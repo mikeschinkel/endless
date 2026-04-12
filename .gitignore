@@ -1,0 +1,16 @@
+# OS
+.DS_Store
+
+# IDE
+.idea/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Go build output
+/bin/
+
+# Symlink to go module cache (created by `just _link-templui`)
+internal/web/assets/css/templui

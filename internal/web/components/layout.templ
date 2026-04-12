@@ -1,0 +1,178 @@
+package components
+
+import (
+	"fmt"
+	"github.com/templui/templui/components/sidebar"
+)
+
+type NavItem struct {
+	Label string
+	Path  string
+	Icon  string
+}
+
+func navItems() []NavItem {
+	return []NavItem{
+		{Label: "Dashboard", Path: "/", Icon: "⌘"},
+		{Label: "Projects", Path: "/projects", Icon: "◆"},
+		{Label: "Plans", Path: "/plans", Icon: "▶"},
+		{Label: "Activity", Path: "/activity", Icon: "⚡"},
+		{Label: "Notes", Path: "/notes", Icon: "✎"},
+	}
+}
+
+func isActive(current, path string) bool {
+	if path == "/" {
+		return current == "/"
+	}
+	return len(current) >= len(path) && current[:len(path)] == path
+}
+
+templ Layout(title string, currentPath string) {
+	<!DOCTYPE html>
+	<html lang="en" class="dark" x-data="themeManager()" x-bind:class="theme">
+	<head>
+		<meta charset="UTF-8"/>
+		<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+		<title>{ fmt.Sprintf("Endless — %s", title) }</title>
+		<link rel="stylesheet" href="/assets/css/output.css"/>
+		<script src="https://unpkg.com/htmx.org@2.0.4"></script>
+		<script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+		<style>
+			html { font-size: var(--font-size, 16px); }
+			html.dark { color-scheme: dark; }
+			[x-cloak] { display: none !important; }
+		</style>
+		<script>
+			function themeManager() {
+				return {
+					theme: localStorage.getItem('theme') || 'dark',
+					fontSize: parseInt(localStorage.getItem('fontSize') || '16'),
+					init() {
+						this.applyTheme();
+						this.applyFontSize();
+					},
+					setTheme(t) {
+						this.theme = t;
+						localStorage.setItem('theme', t);
+						this.applyTheme();
+					},
+					applyTheme() {
+						if (this.theme === 'system') {
+							const dark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+							document.documentElement.className = dark ? 'dark' : '';
+						} else {
+							document.documentElement.className = this.theme;
+						}
+					},
+					increaseFontSize() {
+						this.fontSize += 1;
+						this.applyFontSize();
+					},
+					decreaseFontSize() {
+						if (this.fontSize > 8) {
+							this.fontSize -= 1;
+							this.applyFontSize();
+						}
+					},
+					resetFontSize() {
+						this.fontSize = 16;
+						this.applyFontSize();
+					},
+					applyFontSize() {
+						document.documentElement.style.setProperty('--font-size', this.fontSize + 'px');
+						localStorage.setItem('fontSize', this.fontSize.toString());
+					}
+				}
+			}
+		</script>
+	</head>
+	<body class="bg-background text-foreground min-h-screen">
+		@sidebar.Script()
+		@sidebar.Layout() {
+			@sidebar.Sidebar(sidebar.Props{
+				Collapsible: sidebar.CollapsibleIcon,
+				Attributes: templ.Attributes{"style": "--sidebar-width: 10rem"},
+			}) {
+				@sidebar.Header() {
+					<h1 class="endless-logo text-lg font-bold text-emerald-400 tracking-wide py-1">
+						<span>∞</span>
+						<span class="endless-logo-text ml-1">Endless</span>
+					</h1>
+				}
+				@sidebar.Content() {
+					@sidebar.Group() {
+						@sidebar.Menu() {
+							for _, item := range navItems() {
+								@sidebar.MenuItem() {
+									@sidebar.MenuButton(sidebar.MenuButtonProps{
+										Href:     item.Path,
+										IsActive: isActive(currentPath, item.Path),
+										Tooltip:  item.Label,
+									}) {
+										<span class="text-base">{ item.Icon }</span>
+										<span>{ item.Label }</span>
+									}
+								}
+							}
+						}
+					}
+				}
+				@sidebar.Footer() {
+					@sidebar.Menu() {
+						@sidebar.MenuItem() {
+							@sidebar.MenuButton(sidebar.MenuButtonProps{
+								Href:    "/settings",
+								Tooltip: "Settings",
+							}) {
+								<span>⚙</span>
+								<span>Settings</span>
+							}
+						}
+					}
+				}
+			}
+
+			@sidebar.Inset() {
+				<!-- Top header bar with controls -->
+				<div class="flex items-center justify-between px-4 py-3 border-b border-border">
+					<div class="flex items-center gap-2">
+						@sidebar.Trigger()
+					</div>
+					<div class="flex items-center gap-4">
+						<!-- Font size controls -->
+						<div class="flex items-center gap-1 text-sm">
+							<button x-on:click="decreaseFontSize()"
+								class="px-2 py-1 rounded cursor-pointer hover:bg-accent text-muted-foreground hover:text-accent-foreground transition-colors"
+								title="Decrease font size">A-</button>
+							<button x-on:click="increaseFontSize()"
+								class="px-2 py-1 rounded cursor-pointer hover:bg-accent text-muted-foreground hover:text-accent-foreground transition-colors"
+								title="Increase font size">A+</button>
+						</div>
+
+						<!-- Theme toggle -->
+						<div class="flex items-center gap-1 text-sm border-l border-border pl-4">
+							<button x-on:click="setTheme('dark')"
+								x-bind:class="theme === 'dark' ? 'text-emerald-400 bg-accent' : 'text-muted-foreground'"
+								class="px-2 py-1 rounded cursor-pointer hover:bg-accent transition-colors"
+								title="Dark theme">🌙</button>
+							<button x-on:click="setTheme('')"
+								x-bind:class="theme === '' ? 'text-emerald-400 bg-accent' : 'text-muted-foreground'"
+								class="px-2 py-1 rounded cursor-pointer hover:bg-accent transition-colors"
+								title="Light theme">☀️</button>
+							<button x-on:click="setTheme('system')"
+								x-bind:class="theme === 'system' ? 'text-emerald-400 bg-accent' : 'text-muted-foreground'"
+								class="px-2 py-1 rounded cursor-pointer hover:bg-accent transition-colors"
+								title="System theme">🖥</button>
+						</div>
+					</div>
+				</div>
+
+				<div class="p-4 lg:p-6">
+					{ children... }
+				</div>
+			}
+		}
+	</body>
+	</html>
+}

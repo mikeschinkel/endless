@@ -1,0 +1,11 @@
+{
+  "name": "endless",
+  "label": "Endless Project Tracker",
+  "description": "Project awareness system",
+  "language": "bash",
+  "status": "active",
+  "dependencies": [],
+  "documents": {
+    "rules": []
+  }
+}

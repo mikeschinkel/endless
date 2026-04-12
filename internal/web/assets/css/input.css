@@ -1,0 +1,76 @@
+@import "tailwindcss";
+@import "./templui/assets/css/themes.css";
+@custom-variant dark (&:where(.dark, .dark *));
+
+@layer utilities {
+  button, [role="button"] {
+    cursor: pointer;
+  }
+  button:hover, [role="button"]:hover {
+    opacity: 0.85;
+  }
+}
+
+@source "../../pages";
+@source "../../components";
+@source "./templui/components";
+
+/* Endless dark theme overrides */
+html.dark {
+  --background: oklch(0.13 0.01 260);
+  --foreground: oklch(0.93 0 0);
+  --card: oklch(0.17 0.01 260);
+  --card-foreground: oklch(0.93 0 0);
+  --border: oklch(0.40 0.06 165);
+  --input: oklch(0.25 0.005 260);
+  --muted: oklch(0.22 0.005 260);
+  --muted-foreground: oklch(0.6 0 0);
+  --accent: oklch(0.25 0.01 260);
+  --accent-foreground: oklch(0.93 0 0);
+  --sidebar: oklch(0.15 0.01 260);
+  --sidebar-foreground: oklch(0.65 0 0);
+  --sidebar-accent: oklch(0.28 0.02 260);
+  --sidebar-accent-foreground: oklch(0.95 0 0);
+  --sidebar-border: oklch(0.40 0.06 165);
+  --color-border: oklch(0.40 0.06 165);
+}
+
+/* Force border colors - Tailwind @theme --color-border can't be overridden by CSS vars */
+html.dark .border,
+html.dark [class*="border-"] {
+  border-color: oklch(0.40 0.06 165);
+}
+html.dark .border-gray-700,
+html.dark .border-gray-800,
+html.dark .border-gray-800\/60 {
+  border-color: oklch(0.22 0.04 165);
+}
+
+/* Hide logo text and center icon when sidebar collapsed */
+[data-tui-sidebar-state="collapsed"] .endless-logo {
+  text-align: center !important;
+}
+[data-tui-sidebar-state="collapsed"] .endless-logo-text {
+  display: none !important;
+}
+
+/* Tighten sidebar nav item spacing — only when expanded */
+[data-tui-sidebar-state="expanded"] .sidebar-content {
+  padding-left: 0.25em !important;
+}
+[data-tui-sidebar-state="expanded"] [data-tui-sidebar="content"] {
+  padding-left: 0.75em !important;
+}
+
+@theme {
+  --color-background: #0a0a1a;
+  --color-card: #111827;
+  --color-card-hover: #1f2937;
+  --color-border: #1f2937;
+  --color-text: #e5e7eb;
+  --color-text-dim: #6b7280;
+  --color-accent: #10b981;
+  --color-warning: #f59e0b;
+  --color-danger: #ef4444;
+  --color-info: #3b82f6;
+}

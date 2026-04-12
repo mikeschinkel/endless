@@ -1,0 +1,70 @@
+#!/usr/bin/env bash
+# endless — Project awareness system for solo developers
+set -u
+
+# Resolve the root directory of this installation
+# Follow symlinks to find the real script location
+SCRIPT_PATH="${BASH_SOURCE[0]}"
+while [[ -L "${SCRIPT_PATH}" ]]; do
+    SCRIPT_PATH="$(readlink "${SCRIPT_PATH}")"
+done
+SCRIPT_DIR="$(cd "$(dirname "${SCRIPT_PATH}")" && pwd)"
+ENDLESS_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+
+# Source core libraries
+# shellcheck source=lib/common.sh
+source "${ENDLESS_ROOT}/lib/common.sh"
+
+# Source command implementations
+# shellcheck source=lib/cmd-register.sh
+source "${ENDLESS_ROOT}/lib/cmd-register.sh"
+# shellcheck source=lib/cmd-list.sh
+source "${ENDLESS_ROOT}/lib/cmd-list.sh"
+# shellcheck source=lib/cmd-status.sh
+source "${ENDLESS_ROOT}/lib/cmd-status.sh"
+# shellcheck source=lib/cmd-scan.sh
+source "${ENDLESS_ROOT}/lib/cmd-scan.sh"
+# shellcheck source=lib/cmd-discover.sh
+source "${ENDLESS_ROOT}/lib/cmd-discover.sh"
+
+usage() {
+    cat <<EOF
+${C_BOLD}endless${C_RESET} — Project awareness system
+
+${C_BOLD}Usage:${C_RESET}
+  endless <command> [options]
+
+${C_BOLD}Commands:${C_RESET}
+  register [<path>]   Register a directory as a project
+  list                List registered projects
+  status [<slug>]     Detailed status of a project
+  scan                Scan projects for document changes
+  discover [<path>]   Find and register unregistered projects
+
+${C_BOLD}Options:${C_RESET}
+  -h, --help          Show this help
+  --version           Show version
+
+Run ${C_BOLD}endless <command> --help${C_RESET} for command-specific help.
+EOF
+}
+
+main() {
+    check_deps
+
+    case "${1:-}" in
+        register)  shift; cmd_register "$@" ;;
+        list|ls)   shift; cmd_list "$@" ;;
+        status)    shift; cmd_status "$@" ;;
+        scan)      shift; cmd_scan "$@" ;;
+        discover)  shift; cmd_discover "$@" ;;
+        -h|--help|help|"")  usage ;;
+        --version) echo "endless 0.1.0-dev" ;;
+        *)
+            die "Unknown command: $1 \
+(run 'endless --help' for usage)"
+            ;;
+    esac
+}
+
+main "$@"

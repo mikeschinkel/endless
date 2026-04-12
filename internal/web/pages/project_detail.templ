@@ -1,0 +1,272 @@
+package pages
+
+import (
+	"fmt"
+	"github.com/mikeschinkel/endless/internal/web/components"
+	"github.com/mikeschinkel/endless/internal/web/data"
+)
+
+templ ProjectDetail(project *data.DashboardProject, planItems []data.PlanItemView, activities []data.ActivityView, notes []data.NoteView, deps []data.DependencyView) {
+	@components.Layout(project.Name, fmt.Sprintf("/project/%s", project.Name)) {
+		<!-- Header -->
+		<div class="mb-8">
+			<div class="flex items-center gap-4 mb-2">
+				<h2 class="text-2xl font-bold text-gray-100">{ project.Name }</h2>
+				@statusBadge(project.Status)
+			</div>
+			if project.Label != "" {
+				<p class="text-gray-400 mb-1">{ project.Label }</p>
+			}
+			if project.Description != "" {
+				<p class="text-gray-300 mb-3 text-sm leading-relaxed max-w-3xl">{ project.Description }</p>
+			}
+			<p class="text-sm text-gray-600 font-mono">{ project.ShortPath }</p>
+			<div class="flex gap-6 mt-3 text-sm">
+				if project.Language != "" {
+					<span class="text-gray-500">Language: <span class="text-gray-300">{ project.Language }</span></span>
+				}
+				if project.GroupName != "" {
+					<span class="text-gray-500">Group: <span class="text-gray-300">{ project.GroupName }</span></span>
+				}
+				if project.LastActivity != "" {
+					<span class="text-gray-500">Last active: <span class="text-gray-300">{ data.SmartDate(project.LastActivity) }</span></span>
+				}
+			</div>
+			<!-- Progress bar -->
+			if project.TaskTotal > 0 {
+				<div class="mt-4 max-w-md">
+					<div class="flex items-center justify-between text-xs text-gray-500 mb-1">
+						<span>Progress</span>
+						<span>{ fmt.Sprintf("%d/%d tasks done", project.TaskCompleted, project.TaskTotal) }</span>
+					</div>
+					<div class="w-full bg-gray-800 rounded-full h-2">
+						<div class="bg-emerald-500 h-2 rounded-full transition-all" style={ fmt.Sprintf("width: %d%%", progressPct(project.TaskCompleted, project.TaskTotal)) }></div>
+					</div>
+				</div>
+			}
+		</div>
+
+		<div class="space-y-8">
+			<!-- Next Actions -->
+			if len(nextActions(planItems)) > 0 {
+				<section>
+					<h3 class="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4">Next Actions</h3>
+					<div class="bg-gray-900 border border-gray-800 rounded-lg divide-y divide-gray-800/50">
+						for _, item := range nextActions(planItems) {
+							<div class="px-4 py-3" x-data="{ open: false }">
+								<div class="flex items-center gap-3 cursor-pointer" x-on:click="open = !open">
+									@planStatusIcon(item.Status)
+									<span class="text-sm text-gray-200 flex-1">{ item.Title }</span>
+									if item.BlockedBy != "" {
+										<span class="text-xs text-rose-400">blocked</span>
+									}
+									<span class="text-gray-600 text-xs" x-text="open ? '▾' : '▸'">▸</span>
+								</div>
+								<div x-show="open" x-cloak class="mt-2 pl-7 text-sm text-gray-400 leading-relaxed">
+									if item.Text != item.Title {
+										<div class="prose-sm prose-invert">
+											@templ.Raw(renderMarkdown(item.Text))
+										</div>
+									}
+									if item.BlockedBy != "" {
+										<p class="text-xs text-rose-400 mt-2">Blocked by: { item.BlockedBy }</p>
+									}
+								</div>
+							</div>
+						}
+					</div>
+				</section>
+			}
+
+			<!-- Task Overview -->
+			<section>
+				<div class="flex items-center justify-between mb-4">
+					<h3 class="text-sm font-semibold text-gray-400 uppercase tracking-wider">
+						Tasks
+						if len(planItems) > 0 {
+							<span class="text-gray-600 ml-2">({ fmt.Sprintf("%d", len(planItems)) })</span>
+						}
+					</h3>
+					if len(planItems) > 0 {
+						<a href={ templ.SafeURL(fmt.Sprintf("/project/%s/plan", project.Name)) } class="text-xs text-emerald-400 hover:text-emerald-300">View full plan →</a>
+					}
+				</div>
+				if len(planItems) > 0 {
+					<div class="bg-gray-900 border border-gray-800 rounded-lg divide-y divide-gray-800/50">
+						for _, item := range planItems {
+							<div class="px-4 py-2" x-data="{ open: false }">
+								<div class="flex items-center gap-3 cursor-pointer" x-on:click="open = !open">
+									@planStatusIcon(item.Status)
+									<span class="text-sm text-gray-300 flex-1 truncate">{ item.Title }</span>
+									if item.ChildCount > 0 {
+										<span class="text-xs text-gray-600">{ fmt.Sprintf("%d sub-items", item.ChildCount) }</span>
+									}
+									<span class="text-xs text-gray-600 font-mono">{ item.Status }</span>
+									<span class="text-gray-600 text-xs" x-text="open ? '▾' : '▸'">▸</span>
+								</div>
+								<div x-show="open" x-cloak class="mt-2 pl-7 text-sm text-gray-400 leading-relaxed">
+									if item.Text != item.Title {
+										<div class="prose-sm prose-invert">
+											@templ.Raw(renderMarkdown(item.Text))
+										</div>
+									} else {
+										<p class="text-gray-500 italic text-xs">No additional details</p>
+									}
+									if item.BlockedBy != "" {
+										<p class="text-xs text-rose-400 mt-2">Blocked by: { item.BlockedBy }</p>
+									}
+								</div>
+							</div>
+						}
+					</div>
+				} else {
+					<p class="text-sm text-gray-500 bg-gray-900 border border-gray-800 rounded-lg px-4 py-6 text-center">No tasks</p>
+				}
+			</section>
+
+			<!-- Dependencies -->
+			if len(deps) > 0 {
+				<section>
+					<h3 class="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4">Dependencies</h3>
+					<div class="bg-gray-900 border border-gray-800 rounded-lg divide-y divide-gray-800/50">
+						for _, d := range deps {
+							<div class="flex items-center gap-3 px-4 py-2.5 text-sm">
+								if d.DepType == "blocks" {
+									<span class="text-xs px-2 py-0.5 rounded bg-amber-900/50 text-amber-400 border border-amber-800 shrink-0">blocks</span>
+								} else {
+									<span class="text-xs px-2 py-0.5 rounded bg-blue-900/50 text-blue-400 border border-blue-800 shrink-0">needs</span>
+								}
+								<span class="text-gray-300">{ d.SourceName }</span>
+								<span class="text-gray-600">→</span>
+								if d.TargetType == "project" {
+									<a href={ templ.SafeURL(fmt.Sprintf("/project/%s", d.TargetName)) } class="text-emerald-400 hover:text-emerald-300">{ d.TargetName }</a>
+								} else {
+									<span class="text-gray-300">{ d.TargetName }</span>
+								}
+							</div>
+						}
+					</div>
+				</section>
+			}
+
+			<!-- Activity -->
+			<section>
+				<h3 class="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4">
+					Recent Activity
+					if len(activities) > 0 {
+						<span class="text-gray-600 ml-2">({ fmt.Sprintf("%d", len(activities)) })</span>
+					}
+				</h3>
+				if len(activities) > 0 {
+					<div class="bg-gray-900 border border-gray-800 rounded-lg divide-y divide-gray-800/50">
+						for _, a := range activities {
+							<div class="flex items-center gap-3 px-4 py-2 text-sm">
+								<span class="text-gray-500 font-mono text-xs w-16 shrink-0">{ a.Source }</span>
+								if a.Event != "" {
+									<span class="text-gray-400">{ a.Event }</span>
+								}
+								<span class="text-gray-600 text-xs ml-auto shrink-0 font-mono">{ data.SmartDate(a.CreatedAt) }</span>
+							</div>
+						}
+					</div>
+				} else {
+					<p class="text-sm text-gray-500 bg-gray-900 border border-gray-800 rounded-lg px-4 py-6 text-center">No activity recorded</p>
+				}
+			</section>
+
+			<!-- Notes -->
+			<section>
+				<h3 class="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4">
+					Notes
+					if len(notes) > 0 {
+						<span class="text-gray-600 ml-2">({ fmt.Sprintf("%d", len(notes)) })</span>
+					}
+				</h3>
+				if len(notes) > 0 {
+					<div class="bg-gray-900 border border-gray-800 rounded-lg divide-y divide-gray-800/50">
+						for _, n := range notes {
+							<div class="flex items-start gap-3 px-4 py-3">
+								@noteTypeBadge(n.Type)
+								<div class="flex-1 min-w-0">
+									<p class="text-sm text-gray-300">{ n.Message }</p>
+									<p class="text-xs text-gray-600 mt-1">{ data.SmartDate(n.Created) }</p>
+								</div>
+								if n.Resolved {
+									<span class="text-xs text-emerald-600">resolved</span>
+								}
+							</div>
+						}
+					</div>
+				} else {
+					<p class="text-sm text-gray-500 bg-gray-900 border border-gray-800 rounded-lg px-4 py-6 text-center">No notes</p>
+				}
+			</section>
+		</div>
+	}
+}
+
+// nextActions returns in-progress items first, then next pending items, up to 5 total.
+func nextActions(items []data.PlanItemView) []data.PlanItemView {
+	var result []data.PlanItemView
+	// In-progress first
+	for _, item := range items {
+		if item.Status == "in_progress" {
+			result = append(result, item)
+		}
+	}
+	// Then blocked
+	for _, item := range items {
+		if item.Status == "blocked" {
+			result = append(result, item)
+		}
+	}
+	// Then next pending (up to 5 total)
+	for _, item := range items {
+		if len(result) >= 5 {
+			break
+		}
+		if item.Status == "pending" {
+			result = append(result, item)
+		}
+	}
+	return result
+}
+
+func progressPct(completed, total int) int {
+	if total == 0 {
+		return 0
+	}
+	return completed * 100 / total
+}
+
+func renderMarkdown(input string) string {
+	return data.RenderMarkdown(input)
+}
+
+templ planStatusIcon(status string) {
+	switch status {
+		case "completed":
+			<span class="text-emerald-500 text-sm">●</span>
+		case "in_progress":
+			<span class="text-amber-400 text-sm">◐</span>
+		case "blocked":
+			<span class="text-rose-400 text-sm">●</span>
+		default:
+			<span class="text-gray-600 text-sm">○</span>
+	}
+}
+
+templ noteTypeBadge(noteType string) {
+	switch noteType {
+		case "staleness":
+			<span class="text-xs px-2 py-0.5 rounded bg-amber-900/50 text-amber-400 border border-amber-800 shrink-0">stale</span>
+		case "update_needed":
+			<span class="text-xs px-2 py-0.5 rounded bg-blue-900/50 text-blue-400 border border-blue-800 shrink-0">update</span>
+		case "sprawl":
+			<span class="text-xs px-2 py-0.5 rounded bg-rose-900/50 text-rose-400 border border-rose-800 shrink-0">sprawl</span>
+		case "privacy":
+			<span class="text-xs px-2 py-0.5 rounded bg-purple-900/50 text-purple-400 border border-purple-800 shrink-0">privacy</span>
+		default:
+			<span class="text-xs px-2 py-0.5 rounded bg-gray-800 text-gray-500 border border-gray-700 shrink-0">note</span>
+	}
+}

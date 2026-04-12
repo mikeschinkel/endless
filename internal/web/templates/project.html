@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>{{.Project.Name}} — Endless</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+</head>
+<body>
+  <div class="breadcrumb">
+    <a href="/">Endless</a> / {{.Project.Name}}
+  </div>
+
+  <div class="project-header">
+    <h1>{{.Project.Name}}</h1>
+    {{if .Project.Label}}<span class="label">{{.Project.Label}}</span>{{end}}
+    <span class="status-{{.Project.Status}}">{{.Project.Status}}</span>
+  </div>
+  <p class="dim" style="margin-bottom:1rem">{{.Project.ShortPath}}</p>
+
+  {{if .PlanItems}}
+  <div class="section">
+    <h2>Plan</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Phase</th>
+          <th>Task</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range .PlanItems}}
+        <tr>
+          <td class="dim">#{{.ID}}</td>
+          <td><span class="phase-tag phase-{{.Phase}}">{{.Phase}}</span></td>
+          <td>{{.Text}}</td>
+          <td><span class="plan-{{.Status}}">{{.Status}}</span></td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+  {{end}}
+
+  <div class="section">
+    <h2>Recent Activity</h2>
+    {{if .Activities}}
+    <table>
+      <thead>
+        <tr>
+          <th>Time</th>
+          <th>Source</th>
+          <th>Event</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range .Activities}}
+        <tr>
+          <td class="dim">{{.CreatedAt}}</td>
+          <td>{{.Source}}</td>
+          <td>{{.Event}}</td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+    {{else}}
+    <p class="dim">No activity recorded yet.</p>
+    {{end}}
+  </div>
+</body>
+</html>
