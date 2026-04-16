@@ -3,6 +3,7 @@ package pages
 import (
 	"fmt"
 	"github.com/mikeschinkel/endless/internal/web/components"
+	"github.com/mikeschinkel/endless/internal/web/components/markdown"
 	"github.com/mikeschinkel/endless/internal/web/data"
 )
 
@@ -16,7 +17,7 @@ templ PlanDetail(project *data.DashboardProject, planItems []data.PlanItemView) 
 			<h2 class="text-2xl font-bold text-gray-100">Full Plan</h2>
 			if project.TaskTotal > 0 {
 				<p class="text-sm text-gray-500 mt-2">
-					{ fmt.Sprintf("%d tasks total — %d completed, %d in progress, %d pending",
+					{ fmt.Sprintf("%d tasks total — %d completed, %d in progress, %d remaining",
 						project.TaskTotal, project.TaskCompleted, project.TaskInProgress,
 						project.TaskTotal - project.TaskCompleted - project.TaskInProgress) }
 				</p>
@@ -41,35 +42,60 @@ templ PlanDetail(project *data.DashboardProject, planItems []data.PlanItemView) 
 
 			<div class="bg-gray-900 border border-gray-800 rounded-lg divide-y divide-gray-800/50">
 				for _, item := range planItems {
-					<div class="px-4 py-3"
-						x-data="{ open: false }"
+					<div class="py-2"
+						style={ fmt.Sprintf("padding-left: %dpx; padding-right: 16px;", 16 + item.Depth * 20) }
+						x-data="{ open: false, editing: false, editTitle: '', startEdit(el) { this.editing = true; this.editTitle = el.textContent.trim(); this.$nextTick(() => { const inp = this.$refs.editInput; inp.style.minWidth = Math.max(this.editTitle.length + 5, 20) + 'ch'; inp.focus(); inp.select(); }); }, saveEdit() { if (!this.editTitle.trim()) return; const inp = this.$refs.editInput; inp.dispatchEvent(new Event('save')); this.$nextTick(() => { inp.closest('.absolute').previousElementSibling.textContent = this.editTitle; this.editing = false; }); } }"
 						x-show={ fmt.Sprintf("filter === 'all' || (filter === 'active' && '%s' !== 'completed') || (filter === 'completed' && '%s' === 'completed')", item.Status, item.Status) }>
-						<div class="flex items-center gap-3 cursor-pointer" x-on:click="open = !open">
+						<div class="flex items-center gap-2">
 							@planStatusIcon(item.Status)
-							<span class={ "text-sm flex-1", templ.KV("text-gray-300", item.Status != "completed"), templ.KV("text-gray-500 line-through", item.Status == "completed") }>
-								{ item.Title }
+							<span class="relative">
+								<span
+									class={ "text-sm flex-1 cursor-pointer", templ.KV("font-semibold text-gray-200", item.ChildCount > 0), templ.KV("text-gray-300", item.Status != "completed" && item.ChildCount == 0), templ.KV("text-gray-500 line-through", item.Status == "completed") }
+									x-on:dblclick.stop="startEdit($el)">
+									{ item.Title }
+								</span>
+								<div x-show="editing" x-cloak
+									class="absolute left-0 z-20 flex flex-col bg-gray-900 border border-gray-600 rounded-lg shadow-lg shadow-black/40"
+									style="top: -4px; padding: 4px 8px 6px 4px;">
+									<input
+										x-ref="editInput"
+										type="text"
+										name="title"
+										x-model="editTitle"
+										hx-put={ fmt.Sprintf("/plan-item/%d/title", item.ID) }
+										hx-trigger="save"
+										hx-swap="none"
+										x-on:keydown.enter.prevent="saveEdit()"
+										x-on:keydown.escape.prevent="editing = false"
+										class="bg-gray-800 text-gray-100 outline-none px-1 py-0.5 text-sm font-normal border border-gray-600 rounded" />
+									<div class="flex gap-1.5 justify-end mt-1">
+										<button
+											x-on:click="saveEdit()"
+											class="text-xs px-2.5 py-1 rounded bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer">Save</button>
+										<button
+											x-on:click="editing = false"
+											class="text-xs px-2.5 py-1 rounded bg-gray-700 hover:bg-gray-600 text-gray-300 cursor-pointer">Cancel</button>
+									</div>
+								</div>
 							</span>
 							if item.ChildCount > 0 {
-								<span class="text-xs text-gray-600">{ fmt.Sprintf("%d sub-items", item.ChildCount) }</span>
+								<span class="text-xs text-gray-600">{ fmt.Sprintf("%d", item.ChildCount) }</span>
 							}
 							if item.Phase != "now" {
-								<span class="text-xs px-2 py-0.5 rounded bg-gray-800 text-gray-500 font-mono">{ item.Phase }</span>
+								<span class="text-xs px-1.5 py-0.5 rounded bg-gray-800 text-gray-500 font-mono">{ item.Phase }</span>
 							}
-							<span class="text-xs text-gray-600 font-mono w-20 text-right">{ item.Status }</span>
-							<span class="text-gray-600 text-xs" x-text="open ? '▾' : '▸'">▸</span>
+							<span class="text-xs text-gray-600 font-mono">{ fmt.Sprintf("#%d", item.ID) }</span>
+							<button x-on:click="open = !open"
+								class="text-gray-600 text-xs select-none cursor-pointer hover:text-gray-300"
+								x-text="open ? '▾' : '▸'">▸</button>
 						</div>
-						<div x-show="open" x-cloak class="mt-3 pl-7 text-sm text-gray-400 leading-relaxed">
+						<div x-show="open" x-cloak class="mt-2 pl-6 text-sm text-gray-400 leading-relaxed">
 							if item.Text != item.Title {
-								<div class="prose-sm prose-invert">
-									@templ.Raw(renderMarkdown(item.Text))
-								</div>
-							} else {
-								<p class="text-gray-500 italic text-xs">No additional details</p>
+								@markdown.MarkdownContent(item.Text)
 							}
 							if item.BlockedBy != "" {
-								<p class="text-xs text-rose-400 mt-2">Blocked by: { item.BlockedBy }</p>
+								<p class="text-xs text-rose-400 mt-1">Blocked by: { item.BlockedBy }</p>
 							}
-							<p class="text-xs text-gray-600 mt-2">ID: { fmt.Sprintf("#%d", item.ID) }</p>
 						</div>
 					</div>
 				}

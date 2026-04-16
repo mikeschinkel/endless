@@ -1,0 +1,23 @@
+package markdown
+
+import "github.com/templui/templui/components/collapsible"
+
+templ mdCollapsibleSection(heading templ.Component, body templ.Component) {
+	@collapsible.Collapsible(collapsible.Props{Open: true}) {
+		@collapsible.Trigger(collapsible.TriggerProps{
+			Class: "flex items-center gap-2 cursor-pointer group",
+		}) {
+			<span class="md-caret text-gray-500 text-xs transition-transform">▸</span>
+			@heading
+		}
+		@collapsible.Content(collapsible.ContentProps{
+			Class: "pl-4 border-l border-gray-800/50",
+		}) {
+			@body
+		}
+	}
+}
+
+templ mdCollapsibleScript() {
+	@collapsible.Script()
+}

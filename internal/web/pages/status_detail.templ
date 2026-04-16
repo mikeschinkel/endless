@@ -1,0 +1,375 @@
+package pages
+
+import (
+	"fmt"
+	"github.com/mikeschinkel/endless/internal/web/components/markdown"
+	"github.com/mikeschinkel/endless/internal/web/data"
+	"github.com/templui/templui/components/progress"
+)
+
+func isActive(item data.PlanItemView) bool {
+	return item.Status != "completed"
+}
+
+// planTreeSmartOpen returns Alpine.js init for open state.
+// Only expands nodes that are in-progress or have in-progress descendants.
+func planTreeSmartOpen(items []data.PlanItemView) string {
+	inProgress := make(map[int64]bool)
+	for _, item := range items {
+		if item.Status == "in_progress" {
+			inProgress[item.ID] = true
+		}
+	}
+	hasActive := make(map[int64]bool)
+	for i := len(items) - 1; i >= 0; i-- {
+		item := items[i]
+		if item.Status == "completed" {
+			continue
+		}
+		if inProgress[item.ID] || hasActive[item.ID] {
+			if item.ParentID != nil {
+				hasActive[*item.ParentID] = true
+			}
+		}
+	}
+	var parts []string
+	for _, item := range items {
+		if item.ChildCount > 0 && item.Status != "completed" {
+			open := hasActive[item.ID] || inProgress[item.ID]
+			parts = append(parts, fmt.Sprintf("%d: %t", item.ID, open))
+		}
+	}
+	return joinParts(parts)
+}
+
+// planTreeParentMap generates "childID: parentID, ..." for visibility checks.
+func planTreeParentMap(items []data.PlanItemView) string {
+	var parts []string
+	for _, item := range items {
+		if item.Status == "completed" {
+			continue
+		}
+		pid := int64(0)
+		if item.ParentID != nil {
+			pid = *item.ParentID
+		}
+		parts = append(parts, fmt.Sprintf("%d: %d", item.ID, pid))
+	}
+	return joinParts(parts)
+}
+
+// planTreeIsActive returns JS object literal of IDs that are in-progress
+// or have any in-progress descendant (the whole active branch is marked).
+func planTreeIsActive(items []data.PlanItemView) string {
+	active := make(map[int64]bool)
+	for _, item := range items {
+		if item.Status == "in_progress" {
+			active[item.ID] = true
+		}
+	}
+	// Propagate up: if a child is active, mark its parent active too
+	for i := len(items) - 1; i >= 0; i-- {
+		item := items[i]
+		if active[item.ID] && item.ParentID != nil {
+			active[*item.ParentID] = true
+		}
+	}
+	var parts []string
+	for _, item := range items {
+		if active[item.ID] {
+			parts = append(parts, fmt.Sprintf("%d: true", item.ID))
+		}
+	}
+	return joinParts(parts)
+}
+
+// statusLabel returns a human-readable status label.
+func statusLabel(status string) string {
+	switch status {
+	case "needs_plan":
+		return "Needs plan"
+	case "ready":
+		return "Ready"
+	case "in_progress":
+		return "In progress"
+	case "revisit":
+		return "Revisit"
+	case "blocked":
+		return "Blocked"
+	case "verify":
+		return "Verify"
+	case "completed":
+		return "Completed"
+	default:
+		return status
+	}
+}
+
+func joinParts(parts []string) string {
+	result := ""
+	for i, p := range parts {
+		if i > 0 {
+			result += ", "
+		}
+		result += p
+	}
+	return result
+}
+
+// planTreeXData builds the Alpine x-data object for the plan tree.
+func planTreeXData(items []data.PlanItemView) string {
+	return fmt.Sprintf(`{
+		open: {%s},
+		parents: {%s},
+		active: {%s},
+		detail: null,
+		editingId: null,
+		editTitle: '',
+		toggleAll(v) {
+			Object.keys(this.open).forEach(k => this.open[k] = v);
+			if (!v) this.detail = null;
+		},
+		isVisible(parentId) {
+			return parentId === 0 || (this.open[parentId] && this.isVisible(this.parents[parentId]));
+		},
+		startEdit(id, title) {
+			this.editingId = id;
+			this.editTitle = title;
+			this.$nextTick(() => {
+				const el = document.getElementById('edit-input-' + id);
+				if (el) {
+					el.style.minWidth = Math.max(title.length + 5, 20) + 'ch';
+					el.focus();
+					el.select();
+				}
+			});
+		},
+		saveEdit(id) {
+			if (!this.editTitle.trim()) return;
+			const el = document.getElementById('edit-input-' + id);
+			if (!el) return;
+			el.dispatchEvent(new Event('save'));
+			const wrapper = el.closest('.absolute').previousElementSibling;
+			this.$nextTick(() => {
+				wrapper.textContent = this.editTitle;
+				this.cancelEdit();
+			});
+		},
+		cancelEdit() {
+			this.editingId = null;
+			this.editTitle = '';
+		}
+	}`, planTreeSmartOpen(items), planTreeParentMap(items), planTreeIsActive(items))
+}
+
+// planItemParentID returns the parent ID or 0 for root items.
+func planItemParentID(item data.PlanItemView) int64 {
+	if item.ParentID != nil {
+		return *item.ParentID
+	}
+	return 0
+}
+
+// hasDetails returns true if the item has detail content worth showing.
+func hasDetails(item data.PlanItemView) bool {
+	return item.Text != item.Title || item.BlockedBy != ""
+}
+
+// depthFontClass returns CSS classes for font sizing based on tree depth.
+func depthFontClass(depth int) string {
+	switch depth {
+	case 0:
+		return "text-base font-bold text-gray-100"
+	case 1:
+		return "text-sm font-semibold text-gray-200"
+	case 2:
+		return "text-sm text-gray-300"
+	default:
+		return "text-xs text-gray-500"
+	}
+}
+
+// statusSphereClass returns Tailwind classes for the 3D sphere icon.
+func statusSphereClass(status string) string {
+	switch status {
+	case "ready":
+		return "bg-emerald-400"
+	case "needs_plan":
+		return "bg-amber-400"
+	case "in_progress":
+		return "bg-blue-500"
+	case "verify":
+		return "bg-purple-400"
+	case "blocked":
+		return "bg-rose-500"
+	case "revisit":
+		return "bg-cyan-400"
+	default:
+		return "bg-gray-500"
+	}
+}
+
+// depthSpacing returns top/bottom padding class based on depth.
+func depthSpacing(depth int) string {
+	switch depth {
+	case 0:
+		return "pt-2 pb-0.5"
+	case 1:
+		return "pt-1 pb-0.5"
+	default:
+		return "py-0.5"
+	}
+}
+
+templ StatusDetail(detail *data.StatusDetail) {
+	<div class="space-y-6">
+		<!-- Header -->
+		<div>
+			<div class="flex items-center gap-3 mb-2">
+				<h2 class="text-xl font-bold text-gray-100">{ detail.Project.Name }</h2>
+				@statusBadge(detail.Project.Status)
+				if detail.Project.Label != "" {
+					<span class="text-sm text-gray-400">{ detail.Project.Label }</span>
+				}
+			</div>
+			if detail.Project.Description != "" {
+				<p class="text-sm text-gray-300 mb-3">{ detail.Project.Description }</p>
+			}
+			<!-- Metadata line -->
+			<div class="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500">
+				if detail.Project.Language != "" {
+					<span>{ detail.Project.Language }</span>
+				}
+				if detail.Project.GroupName != "" {
+					<span>{ detail.Project.GroupName }</span>
+				}
+				<span class="font-mono">{ detail.Project.ShortPath }</span>
+				<span>{ data.SmartDate(detail.Project.LastActivity) }</span>
+			</div>
+		</div>
+
+		<!-- Progress -->
+		if detail.Project.TaskTotal > 0 {
+			@progress.Script()
+			<div class="flex items-center gap-3">
+				@progress.Progress(progress.Props{
+					Value:   detail.Project.TaskCompleted,
+					Max:     detail.Project.TaskTotal,
+					Size:    progress.SizeSm,
+					Variant: progress.VariantSuccess,
+					Class:   "min-w-32 [&>div]:!bg-gray-700",
+				})
+				<span class="text-xs text-gray-400">
+					{ fmt.Sprintf("%d/%d tasks done", detail.Project.TaskCompleted, detail.Project.TaskTotal) }
+				</span>
+			</div>
+		}
+
+		<!-- Plan tree -->
+		if len(detail.PlanItems) > 0 {
+			<div class="border border-gray-800 rounded-lg p-4"
+				x-data={ planTreeXData(detail.PlanItems) }>
+				<div class="flex items-center justify-between mb-3">
+					<h3 class="text-sm font-semibold text-gray-400 uppercase tracking-wider">Plan</h3>
+					<div class="flex items-center gap-3">
+						<button x-on:click="toggleAll(true)"
+							class="text-xs text-gray-500 hover:text-gray-300 cursor-pointer">Expand</button>
+						<button x-on:click="toggleAll(false)"
+							class="text-xs text-gray-500 hover:text-gray-300 cursor-pointer">Collapse</button>
+						<a href={ templ.SafeURL(fmt.Sprintf("/project/%s/plan", detail.Project.Name)) }
+						   class="text-xs text-emerald-400 hover:text-emerald-300">Full plan →</a>
+					</div>
+				</div>
+				<div>
+					for _, item := range detail.PlanItems {
+						if isActive(item) {
+							<div x-show={ fmt.Sprintf("isVisible(%d)", planItemParentID(item)) }
+								x-cloak
+								style={ fmt.Sprintf("padding-left: %dpx;", item.Depth * 28) }
+								class={ depthSpacing(item.Depth) }>
+								<div class="flex items-center gap-1.5 rounded px-1 -mx-1 hover:bg-gray-800/40">
+									if item.ChildCount > 0 {
+										<button x-on:click={ fmt.Sprintf("open[%d] = !open[%d]", item.ID, item.ID) }
+											class="w-5 shrink-0 select-none cursor-pointer text-lg leading-none"
+											x-bind:class={ fmt.Sprintf("active[%d] ? 'text-amber-400 hover:text-amber-300' : 'text-gray-500 hover:text-gray-300'", item.ID) }
+											x-text={ fmt.Sprintf("open[%d] ? '▾' : '▸'", item.ID) }>▾</button>
+									} else {
+										<span class="w-5 shrink-0 text-center text-lg leading-none"
+											x-bind:class={ fmt.Sprintf("active[%d] ? 'text-amber-400' : 'text-gray-700'", item.ID) }>›</span>
+									}
+									<span class={ "w-3 h-3 rounded-full shrink-0 cursor-pointer", statusSphereClass(item.Status) }
+									style="box-shadow: inset -1px -1px 2px rgba(0,0,0,0.3), inset 1px 1px 2px rgba(255,255,255,0.25);"
+									x-on:click={ fmt.Sprintf("detail = (detail === %d) ? null : %d", item.ID, item.ID) }></span>
+									<span class="relative">
+										<span
+											class={ "cursor-pointer", depthFontClass(item.Depth) }
+											x-on:dblclick.stop={ fmt.Sprintf("startEdit(%d, $el.textContent.trim())", item.ID) }>
+											{ item.Title }
+										</span>
+										<div x-show={ fmt.Sprintf("editingId === %d", item.ID) }
+											x-cloak
+											class="absolute left-0 z-20 flex flex-col bg-gray-900 border border-gray-600 rounded-lg shadow-lg shadow-black/40"
+											style="top: -4px; padding: 4px 8px 6px 4px;">
+											<input
+												id={ fmt.Sprintf("edit-input-%d", item.ID) }
+												type="text"
+												name="title"
+												x-model="editTitle"
+												hx-put={ fmt.Sprintf("/plan-item/%d/title", item.ID) }
+												hx-trigger="save"
+												hx-swap="none"
+												x-on:keydown.enter.prevent={ fmt.Sprintf("saveEdit(%d)", item.ID) }
+												x-on:keydown.escape.prevent="cancelEdit()"
+												class="bg-gray-800 text-gray-100 outline-none px-1 py-0.5 text-sm font-normal border border-gray-600 rounded" />
+											<div class="flex gap-1.5 justify-end mt-1">
+												<button
+													x-on:click={ fmt.Sprintf("saveEdit(%d)", item.ID) }
+													class="text-xs px-2.5 py-1 rounded bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer">Save</button>
+												<button
+													x-on:click="cancelEdit()"
+													class="text-xs px-2.5 py-1 rounded bg-gray-700 hover:bg-gray-600 text-gray-300 cursor-pointer">Cancel</button>
+											</div>
+										</div>
+									</span>
+									if item.Phase != "now" {
+										<span class="text-xs px-1.5 py-0.5 rounded bg-gray-800/80 text-gray-500 font-mono shrink-0">{ item.Phase }</span>
+									}
+								</div>
+								<!-- Detail pane -->
+								<div x-show={ fmt.Sprintf("detail === %d", item.ID) }
+									x-cloak
+									class="pl-7 py-2 mt-1 text-sm border-l-2 border-gray-700/50">
+									<div class="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500 mb-1">
+										<span>{ statusLabel(item.Status) }</span>
+										<span>Phase: { item.Phase }</span>
+										<span class="font-mono">{ fmt.Sprintf("#%d", item.ID) }</span>
+										if item.ChildCount > 0 {
+											<span>{ fmt.Sprintf("%d sub-items", item.ChildCount) }</span>
+										}
+									</div>
+									if item.Text != item.Title {
+										@markdown.MarkdownContent(item.Text)
+									}
+									if item.BlockedBy != "" {
+										<p class="text-xs text-rose-400 mt-1">Blocked by: { item.BlockedBy }</p>
+									}
+								</div>
+							</div>
+						}
+					}
+				</div>
+			</div>
+		} else if detail.Project.TaskTotal == 0 {
+			<p class="text-sm text-gray-500 italic">No plan items</p>
+		}
+
+		<!-- Notes -->
+		if detail.PendingNotes > 0 {
+			<div class="flex items-center gap-2">
+				<span class="text-xs text-amber-400">{ fmt.Sprintf("%d pending note(s)", detail.PendingNotes) }</span>
+				<a href={ templ.SafeURL(fmt.Sprintf("/project/%s", detail.Project.Name)) }
+				   class="text-xs text-emerald-400 hover:text-emerald-300">View →</a>
+			</div>
+		}
+	</div>
+}

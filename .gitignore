@@ -14,3 +14,8 @@ __pycache__/
 
 # Symlink to go module cache (created by `just _link-templui`)
 internal/web/assets/css/templui
+
+# SQLite binary DB (committed as .sql dump instead)
+*.db
+*.db-wal
+*.db-shm

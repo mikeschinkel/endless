@@ -1,0 +1,41 @@
+package markdown
+
+templ mdText(value string) {
+	{ value }
+}
+
+templ mdEmphasis(content templ.Component) {
+	<em class="italic text-gray-300">
+		@content
+	</em>
+}
+
+templ mdStrong(content templ.Component) {
+	<strong class="font-semibold text-gray-200">
+		@content
+	</strong>
+}
+
+templ mdCodeSpan(text string) {
+	<code class="bg-gray-800/80 text-emerald-400 px-1.5 py-0.5 rounded text-xs font-mono">{ text }</code>
+}
+
+templ mdLink(href string, title string, content templ.Component) {
+	if title != "" {
+		<a href={ templ.SafeURL(href) } title={ title } class="text-emerald-400 hover:text-emerald-300 underline underline-offset-2">
+			@content
+		</a>
+	} else {
+		<a href={ templ.SafeURL(href) } class="text-emerald-400 hover:text-emerald-300 underline underline-offset-2">
+			@content
+		</a>
+	}
+}
+
+templ mdImage(src string, alt string, title string) {
+	if title != "" {
+		<img src={ src } alt={ alt } title={ title } class="max-w-full rounded-md mb-3"/>
+	} else {
+		<img src={ src } alt={ alt } class="max-w-full rounded-md mb-3"/>
+	}
+}

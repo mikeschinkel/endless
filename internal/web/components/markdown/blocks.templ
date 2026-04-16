@@ -1,0 +1,72 @@
+package markdown
+
+templ mdHeading(level int, content templ.Component) {
+	switch level {
+		case 1:
+			<h1 class="text-xl font-bold text-gray-100 mt-6 mb-2">
+				@content
+			</h1>
+		case 2:
+			<h2 class="text-lg font-bold text-gray-200 mt-5 mb-2">
+				@content
+			</h2>
+		case 3:
+			<h3 class="text-base font-semibold text-gray-300 mt-4 mb-1">
+				@content
+			</h3>
+		case 4:
+			<h4 class="text-sm font-semibold text-gray-400 mt-3 mb-1">
+				@content
+			</h4>
+		default:
+			<h5 class="text-sm font-medium text-gray-500 mt-2 mb-1">
+				@content
+			</h5>
+	}
+}
+
+templ mdParagraph(content templ.Component) {
+	<p class="text-sm text-gray-400 leading-relaxed mb-3">
+		@content
+	</p>
+}
+
+templ mdBulletList(items templ.Component) {
+	<ul class="list-disc pl-5 mb-3 space-y-1 text-sm text-gray-400">
+		@items
+	</ul>
+}
+
+templ mdOrderedList(items templ.Component, start int) {
+	<ol class="list-decimal pl-5 mb-3 space-y-1 text-sm text-gray-400" { olStartAttr(start)... }>
+		@items
+	</ol>
+}
+
+templ mdListItem(content templ.Component) {
+	<li class="leading-relaxed">
+		@content
+	</li>
+}
+
+templ mdFencedCodeBlock(code string, language string) {
+	<div class="relative mb-3 group" x-data="{ copied: false }">
+		<button
+			type="button"
+			class="absolute top-2 right-2 text-gray-500 hover:text-gray-300 opacity-0 group-hover:opacity-100 transition-opacity text-xs px-1.5 py-0.5 rounded bg-gray-700/50 hover:bg-gray-700"
+			x-on:click={ "navigator.clipboard.writeText(" + codeBlockJSON(code) + "); copied = true; setTimeout(() => copied = false, 2000)" }
+			x-text="copied ? 'Copied' : 'Copy'"
+		>Copy</button>
+		<pre class="bg-gray-800/60 border border-gray-700/50 rounded-md px-4 py-3 text-xs font-mono text-gray-300 overflow-x-auto"><code>{ code }</code></pre>
+	</div>
+}
+
+templ mdBlockquote(content templ.Component) {
+	<blockquote class="border-l-2 border-gray-600 pl-4 italic text-gray-500 mb-3">
+		@content
+	</blockquote>
+}
+
+templ mdThematicBreak() {
+	<hr class="border-t border-gray-700 my-4"/>
+}

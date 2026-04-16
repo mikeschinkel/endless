@@ -1,5 +1,6 @@
 """Plan command logic — import, show, and manage plan items."""
 
+import os
 import re
 from datetime import datetime, timezone
 from pathlib import Path
@@ -41,21 +42,8 @@ def _resolve_project(name: str | None) -> tuple[int, str]:
     return row[0]["id"], row[0]["name"]
 
 
-def _parse_plan_markdown(content: str) -> list[dict]:
-    """Parse a markdown plan file into structured items.
-
-    Extracts items from:
-    - Bullet lists (- item or * item)
-    - Numbered lists (1. item)
-    - ## Section headings become phase names
-
-    Returns list of {phase, task_text, sort_order}
-    """
-    items = []
-    current_phase = "now"
-    sort_order = 0
-
-    # Map common section names to phases
+def _phase_for_heading(text: str) -> str:
+    """Map a heading's text to a phase name."""
     phase_map = {
         "now": "now",
         "current": "now",
@@ -75,78 +63,167 @@ def _parse_plan_markdown(content: str) -> list[dict]:
         "deliverables": "now",
         "verification": "_skip",
     }
+    lower = text.lower()
+    lower = re.sub(
+        r"^(phase \d+|step \d+)\s*[—–:-]\s*", "", lower,
+    )
+    for key, phase in phase_map.items():
+        if key in lower:
+            return phase
+    return "now"
+
+
+def _parse_plan_markdown(content: str) -> list[dict]:
+    """Parse a markdown plan file into a tree of items.
+
+    Headings become parent items (goals/branches).
+    Bullets nest under the nearest heading.
+    Nested bullets nest under their parent bullet.
+
+    Returns list of {text, title, phase, sort_order, depth, children: [...]}
+    """
+    root_children: list[dict] = []
+    # Stack tracks the current nesting context:
+    # each entry is (depth, node) where node has a "children" list
+    stack: list[tuple[int, dict]] = []
+    current_phase = "now"
+    heading_depth = 0  # depth of the most recent heading
+    sort_order = 0
+    in_code_block = False
+    last_node: dict | None = None  # most recent node (heading or bullet)
+    last_node_indent = 0  # indent level of the last node (0 for headings)
+    prose_lines: list[str] = []  # accumulating prose for last node
+
+    def _flush_prose():
+        """Set accumulated prose as the text field (title already has the item text)."""
+        nonlocal prose_lines
+        if last_node and prose_lines:
+            # Strip trailing blank lines
+            while prose_lines and not prose_lines[-1]:
+                prose_lines.pop()
+            if prose_lines:
+                last_node["text"] = "\n".join(prose_lines)
+        prose_lines = []
 
     for line in content.splitlines():
-        line = line.rstrip()
+        stripped = line.rstrip()
 
-        # Detect section headings
-        heading_match = re.match(r"^#{1,3}\s+(.+)$", line)
+        # Track fenced code blocks
+        if stripped.startswith("```"):
+            in_code_block = not in_code_block
+            continue
+        if in_code_block:
+            continue
+
+        # Detect headings → become items themselves
+        heading_match = re.match(r"^(#{1,6})\s+(.+)$", stripped)
         if heading_match:
-            heading_text = heading_match.group(1).strip()
-            heading_lower = heading_text.lower()
-            # Strip common prefixes
-            heading_lower = re.sub(
-                r"^(phase \d+|step \d+)\s*[—–:-]\s*", "",
-                heading_lower,
-            )
-            # Match to a known phase
-            matched = False
-            for key, phase in phase_map.items():
-                if key in heading_lower:
-                    current_phase = phase
-                    matched = True
-                    break
-            if not matched:
-                # Unknown heading becomes a "now" phase
-                # with the heading as context
-                current_phase = "now"
+            _flush_prose()
+            depth = len(heading_match.group(1))
+            text = heading_match.group(2).strip()
+            current_phase = _phase_for_heading(text)
+            if current_phase == "_skip":
+                continue
+            heading_depth = depth
+            node = {
+                "text": text,
+                "title": text[:80],
+                "phase": current_phase,
+                "sort_order": sort_order,
+                "depth": depth,
+                "children": [],
+            }
+            sort_order += 1
+            # Pop stack back to a depth < this heading
+            while stack and stack[-1][0] >= depth:
+                stack.pop()
+            if stack:
+                stack[-1][1]["children"].append(node)
+            else:
+                root_children.append(node)
+            stack.append((depth, node))
+            last_node = node
+            last_node_indent = 0
             continue
 
         if current_phase == "_skip":
             continue
 
-        # Detect list items
+        # Detect list items (bullet or numbered)
         item_match = re.match(
-            r"^\s*[-*]\s+(.+)$|^\s*\d+[.)]\s+(.+)$", line
+            r"^(\s*)[-*]\s+(.+)$|^(\s*)\d+[.)]\s+(.+)$", stripped
         )
         if item_match:
-            text = (item_match.group(1)
-                    or item_match.group(2)).strip()
-            # Skip empty or very short items
+            _flush_prose()
+            if item_match.group(1) is not None:
+                indent = len(item_match.group(1))
+                text = item_match.group(2).strip()
+            else:
+                indent = len(item_match.group(3))
+                text = item_match.group(4).strip()
             if len(text) < 3:
                 continue
-            # Skip items that look like code or metadata
             if text.startswith("```") or text.startswith("---"):
                 continue
-            items.append({
+
+            # Bullet depth is always relative to the current heading,
+            # not the previous bullet. Each 2 spaces of indent adds 1 level.
+            bullet_depth = heading_depth + 1 + (indent // 2)
+
+            node = {
+                "text": text,
+                "title": text[:80],
                 "phase": current_phase,
-                "task_text": text,
                 "sort_order": sort_order,
-            })
+                "depth": bullet_depth,
+                "children": [],
+            }
             sort_order += 1
 
-    return items
+            # Pop stack back to a depth < this bullet
+            while stack and stack[-1][0] >= bullet_depth:
+                stack.pop()
+            if stack:
+                stack[-1][1]["children"].append(node)
+            else:
+                root_children.append(node)
+            stack.append((bullet_depth, node))
+            last_node = node
+            last_node_indent = indent
+            continue
+
+        # Prose lines: non-heading, non-bullet text after a heading or bullet.
+        # Must be indented (for bullets: more than the bullet; for headings:
+        # any indentation), or be a blank line continuing a prose block.
+        if last_node is not None:
+            if stripped == "":
+                # Blank line — include in prose if we already have some
+                if prose_lines:
+                    prose_lines.append("")
+                continue
+            # Check if line is indented (prose continuation)
+            line_indent = len(line) - len(line.lstrip())
+            if line_indent > last_node_indent:
+                prose_lines.append(stripped.strip())
+                continue
+
+        # Non-indented prose or unattached text — reset prose tracking
+        _flush_prose()
+        last_node = None
+
+    _flush_prose()
+    return root_children
 
 
 def import_plan(
     file_path: str | None = None,
     from_claude: bool = False,
     project_name: str | None = None,
-    clear: bool = False,
+    replace: bool = False,
+    parent_id: int | None = None,
 ):
     """Import a plan file into the DB."""
     project_id, proj_name = _resolve_project(project_name)
-
-    if clear:
-        db.execute(
-            "DELETE FROM plan_items WHERE project_id = ?",
-            (project_id,),
-        )
-        click.echo(
-            click.style("•", fg="cyan")
-            + f" Cleared existing plan for "
-            + click.style(proj_name, bold=True)
-        )
 
     if from_claude:
         # Scan ~/.claude/plans/ for files, try to match to project
@@ -195,14 +272,20 @@ def import_plan(
             + f" Importing {plan_file.name}"
         )
         content = plan_file.read_text()
-        _do_import(project_id, proj_name, content, str(plan_file))
+        _do_import(
+            project_id, proj_name, content, str(plan_file),
+            replace=replace, parent_id=parent_id,
+        )
 
     elif file_path:
         p = Path(file_path).expanduser()
         if not p.exists():
             raise click.ClickException(f"File not found: {p}")
         content = p.read_text()
-        _do_import(project_id, proj_name, content, str(p))
+        _do_import(
+            project_id, proj_name, content, str(p),
+            replace=replace, parent_id=parent_id,
+        )
 
     else:
         # Try PLAN.md in project directory
@@ -217,6 +300,7 @@ def import_plan(
                 _do_import(
                     project_id, proj_name, content,
                     str(plan_path),
+                    replace=replace, parent_id=parent_id,
                 )
                 return
 
@@ -231,148 +315,143 @@ def import_plan(
 def _do_import(
     project_id: int, proj_name: str,
     content: str, source_file: str,
+    replace: bool = False,
+    parent_id: int | None = None,
 ):
-    items = _parse_plan_markdown(content)
+    tree = _parse_plan_markdown(content)
 
-    if not items:
+    if not tree:
         click.echo(
             click.style("•", fg="cyan")
             + " No plan items found in file."
         )
         return
 
-    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
-
-    # Filter out completed items
-    active_items = [
-        i for i in items if i["phase"] != "completed"
-    ]
-
-    for item in active_items:
-        title = item["task_text"][:80]
+    if replace:
+        # Delete items from the same source file AND all their
+        # descendants (which may be from other source files).
+        # First null out parent references to avoid FK issues,
+        # then delete.
         db.execute(
-            "INSERT INTO plan_items "
-            "(project_id, phase, title, task_text, status, "
-            "source_file, sort_order, created_at) "
-            "VALUES (?, ?, ?, ?, 'pending', ?, ?, ?)",
-            (project_id, item["phase"], title, item["task_text"],
-             source_file, item["sort_order"], now),
+            "UPDATE plans SET parent_id = NULL "
+            "WHERE parent_id IN ("
+            "  WITH RECURSIVE tree(id) AS ("
+            "    SELECT id FROM plans"
+            "    WHERE project_id = ? AND source_file = ?"
+            "    UNION ALL"
+            "    SELECT pi.id FROM plans pi"
+            "    JOIN tree t ON pi.parent_id = t.id"
+            "  ) SELECT id FROM tree"
+            ")",
+            (project_id, source_file),
+        )
+        db.execute(
+            "DELETE FROM plans WHERE id IN ("
+            "  SELECT id FROM plans"
+            "  WHERE project_id = ? AND source_file = ?"
+            ")",
+            (project_id, source_file),
+        )
+        click.echo(
+            click.style("•", fg="cyan")
+            + f" Replaced items from {Path(source_file).name}"
+            + f" for {click.style(proj_name, bold=True)}"
         )
 
-    # Count by phase
-    phases = {}
-    for item in active_items:
-        phases[item["phase"]] = phases.get(item["phase"], 0) + 1
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+    count = [0]  # mutable counter for recursion
+
+    def _insert_tree(nodes: list[dict], db_parent_id: int | None):
+        for node in nodes:
+            if node["phase"] == "completed":
+                continue
+            title = node["title"]
+            cursor = db.execute(
+                "INSERT INTO plans "
+                "(project_id, phase, title, description, status, "
+                "source_file, sort_order, parent_id, created_at) "
+                "VALUES (?, ?, ?, ?, 'needs_plan', ?, ?, ?, ?)",
+                (project_id, node["phase"], title, node["text"],
+                 source_file, node["sort_order"], db_parent_id, now),
+            )
+            count[0] += 1
+            new_id = cursor.lastrowid
+            if node["children"]:
+                _insert_tree(node["children"], new_id)
+
+    _insert_tree(tree, parent_id)
 
     click.echo(
         click.style("•", fg="cyan")
-        + f" Imported {len(active_items)} plan item(s) "
+        + f" Imported {count[0]} plan item(s) "
         + f"for {click.style(proj_name, bold=True)}"
     )
-    for phase, count in sorted(phases.items()):
-        click.echo(f"  {phase}: {count}")
 
 
 def show_plan(
     project_name: str | None = None,
     show_all: bool = False,
-    plan_id: int = 0,
 ):
-    """Show a plan for a project."""
+    """Show a plan for a project as a tree."""
     project_id, proj_name = _resolve_project(project_name)
 
-    where = "WHERE pi.project_id = ? AND pi.plan_id = ?"
-    params: list = [project_id, plan_id]
+    where = "WHERE pi.project_id = ?"
+    params: list = [project_id]
     if not show_all:
         where += " AND pi.status != 'completed'"
 
     rows = db.query(
-        f"SELECT pi.id, pi.phase, COALESCE(pi.title, pi.task_text) as title, "
-        f"pi.task_text, pi.status, "
+        f"SELECT pi.id, pi.phase, COALESCE(pi.title, pi.description) as title, "
+        f"pi.description, pi.status, pi.parent_id, "
         f"pi.created_at, pi.completed_at "
-        f"FROM plan_items pi {where} "
-        f"ORDER BY pi.phase, pi.sort_order",
+        f"FROM plans pi {where} "
+        f"ORDER BY pi.sort_order",
         tuple(params),
     )
 
-    # Get sub-plan info for items that have sub-plans
-    sub_plan_counts = {}
-    sub_rows = db.query(
-        "SELECT parent_item_id, count(*) as total, "
-        "sum(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as done "
-        "FROM plan_items WHERE project_id = ? AND parent_item_id IS NOT NULL "
-        "GROUP BY parent_item_id",
-        (project_id,),
-    )
-    for sr in sub_rows:
-        sub_plan_counts[sr["parent_item_id"]] = (
-            sr["total"], sr["done"]
-        )
-
     if not rows:
-        if plan_id == 0:
-            click.echo(
-                click.style("•", fg="cyan")
-                + f" No plan items for "
-                + click.style(proj_name, bold=True)
-            )
-        else:
-            click.echo(
-                click.style("•", fg="cyan")
-                + f" No items in sub-plan {plan_id}"
-            )
+        click.echo(
+            click.style("•", fg="cyan")
+            + f" No plan items for "
+            + click.style(proj_name, bold=True)
+        )
         return
+
+    # Build tree from flat rows
+    by_id = {r["id"]: r for r in rows}
+    children_of: dict[int | None, list] = {}
+    for row in rows:
+        pid = row["parent_id"]
+        children_of.setdefault(pid, []).append(row)
 
     # Header
     click.echo()
-    if plan_id == 0:
-        click.echo(
-            click.style(f"Plan for {proj_name}", bold=True)
-        )
-    else:
-        # plan_id = parent_item_id
-        parent = db.query(
-            "SELECT task_text FROM plan_items WHERE id = ?",
-            (plan_id,),
-        )
-        parent_text = parent[0]["task_text"] if parent else f"sub-plan {plan_id}"
-        click.echo(
-            click.style(f"Sub-plan: {parent_text}", bold=True)
-        )
+    click.echo(
+        click.style(f"Plan for {proj_name}", bold=True)
+    )
 
-    current_phase = None
-    for row in rows:
-        if row["phase"] != current_phase:
-            current_phase = row["phase"]
-            click.echo()
-            click.echo(click.style(
-                f"  [{current_phase.upper()}]", bold=True, fg="cyan"
-            ))
+    status_indicators = {
+        "needs_plan": click.style("○", fg="yellow"),
+        "ready": click.style("●", fg="green"),
+        "revisit": click.style("?", fg="cyan"),
+        "in_progress": click.style("◉", fg="blue"),
+        "verify": click.style("◉", fg="magenta"),
+        "completed": click.style("●", fg="green"),
+        "blocked": click.style("✗", fg="red"),
+    }
 
-        status_indicators = {
-            "pending": click.style("○", dim=True),
-            "in_progress": click.style("◉", fg="yellow"),
-            "completed": click.style("●", fg="green"),
-            "blocked": click.style("✗", fg="red"),
-        }
-        indicator = status_indicators.get(
-            row["status"], "?"
-        )
-
-        item_id = row["id"]
-        task = row["title"]
-        id_str = click.style(f"#{item_id}", dim=True)
-
-        # Sub-plan indicator
-        sub_info = ""
-        if item_id in sub_plan_counts:
-            total, done = sub_plan_counts[item_id]
-            sub_info = click.style(
-                f" ▸ sub-plan ({total} items, {done} done)",
-                fg="cyan",
+    def _render(parent_id: int | None, indent: int):
+        for row in children_of.get(parent_id, []):
+            indicator = status_indicators.get(row["status"], "?")
+            id_str = click.style(f"#{row['id']}", dim=True)
+            phase_str = click.style(f"[{row['phase']}]", fg="cyan")
+            pad = "  " * indent
+            click.echo(
+                f"{pad}{indicator} {id_str} {phase_str} {row['title']}"
             )
+            _render(row["id"], indent + 1)
 
-        click.echo(f"  {indicator} {id_str} {task}{sub_info}")
+    _render(None, 1)
 
     click.echo()
     total = len(rows)
@@ -385,44 +464,37 @@ def show_plan(
 
 
 def add_item(
-    task_text: str,
-    title: str | None = None,
+    title: str,
+    description: str | None = None,
     phase: str = "now",
     project_name: str | None = None,
     after: int | None = None,
-    plan_id: int = 0,
+    parent_id: int | None = None,
 ):
-    """Add a single plan item."""
+    """Add a single plan."""
     project_id, proj_name = _resolve_project(project_name)
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
-
-    # Default title to first 80 chars of task_text
-    if not title:
-        title = task_text[:80]
 
     # Determine sort_order
     if after:
         row = db.query(
-            "SELECT sort_order FROM plan_items WHERE id = ?",
+            "SELECT sort_order FROM plans WHERE id = ?",
             (after,),
         )
         if row:
             sort_order = row[0]["sort_order"] + 5
         else:
-            sort_order = _next_sort_order(project_id, phase, plan_id)
+            sort_order = _next_sort_order(project_id, phase)
     else:
-        sort_order = _next_sort_order(project_id, phase, plan_id)
-
-    # Sub-plan: plan_id IS the parent_item_id
-    parent_item_id = plan_id if plan_id > 0 else None
+        sort_order = _next_sort_order(project_id, phase)
 
     cursor = db.execute(
-        "INSERT INTO plan_items "
-        "(project_id, phase, title, task_text, status, sort_order, "
-        "plan_id, parent_item_id, created_at) "
-        "VALUES (?, ?, ?, ?, 'pending', ?, ?, ?, ?)",
-        (project_id, phase, title, task_text, sort_order,
-         plan_id, parent_item_id, now),
+        "INSERT INTO plans "
+        "(project_id, phase, title, description, status, sort_order, "
+        "parent_id, created_at) "
+        "VALUES (?, ?, ?, ?, 'needs_plan', ?, ?, ?)",
+        (project_id, phase, title, description, sort_order,
+         parent_id, now),
     )
     item_id = cursor.lastrowid
     click.echo(
@@ -430,36 +502,6 @@ def add_item(
         + f" Added #{item_id}: {title}"
     )
 
-
-def create_sub_plan(
-    parent_item_id: int,
-    project_name: str | None = None,
-):
-    """Create a sub-plan for a parent item. Returns the plan_id."""
-    project_id, proj_name = _resolve_project(project_name)
-
-    # Verify parent exists
-    row = db.query(
-        "SELECT id, task_text FROM plan_items WHERE id = ?",
-        (parent_item_id,),
-    )
-    if not row:
-        raise click.ClickException(
-            f"No plan item found with id {parent_item_id}"
-        )
-
-    # Use parent_item_id as the plan_id (simple 1:1 mapping)
-    new_plan_id = parent_item_id
-
-    click.echo(
-        click.style("•", fg="cyan")
-        + f" Created sub-plan for "
-        + click.style(f"#{parent_item_id}: {row[0]['task_text']}", bold=True)
-    )
-    click.echo(
-        f"  Add items with: endless plan add \"task\" --plan {new_plan_id}"
-    )
-    return new_plan_id
 
 
 def import_json(
@@ -472,22 +514,22 @@ def import_json(
 
     if clear:
         db.execute(
-            "DELETE FROM plan_items WHERE project_id = ?",
+            "DELETE FROM plans WHERE project_id = ?",
             (project_id,),
         )
 
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
     count = 0
     for i, item in enumerate(data):
-        text = item.get("text", item.get("task_text", ""))
+        text = item.get("text", item.get("description", ""))
         if not text:
             continue
         title = item.get("title", text[:80])
         phase = item.get("phase", "now")
-        status = item.get("status", "pending")
+        status = item.get("status", "needs_plan")
         db.execute(
-            "INSERT INTO plan_items "
-            "(project_id, phase, title, task_text, status, sort_order, created_at) "
+            "INSERT INTO plans "
+            "(project_id, phase, title, description, status, sort_order, created_at) "
             "VALUES (?, ?, ?, ?, ?, ?, ?)",
             (project_id, phase, title, text, status, i * 10, now),
         )
@@ -503,7 +545,7 @@ def import_json(
 def remove_item(item_id: int):
     """Remove a plan item."""
     row = db.query(
-        "SELECT id, task_text FROM plan_items WHERE id = ?",
+        "SELECT id, description FROM plans WHERE id = ?",
         (item_id,),
     )
     if not row:
@@ -511,18 +553,18 @@ def remove_item(item_id: int):
             f"No plan item found with id {item_id}"
         )
 
-    db.execute("DELETE FROM plan_items WHERE id = ?", (item_id,))
+    db.execute("DELETE FROM plans WHERE id = ?", (item_id,))
     click.echo(
         click.style("•", fg="cyan")
-        + f" Removed: {row[0]['task_text']}"
+        + f" Removed: {row[0]['description']}"
     )
 
 
-def _next_sort_order(project_id: int, phase: str, plan_id: int = 0) -> int:
+def _next_sort_order(project_id: int, phase: str) -> int:
     val = db.scalar(
-        "SELECT MAX(sort_order) FROM plan_items "
-        "WHERE project_id = ? AND phase = ? AND plan_id = ?",
-        (project_id, phase, plan_id),
+        "SELECT MAX(sort_order) FROM plans "
+        "WHERE project_id = ? AND phase = ?",
+        (project_id, phase),
     )
     return (val or 0) + 10
 
@@ -530,7 +572,7 @@ def _next_sort_order(project_id: int, phase: str, plan_id: int = 0) -> int:
 def complete_item(item_id: int):
     """Mark a plan item as completed."""
     row = db.query(
-        "SELECT id, task_text, status FROM plan_items "
+        "SELECT id, description, status FROM plans "
         "WHERE id = ?",
         (item_id,),
     )
@@ -548,20 +590,20 @@ def complete_item(item_id: int):
 
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
     db.execute(
-        "UPDATE plan_items SET status='completed', "
+        "UPDATE plans SET status='completed', "
         "completed_at=? WHERE id=?",
         (now, item_id),
     )
     click.echo(
         click.style("•", fg="cyan")
-        + f" Completed: {row[0]['task_text']}"
+        + f" Completed: {row[0]['description']}"
     )
 
 
 def start_item(item_id: int):
     """Mark a plan item as in progress."""
     row = db.query(
-        "SELECT id, task_text FROM plan_items WHERE id = ?",
+        "SELECT id, description FROM plans WHERE id = ?",
         (item_id,),
     )
     if not row:
@@ -570,11 +612,293 @@ def start_item(item_id: int):
         )
 
     db.execute(
-        "UPDATE plan_items SET status='in_progress' "
+        "UPDATE plans SET status='in_progress' "
         "WHERE id=?",
         (item_id,),
     )
     click.echo(
         click.style("•", fg="cyan")
-        + f" Started: {row[0]['task_text']}"
+        + f" Started: {row[0]['description']}"
+    )
+
+
+def update_plan(
+    item_id: int,
+    status: str | None = None,
+    title: str | None = None,
+    description: str | None = None,
+    text_file: str | None = None,
+    prompt_file: str | None = None,
+    parent_id: int | None = None,
+):
+    """Update fields on a plan."""
+    row = db.query(
+        "SELECT id, title FROM plans WHERE id = ?",
+        (item_id,),
+    )
+    if not row:
+        raise click.ClickException(
+            f"No plan found with id {item_id}"
+        )
+
+    updates = []
+    params = []
+
+    if status is not None:
+        valid = ("needs_plan", "ready", "in_progress",
+                 "verify", "completed", "blocked", "revisit")
+        if status not in valid:
+            raise click.ClickException(
+                f"Invalid status '{status}'. "
+                f"Valid: {', '.join(valid)}"
+            )
+        updates.append("status = ?")
+        params.append(status)
+        if status == "completed":
+            now = datetime.now(timezone.utc).strftime(
+                "%Y-%m-%dT%H:%M:%S"
+            )
+            updates.append("completed_at = ?")
+            params.append(now)
+
+    if title is not None:
+        updates.append("title = ?")
+        params.append(title)
+
+    if description is not None:
+        updates.append("description = ?")
+        params.append(description)
+
+    if text_file is not None:
+        p = Path(text_file).expanduser()
+        if not p.exists():
+            raise click.ClickException(
+                f"File not found: {p}"
+            )
+        updates.append("text = ?")
+        params.append(p.read_text())
+
+    if prompt_file is not None:
+        p = Path(prompt_file).expanduser()
+        if not p.exists():
+            raise click.ClickException(
+                f"File not found: {p}"
+            )
+        updates.append("prompt = ?")
+        params.append(p.read_text())
+
+    if parent_id is not None:
+        updates.append("parent_id = ?")
+        params.append(parent_id if parent_id > 0 else None)
+
+    if not updates:
+        raise click.ClickException(
+            "Nothing to update. Specify at least one flag."
+        )
+
+    params.append(item_id)
+    db.execute(
+        f"UPDATE plans SET {', '.join(updates)} WHERE id = ?",
+        tuple(params),
+    )
+
+    changed = [u.split(" =")[0] for u in updates]
+    click.echo(
+        click.style("•", fg="cyan")
+        + f" Updated #{item_id}: {', '.join(changed)}"
+    )
+
+
+def detail_item(item_id: int):
+    """Show full detail for a plan item."""
+    row = db.query(
+        "SELECT id, title, description, phase, status, "
+        "parent_id, source_file, prompt, created_at, "
+        "completed_at FROM plans WHERE id = ?",
+        (item_id,),
+    )
+    if not row:
+        raise click.ClickException(
+            f"No plan item found with id {item_id}"
+        )
+
+    item = row[0]
+    click.echo()
+    click.echo(click.style(
+        f"#{item['id']} — {item['title']}", bold=True,
+    ))
+    click.echo(click.style(
+        f"Status: {item['status']}  Phase: {item['phase']}",
+        dim=True,
+    ))
+    if item["parent_id"]:
+        click.echo(click.style(
+            f"Parent: #{item['parent_id']}", dim=True,
+        ))
+    if item["source_file"]:
+        click.echo(click.style(
+            f"Source: {item['source_file']}", dim=True,
+        ))
+    click.echo()
+
+    # Show description
+    if item["description"] and item["description"] != item["title"]:
+        click.echo(click.style("— Detail —", fg="cyan"))
+        click.echo(item["description"])
+        click.echo()
+
+    # Show prompt if present
+    if item["prompt"]:
+        click.echo(click.style("— Prompt —", fg="cyan"))
+        click.echo(item["prompt"])
+        click.echo()
+
+
+def show_prompt(item_id: int):
+    """Output just the prompt text for a plan item."""
+    row = db.query(
+        "SELECT prompt FROM plans WHERE id = ?",
+        (item_id,),
+    )
+    if not row:
+        raise click.ClickException(
+            f"No plan item found with id {item_id}"
+        )
+    if not row[0]["prompt"]:
+        raise click.ClickException(
+            f"No prompt set for item #{item_id}"
+        )
+    # Raw output, no decoration — suitable for piping
+    click.echo(row[0]["prompt"])
+
+
+def spawn_plan(item_id: int, project_name: str | None = None):
+    """Spawn a new tmux window with Claude working on a plan's prompt."""
+    import shutil
+    import subprocess
+    import tempfile
+
+    # Verify tmux is available and we're in a tmux session
+    if not shutil.which("tmux"):
+        raise click.ClickException("tmux is not installed")
+    if not os.environ.get("TMUX"):
+        raise click.ClickException(
+            "Not in a tmux session. "
+            "endless spawn requires tmux."
+        )
+
+    # Get the plan item and its prompt
+    row = db.query(
+        "SELECT p.id, p.title, p.prompt, p.project_id, "
+        "proj.path as project_path "
+        "FROM plans p "
+        "JOIN projects proj ON p.project_id = proj.id "
+        "WHERE p.id = ?",
+        (item_id,),
+    )
+    if not row:
+        raise click.ClickException(
+            f"No plan found with id {item_id}"
+        )
+    item = row[0]
+    if not item["prompt"]:
+        raise click.ClickException(
+            f"No prompt set for plan #{item_id}. "
+            f"Set one first."
+        )
+
+    project_path = item["project_path"]
+    title = item["title"]
+
+    # Create a short window name from the title
+    window_name = re.sub(r"[^a-zA-Z0-9]", "-", title.lower())[:30]
+
+    # Write prompt to a temp file for tmux load-buffer
+    prompt_file = tempfile.NamedTemporaryFile(
+        mode="w", suffix=".md", prefix="endless-prompt-",
+        delete=False,
+    )
+    prompt_file.write(item["prompt"])
+    prompt_file.close()
+
+    # Create tmux window and set plan metadata
+    subprocess.run(
+        ["tmux", "new-window", "-n", window_name],
+        check=True,
+    )
+    subprocess.run(
+        ["tmux", "set", "-w", "-t", window_name,
+         "@endless_plan_id", str(item_id)],
+        check=True,
+    )
+    subprocess.run(
+        ["tmux", "set", "-w", "-t", window_name,
+         "@endless_project_id", str(item["project_id"])],
+        check=True,
+    )
+
+    # cd to project directory
+    subprocess.run(
+        ["tmux", "send-keys", "-t", window_name,
+         f"cd {project_path}", "Enter"],
+        check=True,
+    )
+
+    # Launch claude
+    subprocess.run(
+        ["tmux", "send-keys", "-t", window_name,
+         "claude", "Enter"],
+        check=True,
+    )
+
+    # Wait for Claude to start
+    import time
+    time.sleep(2)
+
+    # Enter plan mode
+    subprocess.run(
+        ["tmux", "send-keys", "-t", window_name,
+         "/plan", "Enter"],
+        check=True,
+    )
+    time.sleep(1)
+
+    # Load the prompt into tmux buffer and paste it
+    subprocess.run(
+        ["tmux", "load-buffer", prompt_file.name],
+        check=True,
+    )
+    subprocess.run(
+        ["tmux", "send-keys", "-t", window_name, ""],
+    )
+    subprocess.run(
+        ["tmux", "paste-buffer", "-t", window_name],
+        check=True,
+    )
+
+    # Send Enter to submit the prompt
+    subprocess.run(
+        ["tmux", "send-keys", "-t", window_name,
+         "Enter"],
+        check=True,
+    )
+
+    # Clean up temp file
+    os.unlink(prompt_file.name)
+
+    click.echo(
+        click.style("•", fg="cyan")
+        + f" Spawned window '{window_name}' for "
+        + click.style(f"#{item_id}: {title}", bold=True)
+    )
+    click.echo(
+        f"  Switch to it: tmux select-window -t {window_name}"
+    )
+
+
+def start_chat():
+    """Start a chat-only session (no task tracking required)."""
+    click.echo(
+        click.style("•", fg="cyan")
+        + " Chat session started. Write operations are allowed without task tracking."
     )

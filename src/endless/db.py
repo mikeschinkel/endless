@@ -36,14 +36,14 @@ def _init_schema(conn: sqlite3.Connection):
 
 def _migrate(conn: sqlite3.Connection):
     """Run schema migrations for existing databases."""
-    # Check if plan_items has title column
+    # Check if plans has title column
     cols = [
-        r[1] for r in conn.execute("PRAGMA table_info(plan_items)").fetchall()
+        r[1] for r in conn.execute("PRAGMA table_info(plans)").fetchall()
     ]
     if "title" not in cols:
-        conn.execute("ALTER TABLE plan_items ADD COLUMN title TEXT")
+        conn.execute("ALTER TABLE plans ADD COLUMN title TEXT")
         conn.execute(
-            "UPDATE plan_items SET title = substr(task_text, 1, 80) "
+            "UPDATE plans SET title = substr(description, 1, 80) "
             "WHERE title IS NULL"
         )
         conn.commit()

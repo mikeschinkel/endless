@@ -54,3 +54,35 @@ go:
 # Kill any running endless-serve process
 kill:
     pkill -f endless-serve || true
+
+# Export this project's Endless data (plans, notes, deps) for version control
+db-export:
+    #!/usr/bin/env bash
+    project_id=$(sqlite3 ~/.config/endless/endless.db "SELECT id FROM projects WHERE path = '$(pwd)'")
+    if [ -z "$project_id" ]; then echo "Project not registered in Endless"; exit 1; fi
+    sqlite3 ~/.config/endless/endless.db <<SQL > .endless/data.sql
+    .mode insert projects
+    SELECT * FROM projects WHERE id = $project_id;
+    .mode insert plans
+    SELECT * FROM plans WHERE project_id = $project_id;
+    .mode insert notes
+    SELECT * FROM notes WHERE project_id = $project_id;
+    .mode insert task_dependencies
+    SELECT * FROM task_dependencies WHERE
+      (source_type = 'task' AND source_id IN (SELECT id FROM plans WHERE project_id = $project_id))
+      OR (target_type = 'task' AND target_id IN (SELECT id FROM plans WHERE project_id = $project_id))
+      OR (source_type = 'project' AND source_id = $project_id)
+      OR (target_type = 'project' AND target_id = $project_id);
+    SQL
+    echo "Exported project $project_id to .endless/data.sql"
+
+# Commit with DB export (usage: just git-commit "message")
+git-commit msg:
+    just db-export
+    git add .endless/data.sql
+    git commit -m "{{ msg }}"
+
+# Commit and push (usage: just git-push "message")
+git-push msg:
+    just git-commit "{{ msg }}"
+    git push

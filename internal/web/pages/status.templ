@@ -1,0 +1,57 @@
+package pages
+
+import (
+	"fmt"
+	"github.com/mikeschinkel/endless/internal/web/components"
+	"github.com/mikeschinkel/endless/internal/web/data"
+)
+
+templ StatusPage(projects []data.DashboardProject, selected string, detail *data.StatusDetail) {
+	@components.Layout("Status", "/status") {
+		<div class="grid grid-cols-[280px_1fr] gap-0 h-[calc(100vh-8rem)]">
+			<!-- Left pane: project list -->
+			<div class="border-r border-gray-800 overflow-y-auto">
+				<div class="p-3 border-b border-gray-800">
+					<h2 class="text-sm font-semibold text-gray-400 uppercase tracking-wider">Projects</h2>
+				</div>
+				<div class="py-1">
+					for _, p := range projects {
+						<a href={ templ.SafeURL(fmt.Sprintf("/status/%s", p.Name)) }
+						   hx-get={ fmt.Sprintf("/status/%s/detail", p.Name) }
+						   hx-target="#detail-pane"
+						   hx-swap="innerHTML"
+						   hx-push-url={ fmt.Sprintf("/status/%s", p.Name) }
+						   class={ "block px-3 py-2 cursor-pointer transition-colors",
+						     templ.KV("bg-gray-800/50 text-gray-100", p.Name == selected),
+						     templ.KV("text-gray-400 hover:bg-gray-800/30 hover:text-gray-200", p.Name != selected) }>
+							<div class="flex items-center gap-2">
+								if p.Status == "active" {
+									<span class="w-2 h-2 rounded-full bg-emerald-400 shrink-0"></span>
+								} else if p.Status == "paused" {
+									<span class="w-2 h-2 rounded-full bg-amber-400 shrink-0"></span>
+								} else if p.Status == "idea" {
+									<span class="w-2 h-2 rounded-full bg-blue-400 shrink-0"></span>
+								} else {
+									<span class="w-2 h-2 rounded-full bg-gray-600 shrink-0"></span>
+								}
+								<span class="text-sm font-medium truncate">{ p.Name }</span>
+							</div>
+							if p.Label != "" {
+								<div class="text-xs text-gray-500 ml-4 truncate">{ p.Label }</div>
+							}
+						</a>
+					}
+				</div>
+			</div>
+
+			<!-- Right pane: project detail -->
+			<div id="detail-pane" class="overflow-y-auto p-6">
+				if detail != nil {
+					@StatusDetail(detail)
+				} else {
+					<p class="text-sm text-gray-500">Select a project</p>
+				}
+			</div>
+		</div>
+	}
+}

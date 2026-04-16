@@ -14,7 +14,7 @@ type PlanItem struct {
 	StableID string
 }
 
-// GetActivePlanItems returns in-progress and pending items for a project.
+// GetActivePlanItems returns in-progress and needs_plan items for a project.
 func GetActivePlanItems(projectID int64) ([]PlanItem, error) {
 	db, err := DB()
 	if err != nil {
@@ -22,9 +22,9 @@ func GetActivePlanItems(projectID int64) ([]PlanItem, error) {
 	}
 
 	rows, err := db.Query(
-		"SELECT id, phase, task_text, status "+
-			"FROM plan_items "+
-			"WHERE project_id = ? AND status IN ('in_progress', 'pending') "+
+		"SELECT id, phase, description, status "+
+			"FROM plans "+
+			"WHERE project_id = ? AND status IN ('in_progress', 'needs_plan', 'ready') "+
 			"ORDER BY CASE status WHEN 'in_progress' THEN 0 ELSE 1 END, sort_order",
 		projectID,
 	)
@@ -56,42 +56,44 @@ func FormatPlanContext(projectName string, items []PlanItem) string {
 		return b.String()
 	}
 
-	fmt.Fprintf(&b, "Endless has an active plan for %s. ", projectName)
-	b.WriteString("Present this to the user and get confirmation before proceeding:\n\n")
+	fmt.Fprintf(&b, "Endless has an active plan for %s.\n", projectName)
+	b.WriteString("Present this to the user and ask which task to work on:\n\n")
 
-	var inProgress, pending []PlanItem
+	var inProgress, available []PlanItem
 	for _, item := range items {
 		if item.Status == "in_progress" {
 			inProgress = append(inProgress, item)
 		} else {
-			pending = append(pending, item)
+			available = append(available, item)
 		}
 	}
 
 	if len(inProgress) > 0 {
 		b.WriteString("IN PROGRESS:\n")
 		for _, item := range inProgress {
-			b.WriteString(fmt.Sprintf("  - #%d %s\n", item.ID, item.Text))
+			fmt.Fprintf(&b, "  - #%d %s\n", item.ID, item.Text)
 		}
 	}
 
-	if len(pending) > 0 {
-		// Show at most 5 pending items
+	if len(available) > 0 {
 		b.WriteString("NEXT UP:\n")
-		limit := 5
-		if len(pending) < limit {
-			limit = len(pending)
+		limit := min(5, len(available))
+		for _, item := range available[:limit] {
+			fmt.Fprintf(&b, "  - #%d %s\n", item.ID, item.Text)
 		}
-		for _, item := range pending[:limit] {
-			b.WriteString(fmt.Sprintf("  - #%d %s\n", item.ID, item.Text))
-		}
-		if len(pending) > 5 {
-			b.WriteString(fmt.Sprintf("  ... and %d more pending items\n", len(pending)-5))
+		if len(available) > 5 {
+			fmt.Fprintf(&b, "  ... and %d more items\n", len(available)-5)
 		}
 	}
 
+	b.WriteString("\nIMPORTANT: You MUST register a task before making any file changes.")
+	b.WriteString("\n1. Present this plan to the user")
+	b.WriteString("\n2. Ask which task to work on")
+	b.WriteString("\n3. Run `endless plan start <id>` after user confirms")
+	b.WriteString("\n4. If this is just a conversation (no code changes), run `endless plan chat`")
+	b.WriteString("\n")
 	b.WriteString("\nUse `endless plan complete <id>` when done with a task.")
-	b.WriteString("\nUse `endless plan start <id>` to mark a task as in progress.")
+	b.WriteString("\nRead-only operations (Read, Glob, Grep) work without registration.")
 
 	return b.String()
 }

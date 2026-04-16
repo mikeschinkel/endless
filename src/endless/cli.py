@@ -128,9 +128,11 @@ def plan_cmd():
               help="Import from JSON file")
 @click.option("--project", default=None,
               help="Project name (default: detect from cwd)")
-@click.option("--clear", is_flag=True,
-              help="Clear existing plan items before importing")
-def plan_import(file, from_claude, json_file, project, clear):
+@click.option("--replace", is_flag=True,
+              help="Replace items from same source file under same parent")
+@click.option("--parent", type=int, default=None,
+              help="Parent goal ID to import under")
+def plan_import(file, from_claude, json_file, project, replace, parent):
     """Import a plan file into the DB."""
     if json_file:
         import json as json_mod
@@ -140,55 +142,66 @@ def plan_import(file, from_claude, json_file, project, clear):
         if not p.exists():
             raise click.ClickException(f"File not found: {p}")
         data = json_mod.loads(p.read_text())
-        import_json(data, project_name=project, clear=clear)
+        import_json(data, project_name=project, clear=replace)
     else:
         from endless.plan_cmd import import_plan
         import_plan(
             file_path=file, from_claude=from_claude,
-            project_name=project, clear=clear,
+            project_name=project, replace=replace,
+            parent_id=parent,
         )
 
 
 @plan_cmd.command("show")
 @click.option("--project", default=None,
               help="Project name (default: detect from cwd)")
-@click.option("--plan", "plan_id", default=0, type=int,
-              help="Show a specific sub-plan")
 @click.option("--all", "show_all", is_flag=True,
               help="Include completed items")
-def plan_show(project, plan_id, show_all):
+def plan_show(project, show_all):
     """Show the current plan for a project."""
     from endless.plan_cmd import show_plan
-    show_plan(project_name=project, show_all=show_all, plan_id=plan_id)
+    show_plan(project_name=project, show_all=show_all)
 
 
 @plan_cmd.command("add")
-@click.argument("text")
-@click.option("--title", default=None,
-              help="Short scannable title (default: first 80 chars of text)")
+@click.argument("title")
+@click.option("--description", default=None,
+              help="Longer description of the plan")
 @click.option("--phase", default="now",
               help="Phase: now, next, later (default: now)")
 @click.option("--project", default=None,
               help="Project name (default: detect from cwd)")
-@click.option("--plan", "plan_id", default=0, type=int,
-              help="Add to a specific sub-plan")
+@click.option("--parent", type=int, default=None,
+              help="Parent plan ID to add under")
 @click.option("--after", type=int, default=None,
-              help="Insert after this item ID")
-def plan_add(text, title, phase, project, plan_id, after):
-    """Add a plan item."""
+              help="Insert after this plan ID")
+def plan_add(title, description, phase, project, parent, after):
+    """Add a plan."""
     from endless.plan_cmd import add_item
-    add_item(text, title=title, phase=phase, project_name=project,
-             after=after, plan_id=plan_id)
+    add_item(title, description=description, phase=phase,
+             project_name=project, after=after, parent_id=parent)
 
 
-@plan_cmd.command("sub")
-@click.argument("parent_item_id", type=int)
-@click.option("--project", default=None,
-              help="Project name (default: detect from cwd)")
-def plan_sub(parent_item_id, project):
-    """Create a sub-plan for a plan item."""
-    from endless.plan_cmd import create_sub_plan
-    create_sub_plan(parent_item_id, project_name=project)
+@plan_cmd.command("update")
+@click.argument("item_id", type=int)
+@click.option("--status", default=None,
+              help="Status: needs_plan, ready, in_progress, verify, completed, blocked, revisit")
+@click.option("--title", default=None,
+              help="New title")
+@click.option("--description", default=None,
+              help="New description")
+@click.option("--text", "text_file", default=None,
+              help="Load full plan text from file")
+@click.option("--prompt", "prompt_file", default=None,
+              help="Load prompt from file")
+@click.option("--parent", type=int, default=None,
+              help="Set parent plan ID (0 to make root)")
+def plan_update(item_id, status, title, description, text_file, prompt_file, parent):
+    """Update fields on a plan."""
+    from endless.plan_cmd import update_plan
+    update_plan(item_id, status=status, title=title,
+                description=description, text_file=text_file,
+                prompt_file=prompt_file, parent_id=parent)
 
 
 @plan_cmd.command("remove")
@@ -213,6 +226,39 @@ def plan_start(item_id):
     """Mark a plan item as in progress."""
     from endless.plan_cmd import start_item
     start_item(item_id)
+
+
+@plan_cmd.command("detail")
+@click.argument("item_id", type=int)
+def plan_detail(item_id):
+    """Show full detail for a plan item."""
+    from endless.plan_cmd import detail_item
+    detail_item(item_id)
+
+
+@plan_cmd.command("prompt")
+@click.argument("item_id", type=int)
+def plan_prompt(item_id):
+    """Output the raw prompt for a plan item (for piping to a session)."""
+    from endless.plan_cmd import show_prompt
+    show_prompt(item_id)
+
+
+@plan_cmd.command("spawn")
+@click.argument("item_id", type=int)
+@click.option("--project", default=None,
+              help="Project name (default: detect from cwd)")
+def plan_spawn(item_id, project):
+    """Spawn a new tmux window with Claude working on a plan's prompt."""
+    from endless.plan_cmd import spawn_plan
+    spawn_plan(item_id, project_name=project)
+
+
+@plan_cmd.command("chat")
+def plan_chat():
+    """Start a chat-only session (no task tracking)."""
+    from endless.plan_cmd import start_chat
+    start_chat()
 
 
 @main.command("docs")

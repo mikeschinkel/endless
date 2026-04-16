@@ -31,12 +31,16 @@ func Serve(port int) error {
 
 	// Pages
 	mux.HandleFunc("/", handleDashboard)
-	mux.HandleFunc("/projects", handleProjects)
+	mux.HandleFunc("/projects", handleProjects) // redirects to /status
+	mux.HandleFunc("/status", handleStatus)
+	mux.HandleFunc("/status/{name}", handleStatus)
+	mux.HandleFunc("/status/{name}/detail", handleStatusDetail)
 	mux.HandleFunc("/project/{name}", handleProjectDetail)
 	mux.HandleFunc("/project/{name}/plan", handleProjectPlan)
 	mux.HandleFunc("/plans", handlePlans)
 	mux.HandleFunc("/activity", handleActivity)
 	mux.HandleFunc("/notes", handleNotes)
+	mux.HandleFunc("PUT /plan-item/{id}/title", handleUpdatePlanItemTitle)
 
 	addr := fmt.Sprintf(":%d", port)
 	fmt.Printf("Endless dashboard: http://localhost%s\n", addr)

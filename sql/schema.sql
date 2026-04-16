@@ -130,32 +130,36 @@ CREATE TABLE IF NOT EXISTS ai_sessions (
         CHECK (platform IN ('claude', 'codex')),
     state TEXT NOT NULL DEFAULT 'working'
         CHECK (state IN ('working', 'idle', 'needs_input', 'ended')),
+    active_goal_id INTEGER,
     working_dir TEXT,
     transcript_path TEXT,
+    plan_file_path TEXT,
     started_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
     last_activity TEXT,
     ended_at TEXT,
     UNIQUE (session_id),
-    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL
+    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL,
+    FOREIGN KEY (active_goal_id) REFERENCES plans(id) ON DELETE SET NULL
 );
 
 -- Plan items (imported from plan files, managed by Endless)
-CREATE TABLE IF NOT EXISTS plan_items (
+CREATE TABLE IF NOT EXISTS plans (
     id INTEGER PRIMARY KEY,
     project_id INTEGER NOT NULL,
     phase TEXT NOT NULL DEFAULT 'now',
     title TEXT,
-    task_text TEXT NOT NULL,
-    status TEXT NOT NULL DEFAULT 'pending'
-        CHECK (status IN ('pending', 'in_progress', 'completed', 'blocked')),
+    description TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'needs_plan'
+        CHECK (status IN ('needs_plan', 'ready', 'in_progress', 'verify', 'completed', 'blocked', 'revisit')),
     source_file TEXT,
     sort_order INTEGER NOT NULL DEFAULT 0,
     plan_id INTEGER NOT NULL DEFAULT 0,
-    parent_item_id INTEGER,
+    parent_id INTEGER,
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
     completed_at TEXT,
+    prompt TEXT,
     FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
-    FOREIGN KEY (parent_item_id) REFERENCES plan_items(id) ON DELETE SET NULL
+    FOREIGN KEY (parent_id) REFERENCES plans(id) ON DELETE SET NULL
 );
 
 -- Task dependencies (cross-project capable)

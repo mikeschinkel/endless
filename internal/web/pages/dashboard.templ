@@ -6,93 +6,42 @@ import (
 	"github.com/mikeschinkel/endless/internal/web/data"
 	"github.com/templui/templui/components/card"
 	"github.com/templui/templui/components/table"
-	"github.com/templui/templui/components/progress"
 )
 
-templ Dashboard(projects []data.DashboardProject, activities []data.ActivityView, currentWork []data.CurrentWorkItem) {
+templ Dashboard(allProjects []data.DashboardProject, recentProjects []data.DashboardProject, activities []data.ActivityView) {
 	@components.Layout("Dashboard", "/") {
-		@progress.Script()
 		<h2 class="text-2xl font-bold text-gray-100 mb-6">Dashboard</h2>
 
-		if len(currentWork) > 0 {
-			<!-- Current Work -->
-			@card.Card(card.Props{Class: "mb-3"}) {
+		<div class="grid grid-cols-1 lg:grid-cols-2 gap-3">
+			<!-- Active Projects (all) -->
+			@card.Card() {
 				@card.Header() {
 					@card.Title(card.TitleProps{Class: "text-sm font-semibold text-gray-400 uppercase tracking-wider"}) {
-						Current Work
+						Active Projects
 					}
 				}
 				@card.Content() {
-					@table.Table() {
-						@table.Body() {
-							for _, w := range currentWork {
-								@table.Row(table.RowProps{Class: "border-gray-800/60"}) {
-									@table.Cell(table.CellProps{Class: "w-40"}) {
-										<a href={ templ.SafeURL(fmt.Sprintf("/project/%s", w.Project)) } class="text-sm text-gray-400 hover:text-emerald-400">
-											{ w.Project }
-										</a>
-									}
-									@table.Cell() {
-										<span class="text-sm text-gray-200">{ w.Title }</span>
-									}
-								}
-							}
-						}
-					}
-				}
-			}
-		}
-
-		<div class="grid grid-cols-1 lg:grid-cols-3 gap-3">
-			<!-- Active Projects (2/3 width) -->
-			@card.Card(card.Props{Class: "lg:col-span-2"}) {
-				@card.Header() {
-					<div class="flex items-center justify-between">
-						@card.Title(card.TitleProps{Class: "text-sm font-semibold text-gray-400 uppercase tracking-wider"}) {
-							Active Projects
-						}
-						<a href="/projects" class="text-xs text-emerald-400 hover:text-emerald-300">View all →</a>
-					</div>
-				}
-				@card.Content() {
-					if len(projects) > 0 {
+					if len(allProjects) > 0 {
 						@table.Table() {
-							@table.Header() {
-								@table.Row(table.RowProps{Class: "border-gray-700"}) {
-									@table.Head(table.HeadProps{Class: "text-gray-400"}) { Project }
-									@table.Head(table.HeadProps{Class: "text-gray-400"}) { Progress }
-									@table.Head(table.HeadProps{Class: "text-gray-400 text-right"}) { Last Active }
-								}
-							}
 							@table.Body() {
-								for i, p := range projects {
-									if i < 15 {
-										@table.Row(table.RowProps{Class: "border-gray-800/60 hover:bg-gray-800/30"}) {
-											@table.Cell() {
-												<a href={ templ.SafeURL(fmt.Sprintf("/project/%s", p.Name)) } class="text-gray-300 hover:text-emerald-400 font-medium">
-													{ p.Name }
-												</a>
+								for _, p := range allProjects {
+									@table.Row(table.RowProps{Class: "border-gray-800/60 hover:bg-gray-800/30"}) {
+										@table.Cell() {
+											<a href={ templ.SafeURL(fmt.Sprintf("/status/%s", p.Name)) } class="text-gray-300 hover:text-emerald-400 font-medium">
+												{ p.Name }
+											</a>
+										}
+										@table.Cell() {
+											@statusBadge(p.Status)
+										}
+										@table.Cell() {
+											if p.Label != "" {
+												<span class="text-xs text-gray-500">{ p.Label }</span>
 											}
-											@table.Cell() {
-												if p.TaskTotal > 0 {
-													<div class="flex items-center gap-2">
-														@progress.Progress(progress.Props{
-															Value:   p.TaskCompleted,
-															Max:     p.TaskTotal,
-															Size:    progress.SizeSm,
-															Variant: progress.VariantSuccess,
-															Class:   "min-w-20 [&>div]:!bg-gray-700",
-														})
-														<span class="text-xs text-muted-foreground shrink-0">
-															{ fmt.Sprintf("%d/%d", p.TaskCompleted, p.TaskTotal) }
-														</span>
-													</div>
-												} else {
-													<span class="text-xs text-muted-foreground italic">no plan</span>
-												}
-											}
-											@table.Cell(table.CellProps{Class: "text-right"}) {
-												<span class="text-xs text-muted-foreground">{ data.SmartDate(p.LastActivity) }</span>
+										}
+										@table.Cell(table.CellProps{Class: "text-right"}) {
+											if p.TaskTotal > 0 {
+												<span class="text-xs text-gray-500">{ fmt.Sprintf("%d/%d", p.TaskCompleted, p.TaskTotal) }</span>
 											}
 										}
 									}
@@ -105,8 +54,47 @@ templ Dashboard(projects []data.DashboardProject, activities []data.ActivityView
 				}
 			}
 
-			<!-- Recent Activity (1/3 width) -->
+			<!-- Recent Projects (top 3 by activity) -->
 			@card.Card() {
+				@card.Header() {
+					<div class="flex items-center justify-between">
+						@card.Title(card.TitleProps{Class: "text-sm font-semibold text-gray-400 uppercase tracking-wider"}) {
+							Recent Projects
+						}
+						<a href="/status" class="text-xs text-emerald-400 hover:text-emerald-300">View all →</a>
+					</div>
+				}
+				@card.Content() {
+					if len(recentProjects) > 0 {
+						@table.Table() {
+							@table.Body() {
+								for _, p := range recentProjects {
+									@table.Row(table.RowProps{Class: "border-gray-800/60 hover:bg-gray-800/30"}) {
+										@table.Cell() {
+											<a href={ templ.SafeURL(fmt.Sprintf("/status/%s", p.Name)) } class="text-gray-300 hover:text-emerald-400 font-medium">
+												{ p.Name }
+											</a>
+										}
+										@table.Cell() {
+											if p.Label != "" {
+												<span class="text-xs text-gray-500">{ p.Label }</span>
+											}
+										}
+										@table.Cell(table.CellProps{Class: "text-right"}) {
+											<span class="text-xs text-muted-foreground">{ data.SmartDate(p.LastActivity) }</span>
+										}
+									}
+								}
+							}
+						}
+					} else {
+						<p class="text-sm text-gray-500">No recent activity</p>
+					}
+				}
+			}
+
+			<!-- Recent Activity -->
+			@card.Card(card.Props{Class: "lg:col-span-2"}) {
 				@card.Header() {
 					<div class="flex items-center justify-between">
 						@card.Title(card.TitleProps{Class: "text-sm font-semibold text-gray-400 uppercase tracking-wider"}) {
@@ -125,7 +113,7 @@ templ Dashboard(projects []data.DashboardProject, activities []data.ActivityView
 											<span class="text-muted-foreground font-mono text-xs">{ a.Source }</span>
 										}
 										@table.Cell(table.CellProps{Class: "py-1.5"}) {
-											<a href={ templ.SafeURL(fmt.Sprintf("/project/%s", a.Project)) } class="text-xs text-gray-400 hover:text-emerald-400">
+											<a href={ templ.SafeURL(fmt.Sprintf("/status/%s", a.Project)) } class="text-xs text-gray-400 hover:text-emerald-400">
 												{ a.Project }
 											</a>
 										}

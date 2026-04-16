@@ -74,6 +74,7 @@ type PlanItemView struct {
 	ParentID   *int64
 	ChildCount int
 	BlockedBy  string
+	Depth      int // nesting depth for tree display (0 = root)
 }
 
 type ActivityView struct {
@@ -101,10 +102,28 @@ type PlanSummary struct {
 }
 
 type CurrentWorkItem struct {
-	Project string
-	Title   string
-	Text    string
-	TaskID  int64
+	Project      string
+	Title        string
+	Text         string
+	TaskID       int64
+	Status       string // plan item status
+	SessionState string
+	LastActivity string
+}
+
+type PlanWithTasks struct {
+	PlanID   int64
+	PlanName string
+	Tasks    []PlanItemView // max 3 next tasks
+	Total    int
+	Done     int
+}
+
+type StatusDetail struct {
+	Project      DashboardProject
+	Plans        []PlanWithTasks
+	PlanItems    []PlanItemView // tree-ordered items with Depth
+	PendingNotes int
 }
 
 type DependencyView struct {

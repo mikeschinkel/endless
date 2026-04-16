@@ -13,6 +13,7 @@
 
 @source "../../pages";
 @source "../../components";
+@source "../../components/markdown";
 @source "./templui/components";
 
 /* Endless dark theme overrides */
@@ -60,6 +61,11 @@ html.dark .border-gray-800\/60 {
 }
 [data-tui-sidebar-state="expanded"] [data-tui-sidebar="content"] {
   padding-left: 0.75em !important;
+}
+
+/* Markdown collapsible caret rotation */
+[data-tui-collapsible-state="open"] > [data-tui-collapsible="trigger"] .md-caret {
+  transform: rotate(90deg);
 }
 
 @theme {

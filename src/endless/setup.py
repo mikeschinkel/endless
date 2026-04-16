@@ -180,6 +180,7 @@ CLAUDE_SETTINGS_PATH = Path.home() / ".claude" / "settings.json"
 
 # Events we want to hook into
 CLAUDE_HOOK_EVENTS = [
+    "PreToolUse",
     "SessionStart",
     "UserPromptSubmit",
     "PostToolUse",
@@ -214,7 +215,7 @@ def _make_hook_entry(hook_bin: str, is_async: bool = True) -> dict:
     }
 
 # Events that must be synchronous (Claude reads the response)
-SYNC_EVENTS = {"SessionStart", "UserPromptSubmit", "PostToolUse"}
+SYNC_EVENTS = {"PreToolUse", "SessionStart", "UserPromptSubmit", "PostToolUse"}
 
 
 def _has_endless_hook(settings: dict) -> bool:

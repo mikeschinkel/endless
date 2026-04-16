@@ -22,7 +22,7 @@ type NavItem struct {
 func navItems() []NavItem {
 	return []NavItem{
 		{Label: "Dashboard", Path: "/", Icon: "⌘"},
-		{Label: "Projects", Path: "/projects", Icon: "◆"},
+		{Label: "Status", Path: "/status", Icon: "◆"},
 		{Label: "Plans", Path: "/plans", Icon: "▶"},
 		{Label: "Activity", Path: "/activity", Icon: "⚡"},
 		{Label: "Notes", Path: "/notes", Icon: "✎"},

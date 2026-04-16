@@ -42,8 +42,8 @@ func DB() (*sql.DB, error) {
 
 // migrate runs schema migrations for existing databases.
 func migrate(db *sql.DB) {
-	// Add title column to plan_items if missing
-	rows, err := db.Query("PRAGMA table_info(plan_items)")
+	// Add title column to plans if missing
+	rows, err := db.Query("PRAGMA table_info(plans)")
 	if err == nil {
 		hasTitle := false
 		for rows.Next() {
@@ -59,8 +59,58 @@ func migrate(db *sql.DB) {
 		}
 		rows.Close()
 		if !hasTitle {
-			db.Exec("ALTER TABLE plan_items ADD COLUMN title TEXT")
-			db.Exec("UPDATE plan_items SET title = substr(task_text, 1, 80) WHERE title IS NULL")
+			db.Exec("ALTER TABLE plans ADD COLUMN title TEXT")
+			db.Exec("UPDATE plans SET title = substr(description, 1, 80) WHERE title IS NULL")
+		}
+	}
+
+	// Add active_task_id column to ai_sessions if missing (legacy)
+	rows, err = db.Query("PRAGMA table_info(ai_sessions)")
+	if err == nil {
+		hasActiveTaskID := false
+		hasActiveGoalID := false
+		for rows.Next() {
+			var cid int
+			var name, typ string
+			var notnull int
+			var dflt *string
+			var pk int
+			rows.Scan(&cid, &name, &typ, &notnull, &dflt, &pk)
+			if name == "active_task_id" {
+				hasActiveTaskID = true
+			}
+			if name == "active_goal_id" {
+				hasActiveGoalID = true
+			}
+		}
+		rows.Close()
+		if !hasActiveTaskID && !hasActiveGoalID {
+			db.Exec("ALTER TABLE ai_sessions ADD COLUMN active_goal_id INTEGER REFERENCES plans(id)")
+		}
+		if hasActiveTaskID && !hasActiveGoalID {
+			db.Exec("ALTER TABLE ai_sessions ADD COLUMN active_goal_id INTEGER REFERENCES plans(id)")
+			db.Exec("UPDATE ai_sessions SET active_goal_id = active_task_id WHERE active_task_id IS NOT NULL")
+		}
+	}
+
+	// Add plan_file_path column to ai_sessions if missing
+	rows, err = db.Query("PRAGMA table_info(ai_sessions)")
+	if err == nil {
+		hasPlanFilePath := false
+		for rows.Next() {
+			var cid int
+			var name, typ string
+			var notnull int
+			var dflt *string
+			var pk int
+			rows.Scan(&cid, &name, &typ, &notnull, &dflt, &pk)
+			if name == "plan_file_path" {
+				hasPlanFilePath = true
+			}
+		}
+		rows.Close()
+		if !hasPlanFilePath {
+			db.Exec("ALTER TABLE ai_sessions ADD COLUMN plan_file_path TEXT")
 		}
 	}
 
@@ -78,6 +128,35 @@ func migrate(db *sql.DB) {
 			created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
 			UNIQUE(source_type, source_id, target_type, target_id)
 		)`)
+	}
+
+	// Add description + prompt columns, migrate from task_text
+	rows, err = db.Query("PRAGMA table_info(plans)")
+	if err == nil {
+		hasDescription := false
+		hasPrompt := false
+		for rows.Next() {
+			var cid int
+			var name, typ string
+			var notnull int
+			var dflt *string
+			var pk int
+			rows.Scan(&cid, &name, &typ, &notnull, &dflt, &pk)
+			if name == "description" {
+				hasDescription = true
+			}
+			if name == "prompt" {
+				hasPrompt = true
+			}
+		}
+		rows.Close()
+		if !hasDescription {
+			db.Exec("ALTER TABLE plans ADD COLUMN description TEXT")
+			db.Exec("UPDATE plans SET description = task_text WHERE task_text IS NOT NULL AND description IS NULL")
+		}
+		if !hasPrompt {
+			db.Exec("ALTER TABLE plans ADD COLUMN prompt TEXT")
+		}
 	}
 }
 

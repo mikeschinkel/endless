@@ -3,6 +3,7 @@ package pages
 import (
 	"fmt"
 	"github.com/mikeschinkel/endless/internal/web/components"
+	"github.com/mikeschinkel/endless/internal/web/components/markdown"
 	"github.com/mikeschinkel/endless/internal/web/data"
 )
 
@@ -64,9 +65,7 @@ templ ProjectDetail(project *data.DashboardProject, planItems []data.PlanItemVie
 								</div>
 								<div x-show="open" x-cloak class="mt-2 pl-7 text-sm text-gray-400 leading-relaxed">
 									if item.Text != item.Title {
-										<div class="prose-sm prose-invert">
-											@templ.Raw(renderMarkdown(item.Text))
-										</div>
+										@markdown.MarkdownContent(item.Text)
 									}
 									if item.BlockedBy != "" {
 										<p class="text-xs text-rose-400 mt-2">Blocked by: { item.BlockedBy }</p>
@@ -94,26 +93,25 @@ templ ProjectDetail(project *data.DashboardProject, planItems []data.PlanItemVie
 				if len(planItems) > 0 {
 					<div class="bg-gray-900 border border-gray-800 rounded-lg divide-y divide-gray-800/50">
 						for _, item := range planItems {
-							<div class="px-4 py-2" x-data="{ open: false }">
-								<div class="flex items-center gap-3 cursor-pointer" x-on:click="open = !open">
+							<div class="py-2" x-data="{ open: false }"
+								style={ fmt.Sprintf("padding-left: %dpx; padding-right: 16px;", 16 + item.Depth * 20) }>
+								<div class="flex items-center gap-2 cursor-pointer" x-on:click="open = !open">
 									@planStatusIcon(item.Status)
-									<span class="text-sm text-gray-300 flex-1 truncate">{ item.Title }</span>
-									if item.ChildCount > 0 {
-										<span class="text-xs text-gray-600">{ fmt.Sprintf("%d sub-items", item.ChildCount) }</span>
+									<span class={ "text-sm flex-1 truncate", templ.KV("font-semibold text-gray-200", item.ChildCount > 0), templ.KV("text-gray-300", item.ChildCount == 0) }>
+										{ item.Title }
+									</span>
+									if item.Phase != "now" {
+										<span class="text-xs px-1.5 py-0.5 rounded bg-gray-800 text-gray-500 font-mono">{ item.Phase }</span>
 									}
-									<span class="text-xs text-gray-600 font-mono">{ item.Status }</span>
+									<span class="text-xs text-gray-600 font-mono">{ fmt.Sprintf("#%d", item.ID) }</span>
 									<span class="text-gray-600 text-xs" x-text="open ? '▾' : '▸'">▸</span>
 								</div>
-								<div x-show="open" x-cloak class="mt-2 pl-7 text-sm text-gray-400 leading-relaxed">
+								<div x-show="open" x-cloak class="mt-2 pl-6 text-sm text-gray-400 leading-relaxed">
 									if item.Text != item.Title {
-										<div class="prose-sm prose-invert">
-											@templ.Raw(renderMarkdown(item.Text))
-										</div>
-									} else {
-										<p class="text-gray-500 italic text-xs">No additional details</p>
+										@markdown.MarkdownContent(item.Text)
 									}
 									if item.BlockedBy != "" {
-										<p class="text-xs text-rose-400 mt-2">Blocked by: { item.BlockedBy }</p>
+										<p class="text-xs text-rose-400 mt-1">Blocked by: { item.BlockedBy }</p>
 									}
 								</div>
 							</div>
@@ -205,7 +203,7 @@ templ ProjectDetail(project *data.DashboardProject, planItems []data.PlanItemVie
 	}
 }
 
-// nextActions returns in-progress items first, then next pending items, up to 5 total.
+// nextActions returns in-progress items first, then next available items, up to 5 total.
 func nextActions(items []data.PlanItemView) []data.PlanItemView {
 	var result []data.PlanItemView
 	// In-progress first
@@ -220,12 +218,12 @@ func nextActions(items []data.PlanItemView) []data.PlanItemView {
 			result = append(result, item)
 		}
 	}
-	// Then next pending (up to 5 total)
+	// Then next available (up to 5 total)
 	for _, item := range items {
 		if len(result) >= 5 {
 			break
 		}
-		if item.Status == "pending" {
+		if item.Status == "needs_plan" || item.Status == "ready" {
 			result = append(result, item)
 		}
 	}
@@ -237,10 +235,6 @@ func progressPct(completed, total int) int {
 		return 0
 	}
 	return completed * 100 / total
-}
-
-func renderMarkdown(input string) string {
-	return data.RenderMarkdown(input)
 }
 
 templ planStatusIcon(status string) {
