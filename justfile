@@ -78,11 +78,13 @@ db-export:
 
 # Commit with DB export (usage: just git-commit "message")
 git-commit msg:
+    #!/usr/bin/env bash
     just db-export
     git add .endless/data.sql
     git commit -m "{{ msg }}"
 
 # Commit and push (usage: just git-push "message")
 git-push msg:
+    #!/usr/bin/env bash
     just git-commit "{{ msg }}"
     git push
