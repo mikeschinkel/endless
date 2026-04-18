@@ -162,7 +162,16 @@ func GetProjectPlanItems(projectID int64) []data.PlanItemView {
 		 ),'') as blocked_by
 		 FROM plans pi
 		 WHERE pi.project_id = ?
-		 ORDER BY pi.sort_order`, projectID)
+		 ORDER BY pi.parent_id, CASE pi.status
+		   WHEN 'in_progress' THEN 0
+		   WHEN 'verify' THEN 1
+		   WHEN 'ready' THEN 2
+		   WHEN 'needs_plan' THEN 3
+		   WHEN 'revisit' THEN 4
+		   WHEN 'blocked' THEN 5
+		   WHEN 'completed' THEN 6
+		   ELSE 7
+		 END, pi.sort_order`, projectID)
 	if err != nil {
 		return nil
 	}
@@ -188,13 +197,14 @@ func GetProjectPlanItems(projectID int64) []data.PlanItemView {
 		}
 	}
 
-	// Flatten tree in depth-first order with computed Depth
+	// Flatten tree in depth-first order with computed Depth and SiblingNum
 	var result []data.PlanItemView
 	var walk func(indices []int, depth int)
 	walk = func(indices []int, depth int) {
-		for _, idx := range indices {
+		for i, idx := range indices {
 			item := allItems[idx]
 			item.Depth = depth
+			item.SiblingNum = i + 1
 			result = append(result, item)
 			if kids, ok := childrenOf[item.ID]; ok {
 				walk(kids, depth+1)

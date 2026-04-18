@@ -71,7 +71,7 @@ func FormatPlanContext(projectName string, items []PlanItem) string {
 	if len(inProgress) > 0 {
 		b.WriteString("IN PROGRESS:\n")
 		for _, item := range inProgress {
-			fmt.Fprintf(&b, "  - #%d %s\n", item.ID, item.Text)
+			fmt.Fprintf(&b, "  - E-%d %s\n", item.ID, item.Text)
 		}
 	}
 
@@ -79,7 +79,7 @@ func FormatPlanContext(projectName string, items []PlanItem) string {
 		b.WriteString("NEXT UP:\n")
 		limit := min(5, len(available))
 		for _, item := range available[:limit] {
-			fmt.Fprintf(&b, "  - #%d %s\n", item.ID, item.Text)
+			fmt.Fprintf(&b, "  - E-%d %s\n", item.ID, item.Text)
 		}
 		if len(available) > 5 {
 			fmt.Fprintf(&b, "  ... and %d more items\n", len(available)-5)

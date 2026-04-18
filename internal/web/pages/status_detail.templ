@@ -125,6 +125,7 @@ func planTreeXData(items []data.PlanItemView) string {
 		detail: null,
 		editingId: null,
 		editTitle: '',
+		showIds: false,
 		toggleAll(v) {
 			Object.keys(this.open).forEach(k => this.open[k] = v);
 			if (!v) this.detail = null;
@@ -149,9 +150,9 @@ func planTreeXData(items []data.PlanItemView) string {
 			const el = document.getElementById('edit-input-' + id);
 			if (!el) return;
 			el.dispatchEvent(new Event('save'));
-			const wrapper = el.closest('.absolute').previousElementSibling;
+			const titleSpan = document.getElementById('title-' + id);
 			this.$nextTick(() => {
-				wrapper.textContent = this.editTitle;
+				if (titleSpan) titleSpan.textContent = this.editTitle;
 				this.cancelEdit();
 			});
 		},
@@ -276,6 +277,9 @@ templ StatusDetail(detail *data.StatusDetail) {
 							class="text-xs text-gray-500 hover:text-gray-300 cursor-pointer">Expand</button>
 						<button x-on:click="toggleAll(false)"
 							class="text-xs text-gray-500 hover:text-gray-300 cursor-pointer">Collapse</button>
+						<button x-on:click="showIds = !showIds"
+							class="text-xs cursor-pointer"
+							x-bind:class="showIds ? 'text-emerald-400 hover:text-emerald-300' : 'text-gray-500 hover:text-gray-300'">IDs</button>
 						<a href={ templ.SafeURL(fmt.Sprintf("/project/%s/plan", detail.Project.Name)) }
 						   class="text-xs text-emerald-400 hover:text-emerald-300">Full plan →</a>
 					</div>
@@ -290,21 +294,35 @@ templ StatusDetail(detail *data.StatusDetail) {
 								<div class="flex items-center gap-1.5 rounded px-1 -mx-1 hover:bg-gray-800/40">
 									if item.ChildCount > 0 {
 										<button x-on:click={ fmt.Sprintf("open[%d] = !open[%d]", item.ID, item.ID) }
-											class="w-5 shrink-0 select-none cursor-pointer text-lg leading-none"
-											x-bind:class={ fmt.Sprintf("active[%d] ? 'text-amber-400 hover:text-amber-300' : 'text-gray-500 hover:text-gray-300'", item.ID) }
+											class="w-5 shrink-0 select-none cursor-pointer text-lg leading-none text-gray-500 hover:text-gray-300"
 											x-text={ fmt.Sprintf("open[%d] ? '▾' : '▸'", item.ID) }>▾</button>
 									} else {
-										<span class="w-5 shrink-0 text-center text-lg leading-none"
-											x-bind:class={ fmt.Sprintf("active[%d] ? 'text-amber-400' : 'text-gray-700'", item.ID) }>›</span>
+										<span class="w-5 shrink-0 text-center text-lg leading-none text-gray-700">›</span>
 									}
-									<span class={ "w-3 h-3 rounded-full shrink-0 cursor-pointer", statusSphereClass(item.Status) }
-									style="box-shadow: inset -1px -1px 2px rgba(0,0,0,0.3), inset 1px 1px 2px rgba(255,255,255,0.25);"
-									x-on:click={ fmt.Sprintf("detail = (detail === %d) ? null : %d", item.ID, item.ID) }></span>
-									<span class="relative">
+									<span class="relative shrink-0" x-data="{ tip: false }">
+										<span class={ "w-3 h-3 rounded-full block cursor-pointer", statusSphereClass(item.Status) }
+										style="box-shadow: inset -1px -1px 2px rgba(0,0,0,0.3), inset 1px 1px 2px rgba(255,255,255,0.25);"
+										x-on:mouseenter="tip = true"
+										x-on:mouseleave="tip = false"
+										x-on:click={ fmt.Sprintf("detail = (detail === %d) ? null : %d", item.ID, item.ID) }></span>
+										<span x-show="tip" x-cloak
+											class="absolute left-1/2 -translate-x-1/2 bottom-full mb-1.5 px-2 py-1 text-xs text-gray-200 bg-gray-800 border border-gray-600 rounded shadow-lg whitespace-nowrap z-30">
+											{ statusLabel(item.Status) }
+										</span>
+									</span>
+									<span class="w-5 text-center text-xs font-mono text-cyan-600">
+										{ fmt.Sprintf("%d", item.SiblingNum) }
+									</span>
+									<span class="relative group">
 										<span
+											id={ fmt.Sprintf("title-%d", item.ID) }
 											class={ "cursor-pointer", depthFontClass(item.Depth) }
 											x-on:dblclick.stop={ fmt.Sprintf("startEdit(%d, $el.textContent.trim())", item.ID) }>
 											{ item.Title }
+										</span>
+										<span class="text-xs font-mono text-emerald-400 ml-1.5"
+											x-bind:class="showIds ? '' : 'invisible group-hover:visible'">
+											{ fmt.Sprintf("E-%d", item.ID) }
 										</span>
 										<div x-show={ fmt.Sprintf("editingId === %d", item.ID) }
 											x-cloak
@@ -342,7 +360,7 @@ templ StatusDetail(detail *data.StatusDetail) {
 									<div class="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500 mb-1">
 										<span>{ statusLabel(item.Status) }</span>
 										<span>Phase: { item.Phase }</span>
-										<span class="font-mono">{ fmt.Sprintf("#%d", item.ID) }</span>
+										<span class="font-mono">{ fmt.Sprintf("E-%d", item.ID) }</span>
 										if item.ChildCount > 0 {
 											<span>{ fmt.Sprintf("%d sub-items", item.ChildCount) }</span>
 										}

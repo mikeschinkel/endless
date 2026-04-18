@@ -44,12 +44,16 @@ templ PlanDetail(project *data.DashboardProject, planItems []data.PlanItemView) 
 				for _, item := range planItems {
 					<div class="py-2"
 						style={ fmt.Sprintf("padding-left: %dpx; padding-right: 16px;", 16 + item.Depth * 20) }
-						x-data="{ open: false, editing: false, editTitle: '', startEdit(el) { this.editing = true; this.editTitle = el.textContent.trim(); this.$nextTick(() => { const inp = this.$refs.editInput; inp.style.minWidth = Math.max(this.editTitle.length + 5, 20) + 'ch'; inp.focus(); inp.select(); }); }, saveEdit() { if (!this.editTitle.trim()) return; const inp = this.$refs.editInput; inp.dispatchEvent(new Event('save')); this.$nextTick(() => { inp.closest('.absolute').previousElementSibling.textContent = this.editTitle; this.editing = false; }); } }"
+						x-data="{ open: false, editing: false, editTitle: '', startEdit(el) { this.editing = true; this.editTitle = el.textContent.trim(); this.$nextTick(() => { const inp = this.$refs.editInput; inp.style.minWidth = Math.max(this.editTitle.length + 5, 20) + 'ch'; inp.focus(); inp.select(); }); }, saveEdit() { if (!this.editTitle.trim()) return; const inp = this.$refs.editInput; inp.dispatchEvent(new Event('save')); this.$nextTick(() => { this.$refs.titleSpan.textContent = this.editTitle; this.editing = false; }); } }"
 						x-show={ fmt.Sprintf("filter === 'all' || (filter === 'active' && '%s' !== 'completed') || (filter === 'completed' && '%s' === 'completed')", item.Status, item.Status) }>
 						<div class="flex items-center gap-2">
 							@planStatusIcon(item.Status)
+							<span class="w-5 text-center text-xs font-mono text-cyan-600">
+								{ fmt.Sprintf("%d", item.SiblingNum) }
+							</span>
 							<span class="relative">
 								<span
+									x-ref="titleSpan"
 									class={ "text-sm flex-1 cursor-pointer", templ.KV("font-semibold text-gray-200", item.ChildCount > 0), templ.KV("text-gray-300", item.Status != "completed" && item.ChildCount == 0), templ.KV("text-gray-500 line-through", item.Status == "completed") }
 									x-on:dblclick.stop="startEdit($el)">
 									{ item.Title }
@@ -84,7 +88,7 @@ templ PlanDetail(project *data.DashboardProject, planItems []data.PlanItemView) 
 							if item.Phase != "now" {
 								<span class="text-xs px-1.5 py-0.5 rounded bg-gray-800 text-gray-500 font-mono">{ item.Phase }</span>
 							}
-							<span class="text-xs text-gray-600 font-mono">{ fmt.Sprintf("#%d", item.ID) }</span>
+							<span class="text-xs text-gray-600 hover:text-emerald-400 font-mono">{ fmt.Sprintf("E-%d", item.ID) }</span>
 							<button x-on:click="open = !open"
 								class="text-gray-600 text-xs select-none cursor-pointer hover:text-gray-300"
 								x-text="open ? '▾' : '▸'">▸</button>

@@ -78,9 +78,13 @@ func runClaude(args []string) error {
 	case "SessionStart":
 		// Track the session from the start
 		_ = monitor.InitSession(payload.SessionID, projectID, payload.CWD)
+		// Record tmux pane for inter-session messaging
+		_ = monitor.SetTmuxPane(payload.SessionID, os.Getenv("TMUX_PANE"))
 		return handlePlanContextInjection(projectID, payload)
 
 	case "UserPromptSubmit":
+		// Backfill tmux_pane if not yet recorded
+		_ = monitor.BackfillTmuxPane(payload.SessionID, os.Getenv("TMUX_PANE"))
 		return handlePlanContextInjection(projectID, payload)
 
 	case "PreToolUse":
@@ -92,7 +96,9 @@ func runClaude(args []string) error {
 	case "ExitPlanMode":
 		return handleExitPlanMode(projectID, payload)
 
-	case "Stop", "SessionEnd":
+	case "Stop":
+		_ = monitor.IdleSession(payload.SessionID)
+	case "SessionEnd":
 		_ = monitor.EndSession(payload.SessionID)
 		changes, err := monitor.DetectFileChanges(projectID, payload.CWD)
 		if err != nil {
@@ -158,16 +164,13 @@ func handlePostToolUse(projectID int64, payload claudePayload) error {
 		return nil
 	}
 
-	// Record which plan file this session is editing
+	// Record which plan file this session is editing (used by ExitPlanMode)
 	_ = monitor.SetPlanFilePath(payload.SessionID, input.FilePath)
 
-	// Auto-import the plan
-	err = autoImportPlan(projectID, payload.SessionID, input.FilePath)
-	if err != nil {
-		return nil
-	}
+	// NOTE: Auto-import disabled. Sessions should use `endless plan update <id> --text <file>`
+	// to save plan text, and `endless plan add` to create child items explicitly.
+	// Auto-import created duplicate items at the wrong granularity (every bullet became a plan item).
 
-	// Return context about what was synced
 	items, err := monitor.GetActivePlanItems(projectID)
 	if err != nil {
 		return nil
@@ -193,6 +196,9 @@ var writeTools = map[string]bool{
 var planStartRe = regexp.MustCompile(`endless\s+plan\s+start\s+(\d+)`)
 var planCompleteRe = regexp.MustCompile(`endless\s+plan\s+complete\s+(\d+)`)
 var planChatRe = regexp.MustCompile(`endless\s+plan\s+chat`)
+var channelBeaconRe = regexp.MustCompile(`endless\s+channel\s+beacon`)
+var channelConnectRe = regexp.MustCompile(`endless\s+channel\s+connect\s+(\S+)`)
+var channelSendRe = regexp.MustCompile(`endless\s+channel\s+send`)
 
 func handlePreToolUse(projectID int64, isRegistered bool, payload claudePayload) error {
 	// No enforcement for unregistered/anonymous projects
@@ -242,7 +248,7 @@ func handlePreToolUse(projectID int64, isRegistered bool, payload claudePayload)
 			limit = len(items)
 		}
 		for _, item := range items[:limit] {
-			fmt.Fprintf(&msg, "  #%d [%s] %s\n", item.ID, item.Status, item.Text)
+			fmt.Fprintf(&msg, "  E-%d [%s] %s\n", item.ID, item.Status, item.Text)
 		}
 		if len(items) > 10 {
 			fmt.Fprintf(&msg, "  ... and %d more\n", len(items)-10)
@@ -300,6 +306,14 @@ func handlePostToolUseSession(projectID int64, payload claudePayload) {
 		_ = monitor.StartChatSession(payload.SessionID, projectID, payload.CWD)
 		return
 	}
+
+	// Detect: endless channel beacon/connect/send (for activity tracking)
+	if channelBeaconRe.MatchString(input.Command) ||
+		channelConnectRe.MatchString(input.Command) ||
+		channelSendRe.MatchString(input.Command) {
+		_ = monitor.TouchSession(payload.SessionID)
+		return
+	}
 }
 
 func handleExitPlanMode(projectID int64, payload claudePayload) error {
@@ -337,10 +351,9 @@ func handleExitPlanMode(projectID int64, payload claudePayload) error {
 		return nil
 	}
 
-	err := autoImportPlan(projectID, payload.SessionID, planFile)
-	if err != nil {
-		return nil
-	}
+	// NOTE: Auto-import disabled. The plan file path is still tracked so sessions
+	// can reference it with `endless plan update <id> --text <plan-file>`.
+	// See PostToolUse/Write handler for rationale.
 
 	items, err := monitor.GetActivePlanItems(projectID)
 	if err != nil {

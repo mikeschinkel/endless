@@ -75,6 +75,7 @@ type PlanItemView struct {
 	ChildCount int
 	BlockedBy  string
 	Depth      int // nesting depth for tree display (0 = root)
+	SiblingNum int // 1-based position among siblings (per parent)
 }
 
 type ActivityView struct {

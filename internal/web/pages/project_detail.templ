@@ -103,7 +103,7 @@ templ ProjectDetail(project *data.DashboardProject, planItems []data.PlanItemVie
 									if item.Phase != "now" {
 										<span class="text-xs px-1.5 py-0.5 rounded bg-gray-800 text-gray-500 font-mono">{ item.Phase }</span>
 									}
-									<span class="text-xs text-gray-600 font-mono">{ fmt.Sprintf("#%d", item.ID) }</span>
+									<span class="text-xs text-gray-600 font-mono">{ fmt.Sprintf("E-%d", item.ID) }</span>
 									<span class="text-gray-600 text-xs" x-text="open ? '▾' : '▸'">▸</span>
 								</div>
 								<div x-show="open" x-cloak class="mt-2 pl-6 text-sm text-gray-400 leading-relaxed">
@@ -238,16 +238,24 @@ func progressPct(completed, total int) int {
 }
 
 templ planStatusIcon(status string) {
-	switch status {
-		case "completed":
-			<span class="text-emerald-500 text-sm">●</span>
-		case "in_progress":
-			<span class="text-amber-400 text-sm">◐</span>
-		case "blocked":
-			<span class="text-rose-400 text-sm">●</span>
-		default:
-			<span class="text-gray-600 text-sm">○</span>
-	}
+	<span class="relative" x-data="{ tip: false }">
+		<span x-on:mouseenter="tip = true" x-on:mouseleave="tip = false">
+			switch status {
+				case "completed":
+					<span class="text-emerald-500 text-sm">●</span>
+				case "in_progress":
+					<span class="text-amber-400 text-sm">◐</span>
+				case "blocked":
+					<span class="text-rose-400 text-sm">●</span>
+				default:
+					<span class="text-gray-600 text-sm">○</span>
+			}
+		</span>
+		<span x-show="tip" x-cloak
+			class="absolute left-1/2 -translate-x-1/2 bottom-full mb-1.5 px-2 py-1 text-xs text-gray-200 bg-gray-800 border border-gray-600 rounded shadow-lg whitespace-nowrap z-30">
+			{ statusLabel(status) }
+		</span>
+	</span>
 }
 
 templ noteTypeBadge(noteType string) {

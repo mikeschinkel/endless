@@ -134,6 +134,7 @@ CREATE TABLE IF NOT EXISTS ai_sessions (
     working_dir TEXT,
     transcript_path TEXT,
     plan_file_path TEXT,
+    tmux_pane TEXT,
     started_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
     last_activity TEXT,
     ended_at TEXT,
@@ -223,6 +224,36 @@ CREATE TABLE IF NOT EXISTS file_changes (
     detected_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
     source TEXT,
     FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+);
+
+-- Messaging channels between paired AI sessions
+CREATE TABLE IF NOT EXISTS msg_channels (
+    id INTEGER PRIMARY KEY,
+    channel_id TEXT NOT NULL UNIQUE,
+    session_a TEXT NOT NULL,
+    pane_a TEXT NOT NULL,
+    session_b TEXT,
+    pane_b TEXT,
+    project_id INTEGER,
+    state TEXT NOT NULL DEFAULT 'beacon'
+        CHECK (state IN ('beacon', 'connected', 'closed')),
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
+    connected_at TEXT,
+    closed_at TEXT,
+    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL
+);
+
+-- Message queue for inter-session messaging
+CREATE TABLE IF NOT EXISTS msg_queue (
+    id INTEGER PRIMARY KEY,
+    channel_id TEXT NOT NULL,
+    sender TEXT NOT NULL,
+    body TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'queued'
+        CHECK (status IN ('queued', 'delivered')),
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
+    delivered_at TEXT,
+    FOREIGN KEY (channel_id) REFERENCES msg_channels(channel_id) ON DELETE CASCADE
 );
 
 -- Learned privacy criteria

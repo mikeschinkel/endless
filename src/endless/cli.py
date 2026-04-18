@@ -7,6 +7,25 @@ import click
 from endless import __version__
 
 
+class PlanIDType(click.ParamType):
+    """Click parameter type that accepts plan IDs with optional E- prefix."""
+    name = "plan_id"
+
+    def convert(self, value, param, ctx):
+        if isinstance(value, int):
+            return value
+        s = str(value).strip()
+        if s.upper().startswith("E-"):
+            s = s[2:]
+        try:
+            return int(s)
+        except ValueError:
+            self.fail(f"{value!r} is not a valid plan ID (expected integer or E-NNN)", param, ctx)
+
+
+PLAN_ID = PlanIDType()
+
+
 @click.group()
 @click.version_option(__version__, prog_name="endless")
 def main():
@@ -183,7 +202,7 @@ def plan_add(title, description, phase, project, parent, after):
 
 
 @plan_cmd.command("update")
-@click.argument("item_id", type=int)
+@click.argument("item_id", type=PLAN_ID)
 @click.option("--status", default=None,
               help="Status: needs_plan, ready, in_progress, verify, completed, blocked, revisit")
 @click.option("--title", default=None,
@@ -205,7 +224,7 @@ def plan_update(item_id, status, title, description, text_file, prompt_file, par
 
 
 @plan_cmd.command("remove")
-@click.argument("item_id", type=int)
+@click.argument("item_id", type=PLAN_ID)
 def plan_remove(item_id):
     """Remove a plan item."""
     from endless.plan_cmd import remove_item
@@ -213,7 +232,7 @@ def plan_remove(item_id):
 
 
 @plan_cmd.command("complete")
-@click.argument("item_id", type=int)
+@click.argument("item_id", type=PLAN_ID)
 def plan_complete(item_id):
     """Mark a plan item as completed."""
     from endless.plan_cmd import complete_item
@@ -221,7 +240,7 @@ def plan_complete(item_id):
 
 
 @plan_cmd.command("start")
-@click.argument("item_id", type=int)
+@click.argument("item_id", type=PLAN_ID)
 def plan_start(item_id):
     """Mark a plan item as in progress."""
     from endless.plan_cmd import start_item
@@ -229,7 +248,7 @@ def plan_start(item_id):
 
 
 @plan_cmd.command("detail")
-@click.argument("item_id", type=int)
+@click.argument("item_id", type=PLAN_ID)
 def plan_detail(item_id):
     """Show full detail for a plan item."""
     from endless.plan_cmd import detail_item
@@ -237,7 +256,7 @@ def plan_detail(item_id):
 
 
 @plan_cmd.command("prompt")
-@click.argument("item_id", type=int)
+@click.argument("item_id", type=PLAN_ID)
 def plan_prompt(item_id):
     """Output the raw prompt for a plan item (for piping to a session)."""
     from endless.plan_cmd import show_prompt
@@ -245,7 +264,7 @@ def plan_prompt(item_id):
 
 
 @plan_cmd.command("spawn")
-@click.argument("item_id", type=int)
+@click.argument("item_id", type=PLAN_ID)
 @click.option("--project", default=None,
               help="Project name (default: detect from cwd)")
 def plan_spawn(item_id, project):
@@ -259,6 +278,60 @@ def plan_chat():
     """Start a chat-only session (no task tracking)."""
     from endless.plan_cmd import start_chat
     start_chat()
+
+
+@main.group("channel")
+def channel_cmd():
+    """Inter-session messaging. Worker session beacons, human session connects."""
+    pass
+
+
+@channel_cmd.command("beacon")
+@click.option("--project", default=None,
+              help="Project name (default: detect from cwd)")
+def channel_beacon(project):
+    """Announce this session as available for messaging (run in worker session)."""
+    from endless.channel_cmd import beacon
+    beacon(project_name=project)
+
+
+@channel_cmd.command("connect")
+@click.argument("channel_id", default=None, required=False)
+def channel_connect(channel_id):
+    """Connect to a beaconing session (auto-finds if only one beacon)."""
+    from endless.channel_cmd import connect
+    connect(channel_id)
+
+
+@channel_cmd.command("send")
+@click.argument("message")
+def channel_send(message):
+    """Send a message to the connected session."""
+    from endless.channel_cmd import send
+    send(message)
+
+
+@channel_cmd.command("inbox")
+def channel_inbox():
+    """Show pending messages."""
+    from endless.channel_cmd import inbox
+    inbox()
+
+
+@channel_cmd.command("list")
+@click.option("--project", default=None,
+              help="Project name")
+def channel_list(project):
+    """List active beacons."""
+    from endless.channel_cmd import list_beacons
+    list_beacons(project_name=project)
+
+
+@channel_cmd.command("close")
+def channel_close():
+    """Close the active channel."""
+    from endless.channel_cmd import close
+    close()
 
 
 @main.command("docs")

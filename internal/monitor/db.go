@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 )
@@ -127,6 +128,103 @@ func migrate(db *sql.DB) {
 			dep_type TEXT NOT NULL DEFAULT 'blocks' CHECK (dep_type IN ('blocks', 'needs')),
 			created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
 			UNIQUE(source_type, source_id, target_type, target_id)
+		)`)
+	}
+
+	// Fix broken FK references: active_task_id/active_goal_id reference plan_items instead of plans
+	fixFK := false
+	var createSQL string
+	err = db.QueryRow(
+		"SELECT sql FROM sqlite_master WHERE type='table' AND name='ai_sessions'",
+	).Scan(&createSQL)
+	if err == nil && strings.Contains(createSQL, "plan_items") {
+		fixFK = true
+	}
+	if fixFK {
+		db.Exec("PRAGMA foreign_keys=OFF")
+		db.Exec(`CREATE TABLE ai_sessions_new (
+			id INTEGER PRIMARY KEY,
+			session_id TEXT NOT NULL,
+			project_id INTEGER,
+			platform TEXT NOT NULL DEFAULT 'claude' CHECK (platform IN ('claude', 'codex')),
+			state TEXT NOT NULL DEFAULT 'working' CHECK (state IN ('working', 'idle', 'needs_input', 'ended')),
+			active_goal_id INTEGER,
+			working_dir TEXT,
+			transcript_path TEXT,
+			plan_file_path TEXT,
+			tmux_pane TEXT,
+			started_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
+			last_activity TEXT,
+			ended_at TEXT,
+			UNIQUE (session_id),
+			FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL,
+			FOREIGN KEY (active_goal_id) REFERENCES plans(id) ON DELETE SET NULL
+		)`)
+		db.Exec(`INSERT INTO ai_sessions_new
+			(id, session_id, project_id, platform, state, active_goal_id, working_dir,
+			 transcript_path, plan_file_path, tmux_pane, started_at, last_activity, ended_at)
+			SELECT id, session_id, project_id, platform, state, active_goal_id, working_dir,
+			       transcript_path, plan_file_path, tmux_pane, started_at, last_activity, ended_at
+			FROM ai_sessions`)
+		db.Exec("DROP TABLE ai_sessions")
+		db.Exec("ALTER TABLE ai_sessions_new RENAME TO ai_sessions")
+		db.Exec("PRAGMA foreign_keys=ON")
+	}
+
+	// Add tmux_pane column to ai_sessions if missing
+	rows, err = db.Query("PRAGMA table_info(ai_sessions)")
+	if err == nil {
+		hasTmuxPane := false
+		for rows.Next() {
+			var cid int
+			var name, typ string
+			var notnull int
+			var dflt *string
+			var pk int
+			rows.Scan(&cid, &name, &typ, &notnull, &dflt, &pk)
+			if name == "tmux_pane" {
+				hasTmuxPane = true
+			}
+		}
+		rows.Close()
+		if !hasTmuxPane {
+			db.Exec("ALTER TABLE ai_sessions ADD COLUMN tmux_pane TEXT")
+		}
+	}
+
+	// Create msg_channels table if missing
+	err = db.QueryRow("SELECT count(*) FROM sqlite_master WHERE type='table' AND name='msg_channels'").Scan(&count)
+	if err == nil && count == 0 {
+		db.Exec(`CREATE TABLE IF NOT EXISTS msg_channels (
+			id INTEGER PRIMARY KEY,
+			channel_id TEXT NOT NULL UNIQUE,
+			session_a TEXT NOT NULL,
+			pane_a TEXT NOT NULL,
+			session_b TEXT,
+			pane_b TEXT,
+			project_id INTEGER,
+			state TEXT NOT NULL DEFAULT 'beacon'
+				CHECK (state IN ('beacon', 'connected', 'closed')),
+			created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
+			connected_at TEXT,
+			closed_at TEXT,
+			FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL
+		)`)
+	}
+
+	// Create msg_queue table if missing
+	err = db.QueryRow("SELECT count(*) FROM sqlite_master WHERE type='table' AND name='msg_queue'").Scan(&count)
+	if err == nil && count == 0 {
+		db.Exec(`CREATE TABLE IF NOT EXISTS msg_queue (
+			id INTEGER PRIMARY KEY,
+			channel_id TEXT NOT NULL,
+			sender TEXT NOT NULL,
+			body TEXT NOT NULL,
+			status TEXT NOT NULL DEFAULT 'queued'
+				CHECK (status IN ('queued', 'delivered')),
+			created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
+			delivered_at TEXT,
+			FOREIGN KEY (channel_id) REFERENCES msg_channels(channel_id) ON DELETE CASCADE
 		)`)
 	}
 

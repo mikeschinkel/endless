@@ -29,13 +29,15 @@ func StartWorkSession(sessionID string, projectID int64, taskID int64, workingDi
 	now := time.Now().UTC().Format("2006-01-02T15:04:05")
 
 	// Upsert ai_sessions
+	tmuxPane := os.Getenv("TMUX_PANE")
 	_, err = db.Exec(
-		`INSERT INTO ai_sessions (session_id, project_id, platform, state, active_goal_id, working_dir, started_at, last_activity)
-		 VALUES (?, ?, 'claude', 'working', ?, ?, ?, ?)
+		`INSERT INTO ai_sessions (session_id, project_id, platform, state, active_goal_id, working_dir, tmux_pane, started_at, last_activity)
+		 VALUES (?, ?, 'claude', 'working', ?, ?, ?, ?, ?)
 		 ON CONFLICT(session_id) DO UPDATE SET
-		   state='working', active_goal_id=?, last_activity=?, project_id=?`,
-		sessionID, projectID, taskID, workingDir, now, now,
-		taskID, now, projectID,
+		   state='working', active_goal_id=?, last_activity=?, project_id=?,
+		   tmux_pane=COALESCE(NULLIF(?, ''), tmux_pane)`,
+		sessionID, projectID, taskID, workingDir, tmuxPane, now, now,
+		taskID, now, projectID, tmuxPane,
 	)
 	if err != nil {
 		return fmt.Errorf("upsert ai_session: %w", err)
@@ -57,14 +59,16 @@ func StartChatSession(sessionID string, projectID int64, workingDir string) erro
 	}
 
 	now := time.Now().UTC().Format("2006-01-02T15:04:05")
+	tmuxPane := os.Getenv("TMUX_PANE")
 
 	_, err = db.Exec(
-		`INSERT INTO ai_sessions (session_id, project_id, platform, state, active_goal_id, working_dir, started_at, last_activity)
-		 VALUES (?, ?, 'claude', 'working', NULL, ?, ?, ?)
+		`INSERT INTO ai_sessions (session_id, project_id, platform, state, active_goal_id, working_dir, tmux_pane, started_at, last_activity)
+		 VALUES (?, ?, 'claude', 'working', NULL, ?, ?, ?, ?)
 		 ON CONFLICT(session_id) DO UPDATE SET
-		   state='working', active_goal_id=NULL, last_activity=?`,
-		sessionID, projectID, workingDir, now, now,
-		now,
+		   state='working', active_goal_id=NULL, last_activity=?,
+		   tmux_pane=COALESCE(NULLIF(?, ''), tmux_pane)`,
+		sessionID, projectID, workingDir, tmuxPane, now, now,
+		now, tmuxPane,
 	)
 	return err
 }
@@ -137,6 +141,38 @@ func GetPlanFilePath(sessionID string) string {
 	return *path
 }
 
+// SetTmuxPane records which tmux pane this session is running in.
+func SetTmuxPane(sessionID, pane string) error {
+	if pane == "" {
+		return nil
+	}
+	db, err := DB()
+	if err != nil {
+		return err
+	}
+	_, err = db.Exec(
+		"UPDATE ai_sessions SET tmux_pane=? WHERE session_id=?",
+		pane, sessionID,
+	)
+	return err
+}
+
+// BackfillTmuxPane sets tmux_pane only if it's currently NULL.
+func BackfillTmuxPane(sessionID, pane string) error {
+	if pane == "" {
+		return nil
+	}
+	db, err := DB()
+	if err != nil {
+		return err
+	}
+	_, err = db.Exec(
+		"UPDATE ai_sessions SET tmux_pane=? WHERE session_id=? AND tmux_pane IS NULL",
+		pane, sessionID,
+	)
+	return err
+}
+
 // TouchSession updates last_activity timestamp.
 func TouchSession(sessionID string) error {
 	db, err := DB()
@@ -173,6 +209,21 @@ func CompleteTask(sessionID string, taskID int64) error {
 	// Clear active task, set state to idle
 	_, err = db.Exec(
 		"UPDATE ai_sessions SET active_goal_id=NULL, state='idle', last_activity=? WHERE session_id=?",
+		now, sessionID,
+	)
+	return err
+}
+
+// IdleSession marks a session as idle (between turns, still alive).
+func IdleSession(sessionID string) error {
+	db, err := DB()
+	if err != nil {
+		return err
+	}
+
+	now := time.Now().UTC().Format("2006-01-02T15:04:05")
+	_, err = db.Exec(
+		"UPDATE ai_sessions SET state='idle', last_activity=? WHERE session_id=?",
 		now, sessionID,
 	)
 	return err
@@ -246,3 +297,4 @@ func GetTrackingMode(projectID int64) string {
 		return "enforce"
 	}
 }
+

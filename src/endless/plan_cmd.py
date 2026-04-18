@@ -11,6 +11,19 @@ from tabulate import tabulate
 from endless import db, config
 
 
+def plan_id_display(item_id: int) -> str:
+    """Format a plan ID for display: E-123"""
+    return f"E-{item_id}"
+
+
+def parse_plan_id(value: str) -> int:
+    """Parse a plan ID from user input, stripping optional E- prefix."""
+    s = value.strip()
+    if s.upper().startswith("E-"):
+        s = s[2:]
+    return int(s)
+
+
 def _resolve_project(name: str | None) -> tuple[int, str]:
     """Resolve project name, return (id, name)."""
     if not name:
@@ -443,7 +456,7 @@ def show_plan(
     def _render(parent_id: int | None, indent: int):
         for row in children_of.get(parent_id, []):
             indicator = status_indicators.get(row["status"], "?")
-            id_str = click.style(f"#{row['id']}", dim=True)
+            id_str = click.style(plan_id_display(row['id']), dim=True)
             phase_str = click.style(f"[{row['phase']}]", fg="cyan")
             pad = "  " * indent
             click.echo(
@@ -499,7 +512,7 @@ def add_item(
     item_id = cursor.lastrowid
     click.echo(
         click.style("•", fg="cyan")
-        + f" Added #{item_id}: {title}"
+        + f" Added {plan_id_display(item_id)}: {title}"
     )
 
 
@@ -584,7 +597,7 @@ def complete_item(item_id: int):
     if row[0]["status"] == "completed":
         click.echo(
             click.style("•", fg="cyan")
-            + f" Item #{item_id} is already completed"
+            + f" Item {plan_id_display(item_id)} is already completed"
         )
         return
 
@@ -705,7 +718,7 @@ def update_plan(
     changed = [u.split(" =")[0] for u in updates]
     click.echo(
         click.style("•", fg="cyan")
-        + f" Updated #{item_id}: {', '.join(changed)}"
+        + f" Updated {plan_id_display(item_id)}: {', '.join(changed)}"
     )
 
 
@@ -725,7 +738,7 @@ def detail_item(item_id: int):
     item = row[0]
     click.echo()
     click.echo(click.style(
-        f"#{item['id']} — {item['title']}", bold=True,
+        f"{plan_id_display(item['id'])} — {item['title']}", bold=True,
     ))
     click.echo(click.style(
         f"Status: {item['status']}  Phase: {item['phase']}",
@@ -733,7 +746,7 @@ def detail_item(item_id: int):
     ))
     if item["parent_id"]:
         click.echo(click.style(
-            f"Parent: #{item['parent_id']}", dim=True,
+            f"Parent: {plan_id_display(item['parent_id'])}", dim=True,
         ))
     if item["source_file"]:
         click.echo(click.style(
@@ -766,7 +779,7 @@ def show_prompt(item_id: int):
         )
     if not row[0]["prompt"]:
         raise click.ClickException(
-            f"No prompt set for item #{item_id}"
+            f"No prompt set for item {plan_id_display(item_id)}"
         )
     # Raw output, no decoration — suitable for piping
     click.echo(row[0]["prompt"])
@@ -803,7 +816,7 @@ def spawn_plan(item_id: int, project_name: str | None = None):
     item = row[0]
     if not item["prompt"]:
         raise click.ClickException(
-            f"No prompt set for plan #{item_id}. "
+            f"No prompt set for plan {plan_id_display(item_id)}. "
             f"Set one first."
         )
 
@@ -889,7 +902,7 @@ def spawn_plan(item_id: int, project_name: str | None = None):
     click.echo(
         click.style("•", fg="cyan")
         + f" Spawned window '{window_name}' for "
-        + click.style(f"#{item_id}: {title}", bold=True)
+        + click.style(f"{plan_id_display(item_id)}: {title}", bold=True)
     )
     click.echo(
         f"  Switch to it: tmux select-window -t {window_name}"
