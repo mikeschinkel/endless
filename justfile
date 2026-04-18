@@ -1,5 +1,26 @@
 # Endless development tasks
 
+# Show available commands
+help:
+    @echo "Development:"
+    @echo "  just build        Build everything (templ, CSS, Go binaries)"
+    @echo "  just install      Build + symlink binaries + install Python CLI"
+    @echo "  just dev          Run templ + tailwind watchers for development"
+    @echo "  just test         Run Python tests"
+    @echo "  just kill         Kill any running endless-serve process"
+    @echo ""
+    @echo "Build (individual):"
+    @echo "  just generate     Generate templ files (one-shot)"
+    @echo "  just css          Build CSS (one-shot)"
+    @echo "  just go           Build Go binaries only"
+    @echo ""
+    @echo "Git:"
+    @echo "  just git-commit \"msg\"  Export DB + commit"
+    @echo "  just git-push \"msg\"    Export DB + commit + push"
+    @echo ""
+    @echo "Database:"
+    @echo "  just db-export    Export project data to .endless/data.sql"
+
 # Resolve the templUI module path and symlink it for CSS imports
 _link-templui:
     #!/usr/bin/env bash
