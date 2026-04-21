@@ -83,7 +83,7 @@ go:
 kill:
     pkill -f endless-serve || true
 
-# Export this project's Endless data (plans, notes, deps) for version control
+# Export this project's Endless data (tasks, notes, deps) for version control
 db-export:
     #!/usr/bin/env bash
     project_id=$(sqlite3 ~/.config/endless/endless.db "SELECT id FROM projects WHERE path = '$(pwd)'")
@@ -95,8 +95,8 @@ db-export:
     SELECT * FROM tasks WHERE project_id = $project_id;
     .mode insert notes
     SELECT * FROM notes WHERE project_id = $project_id;
-    .mode insert task_dependencies
-    SELECT * FROM task_dependencies WHERE
+    .mode insert task_deps
+    SELECT * FROM task_deps WHERE
       (source_type = 'task' AND source_id IN (SELECT id FROM tasks WHERE project_id = $project_id))
       OR (target_type = 'task' AND target_id IN (SELECT id FROM tasks WHERE project_id = $project_id))
       OR (source_type = 'project' AND source_id = $project_id)
