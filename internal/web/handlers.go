@@ -81,15 +81,15 @@ func handleProjectDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	planItems := GetProjectPlanItems(project.ID)
+	taskItems := GetProjectTasks(project.ID)
 	activities := GetProjectActivity(project.ID, 30)
 	notes := GetProjectNotes(project.ID)
 	deps := GetProjectDependencies(project.ID)
 
-	_ = pages.ProjectDetail(project, planItems, activities, notes, deps).Render(r.Context(), w)
+	_ = pages.ProjectDetail(project, taskItems, activities, notes, deps).Render(r.Context(), w)
 }
 
-func handleProjectPlan(w http.ResponseWriter, r *http.Request) {
+func handleProjectTasks(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	if name == "" {
 		http.NotFound(w, r)
@@ -102,12 +102,12 @@ func handleProjectPlan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	planItems := GetProjectPlanItems(project.ID)
-	_ = pages.PlanDetail(project, planItems).Render(r.Context(), w)
+	taskItems := GetProjectTasks(project.ID)
+	_ = pages.TaskDetail(project, taskItems).Render(r.Context(), w)
 }
 
-func handlePlans(w http.ResponseWriter, r *http.Request) {
-	_ = pages.StubPage("Plans", "/plans").Render(r.Context(), w)
+func handleTasks(w http.ResponseWriter, r *http.Request) {
+	_ = pages.StubPage("Tasks", "/tasks").Render(r.Context(), w)
 }
 
 func handleActivity(w http.ResponseWriter, r *http.Request) {
@@ -118,7 +118,7 @@ func handleNotes(w http.ResponseWriter, r *http.Request) {
 	_ = pages.StubPage("Notes", "/notes").Render(r.Context(), w)
 }
 
-func handleUpdatePlanItemTitle(w http.ResponseWriter, r *http.Request) {
+func handleUpdateTaskTitle(w http.ResponseWriter, r *http.Request) {
 	idStr := r.PathValue("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
@@ -132,7 +132,7 @@ func handleUpdatePlanItemTitle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := UpdatePlanItemTitle(id, newTitle); err != nil {
+	if err := UpdateTaskTitle(id, newTitle); err != nil {
 		http.Error(w, "Update failed", http.StatusInternalServerError)
 		return
 	}

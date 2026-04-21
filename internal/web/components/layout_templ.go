@@ -23,7 +23,7 @@ func navItems() []NavItem {
 	return []NavItem{
 		{Label: "Dashboard", Path: "/", Icon: "⌘"},
 		{Label: "Status", Path: "/status", Icon: "◆"},
-		{Label: "Plans", Path: "/plans", Icon: "▶"},
+		{Label: "Tasks", Path: "/tasks", Icon: "▶"},
 		{Label: "Activity", Path: "/activity", Icon: "⚡"},
 		{Label: "Notes", Path: "/notes", Icon: "✎"},
 	}

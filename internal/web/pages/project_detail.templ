@@ -7,7 +7,7 @@ import (
 	"github.com/mikeschinkel/endless/internal/web/data"
 )
 
-templ ProjectDetail(project *data.DashboardProject, planItems []data.PlanItemView, activities []data.ActivityView, notes []data.NoteView, deps []data.DependencyView) {
+templ ProjectDetail(project *data.DashboardProject, taskItems []data.TaskView, activities []data.ActivityView, notes []data.NoteView, deps []data.DependencyView) {
 	@components.Layout(project.Name, fmt.Sprintf("/project/%s", project.Name)) {
 		<!-- Header -->
 		<div class="mb-8">
@@ -49,14 +49,14 @@ templ ProjectDetail(project *data.DashboardProject, planItems []data.PlanItemVie
 
 		<div class="space-y-8">
 			<!-- Next Actions -->
-			if len(nextActions(planItems)) > 0 {
+			if len(nextActions(taskItems)) > 0 {
 				<section>
 					<h3 class="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4">Next Actions</h3>
 					<div class="bg-gray-900 border border-gray-800 rounded-lg divide-y divide-gray-800/50">
-						for _, item := range nextActions(planItems) {
+						for _, item := range nextActions(taskItems) {
 							<div class="px-4 py-3" x-data="{ open: false }">
 								<div class="flex items-center gap-3 cursor-pointer" x-on:click="open = !open">
-									@planStatusIcon(item.Status)
+									@taskStatusIcon(item.Status)
 									<span class="text-sm text-gray-200 flex-1">{ item.Title }</span>
 									if item.BlockedBy != "" {
 										<span class="text-xs text-rose-400">blocked</span>
@@ -82,21 +82,21 @@ templ ProjectDetail(project *data.DashboardProject, planItems []data.PlanItemVie
 				<div class="flex items-center justify-between mb-4">
 					<h3 class="text-sm font-semibold text-gray-400 uppercase tracking-wider">
 						Tasks
-						if len(planItems) > 0 {
-							<span class="text-gray-600 ml-2">({ fmt.Sprintf("%d", len(planItems)) })</span>
+						if len(taskItems) > 0 {
+							<span class="text-gray-600 ml-2">({ fmt.Sprintf("%d", len(taskItems)) })</span>
 						}
 					</h3>
-					if len(planItems) > 0 {
-						<a href={ templ.SafeURL(fmt.Sprintf("/project/%s/plan", project.Name)) } class="text-xs text-emerald-400 hover:text-emerald-300">View full plan →</a>
+					if len(taskItems) > 0 {
+						<a href={ templ.SafeURL(fmt.Sprintf("/project/%s/tasks", project.Name)) } class="text-xs text-emerald-400 hover:text-emerald-300">View all tasks →</a>
 					}
 				</div>
-				if len(planItems) > 0 {
+				if len(taskItems) > 0 {
 					<div class="bg-gray-900 border border-gray-800 rounded-lg divide-y divide-gray-800/50">
-						for _, item := range planItems {
+						for _, item := range taskItems {
 							<div class="py-2" x-data="{ open: false }"
 								style={ fmt.Sprintf("padding-left: %dpx; padding-right: 16px;", 16 + item.Depth * 20) }>
 								<div class="flex items-center gap-2 cursor-pointer" x-on:click="open = !open">
-									@planStatusIcon(item.Status)
+									@taskStatusIcon(item.Status)
 									<span class={ "text-sm flex-1 truncate", templ.KV("font-semibold text-gray-200", item.ChildCount > 0), templ.KV("text-gray-300", item.ChildCount == 0) }>
 										{ item.Title }
 									</span>
@@ -204,8 +204,8 @@ templ ProjectDetail(project *data.DashboardProject, planItems []data.PlanItemVie
 }
 
 // nextActions returns in-progress items first, then next available items, up to 5 total.
-func nextActions(items []data.PlanItemView) []data.PlanItemView {
-	var result []data.PlanItemView
+func nextActions(items []data.TaskView) []data.TaskView {
+	var result []data.TaskView
 	// In-progress first
 	for _, item := range items {
 		if item.Status == "in_progress" {
@@ -237,7 +237,7 @@ func progressPct(completed, total int) int {
 	return completed * 100 / total
 }
 
-templ planStatusIcon(status string) {
+templ taskStatusIcon(status string) {
 	<span class="relative" x-data="{ tip: false }">
 		<span x-on:mouseenter="tip = true" x-on:mouseleave="tip = false">
 			switch status {

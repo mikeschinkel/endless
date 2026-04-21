@@ -7,9 +7,9 @@ import click
 from endless import __version__
 
 
-class PlanIDType(click.ParamType):
-    """Click parameter type that accepts plan IDs with optional E- prefix."""
-    name = "plan_id"
+class TaskIDType(click.ParamType):
+    """Click parameter type that accepts task IDs with optional E- prefix."""
+    name = "task_id"
 
     def convert(self, value, param, ctx):
         if isinstance(value, int):
@@ -20,10 +20,10 @@ class PlanIDType(click.ParamType):
         try:
             return int(s)
         except ValueError:
-            self.fail(f"{value!r} is not a valid plan ID (expected integer or E-NNN)", param, ctx)
+            self.fail(f"{value!r} is not a valid task ID (expected integer or E-NNN)", param, ctx)
 
 
-PLAN_ID = PlanIDType()
+TASK_ID = TaskIDType()
 
 
 @click.group()
@@ -110,11 +110,10 @@ def status(name):
 
 @main.command()
 @click.option("--project", default=None, help="Scan a single project")
-@click.option("--docs-only", is_flag=True, help="Scan documents only")
-def scan(project, docs_only):
-    """Scan projects for document changes."""
+def scan(project):
+    """Scan and reconcile projects."""
     from endless.scan import run_scan
-    run_scan(project_name=project, docs_only=docs_only)
+    run_scan(project_name=project)
 
 
 @main.command()
@@ -133,13 +132,23 @@ def serve(port):
     subprocess.run([serve_bin, str(port)])
 
 
-@main.group("plan")
-def plan_cmd():
-    """Manage project plans."""
+@main.command("quick-start")
+def quick_start():
+    """Output the session onboarding guide."""
+    from pathlib import Path
+    guide = Path(__file__).resolve().parent.parent.parent / "docs" / "guide-2026-04-15-using-endless-in-sessions.md"
+    if not guide.exists():
+        raise click.ClickException(f"Guide not found at {guide}")
+    click.echo(guide.read_text())
+
+
+@main.group("task")
+def task_cmd():
+    """Manage project tasks."""
     pass
 
 
-@plan_cmd.command("import")
+@task_cmd.command("import")
 @click.argument("file", default=None, required=False)
 @click.option("--from-claude", is_flag=True,
               help="Import from ~/.claude/plans/")
@@ -151,19 +160,19 @@ def plan_cmd():
               help="Replace items from same source file under same parent")
 @click.option("--parent", type=int, default=None,
               help="Parent goal ID to import under")
-def plan_import(file, from_claude, json_file, project, replace, parent):
+def task_import(file, from_claude, json_file, project, replace, parent):
     """Import a plan file into the DB."""
     if json_file:
         import json as json_mod
         from pathlib import Path
-        from endless.plan_cmd import import_json
+        from endless.task_cmd import import_json
         p = Path(json_file).expanduser()
         if not p.exists():
             raise click.ClickException(f"File not found: {p}")
         data = json_mod.loads(p.read_text())
         import_json(data, project_name=project, clear=replace)
     else:
-        from endless.plan_cmd import import_plan
+        from endless.task_cmd import import_plan
         import_plan(
             file_path=file, from_claude=from_claude,
             project_name=project, replace=replace,
@@ -171,38 +180,119 @@ def plan_import(file, from_claude, json_file, project, replace, parent):
         )
 
 
-@plan_cmd.command("show")
+@task_cmd.command("list")
 @click.option("--project", default=None,
               help="Project name (default: detect from cwd)")
 @click.option("--all", "show_all", is_flag=True,
               help="Include completed items")
-def plan_show(project, show_all):
-    """Show the current plan for a project."""
-    from endless.plan_cmd import show_plan
-    show_plan(project_name=project, show_all=show_all)
+@click.option("--status", default=None,
+              type=click.Choice(["needs_plan", "ready", "in_progress",
+                                 "verify", "completed", "blocked", "revisit"]),
+              help="Filter by status")
+@click.option("--phase", default=None,
+              type=click.Choice(["now", "next", "later"]),
+              help="Filter by phase")
+@click.option("--sort", default=None,
+              type=click.Choice(["id", "status", "phase", "created", "title"]),
+              help="Flat output sorted by column (no tree)")
+@click.option("--llm", is_flag=True,
+              help="Token-efficient output for LLMs")
+@click.option("--json", "as_json", is_flag=True,
+              help="JSON output")
+def task_list(project, show_all, status, phase, sort, llm, as_json):
+    """List tasks for a project."""
+    from endless.task_cmd import show_plan
+    show_plan(project_name=project, show_all=show_all,
+              status_filter=status, phase_filter=phase,
+              sort_by=sort, llm=llm, as_json=as_json)
 
 
-@plan_cmd.command("add")
+@task_cmd.command("show")
+@click.argument("item_id", type=TASK_ID)
+@click.option("--no-description", is_flag=True,
+              help="Hide description")
+@click.option("--text", "show_text", is_flag=True,
+              help="Show text field")
+@click.option("--prompt", "show_prompt", is_flag=True,
+              help="Show prompt field")
+@click.option("--children", "show_children", is_flag=True,
+              help="Show direct children")
+@click.option("--llm", is_flag=True,
+              help="Token-efficient output for LLMs")
+@click.option("--json", "as_json", is_flag=True,
+              help="JSON output")
+def task_show(item_id, no_description, show_text, show_prompt,
+              show_children, llm, as_json):
+    """Show detail for a specific task."""
+    from endless.task_cmd import detail_item
+    detail_item(item_id, show_description=not no_description,
+                show_text=show_text, show_prompt=show_prompt,
+                show_children=show_children, llm=llm, as_json=as_json)
+
+
+@task_cmd.command("next")
+@click.option("--project", default=None,
+              help="Project name (default: detect from cwd)")
+@click.option("--all", "show_all", is_flag=True,
+              help="Show tasks from all projects")
+@click.option("--limit", default=10, type=int,
+              help="Max items to show (default: 10)")
+@click.option("--llm", is_flag=True,
+              help="Token-efficient output for LLMs")
+@click.option("--json", "as_json", is_flag=True,
+              help="JSON output")
+def task_next(project, show_all, limit, llm, as_json):
+    """Show top actionable tasks, ranked by priority."""
+    from endless.task_cmd import next_tasks
+    next_tasks(project_name=project, show_all=show_all,
+               limit=limit, llm=llm, as_json=as_json)
+
+
+@task_cmd.command("recent")
+@click.option("--project", default=None,
+              help="Project name (default: detect from cwd)")
+@click.option("--all", "show_all", is_flag=True,
+              help="Show tasks from all projects")
+@click.option("--limit", default=10, type=int,
+              help="Max items to show (default: 10)")
+@click.option("--llm", is_flag=True,
+              help="Token-efficient output for LLMs")
+@click.option("--json", "as_json", is_flag=True,
+              help="JSON output")
+def task_recent(project, show_all, limit, llm, as_json):
+    """Show most recently updated tasks."""
+    from endless.task_cmd import recent_tasks
+    recent_tasks(project_name=project, show_all=show_all,
+                 limit=limit, llm=llm, as_json=as_json)
+
+
+@task_cmd.command("add")
 @click.argument("title")
 @click.option("--description", default=None,
-              help="Longer description of the plan")
+              help="Longer description of the task")
 @click.option("--phase", default="now",
               help="Phase: now, next, later (default: now)")
 @click.option("--project", default=None,
               help="Project name (default: detect from cwd)")
 @click.option("--parent", type=int, default=None,
-              help="Parent plan ID to add under")
+              help="Parent task ID to add under")
 @click.option("--after", type=int, default=None,
-              help="Insert after this plan ID")
-def plan_add(title, description, phase, project, parent, after):
-    """Add a plan."""
-    from endless.plan_cmd import add_item
+              help="Insert after this task ID")
+@click.option("--type", "task_type", default=None,
+              type=click.Choice(["task", "plan", "bug", "research", "spike", "chore"]),
+              help="Task type (default: task)")
+@click.option("--force", is_flag=True,
+              help="Bypass title validation")
+def task_add(title, description, phase, project, parent, after, task_type, force):
+    """Add a task."""
+    from endless.task_cmd import add_item
     add_item(title, description=description, phase=phase,
-             project_name=project, after=after, parent_id=parent)
+             project_name=project, after=after, parent_id=parent,
+             task_type=task_type, force=force)
 
 
-@plan_cmd.command("update")
-@click.argument("item_id", type=PLAN_ID)
+@task_cmd.command("update")
+@click.argument("item_id", type=TASK_ID)
 @click.option("--status", default=None,
               help="Status: needs_plan, ready, in_progress, verify, completed, blocked, revisit")
 @click.option("--title", default=None,
@@ -210,74 +300,91 @@ def plan_add(title, description, phase, project, parent, after):
 @click.option("--description", default=None,
               help="New description")
 @click.option("--text", "text_file", default=None,
-              help="Load full plan text from file")
+              help="Load full task text from file")
 @click.option("--prompt", "prompt_file", default=None,
               help="Load prompt from file")
 @click.option("--parent", type=int, default=None,
-              help="Set parent plan ID (0 to make root)")
-def plan_update(item_id, status, title, description, text_file, prompt_file, parent):
-    """Update fields on a plan."""
-    from endless.plan_cmd import update_plan
+              help="Set parent task ID (0 to make root)")
+@click.option("--force", is_flag=True,
+              help="Bypass title validation")
+def task_update(item_id, status, title, description, text_file, prompt_file, parent, force):
+    """Update fields on a task."""
+    from endless.task_cmd import update_plan
     update_plan(item_id, status=status, title=title,
                 description=description, text_file=text_file,
-                prompt_file=prompt_file, parent_id=parent)
+                prompt_file=prompt_file, parent_id=parent, force=force)
 
 
-@plan_cmd.command("remove")
-@click.argument("item_id", type=PLAN_ID)
-def plan_remove(item_id):
-    """Remove a plan item."""
-    from endless.plan_cmd import remove_item
+@task_cmd.command("remove")
+@click.argument("item_id", type=TASK_ID)
+def task_remove(item_id):
+    """Remove a task."""
+    from endless.task_cmd import remove_item
     remove_item(item_id)
 
 
-@plan_cmd.command("complete")
-@click.argument("item_id", type=PLAN_ID)
-def plan_complete(item_id):
-    """Mark a plan item as completed."""
-    from endless.plan_cmd import complete_item
-    complete_item(item_id)
+@task_cmd.command("complete")
+@click.argument("item_id", type=TASK_ID)
+@click.option("--cascade", is_flag=True,
+              help="Also complete all descendants")
+def task_complete(item_id, cascade):
+    """Mark a task as completed."""
+    from endless.task_cmd import complete_item
+    complete_item(item_id, cascade=cascade)
 
 
-@plan_cmd.command("start")
-@click.argument("item_id", type=PLAN_ID)
-def plan_start(item_id):
-    """Mark a plan item as in progress."""
-    from endless.plan_cmd import start_item
+@task_cmd.command("start")
+@click.argument("item_id", type=TASK_ID)
+def task_start(item_id):
+    """Mark a task as in progress."""
+    from endless.task_cmd import start_item
     start_item(item_id)
 
 
-@plan_cmd.command("detail")
-@click.argument("item_id", type=PLAN_ID)
-def plan_detail(item_id):
-    """Show full detail for a plan item."""
-    from endless.plan_cmd import detail_item
-    detail_item(item_id)
 
-
-@plan_cmd.command("prompt")
-@click.argument("item_id", type=PLAN_ID)
-def plan_prompt(item_id):
-    """Output the raw prompt for a plan item (for piping to a session)."""
-    from endless.plan_cmd import show_prompt
+@task_cmd.command("prompt")
+@click.argument("item_id", type=TASK_ID)
+def task_prompt(item_id):
+    """Output the raw prompt for a task (for piping to a session)."""
+    from endless.task_cmd import show_prompt
     show_prompt(item_id)
 
 
-@plan_cmd.command("spawn")
-@click.argument("item_id", type=PLAN_ID)
+@task_cmd.command("spawn")
+@click.argument("item_id", type=TASK_ID)
 @click.option("--project", default=None,
               help="Project name (default: detect from cwd)")
-def plan_spawn(item_id, project):
-    """Spawn a new tmux window with Claude working on a plan's prompt."""
-    from endless.plan_cmd import spawn_plan
-    spawn_plan(item_id, project_name=project)
+@click.option("--no-plan", is_flag=True,
+              help="Skip plan mode, send prompt directly")
+def task_spawn(item_id, project, no_plan):
+    """Spawn a new tmux window with Claude working on a task's prompt."""
+    from endless.task_cmd import spawn_plan
+    spawn_plan(item_id, project_name=project, no_plan=no_plan)
 
 
-@plan_cmd.command("chat")
-def plan_chat():
+@task_cmd.command("chat")
+def task_chat():
     """Start a chat-only session (no task tracking)."""
-    from endless.plan_cmd import start_chat
+    from endless.task_cmd import start_chat
     start_chat()
+
+
+@main.command("plan", context_settings={"ignore_unknown_options": True})
+@click.argument("args", nargs=-1, type=click.UNPROCESSED)
+def plan_redirect(args):
+    """Renamed to 'task'. Prints corrected command."""
+    corrected = " ".join(["endless", "task"] + list(args))
+    click.echo(
+        click.style("The 'plan' command has been renamed to 'task'.", fg="yellow")
+    )
+    click.echo()
+    click.echo(f"  Use: {click.style(corrected, bold=True)}")
+    click.echo()
+    click.echo(
+        "If recording a Claude plan (from ~/.claude/plans/), "
+        "use --type=plan with 'task add'."
+    )
+    raise SystemExit(1)
 
 
 @main.group("channel")
@@ -339,9 +446,12 @@ def channel_close():
 @click.option("--type", "type_filter", default=None,
               help="Filter by document type")
 def docs_cmd(name, type_filter):
-    """List tracked documents for a project."""
-    from endless.docs_cmd import list_docs
-    list_docs(name=name, type_filter=type_filter)
+    """List tracked documents for a project (temporarily disabled)."""
+    click.echo(
+        click.style("•", fg="yellow")
+        + " Document tracking is temporarily disabled."
+        + " It will return with shadow git repos."
+    )
 
 
 @main.command("notes")
@@ -423,3 +533,17 @@ def setup_remove_claude_hook():
     """Remove the Claude Code hook."""
     from endless.setup import remove_claude_hook
     remove_claude_hook()
+
+
+@setup.command("channel-plugin")
+def setup_channel_plugin_cmd():
+    """Register the MCP channel plugin for inter-session messaging."""
+    from endless.setup import setup_channel_plugin
+    setup_channel_plugin()
+
+
+@setup.command("remove-channel-plugin")
+def setup_remove_channel_plugin_cmd():
+    """Remove the MCP channel plugin."""
+    from endless.setup import remove_channel_plugin
+    remove_channel_plugin()

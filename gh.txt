@@ -1,0 +1,465 @@
+author:	SamMorrowDrums
+association:	contributor
+edited:	true
+status:	none
+--
+Seems clear to me, I think the additive only mutation seems reasonable. It ticks both boxes:
+
+- [x] when we register different MCP feature handlers with a server they are automatically picked up
+- [x] we can pre-advertise anything dynamic so a client knows to expect a possible update (like calling tools and getting a resources list change)
+
+
+
+
+--
+author:	findleyr
+association:	contributor
+edited:	false
+status:	none
+--
+This issue shouldn't have been closed: the proposal is still open and will remain open during the prerelease period.
+--
+author:	findleyr
+association:	contributor
+edited:	false
+status:	none
+--
+Closing as accepted, since there have been no objections.
+--
+author:	jba
+association:	contributor
+edited:	false
+status:	none
+--
+While the MCP spec does not explicitly allow custom notifications, it doesn't explicitly exclude them either.
+
+I confirmed by reading the linked doc that the IDE plugin must talk to the IDE over an HTTP connection using MCP, and that it does specify some custom notifications.
+
+So I recommend we do this.
+--
+author:	jba
+association:	contributor
+edited:	false
+status:	none
+--
+Some issues that make this more complicated than the simple one-liner in the top post:
+
+- All other notifications go through sending middleware. These should too.
+- The sending mechanism recognizes a notification because its method starts with "notifications/". These do not.
+- A server may support many sessions. Presumbably the notification should be sent to them all. (Even if there's ever only one for the IDE; we need to think more generally.)
+--
+author:	vaijab
+association:	none
+edited:	false
+status:	none
+--
+@jba thanks for looking into this. Shall I raise a PR with the changes or you prefer that maintainers do it?
+--
+author:	jba
+association:	contributor
+edited:	false
+status:	none
+--
+A PR would be great. I don't quite see how to do it myself, frankly.
+--
+author:	jba
+association:	contributor
+edited:	false
+status:	none
+--
+Let's discuss the design here first. We should start with how we're going to recognize these custom notifications. I'd rather not have a registration mechanism. Maybe we can design a convention.
+--
+author:	findleyr
+association:	contributor
+edited:	false
+status:	none
+--
+@jba I think we can just expose a method to send an arbitrary notification. No registry needed.
+--
+author:	jba
+association:	contributor
+edited:	false
+status:	none
+--
+@findleyr It should go through the middleware, which means it will eventually get to https://github.com/modelcontextprotocol/go-sdk/blob/main/mcp/shared.go#L91, which expects all methods to be known and recognizes notifications by method name.
+
+I don't think we should skip the middleware. It may be performing accounting, logging, PII scrubbing, and other operations that should apply to all outgoing messages.
+
+One simple idea: if `method` begins with the segment `x-notifications`, that segment is removed and the remainder is sent as a notification. We would skip everything else in the function until L107.
+--
+author:	maciej-kisiel
+association:	contributor
+edited:	false
+status:	none
+--
+Hi @ajuijas, the issue #745 hasn't been marked as "ready for work" yet, since the decision that we want or need this functionality hasn't been made yet. Do you have any personal use cases that would require this functionality? If so, I would encourage you to add to the discussion on the issue first, before we dive into implementation. Thanks!
+--
+author:	ajuijas
+association:	none
+edited:	true
+status:	none
+--
+Hi! I don't have a personal use case for this. I was just bored and looking for open source issues to help with, so I decided to try fixing this one (I wasn't paying attention to the "ready for work" tag 😪). 
+Please let me know if you decide to move forward with the implementation! Thanks 🙏.
+--
+author:	jba
+association:	contributor
+edited:	false
+status:	none
+--
+Please look at #745 and make sure you're solving the problem there. Also refer to that issue in the commit message.
+--
+author:	jba
+association:	contributor
+edited:	false
+status:	none
+--
+(No, you're not.)
+--
+author:	mikeschinkel
+association:	none
+edited:	false
+status:	none
+--
+Use-case wise — for Claude Channels — I have exactly the same need. 
+--
+diff --git a/mcp/client.go b/mcp/client.go
+index 74900b1c..04c06cfd 100644
+--- a/mcp/client.go
++++ b/mcp/client.go
+@@ -1106,6 +1106,14 @@ func (cs *ClientSession) NotifyProgress(ctx context.Context, params *ProgressNot
+ 	return handleNotify(ctx, notificationProgress, newClientRequest(cs, orZero[Params](params)))
+ }
+ 
++// SendNotification sends a custom notification from the client to the server
++// associated with this session. This is typically used for protocol extensions
++// that send arbitrary JSON-RPC notifications.
++func (cs *ClientSession) SendNotification(ctx context.Context, method string, params any) error {
++	cp := &customNotificationParams{payload: params}
++	return handleNotify(ctx, "x-notifications/"+method, newClientRequest(cs, Params(cp)))
++}
++
+ // Tools provides an iterator for all tools available on the server,
+ // automatically fetching pages and managing cursors.
+ // The params argument can set the initial cursor.
+diff --git a/mcp/client_test.go b/mcp/client_test.go
+index fc37c3eb..52c0cbcc 100644
+--- a/mcp/client_test.go
++++ b/mcp/client_test.go
+@@ -13,6 +13,10 @@ import (
+ 	"github.com/google/go-cmp/cmp"
+ 	"github.com/google/go-cmp/cmp/cmpopts"
+ 	"github.com/google/jsonschema-go/jsonschema"
++	"encoding/json"
++	"time"
++	"github.com/modelcontextprotocol/go-sdk/internal/jsonrpc2"
++	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
+ )
+ 
+ type Item struct {
+@@ -543,3 +547,74 @@ func TestClientCapabilitiesOverWire(t *testing.T) {
+ 		})
+ 	}
+ }
++
++func TestClientSendNotification(t *testing.T) {
++	ctx, cancel := context.WithCancel(context.Background())
++	defer cancel()
++
++	client := NewClient(&Implementation{Name: "testClient", Version: "1.0.0"}, nil)
++	cTrans, sTrans := NewInMemoryTransports()
++	
++	// Create channels to capture notifications
++	notifCh := make(chan *jsonrpc.Request, 1) // Using jsonrpc.Request since decode returns that
++	
++	// Intercept server transport to capture notifications
++	sConn, err := sTrans.Connect(ctx)
++	if err != nil {
++		t.Fatal(err)
++	}
++	go func() {
++		for {
++			msg, err := sConn.Read(ctx)
++			if err != nil {
++				return
++			}
++			if req, ok := msg.(*jsonrpc.Request); ok {
++				if req.Method == "initialize" {
++					resp, _ := jsonrpc2.NewResponse(req.ID, InitializeResult{
++						ProtocolVersion: "2024-11-05",
++						ServerInfo: &Implementation{Name: "testServer", Version: "1.0.0"},
++					}, nil)
++					sConn.Write(ctx, resp)
++				} else if req.Method != "notifications/initialized" && !req.IsCall() {
++					notifCh <- req
++				}
++			}
++		}
++	}()
++
++	cs, err := client.Connect(ctx, cTrans, nil)
++	if err != nil {
++		t.Fatal(err)
++	}
++
++	// Send a custom notification
++	type myParams struct {
++		Key string `json:"key"`
++		Val int    `json:"val"`
++	}
++	
++	err = cs.SendNotification(ctx, "custom/myNotif", myParams{Key: "hello", Val: 42})
++	if err != nil {
++		t.Fatalf("SendNotification failed: %v", err)
++	}
++
++	// Wait for the notification to be received
++	select {
++	case req := <-notifCh:
++		if req.Method != "custom/myNotif" {
++			t.Errorf("got method %q, want %q", req.Method, "custom/myNotif")
++		}
++		
++		var gotParams myParams
++		if err := json.Unmarshal(req.Params, &gotParams); err != nil {
++			t.Fatalf("failed to unmarshal params: %v", err)
++		}
++		
++		if gotParams.Key != "hello" || gotParams.Val != 42 {
++			t.Errorf("got params %+v, want {Key: hello, Val: 42}", gotParams)
++		}
++	case <-time.After(time.Second * 2):
++		t.Fatal("timeout waiting for notification")
++	}
++}
+diff --git a/mcp/server.go b/mcp/server.go
+index e3c03e27..a44d5867 100644
+--- a/mcp/server.go
++++ b/mcp/server.go
+@@ -1079,6 +1079,14 @@ func (ss *ServerSession) NotifyProgress(ctx context.Context, params *ProgressNot
+ 	return handleNotify(ctx, notificationProgress, newServerRequest(ss, orZero[Params](params)))
+ }
+ 
++// SendNotification sends a custom notification from the server to the client
++// associated with this session. This is typically used for protocol extensions
++// that send arbitrary JSON-RPC notifications.
++func (ss *ServerSession) SendNotification(ctx context.Context, method string, params any) error {
++	cp := &customNotificationParams{payload: params}
++	return handleNotify(ctx, "x-notifications/"+method, newServerRequest(ss, Params(cp)))
++}
++
+ func newServerRequest[P Params](ss *ServerSession, params P) *ServerRequest[P] {
+ 	return &ServerRequest[P]{Session: ss, Params: params}
+ }
+diff --git a/mcp/server_test.go b/mcp/server_test.go
+index e57af1e2..3219d71c 100644
+--- a/mcp/server_test.go
++++ b/mcp/server_test.go
+@@ -18,6 +18,7 @@ import (
+ 	"github.com/google/go-cmp/cmp"
+ 	"github.com/google/jsonschema-go/jsonschema"
+ 	"github.com/modelcontextprotocol/go-sdk/internal/jsonrpc2"
++	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
+ )
+ 
+ type testItem struct {
+@@ -1001,3 +1002,67 @@ func TestServerCapabilitiesOverWire(t *testing.T) {
+ 		})
+ 	}
+ }
++
++func TestSendNotification(t *testing.T) {
++	ctx, cancel := context.WithCancel(context.Background())
++	defer cancel()
++
++	s := NewServer(testImpl, nil)
++	cTrans, sTrans := NewInMemoryTransports()
++	
++	// Create channels to capture notifications
++	notifCh := make(chan *jsonrpc2.Request, 1)
++	
++	// Intercept client transport to capture notifications
++	cConn, err := cTrans.Connect(ctx)
++	if err != nil {
++		t.Fatal(err)
++	}
++	go func() {
++		for {
++			msg, err := cConn.Read(ctx)
++			if err != nil {
++				return
++			}
++			if req, ok := msg.(*jsonrpc.Request); ok && !req.IsCall() {
++				// Capture notifications (requests without ID)
++				notifCh <- req
++			}
++		}
++	}()
++
++	ss, err := s.Connect(ctx, sTrans, nil)
++	if err != nil {
++		t.Fatal(err)
++	}
++
++	// Send a custom notification
++	type diffParams struct {
++		File string `json:"file"`
++		Hunk int    `json:"hunk"`
++	}
++	
++	err = ss.SendNotification(ctx, "ide/diffAccepted", diffParams{File: "main.go", Hunk: 2})
++	if err != nil {
++		t.Fatalf("SendNotification failed: %v", err)
++	}
++
++	// Wait for the notification to be received
++	select {
++	case req := <-notifCh:
++		if req.Method != "ide/diffAccepted" {
++			t.Errorf("got method %q, want %q", req.Method, "ide/diffAccepted")
++		}
++		
++		var gotParams diffParams
++		if err := json.Unmarshal(req.Params, &gotParams); err != nil {
++			t.Fatalf("failed to unmarshal params: %v", err)
++		}
++		
++		if gotParams.File != "main.go" || gotParams.Hunk != 2 {
++			t.Errorf("got params %+v, want {File: main.go, Hunk: 2}", gotParams)
++		}
++	case <-time.After(time.Second):
++		t.Fatal("timeout waiting for notification")
++	}
++}
+diff --git a/mcp/shared.go b/mcp/shared.go
+index f8c92502..667d6d74 100644
+--- a/mcp/shared.go
++++ b/mcp/shared.go
+@@ -90,6 +90,12 @@ func addMiddleware(handlerp *MethodHandler, middleware []Middleware) {
+ }
+ 
+ func defaultSendingMethodHandler(ctx context.Context, method string, req Request) (Result, error) {
++	// Custom notifications from SendNotification are prefixed with x-notifications/
++	if strings.HasPrefix(method, "x-notifications/") {
++		actualMethod := strings.TrimPrefix(method, "x-notifications/")
++		return nil, req.GetSession().getConn().Notify(ctx, actualMethod, req.GetParams())
++	}
++
+ 	info, ok := req.GetSession().sendingMethodInfos()[method]
+ 	if !ok {
+ 		// This can be called from user code, with an arbitrary value for method.
+@@ -244,6 +250,25 @@ const (
+ 	missingParamsOK                         // params may be missing or null
+ )
+ 
++// customNotificationParams wraps arbitrary payload parameters so they can pass
++// through the SDK middleware as Params while satisfying the internal interface.
++type customNotificationParams struct {
++	payload any
++}
++
++func (c *customNotificationParams) GetMeta() map[string]any { return nil }
++func (c *customNotificationParams) SetMeta(map[string]any)  {}
++func (c *customNotificationParams) isParams()               {}
++
++// MarshalJSON delegates JSON marshaling to the wrapped payload payload.
++// If payload is nil, it marshals to an empty object "{}".
++func (c customNotificationParams) MarshalJSON() ([]byte, error) {
++	if c.payload == nil {
++		return []byte("{}"), nil
++	}
++	return json.Marshal(c.payload)
++}
++
+ func newClientMethodInfo[P paramsPtr[T], R Result, T any](d typedClientMethodHandler[P, R], flags methodFlags) methodInfo {
+ 	mi := newMethodInfo[P, R](flags)
+ 	mi.newRequest = func(s Session, p Params, _ *RequestExtra) Request {
+diff --git a/mcp/server.go b/mcp/server.go
+index 97b5d446..cb2a203b 100644
+--- a/mcp/server.go
++++ b/mcp/server.go
+@@ -20,6 +20,7 @@ import (
+ 	"path/filepath"
+ 	"reflect"
+ 	"slices"
++	"strings"
+ 	"sync"
+ 	"sync/atomic"
+ 	"time"
+@@ -1082,6 +1083,16 @@ func (ss *ServerSession) callProgressNotificationHandler(ctx context.Context, p
+ 	return nil, nil
+ }
+ 
++// Notify sends a notification with an arbitrary custom method name.
++// method MUST start with "notifications/". Returns when the peer has
++// acknowledged the write or the context is cancelled.
++func (ss *ServerSession) Notify(ctx context.Context, method string, params any) error {
++	if !strings.HasPrefix(method, "notifications/") {
++		return fmt.Errorf("Notify: method must start with notifications/, got %q", method)
++	}
++	return ss.getConn().Notify(ctx, method, params)
++}
++
+ // NotifyProgress sends a progress notification from the server to the client
+ // associated with this session.
+ // This is typically used to report on the status of a long-running request
+666	OPEN	Proposal: support for sending `tools/list_changed` notifications manually	needs investigation	2026-02-13T09:59:38Z
+745	OPEN	Expose generic `SendNotification` on `ServerSession` for custom protocol extensions	needs investigation	2026-02-13T09:49:26Z
+639	OPEN	Proposal: provide a Server.SetTools method	needs community feedback	2026-02-13T10:02:39Z
+882	OPEN	mcp/transport.go call() attempts to call Notify() on a failed connection	needs investigation, P2	2026-04-08T04:27:06Z
+460	OPEN	Proposal: progress reporting (analogue to FastMCP)	needs community feedback	2026-02-13T11:34:50Z
+626	OPEN	SEP-1686 (experimental): Implement Tasks	ready for work	2026-02-13T10:04:55Z
+649	CLOSED	batch notifications		2025-12-11T20:11:34Z
+633	CLOSED	Streamable HTTP clients can get stuck connecting	needs decision	2026-02-13T10:03:39Z
+684	CLOSED	Undeliverable messages in StreamableServerTransport when there are no connected streams.		2025-12-10T23:34:50Z
+648	CLOSED	Validate schemas on the caller side (in addition to callee)	needs investigation	2026-04-02T09:12:17Z
+748	CLOSED	Feature: Add sensitive data sanitization to ServerSession.Log()		2026-02-02T09:19:49Z
+565	CLOSED	Proposal: export method name constants	needs decision	2025-10-23T13:36:32Z
+767	CLOSED	StreamableHTTP transport timeout issue.		2026-01-30T16:15:07Z
+728	CLOSED	Proposal: Add option to disable continuous listening in StreamableClientTransport		2026-01-11T12:56:49Z
+706	CLOSED	Proposal: Add {Client,Server}Options.Capabilities, and deprecate Has{Tools,Prompts,Resources}		2025-12-22T14:29:05Z
+73	CLOSED	design: tool binding		2025-11-20T16:27:36Z
+387	CLOSED	Server notifications are not sent out in stateless mode		2025-09-05T13:19:51Z
+313	CLOSED	Excessive goroutine creation on duplicate 'initialized' notification		2025-08-19T13:46:56Z
+196	CLOSED	"notifications/initialized" panics when given an "id" field		2025-08-22T18:46:51Z
+390	CLOSED	Possibility to filter Tools / Prompts in builtIn list/* requests.		2026-01-13T14:26:13Z
+464	CLOSED	Simple example gives mcp_protocol_error: 32600 using OpenAI responses API		2026-02-02T09:57:09Z
+227	CLOSED	mcp: streamable transport terminating stream prematurely		2025-08-22T18:46:28Z
+521	CLOSED	Make StreamableClientTransport less strict by default		2025-09-24T18:42:16Z
+179	CLOSED	Obtain server response even with malformed json input	good first issue, help wanted	2025-08-22T18:46:49Z
+395	CLOSED	Claude Desktop Not Able To Detect The Tool		2025-09-05T16:05:23Z
+190	CLOSED	unbounded memory in streamable transport	release blocker	2025-09-19T18:14:12Z
+393	CLOSED	`failed to reconnect: Not Found` after initalize in stateless HTTP `POST` server	documentation	2025-09-05T13:19:52Z
+26	CLOSED	Design: concurrency model	breaking change	2025-08-19T15:21:04Z
+135	CLOSED	Enable advertising unused capabilities	needs investigation	2025-08-22T18:46:11Z
+225	CLOSED	mcp lifecycle: initialization phase is not completely followed		2025-09-04T22:36:58Z
+898	feat(mcp): add ServerSession.Notify for custom notification methods	standardbeagle:agnt-notify	OPEN	2026-04-15T11:56:39Z
+844	feat: implement generic SendNotification method for Issue #745	ajuijas:feature/send-notification	OPEN	2026-03-15T11:55:10Z
+885	mcp: do not re-prompt OAuth after cancelled Authorize	ravyg:fix/882-auth-cancel-no-renotify	OPEN	2026-04-08T04:52:45Z
+480	Export callback to StreamableHTTPHandler for closed transports	fgrosse:fgrosse/479-connection-closing-callback	OPEN	2025-09-17T13:44:37Z
+865	mcp: add ErrorHandler to ServerOptions	ravyg:feat/218-error-handler	CLOSED	2026-03-27T23:02:59Z
+851	mcp: re-enable race test after fixing data races	mkisiel/go125	MERGED	2026-03-20T15:58:06Z
+717	mcp: debounce server change notifications	findleyr:notifications	MERGED	2025-12-11T19:52:40Z
+671	mcp: debounce server change notifications	jba:notifications	CLOSED	2025-12-01T13:35:36Z
+729	mcp: add DisableListening option to StreamableClientTransport	zxxf18:main	MERGED	2025-12-18T03:20:56Z
+713	mcp: add Capabilities fields to ServerOptions and ClientOptions	findleyr:capabilities-refactor	MERGED	2025-12-11T02:45:53Z
+760	feat: add automatic DNS rebinding protection for localhost servers	pcarleton:feat/dns-rebinding-protection	MERGED	2026-01-22T15:45:39Z
+634	streamable HTTP client: Don't block on standalone SSE Get	richard-rance:persisted-sse	CLOSED	2025-11-11T01:18:54Z
+439	async call handleNotify in notifySessions	RHzzz666:feat_async_notify	CLOSED	2025-09-09T16:05:18Z
+663	mcp: support SSE polling and server disconnects (SEP-1699)	findleyr:serverdisconnects	MERGED	2025-11-27T00:10:27Z
+8	mcp: move to 2025-06-18 schema	jba-newschema	MERGED	2025-06-24T20:06:38Z
+423	mcp: allow requests before notifications/initialized	findleyr:nullcontent2	CLOSED	2025-09-05T20:50:10Z
+419	mcp: allow requests before notifications/initialized	findleyr:nullcontent	MERGED	2025-09-05T01:15:20Z
+677	mcp: better handling for streamable context cancellation	findleyr:clientctx	MERGED	2025-12-03T00:41:41Z
+304	mcp/streamable: fix unbounded memory in streamable transport	samthanawalla:memory	CLOSED	2025-08-14T18:17:05Z
+524	mcp: make the streamable client transport less strict	findleyr:streamableclient	MERGED	2025-09-24T16:50:36Z
+411	mcp: set default logging level to info	ln-12:add_default_logging_level	MERGED	2025-09-04T12:44:50Z
+204	mcp: reject notifications with unexpected ID field	findleyr:badnotifications	MERGED	2025-07-30T16:34:23Z
+364	make mcp.handleNotify public	slimslenderslacks:slim/HandleNotify	CLOSED	2025-08-25T07:26:58Z
+323	mcp: implement a concurrency model for calls	findleyr:async	MERGED	2025-08-18T23:50:58Z
+544	mcp: add client-side OAuth flow	samthanawalla:clientOauth	MERGED	2025-09-29T20:10:29Z
+260	mcp: simplify ServerSession.initialize	findleyr:smallthings	MERGED	2025-08-07T16:24:14Z
+138	mcp: add resource subscriptions	samthanawalla:resourcesubs	MERGED	2025-07-15T19:30:24Z
+202	mcp: reject requests with bad IDs	findleyr:findleyr/robustness	MERGED	2025-07-30T15:01:52Z
+505	docs: document resources	jba:fdoc-resource	MERGED	2025-09-19T15:10:45Z
+133	mcp/streamable: add resumability for the Streamable transport	samthanawalla:resumability	MERGED	2025-07-14T18:46:55Z

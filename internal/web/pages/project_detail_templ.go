@@ -15,7 +15,7 @@ import (
 	"github.com/mikeschinkel/endless/internal/web/data"
 )
 
-func ProjectDetail(project *data.DashboardProject, planItems []data.PlanItemView, activities []data.ActivityView, notes []data.NoteView, deps []data.DependencyView) templ.Component {
+func ProjectDetail(project *data.DashboardProject, taskItems []data.TaskView, activities []data.ActivityView, notes []data.NoteView, deps []data.DependencyView) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
@@ -225,17 +225,17 @@ func ProjectDetail(project *data.DashboardProject, planItems []data.PlanItemView
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			if len(nextActions(planItems)) > 0 {
+			if len(nextActions(taskItems)) > 0 {
 				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 21, "<section><h3 class=\"text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4\">Next Actions</h3><div class=\"bg-gray-900 border border-gray-800 rounded-lg divide-y divide-gray-800/50\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				for _, item := range nextActions(planItems) {
+				for _, item := range nextActions(taskItems) {
 					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 22, "<div class=\"px-4 py-3\" x-data=\"{ open: false }\"><div class=\"flex items-center gap-3 cursor-pointer\" x-on:click=\"open = !open\">")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					templ_7745c5c3_Err = planStatusIcon(item.Status).Render(ctx, templ_7745c5c3_Buffer)
+					templ_7745c5c3_Err = taskStatusIcon(item.Status).Render(ctx, templ_7745c5c3_Buffer)
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
@@ -305,13 +305,13 @@ func ProjectDetail(project *data.DashboardProject, planItems []data.PlanItemView
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			if len(planItems) > 0 {
+			if len(taskItems) > 0 {
 				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 32, "<span class=\"text-gray-600 ml-2\">(")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var14 string
-				templ_7745c5c3_Var14, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("%d", len(planItems)))
+				templ_7745c5c3_Var14, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("%d", len(taskItems)))
 				if templ_7745c5c3_Err != nil {
 					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/pages/project_detail.templ`, Line: 86, Col: 76}
 				}
@@ -328,21 +328,21 @@ func ProjectDetail(project *data.DashboardProject, planItems []data.PlanItemView
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			if len(planItems) > 0 {
+			if len(taskItems) > 0 {
 				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 35, "<a href=\"")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var15 templ.SafeURL
-				templ_7745c5c3_Var15, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL(fmt.Sprintf("/project/%s/plan", project.Name)))
+				templ_7745c5c3_Var15, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL(fmt.Sprintf("/project/%s/tasks", project.Name)))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/pages/project_detail.templ`, Line: 90, Col: 76}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/pages/project_detail.templ`, Line: 90, Col: 77}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var15))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 36, "\" class=\"text-xs text-emerald-400 hover:text-emerald-300\">View full plan →</a>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 36, "\" class=\"text-xs text-emerald-400 hover:text-emerald-300\">View all tasks →</a>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -351,12 +351,12 @@ func ProjectDetail(project *data.DashboardProject, planItems []data.PlanItemView
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			if len(planItems) > 0 {
+			if len(taskItems) > 0 {
 				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 38, "<div class=\"bg-gray-900 border border-gray-800 rounded-lg divide-y divide-gray-800/50\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				for _, item := range planItems {
+				for _, item := range taskItems {
 					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 39, "<div class=\"py-2\" x-data=\"{ open: false }\" style=\"")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
@@ -374,7 +374,7 @@ func ProjectDetail(project *data.DashboardProject, planItems []data.PlanItemView
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					templ_7745c5c3_Err = planStatusIcon(item.Status).Render(ctx, templ_7745c5c3_Buffer)
+					templ_7745c5c3_Err = taskStatusIcon(item.Status).Render(ctx, templ_7745c5c3_Buffer)
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
@@ -795,8 +795,8 @@ func ProjectDetail(project *data.DashboardProject, planItems []data.PlanItemView
 }
 
 // nextActions returns in-progress items first, then next available items, up to 5 total.
-func nextActions(items []data.PlanItemView) []data.PlanItemView {
-	var result []data.PlanItemView
+func nextActions(items []data.TaskView) []data.TaskView {
+	var result []data.TaskView
 	// In-progress first
 	for _, item := range items {
 		if item.Status == "in_progress" {
@@ -828,7 +828,7 @@ func progressPct(completed, total int) int {
 	return completed * 100 / total
 }
 
-func planStatusIcon(status string) templ.Component {
+func taskStatusIcon(status string) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {

@@ -60,10 +60,10 @@ tr:hover { background: var(--bg-hover); }
 .status-idea { color: var(--blue); }
 .status-archived { color: var(--text-dim); }
 
-.plan-pending { color: var(--text-dim); }
-.plan-in_progress { color: var(--yellow); font-weight: 600; }
-.plan-completed { color: var(--green); }
-.plan-blocked { color: var(--red); }
+.task-pending { color: var(--text-dim); }
+.task-in_progress { color: var(--yellow); font-weight: 600; }
+.task-completed { color: var(--green); }
+.task-blocked { color: var(--red); }
 
 .phase-tag {
   display: inline-block;

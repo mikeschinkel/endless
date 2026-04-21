@@ -93,114 +93,116 @@ endless unregister myapp
 endless purge myapp
 ```
 
-### Plan Management
+### Task Management
 
-Plans are a tree. Each plan can have child plans. The `plans` table stores title, description, full text, and prompt.
+Tasks form a tree. Each task can have child tasks. The `tasks` table stores title, description, full text, prompt, and type.
 
-#### View plans
+#### View tasks
 
 ```bash
-endless plan show [--project <name>] [--all]
-endless plan detail <plan_id>
+endless task show [--project <name>] [--all]
+endless task detail <task_id>
 ```
 
 ```bash
-endless plan show
-endless plan show --all
-endless plan detail 445
+endless task show
+endless task show --all
+endless task detail 445
 ```
 
-#### Add plans
+#### Add tasks
 
 ```bash
-endless plan add <title> \
+endless task add <title> \
   [--description <text>] \
-  [--parent <plan_id>] \
+  [--parent <task_id>] \
   [--phase now|next|later] \
+  [--type task|plan|bug|research|spike|chore] \
   [--project <name>]
 ```
 
 ```bash
-endless plan add "Build dashboard" --description "Web dashboard for project status"
-endless plan add "Fix login bug" --parent 444 --description "Auth token expires too early"
-endless plan add "Refactor DB layer" --phase next
+endless task add "Build dashboard" --description "Web dashboard for project status"
+endless task add "Fix login bug" --parent 444 --description "Auth token expires too early"
+endless task add "Refactor DB layer" --phase next
+endless task add "Design auth system" --type plan
 ```
 
-#### Import plans from files
+#### Import tasks from files
 
 ```bash
-endless plan import \
+endless task import \
   [<file>] \ 
   [--project <name>] \
   [--replace] \
-  [--parent <plan_id>] \
+  [--parent <task_id>] \
   [--from-claude]
 ```
 
 ```bash
-endless plan import PLAN.md --project endless
-endless plan import PLAN.md --project endless --replace
-endless plan import subplan.md --project endless --parent 445
-endless plan import --from-claude --project endless
+endless task import PLAN.md --project endless
+endless task import PLAN.md --project endless --replace
+endless task import subplan.md --project endless --parent 445
+endless task import --from-claude --project endless
 ```
 
-#### Update a plan
+#### Update a task
 
 ```bash
-endless plan update <id> \
+endless task update <id> \
   [--status needs_plan|ready|in_progress|verify|completed|blocked|revisit] \
   [--title <title>] \
   [--description <text>] \
   [--text <file>] \
   [--prompt <file>] \
-  [--parent <plan_id>]
+  [--parent <task_id>]
 ```
 
 ```bash
 # Change status
-endless plan update 445 --status ready
+endless task update 445 --status ready
 
 # Update title and description
-endless plan update 441 --title "Dependency Graph" --description "Track cross-project deps"
+endless task update 441 --title "Dependency Graph" --description "Track cross-project deps"
 
-# Load full plan text from a file
-endless plan update 449 --text plan-markdown-component.md
+# Load full task text from a file
+endless task update 449 --text plan-markdown-component.md
 
-# Move a plan under a different parent (0 = make root)
-endless plan update 506 --parent 443
+# Move a task under a different parent (0 = make root)
+endless task update 506 --parent 443
 ```
 
 #### Track progress
 
 ```bash
-endless plan start <plan_id>
-endless plan complete <plan_id>
-endless plan remove <plan_id>
+endless task start <task_id>
+endless task complete <task_id>
+endless task remove <task_id>
 ```
 
 ```bash
-endless plan start 445
-endless plan complete 445
-endless plan remove 445
+endless task start 445
+endless task complete 445
+endless task remove 445
 ```
 
-#### Spawn a session for a plan
+#### Spawn a session for a task
 
 ```bash
-endless plan prompt <plan_id>
-endless plan spawn <plan_id> [--project <name>]
-endless plan chat
+endless task prompt <task_id>
+endless task spawn <task_id> [--project <name>]
+endless task chat
 ```
 
 ```bash
 # Review the prompt that will be sent
-endless plan prompt 445
+endless task prompt 445
 
-# Spawn a new tmux window with Claude working on the plan's prompt
-endless plan spawn 445
+# Spawn a new tmux window with Claude working on the task's prompt
+endless task spawn 445
 
-# Start a chat session without plan tracking
-endless plan chat
+# Start a chat session without task tracking
+endless task chat
 ```
 
 ### Documents & Notes
@@ -239,10 +241,10 @@ endless serve                     Start the web dashboard
 
 Routes:
 - `/` — Dashboard homepage
-- `/status` — Project status (master-detail with plan tree)
+- `/status` — Project status (master-detail with task tree)
 - `/status/<name>` — Project-specific status
-- `/project/<name>` — Project detail (plan, activity, notes, deps)
-- `/project/<name>/plan` — Full plan detail
+- `/project/<name>` — Project detail (tasks, activity, notes, deps)
+- `/project/<name>/tasks` — Full task list
 
 ### Hooks & Setup
 
@@ -254,10 +256,10 @@ endless setup remove-claude-hook  Remove Claude Code hook
 ```
 
 The Claude Code hook handles:
-- **SessionStart**: Injects plan context
-- **PreToolUse**: Blocks Write/Edit without active plan session
-- **PostToolUse**: Detects file changes, auto-imports plan files, tracks plan file path on session
-- **ExitPlanMode**: Imports the accepted plan, using the tracked file path
+- **SessionStart**: Injects task context
+- **PreToolUse**: Blocks Write/Edit without active task session
+- **PostToolUse**: Detects file changes, tracks plan file path on session
+- **ExitPlanMode**: Syncs the accepted plan, using the tracked file path
 - **Stop/SessionEnd**: Ends the session, records file changes
 
 ## Database
@@ -265,7 +267,7 @@ The Claude Code hook handles:
 SQLite at `~/.config/endless/endless.db`. Key tables:
 
 - `projects` — registered projects
-- `plans` — hierarchical plan tree (title, description, text, prompt, parent_id)
+- `tasks` — hierarchical task tree (title, description, text, prompt, type, parent_id)
 - `ai_sessions` — Claude/Codex session tracking with active_goal_id and plan_file_path
 - `activity` — hook-captured activity events
 - `file_changes` — detected file modifications

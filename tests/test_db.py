@@ -10,8 +10,8 @@ def test_get_db_creates_tables(isolated_env):
     ).fetchall()
     table_names = {row["name"] for row in tables}
     assert "projects" in table_names
-    assert "documents" in table_names
     assert "notes" in table_names
+    assert "sessions" in table_names
 
 
 def test_execute_and_query(isolated_env):

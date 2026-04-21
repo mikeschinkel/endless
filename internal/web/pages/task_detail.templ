@@ -7,14 +7,14 @@ import (
 	"github.com/mikeschinkel/endless/internal/web/data"
 )
 
-templ PlanDetail(project *data.DashboardProject, planItems []data.PlanItemView) {
-	@components.Layout(fmt.Sprintf("%s — Plan", project.Name), fmt.Sprintf("/project/%s", project.Name)) {
+templ TaskDetail(project *data.DashboardProject, taskItems []data.TaskView) {
+	@components.Layout(fmt.Sprintf("%s — Tasks", project.Name), fmt.Sprintf("/project/%s", project.Name)) {
 		<!-- Header -->
 		<div class="mb-8">
 			<div class="flex items-center gap-4 mb-2">
 				<a href={ templ.SafeURL(fmt.Sprintf("/project/%s", project.Name)) } class="text-gray-500 hover:text-gray-300 transition-colors">← { project.Name }</a>
 			</div>
-			<h2 class="text-2xl font-bold text-gray-100">Full Plan</h2>
+			<h2 class="text-2xl font-bold text-gray-100">All Tasks</h2>
 			if project.TaskTotal > 0 {
 				<p class="text-sm text-gray-500 mt-2">
 					{ fmt.Sprintf("%d tasks total — %d completed, %d in progress, %d remaining",
@@ -29,7 +29,7 @@ templ PlanDetail(project *data.DashboardProject, planItems []data.PlanItemView) 
 			}
 		</div>
 
-		if len(planItems) > 0 {
+		if len(taskItems) > 0 {
 			<!-- Status filter -->
 			<div class="mb-6 flex gap-2" x-data="{ filter: 'all' }">
 				<button x-on:click="filter = 'all'" x-bind:class="filter === 'all' ? 'bg-gray-700 text-gray-200' : 'text-gray-500 hover:text-gray-300'"
@@ -41,13 +41,13 @@ templ PlanDetail(project *data.DashboardProject, planItems []data.PlanItemView) 
 			</div>
 
 			<div class="bg-gray-900 border border-gray-800 rounded-lg divide-y divide-gray-800/50">
-				for _, item := range planItems {
+				for _, item := range taskItems {
 					<div class="py-2"
 						style={ fmt.Sprintf("padding-left: %dpx; padding-right: 16px;", 16 + item.Depth * 20) }
 						x-data="{ open: false, editing: false, editTitle: '', startEdit(el) { this.editing = true; this.editTitle = el.textContent.trim(); this.$nextTick(() => { const inp = this.$refs.editInput; inp.style.minWidth = Math.max(this.editTitle.length + 5, 20) + 'ch'; inp.focus(); inp.select(); }); }, saveEdit() { if (!this.editTitle.trim()) return; const inp = this.$refs.editInput; inp.dispatchEvent(new Event('save')); this.$nextTick(() => { this.$refs.titleSpan.textContent = this.editTitle; this.editing = false; }); } }"
 						x-show={ fmt.Sprintf("filter === 'all' || (filter === 'active' && '%s' !== 'completed') || (filter === 'completed' && '%s' === 'completed')", item.Status, item.Status) }>
 						<div class="flex items-center gap-2">
-							@planStatusIcon(item.Status)
+							@taskStatusIcon(item.Status)
 							<span class="w-5 text-center text-xs font-mono text-cyan-600">
 								{ fmt.Sprintf("%d", item.SiblingNum) }
 							</span>
@@ -66,7 +66,7 @@ templ PlanDetail(project *data.DashboardProject, planItems []data.PlanItemView) 
 										type="text"
 										name="title"
 										x-model="editTitle"
-										hx-put={ fmt.Sprintf("/plan-item/%d/title", item.ID) }
+										hx-put={ fmt.Sprintf("/tasks/%d/title", item.ID) }
 										hx-trigger="save"
 										hx-swap="none"
 										x-on:keydown.enter.prevent="saveEdit()"
@@ -105,7 +105,7 @@ templ PlanDetail(project *data.DashboardProject, planItems []data.PlanItemView) 
 				}
 			</div>
 		} else {
-			<p class="text-sm text-gray-500 bg-gray-900 border border-gray-800 rounded-lg px-4 py-6 text-center">No plan items</p>
+			<p class="text-sm text-gray-500 bg-gray-900 border border-gray-800 rounded-lg px-4 py-6 text-center">No tasks</p>
 		}
 	}
 }

@@ -1,6 +1,7 @@
 package web
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -29,10 +30,10 @@ func GetDashboardProjects() []data.DashboardProject {
 		 p.status, COALESCE(NULLIF(p.language,''),'') as language,
 		 p.path, COALESCE(p.group_name,'') as group_name,
 		 (SELECT count(*) FROM notes n WHERE n.project_id = p.id AND n.resolved = 0) as pending_notes,
-		 (SELECT count(*) FROM plans pi WHERE pi.project_id = p.id AND pi.status IN ('needs_plan','ready','in_progress')) as active_plan,
-		 (SELECT count(*) FROM plans pi WHERE pi.project_id = p.id) as task_total,
-		 (SELECT count(*) FROM plans pi WHERE pi.project_id = p.id AND pi.status = 'completed') as task_completed,
-		 (SELECT count(*) FROM plans pi WHERE pi.project_id = p.id AND pi.status = 'in_progress') as task_in_progress,
+		 (SELECT count(*) FROM tasks pi WHERE pi.project_id = p.id AND pi.status IN ('needs_plan','ready','in_progress')) as active_plan,
+		 (SELECT count(*) FROM tasks pi WHERE pi.project_id = p.id) as task_total,
+		 (SELECT count(*) FROM tasks pi WHERE pi.project_id = p.id AND pi.status = 'completed') as task_completed,
+		 (SELECT count(*) FROM tasks pi WHERE pi.project_id = p.id AND pi.status = 'in_progress') as task_in_progress,
 		 COALESCE((SELECT a.created_at FROM activity a WHERE a.project_id = p.id ORDER BY a.created_at DESC LIMIT 1),'') as last_activity
 		 FROM projects p WHERE p.status IN ('active','paused','idea')
 		 ORDER BY last_activity DESC, p.name`)
@@ -45,7 +46,7 @@ func GetDashboardProjects() []data.DashboardProject {
 	for rows.Next() {
 		var p data.DashboardProject
 		rows.Scan(&p.ID, &p.Name, &p.Label, &p.Description, &p.Status, &p.Language,
-			&p.Path, &p.GroupName, &p.PendingNotes, &p.ActivePlan,
+			&p.Path, &p.GroupName, &p.PendingNotes, &p.ActiveTasks,
 			&p.TaskTotal, &p.TaskCompleted, &p.TaskInProgress, &p.LastActivity)
 		p.ShortPath = shortPath(p.Path)
 		projects = append(projects, p)
@@ -64,9 +65,9 @@ func GetCurrentWork() []data.CurrentWorkItem {
 		 pi.description, pi.id,
 		 COALESCE(s.state, '') as session_state,
 		 COALESCE(s.last_activity, '') as last_activity
-		 FROM plans pi
+		 FROM tasks pi
 		 JOIN projects p ON pi.project_id = p.id
-		 LEFT JOIN ai_sessions s ON s.active_goal_id = pi.id AND s.state = 'working'
+		 LEFT JOIN sessions s ON s.active_task_id = pi.id AND s.state = 'working'
 		 WHERE pi.status = 'in_progress'
 		 ORDER BY p.name, pi.sort_order`)
 	if err != nil {
@@ -124,14 +125,14 @@ func GetProjectDetail(name string) (*data.DashboardProject, error) {
 		 p.status, COALESCE(NULLIF(p.language,''),'') as language,
 		 p.path, COALESCE(p.group_name,'') as group_name,
 		 (SELECT count(*) FROM notes n WHERE n.project_id = p.id AND n.resolved = 0) as pending_notes,
-		 (SELECT count(*) FROM plans pi WHERE pi.project_id = p.id AND pi.status IN ('needs_plan','ready','in_progress')) as active_plan,
-		 (SELECT count(*) FROM plans pi WHERE pi.project_id = p.id) as task_total,
-		 (SELECT count(*) FROM plans pi WHERE pi.project_id = p.id AND pi.status = 'completed') as task_completed,
-		 (SELECT count(*) FROM plans pi WHERE pi.project_id = p.id AND pi.status = 'in_progress') as task_in_progress,
+		 (SELECT count(*) FROM tasks pi WHERE pi.project_id = p.id AND pi.status IN ('needs_plan','ready','in_progress')) as active_plan,
+		 (SELECT count(*) FROM tasks pi WHERE pi.project_id = p.id) as task_total,
+		 (SELECT count(*) FROM tasks pi WHERE pi.project_id = p.id AND pi.status = 'completed') as task_completed,
+		 (SELECT count(*) FROM tasks pi WHERE pi.project_id = p.id AND pi.status = 'in_progress') as task_in_progress,
 		 COALESCE((SELECT a.created_at FROM activity a WHERE a.project_id = p.id ORDER BY a.created_at DESC LIMIT 1),'') as last_activity
 		 FROM projects p WHERE p.name = ?`, name,
 	).Scan(&p.ID, &p.Name, &p.Label, &p.Description, &p.Status, &p.Language,
-		&p.Path, &p.GroupName, &p.PendingNotes, &p.ActivePlan,
+		&p.Path, &p.GroupName, &p.PendingNotes, &p.ActiveTasks,
 		&p.TaskTotal, &p.TaskCompleted, &p.TaskInProgress, &p.LastActivity)
 	if err != nil {
 		return nil, err
@@ -140,27 +141,37 @@ func GetProjectDetail(name string) (*data.DashboardProject, error) {
 	return &p, nil
 }
 
-func GetProjectPlanItems(projectID int64) []data.PlanItemView {
+func GetProjectTasks(projectID int64, excludeStatuses ...string) []data.TaskView {
 	db, err := monitor.DB()
 	if err != nil {
 		return nil
 	}
 
+	// Build the NOT IN clause for child_count
+	childExclude := "'completed'"
+	if len(excludeStatuses) > 0 {
+		parts := make([]string, len(excludeStatuses))
+		for i, s := range excludeStatuses {
+			parts[i] = "'" + s + "'"
+		}
+		childExclude = strings.Join(parts, ", ")
+	}
+
 	rows, err := db.Query(
-		`SELECT pi.id, COALESCE(pi.title,'') as title, pi.description, pi.phase, pi.status,
+		fmt.Sprintf(`SELECT pi.id, COALESCE(pi.title,'') as title, pi.description, pi.phase, pi.status,
 		 pi.parent_id,
-		 (SELECT count(*) FROM plans c WHERE c.parent_id = pi.id) as child_count,
+		 (SELECT count(*) FROM tasks c WHERE c.parent_id = pi.id AND c.status NOT IN (%s)) as child_count,
 		 COALESCE((SELECT
 		   CASE td.target_type
-		     WHEN 'task' THEN (SELECT COALESCE(t.title, substr(t.description,1,60)) FROM plans t WHERE t.id = td.target_id)
+		     WHEN 'task' THEN (SELECT COALESCE(t.title, substr(t.description,1,60)) FROM tasks t WHERE t.id = td.target_id)
 		     WHEN 'project' THEN (SELECT p2.name FROM projects p2 WHERE p2.id = td.target_id)
 		     ELSE ''
 		   END
-		   FROM task_dependencies td
+		   FROM task_deps td
 		   WHERE td.source_type = 'task' AND td.source_id = pi.id AND td.dep_type = 'needs'
 		   LIMIT 1
 		 ),'') as blocked_by
-		 FROM plans pi
+		 FROM tasks pi
 		 WHERE pi.project_id = ?
 		 ORDER BY pi.parent_id, CASE pi.status
 		   WHEN 'in_progress' THEN 0
@@ -171,20 +182,27 @@ func GetProjectPlanItems(projectID int64) []data.PlanItemView {
 		   WHEN 'blocked' THEN 5
 		   WHEN 'completed' THEN 6
 		   ELSE 7
-		 END, pi.sort_order`, projectID)
+		 END,
+		 CASE pi.phase
+		   WHEN 'now' THEN 0
+		   WHEN 'next' THEN 1
+		   WHEN 'later' THEN 2
+		   ELSE 3
+		 END,
+		 pi.updated_at DESC`, childExclude), projectID)
 	if err != nil {
 		return nil
 	}
 	defer rows.Close()
 
 	// Collect all items indexed by ID
-	var allItems []data.PlanItemView
-	byID := make(map[int64]*data.PlanItemView)
+	var allItems []data.TaskView
+	byID := make(map[int64]*data.TaskView)
 	childrenOf := make(map[int64][]int) // parent_id -> child indices
 	var rootIndices []int
 
 	for rows.Next() {
-		var pi data.PlanItemView
+		var pi data.TaskView
 		rows.Scan(&pi.ID, &pi.Title, &pi.Text, &pi.Phase, &pi.Status,
 			&pi.ParentID, &pi.ChildCount, &pi.BlockedBy)
 		idx := len(allItems)
@@ -198,7 +216,7 @@ func GetProjectPlanItems(projectID int64) []data.PlanItemView {
 	}
 
 	// Flatten tree in depth-first order with computed Depth and SiblingNum
-	var result []data.PlanItemView
+	var result []data.TaskView
 	var walk func(indices []int, depth int)
 	walk = func(indices []int, depth int) {
 		for i, idx := range indices {
@@ -216,7 +234,7 @@ func GetProjectPlanItems(projectID int64) []data.PlanItemView {
 	return result
 }
 
-func GetProjectPlansWithTasks(projectID int64) []data.PlanWithTasks {
+func GetProjectTaskGroups(projectID int64) []data.TaskGroup {
 	db, err := monitor.DB()
 	if err != nil {
 		return nil
@@ -224,13 +242,13 @@ func GetProjectPlansWithTasks(projectID int64) []data.PlanWithTasks {
 
 	// Get active tasks grouped by plan, ordered so in_progress comes first
 	rows, err := db.Query(
-		`SELECT pi.plan_id,
-		 COALESCE((SELECT COALESCE(p2.title, p2.description) FROM plans p2 WHERE p2.id = pi.plan_id), 'Main Plan') as plan_name,
+		`SELECT pi.task_id,
+		 COALESCE((SELECT COALESCE(p2.title, p2.description) FROM tasks p2 WHERE p2.id = pi.task_id), 'Ungrouped') as group_name,
 		 pi.id, COALESCE(pi.title, substr(pi.description, 1, 80)) as title,
 		 pi.description, pi.phase, pi.status
-		 FROM plans pi
+		 FROM tasks pi
 		 WHERE pi.project_id = ? AND pi.status IN ('in_progress', 'needs_plan', 'ready')
-		 ORDER BY pi.plan_id,
+		 ORDER BY pi.task_id,
 		   CASE pi.status WHEN 'in_progress' THEN 0 ELSE 1 END,
 		   pi.sort_order`, projectID)
 	if err != nil {
@@ -238,17 +256,17 @@ func GetProjectPlansWithTasks(projectID int64) []data.PlanWithTasks {
 	}
 	defer rows.Close()
 
-	planMap := make(map[int64]*data.PlanWithTasks)
+	planMap := make(map[int64]*data.TaskGroup)
 	var planOrder []int64
 	for rows.Next() {
 		var planID int64
 		var planName string
-		var item data.PlanItemView
+		var item data.TaskView
 		rows.Scan(&planID, &planName, &item.ID, &item.Title, &item.Text, &item.Phase, &item.Status)
 
 		p, ok := planMap[planID]
 		if !ok {
-			p = &data.PlanWithTasks{PlanID: planID, PlanName: planName}
+			p = &data.TaskGroup{GroupID: planID, GroupName: planName}
 			planMap[planID] = p
 			planOrder = append(planOrder, planID)
 		}
@@ -261,16 +279,16 @@ func GetProjectPlansWithTasks(projectID int64) []data.PlanWithTasks {
 	for _, pid := range planOrder {
 		p := planMap[pid]
 		db.QueryRow(
-			"SELECT count(*) FROM plans WHERE project_id=? AND plan_id=?",
+			"SELECT count(*) FROM tasks WHERE project_id=? AND task_id=?",
 			projectID, pid,
 		).Scan(&p.Total)
 		db.QueryRow(
-			"SELECT count(*) FROM plans WHERE project_id=? AND plan_id=? AND status='completed'",
+			"SELECT count(*) FROM tasks WHERE project_id=? AND task_id=? AND status='completed'",
 			projectID, pid,
 		).Scan(&p.Done)
 	}
 
-	var result []data.PlanWithTasks
+	var result []data.TaskGroup
 	for _, pid := range planOrder {
 		result = append(result, *planMap[pid])
 	}
@@ -283,11 +301,11 @@ func GetStatusDetail(name string) (*data.StatusDetail, error) {
 		return nil, err
 	}
 
-	planItems := GetProjectPlanItems(project.ID)
+	taskItems := GetProjectTasks(project.ID, "completed", "verify")
 
 	return &data.StatusDetail{
 		Project:      *project,
-		PlanItems:    planItems,
+		TaskItems:    taskItems,
 		PendingNotes: project.PendingNotes,
 	}, nil
 }
@@ -301,22 +319,22 @@ func GetProjectDependencies(projectID int64) []data.DependencyView {
 	rows, err := db.Query(
 		`SELECT td.source_type, td.source_id,
 		 CASE td.source_type
-		   WHEN 'task' THEN COALESCE((SELECT COALESCE(t.title, substr(t.description,1,60)) FROM plans t WHERE t.id = td.source_id),'')
+		   WHEN 'task' THEN COALESCE((SELECT COALESCE(t.title, substr(t.description,1,60)) FROM tasks t WHERE t.id = td.source_id),'')
 		   WHEN 'project' THEN COALESCE((SELECT p.name FROM projects p WHERE p.id = td.source_id),'')
 		   ELSE ''
 		 END as source_name,
 		 td.target_type, td.target_id,
 		 CASE td.target_type
-		   WHEN 'task' THEN COALESCE((SELECT COALESCE(t.title, substr(t.description,1,60)) FROM plans t WHERE t.id = td.target_id),'')
+		   WHEN 'task' THEN COALESCE((SELECT COALESCE(t.title, substr(t.description,1,60)) FROM tasks t WHERE t.id = td.target_id),'')
 		   WHEN 'project' THEN COALESCE((SELECT p.name FROM projects p WHERE p.id = td.target_id),'')
 		   ELSE ''
 		 END as target_name,
 		 td.dep_type
-		 FROM task_dependencies td
+		 FROM task_deps td
 		 WHERE (td.source_type = 'project' AND td.source_id = ?)
 		    OR (td.target_type = 'project' AND td.target_id = ?)
-		    OR (td.source_type = 'task' AND td.source_id IN (SELECT id FROM plans WHERE project_id = ?))
-		    OR (td.target_type = 'task' AND td.target_id IN (SELECT id FROM plans WHERE project_id = ?))`,
+		    OR (td.source_type = 'task' AND td.source_id IN (SELECT id FROM tasks WHERE project_id = ?))
+		    OR (td.target_type = 'task' AND td.target_id IN (SELECT id FROM tasks WHERE project_id = ?))`,
 		projectID, projectID, projectID, projectID)
 	if err != nil {
 		return nil
@@ -387,12 +405,12 @@ func GetProjectNotes(projectID int64) []data.NoteView {
 	return notes
 }
 
-func UpdatePlanItemTitle(itemID int64, newTitle string) error {
+func UpdateTaskTitle(itemID int64, newTitle string) error {
 	db, err := monitor.DB()
 	if err != nil {
 		return err
 	}
-	_, err = db.Exec("UPDATE plans SET title = ? WHERE id = ?", newTitle, itemID)
+	_, err = db.Exec("UPDATE tasks SET title = ? WHERE id = ?", newTitle, itemID)
 	return err
 }
 

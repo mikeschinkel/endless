@@ -20,6 +20,10 @@ help:
     @echo ""
     @echo "Database:"
     @echo "  just db-export    Export project data to .endless/data.sql"
+    @echo ""
+    @echo "Demo:"
+    @echo "  cd deploy/machine && just demo-sync     Sync to demo machine"
+    @echo "  cd deploy/machine && just demo-prepare  Prepare demo machine"
 
 # Resolve the templUI module path and symlink it for CSS imports
 _link-templui:
@@ -47,12 +51,14 @@ build: _link-templui
     tailwindcss -i internal/web/assets/css/input.css -o internal/web/assets/css/output.css
     go build -o bin/endless-serve ./cmd/endless-serve
     go build -o bin/endless-hook ./cmd/endless-hook
+    go build -o bin/endless-channel ./cmd/endless-channel
 
 # Build and install everything (Go binaries symlinked to /usr/local/bin, Python CLI installed)
 install:
     just build
     ln -sfn "$(pwd)/bin/endless-serve" /usr/local/bin/endless-serve
     ln -sfn "$(pwd)/bin/endless-hook" /usr/local/bin/endless-hook
+    ln -sfn "$(pwd)/bin/endless-channel" /usr/local/bin/endless-channel
     uv tool install -e . --force
 
 # Run Python tests
@@ -71,6 +77,7 @@ css: _link-templui
 go:
     go build -o bin/endless-serve ./cmd/endless-serve
     go build -o bin/endless-hook ./cmd/endless-hook
+    go build -o bin/endless-channel ./cmd/endless-channel
 
 # Kill any running endless-serve process
 kill:
@@ -84,14 +91,14 @@ db-export:
     sqlite3 ~/.config/endless/endless.db <<SQL > .endless/data.sql
     .mode insert projects
     SELECT * FROM projects WHERE id = $project_id;
-    .mode insert plans
-    SELECT * FROM plans WHERE project_id = $project_id;
+    .mode insert tasks
+    SELECT * FROM tasks WHERE project_id = $project_id;
     .mode insert notes
     SELECT * FROM notes WHERE project_id = $project_id;
     .mode insert task_dependencies
     SELECT * FROM task_dependencies WHERE
-      (source_type = 'task' AND source_id IN (SELECT id FROM plans WHERE project_id = $project_id))
-      OR (target_type = 'task' AND target_id IN (SELECT id FROM plans WHERE project_id = $project_id))
+      (source_type = 'task' AND source_id IN (SELECT id FROM tasks WHERE project_id = $project_id))
+      OR (target_type = 'task' AND target_id IN (SELECT id FROM tasks WHERE project_id = $project_id))
       OR (source_type = 'project' AND source_id = $project_id)
       OR (target_type = 'project' AND target_id = $project_id);
     SQL
@@ -109,3 +116,4 @@ git-push msg:
     #!/usr/bin/env bash
     just git-commit "{{ msg }}"
     git push
+

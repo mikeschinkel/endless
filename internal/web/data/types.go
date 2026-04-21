@@ -58,14 +58,14 @@ type DashboardProject struct {
 	ShortPath      string
 	GroupName      string
 	PendingNotes   int
-	ActivePlan     int
+	ActiveTasks    int
 	TaskTotal      int
 	TaskCompleted  int
 	TaskInProgress int
 	LastActivity   string
 }
 
-type PlanItemView struct {
+type TaskView struct {
 	ID         int64
 	Title      string
 	Text       string
@@ -96,7 +96,7 @@ type NoteView struct {
 	Resolved bool
 }
 
-type PlanSummary struct {
+type TaskSummary struct {
 	Total      int
 	InProgress int
 	Completed  int
@@ -107,23 +107,23 @@ type CurrentWorkItem struct {
 	Title        string
 	Text         string
 	TaskID       int64
-	Status       string // plan item status
+	Status       string // task item status
 	SessionState string
 	LastActivity string
 }
 
-type PlanWithTasks struct {
-	PlanID   int64
-	PlanName string
-	Tasks    []PlanItemView // max 3 next tasks
+type TaskGroup struct {
+	GroupID   int64
+	GroupName string
+	Tasks    []TaskView // max 3 next tasks
 	Total    int
 	Done     int
 }
 
 type StatusDetail struct {
 	Project      DashboardProject
-	Plans        []PlanWithTasks
-	PlanItems    []PlanItemView // tree-ordered items with Depth
+	TaskGroups   []TaskGroup
+	TaskItems    []TaskView // tree-ordered items with Depth
 	PendingNotes int
 }
 

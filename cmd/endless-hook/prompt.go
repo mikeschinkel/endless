@@ -35,35 +35,5 @@ func runPrompt(args []string) error {
 	}
 
 	// Record activity
-	err = monitor.RecordActivity(projectID, "prompt", dir, sessionCtx)
-	if err != nil {
-		return err
-	}
-
-	// Detect and record file changes
-	row := struct{ path string }{}
-	db, err := monitor.DB()
-	if err != nil {
-		return err
-	}
-	err = db.QueryRow(
-		"SELECT path FROM projects WHERE id = ?", projectID,
-	).Scan(&row.path)
-	if err != nil {
-		return err
-	}
-
-	changes, err := monitor.DetectFileChanges(projectID, row.path)
-	if err != nil {
-		return err
-	}
-
-	if len(changes) > 0 {
-		err = monitor.RecordFileChanges(projectID, changes, "prompt")
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
+	return monitor.RecordActivity(projectID, "prompt", dir, sessionCtx)
 }

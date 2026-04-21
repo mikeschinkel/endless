@@ -1,6 +1,6 @@
 # Using Endless in Claude Code Sessions
 
-This guide is for Claude Code sessions working on projects tracked by Endless. If Mike gives you a plan item ID, this doc tells you how to work with it.
+This guide is for Claude Code sessions working on projects tracked by Endless. If Mike gives you a task ID, this doc tells you how to work with it.
 
 ## Background
 This is background IF YOU NEED IT:
@@ -17,17 +17,17 @@ Endless is currently in active development and as such we are "paving the cowpat
 
 Endless is a project awareness tool that tracks what you're working on, why, and whether you declared your intent before making changes. Endless has:
 
-- A **plan tree** — hierarchical items representing what needs to be done
+- A **task tree** — hierarchical items representing what needs to be done
 - **Enforcement** — a hook that can block Write/Edit unless you've declared what you're working on (this may be disabled from time-to-time while we are still in development.)
-- **Session tracking** — records which Claude session is working on which plan item
+- **Session tracking** — records which Claude session is working on which task
 - A **web dashboard** at `http://localhost:8484` (when running)
 
-## Quick Start: You've Been Given a Plan Item ID
+## Quick Start: You've Been Given a Task ID
 
 ### 1. See what you're working on
 
 ```bash
-endless plan detail <id>
+endless task show <id>
 ```
 
 This shows the title, description, status, and full text (which may contain an implementation plan).
@@ -35,19 +35,19 @@ This shows the title, description, status, and full text (which may contain an i
 ### 2. Start working on it
 
 ```bash
-endless plan start <id>
+endless task start <id>
 ```
 
-This registers your session as actively working on that plan item. It sets the item's status to `in_progress` and links your session to it. **If enforcement is enabled for this project, you must do this before you can use Write/Edit tools.**
+This registers your session as actively working on that task. It sets the item's status to `in_progress` and links your session to it. **If enforcement is enabled for this project, you must do this before you can use Write/Edit tools.**
 
 ### 3. Do the work
 
-Implement whatever the plan item describes. The plan item's `text` field may contain a detailed implementation plan — read it with `endless plan detail <id>`.
+Implement whatever the task describes. The task's `text` field may contain a detailed implementation plan — read it with `endless task show <id> --text`.
 
 ### 4. When done, set status to verify
 
 ```bash
-endless plan update <id> --status verify
+endless task update <id> --status verify
 ```
 
 This signals that implementation is complete and the item needs manual verification by Mike. Do NOT mark items as `completed` — only Mike does that after verifying.
@@ -55,56 +55,80 @@ This signals that implementation is complete and the item needs manual verificat
 ### 5. If you need to mark it complete (only if Mike confirms)
 
 ```bash
-endless plan complete <id>
+endless task complete <id>
 ```
 
 ## Key Commands Reference
 
-### Viewing Plans
+### Viewing Tasks
 
 ```bash
-# Show full plan tree for current project
-endless plan show
+# Show task tree for current project
+endless task list
 
-# Show plan tree for a specific project
-endless plan show --project <name>
+# Show task tree for a specific project
+endless task list --project <name>
 
 # Show all items including completed
-endless plan show --all
+endless task list --all
 
-# Full detail for one item (title, description, text, status, phase)
-endless plan detail <id>
+# Filter by status or phase
+endless task list --status ready
+endless task list --phase now
+
+# Flat sorted list
+endless task list --sort id
+endless task list --sort status
+
+# Detail for one task
+endless task show <id>
+endless task show <id> --children           # include direct children
+endless task show <id> --text               # include text field
+endless task show <id> --prompt             # include prompt field
+
+# Top actionable tasks, ranked by priority (leaf nodes only)
+endless task next
+endless task next --limit 5
+endless task next --all                     # all projects
+endless task next --llm                     # token-efficient output for LLMs
+
+# Most recently updated tasks
+endless task recent
+endless task recent --limit 5
 ```
 
-### Modifying Plans
+### Modifying Tasks
 
 ```bash
-# Add a new plan item
-endless plan add "Title here" --parent <parent_id> --phase now
-endless plan add "Title here" --description "Longer description" --project <name>
+# Add a new task
+endless task add "Title here" --parent <parent_id> --phase now
+endless task add "Title here" --description "Longer description" --project <name>
 
 # Update fields on an existing item
-endless plan update <id> --title "New title"
-endless plan update <id> --status ready
-endless plan update <id> --text /path/to/file.md    # loads text from file
-endless plan update <id> --parent 444               # move under a different parent
-endless plan update <id> --parent 0                 # make it a root item
+endless task update <id> --title "New title"
+endless task update <id> --status ready
+endless task update <id> --text /path/to/file.md    # loads text from file
+endless task update <id> --parent 444               # move under a different parent
+endless task update <id> --parent 0                 # make it a root item
 
-# Remove a plan item
-endless plan remove <id>
+# Remove a task
+endless task remove <id>
 ```
 
 ### Session Management
 
 ```bash
-# Start working on a plan item (registers your session)
-endless plan start <id>
+# Start working on a task (registers your session)
+endless task start <id>
 
-# Start a chat-only session (tracked but not tied to a plan item)
-endless plan chat
+# Start a chat-only session (tracked but not tied to a task)
+endless task chat
 
-# Mark a plan item complete
-endless plan complete <id>
+# Mark a task complete
+endless task complete <id>
+
+# Complete a task and all its descendants
+endless task complete <id> --cascade
 ```
 
 ### Project Commands
@@ -118,7 +142,7 @@ endless status
 endless status --project <name>
 ```
 
-## Plan Item Statuses
+## Task Statuses
 
 | Status        | Meaning                                                   |
 |---------------|-----------------------------------------------------------|
@@ -130,7 +154,7 @@ endless status --project <name>
 | `completed`   | Verified and done                                         |
 | `revisit`     | Was partially planned but needs re-evaluation             |
 
-## Plan Item Phases
+## Task Phases
 
 | Phase | Meaning |
 |-------|---------|
@@ -142,9 +166,9 @@ endless status --project <name>
 
 These features are planned but not yet implemented. You'll need workarounds:
 
-### Dependencies between plan items
+### Dependencies between tasks
 
-The `task_dependencies` table exists in the DB but there's no CLI command for it yet (plan #575). If you need to record that one item blocks another, use SQL directly:
+The `task_dependencies` table exists in the DB but there's no CLI command for it yet (E-575). If you need to record that one item blocks another, use SQL directly:
 
 ```bash
 python3 -c "
@@ -158,17 +182,17 @@ db.close()
 
 ### Saving plan text from Claude's plan mode
 
-When you exit plan mode and want to save the plan to a plan item's text field:
+When you exit plan mode and want to save the plan to a task's text field:
 
 ```bash
-endless plan update <id> --text /path/to/plan-file.md
+endless task update <id> --text /path/to/plan-file.md
 ```
 
 The plan file is typically at the path shown when you exit plan mode (e.g., `~/.claude/plans/<name>.md`).
 
 ### Enforcement not yet enabled for most projects
 
-Enforcement (blocking Write/Edit without `plan start`) requires `"tracking": "enforce"` in the project's `.endless/config.json`. Most projects don't have this yet. If you want to be a good citizen, run `endless plan start <id>` anyway — it still tracks your session even without enforcement.
+Enforcement (blocking Write/Edit without `task start`) requires `"tracking": "enforce"` in the project's `.endless/config.json`. Most projects don't have this yet. If you want to be a good citizen, run `endless task start <id>` anyway — it still tracks your session even without enforcement.
 
 ## Where Things Live
 
@@ -182,39 +206,36 @@ Enforcement (blocking Write/Edit without `plan start`) requires `"tracking": "en
 
 ### Starting a new piece of work
 
-1. `endless plan show` — see what's available
+1. `endless task next` — see what's actionable
 2. Pick an item (or Mike gives you one)
-3. `endless plan detail <id>` — read the plan
-4. `endless plan start <id>` — register your session
+3. `endless task show <id>` — read the detail
+4. `endless task start <id>` — register your session
 5. Do the work
-6. `endless plan update <id> --status verify`
+6. `endless task update <id> --status verify`
 
-### Adding a new plan item you discovered during work
+### Adding a new task you discovered during work
 
 ```bash
-endless plan add "Title of new item" --parent <parent_id> --description "What needs to happen"
+endless task add "Title of new item" --parent <parent_id> --description "What needs to happen"
 ```
 
 ### Recording that you need to revisit something
 
 ```bash
-endless plan update <id> --status revisit
+endless task update <id> --status revisit
 ```
 
 ### Checking what's currently in progress
 
 ```bash
-# Workaround until `endless plan show --status` is implemented (#583)
-sqlite3 ~/.config/endless/endless.db \
-  "SELECT '#' || id, title FROM plans WHERE status = 'in_progress' ORDER BY sort_order"
+endless task show --status in_progress
+endless task next --project <name>
 ```
-
-A proper `--status` filter flag is planned (#583).
 
 ## Important Notes
 
 - **Don't mark items `completed`** — set them to `verify` and let Mike confirm
-- **Always `plan start` before writing code** — even if enforcement isn't on, it helps tracking
-- **Plan items have hierarchy** — use `--parent` when adding items to keep the tree organized
-- **The `text` field is the plan body** — `title` is the one-liner, `description` is a short summary, `text` is the full implementation plan
-- **If you create a plan in Claude's plan mode**, save it to the plan item with `endless plan update <id> --text <path>`
+- **Always `task start` before writing code** — even if enforcement isn't on, it helps tracking
+- **Tasks have hierarchy** — use `--parent` when adding items to keep the tree organized
+- **The `text` field is the task body** — `title` is the one-liner, `description` is a short summary, `text` is the full implementation plan
+- **If you create a plan in Claude's plan mode**, save it to the task with `endless task update <id> --text <path>`

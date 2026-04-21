@@ -47,7 +47,7 @@ func Projects(projects []data.DashboardProject) templ.Component {
 				}()
 			}
 			ctx = templ.InitializeContext(ctx)
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<h2 class=\"text-2xl font-bold text-gray-100 mb-6\">Projects</h2><div class=\"bg-gray-900 border border-gray-800 rounded-lg overflow-hidden\"><table class=\"w-full text-sm\"><thead><tr class=\"border-b border-gray-800 text-left\"><th class=\"px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider\">Name</th><th class=\"px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider\">Label</th><th class=\"px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider\">Status</th><th class=\"px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider\">Language</th><th class=\"px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider text-right\">Plans</th><th class=\"px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider text-right\">Notes</th><th class=\"px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider\">Last Activity</th><th class=\"px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider\">Path</th></tr></thead> <tbody>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<h2 class=\"text-2xl font-bold text-gray-100 mb-6\">Projects</h2><div class=\"bg-gray-900 border border-gray-800 rounded-lg overflow-hidden\"><table class=\"w-full text-sm\"><thead><tr class=\"border-b border-gray-800 text-left\"><th class=\"px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider\">Name</th><th class=\"px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider\">Label</th><th class=\"px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider\">Status</th><th class=\"px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider\">Language</th><th class=\"px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider text-right\">Tasks</th><th class=\"px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider text-right\">Notes</th><th class=\"px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider\">Last Activity</th><th class=\"px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider\">Path</th></tr></thead> <tbody>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -118,9 +118,9 @@ func Projects(projects []data.DashboardProject) templ.Component {
 						return templ_7745c5c3_Err
 					}
 					var templ_7745c5c3_Var7 string
-					templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("%d", p.ActivePlan))
+					templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("%d", p.ActiveTasks))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/pages/projects.templ`, Line: 41, Col: 100}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/pages/projects.templ`, Line: 41, Col: 101}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var7))
 					if templ_7745c5c3_Err != nil {

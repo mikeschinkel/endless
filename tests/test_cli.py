@@ -146,4 +146,4 @@ def test_scan(isolated_env):
 
     result = runner.invoke(main, ["scan"])
     assert result.exit_code == 0
-    assert "1 document(s)" in result.output
+    assert "1 project(s)" in result.output

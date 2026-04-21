@@ -76,14 +76,6 @@ def show_status(name: str | None = None):
     click.echo(f"  {'Registered:':<14} {p['created_at']}")
     click.echo(f"  {'Updated:':<14} {p['updated_at']}")
 
-    # Documents
-    doc_count = db.scalar(
-        "SELECT count(*) FROM documents "
-        "WHERE project_id = ? AND is_archived = 0",
-        (p["id"],),
-    )
-    click.echo(f"  {'Documents:':<14} {doc_count} tracked")
-
     # Notes
     notes_count = db.scalar(
         "SELECT count(*) FROM notes "

@@ -1,10 +1,12 @@
-"""Setup commands — install hooks into shell/tool configs."""
+"""Setup commands — install hooks and plugins into shell/tool configs."""
 
 import json
 import shutil
 from pathlib import Path
 
 import click
+
+CLAUDE_JSON_PATH = Path.home() / ".claude.json"
 
 HOOK_COMMENT = "# Endless: project activity monitor (prompt hook)"
 HOOK_CODE = """\
@@ -337,4 +339,108 @@ def remove_claude_hook():
         click.style("•", fg="cyan")
         + " Removed Endless hook from "
         + click.style(str(CLAUDE_SETTINGS_PATH), bold=True)
+    )
+
+
+# --- MCP Channel Plugin ---
+
+
+def _find_endless_channel() -> str | None:
+    """Check if endless-channel binary is on PATH."""
+    return shutil.which("endless-channel")
+
+
+def _load_claude_json() -> dict:
+    if not CLAUDE_JSON_PATH.exists():
+        return {}
+    with open(CLAUDE_JSON_PATH) as f:
+        return json.load(f)
+
+
+def _save_claude_json(data: dict):
+    with open(CLAUDE_JSON_PATH, "w") as f:
+        json.dump(data, f, indent=2)
+        f.write("\n")
+
+
+def setup_channel_plugin():
+    channel_bin = _find_endless_channel()
+    if not channel_bin:
+        raise click.ClickException(
+            "endless-channel binary not found on PATH. "
+            "Build it first: just install"
+        )
+
+    click.echo(
+        click.style("•", fg="cyan")
+        + f" Found endless-channel at {channel_bin}"
+    )
+
+    data = _load_claude_json()
+    servers = data.get("mcpServers", {})
+
+    if "endless-channel" in servers:
+        click.echo(
+            click.style("•", fg="cyan")
+            + " Channel plugin is already registered in "
+            + click.style(str(CLAUDE_JSON_PATH), bold=True)
+        )
+        return
+
+    servers["endless-channel"] = {
+        "command": channel_bin,
+        "args": [],
+    }
+    data["mcpServers"] = servers
+    _save_claude_json(data)
+
+    click.echo(
+        click.style("•", fg="cyan")
+        + " Channel plugin registered in "
+        + click.style(str(CLAUDE_JSON_PATH), bold=True)
+    )
+    click.echo()
+    click.echo(
+        "  To activate, launch Claude Code with:"
+    )
+    click.echo(
+        click.style(
+            "    claude --dangerously-load-development-channels "
+            "server:endless-channel",
+            bold=True,
+        )
+    )
+    click.echo()
+    click.echo(
+        click.style(
+            "  Or add a shell alias to ~/.zshrc:\n"
+            '    claude() { command claude '
+            '--dangerously-load-development-channels '
+            'server:endless-channel "$@"; }',
+            dim=True,
+        )
+    )
+
+
+def remove_channel_plugin():
+    data = _load_claude_json()
+    servers = data.get("mcpServers", {})
+
+    if "endless-channel" not in servers:
+        click.echo(
+            click.style("•", fg="cyan")
+            + " No channel plugin found in "
+            + click.style(str(CLAUDE_JSON_PATH), bold=True)
+        )
+        return
+
+    del servers["endless-channel"]
+    if not servers:
+        del data["mcpServers"]
+    _save_claude_json(data)
+
+    click.echo(
+        click.style("•", fg="cyan")
+        + " Removed channel plugin from "
+        + click.style(str(CLAUDE_JSON_PATH), bold=True)
     )

@@ -7,59 +7,57 @@ import (
 	"github.com/google/uuid"
 )
 
-// ChannelInfo represents a messaging channel between two sessions.
-type ChannelInfo struct {
-	ID        int64
-	ChannelID string
-	SessionA  string
-	PaneA     string
-	SessionB  string
-	PaneB     string
-	ProjectID int64
-	State     string
-	CreatedAt string
+// ConversationInfo represents a messaging conversation between two processes.
+type ConversationInfo struct {
+	ID             int64
+	ConversationID string
+	ProcessA       string
+	ProcessB       string
+	ProjectID      int64
+	State          string
+	CreatedAt      string
 }
 
 // MessageInfo represents a queued message.
 type MessageInfo struct {
-	ID        int64
-	ChannelID string
-	Sender    string
-	Body      string
-	Status    string
-	CreatedAt string
+	ID             int64
+	ConversationID string
+	Sender         string
+	Body           string
+	Status         string
+	CreatedAt      string
 }
 
-// CreateBeacon registers a new channel in 'beacon' state.
-func CreateBeacon(sessionID, tmuxPane string, projectID int64) (string, error) {
+// CreateBeacon registers a new conversation in 'beacon' state.
+func CreateBeacon(process string, projectID int64) (string, error) {
 	db, err := DB()
 	if err != nil {
 		return "", err
 	}
 
-	channelID := uuid.New().String()[:8]
+	conversationID := uuid.New().String()[:8]
 	now := time.Now().UTC().Format("2006-01-02T15:04:05")
 
 	_, err = db.Exec(
-		`INSERT INTO msg_channels (channel_id, session_a, pane_a, project_id, state, created_at)
-		 VALUES (?, ?, ?, ?, 'beacon', ?)`,
-		channelID, sessionID, tmuxPane, projectID, now,
+		`INSERT INTO conversations (conversation_id, process_a, project_id, state, created_at)
+		 VALUES (?, ?, ?, 'beacon', ?)`,
+		conversationID, process, projectID, now,
 	)
 	if err != nil {
 		return "", fmt.Errorf("create beacon: %w", err)
 	}
-	return channelID, nil
+	return conversationID, nil
 }
 
-// ListBeacons returns all channels in 'beacon' state, optionally filtered by project.
-func ListBeacons(projectID int64) ([]ChannelInfo, error) {
+// ListBeacons returns all conversations in 'beacon' state.
+func ListBeacons(projectID int64) ([]ConversationInfo, error) {
 	db, err := DB()
 	if err != nil {
 		return nil, err
 	}
 
-	query := `SELECT id, channel_id, session_a, pane_a, COALESCE(project_id,0), state, created_at
-	           FROM msg_channels WHERE state = 'beacon'`
+	query := `SELECT id, conversation_id, process_a, COALESCE(project_id,0), state, created_at
+	           FROM conversations WHERE state = 'beacon'`
 	args := []any{}
 	if projectID > 0 {
 		query += " AND project_id = ?"
@@ -73,19 +71,19 @@ func ListBeacons(projectID int64) ([]ChannelInfo, error) {
 	}
 	defer rows.Close()
 
-	var channels []ChannelInfo
+	var convos []ConversationInfo
 	for rows.Next() {
-		var c ChannelInfo
-		if err := rows.Scan(&c.ID, &c.ChannelID, &c.SessionA, &c.PaneA, &c.ProjectID, &c.State, &c.CreatedAt); err != nil {
+		var c ConversationInfo
+		if err := rows.Scan(&c.ID, &c.ConversationID, &c.ProcessA, &c.ProjectID, &c.State, &c.CreatedAt); err != nil {
 			continue
 		}
-		channels = append(channels, c)
+		convos = append(convos, c)
 	}
-	return channels, nil
+	return convos, nil
 }
 
-// ConnectToChannel joins an existing beacon channel.
-func ConnectToChannel(channelID, sessionID, tmuxPane string) (*ChannelInfo, error) {
+// ConnectToConversation joins an existing beacon conversation.
+func ConnectToConversation(conversationID, process string) (*ConversationInfo, error) {
 	db, err := DB()
 	if err != nil {
 		return nil, err
@@ -94,26 +92,25 @@ func ConnectToChannel(channelID, sessionID, tmuxPane string) (*ChannelInfo, erro
 	now := time.Now().UTC().Format("2006-01-02T15:04:05")
 
 	result, err := db.Exec(
-		`UPDATE msg_channels SET session_b=?, pane_b=?, state='connected', connected_at=?
-		 WHERE channel_id=? AND state='beacon'`,
-		sessionID, tmuxPane, now, channelID,
+		`UPDATE conversations SET process_b=?, state='connected', connected_at=?
+		 WHERE conversation_id=? AND state='beacon'`,
+		process, now, conversationID,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("connect to channel: %w", err)
+		return nil, fmt.Errorf("connect to conversation: %w", err)
 	}
 	n, _ := result.RowsAffected()
 	if n == 0 {
-		return nil, fmt.Errorf("channel %s not found or not in beacon state", channelID)
+		return nil, fmt.Errorf("conversation %s not found or not in beacon state", conversationID)
 	}
 
-	// Return the updated channel info
-	var c ChannelInfo
+	var c ConversationInfo
 	err = db.QueryRow(
-		`SELECT id, channel_id, session_a, pane_a, COALESCE(session_b,''), COALESCE(pane_b,''),
+		`SELECT id, conversation_id, process_a, COALESCE(process_b,''),
 		        COALESCE(project_id,0), state, created_at
-		 FROM msg_channels WHERE channel_id=?`,
-		channelID,
-	).Scan(&c.ID, &c.ChannelID, &c.SessionA, &c.PaneA, &c.SessionB, &c.PaneB,
+		 FROM conversations WHERE conversation_id=?`,
+		conversationID,
+	).Scan(&c.ID, &c.ConversationID, &c.ProcessA, &c.ProcessB,
 		&c.ProjectID, &c.State, &c.CreatedAt)
 	if err != nil {
 		return nil, err
@@ -122,7 +119,7 @@ func ConnectToChannel(channelID, sessionID, tmuxPane string) (*ChannelInfo, erro
 }
 
 // SendMessage inserts a message into the queue.
-func SendMessage(channelID, senderSessionID, body string) (int64, error) {
+func SendMessage(conversationID, senderProcess, body string) (int64, error) {
 	db, err := DB()
 	if err != nil {
 		return 0, err
@@ -131,9 +128,9 @@ func SendMessage(channelID, senderSessionID, body string) (int64, error) {
 	now := time.Now().UTC().Format("2006-01-02T15:04:05")
 
 	result, err := db.Exec(
-		`INSERT INTO msg_queue (channel_id, sender, body, status, created_at)
+		`INSERT INTO messages (conversation_id, sender, body, status, created_at)
 		 VALUES (?, ?, ?, 'queued', ?)`,
-		channelID, senderSessionID, body, now,
+		conversationID, senderProcess, body, now,
 	)
 	if err != nil {
 		return 0, fmt.Errorf("send message: %w", err)
@@ -141,8 +138,8 @@ func SendMessage(channelID, senderSessionID, body string) (int64, error) {
 	return result.LastInsertId()
 }
 
-// HasPendingMessages checks if there are any queued messages for a session without consuming them.
-func HasPendingMessages(sessionID string) (bool, error) {
+// HasPendingMessages checks if there are any queued messages for a process without consuming them.
+func HasPendingMessages(process string) (bool, error) {
 	db, err := DB()
 	if err != nil {
 		return false, err
@@ -150,13 +147,13 @@ func HasPendingMessages(sessionID string) (bool, error) {
 
 	var count int
 	err = db.QueryRow(
-		`SELECT count(*) FROM msg_queue mq
-		 JOIN msg_channels mc ON mq.channel_id = mc.channel_id
+		`SELECT count(*) FROM messages mq
+		 JOIN conversations mc ON mq.conversation_id = mc.conversation_id
 		 WHERE mq.status = 'queued'
 		   AND mq.sender != ?
 		   AND mc.state = 'connected'
-		   AND (mc.session_a = ? OR mc.session_b = ?)`,
-		sessionID, sessionID, sessionID,
+		   AND (mc.process_a = ? OR mc.process_b = ?)`,
+		process, process, process,
 	).Scan(&count)
 	if err != nil {
 		return false, err
@@ -164,23 +161,23 @@ func HasPendingMessages(sessionID string) (bool, error) {
 	return count > 0, nil
 }
 
-// GetPendingMessages fetches and marks as delivered all queued messages for a session.
-func GetPendingMessages(sessionID string) ([]MessageInfo, error) {
+// GetPendingMessages fetches and marks as delivered all queued messages for a process.
+func GetPendingMessages(process string) ([]MessageInfo, error) {
 	db, err := DB()
 	if err != nil {
 		return nil, err
 	}
 
 	rows, err := db.Query(
-		`SELECT mq.id, mq.channel_id, mq.sender, mq.body, mq.status, mq.created_at
-		 FROM msg_queue mq
-		 JOIN msg_channels mc ON mq.channel_id = mc.channel_id
+		`SELECT mq.id, mq.conversation_id, mq.sender, mq.body, mq.status, mq.created_at
+		 FROM messages mq
+		 JOIN conversations mc ON mq.conversation_id = mc.conversation_id
 		 WHERE mq.status = 'queued'
 		   AND mq.sender != ?
 		   AND mc.state = 'connected'
-		   AND (mc.session_a = ? OR mc.session_b = ?)
+		   AND (mc.process_a = ? OR mc.process_b = ?)
 		 ORDER BY mq.created_at ASC`,
-		sessionID, sessionID, sessionID,
+		process, process, process,
 	)
 	if err != nil {
 		return nil, err
@@ -191,73 +188,48 @@ func GetPendingMessages(sessionID string) ([]MessageInfo, error) {
 	var ids []any
 	for rows.Next() {
 		var m MessageInfo
-		if err := rows.Scan(&m.ID, &m.ChannelID, &m.Sender, &m.Body, &m.Status, &m.CreatedAt); err != nil {
+		if err := rows.Scan(&m.ID, &m.ConversationID, &m.Sender, &m.Body, &m.Status, &m.CreatedAt); err != nil {
 			continue
 		}
 		msgs = append(msgs, m)
 		ids = append(ids, m.ID)
 	}
 
-	// Mark as delivered
 	if len(ids) > 0 {
 		now := time.Now().UTC().Format("2006-01-02T15:04:05")
 		for _, id := range ids {
-			db.Exec("UPDATE msg_queue SET status='delivered', delivered_at=? WHERE id=?", now, id)
+			db.Exec("UPDATE messages SET status='delivered', delivered_at=? WHERE id=?", now, id)
 		}
 	}
 
 	return msgs, nil
 }
 
-// GetChannelForSession returns the active (connected) channel for a session.
-func GetChannelForSession(sessionID string) (*ChannelInfo, error) {
-	db, err := DB()
-	if err != nil {
-		return nil, err
-	}
-
-	var c ChannelInfo
-	err = db.QueryRow(
-		`SELECT id, channel_id, session_a, pane_a, COALESCE(session_b,''), COALESCE(pane_b,''),
-		        COALESCE(project_id,0), state, created_at
-		 FROM msg_channels
-		 WHERE state = 'connected'
-		   AND (session_a = ? OR session_b = ?)
-		 ORDER BY connected_at DESC LIMIT 1`,
-		sessionID, sessionID,
-	).Scan(&c.ID, &c.ChannelID, &c.SessionA, &c.PaneA, &c.SessionB, &c.PaneB,
-		&c.ProjectID, &c.State, &c.CreatedAt)
-	if err != nil {
-		return nil, fmt.Errorf("no active channel for session: %w", err)
-	}
-	return &c, nil
-}
-
-// GetTargetPane returns the tmux pane of the other participant in a channel.
-func GetTargetPane(channelID, senderSessionID string) (string, error) {
+// GetTargetProcess returns the process identifier of the other participant.
+func GetTargetProcess(conversationID, senderProcess string) (string, error) {
 	db, err := DB()
 	if err != nil {
 		return "", err
 	}
 
-	var sessionA, paneA, sessionB, paneB string
+	var processA, processB string
 	err = db.QueryRow(
-		`SELECT session_a, pane_a, COALESCE(session_b,''), COALESCE(pane_b,'')
-		 FROM msg_channels WHERE channel_id=? AND state='connected'`,
-		channelID,
-	).Scan(&sessionA, &paneA, &sessionB, &paneB)
+		`SELECT process_a, COALESCE(process_b,'')
+		 FROM conversations WHERE conversation_id=? AND state='connected'`,
+		conversationID,
+	).Scan(&processA, &processB)
 	if err != nil {
-		return "", fmt.Errorf("channel not found: %w", err)
+		return "", fmt.Errorf("conversation not found: %w", err)
 	}
 
-	if senderSessionID == sessionA {
-		return paneB, nil
+	if senderProcess == processA {
+		return processB, nil
 	}
-	return paneA, nil
+	return processA, nil
 }
 
-// CloseChannel marks a channel as closed.
-func CloseChannel(channelID string) error {
+// CloseConversation marks a conversation as closed.
+func CloseConversation(conversationID string) error {
 	db, err := DB()
 	if err != nil {
 		return err
@@ -265,28 +237,8 @@ func CloseChannel(channelID string) error {
 
 	now := time.Now().UTC().Format("2006-01-02T15:04:05")
 	_, err = db.Exec(
-		"UPDATE msg_channels SET state='closed', closed_at=? WHERE channel_id=?",
-		now, channelID,
+		"UPDATE conversations SET state='closed', closed_at=? WHERE conversation_id=?",
+		now, conversationID,
 	)
 	return err
-}
-
-// SessionIDForPane returns the session_id for a given tmux pane.
-func SessionIDForPane(tmuxPane string) (string, error) {
-	db, err := DB()
-	if err != nil {
-		return "", err
-	}
-
-	var sessionID string
-	err = db.QueryRow(
-		`SELECT session_id FROM ai_sessions
-		 WHERE tmux_pane = ? AND state != 'ended'
-		 ORDER BY last_activity DESC LIMIT 1`,
-		tmuxPane,
-	).Scan(&sessionID)
-	if err != nil {
-		return "", fmt.Errorf("no active session for pane %s: %w", tmuxPane, err)
-	}
-	return sessionID, nil
 }

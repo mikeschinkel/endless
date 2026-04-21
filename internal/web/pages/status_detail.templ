@@ -7,17 +7,17 @@ import (
 	"github.com/templui/templui/components/progress"
 )
 
-func isActive(item data.PlanItemView) bool {
-	return item.Status != "completed"
+func isActive(item data.TaskView) bool {
+	return item.Status != "completed" && item.Status != "verify"
 }
 
-// planTreeSmartOpen returns Alpine.js init for open state.
-// Only expands nodes that are in-progress or have in-progress descendants.
-func planTreeSmartOpen(items []data.PlanItemView) string {
-	inProgress := make(map[int64]bool)
+// taskTreeSmartOpen returns Alpine.js init for open state.
+// Expands nodes that have in-progress or verify descendants.
+func taskTreeSmartOpen(items []data.TaskView) string {
+	expandFor := make(map[int64]bool)
 	for _, item := range items {
-		if item.Status == "in_progress" {
-			inProgress[item.ID] = true
+		if item.Status == "in_progress" || item.Status == "verify" {
+			expandFor[item.ID] = true
 		}
 	}
 	hasActive := make(map[int64]bool)
@@ -26,7 +26,7 @@ func planTreeSmartOpen(items []data.PlanItemView) string {
 		if item.Status == "completed" {
 			continue
 		}
-		if inProgress[item.ID] || hasActive[item.ID] {
+		if expandFor[item.ID] || hasActive[item.ID] {
 			if item.ParentID != nil {
 				hasActive[*item.ParentID] = true
 			}
@@ -34,16 +34,19 @@ func planTreeSmartOpen(items []data.PlanItemView) string {
 	}
 	var parts []string
 	for _, item := range items {
-		if item.ChildCount > 0 && item.Status != "completed" {
-			open := hasActive[item.ID] || inProgress[item.ID]
+		if item.Status == "completed" {
+			continue
+		}
+		if item.ChildCount > 0 || hasActive[item.ID] {
+			open := hasActive[item.ID] || expandFor[item.ID]
 			parts = append(parts, fmt.Sprintf("%d: %t", item.ID, open))
 		}
 	}
 	return joinParts(parts)
 }
 
-// planTreeParentMap generates "childID: parentID, ..." for visibility checks.
-func planTreeParentMap(items []data.PlanItemView) string {
+// taskTreeParentMap generates "childID: parentID, ..." for visibility checks.
+func taskTreeParentMap(items []data.TaskView) string {
 	var parts []string
 	for _, item := range items {
 		if item.Status == "completed" {
@@ -58,9 +61,9 @@ func planTreeParentMap(items []data.PlanItemView) string {
 	return joinParts(parts)
 }
 
-// planTreeIsActive returns JS object literal of IDs that are in-progress
+// taskTreeIsActive returns JS object literal of IDs that are in-progress
 // or have any in-progress descendant (the whole active branch is marked).
-func planTreeIsActive(items []data.PlanItemView) string {
+func taskTreeIsActive(items []data.TaskView) string {
 	active := make(map[int64]bool)
 	for _, item := range items {
 		if item.Status == "in_progress" {
@@ -105,11 +108,46 @@ func statusLabel(status string) string {
 	}
 }
 
-// needsAttention returns items with statuses requiring user action.
-func needsAttention(items []data.PlanItemView) []data.PlanItemView {
-	var result []data.PlanItemView
+// needsAttention returns verify/blocked items plus their ancestor chain for tree display.
+func needsAttention(items []data.TaskView) []data.TaskView {
+	// Index items by ID
+	byID := make(map[int64]data.TaskView)
+	for _, item := range items {
+		byID[item.ID] = item
+	}
+
+	// Find verify/blocked items and collect their ancestor IDs
+	include := make(map[int64]bool)
 	for _, item := range items {
 		if item.Status == "verify" || item.Status == "blocked" {
+			include[item.ID] = true
+			// Walk up ancestor chain
+			cur := item
+			for cur.ParentID != nil {
+				pid := *cur.ParentID
+				include[pid] = true
+				parent, ok := byID[pid]
+				if !ok {
+					break
+				}
+				cur = parent
+			}
+		}
+	}
+
+	// Count children within the needs-attention set
+	childCount := make(map[int64]int)
+	for _, item := range items {
+		if include[item.ID] && item.ParentID != nil && include[*item.ParentID] {
+			childCount[*item.ParentID]++
+		}
+	}
+
+	// Return items in original order, with ChildCount adjusted for this subset
+	var result []data.TaskView
+	for _, item := range items {
+		if include[item.ID] {
+			item.ChildCount = childCount[item.ID]
 			result = append(result, item)
 		}
 	}
@@ -127,8 +165,8 @@ func joinParts(parts []string) string {
 	return result
 }
 
-// planTreeXData builds the Alpine x-data object for the plan tree.
-func planTreeXData(items []data.PlanItemView) string {
+// taskTreeXData builds the Alpine x-data object for the plan tree.
+func taskTreeXData(items []data.TaskView) string {
 	return fmt.Sprintf(`{
 		open: {%s},
 		parents: {%s},
@@ -171,11 +209,11 @@ func planTreeXData(items []data.PlanItemView) string {
 			this.editingId = null;
 			this.editTitle = '';
 		}
-	}`, planTreeSmartOpen(items), planTreeParentMap(items), planTreeIsActive(items))
+	}`, taskTreeSmartOpen(items), taskTreeParentMap(items), taskTreeIsActive(items))
 }
 
-// planItemParentID returns the parent ID or 0 for root items.
-func planItemParentID(item data.PlanItemView) int64 {
+// taskItemParentID returns the parent ID or 0 for root items.
+func taskItemParentID(item data.TaskView) int64 {
 	if item.ParentID != nil {
 		return *item.ParentID
 	}
@@ -183,7 +221,7 @@ func planItemParentID(item data.PlanItemView) int64 {
 }
 
 // hasDetails returns true if the item has detail content worth showing.
-func hasDetails(item data.PlanItemView) bool {
+func hasDetails(item data.TaskView) bool {
 	return item.Text != item.Title || item.BlockedBy != ""
 }
 
@@ -278,11 +316,11 @@ templ StatusDetail(detail *data.StatusDetail) {
 		}
 
 		<!-- Plan tree -->
-		if len(detail.PlanItems) > 0 {
+		if len(detail.TaskItems) > 0 {
 			<div class="border border-gray-800 rounded-lg p-4"
-				x-data={ planTreeXData(detail.PlanItems) }>
+				x-data={ taskTreeXData(detail.TaskItems) }>
 				<div class="flex items-center justify-between mb-3">
-					<h3 class="text-sm font-semibold text-gray-400 uppercase tracking-wider">Plan</h3>
+					<h3 class="text-sm font-semibold text-gray-400 uppercase tracking-wider">Tasks</h3>
 					<div class="flex items-center gap-3">
 						<button x-on:click="toggleAll(true)"
 							class="text-xs text-gray-500 hover:text-gray-300 cursor-pointer">Expand</button>
@@ -291,145 +329,28 @@ templ StatusDetail(detail *data.StatusDetail) {
 						<button x-on:click="showIds = !showIds"
 							class="text-xs cursor-pointer"
 							x-bind:class="showIds ? 'text-emerald-400 hover:text-emerald-300' : 'text-gray-500 hover:text-gray-300'">IDs</button>
-						<a href={ templ.SafeURL(fmt.Sprintf("/project/%s/plan", detail.Project.Name)) }
-						   class="text-xs text-emerald-400 hover:text-emerald-300">Full plan →</a>
+						<a href={ templ.SafeURL(fmt.Sprintf("/project/%s/tasks", detail.Project.Name)) }
+						   class="text-xs text-emerald-400 hover:text-emerald-300">All tasks →</a>
 					</div>
 				</div>
-				if len(needsAttention(detail.PlanItems)) > 0 {
+				if len(needsAttention(detail.TaskItems)) > 0 {
 					<div class="mb-3 border border-gray-700/50 rounded-md bg-gray-800/30 px-3 py-2">
 						<div class="text-xs font-semibold text-amber-400 uppercase tracking-wider mb-1.5">Needs attention</div>
-						for _, item := range needsAttention(detail.PlanItems) {
-							<div x-data="{ open: false }">
-								<div class="flex items-center gap-2 py-0.5 group">
-									<span class="relative shrink-0" x-data="{ tip: false }">
-										<span class={ "w-2.5 h-2.5 rounded-full block cursor-pointer", statusSphereClass(item.Status) }
-											style="box-shadow: inset -1px -1px 2px rgba(0,0,0,0.3), inset 1px 1px 2px rgba(255,255,255,0.25);"
-											x-on:mouseenter="tip = true"
-											x-on:mouseleave="tip = false"
-											x-on:click="open = !open"></span>
-										<span x-show="tip" x-cloak
-											class="absolute left-1/2 -translate-x-1/2 bottom-full mb-1.5 px-2 py-1 text-xs text-gray-200 bg-gray-800 border border-gray-600 rounded shadow-lg whitespace-nowrap z-30">
-											{ statusLabel(item.Status) }
-										</span>
-									</span>
-									<span class="text-xs text-gray-300">{ item.Title }</span>
-									<span class="text-xs font-mono text-emerald-400 ml-0.5"
-										x-bind:class="showIds ? '' : 'invisible group-hover:visible'">
-										{ fmt.Sprintf("E-%d", item.ID) }
-									</span>
-								</div>
-								<div x-show="open" x-cloak class="pl-5 py-1 text-xs text-gray-400 border-l-2 border-gray-700/50 ml-1 mb-1">
-									<div class="flex flex-wrap gap-x-3 gap-y-0.5 text-gray-500 mb-1">
-										<span>{ statusLabel(item.Status) }</span>
-										<span>Phase: { item.Phase }</span>
-										<span class="font-mono">{ fmt.Sprintf("E-%d", item.ID) }</span>
-									</div>
-									if item.Text != item.Title {
-										@markdown.MarkdownContent(item.Text)
-									}
-									if item.BlockedBy != "" {
-										<p class="text-rose-400 mt-1">Blocked by: { item.BlockedBy }</p>
-									}
-								</div>
-							</div>
+						for _, item := range needsAttention(detail.TaskItems) {
+							@taskTreeRow(item, true)
 						}
 					</div>
 				}
 				<div>
-					for _, item := range detail.PlanItems {
+					for _, item := range detail.TaskItems {
 						if isActive(item) {
-							<div x-show={ fmt.Sprintf("isVisible(%d)", planItemParentID(item)) }
-								x-cloak
-								style={ fmt.Sprintf("padding-left: %dpx;", item.Depth * 28) }
-								class={ depthSpacing(item.Depth) }>
-								<div class="flex items-center gap-1.5 rounded px-1 -mx-1 hover:bg-gray-800/40">
-									if item.ChildCount > 0 {
-										<button x-on:click={ fmt.Sprintf("open[%d] = !open[%d]", item.ID, item.ID) }
-											class="w-5 shrink-0 select-none cursor-pointer text-lg leading-none text-gray-500 hover:text-gray-300"
-											x-text={ fmt.Sprintf("open[%d] ? '▾' : '▸'", item.ID) }>▾</button>
-									} else {
-										<span class="w-5 shrink-0 text-center text-lg leading-none text-gray-700">›</span>
-									}
-									<span class="relative shrink-0" x-data="{ tip: false }">
-										<span class={ "w-3 h-3 rounded-full block cursor-pointer", statusSphereClass(item.Status) }
-										style="box-shadow: inset -1px -1px 2px rgba(0,0,0,0.3), inset 1px 1px 2px rgba(255,255,255,0.25);"
-										x-on:mouseenter="tip = true"
-										x-on:mouseleave="tip = false"
-										x-on:click={ fmt.Sprintf("detail = (detail === %d) ? null : %d", item.ID, item.ID) }></span>
-										<span x-show="tip" x-cloak
-											class="absolute left-1/2 -translate-x-1/2 bottom-full mb-1.5 px-2 py-1 text-xs text-gray-200 bg-gray-800 border border-gray-600 rounded shadow-lg whitespace-nowrap z-30">
-											{ statusLabel(item.Status) }
-										</span>
-									</span>
-									<span class="w-5 text-center text-xs font-mono text-cyan-600">
-										{ fmt.Sprintf("%d", item.SiblingNum) }
-									</span>
-									<span class="relative group">
-										<span
-											id={ fmt.Sprintf("title-%d", item.ID) }
-											class={ "cursor-pointer", depthFontClass(item.Depth) }
-											x-on:dblclick.stop={ fmt.Sprintf("startEdit(%d, $el.textContent.trim())", item.ID) }>
-											{ item.Title }
-										</span>
-										<span class="text-xs font-mono text-emerald-400 ml-1.5"
-											x-bind:class="showIds ? '' : 'invisible group-hover:visible'">
-											{ fmt.Sprintf("E-%d", item.ID) }
-										</span>
-										<div x-show={ fmt.Sprintf("editingId === %d", item.ID) }
-											x-cloak
-											class="absolute left-0 z-20 flex flex-col bg-gray-900 border border-gray-600 rounded-lg shadow-lg shadow-black/40"
-											style="top: -4px; padding: 4px 8px 6px 4px;">
-											<input
-												id={ fmt.Sprintf("edit-input-%d", item.ID) }
-												type="text"
-												name="title"
-												x-model="editTitle"
-												hx-put={ fmt.Sprintf("/plan-item/%d/title", item.ID) }
-												hx-trigger="save"
-												hx-swap="none"
-												x-on:keydown.enter.prevent={ fmt.Sprintf("saveEdit(%d)", item.ID) }
-												x-on:keydown.escape.prevent="cancelEdit()"
-												class="bg-gray-800 text-gray-100 outline-none px-1 py-0.5 text-sm font-normal border border-gray-600 rounded" />
-											<div class="flex gap-1.5 justify-end mt-1">
-												<button
-													x-on:click={ fmt.Sprintf("saveEdit(%d)", item.ID) }
-													class="text-xs px-2.5 py-1 rounded bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer">Save</button>
-												<button
-													x-on:click="cancelEdit()"
-													class="text-xs px-2.5 py-1 rounded bg-gray-700 hover:bg-gray-600 text-gray-300 cursor-pointer">Cancel</button>
-											</div>
-										</div>
-									</span>
-									if item.Phase != "now" {
-										<span class="text-xs px-1.5 py-0.5 rounded bg-gray-800/80 text-gray-500 font-mono shrink-0">{ item.Phase }</span>
-									}
-								</div>
-								<!-- Detail pane -->
-								<div x-show={ fmt.Sprintf("detail === %d", item.ID) }
-									x-cloak
-									class="pl-7 py-2 mt-1 text-sm border-l-2 border-gray-700/50">
-									<div class="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500 mb-1">
-										<span>{ statusLabel(item.Status) }</span>
-										<span>Phase: { item.Phase }</span>
-										<span class="font-mono">{ fmt.Sprintf("E-%d", item.ID) }</span>
-										if item.ChildCount > 0 {
-											<span>{ fmt.Sprintf("%d sub-items", item.ChildCount) }</span>
-										}
-									</div>
-									if item.Text != item.Title {
-										@markdown.MarkdownContent(item.Text)
-									}
-									if item.BlockedBy != "" {
-										<p class="text-xs text-rose-400 mt-1">Blocked by: { item.BlockedBy }</p>
-									}
-								</div>
-							</div>
+							@taskTreeRow(item, false)
 						}
 					}
 				</div>
 			</div>
 		} else if detail.Project.TaskTotal == 0 {
-			<p class="text-sm text-gray-500 italic">No plan items</p>
+			<p class="text-sm text-gray-500 italic">No tasks</p>
 		}
 
 		<!-- Notes -->
@@ -439,6 +360,130 @@ templ StatusDetail(detail *data.StatusDetail) {
 				<a href={ templ.SafeURL(fmt.Sprintf("/project/%s", detail.Project.Name)) }
 				   class="text-xs text-emerald-400 hover:text-emerald-300">View →</a>
 			</div>
+		}
+	</div>
+}
+
+templ taskTreeRow(item data.TaskView, compact bool) {
+	if compact {
+		@taskTreeRowCompact(item)
+	} else {
+		@taskTreeRowFull(item)
+	}
+}
+
+templ taskTreeRowCompact(item data.TaskView) {
+	<div x-show={ fmt.Sprintf("isVisible(%d)", taskItemParentID(item)) }
+		style={ fmt.Sprintf("padding-left: %dpx;", item.Depth * 20) }
+		class="py-0.5">
+		<div class="flex items-center gap-1.5 rounded px-1 -mx-1 hover:bg-gray-800/40">
+			if item.ChildCount > 0 {
+				<button x-on:click={ fmt.Sprintf("open[%d] = !open[%d]", item.ID, item.ID) }
+					class="w-5 shrink-0 select-none cursor-pointer text-lg leading-none text-gray-500 hover:text-gray-300"
+					x-text={ fmt.Sprintf("open[%d] ? '▾' : '▸'", item.ID) }>▾</button>
+			} else {
+				<span class="w-5 shrink-0"></span>
+			}
+			@taskItemContent(item, true)
+		</div>
+		@taskDetailPane(item)
+	</div>
+}
+
+templ taskTreeRowFull(item data.TaskView) {
+	<div x-show={ fmt.Sprintf("isVisible(%d)", taskItemParentID(item)) }
+		x-cloak
+		style={ fmt.Sprintf("padding-left: %dpx;", item.Depth * 28) }
+		class={ depthSpacing(item.Depth) }>
+		<div class="flex items-center gap-1.5 rounded px-1 -mx-1 hover:bg-gray-800/40">
+			if item.ChildCount > 0 {
+				<button x-on:click={ fmt.Sprintf("open[%d] = !open[%d]", item.ID, item.ID) }
+					class="w-5 shrink-0 select-none cursor-pointer text-lg leading-none text-gray-500 hover:text-gray-300"
+					x-text={ fmt.Sprintf("open[%d] ? '▾' : '▸'", item.ID) }>▾</button>
+			} else {
+				<span class="w-5 shrink-0"></span>
+			}
+			@taskItemContent(item, false)
+		</div>
+		@taskDetailPane(item)
+	</div>
+}
+
+templ taskItemContent(item data.TaskView, compact bool) {
+	<span class="relative shrink-0" x-data="{ tip: false }">
+		<span class={ "w-3 h-3 rounded-full block cursor-pointer", statusSphereClass(item.Status) }
+		style="box-shadow: inset -1px -1px 2px rgba(0,0,0,0.3), inset 1px 1px 2px rgba(255,255,255,0.25);"
+		x-on:mouseenter="tip = true"
+		x-on:mouseleave="tip = false"
+		x-on:click={ fmt.Sprintf("detail = (detail === %d) ? null : %d", item.ID, item.ID) }></span>
+		<span x-show="tip" x-cloak
+			class="absolute left-1/2 -translate-x-1/2 bottom-full mb-1.5 px-2 py-1 text-xs text-gray-200 bg-gray-800 border border-gray-600 rounded shadow-lg whitespace-nowrap z-30">
+			{ statusLabel(item.Status) }
+		</span>
+	</span>
+	if !compact {
+		<span class="w-5 text-center text-xs font-mono text-cyan-600">
+			{ fmt.Sprintf("%d", item.SiblingNum) }
+		</span>
+	}
+	<span class="relative group">
+		<span
+			id={ fmt.Sprintf("title-%d", item.ID) }
+			class={ "cursor-pointer", depthFontClass(item.Depth) }
+			x-on:dblclick.stop={ fmt.Sprintf("startEdit(%d, $el.textContent.trim())", item.ID) }>
+			{ item.Title }
+		</span>
+		<span class="text-xs font-mono text-emerald-400 ml-1.5"
+			x-bind:class="showIds ? '' : 'invisible group-hover:visible'">
+			{ fmt.Sprintf("E-%d", item.ID) }
+		</span>
+		<div x-show={ fmt.Sprintf("editingId === %d", item.ID) }
+			x-cloak
+			class="absolute left-0 z-20 flex flex-col bg-gray-900 border border-gray-600 rounded-lg shadow-lg shadow-black/40"
+			style="top: -4px; padding: 4px 8px 6px 4px;">
+			<input
+				id={ fmt.Sprintf("edit-input-%d", item.ID) }
+				type="text"
+				name="title"
+				x-model="editTitle"
+				hx-put={ fmt.Sprintf("/tasks/%d/title", item.ID) }
+				hx-trigger="save"
+				hx-swap="none"
+				x-on:keydown.enter.prevent={ fmt.Sprintf("saveEdit(%d)", item.ID) }
+				x-on:keydown.escape.prevent="cancelEdit()"
+				class="bg-gray-800 text-gray-100 outline-none px-1 py-0.5 text-sm font-normal border border-gray-600 rounded" />
+			<div class="flex gap-1.5 justify-end mt-1">
+				<button
+					x-on:click={ fmt.Sprintf("saveEdit(%d)", item.ID) }
+					class="text-xs px-2.5 py-1 rounded bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer">Save</button>
+				<button
+					x-on:click="cancelEdit()"
+					class="text-xs px-2.5 py-1 rounded bg-gray-700 hover:bg-gray-600 text-gray-300 cursor-pointer">Cancel</button>
+			</div>
+		</div>
+	</span>
+	if item.Phase != "now" {
+		<span class="text-xs px-1.5 py-0.5 rounded bg-gray-800/80 text-gray-500 font-mono shrink-0">{ item.Phase }</span>
+	}
+}
+
+templ taskDetailPane(item data.TaskView) {
+	<div x-show={ fmt.Sprintf("detail === %d", item.ID) }
+		x-cloak
+		class="pl-7 py-2 mt-1 text-sm border-l-2 border-gray-700/50">
+		<div class="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500 mb-1">
+			<span>{ statusLabel(item.Status) }</span>
+			<span>Phase: { item.Phase }</span>
+			<span class="font-mono">{ fmt.Sprintf("E-%d", item.ID) }</span>
+			if item.ChildCount > 0 {
+				<span>{ fmt.Sprintf("%d sub-items", item.ChildCount) }</span>
+			}
+		</div>
+		if item.Text != item.Title {
+			@markdown.MarkdownContent(item.Text)
+		}
+		if item.BlockedBy != "" {
+			<p class="text-xs text-rose-400 mt-1">Blocked by: { item.BlockedBy }</p>
 		}
 	</div>
 }

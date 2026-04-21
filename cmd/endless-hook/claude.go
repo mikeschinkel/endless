@@ -77,15 +77,27 @@ func runClaude(args []string) error {
 	switch payload.EventName {
 	case "SessionStart":
 		// Track the session from the start
-		_ = monitor.InitSession(payload.SessionID, projectID, payload.CWD)
-		// Record tmux pane for inter-session messaging
-		_ = monitor.SetTmuxPane(payload.SessionID, os.Getenv("TMUX_PANE"))
-		return handlePlanContextInjection(projectID, payload)
+		_ = monitor.InitSession(payload.SessionID, projectID)
+		// Record process identifier for inter-session messaging
+		_ = monitor.SetProcess(payload.SessionID, os.Getenv("TMUX_PANE"))
+		return handleTaskContextInjection(projectID, payload)
 
 	case "UserPromptSubmit":
-		// Backfill tmux_pane if not yet recorded
-		_ = monitor.BackfillTmuxPane(payload.SessionID, os.Getenv("TMUX_PANE"))
-		return handlePlanContextInjection(projectID, payload)
+		// Backfill process if not yet recorded
+		_ = monitor.BackfillProcess(payload.SessionID, os.Getenv("TMUX_PANE"))
+		// Fallback message check for sessions without MCP channel plugin
+		pane := os.Getenv("TMUX_PANE")
+		port, _, _ := monitor.LookupChannelPort(pane)
+		if port == 0 {
+			hasMsgs, err := monitor.HasPendingMessages(pane)
+			if err == nil && hasMsgs {
+				resp := hookResponse{
+					AdditionalContext: "You have pending inter-session messages. Run: endless channel inbox",
+				}
+				return json.NewEncoder(os.Stdout).Encode(resp)
+			}
+		}
+		return handleTaskContextInjection(projectID, payload)
 
 	case "PreToolUse":
 		return handlePreToolUse(projectID, isRegistered, payload)
@@ -100,19 +112,12 @@ func runClaude(args []string) error {
 		_ = monitor.IdleSession(payload.SessionID)
 	case "SessionEnd":
 		_ = monitor.EndSession(payload.SessionID)
-		changes, err := monitor.DetectFileChanges(projectID, payload.CWD)
-		if err != nil {
-			return err
-		}
-		if len(changes) > 0 {
-			_ = monitor.RecordFileChanges(projectID, changes, "claude")
-		}
 	}
 
 	return nil
 }
 
-func handlePlanContextInjection(projectID int64, payload claudePayload) error {
+func handleTaskContextInjection(projectID int64, payload claudePayload) error {
 	// Only inject once per session
 	if monitor.HasInjectedContext(payload.SessionID) {
 		return nil
@@ -123,12 +128,12 @@ func handlePlanContextInjection(projectID int64, payload claudePayload) error {
 		return nil
 	}
 
-	items, err := monitor.GetActivePlanItems(projectID)
+	items, err := monitor.GetActiveTasks(projectID)
 	if err != nil {
 		return nil
 	}
 
-	context := monitor.FormatPlanContext(projectName, items)
+	context := monitor.FormatTasks(projectName, items)
 
 	// Mark as injected so we don't repeat
 	monitor.MarkContextInjected(projectID, payload.SessionID, payload.CWD)
@@ -140,13 +145,7 @@ func handlePlanContextInjection(projectID int64, payload claudePayload) error {
 }
 
 func handlePostToolUse(projectID int64, payload claudePayload) error {
-	// Detect file changes
-	changes, err := monitor.DetectFileChanges(projectID, payload.CWD)
-	if err == nil && len(changes) > 0 {
-		_ = monitor.RecordFileChanges(projectID, changes, "claude")
-	}
-
-	// Detect endless plan start/complete/chat commands and update session state
+	// Detect endless task start/complete/chat commands and update session state
 	handlePostToolUseSession(projectID, payload)
 
 	// Check if a plan file was written
@@ -167,11 +166,11 @@ func handlePostToolUse(projectID int64, payload claudePayload) error {
 	// Record which plan file this session is editing (used by ExitPlanMode)
 	_ = monitor.SetPlanFilePath(payload.SessionID, input.FilePath)
 
-	// NOTE: Auto-import disabled. Sessions should use `endless plan update <id> --text <file>`
-	// to save plan text, and `endless plan add` to create child items explicitly.
-	// Auto-import created duplicate items at the wrong granularity (every bullet became a plan item).
+	// NOTE: Auto-import disabled. Sessions should use `endless task update <id> --text <file>`
+	// to save task text, and `endless task add` to create child items explicitly.
+	// Auto-import created duplicate items at the wrong granularity (every bullet became a task item).
 
-	items, err := monitor.GetActivePlanItems(projectID)
+	items, err := monitor.GetActiveTasks(projectID)
 	if err != nil {
 		return nil
 	}
@@ -193,9 +192,9 @@ var writeTools = map[string]bool{
 	"NotebookEdit": true,
 }
 
-var planStartRe = regexp.MustCompile(`endless\s+plan\s+start\s+(\d+)`)
-var planCompleteRe = regexp.MustCompile(`endless\s+plan\s+complete\s+(\d+)`)
-var planChatRe = regexp.MustCompile(`endless\s+plan\s+chat`)
+var taskStartRe = regexp.MustCompile(`endless\s+task\s+start\s+(\d+)`)
+var taskCompleteRe = regexp.MustCompile(`endless\s+task\s+complete\s+(\d+)`)
+var taskChatRe = regexp.MustCompile(`endless\s+task\s+chat`)
 var channelBeaconRe = regexp.MustCompile(`endless\s+channel\s+beacon`)
 var channelConnectRe = regexp.MustCompile(`endless\s+channel\s+connect\s+(\S+)`)
 var channelSendRe = regexp.MustCompile(`endless\s+channel\s+send`)
@@ -224,8 +223,8 @@ func handlePreToolUse(projectID int64, isRegistered bool, payload claudePayload)
 			// Check expiration
 			if monitor.IsSessionExpired(session, 30) {
 				blockToolUse("Your work session has expired due to inactivity.\n\n" +
-					"Run `endless plan start <id>` to resume working on a task.\n" +
-					"Run `endless plan show` to see available tasks.")
+					"Run `endless task start <id>` to resume working on a task.\n" +
+					"Run `endless task show` to see available tasks.")
 			}
 			// Active and valid — allow through, touch session
 			_ = monitor.TouchSession(payload.SessionID)
@@ -235,7 +234,7 @@ func handlePreToolUse(projectID int64, isRegistered bool, payload claudePayload)
 
 	// No active session — block with helpful message
 	projectName, _ := monitor.GetProjectName(projectID)
-	items, _ := monitor.GetActivePlanItems(projectID)
+	items, _ := monitor.GetActiveTasks(projectID)
 
 	var msg strings.Builder
 	fmt.Fprintf(&msg, "BLOCKED: No active work session for project '%s'.\n", projectName)
@@ -257,9 +256,9 @@ func handlePreToolUse(projectID int64, isRegistered bool, payload claudePayload)
 	}
 
 	msg.WriteString("Run one of:\n")
-	msg.WriteString("  endless plan start <id>   — start working on a specific task\n")
-	msg.WriteString("  endless plan show         — see all available tasks\n")
-	msg.WriteString("  endless plan chat         — start a chat-only session (no task tracking)\n")
+	msg.WriteString("  endless task start <id>   — start working on a specific task\n")
+	msg.WriteString("  endless task show         — see all available tasks\n")
+	msg.WriteString("  endless task chat         — start a chat-only session (no task tracking)\n")
 
 	blockToolUse(msg.String())
 	return nil // unreachable, blockToolUse calls os.Exit
@@ -283,17 +282,17 @@ func handlePostToolUseSession(projectID int64, payload claudePayload) {
 		return
 	}
 
-	// Detect: endless plan start <id>
-	if m := planStartRe.FindStringSubmatch(input.Command); m != nil {
+	// Detect: endless task start <id>
+	if m := taskStartRe.FindStringSubmatch(input.Command); m != nil {
 		taskID, err := strconv.ParseInt(m[1], 10, 64)
 		if err == nil {
-			_ = monitor.StartWorkSession(payload.SessionID, projectID, taskID, payload.CWD)
+			_ = monitor.StartWorkSession(payload.SessionID, projectID, taskID)
 		}
 		return
 	}
 
-	// Detect: endless plan complete <id>
-	if m := planCompleteRe.FindStringSubmatch(input.Command); m != nil {
+	// Detect: endless task complete <id>
+	if m := taskCompleteRe.FindStringSubmatch(input.Command); m != nil {
 		taskID, err := strconv.ParseInt(m[1], 10, 64)
 		if err == nil {
 			_ = monitor.CompleteTask(payload.SessionID, taskID)
@@ -301,9 +300,9 @@ func handlePostToolUseSession(projectID int64, payload claudePayload) {
 		return
 	}
 
-	// Detect: endless plan chat
-	if planChatRe.MatchString(input.Command) {
-		_ = monitor.StartChatSession(payload.SessionID, projectID, payload.CWD)
+	// Detect: endless task chat
+	if taskChatRe.MatchString(input.Command) {
+		_ = monitor.StartChatSession(payload.SessionID, projectID)
 		return
 	}
 
@@ -352,10 +351,10 @@ func handleExitPlanMode(projectID int64, payload claudePayload) error {
 	}
 
 	// NOTE: Auto-import disabled. The plan file path is still tracked so sessions
-	// can reference it with `endless plan update <id> --text <plan-file>`.
+	// can reference it with `endless task update <id> --text <plan-file>`.
 	// See PostToolUse/Write handler for rationale.
 
-	items, err := monitor.GetActivePlanItems(projectID)
+	items, err := monitor.GetActiveTasks(projectID)
 	if err != nil {
 		return nil
 	}
@@ -380,15 +379,15 @@ func isPlanFile(path string) bool {
 	return false
 }
 
-// tmuxPlanID reads @endless_plan_id from the current tmux window.
+// tmuxTaskID reads @endless_task_id from the current tmux window.
 // Returns 0 if not in tmux or not set.
-func tmuxPlanID() int64 {
+func tmuxTaskID() int64 {
 	pane := os.Getenv("TMUX_PANE")
 	if pane == "" {
 		return 0
 	}
 	out, err := exec.Command(
-		"tmux", "display-message", "-p", "-t", pane, "#{@endless_plan_id}",
+		"tmux", "display-message", "-p", "-t", pane, "#{@endless_task_id}",
 	).Output()
 	if err != nil {
 		return 0
@@ -404,30 +403,30 @@ func tmuxPlanID() int64 {
 	return id
 }
 
-// resolveParentPlanID determines the parent plan ID for auto-import.
-// Priority: session's active goal > tmux @endless_plan_id > none.
-func resolveParentPlanID(sessionID string) *int64 {
+// resolveParentTaskID determines the parent task ID for auto-import.
+// Priority: session's active goal > tmux @endless_task_id > none.
+func resolveParentTaskID(sessionID string) *int64 {
 	// Check session's active goal first
 	session, err := monitor.GetActiveSession(sessionID)
-	if err == nil && session != nil && session.ActiveGoalID != nil {
-		return session.ActiveGoalID
+	if err == nil && session != nil && session.ActiveTaskID != nil {
+		return session.ActiveTaskID
 	}
 	// Fall back to tmux window option
-	if id := tmuxPlanID(); id > 0 {
+	if id := tmuxTaskID(); id > 0 {
 		return &id
 	}
 	return nil
 }
 
-func autoImportPlan(projectID int64, sessionID, filePath string) error {
+func autoImportTask(projectID int64, sessionID, filePath string) error {
 	projectName, err := monitor.GetProjectName(projectID)
 	if err != nil {
 		return err
 	}
 
-	args := []string{"plan", "import", filePath, "--project", projectName, "--replace"}
+	args := []string{"task", "import", filePath, "--project", projectName, "--replace"}
 
-	if parentID := resolveParentPlanID(sessionID); parentID != nil {
+	if parentID := resolveParentTaskID(sessionID); parentID != nil {
 		args = append(args, "--parent", strconv.FormatInt(*parentID, 10))
 	}
 

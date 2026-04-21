@@ -13,14 +13,14 @@ type SessionInfo struct {
 	ID           int64
 	SessionID    string
 	ProjectID    int64
-	ActiveGoalID *int64
+	ActiveTaskID *int64
 	State        string
 	LastActivity string
 }
 
-// StartWorkSession creates or updates an ai_session linked to a specific task.
-// Also marks the plan item as in_progress.
-func StartWorkSession(sessionID string, projectID int64, taskID int64, workingDir string) error {
+// StartWorkSession creates or updates a session linked to a specific task.
+// Also marks the task as in_progress.
+func StartWorkSession(sessionID string, projectID int64, taskID int64) error {
 	db, err := DB()
 	if err != nil {
 		return err
@@ -28,53 +28,51 @@ func StartWorkSession(sessionID string, projectID int64, taskID int64, workingDi
 
 	now := time.Now().UTC().Format("2006-01-02T15:04:05")
 
-	// Upsert ai_sessions
-	tmuxPane := os.Getenv("TMUX_PANE")
+	process := os.Getenv("TMUX_PANE")
 	_, err = db.Exec(
-		`INSERT INTO ai_sessions (session_id, project_id, platform, state, active_goal_id, working_dir, tmux_pane, started_at, last_activity)
-		 VALUES (?, ?, 'claude', 'working', ?, ?, ?, ?, ?)
+		`INSERT INTO sessions (session_id, project_id, platform, state, active_task_id, process, started_at, last_activity)
+		 VALUES (?, ?, 'claude', 'working', ?, ?, ?, ?)
 		 ON CONFLICT(session_id) DO UPDATE SET
-		   state='working', active_goal_id=?, last_activity=?, project_id=?,
-		   tmux_pane=COALESCE(NULLIF(?, ''), tmux_pane)`,
-		sessionID, projectID, taskID, workingDir, tmuxPane, now, now,
-		taskID, now, projectID, tmuxPane,
+		   state='working', active_task_id=?, last_activity=?, project_id=?,
+		   process=COALESCE(NULLIF(?, ''), process)`,
+		sessionID, projectID, taskID, process, now, now,
+		taskID, now, projectID, process,
 	)
 	if err != nil {
-		return fmt.Errorf("upsert ai_session: %w", err)
+		return fmt.Errorf("upsert session: %w", err)
 	}
 
-	// Mark plan item as in_progress
 	_, err = db.Exec(
-		"UPDATE plans SET status='in_progress' WHERE id=? AND status IN ('needs_plan','ready','blocked')",
+		"UPDATE tasks SET status='in_progress' WHERE id=? AND status IN ('needs_plan','ready','blocked')",
 		taskID,
 	)
 	return err
 }
 
 // StartChatSession creates a working session with no task (chat-only).
-func StartChatSession(sessionID string, projectID int64, workingDir string) error {
+func StartChatSession(sessionID string, projectID int64) error {
 	db, err := DB()
 	if err != nil {
 		return err
 	}
 
 	now := time.Now().UTC().Format("2006-01-02T15:04:05")
-	tmuxPane := os.Getenv("TMUX_PANE")
+	process := os.Getenv("TMUX_PANE")
 
 	_, err = db.Exec(
-		`INSERT INTO ai_sessions (session_id, project_id, platform, state, active_goal_id, working_dir, tmux_pane, started_at, last_activity)
-		 VALUES (?, ?, 'claude', 'working', NULL, ?, ?, ?, ?)
+		`INSERT INTO sessions (session_id, project_id, platform, state, active_task_id, process, started_at, last_activity)
+		 VALUES (?, ?, 'claude', 'working', NULL, ?, ?, ?)
 		 ON CONFLICT(session_id) DO UPDATE SET
-		   state='working', active_goal_id=NULL, last_activity=?,
-		   tmux_pane=COALESCE(NULLIF(?, ''), tmux_pane)`,
-		sessionID, projectID, workingDir, tmuxPane, now, now,
-		now, tmuxPane,
+		   state='working', active_task_id=NULL, last_activity=?,
+		   process=COALESCE(NULLIF(?, ''), process)`,
+		sessionID, projectID, process, now, now,
+		now, process,
 	)
 	return err
 }
 
 // InitSession creates a session with state='needs_input' on SessionStart.
-func InitSession(sessionID string, projectID int64, workingDir string) error {
+func InitSession(sessionID string, projectID int64) error {
 	db, err := DB()
 	if err != nil {
 		return err
@@ -83,10 +81,10 @@ func InitSession(sessionID string, projectID int64, workingDir string) error {
 	now := time.Now().UTC().Format("2006-01-02T15:04:05")
 
 	_, err = db.Exec(
-		`INSERT INTO ai_sessions (session_id, project_id, platform, state, working_dir, started_at, last_activity)
-		 VALUES (?, ?, 'claude', 'needs_input', ?, ?, ?)
+		`INSERT INTO sessions (session_id, project_id, platform, state, started_at, last_activity)
+		 VALUES (?, ?, 'claude', 'needs_input', ?, ?)
 		 ON CONFLICT(session_id) DO UPDATE SET last_activity=?`,
-		sessionID, projectID, workingDir, now, now,
+		sessionID, projectID, now, now,
 		now,
 	)
 	return err
@@ -101,10 +99,10 @@ func GetActiveSession(sessionID string) (*SessionInfo, error) {
 
 	var s SessionInfo
 	err = db.QueryRow(
-		`SELECT id, session_id, COALESCE(project_id,0), active_goal_id, state, COALESCE(last_activity,'')
-		 FROM ai_sessions WHERE session_id=?`,
+		`SELECT id, session_id, COALESCE(project_id,0), active_task_id, state, COALESCE(last_activity,'')
+		 FROM sessions WHERE session_id=?`,
 		sessionID,
-	).Scan(&s.ID, &s.SessionID, &s.ProjectID, &s.ActiveGoalID, &s.State, &s.LastActivity)
+	).Scan(&s.ID, &s.SessionID, &s.ProjectID, &s.ActiveTaskID, &s.State, &s.LastActivity)
 	if err != nil {
 		return nil, err
 	}
@@ -118,7 +116,7 @@ func SetPlanFilePath(sessionID, filePath string) error {
 		return err
 	}
 	_, err = db.Exec(
-		"UPDATE ai_sessions SET plan_file_path=? WHERE session_id=?",
+		"UPDATE sessions SET plan_file_path=? WHERE session_id=?",
 		filePath, sessionID,
 	)
 	return err
@@ -132,7 +130,7 @@ func GetPlanFilePath(sessionID string) string {
 	}
 	var path *string
 	err = db.QueryRow(
-		"SELECT plan_file_path FROM ai_sessions WHERE session_id=?",
+		"SELECT plan_file_path FROM sessions WHERE session_id=?",
 		sessionID,
 	).Scan(&path)
 	if err != nil || path == nil {
@@ -141,9 +139,9 @@ func GetPlanFilePath(sessionID string) string {
 	return *path
 }
 
-// SetTmuxPane records which tmux pane this session is running in.
-func SetTmuxPane(sessionID, pane string) error {
-	if pane == "" {
+// SetProcess records which process identifier this session is running in.
+func SetProcess(sessionID, process string) error {
+	if process == "" {
 		return nil
 	}
 	db, err := DB()
@@ -151,15 +149,61 @@ func SetTmuxPane(sessionID, pane string) error {
 		return err
 	}
 	_, err = db.Exec(
-		"UPDATE ai_sessions SET tmux_pane=? WHERE session_id=?",
-		pane, sessionID,
+		"UPDATE sessions SET process=? WHERE session_id=?",
+		process, sessionID,
 	)
 	return err
 }
 
-// BackfillTmuxPane sets tmux_pane only if it's currently NULL.
-func BackfillTmuxPane(sessionID, pane string) error {
-	if pane == "" {
+// RegisterChannelPort upserts the channel plugin's HTTP port in the channels table.
+// The process key is typically TMUX_PANE or another session-unique identifier.
+func RegisterChannelPort(process string, port, pid int) error {
+	db, err := DB()
+	if err != nil {
+		return err
+	}
+	now := time.Now().UTC().Format("2006-01-02T15:04:05")
+	_, err = db.Exec(
+		`INSERT INTO channels (process, port, pid, created_at)
+		 VALUES (?, ?, ?, ?)
+		 ON CONFLICT(process) DO UPDATE SET port=?, pid=?, created_at=?`,
+		process, port, pid, now,
+		port, pid, now,
+	)
+	return err
+}
+
+// UnregisterChannelPort removes a channel port entry.
+func UnregisterChannelPort(process string) error {
+	db, err := DB()
+	if err != nil {
+		return err
+	}
+	_, err = db.Exec("DELETE FROM channels WHERE process=?", process)
+	return err
+}
+
+// LookupChannelPort returns the HTTP port for a given process identifier.
+// Returns 0 if not found.
+func LookupChannelPort(process string) (int, int, error) {
+	db, err := DB()
+	if err != nil {
+		return 0, 0, err
+	}
+	var port, pid int
+	err = db.QueryRow(
+		"SELECT port, pid FROM channels WHERE process=?",
+		process,
+	).Scan(&port, &pid)
+	if err != nil {
+		return 0, 0, err
+	}
+	return port, pid, nil
+}
+
+// BackfillProcess sets process only if it's currently NULL.
+func BackfillProcess(sessionID, process string) error {
+	if process == "" {
 		return nil
 	}
 	db, err := DB()
@@ -167,8 +211,8 @@ func BackfillTmuxPane(sessionID, pane string) error {
 		return err
 	}
 	_, err = db.Exec(
-		"UPDATE ai_sessions SET tmux_pane=? WHERE session_id=? AND tmux_pane IS NULL",
-		pane, sessionID,
+		"UPDATE sessions SET process=? WHERE session_id=? AND process IS NULL",
+		process, sessionID,
 	)
 	return err
 }
@@ -182,7 +226,7 @@ func TouchSession(sessionID string) error {
 
 	now := time.Now().UTC().Format("2006-01-02T15:04:05")
 	_, err = db.Exec(
-		"UPDATE ai_sessions SET last_activity=? WHERE session_id=?",
+		"UPDATE sessions SET last_activity=? WHERE session_id=?",
 		now, sessionID,
 	)
 	return err
@@ -197,9 +241,9 @@ func CompleteTask(sessionID string, taskID int64) error {
 
 	now := time.Now().UTC().Format("2006-01-02T15:04:05")
 
-	// Mark plan item completed
+	// Mark task item completed
 	_, err = db.Exec(
-		"UPDATE plans SET status='completed', completed_at=? WHERE id=?",
+		"UPDATE tasks SET status='completed', completed_at=? WHERE id=?",
 		now, taskID,
 	)
 	if err != nil {
@@ -208,7 +252,7 @@ func CompleteTask(sessionID string, taskID int64) error {
 
 	// Clear active task, set state to idle
 	_, err = db.Exec(
-		"UPDATE ai_sessions SET active_goal_id=NULL, state='idle', last_activity=? WHERE session_id=?",
+		"UPDATE sessions SET active_task_id=NULL, state='idle', last_activity=? WHERE session_id=?",
 		now, sessionID,
 	)
 	return err
@@ -223,7 +267,7 @@ func IdleSession(sessionID string) error {
 
 	now := time.Now().UTC().Format("2006-01-02T15:04:05")
 	_, err = db.Exec(
-		"UPDATE ai_sessions SET state='idle', last_activity=? WHERE session_id=?",
+		"UPDATE sessions SET state='idle', last_activity=? WHERE session_id=?",
 		now, sessionID,
 	)
 	return err
@@ -238,8 +282,8 @@ func EndSession(sessionID string) error {
 
 	now := time.Now().UTC().Format("2006-01-02T15:04:05")
 	_, err = db.Exec(
-		"UPDATE ai_sessions SET state='ended', ended_at=?, last_activity=? WHERE session_id=?",
-		now, now, sessionID,
+		"UPDATE sessions SET state='ended', last_activity=? WHERE session_id=?",
+		now, sessionID,
 	)
 	return err
 }

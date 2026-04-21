@@ -43,10 +43,6 @@ def unregister_project(name: str):
 
     # Remove from DB
     db.execute(
-        "DELETE FROM documents WHERE project_id = ?",
-        (project_id,),
-    )
-    db.execute(
         "DELETE FROM notes WHERE project_id = ?",
         (project_id,),
     )
@@ -93,10 +89,6 @@ def purge_project(name: str):
     )
 
     # Remove from DB
-    db.execute(
-        "DELETE FROM documents WHERE project_id = ?",
-        (project_id,),
-    )
     db.execute(
         "DELETE FROM notes WHERE project_id = ?",
         (project_id,),

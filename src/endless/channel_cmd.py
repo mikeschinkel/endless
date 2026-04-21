@@ -1,5 +1,6 @@
 """Inter-session messaging — beacon, connect, send messages between Claude sessions."""
 
+import json
 import os
 import subprocess
 from pathlib import Path
@@ -38,41 +39,85 @@ def _resolve_project(name: str | None) -> tuple[int, str]:
     return row[0]["id"], row[0]["name"]
 
 
-def _resolve_session() -> str:
-    """Resolve the current session ID from TMUX_PANE."""
+def _resolve_process() -> str:
+    """Resolve the current process identifier. Uses TMUX_PANE when in tmux."""
     pane = os.environ.get("TMUX_PANE")
-    if not pane:
-        raise click.ClickException(
-            "Not in a tmux session. Inter-session messaging requires tmux."
-        )
+    if pane:
+        return pane
+    raise click.ClickException(
+        "Not in a tmux session. Inter-session messaging requires tmux "
+        "(non-tmux support planned)."
+    )
+
+
+def _channel_notify(target_process: str, event: str, channel_id: str, preview: str):
+    """Push a notification to the target session's MCP channel plugin via HTTP.
+    Falls back to tmux send-keys if no channel plugin is registered.
+    target_process is the process identifier (TMUX_PANE or similar)."""
+    import urllib.request
 
     row = db.query(
-        "SELECT session_id FROM ai_sessions "
-        "WHERE tmux_pane = ? AND state != 'ended' "
-        "ORDER BY last_activity DESC LIMIT 1",
-        (pane,),
+        "SELECT port, pid FROM channels WHERE process = ?",
+        (target_process,),
     )
-    if not row:
-        raise click.ClickException(
-            f"No active session found for tmux pane {pane}. "
-            "Run 'endless plan start <id>' first."
-        )
-    return row[0]["session_id"]
+    if row:
+        port = row[0]["port"]
+        pid = row[0]["pid"]
+        # Check if the process is still alive
+        alive = _pid_alive(pid)
+        if alive:
+            try:
+                data = json.dumps({
+                    "event": event,
+                    "channel_id": channel_id,
+                    "preview": preview,
+                }).encode()
+                req = urllib.request.Request(
+                    f"http://127.0.0.1:{port}/notify",
+                    data=data,
+                    headers={"Content-Type": "application/json"},
+                )
+                urllib.request.urlopen(req, timeout=2)
+                return
+            except Exception:
+                click.echo(
+                    click.style("!", fg="yellow")
+                    + f" Channel plugin on port {port} not reachable, falling back to tmux"
+                )
+        else:
+            # Stale entry — clean it up
+            db.execute(
+                "DELETE FROM channels WHERE process = ?",
+                (target_process,),
+            )
 
-
-def _tmux_nudge(pane: str, text: str):
-    """Send a nudge to a tmux pane to trigger UserPromptSubmit."""
-    try:
-        subprocess.run(
-            ["tmux", "send-keys", "-t", pane, text, "Enter"],
-            check=True,
-            capture_output=True,
-        )
-    except subprocess.CalledProcessError:
+    # Fallback: tmux send-keys (only works if target_process looks like a pane)
+    if target_process.startswith("%"):
+        try:
+            subprocess.run(
+                ["tmux", "send-keys", "-t", target_process, preview, "Enter"],
+                check=True,
+                capture_output=True,
+            )
+        except subprocess.CalledProcessError:
+            click.echo(
+                click.style("!", fg="yellow")
+                + f" Could not nudge pane {target_process} (may have closed)"
+            )
+    else:
         click.echo(
             click.style("!", fg="yellow")
-            + f" Could not nudge pane {pane} (may have closed)"
+            + " No channel plugin and no tmux pane for target session"
         )
+
+
+def _pid_alive(pid: int) -> bool:
+    """Check if a process is still running."""
+    try:
+        os.kill(pid, 0)
+        return True
+    except OSError:
+        return False
 
 
 def beacon(project_name: str | None = None):
@@ -80,15 +125,14 @@ def beacon(project_name: str | None = None):
     import uuid
 
     project_id, proj_name = _resolve_project(project_name)
-    session_id = _resolve_session()
-    pane = os.environ["TMUX_PANE"]
+    process = _resolve_process()
 
     channel_id = str(uuid.uuid4())[:8]
     db.execute(
-        "INSERT INTO msg_channels "
-        "(channel_id, session_a, pane_a, project_id, state) "
-        "VALUES (?, ?, ?, ?, 'beacon')",
-        (channel_id, session_id, pane, project_id),
+        "INSERT INTO conversations "
+        "(conversation_id, process_a, project_id, state) "
+        "VALUES (?, ?, ?, 'beacon')",
+        (channel_id, process, project_id),
     )
 
     click.echo(
@@ -111,13 +155,12 @@ def beacon(project_name: str | None = None):
 
 def connect(channel_id: str | None = None):
     """Connect to a beaconing session."""
-    session_id = _resolve_session()
-    pane = os.environ["TMUX_PANE"]
+    process = _resolve_process()
 
     if channel_id:
         row = db.query(
-            "SELECT channel_id, session_a, pane_a FROM msg_channels "
-            "WHERE channel_id = ? AND state = 'beacon'",
+            "SELECT conversation_id, process_a FROM conversations "
+            "WHERE conversation_id = ? AND state = 'beacon'",
             (channel_id,),
         )
         if not row:
@@ -126,7 +169,7 @@ def connect(channel_id: str | None = None):
             )
     else:
         row = db.query(
-            "SELECT channel_id, session_a, pane_a FROM msg_channels "
+            "SELECT conversation_id, process_a FROM conversations "
             "WHERE state = 'beacon' ORDER BY created_at DESC",
         )
         if not row:
@@ -134,17 +177,17 @@ def connect(channel_id: str | None = None):
         if len(row) > 1:
             raise click.ClickException(
                 f"Multiple beacons active ({len(row)}). "
-                "Specify a channel_id: endless msg connect <channel_id>"
+                "Specify a channel_id: endless channel connect <channel_id>"
             )
-        channel_id = row[0]["channel_id"]
+        channel_id = row[0]["conversation_id"]
 
-    target_pane = row[0]["pane_a"]
+    target_process = row[0]["process_a"]
 
     db.execute(
-        "UPDATE msg_channels SET session_b=?, pane_b=?, "
+        "UPDATE conversations SET process_b=?, "
         "state='connected', connected_at=strftime('%Y-%m-%dT%H:%M:%S','now') "
-        "WHERE channel_id=?",
-        (session_id, pane, channel_id),
+        "WHERE conversation_id=?",
+        (process, channel_id),
     )
 
     click.echo(
@@ -153,22 +196,25 @@ def connect(channel_id: str | None = None):
         + click.style(channel_id, bold=True)
     )
 
-    # Nudge the beacon session
-    _tmux_nudge(target_pane, f"[connected: {channel_id}]")
+    # Notify the beacon session
+    _channel_notify(
+        target_process, "connected", channel_id,
+        f"[connected: {channel_id}]",
+    )
 
 
 def send(message: str):
     """Send a message to the connected session."""
-    session_id = _resolve_session()
+    process = _resolve_process()
 
-    # Find the active channel for this session
+    # Find the active conversation for this process
     row = db.query(
-        "SELECT channel_id, session_a, pane_a, session_b, pane_b "
-        "FROM msg_channels "
+        "SELECT conversation_id, process_a, process_b "
+        "FROM conversations "
         "WHERE state = 'connected' "
-        "AND (session_a = ? OR session_b = ?) "
+        "AND (process_a = ? OR process_b = ?) "
         "ORDER BY connected_at DESC LIMIT 1",
-        (session_id, session_id),
+        (process, process),
     )
     if not row:
         raise click.ClickException(
@@ -177,19 +223,19 @@ def send(message: str):
         )
 
     channel = row[0]
-    channel_id = channel["channel_id"]
+    channel_id = channel["conversation_id"]
 
-    # Determine target pane
-    if session_id == channel["session_a"]:
-        target_pane = channel["pane_b"]
+    # Determine target process identifier
+    if process == channel["process_a"]:
+        target_process = channel["process_b"]
     else:
-        target_pane = channel["pane_a"]
+        target_process = channel["process_a"]
 
     # Queue the message
     db.execute(
-        "INSERT INTO msg_queue (channel_id, sender, body, status) "
+        "INSERT INTO messages (conversation_id, sender, body, status) "
         "VALUES (?, ?, ?, 'queued')",
-        (channel_id, session_id, message),
+        (channel_id, process, message),
     )
 
     click.echo(
@@ -198,24 +244,27 @@ def send(message: str):
         + click.style(channel_id, bold=True)
     )
 
-    # Nudge the target
-    _tmux_nudge(target_pane, "[You have a pending inter-session message. Run: endless channel inbox]")
+    # Notify the target
+    _channel_notify(
+        target_process, "message", channel_id,
+        "You have a pending inter-session message. Run: endless channel inbox",
+    )
 
 
 def inbox():
     """Show pending messages for the current session."""
-    session_id = _resolve_session()
+    process = _resolve_process()
 
     rows = db.query(
-        "SELECT mq.id, mq.channel_id, mq.sender, mq.body, mq.created_at "
-        "FROM msg_queue mq "
-        "JOIN msg_channels mc ON mq.channel_id = mc.channel_id "
+        "SELECT mq.id, mq.conversation_id, mq.sender, mq.body, mq.created_at "
+        "FROM messages mq "
+        "JOIN conversations mc ON mq.conversation_id = mc.conversation_id "
         "WHERE mq.status = 'queued' "
         "AND mq.sender != ? "
         "AND mc.state = 'connected' "
-        "AND (mc.session_a = ? OR mc.session_b = ?) "
+        "AND (mc.process_a = ? OR mc.process_b = ?) "
         "ORDER BY mq.created_at ASC",
-        (session_id, session_id, session_id),
+        (process, process, process),
     )
 
     if not rows:
@@ -233,7 +282,7 @@ def inbox():
     # Mark as delivered
     for row in rows:
         db.execute(
-            "UPDATE msg_queue SET status='delivered', "
+            "UPDATE messages SET status='delivered', "
             "delivered_at=strftime('%Y-%m-%dT%H:%M:%S','now') "
             "WHERE id = ?",
             (row['id'],),
@@ -246,23 +295,23 @@ def inbox():
 
 def close():
     """Close the active channel for the current session."""
-    session_id = _resolve_session()
+    process = _resolve_process()
 
     row = db.query(
-        "SELECT channel_id FROM msg_channels "
-        "WHERE state = 'connected' "
-        "AND (session_a = ? OR session_b = ?) "
-        "ORDER BY connected_at DESC LIMIT 1",
-        (session_id, session_id),
+        "SELECT conversation_id, state FROM conversations "
+        "WHERE state IN ('connected', 'beacon') "
+        "AND (process_a = ? OR process_b = ?) "
+        "ORDER BY created_at DESC LIMIT 1",
+        (process, process),
     )
     if not row:
         raise click.ClickException("No active channel to close.")
 
-    channel_id = row[0]["channel_id"]
+    channel_id = row[0]["conversation_id"]
     db.execute(
-        "UPDATE msg_channels SET state='closed', "
+        "UPDATE conversations SET state='closed', "
         "closed_at=strftime('%Y-%m-%dT%H:%M:%S','now') "
-        "WHERE channel_id=?",
+        "WHERE conversation_id=?",
         (channel_id,),
     )
 
@@ -278,9 +327,9 @@ def list_beacons(project_name: str | None = None):
     if project_name:
         project_id, _ = _resolve_project(project_name)
         rows = db.query(
-            "SELECT mc.channel_id, mc.session_a, mc.pane_a, mc.created_at, "
+            "SELECT mc.conversation_id, mc.process_a, mc.created_at, "
             "p.name as project_name "
-            "FROM msg_channels mc "
+            "FROM conversations mc "
             "LEFT JOIN projects p ON mc.project_id = p.id "
             "WHERE mc.state = 'beacon' AND mc.project_id = ? "
             "ORDER BY mc.created_at DESC",
@@ -288,9 +337,9 @@ def list_beacons(project_name: str | None = None):
         )
     else:
         rows = db.query(
-            "SELECT mc.channel_id, mc.session_a, mc.pane_a, mc.created_at, "
+            "SELECT mc.conversation_id, mc.process_a, mc.created_at, "
             "p.name as project_name "
-            "FROM msg_channels mc "
+            "FROM conversations mc "
             "LEFT JOIN projects p ON mc.project_id = p.id "
             "WHERE mc.state = 'beacon' "
             "ORDER BY mc.created_at DESC",
@@ -305,8 +354,8 @@ def list_beacons(project_name: str | None = None):
     for row in rows:
         proj = row["project_name"] or "unknown"
         click.echo(
-            click.style("  " + row["channel_id"], bold=True)
-            + f"  {proj}  pane={row['pane_a']}  "
+            click.style("  " + row["conversation_id"], bold=True)
+            + f"  {proj}  process={row['process_a']}  "
             + click.style(row["created_at"], dim=True)
         )
 

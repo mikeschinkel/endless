@@ -18,9 +18,9 @@
   </div>
   <p class="dim" style="margin-bottom:1rem">{{.Project.ShortPath}}</p>
 
-  {{if .PlanItems}}
+  {{if .TaskItems}}
   <div class="section">
-    <h2>Plan</h2>
+    <h2>Tasks</h2>
     <table>
       <thead>
         <tr>
@@ -31,12 +31,12 @@
         </tr>
       </thead>
       <tbody>
-        {{range .PlanItems}}
+        {{range .TaskItems}}
         <tr>
           <td class="dim">#{{.ID}}</td>
           <td><span class="phase-tag phase-{{.Phase}}">{{.Phase}}</span></td>
           <td>{{.Text}}</td>
-          <td><span class="plan-{{.Status}}">{{.Status}}</span></td>
+          <td><span class="task-{{.Status}}">{{.Status}}</span></td>
         </tr>
         {{end}}
       </tbody>

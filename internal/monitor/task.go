@@ -5,8 +5,8 @@ import (
 	"strings"
 )
 
-// PlanItem represents a plan item from the DB.
-type PlanItem struct {
+// Task represents a task item from the DB.
+type Task struct {
 	ID       int64
 	Phase    string
 	Text     string
@@ -14,8 +14,8 @@ type PlanItem struct {
 	StableID string
 }
 
-// GetActivePlanItems returns in-progress and needs_plan items for a project.
-func GetActivePlanItems(projectID int64) ([]PlanItem, error) {
+// GetActiveTasks returns in-progress and needs_plan items for a project.
+func GetActiveTasks(projectID int64) ([]Task, error) {
 	db, err := DB()
 	if err != nil {
 		return nil, err
@@ -23,7 +23,7 @@ func GetActivePlanItems(projectID int64) ([]PlanItem, error) {
 
 	rows, err := db.Query(
 		"SELECT id, phase, description, status "+
-			"FROM plans "+
+			"FROM tasks "+
 			"WHERE project_id = ? AND status IN ('in_progress', 'needs_plan', 'ready') "+
 			"ORDER BY CASE status WHEN 'in_progress' THEN 0 ELSE 1 END, sort_order",
 		projectID,
@@ -33,9 +33,9 @@ func GetActivePlanItems(projectID int64) ([]PlanItem, error) {
 	}
 	defer rows.Close()
 
-	var items []PlanItem
+	var items []Task
 	for rows.Next() {
-		var item PlanItem
+		var item Task
 		if err := rows.Scan(&item.ID, &item.Phase, &item.Text, &item.Status); err != nil {
 			continue
 		}
@@ -44,22 +44,22 @@ func GetActivePlanItems(projectID int64) ([]PlanItem, error) {
 	return items, nil
 }
 
-// FormatPlanContext formats plan items as context text for Claude.
-func FormatPlanContext(projectName string, items []PlanItem) string {
+// FormatTasks formats task items as context text for Claude.
+func FormatTasks(projectName string, items []Task) string {
 	var b strings.Builder
 
 	if len(items) == 0 {
 		fmt.Fprintf(&b, "Endless is tracking project: %s\n", projectName)
-		b.WriteString("No plan items yet. Ask the user what they'd like to work on.\n")
-		b.WriteString("Use `endless plan import <file>` to import a plan, ")
-		b.WriteString("or `endless plan show` to check status.")
+		b.WriteString("No tasks yet. Ask the user what they'd like to work on.\n")
+		b.WriteString("Use `endless task import <file>` to import tasks, ")
+		b.WriteString("or `endless task show` to check status.")
 		return b.String()
 	}
 
-	fmt.Fprintf(&b, "Endless has an active plan for %s.\n", projectName)
+	fmt.Fprintf(&b, "Endless has active tasks for %s.\n", projectName)
 	b.WriteString("Present this to the user and ask which task to work on:\n\n")
 
-	var inProgress, available []PlanItem
+	var inProgress, available []Task
 	for _, item := range items {
 		if item.Status == "in_progress" {
 			inProgress = append(inProgress, item)
@@ -87,18 +87,18 @@ func FormatPlanContext(projectName string, items []PlanItem) string {
 	}
 
 	b.WriteString("\nIMPORTANT: You MUST register a task before making any file changes.")
-	b.WriteString("\n1. Present this plan to the user")
+	b.WriteString("\n1. Present these tasks to the user")
 	b.WriteString("\n2. Ask which task to work on")
-	b.WriteString("\n3. Run `endless plan start <id>` after user confirms")
-	b.WriteString("\n4. If this is just a conversation (no code changes), run `endless plan chat`")
+	b.WriteString("\n3. Run `endless task start <id>` after user confirms")
+	b.WriteString("\n4. If this is just a conversation (no code changes), run `endless task chat`")
 	b.WriteString("\n")
-	b.WriteString("\nUse `endless plan complete <id>` when done with a task.")
+	b.WriteString("\nUse `endless task complete <id>` when done with a task.")
 	b.WriteString("\nRead-only operations (Read, Glob, Grep) work without registration.")
 
 	return b.String()
 }
 
-// HasInjectedContext checks if we've already injected plan context for this session.
+// HasInjectedContext checks if we've already injected task context for this session.
 func HasInjectedContext(sessionID string) bool {
 	db, err := DB()
 	if err != nil {
@@ -108,7 +108,7 @@ func HasInjectedContext(sessionID string) bool {
 	err = db.QueryRow(
 		"SELECT count(*) FROM activity "+
 			"WHERE session_context LIKE ? "+
-			"AND session_context LIKE '%\"injected_plan\":\"true\"%'",
+			"AND session_context LIKE '%\"injected_tasks\":\"true\"%'",
 		fmt.Sprintf("%%\"session_id\":\"%s\"%%", sessionID),
 	).Scan(&count)
 	if err != nil {
@@ -117,12 +117,12 @@ func HasInjectedContext(sessionID string) bool {
 	return count > 0
 }
 
-// MarkContextInjected records that plan context was injected for this session.
+// MarkContextInjected records that task context was injected for this session.
 func MarkContextInjected(projectID int64, sessionID, workingDir string) {
 	RecordActivity(projectID, "claude", workingDir, map[string]string{
-		"session_id":    sessionID,
-		"event":         "plan_context_injected",
-		"injected_plan": "true",
+		"session_id":     sessionID,
+		"event":          "task_context_injected",
+		"injected_tasks": "true",
 	})
 }
 
