@@ -41,7 +41,7 @@ Tasks is fundamentally an **agent coordination tool** — it helps Claude decomp
 ## B. What Tasks Does Better
 
 ### 1. Dependency DAGs
-Tasks has first-class `blocks`/`blockedBy` with arbitrary edges between any tasks. Endless has the `task_dependencies` table in the schema but no UI, no CLI support, and no visualization. **Tasks is ahead here**, though Endless has the schema foundation to catch up.
+Tasks has first-class `blocks`/`blockedBy` with arbitrary edges between any tasks. Endless has the `task_deps` table in the schema but no UI, no CLI support, and no visualization. **Tasks is ahead here**, though Endless has the schema foundation to catch up.
 
 ### 2. Agent Coordination
 Tasks is designed for multi-agent workflows — an orchestrator agent can create tasks, assign them to worker agents via the `owner` field, and workers can claim and complete tasks. Endless has no concept of coordinating multiple Claude Code instances working on different subtasks of the same plan.
@@ -135,7 +135,7 @@ If Endless ever supports `plan spawn` launching multiple Claude sessions for sib
 
 ### Integrate Rather Than Duplicate
 
-1. **Dependency tracking**: Don't build a full dependency DAG UI for plan items from scratch. Instead, bridge to Tasks: when a plan item is active, let Claude's Tasks handle sub-task dependencies within that scope. Endless should track **plan-level** dependencies (project A blocks project B), and Tasks should track **task-level** dependencies (implement X before Y within a plan item). Build the `task_dependencies` UI for cross-plan/cross-project edges only.
+1. **Dependency tracking**: Don't build a full dependency DAG UI for plan items from scratch. Instead, bridge to Tasks: when a plan item is active, let Claude's Tasks handle sub-task dependencies within that scope. Endless should track **plan-level** dependencies (project A blocks project B), and Tasks should track **task-level** dependencies (implement X before Y within a plan item). Build the `task_deps` UI for cross-plan/cross-project edges only.
 
 2. **Status workflow within a plan item**: Don't try to track Claude's moment-to-moment progress on a plan item. Let Tasks handle `pending → in_progress → completed` for sub-tasks. Endless should track the plan item's status at the human-intent level (needs_plan, ready, in_progress, completed, blocked).
 

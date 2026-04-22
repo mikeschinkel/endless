@@ -273,4 +273,4 @@ SQLite at `~/.config/endless/endless.db`. Key tables:
 - `file_changes` — detected file modifications
 - `notes` — project notes and alerts
 - `documents` — tracked document metadata
-- `task_dependencies` — cross-item and cross-project dependencies
+- `task_deps` — cross-item and cross-project dependencies
