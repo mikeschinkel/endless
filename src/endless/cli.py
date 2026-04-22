@@ -281,14 +281,18 @@ def task_recent(project, show_all, limit, llm, as_json):
 @click.option("--type", "task_type", default=None,
               type=click.Choice(["task", "plan", "bug", "research", "spike", "chore"]),
               help="Task type (default: task)")
+@click.option("--status", default=None,
+              type=click.Choice(["needs_plan", "ready", "in_progress",
+                                 "verify", "completed", "blocked", "revisit"]),
+              help="Initial status (default: needs_plan)")
 @click.option("--force", is_flag=True,
               help="Bypass title validation")
-def task_add(title, description, phase, project, parent, after, task_type, force):
+def task_add(title, description, phase, project, parent, after, task_type, status, force):
     """Add a task."""
     from endless.task_cmd import add_item
     add_item(title, description=description, phase=phase,
              project_name=project, after=after, parent_id=parent,
-             task_type=task_type, force=force)
+             task_type=task_type, status=status, force=force)
 
 
 @task_cmd.command("update")

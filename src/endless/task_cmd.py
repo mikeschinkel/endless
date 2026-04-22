@@ -786,6 +786,7 @@ def add_item(
     after: int | None = None,
     parent_id: int | None = None,
     task_type: str | None = None,
+    status: str | None = None,
     force: bool = False,
 ):
     """Add a single task."""
@@ -793,6 +794,7 @@ def add_item(
     project_id, proj_name = _resolve_project(project_name)
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
     task_type = task_type or "task"
+    status = status or "needs_plan"
 
     # Determine sort_order
     if after:
@@ -811,8 +813,8 @@ def add_item(
         "INSERT INTO tasks "
         "(project_id, phase, title, description, status, type, sort_order, "
         "parent_id, created_at, updated_at) "
-        "VALUES (?, ?, ?, ?, 'needs_plan', ?, ?, ?, ?, ?)",
-        (project_id, phase, title, description, task_type, sort_order,
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (project_id, phase, title, description, status, task_type, sort_order,
          parent_id, now, now),
     )
     item_id = cursor.lastrowid
