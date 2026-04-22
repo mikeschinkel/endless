@@ -2,6 +2,7 @@
 
 import os
 import re
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -1390,7 +1391,15 @@ def spawn_plan(item_id: int, project_name: str | None = None, no_plan: bool = Fa
 
 def start_chat():
     """Start a chat-only session (no task tracking required)."""
+    session_id = str(uuid.uuid4())
+    cursor = db.execute(
+        "INSERT INTO sessions (session_id, platform, state) "
+        "VALUES (?, 'claude', 'working')",
+        (session_id,),
+    )
+    row_id = cursor.lastrowid
     click.echo(
         click.style("•", fg="cyan")
-        + " Chat session started. Write operations are allowed without task tracking."
+        + f" Chat session started (session: {row_id})."
+        + " Write operations are allowed without task tracking."
     )
