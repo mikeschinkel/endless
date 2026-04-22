@@ -786,6 +786,7 @@ def add_item(
     after: int | None = None,
     parent_id: int | None = None,
     task_type: str | None = None,
+    status: str | None = None,
     force: bool = False,
 ):
     """Add a single task."""
@@ -807,12 +808,13 @@ def add_item(
     else:
         sort_order = _next_sort_order(project_id, phase)
 
+    status = status or "needs_plan"
     cursor = db.execute(
         "INSERT INTO tasks "
         "(project_id, phase, title, description, status, type, sort_order, "
         "parent_id, created_at, updated_at) "
-        "VALUES (?, ?, ?, ?, 'needs_plan', ?, ?, ?, ?, ?)",
-        (project_id, phase, title, description, task_type, sort_order,
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (project_id, phase, title, description, status, task_type, sort_order,
          parent_id, now, now),
     )
     item_id = cursor.lastrowid
@@ -861,10 +863,10 @@ def import_json(
     )
 
 
-def remove_item(item_id: int):
+def remove_item(item_id: int, cascade: bool = False):
     """Remove a task."""
     row = db.query(
-        "SELECT id, description FROM tasks WHERE id = ?",
+        "SELECT id, COALESCE(title, description) as title FROM tasks WHERE id = ?",
         (item_id,),
     )
     if not row:
@@ -872,11 +874,44 @@ def remove_item(item_id: int):
             f"No task found with id {item_id}"
         )
 
-    db.execute("DELETE FROM tasks WHERE id = ?", (item_id,))
-    click.echo(
-        click.style("•", fg="cyan")
-        + f" Removed: {row[0]['description']}"
-    )
+    child_count = db.scalar(
+        "SELECT count(*) FROM tasks WHERE parent_id = ?",
+        (item_id,),
+    ) or 0
+
+    if child_count > 0 and not cascade:
+        raise click.ClickException(
+            f"Task {task_id_display(item_id)} has {child_count} child(ren). "
+            f"Use --cascade to delete it and all descendants."
+        )
+
+    if cascade and child_count > 0:
+        desc_count = db.scalar(
+            "WITH RECURSIVE tree(id) AS ("
+            "  SELECT id FROM tasks WHERE parent_id = ?"
+            "  UNION ALL"
+            "  SELECT t.id FROM tasks t JOIN tree ON t.parent_id = tree.id"
+            ") SELECT count(*) FROM tree",
+            (item_id,),
+        ) or 0
+        db.execute(
+            "WITH RECURSIVE tree(id) AS ("
+            "  SELECT id FROM tasks WHERE id = ?"
+            "  UNION ALL"
+            "  SELECT t.id FROM tasks t JOIN tree ON t.parent_id = tree.id"
+            ") DELETE FROM tasks WHERE id IN (SELECT id FROM tree)",
+            (item_id,),
+        )
+        click.echo(
+            click.style("•", fg="cyan")
+            + f" Removed {task_id_display(item_id)} and {desc_count} descendant(s): {row[0]['title']}"
+        )
+    else:
+        db.execute("DELETE FROM tasks WHERE id = ?", (item_id,))
+        click.echo(
+            click.style("•", fg="cyan")
+            + f" Removed: {row[0]['title']}"
+        )
 
 
 def _next_sort_order(project_id: int, phase: str) -> int:
