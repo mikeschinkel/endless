@@ -95,7 +95,7 @@ def _migrate(conn: sqlite3.Connection):
     # Create task_deps table if missing (handles both old and new name)
     exists = conn.execute(
         "SELECT name FROM sqlite_master "
-        "WHERE type='table' AND name IN ('task_deps', 'task_dependencies')"
+        "WHERE type='table' AND name = 'task_deps'"
     ).fetchone()
     if not exists:
         conn.executescript("""
@@ -215,14 +215,7 @@ def _migrate_v2(conn: sqlite3.Connection):
         conn.execute("PRAGMA foreign_keys=ON")
         conn.commit()
 
-    # Step 5: Rename task_dependencies → task_deps (E-763)
-    if _has_table(conn, "task_dependencies") and not _has_table(conn, "task_deps"):
-        conn.execute("ALTER TABLE task_dependencies RENAME TO task_deps")
-        conn.commit()
-    # Clean up stale empty table if both exist (from partial migrations)
-    if _has_table(conn, "task_dependencies") and _has_table(conn, "task_deps"):
-        conn.execute("DROP TABLE task_dependencies")
-        conn.commit()
+    # Step 5 (removed): task_dependencies → task_deps rename completed on all databases.
 
     # Step 6: Fix task_deps CHECK constraints (E-745)
     if _has_table(conn, "task_deps"):

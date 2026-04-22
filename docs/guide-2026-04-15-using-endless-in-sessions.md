@@ -168,13 +168,13 @@ These features are planned but not yet implemented. You'll need workarounds:
 
 ### Dependencies between tasks
 
-The `task_dependencies` table exists in the DB but there's no CLI command for it yet (E-575). If you need to record that one item blocks another, use SQL directly:
+The `task_deps` table exists in the DB but there's no CLI command for it yet (E-575). If you need to record that one item blocks another, use SQL directly:
 
 ```bash
 python3 -c "
 import sqlite3, pathlib
 db = sqlite3.connect(pathlib.Path.home() / '.config/endless/endless.db')
-db.execute('INSERT INTO task_dependencies (source_type, source_id, target_type, target_id, dep_type) VALUES (\"task\", <blocked_id>, \"task\", <blocker_id>, \"needs\")')
+db.execute('INSERT INTO task_deps (source_type, source_id, target_type, target_id, dep_type) VALUES (\"task\", <blocked_id>, \"task\", <blocker_id>, \"needs\")')
 db.commit()
 db.close()
 "

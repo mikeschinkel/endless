@@ -143,7 +143,7 @@ This table is completely dead code.
 
 ---
 
-### 11. `task_dependencies` — KEEP
+### 11. `task_deps` — KEEP
 
 **Used by:** `internal/web/queries.go:152-161` (blocked_by display), `internal/web/queries.go:295-334` (dependency view).
 
@@ -296,7 +296,7 @@ This is the MCP channel plugin port registry. Once `msg_channels` is renamed to 
 ### FK Fixes
 | Location | Issue | Fix |
 |----------|-------|-----|
-| `task_dependencies` CHECK | `source_type`/`target_type` still allow `'plan'` | Remove or keep for backwards compat |
+| `task_deps` CHECK | `source_type`/`target_type` still allow `'plan'` | Remove or keep for backwards compat |
 | `ai_sessions.active_goal_id` | Name says "goal" but references tasks | Rename to `active_task_id` |
 
 ### Columns to Investigate
@@ -427,7 +427,7 @@ CREATE TABLE IF NOT EXISTS tasks (
 );
 
 -- Task dependencies (cross-project capable)
-CREATE TABLE IF NOT EXISTS task_dependencies (
+CREATE TABLE IF NOT EXISTS task_deps (
     id INTEGER PRIMARY KEY,
     source_type TEXT NOT NULL
         CHECK (source_type IN ('task', 'project')),

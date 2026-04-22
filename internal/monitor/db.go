@@ -129,8 +129,8 @@ func migrateV1(db *sql.DB) {
 		db.Exec("ALTER TABLE " + sessionTable + " ADD COLUMN plan_file_path TEXT")
 	}
 
-	// Create task_deps table if missing (handles both old and new name)
-	if !hasTable(db, "task_deps") && !hasTable(db, "task_dependencies") {
+	// Create task_deps table if missing
+	if !hasTable(db, "task_deps") {
 		db.Exec(`CREATE TABLE IF NOT EXISTS task_deps (
 			id INTEGER PRIMARY KEY,
 			source_type TEXT NOT NULL CHECK (source_type IN ('task', 'project')),
@@ -332,14 +332,7 @@ func migrateV2(db *sql.DB) {
 		db.Exec("PRAGMA foreign_keys=ON")
 	}
 
-	// === Step 5: Rename task_dependencies → task_deps (E-763) ===
-	if hasTable(db, "task_dependencies") && !hasTable(db, "task_deps") {
-		db.Exec("ALTER TABLE task_dependencies RENAME TO task_deps")
-	}
-	// Clean up stale empty table if both exist (from partial migrations)
-	if hasTable(db, "task_dependencies") && hasTable(db, "task_deps") {
-		db.Exec("DROP TABLE task_dependencies")
-	}
+	// Step 5 removed: task_dependencies → task_deps rename completed on all databases.
 
 	// === Step 6: Fix task_deps CHECK constraints (E-745) ===
 	if hasTable(db, "task_deps") {
