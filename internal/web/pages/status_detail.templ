@@ -281,6 +281,21 @@ templ StatusDetail(detail *data.StatusDetail) {
 				if detail.Project.Label != "" {
 					<span class="text-sm text-gray-400">{ detail.Project.Label }</span>
 				}
+				if detail.Project.TaskTotal > 0 {
+					<div class="ml-auto flex items-center gap-2">
+						@progress.Script()
+						@progress.Progress(progress.Props{
+							Value:   detail.Project.TaskCompleted,
+							Max:     detail.Project.TaskTotal,
+							Size:    progress.SizeSm,
+							Variant: progress.VariantSuccess,
+							Class:   "w-20 [&>div]:!bg-gray-700",
+						})
+						<span class="text-xs text-gray-400 whitespace-nowrap">
+							{ fmt.Sprintf("%d/%d done", detail.Project.TaskCompleted, detail.Project.TaskTotal) }
+						</span>
+					</div>
+				}
 			</div>
 			if detail.Project.Description != "" {
 				<p class="text-sm text-gray-300 mb-3">{ detail.Project.Description }</p>
@@ -297,23 +312,6 @@ templ StatusDetail(detail *data.StatusDetail) {
 				<span class="text-gray-600">Last active: <span class="text-gray-400">{ data.SmartDate(detail.Project.LastActivity) }</span></span>
 			</div>
 		</div>
-
-		<!-- Progress -->
-		if detail.Project.TaskTotal > 0 {
-			@progress.Script()
-			<div class="flex items-center gap-3">
-				@progress.Progress(progress.Props{
-					Value:   detail.Project.TaskCompleted,
-					Max:     detail.Project.TaskTotal,
-					Size:    progress.SizeSm,
-					Variant: progress.VariantSuccess,
-					Class:   "min-w-32 [&>div]:!bg-gray-700",
-				})
-				<span class="text-xs text-gray-400">
-					{ fmt.Sprintf("%d/%d tasks done", detail.Project.TaskCompleted, detail.Project.TaskTotal) }
-				</span>
-			</div>
-		}
 
 		<!-- Plan tree -->
 		if len(detail.TaskItems) > 0 {
