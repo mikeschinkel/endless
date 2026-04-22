@@ -794,6 +794,7 @@ def add_item(
     project_id, proj_name = _resolve_project(project_name)
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
     task_type = task_type or "task"
+    status = status or "needs_plan"
 
     # Determine sort_order
     if after:
