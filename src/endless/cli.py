@@ -342,6 +342,26 @@ def task_start(item_id):
 
 
 
+@task_cmd.command("move")
+@click.argument("item_id", type=TASK_ID, required=False, default=None)
+@click.option("--parent", type=TASK_ID, default=None,
+              help="Target parent task ID to move under")
+@click.option("--root", is_flag=True,
+              help="Move to root (no parent)")
+@click.option("--with-children", is_flag=True,
+              help="Move the task and all its descendants")
+@click.option("--children-of", type=TASK_ID, default=None,
+              help="Move children of this task instead")
+@click.option("--project", default=None,
+              help="Project name (default: detect from cwd)")
+def task_move(item_id, parent, root, with_children, children_of, project):
+    """Move a task to a new parent or to root."""
+    from endless.task_cmd import move_task
+    move_task(item_id=item_id, parent=parent, root=root,
+              with_children=with_children, children_of=children_of,
+              project_name=project)
+
+
 @task_cmd.command("prompt")
 @click.argument("item_id", type=TASK_ID)
 def task_prompt(item_id):
