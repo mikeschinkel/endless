@@ -17,14 +17,19 @@ var (
 	dbErr  error
 )
 
-// DBPath returns the path to the Endless SQLite database.
-func DBPath() string {
+// ConfigDir returns the Endless configuration directory.
+func ConfigDir() string {
 	configDir := os.Getenv("XDG_CONFIG_HOME")
 	if configDir == "" {
 		home, _ := os.UserHomeDir()
 		configDir = filepath.Join(home, ".config")
 	}
-	return filepath.Join(configDir, "endless", "endless.db")
+	return filepath.Join(configDir, "endless")
+}
+
+// DBPath returns the path to the Endless SQLite database.
+func DBPath() string {
+	return filepath.Join(ConfigDir(), "endless.db")
 }
 
 // DB returns a connection to the Endless SQLite database.

@@ -4,11 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -17,6 +19,23 @@ import (
 
 	"github.com/mikeschinkel/endless/internal/monitor"
 )
+
+func init() {
+	logDir := filepath.Join(monitor.ConfigDir(), "log")
+	os.MkdirAll(logDir, 0755)
+	logFile, err := os.OpenFile(
+		filepath.Join(logDir, "channel.log"),
+		os.O_CREATE|os.O_WRONLY|os.O_APPEND,
+		0644,
+	)
+	if err != nil {
+		log.SetOutput(os.Stderr)
+	} else {
+		log.SetOutput(io.MultiWriter(os.Stderr, logFile))
+	}
+	log.SetFlags(log.Ldate | log.Ltime)
+	log.SetPrefix("endless-channel: ")
+}
 
 // channelNotification is the payload sent via MCP channel notification.
 type channelNotification struct {

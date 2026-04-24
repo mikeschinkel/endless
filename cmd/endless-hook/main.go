@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"os"
 
 	_ "modernc.org/sqlite"
@@ -28,7 +29,7 @@ func main() {
 	}
 
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "endless-hook %s: %v\n", os.Args[1], err)
+		log.Printf("%s: %v", os.Args[1], err)
 		os.Exit(1)
 	}
 }

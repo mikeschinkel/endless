@@ -16,8 +16,21 @@ import (
 )
 
 func init() {
-	log.SetOutput(os.Stderr)
-	log.SetFlags(0)
+	// Log to both stderr and a persistent log file
+	logDir := filepath.Join(monitor.ConfigDir(), "log")
+	os.MkdirAll(logDir, 0755)
+	logFile, err := os.OpenFile(
+		filepath.Join(logDir, "hook.log"),
+		os.O_CREATE|os.O_WRONLY|os.O_APPEND,
+		0644,
+	)
+	if err != nil {
+		// Fall back to stderr only
+		log.SetOutput(os.Stderr)
+	} else {
+		log.SetOutput(io.MultiWriter(os.Stderr, logFile))
+	}
+	log.SetFlags(log.Ldate | log.Ltime)
 	log.SetPrefix("endless-hook: ")
 }
 
@@ -78,7 +91,7 @@ func runClaude(args []string) error {
 			sessionCtx["tool_name"] = payload.ToolName
 		}
 		if err := monitor.RecordActivity(projectID, "claude", payload.CWD, sessionCtx); err != nil {
-			log.Printf("recording activity: %v", err)
+			return fmt.Errorf("recording activity: %w", err)
 		}
 	}
 
@@ -90,14 +103,14 @@ func runClaude(args []string) error {
 			return fmt.Errorf("initializing session: %w", err)
 		}
 		if err := monitor.SetProcess(payload.SessionID, os.Getenv("TMUX_PANE")); err != nil {
-			log.Printf("setting process: %v", err)
+			return fmt.Errorf("setting process: %w", err)
 		}
 		return handleTaskContextInjection(projectID, payload)
 
 	case "UserPromptSubmit":
 		// Backfill process if not yet recorded
 		if err := monitor.BackfillProcess(payload.SessionID, os.Getenv("TMUX_PANE")); err != nil {
-			log.Printf("backfilling process: %v", err)
+			return fmt.Errorf("backfilling process: %w", err)
 		}
 		// Fallback message check for sessions without MCP channel plugin
 		pane := os.Getenv("TMUX_PANE")
@@ -124,11 +137,11 @@ func runClaude(args []string) error {
 
 	case "Stop":
 		if err := monitor.IdleSession(payload.SessionID); err != nil {
-			log.Printf("idling session: %v", err)
+			return fmt.Errorf("idling session: %w", err)
 		}
 	case "SessionEnd":
 		if err := monitor.EndSession(payload.SessionID); err != nil {
-			log.Printf("ending session: %v", err)
+			return fmt.Errorf("ending session: %w", err)
 		}
 	}
 
@@ -143,14 +156,12 @@ func handleTaskContextInjection(projectID int64, payload claudePayload) error {
 
 	projectName, err := monitor.GetProjectName(projectID)
 	if err != nil {
-		log.Printf("getting project name: %v", err)
-		return nil
+		return fmt.Errorf("getting project name: %w", err)
 	}
 
 	items, err := monitor.GetActiveTasks(projectID)
 	if err != nil {
-		log.Printf("getting active tasks: %v", err)
-		return nil
+		return fmt.Errorf("getting active tasks: %w", err)
 	}
 
 	context := monitor.FormatTasks(projectName, items)
@@ -166,7 +177,9 @@ func handleTaskContextInjection(projectID int64, payload claudePayload) error {
 
 func handlePostToolUse(projectID int64, payload claudePayload) error {
 	// Detect endless task start/complete/chat commands and update session state
-	handlePostToolUseSession(projectID, payload)
+	if err := handlePostToolUseSession(projectID, payload); err != nil {
+		return fmt.Errorf("post tool use session: %w", err)
+	}
 
 	// Check if a plan file was written
 	if payload.ToolName != "Write" {
@@ -185,7 +198,7 @@ func handlePostToolUse(projectID int64, payload claudePayload) error {
 
 	// Record which plan file this session is editing (used by ExitPlanMode)
 	if err := monitor.SetPlanFilePath(payload.SessionID, input.FilePath); err != nil {
-		log.Printf("setting plan file path: %v", err)
+		return fmt.Errorf("setting plan file path: %w", err)
 	}
 
 	// NOTE: Auto-import disabled. Sessions should use `endless task update <id> --text <file>`
@@ -194,8 +207,7 @@ func handlePostToolUse(projectID int64, payload claudePayload) error {
 
 	items, err := monitor.GetActiveTasks(projectID)
 	if err != nil {
-		log.Printf("getting active tasks: %v", err)
-		return nil
+		return fmt.Errorf("getting active tasks: %w", err)
 	}
 
 	resp := hookResponse{
@@ -297,14 +309,14 @@ func blockToolUse(message string) {
 	os.Exit(2)
 }
 
-func handlePostToolUseSession(projectID int64, payload claudePayload) {
+func handlePostToolUseSession(projectID int64, payload claudePayload) error {
 	if payload.ToolName != "Bash" {
-		return
+		return nil
 	}
 
 	var input toolInputBash
 	if err := json.Unmarshal(payload.ToolInput, &input); err != nil {
-		return
+		return nil
 	}
 
 	// Detect: endless task start <id>
@@ -312,10 +324,10 @@ func handlePostToolUseSession(projectID int64, payload claudePayload) {
 		taskID, err := strconv.ParseInt(m[1], 10, 64)
 		if err == nil {
 			if err := monitor.StartWorkSession(payload.SessionID, projectID, taskID); err != nil {
-				log.Printf("starting work session: %v", err)
+				return fmt.Errorf("starting work session: %w", err)
 			}
 		}
-		return
+		return nil
 	}
 
 	// Detect: endless task complete <id>
@@ -323,18 +335,18 @@ func handlePostToolUseSession(projectID int64, payload claudePayload) {
 		taskID, err := strconv.ParseInt(m[1], 10, 64)
 		if err == nil {
 			if err := monitor.CompleteTask(payload.SessionID, taskID); err != nil {
-				log.Printf("completing task: %v", err)
+				return fmt.Errorf("completing task: %w", err)
 			}
 		}
-		return
+		return nil
 	}
 
 	// Detect: endless task chat
 	if taskChatRe.MatchString(input.Command) {
 		if err := monitor.StartChatSession(payload.SessionID, projectID); err != nil {
-			log.Printf("starting chat session: %v", err)
+			return fmt.Errorf("starting chat session: %w", err)
 		}
-		return
+		return nil
 	}
 
 	// Detect: endless channel beacon/connect/send (for activity tracking)
@@ -342,10 +354,12 @@ func handlePostToolUseSession(projectID int64, payload claudePayload) {
 		channelConnectRe.MatchString(input.Command) ||
 		channelSendRe.MatchString(input.Command) {
 		if err := monitor.TouchSession(payload.SessionID); err != nil {
-			log.Printf("touching session: %v", err)
+			return fmt.Errorf("touching session: %w", err)
 		}
-		return
+		return nil
 	}
+
+	return nil
 }
 
 func handleExitPlanMode(projectID int64, payload claudePayload) error {
@@ -389,8 +403,7 @@ func handleExitPlanMode(projectID int64, payload claudePayload) error {
 
 	items, err := monitor.GetActiveTasks(projectID)
 	if err != nil {
-		log.Printf("getting active tasks: %v", err)
-		return nil
+		return fmt.Errorf("getting active tasks: %w", err)
 	}
 
 	resp := hookResponse{
