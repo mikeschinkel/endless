@@ -237,7 +237,7 @@ def task_list(project, show_all, status, phase, tier, sort, as_tree, llm, as_jso
 
 
 @task_cmd.command("show")
-@click.argument("item_id", type=TASK_ID)
+@click.argument("item_ids", type=TASK_ID, nargs=-1, required=True)
 @click.option("--no-description", is_flag=True,
               help="Hide description")
 @click.option("--text", "show_text", is_flag=True,
@@ -250,13 +250,14 @@ def task_list(project, show_all, status, phase, tier, sort, as_tree, llm, as_jso
               help="Token-efficient output for LLMs")
 @click.option("--json", "as_json", is_flag=True,
               help="JSON output")
-def task_show(item_id, no_description, show_text, show_prompt,
+def task_show(item_ids, no_description, show_text, show_prompt,
               show_children, llm, as_json):
-    """Show detail for a specific task."""
+    """Show detail for one or more tasks."""
     from endless.task_cmd import detail_item
-    detail_item(item_id, show_description=not no_description,
-                show_text=show_text, show_prompt=show_prompt,
-                show_children=show_children, llm=llm, as_json=as_json)
+    for item_id in item_ids:
+        detail_item(item_id, show_description=not no_description,
+                    show_text=show_text, show_prompt=show_prompt,
+                    show_children=show_children, llm=llm, as_json=as_json)
 
 
 @task_cmd.command("next")
@@ -377,7 +378,7 @@ def task_add(title, description, phase, project, parent, after, task_type, statu
 
 
 @task_cmd.command("update")
-@click.argument("item_id", type=TASK_ID)
+@click.argument("item_ids", type=TASK_ID, nargs=-1, required=True)
 @click.option("--status", default=None,
               help="Status: needs_plan, ready, in_progress, verify, confirmed, assumed, blocked, revisit, declined")
 @click.option("--title", default=None,
@@ -397,44 +398,48 @@ def task_add(title, description, phase, project, parent, after, task_type, statu
               help="Tier (1-4 or auto/quick/deep/discuss, 0 to clear)")
 @click.option("--force", is_flag=True,
               help="Bypass title validation")
-def task_update(item_id, status, title, description, text_file, prompt_file, parent, phase, tier, force):
-    """Update fields on a task."""
+def task_update(item_ids, status, title, description, text_file, prompt_file, parent, phase, tier, force):
+    """Update fields on one or more tasks."""
     from endless.task_cmd import update_plan, parse_tier
     tier_val = parse_tier(tier) if tier else None
-    update_plan(item_id, status=status, title=title,
-                description=description, text_file=text_file,
-                prompt_file=prompt_file, parent_id=parent,
-                phase=phase, tier=tier_val, force=force)
+    for item_id in item_ids:
+        update_plan(item_id, status=status, title=title,
+                    description=description, text_file=text_file,
+                    prompt_file=prompt_file, parent_id=parent,
+                    phase=phase, tier=tier_val, force=force)
 
 
 @task_cmd.command("remove")
-@click.argument("item_id", type=TASK_ID)
+@click.argument("item_ids", type=TASK_ID, nargs=-1, required=True)
 @click.option("--cascade", is_flag=True,
               help="Also remove all descendants")
-def task_remove(item_id, cascade):
-    """Remove a task."""
+def task_remove(item_ids, cascade):
+    """Remove one or more tasks."""
     from endless.task_cmd import remove_item
-    remove_item(item_id, cascade=cascade)
+    for item_id in item_ids:
+        remove_item(item_id, cascade=cascade)
 
 
 @task_cmd.command("confirm")
-@click.argument("item_id", type=TASK_ID)
+@click.argument("item_ids", type=TASK_ID, nargs=-1, required=True)
 @click.option("--cascade", is_flag=True,
               help="Also confirm all descendants")
-def task_complete(item_id, cascade):
-    """Mark a task as confirmed."""
+def task_complete(item_ids, cascade):
+    """Confirm one or more tasks."""
     from endless.task_cmd import complete_item
-    complete_item(item_id, cascade=cascade)
+    for item_id in item_ids:
+        complete_item(item_id, cascade=cascade)
 
 
 @task_cmd.command("assume")
-@click.argument("item_id", type=TASK_ID)
+@click.argument("item_ids", type=TASK_ID, nargs=-1, required=True)
 @click.option("--cascade", is_flag=True,
               help="Also assume all descendants")
-def task_assume(item_id, cascade):
-    """Mark a task as assumed (believed complete, not yet verified)."""
+def task_assume(item_ids, cascade):
+    """Assume one or more tasks (believed complete, not yet verified)."""
     from endless.task_cmd import assume_item
-    assume_item(item_id, cascade=cascade)
+    for item_id in item_ids:
+        assume_item(item_id, cascade=cascade)
 
 
 @task_cmd.command("start")
