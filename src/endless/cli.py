@@ -26,7 +26,7 @@ class TaskIDType(click.ParamType):
 TASK_ID = TaskIDType()
 
 TASK_STATUSES = ["needs_plan", "ready", "in_progress",
-                 "verify", "confirmed", "assumed", "blocked", "revisit", "declined"]
+                 "verify", "confirmed", "assumed", "blocked", "revisit", "declined", "obsolete"]
 
 
 class MultiChoice(click.ParamType):
@@ -362,7 +362,7 @@ def task_search(query, project, show_all, status, phase,
               help="Task type (default: task)")
 @click.option("--status", default=None,
               type=click.Choice(["needs_plan", "ready", "in_progress",
-                                 "verify", "confirmed", "assumed", "blocked", "revisit", "declined"]),
+                                 "verify", "confirmed", "assumed", "blocked", "revisit", "declined", "obsolete"]),
               help="Initial status (default: needs_plan)")
 @click.option("--tier", default=None,
               help="Tier (1-4 or auto/quick/deep/discuss)")
@@ -380,7 +380,7 @@ def task_add(title, description, phase, project, parent, after, task_type, statu
 @task_cmd.command("update")
 @click.argument("item_ids", type=TASK_ID, nargs=-1, required=True)
 @click.option("--status", default=None,
-              help="Status: needs_plan, ready, in_progress, verify, confirmed, assumed, blocked, revisit, declined")
+              help="Status: needs_plan, ready, in_progress, verify, confirmed, assumed, blocked, revisit, declined, obsolete")
 @click.option("--title", default=None,
               help="New title")
 @click.option("--description", default=None,
@@ -496,6 +496,34 @@ def task_chat():
     """Start a chat-only session (no task tracking)."""
     from endless.task_cmd import start_chat
     start_chat()
+
+
+@task_cmd.command("block")
+@click.argument("item_id", type=TASK_ID)
+@click.option("--by", "blocker_id", type=TASK_ID, required=True,
+              help="Task ID that blocks this task")
+def task_block(item_id, blocker_id):
+    """Record that a task is blocked by another task."""
+    from endless.task_cmd import add_dep
+    add_dep(item_id, blocker_id)
+
+
+@task_cmd.command("unblock")
+@click.argument("item_id", type=TASK_ID)
+@click.option("--by", "blocker_id", type=TASK_ID, required=True,
+              help="Task ID to remove as blocker")
+def task_unblock(item_id, blocker_id):
+    """Remove a blocking dependency between tasks."""
+    from endless.task_cmd import remove_dep
+    remove_dep(item_id, blocker_id)
+
+
+@task_cmd.command("deps")
+@click.argument("item_id", type=TASK_ID)
+def task_deps(item_id):
+    """Show dependencies for a task."""
+    from endless.task_cmd import show_deps
+    show_deps(item_id)
 
 
 @main.command("plan", context_settings={"ignore_unknown_options": True})

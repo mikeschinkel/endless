@@ -555,7 +555,7 @@ def show_plan(
     where = "WHERE pi.project_id = ?"
     params: list = [project_id]
     if not show_all:
-        where += " AND pi.status NOT IN ('confirmed', 'assumed', 'declined')"
+        where += " AND pi.status NOT IN ('confirmed', 'assumed', 'declined', 'obsolete')"
     if status_filter:
         placeholders = ",".join("?" for _ in status_filter)
         where += f" AND pi.status IN ({placeholders})"
@@ -696,7 +696,7 @@ def next_tasks(
 ):
     """Show top actionable leaf tasks, ranked by priority."""
     where = (
-        "WHERE t.status NOT IN ('confirmed', 'assumed', 'blocked', 'declined', 'in_progress', 'verify') "
+        "WHERE t.status NOT IN ('confirmed', 'assumed', 'blocked', 'declined', 'obsolete', 'in_progress', 'verify') "
         "AND (SELECT count(*) FROM tasks c WHERE c.parent_id = t.id) = 0 "
         "AND t.id NOT IN ("
         "  SELECT td.source_id FROM task_deps td"
@@ -1273,7 +1273,7 @@ def update_plan(
 
     if status is not None:
         valid = ("needs_plan", "ready", "in_progress",
-                 "verify", "confirmed", "assumed", "blocked", "revisit", "declined")
+                 "verify", "confirmed", "assumed", "blocked", "revisit", "declined", "obsolete")
         if status not in valid:
             raise click.ClickException(
                 f"Invalid status '{status}'. "
@@ -1420,6 +1420,11 @@ def detail_item(
                     f"status={item['status']}{tier_str}")
         if item["parent_id"]:
             click.echo(f"parent=E-{item['parent_id']}")
+        blocked_by, blocking = get_deps_for_display(item_id)
+        if blocked_by:
+            click.echo(f"blocked_by={','.join(f'E-{d['id']}' for d in blocked_by)}")
+        if blocking:
+            click.echo(f"blocking={','.join(f'E-{d['id']}' for d in blocking)}")
         click.echo(f"created={item['created_at']}")
         click.echo(f"updated={item['updated_at']}")
         if item["completed_at"]:
@@ -1460,6 +1465,13 @@ def detail_item(
         click.echo(f"{label('Tier:'):<19} {val(tier_display(item['tier']))}")
     if item["parent_id"]:
         click.echo(f"{label('Parent:'):<19} {val(task_id_display(item['parent_id']))}")
+    blocked_by, blocking = get_deps_for_display(item_id)
+    if blocked_by:
+        dep_str = ", ".join(f"{task_id_display(d['id'])}" for d in blocked_by)
+        click.echo(f"{label('Blocked by:'):<19} {val(dep_str)}")
+    if blocking:
+        dep_str = ", ".join(f"{task_id_display(d['id'])}" for d in blocking)
+        click.echo(f"{label('Blocking:'):<19} {val(dep_str)}")
     click.echo(f"{label('Created:'):<19} {val(_format_timestamp(item['created_at']))}")
     if item["updated_at"] and item["updated_at"] != item["created_at"]:
         click.echo(f"{label('Updated:'):<19} {val(_format_timestamp(item['updated_at']))}")
@@ -1662,7 +1674,7 @@ def search_tasks(
     params: list = [project_id]
 
     if not show_all:
-        where += " AND t.status NOT IN ('confirmed', 'assumed', 'declined')"
+        where += " AND t.status NOT IN ('confirmed', 'assumed', 'declined', 'obsolete')"
     if status_filter:
         placeholders = ",".join("?" for _ in status_filter)
         where += f" AND t.status IN ({placeholders})"
@@ -1893,3 +1905,119 @@ def start_chat():
         + f" Chat session started (session: {row_id})."
         + " Write operations are allowed without task tracking."
     )
+
+
+# ── Dependency management ──────────────────────────────────────────
+
+
+def add_dep(source_id: int, target_id: int, dep_type: str = "blocks"):
+    """Record that target blocks source (source needs target to be done first)."""
+    if source_id == target_id:
+        raise click.ClickException("A task cannot depend on itself.")
+    # Verify both tasks exist
+    for tid in (source_id, target_id):
+        if not db.exists("SELECT 1 FROM tasks WHERE id = ?", (tid,)):
+            raise click.ClickException(f"Task {task_id_display(tid)} not found.")
+    try:
+        db.execute(
+            "INSERT INTO task_deps (source_type, source_id, target_type, target_id, dep_type) "
+            "VALUES ('task', ?, 'task', ?, ?)",
+            (source_id, target_id, dep_type),
+        )
+    except Exception as e:
+        if "UNIQUE" in str(e):
+            raise click.ClickException(
+                f"{task_id_display(source_id)} already depends on {task_id_display(target_id)}."
+            )
+        raise
+    click.echo(
+        click.style("•", fg="cyan")
+        + f" {task_id_display(source_id)} now blocked by {task_id_display(target_id)}"
+    )
+
+
+def remove_dep(source_id: int, target_id: int):
+    """Remove a dependency between two tasks."""
+    result = db.execute(
+        "DELETE FROM task_deps WHERE source_type = 'task' AND source_id = ? "
+        "AND target_type = 'task' AND target_id = ?",
+        (source_id, target_id),
+    )
+    if result.rowcount == 0:
+        raise click.ClickException(
+            f"No dependency found: {task_id_display(source_id)} → {task_id_display(target_id)}"
+        )
+    click.echo(
+        click.style("•", fg="cyan")
+        + f" Removed: {task_id_display(source_id)} no longer blocked by {task_id_display(target_id)}"
+    )
+
+
+def show_deps(item_id: int):
+    """Show all dependencies for a task."""
+    if not db.exists("SELECT 1 FROM tasks WHERE id = ?", (item_id,)):
+        raise click.ClickException(f"Task {task_id_display(item_id)} not found.")
+
+    blocked_by = db.query(
+        "SELECT td.target_id as id, t.title, t.status, t.phase "
+        "FROM task_deps td JOIN tasks t ON t.id = td.target_id "
+        "WHERE td.source_type = 'task' AND td.source_id = ? "
+        "AND td.target_type = 'task' ORDER BY td.target_id",
+        (item_id,),
+    )
+    blocking = db.query(
+        "SELECT td.source_id as id, t.title, t.status, t.phase "
+        "FROM task_deps td JOIN tasks t ON t.id = td.source_id "
+        "WHERE td.target_type = 'task' AND td.target_id = ? "
+        "AND td.source_type = 'task' ORDER BY td.source_id",
+        (item_id,),
+    )
+
+    label = lambda s: click.style(s, fg="cyan")
+
+    click.echo()
+    click.echo(click.style(f"Dependencies for {task_id_display(item_id)}", fg="green", bold=True))
+    click.echo(click.style("─" * 30, dim=True))
+
+    click.echo(label("Blocked by:"))
+    if blocked_by:
+        for dep in blocked_by:
+            status_color = "green" if dep["status"] in ("confirmed", "assumed") else "yellow"
+            click.echo(
+                f"  {task_id_display(dep['id'])} "
+                f"[{click.style(dep['status'], fg=status_color)}] "
+                f"{dep['title']}"
+            )
+    else:
+        click.echo("  (none)")
+
+    click.echo(label("Blocking:"))
+    if blocking:
+        for dep in blocking:
+            click.echo(
+                f"  {task_id_display(dep['id'])} "
+                f"[{click.style(dep['status'], fg='yellow')}] "
+                f"{dep['title']}"
+            )
+    else:
+        click.echo("  (none)")
+    click.echo()
+
+
+def get_deps_for_display(item_id: int) -> tuple[list, list]:
+    """Return (blocked_by, blocking) lists for a task. Used by detail_item."""
+    blocked_by = db.query(
+        "SELECT td.target_id as id, t.title, t.status "
+        "FROM task_deps td JOIN tasks t ON t.id = td.target_id "
+        "WHERE td.source_type = 'task' AND td.source_id = ? "
+        "AND td.target_type = 'task' ORDER BY td.target_id",
+        (item_id,),
+    )
+    blocking = db.query(
+        "SELECT td.source_id as id, t.title, t.status "
+        "FROM task_deps td JOIN tasks t ON t.id = td.source_id "
+        "WHERE td.target_type = 'task' AND td.target_id = ? "
+        "AND td.source_type = 'task' ORDER BY td.source_id",
+        (item_id,),
+    )
+    return blocked_by, blocking

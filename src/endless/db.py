@@ -388,6 +388,36 @@ def _migrate_v2(conn: sqlite3.Connection):
             conn.execute("PRAGMA foreign_keys=ON")
             conn.commit()
 
+    # Step 11: Add 'obsolete' to tasks.status CHECK constraint (E-854)
+    if _has_table(conn, "tasks"):
+        row = conn.execute(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='tasks'"
+        ).fetchone()
+        if row and "'obsolete'" not in row[0]:
+            ddl = row[0]
+            ddl = ddl.replace("'assumed')", "'assumed', 'obsolete')")
+            if 'CREATE TABLE "tasks"' in ddl:
+                new_sql = ddl.replace('CREATE TABLE "tasks"', "CREATE TABLE tasks_new")
+            else:
+                new_sql = ddl.replace("CREATE TABLE tasks", "CREATE TABLE tasks_new")
+            col_names = [c[1] for c in conn.execute("PRAGMA table_info(tasks)").fetchall()]
+            col_list = ", ".join(col_names)
+            conn.execute("PRAGMA foreign_keys=OFF")
+            conn.executescript(f"""
+                DROP TABLE IF EXISTS tasks_new;
+                {new_sql};
+                INSERT INTO tasks_new ({col_list}) SELECT {col_list} FROM tasks;
+                DROP TABLE tasks;
+                ALTER TABLE tasks_new RENAME TO tasks;
+                CREATE TRIGGER IF NOT EXISTS tasks_updated_at AFTER UPDATE ON tasks
+                BEGIN
+                    UPDATE tasks SET updated_at = strftime('%Y-%m-%dT%H:%M:%S', 'now')
+                    WHERE id = NEW.id;
+                END;
+            """)
+            conn.execute("PRAGMA foreign_keys=ON")
+            conn.commit()
+
     # Safety net: ensure sessions table exists
     # Handles edge cases where partial migrations left the table missing
     if not _has_table(conn, "sessions"):

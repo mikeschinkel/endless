@@ -74,7 +74,7 @@ CREATE TABLE IF NOT EXISTS tasks (
     title TEXT,
     description TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'needs_plan'
-        CHECK (status IN ('needs_plan', 'ready', 'in_progress', 'verify', 'confirmed', 'assumed', 'blocked', 'revisit', 'declined')),
+        CHECK (status IN ('needs_plan', 'ready', 'in_progress', 'verify', 'confirmed', 'assumed', 'blocked', 'revisit', 'declined', 'obsolete')),
     type TEXT NOT NULL DEFAULT 'task'
         CHECK (type IN ('task', 'plan', 'bug', 'research', 'spike', 'chore')),
     source_file TEXT,
