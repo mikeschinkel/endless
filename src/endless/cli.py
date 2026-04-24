@@ -291,6 +291,38 @@ def task_recent(project, show_all, limit, llm, as_json):
                  limit=limit, llm=llm, as_json=as_json)
 
 
+@task_cmd.command("search")
+@click.argument("query")
+@click.option("--project", default=None,
+              help="Project name (default: detect from cwd)")
+@click.option("--all", "show_all", is_flag=True,
+              help="Include completed/declined items")
+@click.option("--status", default=None,
+              type=click.Choice(["needs_plan", "ready", "in_progress",
+                                 "verify", "completed", "blocked", "revisit",
+                                 "declined"]),
+              help="Filter by status")
+@click.option("--phase", default=None,
+              type=click.Choice(["now", "next", "later"]),
+              help="Filter by phase")
+@click.option("--text", "search_text", is_flag=True,
+              help="Also search in text field")
+@click.option("--prompt", "search_prompt", is_flag=True,
+              help="Also search in prompt field")
+@click.option("--llm", is_flag=True,
+              help="Token-efficient output for LLMs")
+@click.option("--json", "as_json", is_flag=True,
+              help="JSON output")
+def task_search(query, project, show_all, status, phase,
+                search_text, search_prompt, llm, as_json):
+    """Search tasks by query string."""
+    from endless.task_cmd import search_tasks
+    search_tasks(query, project_name=project, show_all=show_all,
+                 status_filter=status, phase_filter=phase,
+                 search_text=search_text, search_prompt=search_prompt,
+                 llm=llm, as_json=as_json)
+
+
 @task_cmd.command("add")
 @click.argument("title")
 @click.option("--description", default=None,

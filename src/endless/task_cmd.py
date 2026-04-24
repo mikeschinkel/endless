@@ -72,7 +72,7 @@ _TITLE_VERBS = {
     "extract", "fix", "implement", "improve", "integrate", "investigate",
     "merge", "migrate", "move", "omit", "package", "print", "read", "redesign", "refactor", "remove",
     "rename", "render", "replace", "require", "research", "resolve",
-    "show", "simplify", "split", "support", "surface", "sync", "test", "track",
+    "search", "show", "simplify", "split", "support", "surface", "sync", "test", "track",
     "update", "validate",
 }
 
@@ -1585,6 +1585,116 @@ def spawn_plan(item_id: int, project_name: str | None = None, no_plan: bool = Fa
     click.echo(
         f"  Switch to it: tmux select-window -t {window_name}"
     )
+
+
+def search_tasks(
+    query: str,
+    project_name: str | None = None,
+    show_all: bool = False,
+    status_filter: str | None = None,
+    phase_filter: str | None = None,
+    search_text: bool = False,
+    search_prompt: bool = False,
+    llm: bool = False,
+    as_json: bool = False,
+):
+    """Search tasks by query string across ID, title, and description."""
+    project_id, proj_name = _resolve_project(project_name)
+
+    where = "WHERE t.project_id = ?"
+    params: list = [project_id]
+
+    if not show_all:
+        where += " AND t.status NOT IN ('completed', 'declined')"
+    if status_filter:
+        where += " AND t.status = ?"
+        params.append(status_filter)
+    if phase_filter:
+        where += " AND t.phase = ?"
+        params.append(phase_filter)
+
+    # Build search conditions
+    like_pattern = f"%{query}%"
+    search_clauses = [
+        "COALESCE(t.title, '') LIKE ? COLLATE NOCASE",
+        "COALESCE(t.description, '') LIKE ? COLLATE NOCASE",
+    ]
+    search_params = [like_pattern, like_pattern]
+
+    # Check if query looks like a task ID (E-NNN or just NNN)
+    id_query = query.strip()
+    if id_query.upper().startswith("E-"):
+        id_query = id_query[2:]
+    try:
+        task_id_num = int(id_query)
+        search_clauses.append("t.id = ?")
+        search_params.append(task_id_num)
+    except ValueError:
+        pass
+
+    if search_text:
+        search_clauses.append("COALESCE(t.text, '') LIKE ? COLLATE NOCASE")
+        search_params.append(like_pattern)
+
+    if search_prompt:
+        search_clauses.append("COALESCE(t.prompt, '') LIKE ? COLLATE NOCASE")
+        search_params.append(like_pattern)
+
+    where += " AND (" + " OR ".join(search_clauses) + ")"
+    params.extend(search_params)
+
+    rows = db.query(
+        f"SELECT t.id, t.phase, COALESCE(t.title, t.description) as title, "
+        f"t.status "
+        f"FROM tasks t "
+        f"{where} "
+        f"ORDER BY t.updated_at DESC",
+        tuple(params),
+    )
+
+    if not rows:
+        if as_json:
+            click.echo("[]")
+        elif llm:
+            click.echo(f"# {proj_name}\n(no matches for '{query}')")
+        else:
+            click.echo(
+                click.style("•", fg="cyan")
+                + f" No tasks matching '{query}' in "
+                + click.style(proj_name, bold=True)
+            )
+        return
+
+    if as_json:
+        import json
+        out = [
+            {
+                "id": f"E-{row['id']}",
+                "phase": row["phase"],
+                "status": row["status"],
+                "title": row["title"],
+            }
+            for row in rows
+        ]
+        click.echo(json.dumps(out, indent=2))
+        return
+
+    if llm:
+        click.echo(f"# {proj_name} search: {query}")
+        for row in rows:
+            click.echo(
+                f"E-{row['id']} {row['phase']} "
+                f"{row['status']} {row['title']}"
+            )
+        return
+
+    click.echo()
+    click.echo(
+        click.style(f"Search results for '{query}' ({proj_name}):", bold=True)
+    )
+    _render_flat_table(rows)
+    click.echo()
+    click.echo(click.style(f"{len(rows)} match(es)", dim=True))
 
 
 def start_chat():
