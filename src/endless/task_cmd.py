@@ -12,18 +12,20 @@ from tabulate import tabulate
 from endless import db, config
 
 
-_TIER_LABELS = {1: "auto", 2: "quick", 3: "deep", 4: "discuss"}
+_TIER_LABELS = {0: "n/a", 1: "auto", 2: "quick", 3: "deep", 4: "discuss"}
 _TIER_FROM_LABEL = {v: k for k, v in _TIER_LABELS.items()}
 
 # Sentinel meaning "tier IS NULL" for filtering
 TIER_NONE = -1
+# Sentinel meaning "clear tier to NULL" for update
+TIER_CLEAR = -2
 
 
 def parse_tier(value: str) -> int:
-    """Parse a tier value from user input: accepts 0 (clear), 1-4, or label names."""
+    """Parse a tier value from user input: accepts clear/none (reset), 0/n/a, 1-4, or label names."""
     s = value.strip().lower()
-    if s == "0":
-        return 0  # sentinel for "clear tier"
+    if s in ("clear", "none"):
+        return TIER_CLEAR  # reset to NULL (untriaged)
     if s in _TIER_FROM_LABEL:
         return _TIER_FROM_LABEL[s]
     try:
@@ -34,7 +36,7 @@ def parse_tier(value: str) -> int:
         pass
     valid = ", ".join(f"{k}={v}" for k, v in _TIER_LABELS.items())
     raise click.ClickException(
-        f"Invalid tier '{value}'. Valid: 0 (clear), {valid}"
+        f"Invalid tier '{value}'. Valid: clear, {valid}"
     )
 
 
@@ -66,7 +68,7 @@ def tier_display(tier: int | None) -> str:
 
 
 _TITLE_VERBS = {
-    "accept", "add", "apply", "assume", "audit", "build", "capture", "change", "clean", "confirm", "configure", "consolidate", "convert",
+    "accept", "add", "apply", "assume", "audit", "build", "capture", "change", "clean", "clear", "confirm", "configure", "consolidate", "convert",
     "create", "decide", "define", "defer", "deploy", "design", "disable",
     "distinguish", "document", "enable", "enforce", "evaluate", "expand",
     "extract", "fix", "implement", "improve", "integrate", "investigate",

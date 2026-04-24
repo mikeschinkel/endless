@@ -142,7 +142,8 @@ def scan(project):
 
 @main.command()
 @click.option("--port", default=8484, help="Port to serve on")
-def serve(port):
+@click.option("--watch", is_flag=True, help="Auto-restart when the binary is rebuilt")
+def serve(port, watch):
     """Start the web dashboard."""
     import shutil
     import subprocess
@@ -153,7 +154,59 @@ def serve(port):
             "Build it: go build -o /usr/local/bin/endless-serve "
             "./cmd/endless-serve/"
         )
-    subprocess.run([serve_bin, str(port)])
+    if not watch:
+        subprocess.run([serve_bin, str(port)])
+        return
+
+    import os
+    import signal
+    import time
+
+    def _get_mtime(path):
+        try:
+            return os.stat(path).st_mtime
+        except OSError:
+            return 0
+
+    last_mtime = _get_mtime(serve_bin)
+    proc = None
+    try:
+        while True:
+            click.echo(
+                click.style("•", fg="cyan")
+                + f" Starting endless-serve (watching {serve_bin} for changes)"
+            )
+            proc = subprocess.Popen([serve_bin, str(port)])
+            while True:
+                time.sleep(1)
+                if proc.poll() is not None:
+                    # Process exited on its own
+                    if not watch:
+                        return
+                    break
+                current_mtime = _get_mtime(serve_bin)
+                if current_mtime != last_mtime:
+                    last_mtime = current_mtime
+                    click.echo(
+                        click.style("•", fg="yellow")
+                        + " Binary changed, restarting..."
+                    )
+                    proc.terminate()
+                    try:
+                        proc.wait(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        proc.kill()
+                        proc.wait()
+                    break
+    except KeyboardInterrupt:
+        click.echo("\n" + click.style("•", fg="cyan") + " Shutting down...")
+        if proc and proc.poll() is None:
+            proc.terminate()
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait()
 
 
 @main.command("quick-start")

@@ -94,11 +94,11 @@ templ TaskDetail(project *data.DashboardProject, taskItems []data.TaskView) {
 								x-text="open ? '▾' : '▸'">▸</button>
 						</div>
 						<div x-show="open" x-cloak class="mt-2 pl-6 text-sm text-gray-400 leading-relaxed">
+							if item.BlockedBy != "" {
+								<p class="text-sm text-rose-400 mb-2 font-medium">Blocked by: { item.BlockedBy }</p>
+							}
 							if item.Text != item.Title {
 								@markdown.MarkdownContent(item.Text)
-							}
-							if item.BlockedBy != "" {
-								<p class="text-xs text-rose-400 mt-1">Blocked by: { item.BlockedBy }</p>
 							}
 						</div>
 					</div>

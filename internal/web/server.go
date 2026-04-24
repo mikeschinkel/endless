@@ -43,7 +43,7 @@ func Serve(port int) error {
 	mux.HandleFunc("PUT /tasks/{id}/title", handleUpdateTaskTitle)
 
 	addr := fmt.Sprintf(":%d", port)
-	fmt.Printf("Endless dashboard: http://localhost%s\n", addr)
+	fmt.Printf("Endless dashboard: http://localhost%s (pid %d)\n", addr, os.Getpid())
 	return http.ListenAndServe(addr, mux)
 }
 
