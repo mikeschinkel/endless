@@ -455,6 +455,15 @@ def _migrate_v2(conn: sqlite3.Connection):
             conn.execute("PRAGMA foreign_keys=ON")
             conn.commit()
 
+    # Step 13: Clear tier to 0 (n/a) on terminal and verify tasks (E-856)
+    if _has_table(conn, "tasks"):
+        conn.execute(
+            "UPDATE tasks SET tier = 0 "
+            "WHERE tier IS NOT NULL AND tier != 0 "
+            "AND status IN ('verify', 'confirmed', 'assumed', 'declined', 'obsolete')"
+        )
+        conn.commit()
+
     # Safety net: ensure sessions table exists
     # Handles edge cases where partial migrations left the table missing
     if not _has_table(conn, "sessions"):

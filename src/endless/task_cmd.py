@@ -22,9 +22,9 @@ TIER_CLEAR = -2
 
 
 def parse_tier(value: str) -> int:
-    """Parse a tier value from user input: accepts clear/none (reset), 0/n/a, 1-4, or label names."""
+    """Parse a tier value from user input: accepts none (NULL), 0/n/a, 1-4, or label names."""
     s = value.strip().lower()
-    if s in ("clear", "none"):
+    if s == "none":
         return TIER_CLEAR  # reset to NULL (untriaged)
     if s in _TIER_FROM_LABEL:
         return _TIER_FROM_LABEL[s]
@@ -36,7 +36,7 @@ def parse_tier(value: str) -> int:
         pass
     valid = ", ".join(f"{k}={v}" for k, v in _TIER_LABELS.items())
     raise click.ClickException(
-        f"Invalid tier '{value}'. Valid: clear, {valid}"
+        f"Invalid tier '{value}'. Valid: none, {valid}"
     )
 
 
@@ -493,14 +493,14 @@ def _render_flat_table(rows):
     # Check if any rows have tier data (column may not exist in all queries)
     has_tier = (
         rows and "tier" in rows[0].keys()
-        and any(r["tier"] for r in rows)
+        and any(r["tier"] is not None for r in rows)
     )
 
     id_w = max(2, max(len(task_id_display(r["id"])) for r in rows))
     ph_w = max(5, max(len(r["phase"]) for r in rows))
     st_w = max(6, max(len(r["status"]) for r in rows))
     ti_w = max(4, max(
-        (len(_TIER_LABELS.get(r["tier"], "-")) if r["tier"] else 1)
+        (len(_TIER_LABELS.get(r["tier"], "-")) if r["tier"] is not None else 1)
         for r in rows
     )) if has_tier else 0
     gap = "  "
@@ -534,7 +534,7 @@ def _render_flat_table(rows):
         )
         if has_tier:
             tier_val = row["tier"]
-            tier_str = _TIER_LABELS.get(tier_val, "-") if tier_val else "-"
+            tier_str = _TIER_LABELS.get(tier_val, "-") if tier_val is not None else "-"
             line += f"{gap}{tier_str:<{ti_w}}"
         line += f"{gap}{title}"
         click.echo(line)
@@ -1149,7 +1149,7 @@ def complete_item(item_id: int, cascade: bool = False):
             "  SELECT id FROM tasks WHERE id = ?"
             "  UNION ALL"
             "  SELECT t.id FROM tasks t JOIN tree ON t.parent_id = tree.id"
-            ") UPDATE tasks SET status='confirmed', completed_at=? "
+            ") UPDATE tasks SET status='confirmed', completed_at=?, tier=0 "
             "WHERE id IN (SELECT id FROM tree) AND status != 'confirmed'",
             (item_id, now),
         )
@@ -1160,7 +1160,7 @@ def complete_item(item_id: int, cascade: bool = False):
     else:
         db.execute(
             "UPDATE tasks SET status='confirmed', "
-            "completed_at=? WHERE id=?",
+            "completed_at=?, tier=0 WHERE id=?",
             (now, item_id),
         )
         click.echo(
@@ -1204,7 +1204,7 @@ def assume_item(item_id: int, cascade: bool = False):
             "  SELECT id FROM tasks WHERE id = ?"
             "  UNION ALL"
             "  SELECT t.id FROM tasks t JOIN tree ON t.parent_id = tree.id"
-            ") UPDATE tasks SET status='assumed', completed_at=NULL "
+            ") UPDATE tasks SET status='assumed', completed_at=NULL, tier=0 "
             "WHERE id IN (SELECT id FROM tree) AND status NOT IN ('confirmed', 'assumed')",
             (item_id,),
         )
@@ -1215,7 +1215,7 @@ def assume_item(item_id: int, cascade: bool = False):
     else:
         db.execute(
             "UPDATE tasks SET status='assumed', "
-            "completed_at=NULL WHERE id=?",
+            "completed_at=NULL, tier=0 WHERE id=?",
             (item_id,),
         )
         click.echo(
@@ -1291,6 +1291,10 @@ def update_plan(
             params.append(now)
         else:
             updates.append("completed_at = NULL")
+        # Clear tier to n/a on terminal and verify statuses
+        terminal = ("verify", "confirmed", "assumed", "declined", "obsolete")
+        if status in terminal and tier is None:
+            updates.append("tier = 0")
 
     if phase is not None:
         updates.append("phase = ?")
@@ -1327,12 +1331,15 @@ def update_plan(
         params.append(parent_id if parent_id > 0 else None)
 
     if tier is not None:
-        updates.append("tier = ?")
-        params.append(tier if tier > 0 else None)
-        # Tier 1 tasks can't be needs_plan — auto-advance to ready
-        if tier == 1 and status is None and row[0]["status"] == "needs_plan":
-            updates.append("status = ?")
-            params.append("ready")
+        if tier == TIER_CLEAR:
+            updates.append("tier = NULL")
+        else:
+            updates.append("tier = ?")
+            params.append(tier)
+            # Tier 1 tasks can't be needs_plan — auto-advance to ready
+            if tier == 1 and status is None and row[0]["status"] == "needs_plan":
+                updates.append("status = ?")
+                params.append("ready")
 
     if not updates:
         raise click.ClickException(

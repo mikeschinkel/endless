@@ -88,7 +88,7 @@ func TierLabel(tier *int) string {
 	if tier == nil {
 		return ""
 	}
-	labels := map[int]string{1: "auto", 2: "quick", 3: "deep", 4: "discuss"}
+	labels := map[int]string{0: "n/a", 1: "auto", 2: "quick", 3: "deep", 4: "discuss"}
 	if label, ok := labels[*tier]; ok {
 		return label
 	}

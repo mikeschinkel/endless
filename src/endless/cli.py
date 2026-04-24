@@ -448,7 +448,7 @@ def task_add(title, description, phase, project, parent, after, task_type, statu
               type=click.Choice(["now", "next", "later"]),
               help="Phase: now, next, later")
 @click.option("--tier", default=None,
-              help="Tier (1-4 or auto/quick/deep/discuss, 0 to clear)")
+              help="Tier (0=n/a, 1-4 or auto/quick/deep/discuss, none=clear)")
 @click.option("--force", is_flag=True,
               help="Bypass title validation")
 def task_update(item_ids, status, title, description, text_file, prompt_file, parent, phase, tier, force):
@@ -471,6 +471,21 @@ def task_remove(item_ids, cascade):
     from endless.task_cmd import remove_item
     for item_id in item_ids:
         remove_item(item_id, cascade=cascade)
+
+
+@task_cmd.group("clear")
+def task_clear():
+    """Clear a field on a task."""
+    pass
+
+
+@task_clear.command("tier")
+@click.argument("item_ids", type=TASK_ID, nargs=-1, required=True)
+def task_clear_tier(item_ids):
+    """Clear tier on one or more tasks (set to NULL/untriaged)."""
+    from endless.task_cmd import update_plan, TIER_CLEAR
+    for item_id in item_ids:
+        update_plan(item_id, tier=TIER_CLEAR)
 
 
 @task_cmd.command("confirm")
