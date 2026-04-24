@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -13,6 +14,12 @@ import (
 
 	"github.com/mikeschinkel/endless/internal/monitor"
 )
+
+func init() {
+	log.SetOutput(os.Stderr)
+	log.SetFlags(0)
+	log.SetPrefix("endless-hook: ")
+}
 
 type claudePayload struct {
 	SessionID      string          `json:"session_id"`
@@ -54,7 +61,7 @@ func runClaude(args []string) error {
 
 	projectID, isRegistered, err := monitor.ProjectIDForPath(payload.CWD)
 	if err != nil {
-		return nil
+		return fmt.Errorf("looking up project for %s: %w", payload.CWD, err)
 	}
 
 	// Record activity (throttled)
@@ -70,21 +77,28 @@ func runClaude(args []string) error {
 		if payload.ToolName != "" {
 			sessionCtx["tool_name"] = payload.ToolName
 		}
-		_ = monitor.RecordActivity(projectID, "claude", payload.CWD, sessionCtx)
+		if err := monitor.RecordActivity(projectID, "claude", payload.CWD, sessionCtx); err != nil {
+			log.Printf("recording activity: %v", err)
+		}
 	}
 
 	// Event-specific handling
 	switch payload.EventName {
 	case "SessionStart":
-		// Track the session from the start
-		_ = monitor.InitSession(payload.SessionID, projectID)
-		// Record process identifier for inter-session messaging
-		_ = monitor.SetProcess(payload.SessionID, os.Getenv("TMUX_PANE"))
+		// Track the session from the start — DB errors here are critical
+		if err := monitor.InitSession(payload.SessionID, projectID); err != nil {
+			return fmt.Errorf("initializing session: %w", err)
+		}
+		if err := monitor.SetProcess(payload.SessionID, os.Getenv("TMUX_PANE")); err != nil {
+			log.Printf("setting process: %v", err)
+		}
 		return handleTaskContextInjection(projectID, payload)
 
 	case "UserPromptSubmit":
 		// Backfill process if not yet recorded
-		_ = monitor.BackfillProcess(payload.SessionID, os.Getenv("TMUX_PANE"))
+		if err := monitor.BackfillProcess(payload.SessionID, os.Getenv("TMUX_PANE")); err != nil {
+			log.Printf("backfilling process: %v", err)
+		}
 		// Fallback message check for sessions without MCP channel plugin
 		pane := os.Getenv("TMUX_PANE")
 		port, _, _ := monitor.LookupChannelPort(pane)
@@ -109,9 +123,13 @@ func runClaude(args []string) error {
 		return handleExitPlanMode(projectID, payload)
 
 	case "Stop":
-		_ = monitor.IdleSession(payload.SessionID)
+		if err := monitor.IdleSession(payload.SessionID); err != nil {
+			log.Printf("idling session: %v", err)
+		}
 	case "SessionEnd":
-		_ = monitor.EndSession(payload.SessionID)
+		if err := monitor.EndSession(payload.SessionID); err != nil {
+			log.Printf("ending session: %v", err)
+		}
 	}
 
 	return nil
@@ -125,11 +143,13 @@ func handleTaskContextInjection(projectID int64, payload claudePayload) error {
 
 	projectName, err := monitor.GetProjectName(projectID)
 	if err != nil {
+		log.Printf("getting project name: %v", err)
 		return nil
 	}
 
 	items, err := monitor.GetActiveTasks(projectID)
 	if err != nil {
+		log.Printf("getting active tasks: %v", err)
 		return nil
 	}
 
@@ -164,7 +184,9 @@ func handlePostToolUse(projectID int64, payload claudePayload) error {
 	}
 
 	// Record which plan file this session is editing (used by ExitPlanMode)
-	_ = monitor.SetPlanFilePath(payload.SessionID, input.FilePath)
+	if err := monitor.SetPlanFilePath(payload.SessionID, input.FilePath); err != nil {
+		log.Printf("setting plan file path: %v", err)
+	}
 
 	// NOTE: Auto-import disabled. Sessions should use `endless task update <id> --text <file>`
 	// to save task text, and `endless task add` to create child items explicitly.
@@ -172,6 +194,7 @@ func handlePostToolUse(projectID int64, payload claudePayload) error {
 
 	items, err := monitor.GetActiveTasks(projectID)
 	if err != nil {
+		log.Printf("getting active tasks: %v", err)
 		return nil
 	}
 
@@ -227,7 +250,9 @@ func handlePreToolUse(projectID int64, isRegistered bool, payload claudePayload)
 					"Run `endless task show` to see available tasks.")
 			}
 			// Active and valid — allow through, touch session
-			_ = monitor.TouchSession(payload.SessionID)
+			if err := monitor.TouchSession(payload.SessionID); err != nil {
+				log.Printf("touching session: %v", err)
+			}
 			return nil
 		}
 	}
@@ -286,7 +311,9 @@ func handlePostToolUseSession(projectID int64, payload claudePayload) {
 	if m := taskStartRe.FindStringSubmatch(input.Command); m != nil {
 		taskID, err := strconv.ParseInt(m[1], 10, 64)
 		if err == nil {
-			_ = monitor.StartWorkSession(payload.SessionID, projectID, taskID)
+			if err := monitor.StartWorkSession(payload.SessionID, projectID, taskID); err != nil {
+				log.Printf("starting work session: %v", err)
+			}
 		}
 		return
 	}
@@ -295,14 +322,18 @@ func handlePostToolUseSession(projectID int64, payload claudePayload) {
 	if m := taskCompleteRe.FindStringSubmatch(input.Command); m != nil {
 		taskID, err := strconv.ParseInt(m[1], 10, 64)
 		if err == nil {
-			_ = monitor.CompleteTask(payload.SessionID, taskID)
+			if err := monitor.CompleteTask(payload.SessionID, taskID); err != nil {
+				log.Printf("completing task: %v", err)
+			}
 		}
 		return
 	}
 
 	// Detect: endless task chat
 	if taskChatRe.MatchString(input.Command) {
-		_ = monitor.StartChatSession(payload.SessionID, projectID)
+		if err := monitor.StartChatSession(payload.SessionID, projectID); err != nil {
+			log.Printf("starting chat session: %v", err)
+		}
 		return
 	}
 
@@ -310,7 +341,9 @@ func handlePostToolUseSession(projectID int64, payload claudePayload) {
 	if channelBeaconRe.MatchString(input.Command) ||
 		channelConnectRe.MatchString(input.Command) ||
 		channelSendRe.MatchString(input.Command) {
-		_ = monitor.TouchSession(payload.SessionID)
+		if err := monitor.TouchSession(payload.SessionID); err != nil {
+			log.Printf("touching session: %v", err)
+		}
 		return
 	}
 }
@@ -356,6 +389,7 @@ func handleExitPlanMode(projectID int64, payload claudePayload) error {
 
 	items, err := monitor.GetActiveTasks(projectID)
 	if err != nil {
+		log.Printf("getting active tasks: %v", err)
 		return nil
 	}
 

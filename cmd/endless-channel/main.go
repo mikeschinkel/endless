@@ -133,10 +133,10 @@ Do not call endless channel inbox unless prompted by a channel event or the user
 	case <-sessionDone:
 	}
 
-	// Cleanup
+	// Cleanup — errors intentionally ignored during shutdown; best-effort cleanup only
 	_ = monitor.UnregisterChannelPort(procID)
 
 	shutCtx, shutCancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer shutCancel()
-	_ = httpServer.Shutdown(shutCtx)
+	_ = httpServer.Shutdown(shutCtx) // best-effort graceful shutdown
 }

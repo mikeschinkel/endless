@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 
 	"github.com/mikeschinkel/endless/internal/monitor"
 )
@@ -15,6 +16,7 @@ func runPrompt(args []string) error {
 	// Look up project
 	projectID, _, err := monitor.ProjectIDForPath(dir)
 	if err != nil {
+		log.Printf("looking up project for %s: %v", dir, err)
 		return nil
 	}
 

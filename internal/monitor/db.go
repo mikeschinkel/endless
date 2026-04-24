@@ -3,6 +3,7 @@ package monitor
 import (
 	"database/sql"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -32,10 +33,21 @@ func DB() (*sql.DB, error) {
 		path := DBPath()
 		dbConn, dbErr = sql.Open("sqlite", path)
 		if dbErr != nil {
+			dbErr = fmt.Errorf("opening database %s: %w", path, dbErr)
 			return
 		}
-		dbConn.Exec("PRAGMA journal_mode=WAL")
-		dbConn.Exec("PRAGMA foreign_keys=ON")
+		// Verify the connection actually works (sql.Open may succeed lazily)
+		if err := dbConn.Ping(); err != nil {
+			dbErr = fmt.Errorf("connecting to database %s: %w", path, err)
+			dbConn = nil
+			return
+		}
+		if _, err := dbConn.Exec("PRAGMA journal_mode=WAL"); err != nil {
+			log.Printf("endless-monitor: PRAGMA journal_mode=WAL: %v", err)
+		}
+		if _, err := dbConn.Exec("PRAGMA foreign_keys=ON"); err != nil {
+			log.Printf("endless-monitor: PRAGMA foreign_keys=ON: %v", err)
+		}
 		migrate(dbConn)
 	})
 	return dbConn, dbErr
@@ -306,6 +318,7 @@ func migrateV2(db *sql.DB) {
 			hasColumn(db, "sessions", "active_goal_id"))
 	if needsSessionRecreate {
 		db.Exec("PRAGMA foreign_keys=OFF")
+		db.Exec(`DROP TABLE IF EXISTS sessions_new`)
 		db.Exec(`CREATE TABLE sessions_new (
 			id INTEGER PRIMARY KEY,
 			session_id TEXT NOT NULL,
@@ -344,6 +357,7 @@ func migrateV2(db *sql.DB) {
 			db.Exec("UPDATE task_deps SET source_type='task' WHERE source_type='plan'")
 			db.Exec("UPDATE task_deps SET target_type='task' WHERE target_type='plan'")
 			db.Exec("PRAGMA foreign_keys=OFF")
+			db.Exec(`DROP TABLE IF EXISTS task_deps_new`)
 			db.Exec(`CREATE TABLE task_deps_new (
 				id INTEGER PRIMARY KEY,
 				source_type TEXT NOT NULL CHECK (source_type IN ('task', 'project')),
