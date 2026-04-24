@@ -4,11 +4,10 @@ import (
 	"fmt"
 	"github.com/mikeschinkel/endless/internal/web/components/markdown"
 	"github.com/mikeschinkel/endless/internal/web/data"
-	"github.com/templui/templui/components/progress"
 )
 
 func isActive(item data.TaskView) bool {
-	return item.Status != "completed" && item.Status != "verify"
+	return item.Status != "completed" && item.Status != "verify" && item.Status != "declined"
 }
 
 // taskTreeSmartOpen returns Alpine.js init for open state.
@@ -97,6 +96,8 @@ func statusLabel(status string) string {
 		return "In progress"
 	case "revisit":
 		return "Revisit"
+	case "declined":
+		return "Declined"
 	case "blocked":
 		return "Blocked"
 	case "verify":
@@ -254,8 +255,29 @@ func statusSphereClass(status string) string {
 		return "bg-rose-500"
 	case "revisit":
 		return "bg-cyan-400"
+	case "declined":
+		return "bg-gray-400"
 	default:
 		return "bg-gray-500"
+	}
+}
+
+// tierBadgeClass returns CSS classes for a tier badge.
+func tierBadgeClass(tier *int) string {
+	if tier == nil {
+		return ""
+	}
+	switch *tier {
+	case 1:
+		return "bg-emerald-900/50 text-emerald-400"
+	case 2:
+		return "bg-blue-900/50 text-blue-400"
+	case 3:
+		return "bg-amber-900/50 text-amber-400"
+	case 4:
+		return "bg-purple-900/50 text-purple-400"
+	default:
+		return "bg-gray-800/50 text-gray-400"
 	}
 }
 
@@ -283,14 +305,9 @@ templ StatusDetail(detail *data.StatusDetail) {
 				}
 				if detail.Project.TaskTotal > 0 {
 					<div class="ml-auto flex items-center gap-2">
-						@progress.Script()
-						@progress.Progress(progress.Props{
-							Value:   detail.Project.TaskCompleted,
-							Max:     detail.Project.TaskTotal,
-							Size:    progress.SizeSm,
-							Variant: progress.VariantSuccess,
-							Class:   "w-20 [&>div]:!bg-gray-700",
-						})
+						<div class="w-40 bg-gray-700 rounded-full h-1.5 overflow-hidden">
+							<div class="bg-emerald-500 h-1.5 rounded-full" style={ fmt.Sprintf("width: %d%%", progressPct(detail.Project.TaskCompleted, detail.Project.TaskTotal)) }></div>
+						</div>
 						<span class="text-xs text-gray-400 whitespace-nowrap">
 							{ fmt.Sprintf("%d/%d done", detail.Project.TaskCompleted, detail.Project.TaskTotal) }
 						</span>
@@ -303,13 +320,13 @@ templ StatusDetail(detail *data.StatusDetail) {
 			<!-- Metadata line -->
 			<div class="flex flex-wrap gap-x-4 gap-y-1 text-xs">
 				if detail.Project.Language != "" {
-					<span class="text-gray-600">Language: <span class="text-gray-400">{ detail.Project.Language }</span></span>
+					<span class="text-gray-400">Language: <span class="text-gray-200">{ detail.Project.Language }</span></span>
 				}
 				if detail.Project.GroupName != "" {
-					<span class="text-gray-600">Group: <span class="text-gray-400">{ detail.Project.GroupName }</span></span>
+					<span class="text-gray-400">Group: <span class="text-gray-200">{ detail.Project.GroupName }</span></span>
 				}
-				<span class="text-gray-600">Path: <span class="text-gray-400 font-mono">{ detail.Project.ShortPath }</span></span>
-				<span class="text-gray-600">Last active: <span class="text-gray-400">{ data.SmartDate(detail.Project.LastActivity) }</span></span>
+				<span class="text-gray-400">Path: <span class="text-gray-200 font-mono">{ detail.Project.ShortPath }</span></span>
+				<span class="text-gray-400">Last active: <span class="text-gray-200">{ data.SmartDate(detail.Project.LastActivity) }</span></span>
 			</div>
 		</div>
 
@@ -464,20 +481,61 @@ templ taskItemContent(item data.TaskView, compact bool) {
 	if item.Phase != "now" {
 		<span class="text-xs px-1.5 py-0.5 rounded bg-gray-800/80 text-gray-500 font-mono shrink-0">{ item.Phase }</span>
 	}
+	if item.Tier != nil {
+		<span class={ "text-xs px-1.5 py-0.5 rounded font-mono shrink-0", tierBadgeClass(item.Tier) }>{ data.TierLabel(item.Tier) }</span>
+	}
 }
 
 templ taskDetailPane(item data.TaskView) {
 	<div x-show={ fmt.Sprintf("detail === %d", item.ID) }
 		x-cloak
 		class="pl-7 py-2 mt-1 text-sm border-l-2 border-gray-700/50">
-		<div class="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500 mb-1">
-			<span>{ statusLabel(item.Status) }</span>
-			<span>Phase: { item.Phase }</span>
-			<span class="font-mono">{ fmt.Sprintf("E-%d", item.ID) }</span>
-			if item.ChildCount > 0 {
-				<span>{ fmt.Sprintf("%d sub-items", item.ChildCount) }</span>
+		<style>
+			.detail-label { color: #34d399; padding: 2px 0.5rem 2px 0; white-space: nowrap; }
+			.detail-value { color: #f3f4f6; padding: 2px 0; }
+			.detail-value-left { color: #f3f4f6; padding: 2px 2rem 2px 0; }
+			.detail-mono { font-family: ui-monospace, monospace; }
+		</style>
+		<table class="text-xs mb-3">
+			<tr>
+				<td class="detail-label">ID:</td>
+				<td class="detail-value-left detail-mono">{ fmt.Sprintf("E-%d", item.ID) }</td>
+				<td class="detail-label">Type:</td>
+				<td class="detail-value">{ item.Type }</td>
+			</tr>
+			<tr>
+				<td class="detail-label">Status:</td>
+				<td class="detail-value-left">{ statusLabel(item.Status) }</td>
+				<td class="detail-label">Phase:</td>
+				<td class="detail-value">{ item.Phase }</td>
+			</tr>
+			<tr>
+				<td class="detail-label">Tier:</td>
+				if item.Tier != nil {
+					<td class="detail-value-left">{ data.TierLabel(item.Tier) }</td>
+				} else {
+					<td class="detail-value-left" style="opacity: 0.4;">unset</td>
+				}
+				if item.ChildCount > 0 {
+					<td class="detail-label">Children:</td>
+					<td class="detail-value">{ fmt.Sprintf("%d", item.ChildCount) }</td>
+				}
+			</tr>
+			<tr>
+				<td class="detail-label">Created:</td>
+				<td class="detail-value-left">{ data.SmartDate(item.CreatedAt) }</td>
+				if item.UpdatedAt != "" && item.UpdatedAt != item.CreatedAt {
+					<td class="detail-label">Updated:</td>
+					<td class="detail-value">{ data.SmartDate(item.UpdatedAt) }</td>
+				}
+			</tr>
+			if item.CompletedAt != "" && item.Status == "completed" {
+				<tr>
+					<td class="detail-label">Completed:</td>
+					<td class="detail-value" colspan="3">{ data.SmartDate(item.CompletedAt) }</td>
+				</tr>
 			}
-		</div>
+		</table>
 		if item.Text != item.Title {
 			@markdown.MarkdownContent(item.Text)
 		}

@@ -66,16 +66,33 @@ type DashboardProject struct {
 }
 
 type TaskView struct {
-	ID         int64
-	Title      string
-	Text       string
-	Phase      string
-	Status     string
-	ParentID   *int64
-	ChildCount int
-	BlockedBy  string
-	Depth      int // nesting depth for tree display (0 = root)
-	SiblingNum int // 1-based position among siblings (per parent)
+	ID          int64
+	Title       string
+	Text        string
+	Phase       string
+	Status      string
+	Type        string
+	ParentID    *int64
+	ChildCount  int
+	BlockedBy   string
+	Tier        *int
+	CreatedAt   string
+	UpdatedAt   string
+	CompletedAt string
+	Depth       int // nesting depth for tree display (0 = root)
+	SiblingNum  int // 1-based position among siblings (per parent)
+}
+
+// TierLabel returns the human-readable label for a tier value.
+func TierLabel(tier *int) string {
+	if tier == nil {
+		return ""
+	}
+	labels := map[int]string{1: "auto", 2: "quick", 3: "deep", 4: "discuss"}
+	if label, ok := labels[*tier]; ok {
+		return label
+	}
+	return ""
 }
 
 type ActivityView struct {

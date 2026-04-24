@@ -74,7 +74,7 @@ CREATE TABLE IF NOT EXISTS tasks (
     title TEXT,
     description TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'needs_plan'
-        CHECK (status IN ('needs_plan', 'ready', 'in_progress', 'verify', 'completed', 'blocked', 'revisit')),
+        CHECK (status IN ('needs_plan', 'ready', 'in_progress', 'verify', 'completed', 'blocked', 'revisit', 'declined')),
     type TEXT NOT NULL DEFAULT 'task'
         CHECK (type IN ('task', 'plan', 'bug', 'research', 'spike', 'chore')),
     source_file TEXT,
@@ -85,8 +85,10 @@ CREATE TABLE IF NOT EXISTS tasks (
     updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
     completed_at TEXT,
     prompt TEXT,
+    tier INTEGER,
     FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
-    FOREIGN KEY (parent_id) REFERENCES tasks(id) ON DELETE SET NULL
+    FOREIGN KEY (parent_id) REFERENCES tasks(id) ON DELETE SET NULL,
+    CHECK (completed_at IS NULL OR status = 'completed')
 );
 
 CREATE TRIGGER IF NOT EXISTS tasks_updated_at AFTER UPDATE ON tasks

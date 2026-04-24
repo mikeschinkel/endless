@@ -159,7 +159,7 @@ func GetProjectTasks(projectID int64, excludeStatuses ...string) []data.TaskView
 
 	rows, err := db.Query(
 		fmt.Sprintf(`SELECT pi.id, COALESCE(pi.title,'') as title, pi.description, pi.phase, pi.status,
-		 pi.parent_id,
+		 COALESCE(pi.type,'task') as type, pi.parent_id,
 		 (SELECT count(*) FROM tasks c WHERE c.parent_id = pi.id AND c.status NOT IN (%s)) as child_count,
 		 COALESCE((SELECT
 		   CASE td.target_type
@@ -170,7 +170,11 @@ func GetProjectTasks(projectID int64, excludeStatuses ...string) []data.TaskView
 		   FROM task_deps td
 		   WHERE td.source_type = 'task' AND td.source_id = pi.id AND td.dep_type = 'needs'
 		   LIMIT 1
-		 ),'') as blocked_by
+		 ),'') as blocked_by,
+		 pi.tier,
+		 COALESCE(pi.created_at,'') as created_at,
+		 COALESCE(pi.updated_at,'') as updated_at,
+		 COALESCE(pi.completed_at,'') as completed_at
 		 FROM tasks pi
 		 WHERE pi.project_id = ?
 		 ORDER BY pi.parent_id, CASE pi.status
@@ -189,6 +193,7 @@ func GetProjectTasks(projectID int64, excludeStatuses ...string) []data.TaskView
 		   WHEN 'later' THEN 2
 		   ELSE 3
 		 END,
+		 CASE WHEN pi.tier IS NULL THEN 99 ELSE pi.tier END,
 		 pi.updated_at DESC`, childExclude), projectID)
 	if err != nil {
 		return nil
@@ -204,7 +209,8 @@ func GetProjectTasks(projectID int64, excludeStatuses ...string) []data.TaskView
 	for rows.Next() {
 		var pi data.TaskView
 		rows.Scan(&pi.ID, &pi.Title, &pi.Text, &pi.Phase, &pi.Status,
-			&pi.ParentID, &pi.ChildCount, &pi.BlockedBy)
+			&pi.Type, &pi.ParentID, &pi.ChildCount, &pi.BlockedBy, &pi.Tier,
+			&pi.CreatedAt, &pi.UpdatedAt, &pi.CompletedAt)
 		idx := len(allItems)
 		allItems = append(allItems, pi)
 		byID[pi.ID] = &allItems[idx]

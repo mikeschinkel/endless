@@ -185,6 +185,7 @@ def _migrate_v2(conn: sqlite3.Connection):
     if needs_session_recreate:
         conn.execute("PRAGMA foreign_keys=OFF")
         conn.executescript("""
+            DROP TABLE IF EXISTS sessions_new;
             CREATE TABLE sessions_new (
                 id INTEGER PRIMARY KEY,
                 session_id TEXT NOT NULL,
@@ -227,6 +228,7 @@ def _migrate_v2(conn: sqlite3.Connection):
             conn.execute("UPDATE task_deps SET target_type='task' WHERE target_type='plan'")
             conn.execute("PRAGMA foreign_keys=OFF")
             conn.executescript("""
+                DROP TABLE IF EXISTS task_deps_new;
                 CREATE TABLE task_deps_new (
                     id INTEGER PRIMARY KEY,
                     source_type TEXT NOT NULL
@@ -244,6 +246,95 @@ def _migrate_v2(conn: sqlite3.Connection):
                 INSERT INTO task_deps_new SELECT * FROM task_deps;
                 DROP TABLE task_deps;
                 ALTER TABLE task_deps_new RENAME TO task_deps;
+            """)
+            conn.execute("PRAGMA foreign_keys=ON")
+            conn.commit()
+
+    # Step 7: Add 'declined' to tasks.status CHECK constraint (E-787)
+    if _has_table(conn, "tasks"):
+        row = conn.execute(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='tasks'"
+        ).fetchone()
+        if row and "'declined'" not in row[0]:
+            # Derive new CREATE TABLE from the existing DDL, only changing the CHECK constraint
+            ddl = row[0]
+            if "'revisit')" in ddl:
+                # Has existing CHECK — just extend it
+                ddl = ddl.replace("'revisit')", "'revisit', 'declined')")
+            else:
+                # CHECK was lost in a prior migration — add it back
+                ddl = ddl.replace(
+                    "status TEXT NOT NULL DEFAULT 'needs_plan'",
+                    "status TEXT NOT NULL DEFAULT 'needs_plan'\n"
+                    "        CHECK (status IN ('needs_plan','ready','in_progress','verify','completed','blocked','revisit','declined'))"
+                )
+            # Handle both quoted and unquoted table names
+            if 'CREATE TABLE "tasks"' in ddl:
+                new_sql = ddl.replace('CREATE TABLE "tasks"', "CREATE TABLE tasks_new")
+            else:
+                new_sql = ddl.replace("CREATE TABLE tasks", "CREATE TABLE tasks_new")
+            col_names = [c[1] for c in conn.execute("PRAGMA table_info(tasks)").fetchall()]
+            col_list = ", ".join(col_names)
+            conn.execute("PRAGMA foreign_keys=OFF")
+            conn.executescript(f"""
+                DROP TABLE IF EXISTS tasks_new;
+                {new_sql};
+                INSERT INTO tasks_new ({col_list}) SELECT {col_list} FROM tasks;
+                DROP TABLE tasks;
+                ALTER TABLE tasks_new RENAME TO tasks;
+                CREATE TRIGGER IF NOT EXISTS tasks_updated_at AFTER UPDATE ON tasks
+                BEGIN
+                    UPDATE tasks SET updated_at = strftime('%Y-%m-%dT%H:%M:%S', 'now')
+                    WHERE id = NEW.id;
+                END;
+            """)
+            conn.execute("PRAGMA foreign_keys=ON")
+            conn.commit()
+
+    # Step 8: Add 'tier' column to tasks (E-786)
+    if _has_table(conn, "tasks"):
+        cols = [
+            r[1] for r in conn.execute("PRAGMA table_info(tasks)").fetchall()
+        ]
+        if "tier" not in cols:
+            conn.execute("ALTER TABLE tasks ADD COLUMN tier INTEGER")
+            conn.commit()
+
+    # Step 9: Add CHECK constraint: completed_at requires status='completed' (E-797)
+    if _has_table(conn, "tasks"):
+        row = conn.execute(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='tasks'"
+        ).fetchone()
+        if row and "completed_at IS NULL" not in row[0]:
+            # Clean up any inconsistent data first
+            conn.execute(
+                "UPDATE tasks SET completed_at = NULL "
+                "WHERE completed_at IS NOT NULL AND status != 'completed'"
+            )
+            # Add CHECK constraint via DDL replacement
+            ddl = row[0]
+            # Insert the new CHECK before the closing paren of the CREATE TABLE
+            # Find the last FOREIGN KEY line and add after it
+            ddl = ddl.rstrip().rstrip(")")
+            ddl += ",\n    CHECK (completed_at IS NULL OR status = 'completed')\n)"
+            if 'CREATE TABLE "tasks"' in ddl:
+                new_sql = ddl.replace('CREATE TABLE "tasks"', "CREATE TABLE tasks_new")
+            else:
+                new_sql = ddl.replace("CREATE TABLE tasks", "CREATE TABLE tasks_new")
+            col_names = [c[1] for c in conn.execute("PRAGMA table_info(tasks)").fetchall()]
+            col_list = ", ".join(col_names)
+            conn.execute("PRAGMA foreign_keys=OFF")
+            conn.executescript(f"""
+                DROP TABLE IF EXISTS tasks_new;
+                {new_sql};
+                INSERT INTO tasks_new ({col_list}) SELECT {col_list} FROM tasks;
+                DROP TABLE tasks;
+                ALTER TABLE tasks_new RENAME TO tasks;
+                CREATE TRIGGER IF NOT EXISTS tasks_updated_at AFTER UPDATE ON tasks
+                BEGIN
+                    UPDATE tasks SET updated_at = strftime('%Y-%m-%dT%H:%M:%S', 'now')
+                    WHERE id = NEW.id;
+                END;
             """)
             conn.execute("PRAGMA foreign_keys=ON")
             conn.commit()

@@ -158,7 +158,7 @@ def task_cmd():
               help="Project name (default: detect from cwd)")
 @click.option("--replace", is_flag=True,
               help="Replace items from same source file under same parent")
-@click.option("--parent", type=int, default=None,
+@click.option("--parent", type=TASK_ID, default=None,
               help="Parent goal ID to import under")
 def task_import(file, from_claude, json_file, project, replace, parent):
     """Import a plan file into the DB."""
@@ -187,24 +187,30 @@ def task_import(file, from_claude, json_file, project, replace, parent):
               help="Include completed items")
 @click.option("--status", default=None,
               type=click.Choice(["needs_plan", "ready", "in_progress",
-                                 "verify", "completed", "blocked", "revisit"]),
+                                 "verify", "completed", "blocked", "revisit", "declined"]),
               help="Filter by status")
 @click.option("--phase", default=None,
               type=click.Choice(["now", "next", "later"]),
               help="Filter by phase")
+@click.option("--tier", default=None,
+              help="Filter by tier (1-4 or auto/quick/deep/discuss)")
 @click.option("--sort", default=None,
-              type=click.Choice(["id", "status", "phase", "created", "title"]),
-              help="Flat output sorted by column (no tree)")
+              type=click.Choice(["id", "status", "phase", "tier", "created", "title"]),
+              help="Sort by column (default: id)")
+@click.option("--tree", "as_tree", is_flag=True,
+              help="Show as indented tree instead of flat table")
 @click.option("--llm", is_flag=True,
               help="Token-efficient output for LLMs")
 @click.option("--json", "as_json", is_flag=True,
               help="JSON output")
-def task_list(project, show_all, status, phase, sort, llm, as_json):
+def task_list(project, show_all, status, phase, tier, sort, as_tree, llm, as_json):
     """List tasks for a project."""
-    from endless.task_cmd import show_plan
+    from endless.task_cmd import show_plan, parse_tier_filter
+    tier_val = parse_tier_filter(tier) if tier else None
     show_plan(project_name=project, show_all=show_all,
               status_filter=status, phase_filter=phase,
-              sort_by=sort, llm=llm, as_json=as_json)
+              tier_filter=tier_val,
+              sort_by=sort, tree=as_tree, llm=llm, as_json=as_json)
 
 
 @task_cmd.command("show")
@@ -241,11 +247,30 @@ def task_show(item_id, no_description, show_text, show_prompt,
               help="Token-efficient output for LLMs")
 @click.option("--json", "as_json", is_flag=True,
               help="JSON output")
-def task_next(project, show_all, limit, llm, as_json):
+@click.option("--tier", default=None,
+              help="Filter by tier (1-4 or auto/quick/deep/discuss)")
+def task_next(project, show_all, limit, llm, as_json, tier):
     """Show top actionable tasks, ranked by priority."""
-    from endless.task_cmd import next_tasks
+    from endless.task_cmd import next_tasks, parse_tier_filter
+    tier_val = parse_tier_filter(tier) if tier else None
     next_tasks(project_name=project, show_all=show_all,
-               limit=limit, llm=llm, as_json=as_json)
+               limit=limit, llm=llm, as_json=as_json, tier=tier_val)
+
+
+@task_cmd.command("active")
+@click.option("--project", default=None,
+              help="Project name (default: detect from cwd)")
+@click.option("--all", "show_all", is_flag=True,
+              help="Show tasks from all projects")
+@click.option("--llm", is_flag=True,
+              help="Token-efficient output for LLMs")
+@click.option("--json", "as_json", is_flag=True,
+              help="JSON output")
+def task_active(project, show_all, llm, as_json):
+    """Show in-progress and verify tasks."""
+    from endless.task_cmd import active_tasks
+    active_tasks(project_name=project, show_all=show_all,
+                 llm=llm, as_json=as_json)
 
 
 @task_cmd.command("recent")
@@ -274,31 +299,34 @@ def task_recent(project, show_all, limit, llm, as_json):
               help="Phase: now, next, later (default: now)")
 @click.option("--project", default=None,
               help="Project name (default: detect from cwd)")
-@click.option("--parent", type=int, default=None,
+@click.option("--parent", type=TASK_ID, default=None,
               help="Parent task ID to add under")
-@click.option("--after", type=int, default=None,
+@click.option("--after", type=TASK_ID, default=None,
               help="Insert after this task ID")
 @click.option("--type", "task_type", default=None,
               type=click.Choice(["task", "plan", "bug", "research", "spike", "chore"]),
               help="Task type (default: task)")
 @click.option("--status", default=None,
               type=click.Choice(["needs_plan", "ready", "in_progress",
-                                 "verify", "completed", "blocked", "revisit"]),
+                                 "verify", "completed", "blocked", "revisit", "declined"]),
               help="Initial status (default: needs_plan)")
+@click.option("--tier", default=None,
+              help="Tier (1-4 or auto/quick/deep/discuss)")
 @click.option("--force", is_flag=True,
               help="Bypass title validation")
-def task_add(title, description, phase, project, parent, after, task_type, status, force):
+def task_add(title, description, phase, project, parent, after, task_type, status, tier, force):
     """Add a task."""
-    from endless.task_cmd import add_item
+    from endless.task_cmd import add_item, parse_tier
+    tier_val = parse_tier(tier) if tier else None
     add_item(title, description=description, phase=phase,
              project_name=project, after=after, parent_id=parent,
-             task_type=task_type, status=status, force=force)
+             task_type=task_type, status=status, tier=tier_val, force=force)
 
 
 @task_cmd.command("update")
 @click.argument("item_id", type=TASK_ID)
 @click.option("--status", default=None,
-              help="Status: needs_plan, ready, in_progress, verify, completed, blocked, revisit")
+              help="Status: needs_plan, ready, in_progress, verify, completed, blocked, revisit, declined")
 @click.option("--title", default=None,
               help="New title")
 @click.option("--description", default=None,
@@ -307,16 +335,23 @@ def task_add(title, description, phase, project, parent, after, task_type, statu
               help="Load full task text from file")
 @click.option("--prompt", "prompt_file", default=None,
               help="Load prompt from file")
-@click.option("--parent", type=int, default=None,
+@click.option("--parent", type=TASK_ID, default=None,
               help="Set parent task ID (0 to make root)")
+@click.option("--phase", default=None,
+              type=click.Choice(["now", "next", "later"]),
+              help="Phase: now, next, later")
+@click.option("--tier", default=None,
+              help="Tier (1-4 or auto/quick/deep/discuss, 0 to clear)")
 @click.option("--force", is_flag=True,
               help="Bypass title validation")
-def task_update(item_id, status, title, description, text_file, prompt_file, parent, force):
+def task_update(item_id, status, title, description, text_file, prompt_file, parent, phase, tier, force):
     """Update fields on a task."""
-    from endless.task_cmd import update_plan
+    from endless.task_cmd import update_plan, parse_tier
+    tier_val = parse_tier(tier) if tier else None
     update_plan(item_id, status=status, title=title,
                 description=description, text_file=text_file,
-                prompt_file=prompt_file, parent_id=parent, force=force)
+                prompt_file=prompt_file, parent_id=parent,
+                phase=phase, tier=tier_val, force=force)
 
 
 @task_cmd.command("remove")

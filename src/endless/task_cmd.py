@@ -12,12 +12,65 @@ from tabulate import tabulate
 from endless import db, config
 
 
+_TIER_LABELS = {1: "auto", 2: "quick", 3: "deep", 4: "discuss"}
+_TIER_FROM_LABEL = {v: k for k, v in _TIER_LABELS.items()}
+
+# Sentinel meaning "tier IS NULL" for filtering
+TIER_NONE = -1
+
+
+def parse_tier(value: str) -> int:
+    """Parse a tier value from user input: accepts 0 (clear), 1-4, or label names."""
+    s = value.strip().lower()
+    if s == "0":
+        return 0  # sentinel for "clear tier"
+    if s in _TIER_FROM_LABEL:
+        return _TIER_FROM_LABEL[s]
+    try:
+        n = int(s)
+        if n in _TIER_LABELS:
+            return n
+    except ValueError:
+        pass
+    valid = ", ".join(f"{k}={v}" for k, v in _TIER_LABELS.items())
+    raise click.ClickException(
+        f"Invalid tier '{value}'. Valid: 0 (clear), {valid}"
+    )
+
+
+def parse_tier_filter(value: str) -> int:
+    """Parse a tier value for filtering: accepts none/0, 1-4, or label names."""
+    s = value.strip().lower()
+    if s in ("none", "0"):
+        return TIER_NONE
+    if s in _TIER_FROM_LABEL:
+        return _TIER_FROM_LABEL[s]
+    try:
+        n = int(s)
+        if n in _TIER_LABELS:
+            return n
+    except ValueError:
+        pass
+    valid = ", ".join(f"{k}={v}" for k, v in _TIER_LABELS.items())
+    raise click.ClickException(
+        f"Invalid tier '{value}'. Valid: none, {valid}"
+    )
+
+
+def tier_display(tier: int | None) -> str:
+    """Format a tier for display: '1 (auto)'."""
+    if tier is None:
+        return ""
+    label = _TIER_LABELS.get(tier, "?")
+    return f"{tier} ({label})"
+
+
 _TITLE_VERBS = {
-    "add", "apply", "audit", "build", "capture", "clean", "configure", "consolidate", "convert",
+    "accept", "add", "apply", "audit", "build", "capture", "change", "clean", "configure", "consolidate", "convert",
     "create", "decide", "define", "defer", "deploy", "design", "disable",
     "distinguish", "document", "enable", "enforce", "evaluate", "expand",
     "extract", "fix", "implement", "improve", "integrate", "investigate",
-    "merge", "migrate", "move", "package", "print", "read", "redesign", "refactor", "remove",
+    "merge", "migrate", "move", "omit", "package", "print", "read", "redesign", "refactor", "remove",
     "rename", "render", "replace", "require", "research", "resolve",
     "show", "simplify", "split", "support", "surface", "sync", "test", "track",
     "update", "validate",
@@ -428,16 +481,29 @@ def _do_import(
 
 
 def _render_flat_table(rows):
-    """Render rows as a flat table with ID, Phase, Status, Title columns."""
+    """Render rows as a flat table with ID, Phase, Status, Tier, Title columns."""
     try:
         term_width = os.get_terminal_size().columns
     except OSError:
         term_width = 80
+
+    # Check if any rows have tier data (column may not exist in all queries)
+    has_tier = (
+        rows and "tier" in rows[0].keys()
+        and any(r["tier"] for r in rows)
+    )
+
     id_w = max(2, max(len(task_id_display(r["id"])) for r in rows))
     ph_w = max(5, max(len(r["phase"]) for r in rows))
     st_w = max(6, max(len(r["status"]) for r in rows))
+    ti_w = max(4, max(
+        (len(_TIER_LABELS.get(r["tier"], "-")) if r["tier"] else 1)
+        for r in rows
+    )) if has_tier else 0
     gap = "  "
     fixed_width = id_w + ph_w + st_w + len(gap) * 3
+    if has_tier:
+        fixed_width += ti_w + len(gap)
     title_width = max(20, term_width - fixed_width)
     display_titles = []
     for row in rows:
@@ -446,18 +512,29 @@ def _render_flat_table(rows):
             title = title[:title_width - 1] + "…"
         display_titles.append(title)
     max_title_len = max(len(t) for t in display_titles) if display_titles else 5
-    click.echo(
-        f"{'ID':<{id_w}}{gap}{'Phase':<{ph_w}}{gap}{'Status':<{st_w}}{gap}Title"
-    )
-    click.echo(
-        f"{'─'*id_w}{gap}{'─'*ph_w}{gap}{'─'*st_w}{gap}{'─'*max_title_len}"
-    )
+
+    header = f"{'ID':<{id_w}}{gap}{'Phase':<{ph_w}}{gap}{'Status':<{st_w}}"
+    sep = f"{'─'*id_w}{gap}{'─'*ph_w}{gap}{'─'*st_w}"
+    if has_tier:
+        header += f"{gap}{'Tier':<{ti_w}}"
+        sep += f"{gap}{'─'*ti_w}"
+    header += f"{gap}Title"
+    sep += f"{gap}{'─'*max_title_len}"
+    click.echo(header)
+    click.echo(sep)
+
     for row, title in zip(rows, display_titles):
-        click.echo(
+        line = (
             f"{task_id_display(row['id']):<{id_w}}{gap}"
             f"{row['phase']:<{ph_w}}{gap}"
-            f"{row['status']:<{st_w}}{gap}{title}"
+            f"{row['status']:<{st_w}}"
         )
+        if has_tier:
+            tier_val = row["tier"]
+            tier_str = _TIER_LABELS.get(tier_val, "-") if tier_val else "-"
+            line += f"{gap}{tier_str:<{ti_w}}"
+        line += f"{gap}{title}"
+        click.echo(line)
 
 
 def show_plan(
@@ -465,7 +542,9 @@ def show_plan(
     show_all: bool = False,
     status_filter: str | None = None,
     phase_filter: str | None = None,
+    tier_filter: int | None = None,
     sort_by: str | None = None,
+    tree: bool = False,
     llm: bool = False,
     as_json: bool = False,
 ):
@@ -475,27 +554,36 @@ def show_plan(
     where = "WHERE pi.project_id = ?"
     params: list = [project_id]
     if not show_all:
-        where += " AND pi.status != 'completed'"
+        where += " AND pi.status NOT IN ('completed', 'declined')"
     if status_filter:
         where += " AND pi.status = ?"
         params.append(status_filter)
     if phase_filter:
         where += " AND pi.phase = ?"
         params.append(phase_filter)
+    if tier_filter is not None:
+        if tier_filter == TIER_NONE:
+            where += " AND pi.tier IS NULL"
+        else:
+            where += " AND pi.tier = ?"
+            params.append(tier_filter)
 
     sort_col_map = {
         "id": "pi.id",
         "status": "pi.status",
         "phase": "CASE pi.phase WHEN 'now' THEN 0 WHEN 'next' THEN 1 WHEN 'later' THEN 2 ELSE 3 END",
+        "tier": "CASE WHEN pi.tier IS NULL THEN 99 ELSE pi.tier END",
         "created": "pi.created_at",
         "title": "pi.title",
     }
+    if not tree and not sort_by:
+        sort_by = "id"
     order_by = sort_col_map.get(sort_by, "pi.sort_order")
 
     rows = db.query(
         f"SELECT pi.id, pi.phase, COALESCE(pi.title, pi.description) as title, "
         f"pi.description, pi.status, pi.parent_id, "
-        f"pi.created_at, pi.completed_at "
+        f"pi.created_at, pi.completed_at, pi.tier "
         f"FROM tasks pi {where} "
         f"ORDER BY {order_by}",
         tuple(params),
@@ -521,6 +609,7 @@ def show_plan(
                 "id": f"E-{row['id']}",
                 "phase": row["phase"],
                 "status": row["status"],
+                "tier": row["tier"],
                 "title": row["title"],
                 "parent": f"E-{row['parent_id']}" if row["parent_id"] else None,
                 "created": row["created_at"],
@@ -534,9 +623,11 @@ def show_plan(
     if llm:
         click.echo(f"# {proj_name}")
         for row in rows:
+            tier_val = row["tier"]
+            tier_str = f" tier={_TIER_LABELS[tier_val]}" if tier_val else ""
             click.echo(
                 f"E-{row['id']} {row['phase']} "
-                f"{row['status']} {row['title']}"
+                f"{row['status']}{tier_str} {row['title']}"
             )
         return
 
@@ -546,7 +637,7 @@ def show_plan(
         click.style(f"Tasks for {proj_name}", bold=True)
     )
 
-    if sort_by:
+    if not tree:
         _render_flat_table(rows)
     else:
         # Tree output
@@ -573,9 +664,11 @@ def show_plan(
                 indicator = status_indicators.get(row["status"], "?")
                 id_str = click.style(task_id_display(row['id']), dim=True)
                 phase_str = click.style(f"[{row['phase']}]", fg="cyan")
+                tier_val = row["tier"] if "tier" in row.keys() else None
+                tier_str = f" {click.style(f'[{_TIER_LABELS[tier_val]}]', fg='magenta')}" if tier_val else ""
                 pad = "  " * indent
                 click.echo(
-                    f"{pad}{indicator} {id_str} {phase_str} {row['title']}"
+                    f"{pad}{indicator} {id_str} {phase_str}{tier_str} {row['title']}"
                 )
                 _render(row["id"], indent + 1)
 
@@ -597,10 +690,11 @@ def next_tasks(
     limit: int = 10,
     llm: bool = False,
     as_json: bool = False,
+    tier: int | None = None,
 ):
     """Show top actionable leaf tasks, ranked by priority."""
     where = (
-        "WHERE t.status NOT IN ('completed', 'blocked') "
+        "WHERE t.status NOT IN ('completed', 'blocked', 'declined', 'in_progress', 'verify') "
         "AND (SELECT count(*) FROM tasks c WHERE c.parent_id = t.id) = 0 "
         "AND t.id NOT IN ("
         "  SELECT td.source_id FROM task_deps td"
@@ -611,6 +705,13 @@ def next_tasks(
         ")"
     )
     params: list = []
+
+    if tier is not None:
+        if tier == TIER_NONE:
+            where += " AND t.tier IS NULL"
+        else:
+            where += " AND t.tier = ?"
+            params.append(tier)
 
     if not show_all:
         # Default: scope to current project (or explicit --project)
@@ -627,18 +728,18 @@ def next_tasks(
 
     rows = db.query(
         f"SELECT t.id, t.phase, COALESCE(t.title, t.description) as title, "
-        f"t.status, p.name as project_name "
+        f"t.status, t.tier, p.name as project_name "
         f"FROM tasks t "
         f"JOIN projects p ON t.project_id = p.id "
         f"{where} "
         f"ORDER BY "
-        f"  CASE t.status "
-        f"    WHEN 'in_progress' THEN 0 WHEN 'verify' THEN 1 "
-        f"    WHEN 'ready' THEN 2 WHEN 'needs_plan' THEN 3 "
-        f"    WHEN 'revisit' THEN 4 ELSE 5 END, "
         f"  CASE t.phase "
         f"    WHEN 'now' THEN 0 WHEN 'next' THEN 1 "
         f"    WHEN 'later' THEN 2 ELSE 3 END, "
+        f"  CASE t.status "
+        f"    WHEN 'ready' THEN 0 WHEN 'needs_plan' THEN 1 "
+        f"    WHEN 'revisit' THEN 2 ELSE 3 END, "
+        f"  CASE WHEN t.tier IS NULL THEN 99 ELSE t.tier END, "
         f"  t.updated_at DESC "
         f"LIMIT ?",
         tuple(params),
@@ -699,6 +800,86 @@ def next_tasks(
         click.echo()
 
 
+def active_tasks(
+    project_name: str | None = None,
+    show_all: bool = False,
+    llm: bool = False,
+    as_json: bool = False,
+):
+    """Show tasks that are in progress or awaiting verification."""
+    where = "WHERE t.status IN ('in_progress', 'verify')"
+    params: list = []
+
+    if not show_all:
+        project_id, proj_name = _resolve_project(project_name)
+        where += " AND t.project_id = ?"
+        params.append(project_id)
+    elif project_name:
+        project_id, proj_name = _resolve_project(project_name)
+        where += " AND t.project_id = ?"
+        params.append(project_id)
+
+    rows = db.query(
+        f"SELECT t.id, t.phase, COALESCE(t.title, t.description) as title, "
+        f"t.status, t.tier, p.name as project_name "
+        f"FROM tasks t "
+        f"JOIN projects p ON t.project_id = p.id "
+        f"{where} "
+        f"ORDER BY "
+        f"  CASE t.status "
+        f"    WHEN 'in_progress' THEN 0 WHEN 'verify' THEN 1 END, "
+        f"  t.updated_at DESC",
+        tuple(params),
+    )
+
+    if not rows:
+        if as_json:
+            click.echo("[]")
+        elif llm:
+            click.echo("# no active tasks")
+        else:
+            click.echo(
+                click.style("•", fg="cyan") + " No active tasks"
+            )
+        return
+
+    if as_json:
+        import json
+        out = [
+            {
+                "id": f"E-{row['id']}",
+                "phase": row["phase"],
+                "status": row["status"],
+                "tier": row["tier"],
+                "title": row["title"],
+                "project": row["project_name"],
+            }
+            for row in rows
+        ]
+        click.echo(json.dumps(out, indent=2))
+        return
+
+    # Group by project
+    groups: dict[str, list] = {}
+    for row in rows:
+        groups.setdefault(row["project_name"], []).append(row)
+
+    for proj, items in groups.items():
+        if llm:
+            click.echo(f"# {proj}")
+            for item in items:
+                click.echo(
+                    f"E-{item['id']} {item['phase']} "
+                    f"{item['status']} {item['title']}"
+                )
+        else:
+            click.echo()
+            click.echo(click.style(f"Active ({proj}):", bold=True))
+            _render_flat_table(items)
+    if not llm:
+        click.echo()
+
+
 def recent_tasks(
     project_name: str | None = None,
     show_all: bool = False,
@@ -723,7 +904,7 @@ def recent_tasks(
 
     rows = db.query(
         f"SELECT t.id, t.phase, COALESCE(t.title, t.description) as title, "
-        f"t.status, p.name as project_name "
+        f"t.status, t.tier, p.name as project_name "
         f"FROM tasks t "
         f"JOIN projects p ON t.project_id = p.id "
         f"{where} "
@@ -788,6 +969,7 @@ def add_item(
     parent_id: int | None = None,
     task_type: str | None = None,
     status: str | None = None,
+    tier: int | None = None,
     force: bool = False,
 ):
     """Add a single task."""
@@ -814,10 +996,10 @@ def add_item(
     cursor = db.execute(
         "INSERT INTO tasks "
         "(project_id, phase, title, description, status, type, sort_order, "
-        "parent_id, created_at, updated_at) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "parent_id, tier, created_at, updated_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (project_id, phase, title, description, status, task_type, sort_order,
-         parent_id, now, now),
+         parent_id, tier, now, now),
     )
     item_id = cursor.lastrowid
     click.echo(
@@ -1013,6 +1195,8 @@ def update_plan(
     text_file: str | None = None,
     prompt_file: str | None = None,
     parent_id: int | None = None,
+    phase: str | None = None,
+    tier: int | None = None,
     force: bool = False,
 ):
     """Update fields on a task."""
@@ -1032,7 +1216,7 @@ def update_plan(
 
     if status is not None:
         valid = ("needs_plan", "ready", "in_progress",
-                 "verify", "completed", "blocked", "revisit")
+                 "verify", "completed", "blocked", "revisit", "declined")
         if status not in valid:
             raise click.ClickException(
                 f"Invalid status '{status}'. "
@@ -1046,6 +1230,12 @@ def update_plan(
             )
             updates.append("completed_at = ?")
             params.append(now)
+        else:
+            updates.append("completed_at = NULL")
+
+    if phase is not None:
+        updates.append("phase = ?")
+        params.append(phase)
 
     if title is not None:
         updates.append("title = ?")
@@ -1076,6 +1266,10 @@ def update_plan(
     if parent_id is not None:
         updates.append("parent_id = ?")
         params.append(parent_id if parent_id > 0 else None)
+
+    if tier is not None:
+        updates.append("tier = ?")
+        params.append(tier if tier > 0 else None)
 
     if not updates:
         raise click.ClickException(
@@ -1119,7 +1313,7 @@ def detail_item(
     row = db.query(
         "SELECT id, title, description, text, phase, status, type, "
         "parent_id, source_file, prompt, created_at, updated_at, "
-        "completed_at, sort_order FROM tasks WHERE id = ?",
+        "completed_at, sort_order, tier FROM tasks WHERE id = ?",
         (item_id,),
     )
     if not row:
@@ -1142,6 +1336,7 @@ def detail_item(
             "updated": item["updated_at"],
             "completed": item["completed_at"] or None,
             "source_file": item["source_file"] or None,
+            "tier": item["tier"],
             "description": item["description"] if show_description else None,
             "text": item["text"] if show_text else None,
             "prompt": item["prompt"] if show_prompt else None,
@@ -1163,8 +1358,9 @@ def detail_item(
 
     if llm:
         click.echo(f"# E-{item['id']} {item['title']}")
+        tier_str = f" tier={tier_display(item['tier'])}" if item["tier"] else ""
         click.echo(f"type={item['type']} phase={item['phase']} "
-                    f"status={item['status']}")
+                    f"status={item['status']}{tier_str}")
         if item["parent_id"]:
             click.echo(f"parent=E-{item['parent_id']}")
         click.echo(f"created={item['created_at']}")
@@ -1203,6 +1399,8 @@ def detail_item(
     click.echo(f"{label('Type:'):<19} {val(item['type'])}")
     click.echo(f"{label('Phase:'):<19} {val(item['phase'])}")
     click.echo(f"{label('Status:'):<19} {val(item['status'])}")
+    if item["tier"]:
+        click.echo(f"{label('Tier:'):<19} {val(tier_display(item['tier']))}")
     if item["parent_id"]:
         click.echo(f"{label('Parent:'):<19} {val(task_id_display(item['parent_id']))}")
     click.echo(f"{label('Created:'):<19} {val(_format_timestamp(item['created_at']))}")
