@@ -147,7 +147,7 @@ def beacon(project_name: str | None = None):
     click.echo(
         click.style(
             "  Other session connects with: "
-            f"endless channel connect {channel_id}",
+            "endless channel connect",
             dim=True,
         )
     )
@@ -158,25 +158,44 @@ def connect(channel_id: str | None = None):
     process = _resolve_process()
 
     if channel_id:
+        # Explicit channel_id — check existence first, then state
         row = db.query(
-            "SELECT conversation_id, process_a FROM conversations "
-            "WHERE conversation_id = ? AND state = 'beacon'",
+            "SELECT conversation_id, process_a, state FROM conversations "
+            "WHERE conversation_id = ?",
             (channel_id,),
         )
         if not row:
             raise click.ClickException(
-                f"Channel {channel_id} not found or not in beacon state."
+                f"Channel {channel_id} not found."
+            )
+        if row[0]["state"] != "beacon":
+            raise click.ClickException(
+                f"Channel {channel_id} exists but is not in beacon state "
+                f"(current state: {row[0]['state']})."
             )
     else:
+        # Auto-detect: find beacons for the current project
+        project_id, proj_name = _resolve_project(None)
         row = db.query(
             "SELECT conversation_id, process_a FROM conversations "
-            "WHERE state = 'beacon' ORDER BY created_at DESC",
+            "WHERE state = 'beacon' AND project_id = ? "
+            "ORDER BY created_at DESC",
+            (project_id,),
         )
         if not row:
-            raise click.ClickException("No active beacons found.")
-        if len(row) > 1:
             raise click.ClickException(
-                f"Multiple beacons active ({len(row)}). "
+                f"No active beacons found for project '{proj_name}'. "
+                "Ask the other session to run: endless channel beacon"
+            )
+        if len(row) > 1:
+            click.echo(
+                click.style("Multiple beacons for ", fg="yellow")
+                + click.style(proj_name, bold=True)
+                + click.style(":", fg="yellow")
+            )
+            for r in row:
+                click.echo(f"  {r['conversation_id']}")
+            raise click.ClickException(
                 "Specify a channel_id: endless channel connect <channel_id>"
             )
         channel_id = row[0]["conversation_id"]
