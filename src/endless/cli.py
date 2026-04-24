@@ -25,6 +25,30 @@ class TaskIDType(click.ParamType):
 
 TASK_ID = TaskIDType()
 
+TASK_STATUSES = ["needs_plan", "ready", "in_progress",
+                 "verify", "confirmed", "assumed", "blocked", "revisit", "declined"]
+
+
+class MultiChoice(click.ParamType):
+    """Click parameter type that accepts comma-separated values from a fixed set."""
+    name = "multi_choice"
+
+    def __init__(self, choices: list[str]):
+        self.choices = choices
+
+    def convert(self, value, param, ctx):
+        if value is None:
+            return None
+        parts = [v.strip() for v in str(value).split(",")]
+        invalid = [p for p in parts if p not in self.choices]
+        if invalid:
+            self.fail(
+                f"Invalid value(s): {', '.join(repr(v) for v in invalid)}. "
+                f"Choose from: {', '.join(self.choices)}",
+                param, ctx,
+            )
+        return parts
+
 
 @click.group()
 @click.version_option(__version__, prog_name="endless")
@@ -184,11 +208,10 @@ def task_import(file, from_claude, json_file, project, replace, parent):
 @click.option("--project", default=None,
               help="Project name (default: detect from cwd)")
 @click.option("--all", "show_all", is_flag=True,
-              help="Include completed items")
+              help="Include confirmed items")
 @click.option("--status", default=None,
-              type=click.Choice(["needs_plan", "ready", "in_progress",
-                                 "verify", "completed", "blocked", "revisit", "declined"]),
-              help="Filter by status")
+              type=MultiChoice(TASK_STATUSES),
+              help="Filter by status (comma-separated, e.g. needs_plan,ready)")
 @click.option("--phase", default=None,
               type=click.Choice(["now", "next", "later"]),
               help="Filter by phase")
@@ -296,12 +319,10 @@ def task_recent(project, show_all, limit, llm, as_json):
 @click.option("--project", default=None,
               help="Project name (default: detect from cwd)")
 @click.option("--all", "show_all", is_flag=True,
-              help="Include completed/declined items")
+              help="Include confirmed/assumed/declined items")
 @click.option("--status", default=None,
-              type=click.Choice(["needs_plan", "ready", "in_progress",
-                                 "verify", "completed", "blocked", "revisit",
-                                 "declined"]),
-              help="Filter by status")
+              type=MultiChoice(TASK_STATUSES),
+              help="Filter by status (comma-separated, e.g. needs_plan,ready)")
 @click.option("--phase", default=None,
               type=click.Choice(["now", "next", "later"]),
               help="Filter by phase")
@@ -340,7 +361,7 @@ def task_search(query, project, show_all, status, phase,
               help="Task type (default: task)")
 @click.option("--status", default=None,
               type=click.Choice(["needs_plan", "ready", "in_progress",
-                                 "verify", "completed", "blocked", "revisit", "declined"]),
+                                 "verify", "confirmed", "assumed", "blocked", "revisit", "declined"]),
               help="Initial status (default: needs_plan)")
 @click.option("--tier", default=None,
               help="Tier (1-4 or auto/quick/deep/discuss)")
@@ -358,7 +379,7 @@ def task_add(title, description, phase, project, parent, after, task_type, statu
 @task_cmd.command("update")
 @click.argument("item_id", type=TASK_ID)
 @click.option("--status", default=None,
-              help="Status: needs_plan, ready, in_progress, verify, completed, blocked, revisit, declined")
+              help="Status: needs_plan, ready, in_progress, verify, confirmed, assumed, blocked, revisit, declined")
 @click.option("--title", default=None,
               help="New title")
 @click.option("--description", default=None,
@@ -396,14 +417,24 @@ def task_remove(item_id, cascade):
     remove_item(item_id, cascade=cascade)
 
 
-@task_cmd.command("complete")
+@task_cmd.command("confirm")
 @click.argument("item_id", type=TASK_ID)
 @click.option("--cascade", is_flag=True,
-              help="Also complete all descendants")
+              help="Also confirm all descendants")
 def task_complete(item_id, cascade):
-    """Mark a task as completed."""
+    """Mark a task as confirmed."""
     from endless.task_cmd import complete_item
     complete_item(item_id, cascade=cascade)
+
+
+@task_cmd.command("assume")
+@click.argument("item_id", type=TASK_ID)
+@click.option("--cascade", is_flag=True,
+              help="Also assume all descendants")
+def task_assume(item_id, cascade):
+    """Mark a task as assumed (believed complete, not yet verified)."""
+    from endless.task_cmd import assume_item
+    assume_item(item_id, cascade=cascade)
 
 
 @task_cmd.command("start")

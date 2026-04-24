@@ -7,7 +7,7 @@ import (
 )
 
 func isActive(item data.TaskView) bool {
-	return item.Status != "completed" && item.Status != "verify" && item.Status != "declined"
+	return item.Status != "confirmed" && item.Status != "verify" && item.Status != "declined"
 }
 
 // taskTreeSmartOpen returns Alpine.js init for open state.
@@ -22,7 +22,7 @@ func taskTreeSmartOpen(items []data.TaskView) string {
 	hasActive := make(map[int64]bool)
 	for i := len(items) - 1; i >= 0; i-- {
 		item := items[i]
-		if item.Status == "completed" {
+		if item.Status == "confirmed" {
 			continue
 		}
 		if expandFor[item.ID] || hasActive[item.ID] {
@@ -33,7 +33,7 @@ func taskTreeSmartOpen(items []data.TaskView) string {
 	}
 	var parts []string
 	for _, item := range items {
-		if item.Status == "completed" {
+		if item.Status == "confirmed" {
 			continue
 		}
 		if item.ChildCount > 0 || hasActive[item.ID] {
@@ -48,7 +48,7 @@ func taskTreeSmartOpen(items []data.TaskView) string {
 func taskTreeParentMap(items []data.TaskView) string {
 	var parts []string
 	for _, item := range items {
-		if item.Status == "completed" {
+		if item.Status == "confirmed" {
 			continue
 		}
 		pid := int64(0)
@@ -102,8 +102,10 @@ func statusLabel(status string) string {
 		return "Blocked"
 	case "verify":
 		return "Verify"
-	case "completed":
-		return "Completed"
+	case "confirmed":
+		return "Confirmed"
+	case "assumed":
+		return "Assumed"
 	default:
 		return status
 	}
@@ -257,6 +259,8 @@ func statusSphereClass(status string) string {
 		return "bg-cyan-400"
 	case "declined":
 		return "bg-gray-400"
+	case "assumed":
+		return "bg-emerald-300"
 	default:
 		return "bg-gray-500"
 	}
@@ -529,7 +533,7 @@ templ taskDetailPane(item data.TaskView) {
 					<td class="detail-value">{ data.SmartDate(item.UpdatedAt) }</td>
 				}
 			</tr>
-			if item.CompletedAt != "" && item.Status == "completed" {
+			if item.CompletedAt != "" && item.Status == "confirmed" {
 				<tr>
 					<td class="detail-label">Completed:</td>
 					<td class="detail-value" colspan="3">{ data.SmartDate(item.CompletedAt) }</td>

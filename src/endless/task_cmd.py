@@ -66,7 +66,7 @@ def tier_display(tier: int | None) -> str:
 
 
 _TITLE_VERBS = {
-    "accept", "add", "apply", "audit", "build", "capture", "change", "clean", "configure", "consolidate", "convert",
+    "accept", "add", "apply", "assume", "audit", "build", "capture", "change", "clean", "confirm", "configure", "consolidate", "convert",
     "create", "decide", "define", "defer", "deploy", "design", "disable",
     "distinguish", "document", "enable", "enforce", "evaluate", "expand",
     "extract", "fix", "implement", "improve", "integrate", "investigate",
@@ -149,8 +149,9 @@ def _phase_for_heading(text: str) -> str:
         "deferred": "later",
         "backlog": "later",
         "blocked": "blocked",
-        "done": "completed",
-        "completed": "completed",
+        "done": "confirmed",
+        "completed": "confirmed",
+        "confirmed": "confirmed",
         "context": "_skip",
         "deliverables": "now",
         "verification": "_skip",
@@ -455,7 +456,7 @@ def _do_import(
 
     def _insert_tree(nodes: list[dict], db_parent_id: int | None):
         for node in nodes:
-            if node["phase"] == "completed":
+            if node["phase"] == "confirmed":
                 continue
             title = node["title"]
             cursor = db.execute(
@@ -540,7 +541,7 @@ def _render_flat_table(rows):
 def show_plan(
     project_name: str | None = None,
     show_all: bool = False,
-    status_filter: str | None = None,
+    status_filter: list[str] | None = None,
     phase_filter: str | None = None,
     tier_filter: int | None = None,
     sort_by: str | None = None,
@@ -554,10 +555,11 @@ def show_plan(
     where = "WHERE pi.project_id = ?"
     params: list = [project_id]
     if not show_all:
-        where += " AND pi.status NOT IN ('completed', 'declined')"
+        where += " AND pi.status NOT IN ('confirmed', 'assumed', 'declined')"
     if status_filter:
-        where += " AND pi.status = ?"
-        params.append(status_filter)
+        placeholders = ",".join("?" for _ in status_filter)
+        where += f" AND pi.status IN ({placeholders})"
+        params.extend(status_filter)
     if phase_filter:
         where += " AND pi.phase = ?"
         params.append(phase_filter)
@@ -613,7 +615,7 @@ def show_plan(
                 "title": row["title"],
                 "parent": f"E-{row['parent_id']}" if row["parent_id"] else None,
                 "created": row["created_at"],
-                "completed": row["completed_at"] or None,
+                "confirmed": row["completed_at"] or None,
             }
             for row in rows
         ]
@@ -655,7 +657,7 @@ def show_plan(
             "revisit": click.style("?", fg="cyan"),
             "in_progress": click.style("◉", fg="blue"),
             "verify": click.style("◉", fg="magenta"),
-            "completed": click.style("●", fg="green"),
+            "confirmed": click.style("●", fg="green"),
             "blocked": click.style("✗", fg="red"),
         }
 
@@ -676,10 +678,10 @@ def show_plan(
 
     click.echo()
     total = len(rows)
-    completed = sum(1 for r in rows if r["status"] == "completed")
+    confirmed = sum(1 for r in rows if r["status"] == "confirmed")
     click.echo(click.style(
         f"{total} item(s)"
-        + (f", {completed} completed" if completed else ""),
+        + (f", {confirmed} confirmed" if confirmed else ""),
         dim=True,
     ))
 
@@ -694,13 +696,13 @@ def next_tasks(
 ):
     """Show top actionable leaf tasks, ranked by priority."""
     where = (
-        "WHERE t.status NOT IN ('completed', 'blocked', 'declined', 'in_progress', 'verify') "
+        "WHERE t.status NOT IN ('confirmed', 'assumed', 'blocked', 'declined', 'in_progress', 'verify') "
         "AND (SELECT count(*) FROM tasks c WHERE c.parent_id = t.id) = 0 "
         "AND t.id NOT IN ("
         "  SELECT td.source_id FROM task_deps td"
         "  WHERE td.source_type = 'task' AND td.dep_type = 'needs'"
         "    AND td.target_id IN ("
-        "      SELECT t2.id FROM tasks t2 WHERE t2.status != 'completed'"
+        "      SELECT t2.id FROM tasks t2 WHERE t2.status != 'confirmed'"
         "    )"
         ")"
     )
@@ -1108,7 +1110,7 @@ def _next_sort_order(project_id: int, phase: str) -> int:
 
 
 def complete_item(item_id: int, cascade: bool = False):
-    """Mark a task as completed."""
+    """Mark a task as confirmed."""
     row = db.query(
         "SELECT id, COALESCE(title, description) as title, status FROM tasks "
         "WHERE id = ?",
@@ -1119,10 +1121,10 @@ def complete_item(item_id: int, cascade: bool = False):
             f"No task found with id {item_id}"
         )
 
-    if row[0]["status"] == "completed" and not cascade:
+    if row[0]["status"] == "confirmed" and not cascade:
         click.echo(
             click.style("•", fg="cyan")
-            + f" Item {task_id_display(item_id)} is already completed"
+            + f" Item {task_id_display(item_id)} is already confirmed"
         )
         return
 
@@ -1137,7 +1139,7 @@ def complete_item(item_id: int, cascade: bool = False):
             "  SELECT t.id FROM tasks t JOIN tree ON t.parent_id = tree.id"
             ") SELECT count(*) FROM tree "
             "JOIN tasks ON tasks.id = tree.id "
-            "WHERE tasks.status != 'completed'",
+            "WHERE tasks.status != 'confirmed'",
             (item_id,),
         ) or 0
         db.execute(
@@ -1145,23 +1147,78 @@ def complete_item(item_id: int, cascade: bool = False):
             "  SELECT id FROM tasks WHERE id = ?"
             "  UNION ALL"
             "  SELECT t.id FROM tasks t JOIN tree ON t.parent_id = tree.id"
-            ") UPDATE tasks SET status='completed', completed_at=? "
-            "WHERE id IN (SELECT id FROM tree) AND status != 'completed'",
+            ") UPDATE tasks SET status='confirmed', completed_at=? "
+            "WHERE id IN (SELECT id FROM tree) AND status != 'confirmed'",
             (item_id, now),
         )
         click.echo(
             click.style("•", fg="cyan")
-            + f" Completed {task_id_display(item_id)} and {count - 1} descendant(s): {row[0]['title']}"
+            + f" Confirmed {task_id_display(item_id)} and {count - 1} descendant(s): {row[0]['title']}"
         )
     else:
         db.execute(
-            "UPDATE tasks SET status='completed', "
+            "UPDATE tasks SET status='confirmed', "
             "completed_at=? WHERE id=?",
             (now, item_id),
         )
         click.echo(
             click.style("•", fg="cyan")
-            + f" Completed: {row[0]['title']}"
+            + f" Confirmed: {row[0]['title']}"
+        )
+
+
+def assume_item(item_id: int, cascade: bool = False):
+    """Mark a task as assumed (believed complete, not yet verified)."""
+    row = db.query(
+        "SELECT id, COALESCE(title, description) as title, status FROM tasks "
+        "WHERE id = ?",
+        (item_id,),
+    )
+    if not row:
+        raise click.ClickException(
+            f"No task found with id {item_id}"
+        )
+
+    if row[0]["status"] == "assumed" and not cascade:
+        click.echo(
+            click.style("•", fg="cyan")
+            + f" Item {task_id_display(item_id)} is already assumed"
+        )
+        return
+
+    if cascade:
+        count = db.scalar(
+            "WITH RECURSIVE tree(id) AS ("
+            "  SELECT id FROM tasks WHERE id = ?"
+            "  UNION ALL"
+            "  SELECT t.id FROM tasks t JOIN tree ON t.parent_id = tree.id"
+            ") SELECT count(*) FROM tree "
+            "JOIN tasks ON tasks.id = tree.id "
+            "WHERE tasks.status NOT IN ('confirmed', 'assumed')",
+            (item_id,),
+        ) or 0
+        db.execute(
+            "WITH RECURSIVE tree(id) AS ("
+            "  SELECT id FROM tasks WHERE id = ?"
+            "  UNION ALL"
+            "  SELECT t.id FROM tasks t JOIN tree ON t.parent_id = tree.id"
+            ") UPDATE tasks SET status='assumed', completed_at=NULL "
+            "WHERE id IN (SELECT id FROM tree) AND status NOT IN ('confirmed', 'assumed')",
+            (item_id,),
+        )
+        click.echo(
+            click.style("•", fg="cyan")
+            + f" Assumed {task_id_display(item_id)} and {count - 1} descendant(s): {row[0]['title']}"
+        )
+    else:
+        db.execute(
+            "UPDATE tasks SET status='assumed', "
+            "completed_at=NULL WHERE id=?",
+            (item_id,),
+        )
+        click.echo(
+            click.style("•", fg="cyan")
+            + f" Assumed: {row[0]['title']}"
         )
 
 
@@ -1216,7 +1273,7 @@ def update_plan(
 
     if status is not None:
         valid = ("needs_plan", "ready", "in_progress",
-                 "verify", "completed", "blocked", "revisit", "declined")
+                 "verify", "confirmed", "assumed", "blocked", "revisit", "declined")
         if status not in valid:
             raise click.ClickException(
                 f"Invalid status '{status}'. "
@@ -1224,7 +1281,7 @@ def update_plan(
             )
         updates.append("status = ?")
         params.append(status)
-        if status == "completed":
+        if status == "confirmed":
             now = datetime.now(timezone.utc).strftime(
                 "%Y-%m-%dT%H:%M:%S"
             )
@@ -1334,7 +1391,7 @@ def detail_item(
             "parent": f"E-{item['parent_id']}" if item["parent_id"] else None,
             "created": item["created_at"],
             "updated": item["updated_at"],
-            "completed": item["completed_at"] or None,
+            "confirmed": item["completed_at"] or None,
             "source_file": item["source_file"] or None,
             "tier": item["tier"],
             "description": item["description"] if show_description else None,
@@ -1344,7 +1401,7 @@ def detail_item(
         if show_children:
             children = db.query(
                 "SELECT id, COALESCE(title, description) as title, status, phase "
-                "FROM tasks WHERE parent_id = ? AND status != 'completed' "
+                "FROM tasks WHERE parent_id = ? AND status != 'confirmed' "
                 "ORDER BY sort_order",
                 (item_id,),
             )
@@ -1366,7 +1423,7 @@ def detail_item(
         click.echo(f"created={item['created_at']}")
         click.echo(f"updated={item['updated_at']}")
         if item["completed_at"]:
-            click.echo(f"completed={item['completed_at']}")
+            click.echo(f"confirmed={item['completed_at']}")
         if show_description and item["description"] and item["description"] != item["title"]:
             click.echo(f"\n## Description\n{item['description']}")
         if show_text and item["text"]:
@@ -1376,7 +1433,7 @@ def detail_item(
         if show_children:
             children = db.query(
                 "SELECT id, COALESCE(title, description) as title, status, phase "
-                "FROM tasks WHERE parent_id = ? AND status != 'completed' "
+                "FROM tasks WHERE parent_id = ? AND status != 'confirmed' "
                 "ORDER BY id",
                 (item_id,),
             )
@@ -1407,7 +1464,7 @@ def detail_item(
     if item["updated_at"] and item["updated_at"] != item["created_at"]:
         click.echo(f"{label('Updated:'):<19} {val(_format_timestamp(item['updated_at']))}")
     if item["completed_at"]:
-        click.echo(f"{label('Completed:'):<19} {val(_format_timestamp(item['completed_at']))}")
+        click.echo(f"{label('Confirmed:'):<19} {val(_format_timestamp(item['completed_at']))}")
     if item["source_file"]:
         click.echo(f"{label('Source:'):<19} {val(item['source_file'])}")
 
@@ -1430,7 +1487,7 @@ def detail_item(
     if show_children:
         children = db.query(
             "SELECT id, COALESCE(title, description) as title, status, phase "
-            "FROM tasks WHERE parent_id = ? AND status != 'completed' "
+            "FROM tasks WHERE parent_id = ? AND status != 'confirmed' "
             "ORDER BY id",
             (item_id,),
         )
@@ -1591,7 +1648,7 @@ def search_tasks(
     query: str,
     project_name: str | None = None,
     show_all: bool = False,
-    status_filter: str | None = None,
+    status_filter: list[str] | None = None,
     phase_filter: str | None = None,
     search_text: bool = False,
     search_prompt: bool = False,
@@ -1605,10 +1662,11 @@ def search_tasks(
     params: list = [project_id]
 
     if not show_all:
-        where += " AND t.status NOT IN ('completed', 'declined')"
+        where += " AND t.status NOT IN ('confirmed', 'assumed', 'declined')"
     if status_filter:
-        where += " AND t.status = ?"
-        params.append(status_filter)
+        placeholders = ",".join("?" for _ in status_filter)
+        where += f" AND t.status IN ({placeholders})"
+        params.extend(status_filter)
     if phase_filter:
         where += " AND t.phase = ?"
         params.append(phase_filter)

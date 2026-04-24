@@ -241,7 +241,7 @@ templ taskStatusIcon(status string) {
 	<span class="relative" x-data="{ tip: false }">
 		<span x-on:mouseenter="tip = true" x-on:mouseleave="tip = false">
 			switch status {
-				case "completed":
+				case "confirmed":
 					<span class="text-emerald-500 text-sm">●</span>
 				case "in_progress":
 					<span class="text-amber-400 text-sm">◐</span>

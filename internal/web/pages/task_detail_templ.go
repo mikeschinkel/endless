@@ -173,7 +173,7 @@ func TaskDetail(project *data.DashboardProject, taskItems []data.TaskView) templ
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					var templ_7745c5c3_Var10 = []any{"text-sm flex-1 cursor-pointer", templ.KV("font-semibold text-gray-200", item.ChildCount > 0), templ.KV("text-gray-300", item.Status != "completed" && item.ChildCount == 0), templ.KV("text-gray-500 line-through", item.Status == "completed")}
+					var templ_7745c5c3_Var10 = []any{"text-sm flex-1 cursor-pointer", templ.KV("font-semibold text-gray-200", item.ChildCount > 0), templ.KV("text-gray-300", item.Status != "confirmed" && item.ChildCount == 0), templ.KV("text-gray-500 line-through", item.Status == "confirmed")}
 					templ_7745c5c3_Err = templ.RenderCSSItems(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_Var10...)
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err

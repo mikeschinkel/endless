@@ -1273,6 +1273,9 @@
   .bg-cyan-400 {
     background-color: var(--color-cyan-400);
   }
+  .bg-emerald-300 {
+    background-color: var(--color-emerald-300);
+  }
   .bg-emerald-400 {
     background-color: var(--color-emerald-400);
   }

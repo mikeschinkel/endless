@@ -232,7 +232,7 @@ func TouchSession(sessionID string) error {
 	return err
 }
 
-// CompleteTask marks a plan item completed and clears the session's active task.
+// CompleteTask marks a task as confirmed and clears the session's active task.
 func CompleteTask(sessionID string, taskID int64) error {
 	db, err := DB()
 	if err != nil {
@@ -241,9 +241,9 @@ func CompleteTask(sessionID string, taskID int64) error {
 
 	now := time.Now().UTC().Format("2006-01-02T15:04:05")
 
-	// Mark task item completed
+	// Mark task as confirmed
 	_, err = db.Exec(
-		"UPDATE tasks SET status='completed', completed_at=? WHERE id=?",
+		"UPDATE tasks SET status='confirmed', completed_at=? WHERE id=?",
 		now, taskID,
 	)
 	if err != nil {

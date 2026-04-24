@@ -854,7 +854,7 @@ func taskStatusIcon(status string) templ.Component {
 			return templ_7745c5c3_Err
 		}
 		switch status {
-		case "completed":
+		case "confirmed":
 			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 95, "<span class=\"text-emerald-500 text-sm\">●</span>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
