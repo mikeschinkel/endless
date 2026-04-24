@@ -88,7 +88,8 @@ CREATE TABLE IF NOT EXISTS tasks (
     tier INTEGER,
     FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
     FOREIGN KEY (parent_id) REFERENCES tasks(id) ON DELETE SET NULL,
-    CHECK (completed_at IS NULL OR status = 'confirmed')
+    CHECK (completed_at IS NULL OR status = 'confirmed'),
+    CHECK (tier != 1 OR status != 'needs_plan')
 );
 
 CREATE TRIGGER IF NOT EXISTS tasks_updated_at AFTER UPDATE ON tasks

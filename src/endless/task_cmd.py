@@ -979,7 +979,7 @@ def add_item(
     project_id, proj_name = _resolve_project(project_name)
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
     task_type = task_type or "task"
-    status = status or "needs_plan"
+    status = status or ("ready" if tier == 1 else "needs_plan")
 
     # Determine sort_order
     if after:
@@ -1260,7 +1260,7 @@ def update_plan(
     if title is not None:
         validate_title(title, force=force)
     row = db.query(
-        "SELECT id, title FROM tasks WHERE id = ?",
+        "SELECT id, title, status FROM tasks WHERE id = ?",
         (item_id,),
     )
     if not row:
@@ -1327,6 +1327,10 @@ def update_plan(
     if tier is not None:
         updates.append("tier = ?")
         params.append(tier if tier > 0 else None)
+        # Tier 1 tasks can't be needs_plan — auto-advance to ready
+        if tier == 1 and status is None and row[0]["status"] == "needs_plan":
+            updates.append("status = ?")
+            params.append("ready")
 
     if not updates:
         raise click.ClickException(
@@ -1910,7 +1914,7 @@ def start_chat():
 # ── Dependency management ──────────────────────────────────────────
 
 
-def add_dep(source_id: int, target_id: int, dep_type: str = "blocks"):
+def add_dep(source_id: int, target_id: int, dep_type: str = "needs"):
     """Record that target blocks source (source needs target to be done first)."""
     if source_id == target_id:
         raise click.ClickException("A task cannot depend on itself.")
