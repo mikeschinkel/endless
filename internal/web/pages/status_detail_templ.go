@@ -503,7 +503,7 @@ func StatusDetail(detail *data.StatusDetail) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 20, "\"><div class=\"flex items-center justify-between mb-3\"><h3 class=\"text-sm font-semibold text-gray-400 uppercase tracking-wider\">Tasks</h3><div class=\"flex items-center gap-3\"><button x-on:click=\"toggleAll(true)\" class=\"text-xs text-gray-500 hover:text-gray-300 cursor-pointer\">Expand</button> <button x-on:click=\"toggleAll(false)\" class=\"text-xs text-gray-500 hover:text-gray-300 cursor-pointer\">Collapse</button> <button x-on:click=\"showIds = !showIds\" class=\"text-xs cursor-pointer\" x-bind:class=\"showIds ? 'text-emerald-400 hover:text-emerald-300' : 'text-gray-500 hover:text-gray-300'\">IDs</button> <a href=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 20, "\"><div class=\"flex items-center justify-between mb-3 sticky top-0 z-10 bg-gray-900 py-2 -mt-2 -mx-4 px-4 border-b border-gray-800/50\"><h3 class=\"text-sm font-semibold text-gray-400 uppercase tracking-wider\">Tasks</h3><div class=\"flex items-center gap-3\"><button x-on:click=\"toggleAll(true)\" class=\"text-xs text-gray-500 hover:text-gray-300 cursor-pointer\">Expand</button> <button x-on:click=\"toggleAll(false)\" class=\"text-xs text-gray-500 hover:text-gray-300 cursor-pointer\">Collapse</button> <button x-on:click=\"showIds = !showIds\" class=\"text-xs cursor-pointer\" x-bind:class=\"showIds ? 'text-emerald-400 hover:text-emerald-300' : 'text-gray-500 hover:text-gray-300'\">IDs</button> <a href=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

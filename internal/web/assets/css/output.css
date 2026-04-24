@@ -431,6 +431,9 @@
   .-mx-1 {
     margin-inline: calc(var(--spacing) * -1);
   }
+  .-mx-4 {
+    margin-inline: calc(var(--spacing) * -4);
+  }
   .mx-2 {
     margin-inline: calc(var(--spacing) * 2);
   }
@@ -451,6 +454,9 @@
   }
   .my-auto {
     margin-block: auto;
+  }
+  .-mt-2 {
+    margin-top: calc(var(--spacing) * -2);
   }
   .mt-1 {
     margin-top: calc(var(--spacing) * 1);
@@ -787,9 +793,6 @@
   }
   .min-w-5 {
     min-width: calc(var(--spacing) * 5);
-  }
-  .min-w-32 {
-    min-width: calc(var(--spacing) * 32);
   }
   .min-w-\[8rem\] {
     min-width: 8rem;
@@ -3082,11 +3085,6 @@
     &>[role=checkbox] {
       --tw-translate-y: 2px;
       translate: var(--tw-translate-x) var(--tw-translate-y);
-    }
-  }
-  .\[\&\>div\]\:\!bg-gray-700 {
-    &>div {
-      background-color: var(--color-gray-700) !important;
     }
   }
   .\[\&\>span\:last-child\]\:truncate {

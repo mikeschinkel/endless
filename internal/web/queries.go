@@ -177,7 +177,14 @@ func GetProjectTasks(projectID int64, excludeStatuses ...string) []data.TaskView
 		 COALESCE(pi.completed_at,'') as completed_at
 		 FROM tasks pi
 		 WHERE pi.project_id = ?
-		 ORDER BY pi.parent_id, CASE pi.status
+		 ORDER BY pi.parent_id,
+		 CASE pi.phase
+		   WHEN 'now' THEN 0
+		   WHEN 'next' THEN 1
+		   WHEN 'later' THEN 2
+		   ELSE 3
+		 END,
+		 CASE pi.status
 		   WHEN 'in_progress' THEN 0
 		   WHEN 'verify' THEN 1
 		   WHEN 'ready' THEN 2
@@ -186,12 +193,6 @@ func GetProjectTasks(projectID int64, excludeStatuses ...string) []data.TaskView
 		   WHEN 'blocked' THEN 5
 		   WHEN 'completed' THEN 6
 		   ELSE 7
-		 END,
-		 CASE pi.phase
-		   WHEN 'now' THEN 0
-		   WHEN 'next' THEN 1
-		   WHEN 'later' THEN 2
-		   ELSE 3
 		 END,
 		 CASE WHEN pi.tier IS NULL THEN 99 ELSE pi.tier END,
 		 pi.updated_at DESC`, childExclude), projectID)
