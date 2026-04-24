@@ -1697,6 +1697,130 @@ def search_tasks(
     click.echo(click.style(f"{len(rows)} match(es)", dim=True))
 
 
+def move_task(
+    item_id: int | None = None,
+    parent: int | None = None,
+    root: bool = False,
+    with_children: bool = False,
+    children_of: int | None = None,
+    project_name: str | None = None,
+):
+    """Move tasks between parents, to root, or batch-move children."""
+    # Validation: must specify exactly one destination
+    if not parent and not root:
+        raise click.ClickException(
+            "Must specify either --parent or --root as the destination."
+        )
+    if parent and root:
+        raise click.ClickException(
+            "Cannot specify both --parent and --root."
+        )
+
+    # Validation: children-of vs item_id
+    if children_of and item_id:
+        raise click.ClickException(
+            "Cannot specify both item_id and --children-of."
+        )
+    if not children_of and not item_id:
+        raise click.ClickException(
+            "Must specify either an item_id or --children-of."
+        )
+    if with_children and not item_id:
+        raise click.ClickException(
+            "--with-children requires an item_id."
+        )
+
+    # Resolve target parent
+    target_parent_id = None
+    if parent:
+        row = db.query(
+            "SELECT id FROM tasks WHERE id = ?",
+            (parent,),
+        )
+        if not row:
+            raise click.ClickException(
+                f"Target parent {task_id_display(parent)} not found."
+            )
+        target_parent_id = parent
+
+    bullet = click.style("•", fg="cyan")
+
+    if children_of:
+        # Verify source parent exists
+        row = db.query(
+            "SELECT id FROM tasks WHERE id = ?",
+            (children_of,),
+        )
+        if not row:
+            raise click.ClickException(
+                f"Source parent {task_id_display(children_of)} not found."
+            )
+
+        # Count children
+        count = db.scalar(
+            "SELECT count(*) FROM tasks WHERE parent_id = ?",
+            (children_of,),
+        ) or 0
+        if count == 0:
+            click.echo(
+                bullet
+                + f" {task_id_display(children_of)} has no children to move."
+            )
+            return
+
+        # Move children
+        db.execute(
+            "UPDATE tasks SET parent_id = ? WHERE parent_id = ?",
+            (target_parent_id, children_of),
+        )
+        dest = task_id_display(target_parent_id) if target_parent_id else "root"
+        click.echo(
+            bullet
+            + f" Moved {count} children of {task_id_display(children_of)} to {dest}"
+        )
+        return
+
+    # Single task move (with or without children)
+    # Verify task exists
+    row = db.query(
+        "SELECT id, parent_id FROM tasks WHERE id = ?",
+        (item_id,),
+    )
+    if not row:
+        raise click.ClickException(
+            f"Task {task_id_display(item_id)} not found."
+        )
+
+    # Circular move check: can't move a task under itself or its descendant
+    if target_parent_id:
+        # Walk up from target_parent_id to make sure item_id is not an ancestor
+        current = target_parent_id
+        while current is not None:
+            if current == item_id:
+                raise click.ClickException(
+                    f"Cannot move {task_id_display(item_id)} under "
+                    f"{task_id_display(target_parent_id)}: would create a cycle."
+                )
+            ancestor = db.query(
+                "SELECT parent_id FROM tasks WHERE id = ?",
+                (current,),
+            )
+            current = ancestor[0]["parent_id"] if ancestor else None
+
+    # Move the task
+    db.execute(
+        "UPDATE tasks SET parent_id = ? WHERE id = ?",
+        (target_parent_id, item_id),
+    )
+
+    dest = task_id_display(target_parent_id) if target_parent_id else "root"
+    suffix = " (with children)" if with_children else ""
+    click.echo(
+        bullet
+        + f" Moved {task_id_display(item_id)} under {dest}{suffix}"
+    )
+
+
 def start_chat():
     """Start a chat-only session (no task tracking required)."""
     session_id = str(uuid.uuid4())
