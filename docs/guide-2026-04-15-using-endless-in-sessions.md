@@ -50,35 +50,51 @@ Implement whatever the task describes. The task's `text` field may contain a det
 endless task update <id> --status verify
 ```
 
-This signals that implementation is complete and the item needs manual verification by Mike. Do NOT mark items as `completed` — only Mike does that after verifying.
+This signals that implementation is complete and the item needs manual verification by Mike. Do NOT mark items as `confirmed` — only Mike does that after verifying.
 
-### 5. If you need to mark it complete (only if Mike confirms)
+When reporting completion to the user (e.g. "Done", "Finished", "Ready for review"), always include the task ID so Mike knows which task you're referring to. For example: "Done — E-752 is ready for verification."
+
+### 5. If Mike confirms the work
 
 ```bash
-endless task complete <id>
+endless task confirm <id>
 ```
+
+### 6. If you can't easily verify but believe it works
+
+```bash
+endless task assume <id>
+```
+
+This marks the task as believed complete but not yet verified. It will be confirmed when the feature is used naturally.
 
 ## Key Commands Reference
 
 ### Viewing Tasks
 
 ```bash
-# Show task tree for current project
+# List tasks for current project (flat table sorted by ID)
 endless task list
 
-# Show task tree for a specific project
+# List tasks for a specific project
 endless task list --project <name>
 
-# Show all items including completed
+# Show all items including confirmed/assumed/declined
 endless task list --all
 
-# Filter by status or phase
+# Filter by status, phase, or tier
 endless task list --status ready
+endless task list --status needs_plan,ready     # comma-separated
 endless task list --phase now
+endless task list --tier 1                      # or --tier auto
 
-# Flat sorted list
-endless task list --sort id
+# Sort by different columns
 endless task list --sort status
+endless task list --sort tier
+endless task list --sort phase
+
+# Tree view (hierarchical)
+endless task list --tree
 
 # Detail for one task
 endless task show <id>
@@ -111,8 +127,19 @@ endless task update <id> --text /path/to/file.md    # loads text from file
 endless task update <id> --parent 444               # move under a different parent
 endless task update <id> --parent 0                 # make it a root item
 
-# Remove a task
+# Remove a task (warns if it has children)
 endless task remove <id>
+endless task remove <id> --cascade            # also remove all descendants
+
+# Move tasks between parents
+endless task move <id> --parent <parent_id>   # move under a new parent
+endless task move <id> --root                 # move to root
+endless task move --children-of <id> --root   # move all children to root
+
+# Search tasks
+endless task search "query"                   # searches ID, title, description
+endless task search "query" --text            # also search text field
+endless task search "query" --status ready    # with status filter
 ```
 
 ### Session Management
@@ -124,12 +151,47 @@ endless task start <id>
 # Start a chat-only session (tracked but not tied to a task)
 endless task chat
 
-# Mark a task complete
-endless task complete <id>
+# Mark a task as confirmed (only when Mike approves)
+endless task confirm <id>
 
-# Complete a task and all its descendants
-endless task complete <id> --cascade
+# Confirm a task and all its descendants
+endless task confirm <id> --cascade
+
+# Mark as assumed (believed complete, verify later)
+endless task assume <id>
 ```
+
+### Inter-Session Messaging
+
+Endless supports messaging between concurrent Claude Code sessions via channels. This is useful when multiple sessions are working on related tasks in the same project.
+
+```bash
+# Session A: announce availability for messaging
+endless channel beacon
+
+# Session B: connect to the beaconing session
+endless channel connect                       # auto-detects if one beacon exists
+endless channel connect <channel_id>          # explicit ID if multiple beacons
+
+# Send a message to the connected session
+endless channel send "Hey — E-839 is done, task update now accepts --phase"
+
+# Check for incoming messages
+endless channel inbox
+
+# List active beacons for a project
+endless channel list
+endless channel list --project <name>
+
+# Close the channel when done
+endless channel close
+```
+
+**How it works:**
+- One session runs `beacon` to advertise itself as available
+- Another session runs `connect` to pair with the beacon
+- Messages are delivered via MCP notifications — the receiving session sees a channel event and runs `inbox` to read them
+- Channels are project-scoped: `connect` auto-finds the beacon for the current project
 
 ### Project Commands
 
@@ -146,13 +208,16 @@ endless status --project <name>
 
 | Status        | Meaning                                                   |
 |---------------|-----------------------------------------------------------|
-| `ready`       | Planned and ready to implement                            |
 | `needs_plan`  | Not yet planned — needs design work before implementation |
+| `ready`       | Planned and ready to implement                            |
 | `in_progress` | Someone is actively working on it                         |
 | `verify`      | Implementation done, awaiting Mike's verification         |
+| `confirmed`   | Verified and done                                         |
+| `assumed`     | Believed complete, will verify when used naturally        |
 | `blocked`     | Waiting on something else                                 |
-| `completed`   | Verified and done                                         |
 | `revisit`     | Was partially planned but needs re-evaluation             |
+| `declined`    | Active decision not to do this                            |
+| `obsolete`    | Made irrelevant by other changes                          |
 
 ## Task Phases
 
@@ -228,13 +293,13 @@ endless task update <id> --status revisit
 ### Checking what's currently in progress
 
 ```bash
-endless task show --status in_progress
-endless task next --project <name>
+endless task active                            # shows in_progress + verify tasks
+endless task next --project <name>             # top actionable tasks
 ```
 
 ## Important Notes
 
-- **Don't mark items `completed`** — set them to `verify` and let Mike confirm
+- **Don't mark items `confirmed`** — set them to `verify` and let Mike confirm, or `assume` if you can't easily verify
 - **Always `task start` before writing code** — even if enforcement isn't on, it helps tracking
 - **Tasks have hierarchy** — use `--parent` when adding items to keep the tree organized
 - **The `text` field is the task body** — `title` is the one-liner, `description` is a short summary, `text` is the full implementation plan
