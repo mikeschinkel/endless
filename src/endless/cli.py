@@ -256,18 +256,21 @@ def session_history(session_id, show_tools, timestamps, limit, sort_order, as_js
               type=click.Choice(["id", "project", "state", "count"]),
               help="Sort by column (default: state priority)")
 @click.option("--all", "show_all", is_flag=True,
-              help="Include hidden sessions")
+              help="Include hidden and empty sessions")
 @click.option("--hidden", "show_hidden", is_flag=True,
               help="Show only hidden sessions")
+@click.option("--empty", "show_empty", is_flag=True,
+              help="Include empty/short sessions (<=2 messages)")
 @click.option("--limit", default=20, type=int,
               help="Max sessions (default: 20)")
 @click.option("--json", "as_json", is_flag=True, help="JSON output")
-def session_list(project, state, sort_by, show_all, show_hidden, limit, as_json):
+def session_list(project, state, sort_by, show_all, show_hidden, show_empty, limit, as_json):
     """List recent sessions."""
     from endless.session_cmd import list_sessions
     list_sessions(project_name=project, show_all=show_all,
-                  show_hidden=show_hidden, state_filter=state,
-                  sort_by=sort_by, limit=limit, as_json=as_json)
+                  show_hidden=show_hidden, show_empty=show_empty,
+                  state_filter=state, sort_by=sort_by,
+                  limit=limit, as_json=as_json)
 
 
 @session_cmd.command("search")

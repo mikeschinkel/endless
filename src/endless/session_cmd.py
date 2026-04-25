@@ -205,6 +205,7 @@ def list_sessions(
     project_name: str | None = None,
     show_all: bool = False,
     show_hidden: bool = False,
+    show_empty: bool = False,
     state_filter: str | None = None,
     sort_by: str | None = None,
     limit: int = 20,
@@ -226,6 +227,20 @@ def list_sessions(
     if state_filter:
         where += " AND s.state = ?"
         params.append(state_filter)
+
+    # Filter out empty sessions and recap-generated sessions by default
+    if not show_all and not show_empty:
+        where += (
+            " AND (SELECT count(*) FROM session_messages m "
+            "WHERE m.session_id = s.session_id) > 0"
+        )
+        # Exclude sessions created by 'endless session recap' (claude -p calls)
+        where += (
+            " AND NOT EXISTS (SELECT 1 FROM session_messages m "
+            "WHERE m.session_id = s.session_id AND m.role = 'user' "
+            "AND m.content LIKE 'Summarize this conversation in 2-3 sentences%' "
+            "ORDER BY m.created_at ASC LIMIT 1)"
+        )
 
     sort_map = {
         "id": "s.id DESC",
