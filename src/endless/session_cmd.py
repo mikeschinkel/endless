@@ -775,23 +775,34 @@ def _project_id_from_path(jsonl_path: str) -> int | None:
     """Derive project_id from a JSONL transcript path.
 
     Path format: ~/.claude/projects/-Users-mike-Projects-foo/UUID.jsonl
-    The encoded CWD uses dashes for path separators.
+    Claude encodes CWD by replacing / with -. Since directory names can
+    also contain dashes, we can't decode reliably. Instead, encode each
+    registered project path the same way and compare.
     """
     import re
     match = re.search(r'/\.claude/projects/([^/]+)/', jsonl_path)
     if not match:
         return None
-    encoded = match.group(1)
-    decoded = encoded.replace('-', '/')
+    encoded_cwd = match.group(1)
 
-    # Try exact match against registered projects
-    row = db.query("SELECT id, path FROM projects")
-    if not row:
+    # Encode each registered project path and find the best match
+    rows = db.query("SELECT id, path FROM projects")
+    if not rows:
         return None
-    for p in row:
-        if p["path"] == decoded or decoded.startswith(p["path"] + "/") or decoded.startswith(p["path"]):
-            return p["id"]
-    return None
+
+    best_match = None
+    best_len = 0
+    for p in rows:
+        # Encode project path same way Claude does: / → -
+        encoded_proj = p["path"].replace("/", "-")
+        # Check if the encoded CWD starts with the encoded project path
+        if encoded_cwd == encoded_proj or encoded_cwd.startswith(encoded_proj + "-"):
+            # Longest match wins (most specific project)
+            if len(encoded_proj) > best_len:
+                best_match = p["id"]
+                best_len = len(encoded_proj)
+
+    return best_match
 
 
 def _find_jsonl(session_id: str) -> str | None:
