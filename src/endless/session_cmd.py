@@ -281,8 +281,19 @@ def list_sessions(
     except OSError:
         term_width = 120
 
+    # Get total count for header
+    total_count = db.scalar(
+        f"SELECT count(*) FROM sessions s "
+        f"LEFT JOIN projects p ON s.project_id = p.id "
+        f"{where}",
+        tuple(params[:-1]),  # exclude limit param
+    ) or 0
+
     click.echo()
-    click.echo(click.style("Sessions", bold=True))
+    if total_count > len(rows):
+        click.echo(click.style(f"Sessions ({len(rows)} of {total_count})", bold=True))
+    else:
+        click.echo(click.style("Sessions", bold=True))
 
     id_w = 4
     proj_w = max(7, max((len(r["project_name"]) for r in rows), default=7))
@@ -323,7 +334,6 @@ def list_sessions(
         click.echo(line)
 
     click.echo()
-    click.echo(click.style(f"{len(rows)} session(s)", dim=True))
 
 
 def search_sessions(
@@ -485,12 +495,15 @@ def reimport_sessions(session_value: str | None = None):
                 (session_id,),
             )
 
-        # Store transcript path
+        # Store transcript path and reset offset for re-parse
+        # Preserve existing summary if set
         db.execute(
             "UPDATE sessions SET transcript_path = ?, transcript_offset = 0 "
             "WHERE session_id = ?",
             (str(jf), session_id),
         )
+        # Clear summary only if it will be re-derived from messages
+        # (don't clear — let _set_summary_if_empty handle it)
 
         # Parse
         before = db.scalar(
