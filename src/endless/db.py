@@ -300,6 +300,12 @@ def _migrate_v3(conn: sqlite3.Connection):
         if "hidden" not in cols:
             conn.execute("ALTER TABLE sessions ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0")
             conn.commit()
+        if "needs_recap" not in cols:
+            conn.execute("ALTER TABLE sessions ADD COLUMN needs_recap INTEGER NOT NULL DEFAULT 0")
+            conn.commit()
+        if "summary_seq" not in cols:
+            conn.execute("ALTER TABLE sessions ADD COLUMN summary_seq INTEGER NOT NULL DEFAULT 0")
+            conn.commit()
 
 
 def execute(sql: str, params: tuple = ()) -> sqlite3.Cursor:

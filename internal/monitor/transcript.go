@@ -334,3 +334,33 @@ func GetTranscriptPath(sessionID string) string {
 	}
 	return ""
 }
+
+// FlagNeedsRecap marks a session as needing a recap if it has enough new
+// user messages since the last recap.
+func FlagNeedsRecap(sessionID string) {
+	db, err := DB()
+	if err != nil {
+		return
+	}
+
+	// Count user messages since last recap
+	var summarySeq int
+	db.QueryRow(
+		"SELECT COALESCE(summary_seq, 0) FROM sessions WHERE session_id = ?",
+		sessionID,
+	).Scan(&summarySeq)
+
+	var userMsgCount int
+	db.QueryRow(
+		"SELECT count(*) FROM session_messages WHERE session_id = ? AND role = 'user'",
+		sessionID,
+	).Scan(&userMsgCount)
+
+	// Flag if >= 10 new user messages since last recap
+	if userMsgCount-summarySeq >= 10 {
+		db.Exec(
+			"UPDATE sessions SET needs_recap = 1 WHERE session_id = ?",
+			sessionID,
+		)
+	}
+}

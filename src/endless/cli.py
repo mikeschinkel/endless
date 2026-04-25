@@ -290,6 +290,16 @@ def session_reimport(session_id):
     reimport_sessions(session_value=session_id)
 
 
+@session_cmd.command("recap")
+@click.argument("session_id", required=False, default=None)
+@click.option("--force", is_flag=True,
+              help="Generate even if < 10 new messages")
+def session_recap(session_id, force):
+    """Generate recap summaries for sessions using Claude."""
+    from endless.session_cmd import recap_session
+    recap_session(session_value=session_id, force=force)
+
+
 @session_cmd.command("hide")
 @click.argument("session_ids", nargs=-1, required=True)
 def session_hide(session_ids):

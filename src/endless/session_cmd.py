@@ -333,6 +333,18 @@ def list_sessions(
         )
         click.echo(line)
 
+    # Notify about sessions needing recaps
+    if not as_json:
+        recap_count = db.scalar(
+            "SELECT count(*) FROM sessions WHERE needs_recap = 1 AND hidden = 0"
+        ) or 0
+        if recap_count > 0:
+            click.echo()
+            click.echo(
+                click.style(f"  {recap_count} session(s) need recaps. ", dim=True)
+                + click.style("Run: endless session recap", fg="cyan", dim=True)
+            )
+
     click.echo()
 
 
@@ -545,6 +557,149 @@ def reimport_sessions(session_value: str | None = None):
         + f" Added {total_messages} messages across {total_sessions} sessions "
         + f"({len(jsonl_files)} JSONL files scanned)"
     )
+
+
+def recap_session(session_value: str | None = None, force: bool = False):
+    """Generate recap summaries for sessions using claude -p."""
+    import subprocess
+    import shutil
+
+    claude_bin = shutil.which("claude")
+    if not claude_bin:
+        raise click.ClickException(
+            "claude CLI not found on PATH. Required for recap generation."
+        )
+
+    if session_value:
+        # Recap a specific session
+        session = _resolve_session(session_value)
+        _generate_recap(session, claude_bin, force=force)
+        return
+
+    # Recap all sessions that need it
+    rows = db.query(
+        "SELECT id, session_id, summary_seq FROM sessions "
+        "WHERE needs_recap = 1 AND hidden = 0"
+    )
+    if not rows:
+        click.echo(
+            click.style("•", fg="cyan") + " No sessions need recaps"
+        )
+        return
+
+    for row in rows:
+        session = _resolve_session(str(row["id"]))
+        _generate_recap(session, claude_bin, force=False)
+
+
+def _generate_recap(session: dict, claude_bin: str, force: bool = False):
+    """Generate a recap for a single session."""
+    import subprocess
+
+    session_id = session["session_id"]
+    summary_seq = session.get("summary_seq", 0) or 0
+
+    # Count user messages
+    user_count = db.scalar(
+        "SELECT count(*) FROM session_messages "
+        "WHERE session_id = ? AND role = 'user'",
+        (session_id,),
+    ) or 0
+
+    # Skip if not enough new messages (unless forced)
+    if not force and user_count - summary_seq < 10:
+        click.echo(
+            click.style("•", fg="cyan")
+            + f" Session {session['id']}: only {user_count - summary_seq} new user messages, skipping (need 10)"
+        )
+        return
+
+    # Get last 20 user+assistant messages
+    rows = db.query(
+        "SELECT role, content FROM session_messages "
+        "WHERE session_id = ? AND role IN ('user', 'assistant') "
+        "ORDER BY created_at DESC LIMIT 20",
+        (session_id,),
+    )
+    if not rows:
+        click.echo(
+            click.style("•", fg="cyan")
+            + f" Session {session['id']}: no messages to recap"
+        )
+        return
+
+    # Reverse to chronological order for the prompt
+    rows = list(reversed(rows))
+
+    # Build conversation text for claude -p
+    conversation = []
+    for row in rows:
+        role = "User" if row["role"] == "user" else "Claude"
+        content = row["content"]
+        if len(content) > 1000:
+            content = content[:1000] + "..."
+        conversation.append(f"{role}: {content}")
+
+    transcript_text = "\n\n".join(conversation)
+
+    prompt = (
+        "Summarize this conversation in 2-3 sentences. "
+        "Focus on what was discussed, decided, and accomplished. "
+        "Be specific — mention task IDs, feature names, and key decisions. "
+        "Do not start with 'In this conversation' or similar preamble.\n\n"
+        f"{transcript_text}"
+    )
+
+    click.echo(
+        click.style("•", fg="cyan")
+        + f" Generating recap for session {session['id']}..."
+    )
+
+    try:
+        result = subprocess.run(
+            [claude_bin, "-p", prompt],
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        if result.returncode != 0:
+            click.echo(
+                click.style("  Error: ", fg="red")
+                + (result.stderr or "claude -p failed").strip()
+            )
+            return
+
+        summary = result.stdout.strip()
+        if not summary:
+            click.echo(
+                click.style("  Warning: ", fg="yellow")
+                + "empty recap returned"
+            )
+            return
+
+        # Store recap and update watermark
+        db.execute(
+            "UPDATE sessions SET summary = ?, summary_seq = ?, needs_recap = 0 "
+            "WHERE session_id = ?",
+            (summary, user_count, session_id),
+        )
+
+        click.echo(
+            click.style("  ✓ ", fg="green")
+            + summary[:100]
+            + ("…" if len(summary) > 100 else "")
+        )
+
+    except subprocess.TimeoutExpired:
+        click.echo(
+            click.style("  Error: ", fg="red")
+            + "claude -p timed out after 30s"
+        )
+    except Exception as e:
+        click.echo(
+            click.style("  Error: ", fg="red")
+            + str(e)
+        )
 
 
 def hide_sessions(session_values: list[str]):

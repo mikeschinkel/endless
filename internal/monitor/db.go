@@ -140,6 +140,12 @@ func migrateV3(db *sql.DB) {
 		if !hasColumn(db, "sessions", "hidden") {
 			db.Exec("ALTER TABLE sessions ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0")
 		}
+		if !hasColumn(db, "sessions", "needs_recap") {
+			db.Exec("ALTER TABLE sessions ADD COLUMN needs_recap INTEGER NOT NULL DEFAULT 0")
+		}
+		if !hasColumn(db, "sessions", "summary_seq") {
+			db.Exec("ALTER TABLE sessions ADD COLUMN summary_seq INTEGER NOT NULL DEFAULT 0")
+		}
 	}
 }
 

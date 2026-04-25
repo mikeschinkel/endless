@@ -144,6 +144,7 @@ func runClaude(args []string) error {
 	case "Stop":
 		// Parse transcript before idling — captures the assistant's last response
 		monitor.ParseTranscript(payload.SessionID, payload.TranscriptPath)
+		monitor.FlagNeedsRecap(payload.SessionID)
 		if err := monitor.IdleSession(payload.SessionID); err != nil {
 			return fmt.Errorf("idling session: %w", err)
 		}
@@ -153,6 +154,7 @@ func runClaude(args []string) error {
 	case "SessionEnd":
 		// Final parse
 		monitor.ParseTranscript(payload.SessionID, payload.TranscriptPath)
+		monitor.FlagNeedsRecap(payload.SessionID)
 		if err := monitor.EndSession(payload.SessionID); err != nil {
 			return fmt.Errorf("ending session: %w", err)
 		}
