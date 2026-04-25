@@ -177,127 +177,19 @@ def _migrate_v2(conn: sqlite3.Connection):
             conn.execute("ALTER TABLE messages RENAME COLUMN channel_id TO conversation_id")
     conn.commit()
 
-    # Step 4: Drop unused columns from sessions (E-744)
-    # Also cleans up stale active_goal_id from partial v1→v2 migrations
-    needs_session_recreate = _has_table(conn, "sessions") and (
-        _has_column(conn, "sessions", "working_dir")
-        or _has_column(conn, "sessions", "ended_at")
-        or _has_column(conn, "sessions", "active_goal_id")
-    )
-    if needs_session_recreate:
-        conn.execute("PRAGMA foreign_keys=OFF")
-        conn.executescript("""
-            DROP TABLE IF EXISTS sessions_new;
-            CREATE TABLE sessions_new (
-                id INTEGER PRIMARY KEY,
-                session_id TEXT NOT NULL,
-                project_id INTEGER,
-                platform TEXT NOT NULL DEFAULT 'claude'
-                    CHECK (platform IN ('claude', 'codex')),
-                state TEXT NOT NULL DEFAULT 'working'
-                    CHECK (state IN ('working', 'idle', 'needs_input', 'ended')),
-                active_task_id INTEGER,
-                plan_file_path TEXT,
-                process TEXT,
-                started_at TEXT NOT NULL
-                    DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
-                last_activity TEXT,
-                transcript_offset INTEGER NOT NULL DEFAULT 0,
-                transcript_path TEXT,
-                summary TEXT,
-                hidden INTEGER NOT NULL DEFAULT 0,
-                UNIQUE (session_id),
-                FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL,
-                FOREIGN KEY (active_task_id) REFERENCES tasks(id) ON DELETE SET NULL
-            );
-            INSERT INTO sessions_new
-                (id, session_id, project_id, platform, state, active_task_id,
-                 plan_file_path, process, started_at, last_activity)
-                SELECT id, session_id, project_id, platform, state, active_task_id,
-                       plan_file_path, process, started_at, last_activity
-                FROM sessions;
-            DROP TABLE sessions;
-            ALTER TABLE sessions_new RENAME TO sessions;
-        """)
-        conn.execute("PRAGMA foreign_keys=ON")
+    # Steps 4-12: Table rebuild migrations — MOVED TO MANUAL
+    # These previously ran automatically but caused data loss when rebuild
+    # migrations dropped columns or failed to copy new columns.
+    # Now only safe data UPDATEs run automatically.
+    # Run 'endless db migrate' for table rebuilds (with backup).
+
+    # Safe data updates from former rebuild migrations:
+    if _has_table(conn, "task_deps"):
+        conn.execute("UPDATE task_deps SET source_type='task' WHERE source_type='plan'")
+        conn.execute("UPDATE task_deps SET target_type='task' WHERE target_type='plan'")
         conn.commit()
 
-    # Step 5 (removed): task_dependencies → task_deps rename completed on all databases.
-
-    # Step 6: Fix task_deps CHECK constraints (E-745)
-    if _has_table(conn, "task_deps"):
-        row = conn.execute(
-            "SELECT sql FROM sqlite_master WHERE type='table' AND name='task_deps'"
-        ).fetchone()
-        if row and "'plan'" in row[0]:
-            conn.execute("UPDATE task_deps SET source_type='task' WHERE source_type='plan'")
-            conn.execute("UPDATE task_deps SET target_type='task' WHERE target_type='plan'")
-            conn.execute("PRAGMA foreign_keys=OFF")
-            conn.executescript("""
-                DROP TABLE IF EXISTS task_deps_new;
-                CREATE TABLE task_deps_new (
-                    id INTEGER PRIMARY KEY,
-                    source_type TEXT NOT NULL
-                        CHECK (source_type IN ('task', 'project')),
-                    source_id INTEGER NOT NULL,
-                    target_type TEXT NOT NULL
-                        CHECK (target_type IN ('task', 'project')),
-                    target_id INTEGER NOT NULL,
-                    dep_type TEXT NOT NULL DEFAULT 'blocks'
-                        CHECK (dep_type IN ('blocks', 'needs')),
-                    created_at TEXT NOT NULL
-                        DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
-                    UNIQUE(source_type, source_id, target_type, target_id)
-                );
-                INSERT INTO task_deps_new SELECT * FROM task_deps;
-                DROP TABLE task_deps;
-                ALTER TABLE task_deps_new RENAME TO task_deps;
-            """)
-            conn.execute("PRAGMA foreign_keys=ON")
-            conn.commit()
-
-    # Step 7: Add 'declined' to tasks.status CHECK constraint (E-787)
-    if _has_table(conn, "tasks"):
-        row = conn.execute(
-            "SELECT sql FROM sqlite_master WHERE type='table' AND name='tasks'"
-        ).fetchone()
-        if row and "'declined'" not in row[0]:
-            # Derive new CREATE TABLE from the existing DDL, only changing the CHECK constraint
-            ddl = row[0]
-            if "'revisit')" in ddl:
-                # Has existing CHECK — just extend it
-                ddl = ddl.replace("'revisit')", "'revisit', 'declined')")
-            else:
-                # CHECK was lost in a prior migration — add it back
-                ddl = ddl.replace(
-                    "status TEXT NOT NULL DEFAULT 'needs_plan'",
-                    "status TEXT NOT NULL DEFAULT 'needs_plan'\n"
-                    "        CHECK (status IN ('needs_plan','ready','in_progress','verify','completed','blocked','revisit','declined'))"
-                )
-            # Handle both quoted and unquoted table names
-            if 'CREATE TABLE "tasks"' in ddl:
-                new_sql = ddl.replace('CREATE TABLE "tasks"', "CREATE TABLE tasks_new")
-            else:
-                new_sql = ddl.replace("CREATE TABLE tasks", "CREATE TABLE tasks_new")
-            col_names = [c[1] for c in conn.execute("PRAGMA table_info(tasks)").fetchall()]
-            col_list = ", ".join(col_names)
-            conn.execute("PRAGMA foreign_keys=OFF")
-            conn.executescript(f"""
-                DROP TABLE IF EXISTS tasks_new;
-                {new_sql};
-                INSERT INTO tasks_new ({col_list}) SELECT {col_list} FROM tasks;
-                DROP TABLE tasks;
-                ALTER TABLE tasks_new RENAME TO tasks;
-                CREATE TRIGGER IF NOT EXISTS tasks_updated_at AFTER UPDATE ON tasks
-                BEGIN
-                    UPDATE tasks SET updated_at = strftime('%Y-%m-%dT%H:%M:%S', 'now')
-                    WHERE id = NEW.id;
-                END;
-            """)
-            conn.execute("PRAGMA foreign_keys=ON")
-            conn.commit()
-
-    # Step 8: Add 'tier' column to tasks (E-786)
+    # Step 8: Add 'tier' column to tasks (E-786) — safe ADD COLUMN
     if _has_table(conn, "tasks"):
         cols = [
             r[1] for r in conn.execute("PRAGMA table_info(tasks)").fetchall()
@@ -306,160 +198,18 @@ def _migrate_v2(conn: sqlite3.Connection):
             conn.execute("ALTER TABLE tasks ADD COLUMN tier INTEGER")
             conn.commit()
 
-    # Step 9: Add CHECK constraint: completed_at requires status='completed' (E-797)
+    # Safe data updates: rename completed → confirmed, fix tier 1 status
     if _has_table(conn, "tasks"):
-        row = conn.execute(
-            "SELECT sql FROM sqlite_master WHERE type='table' AND name='tasks'"
-        ).fetchone()
-        if row and "completed_at IS NULL" not in row[0]:
-            # Clean up any inconsistent data first
-            conn.execute(
-                "UPDATE tasks SET completed_at = NULL "
-                "WHERE completed_at IS NOT NULL AND status != 'completed'"
-            )
-            # Add CHECK constraint via DDL replacement
-            ddl = row[0]
-            # Insert the new CHECK before the closing paren of the CREATE TABLE
-            # Find the last FOREIGN KEY line and add after it
-            ddl = ddl.rstrip().rstrip(")")
-            ddl += ",\n    CHECK (completed_at IS NULL OR status = 'completed')\n)"
-            if 'CREATE TABLE "tasks"' in ddl:
-                new_sql = ddl.replace('CREATE TABLE "tasks"', "CREATE TABLE tasks_new")
-            else:
-                new_sql = ddl.replace("CREATE TABLE tasks", "CREATE TABLE tasks_new")
-            col_names = [c[1] for c in conn.execute("PRAGMA table_info(tasks)").fetchall()]
-            col_list = ", ".join(col_names)
-            conn.execute("PRAGMA foreign_keys=OFF")
-            conn.executescript(f"""
-                DROP TABLE IF EXISTS tasks_new;
-                {new_sql};
-                INSERT INTO tasks_new ({col_list}) SELECT {col_list} FROM tasks;
-                DROP TABLE tasks;
-                ALTER TABLE tasks_new RENAME TO tasks;
-                CREATE TRIGGER IF NOT EXISTS tasks_updated_at AFTER UPDATE ON tasks
-                BEGIN
-                    UPDATE tasks SET updated_at = strftime('%Y-%m-%dT%H:%M:%S', 'now')
-                    WHERE id = NEW.id;
-                END;
-            """)
-            conn.execute("PRAGMA foreign_keys=ON")
-            conn.commit()
-
-    # Step 10: Rename 'completed' status to 'confirmed', add 'assumed' status (E-846)
-    if _has_table(conn, "tasks"):
-        row = conn.execute(
-            "SELECT sql FROM sqlite_master WHERE type='table' AND name='tasks'"
-        ).fetchone()
-        if row and "'confirmed'" not in row[0]:
-            # Rebuild table with updated CHECK constraints
-            ddl = row[0]
-            # Replace the status CHECK constraint
-            if "'declined'" in ddl:
-                ddl = ddl.replace(
-                    "'declined')",
-                    "'declined', 'confirmed', 'assumed')"
-                ).replace("'completed',", "")
-            # Update completed_at CHECK if present
-            if "status = 'completed'" in ddl:
-                ddl = ddl.replace("status = 'completed'", "status = 'confirmed'")
-            if 'CREATE TABLE "tasks"' in ddl:
-                new_sql = ddl.replace('CREATE TABLE "tasks"', "CREATE TABLE tasks_new")
-            else:
-                new_sql = ddl.replace("CREATE TABLE tasks", "CREATE TABLE tasks_new")
-            col_names = [c[1] for c in conn.execute("PRAGMA table_info(tasks)").fetchall()]
-            # Build SELECT with status rename inline
-            select_parts = []
-            for col in col_names:
-                if col == "status":
-                    select_parts.append(
-                        "CASE status WHEN 'completed' THEN 'confirmed' ELSE status END"
-                    )
-                else:
-                    select_parts.append(col)
-            select_list = ", ".join(select_parts)
-            col_list = ", ".join(col_names)
-            conn.execute("PRAGMA foreign_keys=OFF")
-            conn.executescript(f"""
-                DROP TABLE IF EXISTS tasks_new;
-                {new_sql};
-                INSERT INTO tasks_new ({col_list}) SELECT {select_list} FROM tasks;
-                DROP TABLE tasks;
-                ALTER TABLE tasks_new RENAME TO tasks;
-                CREATE TRIGGER IF NOT EXISTS tasks_updated_at AFTER UPDATE ON tasks
-                BEGIN
-                    UPDATE tasks SET updated_at = strftime('%Y-%m-%dT%H:%M:%S', 'now')
-                    WHERE id = NEW.id;
-                END;
-            """)
-            conn.execute("PRAGMA foreign_keys=ON")
-            conn.commit()
-
-    # Step 11: Add 'obsolete' to tasks.status CHECK constraint (E-854)
-    if _has_table(conn, "tasks"):
-        row = conn.execute(
-            "SELECT sql FROM sqlite_master WHERE type='table' AND name='tasks'"
-        ).fetchone()
-        if row and "'obsolete'" not in row[0]:
-            ddl = row[0]
-            ddl = ddl.replace("'assumed')", "'assumed', 'obsolete')")
-            if 'CREATE TABLE "tasks"' in ddl:
-                new_sql = ddl.replace('CREATE TABLE "tasks"', "CREATE TABLE tasks_new")
-            else:
-                new_sql = ddl.replace("CREATE TABLE tasks", "CREATE TABLE tasks_new")
-            col_names = [c[1] for c in conn.execute("PRAGMA table_info(tasks)").fetchall()]
-            col_list = ", ".join(col_names)
-            conn.execute("PRAGMA foreign_keys=OFF")
-            conn.executescript(f"""
-                DROP TABLE IF EXISTS tasks_new;
-                {new_sql};
-                INSERT INTO tasks_new ({col_list}) SELECT {col_list} FROM tasks;
-                DROP TABLE tasks;
-                ALTER TABLE tasks_new RENAME TO tasks;
-                CREATE TRIGGER IF NOT EXISTS tasks_updated_at AFTER UPDATE ON tasks
-                BEGIN
-                    UPDATE tasks SET updated_at = strftime('%Y-%m-%dT%H:%M:%S', 'now')
-                    WHERE id = NEW.id;
-                END;
-            """)
-            conn.execute("PRAGMA foreign_keys=ON")
-            conn.commit()
-
-    # Step 12: Tier 1 tasks cannot be needs_plan — add CHECK + fix data (E-855)
-    if _has_table(conn, "tasks"):
-        row = conn.execute(
-            "SELECT sql FROM sqlite_master WHERE type='table' AND name='tasks'"
-        ).fetchone()
-        if row and "tier = 1" not in row[0]:
-            # Fix existing data: tier 1 needs_plan → ready
-            conn.execute(
-                "UPDATE tasks SET status = 'ready' "
-                "WHERE tier = 1 AND status = 'needs_plan'"
-            )
-            # Add CHECK constraint
-            ddl = row[0]
-            ddl = ddl.rstrip().rstrip(")")
-            ddl += ",\n    CHECK (tier != 1 OR status != 'needs_plan')\n)"
-            if 'CREATE TABLE "tasks"' in ddl:
-                new_sql = ddl.replace('CREATE TABLE "tasks"', "CREATE TABLE tasks_new")
-            else:
-                new_sql = ddl.replace("CREATE TABLE tasks", "CREATE TABLE tasks_new")
-            col_names = [c[1] for c in conn.execute("PRAGMA table_info(tasks)").fetchall()]
-            col_list = ", ".join(col_names)
-            conn.execute("PRAGMA foreign_keys=OFF")
-            conn.executescript(f"""
-                DROP TABLE IF EXISTS tasks_new;
-                {new_sql};
-                INSERT INTO tasks_new ({col_list}) SELECT {col_list} FROM tasks;
-                DROP TABLE tasks;
-                ALTER TABLE tasks_new RENAME TO tasks;
-                CREATE TRIGGER IF NOT EXISTS tasks_updated_at AFTER UPDATE ON tasks
-                BEGIN
-                    UPDATE tasks SET updated_at = strftime('%Y-%m-%dT%H:%M:%S', 'now')
-                    WHERE id = NEW.id;
-                END;
-            """)
-            conn.execute("PRAGMA foreign_keys=ON")
-            conn.commit()
+        conn.execute("UPDATE tasks SET status = 'confirmed' WHERE status = 'completed'")
+        conn.execute(
+            "UPDATE tasks SET completed_at = NULL "
+            "WHERE completed_at IS NOT NULL AND status != 'confirmed'"
+        )
+        conn.execute(
+            "UPDATE tasks SET status = 'ready' "
+            "WHERE tier = 1 AND status = 'needs_plan'"
+        )
+        conn.commit()
 
     # Step 13: Clear tier to 0 (n/a) on terminal and verify tasks (E-856)
     if _has_table(conn, "tasks"):

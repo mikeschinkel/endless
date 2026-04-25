@@ -6,7 +6,6 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 	"time"
 )
@@ -212,42 +211,8 @@ func migrateV1(db *sql.DB) {
 	}
 
 	// Fix broken FK references: active_goal_id referencing plan_items instead of tasks
-	if hasTable(db, sessionTable) {
-		var createSQL string
-		err := db.QueryRow(
-			"SELECT sql FROM sqlite_master WHERE type='table' AND name=?", sessionTable,
-		).Scan(&createSQL)
-		if err == nil && strings.Contains(createSQL, "plan_items") {
-			db.Exec("PRAGMA foreign_keys=OFF")
-			db.Exec(`CREATE TABLE _sessions_fix (
-				id INTEGER PRIMARY KEY,
-				session_id TEXT NOT NULL,
-				project_id INTEGER,
-				platform TEXT NOT NULL DEFAULT 'claude' CHECK (platform IN ('claude', 'codex')),
-				state TEXT NOT NULL DEFAULT 'working' CHECK (state IN ('working', 'idle', 'needs_input', 'ended')),
-				active_goal_id INTEGER,
-				working_dir TEXT,
-				transcript_path TEXT,
-				plan_file_path TEXT,
-				tmux_pane TEXT,
-				started_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
-				last_activity TEXT,
-				ended_at TEXT,
-				UNIQUE (session_id),
-				FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL,
-				FOREIGN KEY (active_goal_id) REFERENCES tasks(id) ON DELETE SET NULL
-			)`)
-			db.Exec(`INSERT INTO _sessions_fix
-				(id, session_id, project_id, platform, state, active_goal_id, working_dir,
-				 transcript_path, plan_file_path, tmux_pane, started_at, last_activity, ended_at)
-				SELECT id, session_id, project_id, platform, state, active_goal_id, working_dir,
-				       transcript_path, plan_file_path, tmux_pane, started_at, last_activity, ended_at
-				FROM ` + sessionTable)
-			db.Exec("DROP TABLE " + sessionTable)
-			db.Exec("ALTER TABLE _sessions_fix RENAME TO " + sessionTable)
-			db.Exec("PRAGMA foreign_keys=ON")
-		}
-	}
+	// V1 FK fix (plan_items → tasks) — MOVED TO MANUAL MIGRATION
+	// Only needed for very old DBs with plan_items FK reference.
 
 	// Add tmux_pane column to session table if missing
 	if hasTable(db, sessionTable) && !hasColumn(db, sessionTable, "tmux_pane") && !hasColumn(db, sessionTable, "process") {
@@ -365,73 +330,18 @@ func migrateV2(db *sql.DB) {
 		}
 	}
 
-	// === Step 4: Drop unused columns from sessions (E-744) ===
-	// Also cleans up stale active_goal_id from partial v1→v2 migrations
-	needsSessionRecreate := hasTable(db, "sessions") &&
-		(hasColumn(db, "sessions", "working_dir") ||
-			hasColumn(db, "sessions", "ended_at") ||
-			hasColumn(db, "sessions", "active_goal_id"))
-	if needsSessionRecreate {
-		db.Exec("PRAGMA foreign_keys=OFF")
-		db.Exec(`DROP TABLE IF EXISTS sessions_new`)
-		db.Exec(`CREATE TABLE sessions_new (
-			id INTEGER PRIMARY KEY,
-			session_id TEXT NOT NULL,
-			project_id INTEGER,
-			platform TEXT NOT NULL DEFAULT 'claude' CHECK (platform IN ('claude', 'codex')),
-			state TEXT NOT NULL DEFAULT 'working' CHECK (state IN ('working', 'idle', 'needs_input', 'ended')),
-			active_task_id INTEGER,
-			plan_file_path TEXT,
-			process TEXT,
-			started_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
-			last_activity TEXT,
-			transcript_offset INTEGER NOT NULL DEFAULT 0,
-			transcript_path TEXT,
-			summary TEXT,
-			hidden INTEGER NOT NULL DEFAULT 0,
-			UNIQUE (session_id),
-			FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL,
-			FOREIGN KEY (active_task_id) REFERENCES tasks(id) ON DELETE SET NULL
-		)`)
-		db.Exec(`INSERT INTO sessions_new
-			(id, session_id, project_id, platform, state, active_task_id,
-			 plan_file_path, process, started_at, last_activity)
-			SELECT id, session_id, project_id, platform, state, active_task_id,
-			       plan_file_path, process, started_at, last_activity
-			FROM sessions`)
-		db.Exec("DROP TABLE sessions")
-		db.Exec("ALTER TABLE sessions_new RENAME TO sessions")
-		db.Exec("PRAGMA foreign_keys=ON")
-	}
+	// Step 4 (E-744): Drop unused session columns — MOVED TO MANUAL MIGRATION
+	// Table rebuilds are destructive and caused data loss when run automatically.
+	// Run 'endless db migrate' to execute rebuild migrations with backup.
 
 	// Step 5 removed: task_dependencies → task_deps rename completed on all databases.
 
 	// === Step 6: Fix task_deps CHECK constraints (E-745) ===
+	// Step 6 (E-745): Fix task_deps CHECK constraints — MOVED TO MANUAL MIGRATION
+	// UPDATE of data values is safe and kept here:
 	if hasTable(db, "task_deps") {
-		var createSQL string
-		err := db.QueryRow(
-			"SELECT sql FROM sqlite_master WHERE type='table' AND name='task_deps'",
-		).Scan(&createSQL)
-		if err == nil && strings.Contains(createSQL, "'plan'") {
-			db.Exec("UPDATE task_deps SET source_type='task' WHERE source_type='plan'")
-			db.Exec("UPDATE task_deps SET target_type='task' WHERE target_type='plan'")
-			db.Exec("PRAGMA foreign_keys=OFF")
-			db.Exec(`DROP TABLE IF EXISTS task_deps_new`)
-			db.Exec(`CREATE TABLE task_deps_new (
-				id INTEGER PRIMARY KEY,
-				source_type TEXT NOT NULL CHECK (source_type IN ('task', 'project')),
-				source_id INTEGER NOT NULL,
-				target_type TEXT NOT NULL CHECK (target_type IN ('task', 'project')),
-				target_id INTEGER NOT NULL,
-				dep_type TEXT NOT NULL DEFAULT 'blocks' CHECK (dep_type IN ('blocks', 'needs')),
-				created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
-				UNIQUE(source_type, source_id, target_type, target_id)
-			)`)
-			db.Exec("INSERT INTO task_deps_new SELECT * FROM task_deps")
-			db.Exec("DROP TABLE task_deps")
-			db.Exec("ALTER TABLE task_deps_new RENAME TO task_deps")
-			db.Exec("PRAGMA foreign_keys=ON")
-		}
+		db.Exec("UPDATE task_deps SET source_type='task' WHERE source_type='plan'")
+		db.Exec("UPDATE task_deps SET target_type='task' WHERE target_type='plan'")
 	}
 
 	// === Safety net: ensure sessions table exists ===
