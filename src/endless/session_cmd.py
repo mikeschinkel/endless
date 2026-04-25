@@ -1,11 +1,61 @@
 """Session command logic — history, list, search, reimport."""
 
+import json as json_mod
 import os
 from pathlib import Path
 
 import click
 
 from endless import db
+
+
+def _format_tool_content(content: str, tool_name: str | None = None, mode: str = "truncated") -> str:
+    """Format tool_use content for display.
+
+    mode: "truncated" (name + description), "full" (everything), "oneline" (search results)
+    """
+    name = tool_name or "unknown"
+
+    # Try to parse the JSON content to extract description and command
+    try:
+        # Content format is "ToolName: {json}" — extract the JSON part
+        json_part = content
+        if ": " in content:
+            _, json_part = content.split(": ", 1)
+        parsed = json_mod.loads(json_part)
+    except (json_mod.JSONDecodeError, ValueError):
+        parsed = None
+
+    if not parsed:
+        if mode == "oneline":
+            return f"{name}: {content[:80]}"
+        return f"{name}: {content[:200]}"
+
+    desc = parsed.get("description", "")
+    cmd = parsed.get("command", "")
+    file_path = parsed.get("file_path", "")
+    pattern = parsed.get("pattern", "")
+
+    if mode == "oneline":
+        detail = desc or cmd or file_path or pattern or ""
+        if detail:
+            return f"{name} — {detail[:60]}"
+        return name
+
+    # truncated or full
+    parts = [name]
+    if desc:
+        parts.append(desc)
+    if cmd:
+        parts.append(cmd)
+    elif file_path:
+        parts.append(file_path)
+    elif pattern:
+        parts.append(pattern)
+
+    if mode == "truncated":
+        return "\n".join(parts[:3])
+    return "\n".join(parts)
 
 
 def _resolve_session(value: str) -> dict:
@@ -111,23 +161,18 @@ def show_history(
         content = row["content"]
 
         if role == "tool_use":
-            if show_tools == "full":
-                tool_line = f"  Tool: {content}"
-            else:
-                # Truncated: just name + first line of input
-                tool_line = f"  Tool: {row['tool_name'] or 'unknown'}"
-                lines = content.split("\n")
-                if len(lines) > 1:
-                    tool_line += f": {lines[0][:80]}"
-                    remaining = len(lines) - 1
-                    if remaining > 0:
-                        tool_line += f"\n    ({remaining} more lines)"
+            mode = "full" if show_tools == "full" else "truncated"
+            formatted = _format_tool_content(content, row["tool_name"], mode)
+            lines = formatted.split("\n")
             if show_timestamps:
                 ts = _format_ts(row["created_at"])
-                click.echo(click.style(f"TOOL [{ts}]", dim=True))
-                click.echo(click.style(tool_line, dim=True))
+                click.echo(click.style(f"  Tool: ", fg="yellow", dim=True) + click.style(lines[0], dim=True))
+                for line in lines[1:]:
+                    click.echo(click.style(f"  {line}", dim=True))
             else:
-                click.echo(click.style(tool_line, dim=True))
+                click.echo(click.style(f"  Tool: ", fg="yellow", dim=True) + click.style(lines[0], dim=True))
+                for line in lines[1:]:
+                    click.echo(click.style(f"  {line}", dim=True))
             click.echo()
             continue
 
@@ -159,6 +204,7 @@ def show_history(
 def list_sessions(
     project_name: str | None = None,
     show_all: bool = False,
+    show_hidden: bool = False,
     limit: int = 20,
     as_json: bool = False,
 ):
@@ -166,7 +212,9 @@ def list_sessions(
     where = "WHERE 1=1"
     params: list = []
 
-    if not show_all:
+    if show_hidden:
+        where += " AND s.hidden = 1"
+    elif not show_all:
         where += " AND s.hidden = 0"
 
     if project_name:
@@ -323,30 +371,34 @@ def search_sessions(
     click.echo()
 
     for row in rows:
-        role_color = "cyan" if row["role"] == "user" else "green"
-        role_label = "User" if row["role"] == "user" else "Claude"
-        if row["role"] == "tool_use":
-            role_label = "Tool"
-            role_color = "yellow"
+        role = row["role"]
+        content = row["content"]
 
-        # Show session ID and project
+        # Session context
         meta = click.style(
             f"  [session {row['db_id']}, {row['project_name']}]",
             dim=True,
         )
 
-        # Truncate content for display
-        content = row["content"]
-        if len(content) > 200:
-            content = content[:200] + "…"
-        # Single line preview
-        content = content.replace("\n", " ")
-
-        click.echo(
-            click.style(f"{role_label}: ", fg=role_color, dim=True)
-            + content
-            + meta
-        )
+        if role == "tool_use":
+            formatted = _format_tool_content(content, None, "oneline")
+            click.echo(
+                click.style("Tool: ", fg="yellow", dim=True)
+                + click.style(formatted, dim=True)
+                + meta
+            )
+        else:
+            role_color = "cyan" if role == "user" else "green"
+            role_label = "User" if role == "user" else "Claude"
+            # Single line preview
+            preview = content.replace("\n", " ")
+            if len(preview) > 200:
+                preview = preview[:200] + "…"
+            click.echo(
+                click.style(f"{role_label}: ", fg=role_color, dim=True)
+                + preview
+                + meta
+            )
 
     click.echo()
     click.echo(click.style(f"{len(rows)} match(es)", dim=True))
@@ -378,7 +430,7 @@ def reimport_sessions(session_value: str | None = None):
         )
         click.echo(
             click.style("•", fg="cyan")
-            + f" Reimported session {session['id']}: {count} messages"
+            + f" Imported session {session['id']}: {count} messages"
         )
         return
 
@@ -438,9 +490,29 @@ def reimport_sessions(session_value: str | None = None):
             total_messages += new
             total_sessions += 1
 
+    # Backfill summaries for sessions that don't have one
+    sessions_needing_summary = db.query(
+        "SELECT session_id FROM sessions "
+        "WHERE (summary IS NULL OR summary = '') "
+        "AND session_id IN (SELECT DISTINCT session_id FROM session_messages WHERE role = 'assistant')"
+    )
+    for s in sessions_needing_summary:
+        sid = s["session_id"]
+        first_msg = db.query(
+            "SELECT substr(content, 1, 200) as summary FROM session_messages "
+            "WHERE session_id = ? AND role = 'assistant' "
+            "ORDER BY created_at ASC LIMIT 1",
+            (sid,),
+        )
+        if first_msg and first_msg[0]["summary"]:
+            db.execute(
+                "UPDATE sessions SET summary = ? WHERE session_id = ?",
+                (first_msg[0]["summary"], sid),
+            )
+
     click.echo(
         click.style("•", fg="cyan")
-        + f" Reimported {total_messages} messages across {total_sessions} sessions "
+        + f" Added {total_messages} messages across {total_sessions} sessions "
         + f"({len(jsonl_files)} JSONL files scanned)"
     )
 

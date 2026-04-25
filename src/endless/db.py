@@ -181,7 +181,6 @@ def _migrate_v2(conn: sqlite3.Connection):
     # Also cleans up stale active_goal_id from partial v1→v2 migrations
     needs_session_recreate = _has_table(conn, "sessions") and (
         _has_column(conn, "sessions", "working_dir")
-        or _has_column(conn, "sessions", "transcript_path")
         or _has_column(conn, "sessions", "ended_at")
         or _has_column(conn, "sessions", "active_goal_id")
     )
@@ -203,6 +202,10 @@ def _migrate_v2(conn: sqlite3.Connection):
                 started_at TEXT NOT NULL
                     DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
                 last_activity TEXT,
+                transcript_offset INTEGER NOT NULL DEFAULT 0,
+                transcript_path TEXT,
+                summary TEXT,
+                hidden INTEGER NOT NULL DEFAULT 0,
                 UNIQUE (session_id),
                 FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL,
                 FOREIGN KEY (active_task_id) REFERENCES tasks(id) ON DELETE SET NULL
