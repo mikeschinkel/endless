@@ -370,7 +370,7 @@ def list_sessions(
             click.echo()
             click.echo(
                 click.style(f"  {recap_count} session(s) need recaps. ", dim=True)
-                + click.style("Run: endless session recap", fg="cyan", dim=True)
+                + click.style("Run: endless-hook recap", fg="cyan", dim=True)
             )
 
     click.echo()
