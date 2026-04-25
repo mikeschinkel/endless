@@ -280,6 +280,16 @@ func setSummaryIfEmpty(db *sql.DB, sessionID, text string) {
 	}
 	summary = strings.TrimSpace(summary)
 
+	// Auto-hide sessions with error summaries
+	if strings.HasPrefix(summary, "Not logged in") ||
+		strings.HasPrefix(summary, "Error:") {
+		db.Exec(
+			"UPDATE sessions SET summary = ?, hidden = 1 WHERE session_id = ?",
+			summary, sessionID,
+		)
+		return
+	}
+
 	db.Exec(
 		"UPDATE sessions SET summary = ? WHERE session_id = ? AND (summary IS NULL OR summary = '')",
 		summary, sessionID,

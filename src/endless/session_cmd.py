@@ -943,6 +943,13 @@ def _set_summary_if_empty(session_id, text):
                 break
         summary = summary[:cutoff]
     summary = summary.strip()
+    # Auto-hide sessions with error summaries
+    if summary.startswith("Not logged in") or summary.startswith("Error:"):
+        db.execute(
+            "UPDATE sessions SET summary = ?, hidden = 1 WHERE session_id = ?",
+            (summary, session_id),
+        )
+        return
     db.execute(
         "UPDATE sessions SET summary = ? WHERE session_id = ? AND (summary IS NULL OR summary = '')",
         (summary, session_id),
