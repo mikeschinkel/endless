@@ -321,7 +321,10 @@ def list_sessions(
     click.echo(sep)
 
     for row in rows:
-        summary = row["summary"] or "(no summary)"
+        if row["msg_count"] == 0:
+            summary = "(empty)"
+        else:
+            summary = row["summary"] or "(no summary)"
         if len(summary) > summary_w:
             summary = summary[:summary_w - 1] + "…"
         line = (
@@ -646,7 +649,10 @@ def _generate_recap(session: dict, claude_bin: str, force: bool = False):
         "Summarize this conversation in 2-3 sentences. "
         "Focus on what was discussed, decided, and accomplished. "
         "Be specific — mention task IDs, feature names, and key decisions. "
-        "Do not start with 'In this conversation' or similar preamble.\n\n"
+        "Start directly with the substance — no filler words like "
+        "'Conversation focused on', 'This session covered', 'The discussion', "
+        "'In this conversation', 'Recap:', or any other preamble. "
+        "Just state what happened.\n\n"
         f"{transcript_text}"
     )
 
@@ -656,8 +662,10 @@ def _generate_recap(session: dict, claude_bin: str, force: bool = False):
     )
 
     try:
+        # Use --allowedTools "" to prevent tool use, reducing noise.
+        # Note: this still creates a session via hooks — we hide those after.
         result = subprocess.run(
-            [claude_bin, "-p", prompt],
+            [claude_bin, "-p", prompt, "--allowedTools", ""],
             capture_output=True,
             text=True,
             timeout=60,
