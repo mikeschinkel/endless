@@ -119,6 +119,9 @@ def _migrate(conn: sqlite3.Connection):
     # === Schema v2 migrations ===
     _migrate_v2(conn)
 
+    # === Schema v3: Session conversation history (E-857) ===
+    _migrate_v3(conn)
+
 
 def _has_table(conn: sqlite3.Connection, table: str) -> bool:
     row = conn.execute(
@@ -488,6 +491,60 @@ def _migrate_v2(conn: sqlite3.Connection):
             );
         """)
         conn.commit()
+
+
+def _migrate_v3(conn: sqlite3.Connection):
+    """Schema v3: session conversation messages + FTS5."""
+    # session_messages table
+    if not _has_table(conn, "session_messages"):
+        conn.executescript("""
+            CREATE TABLE IF NOT EXISTS session_messages (
+                id INTEGER PRIMARY KEY,
+                session_id TEXT NOT NULL,
+                role TEXT NOT NULL CHECK (role IN ('user', 'assistant', 'tool_use')),
+                content TEXT NOT NULL,
+                tool_name TEXT,
+                message_uuid TEXT UNIQUE,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (session_id) REFERENCES sessions(session_id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS idx_session_messages_session
+                ON session_messages(session_id, created_at DESC);
+        """)
+        conn.commit()
+
+    # FTS5 for cross-session search
+    if not _has_table(conn, "session_messages_fts"):
+        conn.executescript("""
+            CREATE VIRTUAL TABLE IF NOT EXISTS session_messages_fts USING fts5(
+                content,
+                content=session_messages,
+                content_rowid=id
+            );
+            CREATE TRIGGER IF NOT EXISTS session_messages_ai AFTER INSERT ON session_messages BEGIN
+                INSERT INTO session_messages_fts(rowid, content) VALUES (new.id, new.content);
+            END;
+            CREATE TRIGGER IF NOT EXISTS session_messages_ad AFTER DELETE ON session_messages BEGIN
+                INSERT INTO session_messages_fts(session_messages_fts, rowid, content) VALUES('delete', old.id, old.content);
+            END;
+        """)
+        conn.commit()
+
+    # Add new columns to sessions
+    if _has_table(conn, "sessions"):
+        cols = [r[1] for r in conn.execute("PRAGMA table_info(sessions)").fetchall()]
+        if "transcript_offset" not in cols:
+            conn.execute("ALTER TABLE sessions ADD COLUMN transcript_offset INTEGER NOT NULL DEFAULT 0")
+            conn.commit()
+        if "transcript_path" not in cols:
+            conn.execute("ALTER TABLE sessions ADD COLUMN transcript_path TEXT")
+            conn.commit()
+        if "summary" not in cols:
+            conn.execute("ALTER TABLE sessions ADD COLUMN summary TEXT")
+            conn.commit()
+        if "hidden" not in cols:
+            conn.execute("ALTER TABLE sessions ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0")
+            conn.commit()
 
 
 def execute(sql: str, params: tuple = ()) -> sqlite3.Cursor:

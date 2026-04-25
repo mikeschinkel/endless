@@ -105,9 +105,15 @@ func runClaude(args []string) error {
 		if err := monitor.SetProcess(payload.SessionID, os.Getenv("TMUX_PANE")); err != nil {
 			return fmt.Errorf("setting process: %w", err)
 		}
+		// Store transcript path for reimport
+		if payload.TranscriptPath != "" {
+			monitor.SetTranscriptPath(payload.SessionID, payload.TranscriptPath)
+		}
 		return handleTaskContextInjection(projectID, payload)
 
 	case "UserPromptSubmit":
+		// Parse transcript to capture new messages
+		monitor.ParseTranscript(payload.SessionID, payload.TranscriptPath)
 		// Backfill process if not yet recorded
 		if err := monitor.BackfillProcess(payload.SessionID, os.Getenv("TMUX_PANE")); err != nil {
 			return fmt.Errorf("backfilling process: %w", err)
@@ -136,10 +142,17 @@ func runClaude(args []string) error {
 		return handleExitPlanMode(projectID, payload)
 
 	case "Stop":
+		// Parse transcript before idling — captures the assistant's last response
+		monitor.ParseTranscript(payload.SessionID, payload.TranscriptPath)
 		if err := monitor.IdleSession(payload.SessionID); err != nil {
 			return fmt.Errorf("idling session: %w", err)
 		}
+	case "PreCompact":
+		// Capture everything before compaction
+		monitor.ParseTranscript(payload.SessionID, payload.TranscriptPath)
 	case "SessionEnd":
+		// Final parse
+		monitor.ParseTranscript(payload.SessionID, payload.TranscriptPath)
 		if err := monitor.EndSession(payload.SessionID); err != nil {
 			return fmt.Errorf("ending session: %w", err)
 		}

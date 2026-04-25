@@ -219,6 +219,84 @@ def quick_start():
     click.echo(guide.read_text())
 
 
+@main.group("session")
+def session_cmd():
+    """View and manage session conversation history."""
+    pass
+
+
+@session_cmd.command("history")
+@click.argument("session_id")
+@click.option("--tools", "show_tools", default=None, flag_value="truncated",
+              help="Include tool calls (truncated)")
+@click.option("--tools-full", "show_tools", flag_value="full",
+              help="Include full tool call content")
+@click.option("--timestamps", is_flag=True,
+              help="Show timestamps on each message")
+@click.option("--limit", default=20, type=int,
+              help="Max messages (default: 20)")
+@click.option("--sort", "sort_order", default="desc",
+              type=click.Choice(["asc", "desc"]),
+              help="Sort order (default: desc, newest first)")
+@click.option("--json", "as_json", is_flag=True, help="JSON output")
+def session_history(session_id, show_tools, timestamps, limit, sort_order, as_json):
+    """Show conversation history for a session."""
+    from endless.session_cmd import show_history
+    show_history(session_id, show_tools=show_tools,
+                 show_timestamps=timestamps, limit=limit,
+                 sort_asc=(sort_order == "asc"), as_json=as_json)
+
+
+@session_cmd.command("list")
+@click.option("--project", default=None, help="Filter by project")
+@click.option("--all", "show_all", is_flag=True,
+              help="Include hidden sessions")
+@click.option("--limit", default=20, type=int,
+              help="Max sessions (default: 20)")
+@click.option("--json", "as_json", is_flag=True, help="JSON output")
+def session_list(project, show_all, limit, as_json):
+    """List recent sessions."""
+    from endless.session_cmd import list_sessions
+    list_sessions(project_name=project, show_all=show_all,
+                  limit=limit, as_json=as_json)
+
+
+@session_cmd.command("search")
+@click.argument("query")
+@click.option("--project", default=None, help="Filter by project")
+@click.option("--limit", default=20, type=int,
+              help="Max results (default: 20)")
+@click.option("--json", "as_json", is_flag=True, help="JSON output")
+def session_search(query, project, limit, as_json):
+    """Search across all session messages."""
+    from endless.session_cmd import search_sessions
+    search_sessions(query, project_name=project, limit=limit, as_json=as_json)
+
+
+@session_cmd.command("reimport")
+@click.argument("session_id", required=False, default=None)
+def session_reimport(session_id):
+    """Reimport transcript data from JSONL files."""
+    from endless.session_cmd import reimport_sessions
+    reimport_sessions(session_value=session_id)
+
+
+@session_cmd.command("hide")
+@click.argument("session_ids", nargs=-1, required=True)
+def session_hide(session_ids):
+    """Hide sessions from the list."""
+    from endless.session_cmd import hide_sessions
+    hide_sessions(list(session_ids))
+
+
+@session_cmd.command("unhide")
+@click.argument("session_ids", nargs=-1, required=True)
+def session_unhide(session_ids):
+    """Unhide sessions."""
+    from endless.session_cmd import unhide_sessions
+    unhide_sessions(list(session_ids))
+
+
 @main.group("task")
 def task_cmd():
     """Manage project tasks."""

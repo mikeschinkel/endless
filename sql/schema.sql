@@ -162,3 +162,31 @@ CREATE TABLE IF NOT EXISTS messages (
     delivered_at TEXT,
     FOREIGN KEY (conversation_id) REFERENCES conversations(conversation_id) ON DELETE CASCADE
 );
+
+-- Session conversation messages (captured from JSONL transcripts via hooks)
+CREATE TABLE IF NOT EXISTS session_messages (
+    id INTEGER PRIMARY KEY,
+    session_id TEXT NOT NULL,
+    role TEXT NOT NULL CHECK (role IN ('user', 'assistant', 'tool_use')),
+    content TEXT NOT NULL,
+    tool_name TEXT,
+    message_uuid TEXT UNIQUE,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (session_id) REFERENCES sessions(session_id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_session_messages_session
+    ON session_messages(session_id, created_at DESC);
+
+-- Full-text search across session messages
+CREATE VIRTUAL TABLE IF NOT EXISTS session_messages_fts USING fts5(
+    content,
+    content=session_messages,
+    content_rowid=id
+);
+
+CREATE TRIGGER IF NOT EXISTS session_messages_ai AFTER INSERT ON session_messages BEGIN
+    INSERT INTO session_messages_fts(rowid, content) VALUES (new.id, new.content);
+END;
+CREATE TRIGGER IF NOT EXISTS session_messages_ad AFTER DELETE ON session_messages BEGIN
+    INSERT INTO session_messages_fts(session_messages_fts, rowid, content) VALUES('delete', old.id, old.content);
+END;
