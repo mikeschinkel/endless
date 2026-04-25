@@ -243,8 +243,13 @@ def list_sessions(
             where += (
                 " AND NOT EXISTS (SELECT 1 FROM session_messages m "
                 "WHERE m.session_id = s.session_id AND m.role = 'user' "
-                "AND m.content LIKE 'Summarize this conversation in 2-3 sentences%' "
-                "ORDER BY m.created_at ASC LIMIT 1)"
+                "AND (m.content LIKE 'Summarize this conversation in 2-3 sentences%'"
+                " OR m.content LIKE 'Write a one-line summary of this conversation%')"
+                " ORDER BY m.created_at ASC LIMIT 1)"
+            )
+            # Exclude error/login sessions
+            where += (
+                " AND (s.summary IS NULL OR s.summary NOT LIKE 'Not logged in%')"
             )
 
     sort_map = {
@@ -679,13 +684,16 @@ def _generate_recap(session: dict, claude_bin: str, force: bool = False):
     transcript_text = "\n\n".join(conversation)
 
     prompt = (
-        "Summarize this conversation in 2-3 sentences. "
-        "Focus on what was discussed, decided, and accomplished. "
-        "Be specific — mention task IDs, feature names, and key decisions. "
-        "Start directly with the substance — no filler words like "
-        "'Conversation focused on', 'This session covered', 'The discussion', "
-        "'In this conversation', 'Recap:', or any other preamble. "
-        "Just state what happened.\n\n"
+        "Write a one-line summary of this conversation (max 200 chars). "
+        "The first 60 characters must identify WHAT was worked on — "
+        "a specific feature name, task ID, bug fix, or component. "
+        "Examples of good starts: 'Added task search command (E-730)', "
+        "'Fixed SQLite migration data loss in sessions table', "
+        "'Designed session recap feature with hook-driven capture'. "
+        "Examples of BAD starts: 'Let me read the file', "
+        "'Discussed various topics', 'Worked on improvements', "
+        "'The conversation covered'. "
+        "No filler, no preamble. Pure substance.\n\n"
         f"{transcript_text}"
     )
 
