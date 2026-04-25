@@ -228,19 +228,24 @@ def list_sessions(
         where += " AND s.state = ?"
         params.append(state_filter)
 
-    # Filter out empty sessions and recap-generated sessions by default
-    if not show_all and not show_empty:
-        where += (
-            " AND (SELECT count(*) FROM session_messages m "
-            "WHERE m.session_id = s.session_id) > 0"
-        )
-        # Exclude sessions created by 'endless session recap' (claude -p calls)
-        where += (
-            " AND NOT EXISTS (SELECT 1 FROM session_messages m "
-            "WHERE m.session_id = s.session_id AND m.role = 'user' "
-            "AND m.content LIKE 'Summarize this conversation in 2-3 sentences%' "
-            "ORDER BY m.created_at ASC LIMIT 1)"
-        )
+    if not show_all:
+        # Only show sessions from registered projects (unless --all)
+        if not project_name:
+            where += " AND s.project_id IS NOT NULL"
+
+        if not show_empty:
+            # Filter out empty sessions
+            where += (
+                " AND (SELECT count(*) FROM session_messages m "
+                "WHERE m.session_id = s.session_id) > 0"
+            )
+            # Exclude sessions created by 'endless session recap' (claude -p calls)
+            where += (
+                " AND NOT EXISTS (SELECT 1 FROM session_messages m "
+                "WHERE m.session_id = s.session_id AND m.role = 'user' "
+                "AND m.content LIKE 'Summarize this conversation in 2-3 sentences%' "
+                "ORDER BY m.created_at ASC LIMIT 1)"
+            )
 
     sort_map = {
         "id": "s.id DESC",
@@ -512,6 +517,9 @@ def reimport_sessions(session_value: str | None = None):
         if len(session_id) < 36:
             continue  # not a UUID filename
 
+        # Derive project_id from JSONL path
+        project_id = _project_id_from_path(str(jf))
+
         # Ensure session exists in DB
         row = db.query(
             "SELECT id FROM sessions WHERE session_id = ?",
@@ -519,21 +527,31 @@ def reimport_sessions(session_value: str | None = None):
         )
         if not row:
             # Create a minimal session record
+            if project_id:
+                db.execute(
+                    "INSERT OR IGNORE INTO sessions (session_id, project_id, state, started_at) "
+                    "VALUES (?, ?, 'ended', datetime('now'))",
+                    (session_id, project_id),
+                )
+            else:
+                db.execute(
+                    "INSERT OR IGNORE INTO sessions (session_id, state, started_at) "
+                    "VALUES (?, 'ended', datetime('now'))",
+                    (session_id,),
+                )
+        elif project_id:
+            # Backfill project_id if missing
             db.execute(
-                "INSERT OR IGNORE INTO sessions (session_id, state, started_at) "
-                "VALUES (?, 'ended', datetime('now'))",
-                (session_id,),
+                "UPDATE sessions SET project_id = ? WHERE session_id = ? AND project_id IS NULL",
+                (project_id, session_id),
             )
 
         # Store transcript path and reset offset for re-parse
-        # Preserve existing summary if set
         db.execute(
             "UPDATE sessions SET transcript_path = ?, transcript_offset = 0 "
             "WHERE session_id = ?",
             (str(jf), session_id),
         )
-        # Clear summary only if it will be re-derived from messages
-        # (don't clear — let _set_summary_if_empty handle it)
 
         # Parse
         before = db.scalar(
@@ -751,6 +769,29 @@ def unhide_sessions(session_values: list[str]):
             click.style("•", fg="cyan")
             + f" Unhidden session {session['id']}"
         )
+
+
+def _project_id_from_path(jsonl_path: str) -> int | None:
+    """Derive project_id from a JSONL transcript path.
+
+    Path format: ~/.claude/projects/-Users-mike-Projects-foo/UUID.jsonl
+    The encoded CWD uses dashes for path separators.
+    """
+    import re
+    match = re.search(r'/\.claude/projects/([^/]+)/', jsonl_path)
+    if not match:
+        return None
+    encoded = match.group(1)
+    decoded = encoded.replace('-', '/')
+
+    # Try exact match against registered projects
+    row = db.query("SELECT id, path FROM projects")
+    if not row:
+        return None
+    for p in row:
+        if p["path"] == decoded or decoded.startswith(p["path"] + "/") or decoded.startswith(p["path"]):
+            return p["id"]
+    return None
 
 
 def _find_jsonl(session_id: str) -> str | None:
