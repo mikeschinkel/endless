@@ -49,6 +49,9 @@ func DB() (*sql.DB, error) {
 		if _, err := dbConn.Exec("PRAGMA journal_mode=WAL"); err != nil {
 			log.Printf("endless-monitor: PRAGMA journal_mode=WAL: %v", err)
 		}
+		if _, err := dbConn.Exec("PRAGMA busy_timeout=5000"); err != nil {
+			log.Printf("endless-monitor: PRAGMA busy_timeout=5000: %v", err)
+		}
 		if _, err := dbConn.Exec("PRAGMA foreign_keys=ON"); err != nil {
 			log.Printf("endless-monitor: PRAGMA foreign_keys=ON: %v", err)
 		}
