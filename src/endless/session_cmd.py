@@ -205,6 +205,8 @@ def list_sessions(
     project_name: str | None = None,
     show_all: bool = False,
     show_hidden: bool = False,
+    state_filter: str | None = None,
+    sort_by: str | None = None,
     limit: int = 20,
     as_json: bool = False,
 ):
@@ -221,6 +223,21 @@ def list_sessions(
         where += " AND p.name = ?"
         params.append(project_name)
 
+    if state_filter:
+        where += " AND s.state = ?"
+        params.append(state_filter)
+
+    sort_map = {
+        "id": "s.id DESC",
+        "project": "project_name, s.id DESC",
+        "state": ("CASE s.state WHEN 'working' THEN 0 WHEN 'needs_input' THEN 1 "
+                  "WHEN 'idle' THEN 2 WHEN 'ended' THEN 3 END, "
+                  "COALESCE(s.last_activity, s.started_at) DESC"),
+        "count": "msg_count DESC",
+    }
+    # Default sort: state priority (working first, ended last), then recency
+    order = sort_map.get(sort_by, sort_map["state"])
+
     params.append(limit)
 
     rows = db.query(
@@ -231,7 +248,7 @@ def list_sessions(
         f"FROM sessions s "
         f"LEFT JOIN projects p ON s.project_id = p.id "
         f"{where} "
-        f"ORDER BY COALESCE(s.last_activity, s.started_at) DESC "
+        f"ORDER BY {order} "
         f"LIMIT ?",
         tuple(params),
     )

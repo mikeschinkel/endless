@@ -369,7 +369,6 @@ func migrateV2(db *sql.DB) {
 	// Also cleans up stale active_goal_id from partial v1→v2 migrations
 	needsSessionRecreate := hasTable(db, "sessions") &&
 		(hasColumn(db, "sessions", "working_dir") ||
-			hasColumn(db, "sessions", "transcript_path") ||
 			hasColumn(db, "sessions", "ended_at") ||
 			hasColumn(db, "sessions", "active_goal_id"))
 	if needsSessionRecreate {
@@ -386,6 +385,10 @@ func migrateV2(db *sql.DB) {
 			process TEXT,
 			started_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
 			last_activity TEXT,
+			transcript_offset INTEGER NOT NULL DEFAULT 0,
+			transcript_path TEXT,
+			summary TEXT,
+			hidden INTEGER NOT NULL DEFAULT 0,
 			UNIQUE (session_id),
 			FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL,
 			FOREIGN KEY (active_task_id) REFERENCES tasks(id) ON DELETE SET NULL
