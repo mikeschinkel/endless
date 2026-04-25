@@ -11,7 +11,7 @@ import (
 func main() {
 	if len(os.Args) < 2 {
 		fmt.Fprintln(os.Stderr, "Usage: endless-hook <command> [args...]")
-		fmt.Fprintln(os.Stderr, "Commands: prompt, claude, codex")
+		fmt.Fprintln(os.Stderr, "Commands: prompt, claude, codex, recap")
 		os.Exit(1)
 	}
 
@@ -23,6 +23,8 @@ func main() {
 		err = runClaude(os.Args[2:])
 	case "codex":
 		err = runCodex(os.Args[2:])
+	case "recap":
+		err = runRecap(os.Args[2:])
 	default:
 		fmt.Fprintf(os.Stderr, "Unknown command: %s\n", os.Args[1])
 		os.Exit(1)
