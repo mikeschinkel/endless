@@ -407,29 +407,29 @@ func ProjectIDForPath(dir string) (int64, bool, error) {
 		check = parent
 	}
 
-	// No registered project found — create or find anonymous entry
-	id, err := ensureAnonymousProject(db, dir)
+	// No registered project found — auto-register as active
+	id, err := ensureAutoRegisteredProject(db, dir)
 	if err != nil {
 		return 0, false, err
 	}
 	return id, false, nil
 }
 
-// ensureAnonymousProject creates or retrieves an anonymous project
-// for an unregistered directory.
-func ensureAnonymousProject(db *sql.DB, dir string) (int64, error) {
-	// Check if already exists
+// ensureAutoRegisteredProject auto-registers an unregistered directory
+// as an active project. Uses the directory basename as the project name.
+func ensureAutoRegisteredProject(db *sql.DB, dir string) (int64, error) {
+	// Check if already exists at this path
 	var id int64
 	err := db.QueryRow(
-		"SELECT id FROM projects WHERE path = ? AND status = 'anonymous'",
+		"SELECT id FROM projects WHERE path = ?",
 		dir,
 	).Scan(&id)
 	if err == nil {
 		return id, nil
 	}
 
-	// Create it
-	name := fmt.Sprintf("_anon_%s", filepath.Base(dir))
+	// Auto-register with directory basename as name
+	name := filepath.Base(dir)
 	now := time.Now().UTC().Format("2006-01-02T15:04:05")
 
 	// Ensure unique name
@@ -442,16 +442,18 @@ func ensureAnonymousProject(db *sql.DB, dir string) (int64, error) {
 		if exists == 0 {
 			break
 		}
-		name = fmt.Sprintf("%s_%d", base, i)
+		name = fmt.Sprintf("%s-%d", base, i)
 	}
 
 	result, err := db.Exec(
 		"INSERT INTO projects (name, path, status, created_at, updated_at) "+
-			"VALUES (?, ?, 'anonymous', ?, ?)",
+			"VALUES (?, ?, 'active', ?, ?)",
 		name, dir, now, now,
 	)
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("auto-registering project %s at %s: %w", name, dir, err)
 	}
+
+	log.Printf("auto-registered project: %s at %s", name, dir)
 	return result.LastInsertId()
 }

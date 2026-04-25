@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS projects (
     group_name TEXT,
     description TEXT,
     status TEXT NOT NULL DEFAULT 'active'
-        CHECK (status IN ('active', 'paused', 'archived', 'idea', 'unregistered', 'anonymous')),
+        CHECK (status IN ('active', 'paused', 'archived', 'idea')),
     language TEXT,
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
     updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now'))
