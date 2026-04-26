@@ -588,7 +588,7 @@ templ taskItemContent(item data.TaskView, compact bool) {
 		<span class={ "text-xs px-1.5 py-0.5 rounded font-mono shrink-0", tierBadgeClass(item.Tier) }>{ data.TierLabel(item.Tier) }</span>
 	}
 	if item.ChildCount > 0 {
-		<span class="text-xs text-gray-500 ml-2"
+		<span class="text-xs text-gray-400 ml-2"
 			x-show={ fmt.Sprintf("!open[%d] && childSummary[%d]", item.ID, item.ID) }
 			x-text={ fmt.Sprintf("childSummary[%d]", item.ID) }
 			x-cloak></span>
