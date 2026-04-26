@@ -318,14 +318,14 @@ type statusChoice struct {
 // statusChoices returns the list of valid statuses with descriptions.
 func statusChoices() []statusChoice {
 	return []statusChoice{
-		{"needs_plan", "Needs plan", "Design work needed first"},
-		{"ready", "Ready", "Planned, ready to implement"},
-		{"in_progress", "In progress", "Actively being worked on"},
-		{"verify", "Verify", "Done, awaiting confirmation"},
 		{"confirmed", "Confirmed", "Verified and done"},
 		{"assumed", "Assumed", "Believed done, verify on use"},
-		{"blocked", "Blocked", "Waiting on something else"},
+		{"verify", "Verify", "Done, awaiting confirmation"},
+		{"in_progress", "In progress", "Actively being worked on"},
+		{"ready", "Ready", "Planned, ready to implement"},
+		{"needs_plan", "Needs plan", "Design work needed first"},
 		{"revisit", "Revisit", "Needs re-evaluation"},
+		{"blocked", "Blocked", "Waiting on something else"},
 		{"declined", "Declined", "Decided not to do"},
 		{"obsolete", "Obsolete", "Made irrelevant by changes"},
 	}
@@ -1404,7 +1404,7 @@ func taskDetailPane(item data.TaskView) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 85, "\" hx-swap=\"none\" x-on:click=\"statusOpen = false; setTimeout(() => location.reload(), 300)\"><span class=\"text-gray-200 w-20\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 85, "\" hx-swap=\"none\" x-on:click=\"statusOpen = false; setTimeout(() => location.reload(), 300)\"><span class=\"text-cyan-400 w-20\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -1417,7 +1417,7 @@ func taskDetailPane(item data.TaskView) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 86, "</span> <span class=\"text-gray-500\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 86, "</span> <span class=\"text-gray-200\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
