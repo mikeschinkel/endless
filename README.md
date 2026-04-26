@@ -17,6 +17,12 @@ just build    # templ generate, tailwind CSS, Go binaries
 just test     # run Python tests
 ```
 
+Endless depends on a [fork of `modelcontextprotocol/go-sdk`](https://github.com/mikeschinkel/go-mcp-sdk/tree/send-notification) via a `replace` directive in `go.mod`, pending upstream merge of [PR #844](https://github.com/modelcontextprotocol/go-sdk/pull/844). If `go mod tidy` fails with a `sum.golang.org` 404, set `GOPRIVATE` once to bypass the public checksum database for the fork:
+
+```bash
+go env -w GOPRIVATE=github.com/mikeschinkel/*
+```
+
 ## CLI Reference
 
 ### Project Management
