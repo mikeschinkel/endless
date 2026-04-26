@@ -1467,7 +1467,7 @@ def detail_item(
         return
 
     # Human-readable output
-    col_w = 12  # width of label column (longest: "Enabled by:" = 11 + 1 space)
+    col_w = 13  # width of label column (longest: "Replaced by:" = 12 + 1 space)
     label = lambda s: click.style(f"{s:<{col_w}}", fg="cyan")
     val = lambda s: click.style(str(s), fg="white", bold=True)
 
@@ -1484,7 +1484,7 @@ def detail_item(
         click.echo(f"{label('Tier:')} {val(tier_display(item['tier']))}")
     if item["parent_id"]:
         click.echo(f"{label('Parent:')} {val(task_id_display(item['parent_id']))}")
-    blocked_by, blocking = get_deps_for_display(item_id)
+    blocked_by, blocking, replaced_by, replaces = get_deps_for_display(item_id)
     terminal = ("confirmed", "assumed", "declined", "obsolete")
     if blocked_by:
         active = [d for d in blocked_by if d["status"] not in terminal]
@@ -1498,6 +1498,12 @@ def detail_item(
     if blocking:
         dep_str = ", ".join(task_id_display(d["id"]) for d in blocking)
         click.echo(f"{label('Enables:')} {val(dep_str)}")
+    if replaced_by:
+        dep_str = ", ".join(task_id_display(d["id"]) for d in replaced_by)
+        click.echo(f"{label('Replaced by:')} {val(dep_str)}")
+    if replaces:
+        dep_str = ", ".join(task_id_display(d["id"]) for d in replaces)
+        click.echo(f"{label('Replaces:')} {val(dep_str)}")
     click.echo(f"{label('Created:')} {val(_format_timestamp(item['created_at']))}")
     if item["updated_at"] and item["updated_at"] != item["created_at"]:
         click.echo(f"{label('Updated:')} {val(_format_timestamp(item['updated_at']))}")
@@ -1939,6 +1945,42 @@ def start_chat():
 # ── Dependency management ──────────────────────────────────────────
 
 
+def replace_task(old_id: int, new_id: int):
+    """Mark old_id as replaced by new_id. Sets old to obsolete and records relationship."""
+    if old_id == new_id:
+        raise click.ClickException("A task cannot replace itself.")
+    for tid in (old_id, new_id):
+        if not db.exists("SELECT 1 FROM tasks WHERE id = ?", (tid,)):
+            raise click.ClickException(f"Task {task_id_display(tid)} not found.")
+
+    # Add replaces relationship (new_id replaces old_id)
+    # Stored as: source=old_id, target=new_id, dep_type='replaces'
+    # meaning "old_id is replaced by new_id"
+    try:
+        db.execute(
+            "INSERT INTO task_deps (source_type, source_id, target_type, target_id, dep_type) "
+            "VALUES ('task', ?, 'task', ?, 'replaces')",
+            (old_id, new_id),
+        )
+    except Exception as e:
+        if "UNIQUE" in str(e):
+            raise click.ClickException(
+                f"{task_id_display(old_id)} is already replaced by {task_id_display(new_id)}."
+            )
+        raise
+
+    # Set old task to obsolete
+    db.execute(
+        "UPDATE tasks SET status = 'obsolete', tier = 0 WHERE id = ?",
+        (old_id,),
+    )
+
+    click.echo(
+        click.style("•", fg="cyan")
+        + f" {task_id_display(old_id)} replaced by {task_id_display(new_id)} (set to obsolete)"
+    )
+
+
 def add_dep(source_id: int, target_id: int, dep_type: str = "needs"):
     """Record that target blocks source (source needs target to be done first)."""
     if source_id == target_id:
@@ -1987,20 +2029,7 @@ def show_deps(item_id: int):
     if not db.exists("SELECT 1 FROM tasks WHERE id = ?", (item_id,)):
         raise click.ClickException(f"Task {task_id_display(item_id)} not found.")
 
-    blocked_by = db.query(
-        "SELECT td.target_id as id, t.title, t.status, t.phase "
-        "FROM task_deps td JOIN tasks t ON t.id = td.target_id "
-        "WHERE td.source_type = 'task' AND td.source_id = ? "
-        "AND td.target_type = 'task' ORDER BY td.target_id",
-        (item_id,),
-    )
-    blocking = db.query(
-        "SELECT td.source_id as id, t.title, t.status, t.phase "
-        "FROM task_deps td JOIN tasks t ON t.id = td.source_id "
-        "WHERE td.target_type = 'task' AND td.target_id = ? "
-        "AND td.source_type = 'task' ORDER BY td.source_id",
-        (item_id,),
-    )
+    blocked_by, blocking, replaced_by, replaces = get_deps_for_display(item_id)
 
     label = lambda s: click.style(s, fg="cyan")
 
@@ -2043,23 +2072,60 @@ def show_deps(item_id: int):
             )
     else:
         click.echo("  (none)")
+
+    if replaced_by:
+        click.echo(label("Replaced by:"))
+        for dep in replaced_by:
+            click.echo(
+                f"  {task_id_display(dep['id'])} "
+                f"[{click.style(dep['status'], fg='green')}] "
+                f"{dep['title']}"
+            )
+    if replaces:
+        click.echo(label("Replaces:"))
+        for dep in replaces:
+            click.echo(
+                f"  {task_id_display(dep['id'])} "
+                f"[{click.style(dep['status'], fg='yellow')}] "
+                f"{dep['title']}"
+            )
     click.echo()
 
 
-def get_deps_for_display(item_id: int) -> tuple[list, list]:
-    """Return (blocked_by, blocking) lists for a task. Used by detail_item."""
+def get_deps_for_display(item_id: int) -> tuple[list, list, list, list]:
+    """Return (blocked_by, blocking, replaced_by, replaces) lists for a task."""
     blocked_by = db.query(
         "SELECT td.target_id as id, t.title, t.status "
         "FROM task_deps td JOIN tasks t ON t.id = td.target_id "
         "WHERE td.source_type = 'task' AND td.source_id = ? "
-        "AND td.target_type = 'task' ORDER BY td.target_id",
+        "AND td.target_type = 'task' AND td.dep_type IN ('needs', 'blocks') "
+        "ORDER BY td.target_id",
         (item_id,),
     )
     blocking = db.query(
         "SELECT td.source_id as id, t.title, t.status "
         "FROM task_deps td JOIN tasks t ON t.id = td.source_id "
         "WHERE td.target_type = 'task' AND td.target_id = ? "
-        "AND td.source_type = 'task' ORDER BY td.source_id",
+        "AND td.source_type = 'task' AND td.dep_type IN ('needs', 'blocks') "
+        "ORDER BY td.source_id",
         (item_id,),
     )
-    return blocked_by, blocking
+    # This task was replaced by...
+    replaced_by = db.query(
+        "SELECT td.target_id as id, t.title, t.status "
+        "FROM task_deps td JOIN tasks t ON t.id = td.target_id "
+        "WHERE td.source_type = 'task' AND td.source_id = ? "
+        "AND td.target_type = 'task' AND td.dep_type = 'replaces' "
+        "ORDER BY td.target_id",
+        (item_id,),
+    )
+    # This task replaces...
+    replaces = db.query(
+        "SELECT td.source_id as id, t.title, t.status "
+        "FROM task_deps td JOIN tasks t ON t.id = td.source_id "
+        "WHERE td.target_type = 'task' AND td.target_id = ? "
+        "AND td.source_type = 'task' AND td.dep_type = 'replaces' "
+        "ORDER BY td.source_id",
+        (item_id,),
+    )
+    return blocked_by, blocking, replaced_by, replaces

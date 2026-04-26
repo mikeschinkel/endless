@@ -684,6 +684,16 @@ def task_block(item_id, blocker_id):
     add_dep(item_id, blocker_id)
 
 
+@task_cmd.command("replace")
+@click.argument("item_id", type=TASK_ID)
+@click.option("--by", "replacement_id", type=TASK_ID, required=True,
+              help="Task ID that replaces this task")
+def task_replace(item_id, replacement_id):
+    """Mark a task as replaced by another task (sets status to obsolete)."""
+    from endless.task_cmd import replace_task
+    replace_task(item_id, replacement_id)
+
+
 @task_cmd.command("unblock")
 @click.argument("item_id", type=TASK_ID)
 @click.option("--by", "blocker_id", type=TASK_ID, required=True,
