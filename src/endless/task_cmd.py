@@ -695,6 +695,7 @@ def next_tasks(
     llm: bool = False,
     as_json: bool = False,
     tier: int | None = None,
+    phase_filter: str | None = None,
 ):
     """Show top actionable leaf tasks, ranked by priority."""
     where = (
@@ -716,6 +717,10 @@ def next_tasks(
         else:
             where += " AND t.tier = ?"
             params.append(tier)
+
+    if phase_filter:
+        where += " AND t.phase = ?"
+        params.append(phase_filter)
 
     if not show_all:
         # Default: scope to current project (or explicit --project)

@@ -426,12 +426,16 @@ def task_show(item_ids, no_description, show_text, show_prompt,
               help="JSON output")
 @click.option("--tier", default=None,
               help="Filter by tier (1-4 or auto/quick/deep/discuss)")
-def task_next(project, show_all, limit, llm, as_json, tier):
+@click.option("--phase", default=None,
+              type=click.Choice(["now", "next", "later"]),
+              help="Filter by phase")
+def task_next(project, show_all, limit, llm, as_json, tier, phase):
     """Show top actionable tasks, ranked by priority."""
     from endless.task_cmd import next_tasks, parse_tier_filter
     tier_val = parse_tier_filter(tier) if tier else None
     next_tasks(project_name=project, show_all=show_all,
-               limit=limit, llm=llm, as_json=as_json, tier=tier_val)
+               limit=limit, llm=llm, as_json=as_json, tier=tier_val,
+               phase_filter=phase)
 
 
 @task_cmd.command("active")
