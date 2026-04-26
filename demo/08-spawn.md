@@ -1,5 +1,13 @@
 # 8. Spawn — tmux send-keys
 
+
+``` shell
+# 6. Spawn without plan mode
+endless task spawn  E-776 \
+    --no-plan
+```
+
+## Setup 
 ``` shell
 # 1. Register project
 endless register ~/Projects/happy-face \
@@ -30,10 +38,3 @@ cat ~/Projects/happy-face/prompt.md
 endless task update E-776 \
     --prompt ~/Projects/happy-face/prompt.md
 ``` 
-
-``` shell
-# 6. Spawn without plan mode
-endless task spawn  E-776 \
-    --no-plan
-```
-
