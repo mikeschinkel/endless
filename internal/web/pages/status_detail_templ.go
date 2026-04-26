@@ -980,7 +980,7 @@ func taskItemContent(item data.TaskView, compact bool) templ.Component {
 			templ_7745c5c3_Var28 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 51, "<span class=\"relative shrink-0\" x-data=\"{ tip: false, statusMenu: false }\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 51, "<span class=\"relative shrink-0\" x-data=\"{ tip: false, statusMenu: false, clickTimer: null }\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -1002,20 +1002,20 @@ func taskItemContent(item data.TaskView, compact bool) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 53, "\" style=\"box-shadow: inset -1px -1px 2px rgba(0,0,0,0.3), inset 1px 1px 2px rgba(255,255,255,0.25);\" x-on:mouseenter=\"tip = true\" x-on:mouseleave=\"tip = false\" x-on:click=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 53, "\" style=\"box-shadow: inset -1px -1px 2px rgba(0,0,0,0.3), inset 1px 1px 2px rgba(255,255,255,0.25);\" x-on:mouseenter=\"tip = true\" x-on:mouseleave=\"tip = false\" x-on:click.prevent=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var31 string
-		templ_7745c5c3_Var31, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("detail = (detail === %d) ? null : %d", item.ID, item.ID))
+		templ_7745c5c3_Var31, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("if (clickTimer) { clearTimeout(clickTimer); clickTimer = null; } else { clickTimer = setTimeout(() => { detail = (detail === %d) ? null : %d; clickTimer = null; }, 250); }", item.ID, item.ID))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/pages/status_detail.templ`, Line: 523, Col: 84}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/pages/status_detail.templ`, Line: 523, Col: 227}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var31))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 54, "\" x-on:dblclick.stop=\"statusMenu = !statusMenu; tip = false\"></span> <span x-show=\"tip && !statusMenu\" x-cloak class=\"absolute left-1/2 -translate-x-1/2 bottom-full mb-1.5 px-2 py-1 text-xs text-gray-200 bg-gray-800 border border-gray-600 rounded shadow-lg whitespace-nowrap z-30\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 54, "\" x-on:dblclick.prevent.stop=\"if (clickTimer) { clearTimeout(clickTimer); clickTimer = null; } statusMenu = !statusMenu; tip = false\"></span> <span x-show=\"tip && !statusMenu\" x-cloak class=\"absolute left-1/2 -translate-x-1/2 bottom-full mb-1.5 px-2 py-1 text-xs text-gray-200 bg-gray-800 border border-gray-600 rounded shadow-lg whitespace-nowrap z-30\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -1033,7 +1033,7 @@ func taskItemContent(item data.TaskView, compact bool) templ.Component {
 			return templ_7745c5c3_Err
 		}
 		for _, s := range statusChoices() {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 56, "<button class=\"block w-full text-left px-3 py-1 text-xs text-gray-300 hover:bg-gray-700 cursor-pointer\" hx-put=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 56, "<button class=\"block w-full text-left px-3 py-1 text-xs text-gray-300 hover:bg-gray-700 cursor-pointer whitespace-nowrap\" hx-put=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
