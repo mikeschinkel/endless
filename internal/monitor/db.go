@@ -86,8 +86,55 @@ func hasColumn(db *sql.DB, table, column string) bool {
 	return false
 }
 
+// BackupDB copies the database file to the backups directory if the last
+// backup is older than 60 seconds. Keeps the last 60 backups.
+func BackupDB() {
+	src := DBPath()
+	if _, err := os.Stat(src); err != nil {
+		return
+	}
+
+	backupDir := filepath.Join(ConfigDir(), "backups")
+	os.MkdirAll(backupDir, 0755)
+
+	// Check if backup is needed (last backup > 60s ago)
+	entries, _ := os.ReadDir(backupDir)
+	if len(entries) > 0 {
+		newest := entries[len(entries)-1]
+		info, err := newest.Info()
+		if err == nil && time.Since(info.ModTime()) < 60*time.Second {
+			return // recent backup exists
+		}
+	}
+
+	// Use SQLite VACUUM INTO for a consistent backup
+	ts := time.Now().Format("20060102-150405")
+	dst := filepath.Join(backupDir, fmt.Sprintf("endless-%s.db", ts))
+
+	backupDB, err := sql.Open("sqlite", src)
+	if err != nil {
+		return
+	}
+	defer backupDB.Close()
+
+	_, err = backupDB.Exec("VACUUM INTO ?", dst)
+	if err != nil {
+		log.Printf("backup failed: %v", err)
+		return
+	}
+
+	// Rotate: keep last 60 backups
+	entries, _ = os.ReadDir(backupDir)
+	if len(entries) > 60 {
+		for _, e := range entries[:len(entries)-60] {
+			os.Remove(filepath.Join(backupDir, e.Name()))
+		}
+	}
+}
+
 // migrate runs schema migrations for existing databases.
 func migrate(db *sql.DB) {
+	BackupDB() // backup before any migration
 	migrateV1(db)
 	migrateV2(db)
 	migrateV3(db)

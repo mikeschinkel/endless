@@ -36,8 +36,43 @@ def _init_schema(conn: sqlite3.Connection):
     conn.executescript(schema)
 
 
+def _backup_db():
+    """Backup DB using SQLite backup API if last backup is > 60 seconds old. Keeps last 60."""
+    import time as _time
+
+    if not DB_PATH.exists():
+        return
+
+    backup_dir = DB_PATH.parent / "backups"
+    backup_dir.mkdir(exist_ok=True)
+
+    # Check if recent backup exists
+    backups = sorted(backup_dir.glob("endless-*.db"))
+    if backups:
+        newest = backups[-1]
+        age = _time.time() - newest.stat().st_mtime
+        if age < 60:
+            return
+
+    # Use SQLite backup API for a consistent copy
+    ts = _time.strftime("%Y%m%d-%H%M%S")
+    dst = backup_dir / f"endless-{ts}.db"
+    src_conn = sqlite3.connect(str(DB_PATH))
+    dst_conn = sqlite3.connect(str(dst))
+    src_conn.backup(dst_conn)
+    dst_conn.close()
+    src_conn.close()
+
+    # Rotate: keep last 60
+    backups = sorted(backup_dir.glob("endless-*.db"))
+    if len(backups) > 60:
+        for old in backups[:-60]:
+            old.unlink()
+
+
 def _migrate(conn: sqlite3.Connection):
     """Run schema migrations for existing databases."""
+    _backup_db()  # backup before any migration
     # Rename plans table to tasks if needed
     tables = [
         r[0]

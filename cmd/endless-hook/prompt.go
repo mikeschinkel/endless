@@ -36,6 +36,9 @@ func runPrompt(args []string) error {
 		sessionCtx = tmuxCtx.ToMap()
 	}
 
+	// Backup DB (throttled internally to every 60s)
+	monitor.BackupDB()
+
 	// Record activity
 	if err := monitor.RecordActivity(projectID, "prompt", dir, sessionCtx); err != nil {
 		return err
