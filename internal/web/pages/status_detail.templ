@@ -515,30 +515,16 @@ templ taskTreeRowFull(item data.TaskView) {
 }
 
 templ taskItemContent(item data.TaskView, compact bool) {
-	<span class="relative shrink-0" x-data="{ tip: false, statusMenu: false, clickTimer: null }">
+	<span class="relative shrink-0" x-data="{ tip: false }">
 		<span class={ "w-3 h-3 rounded-full block cursor-pointer", statusSphereClass(item.Status) }
 		style="box-shadow: inset -1px -1px 2px rgba(0,0,0,0.3), inset 1px 1px 2px rgba(255,255,255,0.25);"
 		x-on:mouseenter="tip = true"
 		x-on:mouseleave="tip = false"
-		x-on:click.prevent={ fmt.Sprintf("if (clickTimer) { clearTimeout(clickTimer); clickTimer = null; } else { clickTimer = setTimeout(() => { detail = (detail === %d) ? null : %d; clickTimer = null; }, 250); }", item.ID, item.ID) }
-		x-on:dblclick.prevent.stop="if (clickTimer) { clearTimeout(clickTimer); clickTimer = null; } statusMenu = !statusMenu; tip = false"></span>
-		<span x-show="tip && !statusMenu" x-cloak
+		x-on:click={ fmt.Sprintf("detail = (detail === %d) ? null : %d", item.ID, item.ID) }></span>
+		<span x-show="tip" x-cloak
 			class="absolute left-1/2 -translate-x-1/2 bottom-full mb-1.5 px-2 py-1 text-xs text-gray-200 bg-gray-800 border border-gray-600 rounded shadow-lg whitespace-nowrap z-30">
 			{ statusLabel(item.Status) }
 		</span>
-		<div x-show="statusMenu" x-cloak x-on:click.away="statusMenu = false"
-			class="absolute left-0 top-full mt-1 z-40 bg-gray-800 border border-gray-600 rounded-lg shadow-lg py-1 min-w-[140px]">
-			for _, s := range statusChoices() {
-				<button
-					class="block w-full text-left px-3 py-1 text-xs text-gray-300 hover:bg-gray-700 cursor-pointer whitespace-nowrap"
-					hx-put={ fmt.Sprintf("/tasks/%d/status", item.ID) }
-					hx-vals={ fmt.Sprintf(`{"status":"%s"}`, s) }
-					hx-swap="none"
-					x-on:click="statusMenu = false; setTimeout(() => location.reload(), 300)">
-					{ statusLabel(s) }
-				</button>
-			}
-		</div>
 	</span>
 	if !compact {
 		<span class="w-5 text-center text-xs font-mono text-cyan-600">
@@ -614,7 +600,22 @@ templ taskDetailPane(item data.TaskView) {
 			</tr>
 			<tr>
 				<td class="detail-label">Status:</td>
-				<td class="detail-value-left">{ statusLabel(item.Status) }</td>
+				<td class="detail-value-left" x-data="{ statusOpen: false }" style="position: relative;">
+					<span class="cursor-pointer hover:underline" x-on:click="statusOpen = !statusOpen">{ statusLabel(item.Status) }</span>
+					<div x-show="statusOpen" x-cloak x-on:click.away="statusOpen = false"
+						class="absolute left-0 top-full mt-1 z-40 bg-gray-800 border border-gray-600 rounded-lg shadow-lg py-1">
+						for _, s := range statusChoices() {
+							<button
+								class="block w-full text-left px-3 py-1 text-xs text-gray-300 hover:bg-gray-700 cursor-pointer whitespace-nowrap"
+								hx-put={ fmt.Sprintf("/tasks/%d/status", item.ID) }
+								hx-vals={ fmt.Sprintf(`{"status":"%s"}`, s) }
+								hx-swap="none"
+								x-on:click="statusOpen = false; setTimeout(() => location.reload(), 300)">
+								{ statusLabel(s) }
+							</button>
+						}
+					</div>
+				</td>
 				<td class="detail-label">Phase:</td>
 				<td class="detail-value">{ item.Phase }</td>
 			</tr>

@@ -797,9 +797,6 @@
   .min-w-\[8rem\] {
     min-width: 8rem;
   }
-  .min-w-\[140px\] {
-    min-width: 140px;
-  }
   .min-w-\[var\(--trigger-width\,12rem\)\] {
     min-width: var(--trigger-width,12rem);
   }
