@@ -1484,12 +1484,19 @@ def detail_item(
     if item["parent_id"]:
         click.echo(f"{label('Parent:'):<19} {val(task_id_display(item['parent_id']))}")
     blocked_by, blocking = get_deps_for_display(item_id)
+    terminal = ("confirmed", "assumed", "declined", "obsolete")
     if blocked_by:
-        dep_str = ", ".join(f"{task_id_display(d['id'])}" for d in blocked_by)
-        click.echo(f"{label('Blocked by:'):<19} {val(dep_str)}")
+        active = [d for d in blocked_by if d["status"] not in terminal]
+        resolved = [d for d in blocked_by if d["status"] in terminal]
+        if active:
+            dep_str = ", ".join(task_id_display(d["id"]) for d in active)
+            click.echo(f"{label('Needs:'):<19} {val(dep_str)}")
+        if resolved:
+            dep_str = ", ".join(task_id_display(d["id"]) for d in resolved)
+            click.echo(f"{label('Enabled by:'):<19} {val(dep_str)}")
     if blocking:
-        dep_str = ", ".join(f"{task_id_display(d['id'])}" for d in blocking)
-        click.echo(f"{label('Blocking:'):<19} {val(dep_str)}")
+        dep_str = ", ".join(task_id_display(d["id"]) for d in blocking)
+        click.echo(f"{label('Enables:'):<19} {val(dep_str)}")
     click.echo(f"{label('Created:'):<19} {val(_format_timestamp(item['created_at']))}")
     if item["updated_at"] and item["updated_at"] != item["created_at"]:
         click.echo(f"{label('Updated:'):<19} {val(_format_timestamp(item['updated_at']))}")
@@ -1997,24 +2004,37 @@ def show_deps(item_id: int):
     click.echo(click.style(f"Dependencies for {task_id_display(item_id)}", fg="green", bold=True))
     click.echo(click.style("─" * 30, dim=True))
 
-    click.echo(label("Blocked by:"))
-    if blocked_by:
-        for dep in blocked_by:
-            status_color = "green" if dep["status"] in ("confirmed", "assumed") else "yellow"
-            click.echo(
-                f"  {task_id_display(dep['id'])} "
-                f"[{click.style(dep['status'], fg=status_color)}] "
-                f"{dep['title']}"
-            )
-    else:
-        click.echo("  (none)")
+    terminal = ("confirmed", "assumed", "declined", "obsolete")
+    active_deps = [d for d in blocked_by if d["status"] not in terminal]
+    resolved_deps = [d for d in blocked_by if d["status"] in terminal]
 
-    click.echo(label("Blocking:"))
-    if blocking:
-        for dep in blocking:
+    if active_deps:
+        click.echo(label("Needs:"))
+        for dep in active_deps:
             click.echo(
                 f"  {task_id_display(dep['id'])} "
                 f"[{click.style(dep['status'], fg='yellow')}] "
+                f"{dep['title']}"
+            )
+    if resolved_deps:
+        click.echo(label("Enabled by:"))
+        for dep in resolved_deps:
+            click.echo(
+                f"  {task_id_display(dep['id'])} "
+                f"[{click.style(dep['status'], fg='green')}] "
+                f"{dep['title']}"
+            )
+    if not blocked_by:
+        click.echo(label("Needs:"))
+        click.echo("  (none)")
+
+    click.echo(label("Enables:"))
+    if blocking:
+        for dep in blocking:
+            status_color = "green" if dep["status"] in terminal else "yellow"
+            click.echo(
+                f"  {task_id_display(dep['id'])} "
+                f"[{click.style(dep['status'], fg=status_color)}] "
                 f"{dep['title']}"
             )
     else:
