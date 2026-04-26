@@ -211,9 +211,9 @@ endless status --project <name>
 | `needs_plan`  | Not yet planned — needs design work before implementation |
 | `ready`       | Planned and ready to implement                            |
 | `in_progress` | Someone is actively working on it                         |
-| `verify`      | Implementation done, awaiting Mike's verification         |
-| `confirmed`   | Verified and done                                         |
-| `assumed`     | Believed complete, will verify when used naturally        |
+| `verify`      | Implementation done, awaiting Mike's verification. **Still blocks dependents.** |
+| `confirmed`   | Verified and done. **Unblocks dependents.**               |
+| `assumed`     | Believed complete, will verify when used naturally. **Unblocks dependents.** |
 | `blocked`     | Waiting on something else                                 |
 | `revisit`     | Was partially planned but needs re-evaluation             |
 | `declined`    | Active decision not to do this                            |
@@ -226,6 +226,21 @@ endless status --project <name>
 | `now` | Current priority |
 | `next` | Up next after current work |
 | `later` | Future work, not urgent |
+
+## Dependency Blocking Semantics
+
+When task A is blocked by task B (`endless task block A --by B`):
+
+- B in `verify` → A is **still blocked**. Verify means "needs Mike to check" — the work isn't confirmed yet.
+- B in `confirmed` or `assumed` → A is **unblocked**. The dependency is resolved.
+- B in `declined` or `obsolete` → A is **unblocked**. The dependency is moot.
+
+**When to use `assumed` vs `verify` for blockers:** If the only way to test B is by implementing A (the dependent task IS the test), change B from `verify` to `assumed`. This unblocks A while acknowledging B hasn't been independently verified.
+
+In `task show`, dependencies display as:
+- **Needs: E-123** — active blocker (not yet done)
+- **Enabled by: E-123** — resolved blocker (done)
+- **Enables: E-456** — tasks that depend on this one
 
 ## Things That Are Still Manual
 
