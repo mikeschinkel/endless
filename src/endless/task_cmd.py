@@ -1690,6 +1690,7 @@ def search_tasks(
     phase_filter: str | None = None,
     search_text: bool = False,
     search_prompt: bool = False,
+    limit: int = 20,
     llm: bool = False,
     as_json: bool = False,
 ):
@@ -1739,12 +1740,14 @@ def search_tasks(
     where += " AND (" + " OR ".join(search_clauses) + ")"
     params.extend(search_params)
 
+    params.append(limit)
     rows = db.query(
         f"SELECT t.id, t.phase, COALESCE(t.title, t.description) as title, "
         f"t.status "
         f"FROM tasks t "
         f"{where} "
-        f"ORDER BY t.updated_at DESC",
+        f"ORDER BY t.updated_at DESC "
+        f"LIMIT ?",
         tuple(params),
     )
 

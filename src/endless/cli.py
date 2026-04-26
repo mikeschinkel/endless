@@ -488,18 +488,20 @@ def task_recent(project, show_all, limit, llm, as_json):
               help="Also search in text field")
 @click.option("--prompt", "search_prompt", is_flag=True,
               help="Also search in prompt field")
+@click.option("--limit", default=20, type=int,
+              help="Max results (default: 20)")
 @click.option("--llm", is_flag=True,
               help="Token-efficient output for LLMs")
 @click.option("--json", "as_json", is_flag=True,
               help="JSON output")
 def task_search(query, project, show_all, status, phase,
-                search_text, search_prompt, llm, as_json):
+                search_text, search_prompt, limit, llm, as_json):
     """Search tasks by query string."""
     from endless.task_cmd import search_tasks
     search_tasks(query, project_name=project, show_all=show_all,
                  status_filter=status, phase_filter=phase,
                  search_text=search_text, search_prompt=search_prompt,
-                 llm=llm, as_json=as_json)
+                 limit=limit, llm=llm, as_json=as_json)
 
 
 @task_cmd.command("add")
