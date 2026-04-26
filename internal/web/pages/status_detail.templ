@@ -300,12 +300,26 @@ func hasDetails(item data.TaskView) bool {
 	return item.Text != item.Title || item.BlockedBy != ""
 }
 
-// statusChoices returns the list of valid statuses for the dropdown.
-func statusChoices() []string {
-	return []string{
-		"needs_plan", "ready", "in_progress", "verify",
-		"confirmed", "assumed", "blocked", "revisit",
-		"declined", "obsolete",
+// statusChoice represents a status with its description.
+type statusChoice struct {
+	Value string
+	Label string
+	Desc  string
+}
+
+// statusChoices returns the list of valid statuses with descriptions.
+func statusChoices() []statusChoice {
+	return []statusChoice{
+		{"needs_plan", "Needs plan", "Design work needed first"},
+		{"ready", "Ready", "Planned, ready to implement"},
+		{"in_progress", "In progress", "Actively being worked on"},
+		{"verify", "Verify", "Done, awaiting confirmation"},
+		{"confirmed", "Confirmed", "Verified and done"},
+		{"assumed", "Assumed", "Believed done, verify on use"},
+		{"blocked", "Blocked", "Waiting on something else"},
+		{"revisit", "Revisit", "Needs re-evaluation"},
+		{"declined", "Declined", "Decided not to do"},
+		{"obsolete", "Obsolete", "Made irrelevant by changes"},
 	}
 }
 
@@ -606,12 +620,13 @@ templ taskDetailPane(item data.TaskView) {
 						class="absolute left-0 top-full mt-1 z-40 bg-gray-800 border border-gray-600 rounded-lg shadow-lg py-1">
 						for _, s := range statusChoices() {
 							<button
-								class="block w-full text-left px-3 py-1 text-xs text-gray-300 hover:bg-gray-700 cursor-pointer whitespace-nowrap"
+								class="flex items-center gap-3 w-full text-left px-3 py-1.5 text-xs hover:bg-gray-700 cursor-pointer whitespace-nowrap"
 								hx-put={ fmt.Sprintf("/tasks/%d/status", item.ID) }
-								hx-vals={ fmt.Sprintf(`{"status":"%s"}`, s) }
+								hx-vals={ fmt.Sprintf(`{"status":"%s"}`, s.Value) }
 								hx-swap="none"
 								x-on:click="statusOpen = false; setTimeout(() => location.reload(), 300)">
-								{ statusLabel(s) }
+								<span class="text-gray-200 w-20">{ s.Label }</span>
+								<span class="text-gray-500">{ s.Desc }</span>
 							</button>
 						}
 					</div>
