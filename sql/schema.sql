@@ -1,7 +1,11 @@
 -- Endless: Project Awareness System
--- SQLite Schema v2
+-- SQLite Schema v3
+-- NOTE: No CHECK constraints. SQLite cannot ALTER/DROP them without
+-- rebuilding the entire table, which caused catastrophic data loss.
+-- All validation is done in application code (Go + Python).
 
 PRAGMA journal_mode=WAL;
+PRAGMA busy_timeout=5000;
 PRAGMA foreign_keys=ON;
 
 -- Projects
@@ -12,8 +16,7 @@ CREATE TABLE IF NOT EXISTS projects (
     path TEXT NOT NULL UNIQUE,
     group_name TEXT,
     description TEXT,
-    status TEXT NOT NULL DEFAULT 'active'
-        CHECK (status IN ('active', 'paused', 'archived', 'idea')),
+    status TEXT NOT NULL DEFAULT 'active',
     language TEXT,
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
     updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now'))
@@ -23,21 +26,18 @@ CREATE TABLE IF NOT EXISTS projects (
 CREATE TABLE IF NOT EXISTS project_deps (
     project_id INTEGER NOT NULL,
     depends_on_id INTEGER NOT NULL,
-    dep_type TEXT NOT NULL DEFAULT 'runtime'
-        CHECK (dep_type IN ('runtime', 'dev', 'tooling')),
+    dep_type TEXT NOT NULL DEFAULT 'runtime',
     notes TEXT,
     PRIMARY KEY (project_id, depends_on_id),
     FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
     FOREIGN KEY (depends_on_id) REFERENCES projects(id) ON DELETE CASCADE
 );
 
-
 -- Notes (staleness alerts, sprawl warnings, etc.)
 CREATE TABLE IF NOT EXISTS notes (
     id INTEGER PRIMARY KEY,
     project_id INTEGER NOT NULL,
-    note_type TEXT NOT NULL
-        CHECK (note_type IN ('staleness', 'update_needed', 'sprawl', 'privacy', 'general')),
+    note_type TEXT NOT NULL,
     message TEXT NOT NULL,
     source TEXT,
     target_doc TEXT,
@@ -52,44 +52,44 @@ CREATE TABLE IF NOT EXISTS sessions (
     id INTEGER PRIMARY KEY,
     session_id TEXT NOT NULL,
     project_id INTEGER,
-    platform TEXT NOT NULL DEFAULT 'claude'
-        CHECK (platform IN ('claude', 'codex')),
-    state TEXT NOT NULL DEFAULT 'working'
-        CHECK (state IN ('working', 'idle', 'needs_input', 'ended')),
+    platform TEXT NOT NULL DEFAULT 'claude',
+    state TEXT NOT NULL DEFAULT 'working',
     active_task_id INTEGER,
     plan_file_path TEXT,
     process TEXT,
     started_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
     last_activity TEXT,
+    transcript_offset INTEGER NOT NULL DEFAULT 0,
+    transcript_path TEXT,
+    summary TEXT,
+    hidden INTEGER NOT NULL DEFAULT 0,
+    needs_recap INTEGER NOT NULL DEFAULT 0,
+    summary_seq INTEGER NOT NULL DEFAULT 0,
     UNIQUE (session_id),
     FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL,
     FOREIGN KEY (active_task_id) REFERENCES tasks(id) ON DELETE SET NULL
 );
 
--- Task items (imported from plan files, managed by Endless)
+-- Task items
 CREATE TABLE IF NOT EXISTS tasks (
     id INTEGER PRIMARY KEY,
     project_id INTEGER NOT NULL,
+    parent_id INTEGER,
+    title TEXT NOT NULL,
+    description TEXT,
+    text TEXT,
+    prompt TEXT,
     phase TEXT NOT NULL DEFAULT 'now',
-    title TEXT,
-    description TEXT NOT NULL,
-    status TEXT NOT NULL DEFAULT 'needs_plan'
-        CHECK (status IN ('needs_plan', 'ready', 'in_progress', 'verify', 'confirmed', 'assumed', 'blocked', 'revisit', 'declined', 'obsolete')),
-    type TEXT NOT NULL DEFAULT 'task'
-        CHECK (type IN ('task', 'plan', 'bug', 'research', 'spike', 'chore')),
+    status TEXT NOT NULL DEFAULT 'needs_plan',
     source_file TEXT,
     sort_order INTEGER NOT NULL DEFAULT 0,
-    task_id INTEGER NOT NULL DEFAULT 0,
-    parent_id INTEGER,
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
-    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
     completed_at TEXT,
-    prompt TEXT,
+    type TEXT NOT NULL DEFAULT 'task',
+    updated_at TEXT NOT NULL DEFAULT '',
     tier INTEGER,
     FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
-    FOREIGN KEY (parent_id) REFERENCES tasks(id) ON DELETE SET NULL,
-    CHECK (completed_at IS NULL OR status = 'confirmed'),
-    CHECK (tier != 1 OR status != 'needs_plan')
+    FOREIGN KEY (parent_id) REFERENCES tasks(id) ON DELETE SET NULL
 );
 
 CREATE TRIGGER IF NOT EXISTS tasks_updated_at AFTER UPDATE ON tasks
@@ -101,31 +101,25 @@ END;
 -- Task dependencies (cross-project capable)
 CREATE TABLE IF NOT EXISTS task_deps (
     id INTEGER PRIMARY KEY,
-    source_type TEXT NOT NULL
-        CHECK (source_type IN ('task', 'project')),
+    source_type TEXT NOT NULL,
     source_id INTEGER NOT NULL,
-    target_type TEXT NOT NULL
-        CHECK (target_type IN ('task', 'project')),
+    target_type TEXT NOT NULL,
     target_id INTEGER NOT NULL,
-    dep_type TEXT NOT NULL DEFAULT 'blocks'
-        CHECK (dep_type IN ('blocks', 'needs')),
+    dep_type TEXT NOT NULL DEFAULT 'blocks',
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
     UNIQUE(source_type, source_id, target_type, target_id)
 );
-
 
 -- Activity log (from hooks)
 CREATE TABLE IF NOT EXISTS activity (
     id INTEGER PRIMARY KEY,
     project_id INTEGER NOT NULL,
-    source TEXT NOT NULL
-        CHECK (source IN ('prompt', 'claude', 'codex')),
+    source TEXT NOT NULL,
     working_dir TEXT,
     session_context TEXT,
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
     FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
 );
-
 
 -- MCP channel plugin port registry
 CREATE TABLE IF NOT EXISTS channels (
@@ -142,8 +136,7 @@ CREATE TABLE IF NOT EXISTS conversations (
     process_a TEXT NOT NULL,
     process_b TEXT,
     project_id INTEGER,
-    state TEXT NOT NULL DEFAULT 'beacon'
-        CHECK (state IN ('beacon', 'connected', 'closed')),
+    state TEXT NOT NULL DEFAULT 'beacon',
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
     connected_at TEXT,
     closed_at TEXT,
@@ -156,8 +149,7 @@ CREATE TABLE IF NOT EXISTS messages (
     conversation_id TEXT NOT NULL,
     sender TEXT NOT NULL,
     body TEXT NOT NULL,
-    status TEXT NOT NULL DEFAULT 'queued'
-        CHECK (status IN ('queued', 'delivered')),
+    status TEXT NOT NULL DEFAULT 'queued',
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
     delivered_at TEXT,
     FOREIGN KEY (conversation_id) REFERENCES conversations(conversation_id) ON DELETE CASCADE
@@ -167,7 +159,7 @@ CREATE TABLE IF NOT EXISTS messages (
 CREATE TABLE IF NOT EXISTS session_messages (
     id INTEGER PRIMARY KEY,
     session_id TEXT NOT NULL,
-    role TEXT NOT NULL CHECK (role IN ('user', 'assistant', 'tool_use')),
+    role TEXT NOT NULL,
     content TEXT NOT NULL,
     tool_name TEXT,
     message_uuid TEXT UNIQUE,
