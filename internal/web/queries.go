@@ -420,3 +420,12 @@ func UpdateTaskTitle(itemID int64, newTitle string) error {
 	return err
 }
 
+func UpdateTaskStatus(itemID int64, newStatus string) error {
+	db, err := monitor.DB()
+	if err != nil {
+		return err
+	}
+	_, err = db.Exec("UPDATE tasks SET status = ? WHERE id = ?", newStatus, itemID)
+	return err
+}
+

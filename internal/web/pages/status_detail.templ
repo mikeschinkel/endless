@@ -170,12 +170,82 @@ func joinParts(parts []string) string {
 	return result
 }
 
+// taskTreeChildSummary generates "parentID: 'summary string', ..." for collapsed parent display.
+func taskTreeChildSummary(items []data.TaskView) string {
+	// Count statuses per parent
+	type counts struct {
+		verify, inProgress, needsPlan, ready, blocked, revisit int
+	}
+	parentCounts := make(map[int64]*counts)
+	for _, item := range items {
+		if item.ParentID == nil || item.Status == "confirmed" || item.Status == "assumed" ||
+			item.Status == "declined" || item.Status == "obsolete" {
+			continue
+		}
+		pid := *item.ParentID
+		c, ok := parentCounts[pid]
+		if !ok {
+			c = &counts{}
+			parentCounts[pid] = c
+		}
+		switch item.Status {
+		case "verify":
+			c.verify++
+		case "in_progress":
+			c.inProgress++
+		case "needs_plan":
+			c.needsPlan++
+		case "ready":
+			c.ready++
+		case "blocked":
+			c.blocked++
+		case "revisit":
+			c.revisit++
+		}
+	}
+
+	var parts []string
+	for pid, c := range parentCounts {
+		var segs []string
+		if c.inProgress > 0 {
+			segs = append(segs, fmt.Sprintf("%d active", c.inProgress))
+		}
+		if c.verify > 0 {
+			segs = append(segs, fmt.Sprintf("%d verify", c.verify))
+		}
+		if c.blocked > 0 {
+			segs = append(segs, fmt.Sprintf("%d blocked", c.blocked))
+		}
+		if c.ready > 0 {
+			segs = append(segs, fmt.Sprintf("%d ready", c.ready))
+		}
+		if c.needsPlan > 0 {
+			segs = append(segs, fmt.Sprintf("%d plan", c.needsPlan))
+		}
+		if c.revisit > 0 {
+			segs = append(segs, fmt.Sprintf("%d revisit", c.revisit))
+		}
+		if len(segs) > 0 {
+			summary := ""
+			for i, s := range segs {
+				if i > 0 {
+					summary += " · "
+				}
+				summary += s
+			}
+			parts = append(parts, fmt.Sprintf("%d: '%s'", pid, summary))
+		}
+	}
+	return joinParts(parts)
+}
+
 // taskTreeXData builds the Alpine x-data object for the plan tree.
 func taskTreeXData(items []data.TaskView) string {
 	return fmt.Sprintf(`{
 		open: {%s},
 		parents: {%s},
 		active: {%s},
+		childSummary: {%s},
 		detail: null,
 		editingId: null,
 		editTitle: '',
@@ -214,7 +284,7 @@ func taskTreeXData(items []data.TaskView) string {
 			this.editingId = null;
 			this.editTitle = '';
 		}
-	}`, taskTreeSmartOpen(items), taskTreeParentMap(items), taskTreeIsActive(items))
+	}`, taskTreeSmartOpen(items), taskTreeParentMap(items), taskTreeIsActive(items), taskTreeChildSummary(items))
 }
 
 // taskItemParentID returns the parent ID or 0 for root items.
@@ -228,6 +298,15 @@ func taskItemParentID(item data.TaskView) int64 {
 // hasDetails returns true if the item has detail content worth showing.
 func hasDetails(item data.TaskView) bool {
 	return item.Text != item.Title || item.BlockedBy != ""
+}
+
+// statusChoices returns the list of valid statuses for the dropdown.
+func statusChoices() []string {
+	return []string{
+		"needs_plan", "ready", "in_progress", "verify",
+		"confirmed", "assumed", "blocked", "revisit",
+		"declined", "obsolete",
+	}
 }
 
 // depthFontClass returns CSS classes for font sizing based on tree depth.
@@ -436,16 +515,30 @@ templ taskTreeRowFull(item data.TaskView) {
 }
 
 templ taskItemContent(item data.TaskView, compact bool) {
-	<span class="relative shrink-0" x-data="{ tip: false }">
+	<span class="relative shrink-0" x-data="{ tip: false, statusMenu: false }">
 		<span class={ "w-3 h-3 rounded-full block cursor-pointer", statusSphereClass(item.Status) }
 		style="box-shadow: inset -1px -1px 2px rgba(0,0,0,0.3), inset 1px 1px 2px rgba(255,255,255,0.25);"
 		x-on:mouseenter="tip = true"
 		x-on:mouseleave="tip = false"
-		x-on:click={ fmt.Sprintf("detail = (detail === %d) ? null : %d", item.ID, item.ID) }></span>
-		<span x-show="tip" x-cloak
+		x-on:click={ fmt.Sprintf("detail = (detail === %d) ? null : %d", item.ID, item.ID) }
+		x-on:dblclick.stop="statusMenu = !statusMenu; tip = false"></span>
+		<span x-show="tip && !statusMenu" x-cloak
 			class="absolute left-1/2 -translate-x-1/2 bottom-full mb-1.5 px-2 py-1 text-xs text-gray-200 bg-gray-800 border border-gray-600 rounded shadow-lg whitespace-nowrap z-30">
 			{ statusLabel(item.Status) }
 		</span>
+		<div x-show="statusMenu" x-cloak x-on:click.away="statusMenu = false"
+			class="absolute left-0 top-full mt-1 z-40 bg-gray-800 border border-gray-600 rounded-lg shadow-lg py-1 min-w-[140px]">
+			for _, s := range statusChoices() {
+				<button
+					class="block w-full text-left px-3 py-1 text-xs text-gray-300 hover:bg-gray-700 cursor-pointer"
+					hx-put={ fmt.Sprintf("/tasks/%d/status", item.ID) }
+					hx-vals={ fmt.Sprintf(`{"status":"%s"}`, s) }
+					hx-swap="none"
+					x-on:click="statusMenu = false; setTimeout(() => location.reload(), 300)">
+					{ statusLabel(s) }
+				</button>
+			}
+		</div>
 	</span>
 	if !compact {
 		<span class="w-5 text-center text-xs font-mono text-cyan-600">
@@ -493,6 +586,12 @@ templ taskItemContent(item data.TaskView, compact bool) {
 	}
 	if item.Tier != nil {
 		<span class={ "text-xs px-1.5 py-0.5 rounded font-mono shrink-0", tierBadgeClass(item.Tier) }>{ data.TierLabel(item.Tier) }</span>
+	}
+	if item.ChildCount > 0 {
+		<span class="text-xs text-gray-500 ml-2"
+			x-show={ fmt.Sprintf("!open[%d] && childSummary[%d]", item.ID, item.ID) }
+			x-text={ fmt.Sprintf("childSummary[%d]", item.ID) }
+			x-cloak></span>
 	}
 }
 

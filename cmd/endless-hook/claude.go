@@ -109,6 +109,10 @@ func runClaude(args []string) error {
 		if payload.TranscriptPath != "" {
 			monitor.SetTranscriptPath(payload.SessionID, payload.TranscriptPath)
 		}
+		// Auto-associate session with task from tmux @endless_task_id
+		if taskID := tmuxTaskID(); taskID > 0 {
+			monitor.StartWorkSession(payload.SessionID, projectID, taskID)
+		}
 		return handleTaskContextInjection(projectID, payload)
 
 	case "UserPromptSubmit":

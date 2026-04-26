@@ -140,3 +140,30 @@ func handleUpdateTaskTitle(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	fmt.Fprint(w, newTitle)
 }
+
+func handleUpdateTaskStatus(w http.ResponseWriter, r *http.Request) {
+	idStr := r.PathValue("id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		http.Error(w, "Invalid ID", http.StatusBadRequest)
+		return
+	}
+
+	newStatus := strings.TrimSpace(r.FormValue("status"))
+	valid := map[string]bool{
+		"needs_plan": true, "ready": true, "in_progress": true,
+		"verify": true, "confirmed": true, "assumed": true,
+		"blocked": true, "revisit": true, "declined": true, "obsolete": true,
+	}
+	if !valid[newStatus] {
+		http.Error(w, "Invalid status", http.StatusUnprocessableEntity)
+		return
+	}
+
+	if err := UpdateTaskStatus(id, newStatus); err != nil {
+		http.Error(w, "Update failed", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+}
