@@ -1467,22 +1467,23 @@ def detail_item(
         return
 
     # Human-readable output
-    label = lambda s: click.style(s, fg="cyan")
+    col_w = 12  # width of label column (longest: "Enabled by:" = 11 + 1 space)
+    label = lambda s: click.style(f"{s:<{col_w}}", fg="cyan")
     val = lambda s: click.style(str(s), fg="white", bold=True)
 
     click.echo()
     click.echo(click.style("Task Detail", fg="green", bold=True))
     click.echo(click.style("───────────", dim=True))
 
-    click.echo(f"{label('ID:'):<19} {val(task_id_display(item['id']))}")
-    click.echo(f"{label('Title:'):<19} {val(item['title'])}")
-    click.echo(f"{label('Type:'):<19} {val(item['type'])}")
-    click.echo(f"{label('Phase:'):<19} {val(item['phase'])}")
-    click.echo(f"{label('Status:'):<19} {val(item['status'])}")
+    click.echo(f"{label('ID:')} {val(task_id_display(item['id']))}")
+    click.echo(f"{label('Title:')} {val(item['title'])}")
+    click.echo(f"{label('Type:')} {val(item['type'])}")
+    click.echo(f"{label('Phase:')} {val(item['phase'])}")
+    click.echo(f"{label('Status:')} {val(item['status'])}")
     if item["tier"]:
-        click.echo(f"{label('Tier:'):<19} {val(tier_display(item['tier']))}")
+        click.echo(f"{label('Tier:')} {val(tier_display(item['tier']))}")
     if item["parent_id"]:
-        click.echo(f"{label('Parent:'):<19} {val(task_id_display(item['parent_id']))}")
+        click.echo(f"{label('Parent:')} {val(task_id_display(item['parent_id']))}")
     blocked_by, blocking = get_deps_for_display(item_id)
     terminal = ("confirmed", "assumed", "declined", "obsolete")
     if blocked_by:
@@ -1490,20 +1491,20 @@ def detail_item(
         resolved = [d for d in blocked_by if d["status"] in terminal]
         if active:
             dep_str = ", ".join(task_id_display(d["id"]) for d in active)
-            click.echo(f"{label('Needs:'):<19} {val(dep_str)}")
+            click.echo(f"{label('Needs:')} {val(dep_str)}")
         if resolved:
             dep_str = ", ".join(task_id_display(d["id"]) for d in resolved)
-            click.echo(f"{label('Enabled by:'):<19} {val(dep_str)}")
+            click.echo(f"{label('Enabled by:')} {val(dep_str)}")
     if blocking:
         dep_str = ", ".join(task_id_display(d["id"]) for d in blocking)
-        click.echo(f"{label('Enables:'):<19} {val(dep_str)}")
-    click.echo(f"{label('Created:'):<19} {val(_format_timestamp(item['created_at']))}")
+        click.echo(f"{label('Enables:')} {val(dep_str)}")
+    click.echo(f"{label('Created:')} {val(_format_timestamp(item['created_at']))}")
     if item["updated_at"] and item["updated_at"] != item["created_at"]:
-        click.echo(f"{label('Updated:'):<19} {val(_format_timestamp(item['updated_at']))}")
+        click.echo(f"{label('Updated:')} {val(_format_timestamp(item['updated_at']))}")
     if item["completed_at"]:
-        click.echo(f"{label('Confirmed:'):<19} {val(_format_timestamp(item['completed_at']))}")
+        click.echo(f"{label('Confirmed:')} {val(_format_timestamp(item['completed_at']))}")
     if item["source_file"]:
-        click.echo(f"{label('Source:'):<19} {val(item['source_file'])}")
+        click.echo(f"{label('Source:')} {val(item['source_file'])}")
 
     # Large text sections
     if show_description and item["description"] and item["description"] != item["title"]:
