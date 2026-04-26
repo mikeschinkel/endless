@@ -590,7 +590,7 @@ templ taskItemContent(item data.TaskView, compact bool) {
 	if item.Tier != nil {
 		<span class={ "text-xs px-1.5 py-0.5 rounded font-mono shrink-0", tierBadgeClass(item.Tier) }>{ data.TierLabel(item.Tier) }</span>
 	}
-	if item.ChildCount > 0 {
+	if item.ChildCount > 0 && !compact {
 		<span class="text-xs ml-2"
 			x-show={ fmt.Sprintf("!open[%d] && childSummary[%d]", item.ID, item.ID) }
 			x-html={ fmt.Sprintf("childSummary[%d]", item.ID) }

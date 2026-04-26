@@ -1267,7 +1267,7 @@ func taskItemContent(item data.TaskView, compact bool) templ.Component {
 				return templ_7745c5c3_Err
 			}
 		}
-		if item.ChildCount > 0 {
+		if item.ChildCount > 0 && !compact {
 			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 75, "<span class=\"text-xs ml-2\" x-show=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
