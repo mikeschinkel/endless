@@ -187,9 +187,11 @@ def serve(port, watch):
                 current_mtime = _get_mtime(serve_bin)
                 if current_mtime != last_mtime:
                     last_mtime = current_mtime
+                    from datetime import datetime
+                    ts = datetime.now().strftime("%-I:%M %p").lower()
                     click.echo(
                         click.style("•", fg="yellow")
-                        + " Binary changed, restarting..."
+                        + f" Binary changed, restarting at {ts}..."
                     )
                     proc.terminate()
                     try:
