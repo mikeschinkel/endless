@@ -207,29 +207,32 @@ func taskTreeChildSummary(items []data.TaskView) string {
 	var parts []string
 	for pid, c := range parentCounts {
 		var segs []string
+		seg := func(n int, label string) string {
+			return fmt.Sprintf("<span class=\"text-gray-200\">%d</span> <span class=\"text-gray-400\">%s</span>", n, label)
+		}
 		if c.inProgress > 0 {
-			segs = append(segs, fmt.Sprintf("%d active", c.inProgress))
+			segs = append(segs, seg(c.inProgress, "active"))
 		}
 		if c.verify > 0 {
-			segs = append(segs, fmt.Sprintf("%d verify", c.verify))
+			segs = append(segs, seg(c.verify, "verify"))
 		}
 		if c.blocked > 0 {
-			segs = append(segs, fmt.Sprintf("%d blocked", c.blocked))
+			segs = append(segs, seg(c.blocked, "blocked"))
 		}
 		if c.ready > 0 {
-			segs = append(segs, fmt.Sprintf("%d ready", c.ready))
+			segs = append(segs, seg(c.ready, "ready"))
 		}
 		if c.needsPlan > 0 {
-			segs = append(segs, fmt.Sprintf("%d plan", c.needsPlan))
+			segs = append(segs, seg(c.needsPlan, "plan"))
 		}
 		if c.revisit > 0 {
-			segs = append(segs, fmt.Sprintf("%d revisit", c.revisit))
+			segs = append(segs, seg(c.revisit, "revisit"))
 		}
 		if len(segs) > 0 {
 			summary := ""
 			for i, s := range segs {
 				if i > 0 {
-					summary += " · "
+					summary += " <span class=\"text-gray-500\">·</span> "
 				}
 				summary += s
 			}
@@ -588,9 +591,9 @@ templ taskItemContent(item data.TaskView, compact bool) {
 		<span class={ "text-xs px-1.5 py-0.5 rounded font-mono shrink-0", tierBadgeClass(item.Tier) }>{ data.TierLabel(item.Tier) }</span>
 	}
 	if item.ChildCount > 0 {
-		<span class="text-xs text-gray-400 ml-2"
+		<span class="text-xs ml-2"
 			x-show={ fmt.Sprintf("!open[%d] && childSummary[%d]", item.ID, item.ID) }
-			x-text={ fmt.Sprintf("childSummary[%d]", item.ID) }
+			x-html={ fmt.Sprintf("childSummary[%d]", item.ID) }
 			x-cloak></span>
 	}
 }
