@@ -10,9 +10,10 @@ import (
 )
 
 // MaxEventLineBytes is the maximum allowed size for a single JSONL event line.
-// O_APPEND guarantees atomic writes up to PIPE_BUF (4096 on most systems).
-// If a line exceeds this, the writer returns an error rather than risking corruption.
-const MaxEventLineBytes = 4096
+// This is a sanity check against bugs (e.g., accidentally serializing a binary file),
+// not a correctness requirement. Local filesystem O_APPEND writes are atomic regardless
+// of size.
+const MaxEventLineBytes = 1024 * 1024 // 1MB
 
 // DefaultMaxEventsPerSegment is the default rotation threshold.
 const DefaultMaxEventsPerSegment = 10000
