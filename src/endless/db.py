@@ -7,8 +7,8 @@ from endless.config import DB_PATH, ensure_config_dir
 
 _conn: sqlite3.Connection | None = None
 
-# Find schema.sql relative to this package
-_SCHEMA_PATH = Path(__file__).resolve().parent.parent.parent / "sql" / "schema.sql"
+# Find schema.sql relative to this package (temporary until E-894 moves all SQL to Go)
+_SCHEMA_PATH = Path(__file__).resolve().parent.parent.parent / "internal" / "schema" / "schema.sql"
 
 
 def get_db() -> sqlite3.Connection:

@@ -10,13 +10,30 @@ import (
 
 	"github.com/mikeschinkel/endless/internal/events"
 	"github.com/mikeschinkel/endless/internal/kairos"
+	"github.com/mikeschinkel/endless/internal/monitor"
 )
 
 func main() {
-	if len(os.Args) < 2 || os.Args[1] != "emit" {
-		fmt.Fprintf(os.Stderr, "Usage: endless-event emit [flags]\n")
+	if len(os.Args) < 2 {
+		fmt.Fprintf(os.Stderr, "Usage: endless-event <command> [flags]\n")
+		fmt.Fprintf(os.Stderr, "Commands: emit, validate-db, rebuild-db\n")
 		os.Exit(1)
 	}
+
+	switch os.Args[1] {
+	case "emit":
+		runEmit()
+	case "validate-db":
+		runValidateDB()
+	case "rebuild-db":
+		runRebuildDB()
+	default:
+		fmt.Fprintf(os.Stderr, "Unknown command: %s\n", os.Args[1])
+		os.Exit(1)
+	}
+}
+
+func runEmit() {
 
 	fs := flag.NewFlagSet("emit", flag.ExitOnError)
 	kind := fs.String("kind", "", "Event kind (e.g. task.created)")
@@ -140,4 +157,140 @@ func run(kindStr, project, entityTypeStr, entityID, actorKindStr, actorID,
 	fmt.Println(string(outJSON))
 
 	return nil
+}
+
+func runValidateDB() {
+	fs := flag.NewFlagSet("validate-db", flag.ExitOnError)
+	projectRoot := fs.String("project-root", "", "Project root directory")
+	fs.Parse(os.Args[2:])
+
+	if *projectRoot == "" {
+		fmt.Fprintf(os.Stderr, "endless-event: error: --project-root is required\n")
+		os.Exit(1)
+	}
+
+	// Get schema from current DB
+	// Project events into temp DB
+	tempPath, projResult, err := events.ProjectToTempDB(*projectRoot)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "endless-event: error: %v\n", err)
+		os.Exit(1)
+	}
+	defer os.Remove(tempPath)
+
+	fmt.Printf("Projection: %d events replayed, %d tasks created, %d updated, %d deleted\n",
+		projResult.EventsReplayed, projResult.TasksCreated, projResult.TasksUpdated, projResult.TasksDeleted)
+	for _, e := range projResult.Errors {
+		fmt.Printf("  warning: %s\n", e)
+	}
+
+	// Compare against current DB
+	currentDB, err := monitor.DB()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "endless-event: error: %v\n", err)
+		os.Exit(1)
+	}
+
+	valResult, err := events.ValidateTasks(currentDB, tempPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "endless-event: error: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("Validation: %d tasks compared\n", valResult.TasksCompared)
+
+	if len(valResult.MissingTasks) > 0 {
+		fmt.Printf("\nMissing tasks (%d):\n", len(valResult.MissingTasks))
+		for _, m := range valResult.MissingTasks {
+			fmt.Printf("  E-%d (%s): only in %s\n", m.TaskID, m.Title, m.In)
+		}
+	}
+
+	if len(valResult.Mismatches) > 0 {
+		fmt.Printf("\nMismatches (%d):\n", len(valResult.Mismatches))
+		for _, m := range valResult.Mismatches {
+			fmt.Printf("  E-%d %s: projected=%q current=%q\n",
+				m.TaskID, m.Field, m.Projected, m.Current)
+		}
+	}
+
+	if len(valResult.MissingTasks) == 0 && len(valResult.Mismatches) == 0 {
+		fmt.Println("\nAll projected tasks match current DB state.")
+	}
+}
+
+func runRebuildDB() {
+	fs := flag.NewFlagSet("rebuild-db", flag.ExitOnError)
+	projectRoot := fs.String("project-root", "", "Project root directory")
+	confirm := fs.Bool("confirm", false, "Actually replace the tasks table (without this, just shows what would happen)")
+	fs.Parse(os.Args[2:])
+
+	if *projectRoot == "" {
+		fmt.Fprintf(os.Stderr, "endless-event: error: --project-root is required\n")
+		os.Exit(1)
+	}
+
+	tempPath, projResult, err := events.ProjectToTempDB(*projectRoot)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "endless-event: error: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("Projection: %d events replayed, %d tasks created, %d updated, %d deleted\n",
+		projResult.EventsReplayed, projResult.TasksCreated, projResult.TasksUpdated, projResult.TasksDeleted)
+	for _, e := range projResult.Errors {
+		fmt.Printf("  warning: %s\n", e)
+	}
+
+	if !*confirm {
+		fmt.Println("\nDry run. Use --confirm to replace the tasks table.")
+		os.Remove(tempPath)
+		return
+	}
+
+	// Replace tasks table in current DB from temp DB
+	currentDB, err := monitor.DB()
+	if err != nil {
+		os.Remove(tempPath)
+		fmt.Fprintf(os.Stderr, "endless-event: error: %v\n", err)
+		os.Exit(1)
+	}
+
+	if _, err := currentDB.Exec(fmt.Sprintf("ATTACH DATABASE '%s' AS proj", tempPath)); err != nil {
+		os.Remove(tempPath)
+		fmt.Fprintf(os.Stderr, "endless-event: error attaching temp db: %v\n", err)
+		os.Exit(1)
+	}
+
+	tx, err := currentDB.Begin()
+	if err != nil {
+		os.Remove(tempPath)
+		fmt.Fprintf(os.Stderr, "endless-event: error: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Delete current tasks for this project and insert from projection
+	if _, err := tx.Exec("DELETE FROM tasks WHERE project_id IN (SELECT id FROM projects WHERE name IN (SELECT name FROM proj.projects))"); err != nil {
+		tx.Rollback()
+		os.Remove(tempPath)
+		fmt.Fprintf(os.Stderr, "endless-event: error clearing tasks: %v\n", err)
+		os.Exit(1)
+	}
+
+	if _, err := tx.Exec("INSERT INTO tasks SELECT * FROM proj.tasks"); err != nil {
+		tx.Rollback()
+		os.Remove(tempPath)
+		fmt.Fprintf(os.Stderr, "endless-event: error inserting projected tasks: %v\n", err)
+		os.Exit(1)
+	}
+
+	if err := tx.Commit(); err != nil {
+		os.Remove(tempPath)
+		fmt.Fprintf(os.Stderr, "endless-event: error committing: %v\n", err)
+		os.Exit(1)
+	}
+
+	currentDB.Exec("DETACH DATABASE proj")
+	os.Remove(tempPath)
+	fmt.Printf("Rebuilt: tasks table replaced with %d projected tasks.\n", projResult.TasksCreated)
 }
