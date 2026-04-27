@@ -84,8 +84,8 @@ func TestWriter_ExceedsMaxBytes(t *testing.T) {
 		t.Fatalf("NewWriter: %v", err)
 	}
 
-	// Create a line that exceeds 4096 bytes
-	bigLine := make([]byte, 5000)
+	// Create a line that exceeds 1MB
+	bigLine := make([]byte, 1024*1024+1)
 	for i := range bigLine {
 		bigLine[i] = 'x'
 	}

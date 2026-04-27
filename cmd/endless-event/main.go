@@ -96,65 +96,123 @@ func run(kindStr, project, entityTypeStr, entityID, actorKindStr, actorID,
 	clock := kairos.NewClock(nid)
 	ts := clock.Now()
 
-	// Build event
-	evt := events.Event{
-		V:       events.Version,
-		TS:      ts.String(),
-		Kind:    evtKind,
-		Project: project,
-		Entity: events.EntityRef{
-			Type: events.EntityType(entityTypeStr),
-			ID:   entityID,
-		},
-		Actor: events.Actor{
-			Kind: events.ActorKind(actorKindStr),
-			ID:   actorID,
-		},
-		CorrelationID: correlationID,
-		Payload:       json.RawMessage(payloadStr),
-	}
+	// Determine if this is a create event that needs ID pre-allocation
+	needsPreAlloc := evtKind == events.KindTaskCreated || evtKind == events.KindTaskImported
 
-	// Validate envelope
-	if err := evt.Validate(); err != nil {
-		return err
-	}
+	if needsPreAlloc {
+		// Events-authoritative flow for creates:
+		// 1. Pre-allocate ID (acquires write lock)
+		// 2. Build and write event to segment file
+		// 3. Execute SQL and commit (releases lock)
+		taskID, execAndCommit, rollback, err := events.PreAllocateTaskID()
+		if err != nil {
+			return err
+		}
 
-	// Execute SQL mutation
-	result, err := events.Execute(&evt)
-	if err != nil {
-		return err
-	}
+		evt := events.Event{
+			V:       events.Version,
+			TS:      ts.String(),
+			Kind:    evtKind,
+			Project: project,
+			Entity: events.EntityRef{
+				Type: events.EntityType(entityTypeStr),
+				ID:   fmt.Sprintf("%d", taskID),
+			},
+			Actor: events.Actor{
+				Kind: events.ActorKind(actorKindStr),
+				ID:   actorID,
+			},
+			CorrelationID: correlationID,
+			Payload:       json.RawMessage(payloadStr),
+		}
 
-	// Update entity ID if task was created (now we have the real ID)
-	if result != nil && result.TaskID > 0 {
-		evt.Entity.ID = fmt.Sprintf("%d", result.TaskID)
-	}
+		if err := evt.Validate(); err != nil {
+			rollback()
+			return err
+		}
 
-	// Marshal to JSON
-	line, err := json.Marshal(evt)
-	if err != nil {
-		return fmt.Errorf("marshal event: %w", err)
-	}
+		// Write event to segment file FIRST (events-authoritative)
+		line, err := json.Marshal(evt)
+		if err != nil {
+			rollback()
+			return fmt.Errorf("marshal event: %w", err)
+		}
 
-	// Write to segment file
-	writer, err := events.NewWriter(projectRoot, nodeIDStr)
-	if err != nil {
-		return fmt.Errorf("create writer: %w", err)
-	}
-	if err := writer.Append(line); err != nil {
-		return err
-	}
+		writer, err := events.NewWriter(projectRoot, nodeIDStr)
+		if err != nil {
+			rollback()
+			return fmt.Errorf("create writer: %w", err)
+		}
+		if err := writer.Append(line); err != nil {
+			rollback()
+			return err
+		}
 
-	// Output result to stdout for Python to parse
-	output := map[string]string{
-		"ts":   ts.String(),
-		"kind": kindStr,
+		// Execute SQL mutation and commit (releases write lock)
+		if _, err := execAndCommit(&evt); err != nil {
+			return err
+		}
+
+		output := map[string]string{
+			"ts":   ts.String(),
+			"kind": kindStr,
+			"id":   fmt.Sprintf("E-%d", taskID),
+		}
+		outJSON, _ := json.Marshal(output)
+		fmt.Println(string(outJSON))
+
+	} else {
+		// Events-authoritative flow for updates/deletes:
+		// 1. Build event (entity ID already known)
+		// 2. Write event to segment file
+		// 3. Execute SQL mutation
+		evt := events.Event{
+			V:       events.Version,
+			TS:      ts.String(),
+			Kind:    evtKind,
+			Project: project,
+			Entity: events.EntityRef{
+				Type: events.EntityType(entityTypeStr),
+				ID:   entityID,
+			},
+			Actor: events.Actor{
+				Kind: events.ActorKind(actorKindStr),
+				ID:   actorID,
+			},
+			CorrelationID: correlationID,
+			Payload:       json.RawMessage(payloadStr),
+		}
+
+		if err := evt.Validate(); err != nil {
+			return err
+		}
+
+		// Write event to segment file FIRST (events-authoritative)
+		line, err := json.Marshal(evt)
+		if err != nil {
+			return fmt.Errorf("marshal event: %w", err)
+		}
+
+		writer, err := events.NewWriter(projectRoot, nodeIDStr)
+		if err != nil {
+			return fmt.Errorf("create writer: %w", err)
+		}
+		if err := writer.Append(line); err != nil {
+			return err
+		}
+
+		// Execute SQL mutation (side effect of the event)
+		if _, err := events.Execute(&evt); err != nil {
+			return err
+		}
+
+		output := map[string]string{
+			"ts":   ts.String(),
+			"kind": kindStr,
+		}
+		outJSON, _ := json.Marshal(output)
+		fmt.Println(string(outJSON))
 	}
-	if result != nil && result.TaskID > 0 {
-		output["id"] = fmt.Sprintf("E-%d", result.TaskID)
-	}
-	outJSON, _ := json.Marshal(output)
-	fmt.Println(string(outJSON))
 
 	return nil
 }

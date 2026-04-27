@@ -46,6 +46,9 @@ func DB() (*sql.DB, error) {
 			dbConn = nil
 			return
 		}
+		// SQLite is single-writer; one connection ensures BEGIN IMMEDIATE
+		// works correctly with Go's connection pool.
+		dbConn.SetMaxOpenConns(1)
 		if _, err := dbConn.Exec("PRAGMA journal_mode=WAL"); err != nil {
 			log.Printf("endless-monitor: PRAGMA journal_mode=WAL: %v", err)
 		}
