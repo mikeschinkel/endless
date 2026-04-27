@@ -413,6 +413,8 @@ def _do_import(
     replace: bool = False,
     parent_id: int | None = None,
 ):
+    from endless.event_bridge import emit_event
+
     tree = _parse_plan_markdown(content)
 
     if not tree:
@@ -423,29 +425,12 @@ def _do_import(
         return
 
     if replace:
-        # Delete items from the same source file AND all their
-        # descendants (which may be from other source files).
-        # First null out parent references to avoid FK issues,
-        # then delete.
-        db.execute(
-            "UPDATE tasks SET parent_id = NULL "
-            "WHERE parent_id IN ("
-            "  WITH RECURSIVE tree(id) AS ("
-            "    SELECT id FROM tasks"
-            "    WHERE project_id = ? AND source_file = ?"
-            "    UNION ALL"
-            "    SELECT pi.id FROM tasks pi"
-            "    JOIN tree t ON pi.parent_id = t.id"
-            "  ) SELECT id FROM tree"
-            ")",
-            (project_id, source_file),
-        )
-        db.execute(
-            "DELETE FROM tasks WHERE id IN ("
-            "  SELECT id FROM tasks"
-            "  WHERE project_id = ? AND source_file = ?"
-            ")",
-            (project_id, source_file),
+        emit_event(
+            kind="task.bulk_cleared",
+            project=proj_name,
+            entity_type="task",
+            entity_id="0",
+            payload={"source_file": source_file},
         )
         click.echo(
             click.style("•", fg="cyan")
@@ -453,24 +438,30 @@ def _do_import(
             + f" for {click.style(proj_name, bold=True)}"
         )
 
-    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
-    count = [0]  # mutable counter for recursion
+    count = [0]
 
     def _insert_tree(nodes: list[dict], db_parent_id: int | None):
         for node in nodes:
             if node["phase"] == "confirmed":
                 continue
             title = node["title"]
-            cursor = db.execute(
-                "INSERT INTO tasks "
-                "(project_id, phase, title, description, status, "
-                "source_file, sort_order, parent_id, created_at, updated_at) "
-                "VALUES (?, ?, ?, ?, 'needs_plan', ?, ?, ?, ?, ?)",
-                (project_id, node["phase"], title, node["text"],
-                 source_file, node["sort_order"], db_parent_id, now, now),
+            result = emit_event(
+                kind="task.imported",
+                project=proj_name,
+                entity_type="task",
+                entity_id="0",
+                payload={
+                    "title": title,
+                    "description": node["text"],
+                    "phase": node["phase"],
+                    "status": "needs_plan",
+                    "source_file": source_file,
+                    "sort_order": node["sort_order"],
+                    "parent_id": db_parent_id,
+                },
             )
             count[0] += 1
-            new_id = cursor.lastrowid
+            new_id = int(result["id"].replace("E-", ""))
             if node["children"]:
                 _insert_tree(node["children"], new_id)
 
@@ -982,35 +973,35 @@ def add_item(
     force: bool = False,
 ):
     """Add a single task."""
+    from endless.event_bridge import emit_event
+
     validate_title(title, force=force)
-    project_id, proj_name = _resolve_project(project_name)
-    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+    _, proj_name = _resolve_project(project_name)
     task_type = task_type or "task"
     status = status or ("ready" if tier == 1 else "needs_plan")
 
-    # Determine sort_order
-    if after:
-        row = db.query(
-            "SELECT sort_order FROM tasks WHERE id = ?",
-            (after,),
-        )
-        if row:
-            sort_order = row[0]["sort_order"] + 5
-        else:
-            sort_order = _next_sort_order(project_id, phase)
-    else:
-        sort_order = _next_sort_order(project_id, phase)
+    payload = {
+        "title": title,
+        "description": description or "",
+        "phase": phase,
+        "status": status,
+        "type": task_type,
+    }
+    if tier is not None:
+        payload["tier"] = tier
+    if parent_id is not None:
+        payload["parent_id"] = parent_id
+    if after is not None:
+        payload["after_id"] = after
 
-    status = status or "needs_plan"
-    cursor = db.execute(
-        "INSERT INTO tasks "
-        "(project_id, phase, title, description, status, type, sort_order, "
-        "parent_id, tier, created_at, updated_at) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        (project_id, phase, title, description, status, task_type, sort_order,
-         parent_id, tier, now, now),
+    result = emit_event(
+        kind="task.created",
+        project=proj_name,
+        entity_type="task",
+        entity_id="0",
+        payload=payload,
     )
-    item_id = cursor.lastrowid
+    item_id = int(result["id"].replace("E-", ""))
     click.echo(
         click.style("•", fg="cyan")
         + f" Added {task_id_display(item_id)}: {title}"
@@ -1024,15 +1015,19 @@ def import_json(
     clear: bool = False,
 ):
     """Import task items from a JSON array."""
-    project_id, proj_name = _resolve_project(project_name)
+    from endless.event_bridge import emit_event
+
+    _, proj_name = _resolve_project(project_name)
 
     if clear:
-        db.execute(
-            "DELETE FROM tasks WHERE project_id = ?",
-            (project_id,),
+        emit_event(
+            kind="task.bulk_cleared",
+            project=proj_name,
+            entity_type="task",
+            entity_id="0",
+            payload={"source_file": "json_import"},
         )
 
-    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
     count = 0
     for i, item in enumerate(data):
         text = item.get("text", item.get("description", ""))
@@ -1041,11 +1036,19 @@ def import_json(
         title = item.get("title", text[:80])
         phase = item.get("phase", "now")
         status = item.get("status", "needs_plan")
-        db.execute(
-            "INSERT INTO tasks "
-            "(project_id, phase, title, description, status, sort_order, created_at, updated_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            (project_id, phase, title, text, status, i * 10, now, now),
+        emit_event(
+            kind="task.imported",
+            project=proj_name,
+            entity_type="task",
+            entity_id="0",
+            payload={
+                "title": title,
+                "description": text,
+                "phase": phase,
+                "status": status,
+                "sort_order": i * 10,
+                "source_file": "json_import",
+            },
         )
         count += 1
 
@@ -1058,6 +1061,8 @@ def import_json(
 
 def remove_item(item_id: int, cascade: bool = False):
     """Remove a task."""
+    from endless.event_bridge import emit_event
+
     row = db.query(
         "SELECT id, COALESCE(title, description) as title FROM tasks WHERE id = ?",
         (item_id,),
@@ -1078,6 +1083,18 @@ def remove_item(item_id: int, cascade: bool = False):
             f"Use --cascade to delete it and all descendants."
         )
 
+    _, proj_name = _resolve_project(None)
+    emit_event(
+        kind="task.deleted",
+        project=proj_name,
+        entity_type="task",
+        entity_id=str(item_id),
+        payload={
+            "cascade": cascade,
+            "title": row[0]["title"],
+        },
+    )
+
     if cascade and child_count > 0:
         desc_count = db.scalar(
             "WITH RECURSIVE tree(id) AS ("
@@ -1087,20 +1104,11 @@ def remove_item(item_id: int, cascade: bool = False):
             ") SELECT count(*) FROM tree",
             (item_id,),
         ) or 0
-        db.execute(
-            "WITH RECURSIVE tree(id) AS ("
-            "  SELECT id FROM tasks WHERE id = ?"
-            "  UNION ALL"
-            "  SELECT t.id FROM tasks t JOIN tree ON t.parent_id = tree.id"
-            ") DELETE FROM tasks WHERE id IN (SELECT id FROM tree)",
-            (item_id,),
-        )
         click.echo(
             click.style("•", fg="cyan")
             + f" Removed {task_id_display(item_id)} and {desc_count} descendant(s): {row[0]['title']}"
         )
     else:
-        db.execute("DELETE FROM tasks WHERE id = ?", (item_id,))
         click.echo(
             click.style("•", fg="cyan")
             + f" Removed: {row[0]['title']}"
@@ -1118,6 +1126,8 @@ def _next_sort_order(project_id: int, phase: str) -> int:
 
 def complete_item(item_id: int, cascade: bool = False):
     """Mark a task as confirmed."""
+    from endless.event_bridge import emit_event
+
     row = db.query(
         "SELECT id, COALESCE(title, description) as title, status FROM tasks "
         "WHERE id = ?",
@@ -1135,39 +1145,33 @@ def complete_item(item_id: int, cascade: bool = False):
         )
         return
 
-    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+    _, proj_name = _resolve_project(None)
+    emit_event(
+        kind="task.status_changed",
+        project=proj_name,
+        entity_type="task",
+        entity_id=str(item_id),
+        payload={
+            "old_status": row[0]["status"],
+            "new_status": "confirmed",
+            "cascade": cascade,
+        },
+    )
 
     if cascade:
-        # Complete all descendants recursively
         count = db.scalar(
             "WITH RECURSIVE tree(id) AS ("
             "  SELECT id FROM tasks WHERE id = ?"
             "  UNION ALL"
             "  SELECT t.id FROM tasks t JOIN tree ON t.parent_id = tree.id"
-            ") SELECT count(*) FROM tree "
-            "JOIN tasks ON tasks.id = tree.id "
-            "WHERE tasks.status != 'confirmed'",
+            ") SELECT count(*) FROM tree",
             (item_id,),
-        ) or 0
-        db.execute(
-            "WITH RECURSIVE tree(id) AS ("
-            "  SELECT id FROM tasks WHERE id = ?"
-            "  UNION ALL"
-            "  SELECT t.id FROM tasks t JOIN tree ON t.parent_id = tree.id"
-            ") UPDATE tasks SET status='confirmed', completed_at=?, tier=0 "
-            "WHERE id IN (SELECT id FROM tree) AND status != 'confirmed'",
-            (item_id, now),
-        )
+        ) or 1
         click.echo(
             click.style("•", fg="cyan")
             + f" Confirmed {task_id_display(item_id)} and {count - 1} descendant(s): {row[0]['title']}"
         )
     else:
-        db.execute(
-            "UPDATE tasks SET status='confirmed', "
-            "completed_at=?, tier=0 WHERE id=?",
-            (now, item_id),
-        )
         click.echo(
             click.style("•", fg="cyan")
             + f" Confirmed: {row[0]['title']}"
@@ -1176,6 +1180,8 @@ def complete_item(item_id: int, cascade: bool = False):
 
 def assume_item(item_id: int, cascade: bool = False):
     """Mark a task as assumed (believed complete, not yet verified)."""
+    from endless.event_bridge import emit_event
+
     row = db.query(
         "SELECT id, COALESCE(title, description) as title, status FROM tasks "
         "WHERE id = ?",
@@ -1193,36 +1199,33 @@ def assume_item(item_id: int, cascade: bool = False):
         )
         return
 
+    _, proj_name = _resolve_project(None)
+    emit_event(
+        kind="task.status_changed",
+        project=proj_name,
+        entity_type="task",
+        entity_id=str(item_id),
+        payload={
+            "old_status": row[0]["status"],
+            "new_status": "assumed",
+            "cascade": cascade,
+        },
+    )
+
     if cascade:
         count = db.scalar(
             "WITH RECURSIVE tree(id) AS ("
             "  SELECT id FROM tasks WHERE id = ?"
             "  UNION ALL"
             "  SELECT t.id FROM tasks t JOIN tree ON t.parent_id = tree.id"
-            ") SELECT count(*) FROM tree "
-            "JOIN tasks ON tasks.id = tree.id "
-            "WHERE tasks.status NOT IN ('confirmed', 'assumed')",
+            ") SELECT count(*) FROM tree",
             (item_id,),
-        ) or 0
-        db.execute(
-            "WITH RECURSIVE tree(id) AS ("
-            "  SELECT id FROM tasks WHERE id = ?"
-            "  UNION ALL"
-            "  SELECT t.id FROM tasks t JOIN tree ON t.parent_id = tree.id"
-            ") UPDATE tasks SET status='assumed', completed_at=NULL, tier=0 "
-            "WHERE id IN (SELECT id FROM tree) AND status NOT IN ('confirmed', 'assumed')",
-            (item_id,),
-        )
+        ) or 1
         click.echo(
             click.style("•", fg="cyan")
             + f" Assumed {task_id_display(item_id)} and {count - 1} descendant(s): {row[0]['title']}"
         )
     else:
-        db.execute(
-            "UPDATE tasks SET status='assumed', "
-            "completed_at=NULL, tier=0 WHERE id=?",
-            (item_id,),
-        )
         click.echo(
             click.style("•", fg="cyan")
             + f" Assumed: {row[0]['title']}"
@@ -1231,8 +1234,10 @@ def assume_item(item_id: int, cascade: bool = False):
 
 def start_item(item_id: int):
     """Mark a task as in progress."""
+    from endless.event_bridge import emit_event
+
     row = db.query(
-        "SELECT id, description FROM tasks WHERE id = ?",
+        "SELECT id, description, status FROM tasks WHERE id = ?",
         (item_id,),
     )
     if not row:
@@ -1240,10 +1245,16 @@ def start_item(item_id: int):
             f"No task found with id {item_id}"
         )
 
-    db.execute(
-        "UPDATE tasks SET status='in_progress' "
-        "WHERE id=?",
-        (item_id,),
+    _, proj_name = _resolve_project(None)
+    emit_event(
+        kind="task.status_changed",
+        project=proj_name,
+        entity_type="task",
+        entity_id=str(item_id),
+        payload={
+            "old_status": row[0]["status"],
+            "new_status": "in_progress",
+        },
     )
     click.echo(
         click.style("•", fg="cyan")
@@ -1264,6 +1275,8 @@ def update_plan(
     force: bool = False,
 ):
     """Update fields on a task."""
+    from endless.event_bridge import emit_event
+
     if title is not None:
         validate_title(title, force=force)
     row = db.query(
@@ -1275,9 +1288,7 @@ def update_plan(
             f"No task found with id {item_id}"
         )
 
-    updates = []
-    params = []
-
+    # Validate status if provided
     if status is not None:
         valid = ("needs_plan", "ready", "in_progress",
                  "verify", "confirmed", "assumed", "blocked", "revisit", "declined", "obsolete")
@@ -1286,81 +1297,73 @@ def update_plan(
                 f"Invalid status '{status}'. "
                 f"Valid: {', '.join(valid)}"
             )
-        updates.append("status = ?")
-        params.append(status)
-        if status == "confirmed":
-            now = datetime.now(timezone.utc).strftime(
-                "%Y-%m-%dT%H:%M:%S"
-            )
-            updates.append("completed_at = ?")
-            params.append(now)
-        else:
-            updates.append("completed_at = NULL")
-        # Clear tier to n/a on terminal and verify statuses
-        terminal = ("verify", "confirmed", "assumed", "declined", "obsolete")
-        if status in terminal and tier is None:
-            updates.append("tier = 0")
+
+    # Build the fields map for the event payload
+    fields = {}
+    changed_names = []
+
+    if status is not None:
+        fields["status"] = status
+        changed_names.append("status")
 
     if phase is not None:
-        updates.append("phase = ?")
-        params.append(phase)
+        fields["phase"] = phase
+        changed_names.append("phase")
 
     if title is not None:
-        updates.append("title = ?")
-        params.append(title)
+        fields["title"] = title
+        changed_names.append("title")
 
     if description is not None:
-        updates.append("description = ?")
-        params.append(description)
+        fields["description"] = description
+        changed_names.append("description")
 
     if text_file is not None:
         p = Path(text_file).expanduser()
         if not p.exists():
-            raise click.ClickException(
-                f"File not found: {p}"
-            )
-        updates.append("text = ?")
-        params.append(p.read_text())
+            raise click.ClickException(f"File not found: {p}")
+        fields["text"] = p.read_text()
+        changed_names.append("text")
 
     if prompt_file is not None:
         p = Path(prompt_file).expanduser()
         if not p.exists():
-            raise click.ClickException(
-                f"File not found: {p}"
-            )
-        updates.append("prompt = ?")
-        params.append(p.read_text())
+            raise click.ClickException(f"File not found: {p}")
+        fields["prompt"] = p.read_text()
+        changed_names.append("prompt")
 
     if parent_id is not None:
-        updates.append("parent_id = ?")
-        params.append(parent_id if parent_id > 0 else None)
+        fields["parent_id"] = parent_id if parent_id > 0 else None
+        changed_names.append("parent_id")
 
     if tier is not None:
         if tier == TIER_CLEAR:
-            updates.append("tier = NULL")
+            fields["tier"] = None
         else:
-            updates.append("tier = ?")
-            params.append(tier)
-            # Tier 1 tasks can't be needs_plan — auto-advance to ready
+            fields["tier"] = tier
+            # Tier 1 tasks can't be needs_plan; auto-advance to ready
             if tier == 1 and status is None and row[0]["status"] == "needs_plan":
-                updates.append("status = ?")
-                params.append("ready")
+                fields["status"] = "ready"
+                changed_names.append("status")
+        changed_names.append("tier")
 
-    if not updates:
+    if not fields:
         raise click.ClickException(
             "Nothing to update. Specify at least one flag."
         )
 
-    params.append(item_id)
-    db.execute(
-        f"UPDATE tasks SET {', '.join(updates)} WHERE id = ?",
-        tuple(params),
+    _, proj_name = _resolve_project(None)
+    emit_event(
+        kind="task.fields_updated",
+        project=proj_name,
+        entity_type="task",
+        entity_id=str(item_id),
+        payload={"fields": fields},
     )
 
-    changed = [u.split(" =")[0] for u in updates]
     click.echo(
         click.style("•", fg="cyan")
-        + f" Updated {task_id_display(item_id)}: {', '.join(changed)}"
+        + f" Updated {task_id_display(item_id)}: {', '.join(changed_names)}"
     )
 
 
@@ -1886,6 +1889,8 @@ def move_task(
         return
 
     # Single task move (with or without children)
+    from endless.event_bridge import emit_event
+
     # Verify task exists
     row = db.query(
         "SELECT id, parent_id FROM tasks WHERE id = ?",
@@ -1896,26 +1901,19 @@ def move_task(
             f"Task {task_id_display(item_id)} not found."
         )
 
-    # Circular move check: can't move a task under itself or its descendant
-    if target_parent_id:
-        # Walk up from target_parent_id to make sure item_id is not an ancestor
-        current = target_parent_id
-        while current is not None:
-            if current == item_id:
-                raise click.ClickException(
-                    f"Cannot move {task_id_display(item_id)} under "
-                    f"{task_id_display(target_parent_id)}: would create a cycle."
-                )
-            ancestor = db.query(
-                "SELECT parent_id FROM tasks WHERE id = ?",
-                (current,),
-            )
-            current = ancestor[0]["parent_id"] if ancestor else None
+    _, proj_name = _resolve_project(project_name)
+    old_parent_id = row[0]["parent_id"]
 
-    # Move the task
-    db.execute(
-        "UPDATE tasks SET parent_id = ? WHERE id = ?",
-        (target_parent_id, item_id),
+    # Go executor handles circular reference check
+    emit_event(
+        kind="task.moved",
+        project=proj_name,
+        entity_type="task",
+        entity_id=str(item_id),
+        payload={
+            "old_parent_id": old_parent_id,
+            "new_parent_id": target_parent_id,
+        },
     )
 
     dest = task_id_display(target_parent_id) if target_parent_id else "root"

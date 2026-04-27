@@ -519,7 +519,7 @@ def task_search(query, project, show_all, status, phase,
 @click.option("--after", type=TASK_ID, default=None,
               help="Insert after this task ID")
 @click.option("--type", "task_type", default=None,
-              type=click.Choice(["task", "plan", "bug", "research", "spike", "chore"]),
+              type=click.Choice(["task", "plan", "bug", "research", "spike", "chore", "decision"]),
               help="Task type (default: task)")
 @click.option("--status", default=None,
               type=click.Choice(["needs_plan", "ready", "in_progress",

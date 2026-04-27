@@ -248,17 +248,18 @@ These features are planned but not yet implemented. You'll need workarounds:
 
 ### Dependencies between tasks
 
-The `task_deps` table exists in the DB but there's no CLI command for it yet (E-575). If you need to record that one item blocks another, use SQL directly:
-
 ```bash
-python3 -c "
-import sqlite3, pathlib
-db = sqlite3.connect(pathlib.Path.home() / '.config/endless/endless.db')
-db.execute('INSERT INTO task_deps (source_type, source_id, target_type, target_id, dep_type) VALUES (\"task\", <blocked_id>, \"task\", <blocker_id>, \"needs\")')
-db.commit()
-db.close()
-"
+# Record that task A is blocked by task B
+endless task block A --by B
+
+# Remove a dependency
+endless task unblock A --by B
+
+# Show all dependencies for a task
+endless task deps A
 ```
+
+Dependencies also show in `task show` output as "Blocked by" and "Blocking" fields.
 
 ### Saving plan text from Claude's plan mode
 
@@ -276,11 +277,17 @@ Enforcement (blocking Write/Edit without `task start`) requires `"tracking": "en
 
 ## Where Things Live
 
-- **Database**: `~/.config/endless/endless.db` (SQLite)
+- **Database**: `~/.config/endless/endless.db` (SQLite, rebuildable projection)
+- **Event logs**: `<project>/.endless/events/events-{node}-{seq}.jsonl` (source of truth, **committed to git**)
 - **Project config**: `<project>/.endless/config.json`
 - **Web dashboard**: `http://localhost:8484` (start with `endless serve`)
+- **Event binary**: `/usr/local/bin/endless-event`
 - **Hook binary**: `/usr/local/bin/endless-hook`
 - **CLI**: installed via `uv tool install` from `/Users/mikeschinkel/Projects/endless`
+
+## Important: .endless/events/ is committed to git
+
+The `.endless/events/` directory contains event-sourced records that **must be committed to git**. This is by design: clone-completeness means task state travels with the repo. Do NOT add `.endless/` or `.endless/events/` to `.gitignore`.
 
 ## Common Patterns
 

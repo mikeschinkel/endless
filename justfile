@@ -52,6 +52,7 @@ build: _link-templui
     go build -o bin/endless-serve ./cmd/endless-serve
     go build -o bin/endless-hook ./cmd/endless-hook
     go build -o bin/endless-channel ./cmd/endless-channel
+    go build -o bin/endless-event ./cmd/endless-event
 
 # Build and install everything (Go binaries symlinked to /usr/local/bin, Python CLI installed)
 install:
@@ -59,6 +60,7 @@ install:
     ln -sfn "$(pwd)/bin/endless-serve" /usr/local/bin/endless-serve
     ln -sfn "$(pwd)/bin/endless-hook" /usr/local/bin/endless-hook
     ln -sfn "$(pwd)/bin/endless-channel" /usr/local/bin/endless-channel
+    ln -sfn "$(pwd)/bin/endless-event" /usr/local/bin/endless-event
     uv tool install -e . --force
 
 # Run Python tests
@@ -78,6 +80,11 @@ go:
     go build -o bin/endless-serve ./cmd/endless-serve
     go build -o bin/endless-hook ./cmd/endless-hook
     go build -o bin/endless-channel ./cmd/endless-channel
+    go build -o bin/endless-event ./cmd/endless-event
+
+# Run Go tests
+test-go:
+    go test ./internal/kairos/... ./internal/events/... -v
 
 # Kill any running endless-serve process
 kill:

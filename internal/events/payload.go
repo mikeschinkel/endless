@@ -11,6 +11,7 @@ type TaskCreatedPayload struct {
 	Tier        *int   `json:"tier,omitempty"`
 	ParentID    *int64 `json:"parent_id,omitempty"`
 	SortOrder   int    `json:"sort_order"`
+	AfterID     *int64 `json:"after_id,omitempty"` // Go resolves to sort_order
 }
 
 type TaskImportedPayload struct {
@@ -27,6 +28,7 @@ type TaskStatusChangedPayload struct {
 	OldStatus   string `json:"old_status"`
 	NewStatus   string `json:"new_status"`
 	CompletedAt string `json:"completed_at,omitempty"`
+	Cascade     bool   `json:"cascade,omitempty"`
 }
 
 type TaskFieldsUpdatedPayload struct {
