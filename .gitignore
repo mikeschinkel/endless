@@ -19,3 +19,6 @@ internal/web/assets/css/templui
 *.db
 *.db-wal
 *.db-shm
+
+# Local git worktree checkouts created for parallel sessions
+.endless/worktrees/
