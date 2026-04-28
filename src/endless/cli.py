@@ -418,6 +418,9 @@ def task_show(item_ids, no_description, show_text, show_prompt,
                     show_children=show_children, llm=llm, as_json=as_json)
 
 
+task_cmd.add_command(task_show, name="detail")
+
+
 @task_cmd.command("next")
 @click.option("--project", default=None,
               help="Project name (default: detect from cwd)")
