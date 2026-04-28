@@ -89,10 +89,10 @@ _TITLE_VERBS = {
     "create", "decide", "define", "defer", "deploy", "design", "disable",
     "distinguish", "document", "enable", "enforce", "evaluate", "expand",
     "extract", "fix", "generate", "implement", "improve", "integrate", "investigate",
-    "hide", "increase", "merge", "migrate", "move", "omit", "package", "print", "raise", "read", "redesign", "refactor", "remove",
+    "hide", "increase", "merge", "migrate", "move", "omit", "package", "print", "raise", "read", "reconcile", "redesign", "refactor", "remove",
     "rename", "render", "replace", "require", "research", "resolve",
     "search", "show", "simplify", "skip", "split", "support", "surface", "sync", "test", "track",
-    "update", "validate",
+    "update", "validate", "verify",
 }
 
 
