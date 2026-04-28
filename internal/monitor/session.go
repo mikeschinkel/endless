@@ -1,11 +1,12 @@
 package monitor
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
 	"time"
+
+	"github.com/mikeschinkel/endless/internal/config"
+	"github.com/mikeschinkel/go-dt"
 )
 
 // SessionInfo represents an active AI coding session.
@@ -302,13 +303,17 @@ func IsSessionExpired(s *SessionInfo, timeoutMinutes int) bool {
 
 // GetTrackingMode returns the tracking enforcement level for a project.
 // Returns "enforce" (default for registered), "track", or "off".
+//
+// Resolution order: anonymous projects always return "off"; otherwise the
+// merged Endless config (CLI layer + project layer) supplies an explicit
+// "track" or "off"; anything else (including absent config) falls through
+// to "enforce".
 func GetTrackingMode(projectID int64) string {
 	db, err := DB()
 	if err != nil {
 		return "off"
 	}
 
-	// Check if project is anonymous — no enforcement for anonymous projects
 	var status, projectPath string
 	err = db.QueryRow(
 		"SELECT status, path FROM projects WHERE id=?", projectID,
@@ -320,23 +325,14 @@ func GetTrackingMode(projectID int64) string {
 		return "off"
 	}
 
-	// Check .endless/config.json for explicit setting
-	configPath := filepath.Join(projectPath, ".endless", "config.json")
-	data, err := os.ReadFile(configPath)
+	cfg, err := config.Load(dt.DirPath(projectPath))
 	if err != nil {
-		return "enforce" // default for registered projects
-	}
-
-	var parsed struct {
-		Tracking string `json:"tracking"`
-	}
-	if err := json.Unmarshal(data, &parsed); err != nil {
 		return "enforce"
 	}
 
-	switch parsed.Tracking {
+	switch cfg.Tracking {
 	case "track", "off":
-		return parsed.Tracking
+		return cfg.Tracking
 	default:
 		return "enforce"
 	}
