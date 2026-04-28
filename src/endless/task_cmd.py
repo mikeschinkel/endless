@@ -19,6 +19,8 @@ _TIER_FROM_LABEL = {v: k for k, v in _TIER_LABELS.items()}
 TIER_NONE = -1
 # Sentinel meaning "clear tier to NULL" for update
 TIER_CLEAR = -2
+# Sentinel meaning "parent_id IS NULL" (root tasks only)
+PARENT_NONE = 0
 
 
 def parse_tier(value: str) -> int:
@@ -59,6 +61,21 @@ def parse_tier_filter(value: str) -> int:
     )
 
 
+def parse_parent_filter(value: str) -> int:
+    """Parse a --parent value: 'none' for root tasks, or a task ID (E-NNN or NNN)."""
+    s = value.strip().lower()
+    if s == "none":
+        return PARENT_NONE
+    if s.startswith("e-"):
+        s = s[2:]
+    try:
+        return int(s)
+    except ValueError:
+        raise click.ClickException(
+            f"Invalid parent '{value}'. Expected 'none' or a task ID (e.g. E-799)"
+        )
+
+
 def tier_display(tier: int | None) -> str:
     """Format a tier for display: '1 (auto)'."""
     if tier is None:
@@ -68,13 +85,13 @@ def tier_display(tier: int | None) -> str:
 
 
 _TITLE_VERBS = {
-    "accept", "add", "apply", "assume", "audit", "build", "capture", "change", "clean", "clear", "confirm", "configure", "consolidate", "convert",
+    "accept", "add", "apply", "assume", "audit", "backfill", "build", "capture", "change", "clean", "clear", "confirm", "configure", "consolidate", "convert",
     "create", "decide", "define", "defer", "deploy", "design", "disable",
     "distinguish", "document", "enable", "enforce", "evaluate", "expand",
     "extract", "fix", "generate", "implement", "improve", "integrate", "investigate",
     "hide", "increase", "merge", "migrate", "move", "omit", "package", "print", "raise", "read", "redesign", "refactor", "remove",
     "rename", "render", "replace", "require", "research", "resolve",
-    "search", "show", "simplify", "split", "support", "surface", "sync", "test", "track",
+    "search", "show", "simplify", "skip", "split", "support", "surface", "sync", "test", "track",
     "update", "validate",
 }
 
@@ -537,6 +554,7 @@ def show_plan(
     status_filter: list[str] | None = None,
     phase_filter: str | None = None,
     tier_filter: int | None = None,
+    parent_id: int | None = None,
     sort_by: str | None = None,
     tree: bool = False,
     llm: bool = False,
@@ -545,14 +563,14 @@ def show_plan(
     """Show tasks for a project as a tree, or flat sorted list."""
     project_id, proj_name = _resolve_project(project_name)
 
-    where = "WHERE pi.project_id = ?"
+    where = "WHERE pi.project_id = ? AND pi.type != 'decision'"
     params: list = [project_id]
-    if not show_all:
-        where += " AND pi.status NOT IN ('confirmed', 'assumed', 'declined', 'obsolete')"
     if status_filter:
         placeholders = ",".join("?" for _ in status_filter)
         where += f" AND pi.status IN ({placeholders})"
         params.extend(status_filter)
+    elif not show_all:
+        where += " AND pi.status NOT IN ('confirmed', 'assumed', 'declined', 'obsolete')"
     if phase_filter:
         where += " AND pi.phase = ?"
         params.append(phase_filter)
@@ -562,6 +580,12 @@ def show_plan(
         else:
             where += " AND pi.tier = ?"
             params.append(tier_filter)
+    if parent_id is not None:
+        if parent_id == PARENT_NONE:
+            where += " AND pi.parent_id IS NULL"
+        else:
+            where += " AND pi.parent_id = ?"
+            params.append(parent_id)
 
     sort_col_map = {
         "id": "pi.id",
@@ -687,10 +711,12 @@ def next_tasks(
     as_json: bool = False,
     tier: int | None = None,
     phase_filter: str | None = None,
+    parent_id: int | None = None,
 ):
     """Show top actionable leaf tasks, ranked by priority."""
     where = (
-        "WHERE t.status NOT IN ('confirmed', 'assumed', 'blocked', 'declined', 'obsolete', 'in_progress', 'verify') "
+        "WHERE t.type != 'decision' "
+        "AND t.status NOT IN ('confirmed', 'assumed', 'blocked', 'declined', 'obsolete', 'in_progress', 'verify') "
         "AND (SELECT count(*) FROM tasks c WHERE c.parent_id = t.id) = 0 "
         "AND t.id NOT IN ("
         "  SELECT td.source_id FROM task_deps td"
@@ -712,6 +738,13 @@ def next_tasks(
     if phase_filter:
         where += " AND t.phase = ?"
         params.append(phase_filter)
+
+    if parent_id is not None:
+        if parent_id == PARENT_NONE:
+            where += " AND t.parent_id IS NULL"
+        else:
+            where += " AND t.parent_id = ?"
+            params.append(parent_id)
 
     if not show_all:
         # Default: scope to current project (or explicit --project)
@@ -805,10 +838,18 @@ def active_tasks(
     show_all: bool = False,
     llm: bool = False,
     as_json: bool = False,
+    parent_id: int | None = None,
 ):
     """Show tasks that are in progress or awaiting verification."""
-    where = "WHERE t.status IN ('in_progress', 'verify')"
+    where = "WHERE t.type != 'decision' AND t.status IN ('in_progress', 'verify')"
     params: list = []
+
+    if parent_id is not None:
+        if parent_id == PARENT_NONE:
+            where += " AND t.parent_id IS NULL"
+        else:
+            where += " AND t.parent_id = ?"
+            params.append(parent_id)
 
     if not show_all:
         project_id, proj_name = _resolve_project(project_name)
@@ -886,10 +927,18 @@ def recent_tasks(
     limit: int = 10,
     llm: bool = False,
     as_json: bool = False,
+    parent_id: int | None = None,
 ):
     """Show most recently updated tasks."""
-    where = "WHERE 1=1"
+    where = "WHERE t.type != 'decision'"
     params: list = []
+
+    if parent_id is not None:
+        if parent_id == PARENT_NONE:
+            where += " AND t.parent_id IS NULL"
+        else:
+            where += " AND t.parent_id = ?"
+            params.append(parent_id)
 
     if not show_all:
         project_id, proj_name = _resolve_project(project_name)
@@ -960,6 +1009,118 @@ def recent_tasks(
         click.echo()
 
 
+def list_decisions(
+    project_name: str | None = None,
+    show_all: bool = False,
+    sort_by: str | None = None,
+    llm: bool = False,
+    as_json: bool = False,
+):
+    """List decisions for a project (or all projects with --all)."""
+    where = "WHERE t.type = 'decision'"
+    params: list = []
+
+    if not show_all:
+        project_id, proj_name = _resolve_project(project_name)
+        where += " AND t.project_id = ?"
+        params.append(project_id)
+    elif project_name:
+        project_id, proj_name = _resolve_project(project_name)
+        where += " AND t.project_id = ?"
+        params.append(project_id)
+    else:
+        proj_name = "all projects"
+
+    sort_col_map = {
+        "id": "t.id DESC",
+        "created": "t.created_at DESC, t.id DESC",
+        "title": "t.title",
+    }
+    order_by = sort_col_map.get(sort_by or "id", "t.id DESC")
+
+    rows = db.query(
+        f"SELECT t.id, COALESCE(t.title, t.description) as title, t.description, "
+        f"t.created_at, p.name as project_name "
+        f"FROM tasks t JOIN projects p ON t.project_id = p.id "
+        f"{where} ORDER BY {order_by}",
+        tuple(params),
+    )
+
+    if not rows:
+        if as_json:
+            click.echo("[]")
+        elif llm:
+            click.echo(f"# {proj_name}\n(no decisions)")
+        else:
+            click.echo(
+                click.style("•", fg="cyan")
+                + f" No decisions for "
+                + click.style(proj_name, bold=True)
+            )
+        return
+
+    if as_json:
+        import json
+        out = [
+            {
+                "id": f"E-{row['id']}",
+                "title": row["title"],
+                "created": row["created_at"],
+            }
+            for row in rows
+        ]
+        click.echo(json.dumps(out, indent=2))
+        return
+
+    if llm:
+        click.echo(f"# {proj_name} decisions")
+        for row in rows:
+            prefix = f"[{row['project_name']}] " if show_all else ""
+            click.echo(f"E-{row['id']} {prefix}{row['title']}")
+    else:
+        try:
+            term_width = os.get_terminal_size().columns
+        except OSError:
+            term_width = 80
+
+        id_w = max(2, max(len(task_id_display(r["id"])) for r in rows))
+        date_w = max(7, max(len(_format_timestamp(r["created_at"])) for r in rows))
+        gap = "  "
+        fixed_width = id_w + date_w + len(gap) * 2
+        if show_all:
+            proj_w = max(7, max(len(r["project_name"]) for r in rows))
+            fixed_width += proj_w + len(gap)
+        title_width = max(20, term_width - fixed_width)
+
+        display_titles = []
+        for row in rows:
+            title = row["title"]
+            if len(title) > title_width:
+                title = title[:title_width - 1] + "…"
+            display_titles.append(title)
+
+        header = f"{'ID':<{id_w}}{gap}{'Created':<{date_w}}"
+        sep = f"{'─'*id_w}{gap}{'─'*date_w}"
+        if show_all:
+            header += f"{gap}{'Project':<{proj_w}}"
+            sep += f"{gap}{'─'*proj_w}"
+        max_title_len = max(len(t) for t in display_titles) if display_titles else 5
+        header += f"{gap}Title"
+        sep += f"{gap}{'─'*max_title_len}"
+        click.echo(header)
+        click.echo(sep)
+
+        for row, title in zip(rows, display_titles):
+            line = (
+                f"{task_id_display(row['id']):<{id_w}}{gap}"
+                f"{_format_timestamp(row['created_at']):<{date_w}}"
+            )
+            if show_all:
+                line += f"{gap}{row['project_name']:<{proj_w}}"
+            line += f"{gap}{title}"
+            click.echo(line)
+
+
 def add_item(
     title: str,
     description: str | None = None,
@@ -975,9 +1136,10 @@ def add_item(
     """Add a single task."""
     from endless.event_bridge import emit_event
 
-    validate_title(title, force=force)
-    _, proj_name = _resolve_project(project_name)
     task_type = task_type or "task"
+    if task_type != "decision":
+        validate_title(title, force=force)
+    _, proj_name = _resolve_project(project_name)
     status = status or ("ready" if tier == 1 else "needs_plan")
 
     payload = {
@@ -1277,16 +1439,16 @@ def update_plan(
     """Update fields on a task."""
     from endless.event_bridge import emit_event
 
-    if title is not None:
-        validate_title(title, force=force)
     row = db.query(
-        "SELECT id, title, status FROM tasks WHERE id = ?",
+        "SELECT id, title, status, type FROM tasks WHERE id = ?",
         (item_id,),
     )
     if not row:
         raise click.ClickException(
             f"No task found with id {item_id}"
         )
+    if title is not None and row[0]["type"] != "decision":
+        validate_title(title, force=force)
 
     # Validate status if provided
     if status is not None:
@@ -1441,11 +1603,15 @@ def detail_item(
                     f"status={item['status']}{tier_str}")
         if item["parent_id"]:
             click.echo(f"parent=E-{item['parent_id']}")
-        blocked_by, blocking = get_deps_for_display(item_id)
+        blocked_by, blocking, replaced_by, replaces = get_deps_for_display(item_id)
         if blocked_by:
             click.echo(f"blocked_by={','.join(f'E-{d['id']}' for d in blocked_by)}")
         if blocking:
             click.echo(f"blocking={','.join(f'E-{d['id']}' for d in blocking)}")
+        if replaced_by:
+            click.echo(f"replaced_by={','.join(f'E-{d['id']}' for d in replaced_by)}")
+        if replaces:
+            click.echo(f"replaces={','.join(f'E-{d['id']}' for d in replaces)}")
         click.echo(f"created={item['created_at']}")
         click.echo(f"updated={item['updated_at']}")
         if item["completed_at"]:
@@ -1697,6 +1863,7 @@ def search_tasks(
     show_all: bool = False,
     status_filter: list[str] | None = None,
     phase_filter: str | None = None,
+    parent_id: int | None = None,
     search_text: bool = False,
     search_prompt: bool = False,
     limit: int = 20,
@@ -1706,18 +1873,24 @@ def search_tasks(
     """Search tasks by query string across ID, title, and description."""
     project_id, proj_name = _resolve_project(project_name)
 
-    where = "WHERE t.project_id = ?"
+    where = "WHERE t.project_id = ? AND t.type != 'decision'"
     params: list = [project_id]
 
-    if not show_all:
-        where += " AND t.status NOT IN ('confirmed', 'assumed', 'declined', 'obsolete')"
     if status_filter:
         placeholders = ",".join("?" for _ in status_filter)
         where += f" AND t.status IN ({placeholders})"
         params.extend(status_filter)
+    elif not show_all:
+        where += " AND t.status NOT IN ('confirmed', 'assumed', 'declined', 'obsolete')"
     if phase_filter:
         where += " AND t.phase = ?"
         params.append(phase_filter)
+    if parent_id is not None:
+        if parent_id == PARENT_NONE:
+            where += " AND t.parent_id IS NULL"
+        else:
+            where += " AND t.parent_id = ?"
+            params.append(parent_id)
 
     # Build search conditions
     like_pattern = f"%{query}%"

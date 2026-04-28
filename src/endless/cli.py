@@ -372,6 +372,8 @@ def task_import(file, from_claude, json_file, project, replace, parent):
               help="Filter by phase")
 @click.option("--tier", default=None,
               help="Filter by tier (1-4 or auto/quick/deep/discuss)")
+@click.option("--parent", "parent_id", default=None,
+              help="Filter to children of this task (e.g. E-799), or 'none' for root tasks")
 @click.option("--sort", default=None,
               type=click.Choice(["id", "status", "phase", "tier", "created", "title"]),
               help="Sort by column (default: id)")
@@ -381,13 +383,14 @@ def task_import(file, from_claude, json_file, project, replace, parent):
               help="Token-efficient output for LLMs")
 @click.option("--json", "as_json", is_flag=True,
               help="JSON output")
-def task_list(project, show_all, status, phase, tier, sort, as_tree, llm, as_json):
+def task_list(project, show_all, status, phase, tier, parent_id, sort, as_tree, llm, as_json):
     """List tasks for a project."""
-    from endless.task_cmd import show_plan, parse_tier_filter
+    from endless.task_cmd import show_plan, parse_tier_filter, parse_parent_filter
     tier_val = parse_tier_filter(tier) if tier else None
+    parent_val = parse_parent_filter(parent_id) if parent_id else None
     show_plan(project_name=project, show_all=show_all,
               status_filter=status, phase_filter=phase,
-              tier_filter=tier_val,
+              tier_filter=tier_val, parent_id=parent_val,
               sort_by=sort, tree=as_tree, llm=llm, as_json=as_json)
 
 
@@ -431,13 +434,16 @@ def task_show(item_ids, no_description, show_text, show_prompt,
 @click.option("--phase", default=None,
               type=click.Choice(["now", "next", "later"]),
               help="Filter by phase")
-def task_next(project, show_all, limit, llm, as_json, tier, phase):
+@click.option("--parent", "parent_id", default=None,
+              help="Filter to children of this task (e.g. E-799), or 'none' for root tasks")
+def task_next(project, show_all, limit, llm, as_json, tier, phase, parent_id):
     """Show top actionable tasks, ranked by priority."""
-    from endless.task_cmd import next_tasks, parse_tier_filter
+    from endless.task_cmd import next_tasks, parse_tier_filter, parse_parent_filter
     tier_val = parse_tier_filter(tier) if tier else None
+    parent_val = parse_parent_filter(parent_id) if parent_id else None
     next_tasks(project_name=project, show_all=show_all,
                limit=limit, llm=llm, as_json=as_json, tier=tier_val,
-               phase_filter=phase)
+               phase_filter=phase, parent_id=parent_val)
 
 
 @task_cmd.command("active")
@@ -449,11 +455,14 @@ def task_next(project, show_all, limit, llm, as_json, tier, phase):
               help="Token-efficient output for LLMs")
 @click.option("--json", "as_json", is_flag=True,
               help="JSON output")
-def task_active(project, show_all, llm, as_json):
+@click.option("--parent", "parent_id", default=None,
+              help="Filter to children of this task (e.g. E-799), or 'none' for root tasks")
+def task_active(project, show_all, llm, as_json, parent_id):
     """Show in-progress and verify tasks."""
-    from endless.task_cmd import active_tasks
+    from endless.task_cmd import active_tasks, parse_parent_filter
+    parent_val = parse_parent_filter(parent_id) if parent_id else None
     active_tasks(project_name=project, show_all=show_all,
-                 llm=llm, as_json=as_json)
+                 llm=llm, as_json=as_json, parent_id=parent_val)
 
 
 @task_cmd.command("recent")
@@ -467,11 +476,14 @@ def task_active(project, show_all, llm, as_json):
               help="Token-efficient output for LLMs")
 @click.option("--json", "as_json", is_flag=True,
               help="JSON output")
-def task_recent(project, show_all, limit, llm, as_json):
+@click.option("--parent", "parent_id", default=None,
+              help="Filter to children of this task (e.g. E-799), or 'none' for root tasks")
+def task_recent(project, show_all, limit, llm, as_json, parent_id):
     """Show most recently updated tasks."""
-    from endless.task_cmd import recent_tasks
+    from endless.task_cmd import recent_tasks, parse_parent_filter
+    parent_val = parse_parent_filter(parent_id) if parent_id else None
     recent_tasks(project_name=project, show_all=show_all,
-                 limit=limit, llm=llm, as_json=as_json)
+                 limit=limit, llm=llm, as_json=as_json, parent_id=parent_val)
 
 
 @task_cmd.command("search")
@@ -486,6 +498,8 @@ def task_recent(project, show_all, limit, llm, as_json):
 @click.option("--phase", default=None,
               type=click.Choice(["now", "next", "later"]),
               help="Filter by phase")
+@click.option("--parent", "parent_id", default=None,
+              help="Filter to children of this task (e.g. E-799), or 'none' for root tasks")
 @click.option("--text", "search_text", is_flag=True,
               help="Also search in text field")
 @click.option("--prompt", "search_prompt", is_flag=True,
@@ -496,12 +510,14 @@ def task_recent(project, show_all, limit, llm, as_json):
               help="Token-efficient output for LLMs")
 @click.option("--json", "as_json", is_flag=True,
               help="JSON output")
-def task_search(query, project, show_all, status, phase,
+def task_search(query, project, show_all, status, phase, parent_id,
                 search_text, search_prompt, limit, llm, as_json):
     """Search tasks by query string."""
-    from endless.task_cmd import search_tasks
+    from endless.task_cmd import search_tasks, parse_parent_filter
+    parent_val = parse_parent_filter(parent_id) if parent_id else None
     search_tasks(query, project_name=project, show_all=show_all,
                  status_filter=status, phase_filter=phase,
+                 parent_id=parent_val,
                  search_text=search_text, search_prompt=search_prompt,
                  limit=limit, llm=llm, as_json=as_json)
 
@@ -730,6 +746,62 @@ def plan_redirect(args):
     raise SystemExit(1)
 
 
+@main.group("decision")
+def decision_cmd():
+    """Manage project decisions."""
+    pass
+
+
+@decision_cmd.command("list")
+@click.option("--project", default=None,
+              help="Project name (default: detect from cwd)")
+@click.option("--all", "show_all", is_flag=True,
+              help="Show decisions from all projects")
+@click.option("--sort", default=None,
+              type=click.Choice(["id", "created", "title"]),
+              help="Sort by column (default: id)")
+@click.option("--llm", is_flag=True,
+              help="Token-efficient output for LLMs")
+@click.option("--json", "as_json", is_flag=True,
+              help="JSON output")
+def decision_list(project, show_all, sort, llm, as_json):
+    """List decisions for a project."""
+    from endless.task_cmd import list_decisions
+    list_decisions(project_name=project, show_all=show_all,
+                   sort_by=sort, llm=llm, as_json=as_json)
+
+
+@decision_cmd.command("add")
+@click.argument("title")
+@click.option("--description", default=None,
+              help="Longer description of the decision")
+@click.option("--project", default=None,
+              help="Project name (default: detect from cwd)")
+def decision_add(title, description, project):
+    """Record a decision."""
+    if title.lower().startswith("record that "):
+        raise click.ClickException(
+            "Decision titles should state the decision, not narrate recording it.\n"
+            f"  Try: {title[len('record that '):]}"
+        )
+    from endless.task_cmd import add_item
+    add_item(title, description=description, project_name=project,
+             task_type="decision", status="confirmed", force=True)
+
+
+@decision_cmd.command("show")
+@click.argument("item_ids", type=TASK_ID, nargs=-1, required=True)
+@click.option("--llm", is_flag=True,
+              help="Token-efficient output for LLMs")
+@click.option("--json", "as_json", is_flag=True,
+              help="JSON output")
+def decision_show(item_ids, llm, as_json):
+    """Show detail for one or more decisions."""
+    from endless.task_cmd import detail_item
+    for item_id in item_ids:
+        detail_item(item_id, llm=llm, as_json=as_json)
+
+
 @main.group("channel")
 def channel_cmd():
     """Inter-session messaging. Worker session beacons, human session connects."""
@@ -890,3 +962,42 @@ def setup_remove_channel_plugin_cmd():
     """Remove the MCP channel plugin."""
     from endless.setup import remove_channel_plugin
     remove_channel_plugin()
+
+
+# Suggestions command group (E-918) — AI-agent rule-relaxation suggestions
+@main.group("suggestions")
+def suggestions_cmd():
+    """Review AI-agent suggestions for relaxing enforcement rules."""
+    pass
+
+
+@suggestions_cmd.command("list")
+@click.option("--project", default=None, help="Project name (default: detect from cwd)")
+@click.option("--all", "show_all", is_flag=True, help="Include accepted suggestions")
+@click.option("--source", default=None, help="Filter by source (e.g. drift_detection)")
+def suggestions_list(project, show_all, source):
+    """List open suggestions (default) or all suggestions with --all."""
+    from endless.suggestions_cmd import list_suggestions
+    list_suggestions(project, show_all, source)
+
+
+@suggestions_cmd.command("show")
+@click.argument("suggestion_id", type=int)
+def suggestions_show(suggestion_id):
+    """Show details of a single suggestion."""
+    from endless.suggestions_cmd import show_suggestion
+    show_suggestion(suggestion_id)
+
+
+@suggestions_cmd.command("accept")
+@click.argument("suggestion_id", type=int)
+@click.option("--type", "task_type",
+              type=click.Choice(["task", "chore", "bug", "decision", "spike", "research"]),
+              default="chore",
+              help="Type of task to create (default: chore)")
+@click.option("--parent", type=TASK_ID, default=None, help="Parent task ID")
+@click.option("--project", default=None, help="Project name (default: from suggestion or cwd)")
+def suggestions_accept(suggestion_id, task_type, parent, project):
+    """Create a task from a suggestion and link them."""
+    from endless.suggestions_cmd import accept_suggestion
+    accept_suggestion(suggestion_id, task_type, parent, project)

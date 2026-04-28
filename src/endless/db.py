@@ -159,6 +159,9 @@ def _migrate(conn: sqlite3.Connection):
     # === Schema v3: Session conversation history (E-857) ===
     _migrate_v3(conn)
 
+    # === Schema v4: task_files (E-917) and suggestions (E-918) ===
+    _migrate_v4(conn)
+
 
 def _has_table(conn: sqlite3.Connection, table: str) -> bool:
     row = conn.execute(
@@ -341,6 +344,43 @@ def _migrate_v3(conn: sqlite3.Connection):
         if "summary_seq" not in cols:
             conn.execute("ALTER TABLE sessions ADD COLUMN summary_seq INTEGER NOT NULL DEFAULT 0")
             conn.commit()
+
+
+def _migrate_v4(conn: sqlite3.Connection):
+    """Schema v4: task_files (per-task edit-set, E-917) and suggestions (E-918)."""
+    if not _has_table(conn, "task_files"):
+        conn.executescript("""
+            CREATE TABLE IF NOT EXISTS task_files (
+                id INTEGER PRIMARY KEY,
+                task_id INTEGER NOT NULL,
+                file_path TEXT NOT NULL,
+                first_edited_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
+                first_edited_session_id TEXT,
+                UNIQUE(task_id, file_path),
+                FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS idx_task_files_task ON task_files(task_id);
+        """)
+        conn.commit()
+
+    if not _has_table(conn, "suggestions"):
+        conn.executescript("""
+            CREATE TABLE IF NOT EXISTS suggestions (
+                id INTEGER PRIMARY KEY,
+                session_id TEXT NOT NULL,
+                project_id INTEGER,
+                source TEXT NOT NULL,
+                trigger_ctx TEXT,
+                suggestion TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
+                task_id INTEGER,
+                notes TEXT,
+                FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE SET NULL,
+                FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS idx_suggestions_open ON suggestions(project_id, created_at DESC);
+        """)
+        conn.commit()
 
 
 def execute(sql: str, params: tuple = ()) -> sqlite3.Cursor:

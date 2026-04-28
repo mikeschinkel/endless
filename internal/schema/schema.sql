@@ -182,3 +182,32 @@ END;
 CREATE TRIGGER IF NOT EXISTS session_messages_ad AFTER DELETE ON session_messages BEGIN
     INSERT INTO session_messages_fts(session_messages_fts, rowid, content) VALUES('delete', old.id, old.content);
 END;
+
+-- Files edited per task (per-task edit-set for drift detection, E-917)
+CREATE TABLE IF NOT EXISTS task_files (
+    id INTEGER PRIMARY KEY,
+    task_id INTEGER NOT NULL,
+    file_path TEXT NOT NULL,
+    first_edited_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
+    first_edited_session_id TEXT,
+    UNIQUE(task_id, file_path),
+    FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_task_files_task ON task_files(task_id);
+
+-- AI-agent suggestions for relaxing enforcement rules (calibration, E-918)
+-- task_id IS NULL means open; populated means accepted into the referenced task.
+CREATE TABLE IF NOT EXISTS suggestions (
+    id INTEGER PRIMARY KEY,
+    session_id TEXT NOT NULL,
+    project_id INTEGER,
+    source TEXT NOT NULL,
+    trigger_ctx TEXT,
+    suggestion TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
+    task_id INTEGER,
+    notes TEXT,
+    FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE SET NULL,
+    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_suggestions_open ON suggestions(project_id, created_at DESC);

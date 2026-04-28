@@ -30,10 +30,10 @@ func GetDashboardProjects() []data.DashboardProject {
 		 p.status, COALESCE(NULLIF(p.language,''),'') as language,
 		 p.path, COALESCE(p.group_name,'') as group_name,
 		 (SELECT count(*) FROM notes n WHERE n.project_id = p.id AND n.resolved = 0) as pending_notes,
-		 (SELECT count(*) FROM tasks pi WHERE pi.project_id = p.id AND pi.status IN ('needs_plan','ready','in_progress')) as active_plan,
-		 (SELECT count(*) FROM tasks pi WHERE pi.project_id = p.id) as task_total,
-		 (SELECT count(*) FROM tasks pi WHERE pi.project_id = p.id AND pi.status = 'completed') as task_completed,
-		 (SELECT count(*) FROM tasks pi WHERE pi.project_id = p.id AND pi.status = 'in_progress') as task_in_progress,
+		 (SELECT count(*) FROM tasks pi WHERE pi.project_id = p.id AND pi.type != 'decision' AND pi.status IN ('needs_plan','ready','in_progress')) as active_plan,
+		 (SELECT count(*) FROM tasks pi WHERE pi.project_id = p.id AND pi.type != 'decision') as task_total,
+		 (SELECT count(*) FROM tasks pi WHERE pi.project_id = p.id AND pi.type != 'decision' AND pi.status = 'completed') as task_completed,
+		 (SELECT count(*) FROM tasks pi WHERE pi.project_id = p.id AND pi.type != 'decision' AND pi.status = 'in_progress') as task_in_progress,
 		 COALESCE((SELECT a.created_at FROM activity a WHERE a.project_id = p.id ORDER BY a.created_at DESC LIMIT 1),'') as last_activity
 		 FROM projects p WHERE p.status IN ('active','paused','idea')
 		 ORDER BY last_activity DESC, p.name`)
@@ -125,10 +125,10 @@ func GetProjectDetail(name string) (*data.DashboardProject, error) {
 		 p.status, COALESCE(NULLIF(p.language,''),'') as language,
 		 p.path, COALESCE(p.group_name,'') as group_name,
 		 (SELECT count(*) FROM notes n WHERE n.project_id = p.id AND n.resolved = 0) as pending_notes,
-		 (SELECT count(*) FROM tasks pi WHERE pi.project_id = p.id AND pi.status IN ('needs_plan','ready','in_progress')) as active_plan,
-		 (SELECT count(*) FROM tasks pi WHERE pi.project_id = p.id) as task_total,
-		 (SELECT count(*) FROM tasks pi WHERE pi.project_id = p.id AND pi.status = 'completed') as task_completed,
-		 (SELECT count(*) FROM tasks pi WHERE pi.project_id = p.id AND pi.status = 'in_progress') as task_in_progress,
+		 (SELECT count(*) FROM tasks pi WHERE pi.project_id = p.id AND pi.type != 'decision' AND pi.status IN ('needs_plan','ready','in_progress')) as active_plan,
+		 (SELECT count(*) FROM tasks pi WHERE pi.project_id = p.id AND pi.type != 'decision') as task_total,
+		 (SELECT count(*) FROM tasks pi WHERE pi.project_id = p.id AND pi.type != 'decision' AND pi.status = 'completed') as task_completed,
+		 (SELECT count(*) FROM tasks pi WHERE pi.project_id = p.id AND pi.type != 'decision' AND pi.status = 'in_progress') as task_in_progress,
 		 COALESCE((SELECT a.created_at FROM activity a WHERE a.project_id = p.id ORDER BY a.created_at DESC LIMIT 1),'') as last_activity
 		 FROM projects p WHERE p.name = ?`, name,
 	).Scan(&p.ID, &p.Name, &p.Label, &p.Description, &p.Status, &p.Language,
@@ -175,7 +175,7 @@ func GetProjectTasks(projectID int64, excludeStatuses ...string) []data.TaskView
 		 COALESCE(pi.updated_at,'') as updated_at,
 		 COALESCE(pi.completed_at,'') as completed_at
 		 FROM tasks pi
-		 WHERE pi.project_id = ?
+		 WHERE pi.project_id = ? AND pi.type != 'decision'
 		 ORDER BY pi.parent_id,
 		 CASE pi.phase
 		   WHEN 'now' THEN 0

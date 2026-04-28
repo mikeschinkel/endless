@@ -141,6 +141,40 @@ func migrate(db *sql.DB) {
 	migrateV1(db)
 	migrateV2(db)
 	migrateV3(db)
+	migrateV4(db)
+}
+
+// migrateV4 adds task_files (per-task edit-set, E-917) and
+// suggestions (AI-agent calibration suggestions, E-918) tables.
+func migrateV4(db *sql.DB) {
+	if !hasTable(db, "task_files") {
+		db.Exec(`CREATE TABLE IF NOT EXISTS task_files (
+			id INTEGER PRIMARY KEY,
+			task_id INTEGER NOT NULL,
+			file_path TEXT NOT NULL,
+			first_edited_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
+			first_edited_session_id TEXT,
+			UNIQUE(task_id, file_path),
+			FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
+		)`)
+		db.Exec(`CREATE INDEX IF NOT EXISTS idx_task_files_task ON task_files(task_id)`)
+	}
+	if !hasTable(db, "suggestions") {
+		db.Exec(`CREATE TABLE IF NOT EXISTS suggestions (
+			id INTEGER PRIMARY KEY,
+			session_id TEXT NOT NULL,
+			project_id INTEGER,
+			source TEXT NOT NULL,
+			trigger_ctx TEXT,
+			suggestion TEXT NOT NULL,
+			created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
+			task_id INTEGER,
+			notes TEXT,
+			FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE SET NULL,
+			FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+		)`)
+		db.Exec(`CREATE INDEX IF NOT EXISTS idx_suggestions_open ON suggestions(project_id, created_at DESC)`)
+	}
 }
 
 // migrateV3 adds session conversation history tables (E-857).
