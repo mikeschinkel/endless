@@ -37,7 +37,20 @@ def emit_event(
         actor_id = f"{os.getenv('USER', 'unknown')}@{socket.gethostname()}"
 
     if project_root is None:
-        project_root = str(Path.cwd())
+        # Look up the project's registered path so events always land in the
+        # main repo, even when invoked from inside a git worktree (where cwd
+        # is the worktree, not the project root). Fall back to cwd only if
+        # the project isn't registered (defensive; shouldn't happen in normal
+        # flow since callers always pass a known project name).
+        from endless import db
+        row = db.query(
+            "SELECT path FROM projects WHERE name = ? LIMIT 1",
+            (project,),
+        )
+        if row:
+            project_root = str(Path(row[0]["path"]).expanduser())
+        else:
+            project_root = str(Path.cwd())
 
     event_bin = shutil.which("endless-event")
     if not event_bin:
