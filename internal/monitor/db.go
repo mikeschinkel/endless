@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 )
@@ -456,6 +457,28 @@ func migrateV2(db *sql.DB) {
 			FOREIGN KEY (active_task_id) REFERENCES tasks(id) ON DELETE SET NULL
 		)`)
 	}
+}
+
+// ProjectPath returns the registered filesystem path for a project ID.
+// Path is returned with ~ expansion applied so callers can use it directly.
+func ProjectPath(id int64) (string, error) {
+	db, err := DB()
+	if err != nil {
+		return "", err
+	}
+	var path string
+	err = db.QueryRow("SELECT path FROM projects WHERE id = ?", id).Scan(&path)
+	if err != nil {
+		return "", err
+	}
+	if strings.HasPrefix(path, "~/") {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", err
+		}
+		path = filepath.Join(home, path[2:])
+	}
+	return path, nil
 }
 
 // ProjectIDForPath looks up a registered project by working directory.

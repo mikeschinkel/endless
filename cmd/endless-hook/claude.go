@@ -1,6 +1,8 @@
 package main
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -11,6 +13,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/mikeschinkel/endless/internal/monitor"
 )
@@ -242,6 +245,13 @@ func handlePostToolUse(projectID int64, payload claudePayload) error {
 	// Record which plan file this session is editing (used by ExitPlanMode)
 	if err := monitor.SetPlanFilePath(payload.SessionID, input.FilePath); err != nil {
 		return fmt.Errorf("setting plan file path: %w", err)
+	}
+
+	// Snapshot the plan content so within-session overwrites and never-attached
+	// plans don't lose data (E-969). Per-session, content-addressed by SHA-256.
+	if err := snapshotPlanFile(projectID, payload.SessionID, input.FilePath); err != nil {
+		// Non-fatal: snapshotting should never block a hook
+		log.Printf("plan snapshot: %v", err)
 	}
 
 	// NOTE: Auto-import disabled. Sessions should use `endless task update <id> --text <file>`
@@ -512,6 +522,99 @@ func isPlanFile(path string) bool {
 	}
 	if strings.HasSuffix(lower, "/plan.md") {
 		return true
+	}
+	return false
+}
+
+// snapshotPlanFile captures the just-written content of a plan file into
+// <project-root>/.endless/plans/snapshots/<ts>-<sha8>.{md,json} so that
+// within-session overwrites and never-attached plans don't lose data.
+//
+// Idempotent: same content from the same session is only stored once
+// (filename includes content hash, so re-runs are no-ops).
+//
+// projectID and sessionID identify the snapshot's session origin in the
+// sidecar. srcPath is the harness path Claude wrote to.
+func snapshotPlanFile(projectID int64, sessionID, srcPath string) error {
+	content, err := os.ReadFile(srcPath)
+	if err != nil {
+		return fmt.Errorf("read plan file: %w", err)
+	}
+
+	// Content hash; first 8 hex chars suffice for filename disambiguation.
+	sum := sha256.Sum256(content)
+	shaFull := hex.EncodeToString(sum[:])
+	sha8 := shaFull[:8]
+	ts := time.Now().UTC().Format("20060102T150405")
+
+	projectRoot, err := monitor.ProjectPath(projectID)
+	if err != nil {
+		return fmt.Errorf("project path lookup: %w", err)
+	}
+	snapsDir := filepath.Join(projectRoot, ".endless", "plans", "snapshots")
+	if err := os.MkdirAll(snapsDir, 0755); err != nil {
+		return fmt.Errorf("create snapshots dir: %w", err)
+	}
+
+	// Idempotency: if a snapshot for this content+session already exists today,
+	// skip. Match by sha8 in the filename and session_id in the sidecar.
+	if existingSnapshot(snapsDir, sha8, sessionID) {
+		return nil
+	}
+
+	stem := fmt.Sprintf("%s-%s", ts, sha8)
+	mdPath := filepath.Join(snapsDir, stem+".md")
+	jsonPath := filepath.Join(snapsDir, stem+".json")
+
+	if err := os.WriteFile(mdPath, content, 0644); err != nil {
+		return fmt.Errorf("write snapshot md: %w", err)
+	}
+
+	sidecar := map[string]string{
+		"session_id":  sessionID,
+		"written_at":  time.Now().UTC().Format(time.RFC3339),
+		"source_path": srcPath,
+		"sha256":      shaFull,
+	}
+	jsonBytes, _ := json.MarshalIndent(sidecar, "", "  ")
+	if err := os.WriteFile(jsonPath, jsonBytes, 0644); err != nil {
+		return fmt.Errorf("write snapshot json: %w", err)
+	}
+	return nil
+}
+
+// existingSnapshot returns true if a snapshot with the given sha8 prefix
+// exists in snapsDir whose sidecar's session_id matches.
+func existingSnapshot(snapsDir, sha8, sessionID string) bool {
+	entries, err := os.ReadDir(snapsDir)
+	if err != nil {
+		return false
+	}
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		name := e.Name()
+		if !strings.HasSuffix(name, ".json") {
+			continue
+		}
+		// Filename format: <ts>-<sha8>.json
+		if !strings.Contains(name, "-"+sha8+".") {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(snapsDir, name))
+		if err != nil {
+			continue
+		}
+		var meta struct {
+			SessionID string `json:"session_id"`
+		}
+		if err := json.Unmarshal(data, &meta); err != nil {
+			continue
+		}
+		if meta.SessionID == sessionID {
+			return true
+		}
 	}
 	return false
 }

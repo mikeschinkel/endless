@@ -122,6 +122,35 @@ def parse_task_id(value: str) -> int:
     return int(s)
 
 
+def _project_root_for_task(task_id: int) -> Path | None:
+    """Return the registered project root path for the project owning this task."""
+    row = db.query(
+        "SELECT p.path FROM projects p "
+        "JOIN tasks t ON t.project_id = p.id "
+        "WHERE t.id = ? LIMIT 1",
+        (task_id,),
+    )
+    if not row:
+        return None
+    return Path(row[0]["path"]).expanduser()
+
+
+def _write_task_plan_file(task_id: int, content: str) -> None:
+    """Write a stable per-task copy of plan content to <project>/.endless/plans/<task-id>.md.
+
+    The DB's tasks.text column remains source of truth; this file is an
+    endless-owned, predictable export at a path that doesn't get clobbered
+    by harness plan-file naming.
+    """
+    root = _project_root_for_task(task_id)
+    if root is None:
+        return  # task lookup failed; emit_event would have raised below anyway
+    plans_dir = root / ".endless" / "plans"
+    plans_dir.mkdir(parents=True, exist_ok=True)
+    target = plans_dir / f"E-{task_id}.md"
+    target.write_text(content)
+
+
 def _resolve_project(name: str | None) -> tuple[int, str]:
     """Resolve project name, return (id, name)."""
     if not name:
@@ -1484,8 +1513,10 @@ def update_plan(
         p = Path(text_file).expanduser()
         if not p.exists():
             raise click.ClickException(f"File not found: {p}")
-        fields["text"] = p.read_text()
+        text_content = p.read_text()
+        fields["text"] = text_content
         changed_names.append("text")
+        _write_task_plan_file(item_id, text_content)
 
     if prompt_file is not None:
         p = Path(prompt_file).expanduser()
