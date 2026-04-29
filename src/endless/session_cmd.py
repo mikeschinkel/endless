@@ -967,3 +967,187 @@ def _format_ts(ts: str) -> str:
         return dt.strftime("%Y-%m-%d %-I:%M %p").lower()
     except (ValueError, AttributeError):
         return ts[:19]
+
+
+# --- session cd (E-990) -----------------------------------------------------
+
+def _pid_alive(pid: int) -> bool:
+    """Return True if a process with the given pid exists."""
+    if pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        # Process exists but we can't signal it — counts as alive.
+        return True
+    except OSError:
+        return False
+    return True
+
+
+def _read_live_companions(sessions_dir: Path, harness: str = "claude") -> list[dict]:
+    """Read companion files for the given harness, prune stale ones.
+
+    A companion is considered stale if its `pid` is not alive. Stale files
+    are unlinked as a side effect (the lazy cleanup E-989 promised).
+    """
+    if not sessions_dir.is_dir():
+        return []
+    live: list[dict] = []
+    prefix = f"{harness}-"
+    for entry in sorted(sessions_dir.iterdir()):
+        if not entry.is_file() or not entry.name.startswith(prefix) or not entry.name.endswith(".json"):
+            continue
+        try:
+            data = json_mod.loads(entry.read_text())
+        except (OSError, ValueError):
+            continue
+        pid = int(data.get("pid") or 0)
+        if not _pid_alive(pid):
+            try:
+                entry.unlink()
+            except OSError:
+                pass
+            continue
+        data["_path"] = str(entry)
+        live.append(data)
+    return live
+
+
+def _project_root_for_cwd() -> Path:
+    """Resolve the project root for the current working directory.
+
+    Walks up from cwd looking for a registered project path. Falls back to
+    cwd itself if not registered (companion files are still per-project).
+    """
+    cwd = Path.cwd().resolve()
+    candidate = cwd
+    while True:
+        row = db.query(
+            "SELECT path FROM projects WHERE path = ?",
+            (str(candidate),),
+        )
+        if row:
+            return Path(row[0]["path"])
+        if candidate.parent == candidate:
+            break
+        candidate = candidate.parent
+    return cwd
+
+
+def _tmux_window_pane_ids() -> list[str] | None:
+    """Return pane ids in the current tmux window, or None if not in tmux."""
+    if not os.environ.get("TMUX"):
+        return None
+    import subprocess
+    try:
+        result = subprocess.run(
+            ["tmux", "list-panes", "-F", "#{pane_id}"],
+            capture_output=True, text=True, timeout=2,
+        )
+    except (FileNotFoundError, subprocess.SubprocessError):
+        return None
+    if result.returncode != 0:
+        return None
+    return [line.strip() for line in result.stdout.splitlines() if line.strip()]
+
+
+def _target_path(c: dict) -> str:
+    """Return the cwd or worktree_path of a companion record."""
+    return c.get("worktree_path") or c.get("cwd") or ""
+
+
+def _format_companion_row(c: dict) -> str:
+    eid = c.get("endless_session_id", "")
+    pane = c.get("pane_id", "") or "-"
+    uuid = (c.get("harness_session_id", "") or "")[:12]
+    target = _target_path(c)
+    return f"{eid:<5} {pane:<6} {uuid:<14} {target}"
+
+
+def session_cd_resolve(session_ref: str | None, show_all: bool = False) -> None:
+    """Resolve a Claude session to its cwd/worktree and print the path.
+
+    Designed for shell wrapping: `cd "$(endless session cd <id>)"`.
+    Success prints just the path on stdout. Errors go to stderr with a
+    non-zero exit.
+    """
+    project_root = _project_root_for_cwd()
+    sessions_dir = project_root / ".endless" / "sessions"
+    live = _read_live_companions(sessions_dir)
+
+    if show_all:
+        if not live:
+            click.echo("No live Claude sessions in this project.", err=True)
+            raise SystemExit(1)
+        click.echo(f"{'ID':<5} {'Pane':<6} {'UUID':<14} CWD")
+        for c in live:
+            click.echo(_format_companion_row(c))
+        return
+
+    if session_ref:
+        matches = _match_companions(live, session_ref)
+        if len(matches) == 1:
+            click.echo(_target_path(matches[0]))
+            return
+        if not matches:
+            click.echo(
+                f"No Claude session matches '{session_ref}'. "
+                "Run `endless session cd --all` to see candidates.",
+                err=True,
+            )
+            raise SystemExit(1)
+        click.echo(f"Ambiguous: '{session_ref}' matches multiple sessions:", err=True)
+        for c in matches:
+            click.echo("  " + _format_companion_row(c), err=True)
+        raise SystemExit(1)
+
+    # No arg: tmux-sibling auto-resolution.
+    window_panes = _tmux_window_pane_ids()
+    if window_panes is None:
+        click.echo(
+            "Outside tmux, an explicit session id is required. "
+            "Run `endless session cd --all` to see candidates.",
+            err=True,
+        )
+        raise SystemExit(1)
+
+    my_pane = os.environ.get("TMUX_PANE", "")
+    siblings = [
+        c for c in live
+        if c.get("pane_id") in window_panes and c.get("pane_id") != my_pane
+    ]
+
+    if len(siblings) == 1:
+        click.echo(_target_path(siblings[0]))
+        return
+    if not siblings:
+        click.echo(
+            "No sibling Claude pane in this tmux window. "
+            "Run `endless session cd --all` to see all candidates project-wide.",
+            err=True,
+        )
+        raise SystemExit(1)
+    click.echo("Multiple sibling Claude panes in this window:", err=True)
+    for c in siblings:
+        click.echo("  " + _format_companion_row(c), err=True)
+    click.echo("Specify one: endless session cd <id-or-uuid>", err=True)
+    raise SystemExit(1)
+
+
+def _match_companions(live: list[dict], ref: str) -> list[dict]:
+    """Match a session-ref against live companions.
+
+    Numeric ref matches endless_session_id exactly. Otherwise the ref is
+    treated as a Claude UUID prefix (case-insensitive).
+    """
+    if ref.isdigit():
+        target = int(ref)
+        return [c for c in live if c.get("endless_session_id") == target]
+    lo = ref.lower()
+    return [
+        c for c in live
+        if (c.get("harness_session_id", "") or "").lower().startswith(lo)
+    ]

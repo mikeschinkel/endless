@@ -287,6 +287,25 @@ def session_search(query, project, limit, as_json):
     search_sessions(query, project_name=project, limit=limit, as_json=as_json)
 
 
+@session_cmd.command("cd")
+@click.argument("session_ref", required=False, default=None)
+@click.option("--all", "show_all", is_flag=True,
+              help="List all live Claude sessions in this project")
+def session_cd(session_ref, show_all):
+    """Print the cwd of a Claude session, for `cd $(...)` wrapping.
+
+    With no arg, in tmux: auto-resolves to the sole sibling Claude pane in
+    the current window. Use --all to list candidates. Provide an endless
+    integer id or a Claude UUID prefix to disambiguate.
+
+    Suggested shell wrapper:
+
+      escd() { cd "$(endless session cd "$@")"; }
+    """
+    from endless.session_cmd import session_cd_resolve
+    session_cd_resolve(session_ref, show_all=show_all)
+
+
 @session_cmd.command("reimport")
 @click.argument("session_id", required=False, default=None)
 def session_reimport(session_id):
