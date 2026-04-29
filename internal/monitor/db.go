@@ -290,17 +290,19 @@ func migrateV1(db *sql.DB) {
 		db.Exec("ALTER TABLE " + sessionTable + " ADD COLUMN plan_file_path TEXT")
 	}
 
-	// Create task_deps table if missing
+	// Create task_deps table if missing.
+	// E-957: dep_type is free-text (no CHECK) so 'implements', 'informs', 'relates_to'
+	// can coexist; UNIQUE includes dep_type so multiple typed relations can share a pair.
 	if !hasTable(db, "task_deps") {
 		db.Exec(`CREATE TABLE IF NOT EXISTS task_deps (
 			id INTEGER PRIMARY KEY,
-			source_type TEXT NOT NULL CHECK (source_type IN ('task', 'project')),
+			source_type TEXT NOT NULL,
 			source_id INTEGER NOT NULL,
-			target_type TEXT NOT NULL CHECK (target_type IN ('task', 'project')),
+			target_type TEXT NOT NULL,
 			target_id INTEGER NOT NULL,
-			dep_type TEXT NOT NULL DEFAULT 'blocks' CHECK (dep_type IN ('blocks', 'needs')),
+			dep_type TEXT NOT NULL DEFAULT 'blocks',
 			created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
-			UNIQUE(source_type, source_id, target_type, target_id)
+			UNIQUE(source_type, source_id, target_type, target_id, dep_type)
 		)`)
 	}
 

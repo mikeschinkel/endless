@@ -107,7 +107,7 @@ CREATE TABLE IF NOT EXISTS task_deps (
     target_id INTEGER NOT NULL,
     dep_type TEXT NOT NULL DEFAULT 'blocks',
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
-    UNIQUE(source_type, source_id, target_type, target_id)
+    UNIQUE(source_type, source_id, target_type, target_id, dep_type)
 );
 
 -- Activity log (from hooks)

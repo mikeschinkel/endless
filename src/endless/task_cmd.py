@@ -23,6 +23,44 @@ TIER_CLEAR = -2
 PARENT_NONE = 0
 
 
+# Task relation vocabulary (E-957/E-958; informs dropped per E-1003).
+# display_name -> (stored_dep_type, swap_source_target)
+# Stored types are active voice (source is the actor): blocks, implements,
+# replaces, relates_to. Inverse views (blocked_by, implemented_by, etc.) resolve to
+# the same stored row queried with source/target swapped.
+CANONICAL_DEP_TYPES: dict[str, tuple[str, bool]] = {
+    "blocks":          ("blocks",     False),  # source blocks target
+    "blocked_by":      ("blocks",     True),   # inverse view
+    "implements":      ("implements", False),  # source implements target
+    "implemented_by":  ("implements", True),
+    "replaces":        ("replaces",   False),  # source replaces target
+    "replaced_by":     ("replaces",   True),
+    "relates_to":      ("relates_to", False),  # symmetric
+}
+
+# The 4 canonical stored types (the values in CANONICAL_DEP_TYPES, deduplicated).
+STORED_DEP_TYPES = ("blocks", "implements", "replaces", "relates_to")
+
+# Display order for `task show` — actionability descending; symmetric last.
+RELATION_DISPLAY_ORDER = (
+    "blocked_by", "blocks",
+    "implements", "implemented_by",
+    "replaces",   "replaced_by",
+    "relates_to",
+)
+
+# Human-readable label for each display name (used in `task show` headings).
+RELATION_LABELS = {
+    "blocked_by":     "Blocked by",
+    "blocks":         "Blocks",
+    "implements":     "Implements",
+    "implemented_by": "Implemented by",
+    "replaces":       "Replaces",
+    "replaced_by":    "Replaced by",
+    "relates_to":     "Relates to",
+}
+
+
 def parse_tier(value: str) -> int:
     """Parse a tier value from user input: accepts none (NULL), 0/n/a, 1-4, or label names."""
     s = value.strip().lower()
@@ -580,6 +618,8 @@ def show_plan(
     phase_filter: str | None = None,
     tier_filter: int | None = None,
     parent_id: int | None = None,
+    related_to_id: int | None = None,
+    rel_type: str | None = None,
     sort_by: str | None = None,
     tree: bool = False,
     llm: bool = False,
@@ -611,6 +651,15 @@ def show_plan(
         else:
             where += " AND pi.parent_id = ?"
             params.append(parent_id)
+    if related_to_id is not None:
+        related_ids = _related_task_ids(related_to_id, rel_type)
+        if not related_ids:
+            # No related tasks — empty result via impossible WHERE
+            where += " AND 0 = 1"
+        else:
+            placeholders = ",".join("?" for _ in related_ids)
+            where += f" AND pi.id IN ({placeholders})"
+            params.extend(related_ids)
 
     sort_col_map = {
         "id": "pi.id",
@@ -744,9 +793,9 @@ def next_tasks(
         "AND t.status NOT IN ('confirmed', 'assumed', 'blocked', 'declined', 'obsolete', 'in_progress', 'verify') "
         "AND (SELECT count(*) FROM tasks c WHERE c.parent_id = t.id) = 0 "
         "AND t.id NOT IN ("
-        "  SELECT td.source_id FROM task_deps td"
-        "  WHERE td.source_type = 'task' AND td.dep_type = 'needs'"
-        "    AND td.target_id IN ("
+        "  SELECT td.target_id FROM task_deps td"
+        "  WHERE td.target_type = 'task' AND td.dep_type = 'blocks'"
+        "    AND td.source_id IN ("
         "      SELECT t2.id FROM tasks t2 WHERE t2.status != 'confirmed'"
         "    )"
         ")"
@@ -1193,6 +1242,7 @@ def add_item(
         click.style("•", fg="cyan")
         + f" Added {task_id_display(item_id)}: {title}"
     )
+    return item_id
 
 
 
@@ -1630,15 +1680,10 @@ def detail_item(
                     f"status={item['status']}{tier_str}")
         if item["parent_id"]:
             click.echo(f"parent=E-{item['parent_id']}")
-        blocked_by, blocking, replaced_by, replaces = get_deps_for_display(item_id)
-        if blocked_by:
-            click.echo(f"blocked_by={','.join(f'E-{d['id']}' for d in blocked_by)}")
-        if blocking:
-            click.echo(f"blocking={','.join(f'E-{d['id']}' for d in blocking)}")
-        if replaced_by:
-            click.echo(f"replaced_by={','.join(f'E-{d['id']}' for d in replaced_by)}")
-        if replaces:
-            click.echo(f"replaces={','.join(f'E-{d['id']}' for d in replaces)}")
+        relations = get_all_relations(item_id)
+        for display_name, items in relations.items():
+            ids = ",".join(f"E-{d['id']}" for d in items)
+            click.echo(f"{display_name}={ids}")
         click.echo(f"created={item['created_at']}")
         click.echo(f"updated={item['updated_at']}")
         if item["completed_at"]:
@@ -1680,26 +1725,11 @@ def detail_item(
         click.echo(f"{label('Tier:')} {val(tier_display(item['tier']))}")
     if item["parent_id"]:
         click.echo(f"{label('Parent:')} {val(task_id_display(item['parent_id']))}")
-    blocked_by, blocking, replaced_by, replaces = get_deps_for_display(item_id)
-    terminal = ("confirmed", "assumed", "declined", "obsolete")
-    if blocked_by:
-        active = [d for d in blocked_by if d["status"] not in terminal]
-        resolved = [d for d in blocked_by if d["status"] in terminal]
-        if active:
-            dep_str = ", ".join(task_id_display(d["id"]) for d in active)
-            click.echo(f"{label('Needs:')} {val(dep_str)}")
-        if resolved:
-            dep_str = ", ".join(task_id_display(d["id"]) for d in resolved)
-            click.echo(f"{label('Enabled by:')} {val(dep_str)}")
-    if blocking:
-        dep_str = ", ".join(task_id_display(d["id"]) for d in blocking)
-        click.echo(f"{label('Enables:')} {val(dep_str)}")
-    if replaced_by:
-        dep_str = ", ".join(task_id_display(d["id"]) for d in replaced_by)
-        click.echo(f"{label('Replaced by:')} {val(dep_str)}")
-    if replaces:
-        dep_str = ", ".join(task_id_display(d["id"]) for d in replaces)
-        click.echo(f"{label('Replaces:')} {val(dep_str)}")
+    relations = get_all_relations(item_id)
+    for display_name, items in relations.items():
+        heading = RELATION_LABELS.get(display_name, display_name) + ":"
+        dep_str = ", ".join(task_id_display(d["id"]) for d in items)
+        click.echo(f"{label(heading)} {val(dep_str)}")
     click.echo(f"{label('Created:')} {val(_format_timestamp(item['created_at']))}")
     if item["updated_at"] and item["updated_at"] != item["created_at"]:
         click.echo(f"{label('Updated:')} {val(_format_timestamp(item['updated_at']))}")
@@ -2140,7 +2170,125 @@ def start_chat():
     )
 
 
-# ── Dependency management ──────────────────────────────────────────
+# ── Task relations (E-957) ─────────────────────────────────────────
+
+
+def link_tasks(source_id: int, target_id: int, dep_type: str):
+    """Create a typed relationship between two tasks.
+
+    `dep_type` is a display name from CANONICAL_DEP_TYPES. The function resolves
+    it to (stored_type, swap) and inserts; if swap, source/target are swapped
+    before insert so storage stays active-voice.
+    """
+    if dep_type not in CANONICAL_DEP_TYPES:
+        valid = ", ".join(CANONICAL_DEP_TYPES)
+        raise click.ClickException(
+            f"Invalid relation type '{dep_type}'. Valid: {valid}"
+        )
+    if source_id == target_id:
+        raise click.ClickException("A task cannot link to itself.")
+    for tid in (source_id, target_id):
+        if not db.exists("SELECT 1 FROM tasks WHERE id = ?", (tid,)):
+            raise click.ClickException(f"Task {task_id_display(tid)} not found.")
+
+    stored, swap = CANONICAL_DEP_TYPES[dep_type]
+    src, tgt = (target_id, source_id) if swap else (source_id, target_id)
+
+    try:
+        db.execute(
+            "INSERT INTO task_deps (source_type, source_id, target_type, target_id, dep_type) "
+            "VALUES ('task', ?, 'task', ?, ?)",
+            (src, tgt, stored),
+        )
+    except Exception as e:
+        if "UNIQUE" in str(e):
+            raise click.ClickException(
+                f"{task_id_display(source_id)} is already linked to {task_id_display(target_id)} as '{dep_type}'."
+            )
+        raise
+
+    click.echo(
+        click.style("•", fg="cyan")
+        + f" Linked: {task_id_display(source_id)} {dep_type} {task_id_display(target_id)}"
+    )
+
+
+def unlink_tasks(source_id: int, target_id: int, dep_type: str | None = None):
+    """Remove a typed relationship between two tasks.
+
+    If `dep_type` is given, removes only that specific relation. If omitted:
+      0 relations  → error
+      1 relation   → remove it
+      2+ relations → error listing them; require --as.
+    """
+    if dep_type is not None:
+        if dep_type not in CANONICAL_DEP_TYPES:
+            valid = ", ".join(CANONICAL_DEP_TYPES)
+            raise click.ClickException(
+                f"Invalid relation type '{dep_type}'. Valid: {valid}"
+            )
+        stored, swap = CANONICAL_DEP_TYPES[dep_type]
+        src, tgt = (target_id, source_id) if swap else (source_id, target_id)
+        result = db.execute(
+            "DELETE FROM task_deps WHERE source_type = 'task' AND source_id = ? "
+            "AND target_type = 'task' AND target_id = ? AND dep_type = ?",
+            (src, tgt, stored),
+        )
+        if result.rowcount == 0:
+            raise click.ClickException(
+                f"No '{dep_type}' relation: {task_id_display(source_id)} → {task_id_display(target_id)}"
+            )
+        click.echo(
+            click.style("•", fg="cyan")
+            + f" Unlinked: {task_id_display(source_id)} no longer {dep_type} {task_id_display(target_id)}"
+        )
+        return
+
+    rows = db.query(
+        "SELECT source_id, target_id, dep_type FROM task_deps "
+        "WHERE source_type = 'task' AND target_type = 'task' "
+        "AND ((source_id = ? AND target_id = ?) OR (source_id = ? AND target_id = ?))",
+        (source_id, target_id, target_id, source_id),
+    )
+    if not rows:
+        raise click.ClickException(
+            f"No relation between {task_id_display(source_id)} and {task_id_display(target_id)}."
+        )
+    if len(rows) > 1:
+        names = []
+        for r in rows:
+            names.append(_relation_display_name_from(r, source_id))
+        raise click.ClickException(
+            f"Multiple relations between {task_id_display(source_id)} and "
+            f"{task_id_display(target_id)} ({', '.join(names)}). Specify --as <type>."
+        )
+
+    row = rows[0]
+    db.execute(
+        "DELETE FROM task_deps WHERE source_type = 'task' AND source_id = ? "
+        "AND target_type = 'task' AND target_id = ? AND dep_type = ?",
+        (row["source_id"], row["target_id"], row["dep_type"]),
+    )
+    name = _relation_display_name_from(row, source_id)
+    click.echo(
+        click.style("•", fg="cyan")
+        + f" Unlinked: {task_id_display(source_id)} ↔ {task_id_display(target_id)} ({name})"
+    )
+
+
+def _relation_display_name_from(row, perspective_id: int) -> str:
+    """Pick the display name for a stored row from `perspective_id`'s point of view."""
+    stored = row["dep_type"]
+    # Symmetric: same name regardless of perspective
+    for name, (st, swap) in CANONICAL_DEP_TYPES.items():
+        if st == stored and not swap and st == "relates_to":
+            return name
+    # Asymmetric: pick swap=True when perspective is the target, swap=False when source
+    want_swap = (row["target_id"] == perspective_id)
+    for name, (st, swap) in CANONICAL_DEP_TYPES.items():
+        if st == stored and swap == want_swap:
+            return name
+    return stored
 
 
 def replace_task(old_id: int, new_id: int):
@@ -2151,23 +2299,17 @@ def replace_task(old_id: int, new_id: int):
         if not db.exists("SELECT 1 FROM tasks WHERE id = ?", (tid,)):
             raise click.ClickException(f"Task {task_id_display(tid)} not found.")
 
-    # Add replaces relationship (new_id replaces old_id)
-    # Stored as: source=old_id, target=new_id, dep_type='replaces'
-    # meaning "old_id is replaced by new_id"
+    # "old replaced_by new" → display='replaced_by' resolves to stored='replaces' with
+    # swap=True → row stored as source=new, target=old, dep_type='replaces' (active voice).
     try:
-        db.execute(
-            "INSERT INTO task_deps (source_type, source_id, target_type, target_id, dep_type) "
-            "VALUES ('task', ?, 'task', ?, 'replaces')",
-            (old_id, new_id),
-        )
-    except Exception as e:
-        if "UNIQUE" in str(e):
+        link_tasks(old_id, new_id, "replaced_by")
+    except click.ClickException as e:
+        if "already linked" in str(e):
             raise click.ClickException(
                 f"{task_id_display(old_id)} is already replaced by {task_id_display(new_id)}."
             )
         raise
 
-    # Set old task to obsolete
     db.execute(
         "UPDATE tasks SET status = 'obsolete', tier = 0 WHERE id = ?",
         (old_id,),
@@ -2179,151 +2321,129 @@ def replace_task(old_id: int, new_id: int):
     )
 
 
-def add_dep(source_id: int, target_id: int, dep_type: str = "needs"):
-    """Record that target blocks source (source needs target to be done first)."""
-    if source_id == target_id:
-        raise click.ClickException("A task cannot depend on itself.")
-    # Verify both tasks exist
-    for tid in (source_id, target_id):
-        if not db.exists("SELECT 1 FROM tasks WHERE id = ?", (tid,)):
-            raise click.ClickException(f"Task {task_id_display(tid)} not found.")
-    try:
-        db.execute(
-            "INSERT INTO task_deps (source_type, source_id, target_type, target_id, dep_type) "
-            "VALUES ('task', ?, 'task', ?, ?)",
-            (source_id, target_id, dep_type),
+def get_all_relations(item_id: int) -> dict[str, list]:
+    """Return all relations for a task, keyed by display-name in fixed order.
+
+    Each value is a list of dicts {id, title, status} for the related task.
+    Empty groups are omitted from the result.
+    """
+    rows = db.query(
+        "SELECT td.source_id, td.target_id, td.dep_type, "
+        "       t_src.title as src_title, t_src.status as src_status, "
+        "       t_tgt.title as tgt_title, t_tgt.status as tgt_status "
+        "FROM   task_deps td "
+        "JOIN   tasks t_src ON t_src.id = td.source_id "
+        "JOIN   tasks t_tgt ON t_tgt.id = td.target_id "
+        "WHERE  td.source_type = 'task' AND td.target_type = 'task' "
+        "AND    (td.source_id = ? OR td.target_id = ?) "
+        "ORDER BY td.dep_type, td.source_id, td.target_id",
+        (item_id, item_id),
+    )
+
+    groups: dict[str, list] = {}
+    for row in rows:
+        is_source = (row["source_id"] == item_id)
+        # Pick display name: swap=True when item is the target, swap=False when item is source
+        want_swap = not is_source
+        display = None
+        for name, (stored, swap) in CANONICAL_DEP_TYPES.items():
+            if stored == row["dep_type"] and swap == want_swap:
+                display = name
+                break
+        if display is None:
+            # Unknown stored dep_type — surface raw value
+            display = row["dep_type"]
+
+        # The "other" task in the relation
+        other_id = row["target_id"] if is_source else row["source_id"]
+        other_title = row["tgt_title"] if is_source else row["src_title"]
+        other_status = row["tgt_status"] if is_source else row["src_status"]
+        groups.setdefault(display, []).append(
+            {"id": other_id, "title": other_title, "status": other_status}
         )
-    except Exception as e:
-        if "UNIQUE" in str(e):
-            raise click.ClickException(
-                f"{task_id_display(source_id)} already depends on {task_id_display(target_id)}."
-            )
-        raise
-    click.echo(
-        click.style("•", fg="cyan")
-        + f" {task_id_display(source_id)} now blocked by {task_id_display(target_id)}"
-    )
+
+    # Return in fixed display order
+    ordered: dict[str, list] = {}
+    for name in RELATION_DISPLAY_ORDER:
+        if name in groups:
+            ordered[name] = groups[name]
+    # Also include any unknown dep_types at the end
+    for name, items in groups.items():
+        if name not in ordered:
+            ordered[name] = items
+    return ordered
 
 
-def remove_dep(source_id: int, target_id: int):
-    """Remove a dependency between two tasks."""
-    result = db.execute(
-        "DELETE FROM task_deps WHERE source_type = 'task' AND source_id = ? "
-        "AND target_type = 'task' AND target_id = ?",
-        (source_id, target_id),
-    )
-    if result.rowcount == 0:
+def _related_task_ids(item_id: int, rel_type: str | None = None) -> list[int]:
+    """Return task IDs related to item_id, optionally narrowed by rel_type display name."""
+    if rel_type is not None and rel_type not in CANONICAL_DEP_TYPES:
+        valid = ", ".join(CANONICAL_DEP_TYPES)
         raise click.ClickException(
-            f"No dependency found: {task_id_display(source_id)} → {task_id_display(target_id)}"
+            f"Invalid relation type '{rel_type}'. Valid: {valid}"
         )
-    click.echo(
-        click.style("•", fg="cyan")
-        + f" Removed: {task_id_display(source_id)} no longer blocked by {task_id_display(target_id)}"
-    )
+
+    if rel_type is None:
+        rows = db.query(
+            "SELECT source_id, target_id FROM task_deps "
+            "WHERE source_type = 'task' AND target_type = 'task' "
+            "AND (source_id = ? OR target_id = ?)",
+            (item_id, item_id),
+        )
+    else:
+        stored, swap = CANONICAL_DEP_TYPES[rel_type]
+        # When swap=False, item_id should be the source side (we want the targets).
+        # When swap=True, item_id should be the target side (we want the sources).
+        if swap:
+            rows = db.query(
+                "SELECT source_id, target_id FROM task_deps "
+                "WHERE source_type = 'task' AND target_type = 'task' "
+                "AND target_id = ? AND dep_type = ?",
+                (item_id, stored),
+            )
+        else:
+            rows = db.query(
+                "SELECT source_id, target_id FROM task_deps "
+                "WHERE source_type = 'task' AND target_type = 'task' "
+                "AND source_id = ? AND dep_type = ?",
+                (item_id, stored),
+            )
+
+    ids: set[int] = set()
+    for r in rows:
+        if r["source_id"] != item_id:
+            ids.add(r["source_id"])
+        if r["target_id"] != item_id:
+            ids.add(r["target_id"])
+    return sorted(ids)
 
 
-def show_deps(item_id: int):
-    """Show all dependencies for a task."""
+def show_relations(item_id: int):
+    """Show all typed relations for a task, grouped by display-name."""
     if not db.exists("SELECT 1 FROM tasks WHERE id = ?", (item_id,)):
         raise click.ClickException(f"Task {task_id_display(item_id)} not found.")
 
-    blocked_by, blocking, replaced_by, replaces = get_deps_for_display(item_id)
+    relations = get_all_relations(item_id)
 
     label = lambda s: click.style(s, fg="cyan")
+    terminal = ("confirmed", "assumed", "declined", "obsolete")
 
     click.echo()
-    click.echo(click.style(f"Dependencies for {task_id_display(item_id)}", fg="green", bold=True))
+    click.echo(click.style(f"Relations for {task_id_display(item_id)}", fg="green", bold=True))
     click.echo(click.style("─" * 30, dim=True))
 
-    terminal = ("confirmed", "assumed", "declined", "obsolete")
-    active_deps = [d for d in blocked_by if d["status"] not in terminal]
-    resolved_deps = [d for d in blocked_by if d["status"] in terminal]
-
-    if active_deps:
-        click.echo(label("Needs:"))
-        for dep in active_deps:
-            click.echo(
-                f"  {task_id_display(dep['id'])} "
-                f"[{click.style(dep['status'], fg='yellow')}] "
-                f"{dep['title']}"
-            )
-    if resolved_deps:
-        click.echo(label("Enabled by:"))
-        for dep in resolved_deps:
-            click.echo(
-                f"  {task_id_display(dep['id'])} "
-                f"[{click.style(dep['status'], fg='green')}] "
-                f"{dep['title']}"
-            )
-    if not blocked_by:
-        click.echo(label("Needs:"))
+    if not relations:
         click.echo("  (none)")
+        click.echo()
+        return
 
-    click.echo(label("Enables:"))
-    if blocking:
-        for dep in blocking:
-            status_color = "green" if dep["status"] in terminal else "yellow"
+    for display, items in relations.items():
+        heading = RELATION_LABELS.get(display, display) + ":"
+        click.echo(label(heading))
+        for it in items:
+            color = "green" if it["status"] in terminal else "yellow"
             click.echo(
-                f"  {task_id_display(dep['id'])} "
-                f"[{click.style(dep['status'], fg=status_color)}] "
-                f"{dep['title']}"
-            )
-    else:
-        click.echo("  (none)")
-
-    if replaced_by:
-        click.echo(label("Replaced by:"))
-        for dep in replaced_by:
-            click.echo(
-                f"  {task_id_display(dep['id'])} "
-                f"[{click.style(dep['status'], fg='green')}] "
-                f"{dep['title']}"
-            )
-    if replaces:
-        click.echo(label("Replaces:"))
-        for dep in replaces:
-            click.echo(
-                f"  {task_id_display(dep['id'])} "
-                f"[{click.style(dep['status'], fg='yellow')}] "
-                f"{dep['title']}"
+                f"  {task_id_display(it['id'])} "
+                f"[{click.style(it['status'], fg=color)}] "
+                f"{it['title']}"
             )
     click.echo()
-
-
-def get_deps_for_display(item_id: int) -> tuple[list, list, list, list]:
-    """Return (blocked_by, blocking, replaced_by, replaces) lists for a task."""
-    blocked_by = db.query(
-        "SELECT td.target_id as id, t.title, t.status "
-        "FROM task_deps td JOIN tasks t ON t.id = td.target_id "
-        "WHERE td.source_type = 'task' AND td.source_id = ? "
-        "AND td.target_type = 'task' AND td.dep_type IN ('needs', 'blocks') "
-        "ORDER BY td.target_id",
-        (item_id,),
-    )
-    blocking = db.query(
-        "SELECT td.source_id as id, t.title, t.status "
-        "FROM task_deps td JOIN tasks t ON t.id = td.source_id "
-        "WHERE td.target_type = 'task' AND td.target_id = ? "
-        "AND td.source_type = 'task' AND td.dep_type IN ('needs', 'blocks') "
-        "ORDER BY td.source_id",
-        (item_id,),
-    )
-    # This task was replaced by...
-    replaced_by = db.query(
-        "SELECT td.target_id as id, t.title, t.status "
-        "FROM task_deps td JOIN tasks t ON t.id = td.target_id "
-        "WHERE td.source_type = 'task' AND td.source_id = ? "
-        "AND td.target_type = 'task' AND td.dep_type = 'replaces' "
-        "ORDER BY td.target_id",
-        (item_id,),
-    )
-    # This task replaces...
-    replaces = db.query(
-        "SELECT td.source_id as id, t.title, t.status "
-        "FROM task_deps td JOIN tasks t ON t.id = td.source_id "
-        "WHERE td.target_type = 'task' AND td.target_id = ? "
-        "AND td.source_type = 'task' AND td.dep_type = 'replaces' "
-        "ORDER BY td.source_id",
-        (item_id,),
-    )
-    return blocked_by, blocking, replaced_by, replaces

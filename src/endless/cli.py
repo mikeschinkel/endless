@@ -374,6 +374,10 @@ def task_import(file, from_claude, json_file, project, replace, parent):
               help="Filter by tier (1-4 or auto/quick/deep/discuss)")
 @click.option("--parent", "parent_id", default=None,
               help="Filter to children of this task (e.g. E-799), or 'none' for root tasks")
+@click.option("--related-to", "--relates-to", "related_to_id", type=TASK_ID, default=None,
+              help="Filter to tasks related to this task ID")
+@click.option("--rel-type", "rel_type", default=None,
+              help="Narrow --related-to by relation type (blocks, implements, informs, ...)")
 @click.option("--sort", default=None,
               type=click.Choice(["id", "status", "phase", "tier", "created", "title"]),
               help="Sort by column (default: id)")
@@ -383,7 +387,8 @@ def task_import(file, from_claude, json_file, project, replace, parent):
               help="Token-efficient output for LLMs")
 @click.option("--json", "as_json", is_flag=True,
               help="JSON output")
-def task_list(project, show_all, status, phase, tier, parent_id, sort, as_tree, llm, as_json):
+def task_list(project, show_all, status, phase, tier, parent_id, related_to_id, rel_type,
+              sort, as_tree, llm, as_json):
     """List tasks for a project."""
     from endless.task_cmd import show_plan, parse_tier_filter, parse_parent_filter
     tier_val = parse_tier_filter(tier) if tier else None
@@ -391,6 +396,7 @@ def task_list(project, show_all, status, phase, tier, parent_id, sort, as_tree, 
     show_plan(project_name=project, show_all=show_all,
               status_filter=status, phase_filter=phase,
               tier_filter=tier_val, parent_id=parent_val,
+              related_to_id=related_to_id, rel_type=rel_type,
               sort_by=sort, tree=as_tree, llm=llm, as_json=as_json)
 
 
@@ -548,13 +554,32 @@ def task_search(query, project, show_all, status, phase, parent_id,
               help="Tier (1-4 or auto/quick/deep/discuss)")
 @click.option("--force", is_flag=True,
               help="Bypass title validation")
-def task_add(title, description, phase, project, parent, after, task_type, status, tier, force):
+@click.option("--blocks", "blocks_ids", type=TASK_ID, multiple=True,
+              help="Task ID(s) this new task blocks (repeatable)")
+@click.option("--blocked-by", "blocked_by_ids", type=TASK_ID, multiple=True,
+              help="Task ID(s) that block this new task (repeatable)")
+@click.option("--relates-to", "relates_to_ids", type=TASK_ID, multiple=True,
+              help="Task ID(s) related to this new task (repeatable)")
+@click.option("--implements", "implements_ids", type=TASK_ID, multiple=True,
+              help="Task ID(s) that this new task implements (repeatable)")
+def task_add(title, description, phase, project, parent, after, task_type, status, tier, force,
+             blocks_ids, blocked_by_ids, relates_to_ids, implements_ids):
     """Add a task."""
-    from endless.task_cmd import add_item, parse_tier
+    from endless.task_cmd import add_item, parse_tier, link_tasks
     tier_val = parse_tier(tier) if tier else None
-    add_item(title, description=description, phase=phase,
-             project_name=project, after=after, parent_id=parent,
-             task_type=task_type, status=status, tier=tier_val, force=force)
+    new_id = add_item(title, description=description, phase=phase,
+                      project_name=project, after=after, parent_id=parent,
+                      task_type=task_type, status=status, tier=tier_val, force=force)
+    if new_id is None:
+        return
+    for tid in blocks_ids:
+        link_tasks(new_id, tid, "blocks")
+    for tid in blocked_by_ids:
+        link_tasks(new_id, tid, "blocked_by")
+    for tid in relates_to_ids:
+        link_tasks(new_id, tid, "relates_to")
+    for tid in implements_ids:
+        link_tasks(new_id, tid, "implements")
 
 
 @task_cmd.command("update")
@@ -693,14 +718,39 @@ def task_chat():
     start_chat()
 
 
+@task_cmd.command("link")
+@click.argument("source_id", type=TASK_ID)
+@click.option("--to", "target_id", type=TASK_ID, required=True,
+              help="Target task ID")
+@click.option("--as", "dep_type", required=True,
+              help="Relation type: blocks, blocked_by, implements, implemented_by, "
+                   "informs, informed_by, replaces, replaced_by, relates_to")
+def task_link(source_id, target_id, dep_type):
+    """Create a typed relation between two tasks."""
+    from endless.task_cmd import link_tasks
+    link_tasks(source_id, target_id, dep_type)
+
+
+@task_cmd.command("unlink")
+@click.argument("source_id", type=TASK_ID)
+@click.option("--to", "target_id", type=TASK_ID, required=True,
+              help="Target task ID")
+@click.option("--as", "dep_type", default=None,
+              help="Relation type to remove (omit to auto-detect when unambiguous)")
+def task_unlink(source_id, target_id, dep_type):
+    """Remove a typed relation between two tasks."""
+    from endless.task_cmd import unlink_tasks
+    unlink_tasks(source_id, target_id, dep_type)
+
+
 @task_cmd.command("block")
 @click.argument("item_id", type=TASK_ID)
 @click.option("--by", "blocker_id", type=TASK_ID, required=True,
               help="Task ID that blocks this task")
 def task_block(item_id, blocker_id):
-    """Record that a task is blocked by another task."""
-    from endless.task_cmd import add_dep
-    add_dep(item_id, blocker_id)
+    """Record that a task is blocked by another task. Shortcut for `link --as blocked_by`."""
+    from endless.task_cmd import link_tasks
+    link_tasks(item_id, blocker_id, "blocked_by")
 
 
 @task_cmd.command("replace")
@@ -719,16 +769,24 @@ def task_replace(item_id, replacement_id):
               help="Task ID to remove as blocker")
 def task_unblock(item_id, blocker_id):
     """Remove a blocking dependency between tasks."""
-    from endless.task_cmd import remove_dep
-    remove_dep(item_id, blocker_id)
+    from endless.task_cmd import unlink_tasks
+    unlink_tasks(item_id, blocker_id, "blocked_by")
 
 
 @task_cmd.command("deps")
 @click.argument("item_id", type=TASK_ID)
 def task_deps(item_id):
-    """Show dependencies for a task."""
-    from endless.task_cmd import show_deps
-    show_deps(item_id)
+    """Show all relations for a task. Alias of `task relations`."""
+    from endless.task_cmd import show_relations
+    show_relations(item_id)
+
+
+@task_cmd.command("relations")
+@click.argument("item_id", type=TASK_ID)
+def task_relations(item_id):
+    """Show all typed relations for a task, grouped by type."""
+    from endless.task_cmd import show_relations
+    show_relations(item_id)
 
 
 @main.command("plan", context_settings={"ignore_unknown_options": True})
@@ -780,16 +838,27 @@ def decision_list(project, show_all, sort, llm, as_json):
               help="Longer description of the decision")
 @click.option("--project", default=None,
               help="Project name (default: detect from cwd)")
-def decision_add(title, description, project):
+@click.option("--about", "about_ids", type=TASK_ID, multiple=True,
+              help="Task ID(s) this decision relates to (repeatable; soft link)")
+@click.option("--decides", "decides_ids", type=TASK_ID, multiple=True,
+              help="Task ID(s) that implement this decision (repeatable; hard link)")
+def decision_add(title, description, project, about_ids, decides_ids):
     """Record a decision."""
     if title.lower().startswith("record that "):
         raise click.ClickException(
             "Decision titles should state the decision, not narrate recording it.\n"
             f"  Try: {title[len('record that '):]}"
         )
-    from endless.task_cmd import add_item
-    add_item(title, description=description, project_name=project,
-             task_type="decision", status="confirmed", force=True)
+    from endless.task_cmd import add_item, link_tasks
+    new_id = add_item(title, description=description, project_name=project,
+                      task_type="decision", status="confirmed", force=True)
+    if new_id is None:
+        return
+    for tid in about_ids:
+        link_tasks(new_id, tid, "relates_to")
+    for tid in decides_ids:
+        # task IMPLEMENTS decision: source=task, target=decision
+        link_tasks(tid, new_id, "implements")
 
 
 @decision_cmd.command("show")
