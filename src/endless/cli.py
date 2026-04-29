@@ -562,8 +562,10 @@ def task_search(query, project, show_all, status, phase, parent_id,
               help="Task ID(s) related to this new task (repeatable)")
 @click.option("--implements", "implements_ids", type=TASK_ID, multiple=True,
               help="Task ID(s) that this new task implements (repeatable)")
+@click.option("--decision", "decision_text", default=None,
+              help="Rationale text — creates a paired decision-type task linked via relates_to")
 def task_add(title, description, phase, project, parent, after, task_type, status, tier, force,
-             blocks_ids, blocked_by_ids, relates_to_ids, implements_ids):
+             blocks_ids, blocked_by_ids, relates_to_ids, implements_ids, decision_text):
     """Add a task."""
     from endless.task_cmd import add_item, parse_tier, link_tasks
     tier_val = parse_tier(tier) if tier else None
@@ -580,6 +582,11 @@ def task_add(title, description, phase, project, parent, after, task_type, statu
         link_tasks(new_id, tid, "relates_to")
     for tid in implements_ids:
         link_tasks(new_id, tid, "implements")
+    if decision_text:
+        decision_id = add_item(decision_text, project_name=project,
+                               task_type="decision", status="confirmed", force=True)
+        if decision_id is not None:
+            link_tasks(decision_id, new_id, "relates_to")
 
 
 @task_cmd.command("update")
@@ -603,15 +610,23 @@ def task_add(title, description, phase, project, parent, after, task_type, statu
               help="Tier (0=n/a, 1-4 or auto/quick/deep/discuss, none=clear)")
 @click.option("--force", is_flag=True,
               help="Bypass title validation")
-def task_update(item_ids, status, title, description, text_file, prompt_file, parent, phase, tier, force):
+@click.option("--decision", "decision_text", default=None,
+              help="Rationale text — creates a paired decision-type task linked via relates_to to each updated task")
+def task_update(item_ids, status, title, description, text_file, prompt_file, parent, phase, tier, force,
+                decision_text):
     """Update fields on one or more tasks."""
-    from endless.task_cmd import update_plan, parse_tier
+    from endless.task_cmd import update_plan, add_item, link_tasks, parse_tier
     tier_val = parse_tier(tier) if tier else None
     for item_id in item_ids:
         update_plan(item_id, status=status, title=title,
                     description=description, text_file=text_file,
                     prompt_file=prompt_file, parent_id=parent,
                     phase=phase, tier=tier_val, force=force)
+        if decision_text:
+            decision_id = add_item(decision_text,
+                                   task_type="decision", status="confirmed", force=True)
+            if decision_id is not None:
+                link_tasks(decision_id, item_id, "relates_to")
 
 
 @task_cmd.command("remove")
