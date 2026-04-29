@@ -10,11 +10,11 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/mikeschinkel/endless/internal/matchers"
 	"github.com/mikeschinkel/endless/internal/monitor"
 )
 
@@ -296,12 +296,20 @@ func extractFilePath(toolName string, raw json.RawMessage) string {
 	return probe.NotebookPath
 }
 
-var taskStartRe = regexp.MustCompile(`endless\s+task\s+start\s+(\d+)`)
-var taskCompleteRe = regexp.MustCompile(`endless\s+task\s+complete\s+(\d+)`)
-var taskChatRe = regexp.MustCompile(`endless\s+task\s+chat`)
-var channelBeaconRe = regexp.MustCompile(`endless\s+channel\s+beacon`)
-var channelConnectRe = regexp.MustCompile(`endless\s+channel\s+connect\s+(\S+)`)
-var channelSendRe = regexp.MustCompile(`endless\s+channel\s+send`)
+// Action regexes are loaded from matchers (config files) per call. Cache
+// per process to avoid repeating the read for each detection in a hook
+// invocation. Per E-970.
+const (
+	actionStart   = "start"
+	actionComplete = "complete"
+	actionChat    = "chat"
+	scopeTask     = "task"
+
+	actionBeacon  = "beacon"
+	actionConnect = "connect"
+	actionSend    = "send"
+	scopeChannel  = "channel"
+)
 
 func handlePreToolUse(projectID int64, isRegistered bool, payload claudePayload) error {
 	// No enforcement for unregistered/anonymous projects
@@ -419,30 +427,40 @@ func handlePostToolUseSession(projectID int64, payload claudePayload) error {
 		return nil
 	}
 
-	// Detect: endless task start <id>
-	if m := taskStartRe.FindStringSubmatch(input.Command); m != nil {
-		taskID, err := strconv.ParseInt(m[1], 10, 64)
-		if err == nil {
-			if err := monitor.StartWorkSession(payload.SessionID, projectID, taskID); err != nil {
-				return fmt.Errorf("starting work session: %w", err)
-			}
-		}
+	all, err := matchers.Load(projectID)
+	if err != nil {
+		log.Printf("loading matchers: %v", err)
 		return nil
+	}
+
+	// Detect: endless task start <id>
+	if re := matchers.ActionRegex(all, actionStart, scopeTask); re != nil {
+		if m := re.FindStringSubmatch(input.Command); m != nil {
+			taskID, err := strconv.ParseInt(m[1], 10, 64)
+			if err == nil {
+				if err := monitor.StartWorkSession(payload.SessionID, projectID, taskID); err != nil {
+					return fmt.Errorf("starting work session: %w", err)
+				}
+			}
+			return nil
+		}
 	}
 
 	// Detect: endless task complete <id>
-	if m := taskCompleteRe.FindStringSubmatch(input.Command); m != nil {
-		taskID, err := strconv.ParseInt(m[1], 10, 64)
-		if err == nil {
-			if err := monitor.CompleteTask(payload.SessionID, taskID); err != nil {
-				return fmt.Errorf("completing task: %w", err)
+	if re := matchers.ActionRegex(all, actionComplete, scopeTask); re != nil {
+		if m := re.FindStringSubmatch(input.Command); m != nil {
+			taskID, err := strconv.ParseInt(m[1], 10, 64)
+			if err == nil {
+				if err := monitor.CompleteTask(payload.SessionID, taskID); err != nil {
+					return fmt.Errorf("completing task: %w", err)
+				}
 			}
+			return nil
 		}
-		return nil
 	}
 
 	// Detect: endless task chat
-	if taskChatRe.MatchString(input.Command) {
+	if re := matchers.ActionRegex(all, actionChat, scopeTask); re != nil && re.MatchString(input.Command) {
 		if err := monitor.StartChatSession(payload.SessionID, projectID); err != nil {
 			return fmt.Errorf("starting chat session: %w", err)
 		}
@@ -450,13 +468,13 @@ func handlePostToolUseSession(projectID int64, payload claudePayload) error {
 	}
 
 	// Detect: endless channel beacon/connect/send (for activity tracking)
-	if channelBeaconRe.MatchString(input.Command) ||
-		channelConnectRe.MatchString(input.Command) ||
-		channelSendRe.MatchString(input.Command) {
-		if err := monitor.TouchSession(payload.SessionID); err != nil {
-			return fmt.Errorf("touching session: %w", err)
+	for _, action := range []string{actionBeacon, actionConnect, actionSend} {
+		if re := matchers.ActionRegex(all, action, scopeChannel); re != nil && re.MatchString(input.Command) {
+			if err := monitor.TouchSession(payload.SessionID); err != nil {
+				return fmt.Errorf("touching session: %w", err)
+			}
+			return nil
 		}
-		return nil
 	}
 
 	return nil

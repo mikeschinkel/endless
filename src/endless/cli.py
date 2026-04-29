@@ -859,6 +859,78 @@ def channel_close():
     close()
 
 
+@main.group("phrase")
+def phrase_cmd():
+    """Manage matchers (verbs, pivots, action regexes) in config files."""
+    pass
+
+
+@phrase_cmd.command("add")
+@click.argument("type_", metavar="TYPE")
+@click.argument("value")
+@click.option("--scope", default=None,
+              help="Optional scope qualifier (e.g., 'task', 'channel')")
+@click.option("--method", default=None,
+              type=click.Choice(["exact", "substring", "regex"]),
+              help="Match algorithm (default: by type — verb=exact, pivot=substring, others=regex)")
+@click.option("--case-sensitive", is_flag=True,
+              help="Match exact case (default: case-insensitive)")
+@click.option("--machine-only", is_flag=True,
+              help="Skip the project config write (machine layer only)")
+def phrase_add(type_, value, scope, method, case_sensitive, machine_only):
+    """Add a matcher: TYPE VALUE [--scope ...] [--method ...] [--case-sensitive] [--machine-only]."""
+    from endless.phrase_cmd import add_phrase
+    add_phrase(type_, value, scope, method, case_sensitive, machine_only)
+
+
+@phrase_cmd.command("list")
+@click.option("--type", "type_filter", default=None,
+              help="Filter to one type")
+@click.option("--scope", "scope_filter", default=None,
+              help="Filter to one scope")
+@click.option("--all", "show_disabled", is_flag=True,
+              help="Include disabled matchers")
+@click.option("--json", "as_json", is_flag=True, help="JSON output")
+def phrase_list(type_filter, scope_filter, show_disabled, as_json):
+    """List matchers from project + machine config layers, merged."""
+    from endless.phrase_cmd import list_phrases
+    list_phrases(type_filter, scope_filter, show_disabled, as_json)
+
+
+@phrase_cmd.command("disable")
+@click.argument("type_", metavar="TYPE")
+@click.argument("value")
+@click.option("--scope", default=None, help="Scope qualifier")
+@click.option("--machine-only", is_flag=True,
+              help="Operate on machine layer only")
+def phrase_disable(type_, value, scope, machine_only):
+    """Disable a matcher value (it stops matching but isn't removed)."""
+    from endless.phrase_cmd import disable_phrase
+    disable_phrase(type_, value, scope, machine_only)
+
+
+@phrase_cmd.command("enable")
+@click.argument("type_", metavar="TYPE")
+@click.argument("value")
+@click.option("--scope", default=None, help="Scope qualifier")
+def phrase_enable(type_, value, scope):
+    """Re-enable a previously disabled matcher value."""
+    from endless.phrase_cmd import enable_phrase
+    enable_phrase(type_, value, scope)
+
+
+@phrase_cmd.command("remove")
+@click.argument("type_", metavar="TYPE")
+@click.argument("value")
+@click.option("--scope", default=None, help="Scope qualifier")
+@click.option("--machine-only", is_flag=True,
+              help="Remove from machine layer only")
+def phrase_remove(type_, value, scope, machine_only):
+    """Remove a matcher value (use disable for reversible silencing)."""
+    from endless.phrase_cmd import remove_phrase
+    remove_phrase(type_, value, scope, machine_only)
+
+
 @main.group("plan-snapshots")
 def plan_snapshots_cmd():
     """Inspect plan-file snapshots written by the PostToolUse hook."""

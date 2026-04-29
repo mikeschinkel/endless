@@ -84,28 +84,24 @@ def tier_display(tier: int | None) -> str:
     return f"{tier} ({label})"
 
 
-_TITLE_VERBS = {
-    "accept", "add", "apply", "assume", "audit", "backfill", "build", "capture", "change", "clean", "clear", "confirm", "configure", "consolidate", "convert",
-    "create", "decide", "define", "defer", "deploy", "design", "disable",
-    "distinguish", "document", "enable", "enforce", "evaluate", "expand",
-    "extract", "fix", "generate", "implement", "improve", "integrate", "investigate",
-    "hide", "increase", "merge", "migrate", "move", "omit", "package", "print", "prune", "raise", "read", "reconcile", "redesign", "refactor", "remove",
-    "rename", "render", "replace", "require", "research", "resolve",
-    "search", "show", "simplify", "skip", "split", "support", "surface", "sync", "test", "track",
-    "update", "validate", "verify",
-}
-
-
 def validate_title(title: str, force: bool = False):
-    """Warn if title doesn't start with an actionable verb."""
+    """Warn if title doesn't start with an actionable verb.
+
+    Verbs are loaded from matchers (config files), seeded from the former
+    _TITLE_VERBS set on first run. Add new verbs with:
+      endless phrase add verb <new-verb>
+    """
     first_word = title.split()[0].lower() if title.strip() else ""
-    if first_word not in _TITLE_VERBS:
+    from endless import matchers
+    verbs = matchers.get_verbs()
+    if first_word not in verbs:
         if force:
             return
         raise click.ClickException(
             f"Title should start with an actionable verb, got '{first_word}'.\n"
             f"  Common verbs: add, fix, implement, design, refactor, remove, build, …\n"
-            f"  Use --force to bypass."
+            f"  Add a new verb: endless phrase add verb '{first_word}'\n"
+            f"  Or use --force to bypass."
         )
 
 
