@@ -22,3 +22,6 @@ internal/web/assets/css/templui
 
 # Local git worktree checkouts created for parallel sessions
 .endless/worktrees/
+
+# Per-session companion files (E-989)
+.endless/sessions/

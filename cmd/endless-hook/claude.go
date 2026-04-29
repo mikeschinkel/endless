@@ -112,6 +112,11 @@ func runClaude(args []string) error {
 		if payload.TranscriptPath != "" {
 			monitor.SetTranscriptPath(payload.SessionID, payload.TranscriptPath)
 		}
+		// Companion file for sibling-pane discovery (E-989).
+		// Fatal on error: foundational primitive for E-990/991/992.
+		if err := writeClaudeCompanion(projectID, payload); err != nil {
+			return fmt.Errorf("writing companion file: %w", err)
+		}
 		// Auto-associate session with task from tmux @endless_task_id
 		if taskID := tmuxTaskID(); taskID > 0 {
 			monitor.StartWorkSession(payload.SessionID, projectID, taskID)
@@ -166,6 +171,10 @@ func runClaude(args []string) error {
 		// Final parse
 		monitor.ParseTranscript(payload.SessionID, payload.TranscriptPath)
 		monitor.FlagNeedsRecap(payload.SessionID)
+		// Remove companion file (E-989). Idempotent — missing file is fine.
+		if err := monitor.RemoveCompanion(projectID, "claude", payload.SessionID); err != nil {
+			return fmt.Errorf("removing companion file: %w", err)
+		}
 		if err := monitor.EndSession(payload.SessionID); err != nil {
 			return fmt.Errorf("ending session: %w", err)
 		}
@@ -635,6 +644,25 @@ func existingSnapshot(snapsDir, sha8, sessionID string) bool {
 		}
 	}
 	return false
+}
+
+// writeClaudeCompanion builds and writes the per-session companion file
+// for a Claude SessionStart event (E-989).
+func writeClaudeCompanion(projectID int64, payload claudePayload) error {
+	session, err := monitor.GetActiveSession(payload.SessionID)
+	if err != nil {
+		return fmt.Errorf("looking up session: %w", err)
+	}
+	c := monitor.CompanionFile{
+		Harness:          "claude",
+		HarnessSessionID: payload.SessionID,
+		EndlessSessionID: session.ID,
+		PaneID:           os.Getenv("TMUX_PANE"),
+		CWD:              payload.CWD,
+		PID:              os.Getppid(),
+		StartedAt:        time.Now().UTC().Format(time.RFC3339),
+	}
+	return monitor.WriteCompanion(projectID, c)
 }
 
 // tmuxTaskID reads @endless_task_id from the current tmux window.
