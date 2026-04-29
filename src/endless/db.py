@@ -138,17 +138,14 @@ def _migrate(conn: sqlite3.Connection):
         conn.executescript("""
             CREATE TABLE IF NOT EXISTS task_deps (
                 id INTEGER PRIMARY KEY,
-                source_type TEXT NOT NULL
-                    CHECK (source_type IN ('task', 'project')),
+                source_type TEXT NOT NULL,
                 source_id INTEGER NOT NULL,
-                target_type TEXT NOT NULL
-                    CHECK (target_type IN ('task', 'project')),
+                target_type TEXT NOT NULL,
                 target_id INTEGER NOT NULL,
-                dep_type TEXT NOT NULL DEFAULT 'blocks'
-                    CHECK (dep_type IN ('blocks', 'needs')),
+                dep_type TEXT NOT NULL DEFAULT 'blocks',
                 created_at TEXT NOT NULL
                     DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
-                UNIQUE(source_type, source_id, target_type, target_id)
+                UNIQUE(source_type, source_id, target_type, target_id, dep_type)
             );
         """)
         conn.commit()
@@ -161,6 +158,9 @@ def _migrate(conn: sqlite3.Connection):
 
     # === Schema v4: task_files (E-917) and suggestions (E-918) ===
     _migrate_v4(conn)
+
+    # === Schema v5: task_deps active-voice vocabulary (E-957) ===
+    _migrate_v5(conn)
 
 
 def _has_table(conn: sqlite3.Connection, table: str) -> bool:
@@ -381,6 +381,101 @@ def _migrate_v4(conn: sqlite3.Connection):
             CREATE INDEX IF NOT EXISTS idx_suggestions_open ON suggestions(project_id, created_at DESC);
         """)
         conn.commit()
+
+
+def _migrate_v5(conn: sqlite3.Connection):
+    """Schema v5: task_deps active-voice vocabulary (E-957).
+
+    Three changes:
+    1. Drop legacy CHECK constraints on task_deps (source_type, target_type, dep_type)
+       so new dep_types like 'implements', 'informs', 'relates_to' can be inserted.
+    2. Expand UNIQUE constraint to include dep_type so multiple typed relations
+       can coexist between the same ordered pair (e.g. A blocks B AND A relates_to B).
+    3. Migrate existing rows to active-voice storage:
+       - 'needs'/'blocks' rows → 'blocks' with source/target swapped (source becomes blocker)
+       - 'replaces' rows → swap source/target (label was already correct, layout was passive)
+    Both UPDATEs evaluate RHS against the original row, so source/target swap atomically.
+    """
+    if not _has_table(conn, "task_deps"):
+        return
+
+    sql_row = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='task_deps'"
+    ).fetchone()
+    table_sql = sql_row[0] if sql_row is not None else ""
+    has_check = "CHECK" in table_sql
+    # Old UNIQUE constraint omits dep_type; new one includes it.
+    needs_unique_rebuild = (
+        "UNIQUE(source_type, source_id, target_type, target_id, dep_type)" not in table_sql
+    )
+
+    if has_check or needs_unique_rebuild:
+        # SQLite has no DROP CHECK; rebuild the table without the constraint.
+        # executescript implicitly commits before running, so we use individual
+        # execute() calls inside an explicit transaction.
+        conn.execute("PRAGMA foreign_keys=OFF")
+        try:
+            conn.execute("""
+                CREATE TABLE task_deps_new (
+                    id INTEGER PRIMARY KEY,
+                    source_type TEXT NOT NULL,
+                    source_id INTEGER NOT NULL,
+                    target_type TEXT NOT NULL,
+                    target_id INTEGER NOT NULL,
+                    dep_type TEXT NOT NULL DEFAULT 'blocks',
+                    created_at TEXT NOT NULL
+                        DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
+                    UNIQUE(source_type, source_id, target_type, target_id, dep_type)
+                )
+            """)
+            conn.execute(
+                "INSERT INTO task_deps_new "
+                "(id, source_type, source_id, target_type, target_id, dep_type, created_at) "
+                "SELECT id, source_type, source_id, target_type, target_id, dep_type, created_at "
+                "FROM task_deps"
+            )
+            conn.execute("DROP TABLE task_deps")
+            conn.execute("ALTER TABLE task_deps_new RENAME TO task_deps")
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            conn.execute("PRAGMA foreign_keys=ON")
+            raise
+        conn.execute("PRAGMA foreign_keys=ON")
+
+    # Active-voice migration: needs/blocks rows store source=blocker, target=blocked.
+    # Today's data has source=blocked, target=blocker, dep_type='needs'. Swap and rename.
+    try:
+        conn.execute("""
+            UPDATE task_deps
+            SET    source_id = target_id,
+                   target_id = source_id,
+                   dep_type  = 'blocks'
+            WHERE  dep_type IN ('needs', 'blocks')
+        """)
+        # replaces rows: label was active ('replaces') but layout was passive
+        # (source=replaced_task, target=replacement). Swap source/target so the row reads
+        # "source replaces target" — matching the label and the active-voice convention.
+        conn.execute("""
+            UPDATE task_deps
+            SET    source_id = target_id,
+                   target_id = source_id
+            WHERE  dep_type = 'replaces'
+        """)
+        # E-1003: informs/informed_by dropped from canonical vocabulary as too vague.
+        # Existing rows fold into relates_to (the soft catch-all). No source/target swap
+        # needed; both informs and relates_to store source=actor with same direction.
+        conn.execute(
+            "UPDATE task_deps SET dep_type='relates_to' WHERE dep_type='informs'"
+        )
+        conn.commit()
+    except sqlite3.IntegrityError as e:
+        conn.rollback()
+        raise RuntimeError(
+            "task_deps active-voice migration aborted: UNIQUE collision after swap. "
+            "Two tasks may have mirrored relations (A blocks B AND B blocks A as separate rows). "
+            f"Backup at ~/.endless/backups/. Original error: {e}"
+        )
 
 
 def execute(sql: str, params: tuple = ()) -> sqlite3.Cursor:

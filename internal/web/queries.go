@@ -161,14 +161,14 @@ func GetProjectTasks(projectID int64, excludeStatuses ...string) []data.TaskView
 		fmt.Sprintf(`SELECT pi.id, COALESCE(pi.title,'') as title, pi.description, pi.phase, pi.status,
 		 COALESCE(pi.type,'task') as type, pi.parent_id,
 		 (SELECT count(*) FROM tasks c WHERE c.parent_id = pi.id AND c.status NOT IN (%s)) as child_count,
-		 COALESCE((SELECT GROUP_CONCAT('E-' || td.target_id || ': ' ||
-		   CASE td.target_type
-		     WHEN 'task' THEN COALESCE((SELECT substr(COALESCE(t.title, t.description),1,50) FROM tasks t WHERE t.id = td.target_id),'')
-		     WHEN 'project' THEN COALESCE((SELECT p2.name FROM projects p2 WHERE p2.id = td.target_id),'')
+		 COALESCE((SELECT GROUP_CONCAT('E-' || td.source_id || ': ' ||
+		   CASE td.source_type
+		     WHEN 'task' THEN COALESCE((SELECT substr(COALESCE(t.title, t.description),1,50) FROM tasks t WHERE t.id = td.source_id),'')
+		     WHEN 'project' THEN COALESCE((SELECT p2.name FROM projects p2 WHERE p2.id = td.source_id),'')
 		     ELSE ''
 		   END, ', ')
 		   FROM task_deps td
-		   WHERE td.source_type = 'task' AND td.source_id = pi.id AND td.dep_type = 'needs'
+		   WHERE td.target_type = 'task' AND td.target_id = pi.id AND td.dep_type = 'blocks'
 		 ),'') as blocked_by,
 		 pi.tier,
 		 COALESCE(pi.created_at,'') as created_at,
