@@ -58,7 +58,7 @@ def test_task_add_decision_creates_paired_decision(fake_add_item):
     assert len(deps) == 1
     assert deps[0]["source_id"] == rows[1]["id"]
     assert deps[0]["target_id"] == rows[0]["id"]
-    assert deps[0]["dep_type"] == "relates_to"
+    assert deps[0]["dep_type"] == "documents"
 
 
 def test_task_add_no_decision_no_extra_task(fake_add_item):
@@ -101,7 +101,7 @@ def test_task_update_decision_creates_decision_and_links(fake_add_item, monkeypa
     deps = list(db.query("SELECT source_id, target_id, dep_type FROM task_deps"))
     assert len(deps) == 1
     assert deps[0]["target_id"] == 100
-    assert deps[0]["dep_type"] == "relates_to"
+    assert deps[0]["dep_type"] == "documents"
 
 
 def test_task_update_decision_with_non_verb_text_works(fake_add_item, monkeypatch):
@@ -148,7 +148,7 @@ def test_task_update_decision_per_task_when_multiple_ids(fake_add_item, monkeypa
 
     deps = list(db.query(
         "SELECT source_id, target_id FROM task_deps "
-        "WHERE dep_type = 'relates_to' ORDER BY target_id"
+        "WHERE dep_type = 'documents' ORDER BY target_id"
     ))
     assert len(deps) == 2
     assert deps[0]["target_id"] == 300

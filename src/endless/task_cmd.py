@@ -23,11 +23,12 @@ TIER_CLEAR = -2
 PARENT_NONE = 0
 
 
-# Task relation vocabulary (E-957/E-958; informs dropped per E-1003).
+# Task relation vocabulary (E-957/E-958; informs dropped per E-1003;
+# documents added per E-1007).
 # display_name -> (stored_dep_type, swap_source_target)
 # Stored types are active voice (source is the actor): blocks, implements,
-# replaces, relates_to. Inverse views (blocked_by, implemented_by, etc.) resolve to
-# the same stored row queried with source/target swapped.
+# replaces, documents, relates_to. Inverse views (blocked_by, implemented_by, etc.)
+# resolve to the same stored row queried with source/target swapped.
 CANONICAL_DEP_TYPES: dict[str, tuple[str, bool]] = {
     "blocks":          ("blocks",     False),  # source blocks target
     "blocked_by":      ("blocks",     True),   # inverse view
@@ -35,17 +36,20 @@ CANONICAL_DEP_TYPES: dict[str, tuple[str, bool]] = {
     "implemented_by":  ("implements", True),
     "replaces":        ("replaces",   False),  # source replaces target
     "replaced_by":     ("replaces",   True),
+    "documents":       ("documents",  False),  # source documents target (records rationale for)
+    "documented_by":   ("documents",  True),
     "relates_to":      ("relates_to", False),  # symmetric
 }
 
-# The 4 canonical stored types (the values in CANONICAL_DEP_TYPES, deduplicated).
-STORED_DEP_TYPES = ("blocks", "implements", "replaces", "relates_to")
+# The 5 canonical stored types (the values in CANONICAL_DEP_TYPES, deduplicated).
+STORED_DEP_TYPES = ("blocks", "implements", "replaces", "documents", "relates_to")
 
 # Display order for `task show` — actionability descending; symmetric last.
 RELATION_DISPLAY_ORDER = (
     "blocked_by", "blocks",
     "implements", "implemented_by",
     "replaces",   "replaced_by",
+    "documents",  "documented_by",
     "relates_to",
 )
 
@@ -57,6 +61,8 @@ RELATION_LABELS = {
     "implemented_by": "Implemented by",
     "replaces":       "Replaces",
     "replaced_by":    "Replaced by",
+    "documents":      "Documents",
+    "documented_by":  "Documented by",
     "relates_to":     "Relates to",
 }
 

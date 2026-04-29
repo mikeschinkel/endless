@@ -563,7 +563,7 @@ def task_search(query, project, show_all, status, phase, parent_id,
 @click.option("--implements", "implements_ids", type=TASK_ID, multiple=True,
               help="Task ID(s) that this new task implements (repeatable)")
 @click.option("--decision", "decision_text", default=None,
-              help="Rationale text — creates a paired decision-type task linked via relates_to")
+              help="Rationale text — creates a paired decision-type task linked via 'documents'")
 def task_add(title, description, phase, project, parent, after, task_type, status, tier, force,
              blocks_ids, blocked_by_ids, relates_to_ids, implements_ids, decision_text):
     """Add a task."""
@@ -586,7 +586,7 @@ def task_add(title, description, phase, project, parent, after, task_type, statu
         decision_id = add_item(decision_text, project_name=project,
                                task_type="decision", status="confirmed", force=True)
         if decision_id is not None:
-            link_tasks(decision_id, new_id, "relates_to")
+            link_tasks(decision_id, new_id, "documents")
 
 
 @task_cmd.command("update")
@@ -611,7 +611,7 @@ def task_add(title, description, phase, project, parent, after, task_type, statu
 @click.option("--force", is_flag=True,
               help="Bypass title validation")
 @click.option("--decision", "decision_text", default=None,
-              help="Rationale text — creates a paired decision-type task linked via relates_to to each updated task")
+              help="Rationale text — creates a paired decision-type task linked via 'documents' to each updated task")
 def task_update(item_ids, status, title, description, text_file, prompt_file, parent, phase, tier, force,
                 decision_text):
     """Update fields on one or more tasks."""
@@ -626,7 +626,7 @@ def task_update(item_ids, status, title, description, text_file, prompt_file, pa
             decision_id = add_item(decision_text,
                                    task_type="decision", status="confirmed", force=True)
             if decision_id is not None:
-                link_tasks(decision_id, item_id, "relates_to")
+                link_tasks(decision_id, item_id, "documents")
 
 
 @task_cmd.command("remove")
@@ -739,7 +739,7 @@ def task_chat():
               help="Target task ID")
 @click.option("--as", "dep_type", required=True,
               help="Relation type: blocks, blocked_by, implements, implemented_by, "
-                   "informs, informed_by, replaces, replaced_by, relates_to")
+                   "replaces, replaced_by, documents, documented_by, relates_to")
 def task_link(source_id, target_id, dep_type):
     """Create a typed relation between two tasks."""
     from endless.task_cmd import link_tasks
@@ -854,7 +854,7 @@ def decision_list(project, show_all, sort, llm, as_json):
 @click.option("--project", default=None,
               help="Project name (default: detect from cwd)")
 @click.option("--about", "about_ids", type=TASK_ID, multiple=True,
-              help="Task ID(s) this decision relates to (repeatable; soft link)")
+              help="Task ID(s) this decision documents (repeatable; soft link)")
 @click.option("--decides", "decides_ids", type=TASK_ID, multiple=True,
               help="Task ID(s) that implement this decision (repeatable; hard link)")
 def decision_add(title, description, project, about_ids, decides_ids):
@@ -870,7 +870,7 @@ def decision_add(title, description, project, about_ids, decides_ids):
     if new_id is None:
         return
     for tid in about_ids:
-        link_tasks(new_id, tid, "relates_to")
+        link_tasks(new_id, tid, "documents")
     for tid in decides_ids:
         # task IMPLEMENTS decision: source=task, target=decision
         link_tasks(tid, new_id, "implements")
