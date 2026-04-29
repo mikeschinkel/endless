@@ -350,6 +350,7 @@ def list_sessions(
             summary = "(empty)"
         else:
             summary = row["summary"] or "(no summary)"
+        summary = " ".join(summary.split())
         if len(summary) > summary_w:
             summary = summary[:summary_w - 1] + "…"
         line = (
