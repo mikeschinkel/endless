@@ -1245,6 +1245,127 @@ def session_show_resolve(session_ref: str | None, as_json: bool = False) -> None
     click.echo()
 
 
+# Module-level constant; tests patch this to a smaller value.
+_USE_EXTENSION_TIMEOUT_SEC = 5
+
+
+def session_use_resolve(session_ref: str | None) -> None:
+    """Print shell-evaluable activation for a Claude session (E-1014).
+
+    Designed for: eval "$(endless session use)"
+
+    Always emits the default activation block (cd + ENDLESS_* env vars). If
+    a per-project extension script lives at .endless/extensions/use.sh, its
+    stdout is appended after the default block. The extension runs with
+    ENDLESS_* vars in its env and a hard 5s timeout. Warnings (security
+    refusal, timeout, non-zero exit) go to stderr; the default block is
+    always emitted regardless.
+    """
+    import shlex
+
+    project_root = _project_root_for_cwd()
+    sessions_dir = project_root / ".endless" / "sessions"
+    live = _read_live_companions(sessions_dir)
+    c = _resolve_companion(session_ref, live, list_hint="endless session list")
+
+    eid = c.get("endless_session_id", "")
+    uuid = c.get("harness_session_id", "") or ""
+    harness = c.get("harness", "") or ""
+    cwd = c.get("cwd", "") or ""
+    worktree = c.get("worktree_path") or ""
+    target = worktree or cwd
+
+    lines = [
+        f"cd {shlex.quote(target)}",
+        f"export ENDLESS_SESSION_ID={shlex.quote(str(eid))}",
+        f"export ENDLESS_HARNESS_SESSION_ID={shlex.quote(uuid)}",
+        f"export ENDLESS_HARNESS={shlex.quote(harness)}",
+        f"export ENDLESS_PROJECT_ROOT={shlex.quote(str(project_root))}",
+        f"export ENDLESS_WORKTREE_PATH={shlex.quote(worktree)}",
+    ]
+
+    extension = project_root / ".endless" / "extensions" / "use.sh"
+    if extension.exists():
+        ext_output = _run_use_extension(
+            extension,
+            {
+                "ENDLESS_SESSION_ID": str(eid),
+                "ENDLESS_HARNESS_SESSION_ID": uuid,
+                "ENDLESS_HARNESS": harness,
+                "ENDLESS_PROJECT_ROOT": str(project_root),
+                "ENDLESS_WORKTREE_PATH": worktree,
+            },
+        )
+        if ext_output:
+            lines.append(ext_output.rstrip())
+
+    click.echo("\n".join(lines))
+
+
+def _run_use_extension(path: Path, extra_env: dict[str, str]) -> str | None:
+    """Run a use.sh extension safely. Returns stdout on success/partial,
+    None when the script is refused outright. Warnings go to stderr.
+    """
+    import stat
+    import subprocess
+
+    try:
+        st = path.stat()
+    except OSError as e:
+        click.echo(f"warning: cannot stat {path}: {e}", err=True)
+        return None
+
+    if not stat.S_ISREG(st.st_mode):
+        click.echo(f"warning: ignoring {path}: not a regular file", err=True)
+        return None
+
+    if st.st_mode & 0o002:
+        click.echo(f"warning: ignoring {path}: world-writable", err=True)
+        return None
+
+    if st.st_uid != os.geteuid():
+        click.echo(
+            f"warning: ignoring {path}: owned by different user (uid {st.st_uid})",
+            err=True,
+        )
+        return None
+
+    full_env = os.environ.copy()
+    full_env.update(extra_env)
+
+    try:
+        result = subprocess.run(
+            ["sh", str(path)],
+            env=full_env,
+            capture_output=True,
+            text=True,
+            timeout=_USE_EXTENSION_TIMEOUT_SEC,
+        )
+    except subprocess.TimeoutExpired:
+        click.echo(
+            f"warning: {path} timed out after {_USE_EXTENSION_TIMEOUT_SEC}s; skipping",
+            err=True,
+        )
+        return None
+    except OSError as e:
+        click.echo(f"warning: cannot run {path}: {e}", err=True)
+        return None
+
+    if result.stderr:
+        # Pass extension's stderr through to the user's terminal as warnings.
+        for line in result.stderr.rstrip().split("\n"):
+            if line:
+                click.echo(f"  [{path.name}] {line}", err=True)
+
+    if result.returncode != 0:
+        click.echo(
+            f"warning: {path} exited {result.returncode}; using its partial output",
+            err=True,
+        )
+
+    return result.stdout
+
+
 def _match_companions(live: list[dict], ref: str) -> list[dict]:
     """Match a session-ref against live companions.
 

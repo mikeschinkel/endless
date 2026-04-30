@@ -305,6 +305,27 @@ def session_search(query, project, limit, as_json):
     search_sessions(query, project_name=project, limit=limit, as_json=as_json)
 
 
+@session_cmd.command("use")
+@click.argument("session_ref", required=False, default=None)
+def session_use(session_ref):
+    """Print shell-evaluable activation for a Claude session.
+
+    Designed for `eval "$(endless session use)"`. Emits cd + ENDLESS_*
+    env vars, then runs .endless/extensions/use.sh (if present) and
+    appends its stdout. With no arg, in tmux: auto-resolves to the sole
+    sibling Claude pane in the current window.
+
+    Standard env vars exported:
+      ENDLESS_SESSION_ID            endless integer id
+      ENDLESS_HARNESS_SESSION_ID    Claude UUID
+      ENDLESS_HARNESS               'claude'
+      ENDLESS_PROJECT_ROOT          repo root
+      ENDLESS_WORKTREE_PATH         worktree path or empty
+    """
+    from endless.session_cmd import session_use_resolve
+    session_use_resolve(session_ref)
+
+
 @session_cmd.command("cd")
 @click.argument("session_ref", required=False, default=None)
 @click.option("--all", "show_all", is_flag=True,
