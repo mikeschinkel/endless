@@ -103,14 +103,24 @@ def _resolve_session(value: str) -> dict:
 
 
 def show_history(
-    session_value: str,
+    session_value: str | None,
     show_tools: str | None = None,
     show_timestamps: bool = False,
     limit: int = 20,
     sort_asc: bool = False,
     as_json: bool = False,
 ):
-    """Show conversation history for a session."""
+    """Show conversation history for a session.
+
+    With no session_value, defaults to the current session via companion file
+    auto-resolution (E-992): in tmux, the sole sibling Claude pane in the
+    current window; outside tmux, an explicit id is required.
+    """
+    if session_value is None:
+        project_root = _project_root_for_cwd()
+        live = _read_live_companions(project_root / ".endless" / "sessions")
+        c = _resolve_companion(None, live, list_hint="endless session list")
+        session_value = str(c.get("endless_session_id"))
     session = _resolve_session(session_value)
     session_id = session["session_id"]
 
@@ -1067,6 +1077,63 @@ def _format_companion_row(c: dict) -> str:
     return f"{eid:<5} {pane:<6} {uuid:<14} {target}"
 
 
+def _resolve_companion(
+    session_ref: str | None,
+    live: list[dict],
+    list_hint: str = "endless session list",
+) -> dict:
+    """Match a session-ref against live companion records, or auto-resolve
+    in tmux. Raises SystemExit(1) with a stderr error on miss/ambiguity/
+    no-tmux-no-arg. Returns the matched companion dict on success.
+    """
+    if session_ref:
+        matches = _match_companions(live, session_ref)
+        if len(matches) == 1:
+            return matches[0]
+        if not matches:
+            click.echo(
+                f"No Claude session matches '{session_ref}'. "
+                f"Run `{list_hint}` to see candidates.",
+                err=True,
+            )
+            raise SystemExit(1)
+        click.echo(f"Ambiguous: '{session_ref}' matches multiple sessions:", err=True)
+        for c in matches:
+            click.echo("  " + _format_companion_row(c), err=True)
+        raise SystemExit(1)
+
+    # No arg: tmux-sibling auto-resolution.
+    window_panes = _tmux_window_pane_ids()
+    if window_panes is None:
+        click.echo(
+            "Outside tmux, an explicit session id is required. "
+            f"Run `{list_hint}` to see candidates.",
+            err=True,
+        )
+        raise SystemExit(1)
+
+    my_pane = os.environ.get("TMUX_PANE", "")
+    siblings = [
+        c for c in live
+        if c.get("pane_id") in window_panes and c.get("pane_id") != my_pane
+    ]
+
+    if len(siblings) == 1:
+        return siblings[0]
+    if not siblings:
+        click.echo(
+            "No sibling Claude pane in this tmux window. "
+            f"Run `{list_hint}` to see all candidates project-wide.",
+            err=True,
+        )
+        raise SystemExit(1)
+    click.echo("Multiple sibling Claude panes in this window:", err=True)
+    for c in siblings:
+        click.echo("  " + _format_companion_row(c), err=True)
+    click.echo("Specify one by id or UUID prefix.", err=True)
+    raise SystemExit(1)
+
+
 def session_cd_resolve(session_ref: str | None, show_all: bool = False) -> None:
     """Resolve a Claude session to its cwd/worktree and print the path.
 
@@ -1087,54 +1154,95 @@ def session_cd_resolve(session_ref: str | None, show_all: bool = False) -> None:
             click.echo(_format_companion_row(c))
         return
 
-    if session_ref:
-        matches = _match_companions(live, session_ref)
-        if len(matches) == 1:
-            click.echo(_target_path(matches[0]))
-            return
-        if not matches:
-            click.echo(
-                f"No Claude session matches '{session_ref}'. "
-                "Run `endless session cd --all` to see candidates.",
-                err=True,
-            )
-            raise SystemExit(1)
-        click.echo(f"Ambiguous: '{session_ref}' matches multiple sessions:", err=True)
-        for c in matches:
-            click.echo("  " + _format_companion_row(c), err=True)
-        raise SystemExit(1)
+    c = _resolve_companion(session_ref, live, list_hint="endless session cd --all")
+    click.echo(_target_path(c))
 
-    # No arg: tmux-sibling auto-resolution.
-    window_panes = _tmux_window_pane_ids()
-    if window_panes is None:
-        click.echo(
-            "Outside tmux, an explicit session id is required. "
-            "Run `endless session cd --all` to see candidates.",
-            err=True,
+
+def session_show_resolve(session_ref: str | None, as_json: bool = False) -> None:
+    """Show details for a Claude session — current by default, or specified by ref.
+
+    Sources the companion record from .endless/sessions/ (E-989) and joins DB
+    fields (state, started_at, last_activity, message count, active task) for
+    a focused per-session view.
+    """
+    project_root = _project_root_for_cwd()
+    sessions_dir = project_root / ".endless" / "sessions"
+    live = _read_live_companions(sessions_dir)
+    c = _resolve_companion(session_ref, live, list_hint="endless session list")
+
+    eid = c.get("endless_session_id")
+    rows = db.query(
+        "SELECT s.state, s.started_at, s.last_activity, s.summary, s.active_task_id, "
+        "COALESCE(p.name, '') AS project_name, "
+        "(SELECT count(*) FROM session_messages m WHERE m.session_id = s.session_id) AS msg_count "
+        "FROM sessions s "
+        "LEFT JOIN projects p ON s.project_id = p.id "
+        "WHERE s.id = ?",
+        (eid,),
+    )
+    if not rows:
+        click.echo(f"Session E-{eid} not found in database.", err=True)
+        raise SystemExit(1)
+    r = rows[0]
+
+    task_info = None
+    if r["active_task_id"]:
+        t = db.query(
+            "SELECT id, title, status FROM tasks WHERE id = ?",
+            (r["active_task_id"],),
         )
-        raise SystemExit(1)
+        if t:
+            task_info = t[0]
 
-    my_pane = os.environ.get("TMUX_PANE", "")
-    siblings = [
-        c for c in live
-        if c.get("pane_id") in window_panes and c.get("pane_id") != my_pane
-    ]
+    summary = " ".join((r["summary"] or "").split())
 
-    if len(siblings) == 1:
-        click.echo(_target_path(siblings[0]))
+    if as_json:
+        out = {
+            "id": eid,
+            "session_id": c.get("harness_session_id"),
+            "harness": c.get("harness"),
+            "project": r["project_name"],
+            "state": r["state"],
+            "started_at": r["started_at"],
+            "last_activity": r["last_activity"],
+            "messages": r["msg_count"],
+            "pane_id": c.get("pane_id") or None,
+            "cwd": c.get("cwd"),
+            "worktree_path": c.get("worktree_path") or None,
+            "pid": c.get("pid"),
+            "active_task": (
+                {"id": task_info["id"], "title": task_info["title"], "status": task_info["status"]}
+                if task_info else None
+            ),
+            "summary": summary,
+        }
+        click.echo(json_mod.dumps(out, indent=2))
         return
-    if not siblings:
+
+    click.echo()
+    click.echo(click.style(f"Session E-{eid}", bold=True))
+    click.echo(f"  UUID:          {c.get('harness_session_id', '')}")
+    click.echo(f"  Harness:       {c.get('harness', '')}")
+    click.echo(f"  Project:       {r['project_name']}")
+    click.echo(f"  State:         {r['state']}")
+    click.echo(f"  Started:       {r['started_at'] or '-'}")
+    click.echo(f"  Last activity: {r['last_activity'] or '-'}")
+    click.echo(f"  Messages:      {r['msg_count']}")
+    click.echo(f"  Pane:          {c.get('pane_id') or '-'}")
+    click.echo(f"  Cwd:           {c.get('cwd', '')}")
+    if c.get("worktree_path"):
+        click.echo(f"  Worktree:      {c.get('worktree_path')}")
+    click.echo(f"  PID:           {c.get('pid')}")
+    if task_info:
         click.echo(
-            "No sibling Claude pane in this tmux window. "
-            "Run `endless session cd --all` to see all candidates project-wide.",
-            err=True,
+            f"  Active task:   E-{task_info['id']} [{task_info['status']}] {task_info['title']}"
         )
-        raise SystemExit(1)
-    click.echo("Multiple sibling Claude panes in this window:", err=True)
-    for c in siblings:
-        click.echo("  " + _format_companion_row(c), err=True)
-    click.echo("Specify one: endless session cd <id-or-uuid>", err=True)
-    raise SystemExit(1)
+    else:
+        click.echo("  Active task:   (none)")
+    if summary:
+        click.echo()
+        click.echo(f"  Summary: {summary}")
+    click.echo()
 
 
 def _match_companions(live: list[dict], ref: str) -> list[dict]:

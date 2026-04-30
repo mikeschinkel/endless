@@ -227,8 +227,22 @@ def session_cmd():
     pass
 
 
+@session_cmd.command("show")
+@click.argument("session_ref", required=False, default=None)
+@click.option("--json", "as_json", is_flag=True, help="JSON output")
+def session_show(session_ref, as_json):
+    """Show details for a Claude session — current by default.
+
+    With no arg, in tmux: auto-resolves to the sole sibling Claude pane in
+    the current window. Otherwise an endless integer id or Claude UUID
+    prefix is required.
+    """
+    from endless.session_cmd import session_show_resolve
+    session_show_resolve(session_ref, as_json=as_json)
+
+
 @session_cmd.command("history")
-@click.argument("session_id")
+@click.argument("session_id", required=False, default=None)
 @click.option("--tools", "show_tools", default=None, flag_value="truncated",
               help="Include tool calls (truncated)")
 @click.option("--tools-full", "show_tools", flag_value="full",
@@ -242,7 +256,11 @@ def session_cmd():
               help="Sort order (default: desc, newest first)")
 @click.option("--json", "as_json", is_flag=True, help="JSON output")
 def session_history(session_id, show_tools, timestamps, limit, sort_order, as_json):
-    """Show conversation history for a session."""
+    """Show conversation history for a session.
+
+    With no arg, defaults to the current session (same auto-resolution as
+    session show).
+    """
     from endless.session_cmd import show_history
     show_history(session_id, show_tools=show_tools,
                  show_timestamps=timestamps, limit=limit,
