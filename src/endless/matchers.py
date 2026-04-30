@@ -27,7 +27,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-from endless.config import CONFIG_FILE
+from endless import config
 
 
 # Default matchers seeded into the machine config on first run if no
@@ -72,11 +72,11 @@ DEFAULT_MATCHERS: list[dict[str, Any]] = [
     },
     {
         "type": "start", "scope": "task", "method": "regex",
-        "match": r"endless\s+task\s+start\s+(\d+)",
+        "match": r"endless\s+task\s+start\s+(?:[Ee]-)?(\d+)",
     },
     {
         "type": "complete", "scope": "task", "method": "regex",
-        "match": r"endless\s+task\s+complete\s+(\d+)",
+        "match": r"endless\s+task\s+complete\s+(?:[Ee]-)?(\d+)",
     },
     {
         "type": "chat", "scope": "task", "method": "regex",
@@ -115,7 +115,7 @@ def project_config_path() -> Path | None:
 
 def machine_config_path() -> Path:
     """Path to the machine-layer config file."""
-    return CONFIG_FILE
+    return config.CONFIG_FILE
 
 
 # --- File IO ----------------------------------------------------------------
@@ -154,6 +154,48 @@ def _ensure_default_seeds() -> None:
     _save_json(path, data)
 
 
+# Maps (type, scope, method) -> {old_match: new_match}. Only rewrites when
+# the existing match is EXACTLY the old default — leaves any user
+# customization alone. Each entry is a one-way migration; once a config is
+# migrated, the new pattern won't re-trigger on subsequent runs.
+_STALE_DEFAULTS: dict[tuple, dict[str, str]] = {
+    ("start", "task", "regex"): {
+        # E-1028: original pattern only matched bare integers; CLI accepts
+        # E-prefixed IDs, so 'endless task start E-1027' was a silent no-op.
+        r"endless\s+task\s+start\s+(\d+)":
+            r"endless\s+task\s+start\s+(?:[Ee]-)?(\d+)",
+    },
+    ("complete", "task", "regex"): {
+        r"endless\s+task\s+complete\s+(\d+)":
+            r"endless\s+task\s+complete\s+(?:[Ee]-)?(\d+)",
+    },
+}
+
+
+def _migrate_stale_defaults() -> None:
+    """Rewrite known-stale default matchers in the machine config in place.
+
+    Idempotent. Only rewrites matchers whose `match` field is exactly the
+    old default value; user-customized matchers are left untouched.
+    """
+    path = machine_config_path()
+    data = _load_json(path)
+    matchers = data.get("matchers")
+    if not isinstance(matchers, list):
+        return
+    changed = False
+    for m in matchers:
+        key = (m.get("type"), m.get("scope"), m.get("method"))
+        rewrites = _STALE_DEFAULTS.get(key)
+        if not rewrites:
+            continue
+        if m.get("match") in rewrites:
+            m["match"] = rewrites[m["match"]]
+            changed = True
+    if changed:
+        _save_json(path, data)
+
+
 # --- Matcher identity / merge logic ----------------------------------------
 
 def _matcher_signature(m: dict) -> tuple:
@@ -185,6 +227,7 @@ def load_all_matchers() -> list[dict]:
     match value) are de-duplicated.
     """
     _ensure_default_seeds()
+    _migrate_stale_defaults()
     project_path = project_config_path()
     project = _read_matchers_from(project_path) if project_path else []
     machine = _read_matchers_from(machine_config_path())
