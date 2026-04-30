@@ -1676,9 +1676,10 @@ def detail_item(
 ):
     """Show full detail for a task."""
     row = db.query(
-        "SELECT id, title, description, text, phase, status, type, "
-        "parent_id, source_file, prompt, created_at, updated_at, "
-        "completed_at, sort_order, tier FROM tasks WHERE id = ?",
+        "SELECT t.id, t.title, t.description, t.text, t.phase, t.status, t.type, "
+        "t.parent_id, t.source_file, t.prompt, t.created_at, t.updated_at, "
+        "t.completed_at, t.sort_order, t.tier, p.name as project_name "
+        "FROM tasks t JOIN projects p ON t.project_id = p.id WHERE t.id = ?",
         (item_id,),
     )
     if not row:
@@ -1693,6 +1694,7 @@ def detail_item(
         out = {
             "id": f"E-{item['id']}",
             "title": item["title"],
+            "project": item["project_name"],
             "type": item["type"],
             "phase": item["phase"],
             "status": item["status"],
@@ -1723,6 +1725,7 @@ def detail_item(
 
     if llm:
         click.echo(f"# E-{item['id']} {item['title']}")
+        click.echo(f"project={item['project_name']}")
         tier_str = f" tier={tier_display(item['tier'])}" if item["tier"] else ""
         click.echo(f"type={item['type']} phase={item['phase']} "
                     f"status={item['status']}{tier_str}")
@@ -1766,6 +1769,7 @@ def detail_item(
 
     click.echo(f"{label('ID:')} {val(task_id_display(item['id']))}")
     click.echo(f"{label('Title:')} {val(item['title'])}")
+    click.echo(f"{label('Project:')} {val(item['project_name'])}")
     click.echo(f"{label('Type:')} {val(item['type'])}")
     click.echo(f"{label('Phase:')} {val(item['phase'])}")
     click.echo(f"{label('Status:')} {val(item['status'])}")
