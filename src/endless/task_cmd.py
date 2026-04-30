@@ -163,7 +163,20 @@ def parse_task_id(value: str) -> int:
 
 
 def _project_root_for_task(task_id: int) -> Path | None:
-    """Return the registered project root path for the project owning this task."""
+    """Return the appropriate working-tree root for writing per-task files.
+
+    Resolution (E-1004):
+    - If cwd is inside a git worktree of the registered project, return the
+      worktree's root so per-task files land in the worktree's checkout
+      and ride along with the worktree branch's commits.
+    - Otherwise return the registered project path.
+
+    Detection uses 'git rev-parse --git-common-dir' to find the main repo's
+    .git directory; its parent is the main repo root. If that matches the
+    registered project path, the current 'git rev-parse --show-toplevel' is
+    the working tree (whether main or a worktree) and is what we want.
+    """
+    import subprocess
     row = db.query(
         "SELECT p.path FROM projects p "
         "JOIN tasks t ON t.project_id = p.id "
@@ -172,7 +185,36 @@ def _project_root_for_task(task_id: int) -> Path | None:
     )
     if not row:
         return None
-    return Path(row[0]["path"]).expanduser()
+    registered = Path(row[0]["path"]).expanduser().resolve()
+
+    cwd = Path.cwd()
+    try:
+        common_dir = subprocess.run(
+            ["git", "rev-parse", "--git-common-dir"],
+            capture_output=True, text=True, check=True, cwd=str(cwd),
+        ).stdout.strip()
+        toplevel = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            capture_output=True, text=True, check=True, cwd=str(cwd),
+        ).stdout.strip()
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return registered
+    if not common_dir or not toplevel:
+        return registered
+
+    # common_dir may be relative (e.g. '.git') or absolute; normalize via cwd.
+    common_path = Path(common_dir)
+    if not common_path.is_absolute():
+        common_path = (cwd / common_path).resolve()
+    else:
+        common_path = common_path.resolve()
+    main_root = common_path.parent
+
+    if main_root == registered:
+        # cwd is in a checkout (main or worktree) of THIS project.
+        return Path(toplevel).resolve()
+    # cwd is unrelated to this task's project.
+    return registered
 
 
 def _write_task_plan_file(task_id: int, content: str) -> None:
