@@ -17,6 +17,7 @@ type SessionInfo struct {
 	ActiveTaskID *int64
 	State        string
 	LastActivity string
+	StartedAt    string
 }
 
 // StartWorkSession creates or updates a session linked to a specific task.
@@ -100,10 +101,10 @@ func GetActiveSession(sessionID string) (*SessionInfo, error) {
 
 	var s SessionInfo
 	err = db.QueryRow(
-		`SELECT id, session_id, COALESCE(project_id,0), active_task_id, state, COALESCE(last_activity,'')
+		`SELECT id, session_id, COALESCE(project_id,0), active_task_id, state, COALESCE(last_activity,''), COALESCE(started_at,'')
 		 FROM sessions WHERE session_id=?`,
 		sessionID,
-	).Scan(&s.ID, &s.SessionID, &s.ProjectID, &s.ActiveTaskID, &s.State, &s.LastActivity)
+	).Scan(&s.ID, &s.SessionID, &s.ProjectID, &s.ActiveTaskID, &s.State, &s.LastActivity, &s.StartedAt)
 	if err != nil {
 		return nil, err
 	}

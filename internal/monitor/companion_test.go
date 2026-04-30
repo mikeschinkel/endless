@@ -172,3 +172,48 @@ func TestRemoveCompanion_IdempotentOnMissing(t *testing.T) {
 		t.Errorf("remove of missing file should be nil, got %v", err)
 	}
 }
+
+func TestCompanionExists_TrueWhenPresent(t *testing.T) {
+	root := t.TempDir()
+	c := CompanionFile{
+		Harness:          "claude",
+		HarnessSessionID: "present",
+		EndlessSessionID: 1,
+		PID:              1,
+		CWD:              "/x",
+		StartedAt:        "2026-04-30T00:00:00Z",
+	}
+	if err := writeCompanionAtRoot(root, c); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	exists, err := companionExistsAtRoot(root, "claude", "present")
+	if err != nil {
+		t.Fatalf("exists: %v", err)
+	}
+	if !exists {
+		t.Errorf("expected exists=true for present file")
+	}
+}
+
+func TestCompanionExists_FalseWhenMissing(t *testing.T) {
+	root := t.TempDir()
+	exists, err := companionExistsAtRoot(root, "claude", "never-written")
+	if err != nil {
+		t.Errorf("missing file should not error, got %v", err)
+	}
+	if exists {
+		t.Errorf("expected exists=false for missing file")
+	}
+}
+
+func TestCompanionExists_FalseWhenSessionsDirMissing(t *testing.T) {
+	// New project root with no .endless/sessions/ dir at all.
+	root := t.TempDir()
+	exists, err := companionExistsAtRoot(root, "claude", "anything")
+	if err != nil {
+		t.Errorf("missing dir should not error, got %v", err)
+	}
+	if exists {
+		t.Errorf("expected exists=false when sessions dir absent")
+	}
+}

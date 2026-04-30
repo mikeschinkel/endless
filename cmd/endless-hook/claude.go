@@ -134,6 +134,16 @@ func runClaude(args []string) error {
 		if err := monitor.BackfillProcess(payload.SessionID, os.Getenv("TMUX_PANE")); err != nil {
 			return fmt.Errorf("backfilling process: %w", err)
 		}
+		// Backfill companion file if missing — covers sessions that were
+		// already running when E-989 landed (E-1011). Idempotent: only
+		// writes when the file is absent.
+		if exists, err := monitor.CompanionExists(projectID, "claude", payload.SessionID); err != nil {
+			return fmt.Errorf("checking companion file: %w", err)
+		} else if !exists {
+			if err := writeClaudeCompanion(projectID, payload); err != nil {
+				return fmt.Errorf("backfilling companion file: %w", err)
+			}
+		}
 		// Fallback message check for sessions without MCP channel plugin
 		pane := os.Getenv("TMUX_PANE")
 		port, _, _ := monitor.LookupChannelPort(pane)
@@ -647,11 +657,21 @@ func existingSnapshot(snapsDir, sha8, sessionID string) bool {
 }
 
 // writeClaudeCompanion builds and writes the per-session companion file
-// for a Claude SessionStart event (E-989).
+// for a Claude session (E-989). Used by SessionStart and by the
+// UserPromptSubmit backfill (E-1011) when the file is missing. Sourcing
+// StartedAt from the DB ensures backfilled and freshly-written files are
+// identical for the same session.
 func writeClaudeCompanion(projectID int64, payload claudePayload) error {
 	session, err := monitor.GetActiveSession(payload.SessionID)
 	if err != nil {
 		return fmt.Errorf("looking up session: %w", err)
+	}
+	startedAt := time.Now().UTC().Format(time.RFC3339)
+	if session.StartedAt != "" {
+		// DB stores naive UTC ("2006-01-02T15:04:05"); reformat to RFC3339 with Z.
+		if t, err := time.Parse("2006-01-02T15:04:05", session.StartedAt); err == nil {
+			startedAt = t.UTC().Format(time.RFC3339)
+		}
 	}
 	c := monitor.CompanionFile{
 		Harness:          "claude",
@@ -660,7 +680,7 @@ func writeClaudeCompanion(projectID int64, payload claudePayload) error {
 		PaneID:           os.Getenv("TMUX_PANE"),
 		CWD:              payload.CWD,
 		PID:              os.Getppid(),
-		StartedAt:        time.Now().UTC().Format(time.RFC3339),
+		StartedAt:        startedAt,
 	}
 	return monitor.WriteCompanion(projectID, c)
 }
