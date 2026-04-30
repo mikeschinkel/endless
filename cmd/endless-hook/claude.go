@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -338,6 +339,14 @@ func handlePreToolUse(projectID int64, isRegistered bool, payload claudePayload)
 		return nil
 	}
 
+	// E-1012: block direct 'git commit' on main's working tree.
+	// Independent of writeTools-based enforcement so it fires even when
+	// per-task tracking is in 'off' mode.
+	if payload.ToolName == "Bash" {
+		blockCommitOnMainIfApplicable(payload)
+		return nil
+	}
+
 	// Only enforce on file-writing tools
 	if !writeTools[payload.ToolName] {
 		return nil
@@ -564,6 +573,99 @@ func handleExitPlanMode(projectID int64, payload claudePayload) error {
 		),
 	}
 	return json.NewEncoder(os.Stdout).Encode(resp)
+}
+
+// gitCommitRe matches common forms of 'git commit' at the start of a command:
+// 'git commit', 'git commit -m ...', '  git commit '. Excludes 'git commit-tree'
+// (the trailing boundary requires whitespace or end-of-string).
+var gitCommitRe = regexp.MustCompile(`^\s*git\s+commit($|\s)`)
+
+// blockCommitOnMainIfApplicable inspects a Bash tool call. If it's a
+// 'git commit' invoked from main's working tree (not a worktree, not
+// during an active merge), block with an actionable message. Otherwise
+// return silently and let the command run.
+func blockCommitOnMainIfApplicable(payload claudePayload) {
+	var input toolInputBash
+	if err := json.Unmarshal(payload.ToolInput, &input); err != nil {
+		return
+	}
+	if !gitCommitRe.MatchString(input.Command) {
+		return
+	}
+	if payload.CWD == "" {
+		return
+	}
+	inMain, err := isInMainCheckout(payload.CWD)
+	if err != nil || !inMain {
+		// Not a git repo, git unavailable, or in a worktree — allow.
+		return
+	}
+	if isInActiveMerge(payload.CWD) {
+		// Merge in progress; the merge commit is part of completing the merge.
+		return
+	}
+
+	blockToolUse(`Direct commits to main are not allowed (E-1012).
+
+main is the integration target. Make changes in a worktree on a per-task
+branch, then ff-merge (or 'endless worktree land' once E-971 ships).
+
+  git worktree add -b e-XXX-<slug> .endless/worktrees/e-XXX main
+  cd .endless/worktrees/e-XXX
+  # ... do work, commit ...
+  cd /path/to/main
+  git merge --ff-only e-XXX-<slug>
+
+Bypass (NOT recommended; surfaces as a deliberate violation):
+  git commit --no-verify`)
+}
+
+// isInMainCheckout returns true if cwd is inside the main checkout of a git
+// repository (as opposed to a linked worktree). Detection: --git-dir and
+// --git-common-dir return the same path in main, different paths in a worktree.
+func isInMainCheckout(cwd string) (bool, error) {
+	gitDir, err := runGitRevParse(cwd, "--git-dir")
+	if err != nil {
+		return false, err
+	}
+	commonDir, err := runGitRevParse(cwd, "--git-common-dir")
+	if err != nil {
+		return false, err
+	}
+	return absFromCwd(cwd, gitDir) == absFromCwd(cwd, commonDir), nil
+}
+
+// isInActiveMerge returns true if a merge is currently in progress in cwd's
+// repository (detected by the presence of MERGE_MSG in the git directory).
+func isInActiveMerge(cwd string) bool {
+	gitDir, err := runGitRevParse(cwd, "--git-dir")
+	if err != nil {
+		return false
+	}
+	_, err = os.Stat(filepath.Join(absFromCwd(cwd, gitDir), "MERGE_MSG"))
+	return err == nil
+}
+
+func runGitRevParse(cwd, arg string) (string, error) {
+	cmd := exec.Command("git", "rev-parse", arg)
+	cmd.Dir = cwd
+	out, err := cmd.Output()
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
+func absFromCwd(cwd, path string) string {
+	p := path
+	if !filepath.IsAbs(p) {
+		p = filepath.Join(cwd, p)
+	}
+	abs, err := filepath.Abs(p)
+	if err != nil {
+		return p
+	}
+	return abs
 }
 
 func isPlanFile(path string) bool {
