@@ -112,14 +112,16 @@ func runClaude(args []string) error {
 		if payload.TranscriptPath != "" {
 			monitor.SetTranscriptPath(payload.SessionID, payload.TranscriptPath)
 		}
-		// Companion file for sibling-pane discovery (E-989).
-		// Fatal on error: foundational primitive for E-990/991/992.
-		if err := writeClaudeCompanion(projectID, payload); err != nil {
-			return fmt.Errorf("writing companion file: %w", err)
-		}
 		// Auto-associate session with task from tmux @endless_task_id
+		// before writing the companion file, so worktree_path reflects
+		// the bound task on first write (E-1027).
 		if taskID := tmuxTaskID(); taskID > 0 {
 			monitor.StartWorkSession(payload.SessionID, projectID, taskID)
+		}
+		// Companion file for sibling-pane discovery (E-989).
+		// Fatal on error: foundational primitive for E-990/991/992/1014.
+		if err := writeClaudeCompanion(projectID, payload); err != nil {
+			return fmt.Errorf("writing companion file: %w", err)
 		}
 		return handleTaskContextInjection(projectID, payload)
 
@@ -460,6 +462,12 @@ func handlePostToolUseSession(projectID int64, payload claudePayload) error {
 				if err := monitor.StartWorkSession(payload.SessionID, projectID, taskID); err != nil {
 					return fmt.Errorf("starting work session: %w", err)
 				}
+				// Refresh companion file: active_task_id changed, worktree_path
+				// must follow (E-1027). Non-fatal: stale worktree_path is a
+				// minor inconsistency, not a session-breaker.
+				if err := writeClaudeCompanion(projectID, payload); err != nil {
+					log.Printf("refreshing companion file: %v", err)
+				}
 			}
 			return nil
 		}
@@ -473,6 +481,9 @@ func handlePostToolUseSession(projectID int64, payload claudePayload) error {
 				if err := monitor.CompleteTask(payload.SessionID, taskID); err != nil {
 					return fmt.Errorf("completing task: %w", err)
 				}
+				if err := writeClaudeCompanion(projectID, payload); err != nil {
+					log.Printf("refreshing companion file: %v", err)
+				}
 			}
 			return nil
 		}
@@ -482,6 +493,9 @@ func handlePostToolUseSession(projectID int64, payload claudePayload) error {
 	if re := matchers.ActionRegex(all, actionChat, scopeTask); re != nil && re.MatchString(input.Command) {
 		if err := monitor.StartChatSession(payload.SessionID, projectID); err != nil {
 			return fmt.Errorf("starting chat session: %w", err)
+		}
+		if err := writeClaudeCompanion(projectID, payload); err != nil {
+			log.Printf("refreshing companion file: %v", err)
 		}
 		return nil
 	}
@@ -657,10 +671,11 @@ func existingSnapshot(snapsDir, sha8, sessionID string) bool {
 }
 
 // writeClaudeCompanion builds and writes the per-session companion file
-// for a Claude session (E-989). Used by SessionStart and by the
-// UserPromptSubmit backfill (E-1011) when the file is missing. Sourcing
-// StartedAt from the DB ensures backfilled and freshly-written files are
-// identical for the same session.
+// for a Claude session (E-989). Used by SessionStart, by the
+// UserPromptSubmit backfill (E-1011), and by post-task-mutation refresh
+// (E-1027). Sourcing StartedAt from the DB ensures backfilled and
+// freshly-written files are identical for the same session. WorktreePath
+// reflects the session's active task's worktree, if any.
 func writeClaudeCompanion(projectID int64, payload claudePayload) error {
 	session, err := monitor.GetActiveSession(payload.SessionID)
 	if err != nil {
@@ -673,6 +688,16 @@ func writeClaudeCompanion(projectID int64, payload claudePayload) error {
 			startedAt = t.UTC().Format(time.RFC3339)
 		}
 	}
+	worktreePath := ""
+	if session.ActiveTaskID != nil {
+		// Failure here is non-fatal: empty worktree_path is a defensible
+		// fallback. The companion still serves sibling-pane discovery.
+		if wp, err := monitor.WorktreePathForTask(projectID, *session.ActiveTaskID); err == nil {
+			worktreePath = wp
+		} else {
+			log.Printf("worktree path lookup: %v", err)
+		}
+	}
 	c := monitor.CompanionFile{
 		Harness:          "claude",
 		HarnessSessionID: payload.SessionID,
@@ -681,6 +706,7 @@ func writeClaudeCompanion(projectID int64, payload claudePayload) error {
 		CWD:              payload.CWD,
 		PID:              os.Getppid(),
 		StartedAt:        startedAt,
+		WorktreePath:     worktreePath,
 	}
 	return monitor.WriteCompanion(projectID, c)
 }

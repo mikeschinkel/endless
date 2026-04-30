@@ -217,3 +217,114 @@ func TestCompanionExists_FalseWhenSessionsDirMissing(t *testing.T) {
 		t.Errorf("expected exists=false when sessions dir absent")
 	}
 }
+
+// --- WorktreePathForTask ----------------------------------------------------
+
+func mkWorktree(t *testing.T, root string, name string) string {
+	t.Helper()
+	wt := filepath.Join(root, ".endless", "worktrees", name)
+	if err := os.MkdirAll(wt, 0755); err != nil {
+		t.Fatalf("mkdir %s: %v", wt, err)
+	}
+	return wt
+}
+
+func TestWorktreePathForTask_BareID(t *testing.T) {
+	root := t.TempDir()
+	wt := mkWorktree(t, root, "e-247")
+
+	got, err := worktreePathForTaskAtRoot(root, 247)
+	if err != nil {
+		t.Fatalf("worktree path: %v", err)
+	}
+	if got != wt {
+		t.Errorf("want %q, got %q", wt, got)
+	}
+}
+
+func TestWorktreePathForTask_WithSlug(t *testing.T) {
+	root := t.TempDir()
+	wt := mkWorktree(t, root, "e-247-some-slug")
+
+	got, err := worktreePathForTaskAtRoot(root, 247)
+	if err != nil {
+		t.Fatalf("worktree path: %v", err)
+	}
+	if got != wt {
+		t.Errorf("want %q, got %q", wt, got)
+	}
+}
+
+func TestWorktreePathForTask_None(t *testing.T) {
+	root := t.TempDir()
+	got, err := worktreePathForTaskAtRoot(root, 247)
+	if err != nil {
+		t.Fatalf("worktree path: %v", err)
+	}
+	if got != "" {
+		t.Errorf("expected empty for missing worktree, got %q", got)
+	}
+}
+
+func TestWorktreePathForTask_NoSubstringFalsePositive(t *testing.T) {
+	// e-1027 should NOT match a request for task 102 — the trailing-7
+	// substring trap that a naive 'e-102*' glob would fall into.
+	root := t.TempDir()
+	mkWorktree(t, root, "e-1027-something")
+
+	got, err := worktreePathForTaskAtRoot(root, 102)
+	if err != nil {
+		t.Fatalf("worktree path: %v", err)
+	}
+	if got != "" {
+		t.Errorf("expected empty (e-1027 should not match task 102), got %q", got)
+	}
+}
+
+func TestWorktreePathForTask_BarePreferredOverSluggedWhenBothExist(t *testing.T) {
+	root := t.TempDir()
+	bare := mkWorktree(t, root, "e-247")
+	mkWorktree(t, root, "e-247-zzz")
+
+	got, err := worktreePathForTaskAtRoot(root, 247)
+	if err != nil {
+		t.Fatalf("worktree path: %v", err)
+	}
+	// Lex-sorted: "e-247" < "e-247-zzz" so bare wins.
+	if got != bare {
+		t.Errorf("expected bare worktree to win, got %q", got)
+	}
+}
+
+func TestWorktreePathForTask_ZeroOrNegative(t *testing.T) {
+	root := t.TempDir()
+	for _, id := range []int64{0, -1} {
+		got, err := worktreePathForTaskAtRoot(root, id)
+		if err != nil {
+			t.Errorf("id=%d should be no-op, got err %v", id, err)
+		}
+		if got != "" {
+			t.Errorf("id=%d should return empty, got %q", id, got)
+		}
+	}
+}
+
+func TestWorktreePathForTask_FileNotDirIgnored(t *testing.T) {
+	root := t.TempDir()
+	worktrees := filepath.Join(root, ".endless", "worktrees")
+	if err := os.MkdirAll(worktrees, 0755); err != nil {
+		t.Fatal(err)
+	}
+	// A regular file at the worktree path — should be ignored, not returned.
+	if err := os.WriteFile(filepath.Join(worktrees, "e-247"), []byte(""), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := worktreePathForTaskAtRoot(root, 247)
+	if err != nil {
+		t.Fatalf("worktree path: %v", err)
+	}
+	if got != "" {
+		t.Errorf("expected file (non-dir) to be ignored, got %q", got)
+	}
+}
