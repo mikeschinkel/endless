@@ -221,6 +221,48 @@ def quick_start():
     click.echo(guide.read_text())
 
 
+_SHELL_INIT_SNIPPET = """\
+# >>> endless shell helpers (regenerate via 'endless shell-init') >>>
+
+# esu — activate a Claude session in this shell.
+#   esu          → auto-resolve to sibling Claude pane in tmux
+#   esu <id>     → explicit endless integer id or Claude UUID prefix
+esu() {
+    local out
+    out="$(endless session use "$@")" || return $?
+    eval "$out"
+}
+
+# escd — cd into the cwd/worktree of a Claude session.
+#   escd         → auto-resolve to sibling Claude pane in tmux
+#   escd <id>    → explicit endless integer id or Claude UUID prefix
+escd() {
+    local target
+    target="$(endless session cd "$@")" || return $?
+    cd "$target"
+}
+
+# <<< endless shell helpers <<<
+"""
+
+
+@main.command("shell-init")
+def shell_init():
+    """Print shell helper functions for bash/zsh.
+
+    Wraps the verbose 'eval "$(endless session use)"' and
+    'cd "$(endless session cd)"' patterns with short functions
+    (esu, escd). One-time setup:
+
+      endless shell-init >> ~/.zshrc        # or ~/.bashrc
+
+    Re-running replaces nothing automatically — find the marker
+    block ('endless shell helpers') in your rc file and replace
+    it manually if the snippet changes.
+    """
+    click.echo(_SHELL_INIT_SNIPPET, nl=False)
+
+
 @main.group("session")
 def session_cmd():
     """View and manage session conversation history."""
