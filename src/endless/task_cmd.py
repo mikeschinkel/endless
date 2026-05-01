@@ -149,6 +149,30 @@ def validate_title(title: str, force: bool = False):
         )
 
 
+DESCRIPTION_MAX_LENGTH = 1024
+
+
+def validate_description(description: str | None):
+    """Reject descriptions longer than 1024 chars or with embedded newlines.
+
+    Per E-1058 / E-1073: description is a 2-3 sentence blurb, not long-form.
+    Empty or None is allowed here; required-ness is E-963's concern.
+    """
+    if not description:
+        return
+    if len(description) > DESCRIPTION_MAX_LENGTH:
+        raise click.ClickException(
+            f"Description is {len(description)} characters; max is {DESCRIPTION_MAX_LENGTH}.\n"
+            f"  Description is a 2-3 sentence blurb, not a dissertation. Long-form context\n"
+            f"  (analysis, plans, verification) belongs in a plan file (--text)."
+        )
+    if "\n" in description or "\r" in description:
+        raise click.ClickException(
+            "Description must be a single line; embedded newlines are not allowed.\n"
+            "  Description is a brief blurb. Long-form context belongs in a plan file (--text)."
+        )
+
+
 def task_id_display(item_id: int) -> str:
     """Format a task ID for display: E-123"""
     return f"E-{item_id}"
@@ -1261,6 +1285,7 @@ def add_item(
     task_type = task_type or "task"
     if task_type != "decision":
         validate_title(title, force=force)
+    validate_description(description)
     _, proj_name = _resolve_project(project_name)
     status = status or ("ready" if tier == 1 else "needs_plan")
 
@@ -1632,6 +1657,9 @@ def update_plan(
         )
     if title is not None and row[0]["type"] != "decision":
         validate_title(title, force=force)
+
+    if description is not None:
+        validate_description(description)
 
     # Validate status if provided
     if status is not None:
