@@ -269,7 +269,13 @@ func handlePostToolUse(projectID int64, payload claudePayload) error {
 	// Snapshot the plan content so within-session overwrites and never-attached
 	// plans don't lose data (E-969). Per-session, content-addressed by SHA-256.
 	if err := snapshotPlanFile(projectID, payload.SessionID, input.FilePath); err != nil {
-		// Non-fatal: snapshotting should never block a hook
+		// Why non-fatal: snapshots are best-effort redundancy (hook error-policy
+		// criterion 1: opportunistic by design). The canonical plan content still
+		// lives in the harness file at input.FilePath and, once attached, in the
+		// task's text field; no automated path reads the snapshots dir — only the
+		// human-driven `endless plan list/show`. Failure is also self-healing
+		// (criterion 2): the next Write to this plan re-attempts, and existingSnapshot
+		// keys on session+content-hash so a missed snapshot is filled in on retry.
 		log.Printf("plan snapshot: %v", err)
 	}
 
