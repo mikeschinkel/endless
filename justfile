@@ -54,7 +54,12 @@ build: _link-templui
     go build -o bin/endless-channel ./cmd/endless-channel
     go build -o bin/endless-event ./cmd/endless-event
 
-# Build and install everything (Go binaries symlinked to /usr/local/bin, Python CLI installed)
+# Build and install everything: Go binaries symlinked to /usr/local/bin,
+# Python CLI installed via uv tool in EDITABLE mode (-e). Editable means the
+# tool's site-packages contains a pointer to this checkout's src/endless/
+# rather than a copy, so subsequent Python source changes go live without
+# rerunning install. Run from the main checkout — running from a worktree
+# would point the global tool at a transient directory.
 install:
     just build
     ln -sfn "$(pwd)/bin/endless-serve" /usr/local/bin/endless-serve
