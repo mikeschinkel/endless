@@ -10,12 +10,13 @@ def test_shell_init_prints_helpers():
     result = runner.invoke(main, ["shell-init"])
     assert result.exit_code == 0
     out = result.output
-    # Both helper functions are present.
+    # Both helper functions are present (E-1050: esp replaces escd).
     assert "esu()" in out
-    assert "escd()" in out
+    assert "esp()" in out
+    assert "escd()" not in out
     # They invoke the right endless subcommands.
     assert "endless session use" in out
-    assert "endless session cd" in out
+    assert "endless session cd --target project" in out
     # Marker block is present so users can find/replace it later.
     assert ">>> endless shell helpers" in out
     assert "<<< endless shell helpers" in out

@@ -224,7 +224,8 @@ def quick_start():
 _SHELL_INIT_SNIPPET = """\
 # >>> endless shell helpers (regenerate via 'endless shell-init') >>>
 
-# esu — activate a Claude session in this shell.
+# esu — activate a Claude session in this shell (cd to its worktree
+#       or cwd, plus export ENDLESS_SESSION_ID).
 #   esu          → auto-resolve to sibling Claude pane in tmux
 #   esu <id>     → explicit endless integer id or Claude UUID prefix
 esu() {
@@ -233,12 +234,12 @@ esu() {
     eval "$out"
 }
 
-# escd — cd into the cwd/worktree of a Claude session.
-#   escd         → auto-resolve to sibling Claude pane in tmux
-#   escd <id>    → explicit endless integer id or Claude UUID prefix
-escd() {
+# esp — cd into the project root of a Claude session.
+#   esp          → auto-resolve to sibling Claude pane in tmux
+#   esp <id>     → explicit endless integer id or Claude UUID prefix
+esp() {
     local target
-    target="$(endless session cd "$@")" || return $?
+    target="$(endless session cd --target project "$@")" || return $?
     cd "$target"
 }
 
@@ -250,9 +251,8 @@ escd() {
 def shell_init():
     """Print shell helper functions for bash/zsh.
 
-    Wraps the verbose 'eval "$(endless session use)"' and
-    'cd "$(endless session cd)"' patterns with short functions
-    (esu, escd). One-time setup:
+    Wraps 'endless session use' and 'endless session cd --target project'
+    with short functions (esu, esp). One-time setup:
 
       endless shell-init >> ~/.zshrc        # or ~/.bashrc
 
@@ -372,19 +372,22 @@ def session_use(session_ref):
 @click.argument("session_ref", required=False, default=None)
 @click.option("--all", "show_all", is_flag=True,
               help="List all live Claude sessions in this project")
-def session_cd(session_ref, show_all):
-    """Print the cwd of a Claude session, for `cd $(...)` wrapping.
+@click.option("--target", "target",
+              type=click.Choice(["auto", "worktree", "project", "cwd"]),
+              default="auto",
+              help="Which path to print: auto (default; worktree else cwd), "
+                   "worktree (errors if none), project (project root), cwd")
+def session_cd(session_ref, show_all, target):
+    """Print a path for a Claude session, for `cd $(...)` wrapping.
 
-    With no arg, in tmux: auto-resolves to the sole sibling Claude pane in
-    the current window. Use --all to list candidates. Provide an endless
-    integer id or a Claude UUID prefix to disambiguate.
+    With no session-ref, in tmux: auto-resolves to the sole sibling Claude
+    pane in the current window. Use --all to list candidates. Provide an
+    endless integer id or a Claude UUID prefix to disambiguate.
 
-    Suggested shell wrapper:
-
-      escd() { cd "$(endless session cd "$@")"; }
+    See `endless shell-init` for esu/esp wrapper functions.
     """
     from endless.session_cmd import session_cd_resolve
-    session_cd_resolve(session_ref, show_all=show_all)
+    session_cd_resolve(session_ref, show_all=show_all, target=target)
 
 
 @session_cmd.command("reimport")

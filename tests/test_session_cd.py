@@ -241,3 +241,81 @@ def test_worktree_path_falls_back_to_cwd_when_missing(registered_with_sessions, 
 
     session_cmd.session_cd_resolve("42")
     assert capsys.readouterr().out.strip() == "/the/cwd"
+
+
+# ---------- --target flag (E-1050) ------------------------------------------
+
+def test_target_cwd_returns_cwd_field_unchanged(registered_with_sessions, capsys, tmp_path):
+    """target=cwd returns companion's cwd field as-is, no fall-back logic."""
+    _, sessions_dir = registered_with_sessions
+    real_wt = tmp_path / "wt"
+    real_wt.mkdir()
+    _write_companion(
+        sessions_dir,
+        endless_session_id=42,
+        cwd="/raw/cwd",
+        worktree_path=str(real_wt),  # would win under auto, but cwd target ignores it
+    )
+
+    session_cmd.session_cd_resolve("42", target="cwd")
+    assert capsys.readouterr().out.strip() == "/raw/cwd"
+
+
+def test_target_worktree_returns_worktree(registered_with_sessions, capsys, tmp_path):
+    """target=worktree returns the worktree path when bound and existing."""
+    _, sessions_dir = registered_with_sessions
+    real_wt = tmp_path / "wt-here"
+    real_wt.mkdir()
+    _write_companion(
+        sessions_dir,
+        endless_session_id=42,
+        cwd="/the/cwd",
+        worktree_path=str(real_wt),
+    )
+
+    session_cmd.session_cd_resolve("42", target="worktree")
+    assert capsys.readouterr().out.strip() == str(real_wt)
+
+
+def test_target_worktree_errors_when_unbound(registered_with_sessions, capsys):
+    """target=worktree errors (no fall-back) when no worktree is bound."""
+    _, sessions_dir = registered_with_sessions
+    _write_companion(sessions_dir, endless_session_id=42, cwd="/the/cwd")  # no worktree
+
+    with pytest.raises(SystemExit) as exc:
+        session_cmd.session_cd_resolve("42", target="worktree")
+    assert exc.value.code == 1
+    err = capsys.readouterr().err
+    assert "no worktree bound" in err.lower()
+
+
+def test_target_worktree_errors_when_missing(registered_with_sessions, capsys):
+    """target=worktree errors when worktree_path is set but the dir is gone."""
+    _, sessions_dir = registered_with_sessions
+    _write_companion(
+        sessions_dir,
+        endless_session_id=42,
+        cwd="/the/cwd",
+        worktree_path="/this/is/gone",
+    )
+
+    with pytest.raises(SystemExit) as exc:
+        session_cmd.session_cd_resolve("42", target="worktree")
+    assert exc.value.code == 1
+    err = capsys.readouterr().err
+    assert "no longer exists" in err
+
+
+def test_target_project_returns_project_root(registered_with_sessions, capsys):
+    """target=project returns the registered project path via DB lookup."""
+    project_dir, sessions_dir = registered_with_sessions
+    from endless import db
+    db.execute(
+        "INSERT INTO sessions (id, session_id, project_id, platform, state) "
+        "VALUES (?, ?, (SELECT id FROM projects WHERE name='my-project'), 'claude', 'idle')",
+        (42, "f41f263e-c708-4c42-af7c-083b5be04943"),
+    )
+    _write_companion(sessions_dir, endless_session_id=42, cwd="/some/where")
+
+    session_cmd.session_cd_resolve("42", target="project")
+    assert capsys.readouterr().out.strip() == str(project_dir)

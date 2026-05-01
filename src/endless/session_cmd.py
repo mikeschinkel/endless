@@ -1095,25 +1095,73 @@ def _short_path(p: str) -> str:
     return p
 
 
-def _emit_resolution_status(c: dict) -> None:
+def _emit_resolution_status(c: dict, target_path: str, target: str = "auto") -> None:
     """Emit confirmation status (and warning if applicable) to stderr.
 
     Silence is wrong when a command produces no visible effect: the user
     can't tell if anything happened. Status goes to stderr so stdout stays
-    clean for shell evaluation. The stale-worktree warning surfaces an
-    anomalous fallback that _target_path would otherwise hide. (E-1047.)
+    clean for shell evaluation. (E-1047.)
 
     Paths are shortened with ~ for display only (E-1049); stdout's cd
     target keeps the full path so shell eval works correctly.
+
+    The stale-worktree warning fires only for target='auto' — that's the
+    only mode that silently falls back from worktree to cwd. Explicit
+    targets (worktree, cwd, project) either succeed cleanly or surface
+    their own error. (E-1050.)
     """
     eid = c.get("endless_session_id", "")
-    wt = c.get("worktree_path") or ""
-    if wt and not os.path.isdir(wt):
-        click.echo(
-            f"! worktree {_short_path(wt)} no longer exists; falling back to cwd",
-            err=True,
-        )
-    click.echo(f"• Session {eid} → {_short_path(_target_path(c))}", err=True)
+    if target == "auto":
+        wt = c.get("worktree_path") or ""
+        if wt and not os.path.isdir(wt):
+            click.echo(
+                f"! worktree {_short_path(wt)} no longer exists; falling back to cwd",
+                err=True,
+            )
+    click.echo(f"• Session {eid} → {_short_path(target_path)}", err=True)
+
+
+def _session_project_root(c: dict) -> str:
+    """Look up the project root for a companion's session via DB. (E-1050.)"""
+    eid = c.get("endless_session_id")
+    if not eid:
+        return ""
+    rows = db.query(
+        "SELECT p.path FROM sessions s "
+        "LEFT JOIN projects p ON s.project_id = p.id "
+        "WHERE s.id = ?",
+        (eid,),
+    )
+    if not rows:
+        return ""
+    return rows[0]["path"] or ""
+
+
+def _resolve_target(c: dict, target: str) -> str | None:
+    """Resolve the cd target for the given --target choice. Returns None
+    on error (with the error message already emitted to stderr). (E-1050.)
+    """
+    if target == "auto":
+        return _target_path(c)
+    if target == "cwd":
+        return c.get("cwd") or ""
+    if target == "worktree":
+        wt = c.get("worktree_path") or ""
+        if not wt:
+            click.echo("Session has no worktree bound.", err=True)
+            return None
+        if not os.path.isdir(wt):
+            click.echo(f"Worktree {_short_path(wt)} no longer exists.", err=True)
+            return None
+        return wt
+    if target == "project":
+        root = _session_project_root(c)
+        if not root:
+            click.echo("Could not determine project root for session.", err=True)
+            return None
+        return root
+    click.echo(f"Unknown --target value: {target}", err=True)
+    return None
 
 
 def _format_companion_row(c: dict) -> str:
@@ -1181,8 +1229,18 @@ def _resolve_companion(
     raise SystemExit(1)
 
 
-def session_cd_resolve(session_ref: str | None, show_all: bool = False) -> None:
-    """Resolve a Claude session to its cwd/worktree and print the path.
+def session_cd_resolve(
+    session_ref: str | None,
+    show_all: bool = False,
+    target: str = "auto",
+) -> None:
+    """Resolve a Claude session to a path and print it.
+
+    --target choices (E-1050):
+      auto      worktree if it exists, else cwd (default)
+      worktree  worktree only; errors if not bound or missing
+      project   project root from DB
+      cwd       companion's cwd field as-is
 
     Designed for shell wrapping: `cd "$(endless session cd <id>)"`.
     Success prints just the path on stdout. Errors go to stderr with a
@@ -1202,8 +1260,11 @@ def session_cd_resolve(session_ref: str | None, show_all: bool = False) -> None:
         return
 
     c = _resolve_companion(session_ref, live, list_hint="endless session cd --all")
-    click.echo(_target_path(c))
-    _emit_resolution_status(c)
+    target_path = _resolve_target(c, target)
+    if target_path is None:
+        raise SystemExit(1)
+    click.echo(target_path)
+    _emit_resolution_status(c, target_path, target=target)
 
 
 def session_show_resolve(session_ref: str | None, as_json: bool = False) -> None:
@@ -1321,10 +1382,10 @@ def session_use_resolve(session_ref: str | None) -> None:
     c = _resolve_companion(session_ref, live, list_hint="endless session list")
 
     eid = c.get("endless_session_id", "")
-    target = _target_path(c)  # validated: worktree if dir exists, else cwd
+    target_path = _target_path(c)  # validated: worktree if dir exists, else cwd
 
     lines = [
-        f"cd {shlex.quote(target)}",
+        f"cd {shlex.quote(target_path)}",
         f"export ENDLESS_SESSION_ID={shlex.quote(str(eid))}",
     ]
 
@@ -1338,7 +1399,7 @@ def session_use_resolve(session_ref: str | None) -> None:
             lines.append(ext_output.rstrip())
 
     click.echo("\n".join(lines))
-    _emit_resolution_status(c)
+    _emit_resolution_status(c, target_path)
 
 
 def _run_use_extension(path: Path, extra_env: dict[str, str]) -> str | None:
