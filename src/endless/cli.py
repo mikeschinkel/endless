@@ -1114,6 +1114,26 @@ def worktree_for_task(task_id, as_json):
     for_task(task_id, as_json)
 
 
+@worktree_cmd.command("land")
+@click.argument("task_id")
+@click.option("--dry-run", is_flag=True,
+              help="Show what would happen without making changes")
+def worktree_land(task_id, dry_run):
+    """Auto-commit endless-managed dirt, rebase, ff-merge, remove worktree (E-987)."""
+    from endless.worktree_cmd import land_worktree
+    land_worktree(task_id, dry_run)
+
+
+@worktree_cmd.command("drop")
+@click.argument("name_or_path")
+@click.option("--force", is_flag=True,
+              help="Drop even if dirty/unmerged/foreign")
+def worktree_drop(name_or_path, force):
+    """Remove a worktree (refuses dirty/unmerged/foreign without --force)."""
+    from endless.worktree_cmd import drop_worktree
+    drop_worktree(name_or_path, force)
+
+
 @main.group("phrase")
 def phrase_cmd():
     """Manage matchers (verbs, pivots, action regexes) in config files."""

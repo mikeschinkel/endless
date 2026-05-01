@@ -1,18 +1,25 @@
-"""Read-only inspection CLI for git worktrees managed by endless.
+"""Inspection and mutation CLI for git worktrees managed by endless.
 
-Mutation operations (land, drop, auto-create on session/task start) come
-in subsequent E-971 layers. This module focuses on inspection:
-
+Inspection (foundation, E-971):
 - list: enumerate all git worktrees of the current project, classified
 - current: report the worktree for cwd
 - show: detail for one worktree
 - for-task: resolve a task ID to its worktree path
 
+Mutation (this slice, E-971 + E-987 + E-1056):
+- land: auto-commit endless-managed files, rebase worktree onto main,
+  ff-merge, remove worktree
+- drop: explicit cleanup (refuses dirty/unmerged without --force)
+
+Auto-creation triggers (next slice): SessionStart hook, plan-bearing
+task start.
+
 Worktree state is filesystem-authoritative (per E-971 design): no DB
 tables. Each endless-managed worktree has a companion JSON file at
 <worktree-root>/.endless/worktree.json with task_id, base_branch,
 branch, created_at. Worktrees without the companion are 'foreign'
-(created by another tool or by hand) and are listed but never mutated.
+(created by another tool or by hand) and are listed but never mutated
+by land/drop.
 
 Lifecycle states (derived):
 - active: git knows about it AND endless companion is present
@@ -21,6 +28,7 @@ Lifecycle states (derived):
 - abandoned: heuristic — unmerged, no live session bound
 """
 
+import fnmatch
 import json
 import re
 import subprocess
@@ -32,6 +40,19 @@ from endless.task_cmd import _resolve_project
 
 
 COMPANION_FILENAME = ".endless/worktree.json"
+
+# Auto-committed file globs per E-987 (locked) + E-1056 (config.json added).
+# Land treats these as endless-managed: dirty state in any of these does
+# not block land; instead, land auto-commits them as a separate commit
+# before the worktree's commits.
+AUTO_COMMIT_GLOBS = (
+    ".endless/events/*.jsonl",
+    ".endless/plans/snapshots/*",
+    ".endless/config.json",
+)
+
+# Land's retry cap for the race-with-concurrent-writers loop (E-987).
+LAND_MAX_RETRIES = 8
 
 
 def _project_root() -> Path:
@@ -292,3 +313,275 @@ def for_task(task_id: str, as_json: bool) -> None:
         }))
     else:
         click.echo(match["path"])
+
+
+# --- Mutation: land + drop -------------------------------------------------
+
+def _is_auto_commit_path(rel_path: str) -> bool:
+    """True if rel_path matches any AUTO_COMMIT_GLOBS pattern."""
+    for pat in AUTO_COMMIT_GLOBS:
+        if fnmatch.fnmatch(rel_path, pat):
+            return True
+    return False
+
+
+def _git_status_partition(repo_root: Path) -> tuple[list[str], list[str]]:
+    """Run `git status --porcelain -z` from repo_root and partition file paths.
+
+    Returns (auto_commit_files, user_work_files) — both lists of repo-relative
+    paths. Untracked files included.
+    """
+    out = subprocess.run(
+        ["git", "status", "--porcelain", "-z"],
+        capture_output=True, text=True, check=True, cwd=str(repo_root),
+    ).stdout
+    auto, user = [], []
+    if not out:
+        return auto, user
+    # -z output is NUL-separated entries: "XY <path>\0" (and "XY <path>\0<oldpath>\0" for renames)
+    entries = out.split("\0")
+    i = 0
+    while i < len(entries):
+        entry = entries[i]
+        if not entry:
+            i += 1
+            continue
+        if len(entry) < 4:
+            i += 1
+            continue
+        status = entry[:2]
+        path = entry[3:]
+        # Renames have an oldpath in the next entry
+        if "R" in status or "C" in status:
+            i += 2
+        else:
+            i += 1
+        if _is_auto_commit_path(path):
+            auto.append(path)
+        else:
+            user.append(path)
+    return auto, user
+
+
+def _git_run(args: list[str], cwd: Path, check: bool = True) -> subprocess.CompletedProcess:
+    """Run a git command with text capture, returning the CompletedProcess.
+
+    Distinct from `_git` (which returns trimmed stdout): land/drop logic
+    needs access to stderr and exit code for branching, not just stdout.
+    """
+    return subprocess.run(
+        ["git", *args],
+        capture_output=True, text=True, check=check, cwd=str(cwd),
+    )
+
+
+def _branch_for_task(rows: list[dict], task_id: str) -> dict | None:
+    """Find the worktree row whose companion's task_id matches."""
+    for r in rows:
+        if r["companion"] and r["companion"].get("task_id") == task_id:
+            return r
+    return None
+
+
+def _normalize_task_id(task_id: str) -> str:
+    m = re.fullmatch(r"(?:[Ee]-)?(\d+)", task_id.strip())
+    if m is None:
+        raise click.ClickException(f"Invalid task id: {task_id}")
+    return f"E-{m.group(1)}"
+
+
+def land_worktree(task_id: str, dry_run: bool) -> None:
+    """Land the worktree for <task-id> into main per E-987's algorithm.
+
+    Loop:
+      1. Partition git status into auto-commit vs user-work.
+      2. If user-work is non-empty: refuse with actionable message.
+      3. If auto-commit is non-empty: 'git add' and commit them as
+         'Endless: auto-record session activity'.
+      4. Rebase the worktree branch onto main (in the worktree).
+      5. ff-merge from main.
+      6. Remove the worktree.
+
+    Retry up to LAND_MAX_RETRIES if a concurrent writer dirties auto-files
+    between auto-commit and merge attempt.
+    """
+    canonical = _normalize_task_id(task_id)
+    main_root = _project_root()
+    rows = _enriched_list(main_root)
+    target = _branch_for_task(rows, canonical)
+    if target is None:
+        raise click.ClickException(
+            f"No endless-managed worktree for {canonical}. "
+            f"(Use 'endless worktree list' to see available worktrees.)"
+        )
+    branch = target["branch"]
+    if not branch:
+        raise click.ClickException(
+            f"Worktree for {canonical} has no branch (detached HEAD); cannot land."
+        )
+    worktree_path = Path(target["path"])
+    base_branch = (target["companion"] or {}).get("base_branch", "main")
+
+    if dry_run:
+        click.echo(f"Would land: {canonical}")
+        click.echo(f"  Worktree: {worktree_path}")
+        click.echo(f"  Branch:   {branch}")
+        click.echo(f"  Base:     {base_branch}")
+        click.echo(f"  Main:     {main_root}")
+        return
+
+    last_error = None
+    for attempt in range(1, LAND_MAX_RETRIES + 1):
+        # Step 1: partition main's working-tree dirt.
+        try:
+            auto_files, user_files = _git_status_partition(main_root)
+        except subprocess.CalledProcessError as e:
+            raise click.ClickException(f"git status failed: {e.stderr or e}")
+
+        # Step 2: refuse if user-work dirty.
+        if user_files:
+            file_list = "\n  ".join(user_files[:20])
+            more = "" if len(user_files) <= 20 else f"\n  ... and {len(user_files) - 20} more"
+            raise click.ClickException(
+                f"main has uncommitted user changes; cannot land {canonical}.\n\n"
+                f"Files:\n  {file_list}{more}\n\n"
+                f"Resolve them: commit (in a worktree), move to a worktree, or set them aside, then retry."
+            )
+
+        # Step 3: auto-commit endless-managed dirt, if any.
+        if auto_files:
+            try:
+                _git_run(["add", "--", *auto_files], cwd=main_root)
+                _git_run(
+                    ["commit", "-m", "Endless: auto-record session activity"],
+                    cwd=main_root,
+                )
+            except subprocess.CalledProcessError as e:
+                raise click.ClickException(
+                    f"auto-commit failed: {e.stderr or e}"
+                )
+
+        # Step 4: rebase the worktree branch onto main.
+        try:
+            _git_run(["rebase", base_branch], cwd=worktree_path)
+        except subprocess.CalledProcessError as e:
+            err_text = (e.stderr or "") + (e.stdout or "")
+            # Try to recover and report
+            _git_run(["rebase", "--abort"], cwd=worktree_path, check=False)
+            raise click.ClickException(
+                f"rebase of {branch} onto {base_branch} failed.\n\n"
+                f"Likely cause: a worktree branch commit modifies an "
+                f"endless-managed auto-file (events log, snapshot, or "
+                f"config.json). This violates the E-972 routing rule and "
+                f"shouldn't normally happen.\n\n"
+                f"Recover: from the worktree, run\n"
+                f"  git checkout {base_branch} -- "
+                f"{' '.join(AUTO_COMMIT_GLOBS)}\n"
+                f"then retry land. (E-1019 will eventually automate this.)\n\n"
+                f"Git output:\n{err_text}"
+            )
+
+        # Step 5: ff-merge.
+        try:
+            _git_run(["merge", "--ff-only", branch], cwd=main_root)
+        except subprocess.CalledProcessError as e:
+            err_text = (e.stderr or "") + (e.stdout or "")
+            if "uncommitted" in err_text.lower() or "would be overwritten" in err_text.lower():
+                # Concurrent writer dirtied auto-files between our auto-commit
+                # and the merge attempt. Loop.
+                last_error = err_text
+                continue
+            raise click.ClickException(
+                f"ff-merge failed: {err_text}"
+            )
+
+        # Step 6: remove the worktree.
+        try:
+            _git_run(["worktree", "remove", str(worktree_path)], cwd=main_root)
+        except subprocess.CalledProcessError as e:
+            err_text = (e.stderr or "") + (e.stdout or "")
+            click.echo(
+                click.style("•", fg="yellow")
+                + f" Landed {canonical} but worktree removal failed: {err_text}\n"
+                f"Manual cleanup: git worktree remove {worktree_path}"
+            )
+        else:
+            # Also delete the branch since it's fully merged
+            _git_run(["branch", "-d", branch], cwd=main_root, check=False)
+
+        click.echo(
+            click.style("•", fg="green")
+            + f" Landed {canonical} ({branch}) into {base_branch}"
+        )
+        return
+
+    raise click.ClickException(
+        f"Land of {canonical} failed after {LAND_MAX_RETRIES} retries; "
+        f"another session is appending to auto-files faster than land "
+        f"can converge. Try again later.\n\nLast error:\n{last_error or '(none)'}"
+    )
+
+
+def drop_worktree(name_or_path: str, force: bool) -> None:
+    """Remove a worktree explicitly. Refuses dirty/unmerged/foreign without --force."""
+    main_root = _project_root()
+    rows = _enriched_list(main_root)
+
+    # Find by trailing path segment or absolute path
+    target = None
+    candidate = Path(name_or_path)
+    if candidate.is_absolute():
+        target_path = candidate.resolve()
+        target = next(
+            (r for r in rows if Path(r["path"]).resolve() == target_path),
+            None,
+        )
+    if target is None:
+        for r in rows:
+            if Path(r["path"]).name == name_or_path:
+                target = r
+                break
+    if target is None:
+        raise click.ClickException(f"No worktree matches: {name_or_path}")
+    if target["state"] == "main":
+        raise click.ClickException("Refusing to drop the main checkout.")
+
+    worktree_path = Path(target["path"])
+
+    if not force:
+        if target["state"] == "foreign":
+            raise click.ClickException(
+                f"Refusing to drop foreign worktree (no endless companion): "
+                f"{worktree_path}\n"
+                f"Use --force to drop anyway, or remove via 'git worktree remove'."
+            )
+        # Check for uncommitted changes in the worktree
+        try:
+            res = _git_run(
+                ["status", "--porcelain"],
+                cwd=worktree_path,
+                check=True,
+            )
+            if res.stdout.strip():
+                raise click.ClickException(
+                    f"Worktree has uncommitted changes: {worktree_path}\n"
+                    f"Commit or discard them, or use --force."
+                )
+        except subprocess.CalledProcessError as e:
+            raise click.ClickException(f"git status check failed: {e.stderr or e}")
+
+    cmd = ["worktree", "remove"]
+    if force:
+        cmd.append("--force")
+    cmd.append(str(worktree_path))
+    try:
+        _git_run(cmd, cwd=main_root)
+    except subprocess.CalledProcessError as e:
+        raise click.ClickException(
+            f"git worktree remove failed: {e.stderr or e}"
+        )
+
+    click.echo(
+        click.style("•", fg="cyan")
+        + f" Dropped worktree: {worktree_path}"
+    )
