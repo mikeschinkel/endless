@@ -37,7 +37,8 @@ def project_with_companion(registered_project, monkeypatch):
 
 # ---------- default activation block ----------------------------------------
 
-def test_use_emits_default_block(project_with_companion, capsys):
+def test_use_emits_minimal_block(project_with_companion, capsys):
+    """Activation block is minimal: cd + ENDLESS_SESSION_ID. (E-1038.)"""
     project_root, sessions_dir = project_with_companion
     _write_companion(sessions_dir, cwd=str(project_root))
 
@@ -46,30 +47,44 @@ def test_use_emits_default_block(project_with_companion, capsys):
 
     assert f"cd {shlex.quote(str(project_root))}" in out
     assert "export ENDLESS_SESSION_ID=247" in out
-    assert "export ENDLESS_HARNESS_SESSION_ID=f41f263e-c708-4c42-af7c-083b5be04943" in out
-    assert "export ENDLESS_HARNESS=claude" in out
-    assert f"export ENDLESS_PROJECT_ROOT={shlex.quote(str(project_root))}" in out
-    assert "export ENDLESS_WORKTREE_PATH=''" in out  # shlex.quote('') == "''"
+    # Other ENDLESS_* vars are no longer in the activation block — fields
+    # are looked up on demand via 'endless session show <id> --json'.
+    assert "ENDLESS_HARNESS_SESSION_ID" not in out
+    assert "ENDLESS_HARNESS=" not in out
+    assert "ENDLESS_PROJECT_ROOT" not in out
+    assert "ENDLESS_WORKTREE_PATH" not in out
 
 
-def test_use_prefers_worktree_path(project_with_companion, capsys):
+def test_use_cds_to_existing_worktree(project_with_companion, capsys, tmp_path):
     _, sessions_dir = project_with_companion
-    _write_companion(sessions_dir, worktree_path="/some/worktree", cwd="/the/cwd")
+    real_worktree = tmp_path / "real-worktree"
+    real_worktree.mkdir()
+    _write_companion(sessions_dir, worktree_path=str(real_worktree), cwd="/the/cwd")
 
     session_cmd.session_use_resolve("247")
     out = capsys.readouterr().out
-    assert "cd /some/worktree" in out
-    assert "export ENDLESS_WORKTREE_PATH=/some/worktree" in out
+    assert f"cd {shlex.quote(str(real_worktree))}" in out
 
 
-def test_use_no_extension_only_default_block(project_with_companion, capsys):
+def test_use_falls_back_to_cwd_when_worktree_missing(project_with_companion, capsys):
+    """If companion's worktree_path doesn't exist on disk, cd to cwd. (E-1037 / E-1038.)"""
+    _, sessions_dir = project_with_companion
+    _write_companion(sessions_dir, worktree_path="/this/path/does/not/exist", cwd="/the/cwd")
+
+    session_cmd.session_use_resolve("247")
+    out = capsys.readouterr().out
+    assert "cd /the/cwd" in out
+    assert "/this/path/does/not/exist" not in out
+
+
+def test_use_no_extension_only_minimal_block(project_with_companion, capsys):
     project_root, sessions_dir = project_with_companion
     _write_companion(sessions_dir)
 
     session_cmd.session_use_resolve("247")
     out = capsys.readouterr().out
-    # No extension exists; output is exactly the default block (6 lines).
-    assert out.count("\n") == 6
+    # Two lines: cd + one export.
+    assert out.count("\n") == 2
     assert "endless/extensions" not in out  # no warnings about extension
 
 
@@ -101,21 +116,29 @@ def test_use_extension_stdout_appended(project_with_companion, capsys):
     assert "export ENDLESS_SESSION_ID=247" in out
 
 
-def test_use_extension_receives_env_vars(project_with_companion, capsys):
+def test_use_extension_receives_only_session_id(project_with_companion, capsys):
+    """Extension's env contains ENDLESS_SESSION_ID and nothing else
+    ENDLESS_*-prefixed. Other fields are looked up via 'endless session show'.
+    (E-1038.)
+    """
     project_root, sessions_dir = project_with_companion
     _write_companion(sessions_dir, worktree_path="/the/wt")
     _write_extension(
         project_root,
-        '#!/bin/sh\necho "export GOT_SESSION=$ENDLESS_SESSION_ID"\n'
-        'echo "export GOT_WT=$ENDLESS_WORKTREE_PATH"\n'
-        'echo "export GOT_HARNESS=$ENDLESS_HARNESS"\n',
+        '#!/bin/sh\n'
+        'echo "export GOT_SESSION=$ENDLESS_SESSION_ID"\n'
+        'echo "export GOT_WT=${ENDLESS_WORKTREE_PATH:-unset}"\n'
+        'echo "export GOT_HARNESS=${ENDLESS_HARNESS:-unset}"\n'
+        'echo "export GOT_PROJECT=${ENDLESS_PROJECT_ROOT:-unset}"\n',
     )
 
     session_cmd.session_use_resolve("247")
     out = capsys.readouterr().out
     assert "export GOT_SESSION=247" in out
-    assert "export GOT_WT=/the/wt" in out
-    assert "export GOT_HARNESS=claude" in out
+    # The dropped vars must not leak into the extension's env.
+    assert "export GOT_WT=unset" in out
+    assert "export GOT_HARNESS=unset" in out
+    assert "export GOT_PROJECT=unset" in out
 
 
 def test_use_extension_nonzero_exit_warns_but_continues(project_with_companion, capsys):

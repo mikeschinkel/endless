@@ -1065,8 +1065,17 @@ def _tmux_window_pane_ids() -> list[str] | None:
 
 
 def _target_path(c: dict) -> str:
-    """Return the cwd or worktree_path of a companion record."""
-    return c.get("worktree_path") or c.get("cwd") or ""
+    """Return the worktree_path if its directory exists, else cwd.
+
+    The companion file's worktree_path can go stale between hook events
+    (a worktree gets removed without firing a refresh). Validating at
+    read time means readers fall back to cwd silently rather than
+    emitting a path that no longer exists. (E-1037 / E-1038.)
+    """
+    wt = c.get("worktree_path") or ""
+    if wt and os.path.isdir(wt):
+        return wt
+    return c.get("cwd") or ""
 
 
 def _format_companion_row(c: dict) -> str:
@@ -1250,14 +1259,18 @@ _USE_EXTENSION_TIMEOUT_SEC = 5
 
 
 def session_use_resolve(session_ref: str | None) -> None:
-    """Print shell-evaluable activation for a Claude session (E-1014).
+    """Print shell-evaluable activation for a Claude session (E-1014, E-1038).
 
     Designed for: eval "$(endless session use)"
 
-    Always emits the default activation block (cd + ENDLESS_* env vars). If
-    a per-project extension script lives at .endless/extensions/use.sh, its
-    stdout is appended after the default block. The extension runs with
-    ENDLESS_* vars in its env and a hard 5s timeout. Warnings (security
+    Emits a minimal block — cd to the session's worktree (if its directory
+    exists) or cwd, plus ENDLESS_SESSION_ID. Other fields (harness, project
+    root, etc.) are looked up on demand via 'endless session show <id>
+    --json' so they're never stale.
+
+    If a per-project extension script lives at .endless/extensions/use.sh,
+    its stdout is appended after the default block. The extension runs with
+    ENDLESS_SESSION_ID in its env and a hard 5s timeout. Warnings (security
     refusal, timeout, non-zero exit) go to stderr; the default block is
     always emitted regardless.
     """
@@ -1269,32 +1282,18 @@ def session_use_resolve(session_ref: str | None) -> None:
     c = _resolve_companion(session_ref, live, list_hint="endless session list")
 
     eid = c.get("endless_session_id", "")
-    uuid = c.get("harness_session_id", "") or ""
-    harness = c.get("harness", "") or ""
-    cwd = c.get("cwd", "") or ""
-    worktree = c.get("worktree_path") or ""
-    target = worktree or cwd
+    target = _target_path(c)  # validated: worktree if dir exists, else cwd
 
     lines = [
         f"cd {shlex.quote(target)}",
         f"export ENDLESS_SESSION_ID={shlex.quote(str(eid))}",
-        f"export ENDLESS_HARNESS_SESSION_ID={shlex.quote(uuid)}",
-        f"export ENDLESS_HARNESS={shlex.quote(harness)}",
-        f"export ENDLESS_PROJECT_ROOT={shlex.quote(str(project_root))}",
-        f"export ENDLESS_WORKTREE_PATH={shlex.quote(worktree)}",
     ]
 
     extension = project_root / ".endless" / "extensions" / "use.sh"
     if extension.exists():
         ext_output = _run_use_extension(
             extension,
-            {
-                "ENDLESS_SESSION_ID": str(eid),
-                "ENDLESS_HARNESS_SESSION_ID": uuid,
-                "ENDLESS_HARNESS": harness,
-                "ENDLESS_PROJECT_ROOT": str(project_root),
-                "ENDLESS_WORKTREE_PATH": worktree,
-            },
+            {"ENDLESS_SESSION_ID": str(eid)},
         )
         if ext_output:
             lines.append(ext_output.rstrip())

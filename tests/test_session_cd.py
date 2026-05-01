@@ -211,14 +211,30 @@ def test_show_all_empty(registered_with_sessions, capsys):
     assert "No live Claude sessions" in err
 
 
-def test_worktree_path_preferred_when_set(registered_with_sessions, capsys):
+def test_worktree_path_preferred_when_set(registered_with_sessions, capsys, tmp_path):
+    _, sessions_dir = registered_with_sessions
+    real_worktree = tmp_path / "real-worktree"
+    real_worktree.mkdir()
+    _write_companion(
+        sessions_dir,
+        endless_session_id=42,
+        cwd="/the/cwd",
+        worktree_path=str(real_worktree),
+    )
+
+    session_cmd.session_cd_resolve("42")
+    assert capsys.readouterr().out.strip() == str(real_worktree)
+
+
+def test_worktree_path_falls_back_to_cwd_when_missing(registered_with_sessions, capsys):
+    """When companion's worktree_path doesn't exist on disk, cd uses cwd. (E-1037 / E-1038.)"""
     _, sessions_dir = registered_with_sessions
     _write_companion(
         sessions_dir,
         endless_session_id=42,
         cwd="/the/cwd",
-        worktree_path="/the/worktree",
+        worktree_path="/this/does/not/exist",
     )
 
     session_cmd.session_cd_resolve("42")
-    assert capsys.readouterr().out.strip() == "/the/worktree"
+    assert capsys.readouterr().out.strip() == "/the/cwd"
