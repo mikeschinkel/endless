@@ -1,6 +1,6 @@
 module github.com/mikeschinkel/endless
 
-go 1.25.3
+go 1.26.2
 
 require (
 	github.com/a-h/templ v0.3.1001
@@ -50,3 +50,5 @@ require (
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
 )
+
+replace github.com/mikeschinkel/go-gitutil => ../../../../go-pkgs/go-gitutil

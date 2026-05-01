@@ -1001,6 +1001,49 @@ def channel_close():
     close()
 
 
+@main.group("worktree")
+def worktree_cmd():
+    """Inspect git worktrees managed by endless (E-971 foundation, read-only)."""
+    pass
+
+
+@worktree_cmd.command("list")
+@click.option("--state", "state_filter", default=None,
+              type=click.Choice(["main", "active", "foreign"]),
+              help="Filter by lifecycle state")
+@click.option("--json", "as_json", is_flag=True, help="JSON output")
+def worktree_list(state_filter, as_json):
+    """List worktrees for the current project."""
+    from endless.worktree_cmd import list_worktrees
+    list_worktrees(state_filter, as_json)
+
+
+@worktree_cmd.command("current")
+@click.option("--json", "as_json", is_flag=True, help="JSON output")
+def worktree_current(as_json):
+    """Show the worktree for the current cwd."""
+    from endless.worktree_cmd import current_worktree
+    current_worktree(as_json)
+
+
+@worktree_cmd.command("show")
+@click.argument("name_or_path")
+@click.option("--json", "as_json", is_flag=True, help="JSON output")
+def worktree_show(name_or_path, as_json):
+    """Show detail for one worktree (by trailing path segment or absolute path)."""
+    from endless.worktree_cmd import show_worktree
+    show_worktree(name_or_path, as_json)
+
+
+@worktree_cmd.command("for-task")
+@click.argument("task_id")
+@click.option("--json", "as_json", is_flag=True, help="JSON output")
+def worktree_for_task(task_id, as_json):
+    """Resolve a task ID to its worktree path (or report none)."""
+    from endless.worktree_cmd import for_task
+    for_task(task_id, as_json)
+
+
 @main.group("phrase")
 def phrase_cmd():
     """Manage matchers (verbs, pivots, action regexes) in config files."""
