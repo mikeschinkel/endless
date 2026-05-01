@@ -1,9 +1,18 @@
 """Global and project configuration management."""
 
 import json
+import os
 from pathlib import Path
 
-CONFIG_DIR = Path.home() / ".config" / "endless"
+
+def _config_root() -> Path:
+    xdg = os.environ.get("XDG_CONFIG_HOME")
+    if xdg:
+        return Path(xdg)
+    return Path.home() / ".config"
+
+
+CONFIG_DIR = _config_root() / "endless"
 CONFIG_FILE = CONFIG_DIR / "config.json"
 DB_PATH = CONFIG_DIR / "endless.db"
 

@@ -87,7 +87,7 @@ def emit_event(
 
 def _get_or_create_node_id() -> str:
     """Read node_id from config.json, or generate and persist one."""
-    config_path = Path.home() / ".config" / "endless" / "config.json"
+    config_path = config.CONFIG_FILE
     if not config_path.exists():
         raise click.ClickException(
             f"Config not found at {config_path}. Run 'endless scan' first."
