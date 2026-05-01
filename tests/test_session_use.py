@@ -206,14 +206,19 @@ def test_use_extension_timeout(project_with_companion, monkeypatch, capsys):
     assert "export ENDLESS_SESSION_ID=247" in cap.out
 
 
-def test_use_no_extension_dir_silent(project_with_companion, capsys):
-    """When .endless/extensions/ doesn't exist at all, no warnings."""
+def test_use_no_extension_no_warning(project_with_companion, capsys):
+    """When no extension exists, only the status line appears on stderr —
+    no extension-related warnings (E-1047)."""
     _, sessions_dir = project_with_companion
     _write_companion(sessions_dir)
 
     session_cmd.session_use_resolve("247")
     cap = capsys.readouterr()
-    assert cap.err == ""
+    # Status line is expected on stderr (E-1047); no warnings.
+    assert "Session 247" in cap.err
+    assert "warning" not in cap.err
+    assert "extension" not in cap.err
+    assert "!" not in cap.err  # no stale-worktree warning
 
 
 # ---------- resolution (mirrors session cd / show) --------------------------
@@ -251,3 +256,53 @@ def test_use_unknown_id_errors(project_with_companion, capsys):
     assert exc.value.code == 1
     err = capsys.readouterr().err
     assert "No Claude session matches" in err
+
+
+# ---------- status messages (E-1047) ----------------------------------------
+
+def test_use_emits_status_to_stderr(project_with_companion, capsys):
+    """Successful activation emits a • Session N → <path> line to stderr."""
+    project_root, sessions_dir = project_with_companion
+    _write_companion(sessions_dir, cwd=str(project_root))
+
+    session_cmd.session_use_resolve("247")
+    cap = capsys.readouterr()
+    assert "•" in cap.err
+    assert "Session 247" in cap.err
+    assert str(project_root) in cap.err
+    # stdout has only the eval block — no status leaks there.
+    assert "•" not in cap.out
+    assert "Session 247" not in cap.out
+
+
+def test_use_warns_when_worktree_path_stale(project_with_companion, capsys):
+    """Companion's worktree_path set but dir gone -> stderr warning + status."""
+    _, sessions_dir = project_with_companion
+    _write_companion(
+        sessions_dir,
+        worktree_path="/this/is/very/much/gone",
+        cwd="/the/cwd",
+    )
+
+    session_cmd.session_use_resolve("247")
+    cap = capsys.readouterr()
+    assert "/this/is/very/much/gone" in cap.err
+    assert "no longer exists" in cap.err
+    assert "falling back to cwd" in cap.err
+    # Status line still appears.
+    assert "Session 247" in cap.err
+    # cd target on stdout is the cwd fallback.
+    assert "cd /the/cwd" in cap.out
+
+
+def test_use_silent_when_no_worktree_path_set(project_with_companion, capsys):
+    """No worktree_path on companion (no active task) -> no stale warning,
+    just the status line."""
+    project_root, sessions_dir = project_with_companion
+    _write_companion(sessions_dir, cwd=str(project_root))  # no worktree_path
+
+    session_cmd.session_use_resolve("247")
+    cap = capsys.readouterr()
+    assert "no longer exists" not in cap.err
+    assert "falling back" not in cap.err
+    assert "Session 247" in cap.err

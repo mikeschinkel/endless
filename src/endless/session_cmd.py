@@ -1078,6 +1078,24 @@ def _target_path(c: dict) -> str:
     return c.get("cwd") or ""
 
 
+def _emit_resolution_status(c: dict) -> None:
+    """Emit confirmation status (and warning if applicable) to stderr.
+
+    Silence is wrong when a command produces no visible effect: the user
+    can't tell if anything happened. Status goes to stderr so stdout stays
+    clean for shell evaluation. The stale-worktree warning surfaces an
+    anomalous fallback that _target_path would otherwise hide. (E-1047.)
+    """
+    eid = c.get("endless_session_id", "")
+    wt = c.get("worktree_path") or ""
+    if wt and not os.path.isdir(wt):
+        click.echo(
+            f"! worktree {wt} no longer exists; falling back to cwd",
+            err=True,
+        )
+    click.echo(f"• Session {eid} → {_target_path(c)}", err=True)
+
+
 def _format_companion_row(c: dict) -> str:
     eid = c.get("endless_session_id", "")
     pane = c.get("pane_id", "") or "-"
@@ -1165,6 +1183,7 @@ def session_cd_resolve(session_ref: str | None, show_all: bool = False) -> None:
 
     c = _resolve_companion(session_ref, live, list_hint="endless session cd --all")
     click.echo(_target_path(c))
+    _emit_resolution_status(c)
 
 
 def session_show_resolve(session_ref: str | None, as_json: bool = False) -> None:
@@ -1299,6 +1318,7 @@ def session_use_resolve(session_ref: str | None) -> None:
             lines.append(ext_output.rstrip())
 
     click.echo("\n".join(lines))
+    _emit_resolution_status(c)
 
 
 def _run_use_extension(path: Path, extra_env: dict[str, str]) -> str | None:

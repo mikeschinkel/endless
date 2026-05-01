@@ -43,7 +43,10 @@ def test_explicit_numeric_match(registered_with_sessions, capsys):
     session_cmd.session_cd_resolve("42")
     out = capsys.readouterr()
     assert out.out.strip() == "/some/where"
-    assert out.err == ""
+    # Status confirmation on stderr (E-1047); no warnings.
+    assert "Session 42" in out.err
+    assert "/some/where" in out.err
+    assert "!" not in out.err
 
 
 def test_explicit_uuid_prefix_match(registered_with_sessions, capsys):
