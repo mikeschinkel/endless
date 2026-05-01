@@ -76,6 +76,7 @@ type TaskView struct {
 	ChildCount  int
 	BlockedBy   string
 	Tier        *int
+	Outcome     string
 	CreatedAt   string
 	UpdatedAt   string
 	CompletedAt string

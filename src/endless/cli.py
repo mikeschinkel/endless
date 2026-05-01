@@ -510,18 +510,21 @@ def task_list(project, show_all, status, phase, tier, parent_id, related_to_id, 
               help="Show prompt field")
 @click.option("--children", "show_children", is_flag=True,
               help="Show direct children")
+@click.option("--outcome", "show_outcome", is_flag=True,
+              help="Show outcome field (always shown for declined tasks)")
 @click.option("--llm", is_flag=True,
               help="Token-efficient output for LLMs")
 @click.option("--json", "as_json", is_flag=True,
               help="JSON output")
 def task_show(item_ids, no_description, show_text, show_prompt,
-              show_children, llm, as_json):
+              show_children, show_outcome, llm, as_json):
     """Show detail for one or more tasks."""
     from endless.task_cmd import detail_item
     for item_id in item_ids:
         detail_item(item_id, show_description=not no_description,
                     show_text=show_text, show_prompt=show_prompt,
-                    show_children=show_children, llm=llm, as_json=as_json)
+                    show_children=show_children, show_outcome=show_outcome,
+                    llm=llm, as_json=as_json)
 
 
 task_cmd.add_command(task_show, name="detail")
@@ -710,10 +713,12 @@ def task_add(title, description, phase, project, parent, after, task_type, statu
               help="Tier (0=n/a, 1-4 or auto/quick/deep/discuss, none=clear)")
 @click.option("--force", is_flag=True,
               help="Bypass title validation")
+@click.option("--outcome", default=None,
+              help="Outcome / reason for status (required if status=declined)")
 @click.option("--decision", "decision_text", default=None,
               help="Rationale text — creates a paired decision-type task linked via 'documents' to each updated task")
 def task_update(item_ids, status, title, description, text_file, prompt_file, parent, phase, tier, force,
-                decision_text):
+                outcome, decision_text):
     """Update fields on one or more tasks."""
     from endless.task_cmd import update_plan, add_item, link_tasks, parse_tier
     tier_val = parse_tier(tier) if tier else None
@@ -721,7 +726,7 @@ def task_update(item_ids, status, title, description, text_file, prompt_file, pa
         update_plan(item_id, status=status, title=title,
                     description=description, text_file=text_file,
                     prompt_file=prompt_file, parent_id=parent,
-                    phase=phase, tier=tier_val, force=force)
+                    phase=phase, tier=tier_val, outcome=outcome, force=force)
         if decision_text:
             decision_id = add_item(decision_text,
                                    task_type="decision", status="confirmed", force=True)
@@ -759,22 +764,37 @@ def task_clear_tier(item_ids):
 @click.argument("item_ids", type=TASK_ID, nargs=-1, required=True)
 @click.option("--cascade", is_flag=True,
               help="Also confirm all descendants")
-def task_complete(item_ids, cascade):
+@click.option("--outcome", default=None,
+              help="Outcome — what was confirmed (applies to root only on cascade)")
+def task_complete(item_ids, cascade, outcome):
     """Confirm one or more tasks."""
     from endless.task_cmd import complete_item
     for item_id in item_ids:
-        complete_item(item_id, cascade=cascade)
+        complete_item(item_id, cascade=cascade, outcome=outcome)
 
 
 @task_cmd.command("assume")
 @click.argument("item_ids", type=TASK_ID, nargs=-1, required=True)
 @click.option("--cascade", is_flag=True,
               help="Also assume all descendants")
-def task_assume(item_ids, cascade):
+@click.option("--outcome", default=None,
+              help="Outcome — what was assumed (applies to root only on cascade)")
+def task_assume(item_ids, cascade, outcome):
     """Assume one or more tasks (believed complete, not yet verified)."""
     from endless.task_cmd import assume_item
     for item_id in item_ids:
-        assume_item(item_id, cascade=cascade)
+        assume_item(item_id, cascade=cascade, outcome=outcome)
+
+
+@task_cmd.command("decline")
+@click.argument("item_ids", type=TASK_ID, nargs=-1, required=True)
+@click.option("--reason", required=True,
+              help="Why this task is being declined (stored as outcome)")
+def task_decline(item_ids, reason):
+    """Decline one or more tasks (sets status=declined; reason required)."""
+    from endless.task_cmd import decline_item
+    for item_id in item_ids:
+        decline_item(item_id, reason=reason)
 
 
 @task_cmd.command("start")
@@ -872,10 +892,15 @@ def task_block(item_id, blocker_id):
 @click.argument("item_id", type=TASK_ID)
 @click.option("--by", "replacement_id", type=TASK_ID, required=True,
               help="Task ID that replaces this task")
-def task_replace(item_id, replacement_id):
-    """Mark a task as replaced by another task (sets status to obsolete)."""
+@click.option("--status", "new_status", default="obsolete",
+              type=click.Choice(["obsolete", "declined", "confirmed", "assumed"]),
+              help="Status to set on the replaced task (default: obsolete)")
+@click.option("--outcome", default=None,
+              help="Outcome — why this was replaced (required if --status=declined)")
+def task_replace(item_id, replacement_id, new_status, outcome):
+    """Mark a task as replaced by another task (sets status, default 'obsolete')."""
     from endless.task_cmd import replace_task
-    replace_task(item_id, replacement_id)
+    replace_task(item_id, replacement_id, status=new_status, outcome=outcome)
 
 
 @task_cmd.command("unblock")

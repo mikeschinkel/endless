@@ -237,6 +237,15 @@ func execTaskStatusChanged(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 		}
 	}
 
+	if p.Outcome != "" {
+		if _, err := db.Exec(
+			"UPDATE tasks SET outcome = ? WHERE id = ?",
+			p.Outcome, taskID,
+		); err != nil {
+			return nil, fmt.Errorf("events: set outcome: %w", err)
+		}
+	}
+
 	return &ExecuteResult{}, nil
 }
 
@@ -259,6 +268,7 @@ func execTaskFieldsUpdated(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 		"title": "title", "description": "description", "text": "text",
 		"prompt": "prompt", "phase": "phase", "tier": "tier",
 		"type": "type", "status": "status", "parent_id": "parent_id",
+		"outcome": "outcome",
 	}
 
 	for field, value := range p.Fields {

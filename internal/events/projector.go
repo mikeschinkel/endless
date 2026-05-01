@@ -203,6 +203,16 @@ func replayTaskStatusChanged(db *sql.DB, evt *Event, result *ProjectResult) erro
 			return err
 		}
 	}
+
+	if p.Outcome != "" {
+		if _, err := db.Exec(
+			"UPDATE tasks SET outcome = ? WHERE id = ?",
+			p.Outcome, taskID,
+		); err != nil {
+			return err
+		}
+	}
+
 	result.TasksUpdated++
 	return nil
 }
@@ -226,6 +236,7 @@ func replayTaskFieldsUpdated(db *sql.DB, evt *Event, result *ProjectResult) erro
 		"title": "title", "description": "description", "text": "text",
 		"prompt": "prompt", "phase": "phase", "tier": "tier",
 		"type": "type", "status": "status", "parent_id": "parent_id",
+		"outcome": "outcome",
 	}
 
 	for field, value := range p.Fields {

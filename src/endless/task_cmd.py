@@ -1409,7 +1409,15 @@ def _next_sort_order(project_id: int, phase: str) -> int:
     return (val or 0) + 10
 
 
-def complete_item(item_id: int, cascade: bool = False):
+def _require_outcome_for_declined(status: str | None, outcome: str | None):
+    if status == "declined" and not (outcome and outcome.strip()):
+        raise click.ClickException(
+            "An outcome is required when declining a task. "
+            "Use --reason (on `task decline`) or --outcome to explain why."
+        )
+
+
+def complete_item(item_id: int, cascade: bool = False, outcome: str | None = None):
     """Mark a task as confirmed."""
     from endless.event_bridge import emit_event
 
@@ -1431,16 +1439,19 @@ def complete_item(item_id: int, cascade: bool = False):
         return
 
     _, proj_name = _resolve_project(None)
+    payload = {
+        "old_status": row[0]["status"],
+        "new_status": "confirmed",
+        "cascade": cascade,
+    }
+    if outcome:
+        payload["outcome"] = outcome
     emit_event(
         kind="task.status_changed",
         project=proj_name,
         entity_type="task",
         entity_id=str(item_id),
-        payload={
-            "old_status": row[0]["status"],
-            "new_status": "confirmed",
-            "cascade": cascade,
-        },
+        payload=payload,
     )
 
     if cascade:
@@ -1463,7 +1474,7 @@ def complete_item(item_id: int, cascade: bool = False):
         )
 
 
-def assume_item(item_id: int, cascade: bool = False):
+def assume_item(item_id: int, cascade: bool = False, outcome: str | None = None):
     """Mark a task as assumed (believed complete, not yet verified)."""
     from endless.event_bridge import emit_event
 
@@ -1485,16 +1496,19 @@ def assume_item(item_id: int, cascade: bool = False):
         return
 
     _, proj_name = _resolve_project(None)
+    payload = {
+        "old_status": row[0]["status"],
+        "new_status": "assumed",
+        "cascade": cascade,
+    }
+    if outcome:
+        payload["outcome"] = outcome
     emit_event(
         kind="task.status_changed",
         project=proj_name,
         entity_type="task",
         entity_id=str(item_id),
-        payload={
-            "old_status": row[0]["status"],
-            "new_status": "assumed",
-            "cascade": cascade,
-        },
+        payload=payload,
     )
 
     if cascade:
@@ -1515,6 +1529,49 @@ def assume_item(item_id: int, cascade: bool = False):
             click.style("•", fg="cyan")
             + f" Assumed: {row[0]['title']}"
         )
+
+
+def decline_item(item_id: int, reason: str):
+    """Mark a task as declined; reason is required and stored as outcome."""
+    from endless.event_bridge import emit_event
+
+    _require_outcome_for_declined("declined", reason)
+
+    row = db.query(
+        "SELECT id, COALESCE(title, description) as title, status FROM tasks "
+        "WHERE id = ?",
+        (item_id,),
+    )
+    if not row:
+        raise click.ClickException(
+            f"No task found with id {item_id}"
+        )
+
+    if row[0]["status"] == "declined":
+        click.echo(
+            click.style("•", fg="cyan")
+            + f" Item {task_id_display(item_id)} is already declined"
+        )
+        return
+
+    _, proj_name = _resolve_project(None)
+    emit_event(
+        kind="task.status_changed",
+        project=proj_name,
+        entity_type="task",
+        entity_id=str(item_id),
+        payload={
+            "old_status": row[0]["status"],
+            "new_status": "declined",
+            "cascade": False,
+            "outcome": reason,
+        },
+    )
+
+    click.echo(
+        click.style("•", fg="cyan")
+        + f" Declined: {row[0]['title']}"
+    )
 
 
 def start_item(item_id: int):
@@ -1557,10 +1614,13 @@ def update_plan(
     parent_id: int | None = None,
     phase: str | None = None,
     tier: int | None = None,
+    outcome: str | None = None,
     force: bool = False,
 ):
     """Update fields on a task."""
     from endless.event_bridge import emit_event
+
+    _require_outcome_for_declined(status, outcome)
 
     row = db.query(
         "SELECT id, title, status, type FROM tasks WHERE id = ?",
@@ -1634,6 +1694,10 @@ def update_plan(
                 changed_names.append("status")
         changed_names.append("tier")
 
+    if outcome is not None:
+        fields["outcome"] = outcome
+        changed_names.append("outcome")
+
     if not fields:
         raise click.ClickException(
             "Nothing to update. Specify at least one flag."
@@ -1671,6 +1735,7 @@ def detail_item(
     show_text: bool = False,
     show_prompt: bool = False,
     show_children: bool = False,
+    show_outcome: bool = False,
     llm: bool = False,
     as_json: bool = False,
 ):
@@ -1678,7 +1743,7 @@ def detail_item(
     row = db.query(
         "SELECT t.id, t.title, t.description, t.text, t.phase, t.status, t.type, "
         "t.parent_id, t.source_file, t.prompt, t.created_at, t.updated_at, "
-        "t.completed_at, t.sort_order, t.tier, p.name as project_name "
+        "t.completed_at, t.sort_order, t.tier, t.outcome, p.name as project_name "
         "FROM tasks t JOIN projects p ON t.project_id = p.id WHERE t.id = ?",
         (item_id,),
     )
@@ -1704,6 +1769,7 @@ def detail_item(
             "confirmed": item["completed_at"] or None,
             "source_file": item["source_file"] or None,
             "tier": item["tier"],
+            "outcome": item["outcome"] or None,
             "description": item["description"] if show_description else None,
             "text": item["text"] if show_text else None,
             "prompt": item["prompt"] if show_prompt else None,
@@ -1729,6 +1795,8 @@ def detail_item(
         tier_str = f" tier={tier_display(item['tier'])}" if item["tier"] else ""
         click.echo(f"type={item['type']} phase={item['phase']} "
                     f"status={item['status']}{tier_str}")
+        if item["outcome"]:
+            click.echo(f"outcome={item['outcome']}")
         if item["parent_id"]:
             click.echo(f"parent=E-{item['parent_id']}")
         relations = get_all_relations(item_id)
@@ -1773,6 +1841,8 @@ def detail_item(
     click.echo(f"{label('Type:')} {val(item['type'])}")
     click.echo(f"{label('Phase:')} {val(item['phase'])}")
     click.echo(f"{label('Status:')} {val(item['status'])}")
+    if item["outcome"] and (show_outcome or item["status"] == "declined"):
+        click.echo(f"{label('Outcome:')} {val(item['outcome'])}")
     if item["tier"]:
         click.echo(f"{label('Tier:')} {val(tier_display(item['tier']))}")
     if item["parent_id"]:
@@ -2343,8 +2413,12 @@ def _relation_display_name_from(row, perspective_id: int) -> str:
     return stored
 
 
-def replace_task(old_id: int, new_id: int):
-    """Mark old_id as replaced by new_id. Sets old to obsolete and records relationship."""
+def replace_task(old_id: int, new_id: int, status: str = "obsolete", outcome: str | None = None):
+    """Mark old_id as replaced by new_id. Sets old to `status` (default 'obsolete') and records relationship."""
+    from endless.event_bridge import emit_event
+
+    _require_outcome_for_declined(status, outcome)
+
     if old_id == new_id:
         raise click.ClickException("A task cannot replace itself.")
     for tid in (old_id, new_id):
@@ -2362,14 +2436,28 @@ def replace_task(old_id: int, new_id: int):
             )
         raise
 
-    db.execute(
-        "UPDATE tasks SET status = 'obsolete', tier = 0 WHERE id = ?",
-        (old_id,),
+    old_status_row = db.query(
+        "SELECT status FROM tasks WHERE id = ?", (old_id,)
+    )
+    payload = {
+        "old_status": old_status_row[0]["status"],
+        "new_status": status,
+        "cascade": False,
+    }
+    if outcome:
+        payload["outcome"] = outcome
+    _, proj_name = _resolve_project(None)
+    emit_event(
+        kind="task.status_changed",
+        project=proj_name,
+        entity_type="task",
+        entity_id=str(old_id),
+        payload=payload,
     )
 
     click.echo(
         click.style("•", fg="cyan")
-        + f" {task_id_display(old_id)} replaced by {task_id_display(new_id)} (set to obsolete)"
+        + f" {task_id_display(old_id)} replaced by {task_id_display(new_id)} (set to {status})"
     )
 
 

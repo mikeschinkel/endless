@@ -1,5 +1,6 @@
 """SQLite database helpers."""
 
+import os
 import sqlite3
 from pathlib import Path
 
@@ -9,6 +10,11 @@ _conn: sqlite3.Connection | None = None
 
 # Find schema.sql relative to this package (temporary until E-894 moves all SQL to Go)
 _SCHEMA_PATH = Path(__file__).resolve().parent.parent.parent / "internal" / "schema" / "schema.sql"
+
+
+def _should_auto_migrate() -> bool:
+    val = os.environ.get("ENDLESS_AUTO_MIGRATE", "1").strip().lower()
+    return val in ("1", "true", "yes", "on")
 
 
 def get_db() -> sqlite3.Connection:
@@ -24,7 +30,7 @@ def get_db() -> sqlite3.Connection:
     _conn.execute("PRAGMA foreign_keys=ON")
     if is_new:
         _init_schema(_conn)
-    else:
+    elif _should_auto_migrate():
         _migrate(_conn)
     return _conn
 
@@ -161,6 +167,9 @@ def _migrate(conn: sqlite3.Connection):
 
     # === Schema v5: task_deps active-voice vocabulary (E-957) ===
     _migrate_v5(conn)
+
+    # === Schema v6: outcome column on tasks (E-787) ===
+    _migrate_v6(conn)
 
 
 def _has_table(conn: sqlite3.Connection, table: str) -> bool:
@@ -476,6 +485,13 @@ def _migrate_v5(conn: sqlite3.Connection):
             "Two tasks may have mirrored relations (A blocks B AND B blocks A as separate rows). "
             f"Backup at ~/.endless/backups/. Original error: {e}"
         )
+
+
+def _migrate_v6(conn: sqlite3.Connection):
+    """Schema v6: add outcome column to tasks (E-787)."""
+    if _has_table(conn, "tasks") and not _has_column(conn, "tasks", "outcome"):
+        conn.execute("ALTER TABLE tasks ADD COLUMN outcome TEXT")
+        conn.commit()
 
 
 def execute(sql: str, params: tuple = ()) -> sqlite3.Cursor:

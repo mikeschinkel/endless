@@ -88,6 +88,7 @@ CREATE TABLE IF NOT EXISTS tasks (
     type TEXT NOT NULL DEFAULT 'task',
     updated_at TEXT NOT NULL DEFAULT '',
     tier INTEGER,
+    outcome TEXT,
     FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
     FOREIGN KEY (parent_id) REFERENCES tasks(id) ON DELETE SET NULL
 );

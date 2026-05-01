@@ -1,6 +1,7 @@
 """Tests for the general-purpose task relation CLI (E-957)."""
 
 import sqlite3
+from pathlib import Path
 
 import click
 import pytest
@@ -22,6 +23,23 @@ def _seed_project():
     db.execute(
         "INSERT INTO projects (name, path, status, created_at, updated_at) "
         "VALUES ('test', '/tmp/test', 'active', datetime('now'), datetime('now'))"
+    )
+
+
+def _seed_project_at_cwd(monkeypatch, isolated_env):
+    """Seed a project AT pytest tmp_path and chdir there.
+
+    Required for tests that call functions emitting events (e.g. replace_task),
+    because _resolve_project(None) inspects cwd. The default cwd (the endless
+    repo) has a .endless/config.json that resolves to a name not present in the
+    test DB, so we chdir to a clean tmp dir and seed the project at that path.
+    """
+    proj_dir = isolated_env["projects_root"]
+    monkeypatch.chdir(proj_dir)
+    db.execute(
+        "INSERT INTO projects (name, path, status, created_at, updated_at) "
+        "VALUES ('test', ?, 'active', datetime('now'), datetime('now'))",
+        (str(proj_dir),),
     )
 
 
@@ -148,8 +166,8 @@ def test_get_all_relations_groups_correctly(isolated_env):
     assert {r["id"] for r in rels["blocked_by"]} == {c}
 
 
-def test_replace_task_active_voice(isolated_env):
-    _seed_project()
+def test_replace_task_active_voice(isolated_env, monkeypatch):
+    _seed_project_at_cwd(monkeypatch, isolated_env)
     old = _add_task("Old")
     new = _add_task("New")
     task_cmd.replace_task(old, new)

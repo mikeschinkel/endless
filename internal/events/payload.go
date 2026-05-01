@@ -29,6 +29,7 @@ type TaskStatusChangedPayload struct {
 	NewStatus   string `json:"new_status"`
 	CompletedAt string `json:"completed_at,omitempty"`
 	Cascade     bool   `json:"cascade,omitempty"`
+	Outcome     string `json:"outcome,omitempty"`
 }
 
 type TaskFieldsUpdatedPayload struct {
