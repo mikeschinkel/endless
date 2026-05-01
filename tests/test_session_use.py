@@ -306,3 +306,46 @@ def test_use_silent_when_no_worktree_path_set(project_with_companion, capsys):
     assert "no longer exists" not in cap.err
     assert "falling back" not in cap.err
     assert "Session 247" in cap.err
+
+
+# ---------- short-path display (E-1049) -------------------------------------
+
+def test_short_path_under_home(monkeypatch):
+    """_short_path replaces the home prefix with ~."""
+    monkeypatch.setenv("HOME", "/Users/mike")
+    assert session_cmd._short_path("/Users/mike/Projects/endless") == "~/Projects/endless"
+    assert session_cmd._short_path("/Users/mike") == "~"
+
+
+def test_short_path_outside_home(monkeypatch):
+    """Paths not under home are returned unchanged."""
+    monkeypatch.setenv("HOME", "/Users/mike")
+    assert session_cmd._short_path("/tmp/foo") == "/tmp/foo"
+    # Beware false positives: a path that *contains* the home string but
+    # isn't a prefix should not be rewritten.
+    assert session_cmd._short_path("/tmp/Users/mike/x") == "/tmp/Users/mike/x"
+    # And the home dir name as a prefix of a different path:
+    assert session_cmd._short_path("/Users/mikeother/x") == "/Users/mikeother/x"
+
+
+def test_short_path_empty(monkeypatch):
+    monkeypatch.setenv("HOME", "/Users/mike")
+    assert session_cmd._short_path("") == ""
+
+
+def test_status_uses_short_path_for_warning(project_with_companion, capsys, monkeypatch):
+    """Stale-worktree warning uses ~ for display when path is under home."""
+    monkeypatch.setenv("HOME", "/Users/mike")
+    _, sessions_dir = project_with_companion
+    _write_companion(
+        sessions_dir,
+        worktree_path="/Users/mike/Projects/foo/.endless/worktrees/e-99",
+        cwd="/the/cwd",
+    )
+
+    session_cmd.session_use_resolve("247")
+    cap = capsys.readouterr()
+    # Warning shows the shortened form.
+    assert "~/Projects/foo/.endless/worktrees/e-99" in cap.err
+    # The literal /Users/mike form should NOT appear in stderr (display).
+    assert "/Users/mike/Projects/foo" not in cap.err

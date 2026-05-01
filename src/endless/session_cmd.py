@@ -1078,6 +1078,23 @@ def _target_path(c: dict) -> str:
     return c.get("cwd") or ""
 
 
+def _short_path(p: str) -> str:
+    """Replace the user's home prefix with '~' for display. (E-1049.)
+
+    Display-only; never use the result for actual cd/exec — shells don't
+    expand '~' inside single-quoted strings, which is what shlex.quote
+    produces for paths with metacharacters.
+    """
+    if not p:
+        return p
+    home = os.path.expanduser("~")
+    if p == home:
+        return "~"
+    if p.startswith(home + "/"):
+        return "~" + p[len(home):]
+    return p
+
+
 def _emit_resolution_status(c: dict) -> None:
     """Emit confirmation status (and warning if applicable) to stderr.
 
@@ -1085,15 +1102,18 @@ def _emit_resolution_status(c: dict) -> None:
     can't tell if anything happened. Status goes to stderr so stdout stays
     clean for shell evaluation. The stale-worktree warning surfaces an
     anomalous fallback that _target_path would otherwise hide. (E-1047.)
+
+    Paths are shortened with ~ for display only (E-1049); stdout's cd
+    target keeps the full path so shell eval works correctly.
     """
     eid = c.get("endless_session_id", "")
     wt = c.get("worktree_path") or ""
     if wt and not os.path.isdir(wt):
         click.echo(
-            f"! worktree {wt} no longer exists; falling back to cwd",
+            f"! worktree {_short_path(wt)} no longer exists; falling back to cwd",
             err=True,
         )
-    click.echo(f"• Session {eid} → {_target_path(c)}", err=True)
+    click.echo(f"• Session {eid} → {_short_path(_target_path(c))}", err=True)
 
 
 def _format_companion_row(c: dict) -> str:
