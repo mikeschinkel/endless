@@ -137,15 +137,12 @@ func runClaude(args []string) error {
 		if err := monitor.BackfillProcess(payload.SessionID, os.Getenv("TMUX_PANE")); err != nil {
 			return fmt.Errorf("backfilling process: %w", err)
 		}
-		// Backfill companion file if missing — covers sessions that were
-		// already running when E-989 landed (E-1011). Idempotent: only
-		// writes when the file is absent.
-		if exists, err := monitor.CompanionExists(projectID, "claude", payload.SessionID); err != nil {
-			return fmt.Errorf("checking companion file: %w", err)
-		} else if !exists {
-			if err := writeClaudeCompanion(projectID, payload); err != nil {
-				return fmt.Errorf("backfilling companion file: %w", err)
-			}
+		// Refresh companion file unconditionally (E-1033). Subsumes the
+		// E-1011 backfill (file gets written when missing) and kills the
+		// drift class where active_task_id mutates through a path that
+		// did not trigger writeClaudeCompanion. Atomic write, ~1ms per turn.
+		if err := writeClaudeCompanion(projectID, payload); err != nil {
+			return fmt.Errorf("refreshing companion file: %w", err)
 		}
 		// Fallback message check for sessions without MCP channel plugin
 		pane := os.Getenv("TMUX_PANE")

@@ -63,17 +63,6 @@ func WriteCompanion(projectID int64, c CompanionFile) error {
 	return writeCompanionAtRoot(root, c)
 }
 
-// CompanionExists reports whether a companion file is on disk for the given
-// harness session. A missing file returns (false, nil); other errors (e.g.
-// permission denied) return (false, err).
-func CompanionExists(projectID int64, harness, harnessSessionID string) (bool, error) {
-	root, err := ProjectPath(projectID)
-	if err != nil {
-		return false, fmt.Errorf("project path: %w", err)
-	}
-	return companionExistsAtRoot(root, harness, harnessSessionID)
-}
-
 // WorktreePathForTask returns the absolute path to the worktree associated
 // with the given task, or "" if no such worktree exists. Convention:
 // <project_root>/.endless/worktrees/e-<task_id> or .../e-<task_id>-<slug>/.
@@ -144,17 +133,6 @@ func writeCompanionAtRoot(projectRoot string, c CompanionFile) error {
 		return fmt.Errorf("rename companion: %w", err)
 	}
 	return nil
-}
-
-func companionExistsAtRoot(projectRoot, harness, harnessSessionID string) (bool, error) {
-	target := companionPathInDir(companionDirAtRoot(projectRoot), harness, harnessSessionID)
-	if _, err := os.Stat(target); err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return false, nil
-		}
-		return false, fmt.Errorf("stat companion: %w", err)
-	}
-	return true, nil
 }
 
 func worktreePathForTaskAtRoot(projectRoot string, taskID int64) (string, error) {
