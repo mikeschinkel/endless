@@ -68,6 +68,47 @@ install:
     ln -sfn "$(pwd)/bin/endless-event" /usr/local/bin/endless-event
     uv tool install -e . --force
 
+# Generate go.work for the current checkout/worktree (E-996).
+#
+# go.mod has 'replace ../go-pkgs/X' directives that resolve relative to
+# the go.mod's location — works from main, breaks from worktrees. go.work
+# overrides those replaces with absolute paths, fixing builds anywhere.
+#
+# go.work is gitignored (per-developer; absolute paths are local). Run
+# this once per fresh clone or worktree. When go.work is present, the
+# go.mod replace directives are ignored — but they remain as a fallback
+# for anyone without go.work.
+go-work-init:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    main_checkout="$(dirname "$(git rev-parse --git-common-dir)")"
+    main_checkout="$(cd "$main_checkout" && pwd)"
+    go_pkgs_root="$(cd "$main_checkout/.." && pwd)/go-pkgs"
+    if [ ! -d "$go_pkgs_root" ]; then
+        echo "go-pkgs not found at $go_pkgs_root" >&2
+        exit 1
+    fi
+    rm -f go.work go.work.sum
+    go work init
+    go work use .
+    # Discover go-pkgs sub-modules from go.mod's replace lines (lines with
+    # '=>' only — skips the documentation comment that mentions ../go-pkgs)
+    # and add each as an explicit go.work replace. Replace (rather than use)
+    # avoids 'conflicting replacement' errors with go.mod's relative-path
+    # replaces — go.work's replace overrides go.mod's for the same module.
+    grep -E '=>\s*\.\./.*go-pkgs/' "$main_checkout/go.mod" \
+        | sed -E 's|.*[[:space:]](github\.com/mikeschinkel/[^[:space:]]+)[[:space:]]+=>[[:space:]]*\.\./.*go-pkgs/(.*)$|\1 \2|' \
+        | while read -r module sub; do
+            sub="${sub%/}"
+            target="$go_pkgs_root/$sub"
+            if [ -d "$target" ] && [ -f "$target/go.mod" ]; then
+                go work edit -replace="${module}=${target}"
+            else
+                echo "warning: $target not found for $module, skipping" >&2
+            fi
+        done
+    echo "go.work generated at $(pwd)/go.work"
+
 # Run Python tests
 test:
     uv run pytest tests/ -v
