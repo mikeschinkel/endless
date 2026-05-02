@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/mikeschinkel/endless/internal/monitor"
@@ -49,9 +50,32 @@ func generateName() (string, error) {
 	return hex.EncodeToString(b[:]), nil
 }
 
+// validateName rejects names that would escape sandboxesDir() or break the
+// filesystem: empty, "." / "..", anything containing path separators.
+func validateName(name string) error {
+	if name == "" {
+		return fmt.Errorf("sandbox name cannot be empty")
+	}
+	if name == "." || name == ".." {
+		return fmt.Errorf("invalid sandbox name %q", name)
+	}
+	if name != filepath.Base(name) {
+		return fmt.Errorf("sandbox name %q must not contain path separators", name)
+	}
+	if strings.ContainsAny(name, `/\`) {
+		return fmt.Errorf("sandbox name %q must not contain path separators", name)
+	}
+	return nil
+}
+
 // Provision creates a new sandbox. If name is empty, a random hex name is
 // generated. Errors if the named sandbox already exists.
 func Provision(name string, mode sandboxMode) (*Sandbox, error) {
+	if name != "" {
+		if err := validateName(name); err != nil {
+			return nil, err
+		}
+	}
 	if name == "" {
 		n, err := generateName()
 		if err != nil {
@@ -65,7 +89,11 @@ func Provision(name string, mode sandboxMode) (*Sandbox, error) {
 	}
 	dir := filepath.Join(parent, name)
 	if _, err := os.Stat(dir); err == nil {
-		return nil, fmt.Errorf("sandbox %q already exists; use 'endless-sandbox destroy %s' first", name, name)
+		// Distinguish a real sandbox (has meta) from a stale fragment.
+		if _, mErr := os.Stat(filepath.Join(dir, metaFilename)); mErr == nil {
+			return nil, fmt.Errorf("sandbox %q already exists; use 'endless-sandbox destroy %s' first", name, name)
+		}
+		return nil, fmt.Errorf("stale sandbox directory at %s (no %s — likely an interrupted enter); run 'endless-sandbox destroy %s' to remove it", dir, metaFilename, name)
 	} else if !os.IsNotExist(err) {
 		return nil, fmt.Errorf("checking sandbox dir %s: %w", dir, err)
 	}

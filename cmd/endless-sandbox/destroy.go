@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 )
 
 func destroyCmd(args []string) {
@@ -17,13 +18,25 @@ func destroyCmd(args []string) {
 		os.Exit(1)
 	}
 	name := rest[0]
-
-	sb, err := Load(name)
-	if err != nil {
+	if err := validateName(name); err != nil {
 		fmt.Fprintf(os.Stderr, "endless-sandbox destroy: %v\n", err)
 		os.Exit(1)
 	}
-	if err := sb.Destroy(); err != nil {
+
+	dir := filepath.Join(sandboxesDir(), name)
+	if _, err := os.Stat(dir); err != nil {
+		if os.IsNotExist(err) {
+			fmt.Fprintf(os.Stderr, "endless-sandbox destroy: sandbox %q does not exist\n", name)
+			os.Exit(1)
+		}
+		fmt.Fprintf(os.Stderr, "endless-sandbox destroy: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Remove unconditionally — a missing or corrupt meta file is exactly
+	// the case where destroy is most needed. Sanity is provided by the
+	// validateName check + the path being rooted at sandboxesDir().
+	if err := os.RemoveAll(dir); err != nil {
 		fmt.Fprintf(os.Stderr, "endless-sandbox destroy: %v\n", err)
 		os.Exit(1)
 	}
