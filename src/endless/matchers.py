@@ -99,13 +99,49 @@ DEFAULT_MATCHERS: list[dict[str, Any]] = [
 
 # --- Layer-aware path resolution -------------------------------------------
 
-def project_config_path() -> Path | None:
-    """Return <project-root>/.endless/config.json if cwd is in a project, else None.
+def _git_main_worktree_root(start: Path) -> Path | None:
+    """Return the working dir of the git main checkout containing `start`.
 
-    Walks up from cwd looking for .endless/config.json. The first match is
-    treated as the project root. Returns None if no project found above cwd.
+    `git rev-parse --git-common-dir` returns the path to the shared `.git`
+    directory regardless of which worktree we are inside. Its parent is the
+    main checkout's working dir.
+
+    Returns None if `start` is not inside a git repo (or git is unavailable).
+    """
+    import subprocess
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--git-common-dir"],
+            cwd=str(start),
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+    except (subprocess.CalledProcessError, FileNotFoundError, OSError):
+        return None
+    common_dir = Path(result.stdout.strip())
+    if not common_dir.is_absolute():
+        common_dir = (start / common_dir).resolve()
+    return common_dir.parent
+
+
+def project_config_path() -> Path | None:
+    """Return <main-checkout>/.endless/config.json if cwd is in a project, else None.
+
+    When cwd is inside a git worktree, resolves to the *main checkout's*
+    .endless/config.json — not the worktree-local copy. This prevents
+    project-layer config from silently diverging across worktrees and being
+    lost when a worktree is removed.
+
+    When cwd is not in a git repo, falls back to walking up from cwd.
     """
     cwd = Path.cwd()
+    main_root = _git_main_worktree_root(cwd)
+    if main_root is not None:
+        candidate = main_root / ".endless" / "config.json"
+        if candidate.exists():
+            return candidate
+        return None
     for parent in [cwd] + list(cwd.parents):
         candidate = parent / ".endless" / "config.json"
         if candidate.exists():
