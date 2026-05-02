@@ -1134,9 +1134,45 @@ def worktree_drop(name_or_path, force):
     drop_worktree(name_or_path, force)
 
 
+@main.group("verb")
+def verb_cmd():
+    """Manage verbs — the registered actions that can start task titles."""
+    pass
+
+
+@verb_cmd.command("add")
+@click.argument("value")
+@click.option("--definition", default=None,
+              help="Short 'to ___' definition (required, e.g., 'to deliberate over')")
+@click.option("--machine-only", is_flag=True,
+              help="Skip the project config write (machine layer only)")
+def verb_add(value, definition, machine_only):
+    """Register a new verb."""
+    from endless.verb_cmd import add_verb
+    add_verb(value, definition, machine_only)
+
+
+@verb_cmd.command("list")
+@click.option("--json", "as_json", is_flag=True, help="JSON output")
+def verb_list(as_json):
+    """List registered verbs from project + machine layers."""
+    from endless.verb_cmd import list_verbs
+    list_verbs(as_json)
+
+
+@verb_cmd.command("remove")
+@click.argument("value")
+@click.option("--machine-only", is_flag=True,
+              help="Remove from machine layer only")
+def verb_remove(value, machine_only):
+    """Remove a verb."""
+    from endless.verb_cmd import remove_verb
+    remove_verb(value, machine_only)
+
+
 @main.group("phrase")
 def phrase_cmd():
-    """Manage matchers (verbs, pivots, action regexes) in config files."""
+    """Manage matchers (pivots, action regexes) in config files."""
     pass
 
 
@@ -1147,17 +1183,15 @@ def phrase_cmd():
               help="Optional scope qualifier (e.g., 'task', 'channel')")
 @click.option("--method", default=None,
               type=click.Choice(["exact", "substring", "regex"]),
-              help="Match algorithm (default: by type — verb=exact, pivot=substring, others=regex)")
+              help="Match algorithm (default: by type — pivot=substring, others=regex)")
 @click.option("--case-sensitive", is_flag=True,
               help="Match exact case (default: case-insensitive)")
 @click.option("--machine-only", is_flag=True,
               help="Skip the project config write (machine layer only)")
-@click.option("--definition", default=None,
-              help="Required for type=verb: short 'to ___' definition (e.g., 'to deliberate over')")
-def phrase_add(type_, value, scope, method, case_sensitive, machine_only, definition):
+def phrase_add(type_, value, scope, method, case_sensitive, machine_only):
     """Add a matcher: TYPE VALUE [--scope ...] [--method ...] [--case-sensitive] [--machine-only]."""
     from endless.phrase_cmd import add_phrase
-    add_phrase(type_, value, scope, method, case_sensitive, machine_only, definition)
+    add_phrase(type_, value, scope, method, case_sensitive, machine_only)
 
 
 @phrase_cmd.command("list")

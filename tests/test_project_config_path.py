@@ -50,30 +50,32 @@ def test_from_worktree_returns_main_config_not_worktree_copy(project_with_worktr
 
 
 def test_writes_from_worktree_land_in_main(project_with_worktree, monkeypatch):
-    """The actual bug: phrase add from a worktree wrote to wrong file."""
+    """The actual bug: writes from a worktree went to the wrong file. Use a
+    pivot here (verbs go through a different API as of E-1117); the
+    project_config_path() fix applies to all matcher writes."""
     monkeypatch.chdir(project_with_worktree["worktree"])
 
     matchers.add_match_value(
-        type_="verb", value="ponder", method="exact",
-        machine_only=False, definition="to deliberate over",
+        type_="pivot", value="testpivotvalue", method="substring",
+        machine_only=False,
     )
 
     main_cfg = json.loads(project_with_worktree["cfg"].read_text())
     matchers_list = main_cfg.get("matchers", [])
     assert any(
-        m.get("type") == "verb" and "ponder" in (m.get("match") or [])
+        m.get("type") == "pivot" and "testpivotvalue" in (m.get("match") or [])
         for m in matchers_list
-    ), "Verb did not land in main checkout's config"
+    ), "Pivot did not land in main checkout's config"
 
     wt_cfg_path = project_with_worktree["worktree"] / ".endless" / "config.json"
     if wt_cfg_path.exists():
         wt_data = json.loads(wt_cfg_path.read_text())
-        wt_verbs = []
+        wt_pivots: list[str] = []
         for m in wt_data.get("matchers", []):
-            if m.get("type") == "verb":
-                wt_verbs.extend(m.get("match") or [])
-        assert "ponder" not in wt_verbs, (
-            "Verb leaked into worktree's .endless/config.json — bug not fixed"
+            if m.get("type") == "pivot":
+                wt_pivots.extend(m.get("match") or [])
+        assert "testpivotvalue" not in wt_pivots, (
+            "Pivot leaked into worktree's .endless/config.json — bug not fixed"
         )
 
 

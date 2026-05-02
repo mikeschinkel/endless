@@ -15,7 +15,6 @@ from endless import matchers
 
 VALID_METHODS = ("exact", "substring", "regex")
 DEFAULT_METHOD_FOR_TYPE = {
-    "verb": "exact",
     "pivot": "substring",
 }
 
@@ -55,10 +54,13 @@ def add_phrase(
     method: str | None,
     case_sensitive: bool,
     machine_only: bool,
-    definition: str | None = None,
 ) -> None:
     _validate_type(type_)
     _validate_scope(scope)
+    if type_ == "verb":
+        raise click.ClickException(
+            "verbs are managed via 'endless verb add' (E-1117), not 'phrase add verb'"
+        )
     if method is None:
         method = _default_method(type_)
     if method not in VALID_METHODS:
@@ -68,14 +70,6 @@ def add_phrase(
     if method == "regex":
         _validate_regex(value)
 
-    if type_ == "verb":
-        if not definition or not definition.strip():
-            raise click.ClickException(
-                f"Adding a verb requires --definition. Define what action '{value}' names.\n"
-                f"  Example: endless phrase add verb '{value}' --definition \"to deliberate over\"\n"
-                f"  If you cannot write a 'to ___' definition, the word is probably not a verb."
-            )
-
     wrote_project, wrote_machine = matchers.add_match_value(
         type_=type_,
         value=value,
@@ -83,7 +77,6 @@ def add_phrase(
         method=method,
         case_sensitive=case_sensitive,
         machine_only=machine_only,
-        definition=definition,
     )
 
     where = []
@@ -216,18 +209,3 @@ def remove_phrase(type_: str, value: str, scope: str | None, machine_only: bool)
     click.echo(click.style("•", fg="cyan") + f" Removed from {', '.join(where)}: type={type_} value={value!r}")
 
 
-# Compatibility helper for validate_title in task_cmd.py
-def get_verbs(enabled_only: bool = True) -> set[str]:
-    """Returns set of valid verb tokens (lowercased for case-insensitive match)."""
-    verbs = matchers.get_verbs()
-    if not enabled_only:
-        # All matchers regardless of enabled flag
-        out = set()
-        for m in matchers.load_all_matchers():
-            if m.get("type") != "verb" or m.get("method") != "exact":
-                continue
-            cs = bool(m.get("case_sensitive", False))
-            for v in m.get("match", []) or []:
-                out.add(v if cs else v.lower())
-        return out
-    return verbs
