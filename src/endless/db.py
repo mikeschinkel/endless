@@ -405,7 +405,15 @@ def _migrate_v5(conn: sqlite3.Connection):
        - 'replaces' rows → swap source/target (label was already correct, layout was passive)
     Both UPDATEs evaluate RHS against the original row, so source/target swap atomically.
     """
+    # Idempotency gate: the swap UPDATEs below are NOT idempotent (running them
+    # twice flips rows back). Use PRAGMA user_version as a one-shot guard so V5
+    # only runs once. See E-1118 / E-863 for the structural fix (real schema
+    # version system).
+    if conn.execute("PRAGMA user_version").fetchone()[0] >= 5:
+        return
     if not _has_table(conn, "task_deps"):
+        conn.execute("PRAGMA user_version = 5")
+        conn.commit()
         return
 
     sql_row = conn.execute(
@@ -477,6 +485,7 @@ def _migrate_v5(conn: sqlite3.Connection):
         conn.execute(
             "UPDATE task_deps SET dep_type='relates_to' WHERE dep_type='informs'"
         )
+        conn.execute("PRAGMA user_version = 5")
         conn.commit()
     except sqlite3.IntegrityError as e:
         conn.rollback()
