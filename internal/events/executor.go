@@ -130,6 +130,9 @@ func execTaskCreated(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 	if err := json.Unmarshal(evt.Payload, &p); err != nil {
 		return nil, fmt.Errorf("events: unmarshal task.created payload: %w", err)
 	}
+	if err := ValidatePhase(p.Phase); err != nil {
+		return nil, err
+	}
 
 	projectID, err := resolveProjectID(db, evt.Project)
 	if err != nil {
@@ -176,6 +179,9 @@ func execTaskImported(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 	var p TaskImportedPayload
 	if err := json.Unmarshal(evt.Payload, &p); err != nil {
 		return nil, fmt.Errorf("events: unmarshal task.imported payload: %w", err)
+	}
+	if err := ValidatePhase(p.Phase); err != nil {
+		return nil, err
 	}
 
 	projectID, err := resolveProjectID(db, evt.Project)
@@ -275,6 +281,15 @@ func execTaskFieldsUpdated(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 		col, ok := allowedFields[field]
 		if !ok {
 			return nil, fmt.Errorf("events: unknown field %q in task.fields_updated", field)
+		}
+		if field == "phase" {
+			phaseStr, ok := value.(string)
+			if !ok {
+				return nil, fmt.Errorf("events: phase field must be string, got %T", value)
+			}
+			if err := ValidatePhase(phaseStr); err != nil {
+				return nil, err
+			}
 		}
 		setClauses = append(setClauses, col+" = ?")
 		args = append(args, value)
