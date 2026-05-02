@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -124,6 +125,16 @@ func runClaude(args []string) error {
 		if err := writeClaudeCompanion(projectID, payload); err != nil {
 			return fmt.Errorf("writing companion file: %w", err)
 		}
+		// Worktree adoption (E-971 Layer D). If cwd is inside an
+		// endless-managed worktree, claim the lock or refuse if
+		// already owned by a live session.
+		if refusal, err := handleWorktreeAdoption(projectID, payload); err != nil {
+			return fmt.Errorf("worktree adoption: %w", err)
+		} else if refusal != "" {
+			return json.NewEncoder(os.Stdout).Encode(hookResponse{
+				AdditionalContext: refusal,
+			})
+		}
 		return handleTaskContextInjection(projectID, payload)
 
 	case "UserPromptSubmit":
@@ -184,6 +195,16 @@ func runClaude(args []string) error {
 		// Remove companion file (E-989). Idempotent — missing file is fine.
 		if err := monitor.RemoveCompanion(projectID, "claude", payload.SessionID); err != nil {
 			return fmt.Errorf("removing companion file: %w", err)
+		}
+		// Release any worktree lock owned by this session (E-971 Layer D).
+		// Use session-id scan rather than walk-up: the user may have cd'd
+		// out before /quit, or the lock may live in a worktree the session
+		// claimed but never entered.
+		if wtPath, err := monitor.FindLockBySessionID(projectID, payload.SessionID); err == nil && wtPath != "" {
+			if err := monitor.ReleaseWorktreeLock(wtPath); err != nil {
+				// Non-fatal: stale-PID check will reap on next claim attempt.
+				log.Printf("releasing worktree lock at %s: %v", wtPath, err)
+			}
 		}
 		if err := monitor.EndSession(payload.SessionID); err != nil {
 			return fmt.Errorf("ending session: %w", err)
@@ -327,10 +348,10 @@ func extractFilePath(toolName string, raw json.RawMessage) string {
 // per process to avoid repeating the read for each detection in a hook
 // invocation. Per E-970.
 const (
-	actionStart   = "start"
+	actionStart    = "start"
 	actionComplete = "complete"
-	actionChat    = "chat"
-	scopeTask     = "task"
+	actionChat     = "chat"
+	scopeTask      = "task"
 
 	actionBeacon  = "beacon"
 	actionConnect = "connect"
@@ -356,6 +377,11 @@ func handlePreToolUse(projectID int64, isRegistered bool, payload claudePayload)
 	if !writeTools[payload.ToolName] {
 		return nil
 	}
+
+	// Worktree gate (E-971 Layer D). Independent of tracking_mode, like
+	// E-1012: even with per-task tracking off, edits in main and edits
+	// to a worktree owned by another session are refused.
+	enforceWorktreeGate(projectID, payload)
 
 	// Check tracking mode
 	mode := monitor.GetTrackingMode(projectID)
@@ -872,4 +898,193 @@ func autoImportTask(projectID int64, sessionID, filePath string) error {
 	cmd := exec.Command("endless", args...)
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
+}
+
+// --- E-971 Layer D: worktree adoption + enforcement helpers ----------------
+
+// handleWorktreeAdoption is called from SessionStart. It walks up from
+// payload.CWD to find a worktree companion, then either claims the lock
+// (case A: unowned or stale, or self-re-entry idempotent), or returns a
+// refusal message (case A: owned by another live session). Returns ("", nil)
+// when there is nothing to adopt (case B: cwd is in main, foreign, or
+// elsewhere) — the caller proceeds normally.
+func handleWorktreeAdoption(projectID int64, payload claudePayload) (string, error) {
+	projectRoot, err := monitor.ProjectPath(projectID)
+	if err != nil {
+		return "", fmt.Errorf("project path: %w", err)
+	}
+	worktreePath, err := monitor.FindWorktreeRoot(payload.CWD, projectRoot)
+	if err != nil {
+		return "", fmt.Errorf("find worktree root: %w", err)
+	}
+	if worktreePath == "" {
+		// Case B: cwd is in main, in a foreign worktree, or unrelated.
+		// Layer D does not auto-create. PreToolUse will block edits
+		// when they're attempted and provide a helpful message.
+		return "", nil
+	}
+
+	// Case A: cwd is inside an endless-managed worktree.
+	existing, err := monitor.ReadWorktreeLock(worktreePath)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return "", fmt.Errorf("read existing lock: %w", err)
+	}
+
+	tryClaim := func() error {
+		newLock := monitor.WorktreeLock{
+			SessionID: payload.SessionID,
+			PID:       os.Getppid(),
+			TmuxPane:  os.Getenv("TMUX_PANE"),
+			ClaimedAt: time.Now().UTC().Format(time.RFC3339),
+		}
+		return monitor.ClaimWorktreeLock(worktreePath, newLock)
+	}
+
+	switch {
+	case existing == nil:
+		// No lock — claim it.
+		if err := tryClaim(); err != nil && !errors.Is(err, os.ErrExist) {
+			return "", fmt.Errorf("claim worktree lock: %w", err)
+		}
+		// If a parallel session raced and won, fall through to next
+		// SessionStart; we don't loop here.
+		return "", nil
+
+	case existing.SessionID == payload.SessionID:
+		// Idempotent re-entry (Claude resume). Nothing to do.
+		return "", nil
+
+	case monitor.IsWorktreeLockStale(existing):
+		// Stale lock — release and reclaim.
+		if err := monitor.ReleaseWorktreeLock(worktreePath); err != nil {
+			return "", fmt.Errorf("release stale lock: %w", err)
+		}
+		if err := tryClaim(); err != nil && !errors.Is(err, os.ErrExist) {
+			return "", fmt.Errorf("claim worktree lock after stale release: %w", err)
+		}
+		return "", nil
+
+	default:
+		// Owned by a live session. Refuse with an actionable message.
+		return fmt.Sprintf(
+			"This worktree is already owned by session %s (PID %d).\n\n"+
+				"Open a new shell in a different worktree (or in main) and start\n"+
+				"a Claude session there. The owning session must end before this\n"+
+				"worktree can be reclaimed.\n\n"+
+				"  endless worktree current\n"+
+				"  endless worktree list",
+			existing.SessionID, existing.PID), nil
+	}
+}
+
+// enforceWorktreeGate runs the four PreToolUse worktree checks. Any
+// violation calls blockToolUse (which exits the process with code 2).
+// Returns silently if all checks pass; the caller then continues with
+// existing tracking-mode and session enforcement.
+func enforceWorktreeGate(projectID int64, payload claudePayload) {
+	projectRoot, err := monitor.ProjectPath(projectID)
+	if err != nil {
+		// Without a project root we cannot evaluate; let the call proceed
+		// and rely on existing checks.
+		return
+	}
+	worktreePath, _ := monitor.FindWorktreeRoot(payload.CWD, projectRoot)
+	session, _ := monitor.GetActiveSession(payload.SessionID)
+
+	if worktreePath == "" {
+		// cwd has no worktree companion. Distinguish main from foreign.
+		inMain, _ := isInMainCheckout(payload.CWD)
+		if !inMain {
+			// Foreign or unrelated tree — leave it alone; existing checks apply.
+			return
+		}
+		var redirectHint string
+		if session != nil && session.ActiveTaskID != nil {
+			if wp, _ := monitor.WorktreePathForTask(projectID, *session.ActiveTaskID); wp != "" {
+				redirectHint = fmt.Sprintf(
+					"\n\nYour active task E-%d has a worktree at:\n  %s\n\n"+
+						"Run `cd %s` in a Bash call (the new cwd persists for\n"+
+						"subsequent Bash calls), and use absolute paths under\n"+
+						"that directory for Read/Write/Edit.",
+					*session.ActiveTaskID, wp, wp)
+			}
+		}
+		blockToolUse("Edits in main are not allowed (E-971).\n\n" +
+			"main is the integration target — every edit goes through a worktree.\n\n" +
+			"If you do not yet have an active task, create one and start it:\n" +
+			"  endless task add \"<title>\"\n" +
+			"  endless task start E-NNN\n\n" +
+			"If you have an active task without a worktree, create the worktree\n" +
+			"via `endless pivot` (when available) or by hand:\n" +
+			"  git worktree add -b task/NNN-<slug> .endless/worktrees/e-NNN main" +
+			redirectHint)
+		return
+	}
+
+	// We are inside an endless-managed worktree. Three checks.
+
+	// (a) Lock-owner check: refuse if the lock is owned by a different session.
+	lock, err := monitor.ReadWorktreeLock(worktreePath)
+	if err == nil && lock != nil && lock.SessionID != payload.SessionID {
+		ownerHint := fmt.Sprintf("session %s (PID %d)", lock.SessionID, lock.PID)
+		if monitor.IsWorktreeLockStale(lock) {
+			ownerHint += " [stale]"
+		}
+		blockToolUse(fmt.Sprintf(
+			"This worktree is owned by %s, not this session.\n\n"+
+				"Restart this Claude session inside this worktree (a fresh SessionStart\n"+
+				"reclaims a stale lock), or move to a different worktree.\n\n"+
+				"  endless worktree current\n"+
+				"  endless worktree list",
+			ownerHint))
+	}
+
+	// (b) Task mismatch: worktree's task_id != session's active task.
+	comp, _ := monitor.ReadWorktreeCompanion(worktreePath)
+	if comp != nil && comp.TaskID != "" && session != nil && session.ActiveTaskID != nil {
+		worktreeTaskNum, parseErr := parseEndlessTaskID(comp.TaskID)
+		if parseErr == nil && worktreeTaskNum != *session.ActiveTaskID {
+			blockToolUse(fmt.Sprintf(
+				"This worktree is bound to %s, but your active task is E-%d.\n\n"+
+					"Either switch tasks (no cd needed):\n"+
+					"  endless task start E-%d\n\n"+
+					"Or move to the worktree for your active task:\n"+
+					"  endless worktree for-task E-%d",
+				comp.TaskID, *session.ActiveTaskID,
+				worktreeTaskNum, *session.ActiveTaskID))
+		}
+	}
+
+	// (c) Session has an active task whose worktree exists, but cwd is
+	// not in it. (e.g. `endless task start E-BBB` ran from inside a
+	// session sitting in worktree A.) Layer F's redirection message
+	// will guide Claude proactively; here we just refuse.
+	if session != nil && session.ActiveTaskID != nil {
+		activeWP, _ := monitor.WorktreePathForTask(projectID, *session.ActiveTaskID)
+		if activeWP != "" && filepath.Clean(activeWP) != filepath.Clean(worktreePath) {
+			blockToolUse(fmt.Sprintf(
+				"Your active task E-%d is bound to a different worktree:\n  %s\n\n"+
+					"Use absolute paths under that directory for Read/Write/Edit,\n"+
+					"and run `cd %s` in a Bash call for shell commands.",
+				*session.ActiveTaskID, activeWP, activeWP))
+		}
+	}
+}
+
+// parseEndlessTaskID parses an "E-NNN" task identifier into its numeric
+// component. Accepts case-insensitive prefixes ("e-808", "E-808") and
+// bare numbers ("808"). Returns an error on anything else.
+func parseEndlessTaskID(s string) (int64, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return 0, fmt.Errorf("empty task id")
+	}
+	if len(s) >= 2 && (s[0] == 'E' || s[0] == 'e') && s[1] == '-' {
+		s = s[2:]
+	}
+	n, err := strconv.ParseInt(s, 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("parse task id %q: %w", s, err)
+	}
+	return n, nil
 }
