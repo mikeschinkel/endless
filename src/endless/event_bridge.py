@@ -85,6 +85,44 @@ def emit_event(
     return None
 
 
+def migrate_db(
+    dry_run: bool = False,
+    force_rebuild: bool = False,
+    target: int = 0,
+) -> dict:
+    """Shell out to `endless-event migrate-db` and return parsed JSON.
+
+    Raises click.ClickException on failure (binary missing or non-zero exit).
+    """
+    event_bin = shutil.which("endless-event")
+    if not event_bin:
+        raise click.ClickException(
+            "endless-event binary not found on PATH. Build it: just build"
+        )
+
+    cmd = [event_bin, "migrate-db"]
+    if dry_run:
+        cmd.append("--dry-run")
+    if force_rebuild:
+        cmd.append("--force-rebuild")
+    if target > 0:
+        cmd.extend(["--target", str(target)])
+
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        # endless-event prints JSON with an "error" field on failure.
+        try:
+            payload = json.loads(result.stdout.strip()) if result.stdout.strip() else {}
+        except json.JSONDecodeError:
+            payload = {}
+        msg = payload.get("error") or result.stderr.strip() or "migrate-db failed"
+        raise click.ClickException(f"migrate-db failed: {msg}")
+
+    if not result.stdout.strip():
+        return {"applied": [], "skipped": []}
+    return json.loads(result.stdout.strip())
+
+
 def _get_or_create_node_id() -> str:
     """Read node_id from config.json, or generate and persist one."""
     config_path = config.CONFIG_FILE

@@ -77,7 +77,15 @@ def _backup_db():
 
 
 def _migrate(conn: sqlite3.Connection):
-    """Run schema migrations for existing databases."""
+    """Run schema migrations for existing databases.
+
+    Short-circuits when PRAGMA user_version is already >= 6 (the highest
+    version this Python migrator knows about). Once Go's framework
+    (internal/monitor/migrate.go, E-863) owns the schema, this function
+    becomes a no-op. Slated for removal in E-894 Phase 5.
+    """
+    if conn.execute("PRAGMA user_version").fetchone()[0] >= 6:
+        return
     _backup_db()  # backup before any migration
     # Rename plans table to tasks if needed
     tables = [

@@ -16,7 +16,7 @@ import (
 func main() {
 	if len(os.Args) < 2 {
 		fmt.Fprintf(os.Stderr, "Usage: endless-event <command> [flags]\n")
-		fmt.Fprintf(os.Stderr, "Commands: emit, validate-db, rebuild-db\n")
+		fmt.Fprintf(os.Stderr, "Commands: emit, validate-db, rebuild-db, migrate-db\n")
 		os.Exit(1)
 	}
 
@@ -27,6 +27,8 @@ func main() {
 		runValidateDB()
 	case "rebuild-db":
 		runRebuildDB()
+	case "migrate-db":
+		runMigrateDB()
 	default:
 		fmt.Fprintf(os.Stderr, "Unknown command: %s\n", os.Args[1])
 		os.Exit(1)
@@ -351,4 +353,37 @@ func runRebuildDB() {
 	currentDB.Exec("DETACH DATABASE proj")
 	os.Remove(tempPath)
 	fmt.Printf("Rebuilt: tasks table replaced with %d projected tasks.\n", projResult.TasksCreated)
+}
+
+func runMigrateDB() {
+	fs := flag.NewFlagSet("migrate-db", flag.ExitOnError)
+	dryRun := fs.Bool("dry-run", false, "Report pending migrations without applying")
+	forceRebuild := fs.Bool("force-rebuild", false, "Allow migrations marked RequiresRebuild")
+	target := fs.Int("target", 0, "Highest version to apply (0 = current)")
+	fs.Parse(os.Args[2:])
+
+	runner := monitor.RunnerExplicit
+	if *forceRebuild {
+		runner = monitor.RunnerForceRebuild
+	}
+
+	result, err := monitor.Migrate(monitor.MigrateOpts{
+		Runner:       runner,
+		AllowRebuild: *forceRebuild,
+		DryRun:       *dryRun,
+		Target:       *target,
+	})
+	if err != nil {
+		out := map[string]any{
+			"applied": result.Applied,
+			"skipped": result.Skipped,
+			"error":   err.Error(),
+		}
+		b, _ := json.Marshal(out)
+		fmt.Println(string(b))
+		os.Exit(1)
+	}
+
+	b, _ := json.Marshal(result)
+	fmt.Println(string(b))
 }

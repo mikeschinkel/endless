@@ -1414,3 +1414,36 @@ def suggestions_accept(suggestion_id, task_type, parent, project):
     """Create a task from a suggestion and link them."""
     from endless.suggestions_cmd import accept_suggestion
     accept_suggestion(suggestion_id, task_type, parent, project)
+
+
+@main.group("db")
+def db_cmd():
+    """Database administration."""
+    pass
+
+
+@db_cmd.command("migrate")
+@click.option("--dry-run", is_flag=True,
+              help="Report pending migrations without applying")
+@click.option("--force-rebuild", is_flag=True,
+              help="Allow migrations that rebuild whole tables")
+@click.option("--target", type=int, default=0,
+              help="Highest version to apply (0 = current)")
+def db_migrate(dry_run, force_rebuild, target):
+    """Run pending schema migrations."""
+    from endless.event_bridge import migrate_db
+    result = migrate_db(dry_run=dry_run, force_rebuild=force_rebuild, target=target)
+    applied = result.get("applied") or []
+    skipped = result.get("skipped") or []
+    if not applied:
+        if dry_run:
+            click.echo("Dry run: no migrations pending.")
+        else:
+            click.echo("No migrations to run.")
+    else:
+        verb = "Would apply" if dry_run else "Applied"
+        click.echo(f"{verb} {len(applied)} migration(s):")
+        for step in applied:
+            click.echo(f"  v{step['version']}: {step['name']}")
+    if skipped:
+        click.echo(f"Skipped {len(skipped)} migration(s).")

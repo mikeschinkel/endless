@@ -59,7 +59,11 @@ func DB() (*sql.DB, error) {
 		if _, err := dbConn.Exec("PRAGMA foreign_keys=ON"); err != nil {
 			log.Printf("endless-monitor: PRAGMA foreign_keys=ON: %v", err)
 		}
-		migrate(dbConn)
+		if _, err := migrate(dbConn, MigrateOpts{Runner: RunnerAuto}); err != nil {
+			dbErr = fmt.Errorf("auto-migrate %s: %w", path, err)
+			dbConn = nil
+			return
+		}
 	})
 	return dbConn, dbErr
 }
@@ -136,18 +140,9 @@ func BackupDB() {
 	}
 }
 
-// migrate runs schema migrations for existing databases.
-func migrate(db *sql.DB) {
-	BackupDB() // backup before any migration
-	migrateV1(db)
-	migrateV2(db)
-	migrateV3(db)
-	migrateV4(db)
-}
-
 // migrateV4 adds task_files (per-task edit-set, E-917) and
 // suggestions (AI-agent calibration suggestions, E-918) tables.
-func migrateV4(db *sql.DB) {
+func migrateV4(db *sql.DB) error {
 	if !hasTable(db, "task_files") {
 		db.Exec(`CREATE TABLE IF NOT EXISTS task_files (
 			id INTEGER PRIMARY KEY,
@@ -176,10 +171,11 @@ func migrateV4(db *sql.DB) {
 		)`)
 		db.Exec(`CREATE INDEX IF NOT EXISTS idx_suggestions_open ON suggestions(project_id, created_at DESC)`)
 	}
+	return nil
 }
 
 // migrateV3 adds session conversation history tables (E-857).
-func migrateV3(db *sql.DB) {
+func migrateV3(db *sql.DB) error {
 	// session_messages table
 	if !hasTable(db, "session_messages") {
 		db.Exec(`CREATE TABLE IF NOT EXISTS session_messages (
@@ -232,10 +228,11 @@ func migrateV3(db *sql.DB) {
 			db.Exec("ALTER TABLE sessions ADD COLUMN summary_seq INTEGER NOT NULL DEFAULT 0")
 		}
 	}
+	return nil
 }
 
 // migrateV1 handles legacy schema migrations (plans→tasks, column additions).
-func migrateV1(db *sql.DB) {
+func migrateV1(db *sql.DB) error {
 	// Determine the session table name (may be ai_sessions or sessions depending on v2 state)
 	sessionTable := "ai_sessions"
 	if hasTable(db, "sessions") && !hasTable(db, "ai_sessions") {
@@ -365,11 +362,12 @@ func migrateV1(db *sql.DB) {
 			db.Exec("ALTER TABLE tasks ADD COLUMN prompt TEXT")
 		}
 	}
+	return nil
 }
 
 // migrateV2 handles schema v2 changes: drop dead tables, rename tables/columns,
 // drop unused columns, fix CHECK constraints.
-func migrateV2(db *sql.DB) {
+func migrateV2(db *sql.DB) error {
 	// === Step 1: Drop dead tables (E-741) ===
 	for _, table := range []string{
 		"doc_dependencies", "doc_regions", "ai_chats",
@@ -459,6 +457,7 @@ func migrateV2(db *sql.DB) {
 			FOREIGN KEY (active_task_id) REFERENCES tasks(id) ON DELETE SET NULL
 		)`)
 	}
+	return nil
 }
 
 // ProjectPath returns the registered filesystem path for a project ID.
