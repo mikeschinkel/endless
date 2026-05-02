@@ -97,6 +97,10 @@ func replayTaskCreated(db *sql.DB, evt *Event, result *ProjectResult) error {
 		return err
 	}
 
+	if err := ValidatePhase(p.Phase); err != nil {
+		return err
+	}
+
 	projectID, err := ensureProject(db, evt.Project)
 	if err != nil {
 		return err
@@ -142,6 +146,9 @@ func replayTaskCreated(db *sql.DB, evt *Event, result *ProjectResult) error {
 func replayTaskImported(db *sql.DB, evt *Event, result *ProjectResult) error {
 	var p TaskImportedPayload
 	if err := json.Unmarshal(evt.Payload, &p); err != nil {
+		return err
+	}
+	if err := ValidatePhase(p.Phase); err != nil {
 		return err
 	}
 
@@ -243,6 +250,15 @@ func replayTaskFieldsUpdated(db *sql.DB, evt *Event, result *ProjectResult) erro
 		col, ok := allowedFields[field]
 		if !ok {
 			continue
+		}
+		if field == "phase" {
+			phaseStr, ok := value.(string)
+			if !ok {
+				return fmt.Errorf("projector: phase field must be string, got %T", value)
+			}
+			if err := ValidatePhase(phaseStr); err != nil {
+				return err
+			}
 		}
 		setClauses = append(setClauses, col+" = ?")
 		args = append(args, value)
