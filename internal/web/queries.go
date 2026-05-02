@@ -181,7 +181,8 @@ func GetProjectTasks(projectID int64, excludeStatuses ...string) []data.TaskView
 		   WHEN 'now' THEN 0
 		   WHEN 'next' THEN 1
 		   WHEN 'later' THEN 2
-		   ELSE 3
+		   WHEN 'maybe' THEN 3
+		   ELSE 4
 		 END,
 		 CASE pi.status
 		   WHEN 'in_progress' THEN 0
