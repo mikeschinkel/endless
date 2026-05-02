@@ -13,8 +13,29 @@
       "type": "verb",
       "method": "exact",
       "match": [
-        "broaden"
-      ]
+        "broaden",
+        "consider",
+        "deprecate",
+        "populate",
+        "re-emit",
+        "refresh",
+        "reduce",
+        "rewrite",
+        "shorten",
+        "set"
+      ],
+      "definitions": {
+        "broaden": "to widen scope or coverage",
+        "consider": "to deliberate over",
+        "deprecate": "to mark as obsolete or schedule for removal",
+        "populate": "to fill with data",
+        "re-emit": "to emit again, typically a previously missed event",
+        "refresh": "to reload from source",
+        "reduce": "to make smaller in count, size, or complexity",
+        "rewrite": "to write anew",
+        "shorten": "to make shorter",
+        "set": "to assign a value"
+      }
     }
   ]
 }
