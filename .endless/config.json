@@ -8,5 +8,13 @@
   "documents": {
     "rules": []
   },
-  "matchers": []
+  "matchers": [
+    {
+      "type": "verb",
+      "method": "exact",
+      "match": [
+        "broaden"
+      ]
+    }
+  ]
 }

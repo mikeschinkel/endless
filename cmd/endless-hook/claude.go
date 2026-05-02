@@ -272,10 +272,12 @@ func handlePostToolUse(projectID int64, payload claudePayload) error {
 		// Why non-fatal: snapshots are best-effort redundancy (hook error-policy
 		// criterion 1: opportunistic by design). The canonical plan content still
 		// lives in the harness file at input.FilePath and, once attached, in the
-		// task's text field; no automated path reads the snapshots dir — only the
-		// human-driven `endless plan list/show`. Failure is also self-healing
-		// (criterion 2): the next Write to this plan re-attempts, and existingSnapshot
-		// keys on session+content-hash so a missed snapshot is filled in on retry.
+		// task's text field; no automated path currently reads the snapshots dir —
+		// only the human-driven `endless snapshots list/show`. Failure is also
+		// self-healing (criterion 2) for plans that iterate: the next harness Write
+		// to the same plan re-runs this path, and existingSnapshot keys on
+		// session+content-hash so a missed snapshot fills in on retry. A backstop
+		// for one-shot plans (Write once, never iterated) is tracked as E-1097.
 		log.Printf("plan snapshot: %v", err)
 	}
 
