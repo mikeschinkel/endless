@@ -27,6 +27,16 @@ func ConfigDir() string {
 	return filepath.Join(configDir, "endless")
 }
 
+// CacheDir returns the Endless cache directory.
+func CacheDir() string {
+	cacheDir := os.Getenv("XDG_CACHE_HOME")
+	if cacheDir == "" {
+		home, _ := os.UserHomeDir()
+		cacheDir = filepath.Join(home, ".cache")
+	}
+	return filepath.Join(cacheDir, "endless")
+}
+
 // DBPath returns the path to the Endless SQLite database.
 func DBPath() string {
 	return filepath.Join(ConfigDir(), "endless.db")
