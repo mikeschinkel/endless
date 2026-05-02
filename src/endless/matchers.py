@@ -139,6 +139,31 @@ def machine_config_path() -> Path:
     return config.CONFIG_FILE
 
 
+def project_verbs_path() -> Path | None:
+    """Return <main-checkout>/.endless/verbs.json if cwd is in a project, else None.
+
+    Co-located with project_config_path's resolution: writes always target
+    the main checkout's working dir even when cwd is in a worktree (E-1111).
+    Returns the path even if the file does not yet exist — callers may need
+    to create it. Returns None only when cwd is not in a project at all.
+    """
+    cwd = Path.cwd()
+    main_root = _git_main_worktree_root(cwd)
+    if main_root is not None:
+        if (main_root / ".endless" / "config.json").exists():
+            return main_root / ".endless" / "verbs.json"
+        return None
+    for parent in [cwd] + list(cwd.parents):
+        if (parent / ".endless" / "config.json").exists():
+            return parent / ".endless" / "verbs.json"
+    return None
+
+
+def machine_verbs_path() -> Path:
+    """Path to the machine-layer verbs file."""
+    return config.CONFIG_DIR / "verbs.json"
+
+
 # --- File IO ----------------------------------------------------------------
 
 def _load_json(path: Path) -> dict:
@@ -159,6 +184,23 @@ def _read_matchers_from(path: Path) -> list[dict]:
     data = _load_json(path)
     raw = data.get("matchers", [])
     return raw if isinstance(raw, list) else []
+
+
+def _load_verbs_list(path: Path) -> list[dict]:
+    """Load verbs from a verbs.json file (top-level array of objects)."""
+    if not path.exists():
+        return []
+    try:
+        raw = json.loads(path.read_text())
+    except (OSError, json.JSONDecodeError):
+        return []
+    return raw if isinstance(raw, list) else []
+
+
+def _save_verbs_list(path: Path, verbs: list[dict]) -> None:
+    """Save verbs as a top-level JSON array."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(verbs, indent=2) + "\n")
 
 
 DEFAULT_VERBS: list[dict[str, str]] = [
@@ -235,70 +277,95 @@ DEFAULT_VERBS: list[dict[str, str]] = [
 
 
 def _ensure_default_seeds() -> None:
-    """Seed defaults into the machine config when missing.
+    """Seed defaults into the machine layer when missing.
 
-    Idempotent. Seeds 'matchers' (pivot + regex command-patterns) and 'verbs'
-    independently — first run writes both; later runs only write whichever is
-    missing. Project config is never auto-seeded.
+    Idempotent. Matchers seed into ~/.config/endless/config.json; verbs seed
+    into the separate ~/.config/endless/verbs.json file (E-1124). Project
+    layer is never auto-seeded.
     """
-    path = machine_config_path()
-    data = _load_json(path)
-    changed = False
-    if "matchers" not in data:
-        data["matchers"] = DEFAULT_MATCHERS
-        changed = True
-    if "verbs" not in data:
-        data["verbs"] = DEFAULT_VERBS
-        changed = True
-    if changed:
-        _save_json(path, data)
+    cfg_path = machine_config_path()
+    cfg_data = _load_json(cfg_path)
+    if "matchers" not in cfg_data:
+        cfg_data["matchers"] = DEFAULT_MATCHERS
+        _save_json(cfg_path, cfg_data)
+
+    verbs_path = machine_verbs_path()
+    if not verbs_path.exists():
+        _save_verbs_list(verbs_path, DEFAULT_VERBS)
 
 
-def _migrate_verb_matchers(path: Path) -> None:
-    """One-time: extract any type=verb matchers in `path` into top-level `verbs`.
+def _migrate_verbs_to_separate_file(config_path: Path, verbs_path: Path) -> None:
+    """One-time: extract verbs from a config.json file into a sibling verbs.json.
 
-    Idempotent. Pre-E-1117 configs stored verbs as a matcher entry, possibly
-    with a sibling `definitions: {value: def}` map (E-1108). This migration
-    hoists each value into a `{value, definition?}` object on the `verbs`
-    top-level array and removes the verb matcher from `matchers`.
+    Handles two pre-E-1124 shapes that may exist in `config_path`:
 
-    Definitions map entries are preserved as the `definition` field; missing
-    definitions leave the field unset (verb-gate tolerates the absence).
+      1. Pre-E-1117: a `type=verb` matcher entry inside `matchers`, optionally
+         with a sibling `definitions: {value: def}` map (E-1108 leftover).
+      2. Post-E-1117 / pre-E-1124: a top-level `verbs: [{value, definition}]`
+         array key on the config object.
 
-    No-op when `path` doesn't exist or has no verb matchers.
+    Both are extracted into the `verbs.json` file at `verbs_path` (top-level
+    JSON array), deduplicated by value (existing verbs.json entries take
+    precedence on conflict). The corresponding fields are removed from
+    `config_path` afterwards.
+
+    Idempotent. No-op when `config_path` doesn't exist, has no migration-
+    eligible content, or the config layer is empty.
     """
-    if not path.exists():
+    if not config_path.exists():
         return
-    data = _load_json(path)
+    data = _load_json(config_path)
     matchers = data.get("matchers")
-    if not isinstance(matchers, list):
-        return
-    verb_matchers = [m for m in matchers if isinstance(m, dict) and m.get("type") == "verb"]
-    if not verb_matchers:
+    inline_verbs = data.get("verbs")
+
+    has_verb_matcher = (
+        isinstance(matchers, list)
+        and any(isinstance(m, dict) and m.get("type") == "verb" for m in matchers)
+    )
+    has_inline_verbs = isinstance(inline_verbs, list) and inline_verbs
+    if not has_verb_matcher and not has_inline_verbs:
         return
 
-    verbs = data.setdefault("verbs", [])
-    if not isinstance(verbs, list):
-        verbs = []
-        data["verbs"] = verbs
-    existing = {v.get("value") for v in verbs if isinstance(v, dict)}
+    existing_verbs = _load_verbs_list(verbs_path)
+    seen = {v.get("value") for v in existing_verbs if isinstance(v, dict)}
 
-    for m in verb_matchers:
-        match_list = m.get("match", []) or []
-        defs = m.get("definitions") or {}
-        if not isinstance(defs, dict):
-            defs = {}
-        for value in match_list:
-            if not isinstance(value, str) or value in existing:
+    # 1. Migrate inline verbs: array
+    if has_inline_verbs:
+        for v in inline_verbs:
+            if not isinstance(v, dict):
                 continue
-            entry: dict[str, str] = {"value": value}
-            if value in defs and isinstance(defs[value], str):
-                entry["definition"] = defs[value]
-            verbs.append(entry)
-            existing.add(value)
+            value = v.get("value")
+            if not isinstance(value, str) or value in seen:
+                continue
+            existing_verbs.append(v)
+            seen.add(value)
 
-    data["matchers"] = [m for m in matchers if not (isinstance(m, dict) and m.get("type") == "verb")]
-    _save_json(path, data)
+    # 2. Migrate verb matchers (with optional `definitions` map)
+    if has_verb_matcher:
+        for m in matchers:
+            if not isinstance(m, dict) or m.get("type") != "verb":
+                continue
+            match_list = m.get("match", []) or []
+            defs = m.get("definitions") or {}
+            if not isinstance(defs, dict):
+                defs = {}
+            for value in match_list:
+                if not isinstance(value, str) or value in seen:
+                    continue
+                entry: dict[str, str] = {"value": value}
+                if value in defs and isinstance(defs[value], str):
+                    entry["definition"] = defs[value]
+                existing_verbs.append(entry)
+                seen.add(value)
+
+    _save_verbs_list(verbs_path, existing_verbs)
+
+    # Strip the migrated content out of config_path
+    if isinstance(matchers, list):
+        data["matchers"] = [m for m in matchers if not (isinstance(m, dict) and m.get("type") == "verb")]
+    if "verbs" in data:
+        del data["verbs"]
+    _save_json(config_path, data)
 
 
 # Maps (type, scope, method) -> {old_match: new_match}. Only rewrites when
@@ -376,9 +443,10 @@ def load_all_matchers() -> list[dict]:
     _ensure_default_seeds()
     _migrate_stale_defaults()
     project_path = project_config_path()
-    if project_path is not None:
-        _migrate_verb_matchers(project_path)
-    _migrate_verb_matchers(machine_config_path())
+    project_vp = project_verbs_path()
+    if project_path is not None and project_vp is not None:
+        _migrate_verbs_to_separate_file(project_path, project_vp)
+    _migrate_verbs_to_separate_file(machine_config_path(), machine_verbs_path())
     project = _read_matchers_from(project_path) if project_path else []
     machine = _read_matchers_from(machine_config_path())
 
@@ -412,24 +480,17 @@ def load_all_matchers() -> list[dict]:
 
 # --- Lookup helpers consumed by validate_title, hooks, etc. ----------------
 
-def _read_verbs_from(path: Path | None) -> list[dict]:
-    if path is None or not path.exists():
-        return []
-    data = _load_json(path)
-    raw = data.get("verbs", [])
-    return raw if isinstance(raw, list) else []
-
-
 def load_all_verbs() -> list[dict]:
     """Project + machine verbs merged additively, deduplicated by value.
 
     Project entries take precedence on conflict (same value, different
     definition). Triggers migration + default seeding via load_all_matchers.
+    Reads from .endless/verbs.json (project) and ~/.config/endless/verbs.json
+    (machine) per E-1124.
     """
     load_all_matchers()
-    project_path = project_config_path()
-    project = _read_verbs_from(project_path)
-    machine = _read_verbs_from(machine_config_path())
+    project = _load_verbs_list(project_verbs_path()) if project_verbs_path() else []
+    machine = _load_verbs_list(machine_verbs_path())
 
     seen: set[str] = set()
     out: list[dict] = []
@@ -700,7 +761,7 @@ def _toggle_in_file(
     return changes
 
 
-# --- Verb mutation API (E-1117) --------------------------------------------
+# --- Verb mutation API (E-1117 / E-1124) -----------------------------------
 
 def add_verb(
     *,
@@ -708,13 +769,11 @@ def add_verb(
     definition: str,
     machine_only: bool = False,
 ) -> tuple[bool, bool]:
-    """Add a verb to the appropriate config files.
+    """Add a verb to the appropriate verbs.json files.
 
     Returns (wrote_project, wrote_machine). Either may be False if the
-    value was already present (no-op) or writing was skipped.
-
-    Definitions are stored on the verb object itself in the top-level
-    `verbs` array — no leakage into matcher schema.
+    value was already present (no-op) or writing was skipped (e.g.,
+    no project at cwd and machine_only=False).
     """
     if not value or not value.strip():
         raise ValueError("verb value is required")
@@ -724,56 +783,50 @@ def add_verb(
 
     wrote_project = False
     wrote_machine = False
-    project_path = project_config_path()
-    if project_path is not None and not machine_only:
-        wrote_project = _add_verb_to_file(project_path, entry)
-    wrote_machine = _add_verb_to_file(machine_config_path(), entry)
+    project_vp = project_verbs_path()
+    if project_vp is not None and not machine_only:
+        wrote_project = _add_verb_to_file(project_vp, entry)
+    wrote_machine = _add_verb_to_file(machine_verbs_path(), entry)
     return wrote_project, wrote_machine
 
 
 def _add_verb_to_file(path: Path, entry: dict) -> bool:
-    data = _load_json(path)
-    verbs = data.setdefault("verbs", [])
-    if not isinstance(verbs, list):
-        verbs = []
-        data["verbs"] = verbs
+    """Append a verb entry to the verbs.json at `path`. No-op if value exists."""
+    verbs = _load_verbs_list(path)
     for v in verbs:
         if isinstance(v, dict) and v.get("value") == entry["value"]:
             return False
     verbs.append(entry)
-    _save_json(path, data)
+    _save_verbs_list(path, verbs)
     return True
 
 
 def remove_verb(*, value: str, machine_only: bool = False) -> tuple[int, int]:
-    """Remove a verb from the appropriate config files.
+    """Remove a verb from the appropriate verbs.json files.
 
     Returns (project_removals, machine_removals).
     """
     pr = 0
     mr = 0
-    project_path = project_config_path()
-    if project_path is not None and not machine_only:
-        pr = _remove_verb_from_file(project_path, value)
-    mr = _remove_verb_from_file(machine_config_path(), value)
+    project_vp = project_verbs_path()
+    if project_vp is not None and not machine_only:
+        pr = _remove_verb_from_file(project_vp, value)
+    mr = _remove_verb_from_file(machine_verbs_path(), value)
     return pr, mr
 
 
 def _remove_verb_from_file(path: Path, value: str) -> int:
+    """Remove all entries with matching `value` from verbs.json at `path`."""
     if not path.exists():
         return 0
-    data = _load_json(path)
-    verbs = data.get("verbs", [])
-    if not isinstance(verbs, list):
-        return 0
-    removed = 0
+    verbs = _load_verbs_list(path)
     keep: list[dict] = []
+    removed = 0
     for v in verbs:
         if isinstance(v, dict) and v.get("value") == value:
             removed += 1
             continue
         keep.append(v)
     if removed:
-        data["verbs"] = keep
-        _save_json(path, data)
+        _save_verbs_list(path, keep)
     return removed
