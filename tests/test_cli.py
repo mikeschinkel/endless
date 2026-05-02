@@ -147,3 +147,16 @@ def test_scan(isolated_env):
     result = runner.invoke(main, ["scan"])
     assert result.exit_code == 0
     assert "1 project(s)" in result.output
+
+
+def test_task_add_rejects_invalid_phase_at_parse_time(isolated_env):
+    """E-1121: --phase on task add must reject unknown values via click.Choice
+    so bad input is caught at the CLI boundary, not deep in the events layer."""
+    runner = CliRunner()
+    result = runner.invoke(
+        main, ["task", "add", "Add a thing", "--phase", "foo"]
+    )
+    assert result.exit_code != 0
+    assert "'foo' is not one of" in result.output
+    for valid in ("now", "next", "later", "maybe"):
+        assert valid in result.output
