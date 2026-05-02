@@ -1152,10 +1152,12 @@ def phrase_cmd():
               help="Match exact case (default: case-insensitive)")
 @click.option("--machine-only", is_flag=True,
               help="Skip the project config write (machine layer only)")
-def phrase_add(type_, value, scope, method, case_sensitive, machine_only):
+@click.option("--definition", default=None,
+              help="Required for type=verb: short 'to ___' definition (e.g., 'to deliberate over')")
+def phrase_add(type_, value, scope, method, case_sensitive, machine_only, definition):
     """Add a matcher: TYPE VALUE [--scope ...] [--method ...] [--case-sensitive] [--machine-only]."""
     from endless.phrase_cmd import add_phrase
-    add_phrase(type_, value, scope, method, case_sensitive, machine_only)
+    add_phrase(type_, value, scope, method, case_sensitive, machine_only, definition)
 
 
 @phrase_cmd.command("list")

@@ -55,6 +55,7 @@ def add_phrase(
     method: str | None,
     case_sensitive: bool,
     machine_only: bool,
+    definition: str | None = None,
 ) -> None:
     _validate_type(type_)
     _validate_scope(scope)
@@ -67,6 +68,14 @@ def add_phrase(
     if method == "regex":
         _validate_regex(value)
 
+    if type_ == "verb":
+        if not definition or not definition.strip():
+            raise click.ClickException(
+                f"Adding a verb requires --definition. Define what action '{value}' names.\n"
+                f"  Example: endless phrase add verb '{value}' --definition \"to deliberate over\"\n"
+                f"  If you cannot write a 'to ___' definition, the word is probably not a verb."
+            )
+
     wrote_project, wrote_machine = matchers.add_match_value(
         type_=type_,
         value=value,
@@ -74,6 +83,7 @@ def add_phrase(
         method=method,
         case_sensitive=case_sensitive,
         machine_only=machine_only,
+        definition=definition,
     )
 
     where = []
