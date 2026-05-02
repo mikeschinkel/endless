@@ -109,6 +109,89 @@ go-work-init:
         done
     echo "go.work generated at $(pwd)/go.work"
 
+# Generate per-worktree .claude/settings.json that overrides hook command
+# paths to point at this worktree's own bin/endless-hook (E-998).
+#
+# Without this, exercising new hook code in a Claude session requires
+# repointing /usr/local/bin/endless-hook at the worktree's binary, which
+# affects every other live Claude session on the machine. Claude Code's
+# project-level .claude/settings.json takes precedence over the user-level
+# config for matching keys (including 'hooks'), so this file scopes the
+# override to sessions whose cwd is inside this worktree.
+#
+# Mirrors the endless-hook entries from ~/.claude/settings.json verbatim
+# (event, async flag, args after the binary), then rewrites the binary
+# path to "$(pwd)/bin/endless-hook". enabledPlugins from the committed
+# main-checkout settings.json is preserved so Claude sessions in the
+# worktree don't lose plugin enablement.
+#
+# Idempotent: re-running produces the same file (sorted keys, stable
+# JSON). Refuses to run from the main checkout to avoid clobbering the
+# committed .claude/settings.json there.
+#
+# git tracks .claude/settings.json (the main checkout commits enabledPlugins
+# via it), so we use 'git update-index --skip-worktree' to mask the
+# regenerated content from this worktree's git status without affecting
+# main or other worktrees.
+#
+# Run AFTER `just build` (or `just go` / `just go-work-init` then `just go`)
+# so that bin/endless-hook exists. The recipe writes the absolute path
+# regardless, since hook fire-time cwd is unpredictable.
+claude-settings-init:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    git_dir="$(cd "$(git rev-parse --git-dir)" && pwd)"
+    git_common_dir="$(cd "$(git rev-parse --git-common-dir)" && pwd)"
+    if [ "$git_dir" = "$git_common_dir" ]; then
+        echo "claude-settings-init: refusing to run from the main checkout (would clobber tracked .claude/settings.json). Run from a worktree." >&2
+        exit 1
+    fi
+    worktree_root="$(pwd)"
+    user_settings="$HOME/.claude/settings.json"
+    if [ ! -f "$user_settings" ]; then
+        echo "claude-settings-init: $user_settings not found. Run 'endless setup claude-hook' from main first." >&2
+        exit 1
+    fi
+    mkdir -p .claude
+    # Capture the committed settings.json content (enabledPlugins etc.) before
+    # we overwrite the working-tree copy, so we can preserve non-hook keys.
+    committed_json="$(git show HEAD:.claude/settings.json 2>/dev/null || echo '{}')"
+    python3 - "$user_settings" "$worktree_root" .claude/settings.json "$committed_json" <<'PY'
+    import json, sys
+    user_path, worktree_root, out_path, committed_raw = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
+    with open(user_path) as f:
+        user = json.load(f)
+    committed = json.loads(committed_raw or "{}")
+    new_bin = f"{worktree_root}/bin/endless-hook"
+    out_hooks = {}
+    for event, entries in (user.get("hooks") or {}).items():
+        rewritten = []
+        for entry in entries:
+            new_entry_hooks = []
+            for h in entry.get("hooks", []):
+                cmd = h.get("command", "")
+                if "endless-hook" not in cmd:
+                    continue
+                parts = cmd.split(None, 1)
+                tail = f" {parts[1]}" if len(parts) > 1 else ""
+                new_h = dict(h)
+                new_h["command"] = new_bin + tail
+                new_entry_hooks.append(new_h)
+            if new_entry_hooks:
+                rewritten.append({"hooks": new_entry_hooks})
+        if rewritten:
+            out_hooks[event] = rewritten
+    out = {k: v for k, v in committed.items() if k != "hooks"}
+    if out_hooks:
+        out["hooks"] = out_hooks
+    with open(out_path, "w") as f:
+        json.dump(out, f, indent=2, sort_keys=True)
+        f.write("\n")
+    print(f"wrote {out_path}: {sum(len(v) for v in out_hooks.values())} hook entries across {len(out_hooks)} events")
+    PY
+    git update-index --skip-worktree .claude/settings.json
+    echo "claude-settings-init: $worktree_root/.claude/settings.json (skip-worktree set)"
+
 # Run Python tests
 test:
     uv run pytest tests/ -v
