@@ -38,7 +38,10 @@ func enterCmd(args []string) {
 	if shell == "" {
 		shell = "/bin/sh"
 	}
-	cmd := exec.Command(shell)
+	// -i forces interactive mode. Without it, bash/zsh launched via exec
+	// can decide they are non-interactive and exit immediately, defeating
+	// the subshell semantics from E-1072.
+	cmd := exec.Command(shell, "-i")
 	cmd.Env = append(os.Environ(), sb.Env()...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
