@@ -302,6 +302,9 @@ def _phase_for_heading(text: str) -> str:
         "future": "later",
         "deferred": "later",
         "backlog": "later",
+        "maybe": "maybe",
+        "considering": "maybe",
+        "tentative": "maybe",
         "blocked": "blocked",
         "done": "confirmed",
         "completed": "confirmed",
@@ -736,7 +739,7 @@ def show_plan(
     sort_col_map = {
         "id": "pi.id",
         "status": "pi.status",
-        "phase": "CASE pi.phase WHEN 'now' THEN 0 WHEN 'next' THEN 1 WHEN 'later' THEN 2 ELSE 3 END",
+        "phase": "CASE pi.phase WHEN 'now' THEN 0 WHEN 'next' THEN 1 WHEN 'later' THEN 2 WHEN 'maybe' THEN 3 ELSE 4 END",
         "tier": "CASE WHEN pi.tier IS NULL THEN 99 ELSE pi.tier END",
         "created": "pi.created_at",
         "title": "pi.title",
@@ -914,7 +917,7 @@ def next_tasks(
         f"ORDER BY "
         f"  CASE t.phase "
         f"    WHEN 'now' THEN 0 WHEN 'next' THEN 1 "
-        f"    WHEN 'later' THEN 2 ELSE 3 END, "
+        f"    WHEN 'later' THEN 2 WHEN 'maybe' THEN 3 ELSE 4 END, "
         f"  CASE t.status "
         f"    WHEN 'ready' THEN 0 WHEN 'needs_plan' THEN 1 "
         f"    WHEN 'revisit' THEN 2 ELSE 3 END, "

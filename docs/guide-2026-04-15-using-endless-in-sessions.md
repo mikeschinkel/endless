@@ -225,7 +225,8 @@ endless status --project <name>
 |-------|---------|
 | `now` | Current priority |
 | `next` | Up next after current work |
-| `later` | Future work, not urgent |
+| `later` | Future work, not urgent — committed to do eventually |
+| `maybe` | Considered but not committed — may or may not be done. Distinct from `later`: `later` says "we will, just not yet"; `maybe` says "we might". Promote `maybe` directly to `now` or `next` when a decision is made. |
 
 ## Dependency Blocking Semantics
 

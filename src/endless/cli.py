@@ -471,7 +471,7 @@ def task_import(file, from_claude, json_file, project, replace, parent):
               type=MultiChoice(TASK_STATUSES),
               help="Filter by status (comma-separated, e.g. needs_plan,ready)")
 @click.option("--phase", default=None,
-              type=click.Choice(["now", "next", "later"]),
+              type=click.Choice(["now", "next", "later", "maybe"]),
               help="Filter by phase")
 @click.option("--tier", default=None,
               help="Filter by tier (1-4 or auto/quick/deep/discuss)")
@@ -547,7 +547,7 @@ task_cmd.add_command(task_show, name="detail")
 @click.option("--tier", default=None,
               help="Filter by tier (1-4 or auto/quick/deep/discuss)")
 @click.option("--phase", default=None,
-              type=click.Choice(["now", "next", "later"]),
+              type=click.Choice(["now", "next", "later", "maybe"]),
               help="Filter by phase")
 @click.option("--parent", "parent_id", default=None,
               help="Filter to children of this task (e.g. E-799), or 'none' for root tasks")
@@ -611,7 +611,7 @@ def task_recent(project, show_all, limit, llm, as_json, parent_id):
               type=MultiChoice(TASK_STATUSES),
               help="Filter by status (comma-separated, e.g. needs_plan,ready)")
 @click.option("--phase", default=None,
-              type=click.Choice(["now", "next", "later"]),
+              type=click.Choice(["now", "next", "later", "maybe"]),
               help="Filter by phase")
 @click.option("--parent", "parent_id", default=None,
               help="Filter to children of this task (e.g. E-799), or 'none' for root tasks")
@@ -642,7 +642,7 @@ def task_search(query, project, show_all, status, phase, parent_id,
 @click.option("--description", default=None,
               help="Longer description of the task")
 @click.option("--phase", default="now",
-              help="Phase: now, next, later (default: now)")
+              help="Phase: now, next, later, maybe (default: now)")
 @click.option("--project", default=None,
               help="Project name (default: detect from cwd)")
 @click.option("--parent", type=TASK_ID, default=None,
@@ -710,8 +710,8 @@ def task_add(title, description, phase, project, parent, after, task_type, statu
 @click.option("--parent", type=TASK_ID, default=None,
               help="Set parent task ID (0 to make root)")
 @click.option("--phase", default=None,
-              type=click.Choice(["now", "next", "later"]),
-              help="Phase: now, next, later")
+              type=click.Choice(["now", "next", "later", "maybe"]),
+              help="Phase: now, next, later, maybe")
 @click.option("--tier", default=None,
               help="Tier (0=n/a, 1-4 or auto/quick/deep/discuss, none=clear)")
 @click.option("--force", is_flag=True,
