@@ -317,12 +317,16 @@ def add_match_value(
     method: str = "exact",
     case_sensitive: bool = False,
     machine_only: bool = False,
+    definition: str | None = None,
 ) -> tuple[bool, bool]:
     """Add a matcher value to the appropriate config files.
 
     Returns (wrote_project, wrote_machine). Either may be False if the
     value was already present (no-op) or if writing was skipped (e.g.,
     no project config and machine_only=False).
+
+    If `definition` is provided (only meaningful for verb-type, exact-method
+    matchers), it is stored in a sibling `definitions` map keyed by value.
     """
     matcher_template = {
         "type": type_,
@@ -337,6 +341,9 @@ def add_match_value(
         matcher_template["match"] = value
     else:
         matcher_template["match"] = [value]
+
+    if definition and method != "regex":
+        matcher_template["definitions"] = {value: definition.strip()}
 
     wrote_project = False
     wrote_machine = False
@@ -392,6 +399,16 @@ def _add_to_file(path: Path, new_matcher: dict) -> bool:
         if v not in target_match:
             target_match.append(v)
             added = True
+
+    new_defs = new_matcher.get("definitions")
+    if isinstance(new_defs, dict) and new_defs:
+        target_defs = target.setdefault("definitions", {})
+        if isinstance(target_defs, dict):
+            for k, v in new_defs.items():
+                if k not in target_defs:
+                    target_defs[k] = v
+                    added = True
+
     if added:
         _save_json(path, data)
     return added

@@ -128,25 +128,53 @@ def tier_display(tier: int | None) -> str:
     return f"{tier} ({label})"
 
 
-def validate_title(title: str, force: bool = False):
-    """Warn if title doesn't start with an actionable verb.
+def _running_under_agent() -> bool:
+    """True if invoked from an LLM agent harness.
 
-    Verbs are loaded from matchers (config files), seeded from the former
-    _TITLE_VERBS set on first run. Add new verbs with:
-      endless phrase add verb <new-verb>
+    Today: Claude Code (sets CLAUDECODE=1). Extend as other harnesses are
+    encountered. Used only to surface a stronger anti-rationalization variant
+    of the verb-gate error — never to gate behavior.
+    """
+    import os
+    return os.environ.get("CLAUDECODE") == "1"
+
+
+def validate_title(title: str, force: bool = False):
+    """Reject titles that don't start with a registered actionable verb.
+
+    Add new verbs with: endless phrase add verb <new-verb> --definition "<def>"
     """
     first_word = title.split()[0].lower() if title.strip() else ""
     from endless import matchers
     verbs = matchers.get_verbs()
-    if first_word not in verbs:
-        if force:
-            return
-        raise click.ClickException(
-            f"Title should start with an actionable verb, got '{first_word}'.\n"
-            f"  Common verbs: add, fix, implement, design, refactor, remove, build, …\n"
-            f"  Add a new verb: endless phrase add verb '{first_word}'\n"
-            f"  Or use --force to bypass."
+    if first_word in verbs:
+        return
+    if force:
+        return
+
+    register_cmd = (
+        f"endless phrase add verb '{first_word}' --definition \"<short definition>\""
+    )
+
+    if _running_under_agent():
+        msg = (
+            f"Title must start with an actionable verb. '{first_word}' is not registered.\n"
+            f"\n"
+            f"  Decide: does '{first_word}' name an action?\n"
+            f"  (Can a person DO it? 'consider' yes. 'maybe' no.)\n"
+            f"\n"
+            f"  IF YES:  {register_cmd}\n"
+            f"  IF NO:   rewrite the title with a verb.\n"
+            f"           Do not register a non-verb to bypass this gate.\n"
+            f"\n"
+            f"  Registering a non-verb defeats the check for everyone — including future-you."
         )
+    else:
+        msg = (
+            f"Title must start with an actionable verb. '{first_word}' is not registered.\n"
+            f"  Register it (if it really is a verb): {register_cmd}"
+        )
+    raise click.ClickException(msg)
 
 
 DESCRIPTION_MAX_LENGTH = 1024
