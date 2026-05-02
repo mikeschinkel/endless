@@ -1,5 +1,9 @@
-"""Matcher patterns: verbs, pivots, action regexes — sourced from
-config files (not the DB).
+"""Matcher patterns: pivots, action regexes — sourced from config files.
+
+Verbs were extracted from this module in E-1117. They live as their own
+top-level `verbs` array of objects (`{value, definition, ...}`); see verb_cmd.py.
+This module is now the home for non-verb pattern matchers (pivot, regex
+command-patterns, channel matchers).
 
 Two layers, merged additively at read time:
 
@@ -9,7 +13,7 @@ Two layers, merged additively at read time:
 A matcher object:
 
     {
-      "type":            <required, e.g. "verb" | "pivot" | "start" | ...>
+      "type":            <required, e.g. "pivot" | "start" | "complete" | ...>
       "scope":           <optional, e.g. "task" | "channel">
       "method":          <required, "exact" | "substring" | "regex">
       "match":           <required, list[str] for exact/substring, str for regex>
@@ -17,9 +21,9 @@ A matcher object:
       "enabled":         <optional bool, default true>
     }
 
-This module owns load/save, default seeding, and lookup helpers consumed
-by validate_title, the future UserPromptSubmit hook (W3), and any other
-matching consumer.
+The verb-gate calls get_verbs() which reads from the top-level `verbs`
+array. Pattern detection helpers (get_pivot_matchers, get_action_regex)
+still read from `matchers`.
 """
 
 import json
@@ -36,25 +40,6 @@ from endless import config
 # planned for the W3 behavioral gate, and the action regexes lifted from
 # cmd/endless-hook/claude.go.
 DEFAULT_MATCHERS: list[dict[str, Any]] = [
-    {
-        "type": "verb",
-        "method": "exact",
-        "match": [
-            "accept", "add", "apply", "assume", "audit", "backfill",
-            "build", "capture", "change", "clean", "clear", "confirm",
-            "configure", "consolidate", "convert", "create", "decide",
-            "define", "defer", "deploy", "design", "disable",
-            "distinguish", "document", "enable", "enforce", "evaluate",
-            "expand", "extract", "fix", "generate", "implement",
-            "improve", "integrate", "investigate", "hide", "increase",
-            "merge", "migrate", "move", "omit", "package", "print",
-            "prune", "raise", "read", "reconcile", "redesign",
-            "refactor", "remove", "rename", "render", "replace",
-            "require", "research", "resolve", "search", "show",
-            "simplify", "skip", "split", "support", "surface", "sync",
-            "test", "track", "update", "validate", "verify",
-        ],
-    },
     {
         "type": "pivot",
         "method": "substring",
@@ -176,17 +161,143 @@ def _read_matchers_from(path: Path) -> list[dict]:
     return raw if isinstance(raw, list) else []
 
 
-def _ensure_default_seeds() -> None:
-    """If the machine config has no 'matchers' property, write the defaults.
+DEFAULT_VERBS: list[dict[str, str]] = [
+    {"value": "accept", "definition": "to receive or agree to"},
+    {"value": "add", "definition": "to introduce or include something new"},
+    {"value": "apply", "definition": "to put into effect"},
+    {"value": "assume", "definition": "to take to be complete pending verification"},
+    {"value": "audit", "definition": "to examine systematically"},
+    {"value": "backfill", "definition": "to fill in missing data after the fact"},
+    {"value": "build", "definition": "to construct or compile"},
+    {"value": "capture", "definition": "to record or take in"},
+    {"value": "change", "definition": "to alter"},
+    {"value": "clean", "definition": "to remove unwanted state"},
+    {"value": "clear", "definition": "to remove or empty"},
+    {"value": "confirm", "definition": "to verify and finalize"},
+    {"value": "configure", "definition": "to set options or parameters"},
+    {"value": "consolidate", "definition": "to combine multiple things into one"},
+    {"value": "convert", "definition": "to change form or representation"},
+    {"value": "create", "definition": "to bring into existence"},
+    {"value": "decide", "definition": "to make a determination"},
+    {"value": "define", "definition": "to specify meaning or scope"},
+    {"value": "defer", "definition": "to postpone"},
+    {"value": "deploy", "definition": "to release for use"},
+    {"value": "design", "definition": "to plan structure or behavior"},
+    {"value": "disable", "definition": "to turn off or block"},
+    {"value": "distinguish", "definition": "to make a difference between"},
+    {"value": "document", "definition": "to record in writing"},
+    {"value": "enable", "definition": "to turn on or allow"},
+    {"value": "enforce", "definition": "to compel observance of"},
+    {"value": "evaluate", "definition": "to assess"},
+    {"value": "expand", "definition": "to make larger or more inclusive"},
+    {"value": "extract", "definition": "to take out or pull from"},
+    {"value": "fix", "definition": "to repair or correct"},
+    {"value": "generate", "definition": "to produce"},
+    {"value": "hide", "definition": "to conceal from view"},
+    {"value": "implement", "definition": "to build the working form of"},
+    {"value": "improve", "definition": "to make better"},
+    {"value": "increase", "definition": "to raise in number or magnitude"},
+    {"value": "integrate", "definition": "to combine into a working whole"},
+    {"value": "investigate", "definition": "to examine in depth"},
+    {"value": "merge", "definition": "to combine branches or items"},
+    {"value": "migrate", "definition": "to move from one system to another"},
+    {"value": "move", "definition": "to change location"},
+    {"value": "omit", "definition": "to leave out intentionally"},
+    {"value": "package", "definition": "to bundle for distribution"},
+    {"value": "print", "definition": "to output to stdout or paper"},
+    {"value": "prune", "definition": "to remove unwanted parts"},
+    {"value": "raise", "definition": "to lift or signal (as in raise an error)"},
+    {"value": "read", "definition": "to examine and interpret"},
+    {"value": "reconcile", "definition": "to bring into agreement"},
+    {"value": "redesign", "definition": "to design again"},
+    {"value": "refactor", "definition": "to restructure code without changing behavior"},
+    {"value": "remove", "definition": "to take away"},
+    {"value": "rename", "definition": "to give a new name"},
+    {"value": "render", "definition": "to produce visual or textual output"},
+    {"value": "replace", "definition": "to substitute"},
+    {"value": "require", "definition": "to demand as necessary"},
+    {"value": "research", "definition": "to investigate systematically"},
+    {"value": "resolve", "definition": "to settle or fix"},
+    {"value": "search", "definition": "to look for"},
+    {"value": "show", "definition": "to display"},
+    {"value": "simplify", "definition": "to make simpler"},
+    {"value": "skip", "definition": "to bypass"},
+    {"value": "split", "definition": "to divide into parts"},
+    {"value": "support", "definition": "to provide for or assist with"},
+    {"value": "surface", "definition": "to bring to attention"},
+    {"value": "sync", "definition": "to bring into alignment"},
+    {"value": "test", "definition": "to check behavior or correctness"},
+    {"value": "track", "definition": "to follow or monitor"},
+    {"value": "update", "definition": "to revise"},
+    {"value": "validate", "definition": "to confirm correctness"},
+    {"value": "verify", "definition": "to check truth or accuracy"},
+]
 
-    Idempotent: subsequent calls are no-ops once the property exists. Project
-    config is never auto-seeded; users add to it explicitly via 'phrase add'.
+
+def _ensure_default_seeds() -> None:
+    """Seed defaults into the machine config when missing.
+
+    Idempotent. Seeds 'matchers' (pivot + regex command-patterns) and 'verbs'
+    independently — first run writes both; later runs only write whichever is
+    missing. Project config is never auto-seeded.
     """
     path = machine_config_path()
     data = _load_json(path)
-    if "matchers" in data:
+    changed = False
+    if "matchers" not in data:
+        data["matchers"] = DEFAULT_MATCHERS
+        changed = True
+    if "verbs" not in data:
+        data["verbs"] = DEFAULT_VERBS
+        changed = True
+    if changed:
+        _save_json(path, data)
+
+
+def _migrate_verb_matchers(path: Path) -> None:
+    """One-time: extract any type=verb matchers in `path` into top-level `verbs`.
+
+    Idempotent. Pre-E-1117 configs stored verbs as a matcher entry, possibly
+    with a sibling `definitions: {value: def}` map (E-1108). This migration
+    hoists each value into a `{value, definition?}` object on the `verbs`
+    top-level array and removes the verb matcher from `matchers`.
+
+    Definitions map entries are preserved as the `definition` field; missing
+    definitions leave the field unset (verb-gate tolerates the absence).
+
+    No-op when `path` doesn't exist or has no verb matchers.
+    """
+    if not path.exists():
         return
-    data["matchers"] = DEFAULT_MATCHERS
+    data = _load_json(path)
+    matchers = data.get("matchers")
+    if not isinstance(matchers, list):
+        return
+    verb_matchers = [m for m in matchers if isinstance(m, dict) and m.get("type") == "verb"]
+    if not verb_matchers:
+        return
+
+    verbs = data.setdefault("verbs", [])
+    if not isinstance(verbs, list):
+        verbs = []
+        data["verbs"] = verbs
+    existing = {v.get("value") for v in verbs if isinstance(v, dict)}
+
+    for m in verb_matchers:
+        match_list = m.get("match", []) or []
+        defs = m.get("definitions") or {}
+        if not isinstance(defs, dict):
+            defs = {}
+        for value in match_list:
+            if not isinstance(value, str) or value in existing:
+                continue
+            entry: dict[str, str] = {"value": value}
+            if value in defs and isinstance(defs[value], str):
+                entry["definition"] = defs[value]
+            verbs.append(entry)
+            existing.add(value)
+
+    data["matchers"] = [m for m in matchers if not (isinstance(m, dict) and m.get("type") == "verb")]
     _save_json(path, data)
 
 
@@ -265,6 +376,9 @@ def load_all_matchers() -> list[dict]:
     _ensure_default_seeds()
     _migrate_stale_defaults()
     project_path = project_config_path()
+    if project_path is not None:
+        _migrate_verb_matchers(project_path)
+    _migrate_verb_matchers(machine_config_path())
     project = _read_matchers_from(project_path) if project_path else []
     machine = _read_matchers_from(machine_config_path())
 
@@ -298,20 +412,63 @@ def load_all_matchers() -> list[dict]:
 
 # --- Lookup helpers consumed by validate_title, hooks, etc. ----------------
 
-def get_verbs() -> set[str]:
-    """Return the lowercased set of enabled verb tokens (case-folded)."""
-    out: set[str] = set()
-    for m in load_all_matchers():
-        if m.get("type") != "verb":
+def _read_verbs_from(path: Path | None) -> list[dict]:
+    if path is None or not path.exists():
+        return []
+    data = _load_json(path)
+    raw = data.get("verbs", [])
+    return raw if isinstance(raw, list) else []
+
+
+def load_all_verbs() -> list[dict]:
+    """Project + machine verbs merged additively, deduplicated by value.
+
+    Project entries take precedence on conflict (same value, different
+    definition). Triggers migration + default seeding via load_all_matchers.
+    """
+    load_all_matchers()
+    project_path = project_config_path()
+    project = _read_verbs_from(project_path)
+    machine = _read_verbs_from(machine_config_path())
+
+    seen: set[str] = set()
+    out: list[dict] = []
+    for v in project + machine:
+        if not isinstance(v, dict):
             continue
-        if m.get("enabled", True) is False:
+        value = v.get("value")
+        if not isinstance(value, str) or value in seen:
             continue
-        if m.get("method") != "exact":
-            continue
-        cs = bool(m.get("case_sensitive", False))
-        for v in m.get("match", []) or []:
-            out.add(v if cs else v.lower())
+        seen.add(value)
+        out.append(v)
     return out
+
+
+def get_verbs() -> set[str]:
+    """Return the lowercased set of enabled verb tokens (case-folded).
+
+    Reads from the top-level `verbs` array. Verbs are case-insensitive by
+    convention; case-sensitivity is not currently surfaced per-verb.
+    """
+    out: set[str] = set()
+    for v in load_all_verbs():
+        if v.get("enabled", True) is False:
+            continue
+        value = v.get("value")
+        if isinstance(value, str):
+            out.add(value.lower())
+    return out
+
+
+def get_verb_definition(value: str) -> str | None:
+    """Return the definition for a verb, or None if missing or unknown."""
+    target = value.lower()
+    for v in load_all_verbs():
+        candidate = v.get("value")
+        if isinstance(candidate, str) and candidate.lower() == target:
+            d = v.get("definition")
+            return d if isinstance(d, str) else None
+    return None
 
 
 def get_pivot_matchers() -> list[dict]:
@@ -353,17 +510,17 @@ def add_match_value(
     method: str = "exact",
     case_sensitive: bool = False,
     machine_only: bool = False,
-    definition: str | None = None,
 ) -> tuple[bool, bool]:
     """Add a matcher value to the appropriate config files.
 
     Returns (wrote_project, wrote_machine). Either may be False if the
     value was already present (no-op) or if writing was skipped (e.g.,
     no project config and machine_only=False).
-
-    If `definition` is provided (only meaningful for verb-type, exact-method
-    matchers), it is stored in a sibling `definitions` map keyed by value.
     """
+    if type_ == "verb":
+        raise ValueError(
+            "verbs are no longer matchers; use add_verb() (E-1117)"
+        )
     matcher_template = {
         "type": type_,
         "method": method,
@@ -377,9 +534,6 @@ def add_match_value(
         matcher_template["match"] = value
     else:
         matcher_template["match"] = [value]
-
-    if definition and method != "regex":
-        matcher_template["definitions"] = {value: definition.strip()}
 
     wrote_project = False
     wrote_machine = False
@@ -435,16 +589,6 @@ def _add_to_file(path: Path, new_matcher: dict) -> bool:
         if v not in target_match:
             target_match.append(v)
             added = True
-
-    new_defs = new_matcher.get("definitions")
-    if isinstance(new_defs, dict) and new_defs:
-        target_defs = target.setdefault("definitions", {})
-        if isinstance(target_defs, dict):
-            for k, v in new_defs.items():
-                if k not in target_defs:
-                    target_defs[k] = v
-                    added = True
-
     if added:
         _save_json(path, data)
     return added
@@ -554,3 +698,82 @@ def _toggle_in_file(
     if changes:
         _save_json(path, data)
     return changes
+
+
+# --- Verb mutation API (E-1117) --------------------------------------------
+
+def add_verb(
+    *,
+    value: str,
+    definition: str,
+    machine_only: bool = False,
+) -> tuple[bool, bool]:
+    """Add a verb to the appropriate config files.
+
+    Returns (wrote_project, wrote_machine). Either may be False if the
+    value was already present (no-op) or writing was skipped.
+
+    Definitions are stored on the verb object itself in the top-level
+    `verbs` array — no leakage into matcher schema.
+    """
+    if not value or not value.strip():
+        raise ValueError("verb value is required")
+    if not definition or not definition.strip():
+        raise ValueError("verb definition is required")
+    entry = {"value": value.strip(), "definition": definition.strip()}
+
+    wrote_project = False
+    wrote_machine = False
+    project_path = project_config_path()
+    if project_path is not None and not machine_only:
+        wrote_project = _add_verb_to_file(project_path, entry)
+    wrote_machine = _add_verb_to_file(machine_config_path(), entry)
+    return wrote_project, wrote_machine
+
+
+def _add_verb_to_file(path: Path, entry: dict) -> bool:
+    data = _load_json(path)
+    verbs = data.setdefault("verbs", [])
+    if not isinstance(verbs, list):
+        verbs = []
+        data["verbs"] = verbs
+    for v in verbs:
+        if isinstance(v, dict) and v.get("value") == entry["value"]:
+            return False
+    verbs.append(entry)
+    _save_json(path, data)
+    return True
+
+
+def remove_verb(*, value: str, machine_only: bool = False) -> tuple[int, int]:
+    """Remove a verb from the appropriate config files.
+
+    Returns (project_removals, machine_removals).
+    """
+    pr = 0
+    mr = 0
+    project_path = project_config_path()
+    if project_path is not None and not machine_only:
+        pr = _remove_verb_from_file(project_path, value)
+    mr = _remove_verb_from_file(machine_config_path(), value)
+    return pr, mr
+
+
+def _remove_verb_from_file(path: Path, value: str) -> int:
+    if not path.exists():
+        return 0
+    data = _load_json(path)
+    verbs = data.get("verbs", [])
+    if not isinstance(verbs, list):
+        return 0
+    removed = 0
+    keep: list[dict] = []
+    for v in verbs:
+        if isinstance(v, dict) and v.get("value") == value:
+            removed += 1
+            continue
+        keep.append(v)
+    if removed:
+        data["verbs"] = keep
+        _save_json(path, data)
+    return removed

@@ -142,7 +142,7 @@ def _running_under_agent() -> bool:
 def validate_title(title: str, force: bool = False):
     """Reject titles that don't start with a registered actionable verb.
 
-    Add new verbs with: endless phrase add verb <new-verb> --definition "<def>"
+    Add new verbs with: endless verb add <new-verb> --definition "<def>"
     """
     first_word = title.split()[0].lower() if title.strip() else ""
     from endless import matchers
@@ -153,7 +153,7 @@ def validate_title(title: str, force: bool = False):
         return
 
     register_cmd = (
-        f"endless phrase add verb '{first_word}' --definition \"<short definition>\""
+        f"endless verb add '{first_word}' --definition \"<short definition>\""
     )
 
     if _running_under_agent():
