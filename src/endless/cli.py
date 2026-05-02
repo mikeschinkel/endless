@@ -642,6 +642,7 @@ def task_search(query, project, show_all, status, phase, parent_id,
 @click.option("--description", default=None,
               help="Longer description of the task")
 @click.option("--phase", default="now",
+              type=click.Choice(["now", "next", "later", "maybe"]),
               help="Phase: now, next, later, maybe (default: now)")
 @click.option("--project", default=None,
               help="Project name (default: detect from cwd)")
