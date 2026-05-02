@@ -8,13 +8,327 @@
   "documents": {
     "rules": []
   },
-  "matchers": [
+  "matchers": [],
+  "verbs": [
     {
-      "type": "verb",
-      "method": "exact",
-      "match": [
-        "broaden"
-      ]
+      "value": "isolate",
+      "definition": "place into its own boundary so external state cannot leak in or out (e.g. a process group, namespace, sandbox)"
+    },
+    {
+      "value": "accept",
+      "definition": "to receive or agree to"
+    },
+    {
+      "value": "add",
+      "definition": "to introduce or include something new"
+    },
+    {
+      "value": "apply",
+      "definition": "to put into effect"
+    },
+    {
+      "value": "assume",
+      "definition": "to take to be complete pending verification"
+    },
+    {
+      "value": "audit",
+      "definition": "to examine systematically"
+    },
+    {
+      "value": "backfill",
+      "definition": "to fill in missing data after the fact"
+    },
+    {
+      "value": "build",
+      "definition": "to construct or compile"
+    },
+    {
+      "value": "capture",
+      "definition": "to record or take in"
+    },
+    {
+      "value": "change",
+      "definition": "to alter"
+    },
+    {
+      "value": "clean",
+      "definition": "to remove unwanted state"
+    },
+    {
+      "value": "clear",
+      "definition": "to remove or empty"
+    },
+    {
+      "value": "confirm",
+      "definition": "to verify and finalize"
+    },
+    {
+      "value": "configure",
+      "definition": "to set options or parameters"
+    },
+    {
+      "value": "consolidate",
+      "definition": "to combine multiple things into one"
+    },
+    {
+      "value": "convert",
+      "definition": "to change form or representation"
+    },
+    {
+      "value": "create",
+      "definition": "to bring into existence"
+    },
+    {
+      "value": "decide",
+      "definition": "to make a determination"
+    },
+    {
+      "value": "define",
+      "definition": "to specify meaning or scope"
+    },
+    {
+      "value": "defer",
+      "definition": "to postpone"
+    },
+    {
+      "value": "deploy",
+      "definition": "to release for use"
+    },
+    {
+      "value": "design",
+      "definition": "to plan structure or behavior"
+    },
+    {
+      "value": "disable",
+      "definition": "to turn off or block"
+    },
+    {
+      "value": "distinguish",
+      "definition": "to make a difference between"
+    },
+    {
+      "value": "document",
+      "definition": "to record in writing"
+    },
+    {
+      "value": "enable",
+      "definition": "to turn on or allow"
+    },
+    {
+      "value": "enforce",
+      "definition": "to compel observance of"
+    },
+    {
+      "value": "evaluate",
+      "definition": "to assess"
+    },
+    {
+      "value": "expand",
+      "definition": "to make larger or more inclusive"
+    },
+    {
+      "value": "extract",
+      "definition": "to take out or pull from"
+    },
+    {
+      "value": "fix",
+      "definition": "to repair or correct"
+    },
+    {
+      "value": "generate",
+      "definition": "to produce"
+    },
+    {
+      "value": "implement",
+      "definition": "to build the working form of"
+    },
+    {
+      "value": "improve",
+      "definition": "to make better"
+    },
+    {
+      "value": "integrate",
+      "definition": "to combine into a working whole"
+    },
+    {
+      "value": "investigate",
+      "definition": "to examine in depth"
+    },
+    {
+      "value": "hide",
+      "definition": "to conceal from view"
+    },
+    {
+      "value": "increase",
+      "definition": "to raise in number or magnitude"
+    },
+    {
+      "value": "merge",
+      "definition": "to combine branches or items"
+    },
+    {
+      "value": "migrate",
+      "definition": "to move from one system to another"
+    },
+    {
+      "value": "move",
+      "definition": "to change location"
+    },
+    {
+      "value": "omit",
+      "definition": "to leave out intentionally"
+    },
+    {
+      "value": "package",
+      "definition": "to bundle for distribution"
+    },
+    {
+      "value": "print",
+      "definition": "to output to stdout or paper"
+    },
+    {
+      "value": "prune",
+      "definition": "to remove unwanted parts"
+    },
+    {
+      "value": "raise",
+      "definition": "to lift or signal (as in raise an error)"
+    },
+    {
+      "value": "read",
+      "definition": "to examine and interpret"
+    },
+    {
+      "value": "reconcile",
+      "definition": "to bring into agreement"
+    },
+    {
+      "value": "redesign",
+      "definition": "to design again"
+    },
+    {
+      "value": "refactor",
+      "definition": "to restructure code without changing behavior"
+    },
+    {
+      "value": "remove",
+      "definition": "to take away"
+    },
+    {
+      "value": "rename",
+      "definition": "to give a new name"
+    },
+    {
+      "value": "render",
+      "definition": "to produce visual or textual output"
+    },
+    {
+      "value": "replace",
+      "definition": "to substitute"
+    },
+    {
+      "value": "require",
+      "definition": "to demand as necessary"
+    },
+    {
+      "value": "research",
+      "definition": "to investigate systematically"
+    },
+    {
+      "value": "resolve",
+      "definition": "to settle or fix"
+    },
+    {
+      "value": "search",
+      "definition": "to look for"
+    },
+    {
+      "value": "show",
+      "definition": "to display"
+    },
+    {
+      "value": "simplify",
+      "definition": "to make simpler"
+    },
+    {
+      "value": "skip",
+      "definition": "to bypass"
+    },
+    {
+      "value": "split",
+      "definition": "to divide into parts"
+    },
+    {
+      "value": "support",
+      "definition": "to provide for or assist with"
+    },
+    {
+      "value": "surface",
+      "definition": "to bring to attention"
+    },
+    {
+      "value": "sync",
+      "definition": "to bring into alignment"
+    },
+    {
+      "value": "test",
+      "definition": "to check behavior or correctness"
+    },
+    {
+      "value": "track",
+      "definition": "to follow or monitor"
+    },
+    {
+      "value": "update",
+      "definition": "to revise"
+    },
+    {
+      "value": "validate",
+      "definition": "to confirm correctness"
+    },
+    {
+      "value": "verify",
+      "definition": "to check truth or accuracy"
+    },
+    {
+      "value": "deprecate",
+      "definition": "to mark as obsolete or schedule for removal"
+    },
+    {
+      "value": "populate",
+      "definition": "to fill with data"
+    },
+    {
+      "value": "refresh",
+      "definition": "to reload from source"
+    },
+    {
+      "value": "reduce",
+      "definition": "to make smaller in count, size, or complexity"
+    },
+    {
+      "value": "shorten",
+      "definition": "to make shorter"
+    },
+    {
+      "value": "rewrite",
+      "definition": "to write anew"
+    },
+    {
+      "value": "broaden",
+      "definition": "to widen scope or coverage"
+    },
+    {
+      "value": "consider",
+      "definition": "to deliberate over"
+    },
+    {
+      "value": "re-emit",
+      "definition": "to emit again, typically a previously missed event"
+    },
+    {
+      "value": "set",
+      "definition": "to assign a value"
     }
   ]
 }
