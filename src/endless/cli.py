@@ -352,17 +352,19 @@ def session_search(query, project, limit, as_json):
 def session_use(session_ref):
     """Print shell-evaluable activation for a Claude session.
 
-    Designed for `eval "$(endless session use)"`. Emits cd + ENDLESS_*
-    env vars, then runs .endless/extensions/use.sh (if present) and
-    appends its stdout. With no arg, in tmux: auto-resolves to the sole
-    sibling Claude pane in the current window.
+    Designed for `eval "$(endless session use)"`. Emits a minimal block —
+    cd to the session's worktree (if its directory exists) or cwd, plus
+    ENDLESS_SESSION_ID. Then runs .endless/extensions/use.sh (if present)
+    and appends its stdout. With no arg, in tmux: auto-resolves to the
+    sole sibling Claude pane in the current window.
 
     Standard env vars exported:
-      ENDLESS_SESSION_ID            endless integer id
-      ENDLESS_HARNESS_SESSION_ID    Claude UUID
-      ENDLESS_HARNESS               'claude'
-      ENDLESS_PROJECT_ROOT          repo root
-      ENDLESS_WORKTREE_PATH         worktree path or empty
+      ENDLESS_SESSION_ID    endless integer id
+
+    Other session fields (harness, project root, worktree path, etc.)
+    are looked up on demand via 'endless session show $ENDLESS_SESSION_ID
+    --json' so they're never stale (E-1038 supersedes E-1014's original
+    five-var contract).
     """
     from endless.session_cmd import session_use_resolve
     session_use_resolve(session_ref)
