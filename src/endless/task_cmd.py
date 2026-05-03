@@ -2447,7 +2447,7 @@ def unlink_tasks(source_id: int, target_id: int, dep_type: str | None = None):
             names.append(_relation_display_name_from(r, source_id))
         raise click.ClickException(
             f"Multiple relations between {task_id_display(source_id)} and "
-            f"{task_id_display(target_id)} ({', '.join(names)}). Specify --as <type>."
+            f"{task_id_display(target_id)} ({', '.join(names)}). Specify --type <type>."
         )
 
     row = rows[0]

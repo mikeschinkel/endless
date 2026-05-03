@@ -870,9 +870,10 @@ def task_chat():
 @click.argument("source_id", type=TASK_ID)
 @click.option("--to", "target_id", type=TASK_ID, required=True,
               help="Target task ID")
-@click.option("--as", "dep_type", required=True,
+@click.option("--type", "dep_type", required=True,
               help="Relation type: blocks, blocked_by, implements, implemented_by, "
-                   "replaces, replaced_by, documents, documented_by, relates_to")
+                   "replaces, replaced_by, documents, documented_by, "
+                   "cleans_up, cleaned_up_by, relates_to")
 def task_link(source_id, target_id, dep_type):
     """Create a typed relation between two tasks."""
     from endless.task_cmd import link_tasks
@@ -883,7 +884,7 @@ def task_link(source_id, target_id, dep_type):
 @click.argument("source_id", type=TASK_ID)
 @click.option("--to", "target_id", type=TASK_ID, required=True,
               help="Target task ID")
-@click.option("--as", "dep_type", default=None,
+@click.option("--type", "dep_type", default=None,
               help="Relation type to remove (omit to auto-detect when unambiguous)")
 def task_unlink(source_id, target_id, dep_type):
     """Remove a typed relation between two tasks."""
@@ -896,7 +897,7 @@ def task_unlink(source_id, target_id, dep_type):
 @click.option("--by", "blocker_id", type=TASK_ID, required=True,
               help="Task ID that blocks this task")
 def task_block(item_id, blocker_id):
-    """Record that a task is blocked by another task. Shortcut for `link --as blocked_by`."""
+    """Record that a task is blocked by another task. Shortcut for `link --type blocked_by`."""
     from endless.task_cmd import link_tasks
     link_tasks(item_id, blocker_id, "blocked_by")
 
