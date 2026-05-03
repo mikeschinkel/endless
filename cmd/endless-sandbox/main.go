@@ -37,5 +37,5 @@ func usage(w *os.File) {
 	fmt.Fprintln(w, "  enter   [--clone] <name>")
 	fmt.Fprintln(w, "  list")
 	fmt.Fprintln(w, "  prune   [--older-than DURATION]")
-	fmt.Fprintln(w, "  destroy <name>")
+	fmt.Fprintln(w, "  destroy [--force] <name>")
 }

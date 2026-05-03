@@ -9,6 +9,7 @@ import (
 
 func destroyCmd(args []string) {
 	fs := flag.NewFlagSet("destroy", flag.ExitOnError)
+	force := fs.Bool("force", false, "Destroy even if processes still hold files in the sandbox")
 	if err := fs.Parse(args); err != nil {
 		os.Exit(2)
 	}
@@ -31,6 +32,25 @@ func destroyCmd(args []string) {
 		}
 		fmt.Fprintf(os.Stderr, "endless-sandbox destroy: %v\n", err)
 		os.Exit(1)
+	}
+
+	// Defense in depth against the original E-1114 incident: even with
+	// pgroup isolation, an external process (an editor with a sandbox file
+	// open, a daemon descended from a different shell) could still hold
+	// files. Refuse and name the offender(s) unless --force.
+	if !*force {
+		writers := findLiveWriters(dir)
+		if len(writers) > 0 {
+			fmt.Fprintf(os.Stderr,
+				"endless-sandbox destroy: refusing to destroy %q — %d process(es) still have files open in it:\n",
+				name, len(writers))
+			for _, w := range writers {
+				fmt.Fprintf(os.Stderr, "    PID %d: %s\n", w.PID, w.Name)
+			}
+			fmt.Fprintln(os.Stderr,
+				"    Exit them (or 'kill <PID>') and retry, or pass --force to destroy anyway.")
+			os.Exit(1)
+		}
 	}
 
 	// Remove unconditionally — a missing or corrupt meta file is exactly
