@@ -32,6 +32,7 @@ import fnmatch
 import json
 import re
 import subprocess
+from datetime import datetime, timezone
 from pathlib import Path
 
 import click
@@ -454,6 +455,128 @@ def _normalize_task_id(task_id: str) -> str:
     if m is None:
         raise click.ClickException(f"Invalid task id: {task_id}")
     return f"E-{m.group(1)}"
+
+
+_FILLER_WORDS = frozenset({
+    "a", "an", "the", "to", "from", "of", "for", "with",
+    "in", "on", "at", "by", "and", "or",
+})
+
+
+def _slugify_title(title: str) -> str:
+    """Slug per E-971 spec for task branch names.
+
+    Lowercase, drop filler words, replace non-alnum with '-', collapse
+    repeats, truncate to 40 chars at a word boundary. Returns 'task' if
+    the input contains only filler/punctuation.
+    """
+    cleaned = re.sub(r"[^a-z0-9]+", " ", title.lower())
+    words = [w for w in cleaned.split() if w and w not in _FILLER_WORDS]
+    slug = "-".join(words)
+    if len(slug) > 40:
+        truncated = slug[:40]
+        # Only back up to the last '-' if the cut landed mid-word.
+        if slug[40] != "-" and "-" in truncated:
+            truncated = truncated.rsplit("-", 1)[0]
+        slug = truncated
+    return slug or "task"
+
+
+def _default_base_branch(project_root: Path) -> str:
+    """Best-effort default-branch detection. Falls back to 'main'.
+
+    Limitation tracked in E-1166: origin/HEAD may be unset on fresh
+    clones, leaving us with the literal 'main' fallback even when the
+    repo's actual default is master/develop.
+    """
+    try:
+        ref = _git(["symbolic-ref", "--quiet", "refs/remotes/origin/HEAD"], cwd=project_root)
+    except subprocess.CalledProcessError:
+        return "main"
+    return ref.removeprefix("refs/remotes/origin/") or "main"
+
+
+def _check_plan_file_committed(task_id: int, project_root: Path) -> str | None:
+    """If .endless/plans/E-<id>.md exists but is dirty/untracked in main,
+    return an error message with recommended commands. Otherwise None.
+
+    The plan file lives in main's working tree but won't propagate to a
+    new worktree (git worktree add starts from a commit, not the index).
+    Per E-1169, refuse with recommendations rather than auto-commit.
+    """
+    plan_rel = f".endless/plans/E-{task_id}.md"
+    plan_abs = project_root / plan_rel
+    if not plan_abs.exists():
+        return None
+    res = _git_run(
+        ["status", "--porcelain", "--", plan_rel],
+        cwd=project_root, check=False,
+    )
+    if res.returncode != 0 or not res.stdout.strip():
+        return None
+    return (
+        f"Plan file {plan_rel} is uncommitted in main; it will not "
+        f"appear in the new worktree.\n\n"
+        f"Capture it before starting the task. Recommended:\n"
+        f"  git -C {project_root} add {plan_rel}\n"
+        f"  git -C {project_root} commit -m 'Add plan for E-{task_id}'\n"
+        f"\nThen retry: endless task start E-{task_id}"
+    )
+
+
+def create_task_worktree(
+    task_id: int, title: str, project_root: Path,
+) -> tuple[Path, bool]:
+    """Create the per-task worktree for E-<id>.
+
+    Returns (worktree_path, created). 'created' is False if the worktree
+    already existed for this task (idempotent no-op). Raises
+    ClickException on path collision with a foreign worktree, on
+    uncommitted plan files (per E-1169), or on git-add failure.
+    """
+    canonical = f"E-{task_id}"
+    slug = _slugify_title(title)
+    branch = f"task/{task_id}-{slug}"
+    wt_dir = project_root / ".endless" / "worktrees" / f"e-{task_id}"
+    base = _default_base_branch(project_root)
+
+    if wt_dir.exists():
+        existing = _read_companion(wt_dir)
+        if existing and existing.get("task_id") == canonical:
+            return wt_dir, False
+        raise click.ClickException(
+            f"Path {wt_dir} exists but does not belong to {canonical}. "
+            f"Resolve manually before retrying."
+        )
+
+    msg = _check_plan_file_committed(task_id, project_root)
+    if msg:
+        raise click.ClickException(msg)
+
+    wt_dir.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        _git_run(
+            ["worktree", "add", "-b", branch, str(wt_dir), base],
+            cwd=project_root,
+        )
+    except subprocess.CalledProcessError as e:
+        raise click.ClickException(
+            f"git worktree add failed for {canonical}:\n{e.stderr or e}"
+        )
+
+    companion_dir = wt_dir / ".endless"
+    companion_dir.mkdir(parents=True, exist_ok=True)
+    companion = {
+        "kind": "task",
+        "task_id": canonical,
+        "base_branch": base,
+        "branch": branch,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    (companion_dir / "worktree.json").write_text(
+        json.dumps(companion, indent=2) + "\n"
+    )
+    return wt_dir, True
 
 
 def land_worktree(task_id: str, dry_run: bool) -> None:

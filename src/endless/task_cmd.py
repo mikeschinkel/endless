@@ -1760,6 +1760,33 @@ def start_item(item_id: int):
         [("status", row[0]["status"], "in_progress")],
     )
 
+    from endless.worktree_cmd import create_task_worktree, _project_root
+
+    try:
+        project_root = _project_root()
+    except click.ClickException:
+        return
+
+    slug_source = row[0]["title"] or "task"
+    wt_path, created = create_task_worktree(
+        item_id, slug_source, project_root,
+    )
+
+    if created:
+        click.echo(
+            click.style("•", fg="cyan")
+            + f" Created task worktree: {wt_path}"
+        )
+        click.echo(f"  Switch sessions to it: cd {wt_path}")
+        click.echo(
+            f"  Or spawn a fresh one:    endless task spawn E-{item_id}"
+        )
+    else:
+        click.echo(
+            click.style("•", fg="cyan")
+            + f" Worktree already exists: {wt_path}"
+        )
+
 
 def update_plan(
     item_id: int,
