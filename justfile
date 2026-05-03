@@ -53,6 +53,7 @@ build: _link-templui
     go build -o bin/endless-hook ./cmd/endless-hook
     go build -o bin/endless-channel ./cmd/endless-channel
     go build -o bin/endless-event ./cmd/endless-event
+    go build -o bin/endless-sandbox ./cmd/endless-sandbox
 
 # Build and install everything: Go binaries symlinked to /usr/local/bin,
 # Python CLI installed via uv tool in EDITABLE mode (-e). Editable means the
@@ -66,6 +67,7 @@ install:
     ln -sfn "$(pwd)/bin/endless-hook" /usr/local/bin/endless-hook
     ln -sfn "$(pwd)/bin/endless-channel" /usr/local/bin/endless-channel
     ln -sfn "$(pwd)/bin/endless-event" /usr/local/bin/endless-event
+    ln -sfn "$(pwd)/bin/endless-sandbox" /usr/local/bin/endless-sandbox
     uv tool install -e . --force
 
 # Generate go.work for the current checkout/worktree (E-996).
@@ -210,10 +212,11 @@ go:
     go build -o bin/endless-hook ./cmd/endless-hook
     go build -o bin/endless-channel ./cmd/endless-channel
     go build -o bin/endless-event ./cmd/endless-event
+    go build -o bin/endless-sandbox ./cmd/endless-sandbox
 
 # Run Go tests
 test-go:
-    go test ./internal/kairos/... ./internal/events/... -v
+    go test ./internal/kairos/... ./internal/events/... ./cmd/endless-sandbox/... -v
 
 # Kill any running endless-serve process
 kill:
