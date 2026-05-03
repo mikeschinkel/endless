@@ -1,10 +1,20 @@
 """Endless CLI — Click entry point."""
 
+import os
 from pathlib import Path
 
 import click
 
 from endless import __version__
+
+# Subcommands that are safe to run inside an endless-sandbox subshell
+# (no project/global I/O — pure stdout). Anything else is refused at
+# CLI entry when ENDLESS_SANDBOX is set. New subcommands inherit the
+# refusal automatically; opt in here only with a one-line justification
+# in the diff.
+SANDBOX_SAFE_SUBCOMMANDS = frozenset({
+    "shell-init",  # static stdout, no I/O
+})
 
 
 class TaskIDType(click.ParamType):
@@ -52,9 +62,22 @@ class MultiChoice(click.ParamType):
 
 @click.group()
 @click.version_option(__version__, prog_name="endless")
-def main():
+@click.pass_context
+def main(ctx):
     """Project awareness system for solo developers."""
-    pass
+    sandbox = os.environ.get("ENDLESS_SANDBOX")
+    if sandbox and ctx.invoked_subcommand not in SANDBOX_SAFE_SUBCOMMANDS:
+        click.echo(
+            f"endless: refusing to run '{ctx.invoked_subcommand}' inside "
+            f"endless-sandbox at {sandbox}",
+            err=True,
+        )
+        click.echo(
+            "    Run 'exit' to leave the sandbox subshell, "
+            "or open a new terminal.",
+            err=True,
+        )
+        ctx.exit(1)
 
 
 @main.command()
