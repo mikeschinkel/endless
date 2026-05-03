@@ -27,9 +27,11 @@ PARENT_NONE = 0
 # documents added per E-1007).
 # display_name -> (stored_dep_type, swap_source_target)
 # Stored types are active voice (source is the actor): blocks, implements,
-# replaces, documents, cleans_up, relates_to. Inverse views (blocked_by,
-# implemented_by, etc.) resolve to the same stored row queried with
-# source/target swapped.
+# replaces, documents, cleans_up, reverses, modifies, relates_to. Inverse
+# views (blocked_by, implemented_by, etc.) resolve to the same stored row
+# queried with source/target swapped. The reverses/modifies pair (E-1156)
+# are decision-to-decision relations; the others are task-to-task or task-
+# to-decision.
 CANONICAL_DEP_TYPES: dict[str, tuple[str, bool]] = {
     "blocks":          ("blocks",     False),  # source blocks target
     "blocked_by":      ("blocks",     True),   # inverse view
@@ -41,17 +43,26 @@ CANONICAL_DEP_TYPES: dict[str, tuple[str, bool]] = {
     "documented_by":   ("documents",  True),
     "cleans_up":       ("cleans_up",  False),  # source is post-ship cleanup of target; target does not wait
     "cleaned_up_by":   ("cleans_up",  True),
+    "reverses":        ("reverses",   False),  # source reverses target (decision↔decision; target no longer in effect)
+    "reversed_by":     ("reverses",   True),
+    "modifies":        ("modifies",   False),  # source modifies target (decision↔decision; target partially still in effect)
+    "modified_by":     ("modifies",   True),
     "relates_to":      ("relates_to", False),  # symmetric
 }
 
-# The 6 canonical stored types (the values in CANONICAL_DEP_TYPES, deduplicated).
-STORED_DEP_TYPES = ("blocks", "implements", "replaces", "documents", "cleans_up", "relates_to")
+# The 8 canonical stored types (the values in CANONICAL_DEP_TYPES, deduplicated).
+STORED_DEP_TYPES = (
+    "blocks", "implements", "replaces", "documents",
+    "cleans_up", "reverses", "modifies", "relates_to",
+)
 
 # Display order for `task show` — actionability descending; symmetric last.
 RELATION_DISPLAY_ORDER = (
     "blocked_by", "blocks",
     "implements", "implemented_by",
     "replaces",   "replaced_by",
+    "reverses",   "reversed_by",
+    "modifies",   "modified_by",
     "documents",  "documented_by",
     "cleans_up",  "cleaned_up_by",
     "relates_to",
@@ -65,6 +76,10 @@ RELATION_LABELS = {
     "implemented_by": "Implemented by",
     "replaces":       "Replaces",
     "replaced_by":    "Replaced by",
+    "reverses":       "Reverses",
+    "reversed_by":    "Reversed by",
+    "modifies":       "Modifies",
+    "modified_by":    "Modified by",
     "documents":      "Documents",
     "documented_by":  "Documented by",
     "cleans_up":      "Cleans up",
@@ -2375,6 +2390,33 @@ def start_chat():
 
 
 # ── Task relations (E-957) ─────────────────────────────────────────
+
+
+def require_decision_pair(source_id: int, target_id: int) -> None:
+    """Raise ClickException unless both IDs reference rows with type='decision'.
+
+    Used by 'endless decision link' / 'unlink' (E-1156) to enforce that the
+    decision-specific commands only operate on decisions; 'endless task link'
+    remains permissive and accepts any task or decision ID.
+    """
+    rows = db.query(
+        "SELECT id, type FROM tasks WHERE id IN (?, ?)",
+        (source_id, target_id),
+    )
+    by_id = {r["id"]: r["type"] for r in rows}
+    bad: list[str] = []
+    for tid in (source_id, target_id):
+        ttype = by_id.get(tid)
+        if ttype is None:
+            bad.append(f"{task_id_display(tid)} (not found)")
+        elif ttype != "decision":
+            bad.append(f"{task_id_display(tid)} (type='{ttype}')")
+    if bad:
+        raise click.ClickException(
+            "endless decision link/unlink requires both arguments to be "
+            "decisions. Offending: " + ", ".join(bad) + ". Use 'endless "
+            "task link' if either side is a task."
+        )
 
 
 def link_tasks(source_id: int, target_id: int, dep_type: str):

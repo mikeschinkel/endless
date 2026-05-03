@@ -1035,6 +1035,33 @@ def decision_show(item_ids, llm, as_json):
         detail_item(item_id, llm=llm, as_json=as_json)
 
 
+@decision_cmd.command("link")
+@click.argument("source_id", type=TASK_ID)
+@click.option("--to", "target_id", type=TASK_ID, required=True,
+              help="Target decision ID")
+@click.option("--type", "dep_type", required=True,
+              help="Relation type: reverses, reversed_by, modifies, modified_by, "
+                   "documents, documented_by, relates_to")
+def decision_link(source_id, target_id, dep_type):
+    """Create a typed relation between two decisions (E-1156)."""
+    from endless.task_cmd import link_tasks, require_decision_pair
+    require_decision_pair(source_id, target_id)
+    link_tasks(source_id, target_id, dep_type)
+
+
+@decision_cmd.command("unlink")
+@click.argument("source_id", type=TASK_ID)
+@click.option("--to", "target_id", type=TASK_ID, required=True,
+              help="Target decision ID")
+@click.option("--type", "dep_type", default=None,
+              help="Relation type to remove (omit to auto-detect when unambiguous)")
+def decision_unlink(source_id, target_id, dep_type):
+    """Remove a typed relation between two decisions."""
+    from endless.task_cmd import unlink_tasks, require_decision_pair
+    require_decision_pair(source_id, target_id)
+    unlink_tasks(source_id, target_id, dep_type)
+
+
 @main.group("channel")
 def channel_cmd():
     """Inter-session messaging. Worker session beacons, human session connects."""
