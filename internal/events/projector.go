@@ -131,9 +131,9 @@ func replayTaskCreated(db *sql.DB, evt *Event, result *ProjectResult) error {
 	ts := kairosToISO(evt.TS)
 
 	_, err = db.Exec(
-		`INSERT INTO tasks (id, project_id, phase, title, description, status, type, sort_order, parent_id, tier, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		taskID, projectID, p.Phase, p.Title, p.Description, p.Status, p.Type,
+		`INSERT INTO tasks (id, project_id, phase, title, description, text, status, type, sort_order, parent_id, tier, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		taskID, projectID, p.Phase, p.Title, p.Description, p.Text, p.Status, p.Type,
 		sortOrder, p.ParentID, p.Tier, ts, ts,
 	)
 	if err != nil {

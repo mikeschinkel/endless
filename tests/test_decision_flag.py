@@ -21,7 +21,7 @@ def fake_add_item(monkeypatch, isolated_env):
         "VALUES ('sample', '/tmp/sample', 'active', datetime('now'), datetime('now'))"
     )
 
-    def _stub(title, description=None, phase="now", project_name=None,
+    def _stub(title, description=None, text_file=None, phase="now", project_name=None,
               after=None, parent_id=None, task_type=None, status=None,
               tier=None, force=False):
         task_type = task_type or "task"

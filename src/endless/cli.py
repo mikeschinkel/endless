@@ -641,6 +641,8 @@ def task_search(query, project, show_all, status, phase, parent_id,
 @click.argument("title")
 @click.option("--description", default=None,
               help="Longer description of the task")
+@click.option("--text", "text_file", default=None,
+              help="Load full task text from file")
 @click.option("--phase", default="now",
               type=click.Choice(["now", "next", "later", "maybe"]),
               help="Phase: now, next, later, maybe (default: now)")
@@ -675,14 +677,14 @@ def task_search(query, project, show_all, status, phase, parent_id,
               help="Task ID(s) that clean up after this new task (repeatable)")
 @click.option("--decision", "decision_text", default=None,
               help="Rationale text — creates a paired decision-type task linked via 'documents'")
-def task_add(title, description, phase, project, parent, after, task_type, status, tier, force,
+def task_add(title, description, text_file, phase, project, parent, after, task_type, status, tier, force,
              blocks_ids, blocked_by_ids, relates_to_ids, implements_ids,
              cleans_up_ids, cleaned_up_by_ids, decision_text):
     """Add a task."""
     from endless.task_cmd import add_item, parse_tier, link_tasks
     tier_val = parse_tier(tier) if tier else None
-    new_id = add_item(title, description=description, phase=phase,
-                      project_name=project, after=after, parent_id=parent,
+    new_id = add_item(title, description=description, text_file=text_file,
+                      phase=phase, project_name=project, after=after, parent_id=parent,
                       task_type=task_type, status=status, tier=tier_val, force=force)
     if new_id is None:
         return

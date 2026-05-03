@@ -1322,6 +1322,7 @@ def list_decisions(
 def add_item(
     title: str,
     description: str | None = None,
+    text_file: str | None = None,
     phase: str = "now",
     project_name: str | None = None,
     after: int | None = None,
@@ -1341,6 +1342,13 @@ def add_item(
     _, proj_name = _resolve_project(project_name)
     status = status or ("ready" if tier == 1 else "needs_plan")
 
+    text_content: str | None = None
+    if text_file is not None:
+        p = Path(text_file).expanduser()
+        if not p.exists():
+            raise click.ClickException(f"File not found: {p}")
+        text_content = p.read_text()
+
     payload = {
         "title": title,
         "description": description or "",
@@ -1348,6 +1356,8 @@ def add_item(
         "status": status,
         "type": task_type,
     }
+    if text_content is not None:
+        payload["text"] = text_content
     if tier is not None:
         payload["tier"] = tier
     if parent_id is not None:
@@ -1363,6 +1373,8 @@ def add_item(
         payload=payload,
     )
     item_id = int(result["id"].replace("E-", ""))
+    if text_content is not None:
+        _write_task_plan_file(item_id, text_content)
     click.echo(
         click.style("•", fg="cyan")
         + f" Added {task_id_display(item_id)}: {title}"
