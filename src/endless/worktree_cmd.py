@@ -41,14 +41,16 @@ from endless.task_cmd import _resolve_project
 
 COMPANION_FILENAME = ".endless/worktree.json"
 
-# Auto-committed file globs per E-987 (locked) + E-1056 (config.json added).
+# Auto-committed file globs per E-987 (locked), modified by E-1141:
+# verbs.json is in (ambient agent-driven churn); config.json is out
+# (deliberate human/agent edits whose attribution the user controls).
 # Land treats these as endless-managed: dirty state in any of these does
 # not block land; instead, land auto-commits them as a separate commit
 # before the worktree's commits.
 AUTO_COMMIT_GLOBS = (
     ".endless/events/*.jsonl",
     ".endless/plans/snapshots/*",
-    ".endless/config.json",
+    ".endless/verbs.json",
 )
 
 # Land's retry cap for the race-with-concurrent-writers loop (E-987).
@@ -375,6 +377,70 @@ def _git_run(args: list[str], cwd: Path, check: bool = True) -> subprocess.Compl
     )
 
 
+def _read_verbs_list(path: Path) -> list[dict]:
+    """Read a verbs.json file as a list of dicts. Returns [] if missing or malformed."""
+    if not path.exists():
+        return []
+    try:
+        data = json.loads(path.read_text())
+    except (OSError, json.JSONDecodeError):
+        return []
+    return data if isinstance(data, list) else []
+
+
+def _dedup_worktree_verbs_against_main(worktree_path: Path, main_root: Path) -> bool:
+    """Bundle the worktree's verbs.json additions into a single commit on
+    the worktree's branch, deduped against main's verbs.json (E-1141 / E-1138).
+
+    Per E-1141: agents adding verbs in worktree sessions accumulate dirt in
+    the worktree's verbs.json (post-E-1137). At land time, two worktrees that
+    independently added the same verb would otherwise produce a textual
+    rebase conflict. This step computes a set-union by `value` key —
+    main's entries first (preserving order), then worktree's new ones —
+    and writes the deduped result to the worktree before rebase. The result
+    is a strict superset of main, so rebase replays cleanly.
+
+    Returns True if a commit was created on the worktree's branch, False
+    otherwise (no dirt, or dedup result equals current committed state).
+    """
+    wt_verbs = worktree_path / ".endless" / "verbs.json"
+    main_verbs = main_root / ".endless" / "verbs.json"
+
+    if not wt_verbs.exists():
+        return False
+
+    initial_status = _git_run(
+        ["status", "--porcelain", "--", ".endless/verbs.json"],
+        cwd=worktree_path,
+    ).stdout
+    if not initial_status.strip():
+        return False
+
+    main_entries = _read_verbs_list(main_verbs)
+    wt_entries = _read_verbs_list(wt_verbs)
+    main_values = {e.get("value") for e in main_entries if isinstance(e, dict)}
+    new_from_wt = [
+        e for e in wt_entries
+        if isinstance(e, dict) and e.get("value") not in main_values
+    ]
+    merged = main_entries + new_from_wt
+    wt_verbs.write_text(json.dumps(merged, indent=2) + "\n")
+
+    post_status = _git_run(
+        ["status", "--porcelain", "--", ".endless/verbs.json"],
+        cwd=worktree_path,
+    ).stdout
+    if not post_status.strip():
+        return False
+
+    _git_run(["add", "--", ".endless/verbs.json"], cwd=worktree_path)
+    _git_run(
+        ["commit", "-m", "Endless: bundle worktree verb additions"],
+        cwd=worktree_path,
+    )
+    return True
+
+
 def _branch_for_task(rows: list[dict], task_id: str) -> dict | None:
     """Find the worktree row whose companion's task_id matches."""
     for r in rows:
@@ -460,6 +526,15 @@ def land_worktree(task_id: str, dry_run: bool) -> None:
                 raise click.ClickException(
                     f"auto-commit failed: {e.stderr or e}"
                 )
+
+        # Step 3.5: dedup the worktree's verbs.json against main's, committing
+        # the bundled result on the worktree's branch (E-1141 / E-1138).
+        try:
+            _dedup_worktree_verbs_against_main(worktree_path, main_root)
+        except subprocess.CalledProcessError as e:
+            raise click.ClickException(
+                f"verbs.json dedup on worktree failed: {e.stderr or e}"
+            )
 
         # Step 4: rebase the worktree branch onto main.
         try:
