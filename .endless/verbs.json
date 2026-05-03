@@ -318,5 +318,17 @@
   {
     "value": "set",
     "definition": "to assign a value"
+  },
+  {
+    "value": "record",
+    "definition": "to persist a fact, observation, or relationship into durable storage so it can be retrieved later"
+  },
+  {
+    "value": "review",
+    "definition": "Assessment, evaluation, or re-examination"
+  },
+  {
+    "value": "allow",
+    "definition": "To permit or enable something"
   }
 ]
