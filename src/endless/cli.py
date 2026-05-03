@@ -266,6 +266,16 @@ esp() {
     cd "$target"
 }
 
+# esf — forget the current session ref (unset ENDLESS_SESSION_ID).
+#       Inverse of esu. The session itself keeps running; only this
+#       shell's pointer to it is cleared. Does not cd anywhere;
+#       combine with esp if you also want to return to the project root.
+esf() {
+    local out
+    out="$(endless session forget)" || return $?
+    eval "$out"
+}
+
 # <<< endless shell helpers <<<
 """
 
@@ -274,8 +284,9 @@ esp() {
 def shell_init():
     """Print shell helper functions for bash/zsh.
 
-    Wraps 'endless session use' and 'endless session cd --target project'
-    with short functions (esu, esp). One-time setup:
+    Wraps 'endless session use', 'session cd --target project', and
+    'session forget' with short functions (esu, esp, esf). One-time
+    setup:
 
       endless shell-init >> ~/.zshrc        # or ~/.bashrc
 
@@ -391,6 +402,21 @@ def session_use(session_ref):
     """
     from endless.session_cmd import session_use_resolve
     session_use_resolve(session_ref)
+
+
+@session_cmd.command("forget")
+def session_forget():
+    """Print shell-evaluable lines that unset session-use env vars.
+
+    Designed for `eval "$(endless session forget)"`. Inverse of
+    'session use': emits one 'unset' line per env var that 'session use'
+    is documented to export. Makes the current shell forget its session
+    reference; the session itself is unaffected. Does not cd anywhere.
+
+    See `endless shell-init` for the esf wrapper function.
+    """
+    from endless.session_cmd import session_forget_resolve
+    session_forget_resolve()
 
 
 @session_cmd.command("cd")
