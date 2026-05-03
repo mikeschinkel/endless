@@ -1,6 +1,8 @@
-"""Project-layer config writes must always target the main checkout's
-.endless/config.json regardless of which git worktree the command runs in
-(E-1111). Tests use real git worktrees because the function shells out to git."""
+"""Project-layer config path resolves to the nearest .endless/config.json
+walking up from cwd (E-1140, reverses E-1112). Inside a worktree this means
+writes go to the worktree's own .endless/config.json — which exists because
+git checked it out from main when the worktree was created. Tests use real
+git worktrees because the prior implementation shelled out to git."""
 
 import json
 import subprocess
@@ -31,28 +33,32 @@ def project_with_worktree(tmp_path):
 
     worktree = tmp_path / "wt"
     _run(["git", "worktree", "add", "-q", str(worktree), "-b", "feat", "main"], main)
-    return {"main": main, "worktree": worktree, "cfg": cfg_path}
+    return {"main": main, "worktree": worktree, "main_cfg": cfg_path}
 
 
 def test_from_main_checkout_returns_main_config(project_with_worktree, monkeypatch):
     monkeypatch.chdir(project_with_worktree["main"])
     result = matchers.project_config_path()
-    assert result == project_with_worktree["cfg"]
+    assert result == project_with_worktree["main_cfg"]
 
 
-def test_from_worktree_returns_main_config_not_worktree_copy(project_with_worktree, monkeypatch):
+def test_from_worktree_returns_worktree_config_not_main(project_with_worktree, monkeypatch):
+    """E-1140: from inside a worktree, resolve to the worktree's own
+    .endless/config.json (which git checked out from main), not main's."""
     monkeypatch.chdir(project_with_worktree["worktree"])
     result = matchers.project_config_path()
-    assert result == project_with_worktree["cfg"], (
-        "Worktree must not resolve to its own .endless/config.json"
+    expected = project_with_worktree["worktree"] / ".endless" / "config.json"
+    assert result == expected, (
+        "Worktree must resolve to its own .endless/config.json, not main's"
     )
-    assert "wt" not in str(result), "Path leaked the worktree directory"
+    assert result != project_with_worktree["main_cfg"]
 
 
-def test_writes_from_worktree_land_in_main(project_with_worktree, monkeypatch):
-    """The actual bug: writes from a worktree went to the wrong file. Use a
-    pivot here (verbs go through a different API as of E-1117); the
-    project_config_path() fix applies to all matcher writes."""
+def test_writes_from_worktree_land_in_worktree_not_main(project_with_worktree, monkeypatch):
+    """E-1140 (reverses E-1112): writes from a worktree dirty the worktree's
+    own config, not main's. Use a pivot here (verbs go through a different
+    API as of E-1117); project_config_path() resolution applies to all
+    matcher writes."""
     monkeypatch.chdir(project_with_worktree["worktree"])
 
     matchers.add_match_value(
@@ -60,23 +66,24 @@ def test_writes_from_worktree_land_in_main(project_with_worktree, monkeypatch):
         machine_only=False,
     )
 
-    main_cfg = json.loads(project_with_worktree["cfg"].read_text())
-    matchers_list = main_cfg.get("matchers", [])
-    assert any(
-        m.get("type") == "pivot" and "testpivotvalue" in (m.get("match") or [])
-        for m in matchers_list
-    ), "Pivot did not land in main checkout's config"
-
     wt_cfg_path = project_with_worktree["worktree"] / ".endless" / "config.json"
-    if wt_cfg_path.exists():
-        wt_data = json.loads(wt_cfg_path.read_text())
-        wt_pivots: list[str] = []
-        for m in wt_data.get("matchers", []):
-            if m.get("type") == "pivot":
-                wt_pivots.extend(m.get("match") or [])
-        assert "testpivotvalue" not in wt_pivots, (
-            "Pivot leaked into worktree's .endless/config.json — bug not fixed"
-        )
+    wt_data = json.loads(wt_cfg_path.read_text())
+    wt_pivots: list[str] = []
+    for m in wt_data.get("matchers", []):
+        if m.get("type") == "pivot":
+            wt_pivots.extend(m.get("match") or [])
+    assert "testpivotvalue" in wt_pivots, (
+        "Pivot did not land in worktree's .endless/config.json"
+    )
+
+    main_cfg = json.loads(project_with_worktree["main_cfg"].read_text())
+    main_pivots: list[str] = []
+    for m in main_cfg.get("matchers", []):
+        if m.get("type") == "pivot":
+            main_pivots.extend(m.get("match") or [])
+    assert "testpivotvalue" not in main_pivots, (
+        "Pivot leaked into main's .endless/config.json — anchor-to-main was not fully reverted"
+    )
 
 
 def test_falls_back_to_walk_up_when_not_in_git_repo(tmp_path, monkeypatch):

@@ -84,49 +84,16 @@ DEFAULT_MATCHERS: list[dict[str, Any]] = [
 
 # --- Layer-aware path resolution -------------------------------------------
 
-def _git_main_worktree_root(start: Path) -> Path | None:
-    """Return the working dir of the git main checkout containing `start`.
-
-    `git rev-parse --git-common-dir` returns the path to the shared `.git`
-    directory regardless of which worktree we are inside. Its parent is the
-    main checkout's working dir.
-
-    Returns None if `start` is not inside a git repo (or git is unavailable).
-    """
-    import subprocess
-    try:
-        result = subprocess.run(
-            ["git", "rev-parse", "--git-common-dir"],
-            cwd=str(start),
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-    except (subprocess.CalledProcessError, FileNotFoundError, OSError):
-        return None
-    common_dir = Path(result.stdout.strip())
-    if not common_dir.is_absolute():
-        common_dir = (start / common_dir).resolve()
-    return common_dir.parent
-
-
 def project_config_path() -> Path | None:
-    """Return <main-checkout>/.endless/config.json if cwd is in a project, else None.
+    """Return the nearest .endless/config.json walking up from cwd, else None.
 
-    When cwd is inside a git worktree, resolves to the *main checkout's*
-    .endless/config.json — not the worktree-local copy. This prevents
-    project-layer config from silently diverging across worktrees and being
-    lost when a worktree is removed.
-
-    When cwd is not in a git repo, falls back to walking up from cwd.
+    Per E-1140 (which reverses E-1112): writes from a worktree go to the
+    worktree's own .endless/config.json; writes from main go to main's. The
+    worktree's copy is checked out from main on `git worktree add`, so it
+    exists from the moment the worktree is created. Cross-worktree dedup
+    (e.g. for verbs) is handled at land time, not at write time.
     """
     cwd = Path.cwd()
-    main_root = _git_main_worktree_root(cwd)
-    if main_root is not None:
-        candidate = main_root / ".endless" / "config.json"
-        if candidate.exists():
-            return candidate
-        return None
     for parent in [cwd] + list(cwd.parents):
         candidate = parent / ".endless" / "config.json"
         if candidate.exists():
@@ -140,19 +107,14 @@ def machine_config_path() -> Path:
 
 
 def project_verbs_path() -> Path | None:
-    """Return <main-checkout>/.endless/verbs.json if cwd is in a project, else None.
+    """Return the nearest .endless/verbs.json walking up from cwd, else None.
 
-    Co-located with project_config_path's resolution: writes always target
-    the main checkout's working dir even when cwd is in a worktree (E-1111).
-    Returns the path even if the file does not yet exist — callers may need
-    to create it. Returns None only when cwd is not in a project at all.
+    Co-located with project_config_path's resolution per E-1140. Returns the
+    path even if the file does not yet exist — callers may need to create
+    it. Returns None only when cwd is not in a project at all (no ancestor
+    has .endless/config.json).
     """
     cwd = Path.cwd()
-    main_root = _git_main_worktree_root(cwd)
-    if main_root is not None:
-        if (main_root / ".endless" / "config.json").exists():
-            return main_root / ".endless" / "verbs.json"
-        return None
     for parent in [cwd] + list(cwd.parents):
         if (parent / ".endless" / "config.json").exists():
             return parent / ".endless" / "verbs.json"
