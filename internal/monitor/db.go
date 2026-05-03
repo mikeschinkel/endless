@@ -140,6 +140,31 @@ func BackupDB() {
 	}
 }
 
+// migrateV6 adds the session_gates table (E-971 Layer E). One row per
+// pivot trigger; an "open" gate has cleared_at IS NULL. cleared_by names
+// the verb that resolved it (task_start | task_confirm | task_add |
+// superseded). Foreign key cascades on session deletion.
+//
+// V5 is intentionally skipped: see the comment in migrate.go alongside
+// the migrations slice — a pre-framework Python stopgap (E-1118) already
+// claimed user_version=5 with no corresponding Go-side migration.
+func migrateV6(db *sql.DB) error {
+	if !hasTable(db, "session_gates") {
+		db.Exec(`CREATE TABLE IF NOT EXISTS session_gates (
+			id INTEGER PRIMARY KEY,
+			session_id TEXT NOT NULL,
+			matcher_phrase TEXT NOT NULL,
+			triggered_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
+			cleared_at TEXT,
+			cleared_by TEXT,
+			FOREIGN KEY (session_id) REFERENCES sessions(session_id) ON DELETE CASCADE
+		)`)
+		db.Exec(`CREATE INDEX IF NOT EXISTS idx_session_gates_session
+			ON session_gates(session_id, triggered_at DESC)`)
+	}
+	return nil
+}
+
 // migrateV4 adds task_files (per-task edit-set, E-917) and
 // suggestions (AI-agent calibration suggestions, E-918) tables.
 func migrateV4(db *sql.DB) error {

@@ -46,6 +46,7 @@ type claudePayload struct {
 	ToolName       string          `json:"tool_name,omitempty"`
 	ToolInput      json.RawMessage `json:"tool_input,omitempty"`
 	TranscriptPath string          `json:"transcript_path,omitempty"`
+	Prompt         string          `json:"prompt,omitempty"` // UserPromptSubmit only
 }
 
 type toolInputWrite struct {
@@ -148,26 +149,11 @@ func runClaude(args []string) error {
 		if err := monitor.BackfillProcess(payload.SessionID, os.Getenv("TMUX_PANE")); err != nil {
 			return fmt.Errorf("backfilling process: %w", err)
 		}
-		// Refresh companion file unconditionally (E-1033). Subsumes the
-		// E-1011 backfill (file gets written when missing) and kills the
-		// drift class where active_task_id mutates through a path that
-		// did not trigger writeClaudeCompanion. Atomic write, ~1ms per turn.
+		// Refresh companion file unconditionally (E-1033).
 		if err := writeClaudeCompanion(projectID, payload); err != nil {
 			return fmt.Errorf("refreshing companion file: %w", err)
 		}
-		// Fallback message check for sessions without MCP channel plugin
-		pane := os.Getenv("TMUX_PANE")
-		port, _, _ := monitor.LookupChannelPort(pane)
-		if port == 0 {
-			hasMsgs, err := monitor.HasPendingMessages(pane)
-			if err == nil && hasMsgs {
-				resp := hookResponse{
-					AdditionalContext: "You have pending inter-session messages. Run: endless channel inbox",
-				}
-				return json.NewEncoder(os.Stdout).Encode(resp)
-			}
-		}
-		return handleTaskContextInjection(projectID, payload)
+		return handleUserPromptSubmit(projectID, payload)
 
 	case "PreToolUse":
 		return handlePreToolUse(projectID, isRegistered, payload)
@@ -215,38 +201,100 @@ func runClaude(args []string) error {
 }
 
 func handleTaskContextInjection(projectID int64, payload claudePayload) error {
-	// Only inject once per session
-	if monitor.HasInjectedContext(payload.SessionID) {
+	ctx, err := buildTaskContextInjection(projectID, payload)
+	if err != nil {
+		return err
+	}
+	if ctx == "" {
 		return nil
 	}
+	return json.NewEncoder(os.Stdout).Encode(hookResponse{AdditionalContext: ctx})
+}
 
+// handleUserPromptSubmit composes the per-prompt response. Three pieces,
+// any subset may be present:
+//
+//  1. Pending inter-session message banner (existing fallback).
+//  2. Layer 1: first-time full task list (one-shot) OR per-prompt
+//     "Active task: E-XXX — <title>." reminder.
+//  3. Layer 2 (E-971 Layer E): pivot trigger detection. On match, opens
+//     a session_gates row and surfaces the gate notice; PreToolUse will
+//     refuse Write/Edit until the gate clears.
+func handleUserPromptSubmit(projectID int64, payload claudePayload) error {
+	var parts []string
+
+	// Pending inter-session messages
+	pane := os.Getenv("TMUX_PANE")
+	if port, _, _ := monitor.LookupChannelPort(pane); port == 0 {
+		if hasMsgs, err := monitor.HasPendingMessages(pane); err == nil && hasMsgs {
+			parts = append(parts, "You have pending inter-session messages. Run: endless channel inbox")
+		}
+	}
+
+	// Layer 1: full list on first injection, single-line reminder thereafter
+	if !monitor.HasInjectedContext(payload.SessionID) {
+		if ctx, err := buildTaskContextInjection(projectID, payload); err == nil && ctx != "" {
+			parts = append(parts, ctx)
+		}
+	} else {
+		if session, err := monitor.GetActiveSession(payload.SessionID); err == nil &&
+			session != nil && session.ActiveTaskID != nil {
+			if title, err := monitor.GetTaskTitle(*session.ActiveTaskID); err == nil && title != "" {
+				parts = append(parts, fmt.Sprintf("Active task: E-%d — %s.", *session.ActiveTaskID, title))
+			}
+		}
+	}
+
+	// Layer 2: pivot detection
+	if payload.Prompt != "" {
+		all, err := matchers.Load(projectID)
+		if err != nil {
+			log.Printf("loading matchers: %v", err)
+		} else if matched := matchers.FindPivotMatch(all, payload.Prompt); matched != "" {
+			if err := monitor.SetGatePending(payload.SessionID, matched); err != nil {
+				log.Printf("setting gate-pending: %v", err)
+			}
+			parts = append(parts, fmt.Sprintf(
+				"Pivot trigger detected (matched: %q). Confirm or update active task before any "+
+					"Write/Edit. Cleared by `endless task add ...` (new task), `endless task start <id>` "+
+					"(continue/switch), or `endless task confirm <id>` (continue/wrap up).",
+				matched))
+		}
+	}
+
+	if len(parts) == 0 {
+		return nil
+	}
+	return json.NewEncoder(os.Stdout).Encode(hookResponse{
+		AdditionalContext: strings.Join(parts, "\n\n"),
+	})
+}
+
+// buildTaskContextInjection returns the one-shot full task list to inject
+// on the first SessionStart/UserPromptSubmit. Returns ("", nil) when the
+// session has already received the injection. Marks the session as
+// injected when it produces a non-empty result.
+func buildTaskContextInjection(projectID int64, payload claudePayload) (string, error) {
+	if monitor.HasInjectedContext(payload.SessionID) {
+		return "", nil
+	}
 	projectName, err := monitor.GetProjectName(projectID)
 	if err != nil {
-		return fmt.Errorf("getting project name: %w", err)
+		return "", fmt.Errorf("getting project name: %w", err)
 	}
-
 	items, err := monitor.GetActiveTasks(projectID)
 	if err != nil {
-		return fmt.Errorf("getting active tasks: %w", err)
+		return "", fmt.Errorf("getting active tasks: %w", err)
 	}
-
 	context := monitor.FormatTasks(projectName, items)
-
-	// Append open-suggestion count if any (E-918)
 	if n, err := monitor.CountOpenSuggestions(projectID); err == nil && n > 0 {
 		context += fmt.Sprintf(
 			"\n\n%d unreviewed AI-agent suggestion(s) for project %q. Run `endless suggestions list` to review.",
 			n, projectName,
 		)
 	}
-
-	// Mark as injected so we don't repeat
 	monitor.MarkContextInjected(projectID, payload.SessionID, payload.CWD)
-
-	resp := hookResponse{
-		AdditionalContext: context,
-	}
-	return json.NewEncoder(os.Stdout).Encode(resp)
+	return context, nil
 }
 
 func handlePostToolUse(projectID int64, payload claudePayload) error {
@@ -348,10 +396,11 @@ func extractFilePath(toolName string, raw json.RawMessage) string {
 // per process to avoid repeating the read for each detection in a hook
 // invocation. Per E-970.
 const (
-	actionStart    = "start"
-	actionComplete = "complete"
-	actionChat     = "chat"
-	scopeTask      = "task"
+	actionStart   = "start"
+	actionConfirm = "confirm"
+	actionAdd     = "add"
+	actionChat    = "chat"
+	scopeTask     = "task"
 
 	actionBeacon  = "beacon"
 	actionConnect = "connect"
@@ -382,6 +431,19 @@ func handlePreToolUse(projectID int64, isRegistered bool, payload claudePayload)
 	// E-1012: even with per-task tracking off, edits in main and edits
 	// to a worktree owned by another session are refused.
 	enforceWorktreeGate(projectID, payload)
+
+	// Pivot gate (E-971 Layer E). Independent of tracking_mode for the
+	// same reason: a deliberate pivot phrase from the user must pause
+	// edits even when per-task tracking is off.
+	if pending, phrase := monitor.IsGatePending(payload.SessionID); pending {
+		blockToolUse(fmt.Sprintf(
+			"BLOCKED (pivot gate): your last user message contained %q.\n\n"+
+				"Edits are paused until you declare your task. Run one of:\n"+
+				"  endless task add \"<title>\"      (new task)\n"+
+				"  endless task start E-NNN          (switch to / resume an existing task)\n"+
+				"  endless task confirm E-NNN        (continue with / wrap up the current task)",
+			phrase))
+	}
 
 	// Check tracking mode
 	mode := monitor.GetTrackingMode(projectID)
@@ -502,6 +564,9 @@ func handlePostToolUseSession(projectID int64, payload claudePayload) error {
 				if err := monitor.StartWorkSession(payload.SessionID, projectID, taskID); err != nil {
 					return fmt.Errorf("starting work session: %w", err)
 				}
+				if err := monitor.ClearGatePending(payload.SessionID, "task_start"); err != nil {
+					log.Printf("clearing gate after task start: %v", err)
+				}
 				// Refresh companion file: active_task_id changed, worktree_path
 				// must follow (E-1027). Non-fatal: stale worktree_path is a
 				// minor inconsistency, not a session-breaker.
@@ -513,13 +578,16 @@ func handlePostToolUseSession(projectID int64, payload claudePayload) error {
 		}
 	}
 
-	// Detect: endless task complete <id>
-	if re := matchers.ActionRegex(all, actionComplete, scopeTask); re != nil {
+	// Detect: endless task confirm <id>
+	if re := matchers.ActionRegex(all, actionConfirm, scopeTask); re != nil {
 		if m := re.FindStringSubmatch(input.Command); m != nil {
 			taskID, err := strconv.ParseInt(m[1], 10, 64)
 			if err == nil {
 				if err := monitor.CompleteTask(payload.SessionID, taskID); err != nil {
-					return fmt.Errorf("completing task: %w", err)
+					return fmt.Errorf("confirming task: %w", err)
+				}
+				if err := monitor.ClearGatePending(payload.SessionID, "task_confirm"); err != nil {
+					log.Printf("clearing gate after task confirm: %v", err)
 				}
 				if err := writeClaudeCompanion(projectID, payload); err != nil {
 					log.Printf("refreshing companion file: %v", err)
@@ -527,6 +595,14 @@ func handlePostToolUseSession(projectID int64, payload claudePayload) error {
 			}
 			return nil
 		}
+	}
+
+	// Detect: endless task add (clears the pivot gate; no other side effects)
+	if re := matchers.ActionRegex(all, actionAdd, scopeTask); re != nil && re.MatchString(input.Command) {
+		if err := monitor.ClearGatePending(payload.SessionID, "task_add"); err != nil {
+			log.Printf("clearing gate after task add: %v", err)
+		}
+		return nil
 	}
 
 	// Detect: endless task chat

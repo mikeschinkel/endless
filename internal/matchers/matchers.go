@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 
 	"github.com/mikeschinkel/endless/internal/monitor"
 )
@@ -107,6 +108,50 @@ func loadFile(path string) ([]Matcher, error) {
 
 func machineConfigPath() string {
 	return filepath.Join(monitor.ConfigDir(), "config.json")
+}
+
+// GetPivotMatchers returns the subset of matchers with type="pivot"
+// that are enabled. Used by the UserPromptSubmit hook (E-971 Layer E).
+func GetPivotMatchers(all []Matcher) []Matcher {
+	out := make([]Matcher, 0)
+	for _, m := range all {
+		if m.Type == "pivot" && m.IsEnabled() {
+			out = append(out, m)
+		}
+	}
+	return out
+}
+
+// FindPivotMatch returns the first phrase from any enabled pivot
+// matcher that substring-matches text, or "" if no match. Honors
+// case_sensitive per matcher (default: case-insensitive substring).
+// Supports method="substring" and method="exact"; "regex" pivots are
+// not supported in v1 since live config uses substrings only.
+func FindPivotMatch(all []Matcher, text string) string {
+	if text == "" {
+		return ""
+	}
+	lower := strings.ToLower(text)
+	for _, m := range GetPivotMatchers(all) {
+		if m.Method != "substring" && m.Method != "exact" {
+			continue
+		}
+		for _, phrase := range m.MatchList() {
+			if phrase == "" {
+				continue
+			}
+			if m.CaseSensitive {
+				if strings.Contains(text, phrase) {
+					return phrase
+				}
+			} else {
+				if strings.Contains(lower, strings.ToLower(phrase)) {
+					return phrase
+				}
+			}
+		}
+	}
+	return ""
 }
 
 // ActionRegex finds the first enabled regex matcher with the given

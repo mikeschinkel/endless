@@ -12,7 +12,7 @@ import (
 // to apply. Bump this when appending to the migrations slice below. The
 // orchestrator uses CurrentSchemaVersion to decide what work is pending and
 // to fast-path post-V4 databases that pre-date the framework.
-const CurrentSchemaVersion = 4
+const CurrentSchemaVersion = 6
 
 // Migration describes one step in the schema evolution.
 //
@@ -48,7 +48,13 @@ var migrations = []Migration{
 	{Version: 2, Name: "drop dead tables, rename, tier", Apply: migrateV2},
 	{Version: 3, Name: "session conversation history", Apply: migrateV3},
 	{Version: 4, Name: "task_files, suggestions", Apply: migrateV4},
+	{Version: 6, Name: "session_gates (E-971 Layer E pivot gate)", Apply: migrateV6},
 }
+
+// V5 is intentionally absent here. The pre-framework Python stopgap from
+// E-1118 set user_version=5 to gate a one-shot data fix; that's recorded
+// as a backfill row in _schema_version with no Go-side Apply. New schema
+// work continues at V6.
 
 // RunnerLabel identifies who triggered a migration. Recorded in the
 // _schema_version audit row.
