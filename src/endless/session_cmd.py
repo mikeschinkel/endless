@@ -1402,6 +1402,25 @@ def session_use_resolve(session_ref: str | None) -> None:
     _emit_resolution_status(c, target_path)
 
 
+# Env vars that 'endless session use' is documented to export (E-1038
+# reduced this to one). Kept as a constant so 'session forget' stays
+# in lockstep — change the contract here, both ends update together.
+SESSION_USE_EXPORTED_VARS = ("ENDLESS_SESSION_ID",)
+
+
+def session_forget_resolve() -> None:
+    """Print shell-evaluable lines that unset every var 'session use' sets.
+
+    Designed for: eval "$(endless session forget)"
+
+    Inverse of session_use_resolve. The session itself keeps running;
+    only the current shell's pointer to it is cleared. Does not cd
+    anywhere — the user can cd back manually or run esp.
+    """
+    for var in SESSION_USE_EXPORTED_VARS:
+        click.echo(f"unset {var}")
+
+
 def _run_use_extension(path: Path, extra_env: dict[str, str]) -> str | None:
     """Run a use.sh extension safely. Returns stdout on success/partial,
     None when the script is refused outright. Warnings go to stderr.
