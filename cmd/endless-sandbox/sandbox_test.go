@@ -1,9 +1,15 @@
 package main
 
 import (
+	"bytes"
+	"errors"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
+	"syscall"
 	"testing"
+	"time"
 )
 
 // TestProvisionRootBlocksEscape exercises the real Provision code path and
@@ -107,4 +113,126 @@ func TestClassify(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestSupervisorSetsProcessGroup asserts the child becomes its own pgroup
+// leader, distinct from the test parent's pgroup.
+func TestSupervisorSetsProcessGroup(t *testing.T) {
+	sup := NewSupervisor("sh", "-c", "echo $$; sleep 30")
+	var stdout bytes.Buffer
+	sup.Stdout = &stdout
+	sigCh := make(chan os.Signal, 1)
+	sup.Signals = sigCh
+
+	done := make(chan struct{})
+	go func() {
+		_ = sup.Run()
+		close(done)
+	}()
+
+	waitFor(t, func() bool { return strings.TrimSpace(stdout.String()) != "" })
+	childPID := mustAtoi(t, strings.TrimSpace(stdout.String()))
+
+	pgid, err := syscall.Getpgid(childPID)
+	if err != nil {
+		t.Fatalf("Getpgid(%d): %v", childPID, err)
+	}
+	if pgid != childPID {
+		t.Fatalf("expected pgid==%d (own group), got %d", childPID, pgid)
+	}
+	if pgid == os.Getpid() {
+		t.Fatalf("child shares pgroup with test parent (%d)", os.Getpid())
+	}
+
+	sigCh <- syscall.SIGTERM
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Supervisor.Run did not return within 2s of signal")
+	}
+}
+
+// TestSupervisorKillsDescendants asserts a backgrounded grandchild is reaped
+// after the foreground child exits — the original E-1114 leak shape.
+//
+// The grandchild's stdout/stderr are redirected to /dev/null so it doesn't
+// hold the test-side pipe open. In production the supervisor's Stdout is
+// os.Stdout (a real file), so Go's exec package does not create an internal
+// pipe and cmd.Wait returns as soon as the immediate child exits — we
+// reproduce that here by detaching the descendant from the buffer-backed
+// pipe.
+func TestSupervisorKillsDescendants(t *testing.T) {
+	sup := NewSupervisor("sh", "-c", "sleep 60 >/dev/null 2>&1 & echo $!; exit 0")
+	var stdout bytes.Buffer
+	sup.Stdout = &stdout
+
+	if err := sup.Run(); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	grandchild := mustAtoi(t, strings.TrimSpace(stdout.String()))
+	err := syscall.Kill(grandchild, 0)
+	if err == nil {
+		// Best-effort cleanup so we don't leave a stray sleep behind.
+		_ = syscall.Kill(grandchild, syscall.SIGKILL)
+		t.Fatalf("grandchild PID %d still alive after Run returned", grandchild)
+	}
+	if !errors.Is(err, syscall.ESRCH) {
+		t.Fatalf("kill(%d,0): want ESRCH, got %v", grandchild, err)
+	}
+}
+
+// TestSupervisorSignalForwarding asserts a signal on Signals reaches the
+// whole pgroup (not just the foreground child) within a bounded wait. The
+// grandchild's stdout/stderr are detached for the same pipe-buffering
+// reason as TestSupervisorKillsDescendants.
+func TestSupervisorSignalForwarding(t *testing.T) {
+	sup := NewSupervisor("sh", "-c", "sleep 60 >/dev/null 2>&1 & echo $!; sleep 60")
+	var stdout bytes.Buffer
+	sup.Stdout = &stdout
+	sigCh := make(chan os.Signal, 1)
+	sup.Signals = sigCh
+
+	done := make(chan struct{})
+	go func() {
+		_ = sup.Run()
+		close(done)
+	}()
+
+	waitFor(t, func() bool { return strings.TrimSpace(stdout.String()) != "" })
+	grandchild := mustAtoi(t, strings.TrimSpace(stdout.String()))
+
+	sigCh <- syscall.SIGTERM
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Supervisor.Run did not return within 2s of signal")
+	}
+
+	if err := syscall.Kill(grandchild, 0); !errors.Is(err, syscall.ESRCH) {
+		_ = syscall.Kill(grandchild, syscall.SIGKILL)
+		t.Fatalf("grandchild not reaped: kill(%d,0)=%v", grandchild, err)
+	}
+}
+
+// waitFor polls cond every 20ms up to 2s, fatal if it never becomes true.
+func waitFor(t *testing.T, cond func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if cond() {
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatal("condition not met within 2s")
+}
+
+func mustAtoi(t *testing.T, s string) int {
+	t.Helper()
+	n, err := strconv.Atoi(s)
+	if err != nil {
+		t.Fatalf("atoi(%q): %v", s, err)
+	}
+	return n
 }
