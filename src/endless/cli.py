@@ -669,10 +669,15 @@ def task_search(query, project, show_all, status, phase, parent_id,
               help="Task ID(s) related to this new task (repeatable)")
 @click.option("--implements", "implements_ids", type=TASK_ID, multiple=True,
               help="Task ID(s) that this new task implements (repeatable)")
+@click.option("--cleans-up", "cleans_up_ids", type=TASK_ID, multiple=True,
+              help="Task ID(s) that this new task cleans up after (repeatable)")
+@click.option("--cleaned-up-by", "cleaned_up_by_ids", type=TASK_ID, multiple=True,
+              help="Task ID(s) that clean up after this new task (repeatable)")
 @click.option("--decision", "decision_text", default=None,
               help="Rationale text — creates a paired decision-type task linked via 'documents'")
 def task_add(title, description, phase, project, parent, after, task_type, status, tier, force,
-             blocks_ids, blocked_by_ids, relates_to_ids, implements_ids, decision_text):
+             blocks_ids, blocked_by_ids, relates_to_ids, implements_ids,
+             cleans_up_ids, cleaned_up_by_ids, decision_text):
     """Add a task."""
     from endless.task_cmd import add_item, parse_tier, link_tasks
     tier_val = parse_tier(tier) if tier else None
@@ -689,6 +694,10 @@ def task_add(title, description, phase, project, parent, after, task_type, statu
         link_tasks(new_id, tid, "relates_to")
     for tid in implements_ids:
         link_tasks(new_id, tid, "implements")
+    for tid in cleans_up_ids:
+        link_tasks(new_id, tid, "cleans_up")
+    for tid in cleaned_up_by_ids:
+        link_tasks(new_id, tid, "cleaned_up_by")
     if decision_text:
         decision_id = add_item(decision_text, project_name=project,
                                task_type="decision", status="confirmed", force=True)

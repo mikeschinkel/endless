@@ -94,6 +94,135 @@ def test_link_relates_to_symmetric(isolated_env):
     assert rows[0]["dep_type"] == "relates_to"
 
 
+def test_link_cleans_up_no_swap(isolated_env):
+    """E-1145: 'cleans_up' stores active-voice; source is the cleanup task."""
+    _seed_project()
+    cleanup = _add_task("Retype prose links")
+    parent = _add_task("Parent that shipped")
+    task_cmd.link_tasks(cleanup, parent, "cleans_up")
+    rows = list(db.query("SELECT source_id, target_id, dep_type FROM task_deps"))
+    assert rows[0]["source_id"] == cleanup
+    assert rows[0]["target_id"] == parent
+    assert rows[0]["dep_type"] == "cleans_up"
+
+
+def test_link_cleaned_up_by_swaps(isolated_env):
+    """E-1145: 'cleaned_up_by' is the inverse view, swaps source and target."""
+    _seed_project()
+    parent = _add_task("Parent that shipped")
+    cleanup = _add_task("Retype prose links")
+    # "parent cleaned_up_by cleanup" → stored as "cleanup cleans_up parent"
+    task_cmd.link_tasks(parent, cleanup, "cleaned_up_by")
+    rows = list(db.query("SELECT source_id, target_id, dep_type FROM task_deps"))
+    assert rows[0]["source_id"] == cleanup
+    assert rows[0]["target_id"] == parent
+    assert rows[0]["dep_type"] == "cleans_up"
+
+
+def test_unlink_cleans_up(isolated_env):
+    _seed_project()
+    cleanup = _add_task("Retype prose links")
+    parent = _add_task("Parent that shipped")
+    task_cmd.link_tasks(cleanup, parent, "cleans_up")
+    task_cmd.unlink_tasks(cleanup, parent, "cleans_up")
+    rows = list(db.query("SELECT * FROM task_deps"))
+    assert rows == []
+
+
+def test_cleans_up_in_canonical_registries():
+    """E-1145: registries expose both directions and the stored type."""
+    assert "cleans_up" in task_cmd.CANONICAL_DEP_TYPES
+    assert "cleaned_up_by" in task_cmd.CANONICAL_DEP_TYPES
+    assert task_cmd.CANONICAL_DEP_TYPES["cleans_up"] == ("cleans_up", False)
+    assert task_cmd.CANONICAL_DEP_TYPES["cleaned_up_by"] == ("cleans_up", True)
+    assert "cleans_up" in task_cmd.STORED_DEP_TYPES
+    assert "cleans_up" in task_cmd.RELATION_DISPLAY_ORDER
+    assert "cleaned_up_by" in task_cmd.RELATION_DISPLAY_ORDER
+    assert task_cmd.RELATION_LABELS["cleans_up"] == "Cleans up"
+    assert task_cmd.RELATION_LABELS["cleaned_up_by"] == "Cleaned up by"
+
+
+def test_task_add_cleans_up_flag(isolated_env, monkeypatch):
+    """E-1145: 'task add --cleans-up <id>' wires the new task as cleanup of <id>."""
+    from click.testing import CliRunner
+
+    from endless.cli import main
+
+    db.execute(
+        "INSERT INTO projects (name, path, status, created_at, updated_at) "
+        "VALUES ('sample', '/tmp/sample', 'active', datetime('now'), datetime('now'))"
+    )
+    parent = _add_task("Add feature flag")
+
+    def _stub(title, description=None, phase="now", project_name=None,
+              after=None, parent_id=None, task_type=None, status=None,
+              tier=None, force=False):
+        cur = db.execute(
+            "INSERT INTO tasks (project_id, title, description, status, type, phase, created_at) "
+            "VALUES (1, ?, ?, ?, ?, ?, datetime('now'))",
+            (title, description or "", status or "needs_plan", task_type or "task", phase),
+        )
+        return cur.lastrowid
+
+    monkeypatch.setattr(task_cmd, "add_item", _stub)
+
+    runner = CliRunner()
+    result = runner.invoke(main, [
+        "task", "add", "Remove feature flag after rampup",
+        "--cleans-up", str(parent),
+    ])
+    assert result.exit_code == 0, result.output
+
+    rows = list(db.query(
+        "SELECT source_id, target_id, dep_type FROM task_deps "
+        "WHERE dep_type = 'cleans_up'"
+    ))
+    assert len(rows) == 1
+    assert rows[0]["target_id"] == parent
+    assert rows[0]["source_id"] != parent  # the new task
+
+
+def test_task_add_cleaned_up_by_flag(isolated_env, monkeypatch):
+    """E-1145: 'task add --cleaned-up-by <id>' swaps to the canonical direction."""
+    from click.testing import CliRunner
+
+    from endless.cli import main
+
+    db.execute(
+        "INSERT INTO projects (name, path, status, created_at, updated_at) "
+        "VALUES ('sample', '/tmp/sample', 'active', datetime('now'), datetime('now'))"
+    )
+    cleanup_task = _add_task("Existing cleanup task")
+
+    def _stub(title, description=None, phase="now", project_name=None,
+              after=None, parent_id=None, task_type=None, status=None,
+              tier=None, force=False):
+        cur = db.execute(
+            "INSERT INTO tasks (project_id, title, description, status, type, phase, created_at) "
+            "VALUES (1, ?, ?, ?, ?, ?, datetime('now'))",
+            (title, description or "", status or "needs_plan", task_type or "task", phase),
+        )
+        return cur.lastrowid
+
+    monkeypatch.setattr(task_cmd, "add_item", _stub)
+
+    runner = CliRunner()
+    result = runner.invoke(main, [
+        "task", "add", "Add feature flag",
+        "--cleaned-up-by", str(cleanup_task),
+    ])
+    assert result.exit_code == 0, result.output
+
+    rows = list(db.query(
+        "SELECT source_id, target_id, dep_type FROM task_deps "
+        "WHERE dep_type = 'cleans_up'"
+    ))
+    assert len(rows) == 1
+    # canonical: source = cleanup task, target = parent (the new task)
+    assert rows[0]["source_id"] == cleanup_task
+    assert rows[0]["target_id"] != cleanup_task
+
+
 def test_self_link_rejected(isolated_env):
     _seed_project()
     a = _add_task("A")

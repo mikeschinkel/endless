@@ -27,8 +27,9 @@ PARENT_NONE = 0
 # documents added per E-1007).
 # display_name -> (stored_dep_type, swap_source_target)
 # Stored types are active voice (source is the actor): blocks, implements,
-# replaces, documents, relates_to. Inverse views (blocked_by, implemented_by, etc.)
-# resolve to the same stored row queried with source/target swapped.
+# replaces, documents, cleans_up, relates_to. Inverse views (blocked_by,
+# implemented_by, etc.) resolve to the same stored row queried with
+# source/target swapped.
 CANONICAL_DEP_TYPES: dict[str, tuple[str, bool]] = {
     "blocks":          ("blocks",     False),  # source blocks target
     "blocked_by":      ("blocks",     True),   # inverse view
@@ -38,11 +39,13 @@ CANONICAL_DEP_TYPES: dict[str, tuple[str, bool]] = {
     "replaced_by":     ("replaces",   True),
     "documents":       ("documents",  False),  # source documents target (records rationale for)
     "documented_by":   ("documents",  True),
+    "cleans_up":       ("cleans_up",  False),  # source is post-ship cleanup of target; target does not wait
+    "cleaned_up_by":   ("cleans_up",  True),
     "relates_to":      ("relates_to", False),  # symmetric
 }
 
-# The 5 canonical stored types (the values in CANONICAL_DEP_TYPES, deduplicated).
-STORED_DEP_TYPES = ("blocks", "implements", "replaces", "documents", "relates_to")
+# The 6 canonical stored types (the values in CANONICAL_DEP_TYPES, deduplicated).
+STORED_DEP_TYPES = ("blocks", "implements", "replaces", "documents", "cleans_up", "relates_to")
 
 # Display order for `task show` — actionability descending; symmetric last.
 RELATION_DISPLAY_ORDER = (
@@ -50,6 +53,7 @@ RELATION_DISPLAY_ORDER = (
     "implements", "implemented_by",
     "replaces",   "replaced_by",
     "documents",  "documented_by",
+    "cleans_up",  "cleaned_up_by",
     "relates_to",
 )
 
@@ -63,6 +67,8 @@ RELATION_LABELS = {
     "replaced_by":    "Replaced by",
     "documents":      "Documents",
     "documented_by":  "Documented by",
+    "cleans_up":      "Cleans up",
+    "cleaned_up_by":  "Cleaned up by",
     "relates_to":     "Relates to",
 }
 
