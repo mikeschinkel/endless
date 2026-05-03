@@ -853,10 +853,17 @@ def task_prompt(item_id):
               help="Project name (default: detect from cwd)")
 @click.option("--no-plan", is_flag=True,
               help="Skip plan mode, send prompt directly")
-def task_spawn(item_id, project, no_plan):
+@click.option("--worktree", default=None,
+              help="cd to this path (e.g. a git worktree) before launching "
+                   "claude, instead of the project's main checkout. The "
+                   "spawned session reads .claude/settings.json from this "
+                   "directory, so a worktree-local hook override (see "
+                   "'just claude-settings-init') applies.")
+def task_spawn(item_id, project, no_plan, worktree):
     """Spawn a new tmux window with Claude working on a task's prompt."""
     from endless.task_cmd import spawn_plan
-    spawn_plan(item_id, project_name=project, no_plan=no_plan)
+    spawn_plan(item_id, project_name=project, no_plan=no_plan,
+               worktree=worktree)
 
 
 @task_cmd.command("chat")

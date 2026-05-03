@@ -1976,7 +1976,8 @@ def show_prompt(item_id: int):
     click.echo(row[0]["prompt"])
 
 
-def spawn_plan(item_id: int, project_name: str | None = None, no_plan: bool = False):
+def spawn_plan(item_id: int, project_name: str | None = None, no_plan: bool = False,
+               worktree: str | None = None):
     """Spawn a new tmux window with Claude working on a task's prompt."""
     import shutil
     import subprocess
@@ -2014,6 +2015,20 @@ def spawn_plan(item_id: int, project_name: str | None = None, no_plan: bool = Fa
     project_path = item["project_path"]
     title = item["title"]
 
+    # --worktree overrides the cd target so the spawned session reads
+    # .claude/settings.json from the worktree (worktree-local hook override
+    # via 'just claude-settings-init' applies). tmux send-keys would not
+    # surface a bad cd, so validate up front.
+    if worktree is not None:
+        cd_target = os.path.abspath(os.path.expanduser(worktree))
+        if not os.path.isdir(cd_target):
+            raise click.ClickException(
+                f"--worktree path does not exist or is not a directory: "
+                f"{cd_target}"
+            )
+    else:
+        cd_target = project_path
+
     # Create a short window name from the title
     window_name = re.sub(r"[^a-zA-Z0-9]", "-", title.lower())[:30]
 
@@ -2041,10 +2056,10 @@ def spawn_plan(item_id: int, project_name: str | None = None, no_plan: bool = Fa
         check=True,
     )
 
-    # cd to project directory
+    # cd to target directory (project main checkout, or --worktree path)
     subprocess.run(
         ["tmux", "send-keys", "-t", window_name,
-         f"cd {project_path}", "Enter"],
+         f"cd {cd_target}", "Enter"],
         check=True,
     )
 
@@ -2096,6 +2111,8 @@ def spawn_plan(item_id: int, project_name: str | None = None, no_plan: bool = Fa
         + f" Spawned window '{window_name}' for "
         + click.style(f"{task_id_display(item_id)}: {title}", bold=True)
     )
+    if worktree is not None:
+        click.echo(f"  cwd: {cd_target}")
     click.echo(
         f"  Switch to it: tmux select-window -t {window_name}"
     )
