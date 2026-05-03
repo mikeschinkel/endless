@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -53,37 +54,27 @@ func runCmd(args []string) {
 	}
 	defer cleanup()
 
+	sup := NewSupervisor(rest[0], rest[1:]...)
+	sup.Env = append(os.Environ(), sb.Env()...)
+	sup.Stdin = os.Stdin
+	sup.Stdout = os.Stdout
+	sup.Stderr = os.Stderr
+
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
-	go func() {
-		<-sigCh
-		cleanup()
-		os.Exit(130)
-	}()
+	sup.Signals = sigCh
 
-	cmd := exec.Command(rest[0], rest[1:]...)
-	cmd.Env = append(os.Environ(), sb.Env()...)
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	runErr := sup.Run()
+	cleanup()
 
-	if err := cmd.Run(); err != nil {
+	if runErr != nil {
 		var exitErr *exec.ExitError
-		if asExitErr(err, &exitErr) {
-			cleanup()
-			os.Exit(exitErr.ExitCode())
+		if !errors.As(runErr, &exitErr) {
+			fmt.Fprintf(os.Stderr, "endless-sandbox run: %v\n", runErr)
+			os.Exit(1)
 		}
-		fmt.Fprintf(os.Stderr, "endless-sandbox run: %v\n", err)
-		cleanup()
-		os.Exit(1)
 	}
-}
-
-// asExitErr is a small helper around errors.As to keep the call site readable.
-func asExitErr(err error, target **exec.ExitError) bool {
-	if e, ok := err.(*exec.ExitError); ok {
-		*target = e
-		return true
+	if sup.ProcessState != nil {
+		os.Exit(sup.ProcessState.ExitCode())
 	}
-	return false
 }
