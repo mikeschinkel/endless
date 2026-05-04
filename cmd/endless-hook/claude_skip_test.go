@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"fmt"
 	"log"
 	"os"
 	"path/filepath"
@@ -36,6 +37,16 @@ func makeWorktreeLayout(t *testing.T) (projectRoot, worktreeRoot string) {
 	return projectRoot, worktreeRoot
 }
 
+// writeSettingsOverride writes a worktree-level .claude/settings.json that
+// registers <worktreeRoot>/bin/endless-hook as a hook command, simulating
+// what claude-settings-init produces.
+func writeSettingsOverride(t *testing.T, worktreeRoot string) {
+	t.Helper()
+	worktreeBin := filepath.Join(worktreeRoot, "bin", "endless-hook")
+	settings := fmt.Sprintf(`{"hooks":{"SessionStart":[{"hooks":[{"command":"%s claude","type":"command"}]}]}}`, worktreeBin)
+	writeTestFile(t, filepath.Join(worktreeRoot, ".claude", "settings.json"), settings)
+}
+
 func setOsExecutable(t *testing.T, path string) {
 	t.Helper()
 	prev := osExecutable
@@ -62,9 +73,37 @@ func TestShouldSkipForWorktreeAt_MainCheckoutNoCompanion(t *testing.T) {
 	}
 }
 
+func TestShouldSkipForWorktreeAt_NoSettingsFile(t *testing.T) {
+	buf := captureLog(t)
+	projectRoot, worktreeRoot := makeWorktreeLayout(t)
+	worktreeBin := filepath.Join(worktreeRoot, "bin", "endless-hook")
+	writeTestFile(t, worktreeBin, "#!/bin/sh\nexit 0\n")
+	if shouldSkipForWorktreeAt(worktreeRoot, projectRoot) {
+		t.Fatal("expected no skip when settings.json is missing (no override registered)")
+	}
+	if strings.Contains(buf.String(), "WARN") {
+		t.Fatalf("expected no WARN when settings.json is missing; got: %q", buf.String())
+	}
+}
+
+func TestShouldSkipForWorktreeAt_SettingsWithoutOverride(t *testing.T) {
+	buf := captureLog(t)
+	projectRoot, worktreeRoot := makeWorktreeLayout(t)
+	worktreeBin := filepath.Join(worktreeRoot, "bin", "endless-hook")
+	writeTestFile(t, worktreeBin, "#!/bin/sh\nexit 0\n")
+	writeTestFile(t, filepath.Join(worktreeRoot, ".claude", "settings.json"), `{"enabledPlugins":{"frontend-design@claude-plugins-official":true}}`)
+	if shouldSkipForWorktreeAt(worktreeRoot, projectRoot) {
+		t.Fatal("expected no skip when settings.json doesn't reference worktree binary")
+	}
+	if strings.Contains(buf.String(), "WARN") {
+		t.Fatalf("expected no WARN when settings.json has no override; got: %q", buf.String())
+	}
+}
+
 func TestShouldSkipForWorktreeAt_WorktreeBinaryMissing(t *testing.T) {
 	buf := captureLog(t)
 	projectRoot, worktreeRoot := makeWorktreeLayout(t)
+	writeSettingsOverride(t, worktreeRoot)
 	if shouldSkipForWorktreeAt(worktreeRoot, projectRoot) {
 		t.Fatal("expected no skip (fallback to global) when worktree binary missing")
 	}
@@ -82,6 +121,7 @@ func TestShouldSkipForWorktreeAt_WorktreeBinaryMissing(t *testing.T) {
 
 func TestShouldSkipForWorktreeAt_SelfIsWorktreeBinary(t *testing.T) {
 	projectRoot, worktreeRoot := makeWorktreeLayout(t)
+	writeSettingsOverride(t, worktreeRoot)
 	worktreeBin := filepath.Join(worktreeRoot, "bin", "endless-hook")
 	writeTestFile(t, worktreeBin, "#!/bin/sh\nexit 0\n")
 	setOsExecutable(t, worktreeBin)
@@ -93,6 +133,7 @@ func TestShouldSkipForWorktreeAt_SelfIsWorktreeBinary(t *testing.T) {
 func TestShouldSkipForWorktreeAt_SelfIsGlobal(t *testing.T) {
 	buf := captureLog(t)
 	projectRoot, worktreeRoot := makeWorktreeLayout(t)
+	writeSettingsOverride(t, worktreeRoot)
 	worktreeBin := filepath.Join(worktreeRoot, "bin", "endless-hook")
 	writeTestFile(t, worktreeBin, "#!/bin/sh\nexit 0\n")
 	globalBin := filepath.Join(t.TempDir(), "endless-hook")
