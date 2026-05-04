@@ -41,6 +41,9 @@ def isolated_env(tmp_path, monkeypatch):
     # for ENDLESS_AUTO_MIGRATE. Tests need a fully migrated schema.
     monkeypatch.setenv("ENDLESS_AUTO_MIGRATE", "1")
 
+    # Tests assume shell helpers are NOT loaded unless a test explicitly opts in.
+    monkeypatch.delenv("ENDLESS_SHELL_HELPERS_LOADED", raising=False)
+
     # Prepend this worktree's bin/ to PATH so subprocesses (e.g. endless-event
     # invoked by event_bridge.emit_event) find the locally-built binary, not
     # the globally-installed one symlinked from a sibling worktree.

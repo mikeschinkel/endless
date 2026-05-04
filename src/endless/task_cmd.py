@@ -1772,20 +1772,27 @@ def start_item(item_id: int):
         item_id, slug_source, project_root,
     )
 
-    if created:
-        click.echo(
-            click.style("•", fg="cyan")
-            + f" Created task worktree: {wt_path}"
-        )
-        click.echo(f"  Switch sessions to it: cd {wt_path}")
-        click.echo(
-            f"  Or spawn a fresh one:    endless task spawn E-{item_id}"
-        )
+    home = str(Path.home())
+    wt_display = str(wt_path).replace(home, "~", 1) if str(wt_path).startswith(home) else str(wt_path)
+    state = "created" if created else "already exists"
+    click.echo(
+        click.style("•", fg="cyan")
+        + f" worktree {state}: {wt_display}"
+    )
+    click.echo("")
+    click.echo("  To work on this task, choose one:")
+    click.echo("    1. Delegate to a fresh Claude session:")
+    click.echo(f"         endless task spawn E-{item_id}")
+    click.echo("    2. Do it yourself (edit, run tests, etc.):")
+
+    eswt_cmd = f"eswt E-{item_id}"
+    if os.environ.get("ENDLESS_SHELL_HELPERS_LOADED"):
+        click.echo(f"         {eswt_cmd}   # Changes to Git worktree dir")
     else:
-        click.echo(
-            click.style("•", fg="cyan")
-            + f" Worktree already exists: {wt_path}"
-        )
+        eval_cmd = 'eval "$(endless shell-init)"'
+        pad = " " * (len(eval_cmd) - len(eswt_cmd))
+        click.echo(f"         {eval_cmd}  # Adds eswt shell helper func")
+        click.echo(f"         {eswt_cmd}{pad}  # Changes to Git worktree dir")
 
 
 def update_plan(

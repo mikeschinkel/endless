@@ -70,11 +70,15 @@ def test_start_creates_worktree_no_plan_file(project_with_task, capsys):
     ).stdout
     assert f"task/{tid}-move-title-verbs-hardcoded-list-database" in branches
 
-    # User-facing output
+    # User-facing output: new format with "worktree created", spawn option,
+    # and the eswt helper command. Path is shown with ~ collapsed when under
+    # $HOME (skipped here when the tmp_path is outside $HOME).
     captured = capsys.readouterr()
-    assert "Created task worktree:" in captured.out
-    assert "Switch sessions to it: cd" in captured.out
+    assert "worktree created:" in captured.out
     assert f"endless task spawn E-{tid}" in captured.out
+    assert f"eswt E-{tid}" in captured.out
+    # When ENDLESS_SHELL_HELPERS_LOADED is unset, the bootstrap eval line shows
+    assert 'eval "$(endless shell-init)"' in captured.out
 
 
 def test_start_idempotent_on_second_run(project_with_task, capsys):
@@ -85,7 +89,11 @@ def test_start_idempotent_on_second_run(project_with_task, capsys):
 
     start_item(project_with_task["task_id"])
     captured = capsys.readouterr()
-    assert "Worktree already exists:" in captured.out
+    assert "worktree already exists:" in captured.out
+    # Re-run still shows the same two-option block
+    tid = project_with_task["task_id"]
+    assert f"endless task spawn E-{tid}" in captured.out
+    assert f"eswt E-{tid}" in captured.out
 
     repo = project_with_task["project_root"]
     tid = project_with_task["task_id"]
@@ -163,6 +171,18 @@ def test_start_uses_task_fallback_for_all_filler_title(seeded_project_at_cwd):
         (repo / ".endless" / "worktrees" / f"e-{tid}" / ".endless" / "worktree.json").read_text()
     )
     assert companion["branch"] == f"task/{tid}-task"
+
+
+def test_start_suppresses_eval_line_when_helpers_loaded(project_with_task, capsys, monkeypatch):
+    """When ENDLESS_SHELL_HELPERS_LOADED is set, skip the bootstrap eval hint."""
+    from endless.task_cmd import start_item
+
+    monkeypatch.setenv("ENDLESS_SHELL_HELPERS_LOADED", "1")
+    start_item(project_with_task["task_id"])
+    captured = capsys.readouterr()
+    tid = project_with_task["task_id"]
+    assert f"eswt E-{tid}" in captured.out
+    assert 'eval "$(endless shell-init)"' not in captured.out
 
 
 def test_start_worktree_discoverable_via_for_task(project_with_task):
