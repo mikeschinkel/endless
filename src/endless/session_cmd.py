@@ -1383,16 +1383,11 @@ def session_use_resolve(session_ref: str | None) -> None:
 
     eid = c.get("endless_session_id", "")
     target_path = _target_path(c)  # validated: worktree if dir exists, else cwd
-    worktree_path = c.get("worktree_path") or ""
 
     lines = [
         f"cd {shlex.quote(target_path)}",
         f"export ENDLESS_SESSION_ID={shlex.quote(str(eid))}",
     ]
-    if worktree_path and os.path.isdir(worktree_path):
-        lines.append(f"export ENDLESS_WORKTREE_PATH={shlex.quote(worktree_path)}")
-    else:
-        lines.append("unset ENDLESS_WORKTREE_PATH")
 
     extension = project_root / ".endless" / "extensions" / "use.sh"
     if extension.exists():
@@ -1407,13 +1402,10 @@ def session_use_resolve(session_ref: str | None) -> None:
     _emit_resolution_status(c, target_path)
 
 
-# Env vars that 'endless session use' is documented to export. E-1038 reduced
-# this to ENDLESS_SESSION_ID alone (other fields derivable on demand). E-1164
-# re-added ENDLESS_WORKTREE_PATH because shell helpers (esp/esf) need to route
-# through the worktree's CLI on every call — looking it up via subprocess each
-# time costs ~100ms per helper invocation. Kept as a constant so 'session
-# forget' stays in lockstep — change the contract here, both ends update.
-SESSION_USE_EXPORTED_VARS = ("ENDLESS_SESSION_ID", "ENDLESS_WORKTREE_PATH")
+# Env vars that 'endless session use' is documented to export (E-1038
+# reduced this to one). Kept as a constant so 'session forget' stays
+# in lockstep — change the contract here, both ends update together.
+SESSION_USE_EXPORTED_VARS = ("ENDLESS_SESSION_ID",)
 
 
 def session_forget_resolve() -> None:

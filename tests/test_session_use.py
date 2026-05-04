@@ -38,9 +38,7 @@ def project_with_companion(registered_project, monkeypatch):
 # ---------- default activation block ----------------------------------------
 
 def test_use_emits_minimal_block(project_with_companion, capsys):
-    """Activation block is minimal: cd + ENDLESS_SESSION_ID + worktree state.
-    E-1038 reduced exports to ENDLESS_SESSION_ID alone; E-1164 re-added
-    ENDLESS_WORKTREE_PATH so shell helpers route in O(1) without subprocesses."""
+    """Activation block is minimal: cd + ENDLESS_SESSION_ID. (E-1038.)"""
     project_root, sessions_dir = project_with_companion
     _write_companion(sessions_dir, cwd=str(project_root))
 
@@ -49,41 +47,12 @@ def test_use_emits_minimal_block(project_with_companion, capsys):
 
     assert f"cd {shlex.quote(str(project_root))}" in out
     assert "export ENDLESS_SESSION_ID=247" in out
-    # Companion has no worktree_path → emit unset to clear any stale value.
-    assert "unset ENDLESS_WORKTREE_PATH" in out
-    # Other ENDLESS_* vars stay deferred per E-1038.
+    # Other ENDLESS_* vars are no longer in the activation block — fields
+    # are looked up on demand via 'endless session show <id> --json'.
     assert "ENDLESS_HARNESS_SESSION_ID" not in out
     assert "ENDLESS_HARNESS=" not in out
     assert "ENDLESS_PROJECT_ROOT" not in out
-
-
-def test_use_exports_worktree_path_when_present(project_with_companion, capsys, tmp_path):
-    """E-1164: when companion has a worktree_path that exists on disk,
-    export it so esp/esf can route through the worktree's CLI."""
-    _, sessions_dir = project_with_companion
-    real_worktree = tmp_path / "real-worktree"
-    real_worktree.mkdir()
-    _write_companion(sessions_dir, worktree_path=str(real_worktree), cwd="/the/cwd")
-
-    session_cmd.session_use_resolve("247")
-    out = capsys.readouterr().out
-
-    assert f"export ENDLESS_WORKTREE_PATH={shlex.quote(str(real_worktree))}" in out
-    assert "unset ENDLESS_WORKTREE_PATH" not in out
-
-
-def test_use_unsets_worktree_path_when_stale(project_with_companion, capsys):
-    """E-1164: when companion's worktree_path no longer exists on disk,
-    emit 'unset' so an inherited stale value from a previous esu doesn't
-    misroute helpers."""
-    _, sessions_dir = project_with_companion
-    _write_companion(sessions_dir, worktree_path="/this/is/gone", cwd="/the/cwd")
-
-    session_cmd.session_use_resolve("247")
-    out = capsys.readouterr().out
-
-    assert "unset ENDLESS_WORKTREE_PATH" in out
-    assert "/this/is/gone" not in out  # the stale path is not exported
+    assert "ENDLESS_WORKTREE_PATH" not in out
 
 
 def test_use_cds_to_existing_worktree(project_with_companion, capsys, tmp_path):
@@ -114,8 +83,8 @@ def test_use_no_extension_only_minimal_block(project_with_companion, capsys):
 
     session_cmd.session_use_resolve("247")
     out = capsys.readouterr().out
-    # Three lines: cd + ENDLESS_SESSION_ID + ENDLESS_WORKTREE_PATH state. (E-1164.)
-    assert out.count("\n") == 3
+    # Two lines: cd + one export.
+    assert out.count("\n") == 2
     assert "endless/extensions" not in out  # no warnings about extension
 
 

@@ -45,12 +45,14 @@ def test_shell_init_idempotent():
 
 
 def test_shell_init_routing_helper_present():
-    """E-1164: snippet defines _endless_run that picks worktree CLI when
-    ENDLESS_WORKTREE_PATH is set."""
+    """E-1164: snippet defines _endless_run that picks the worktree CLI by
+    looking up the session's worktree on each invocation (subprocess call,
+    no exported env var — see feedback_env_vars_visible_latency_invisible)."""
     runner = CliRunner()
     out = runner.invoke(main, ["shell-init"]).output
     assert "_endless_run()" in out
-    assert "ENDLESS_WORKTREE_PATH" in out
+    assert "ENDLESS_SESSION_ID" in out
+    assert "session cd --target worktree" in out
     assert "uv run --directory" in out
 
 
@@ -78,12 +80,3 @@ def test_shell_init_precondition_checks():
     out = runner.invoke(main, ["shell-init"]).output
     assert "esp: no active session" in out
     assert "esf: no active session" in out
-
-
-def test_shell_init_stale_worktree_warning():
-    """E-1164: when ENDLESS_WORKTREE_PATH is set but the dir is gone, fall
-    back to global endless with a warning the user can act on."""
-    runner = CliRunner()
-    out = runner.invoke(main, ["shell-init"]).output
-    assert "no longer exists" in out
-    assert "esf" in out  # warning mentions the recovery action
