@@ -71,13 +71,12 @@ def test_start_creates_worktree_no_plan_file(project_with_task, capsys):
     assert f"task/{tid}-move-title-verbs-hardcoded-list-database" in branches
 
     # User-facing output: new format with "worktree created", spawn option,
-    # and the eswt helper command. Path is shown with ~ collapsed when under
-    # $HOME (skipped here when the tmp_path is outside $HOME).
+    # and the eswt helper command guarded by a command -v self-check.
     captured = capsys.readouterr()
     assert "worktree created:" in captured.out
     assert f"endless task spawn E-{tid}" in captured.out
     assert f"eswt E-{tid}" in captured.out
-    # When ENDLESS_SHELL_HELPERS_LOADED is unset, the bootstrap eval line shows
+    assert 'command -v eswt' in captured.out
     assert 'eval "$(endless shell-init)"' in captured.out
 
 
@@ -171,18 +170,6 @@ def test_start_uses_task_fallback_for_all_filler_title(seeded_project_at_cwd):
         (repo / ".endless" / "worktrees" / f"e-{tid}" / ".endless" / "worktree.json").read_text()
     )
     assert companion["branch"] == f"task/{tid}-task"
-
-
-def test_start_suppresses_eval_line_when_helpers_loaded(project_with_task, capsys, monkeypatch):
-    """When ENDLESS_SHELL_HELPERS_LOADED is set, skip the bootstrap eval hint."""
-    from endless.task_cmd import start_item
-
-    monkeypatch.setenv("ENDLESS_SHELL_HELPERS_LOADED", "1")
-    start_item(project_with_task["task_id"])
-    captured = capsys.readouterr()
-    tid = project_with_task["task_id"]
-    assert f"eswt E-{tid}" in captured.out
-    assert 'eval "$(endless shell-init)"' not in captured.out
 
 
 def test_start_worktree_discoverable_via_for_task(project_with_task):

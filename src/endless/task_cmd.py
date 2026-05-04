@@ -1784,15 +1784,8 @@ def start_item(item_id: int):
     click.echo("    1. Delegate to a fresh Claude session:")
     click.echo(f"         endless task spawn E-{item_id}")
     click.echo("    2. Do it yourself (edit, run tests, etc.):")
-
-    eswt_cmd = f"eswt E-{item_id}"
-    if os.environ.get("ENDLESS_SHELL_HELPERS_LOADED"):
-        click.echo(f"         {eswt_cmd}   # Changes to Git worktree dir")
-    else:
-        eval_cmd = 'eval "$(endless shell-init)"'
-        pad = " " * (len(eval_cmd) - len(eswt_cmd))
-        click.echo(f"         {eval_cmd}  # Adds eswt shell helper func")
-        click.echo(f"         {eswt_cmd}{pad}  # Changes to Git worktree dir")
+    click.echo('         command -v eswt >/dev/null || eval "$(endless shell-init)"')
+    click.echo(f"         eswt E-{item_id}")
 
 
 def update_plan(
