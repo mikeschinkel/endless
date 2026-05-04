@@ -149,6 +149,77 @@ def tier_display(tier: int | None) -> str:
     return f"{tier} ({label})"
 
 
+# Field labels for change output emitted by state-mutating commands (E-1120).
+_FIELD_LABELS = {
+    "status":      "Status",
+    "phase":       "Phase",
+    "title":       "Title",
+    "description": "Description",
+    "text":        "Text",
+    "prompt":      "Prompt",
+    "parent_id":   "Parent",
+    "tier":        "Tier",
+    "outcome":     "Outcome",
+}
+
+
+_CHANGE_TRUNC_LEN = 40  # max chars for title/description/outcome in change output
+
+
+def _truncate(s: str, n: int = _CHANGE_TRUNC_LEN) -> str:
+    """Truncate a string to n chars, adding ellipsis if needed."""
+    return s if len(s) <= n else s[: n - 3] + "..."
+
+
+def _format_field_value(name: str, value) -> str:
+    """Format a field value for change-output display ('<old> -> <new>')."""
+    if value is None:
+        return "∅"
+    if name == "tier":
+        try:
+            return _TIER_LABELS.get(int(value), str(value))
+        except (TypeError, ValueError):
+            return str(value)
+    if name == "parent_id":
+        try:
+            return task_id_display(int(value))
+        except (TypeError, ValueError):
+            return str(value)
+    if name in ("text", "prompt"):
+        return "<set>" if value else "<cleared>"
+    if name in ("title", "description", "outcome"):
+        s = str(value)
+        if not s:
+            return "∅"
+        return _truncate(s)
+    return str(value)
+
+
+def _emit_field_changes(
+    item_id: int,
+    title: str | None,
+    changes: list,
+    suffix: str | None = None,
+):
+    """Print 'Updated E-NNN (<title>): ' header and one '• <Label>: <old> -> <new>' bullet per change.
+
+    `changes` is a list of (field_name, old_value, new_value) tuples.
+    `suffix`, if given, is appended as a parenthesized note on the header line
+    before the colon (e.g., '(cascaded to 3 descendants)').
+    """
+    bullet = click.style("•", fg="cyan")
+    header = f"Updated {task_id_display(item_id)}"
+    if title:
+        header += f" ({_truncate(title)})"
+    if suffix:
+        header += f" {suffix}"
+    header += ":"
+    click.echo(header)
+    for name, old, new in changes:
+        label = _FIELD_LABELS.get(name, name)
+        click.echo(f"{bullet} {label}: {_format_field_value(name, old)} -> {_format_field_value(name, new)}")
+
+
 def _running_under_agent() -> bool:
     """True if invoked from an LLM agent harness.
 
@@ -1543,6 +1614,10 @@ def complete_item(item_id: int, cascade: bool = False, outcome: str | None = Non
         payload=payload,
     )
 
+    changes = [("status", row[0]["status"], "confirmed")]
+    if outcome:
+        changes.append(("outcome", None, outcome))
+    suffix = None
     if cascade:
         count = db.scalar(
             "WITH RECURSIVE tree(id) AS ("
@@ -1552,15 +1627,8 @@ def complete_item(item_id: int, cascade: bool = False, outcome: str | None = Non
             ") SELECT count(*) FROM tree",
             (item_id,),
         ) or 1
-        click.echo(
-            click.style("•", fg="cyan")
-            + f" Confirmed {task_id_display(item_id)} and {count - 1} descendant(s): {row[0]['title']}"
-        )
-    else:
-        click.echo(
-            click.style("•", fg="cyan")
-            + f" Confirmed: {row[0]['title']}"
-        )
+        suffix = f"(cascaded to {count - 1} descendant(s))"
+    _emit_field_changes(item_id, row[0]["title"], changes, suffix=suffix)
 
 
 def assume_item(item_id: int, cascade: bool = False, outcome: str | None = None):
@@ -1600,6 +1668,10 @@ def assume_item(item_id: int, cascade: bool = False, outcome: str | None = None)
         payload=payload,
     )
 
+    changes = [("status", row[0]["status"], "assumed")]
+    if outcome:
+        changes.append(("outcome", None, outcome))
+    suffix = None
     if cascade:
         count = db.scalar(
             "WITH RECURSIVE tree(id) AS ("
@@ -1609,15 +1681,8 @@ def assume_item(item_id: int, cascade: bool = False, outcome: str | None = None)
             ") SELECT count(*) FROM tree",
             (item_id,),
         ) or 1
-        click.echo(
-            click.style("•", fg="cyan")
-            + f" Assumed {task_id_display(item_id)} and {count - 1} descendant(s): {row[0]['title']}"
-        )
-    else:
-        click.echo(
-            click.style("•", fg="cyan")
-            + f" Assumed: {row[0]['title']}"
-        )
+        suffix = f"(cascaded to {count - 1} descendant(s))"
+    _emit_field_changes(item_id, row[0]["title"], changes, suffix=suffix)
 
 
 def decline_item(item_id: int, reason: str):
@@ -1657,10 +1722,11 @@ def decline_item(item_id: int, reason: str):
         },
     )
 
-    click.echo(
-        click.style("•", fg="cyan")
-        + f" Declined: {row[0]['title']}"
-    )
+    changes = [
+        ("status", row[0]["status"], "declined"),
+        ("outcome", None, reason),
+    ]
+    _emit_field_changes(item_id, row[0]["title"], changes)
 
 
 def start_item(item_id: int):
@@ -1668,7 +1734,8 @@ def start_item(item_id: int):
     from endless.event_bridge import emit_event
 
     row = db.query(
-        "SELECT id, description, status FROM tasks WHERE id = ?",
+        "SELECT id, COALESCE(title, description) as title, status FROM tasks "
+        "WHERE id = ?",
         (item_id,),
     )
     if not row:
@@ -1687,9 +1754,10 @@ def start_item(item_id: int):
             "new_status": "in_progress",
         },
     )
-    click.echo(
-        click.style("•", fg="cyan")
-        + f" Started: {row[0]['description']}"
+    _emit_field_changes(
+        item_id,
+        row[0]["title"],
+        [("status", row[0]["status"], "in_progress")],
     )
 
 
@@ -1712,7 +1780,9 @@ def update_plan(
     _require_outcome_for_declined(status, outcome)
 
     row = db.query(
-        "SELECT id, title, status, type FROM tasks WHERE id = ?",
+        "SELECT id, title, description, text, prompt, status, type, "
+        "       phase, tier, parent_id, outcome "
+        "FROM   tasks WHERE id = ?",
         (item_id,),
     )
     if not row:
@@ -1735,60 +1805,55 @@ def update_plan(
                 f"Valid: {', '.join(valid)}"
             )
 
-    # Build the fields map for the event payload
+    # Build the fields map for the event payload, plus an ordered list of
+    # (name, old, new) tuples for change-output rendering.
     fields = {}
-    changed_names = []
+    changes: list = []
+
+    def _add(name: str, new_value):
+        fields[name] = new_value
+        changes.append((name, row[0][name], new_value))
 
     if status is not None:
-        fields["status"] = status
-        changed_names.append("status")
+        _add("status", status)
 
     if phase is not None:
-        fields["phase"] = phase
-        changed_names.append("phase")
+        _add("phase", phase)
 
     if title is not None:
-        fields["title"] = title
-        changed_names.append("title")
+        _add("title", title)
 
     if description is not None:
-        fields["description"] = description
-        changed_names.append("description")
+        _add("description", description)
 
     if text_file is not None:
         p = Path(text_file).expanduser()
         if not p.exists():
             raise click.ClickException(f"File not found: {p}")
         text_content = p.read_text()
-        fields["text"] = text_content
-        changed_names.append("text")
+        _add("text", text_content)
         _write_task_plan_file(item_id, text_content)
 
     if prompt_file is not None:
         p = Path(prompt_file).expanduser()
         if not p.exists():
             raise click.ClickException(f"File not found: {p}")
-        fields["prompt"] = p.read_text()
-        changed_names.append("prompt")
+        _add("prompt", p.read_text())
 
     if parent_id is not None:
-        fields["parent_id"] = parent_id if parent_id > 0 else None
-        changed_names.append("parent_id")
+        _add("parent_id", parent_id if parent_id > 0 else None)
 
     if tier is not None:
         if tier == TIER_CLEAR:
-            fields["tier"] = None
+            _add("tier", None)
         else:
-            fields["tier"] = tier
+            _add("tier", tier)
             # Tier 1 tasks can't be needs_plan; auto-advance to ready
             if tier == 1 and status is None and row[0]["status"] == "needs_plan":
-                fields["status"] = "ready"
-                changed_names.append("status")
-        changed_names.append("tier")
+                _add("status", "ready")
 
     if outcome is not None:
-        fields["outcome"] = outcome
-        changed_names.append("outcome")
+        _add("outcome", outcome)
 
     if not fields:
         raise click.ClickException(
@@ -1804,10 +1869,9 @@ def update_plan(
         payload={"fields": fields},
     )
 
-    click.echo(
-        click.style("•", fg="cyan")
-        + f" Updated {task_id_display(item_id)}: {', '.join(changed_names)}"
-    )
+    # Header title reflects the new title if it was changed in this update.
+    header_title = fields.get("title", row[0]["title"]) or row[0]["description"]
+    _emit_field_changes(item_id, header_title, changes)
 
 
 def _format_timestamp(ts: str) -> str:
@@ -2573,7 +2637,8 @@ def replace_task(old_id: int, new_id: int, status: str = "obsolete", outcome: st
         raise
 
     old_status_row = db.query(
-        "SELECT status FROM tasks WHERE id = ?", (old_id,)
+        "SELECT COALESCE(title, description) as title, status "
+        "FROM   tasks WHERE id = ?", (old_id,)
     )
     payload = {
         "old_status": old_status_row[0]["status"],
@@ -2591,9 +2656,14 @@ def replace_task(old_id: int, new_id: int, status: str = "obsolete", outcome: st
         payload=payload,
     )
 
-    click.echo(
-        click.style("•", fg="cyan")
-        + f" {task_id_display(old_id)} replaced by {task_id_display(new_id)} (set to {status})"
+    changes = [("status", old_status_row[0]["status"], status)]
+    if outcome:
+        changes.append(("outcome", None, outcome))
+    _emit_field_changes(
+        old_id,
+        old_status_row[0]["title"],
+        changes,
+        suffix=f"(replaced by {task_id_display(new_id)})",
     )
 
 
