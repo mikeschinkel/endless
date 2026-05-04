@@ -83,6 +83,10 @@ func runClaude(args []string) error {
 		return fmt.Errorf("looking up project for %s: %w", payload.CWD, err)
 	}
 
+	if shouldSkipForWorktree(projectID, payload.CWD) {
+		return nil
+	}
+
 	// Record activity (throttled)
 	throttled, err := monitor.ShouldThrottle(projectID, "claude", 2)
 	if err != nil {
@@ -977,6 +981,68 @@ func autoImportTask(projectID int64, sessionID, filePath string) error {
 }
 
 // --- E-971 Layer D: worktree adoption + enforcement helpers ----------------
+
+// osExecutable is a test seam for os.Executable.
+var osExecutable = os.Executable
+
+// shouldSkipForWorktree returns true when this binary should yield to a
+// worktree-local copy of endless-hook for the same hook event.
+//
+// Why: Claude Code merges hook entries across user/project settings scopes
+// (concatenate + dedupe, not replace), so a session whose cwd is inside a
+// worktree fires both the global binary and the worktree's binary for every
+// event. The global yields here so state-mutating handlers don't run twice.
+// Asymmetric by design: only the global self-skips; the worktree binary
+// handles the event without coordination.
+func shouldSkipForWorktree(projectID int64, cwd string) bool {
+	if projectID == 0 || cwd == "" {
+		return false
+	}
+	projectRoot, err := monitor.ProjectPath(projectID)
+	if err != nil {
+		log.Printf("self-skip check: project path lookup failed: %v", err)
+		return false
+	}
+	return shouldSkipForWorktreeAt(cwd, projectRoot)
+}
+
+// shouldSkipForWorktreeAt is the filesystem-only inner check, separated so
+// unit tests can drive it without a database.
+func shouldSkipForWorktreeAt(cwd, projectRoot string) bool {
+	worktreeRoot, err := monitor.FindWorktreeRoot(cwd, projectRoot)
+	if err != nil {
+		log.Printf("self-skip check: find worktree root: %v", err)
+		return false
+	}
+	if worktreeRoot == "" {
+		return false
+	}
+	worktreeBin := filepath.Join(worktreeRoot, "bin", "endless-hook")
+	worktreeStat, err := os.Stat(worktreeBin)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			log.Printf("WARN: cwd %s is inside worktree %s but %s does not exist — running global as fallback. Run 'just build' in the worktree to enable the override.", cwd, worktreeRoot, worktreeBin)
+		} else {
+			log.Printf("self-skip check: stat %s: %v", worktreeBin, err)
+		}
+		return false
+	}
+	selfPath, err := osExecutable()
+	if err != nil {
+		log.Printf("self-skip check: os.Executable: %v", err)
+		return false
+	}
+	selfStat, err := os.Stat(selfPath)
+	if err != nil {
+		log.Printf("self-skip check: stat self %s: %v", selfPath, err)
+		return false
+	}
+	if os.SameFile(selfStat, worktreeStat) {
+		return false
+	}
+	log.Printf("deferring to %s (cwd %s is inside worktree %s)", worktreeBin, cwd, worktreeRoot)
+	return true
+}
 
 // handleWorktreeAdoption is called from SessionStart. It walks up from
 // payload.CWD to find a worktree companion, then either claims the lock
