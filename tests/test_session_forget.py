@@ -43,7 +43,9 @@ def test_shell_init_includes_esf():
     assert result.exit_code == 0
     out = result.output
     assert "esf()" in out
-    assert "endless session forget" in out
+    # E-1164 wraps the call in _endless_run, so the literal subcommand
+    # invocation is "_endless_run session forget" not "endless session forget".
+    assert "session forget" in out
     # All three helpers present.
     assert "esu()" in out
     assert "esp()" in out

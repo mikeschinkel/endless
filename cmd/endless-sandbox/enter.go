@@ -46,11 +46,18 @@ func enterCmd(args []string) {
 	// during cleanup after the foreground subshell exits.
 	signal.Ignore(syscall.SIGTTOU, syscall.SIGTTIN)
 
+	// Auto-inject 'eval $(endless shell-init)' so esu/esp/esf are defined
+	// in the sandbox subshell with zero user setup. (E-1182.)
+	inject := buildShellInjection(shell)
+	defer inject.Clean()
+
 	// -i forces interactive mode. Without it, bash/zsh launched via exec
 	// can decide they are non-interactive and exit immediately, defeating
 	// the subshell semantics from E-1072.
-	sup := NewSupervisor(shell, "-i")
+	shellArgs := append(inject.Args, "-i")
+	sup := NewSupervisor(shell, shellArgs...)
 	sup.Env = append(os.Environ(), sb.Env()...)
+	sup.Env = append(sup.Env, inject.Env...)
 	sup.Stdin = os.Stdin
 	sup.Stdout = os.Stdout
 	sup.Stderr = os.Stderr

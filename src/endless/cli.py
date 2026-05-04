@@ -247,13 +247,30 @@ def quick_start():
 _SHELL_INIT_SNIPPET = """\
 # >>> endless shell helpers (regenerate via 'endless shell-init') >>>
 
+# _endless_run — pick the right endless CLI for the current session.
+# When ENDLESS_WORKTREE_PATH is set and points at an existing dir, route
+# through the worktree's checkout via 'uv run --directory ...' so worktree-
+# only subcommands work without needing a global 'just install'. Otherwise
+# fall back to the bare 'endless' on PATH. Stale-worktree paths fall back
+# with a one-line warning so the user can esf and start fresh. (E-1164.)
+_endless_run() {
+    if [ -n "$ENDLESS_WORKTREE_PATH" ]; then
+        if [ -d "$ENDLESS_WORKTREE_PATH" ]; then
+            uv run --directory "$ENDLESS_WORKTREE_PATH" endless "$@"
+            return $?
+        fi
+        echo "endless: ENDLESS_WORKTREE_PATH=$ENDLESS_WORKTREE_PATH no longer exists; using global endless (run 'esf' to clear)" >&2
+    fi
+    endless "$@"
+}
+
 # esu — activate a Claude session in this shell (cd to its worktree
-#       or cwd, plus export ENDLESS_SESSION_ID).
+#       or cwd, plus export ENDLESS_SESSION_ID + ENDLESS_WORKTREE_PATH).
 #   esu          → auto-resolve to sibling Claude pane in tmux
 #   esu <id>     → explicit endless integer id or Claude UUID prefix
 esu() {
     local out
-    out="$(endless session use "$@")" || return $?
+    out="$(_endless_run session use "$@")" || return $?
     eval "$out"
 }
 
@@ -261,18 +278,26 @@ esu() {
 #   esp          → auto-resolve to sibling Claude pane in tmux
 #   esp <id>     → explicit endless integer id or Claude UUID prefix
 esp() {
+    if [ -z "$ENDLESS_SESSION_ID" ] && [ $# -eq 0 ]; then
+        echo "esp: no active session, run 'esu <id>' first" >&2
+        return 1
+    fi
     local target
-    target="$(endless session cd --target project "$@")" || return $?
+    target="$(_endless_run session cd --target project "$@")" || return $?
     cd "$target"
 }
 
-# esf — forget the current session ref (unset ENDLESS_SESSION_ID).
-#       Inverse of esu. The session itself keeps running; only this
-#       shell's pointer to it is cleared. Does not cd anywhere;
-#       combine with esp if you also want to return to the project root.
+# esf — forget the current session ref (unset ENDLESS_SESSION_ID +
+#       ENDLESS_WORKTREE_PATH). Inverse of esu. The session itself keeps
+#       running; only this shell's pointer to it is cleared. Does not cd
+#       anywhere; combine with esp if you also want to return to project root.
 esf() {
+    if [ -z "$ENDLESS_SESSION_ID" ]; then
+        echo "esf: no active session" >&2
+        return 1
+    fi
     local out
-    out="$(endless session forget)" || return $?
+    out="$(_endless_run session forget)" || return $?
     eval "$out"
 }
 
