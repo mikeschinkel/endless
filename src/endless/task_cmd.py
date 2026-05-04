@@ -2003,6 +2003,26 @@ def show_prompt(item_id: int):
     click.echo(row[0]["prompt"])
 
 
+_SPAWN_WINDOW_STOP_WORDS = frozenset({
+    "a", "an", "the", "to", "from", "of", "for", "with",
+    "in", "on", "at", "by", "and", "or",
+})
+
+
+def _spawn_window_name(project_name: str, title: str, item_id: int) -> str:
+    """Build tmux window name in the form <project>_<one_or_two_words>[E-nnn].
+
+    Separator is '_' because tmux parses ':' as session:window and '.' as
+    window.pane in -t targets, so either char in a window name breaks
+    'select-window -t <name>' / 'send-keys -t <name>' even within one session.
+    """
+    words = re.findall(r"[a-z0-9]+", title.lower())
+    meaningful = [w for w in words if w not in _SPAWN_WINDOW_STOP_WORDS]
+    slug_words = meaningful or words or ["task"]
+    slug = "-".join(slug_words[:2])
+    return f"{project_name}_{slug}[{task_id_display(item_id)}]"
+
+
 def spawn_plan(item_id: int, project_name: str | None = None, no_plan: bool = False,
                worktree: str | None = None):
     """Spawn a new tmux window with Claude working on a task's prompt."""
@@ -2022,7 +2042,7 @@ def spawn_plan(item_id: int, project_name: str | None = None, no_plan: bool = Fa
     # Get the plan item and its prompt
     row = db.query(
         "SELECT p.id, p.title, p.prompt, p.project_id, "
-        "proj.path as project_path "
+        "proj.path as project_path, proj.name as project_name "
         "FROM tasks p "
         "JOIN projects proj ON p.project_id = proj.id "
         "WHERE p.id = ?",
@@ -2056,8 +2076,10 @@ def spawn_plan(item_id: int, project_name: str | None = None, no_plan: bool = Fa
     else:
         cd_target = project_path
 
-    # Create a short window name from the title
-    window_name = re.sub(r"[^a-zA-Z0-9]", "-", title.lower())[:30]
+    # Build window name: <project>_<one_or_two_words>[E-nnn]
+    window_name = _spawn_window_name(
+        item["project_name"], title, item_id,
+    )
 
     # Write prompt to a temp file for tmux load-buffer
     prompt_file = tempfile.NamedTemporaryFile(
