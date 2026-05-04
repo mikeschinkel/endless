@@ -4,6 +4,8 @@ import os
 import sqlite3
 from pathlib import Path
 
+import click
+
 from endless.config import DB_PATH, ensure_config_dir
 
 _conn: sqlite3.Connection | None = None
@@ -30,6 +32,13 @@ def get_db() -> sqlite3.Connection:
     _conn.execute("PRAGMA foreign_keys=ON")
     if is_new:
         _init_schema(_conn)
+    elif not _has_table(_conn, "projects"):
+        # File exists but lacks the foundational schema. Don't try to migrate
+        # (it would crash with a raw OperationalError). Surface a clear error
+        # naming the resolved path and resolution mechanism.
+        _conn.close()
+        _conn = None
+        raise _missing_schema_hint()
     elif _should_auto_migrate():
         _migrate(_conn)
     return _conn
@@ -511,19 +520,74 @@ def _migrate_v6(conn: sqlite3.Connection):
         conn.commit()
 
 
+def _is_missing_schema_error(err: sqlite3.OperationalError) -> bool:
+    """sqlite3 raises OperationalError with these prefixes when the DB is
+    structurally absent. Distinct from per-row errors we want to keep raising."""
+    msg = str(err).lower()
+    return msg.startswith("no such table") or msg.startswith("no such column")
+
+
+def _missing_schema_hint() -> click.ClickException:
+    """Build a ClickException explaining why the resolved DB has no schema.
+
+    The user sees this when XDG_CONFIG_HOME points somewhere endless wasn't
+    initialized (e.g., a sandbox subshell, a stale env override, or a worktree's
+    own .endless/ — see E-1158, E-1162). Names the resolved path, the resolution
+    mechanism, and the file's state so the user can spot the problem.
+    """
+    xdg = os.environ.get("XDG_CONFIG_HOME")
+    if xdg:
+        mechanism = f"resolved via XDG_CONFIG_HOME={xdg}"
+        suggestion = ("    If unintentional: 'unset XDG_CONFIG_HOME' "
+                      "(or 'exit' if you're in an endless-sandbox subshell).")
+    else:
+        mechanism = "resolved via default ~/.config (XDG_CONFIG_HOME unset)"
+        suggestion = ("    Initialize with 'endless register <project-path>' "
+                      "or check that you're invoking the expected endless install.")
+    if DB_PATH.exists():
+        try:
+            size = DB_PATH.stat().st_size
+            file_state = f"exists ({size} bytes) but has no endless schema"
+        except OSError:
+            file_state = "exists but cannot be stat'd"
+    else:
+        file_state = "does not exist"
+    return click.ClickException(
+        f"endless database is uninitialized at {DB_PATH}\n"
+        f"    {mechanism}\n"
+        f"    db file: {file_state}\n"
+        f"{suggestion}"
+    )
+
+
 def execute(sql: str, params: tuple = ()) -> sqlite3.Cursor:
     db = get_db()
-    cursor = db.execute(sql, params)
+    try:
+        cursor = db.execute(sql, params)
+    except sqlite3.OperationalError as e:
+        if _is_missing_schema_error(e):
+            raise _missing_schema_hint() from e
+        raise
     db.commit()
     return cursor
 
 
 def query(sql: str, params: tuple = ()) -> list[sqlite3.Row]:
-    return get_db().execute(sql, params).fetchall()
+    try:
+        return get_db().execute(sql, params).fetchall()
+    except sqlite3.OperationalError as e:
+        if _is_missing_schema_error(e):
+            raise _missing_schema_hint() from e
+        raise
 
 
 def scalar(sql: str, params: tuple = ()):
-    row = get_db().execute(sql, params).fetchone()
+    try:
+        row = get_db().execute(sql, params).fetchone()
+    except sqlite3.OperationalError as e:
+        if _is_missing_schema_error(e):
+            raise _missing_schema_hint() from e
+        raise
     if row is None:
         return None
     return row[0]

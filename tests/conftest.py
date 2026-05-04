@@ -68,6 +68,17 @@ def isolated_env(tmp_path, monkeypatch):
         "db_path": config_dir / "endless.db",
     }
 
+    # Close the connection opened during this test before monkeypatch restores
+    # _conn to its prior value. Otherwise the Connection object becomes
+    # unreferenced but isn't GC'd promptly, leaking the SQLite/-wal/-shm fds.
+    # On macOS (default ulimit -n 256) the suite blows past the limit
+    # somewhere mid-run without this.
+    if db._conn is not None:
+        try:
+            db._conn.close()
+        except sqlite3.Error:
+            pass
+
 
 @pytest.fixture
 def seeded_project_at_cwd(isolated_env, monkeypatch):
