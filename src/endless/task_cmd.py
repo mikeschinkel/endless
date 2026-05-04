@@ -2785,12 +2785,24 @@ def _related_task_ids(item_id: int, rel_type: str | None = None) -> list[int]:
     return sorted(ids)
 
 
-def show_relations(item_id: int):
+def show_relations(item_id: int, llm: bool = False):
     """Show all typed relations for a task, grouped by display-name."""
     if not db.exists("SELECT 1 FROM tasks WHERE id = ?", (item_id,)):
         raise click.ClickException(f"Task {task_id_display(item_id)} not found.")
 
     relations = get_all_relations(item_id)
+
+    if llm:
+        click.echo(f"# Relations for E-{item_id}")
+        if not relations:
+            click.echo("(none)")
+            return
+        for display, items in relations.items():
+            for it in items:
+                click.echo(
+                    f"{display} E-{it['id']} {it['status']} {it['title']}"
+                )
+        return
 
     label = lambda s: click.style(s, fg="cyan")
     terminal = ("confirmed", "assumed", "declined", "obsolete")

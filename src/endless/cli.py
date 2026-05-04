@@ -989,18 +989,22 @@ def task_unblock(item_id, blocker_id):
 
 @task_cmd.command("deps")
 @click.argument("item_id", type=TASK_ID)
-def task_deps(item_id):
+@click.option("--llm", is_flag=True,
+              help="Token-efficient output for LLMs")
+def task_deps(item_id, llm):
     """Show all relations for a task. Alias of `task relations`."""
     from endless.task_cmd import show_relations
-    show_relations(item_id)
+    show_relations(item_id, llm=llm)
 
 
 @task_cmd.command("relations")
 @click.argument("item_id", type=TASK_ID)
-def task_relations(item_id):
+@click.option("--llm", is_flag=True,
+              help="Token-efficient output for LLMs")
+def task_relations(item_id, llm):
     """Show all typed relations for a task, grouped by type."""
     from endless.task_cmd import show_relations
-    show_relations(item_id)
+    show_relations(item_id, llm=llm)
 
 
 @main.command("plan", context_settings={"ignore_unknown_options": True})
