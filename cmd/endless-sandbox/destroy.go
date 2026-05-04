@@ -10,6 +10,7 @@ import (
 func destroyCmd(args []string) {
 	fs := flag.NewFlagSet("destroy", flag.ExitOnError)
 	force := fs.Bool("force", false, "Destroy even if processes still hold files in the sandbox")
+	ifExists := fs.Bool("if-exists", false, "Exit 0 silently if the sandbox does not exist (idempotent script use)")
 	if err := fs.Parse(args); err != nil {
 		os.Exit(2)
 	}
@@ -27,6 +28,9 @@ func destroyCmd(args []string) {
 	dir := filepath.Join(sandboxesDir(), name)
 	if _, err := os.Stat(dir); err != nil {
 		if os.IsNotExist(err) {
+			if *ifExists {
+				return
+			}
 			fmt.Fprintf(os.Stderr, "endless-sandbox destroy: sandbox %q does not exist\n", name)
 			os.Exit(1)
 		}
