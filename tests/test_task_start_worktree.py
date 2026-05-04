@@ -71,12 +71,12 @@ def test_start_creates_worktree_no_plan_file(project_with_task, capsys):
     assert f"task/{tid}-move-title-verbs-hardcoded-list-database" in branches
 
     # User-facing output: new format with "worktree created", spawn option,
-    # and the eswt helper command guarded by a command -v self-check.
+    # and the eswt helper command. Defaults to verbose form because no
+    # SHELL is set in the test environment (or eswt isn't defined there).
     captured = capsys.readouterr()
     assert "worktree created:" in captured.out
     assert f"endless task spawn E-{tid}" in captured.out
     assert f"eswt E-{tid}" in captured.out
-    assert 'command -v eswt' in captured.out
     assert 'eval "$(endless shell-init)"' in captured.out
 
 
@@ -170,6 +170,18 @@ def test_start_uses_task_fallback_for_all_filler_title(seeded_project_at_cwd):
         (repo / ".endless" / "worktrees" / f"e-{tid}" / ".endless" / "worktree.json").read_text()
     )
     assert companion["branch"] == f"task/{tid}-task"
+
+
+def test_start_skips_eval_line_when_eswt_already_defined(project_with_task, capsys, monkeypatch):
+    """When _eswt_defined_in_user_shell() returns True, suppress the bootstrap line."""
+    from endless import task_cmd
+
+    monkeypatch.setattr(task_cmd, "_eswt_defined_in_user_shell", lambda: True)
+    task_cmd.start_item(project_with_task["task_id"])
+    captured = capsys.readouterr()
+    tid = project_with_task["task_id"]
+    assert f"eswt E-{tid}" in captured.out
+    assert 'eval "$(endless shell-init)"' not in captured.out
 
 
 def test_start_worktree_discoverable_via_for_task(project_with_task):

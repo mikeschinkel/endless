@@ -1729,6 +1729,34 @@ def decline_item(item_id: int, reason: str):
     _emit_field_changes(item_id, row[0]["title"], changes)
 
 
+def _eswt_defined_in_user_shell() -> bool:
+    """Probe the user's interactive shell for the 'eswt' function.
+
+    Functions defined by 'endless shell-init' live in the parent shell's
+    process memory and don't propagate to Python subprocesses. To check
+    them, spawn $SHELL -ic which sources the user's rc files (where the
+    shell-init snippet was eval'd), then run 'command -v eswt'.
+
+    Returns False on any failure so output defaults to the bootstrap
+    form — better to over-instruct than to print a command the user's
+    shell can't actually run.
+    """
+    import subprocess
+
+    shell = os.environ.get("SHELL")
+    if not shell:
+        return False
+    try:
+        result = subprocess.run(
+            [shell, "-ic", "command -v eswt >/dev/null"],
+            capture_output=True,
+            timeout=3,
+        )
+        return result.returncode == 0
+    except (subprocess.TimeoutExpired, OSError, ValueError):
+        return False
+
+
 def start_item(item_id: int):
     """Mark a task as in progress."""
     from endless.event_bridge import emit_event
@@ -1784,8 +1812,14 @@ def start_item(item_id: int):
     click.echo("    1. Delegate to a fresh Claude session:")
     click.echo(f"         endless task spawn E-{item_id}")
     click.echo("    2. Do it yourself (edit, run tests, etc.):")
-    click.echo('         command -v eswt >/dev/null || eval "$(endless shell-init)"')
-    click.echo(f"         eswt E-{item_id}")
+    eswt_cmd = f"eswt E-{item_id}"
+    if _eswt_defined_in_user_shell():
+        click.echo(f"         {eswt_cmd}   # Changes to Git worktree dir")
+    else:
+        eval_cmd = 'eval "$(endless shell-init)"'
+        pad = " " * (len(eval_cmd) - len(eswt_cmd))
+        click.echo(f"         {eval_cmd}  # Adds eswt shell helper func")
+        click.echo(f"         {eswt_cmd}{pad}  # Changes to Git worktree dir")
 
 
 def update_plan(

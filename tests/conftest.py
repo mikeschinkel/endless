@@ -41,6 +41,11 @@ def isolated_env(tmp_path, monkeypatch):
     # for ENDLESS_AUTO_MIGRATE. Tests need a fully migrated schema.
     monkeypatch.setenv("ENDLESS_AUTO_MIGRATE", "1")
 
+    # Force 'task start' eswt-detection to default to verbose form. Without
+    # this, tests would non-deterministically read the developer's actual
+    # shell function table.
+    monkeypatch.delenv("SHELL", raising=False)
+
     # Prepend this worktree's bin/ to PATH so subprocesses (e.g. endless-event
     # invoked by event_bridge.emit_event) find the locally-built binary, not
     # the globally-installed one symlinked from a sibling worktree.
