@@ -65,6 +65,16 @@ class MultiChoice(click.ParamType):
 @click.pass_context
 def main(ctx):
     """Project awareness system for solo developers."""
+    try:
+        os.getcwd()
+    except FileNotFoundError:
+        click.echo(
+            "endless: current working directory no longer exists "
+            "(was it deleted from another shell?). cd to an existing "
+            "directory and retry.",
+            err=True,
+        )
+        ctx.exit(1)
     sandbox = os.environ.get("ENDLESS_SANDBOX")
     if sandbox and ctx.invoked_subcommand not in SANDBOX_SAFE_SUBCOMMANDS:
         click.echo(
