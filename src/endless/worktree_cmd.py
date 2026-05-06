@@ -463,6 +463,13 @@ _FILLER_WORDS = frozenset({
 })
 
 
+def _tilde(p: Path) -> str:
+    """Display a Path with $HOME collapsed to ~. Falls back to absolute."""
+    s = str(p)
+    home = str(Path.home())
+    return s.replace(home, "~", 1) if s.startswith(home) else s
+
+
 def _slugify_title(title: str) -> str:
     """Slug per E-971 spec for task branch names.
 
@@ -514,12 +521,13 @@ def _check_plan_file_committed(task_id: int, project_root: Path) -> str | None:
     )
     if res.returncode != 0 or not res.stdout.strip():
         return None
+    root_display = _tilde(project_root)
     return (
         f"Plan file {plan_rel} is uncommitted in main; it will not "
         f"appear in the new worktree.\n\n"
         f"Capture it before starting the task. Recommended:\n"
-        f"  git -C {project_root} add {plan_rel}\n"
-        f"  git -C {project_root} commit -m 'Add plan for E-{task_id}'\n"
+        f"  git -C {root_display} add {plan_rel}\n"
+        f"  git -C {root_display} commit -m 'Add plan for E-{task_id}'\n"
         f"\nThen retry: endless task start E-{task_id}"
     )
 
@@ -545,7 +553,7 @@ def create_task_worktree(
         if existing and existing.get("task_id") == canonical:
             return wt_dir, False
         raise click.ClickException(
-            f"Path {wt_dir} exists but does not belong to {canonical}. "
+            f"Path {_tilde(wt_dir)} exists but does not belong to {canonical}. "
             f"Resolve manually before retrying."
         )
 

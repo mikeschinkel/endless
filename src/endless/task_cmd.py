@@ -1787,6 +1787,7 @@ def start_item(item_id: int):
         row[0]["title"],
         [("status", row[0]["status"], "in_progress")],
     )
+    click.echo("")
 
     from endless.worktree_cmd import create_task_worktree, _project_root
 
