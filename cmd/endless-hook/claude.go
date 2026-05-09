@@ -716,18 +716,21 @@ func blockCommitOnMainIfApplicable(payload claudePayload) {
 		return
 	}
 
-	blockToolUse(`Direct commits to main are not allowed (E-1012).
+	blockToolUse(`Direct commits to main are highly discouraged when using endless (E-1012).
 
 main is the integration target. Make changes in a worktree on a per-task
-branch, then ff-merge (or 'endless worktree land' once E-971 ships).
+branch, then merge via ` + "`endless worktree land <task-id>`" + `.
 
-  git worktree add -b e-XXX-<slug> .endless/worktrees/e-XXX main
-  cd .endless/worktrees/e-XXX
+If you have an Endless task for this work:
+  endless task start E-NNN          # creates worktree at .endless/worktrees/e-NNN
+
+Or by hand:
+  git worktree add -b task/NNN-<slug> .endless/worktrees/e-NNN main
+  cd .endless/worktrees/e-NNN
   # ... do work, commit ...
-  cd /path/to/main
-  git merge --ff-only e-XXX-<slug>
+  endless worktree land E-NNN
 
-Bypass (NOT recommended; surfaces as a deliberate violation):
+Bypass (NOT recommended):
   git commit --no-verify`)
 }
 
@@ -1174,13 +1177,15 @@ func enforceWorktreeGate(projectID int64, payload claudePayload) {
 					*session.ActiveTaskID, wp, wp)
 			}
 		}
-		blockToolUse("Edits in main are not allowed (E-971).\n\n" +
-			"main is the integration target — every edit goes through a worktree.\n\n" +
+		blockToolUse("Edits in main are highly discouraged when using endless (E-971).\n\n" +
+			"main is the integration target — every edit ideally should go through\n" +
+			"a worktree.\n\n" +
 			"If you do not yet have an active task, create one and start it:\n" +
 			"  endless task add \"<title>\"\n" +
-			"  endless task start E-NNN\n\n" +
-			"If you have an active task without a worktree, create the worktree\n" +
-			"via `endless pivot` (when available) or by hand:\n" +
+			"  endless task start E-NNN          # auto-creates the worktree\n\n" +
+			"If you already have an active task without a worktree:\n" +
+			"  endless task start E-NNN          # idempotent; creates if missing\n\n" +
+			"Or create the worktree by hand or via `endless pivot` (when available):\n" +
 			"  git worktree add -b task/NNN-<slug> .endless/worktrees/e-NNN main" +
 			redirectHint)
 		return
