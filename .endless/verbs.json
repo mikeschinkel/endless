@@ -374,5 +374,9 @@
   {
     "value": "make",
     "definition": "Cause a property or invariant to become true (typically via tooling, in titles like 'Make X deterministic')"
+  },
+  {
+    "value": "automate",
+    "definition": "Replace a manual workflow with code or tooling so it runs without human action."
   }
 ]
