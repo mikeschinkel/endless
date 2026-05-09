@@ -23,6 +23,14 @@ internal/web/assets/css/templui
 # Local git worktree checkouts created for parallel sessions
 .endless/worktrees/
 
+# Per-worktree companion + ownership lock files (E-1218). Each worktree
+# writes its own; main has no business carrying either, but if the
+# SessionStart hook ever walks up from a cwd inside main and writes
+# them, we don't want them tracked. Layer F's create_task_worktree
+# also writes worktree.json into each new worktree's working tree.
+.endless/worktree.json
+.endless/worktree.lock
+
 # Per-session companion files (E-989)
 .endless/sessions/
 
