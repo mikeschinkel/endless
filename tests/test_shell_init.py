@@ -80,3 +80,19 @@ def test_shell_init_precondition_checks():
     out = runner.invoke(main, ["shell-init"]).output
     assert "esp: no active session" in out
     assert "esf: no active session" in out
+
+
+def test_shell_init_safe_under_nounset():
+    """E-1164: ENDLESS_SESSION_ID reads in test/conditional positions use
+    ${VAR:-} expansion so the helpers don't error 'unbound variable' under
+    'set -u'. Plain $ENDLESS_SESSION_ID is fine inside command arguments
+    (e.g. 'endless session cd ... "$ENDLESS_SESSION_ID"') because by then
+    we've already verified the var is set; only the [ -n / -z ] tests need
+    the safe form."""
+    runner = CliRunner()
+    out = runner.invoke(main, ["shell-init"]).output
+    # No bare bracket-tests (the form that errors under nounset).
+    assert '[ -n "$ENDLESS_SESSION_ID"' not in out
+    assert '[ -z "$ENDLESS_SESSION_ID"' not in out
+    # Safe form is present in test positions.
+    assert '${ENDLESS_SESSION_ID:-}' in out

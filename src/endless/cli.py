@@ -257,7 +257,9 @@ _SHELL_INIT_SNIPPET = """\
 # exported environment — env vars are visible/inheritable forever, latency
 # is invisible. (E-1164.)
 _endless_run() {
-    if [ -n "$ENDLESS_SESSION_ID" ]; then
+    # ${VAR:-} expansion keeps us safe under 'set -u' (nounset) — bare
+    # "$ENDLESS_SESSION_ID" would error there when the var is unset.
+    if [ -n "${ENDLESS_SESSION_ID:-}" ]; then
         local wt
         wt="$(endless session cd --target worktree "$ENDLESS_SESSION_ID" 2>/dev/null)"
         if [ -n "$wt" ] && [ -d "$wt" ]; then
@@ -282,7 +284,7 @@ esu() {
 #   esp          → auto-resolve to sibling Claude pane in tmux
 #   esp <id>     → explicit endless integer id or Claude UUID prefix
 esp() {
-    if [ -z "$ENDLESS_SESSION_ID" ] && [ $# -eq 0 ]; then
+    if [ -z "${ENDLESS_SESSION_ID:-}" ] && [ $# -eq 0 ]; then
         echo "esp: no active session, run 'esu <id>' first" >&2
         return 1
     fi
@@ -296,7 +298,7 @@ esp() {
 #       shell's pointer to it is cleared. Does not cd anywhere;
 #       combine with esp if you also want to return to project root.
 esf() {
-    if [ -z "$ENDLESS_SESSION_ID" ]; then
+    if [ -z "${ENDLESS_SESSION_ID:-}" ]; then
         echo "esf: no active session" >&2
         return 1
     fi
