@@ -49,11 +49,7 @@ COMPANION_FILENAME = ".endless/worktree.json"
 # not block land; instead, land auto-commits them as a separate commit
 # before the worktree's commits.
 AUTO_COMMIT_GLOBS = (
-    # E-1197: db-ledger is the new home; events/ is the pre-rename location
-    # kept here so a land that runs during the migration window still
-    # auto-commits any in-flight legacy files.
     ".endless/db-ledger/*.jsonl",
-    ".endless/events/*.jsonl",
     ".endless/plans/snapshots/*",
     ".endless/verbs.json",
 )

@@ -22,11 +22,9 @@ const DefaultMaxEventsPerSegment = 10000
 // the Endless SQLite DB). See decision E-1198 / task E-1197 for why these are
 // "ledger" + "entries" and not "events" / "log" / "journal".
 const (
-	LedgerDirName      = "db-ledger"
-	LedgerFilePrefix   = "db-entries-"
-	LegacyDirName      = "events"     // pre-E-1197 directory name
-	LegacyFilePrefix   = "events-"    // pre-E-1197 file prefix
-	LedgerFileSuffix   = ".jsonl"
+	LedgerDirName    = "db-ledger"
+	LedgerFilePrefix = "db-entries-"
+	LedgerFileSuffix = ".jsonl"
 )
 
 // Writer appends events to segmented JSONL files.
@@ -41,15 +39,8 @@ type Writer struct {
 
 // NewWriter creates a Writer for the given project root and node.
 // It scans existing segments to determine the current sequence and count.
-//
-// On first init, if a pre-E-1197 .endless/events/ directory exists, its
-// contents are migrated to .endless/db-ledger/ with the new file prefix.
-// Migration is line-count-verified before the legacy directory is removed.
 func NewWriter(projectRoot string, nodeHex string) (*Writer, error) {
 	eventsDir := filepath.Join(projectRoot, ".endless", LedgerDirName)
-	if err := MigrateLegacyLedger(projectRoot); err != nil {
-		return nil, fmt.Errorf("events: migrate legacy ledger: %w", err)
-	}
 	if err := os.MkdirAll(eventsDir, 0755); err != nil {
 		return nil, fmt.Errorf("events: create ledger dir: %w", err)
 	}
