@@ -330,5 +330,49 @@
   {
     "value": "allow",
     "definition": "To permit or enable something"
+  },
+  {
+    "value": "block",
+    "definition": "Prevent an action from completing when a precondition fails (e.g., refuse with a clear error)"
+  },
+  {
+    "value": "detect",
+    "definition": "Identify a condition, context, or state and act on it (e.g., detect worktree context, detect malformed input)"
+  },
+  {
+    "value": "port",
+    "definition": "Move a piece of software from one platform/language/runtime to another while preserving behavior"
+  },
+  {
+    "value": "distill",
+    "definition": "extract the essential workflow into reusable commands"
+  },
+  {
+    "value": "auto-inject",
+    "definition": "Automatically inject content into a target without explicit user invocation"
+  },
+  {
+    "value": "close",
+    "definition": "Mark a task as duplicate, obsolete, or otherwise resolved without active implementation work"
+  },
+  {
+    "value": "ship",
+    "definition": "Release functionality for use, including packaging and any associated rollout steps"
+  },
+  {
+    "value": "catch",
+    "definition": "Intercept and handle an exception or error condition"
+  },
+  {
+    "value": "forbid",
+    "definition": "Prohibit a behavior or input via tooling enforcement (hook, CLI guard, validator)"
+  },
+  {
+    "value": "refuse",
+    "definition": "Reject an action at runtime, returning an error rather than completing it"
+  },
+  {
+    "value": "make",
+    "definition": "Cause a property or invariant to become true (typically via tooling, in titles like 'Make X deterministic')"
   }
 ]
