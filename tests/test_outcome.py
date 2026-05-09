@@ -184,8 +184,8 @@ def test_task_show_json_includes_outcome(seeded_project_at_cwd):
 def test_event_log_records_outcome(seeded_project_at_cwd):
     tid = _add_task("Sample")
     task_cmd.decline_item(tid, reason="event-log reason")
-    events_dir = seeded_project_at_cwd / ".endless" / "events"
-    files = list(events_dir.glob("events-*.jsonl"))
+    events_dir = seeded_project_at_cwd / ".endless" / "db-ledger"
+    files = list(events_dir.glob("db-entries-*.jsonl"))
     assert files, "no event log file written"
     found = False
     for f in files:

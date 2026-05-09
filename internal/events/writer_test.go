@@ -24,7 +24,7 @@ func TestWriter_Append(t *testing.T) {
 	}
 
 	// Verify file exists
-	segPath := filepath.Join(projectRoot, ".endless", "events", w.CurrentSegment())
+	segPath := filepath.Join(projectRoot, ".endless", events.LedgerDirName, w.CurrentSegment())
 	data, err := os.ReadFile(segPath)
 	if err != nil {
 		t.Fatalf("ReadFile: %v", err)
@@ -53,8 +53,8 @@ func TestWriter_Rotation(t *testing.T) {
 	}
 
 	// Should have rotated: first segment has 3, second has 2
-	seg1 := filepath.Join(dir, ".endless", "events", "events-b2c1-000001.jsonl")
-	seg2 := filepath.Join(dir, ".endless", "events", "events-b2c1-000002.jsonl")
+	seg1 := filepath.Join(dir, ".endless", events.LedgerDirName, "db-entries-b2c1-000001.jsonl")
+	seg2 := filepath.Join(dir, ".endless", events.LedgerDirName, "db-entries-b2c1-000002.jsonl")
 
 	data1, err := os.ReadFile(seg1)
 	if err != nil {
@@ -118,7 +118,7 @@ func TestWriter_ResumeExisting(t *testing.T) {
 	w2.Append([]byte(`{"v":1,"n":3}`))
 
 	// All 3 events should be in the same segment
-	segPath := filepath.Join(dir, ".endless", "events", "events-d5e6-000001.jsonl")
+	segPath := filepath.Join(dir, ".endless", events.LedgerDirName, "db-entries-d5e6-000001.jsonl")
 	data, err := os.ReadFile(segPath)
 	if err != nil {
 		t.Fatalf("ReadFile: %v", err)

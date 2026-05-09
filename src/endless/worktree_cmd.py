@@ -49,6 +49,10 @@ COMPANION_FILENAME = ".endless/worktree.json"
 # not block land; instead, land auto-commits them as a separate commit
 # before the worktree's commits.
 AUTO_COMMIT_GLOBS = (
+    # E-1197: db-ledger is the new home; events/ is the pre-rename location
+    # kept here so a land that runs during the migration window still
+    # auto-commits any in-flight legacy files.
+    ".endless/db-ledger/*.jsonl",
     ".endless/events/*.jsonl",
     ".endless/plans/snapshots/*",
     ".endless/verbs.json",
@@ -677,7 +681,7 @@ def land_worktree(task_id: str, dry_run: bool) -> None:
             raise click.ClickException(
                 f"rebase of {branch} onto {base_branch} failed.\n\n"
                 f"Likely cause: a worktree branch commit modifies an "
-                f"endless-managed auto-file (events log, snapshot, or "
+                f"endless-managed auto-file (db-ledger entry, snapshot, or "
                 f"config.json). This violates the E-972 routing rule and "
                 f"shouldn't normally happen.\n\n"
                 f"Recover: from the worktree, run\n"

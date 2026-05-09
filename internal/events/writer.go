@@ -18,8 +18,19 @@ const MaxEventLineBytes = 1024 * 1024 // 1MB
 // DefaultMaxEventsPerSegment is the default rotation threshold.
 const DefaultMaxEventsPerSegment = 10000
 
+// Path/naming constants for the durable event ledger (write-ahead record for
+// the Endless SQLite DB). See decision E-1198 / task E-1197 for why these are
+// "ledger" + "entries" and not "events" / "log" / "journal".
+const (
+	LedgerDirName      = "db-ledger"
+	LedgerFilePrefix   = "db-entries-"
+	LegacyDirName      = "events"     // pre-E-1197 directory name
+	LegacyFilePrefix   = "events-"    // pre-E-1197 file prefix
+	LedgerFileSuffix   = ".jsonl"
+)
+
 // Writer appends events to segmented JSONL files.
-// Each node writes to its own segments: events-{nodeHex}-{seq:06d}.jsonl
+// Each node writes to its own segments: db-entries-{nodeHex}-{seq:06d}.jsonl
 type Writer struct {
 	eventsDir string
 	nodeHex   string
@@ -30,10 +41,17 @@ type Writer struct {
 
 // NewWriter creates a Writer for the given project root and node.
 // It scans existing segments to determine the current sequence and count.
+//
+// On first init, if a pre-E-1197 .endless/events/ directory exists, its
+// contents are migrated to .endless/db-ledger/ with the new file prefix.
+// Migration is line-count-verified before the legacy directory is removed.
 func NewWriter(projectRoot string, nodeHex string) (*Writer, error) {
-	eventsDir := filepath.Join(projectRoot, ".endless", "events")
+	eventsDir := filepath.Join(projectRoot, ".endless", LedgerDirName)
+	if err := MigrateLegacyLedger(projectRoot); err != nil {
+		return nil, fmt.Errorf("events: migrate legacy ledger: %w", err)
+	}
 	if err := os.MkdirAll(eventsDir, 0755); err != nil {
-		return nil, fmt.Errorf("events: create events dir: %w", err)
+		return nil, fmt.Errorf("events: create ledger dir: %w", err)
 	}
 
 	w := &Writer{
@@ -97,7 +115,7 @@ func (w *Writer) CurrentSegment() string {
 }
 
 func (w *Writer) segmentName(seq int) string {
-	return fmt.Sprintf("events-%s-%06d.jsonl", w.nodeHex, seq)
+	return fmt.Sprintf("%s%s-%06d%s", LedgerFilePrefix, w.nodeHex, seq, LedgerFileSuffix)
 }
 
 func (w *Writer) segmentPath(seq int) string {
@@ -106,7 +124,7 @@ func (w *Writer) segmentPath(seq int) string {
 
 // scanSegments finds the highest sequence number and event count for this node.
 func (w *Writer) scanSegments() (seq int, count int, err error) {
-	prefix := fmt.Sprintf("events-%s-", w.nodeHex)
+	prefix := fmt.Sprintf("%s%s-", LedgerFilePrefix, w.nodeHex)
 
 	entries, err := os.ReadDir(w.eventsDir)
 	if err != nil {
@@ -122,9 +140,9 @@ func (w *Writer) scanSegments() (seq int, count int, err error) {
 		if !strings.HasPrefix(name, prefix) || !strings.HasSuffix(name, ".jsonl") {
 			continue
 		}
-		// Extract sequence number: events-{node}-{seq}.jsonl
+		// Extract sequence number: db-entries-{node}-{seq}.jsonl
 		seqStr := strings.TrimPrefix(name, prefix)
-		seqStr = strings.TrimSuffix(seqStr, ".jsonl")
+		seqStr = strings.TrimSuffix(seqStr, LedgerFileSuffix)
 		s, err := strconv.Atoi(seqStr)
 		if err != nil {
 			continue

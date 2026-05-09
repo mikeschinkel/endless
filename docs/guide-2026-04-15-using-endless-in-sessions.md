@@ -279,16 +279,18 @@ Enforcement (blocking Write/Edit without `task start`) requires `"tracking": "en
 ## Where Things Live
 
 - **Database**: `~/.config/endless/endless.db` (SQLite, rebuildable projection)
-- **Event logs**: `<project>/.endless/events/events-{node}-{seq}.jsonl` (source of truth, **committed to git**)
+- **DB ledger** (event-sourced write-ahead record): `<project>/.endless/db-ledger/db-entries-{node}-{seq}.jsonl` (source of truth for the SQLite DB rebuild, **committed to git**). Pre-E-1197 this lived at `.endless/events/events-{node}-{seq}.jsonl`; existing installs auto-migrate on first event write.
 - **Project config**: `<project>/.endless/config.json`
 - **Web dashboard**: `http://localhost:8484` (start with `endless serve`)
 - **Event binary**: `/usr/local/bin/endless-event`
 - **Hook binary**: `/usr/local/bin/endless-hook`
 - **CLI**: installed via `uv tool install` from `/Users/mikeschinkel/Projects/endless`
 
-## Important: .endless/events/ is committed to git
+## Important: .endless/db-ledger/ is committed to git
 
-The `.endless/events/` directory contains event-sourced records that **must be committed to git**. This is by design: clone-completeness means task state travels with the repo. Do NOT add `.endless/` or `.endless/events/` to `.gitignore`.
+The `.endless/db-ledger/` directory holds the database write-ahead record — JSONL ledger entries that the SQLite DB is rebuilt from on every clone. **Must be committed to git.** Clone-completeness means task state travels with the repo. Do NOT add `.endless/` or `.endless/db-ledger/` to `.gitignore`.
+
+Renamed from `.endless/events/` in E-1197 because the old name biased readers (human and LLM) to treat the files as discardable logs — which they are not. They are durable database state. Existing installs auto-migrate on first event write; the legacy directory is removed once all entries are line-count-verified at the new location.
 
 ## Common Patterns
 

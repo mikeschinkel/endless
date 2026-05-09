@@ -45,7 +45,7 @@ func runEmit() {
 	actorKind := fs.String("actor-kind", "", "Actor kind (cli, session, hook, system, web)")
 	actorID := fs.String("actor-id", "", "Actor identifier")
 	nodeID := fs.String("node-id", "", "Kairos node ID (4-char hex)")
-	projectRoot := fs.String("project-root", "", "Project root directory (for .endless/events/)")
+	projectRoot := fs.String("project-root", "", "Project root directory (for .endless/db-ledger/)")
 	payload := fs.String("payload", "{}", "Event payload as JSON")
 	correlationID := fs.String("cid", "", "Correlation ID (optional)")
 
