@@ -435,6 +435,13 @@ const (
 )
 
 func handlePreToolUse(projectID int64, isRegistered bool, payload claudePayload) error {
+	// E-1226: refuse `sqlite3 .endless/...` regardless of registration —
+	// the antipattern is file-pattern-specific, not project-state-specific,
+	// and the recovery cost (ghost DB files blocking worktree-land) is real.
+	if payload.ToolName == "Bash" {
+		blockSqliteAgainstEndlessIfApplicable(payload)
+	}
+
 	// No enforcement for unregistered/anonymous projects
 	if !isRegistered {
 		return nil
@@ -712,6 +719,40 @@ func handleExitPlanMode(projectID int64, payload claudePayload) error {
 // 'git commit', 'git commit -m ...', '  git commit '. Excludes 'git commit-tree'
 // (the trailing boundary requires whitespace or end-of-string).
 var gitCommitRe = regexp.MustCompile(`^\s*git\s+commit($|\s)`)
+
+// sqliteEndlessRe matches sqlite3 invocations targeting any path inside
+// a .endless/ directory. The character class [^|;&] stops the match at
+// command-pipeline boundaries; [ /] before \.endless/ ensures the
+// pattern is a path component (avoids false-positive on names like
+// my.endless/x). Case-insensitive (?i) catches uppercase variants.
+var sqliteEndlessRe = regexp.MustCompile(`(?i)sqlite3[^|;&]*[ /]\.endless/`)
+
+// blockSqliteAgainstEndlessIfApplicable refuses Bash calls that invoke
+// sqlite3 against any path inside a .endless/ directory. Such paths
+// rarely exist, and sqlite3 silently creates 0-byte ghost DB files when
+// the target is missing — those files then block `endless worktree land`
+// until they're cleaned up. (E-1226; recurring agent antipattern.) The
+// real DB lives at ~/.config/endless/endless.db; `endless sql` resolves
+// it without exposing the path.
+func blockSqliteAgainstEndlessIfApplicable(payload claudePayload) {
+	var input toolInputBash
+	if err := json.Unmarshal(payload.ToolInput, &input); err != nil {
+		return
+	}
+	if !sqliteEndlessRe.MatchString(input.Command) {
+		return
+	}
+	blockToolUse(
+		"BLOCKED (E-1226): refusing `sqlite3` against a path inside `.endless/`.\n\n" +
+			"The Endless DB lives at `~/.config/endless/endless.db`. " +
+			"Running sqlite3 against speculative `.endless/...` paths " +
+			"silently creates 0-byte ghost DB files that block " +
+			"`endless worktree land`.\n\n" +
+			"Use this instead:\n" +
+			"  endless sql \"<query>\"             # read-only by default\n" +
+			"  endless sql --write \"<query>\"     # mutations require --write\n",
+	)
+}
 
 // blockCommitOnMainIfApplicable inspects a Bash tool call. If it's a
 // 'git commit' invoked from main's working tree (not a worktree, not
