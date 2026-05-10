@@ -1828,8 +1828,21 @@ def _check_task_ownership(item_id: int) -> bool:
     return owned_by_current
 
 
-def claim_item(item_id: int):
-    """Claim ownership of a task for this session and mark it in_progress."""
+_CLAIM_REQUIRES_FORCE: frozenset[str] = frozenset({
+    "verify", "confirmed", "declined", "obsolete", "assumed",
+})
+
+
+def claim_item(item_id: int, force: bool = False):
+    """Claim ownership of a task for this session and mark it in_progress.
+
+    Refuses (without `force`) when the task is in a status the user
+    explicitly chose as terminal-ish or done-ish (verify, confirmed,
+    declined, obsolete, assumed). Re-claiming such a task silently
+    demotes it to in_progress, which has bitten me twice when running
+    smoke tests against tasks I'd just verified. Force allows the
+    deliberate override.
+    """
     from endless.event_bridge import emit_event
 
     row = db.query(
@@ -1840,6 +1853,15 @@ def claim_item(item_id: int):
     if not row:
         raise click.ClickException(
             f"No task found with id {item_id}"
+        )
+
+    current_status = row[0]["status"]
+    if not force and current_status in _CLAIM_REQUIRES_FORCE:
+        raise click.ClickException(
+            f"E-{item_id} is in status '{current_status}'; re-claiming "
+            f"would demote it to 'in_progress'.\n"
+            "Pass --force to confirm the demotion, or update the status "
+            "first if that's not what you intended."
         )
 
     if _check_task_ownership(item_id):

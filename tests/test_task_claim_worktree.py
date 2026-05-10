@@ -43,6 +43,36 @@ def project_with_task(seeded_project_at_cwd):
     return {"project_root": repo, "task_id": task_id, "title": title}
 
 
+def test_claim_refuses_done_status_without_force(project_with_task):
+    """E-1235: claim refuses verify/confirmed/declined/obsolete/assumed without --force."""
+    from endless.task_cmd import claim_item
+
+    tid = project_with_task["task_id"]
+    for status in ("verify", "confirmed", "declined", "obsolete", "assumed"):
+        db.execute("UPDATE tasks SET status = ? WHERE id = ?", (status, tid))
+        with pytest.raises(click.ClickException) as exc:
+            claim_item(tid)
+        msg = str(exc.value)
+        assert f"E-{tid} is in status '{status}'" in msg
+        assert "--force" in msg
+        # Status must not have changed
+        row = db.query("SELECT status FROM tasks WHERE id = ?", (tid,))[0]
+        assert row["status"] == status
+
+
+def test_claim_with_force_demotes_done_status(project_with_task, capsys):
+    """E-1235: --force allows the demotion."""
+    from endless.task_cmd import claim_item
+
+    tid = project_with_task["task_id"]
+    db.execute("UPDATE tasks SET status = 'verify' WHERE id = ?", (tid,))
+
+    claim_item(tid, force=True)
+
+    row = db.query("SELECT status FROM tasks WHERE id = ?", (tid,))[0]
+    assert row["status"] == "in_progress"
+
+
 def test_claim_creates_worktree_no_plan_file(project_with_task, capsys):
     from endless.task_cmd import claim_item
 

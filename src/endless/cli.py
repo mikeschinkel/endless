@@ -906,10 +906,14 @@ def task_decline(item_ids, reason):
 
 @task_cmd.command("claim")
 @click.argument("item_id", type=TASK_ID)
-def task_claim(item_id):
+@click.option("--force", is_flag=True,
+              help="Re-claim even when the task is in a done-ish status "
+                   "(verify, confirmed, declined, obsolete, assumed) — "
+                   "demotes it back to in_progress.")
+def task_claim(item_id, force):
     """Claim ownership of a task for this session."""
     from endless.task_cmd import claim_item
-    claim_item(item_id)
+    claim_item(item_id, force=force)
 
 
 @task_cmd.command("release")
@@ -922,7 +926,8 @@ def task_release(item_id):
 
 @task_cmd.command("start", hidden=True)
 @click.argument("item_id", type=TASK_ID)
-def task_start_deprecated(item_id):
+@click.option("--force", is_flag=True)
+def task_start_deprecated(item_id, force):
     """Deprecated alias for `task claim` (E-1232 rename)."""
     click.echo(
         click.style(
@@ -932,7 +937,7 @@ def task_start_deprecated(item_id):
         err=True,
     )
     from endless.task_cmd import claim_item
-    claim_item(item_id)
+    claim_item(item_id, force=force)
 
 
 @task_cmd.command("move")
