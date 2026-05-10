@@ -1757,6 +1757,66 @@ def _eswt_defined_in_user_shell() -> bool:
         return False
 
 
+def _current_endless_session_id() -> int | None:
+    """Best-effort lookup of the current Endless session id (int PK).
+
+    Returns None when neither ENDLESS_SESSION_ID nor a TMUX_PANE-matching
+    companion file resolves the current session. Callers must treat None
+    as "no exclusion possible".
+    """
+    env_id = os.environ.get("ENDLESS_SESSION_ID")
+    if env_id and env_id.isdigit():
+        return int(env_id)
+    pane = os.environ.get("TMUX_PANE")
+    if not pane:
+        return None
+    from endless.session_cmd import _read_live_companions, _project_root_for_cwd
+    project_root = _project_root_for_cwd()
+    live = _read_live_companions(project_root / ".endless" / "sessions")
+    for c in live:
+        if c.get("pane_id") == pane:
+            eid = c.get("endless_session_id")
+            if isinstance(eid, int):
+                return eid
+    return None
+
+
+def _refuse_if_task_in_use(item_id: int) -> None:
+    """Refuse `task start` if another live session has this task active."""
+    rows = db.query(
+        "SELECT id AS eid FROM sessions "
+        "WHERE active_task_id = ? AND state != 'ended'",
+        (item_id,),
+    )
+    if not rows:
+        return
+
+    current_eid = _current_endless_session_id()
+    candidate_eids = [r["eid"] for r in rows if r["eid"] != current_eid]
+    if not candidate_eids:
+        return
+
+    from endless.session_cmd import _read_live_companions, _project_root_for_cwd
+    project_root = _project_root_for_cwd()
+    live = _read_live_companions(project_root / ".endless" / "sessions")
+    live_by_eid = {
+        c["endless_session_id"]: c
+        for c in live
+        if isinstance(c.get("endless_session_id"), int)
+    }
+
+    for eid in candidate_eids:
+        comp = live_by_eid.get(eid)
+        if comp is None:
+            continue
+        pane = comp.get("pane_id", "?")
+        raise click.ClickException(
+            f"E-{item_id} is already active in session {eid} "
+            f"(pid {comp['pid']}, tmux pane {pane}).\n"
+            "Switch to that session or have it release the task first."
+        )
+
+
 def start_item(item_id: int):
     """Mark a task as in progress."""
     from endless.event_bridge import emit_event
@@ -1770,6 +1830,8 @@ def start_item(item_id: int):
         raise click.ClickException(
             f"No task found with id {item_id}"
         )
+
+    _refuse_if_task_in_use(item_id)
 
     _, proj_name = _resolve_project(None)
     emit_event(
