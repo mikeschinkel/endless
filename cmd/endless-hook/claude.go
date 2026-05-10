@@ -83,6 +83,25 @@ func runClaude(args []string) error {
 		return fmt.Errorf("looking up project for %s: %w", payload.CWD, err)
 	}
 
+	// Belt-and-suspenders for E-971's worktree lock release. The
+	// worktree-local binary handles SessionEnd's full lifecycle; if it
+	// fails to fire (missing, crashed, misconfigured), the lock leaks
+	// and future sessions can't claim the worktree. ReleaseWorktreeLock
+	// is idempotent (os.Remove swallows ErrNotExist), so running it in
+	// both binaries is safe. Other SessionEnd ops stay single-fire in
+	// the worktree-local handler. The success log makes leaks
+	// diagnosable — its absence in stderr means SessionEnd never ran.
+	// (E-1209)
+	if payload.EventName == "SessionEnd" {
+		if wtPath, err := monitor.FindLockBySessionID(projectID, payload.SessionID); err == nil && wtPath != "" {
+			if err := monitor.ReleaseWorktreeLock(wtPath); err != nil {
+				log.Printf("SessionEnd lock release at %s: %v", wtPath, err)
+			} else {
+				log.Printf("released worktree lock at %s for session %s", wtPath, payload.SessionID)
+			}
+		}
+	}
+
 	if shouldSkipForWorktree(projectID, payload.CWD) {
 		return nil
 	}
@@ -190,6 +209,9 @@ func runClaude(args []string) error {
 		// Use session-id scan rather than walk-up: the user may have cd'd
 		// out before /quit, or the lock may live in a worktree the session
 		// claimed but never entered.
+		// Defense-in-depth: usually a no-op because the early belt-and-
+		// suspenders block (E-1209) already released the lock. Kept as
+		// a safety net in case FindLockBySessionID errored at that point.
 		if wtPath, err := monitor.FindLockBySessionID(projectID, payload.SessionID); err == nil && wtPath != "" {
 			if err := monitor.ReleaseWorktreeLock(wtPath); err != nil {
 				// Non-fatal: stale-PID check will reap on next claim attempt.

@@ -30,6 +30,7 @@ Lifecycle states (derived):
 
 import fnmatch
 import json
+import os
 import re
 import subprocess
 from datetime import datetime, timezone
@@ -41,6 +42,7 @@ from endless.task_cmd import _resolve_project
 
 
 COMPANION_FILENAME = ".endless/worktree.json"
+LOCK_FILENAME = ".endless/worktree.lock"
 
 # Auto-committed file globs per E-987 (locked), modified by E-1141:
 # verbs.json is in (ambient agent-driven churn); config.json is out
@@ -128,6 +130,40 @@ def _read_companion(worktree_path: Path) -> dict | None:
         return json.loads(companion.read_text())
     except (OSError, json.JSONDecodeError):
         return None
+
+
+def _check_worktree_lock_liveness(worktree_path: Path) -> tuple[str, dict | None]:
+    """Inspect <worktree>/.endless/worktree.lock for liveness (E-1209).
+
+    Returns (state, lock_data) where state is one of:
+      - "absent":    no lock file
+      - "alive":     lock owner's PID responds to kill(pid, 0)
+      - "stale":     PID is gone (ESRCH) or invalid
+      - "malformed": file present but unparseable
+
+    Mirrors monitor.IsWorktreeLockStale semantics from E-971: never
+    reclaim a lock we cannot conclusively prove dead (PermissionError
+    on kill(pid, 0) means a different uid owns it, treat as alive).
+    """
+    lock_path = worktree_path / LOCK_FILENAME
+    if not lock_path.exists():
+        return ("absent", None)
+    try:
+        data = json.loads(lock_path.read_text())
+    except (json.JSONDecodeError, OSError):
+        return ("malformed", None)
+    pid = data.get("pid")
+    if not isinstance(pid, int) or pid <= 0:
+        return ("malformed", data)
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return ("stale", data)
+    except PermissionError:
+        return ("alive", data)
+    except OSError:
+        return ("alive", data)
+    return ("alive", data)
 
 
 def _short_branch(ref: str | None) -> str:
@@ -700,6 +736,34 @@ def land_worktree(task_id: str, dry_run: bool) -> None:
             raise click.ClickException(
                 f"ff-merge failed: {err_text}"
             )
+
+        # Step 5.5: pre-cleanup of per-worktree state files (E-1209).
+        # `git worktree remove` refuses on non-gitignored untracked files;
+        # E-1218 gitignored .endless/worktree.{json,lock}, but land still
+        # owns its cleanup contract. Refuse if the lock points at a live
+        # session — clobbering it would strand that session on next FS write.
+        state, lock_data = _check_worktree_lock_liveness(worktree_path)
+        if state == "alive":
+            assert lock_data is not None
+            raise click.ClickException(
+                f"Worktree for {canonical} is owned by a live session "
+                f"(PID {lock_data.get('pid', '?')}, "
+                f"session {lock_data.get('session_id', '?')}, "
+                f"claimed at {lock_data.get('claimed_at', '?')}). "
+                f"End that session before landing this task."
+            )
+        # Stale, absent, or malformed: safe to delete both files.
+        for rel in (LOCK_FILENAME, COMPANION_FILENAME):
+            p = worktree_path / rel
+            try:
+                p.unlink(missing_ok=True)
+            except OSError as e:
+                # Don't block land on a cleanup error; let `git worktree
+                # remove` surface whatever's actually wrong.
+                click.echo(
+                    click.style("•", fg="yellow")
+                    + f" pre-cleanup: failed to remove {p}: {e} (continuing)"
+                )
 
         # Step 6: remove the worktree.
         try:
