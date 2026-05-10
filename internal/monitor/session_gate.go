@@ -31,8 +31,8 @@ func SetGatePending(sessionID, phrase string) error {
 }
 
 // ClearGatePending marks all open gates for the session as cleared by
-// the given verb (task_start | task_confirm | task_add). No-op when the
-// session has no open gate.
+// the given verb (task_claim | task_confirm | task_add). No-op when the
+// session has no open gate. (Pre-E-1232 rows may carry "task_start".)
 func ClearGatePending(sessionID, clearedBy string) error {
 	db, err := DB()
 	if err != nil {

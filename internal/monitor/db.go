@@ -152,8 +152,9 @@ func BackupDB() {
 
 // migrateV6 adds the session_gates table (E-971 Layer E). One row per
 // pivot trigger; an "open" gate has cleared_at IS NULL. cleared_by names
-// the verb that resolved it (task_start | task_confirm | task_add |
-// superseded). Foreign key cascades on session deletion.
+// the verb that resolved it (task_claim | task_confirm | task_add |
+// superseded). Pre-E-1232 rows may carry "task_start". Foreign key
+// cascades on session deletion.
 //
 // V5 is intentionally skipped: see the comment in migrate.go alongside
 // the migrations slice — a pre-framework Python stopgap (E-1118) already

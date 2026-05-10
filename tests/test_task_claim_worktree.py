@@ -1,6 +1,6 @@
-"""Tests for E-971 Layer F: end-to-end worktree creation on `task start`.
+"""Tests for E-971 Layer F: end-to-end worktree creation on `task claim`.
 
-Exercises start_item against a real git project + DB.
+Exercises claim_item against a real git project + DB.
 """
 
 import json
@@ -43,10 +43,10 @@ def project_with_task(seeded_project_at_cwd):
     return {"project_root": repo, "task_id": task_id, "title": title}
 
 
-def test_start_creates_worktree_no_plan_file(project_with_task, capsys):
-    from endless.task_cmd import start_item
+def test_claim_creates_worktree_no_plan_file(project_with_task, capsys):
+    from endless.task_cmd import claim_item
 
-    start_item(project_with_task["task_id"])
+    claim_item(project_with_task["task_id"])
 
     repo = project_with_task["project_root"]
     tid = project_with_task["task_id"]
@@ -80,13 +80,13 @@ def test_start_creates_worktree_no_plan_file(project_with_task, capsys):
     assert 'eval "$(endless shell-init)"' in captured.out
 
 
-def test_start_idempotent_on_second_run(project_with_task, capsys):
-    from endless.task_cmd import start_item
+def test_claim_idempotent_on_second_run(project_with_task, capsys):
+    from endless.task_cmd import claim_item
 
-    start_item(project_with_task["task_id"])
+    claim_item(project_with_task["task_id"])
     capsys.readouterr()  # clear
 
-    start_item(project_with_task["task_id"])
+    claim_item(project_with_task["task_id"])
     captured = capsys.readouterr()
     assert "worktree already exists:" in captured.out
     # Re-run still shows the same two-option block
@@ -103,8 +103,8 @@ def test_start_idempotent_on_second_run(project_with_task, capsys):
     assert branches.count(f"task/{tid}-") == 1
 
 
-def test_start_refuses_when_plan_file_uncommitted(project_with_task, capsys):
-    from endless.task_cmd import start_item
+def test_claim_refuses_when_plan_file_uncommitted(project_with_task, capsys):
+    from endless.task_cmd import claim_item
 
     repo = project_with_task["project_root"]
     tid = project_with_task["task_id"]
@@ -113,20 +113,20 @@ def test_start_refuses_when_plan_file_uncommitted(project_with_task, capsys):
     (plans / f"E-{tid}.md").write_text("plan content\n")
 
     with pytest.raises(click.ClickException) as exc_info:
-        start_item(tid)
+        claim_item(tid)
 
     msg = exc_info.value.message
     assert f".endless/plans/E-{tid}.md" in msg
     assert "git -C" in msg
-    assert f"endless task start E-{tid}" in msg
+    assert f"endless task claim E-{tid}" in msg
 
     # No worktree created
     wt = repo / ".endless" / "worktrees" / f"e-{tid}"
     assert not wt.exists()
 
 
-def test_start_succeeds_when_plan_file_committed(project_with_task):
-    from endless.task_cmd import start_item
+def test_claim_succeeds_when_plan_file_committed(project_with_task):
+    from endless.task_cmd import claim_item
 
     repo = project_with_task["project_root"]
     tid = project_with_task["task_id"]
@@ -136,7 +136,7 @@ def test_start_succeeds_when_plan_file_committed(project_with_task):
     _run(["git", "add", f".endless/plans/E-{tid}.md"], repo)
     _run(["git", "commit", "-q", "-m", "add plan"], repo)
 
-    start_item(tid)
+    claim_item(tid)
 
     wt = repo / ".endless" / "worktrees" / f"e-{tid}"
     assert wt.exists()
@@ -144,8 +144,8 @@ def test_start_succeeds_when_plan_file_committed(project_with_task):
     assert (wt / ".endless" / "plans" / f"E-{tid}.md").exists()
 
 
-def test_start_uses_task_fallback_for_all_filler_title(seeded_project_at_cwd):
-    from endless.task_cmd import start_item
+def test_claim_uses_task_fallback_for_all_filler_title(seeded_project_at_cwd):
+    from endless.task_cmd import claim_item
 
     repo = seeded_project_at_cwd
     _run(["git", "init", "-q", "-b", "main"], repo)
@@ -164,7 +164,7 @@ def test_start_uses_task_fallback_for_all_filler_title(seeded_project_at_cwd):
     )
     tid = db.query("SELECT id FROM tasks WHERE title = ?", ("The to from",))[0]["id"]
 
-    start_item(tid)
+    claim_item(tid)
 
     companion = json.loads(
         (repo / ".endless" / "worktrees" / f"e-{tid}" / ".endless" / "worktree.json").read_text()
@@ -172,24 +172,24 @@ def test_start_uses_task_fallback_for_all_filler_title(seeded_project_at_cwd):
     assert companion["branch"] == f"task/{tid}-task"
 
 
-def test_start_skips_eval_line_when_eswt_already_defined(project_with_task, capsys, monkeypatch):
+def test_claim_skips_eval_line_when_eswt_already_defined(project_with_task, capsys, monkeypatch):
     """When _eswt_defined_in_user_shell() returns True, suppress the bootstrap line."""
     from endless import task_cmd
 
     monkeypatch.setattr(task_cmd, "_eswt_defined_in_user_shell", lambda: True)
-    task_cmd.start_item(project_with_task["task_id"])
+    task_cmd.claim_item(project_with_task["task_id"])
     captured = capsys.readouterr()
     tid = project_with_task["task_id"]
     assert f"eswt E-{tid}" in captured.out
     assert 'eval "$(endless shell-init)"' not in captured.out
 
 
-def test_start_worktree_discoverable_via_for_task(project_with_task):
+def test_claim_worktree_discoverable_via_for_task(project_with_task):
     """After start, the new worktree shows up in worktree list / for-task."""
-    from endless.task_cmd import start_item
+    from endless.task_cmd import claim_item
     from endless.worktree_cmd import _branch_for_task, _enriched_list
 
-    start_item(project_with_task["task_id"])
+    claim_item(project_with_task["task_id"])
 
     repo = project_with_task["project_root"]
     tid = project_with_task["task_id"]

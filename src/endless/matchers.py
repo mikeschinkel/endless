@@ -57,11 +57,15 @@ DEFAULT_MATCHERS: list[dict[str, Any]] = [
     },
     {
         "type": "start", "scope": "task", "method": "regex",
-        "match": r"endless\s+task\s+start\s+(?:[Ee]-)?(\d+)",
+        "match": r"endless\s+task\s+claim\s+(?:[Ee]-)?(\d+)",
     },
     {
         "type": "complete", "scope": "task", "method": "regex",
         "match": r"endless\s+task\s+complete\s+(?:[Ee]-)?(\d+)",
+    },
+    {
+        "type": "release", "scope": "task", "method": "regex",
+        "match": r"endless\s+task\s+release(?:\s+(?:[Ee]-)?(\d+))?",
     },
     {
         "type": "chat", "scope": "task", "method": "regex",
@@ -339,7 +343,12 @@ _STALE_DEFAULTS: dict[tuple, dict[str, str]] = {
         # E-1028: original pattern only matched bare integers; CLI accepts
         # E-prefixed IDs, so 'endless task start E-1027' was a silent no-op.
         r"endless\s+task\s+start\s+(\d+)":
-            r"endless\s+task\s+start\s+(?:[Ee]-)?(\d+)",
+            r"endless\s+task\s+claim\s+(?:[Ee]-)?(\d+)",
+        # E-1232: CLI verb renamed start -> claim. The matcher type stays
+        # "start" (stable internal id); only the regex moves to the new
+        # command word.
+        r"endless\s+task\s+start\s+(?:[Ee]-)?(\d+)":
+            r"endless\s+task\s+claim\s+(?:[Ee]-)?(\d+)",
     },
     ("complete", "task", "regex"): {
         r"endless\s+task\s+complete\s+(\d+)":
@@ -348,11 +357,25 @@ _STALE_DEFAULTS: dict[tuple, dict[str, str]] = {
 }
 
 
+_ENSURED_DEFAULTS: list[dict] = [
+    # E-1232: ensure the new release matcher exists in already-seeded
+    # configs (DEFAULT_MATCHERS only seeds when the matchers list is
+    # missing entirely; this fills in newly-introduced entries).
+    {
+        "type": "release", "scope": "task", "method": "regex",
+        "match": r"endless\s+task\s+release(?:\s+(?:[Ee]-)?(\d+))?",
+    },
+]
+
+
 def _migrate_stale_defaults() -> None:
-    """Rewrite known-stale default matchers in the machine config in place.
+    """Rewrite known-stale default matchers in the machine config in place,
+    and ensure newly-introduced default matchers exist.
 
     Idempotent. Only rewrites matchers whose `match` field is exactly the
-    old default value; user-customized matchers are left untouched.
+    old default value; user-customized matchers are left untouched. New
+    entries from `_ENSURED_DEFAULTS` are added only when their (type,
+    scope, method) key is absent — never overwrites user customization.
     """
     path = machine_config_path()
     data = _load_json(path)
@@ -368,6 +391,18 @@ def _migrate_stale_defaults() -> None:
         if m.get("match") in rewrites:
             m["match"] = rewrites[m["match"]]
             changed = True
+
+    existing_keys = {
+        (m.get("type"), m.get("scope"), m.get("method"))
+        for m in matchers
+        if isinstance(m, dict)
+    }
+    for entry in _ENSURED_DEFAULTS:
+        key = (entry["type"], entry["scope"], entry["method"])
+        if key not in existing_keys:
+            matchers.append(dict(entry))
+            changed = True
+
     if changed:
         _save_json(path, data)
 

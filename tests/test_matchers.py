@@ -40,6 +40,7 @@ def test_ensure_default_seeds_idempotent(isolated_env):
 
 
 def test_migrate_stale_default_rewrites_start_regex(isolated_env):
+    """Old bare-int 'start' pattern migrates straight to the new 'claim' verb."""
     config_dir = isolated_env["config_dir"]
     _write_machine_config(config_dir, {
         "matchers": [
@@ -53,7 +54,25 @@ def test_migrate_stale_default_rewrites_start_regex(isolated_env):
     matchers._migrate_stale_defaults()
 
     data = _machine_config(config_dir)
-    assert data["matchers"][0]["match"] == r"endless\s+task\s+start\s+(?:[Ee]-)?(\d+)"
+    assert data["matchers"][0]["match"] == r"endless\s+task\s+claim\s+(?:[Ee]-)?(\d+)"
+
+
+def test_migrate_stale_default_rewrites_eprefix_start_to_claim(isolated_env):
+    """Post-E-1028 'start' pattern migrates to the new 'claim' verb (E-1232)."""
+    config_dir = isolated_env["config_dir"]
+    _write_machine_config(config_dir, {
+        "matchers": [
+            {
+                "type": "start", "scope": "task", "method": "regex",
+                "match": r"endless\s+task\s+start\s+(?:[Ee]-)?(\d+)",
+            },
+        ],
+    })
+
+    matchers._migrate_stale_defaults()
+
+    data = _machine_config(config_dir)
+    assert data["matchers"][0]["match"] == r"endless\s+task\s+claim\s+(?:[Ee]-)?(\d+)"
 
 
 def test_migrate_stale_default_rewrites_complete_regex(isolated_env):
@@ -125,7 +144,7 @@ def test_load_all_matchers_runs_migration(isolated_env):
     matchers.load_all_matchers()
 
     data = _machine_config(config_dir)
-    assert data["matchers"][0]["match"] == r"endless\s+task\s+start\s+(?:[Ee]-)?(\d+)"
+    assert data["matchers"][0]["match"] == r"endless\s+task\s+claim\s+(?:[Ee]-)?(\d+)"
 
 
 def test_default_seed_uses_eprefix_pattern(isolated_env):

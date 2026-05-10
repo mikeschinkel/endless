@@ -181,13 +181,13 @@ endless task update 506 --parent 443
 #### Track progress
 
 ```bash
-endless task start <task_id>
+endless task claim <task_id>
 endless task complete <task_id>
 endless task remove <task_id>
 ```
 
 ```bash
-endless task start 445
+endless task claim 445
 endless task complete 445
 endless task remove 445
 ```

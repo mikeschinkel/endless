@@ -1,7 +1,7 @@
 """Tests for E-971 Layer F: per-task worktree auto-creation helpers.
 
 Covers _slugify_title, _default_base_branch, and _check_plan_file_committed.
-The end-to-end create_task_worktree flow is exercised via test_task_start_worktree.
+The end-to-end create_task_worktree flow is exercised via test_task_claim_worktree.
 """
 
 import json
@@ -143,7 +143,7 @@ def test_check_plan_file_untracked_returns_message(git_repo):
     assert msg is not None
     assert ".endless/plans/E-1170.md" in msg
     assert "git -C" in msg
-    assert "endless task start E-1170" in msg
+    assert "endless task claim E-1170" in msg
 
 
 def test_check_plan_file_modified_tracked_returns_message(git_repo):

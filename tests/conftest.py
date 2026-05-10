@@ -41,7 +41,7 @@ def isolated_env(tmp_path, monkeypatch):
     # for ENDLESS_AUTO_MIGRATE. Tests need a fully migrated schema.
     monkeypatch.setenv("ENDLESS_AUTO_MIGRATE", "1")
 
-    # Force 'task start' eswt-detection to default to verbose form. Without
+    # Force 'task claim' eswt-detection to default to verbose form. Without
     # this, tests would non-deterministically read the developer's actual
     # shell function table.
     monkeypatch.delenv("SHELL", raising=False)

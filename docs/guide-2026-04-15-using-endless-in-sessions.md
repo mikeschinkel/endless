@@ -35,7 +35,7 @@ This shows the title, description, status, and full text (which may contain an i
 ### 2. Start working on it
 
 ```bash
-endless task start <id>
+endless task claim <id>
 ```
 
 This registers your session as actively working on that task. It sets the item's status to `in_progress` and links your session to it. **If enforcement is enabled for this project, you must do this before you can use Write/Edit tools.**
@@ -146,7 +146,7 @@ endless task search "query" --status ready    # with status filter
 
 ```bash
 # Start working on a task (registers your session)
-endless task start <id>
+endless task claim <id>
 
 # Start a chat-only session (tracked but not tied to a task)
 endless task chat
@@ -274,7 +274,7 @@ The plan file is typically at the path shown when you exit plan mode (e.g., `~/.
 
 ### Enforcement not yet enabled for most projects
 
-Enforcement (blocking Write/Edit without `task start`) requires `"tracking": "enforce"` in the project's `.endless/config.json`. Most projects don't have this yet. If you want to be a good citizen, run `endless task start <id>` anyway — it still tracks your session even without enforcement.
+Enforcement (blocking Write/Edit without `task claim`) requires `"tracking": "enforce"` in the project's `.endless/config.json`. Most projects don't have this yet. If you want to be a good citizen, run `endless task claim <id>` anyway — it still tracks your session even without enforcement.
 
 ## Where Things Live
 
@@ -299,7 +299,7 @@ Renamed from `.endless/events/` in E-1197 because the old name biased readers (h
 1. `endless task next` — see what's actionable
 2. Pick an item (or Mike gives you one)
 3. `endless task show <id>` — read the detail
-4. `endless task start <id>` — register your session
+4. `endless task claim <id>` — register your session
 5. Do the work
 6. `endless task update <id> --status verify`
 
@@ -325,7 +325,7 @@ endless task next --project <name>             # top actionable tasks
 ## Important Notes
 
 - **Don't mark items `confirmed`** — set them to `verify` and let Mike confirm, or `assume` if you can't easily verify
-- **Always `task start` before writing code** — even if enforcement isn't on, it helps tracking
+- **Always `task claim` before writing code** — even if enforcement isn't on, it helps tracking
 - **Tasks have hierarchy** — use `--parent` when adding items to keep the tree organized
 - **The `text` field is the task body** — `title` is the one-liner, `description` is a short summary, `text` is the full implementation plan
 - **If you create a plan in Claude's plan mode**, save it to the task with `endless task update <id> --text <path>`

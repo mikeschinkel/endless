@@ -107,6 +107,8 @@ func dispatch(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 		return execTaskDeleted(db, evt)
 	case KindTaskBulkCleared:
 		return execTaskBulkCleared(db, evt)
+	case KindTaskReleased:
+		return execTaskReleased(db, evt)
 	default:
 		return nil, fmt.Errorf("events: executor does not handle kind %q", evt.Kind)
 	}
@@ -412,6 +414,21 @@ func execTaskBulkCleared(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 		return nil, fmt.Errorf("events: bulk clear: %w", err)
 	}
 
+	return &ExecuteResult{}, nil
+}
+
+func execTaskReleased(db dbQuerier, evt *Event) (*ExecuteResult, error) {
+	var p TaskReleasedPayload
+	if err := json.Unmarshal(evt.Payload, &p); err != nil {
+		return nil, fmt.Errorf("events: unmarshal task.released payload: %w", err)
+	}
+	taskID := evt.Entity.ID
+	if _, err := db.Exec(
+		"UPDATE sessions SET active_task_id = NULL WHERE id = ? AND active_task_id = ?",
+		p.SessionID, taskID,
+	); err != nil {
+		return nil, fmt.Errorf("events: release task: %w", err)
+	}
 	return &ExecuteResult{}, nil
 }
 

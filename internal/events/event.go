@@ -73,6 +73,7 @@ const (
 	KindTaskMoved         Kind = "task.moved"
 	KindTaskDeleted       Kind = "task.deleted"
 	KindTaskBulkCleared   Kind = "task.bulk_cleared"
+	KindTaskReleased      Kind = "task.released"
 )
 
 // Task dependency event kinds.
@@ -130,6 +131,7 @@ var ValidKinds = map[Kind]bool{
 	KindTaskMoved:         true,
 	KindTaskDeleted:       true,
 	KindTaskBulkCleared:   true,
+	KindTaskReleased:      true,
 	// Task dependency
 	KindTaskDepCreated: true,
 	KindTaskDepDeleted: true,

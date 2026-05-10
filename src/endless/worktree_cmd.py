@@ -12,7 +12,7 @@ Mutation (this slice, E-971 + E-987 + E-1056):
 - drop: explicit cleanup (refuses dirty/unmerged without --force)
 
 Auto-creation triggers (next slice): SessionStart hook, plan-bearing
-task start.
+task claim.
 
 Worktree state is filesystem-authoritative (per E-971 design): no DB
 tables. Each endless-managed worktree has a companion JSON file at
@@ -564,7 +564,7 @@ def _check_plan_file_committed(task_id: int, project_root: Path) -> str | None:
         f"Capture it before starting the task. Recommended:\n"
         f"  git -C {root_display} add {plan_rel}\n"
         f"  git -C {root_display} commit -m 'Add plan for E-{task_id}'\n"
-        f"\nThen retry: endless task start E-{task_id}"
+        f"\nThen retry: endless task claim E-{task_id}"
     )
 
 

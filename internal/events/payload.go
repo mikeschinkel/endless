@@ -51,6 +51,10 @@ type TaskBulkClearedPayload struct {
 	SourceFile string `json:"source_file,omitempty"`
 }
 
+type TaskReleasedPayload struct {
+	SessionID int64 `json:"session_id"`
+}
+
 // Task dependency payloads
 
 type TaskDepCreatedPayload struct {

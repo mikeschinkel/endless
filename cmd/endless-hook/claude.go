@@ -282,7 +282,7 @@ func handleUserPromptSubmit(projectID int64, payload claudePayload) error {
 			}
 			parts = append(parts, fmt.Sprintf(
 				"Pivot trigger detected (matched: %q). Confirm or update active task before any "+
-					"Write/Edit. Cleared by `endless task add ...` (new task), `endless task start <id>` "+
+					"Write/Edit. Cleared by `endless task add ...` (new task), `endless task claim <id>` "+
 					"(continue/switch), or `endless task confirm <id>` (continue/wrap up).",
 				matched))
 		}
@@ -324,7 +324,7 @@ func buildTaskContextInjection(projectID int64, payload claudePayload) (string, 
 }
 
 func handlePostToolUse(projectID int64, payload claudePayload) error {
-	// Detect endless task start/complete/chat commands and update session state
+	// Detect endless task claim/complete/chat commands and update session state
 	if err := handlePostToolUseSession(projectID, payload); err != nil {
 		return fmt.Errorf("post tool use session: %w", err)
 	}
@@ -466,7 +466,7 @@ func handlePreToolUse(projectID int64, isRegistered bool, payload claudePayload)
 			"BLOCKED (pivot gate): your last user message contained %q.\n\n"+
 				"Edits are paused until you declare your task. Run one of:\n"+
 				"  endless task add \"<title>\"      (new task)\n"+
-				"  endless task start E-NNN          (switch to / resume an existing task)\n"+
+				"  endless task claim E-NNN          (switch to / resume an existing task)\n"+
 				"  endless task confirm E-NNN        (continue with / wrap up the current task)",
 			phrase))
 	}
@@ -484,7 +484,7 @@ func handlePreToolUse(projectID int64, isRegistered bool, payload claudePayload)
 			// Check expiration
 			if monitor.IsSessionExpired(session, 30) {
 				blockToolUse("Your work session has expired due to inactivity.\n\n" +
-					"Run `endless task start <id>` to resume working on a task.\n" +
+					"Run `endless task claim <id>` to resume working on a task.\n" +
 					"Run `endless task show` to see available tasks.")
 			}
 			// Active and valid — allow through, touch session
@@ -531,7 +531,7 @@ func handlePreToolUse(projectID int64, isRegistered bool, payload claudePayload)
 	}
 
 	msg.WriteString("Run one of:\n")
-	msg.WriteString("  endless task start <id>   — start working on a specific task\n")
+	msg.WriteString("  endless task claim <id>   — start working on a specific task\n")
 	msg.WriteString("  endless task show         — see all available tasks\n")
 	msg.WriteString("  endless task chat         — start a chat-only session (no task tracking)\n")
 
@@ -558,7 +558,7 @@ func blockDriftViolation(activeTaskID int64, filePath string) {
 		fmt.Fprintf(&msg, " %q", taskTitle)
 	}
 	msg.WriteString(".\n\nChoose one:\n")
-	fmt.Fprintf(&msg, "  endless task start <id>                                  switch focus (active task is preserved)\n")
+	fmt.Fprintf(&msg, "  endless task claim <id>                                  switch focus (active task is preserved)\n")
 	fmt.Fprintf(&msg, "  endless task add \"<title>\" --parent E-%d                 add a sub-task for this work\n", activeTaskID)
 	fmt.Fprintf(&msg, "  endless task touch E-%d --add-file %s    register this file as in-scope of the current task\n", activeTaskID, filePath)
 	msg.WriteString("\nIf this prompt is needless here, also include in your next response:\n")
@@ -582,7 +582,7 @@ func handlePostToolUseSession(projectID int64, payload claudePayload) error {
 		return nil
 	}
 
-	// Detect: endless task start <id>
+	// Detect: endless task claim <id>
 	if re := matchers.ActionRegex(all, actionStart, scopeTask); re != nil {
 		if m := re.FindStringSubmatch(input.Command); m != nil {
 			taskID, err := strconv.ParseInt(m[1], 10, 64)
@@ -590,8 +590,8 @@ func handlePostToolUseSession(projectID int64, payload claudePayload) error {
 				if err := monitor.StartWorkSession(payload.SessionID, projectID, taskID); err != nil {
 					return fmt.Errorf("starting work session: %w", err)
 				}
-				if err := monitor.ClearGatePending(payload.SessionID, "task_start"); err != nil {
-					log.Printf("clearing gate after task start: %v", err)
+				if err := monitor.ClearGatePending(payload.SessionID, "task_claim"); err != nil {
+					log.Printf("clearing gate after task claim: %v", err)
 				}
 				// Refresh companion file: active_task_id changed, worktree_path
 				// must follow (E-1027). Non-fatal: stale worktree_path is a
@@ -744,7 +744,7 @@ main is the integration target. Make changes in a worktree on a per-task
 branch, then merge via ` + "`endless worktree land <task-id>`" + `.
 
 If you have an Endless task for this work:
-  endless task start E-NNN          # creates worktree at .endless/worktrees/e-NNN
+  endless task claim E-NNN          # creates worktree at .endless/worktrees/e-NNN
 
 Or by hand:
   git worktree add -b task/NNN-<slug> .endless/worktrees/e-NNN main
@@ -1204,9 +1204,9 @@ func enforceWorktreeGate(projectID int64, payload claudePayload) {
 			"a worktree.\n\n" +
 			"If you do not yet have an active task, create one and start it:\n" +
 			"  endless task add \"<title>\"\n" +
-			"  endless task start E-NNN          # auto-creates the worktree\n\n" +
+			"  endless task claim E-NNN          # auto-creates the worktree\n\n" +
 			"If you already have an active task without a worktree:\n" +
-			"  endless task start E-NNN          # idempotent; creates if missing\n\n" +
+			"  endless task claim E-NNN          # idempotent; creates if missing\n\n" +
 			"Or create the worktree by hand or via `endless pivot` (when available):\n" +
 			"  git worktree add -b task/NNN-<slug> .endless/worktrees/e-NNN main" +
 			redirectHint)
@@ -1239,7 +1239,7 @@ func enforceWorktreeGate(projectID int64, payload claudePayload) {
 			blockToolUse(fmt.Sprintf(
 				"This worktree is bound to %s, but your active task is E-%d.\n\n"+
 					"Either switch tasks (no cd needed):\n"+
-					"  endless task start E-%d\n\n"+
+					"  endless task claim E-%d\n\n"+
 					"Or move to the worktree for your active task:\n"+
 					"  endless worktree for-task E-%d",
 				comp.TaskID, *session.ActiveTaskID,
@@ -1248,7 +1248,7 @@ func enforceWorktreeGate(projectID int64, payload claudePayload) {
 	}
 
 	// (c) Session has an active task whose worktree exists, but cwd is
-	// not in it. (e.g. `endless task start E-BBB` ran from inside a
+	// not in it. (e.g. `endless task claim E-BBB` ran from inside a
 	// session sitting in worktree A.) Layer F's redirection message
 	// will guide Claude proactively; here we just refuse.
 	if session != nil && session.ActiveTaskID != nil {

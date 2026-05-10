@@ -1828,8 +1828,8 @@ def _check_task_ownership(item_id: int) -> bool:
     return owned_by_current
 
 
-def start_item(item_id: int):
-    """Mark a task as in progress."""
+def claim_item(item_id: int):
+    """Claim ownership of a task for this session and mark it in_progress."""
     from endless.event_bridge import emit_event
 
     row = db.query(
@@ -1916,6 +1916,60 @@ def start_item(item_id: int):
         pad = " " * (len(eval_cmd) - len(eswt_cmd))
         click.echo(f"         {eval_cmd}  # Adds eswt shell helper func")
         click.echo(f"         {eswt_cmd}{pad}  # Changes to Git worktree dir")
+
+
+def release_item(item_id: int | None) -> None:
+    """Release the current session's claim on a task.
+
+    If `item_id` is None, releases whatever task the current session has
+    claimed. Refuses if the current session does not own the named task.
+    Leaves tasks.status unchanged (the task remains in_progress, free for
+    another session to claim) and leaves the worktree intact. Emits a
+    `task.released` event whose Go executor clears `sessions.active_task_id`
+    for the named session.
+    """
+    from endless.event_bridge import emit_event
+
+    current_eid = _current_endless_session_id()
+    if current_eid is None:
+        raise click.ClickException(
+            "Cannot resolve current session id (set ENDLESS_SESSION_ID "
+            "or run inside a tmux pane with a known companion file)."
+        )
+
+    rows = db.query(
+        "SELECT active_task_id FROM sessions WHERE id = ?",
+        (current_eid,),
+    )
+    if not rows or rows[0]["active_task_id"] is None:
+        if item_id is None:
+            click.echo("No task currently claimed by this session.")
+            return
+        raise click.ClickException(
+            f"E-{item_id} is not claimed by this session "
+            f"(session {current_eid} has no active task)."
+        )
+
+    bound_id = rows[0]["active_task_id"]
+    if item_id is not None and item_id != bound_id:
+        raise click.ClickException(
+            f"E-{item_id} is not claimed by this session "
+            f"(session {current_eid} is on E-{bound_id})."
+        )
+
+    target_id = bound_id
+    _, proj_name = _resolve_project(None)
+    emit_event(
+        kind="task.released",
+        project=proj_name,
+        entity_type="task",
+        entity_id=str(target_id),
+        payload={"session_id": current_eid},
+    )
+    click.echo(
+        click.style("•", fg="cyan")
+        + f" released claim on E-{target_id} (session {current_eid})"
+    )
 
 
 def update_plan(

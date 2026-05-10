@@ -904,13 +904,20 @@ def task_decline(item_ids, reason):
         decline_item(item_id, reason=reason)
 
 
-@task_cmd.command("start")
+@task_cmd.command("claim")
 @click.argument("item_id", type=TASK_ID)
-def task_start(item_id):
-    """Mark a task as in progress."""
-    from endless.task_cmd import start_item
-    start_item(item_id)
+def task_claim(item_id):
+    """Claim ownership of a task for this session."""
+    from endless.task_cmd import claim_item
+    claim_item(item_id)
 
+
+@task_cmd.command("release")
+@click.argument("item_id", type=TASK_ID, required=False, default=None)
+def task_release(item_id):
+    """Release the current session's claim on a task (defaults to active task)."""
+    from endless.task_cmd import release_item
+    release_item(item_id)
 
 
 @task_cmd.command("move")
