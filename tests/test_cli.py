@@ -26,6 +26,40 @@ def test_list_empty(isolated_env):
     assert "No projects registered" in result.output
 
 
+def test_sql_refuses_mutation_without_write(isolated_env):
+    """E-1225: read-only by default — INSERT/UPDATE/DELETE/PRAGMA refused."""
+    runner = CliRunner()
+    for sql in (
+        "DELETE FROM tasks",
+        "UPDATE tasks SET status='x'",
+        "INSERT INTO tasks (id) VALUES (1)",
+        "PRAGMA table_info(tasks)",
+    ):
+        result = runner.invoke(main, ["sql", sql])
+        assert result.exit_code != 0, f"should have refused: {sql}"
+        assert "--write" in result.output
+
+
+def test_sql_accepts_read_only_prefixes(isolated_env):
+    """E-1225: SELECT/WITH/EXPLAIN allowed without --write."""
+    runner = CliRunner()
+    for sql in (
+        "SELECT 1 AS x",
+        "WITH t AS (SELECT 1 AS x) SELECT * FROM t",
+        "EXPLAIN SELECT 1",
+    ):
+        result = runner.invoke(main, ["sql", sql])
+        assert result.exit_code == 0, f"should have accepted: {sql} ({result.output})"
+
+
+def test_sql_surfaces_real_sql_error(isolated_env):
+    """E-1225: SQL errors are reported as SQL errors, not as 'uninitialized DB'."""
+    runner = CliRunner()
+    result = runner.invoke(main, ["sql", "SELECT * FROM definitely_no_such_table"])
+    assert result.exit_code != 0
+    assert "no such table" in result.output
+
+
 def test_register_and_list(isolated_env):
     project_dir = isolated_env["projects_root"] / "cli-test"
     project_dir.mkdir()

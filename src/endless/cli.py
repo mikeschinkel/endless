@@ -321,6 +321,77 @@ esf() {
 """
 
 
+_SQL_READ_PREFIXES = ("select", "with", "explain")
+
+
+def _is_read_only_sql(sql: str) -> bool:
+    stripped = sql.strip()
+    while stripped.startswith("--"):
+        nl = stripped.find("\n")
+        if nl == -1:
+            stripped = ""
+            break
+        stripped = stripped[nl + 1:].lstrip()
+    while stripped.startswith("/*"):
+        end = stripped.find("*/")
+        if end == -1:
+            stripped = ""
+            break
+        stripped = stripped[end + 2:].lstrip()
+    head = stripped[:7].lower()
+    return any(head.startswith(p) for p in _SQL_READ_PREFIXES)
+
+
+@main.command("sql")
+@click.argument("query")
+@click.option("--write", is_flag=True,
+              help="Allow mutating statements (INSERT/UPDATE/DELETE/PRAGMA/etc.). "
+                   "Default is read-only — only SELECT/WITH/EXPLAIN are accepted.")
+@click.option("--tsv", is_flag=True,
+              help="Tab-separated output (no header). Useful for piping.")
+def sql_query(query, write, tsv):
+    """Run a SQL query against the Endless DB.
+
+    Resolves the DB path internally (no need to know where it lives).
+    Read-only by default — pass --write for mutations. Replaces the
+    agent instinct to reach for sqlite3 against speculative paths
+    under .endless/, which silently creates ghost DB files.
+    """
+    from endless import db
+    import sqlite3
+
+    if not write and not _is_read_only_sql(query):
+        raise click.ClickException(
+            "Refusing to run a non-read-only query without --write. "
+            "Allowed prefixes: SELECT, WITH, EXPLAIN.\n"
+            "If you need to mutate, pass --write explicitly."
+        )
+
+    try:
+        cursor = db.get_db().execute(query)
+        rows = cursor.fetchall()
+    except sqlite3.Error as e:
+        raise click.ClickException(f"SQL error: {e}")
+
+    headers = [c[0] for c in cursor.description] if cursor.description else []
+    if not rows:
+        if write:
+            click.echo(f"OK ({cursor.rowcount} rows affected)")
+        return
+    if tsv:
+        if not headers:
+            for r in rows:
+                click.echo("\t".join(str(c) for c in r))
+            return
+        for r in rows:
+            click.echo("\t".join(str(r[h]) for h in headers))
+        return
+
+    from tabulate import tabulate
+    table = [[r[h] for h in headers] for r in rows]
+    click.echo(tabulate(table, headers=headers, tablefmt="simple"))
+
+
 @main.command("shell-init")
 def shell_init():
     """Print shell helper functions for bash/zsh.
