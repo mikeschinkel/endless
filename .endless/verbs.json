@@ -382,5 +382,9 @@
   {
     "value": "untrack",
     "definition": "Remove a file from git's tracking without deleting it from the working tree (git rm --cached)"
+  },
+  {
+    "value": "teating",
+    "definition": "The process of evaluating or trying something"
   }
 ]
