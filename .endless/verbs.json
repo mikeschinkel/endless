@@ -386,5 +386,13 @@
   {
     "value": "teating",
     "definition": "The process of evaluating or trying something"
+  },
+  {
+    "value": "claim",
+    "definition": "Assertion, statement, or demand that something is true, factual, or rightfully one's own"
+  },
+  {
+    "value": "release",
+    "definition": "Setting free, liberating, or letting go"
   }
 ]
