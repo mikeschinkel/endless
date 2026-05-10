@@ -378,5 +378,9 @@
   {
     "value": "automate",
     "definition": "Replace a manual workflow with code or tooling so it runs without human action."
+  },
+  {
+    "value": "untrack",
+    "definition": "Remove a file from git's tracking without deleting it from the working tree (git rm --cached)"
   }
 ]
