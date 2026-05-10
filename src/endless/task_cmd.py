@@ -1781,20 +1781,29 @@ def _current_endless_session_id() -> int | None:
     return None
 
 
-def _refuse_if_task_in_use(item_id: int) -> None:
-    """Refuse `task start` if another live session has this task active."""
+def _check_task_ownership(item_id: int) -> bool:
+    """Resolve the live ownership state of `item_id`.
+
+    Returns True if the current session already owns the task (caller
+    should short-circuit with an "already active" notice instead of
+    re-emitting events). Returns False if the task is free. Raises
+    click.ClickException if a different live session owns the task.
+    """
     rows = db.query(
         "SELECT id AS eid FROM sessions "
         "WHERE active_task_id = ? AND state != 'ended'",
         (item_id,),
     )
     if not rows:
-        return
+        return False
 
     current_eid = _current_endless_session_id()
+    owned_by_current = current_eid is not None and any(
+        r["eid"] == current_eid for r in rows
+    )
     candidate_eids = [r["eid"] for r in rows if r["eid"] != current_eid]
     if not candidate_eids:
-        return
+        return owned_by_current
 
     from endless.session_cmd import _read_live_companions, _project_root_for_cwd
     project_root = _project_root_for_cwd()
@@ -1816,6 +1825,8 @@ def _refuse_if_task_in_use(item_id: int) -> None:
             "Switch to that session or have it release the task first."
         )
 
+    return owned_by_current
+
 
 def start_item(item_id: int):
     """Mark a task as in progress."""
@@ -1831,7 +1842,29 @@ def start_item(item_id: int):
             f"No task found with id {item_id}"
         )
 
-    _refuse_if_task_in_use(item_id)
+    if _check_task_ownership(item_id):
+        from endless.worktree_cmd import create_task_worktree, _project_root
+        click.echo(
+            click.style("•", fg="cyan")
+            + f" E-{item_id} is already active in this session"
+        )
+        try:
+            project_root = _project_root()
+        except click.ClickException:
+            return
+        slug_source = row[0]["title"] or "task"
+        wt_path, _ = create_task_worktree(item_id, slug_source, project_root)
+        home = str(Path.home())
+        wt_display = (
+            str(wt_path).replace(home, "~", 1)
+            if str(wt_path).startswith(home)
+            else str(wt_path)
+        )
+        click.echo(
+            click.style("•", fg="cyan")
+            + f" worktree: {wt_display}"
+        )
+        return
 
     _, proj_name = _resolve_project(None)
     emit_event(
