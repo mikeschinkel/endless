@@ -245,14 +245,49 @@ def serve(port, watch):
                 proc.wait()
 
 
-@main.command("quick-start")
-def quick_start():
-    """Output the session onboarding guide."""
-    from pathlib import Path
-    guide = Path(__file__).resolve().parent.parent.parent / "docs" / "guide-2026-04-15-using-endless-in-sessions.md"
-    if not guide.exists():
-        raise click.ClickException(f"Guide not found at {guide}")
-    click.echo(guide.read_text())
+@main.command("guide")
+@click.argument("section", required=False)
+@click.option("--list", "list_sections", is_flag=True,
+              help="List available section slugs and exit.")
+def guide(section, list_sections):
+    """Output the session guide (or a specific section).
+
+    With no argument, prints the top-level index. Pass a section slug
+    (e.g. 'spawn', 'worktree') to print just that section. Use --list
+    to enumerate available sections.
+    """
+    guide_dir = (
+        Path(__file__).resolve().parent.parent.parent / "docs" / "guide"
+    )
+    if not guide_dir.is_dir():
+        raise click.ClickException(
+            f"Guide directory not found at {guide_dir}"
+        )
+
+    available = sorted(
+        p.stem for p in guide_dir.glob("*.md") if p.stem != "index"
+    )
+
+    if list_sections:
+        for slug in available:
+            click.echo(slug)
+        return
+
+    if section is None:
+        target = guide_dir / "index.md"
+        if not target.exists():
+            raise click.ClickException(
+                f"Guide index not found at {target}"
+            )
+    else:
+        if section == "index" or section not in available:
+            raise click.ClickException(
+                f"Unknown section '{section}'. Available: "
+                + ", ".join(available)
+            )
+        target = guide_dir / f"{section}.md"
+
+    click.echo(target.read_text())
 
 
 _SHELL_INIT_SNIPPET = """\

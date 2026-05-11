@@ -8,7 +8,7 @@ claude
 
 Claude Code:
 ```
-Run `endless quick-start`
+Run `endless guide`
 Run `endless channel beacon` 
 # This above will error, but Claude should fix
 ```
@@ -16,6 +16,6 @@ In Endless session:
 ```shell
 Run `endless channel connect`
 
-I just had the session run quick-start.
+I just had the session run `endless guide`.
 ask if it has any suggestions.
 ```

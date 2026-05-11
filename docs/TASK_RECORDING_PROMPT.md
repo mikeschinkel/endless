@@ -54,7 +54,7 @@ Decisions are harder than tasks because they emerge from conversation, not from 
 - `/Users/mikeschinkel/Projects/endless/CLAUDE.md` -- project instructions
 - `~/.claude/CLAUDE.md` -- global instructions (has the "Record all actions" rule in Task Management section)
 - `~/.claude/projects/-Users-mikeschinkel-Projects-endless/memory/feedback_record_all_actions.md` -- the memory entry about this
-- `/Users/mikeschinkel/Projects/endless/docs/guide-2026-04-15-using-endless-in-sessions.md` -- session guide given to new sessions
+- `/Users/mikeschinkel/Projects/endless/docs/guide/index.md` -- session guide given to new sessions (also at `docs/guide/<section>.md`)
 - `/Users/mikeschinkel/Projects/endless/src/endless/cli.py` -- where `--type decision` was added
 
 ## Goal of this discussion
