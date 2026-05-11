@@ -185,3 +185,131 @@ def test_verb_remove(isolated_env):
 def test_add_match_value_rejects_verb_type(isolated_env):
     with pytest.raises(ValueError):
         matchers.add_match_value(type_="verb", value="ponder", method="exact")
+
+
+# E-1264: auto-register an unrecognized first word as a verb when claude
+# haiku confirms it is one.
+
+def test_verb_gate_auto_registers_when_haiku_says_yes(monkeypatch, isolated_env, capsys):
+    monkeypatch.setattr(
+        task_cmd, "_check_verb_via_haiku",
+        lambda word: (True, "to make stronger, more robust, or more resilient"),
+    )
+
+    # Title would normally fail — 'forge' is not in DEFAULT_VERBS.
+    assert "forge" not in matchers.get_verbs()
+    task_cmd.validate_title("Forge a new path")
+
+    out = capsys.readouterr().out
+    assert "Auto-registered verb 'forge'" in out
+    assert "to make stronger" in out
+    assert "forge" in matchers.get_verbs()
+
+
+def test_verb_gate_falls_through_when_haiku_says_no(monkeypatch, isolated_env):
+    monkeypatch.setattr(
+        task_cmd, "_check_verb_via_haiku", lambda word: (False, None),
+    )
+
+    with pytest.raises(click.ClickException) as exc:
+        task_cmd.validate_title("Frobnicate the widget")
+
+    assert "not registered" in exc.value.message
+    assert "frobnicate" not in matchers.get_verbs()
+
+
+def test_verb_gate_falls_through_when_haiku_returns_empty_definition(monkeypatch, isolated_env):
+    """YES with no definition is treated as malformed → fall through."""
+    monkeypatch.setattr(
+        task_cmd, "_check_verb_via_haiku", lambda word: (True, ""),
+    )
+
+    with pytest.raises(click.ClickException):
+        task_cmd.validate_title("Frobnicate the widget")
+    assert "frobnicate" not in matchers.get_verbs()
+
+
+def test_verb_gate_force_bypasses_haiku_check(monkeypatch, isolated_env):
+    """--force should skip validation entirely — haiku should never be called."""
+    called = []
+
+    def fake(word):
+        called.append(word)
+        return (False, None)
+
+    monkeypatch.setattr(task_cmd, "_check_verb_via_haiku", fake)
+    task_cmd.validate_title("Frobnicate the widget", force=True)
+    assert called == []
+
+
+@pytest.mark.no_haiku_stub
+def test_check_verb_via_haiku_handles_missing_binary(monkeypatch):
+    """When `claude` is not on PATH, return (False, None) — no exception."""
+    import subprocess
+
+    def raise_fnf(*args, **kwargs):
+        raise FileNotFoundError(2, "No such file or directory: 'claude'")
+
+    monkeypatch.setattr(subprocess, "run", raise_fnf)
+    is_verb, defn = task_cmd._check_verb_via_haiku("anything")
+    assert is_verb is False
+    assert defn is None
+
+
+@pytest.mark.no_haiku_stub
+def test_check_verb_via_haiku_parses_yes_response(monkeypatch):
+    """A clean `YES: <definition>` reply yields (True, definition)."""
+    import subprocess
+
+    class FakeResult:
+        returncode = 0
+        stdout = "YES: To bring into existence by forming or shaping.\n"
+        stderr = ""
+
+    monkeypatch.setattr(subprocess, "run", lambda *a, **k: FakeResult())
+    is_verb, defn = task_cmd._check_verb_via_haiku("forge")
+    assert is_verb is True
+    assert defn == "To bring into existence by forming or shaping."
+
+
+@pytest.mark.no_haiku_stub
+def test_check_verb_via_haiku_no_response(monkeypatch):
+    import subprocess
+
+    class FakeResult:
+        returncode = 0
+        stdout = "NO"
+        stderr = ""
+
+    monkeypatch.setattr(subprocess, "run", lambda *a, **k: FakeResult())
+    is_verb, defn = task_cmd._check_verb_via_haiku("frobnicate")
+    assert is_verb is False
+    assert defn is None
+
+
+@pytest.mark.no_haiku_stub
+def test_check_verb_via_haiku_timeout(monkeypatch):
+    import subprocess
+
+    def raise_timeout(*args, **kwargs):
+        raise subprocess.TimeoutExpired(cmd="claude", timeout=30)
+
+    monkeypatch.setattr(subprocess, "run", raise_timeout)
+    is_verb, defn = task_cmd._check_verb_via_haiku("anything")
+    assert is_verb is False
+    assert defn is None
+
+
+@pytest.mark.no_haiku_stub
+def test_check_verb_via_haiku_non_zero_exit(monkeypatch):
+    import subprocess
+
+    class FakeResult:
+        returncode = 1
+        stdout = ""
+        stderr = "boom"
+
+    monkeypatch.setattr(subprocess, "run", lambda *a, **k: FakeResult())
+    is_verb, defn = task_cmd._check_verb_via_haiku("anything")
+    assert is_verb is False
+    assert defn is None

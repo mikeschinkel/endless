@@ -23,3 +23,8 @@ packages = ["src/endless"]
 dev = [
     "pytest>=9.0.3",
 ]
+
+[tool.pytest.ini_options]
+markers = [
+    "no_haiku_stub: opt out of the autouse stub that disables the haiku verb-check subprocess",
+]

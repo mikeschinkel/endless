@@ -85,6 +85,20 @@ def isolated_env(tmp_path, monkeypatch):
             pass
 
 
+@pytest.fixture(autouse=True)
+def disable_haiku_verb_check(monkeypatch, request):
+    """E-1264: stub out the haiku verb-check subprocess in every test.
+
+    Tests that need to exercise the real `_check_verb_via_haiku` (e.g. to
+    test subprocess handling itself) should opt out with the
+    `@pytest.mark.no_haiku_stub` marker.
+    """
+    if request.node.get_closest_marker("no_haiku_stub"):
+        return
+    from endless import task_cmd
+    monkeypatch.setattr(task_cmd, "_check_verb_via_haiku", lambda _word: (False, None))
+
+
 @pytest.fixture
 def seeded_project_at_cwd(isolated_env, monkeypatch):
     """Chdir into a clean tmp project dir and register a project there.

@@ -231,10 +231,54 @@ def _running_under_agent() -> bool:
     return os.environ.get("CLAUDECODE") == "1"
 
 
+_VERB_CHECK_PROMPT_TEMPLATE = (
+    "Is '{word}' a verb? "
+    "If it is say 'YES:' and then provide a definition. "
+    "Your definition should be a single statement that does NOT include the "
+    "verb in the statement. "
+    "If not, just reply 'NO'"
+)
+
+
+def _check_verb_via_haiku(word: str) -> tuple[bool, str | None]:
+    """Ask claude haiku whether `word` is a verb (E-1264).
+
+    Invokes the `claude` binary directly via PATH lookup — no shell, no alias
+    expansion, so users' `claude` shell wrappers are bypassed.
+
+    Returns (True, definition) only on a clean `YES: <text>` reply with a
+    non-empty definition. Every other outcome — `NO`, malformed output,
+    timeout, missing binary, non-zero exit — returns (False, None), causing
+    the caller to fall through to the standard verb-rejection error.
+    """
+    import subprocess
+    prompt = _VERB_CHECK_PROMPT_TEMPLATE.format(word=word)
+    try:
+        result = subprocess.run(
+            ["claude", "--model", "haiku", "-p", prompt],
+            capture_output=True, text=True, timeout=30,
+        )
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        return False, None
+    if result.returncode != 0:
+        return False, None
+    response = result.stdout.strip()
+    if not response.startswith("YES:"):
+        return False, None
+    definition = response[len("YES:"):].strip()
+    if not definition:
+        return False, None
+    return True, definition
+
+
 def validate_title(title: str, force: bool = False):
     """Reject titles that don't start with a registered actionable verb.
 
-    Add new verbs with: endless verb add <new-verb> --definition "<def>"
+    On a miss, ask claude haiku whether the first word is a verb; if YES,
+    auto-register it (E-1264) and let the title pass. NO / failure falls
+    through to the standard error.
+
+    Add new verbs manually with: endless verb add <new-verb> --definition "<def>"
     """
     first_word = title.split()[0].lower() if title.strip() else ""
     from endless import matchers
@@ -243,6 +287,24 @@ def validate_title(title: str, force: bool = False):
         return
     if force:
         return
+
+    # E-1264: ask claude haiku whether the first word is a verb. If YES,
+    # auto-register it and let the title pass. This removes the agent's
+    # bypass option (rewriting the title with a different verb) that was
+    # wasting tokens across sessions. NO / failure paths fall through to
+    # the standard error below.
+    is_verb, definition = _check_verb_via_haiku(first_word)
+    if is_verb and definition:
+        try:
+            matchers.add_verb(value=first_word, definition=definition)
+        except ValueError:
+            pass
+        else:
+            click.echo(
+                click.style("•", fg="cyan")
+                + f" Auto-registered verb '{first_word}': {definition}"
+            )
+            return
 
     register_cmd = (
         f"endless verb add '{first_word}' --definition \"<short definition>\""

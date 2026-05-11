@@ -196,10 +196,12 @@ endless verb add <verb>                              # register a new verb
 endless verb remove <verb>                           # remove (with confirmation)
 ```
 
+When the first word of a title isn't a registered verb, `task add` shells out to `claude --model haiku -p` and asks whether the word is a verb. On a `YES: <definition>` reply, Endless auto-registers the verb on the fly and lets the title pass — you'll see a `• Auto-registered verb '<word>': <definition>` line before the task-added line. On `NO` (or any failure: missing binary, timeout, malformed reply), `task add` falls through to the standard error.
+
 When `task add` rejects a title:
 
 1. **Pick an existing verb** — run `endless verb list`, find one that fits.
-2. **Register a new verb** if no existing one fits and the verb genuinely adds value: `endless verb add <verb>`. Use sparingly — the verb list is a contract for readability.
+2. **Register a new verb manually** if haiku said NO but you disagree: `endless verb add <verb> --definition "..."`. Use sparingly — the verb list is a contract for readability.
 3. **`--force`** bypasses validation. Don't habituate to this — it's an escape hatch, not a workflow.
 
 Verbs are stored in `verbs.json` at the project root and auto-commit to `main` directly (they're treated as global-config artifacts, not task work).
