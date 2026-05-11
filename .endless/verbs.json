@@ -454,5 +454,21 @@
   {
     "value": "promote",
     "definition": "Advance to a higher status, rank, level, or visibility"
+  },
+  {
+    "value": "forge",
+    "definition": "to make stronger, more robust, or more resilient"
+  },
+  {
+    "value": "bolster",
+    "definition": "To strengthen or support something, making it more secure, confident, or effective."
+  },
+  {
+    "value": "galvanize",
+    "definition": "To stimulate someone into action or to coat metal with zinc for protection against corrosion."
+  },
+  {
+    "value": "deinstitutionalize",
+    "definition": "To release people or operations from institutional settings and reintegrate them into community-based or independent contexts."
   }
 ]
