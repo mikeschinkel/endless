@@ -72,13 +72,23 @@ func buildApplySteps(binPath, hotkey string, statusInterval int) [][]string {
 	// (binPath active-id) so the menu always reflects the current task,
 	// not whatever was active when `apply` ran.
 	menuTitle := "#[align=centre]Endless"
+	// Detail and Task tree open inside a tmux popup paged by `less`.
+	// `tmux display-popup -E '<cmd>'` runs <cmd> inside the popup and
+	// auto-closes when the command exits; using `less` lets the user
+	// scroll and press 'q' to dismiss.
+	//
+	// Outer run-shell argument uses DOUBLE quotes so tmux expands the
+	// `#{pane_id}` format substitution (the menu's run-shell context
+	// does not reliably set $TMUX_PANE, so we pass --pane explicitly
+	// to active-id). Inner display-popup -E uses single quotes so the
+	// shell — not tmux — handles the `$(...)` command substitution.
 	menuItems := []menuItem{
 		{"Detail", "d", fmt.Sprintf(
-			`run-shell "endless task show $(%s active-id) | tmux display-popup -E -"`, binPath)},
+			`run-shell "tmux display-popup -E 'endless task show $(%s active-id --pane=#{pane_id}) | less'"`, binPath)},
 		{"Mark verify", "v", fmt.Sprintf(
-			`run-shell "endless task update $(%s active-id) --status verify"`, binPath)},
+			`run-shell "endless task update $(%s active-id --pane=#{pane_id}) --status verify"`, binPath)},
 		{"Task tree", "t",
-			`run-shell "endless task list --tree | tmux display-popup -E -"`},
+			`run-shell "tmux display-popup -E 'endless task list --tree | less'"`},
 		{}, // separator
 		{"Refresh", "r", "refresh-client -S"},
 	}
