@@ -49,20 +49,39 @@ func runStatusLine(args []string) {
 	fmt.Print(format(info))
 }
 
-// format renders the v1 status line: task ID, project, status.
+// format renders the status line in the order:
+//
+//	[E-NNN] · project · type · phase · tier · status
+//
 // Title is intentionally omitted — bar space is scarce; title lives
 // in the menu popup. Style mirrors the user's right-status "Help"
 // marker (bold yellow) for the ID, then inherits status-style default
-// for the rest so it matches the user's theme.
+// for the rest so it matches the user's theme. Fields are omitted
+// when their value is empty/nil so the row stays compact.
 func format(info *monitor.ActiveTaskInfo) string {
 	out := fmt.Sprintf("#[fg=colour226,bold][E-%d]#[default]", info.TaskID)
-	if info.ProjectName != "" {
-		out += fmt.Sprintf(" · %s", info.ProjectName)
-	}
-	if info.Status != "" {
-		out += fmt.Sprintf(" · %s", info.Status)
+	for _, field := range []string{
+		info.ProjectName,
+		info.Type,
+		info.Phase,
+		tierString(info.Tier),
+		info.Status,
+	} {
+		if field != "" {
+			out += " · " + field
+		}
 	}
 	return out
+}
+
+// tierString formats the nullable tier integer for display, returning
+// an empty string when tier is nil or 0 ("n/a") so those rows skip the
+// segment entirely.
+func tierString(tier *int64) string {
+	if tier == nil || *tier == 0 {
+		return ""
+	}
+	return fmt.Sprintf("t%d", *tier)
 }
 
 // placeholder is shown when no active task is found. A single dim dot

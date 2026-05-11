@@ -61,38 +61,16 @@ func runApply(args []string) {
 // format substitution because tmux does NOT propagate TMUX_PANE to
 // commands invoked via #() — relying on the env var alone causes the
 // binary to see an empty pane and render the placeholder dot.
+//
+// Menu bindings delegate to `endless-tmux show-menu` so the menu's
+// title and items can include the live task ID (resolved at click
+// time, not at apply time) and so changing the menu doesn't require
+// re-running apply.
 func buildApplySteps(binPath, hotkey string, statusInterval int) [][]string {
 	statusFmt := fmt.Sprintf("#[align=centre]#(%s status-line --pane=#{pane_id})", binPath)
 
-	// Menu items are shared between the hotkey-triggered menu and the
-	// right-click menu. The bracketed letters mirror Mike's idiom in
-	// ~/.init/tmux/conf.d/70-mouse-menus.conf.
-	//
-	// Active task ID is resolved at click time via the local Go binary
-	// (binPath active-id) so the menu always reflects the current task,
-	// not whatever was active when `apply` ran.
-	menuTitle := "#[align=centre]Endless"
-	// Detail and Task tree open inside a tmux popup paged by `less`.
-	// `tmux display-popup -E '<cmd>'` runs <cmd> inside the popup and
-	// auto-closes when the command exits; using `less` lets the user
-	// scroll and press 'q' to dismiss.
-	//
-	// Outer run-shell argument uses DOUBLE quotes so tmux expands the
-	// `#{pane_id}` format substitution (the menu's run-shell context
-	// does not reliably set $TMUX_PANE, so we pass --pane explicitly
-	// to active-id). Inner display-popup -E uses single quotes so the
-	// shell — not tmux — handles the `$(...)` command substitution.
-	menuItems := []menuItem{
-		{"Detail", "d", fmt.Sprintf(
-			`run-shell "tmux display-popup -E 'endless task show $(%s active-id --pane=#{pane_id}) | less'"`, binPath)},
-		{"Mark verify", "v", fmt.Sprintf(
-			`run-shell "endless task update $(%s active-id --pane=#{pane_id}) --status verify"`, binPath)},
-		{"Task tree", "t",
-			`run-shell "tmux display-popup -E 'endless task list --tree | less'"`},
-		{}, // separator
-		{"Refresh", "r", "refresh-client -S"},
-	}
-	displayMenu := buildDisplayMenu(menuTitle, menuItems)
+	hotkeyMenu := fmt.Sprintf("run-shell '%s show-menu --pane=#{pane_id} --position=center'", binPath)
+	mouseMenu := fmt.Sprintf("run-shell '%s show-menu --pane=#{pane_id} --position=mouse'", binPath)
 
 	return [][]string{
 		// 1. Enable second status line.
@@ -101,40 +79,27 @@ func buildApplySteps(binPath, hotkey string, statusInterval int) [][]string {
 		{"set-option", "-g", "status-format[1]", statusFmt},
 		// 3. Tighten refresh cadence.
 		{"set-option", "-g", "status-interval", fmt.Sprintf("%d", statusInterval)},
-		// 4. Hotkey-triggered popup menu (prefix + hotkey).
-		append([]string{"bind-key", hotkey}, displayMenu...),
-		// 5a. Right-click popup menu on status-right region.
+		// 4. Hotkey-triggered popup menu — centered on the focused pane.
+		{"bind-key", hotkey, hotkeyMenu},
+		// 5a. Right-click popup menu on status-right region of row 0.
 		// Note: tmux does not provide per-region mouse events scoped
 		// to status-format[N>0], so the menu is anchored to row 0's
-		// status-right. Documented as a known limitation.
-		append([]string{"bind-key", "-n", "MouseDown3StatusRight"}, displayMenu...),
+		// status-right. Tracked in E-1247.
+		{"bind-key", "-n", "MouseDown3StatusRight", mouseMenu},
 		// 5b. Alt+right-click variant, for consistency with the user's
 		// existing M-MouseDown3Status* bindings.
-		append([]string{"bind-key", "-n", "M-MouseDown3StatusRight"}, displayMenu...),
+		{"bind-key", "-n", "M-MouseDown3StatusRight", mouseMenu},
 	}
 }
 
 // menuItem is one entry in a display-menu. A zero-value item produces
 // a separator. Otherwise label, hotkey, and the command tmux runs on
-// activation are passed verbatim to `tmux display-menu`.
+// activation are passed verbatim to `tmux display-menu`. Used by
+// show_menu.go to construct the menu argv.
 type menuItem struct {
 	Label  string
 	Key    string
 	Action string
-}
-
-// buildDisplayMenu constructs the argv suffix for `tmux bind-key <key>
-// display-menu ...`. Zero-value items produce separators.
-func buildDisplayMenu(title string, items []menuItem) []string {
-	args := []string{"display-menu", "-T", title, "-x", "M", "-y", "S"}
-	for _, it := range items {
-		if it.Label == "" {
-			args = append(args, "")
-			continue
-		}
-		args = append(args, it.Label, it.Key, it.Action)
-	}
-	return args
 }
 
 func runTmux(args ...string) error {

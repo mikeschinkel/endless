@@ -7,13 +7,20 @@ import (
 	"strings"
 )
 
-// ActiveTaskInfo is the read-only projection used by the tmux status line
-// and menu: enough to render "[E-NNNN] · project · status" plus the title
+// ActiveTaskInfo is the read-only projection used by the tmux status
+// line and menu: enough to render the second status row
+// ("[E-NNNN] · project · type · phase · tier · status") plus the title
 // for popup display.
+//
+// Tier is a *int64 because `tasks.tier` is nullable; nil means
+// "not set", which the renderer skips so the row doesn't show "tier: ".
 type ActiveTaskInfo struct {
 	TaskID      int64
 	Title       string
 	Status      string
+	Type        string
+	Phase       string
+	Tier        *int64
 	ProjectName string
 }
 
@@ -78,7 +85,7 @@ func queryActiveTaskForPanes(db *sql.DB, panes []string) (*ActiveTaskInfo, error
 		args[i] = p
 	}
 
-	q := `SELECT t.id, t.title, t.status, COALESCE(p.name, '')
+	q := `SELECT t.id, t.title, t.status, t.type, t.phase, t.tier, COALESCE(p.name, '')
 	      FROM sessions s
 	      JOIN tasks t ON t.id = s.active_task_id
 	      LEFT JOIN projects p ON p.id = t.project_id
@@ -88,7 +95,10 @@ func queryActiveTaskForPanes(db *sql.DB, panes []string) (*ActiveTaskInfo, error
 	      LIMIT 1`
 
 	var info ActiveTaskInfo
-	err := db.QueryRow(q, args...).Scan(&info.TaskID, &info.Title, &info.Status, &info.ProjectName)
+	err := db.QueryRow(q, args...).Scan(
+		&info.TaskID, &info.Title, &info.Status,
+		&info.Type, &info.Phase, &info.Tier, &info.ProjectName,
+	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNoActiveTask
 	}

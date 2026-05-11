@@ -33,6 +33,8 @@ func main() {
 		runStatusLine(os.Args[2:])
 	case "active-id":
 		runActiveID(os.Args[2:])
+	case "show-menu":
+		runShowMenu(os.Args[2:])
 	case "-h", "--help", "help":
 		usage(os.Stdout)
 	default:
