@@ -1041,10 +1041,13 @@ def task_claim(item_id, force):
 
 @task_cmd.command("release")
 @click.argument("item_id", type=TASK_ID, required=False, default=None)
-def task_release(item_id):
-    """Release the current session's claim on a task (defaults to active task)."""
+@click.option("--ignore-missing", is_flag=True,
+              help="When releasing a specific task ID, succeed with an info "
+                   "message instead of erroring if no session has it claimed.")
+def task_release(item_id, ignore_missing):
+    """Release a session's claim on a task (defaults to current session's active task)."""
     from endless.task_cmd import release_item
-    release_item(item_id)
+    release_item(item_id, ignore_missing=ignore_missing)
 
 
 @task_cmd.command("start", hidden=True)

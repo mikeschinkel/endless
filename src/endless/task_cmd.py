@@ -2039,57 +2039,99 @@ def claim_item(item_id: int, force: bool = False):
         click.echo(f"         {eswt_cmd}{pad}  # Changes to Git worktree dir")
 
 
-def release_item(item_id: int | None) -> None:
-    """Release the current session's claim on a task.
+def release_item(item_id: int | None, ignore_missing: bool = False) -> None:
+    """Release a session's claim on a task.
 
-    If `item_id` is None, releases whatever task the current session has
-    claimed. Refuses if the current session does not own the named task.
-    Leaves tasks.status unchanged (the task remains in_progress, free for
-    another session to claim) and leaves the worktree intact. Emits a
-    `task.released` event whose Go executor clears `sessions.active_task_id`
-    for the named session.
+    Two modes:
+      - Bare `release` (item_id is None): release whatever task the current
+        session is bound to. Requires resolving the current session id;
+        errors with a pointer to the explicit-ID form if it can't.
+      - `release E-NNN` (item_id given): clear the binding for whichever
+        session owns E-NNN, regardless of who's asking. If a *different*
+        live session owns it, refuse (preserves E-1203's exclusive-ownership
+        invariant). If the binding is stale (DB row exists but no live
+        companion), auto-clear and report. If no session has E-NNN bound:
+        error UNLESS ignore_missing then info.
+
+    Leaves tasks.status unchanged and leaves the worktree intact. Emits
+    a `task.released` event whose Go executor clears the binding.
     """
     from endless.event_bridge import emit_event
+    from endless.session_cmd import _read_live_companions, _project_root_for_cwd
 
     current_eid = _current_endless_session_id()
-    if current_eid is None:
-        raise click.ClickException(
-            "Cannot resolve current session id (set ENDLESS_SESSION_ID "
-            "or run inside a tmux pane with a known companion file)."
-        )
 
-    rows = db.query(
-        "SELECT active_task_id FROM sessions WHERE id = ?",
-        (current_eid,),
-    )
-    if not rows or rows[0]["active_task_id"] is None:
-        if item_id is None:
+    if item_id is None:
+        if current_eid is None:
+            raise click.ClickException(
+                "Cannot resolve current session id "
+                "(set ENDLESS_SESSION_ID or run inside a tmux pane with a "
+                "known companion file).\n"
+                "To release a specific task, pass its ID: "
+                "endless task release E-NNN"
+            )
+        rows = db.query(
+            "SELECT active_task_id FROM sessions WHERE id = ?",
+            (current_eid,),
+        )
+        if not rows or rows[0]["active_task_id"] is None:
             click.echo("No task currently claimed by this session.")
             return
-        raise click.ClickException(
-            f"E-{item_id} is not claimed by this session "
-            f"(session {current_eid} has no active task)."
+        target_id = rows[0]["active_task_id"]
+        target_session = current_eid
+    else:
+        rows = db.query(
+            "SELECT id FROM sessions "
+            "WHERE active_task_id = ? AND state != 'ended'",
+            (item_id,),
         )
+        if not rows:
+            msg = f"E-{item_id} is not currently claimed by any session."
+            if ignore_missing:
+                click.echo(msg)
+                return
+            raise click.ClickException(msg)
 
-    bound_id = rows[0]["active_task_id"]
-    if item_id is not None and item_id != bound_id:
-        raise click.ClickException(
-            f"E-{item_id} is not claimed by this session "
-            f"(session {current_eid} is on E-{bound_id})."
-        )
+        owning_session = rows[0]["id"]
+        if owning_session != current_eid:
+            project_root = _project_root_for_cwd()
+            live = _read_live_companions(
+                project_root / ".endless" / "sessions",
+            )
+            live_match = next(
+                (
+                    c for c in live
+                    if c.get("endless_session_id") == owning_session
+                ),
+                None,
+            )
+            if live_match is not None:
+                pane = live_match.get("pane_id", "?")
+                raise click.ClickException(
+                    f"E-{item_id} is held by session {owning_session} "
+                    f"(live; pid {live_match['pid']}, tmux pane {pane}).\n"
+                    "Refusing to release another live session's claim."
+                )
+            click.echo(
+                click.style("•", fg="cyan")
+                + f" clearing stale binding for E-{item_id} "
+                f"(session {owning_session} is no longer alive)"
+            )
 
-    target_id = bound_id
+        target_id = item_id
+        target_session = owning_session
+
     _, proj_name = _resolve_project(None)
     emit_event(
         kind="task.released",
         project=proj_name,
         entity_type="task",
         entity_id=str(target_id),
-        payload={"session_id": current_eid},
+        payload={"session_id": target_session},
     )
     click.echo(
         click.style("•", fg="cyan")
-        + f" released claim on E-{target_id} (session {current_eid})"
+        + f" released claim on E-{target_id} (session {target_session})"
     )
 
 
