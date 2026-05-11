@@ -1,0 +1,6 @@
+# E-1268: verbs.jsonl is append-only — `merge=union` makes git auto-concat
+# both sides' new lines on rebase/merge, eliminating the trailing-region
+# conflicts that plagued the JSON-array format. Same-`value` duplicates
+# produced by union merge are absorbed silently by the load-time dedup in
+# matchers._add_verb_to_file.
+.endless/verbs.jsonl merge=union

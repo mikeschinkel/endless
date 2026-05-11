@@ -53,7 +53,8 @@ LOCK_FILENAME = ".endless/worktree.lock"
 AUTO_COMMIT_GLOBS = (
     ".endless/db-ledger/*.jsonl",
     ".endless/plans/snapshots/*",
-    ".endless/verbs.json",
+    ".endless/verbs.jsonl",
+    ".endless/verbs.json",  # legacy — still seen during E-1268 migration
 )
 
 # Land's retry cap for the race-with-concurrent-writers loop (E-987).
@@ -415,39 +416,73 @@ def _git_run(args: list[str], cwd: Path, check: bool = True) -> subprocess.Compl
 
 
 def _read_verbs_list(path: Path) -> list[dict]:
-    """Read a verbs.json file as a list of dicts. Returns [] if missing or malformed."""
+    """Read a verbs.jsonl file as a list of dicts (E-1268).
+
+    Reads JSONL (one object per line). For backward compatibility with the
+    pre-E-1268 array format, if `path` ends in `.json` the file is parsed
+    as a top-level JSON array. Returns [] if missing or malformed.
+    """
     if not path.exists():
         return []
     try:
-        data = json.loads(path.read_text())
-    except (OSError, json.JSONDecodeError):
+        text = path.read_text()
+    except OSError:
         return []
-    return data if isinstance(data, list) else []
+    if path.suffix == ".json":
+        try:
+            data = json.loads(text)
+        except json.JSONDecodeError:
+            return []
+        return data if isinstance(data, list) else []
+    entries: list[dict] = []
+    for line in text.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            obj = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(obj, dict):
+            entries.append(obj)
+    return entries
+
+
+def _write_verbs_jsonl(path: Path, verbs: list[dict]) -> None:
+    """Write a list of verb dicts as JSONL — one object per line."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lines = [json.dumps(v, separators=(", ", ": ")) for v in verbs]
+    path.write_text("\n".join(lines) + ("\n" if lines else ""))
 
 
 def _dedup_worktree_verbs_against_main(worktree_path: Path, main_root: Path) -> bool:
-    """Bundle the worktree's verbs.json additions into a single commit on
-    the worktree's branch, deduped against main's verbs.json (E-1141 / E-1138).
+    """Bundle the worktree's verbs.jsonl additions into a single commit on
+    the worktree's branch, deduped against main's verbs.jsonl (E-1141 / E-1138).
 
     Per E-1141: agents adding verbs in worktree sessions accumulate dirt in
-    the worktree's verbs.json (post-E-1137). At land time, two worktrees that
-    independently added the same verb would otherwise produce a textual
-    rebase conflict. This step computes a set-union by `value` key —
-    main's entries first (preserving order), then worktree's new ones —
-    and writes the deduped result to the worktree before rebase. The result
-    is a strict superset of main, so rebase replays cleanly.
+    the worktree's verbs file. At land time, two worktrees that independently
+    added the same verb would otherwise produce a textual rebase conflict.
+    This step computes a set-union by `value` key — main's entries first
+    (preserving order), then worktree's new ones — and writes the deduped
+    result to the worktree before rebase. The result is a strict superset
+    of main, so rebase replays cleanly.
+
+    With E-1268 the file is JSONL and `.gitattributes` carries a merge=union
+    driver, which makes concurrent appends auto-merge even without this
+    dedup. The dedup remains as belt-and-suspenders for same-value-on-both-
+    sides edits where union would produce duplicates.
 
     Returns True if a commit was created on the worktree's branch, False
     otherwise (no dirt, or dedup result equals current committed state).
     """
-    wt_verbs = worktree_path / ".endless" / "verbs.json"
-    main_verbs = main_root / ".endless" / "verbs.json"
+    wt_verbs = worktree_path / ".endless" / "verbs.jsonl"
+    main_verbs = main_root / ".endless" / "verbs.jsonl"
 
     if not wt_verbs.exists():
         return False
 
     initial_status = _git_run(
-        ["status", "--porcelain", "--", ".endless/verbs.json"],
+        ["status", "--porcelain", "--", ".endless/verbs.jsonl"],
         cwd=worktree_path,
     ).stdout
     if not initial_status.strip():
@@ -461,16 +496,16 @@ def _dedup_worktree_verbs_against_main(worktree_path: Path, main_root: Path) -> 
         if isinstance(e, dict) and e.get("value") not in main_values
     ]
     merged = main_entries + new_from_wt
-    wt_verbs.write_text(json.dumps(merged, indent=2) + "\n")
+    _write_verbs_jsonl(wt_verbs, merged)
 
     post_status = _git_run(
-        ["status", "--porcelain", "--", ".endless/verbs.json"],
+        ["status", "--porcelain", "--", ".endless/verbs.jsonl"],
         cwd=worktree_path,
     ).stdout
     if not post_status.strip():
         return False
 
-    _git_run(["add", "--", ".endless/verbs.json"], cwd=worktree_path)
+    _git_run(["add", "--", ".endless/verbs.jsonl"], cwd=worktree_path)
     _git_run(
         ["commit", "-m", "Endless: bundle worktree verb additions"],
         cwd=worktree_path,

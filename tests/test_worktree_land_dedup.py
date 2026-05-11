@@ -1,7 +1,8 @@
-"""Tests for E-1138: auto-commit list inversion + verbs.json dedup at land.
+"""Tests for E-1138 / E-1141 / E-1268: auto-commit list inversion +
+verbs.jsonl dedup at land.
 
 Two surfaces:
-- AUTO_COMMIT_GLOBS registry: verbs.json in, config.json out (E-1141).
+- AUTO_COMMIT_GLOBS registry: verbs.jsonl in, config.json out (E-1141 + E-1268).
 - _dedup_worktree_verbs_against_main: bundles worktree verb additions into
   a single commit on the worktree's branch, deduped against main's verbs.
 
@@ -28,11 +29,20 @@ def _run(cmd, cwd):
 
 
 def _verbs(values: list[str]) -> str:
-    """Render a verbs.json body for the given list of value strings."""
-    return json.dumps(
-        [{"value": v, "definition": f"def {v}"} for v in values],
-        indent=2,
-    ) + "\n"
+    """Render a verbs.jsonl body for the given list of value strings."""
+    lines = [
+        json.dumps({"value": v, "definition": f"def {v}"})
+        for v in values
+    ]
+    return "\n".join(lines) + ("\n" if lines else "")
+
+
+def _read_jsonl(path: Path) -> list[dict]:
+    return [
+        json.loads(line)
+        for line in path.read_text().splitlines()
+        if line.strip()
+    ]
 
 
 def _commit_all(repo: Path, msg: str = "x"):
@@ -44,8 +54,8 @@ def _commit_all(repo: Path, msg: str = "x"):
 def project_with_worktree(tmp_path):
     """Set up a real git repo with main and one worktree.
 
-    main has .endless/verbs.json committed. The worktree is created from main,
-    so it inherits the same verbs.json content as a clean checkout.
+    main has .endless/verbs.jsonl committed. The worktree is created from
+    main, so it inherits the same verbs.jsonl content as a clean checkout.
     """
     main = tmp_path / "main"
     main.mkdir()
@@ -56,7 +66,7 @@ def project_with_worktree(tmp_path):
     endless_dir = main / ".endless"
     endless_dir.mkdir()
     (endless_dir / "config.json").write_text('{"name": "p"}\n')
-    (endless_dir / "verbs.json").write_text(_verbs(["add", "fix"]))
+    (endless_dir / "verbs.jsonl").write_text(_verbs(["add", "fix"]))
     _commit_all(main, "init")
 
     worktree = tmp_path / "wt"
@@ -65,10 +75,16 @@ def project_with_worktree(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# AUTO_COMMIT_GLOBS registry (E-1141)
+# AUTO_COMMIT_GLOBS registry (E-1141 + E-1268)
 # ---------------------------------------------------------------------------
 
-def test_auto_commit_globs_includes_verbs():
+def test_auto_commit_globs_includes_verbs_jsonl():
+    assert any(fnmatch.fnmatch(".endless/verbs.jsonl", p) for p in AUTO_COMMIT_GLOBS)
+
+
+def test_auto_commit_globs_still_includes_legacy_verbs_json():
+    """Legacy verbs.json stays in the glob list during the migration window
+    so any stragglers get auto-committed instead of blocking land."""
     assert any(fnmatch.fnmatch(".endless/verbs.json", p) for p in AUTO_COMMIT_GLOBS)
 
 
@@ -76,8 +92,8 @@ def test_auto_commit_globs_excludes_config():
     assert not any(fnmatch.fnmatch(".endless/config.json", p) for p in AUTO_COMMIT_GLOBS)
 
 
-def test_is_auto_commit_path_verbs():
-    assert _is_auto_commit_path(".endless/verbs.json") is True
+def test_is_auto_commit_path_verbs_jsonl():
+    assert _is_auto_commit_path(".endless/verbs.jsonl") is True
 
 
 def test_is_auto_commit_path_config():
@@ -89,7 +105,7 @@ def test_is_auto_commit_path_config():
 # ---------------------------------------------------------------------------
 
 def test_dedup_skips_when_verbs_clean(project_with_worktree):
-    """No-op: worktree's verbs.json matches what was committed."""
+    """No-op: worktree's verbs.jsonl matches what was committed."""
     main = project_with_worktree["main"]
     worktree = project_with_worktree["worktree"]
     result = _dedup_worktree_verbs_against_main(worktree, main)
@@ -100,7 +116,7 @@ def test_dedup_commits_when_worktree_added_new_verb(project_with_worktree):
     """Worktree adds a new verb; dedup commits it on the worktree's branch."""
     main = project_with_worktree["main"]
     worktree = project_with_worktree["worktree"]
-    (worktree / ".endless" / "verbs.json").write_text(_verbs(["add", "fix", "rewrite"]))
+    (worktree / ".endless" / "verbs.jsonl").write_text(_verbs(["add", "fix", "rewrite"]))
 
     result = _dedup_worktree_verbs_against_main(worktree, main)
     assert result is True
@@ -111,26 +127,23 @@ def test_dedup_commits_when_worktree_added_new_verb(project_with_worktree):
     ).stdout
     assert "bundle worktree verb additions" in log
 
-    on_disk = json.loads((worktree / ".endless" / "verbs.json").read_text())
+    on_disk = _read_jsonl(worktree / ".endless" / "verbs.jsonl")
     values = [e["value"] for e in on_disk]
     assert values == ["add", "fix", "rewrite"]
 
 
 def test_dedup_skips_when_worktree_only_has_main_verbs(project_with_worktree):
-    """Worktree's verbs.json was rewritten with only main's existing values
+    """Worktree's verbs.jsonl was rewritten with only main's existing values
     (no new entries) — after dedup the on-disk content matches the committed
     HEAD, so no commit is created."""
     main = project_with_worktree["main"]
     worktree = project_with_worktree["worktree"]
-    # Rewrite identically (just to dirty mtime/cause a status entry briefly,
-    # though this should be a no-op once we re-serialize).
-    (worktree / ".endless" / "verbs.json").write_text(_verbs(["add", "fix"]))
+    (worktree / ".endless" / "verbs.jsonl").write_text(_verbs(["add", "fix"]))
 
     result = _dedup_worktree_verbs_against_main(worktree, main)
     assert result is False
 
-    # The post-dedup file should still equal what was committed.
-    on_disk = json.loads((worktree / ".endless" / "verbs.json").read_text())
+    on_disk = _read_jsonl(worktree / ".endless" / "verbs.jsonl")
     values = [e["value"] for e in on_disk]
     assert values == ["add", "fix"]
 
@@ -142,49 +155,41 @@ def test_dedup_handles_main_having_new_verbs_too(project_with_worktree):
     main = project_with_worktree["main"]
     worktree = project_with_worktree["worktree"]
 
-    # Main lands a new verb.
-    (main / ".endless" / "verbs.json").write_text(_verbs(["add", "fix", "deploy"]))
+    (main / ".endless" / "verbs.jsonl").write_text(_verbs(["add", "fix", "deploy"]))
     _commit_all(main, "main adds deploy")
 
-    # Worktree independently adds its own verb.
-    (worktree / ".endless" / "verbs.json").write_text(_verbs(["add", "fix", "rewrite"]))
+    (worktree / ".endless" / "verbs.jsonl").write_text(_verbs(["add", "fix", "rewrite"]))
 
     result = _dedup_worktree_verbs_against_main(worktree, main)
     assert result is True
 
-    on_disk = json.loads((worktree / ".endless" / "verbs.json").read_text())
+    on_disk = _read_jsonl(worktree / ".endless" / "verbs.jsonl")
     values = [e["value"] for e in on_disk]
-    # Main's order preserved first; worktree's new entry (rewrite) appended.
     assert values == ["add", "fix", "deploy", "rewrite"]
 
 
 def test_dedup_handles_overlap_with_main_new_verb(project_with_worktree):
     """Both main and worktree added the same new verb. After dedup the
-    worktree's verbs.json has main's view (no duplicate), and the worktree's
-    file content matches what main has — so no commit is made."""
+    worktree's verbs.jsonl has main's view (no duplicate)."""
     main = project_with_worktree["main"]
     worktree = project_with_worktree["worktree"]
 
-    # Both sides add 'rewrite' independently.
-    (main / ".endless" / "verbs.json").write_text(_verbs(["add", "fix", "rewrite"]))
+    (main / ".endless" / "verbs.jsonl").write_text(_verbs(["add", "fix", "rewrite"]))
     _commit_all(main, "main adds rewrite")
-    (worktree / ".endless" / "verbs.json").write_text(_verbs(["add", "fix", "rewrite"]))
+    (worktree / ".endless" / "verbs.jsonl").write_text(_verbs(["add", "fix", "rewrite"]))
 
     result = _dedup_worktree_verbs_against_main(worktree, main)
-    # Worktree's content after dedup equals main's — strictly speaking no diff
-    # against worktree's HEAD (which was the original ['add','fix']). It IS
-    # different from HEAD, so a commit should happen carrying main's update.
     assert result is True
 
-    on_disk = json.loads((worktree / ".endless" / "verbs.json").read_text())
+    on_disk = _read_jsonl(worktree / ".endless" / "verbs.jsonl")
     values = [e["value"] for e in on_disk]
     assert values == ["add", "fix", "rewrite"]
 
 
 def test_dedup_returns_false_when_no_verbs_file(project_with_worktree):
-    """If the worktree has no .endless/verbs.json at all, dedup is a no-op."""
+    """If the worktree has no .endless/verbs.jsonl at all, dedup is a no-op."""
     main = project_with_worktree["main"]
     worktree = project_with_worktree["worktree"]
-    (worktree / ".endless" / "verbs.json").unlink()
+    (worktree / ".endless" / "verbs.jsonl").unlink()
     result = _dedup_worktree_verbs_against_main(worktree, main)
     assert result is False

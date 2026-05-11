@@ -112,7 +112,7 @@ A quick map of the files and directories Endless manages.
 | `.endless/worktrees/e-<id>/`                                 | Primary per-task git worktree. **Gitignored.**                                           |
 | `.endless/worktrees/e-<id>-<slug>/`                          | Ad-hoc additional worktree for a task (testing, alternate experiments). **Gitignored.**  |
 | `.endless/worktree.json`                                     | Current session's task → worktree mapping (companion file).                              |
-| `verbs.json`                                                 | Registered action verbs at the project root. Auto-committed to main as a global-config artifact. |
+| `verbs.jsonl`                                                | Registered action verbs at the project root, one JSON object per line. Auto-committed to main as a global-config artifact. The legacy `verbs.json` array format is migrated on first load (E-1268). |
 
 ### Critical: `.endless/db-ledger/` is committed to git
 
@@ -120,7 +120,7 @@ The `.endless/db-ledger/` directory holds the database write-ahead record — JS
 
 This directory was previously named `.endless/events/`. The old name biased readers (human and LLM) to treat the files as discardable logs — which they are not. Existing installs auto-migrate.
 
-If you see "Endless: auto-record session activity" commits in `git log`, those are the ledger / verbs.json / snapshot auto-commits. **Never discard those commits.** They are durable state.
+If you see "Endless: auto-record session activity" commits in `git log`, those are the ledger / verbs.jsonl / snapshot auto-commits. **Never discard those commits.** They are durable state.
 
 ### Global (per-machine)
 

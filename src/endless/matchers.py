@@ -111,23 +111,27 @@ def machine_config_path() -> Path:
 
 
 def project_verbs_path() -> Path | None:
-    """Return the nearest .endless/verbs.json walking up from cwd, else None.
+    """Return the nearest .endless/verbs.jsonl walking up from cwd, else None.
 
     Co-located with project_config_path's resolution per E-1140. Returns the
     path even if the file does not yet exist — callers may need to create
     it. Returns None only when cwd is not in a project at all (no ancestor
     has .endless/config.json).
+
+    E-1268: migrated from verbs.json (array) to verbs.jsonl (line-per-entry)
+    so concurrent appends auto-merge via the `merge=union` driver. The legacy
+    verbs.json is migrated on first load.
     """
     cwd = Path.cwd()
     for parent in [cwd] + list(cwd.parents):
         if (parent / ".endless" / "config.json").exists():
-            return parent / ".endless" / "verbs.json"
+            return parent / ".endless" / "verbs.jsonl"
     return None
 
 
 def machine_verbs_path() -> Path:
     """Path to the machine-layer verbs file."""
-    return config.CONFIG_DIR / "verbs.json"
+    return config.CONFIG_DIR / "verbs.jsonl"
 
 
 # --- File IO ----------------------------------------------------------------
@@ -152,21 +156,69 @@ def _read_matchers_from(path: Path) -> list[dict]:
     return raw if isinstance(raw, list) else []
 
 
+def _legacy_json_path_for(jsonl_path: Path) -> Path:
+    """Return the legacy verbs.json path co-located with a verbs.jsonl path."""
+    return jsonl_path.with_name("verbs.json")
+
+
 def _load_verbs_list(path: Path) -> list[dict]:
-    """Load verbs from a verbs.json file (top-level array of objects)."""
-    if not path.exists():
-        return []
-    try:
-        raw = json.loads(path.read_text())
-    except (OSError, json.JSONDecodeError):
-        return []
-    return raw if isinstance(raw, list) else []
+    """Load verbs from a verbs.jsonl file (one JSON object per line).
+
+    E-1268 migration: if a legacy verbs.json (top-level array) sits next to
+    the jsonl path, its entries are merged in and the .json file is removed.
+    Same-`value` duplicates resolved against the jsonl entries (jsonl wins).
+    """
+    legacy = _legacy_json_path_for(path)
+    legacy_entries: list[dict] = []
+    if legacy.exists():
+        try:
+            raw = json.loads(legacy.read_text())
+            if isinstance(raw, list):
+                legacy_entries = [e for e in raw if isinstance(e, dict)]
+        except (OSError, json.JSONDecodeError):
+            legacy_entries = []
+
+    entries: list[dict] = []
+    if path.exists():
+        try:
+            for line in path.read_text().splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    obj = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if isinstance(obj, dict):
+                    entries.append(obj)
+        except OSError:
+            entries = []
+
+    if legacy_entries:
+        seen = {e.get("value") for e in entries if isinstance(e, dict)}
+        for e in legacy_entries:
+            v = e.get("value")
+            if v not in seen:
+                entries.append(e)
+                seen.add(v)
+        _save_verbs_list(path, entries)
+        try:
+            legacy.unlink()
+        except OSError:
+            pass
+
+    return entries
 
 
 def _save_verbs_list(path: Path, verbs: list[dict]) -> None:
-    """Save verbs as a top-level JSON array."""
+    """Save verbs as JSONL (one JSON object per line).
+
+    E-1268: line-oriented format so concurrent appends auto-merge via
+    `merge=union` in .gitattributes.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(verbs, indent=2) + "\n")
+    lines = [json.dumps(v, separators=(", ", ": ")) for v in verbs]
+    path.write_text("\n".join(lines) + ("\n" if lines else ""))
 
 
 def _resolved_verbs() -> list[dict]:

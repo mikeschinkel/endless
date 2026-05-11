@@ -1,5 +1,5 @@
 """Tests for the verb-gate redesign (E-1106), verb storage (E-1117),
-and the verbs.json file split (E-1124)."""
+the verbs.json file split (E-1124), and the JSONL format (E-1268)."""
 
 import json
 
@@ -7,6 +7,15 @@ import click
 import pytest
 
 from endless import task_cmd, matchers, verb_cmd
+
+
+def _read_jsonl(path):
+    """Parse a JSONL file as a list of dicts. Skips blank lines."""
+    return [
+        json.loads(line)
+        for line in path.read_text().splitlines()
+        if line.strip()
+    ]
 
 
 def test_verb_gate_human_form_omits_force_and_alternatives(monkeypatch):
@@ -53,12 +62,11 @@ def test_verb_add_with_blank_definition_rejected(isolated_env):
 
 def test_verb_add_persists_in_verbs_file(isolated_env):
     verb_cmd.add_verb("ponder", "to deliberate over", machine_only=True)
-    verbs_path = isolated_env["config_dir"] / "verbs.json"
-    assert verbs_path.exists(), "verbs.json must be created (E-1124)"
-    verbs = json.loads(verbs_path.read_text())
-    assert isinstance(verbs, list), "verbs.json must be a top-level array"
+    verbs_path = isolated_env["config_dir"] / "verbs.jsonl"
+    assert verbs_path.exists(), "verbs.jsonl must be created (E-1268)"
+    verbs = _read_jsonl(verbs_path)
     entry = next((v for v in verbs if v.get("value") == "ponder"), None)
-    assert entry is not None, "verb should be persisted in verbs.json"
+    assert entry is not None, "verb should be persisted in verbs.jsonl"
     assert entry.get("definition") == "to deliberate over"
     cfg = json.loads((isolated_env["config_dir"] / "config.json").read_text())
     assert "verbs" not in cfg, "config.json must not contain 'verbs' key"
@@ -89,10 +97,9 @@ def test_phrase_add_pivot_still_works(isolated_env):
 
 def test_legacy_verb_matcher_migrated_to_verbs_file(isolated_env, monkeypatch):
     """A pre-E-1117 config with type=verb matcher (with the bad 'definitions'
-    field from E-1108) is migrated into the top-level verbs.json file on
-    first load."""
+    field from E-1108) is migrated into the verbs file on first load."""
     cfg_path = isolated_env["config_dir"] / "config.json"
-    verbs_path = isolated_env["config_dir"] / "verbs.json"
+    verbs_path = isolated_env["config_dir"] / "verbs.jsonl"
     legacy = json.loads(cfg_path.read_text())
     legacy["matchers"] = [
         {
@@ -120,8 +127,8 @@ def test_legacy_verb_matcher_migrated_to_verbs_file(isolated_env, monkeypatch):
     pivots = [m for m in cfg_after["matchers"] if m.get("type") == "pivot"]
     assert pivots, "non-verb matchers must remain in config.json"
 
-    assert verbs_path.exists(), "verbs.json must be created"
-    verbs = json.loads(verbs_path.read_text())
+    assert verbs_path.exists(), "verbs.jsonl must be created"
+    verbs = _read_jsonl(verbs_path)
     values = {v.get("value") for v in verbs}
     assert {"ponder", "deliberate"}.issubset(values)
     ponder = next(v for v in verbs if v.get("value") == "ponder")
@@ -130,9 +137,9 @@ def test_legacy_verb_matcher_migrated_to_verbs_file(isolated_env, monkeypatch):
 
 def test_inline_verbs_key_migrated_to_verbs_file(isolated_env, monkeypatch):
     """A post-E-1117/pre-E-1124 config with a top-level 'verbs' array key in
-    config.json is migrated to the verbs.json file."""
+    config.json is migrated to the verbs file."""
     cfg_path = isolated_env["config_dir"] / "config.json"
-    verbs_path = isolated_env["config_dir"] / "verbs.json"
+    verbs_path = isolated_env["config_dir"] / "verbs.jsonl"
     cfg = json.loads(cfg_path.read_text())
     cfg["verbs"] = [
         {"value": "ponder", "definition": "to deliberate over"},
@@ -147,8 +154,8 @@ def test_inline_verbs_key_migrated_to_verbs_file(isolated_env, monkeypatch):
     cfg_after = json.loads(cfg_path.read_text())
     assert "verbs" not in cfg_after, "verbs key must be stripped from config.json"
 
-    assert verbs_path.exists(), "verbs.json must be created"
-    verbs = json.loads(verbs_path.read_text())
+    assert verbs_path.exists(), "verbs.jsonl must be created"
+    verbs = _read_jsonl(verbs_path)
     values = {v.get("value") for v in verbs}
     assert {"ponder", "deliberate"}.issubset(values)
     ponder = next(v for v in verbs if v.get("value") == "ponder")
@@ -156,15 +163,15 @@ def test_inline_verbs_key_migrated_to_verbs_file(isolated_env, monkeypatch):
 
 
 def test_default_seed_creates_verbs_file(isolated_env):
-    """First-run seeding writes DEFAULT_VERBS to verbs.json (not into config.json)."""
-    verbs_path = isolated_env["config_dir"] / "verbs.json"
+    """First-run seeding writes DEFAULT_VERBS to verbs.jsonl."""
+    verbs_path = isolated_env["config_dir"] / "verbs.jsonl"
     if verbs_path.exists():
         verbs_path.unlink()
 
     matchers.load_all_matchers()  # triggers _ensure_default_seeds
 
-    assert verbs_path.exists(), "verbs.json must be created on first seed"
-    verbs = json.loads(verbs_path.read_text())
+    assert verbs_path.exists(), "verbs.jsonl must be created on first seed"
+    verbs = _read_jsonl(verbs_path)
     values = {v.get("value") for v in verbs}
     assert "add" in values
     assert "fix" in values
@@ -176,10 +183,61 @@ def test_verb_remove(isolated_env):
     verb_cmd.add_verb("ponder", "to deliberate over", machine_only=True)
     pr, mr = matchers.remove_verb(value="ponder", machine_only=True)
     assert mr == 1
-    verbs_path = isolated_env["config_dir"] / "verbs.json"
-    verbs = json.loads(verbs_path.read_text())
+    verbs_path = isolated_env["config_dir"] / "verbs.jsonl"
+    verbs = _read_jsonl(verbs_path)
     values = {v.get("value") for v in verbs}
     assert "ponder" not in values
+
+
+def test_legacy_verbs_json_migrated_to_jsonl(isolated_env):
+    """E-1268: a pre-existing verbs.json (array format) is migrated to
+    verbs.jsonl (one object per line) on first load, and the legacy file
+    is removed.
+    """
+    config_dir = isolated_env["config_dir"]
+    legacy_path = config_dir / "verbs.json"
+    jsonl_path = config_dir / "verbs.jsonl"
+    if jsonl_path.exists():
+        jsonl_path.unlink()
+    legacy_path.write_text(json.dumps([
+        {"value": "ponder", "definition": "to deliberate over"},
+        {"value": "deliberate"},
+    ]))
+
+    loaded = matchers._load_verbs_list(jsonl_path)
+
+    values = {v.get("value") for v in loaded}
+    assert {"ponder", "deliberate"}.issubset(values)
+    assert jsonl_path.exists(), "verbs.jsonl must be created after migration"
+    assert not legacy_path.exists(), "legacy verbs.json must be removed"
+
+    on_disk = _read_jsonl(jsonl_path)
+    on_disk_values = {v.get("value") for v in on_disk}
+    assert {"ponder", "deliberate"}.issubset(on_disk_values)
+
+
+def test_legacy_verbs_json_merges_with_existing_jsonl(isolated_env):
+    """E-1268: if both verbs.json (legacy) and verbs.jsonl exist, entries
+    from .json are merged into .jsonl (jsonl wins on same-value conflicts)
+    and .json is removed.
+    """
+    config_dir = isolated_env["config_dir"]
+    legacy_path = config_dir / "verbs.json"
+    jsonl_path = config_dir / "verbs.jsonl"
+
+    jsonl_path.write_text(
+        json.dumps({"value": "ponder", "definition": "jsonl version"}) + "\n"
+    )
+    legacy_path.write_text(json.dumps([
+        {"value": "ponder", "definition": "legacy version"},
+        {"value": "deliberate", "definition": "only-in-legacy"},
+    ]))
+
+    loaded = matchers._load_verbs_list(jsonl_path)
+    by_value = {v["value"]: v for v in loaded if isinstance(v, dict)}
+    assert by_value["ponder"]["definition"] == "jsonl version"
+    assert by_value["deliberate"]["definition"] == "only-in-legacy"
+    assert not legacy_path.exists()
 
 
 def test_add_match_value_rejects_verb_type(isolated_env):
@@ -191,42 +249,46 @@ def test_add_match_value_rejects_verb_type(isolated_env):
 # haiku confirms it is one.
 
 def test_verb_gate_auto_registers_when_haiku_says_yes(monkeypatch, isolated_env, capsys):
+    # chdir somewhere with no ancestor .endless/config.json so the project
+    # verbs layer doesn't leak in from the surrounding repo.
+    monkeypatch.chdir(isolated_env["projects_root"])
     monkeypatch.setattr(
         task_cmd, "_check_verb_via_haiku",
         lambda word: (True, "to make stronger, more robust, or more resilient"),
     )
 
-    # Title would normally fail — 'forge' is not in DEFAULT_VERBS.
-    assert "forge" not in matchers.get_verbs()
-    task_cmd.validate_title("Forge a new path")
+    assert "frobnishop" not in matchers.get_verbs()
+    task_cmd.validate_title("Frobnishop a new path")
 
     out = capsys.readouterr().out
-    assert "Auto-registered verb 'forge'" in out
+    assert "Auto-registered verb 'frobnishop'" in out
     assert "to make stronger" in out
-    assert "forge" in matchers.get_verbs()
+    assert "frobnishop" in matchers.get_verbs()
 
 
 def test_verb_gate_falls_through_when_haiku_says_no(monkeypatch, isolated_env):
+    monkeypatch.chdir(isolated_env["projects_root"])
     monkeypatch.setattr(
         task_cmd, "_check_verb_via_haiku", lambda word: (False, None),
     )
 
     with pytest.raises(click.ClickException) as exc:
-        task_cmd.validate_title("Frobnicate the widget")
+        task_cmd.validate_title("Frobnishop the widget")
 
     assert "not registered" in exc.value.message
-    assert "frobnicate" not in matchers.get_verbs()
+    assert "frobnishop" not in matchers.get_verbs()
 
 
 def test_verb_gate_falls_through_when_haiku_returns_empty_definition(monkeypatch, isolated_env):
     """YES with no definition is treated as malformed → fall through."""
+    monkeypatch.chdir(isolated_env["projects_root"])
     monkeypatch.setattr(
         task_cmd, "_check_verb_via_haiku", lambda word: (True, ""),
     )
 
     with pytest.raises(click.ClickException):
-        task_cmd.validate_title("Frobnicate the widget")
-    assert "frobnicate" not in matchers.get_verbs()
+        task_cmd.validate_title("Frobnishop the widget")
+    assert "frobnishop" not in matchers.get_verbs()
 
 
 def test_verb_gate_force_bypasses_haiku_check(monkeypatch, isolated_env):

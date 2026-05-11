@@ -61,12 +61,12 @@ endless worktree land <id> --dry-run        # preview without making changes
 
 `land` performs:
 
-1. Auto-commits endless-managed dirt (verbs.json, ledger entries) — these auto-commit to main as global-config artifacts.
+1. Auto-commits endless-managed dirt (verbs.jsonl, ledger entries) — these auto-commit to main as global-config artifacts.
 2. Rebases the task branch onto current `main`.
 3. Fast-forwards `main` to the rebased tip.
 4. Removes the worktree.
 
-**Do not merge to main any other way.** `worktree land` is the single sanctioned path. The exception is global-config artifacts (verbs.json, db-ledger entries, plan files) which auto-commit to main directly.
+**Do not merge to main any other way.** `worktree land` is the single sanctioned path. The exception is global-config artifacts (verbs.jsonl, db-ledger entries, plan files) which auto-commit to main directly.
 
 ### Abandoning a worktree
 
@@ -86,7 +86,7 @@ Use `drop` when the work is being abandoned (task declined/obsolete). Don't `dro
 | Task work (code, docs, tests)       | Worktree branch → main    | `worktree land` only                                      |
 | Plan files (`.endless/plans/`)      | Main directly             | Manual `git commit` from main; required before `task claim` |
 | DB ledger (`.endless/db-ledger/`)   | Main directly             | Auto by endless-event hook                                |
-| Verbs (`verbs.json`)                | Main directly             | Auto on `worktree land`                                   |
+| Verbs (`verbs.jsonl`)                | Main directly             | Auto on `worktree land`                                   |
 | Project config (`.endless/config.json`) | Worktree branch → main | Follows task work; not auto                              |
 
 If you see uncommitted changes in main that aren't on the allowlist above, that's a bug worth filing as a task.
