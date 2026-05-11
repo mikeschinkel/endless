@@ -416,6 +416,9 @@
   .col-start-2 {
     grid-column-start: 2;
   }
+  .row-0 {
+    grid-row: 0;
+  }
   .container {
     width: 100%;
     @media (width >= 40rem) {
