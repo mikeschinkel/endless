@@ -1997,8 +1997,11 @@ def claim_item(item_id: int, force: bool = False):
         raise click.ClickException(
             f"E-{item_id} is in status '{current_status}'; re-claiming "
             f"would demote it to 'in_progress'.\n"
-            "Pass --force to confirm the demotion, or update the status "
-            "first if that's not what you intended."
+            "Pass --force to confirm the demotion, run "
+            f"`endless task bind E-{item_id}` to attach this session "
+            "to the task for status-bar display without changing its "
+            "status, or update the status first if that's not what "
+            "you intended."
         )
 
     target_session = _current_endless_session_id()
@@ -2108,6 +2111,74 @@ def claim_item(item_id: int, force: bool = False):
         pad = " " * (len(eval_cmd) - len(eswt_cmd))
         click.echo(f"         {eval_cmd}  # Adds eswt shell helper func")
         click.echo(f"         {eswt_cmd}{pad}  # Changes to Git worktree dir")
+
+
+def bind_item(item_id: int) -> None:
+    """Bind a Claude session to a task for status-bar display only.
+
+    Symmetric counterpart to `release_item`: bind sets the session's
+    active_task_id, release clears it. Unlike `claim_item`, bind does
+    NOT change the task's status and does NOT create a worktree.
+
+    Use when the task is already in `assumed` / `confirmed` / `verify`
+    and the user wants the status row to keep showing it as context.
+    `claim --force` is the wrong tool there because it demotes status
+    back to `in_progress`.
+
+    Target session resolution mirrors `claim_item` (current Endless
+    session, else sibling Claude pane in the same tmux window). Refuses
+    when no session resolves or when multiple sibling Claude panes
+    exist — bind without a session is meaningless (nothing to display
+    for) and an ambiguous choice should not be silently picked.
+
+    Emits a `task.claimed` event (the existing event added in E-1242);
+    the Go executor performs the sessions DB write.
+    """
+    from endless.event_bridge import emit_event
+
+    row = db.query(
+        "SELECT id, COALESCE(title, description) as title, status FROM tasks "
+        "WHERE id = ?",
+        (item_id,),
+    )
+    if not row:
+        raise click.ClickException(
+            f"No task found with id {item_id}"
+        )
+    current_status = row[0]["status"]
+
+    target_session = _current_endless_session_id()
+    if target_session is None:
+        sibling_eid, n_matches = _find_sibling_claude_session()
+        if n_matches > 1:
+            raise click.ClickException(
+                f"Found {n_matches} Claude sessions in this tmux window. "
+                f"Ambiguous — bind from one of those panes directly.\n"
+                "(E-1244 will design auto-disambiguation rules.)"
+            )
+        if n_matches == 0:
+            raise click.ClickException(
+                "No Claude session available to bind this task to "
+                "(not running inside a Claude session, and no sibling "
+                "Claude pane in this tmux window).\n"
+                "Bind only makes sense when a session exists for the "
+                "status bar to read from."
+            )
+        target_session = sibling_eid
+
+    _, proj_name = _resolve_project(None)
+    emit_event(
+        kind="task.claimed",
+        project=proj_name,
+        entity_type="task",
+        entity_id=str(item_id),
+        payload={"session_id": target_session},
+    )
+    click.echo(
+        click.style("•", fg="cyan")
+        + f" E-{item_id} bound to session {target_session} for display "
+          f"(task status unchanged: {current_status})"
+    )
 
 
 def release_item(item_id: int | None, ignore_missing: bool = False) -> None:

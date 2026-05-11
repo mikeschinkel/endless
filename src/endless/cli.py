@@ -1050,6 +1050,21 @@ def task_release(item_id, ignore_missing):
     release_item(item_id, ignore_missing=ignore_missing)
 
 
+@task_cmd.command("bind")
+@click.argument("item_id", type=TASK_ID)
+def task_bind(item_id):
+    """Bind this session to a task for status-bar display only.
+
+    Unlike `claim`, `bind` does not change the task's status or create
+    a worktree — it just sets sessions.active_task_id so the second
+    tmux status row shows this task. Use when the task is already in
+    `assumed` / `confirmed` / `verify` and you want the bar to keep
+    showing it as context. Symmetric counterpart to `release`.
+    """
+    from endless.task_cmd import bind_item
+    bind_item(item_id)
+
+
 @task_cmd.command("start", hidden=True)
 @click.argument("item_id", type=TASK_ID, required=False, default=None)
 def task_start_deprecated(item_id):
