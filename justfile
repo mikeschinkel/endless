@@ -54,6 +54,7 @@ build: _link-templui
     go build -o bin/endless-channel ./cmd/endless-channel
     go build -o bin/endless-event ./cmd/endless-event
     go build -o bin/endless-sandbox ./cmd/endless-sandbox
+    go build -o bin/endless-tmux ./cmd/endless-tmux
 
 # Build and install everything: Go binaries symlinked to /usr/local/bin,
 # Python CLI installed via uv tool in EDITABLE mode (-e). Editable means the
@@ -68,6 +69,7 @@ install:
     ln -sfn "$(pwd)/bin/endless-channel" /usr/local/bin/endless-channel
     ln -sfn "$(pwd)/bin/endless-event" /usr/local/bin/endless-event
     ln -sfn "$(pwd)/bin/endless-sandbox" /usr/local/bin/endless-sandbox
+    ln -sfn "$(pwd)/bin/endless-tmux" /usr/local/bin/endless-tmux
     uv tool install -e . --force
 
 # Generate go.work for the current checkout/worktree (E-996).

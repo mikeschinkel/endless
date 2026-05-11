@@ -1,0 +1,118 @@
+package monitor
+
+import (
+	"database/sql"
+	"errors"
+	"os/exec"
+	"strings"
+)
+
+// ActiveTaskInfo is the read-only projection used by the tmux status line
+// and menu: enough to render "[E-NNNN] · project · status" plus the title
+// for popup display.
+type ActiveTaskInfo struct {
+	TaskID      int64
+	Title       string
+	Status      string
+	ProjectName string
+}
+
+// ErrNoActiveTask is returned when no working session, in either the
+// requested pane or anywhere else in the same tmux session, has a
+// non-NULL active_task_id. Callers should render an empty/placeholder
+// status line rather than treat this as a fatal error.
+var ErrNoActiveTask = errors.New("no active task for this tmux context")
+
+// GetActiveTaskForPane resolves a tmux pane identifier (the value tmux
+// passes in $TMUX_PANE, stored in sessions.process) to the active task
+// the user should see in the status line.
+//
+// Lookup order:
+//  1. Pane-specific: an Endless session whose process column matches
+//     this exact pane and whose active_task_id is non-NULL.
+//  2. Session-scoped fallback: any pane in the same tmux session has
+//     an Endless session with a non-NULL active_task_id. Most recent
+//     last_activity wins.
+//
+// The fallback exists because tmux's #() substitution runs in the
+// FOCUSED pane's environment. Without it, focusing on a shell pane
+// next to a Claude pane would blank out the status line for every
+// pane in the session.
+//
+// Returns ErrNoActiveTask when both lookups come up empty.
+func GetActiveTaskForPane(tmuxPane string) (*ActiveTaskInfo, error) {
+	if tmuxPane == "" {
+		return nil, ErrNoActiveTask
+	}
+
+	db, err := DB()
+	if err != nil {
+		return nil, err
+	}
+
+	if info, err := queryActiveTaskForPanes(db, []string{tmuxPane}); err == nil {
+		return info, nil
+	} else if !errors.Is(err, ErrNoActiveTask) {
+		return nil, err
+	}
+
+	panes, err := listPanesInSameSession(tmuxPane)
+	if err != nil || len(panes) == 0 {
+		return nil, ErrNoActiveTask
+	}
+	return queryActiveTaskForPanes(db, panes)
+}
+
+func queryActiveTaskForPanes(db *sql.DB, panes []string) (*ActiveTaskInfo, error) {
+	if len(panes) == 0 {
+		return nil, ErrNoActiveTask
+	}
+
+	placeholders := strings.Repeat("?,", len(panes))
+	placeholders = placeholders[:len(placeholders)-1] // trim trailing comma
+
+	args := make([]any, len(panes))
+	for i, p := range panes {
+		args[i] = p
+	}
+
+	q := `SELECT t.id, t.title, t.status, COALESCE(p.name, '')
+	      FROM sessions s
+	      JOIN tasks t ON t.id = s.active_task_id
+	      LEFT JOIN projects p ON p.id = t.project_id
+	      WHERE s.process IN (` + placeholders + `)
+	        AND s.active_task_id IS NOT NULL
+	      ORDER BY s.last_activity DESC
+	      LIMIT 1`
+
+	var info ActiveTaskInfo
+	err := db.QueryRow(q, args...).Scan(&info.TaskID, &info.Title, &info.Status, &info.ProjectName)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrNoActiveTask
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &info, nil
+}
+
+// listPanesInSameSession asks tmux for every pane in the tmux session
+// that contains targetPane. Returns the list of pane IDs (`%N` form)
+// that share that tmux session.
+func listPanesInSameSession(targetPane string) ([]string, error) {
+	out, err := exec.Command("tmux",
+		"list-panes", "-s", "-t", targetPane, "-F", "#{pane_id}",
+	).Output()
+	if err != nil {
+		return nil, err
+	}
+	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+	panes := lines[:0]
+	for _, l := range lines {
+		l = strings.TrimSpace(l)
+		if l != "" {
+			panes = append(panes, l)
+		}
+	}
+	return panes, nil
+}

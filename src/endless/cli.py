@@ -1617,6 +1617,41 @@ def setup_remove_channel_plugin_cmd():
     remove_channel_plugin()
 
 
+# tmux integration command group (E-1236)
+@main.group("tmux")
+def tmux_cmd():
+    """Endless tmux integration (ephemeral status line + popup menus)."""
+    pass
+
+
+@tmux_cmd.command("apply")
+@click.option("--hotkey", default="e",
+              help="Prefix-table key to bind for the popup menu (default: e)")
+@click.option("--status-interval", type=int, default=2,
+              help="tmux status-interval seconds (default: 2)")
+def tmux_apply(hotkey, status_interval):
+    """Configure the running tmux server for Endless (ephemeral).
+
+    Enables a second status row, wires it to the printer, installs hotkey
+    and right-click popup menus. No files are touched; reverses when the
+    tmux server exits. Run once per tmux server start.
+    """
+    from endless.tmux_cmd import run_apply
+    run_apply(hotkey, status_interval)
+
+
+@tmux_cmd.command("status-line")
+def tmux_status_line():
+    """Print one styled line for tmux's status-format[1].
+
+    Normally invoked by tmux on each refresh, not by humans. The tmux
+    config calls the `endless-tmux` Go binary directly to stay under the
+    latency budget; this Python wrapper exists for parity and debugging.
+    """
+    from endless.tmux_cmd import run_status_line
+    run_status_line()
+
+
 # Suggestions command group (E-918) — AI-agent rule-relaxation suggestions
 @main.group("suggestions")
 def suggestions_cmd():
