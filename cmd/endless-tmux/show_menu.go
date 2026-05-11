@@ -110,28 +110,33 @@ func buildMenuItems(binPath string, info *monitor.ActiveTaskInfo) []menuItem {
 // buildDisplayMenuArgs translates a position keyword into tmux's
 // -x/-y flags and appends the items.
 //
-// For position="mouse", the caller MUST pass numeric mouseX / mouseY
-// captured by the binding via #{mouse_x} / #{mouse_y} format
-// substitutions. We can't use the `M` shorthand here because
-// display-menu is invoked from a fresh tmux process inside run-shell,
-// where the original mouse event context is gone — `M` would resolve
-// to top-left. Numeric coordinates resolved at binding time work.
+// For position="mouse":
 //
-// If mouseX or mouseY are empty (e.g. position=mouse called without
-// the binding capturing the coordinates), fall back to "S" so the
-// menu at least appears adjacent to the status line rather than
-// at top-left.
+//   - X uses the captured numeric mouseX. display-menu is invoked from
+//     a fresh tmux process inside run-shell where the original mouse-
+//     event context is gone — the `M` shorthand resolves to top-left.
+//     Numeric coordinates resolved at binding time work.
+//
+//   - Y always uses `S` (the line adjacent to the status bar),
+//     regardless of click row. Using the numeric mouse_y backfires:
+//     tmux treats `-y N` as "place the menu top at row N"; when the
+//     click is on the status bar near the screen bottom, the menu
+//     can't extend downward, and tmux auto-flips it to the top of the
+//     screen rather than shifting upward. `-y S` keeps it adjacent to
+//     the status line where the click actually was. mouseY remains on
+//     the function signature for potential future use.
+//
+// If mouseX is empty, fall back to `S` so the menu at least appears
+// adjacent to the status line rather than at top-left.
 func buildDisplayMenuArgs(title, position, mouseX, mouseY string, items []menuItem) []string {
+	_ = mouseY // see comment above
 	x, y := "C", "C"
 	if position == "mouse" {
 		x = mouseX
 		if x == "" {
 			x = "S"
 		}
-		y = mouseY
-		if y == "" {
-			y = "S"
-		}
+		y = "S"
 	}
 	args := []string{"display-menu", "-T", title, "-x", x, "-y", y}
 	for _, it := range items {
