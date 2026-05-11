@@ -107,10 +107,15 @@ func buildMenuItems(binPath string, info *monitor.ActiveTaskInfo) []menuItem {
 
 // buildDisplayMenuArgs translates a position keyword into tmux's
 // -x/-y flags and appends the items.
+//
+// Mouse position uses `-x M -y S` (mouse X, status-line Y) rather
+// than `-y M`: tmux misplaces the menu at top-left when `-y M` is
+// used for clicks on the status bar — `-y S` correctly anchors the
+// menu adjacent to the status line so it appears at the cursor.
 func buildDisplayMenuArgs(title, position string, items []menuItem) []string {
 	x, y := "C", "C"
 	if position == "mouse" {
-		x, y = "M", "M"
+		x, y = "M", "S"
 	}
 	args := []string{"display-menu", "-T", title, "-x", x, "-y", y}
 	for _, it := range items {
