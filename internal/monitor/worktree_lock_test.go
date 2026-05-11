@@ -205,6 +205,74 @@ func TestFindWorktreeRoot_DoesNotWalkAboveProjectRoot(t *testing.T) {
 	}
 }
 
+// E-1219: a stray companion at projectRoot must not cause FindWorktreeRoot
+// to return projectRoot as a worktree. main is never a worktree, even if
+// the file exists (e.g., a buggy write, a leftover, a manual paste).
+func TestFindWorktreeRoot_IgnoresCompanionAtProjectRoot(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, ".endless")
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "worktree.json"), []byte(`{"kind":"task"}`), 0644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	// cwd == projectRoot.
+	got, err := FindWorktreeRoot(root, root)
+	if err != nil {
+		t.Fatalf("find at root: %v", err)
+	}
+	if got != "" {
+		t.Errorf("returned projectRoot as worktree: got %q, want empty", got)
+	}
+
+	// cwd is a subdir of projectRoot but not in any worktree.
+	sub := filepath.Join(root, "src")
+	if err := os.MkdirAll(sub, 0755); err != nil {
+		t.Fatalf("mkdir sub: %v", err)
+	}
+	got, err = FindWorktreeRoot(sub, root)
+	if err != nil {
+		t.Fatalf("find at sub: %v", err)
+	}
+	if got != "" {
+		t.Errorf("walked up to projectRoot's stray companion: got %q, want empty", got)
+	}
+}
+
+// E-1219: when both a real worktree companion AND a stray projectRoot
+// companion exist, FindWorktreeRoot returns the real worktree (cwd path
+// is consulted first along the walk-up). Confirms the projectRoot
+// exclusion does not interfere with normal worktree resolution.
+func TestFindWorktreeRoot_PrefersRealWorktreeOverStrayAtProjectRoot(t *testing.T) {
+	root := t.TempDir()
+
+	// Real worktree.
+	wt := filepath.Join(root, ".endless", "worktrees", "e-808")
+	wtMeta := filepath.Join(wt, ".endless")
+	if err := os.MkdirAll(wtMeta, 0755); err != nil {
+		t.Fatalf("mkdir wt: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(wtMeta, "worktree.json"), []byte(`{"kind":"task"}`), 0644); err != nil {
+		t.Fatalf("write wt: %v", err)
+	}
+
+	// Stray companion at projectRoot.
+	rootMeta := filepath.Join(root, ".endless")
+	if err := os.WriteFile(filepath.Join(rootMeta, "worktree.json"), []byte(`{"kind":"task"}`), 0644); err != nil {
+		t.Fatalf("write stray: %v", err)
+	}
+
+	got, err := FindWorktreeRoot(wt, root)
+	if err != nil {
+		t.Fatalf("find: %v", err)
+	}
+	if got != wt {
+		t.Errorf("got %q, want real worktree %q", got, wt)
+	}
+}
+
 func TestParseEndlessTaskID_AcceptsForms(t *testing.T) {
 	// Local copy of the helper for testability — production version lives in
 	// cmd/endless-hook/claude.go (it's a hook-local helper, not a package

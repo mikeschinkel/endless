@@ -236,9 +236,11 @@ func TaskIDFromWorktreePath(path string) string {
 }
 
 // FindWorktreeRoot walks up from cwd looking for .endless/worktree.json.
-// Stops at projectRoot (inclusive — does not walk above it). Returns the
-// directory containing .endless/worktree.json, or "" if no companion is
-// found at or below projectRoot.
+// Stops at projectRoot exclusively — projectRoot is the main checkout,
+// never a worktree, so even if a stray companion file exists there it
+// is ignored. Returns the directory containing .endless/worktree.json
+// (somewhere strictly between cwd and projectRoot), or "" if no
+// companion is found.
 //
 // projectRoot must be the absolute, resolved path to the registered
 // project root; cwd is treated as absolute (Cleaned but not resolved
@@ -250,6 +252,12 @@ func FindWorktreeRoot(cwd, projectRoot string) (string, error) {
 	dir := filepath.Clean(cwd)
 	root := filepath.Clean(projectRoot)
 	for {
+		// Terminate before checking projectRoot's companion. main is
+		// never a worktree by definition; a stray .endless/worktree.json
+		// there must not cause adoption (E-1219).
+		if dir == root {
+			return "", nil
+		}
 		candidate := filepath.Join(dir, worktreeEndlessDir, worktreeCompanionFile)
 		info, err := os.Stat(candidate)
 		if err == nil && !info.IsDir() {
@@ -257,9 +265,6 @@ func FindWorktreeRoot(cwd, projectRoot string) (string, error) {
 		}
 		if err != nil && !errors.Is(err, os.ErrNotExist) {
 			return "", fmt.Errorf("stat %s: %w", candidate, err)
-		}
-		if dir == root {
-			return "", nil
 		}
 		parent := filepath.Dir(dir)
 		if parent == dir {
