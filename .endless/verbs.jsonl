@@ -94,7 +94,6 @@
 {"value": "make", "definition": "Cause a property or invariant to become true (typically via tooling, in titles like 'Make X deterministic')"}
 {"value": "automate", "definition": "Replace a manual workflow with code or tooling so it runs without human action."}
 {"value": "untrack", "definition": "Remove a file from git's tracking without deleting it from the working tree (git rm --cached)"}
-{"value": "teating", "definition": "The process of evaluating or trying something"}
 {"value": "claim", "definition": "Assertion, statement, or demand that something is true, factual, or rightfully one's own"}
 {"value": "release", "definition": "Setting free, liberating, or letting go"}
 {"value": "bind", "definition": "to associate or attach two things together (e.g., a session to a task)"}
@@ -111,6 +110,5 @@
 {"value": "forge", "definition": "to make stronger, more robust, or more resilient"}
 {"value": "bolster", "definition": "To strengthen or support something, making it more secure, confident, or effective."}
 {"value": "galvanize", "definition": "To stimulate someone into action or to coat metal with zinc for protection against corrosion."}
-{"value": "deinstitutionalize", "definition": "To release people or operations from institutional settings and reintegrate them into community-based or independent contexts."}
 {"value": "reify", "definition": "Make abstract concrete by treating it as a real thing"}
 {"value": "strip", "definition": "To remove something completely from a surface, object, or person."}
