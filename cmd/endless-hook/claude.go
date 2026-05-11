@@ -743,7 +743,7 @@ func blockSqliteAgainstEndlessIfApplicable(payload claudePayload) {
 		return
 	}
 	blockToolUse(
-		"BLOCKED (E-1226): refusing `sqlite3` against a path inside `.endless/`.\n\n" +
+		"BLOCKED: refusing `sqlite3` against a path inside `.endless/`.\n\n" +
 			"The Endless DB lives at `~/.config/endless/endless.db`. " +
 			"Running sqlite3 against speculative `.endless/...` paths " +
 			"silently creates 0-byte ghost DB files that block " +
@@ -779,7 +779,7 @@ func blockCommitOnMainIfApplicable(payload claudePayload) {
 		return
 	}
 
-	blockToolUse(`Direct commits to main are highly discouraged when using endless (E-1012).
+	blockToolUse(`Direct commits to main are highly discouraged when using endless.
 
 main is the integration target. Make changes in a worktree on a per-task
 branch, then merge via ` + "`endless worktree land <task-id>`" + `.
@@ -1240,7 +1240,7 @@ func enforceWorktreeGate(projectID int64, payload claudePayload) {
 					*session.ActiveTaskID, wp, wp)
 			}
 		}
-		blockToolUse("Edits in main are highly discouraged when using endless (E-971).\n\n" +
+		blockToolUse("Edits in main are highly discouraged when using endless.\n\n" +
 			"main is the integration target — every edit ideally should go through\n" +
 			"a worktree.\n\n" +
 			"If you do not yet have an active task, create one and start it:\n" +

@@ -2072,8 +2072,7 @@ def claim_item(item_id: int, force: bool = False):
         if n_matches > 1:
             raise click.ClickException(
                 f"Found {n_matches} Claude sessions in this tmux window. "
-                f"Ambiguous — claim from one of those panes directly.\n"
-                "(E-1244 will design auto-disambiguation rules.)"
+                f"Ambiguous — claim from one of those panes directly."
             )
         if n_matches == 0 and not force:
             raise click.ClickException(
@@ -2215,8 +2214,7 @@ def bind_item(item_id: int) -> None:
         if n_matches > 1:
             raise click.ClickException(
                 f"Found {n_matches} Claude sessions in this tmux window. "
-                f"Ambiguous — bind from one of those panes directly.\n"
-                "(E-1244 will design auto-disambiguation rules.)"
+                f"Ambiguous — bind from one of those panes directly."
             )
         if n_matches == 0:
             raise click.ClickException(

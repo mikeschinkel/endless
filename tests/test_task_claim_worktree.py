@@ -100,7 +100,7 @@ def test_claim_refuses_when_two_sibling_claude_sessions(project_with_task):
             claim_item(tid)
     msg = str(exc.value)
     assert "Found 3 Claude sessions" in msg
-    assert "E-1244" in msg
+    assert "claim from one of those panes directly" in msg
 
 
 def test_claim_binds_sibling_claude_session(project_with_task):

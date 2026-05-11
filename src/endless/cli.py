@@ -1075,7 +1075,7 @@ def task_start_deprecated(item_id):
     silently enabled to keep using the old one.
     """
     raise click.ClickException(
-        "`task start` was renamed to `task claim` (E-1232).\n"
+        "`task start` was renamed to `task claim`.\n"
         "Run: endless task claim "
         + (f"E-{item_id}" if item_id is not None else "<id>")
     )
