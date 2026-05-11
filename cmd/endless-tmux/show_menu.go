@@ -30,6 +30,8 @@ func runShowMenu(args []string) {
 	fs.SetOutput(os.Stderr)
 	paneArg := fs.String("pane", "", "Tmux pane ID (overrides TMUX_PANE env)")
 	position := fs.String("position", "center", "Menu position: center | mouse")
+	mouseX := fs.String("mouse-x", "", "Numeric x coordinate (mouse position; required when position=mouse)")
+	mouseY := fs.String("mouse-y", "", "Numeric y coordinate (mouse position; required when position=mouse)")
 	if err := fs.Parse(args); err != nil {
 		os.Exit(2)
 	}
@@ -52,7 +54,7 @@ func runShowMenu(args []string) {
 
 	title := buildMenuTitle(info)
 	items := buildMenuItems(binPath, info)
-	tmuxArgs := buildDisplayMenuArgs(title, *position, items)
+	tmuxArgs := buildDisplayMenuArgs(title, *position, *mouseX, *mouseY, items)
 
 	cmd := exec.Command("tmux", tmuxArgs...)
 	cmd.Stderr = os.Stderr
@@ -108,14 +110,28 @@ func buildMenuItems(binPath string, info *monitor.ActiveTaskInfo) []menuItem {
 // buildDisplayMenuArgs translates a position keyword into tmux's
 // -x/-y flags and appends the items.
 //
-// Mouse position uses `-x M -y S` (mouse X, status-line Y) rather
-// than `-y M`: tmux misplaces the menu at top-left when `-y M` is
-// used for clicks on the status bar — `-y S` correctly anchors the
-// menu adjacent to the status line so it appears at the cursor.
-func buildDisplayMenuArgs(title, position string, items []menuItem) []string {
+// For position="mouse", the caller MUST pass numeric mouseX / mouseY
+// captured by the binding via #{mouse_x} / #{mouse_y} format
+// substitutions. We can't use the `M` shorthand here because
+// display-menu is invoked from a fresh tmux process inside run-shell,
+// where the original mouse event context is gone — `M` would resolve
+// to top-left. Numeric coordinates resolved at binding time work.
+//
+// If mouseX or mouseY are empty (e.g. position=mouse called without
+// the binding capturing the coordinates), fall back to "S" so the
+// menu at least appears adjacent to the status line rather than
+// at top-left.
+func buildDisplayMenuArgs(title, position, mouseX, mouseY string, items []menuItem) []string {
 	x, y := "C", "C"
 	if position == "mouse" {
-		x, y = "M", "S"
+		x = mouseX
+		if x == "" {
+			x = "S"
+		}
+		y = mouseY
+		if y == "" {
+			y = "S"
+		}
 	}
 	args := []string{"display-menu", "-T", title, "-x", x, "-y", y}
 	for _, it := range items {

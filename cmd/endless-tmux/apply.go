@@ -69,8 +69,18 @@ func runApply(args []string) {
 func buildApplySteps(binPath, hotkey string, statusInterval int) [][]string {
 	statusFmt := fmt.Sprintf("#[align=centre]#(%s status-line --pane=#{pane_id})", binPath)
 
+	// Hotkey binding: no mouse context needed; single-quoted is fine.
 	hotkeyMenu := fmt.Sprintf("run-shell '%s show-menu --pane=#{pane_id} --position=center'", binPath)
-	mouseMenu := fmt.Sprintf("run-shell '%s show-menu --pane=#{pane_id} --position=mouse'", binPath)
+	// Mouse binding: must capture mouse_x/mouse_y at binding time —
+	// tmux substitutes #{mouse_x}/#{mouse_y} inline, then run-shell
+	// invokes our binary with the resolved coordinates. We cannot rely
+	// on `display-menu -x M -y M` later because the mouse-event context
+	// is gone once we shell out. Outer arg is DOUBLE-quoted so tmux
+	// processes #{...} substitutions; single quotes would pass the
+	// literal "#{mouse_x}" text through.
+	mouseMenu := fmt.Sprintf(
+		`run-shell "%s show-menu --pane=#{pane_id} --position=mouse --mouse-x=#{mouse_x} --mouse-y=#{mouse_y}"`,
+		binPath)
 
 	return [][]string{
 		// 1. Enable second status line.
