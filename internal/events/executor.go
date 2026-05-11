@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/mikeschinkel/endless/internal/monitor"
@@ -166,10 +167,20 @@ func execTaskCreated(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 	taskID := mustParseInt64(evt.Entity.ID)
 	ts := now()
 
+	// Attaching a non-empty plan at creation auto-promotes the task to
+	// `ready`. Mirrors the behavior of task.fields_updated when --text is
+	// supplied. The promotion only fires when status was the default
+	// `needs_plan` — an explicit override (e.g. a tier-1 task created at
+	// `ready` already, or any non-default status) is preserved.
+	status := p.Status
+	if status == "needs_plan" && strings.TrimSpace(p.Text) != "" {
+		status = "ready"
+	}
+
 	_, err = db.Exec(
 		`INSERT INTO tasks (id, project_id, phase, title, description, text, status, type, sort_order, parent_id, tier, created_at, updated_at)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		taskID, projectID, p.Phase, p.Title, p.Description, p.Text, p.Status, p.Type,
+		taskID, projectID, p.Phase, p.Title, p.Description, p.Text, status, p.Type,
 		sortOrder, p.ParentID, p.Tier, ts, ts,
 	)
 	if err != nil {
@@ -297,6 +308,25 @@ func execTaskFieldsUpdated(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 		}
 		setClauses = append(setClauses, col+" = ?")
 		args = append(args, value)
+	}
+
+	// Attaching a non-empty plan (--text) auto-promotes a `needs_plan`
+	// task to `ready`. Only fires when the same update does not already
+	// set status explicitly (caller wins).
+	if textVal, hasText := p.Fields["text"]; hasText {
+		if _, statusSet := p.Fields["status"]; !statusSet {
+			textStr, _ := textVal.(string)
+			if strings.TrimSpace(textStr) != "" {
+				var currentStatus string
+				if err := db.QueryRow("SELECT status FROM tasks WHERE id = ?",
+					taskID).Scan(&currentStatus); err == nil {
+					if currentStatus == "needs_plan" {
+						setClauses = append(setClauses, "status = ?")
+						args = append(args, "ready")
+					}
+				}
+			}
+		}
 	}
 
 	if status, ok := p.Fields["status"]; ok {

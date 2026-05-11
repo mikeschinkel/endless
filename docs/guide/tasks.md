@@ -111,7 +111,7 @@ endless task update <id> --decision "<rationale>"    # creates paired decision t
 endless task update <id> <id2> ... --status ready    # bulk update
 ```
 
-Attaching a plan (`--text`) to a `needs_plan` task auto-promotes the status to `ready`.
+Attaching a non-empty plan (`--text`) to a `needs_plan` task auto-promotes the status to `ready`. Applies on both `task add` and `task update`. An explicit `--status` in the same call always wins.
 
 ---
 
