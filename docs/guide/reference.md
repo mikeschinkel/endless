@@ -112,7 +112,7 @@ A quick map of the files and directories Endless manages.
 | `.endless/worktrees/e-<id>/`                                 | Primary per-task git worktree. **Gitignored.**                                           |
 | `.endless/worktrees/e-<id>-<slug>/`                          | Ad-hoc additional worktree for a task (testing, alternate experiments). **Gitignored.**  |
 | `.endless/worktree.json`                                     | Current session's task → worktree mapping (companion file).                              |
-| `verbs.jsonl`                                                | Registered action verbs at the project root, one JSON object per line. Auto-committed to main as a global-config artifact. The legacy `verbs.json` array format is migrated on first load (E-1268). |
+| `verbs.jsonl`                                                | Registered action verbs at the project root, one JSON object per line. Auto-committed to main as a global-config artifact. A legacy `verbs.json` array, if present, is migrated to JSONL on first load. |
 
 ### Critical: `.endless/db-ledger/` is committed to git
 
