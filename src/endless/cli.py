@@ -1048,19 +1048,19 @@ def task_release(item_id):
 
 
 @task_cmd.command("start", hidden=True)
-@click.argument("item_id", type=TASK_ID)
-@click.option("--force", is_flag=True)
-def task_start_deprecated(item_id, force):
-    """Deprecated alias for `task claim` (E-1232 rename)."""
-    click.echo(
-        click.style(
-            "Note: `task start` is deprecated; use `task claim` instead.",
-            fg="yellow",
-        ),
-        err=True,
+@click.argument("item_id", type=TASK_ID, required=False, default=None)
+def task_start_deprecated(item_id):
+    """Deprecated stub for `task claim` (E-1232 rename).
+
+    Refuses to execute — prints the rename note and exits non-zero so the
+    caller (agent or human) switches to the new verb instead of being
+    silently enabled to keep using the old one.
+    """
+    raise click.ClickException(
+        "`task start` was renamed to `task claim` (E-1232).\n"
+        "Run: endless task claim "
+        + (f"E-{item_id}" if item_id is not None else "<id>")
     )
-    from endless.task_cmd import claim_item
-    claim_item(item_id, force=force)
 
 
 @task_cmd.command("move")
