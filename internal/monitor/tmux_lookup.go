@@ -130,3 +130,133 @@ func listPanesInSameWindow(targetPane string) ([]string, error) {
 	}
 	return panes, nil
 }
+
+// PaneStatusKind classifies what the status row should render for a
+// given tmux pane. Drives the contextual-hint logic in the printer.
+type PaneStatusKind int
+
+const (
+	// PaneStatusNone — no Endless context to display for this pane or
+	// any pane in its window, and the pane is not running Claude.
+	// Render the dim placeholder dot.
+	PaneStatusNone PaneStatusKind = iota
+	// PaneStatusActive — a window pane has an Endless session with a
+	// non-NULL active_task_id. The Task field is populated.
+	PaneStatusActive
+	// PaneStatusNoTask — a window pane has an Endless session, but no
+	// session has active_task_id set. Hint the user to `task claim`.
+	PaneStatusNoTask
+	// PaneStatusClaudeNoSession — the focused pane is running Claude,
+	// but no Endless session has been registered for any pane in this
+	// window. Hint the user to register (usually means the Claude hook
+	// isn't installed, or the session predates the install).
+	PaneStatusClaudeNoSession
+)
+
+// PaneStatus is the result of inspecting a tmux pane for status-bar
+// content. Task is populated only when Kind == PaneStatusActive.
+type PaneStatus struct {
+	Kind PaneStatusKind
+	Task *ActiveTaskInfo
+}
+
+// GetPaneStatus is the higher-level companion to GetActiveTaskForPane.
+// Beyond "find an active task," it classifies what the bar should show:
+//
+//  1. PaneStatusActive — there's an active task; render it.
+//  2. PaneStatusNoTask — a session exists in this window but no task
+//     is claimed; render a "claim a task" hint.
+//  3. PaneStatusClaudeNoSession — the focused pane is running Claude
+//     but Endless has no session row for any pane in this window;
+//     render a "register session" hint.
+//  4. PaneStatusNone — none of the above; render the placeholder.
+//
+// Detection uses two extra tmux queries beyond the existing DB lookup:
+// `tmux list-panes` for the window's pane set (already used by the
+// fallback) and `tmux display-message -p -t <pane> #{pane_current_command}`
+// to detect Claude in the focused pane. Both are cheap (<5ms).
+func GetPaneStatus(tmuxPane string) (*PaneStatus, error) {
+	if tmuxPane == "" {
+		return &PaneStatus{Kind: PaneStatusNone}, nil
+	}
+
+	if info, err := GetActiveTaskForPane(tmuxPane); err == nil {
+		return &PaneStatus{Kind: PaneStatusActive, Task: info}, nil
+	} else if !errors.Is(err, ErrNoActiveTask) {
+		return nil, err
+	}
+
+	// No active task. Determine which hint (if any) to show.
+	panes, err := listPanesInSameWindow(tmuxPane)
+	if err != nil {
+		panes = []string{tmuxPane}
+	}
+	if len(panes) == 0 {
+		panes = []string{tmuxPane}
+	}
+
+	hasSession, err := anySessionForPanes(panes)
+	if err != nil {
+		return nil, err
+	}
+	if hasSession {
+		return &PaneStatus{Kind: PaneStatusNoTask}, nil
+	}
+
+	if paneIsRunningClaude(tmuxPane) {
+		return &PaneStatus{Kind: PaneStatusClaudeNoSession}, nil
+	}
+
+	return &PaneStatus{Kind: PaneStatusNone}, nil
+}
+
+// anySessionForPanes returns true when at least one Endless session row
+// exists for any of the given pane IDs, regardless of active_task_id.
+// Used to distinguish "session exists but no task" from "no session at
+// all" — the two states drive different hint text.
+func anySessionForPanes(panes []string) (bool, error) {
+	if len(panes) == 0 {
+		return false, nil
+	}
+
+	db, err := DB()
+	if err != nil {
+		return false, err
+	}
+
+	placeholders := strings.Repeat("?,", len(panes))
+	placeholders = placeholders[:len(placeholders)-1]
+
+	args := make([]any, len(panes))
+	for i, p := range panes {
+		args[i] = p
+	}
+
+	var found int
+	err = db.QueryRow(
+		"SELECT 1 FROM sessions WHERE process IN ("+placeholders+") LIMIT 1",
+		args...,
+	).Scan(&found)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// paneIsRunningClaude asks tmux for the pane's current foreground
+// command and returns true when it looks like a Claude session.
+// Matches Claude Code's known process names ("claude", "claude-code").
+// Best-effort: returns false on any tmux error rather than propagating.
+func paneIsRunningClaude(tmuxPane string) bool {
+	out, err := exec.Command("tmux",
+		"display-message", "-p", "-t", tmuxPane, "#{pane_current_command}",
+	).Output()
+	if err != nil {
+		return false
+	}
+	cmd := strings.TrimSpace(string(out))
+	return cmd == "claude" || cmd == "claude-code"
+}

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -24,8 +23,6 @@ func runStatusLine(args []string) {
 	fs.SetOutput(os.Stderr)
 	paneArg := fs.String("pane", "", "Tmux pane ID (overrides TMUX_PANE env)")
 	if err := fs.Parse(args); err != nil {
-		// Don't exit non-zero — tmux will keep calling us and we'd
-		// rather render the placeholder than blink.
 		fmt.Print(placeholder())
 		return
 	}
@@ -35,21 +32,27 @@ func runStatusLine(args []string) {
 		pane = os.Getenv("TMUX_PANE")
 	}
 
-	info, err := monitor.GetActiveTaskForPane(pane)
+	status, err := monitor.GetPaneStatus(pane)
 	if err != nil {
-		if !errors.Is(err, monitor.ErrNoActiveTask) {
-			// Real error (DB unreachable, etc.). Stay silent on stderr
-			// to avoid log spam during interactive use; render placeholder.
-			fmt.Fprint(os.Stderr, "")
-		}
+		// Real error (DB unreachable, etc.). Render placeholder; stay
+		// silent on stderr to avoid log spam during interactive use.
 		fmt.Print(placeholder())
 		return
 	}
 
-	fmt.Print(format(info))
+	switch status.Kind {
+	case monitor.PaneStatusActive:
+		fmt.Print(format(status.Task))
+	case monitor.PaneStatusNoTask:
+		fmt.Print(hintNoTask())
+	case monitor.PaneStatusClaudeNoSession:
+		fmt.Print(hintNoSession())
+	default:
+		fmt.Print(placeholder())
+	}
 }
 
-// format renders the status line in the order:
+// format renders the active-task status line in the order:
 //
 //	[E-NNN] · project · type · phase · tier · status
 //
@@ -84,8 +87,24 @@ func tierString(tier *int64) string {
 	return fmt.Sprintf("t%d", *tier)
 }
 
-// placeholder is shown when no active task is found. A single dim dot
-// keeps the bar width stable so the rest of the row doesn't reflow.
+// hintNoTask is shown when the pane (or its window) has an Endless
+// session but no active task. Inherits the theme's status-style fg
+// (readable on the user's background) with italics for emphasis.
+func hintNoTask() string {
+	return "#[italics]claim a task ▸  endless task claim <id>#[default]"
+}
+
+// hintNoSession is shown when the focused pane is running Claude but
+// no Endless session row exists for any pane in this window. Most
+// commonly means the Claude hook isn't installed or the session
+// predates the install.
+func hintNoSession() string {
+	return "#[italics]no Endless session ▸  endless setup claude-hook#[default]"
+}
+
+// placeholder is shown when no Endless context applies to this pane.
+// A single dim dot keeps the bar width stable so the rest of the row
+// doesn't reflow.
 func placeholder() string {
 	return "#[fg=colour240]·#[default]"
 }
