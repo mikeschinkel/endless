@@ -22,13 +22,15 @@ Endless is in active development — paving the cowpaths. Expect rough edges, ex
 When your user gives you a task ID:
 
 1. `endless task show <id> --text --prompt` — read the task and any attached plan.
-2. `endless task claim <id>` — claim the task. This automatically creates a git worktree at `.endless/worktrees/<slug>/` for your work (E-1168).
+2. `endless task claim <id>` — claim the task. This automatically creates a git worktree at `.endless/worktrees/e-<id>/` for your work. Every task gets its own worktree so multiple sessions can work in parallel without stepping on each other, and `main`'s working tree stays clean.
 3. Get into the worktree:
    - `cd "$(endless worktree for-task <id>)"`, or
-   - run `eval "$(endless shell-init)"` once per shell, then `esu` to cd to your session's worktree.
+   - run `eval "$(endless shell-init)"` once per shell, then `esu` to cd to your session's worktree *and* export `ENDLESS_SESSION_ID` so subsequent endless commands route through the worktree's source (not the global install). See **Shell helpers** in `endless guide orchestration`.
 4. Do the work in the worktree.
-5. `endless task update <id> --status verify` when implementation is complete.
-6. Report completion to your user with the task ID. Example: "Done — E-752 is ready for verification."
+5. When implementation is complete:
+   - `endless task update <id> --status verify`, **and**
+   - In your reply to the user, include **how to test**: the specific commands, files, or UI actions that verify the change. Don't just say "ready" — say "ready; verify by running X then checking Y." The user shouldn't have to ask.
+6. Report completion to your user with the task ID. Example: "Done — E-752 is ready for verification. To verify: run `endless guide --list` and confirm the 4 expected slugs."
 7. **Do not mark `confirmed` yourself.** Only your user does that, after verifying. If you can't easily verify but believe it works, run `endless task assume <id> --outcome "..."` instead.
 
 When implementation is verified, land the work with `endless worktree land <id>` (auto-commits endless-managed files, rebases onto main, fast-forwards, removes the worktree).

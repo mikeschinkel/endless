@@ -1,6 +1,8 @@
 # Decisions
 
-Decisions are first-class items in Endless (E-907). They live alongside tasks and capture *why* something is the way it is — choices about approach, scope, conventions, deferrals.
+Decisions are first-class items in Endless. They live alongside tasks and capture *why* something is the way it is — choices about approach, scope, conventions, deferrals.
+
+> **Implementation note (transitional):** decisions are currently stored in the `tasks` table with `type=decision` and will move to their own table in a future release. The CLI surface (`endless decision ...`) is stable; the underlying storage is implementation detail you can ignore today.
 
 ## STRONG guidance (read this before writing decisions)
 
@@ -30,7 +32,7 @@ When you're not sure which you heard, **ask before writing**. A wrongly-recorded
 
 ## Inline `--decision` is the preferred form
 
-The cheapest way to record a decision is inline, on the task that prompted it (E-981):
+The cheapest way to record a decision is inline, on the task that prompted it:
 
 ```bash
 endless task add "Verb-first title" --decision "Why we chose this approach over the alternatives."
@@ -50,18 +52,18 @@ endless decision add "Statement of the decision" \
     --decides <task_id>   # task this decision settles (hard link, repeatable)
 ```
 
-Decision titles should state the decision directly. **Do not** start with "Record that ..." (E-931). Decision titles skip the verb-first validation since they're statements, not actions (E-930).
+Decision titles should state the decision directly. **Do not** start with "Record that ...". Decision titles skip the verb-first validation since they're statements, not actions.
 
 Examples of good decision titles:
 
-- `Use --type for relation-type flag on task link/unlink (E-1148)`
-- `Project-config writes resolve to cwd-local, not anchored to main (E-1140)`
-- `Allow tracking field to be set in global config as a default (E-956)`
+- `Use --type for relation-type flag on task link/unlink`
+- `Project-config writes resolve to cwd-local, not anchored to main`
+- `Allow tracking field to be set in global config as a default`
 
 Examples of bad decision titles:
 
 - "Decided on the approach" (vague)
-- "Record that we picked X" (E-931 violation)
+- "Record that we picked X" (don't start titles with "Record that")
 - "User prefers X" (a preference voiced by one person isn't a decision; if it's a rule, state the rule directly)
 
 ## Viewing and linking
@@ -70,7 +72,7 @@ Examples of bad decision titles:
 endless decision list                            # decisions for current project
 endless decision list --llm                      # token-efficient
 endless decision show <id>
-endless decision link <a> --to <b> --type ...    # see E-1156 for decision-to-decision link types
+endless decision link <a> --to <b> --type ...    # decision-to-decision typed link
 endless decision unlink <a> --to <b> --type ...
 ```
 

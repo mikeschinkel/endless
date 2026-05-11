@@ -76,7 +76,7 @@ The snapshot name is the filename stem (the `<timestamp>-<hash>` portion).
 
 **When useful:** reviewing how a plan was iterated, auditing what was promised vs what shipped, recovering accidentally-overwritten plan content.
 
-**Not the source of truth:** the canonical plan for a task is its `text` field, populated via `task update <id> --text <plan-file>`. Snapshots are write-once history (E-1017) — don't delete them manually.
+**Not the source of truth:** the canonical plan for a task is its `text` field, populated via `task update <id> --text <plan-file>`. Snapshots are write-once history — don't delete them manually.
 
 ---
 
@@ -89,7 +89,7 @@ endless tmux apply              # configure the running tmux server (ephemeral)
 endless tmux status-line        # the runtime printer tmux calls per refresh
 ```
 
-After `apply`, your tmux session shows a second status row like `[E-1248] · endless · in_progress`.
+After `apply`, your tmux session shows a second status row like `[E-NNNN] · <project> · in_progress`.
 
 **This feature is evolving fast.** Menus, hotkeys, layout, permanent install, and theming are all in flight. **Don't memorize the UI** — run `endless tmux --help` for the currently shipping verbs and trust the help over any doc more than a few days old.
 
@@ -106,18 +106,19 @@ A quick map of the files and directories Endless manages.
 | Path                                                         | Purpose                                                                                  |
 |--------------------------------------------------------------|------------------------------------------------------------------------------------------|
 | `.endless/config.json`                                       | Project-local Endless config (tracking mode, custom settings).                            |
-| `.endless/db-ledger/db-entries-<node>-<seq>.jsonl`           | Write-ahead log of all DB writes. **Committed to git** (E-1198).                          |
+| `.endless/db-ledger/db-entries-<node>-<seq>.jsonl`           | Write-ahead log of all DB writes. **Committed to git** — the SQLite DB is rebuilt from these on every clone.  |
 | `.endless/plans/E-NNNN.md`                                   | Plan files attached to tasks. Committed to git; required before `task claim`.            |
-| `.endless/plans/snapshots/<timestamp>-<hash>.md`             | Plan snapshots from the PostToolUse hook. Committed to git per project (E-1092).         |
-| `.endless/worktrees/<slug>/`                                 | Per-task git worktrees. **Gitignored** (E-975).                                          |
+| `.endless/plans/snapshots/<timestamp>-<hash>.md`             | Plan snapshots from the PostToolUse hook. Committed to git per project (choice on first snapshot). |
+| `.endless/worktrees/e-<id>/`                                 | Primary per-task git worktree. **Gitignored.**                                           |
+| `.endless/worktrees/e-<id>-<slug>/`                          | Ad-hoc additional worktree for a task (testing, alternate experiments). **Gitignored.**  |
 | `.endless/worktree.json`                                     | Current session's task → worktree mapping (companion file).                              |
-| `verbs.json`                                                 | Registered action verbs at the project root. Auto-committed on `worktree land` (E-1141). |
+| `verbs.json`                                                 | Registered action verbs at the project root. Auto-committed to main as a global-config artifact. |
 
 ### Critical: `.endless/db-ledger/` is committed to git
 
 The `.endless/db-ledger/` directory holds the database write-ahead record — JSONL ledger entries that the SQLite DB is rebuilt from on every clone. **Must be committed to git.** Clone-completeness means task state travels with the repo. Do not add `.endless/` or `.endless/db-ledger/` to `.gitignore`.
 
-This directory was renamed from `.endless/events/` in E-1197/E-1198 — the old name biased readers to treat the files as discardable logs, which they are not.
+This directory was previously named `.endless/events/`. The old name biased readers (human and LLM) to treat the files as discardable logs — which they are not. Existing installs auto-migrate.
 
 If you see "Endless: auto-record session activity" commits in `git log`, those are the ledger / verbs.json / snapshot auto-commits. **Never discard those commits.** They are durable state.
 

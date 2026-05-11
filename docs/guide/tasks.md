@@ -14,13 +14,13 @@ Every task has multiple body fields. Knowing which to use prevents long descript
 | `description` | < 200 words    | Brief pitch — *what* and *why* in a paragraph or two. Shown by default in `task list` / `task show`. | `--description` on `task add` / `task update`.     |
 | `text`        | Long-form      | Full implementation plan, including approach, file paths, verification steps. Shown with `task show --text`. | `--text <file>` on `task add` / `task update`.     |
 | `prompt`      | Long-form      | LLM prompt — what a spawned Claude session sees as its opening instructions for this task.       | `--prompt <file>` on `task update`.                |
-| `analysis`    | Long-form      | Supporting research / exploration content that is *not* a proper plan (E-1073).                  | DB column; CLI flag may not yet be wired — set via DB or via web UI. |
+| `analysis`    | Long-form      | Supporting research / exploration content that is *not* a proper plan — comparisons, findings, evidence gathered before the plan is written. | DB column; CLI flag may not yet be wired — set via DB or via web UI. |
 | `notes`       | Freeform       | Catch-all for content that doesn't fit elsewhere. Use sparingly.                                 | DB column; CLI flag may not yet be wired.          |
 | `outcome`     | Short to long  | Result / reason at terminal status. Required for `confirm`/`assume`/`decline`.                   | `--outcome` on `task confirm` / `task assume` / `task update`; `--reason` on `task decline` (stored as outcome). |
 
 ### Distinctions in practice
 
-- **Description vs text.** Description is a pitch — readable in 30 seconds, fits in a list view. Text is the plan you'd hand to an engineer. If you're writing four paragraphs into `--description`, stop — put it in a plan file and load with `--text`.
+- **Description vs text.** Description is a pitch — max 1024 character — readable in 30 seconds, fits in a list view. Text is the plan you'd hand to an engineer. If you're writing four paragraphs into `--description`, stop — put it in a plan file and load with `--text`.
 - **Text vs prompt.** Text is for humans (and you, reading the task). Prompt is what gets pasted into a *spawned* Claude session as its starting input. Often similar but not identical: a prompt typically includes directives like "claim the task, do the work"; the text describes approach without imperatives.
 - **Analysis vs text.** Analysis is research output — comparisons, findings, evidence. Text is the actionable plan. An audit task's deliverable lives in `outcome`, not `text` or `analysis`.
 - **Outcome.** Single field for "how this task ended." Required at terminal statuses so the *why* is captured at the moment of the decision. `task decline` uses `--reason` as the CLI flag (stored as outcome internally).
@@ -39,7 +39,7 @@ endless task list --status needs_plan,ready          # comma-separated
 endless task list --phase now
 endless task list --parent E-799
 endless task list --parent none                      # roots only
-endless task list --related-to E-1248 --rel-type blocks
+endless task list --related-to <id> --rel-type blocks
 endless task list --sort status                      # id, status, phase, tier, created, title
 endless task list --llm                              # token-efficient agent output
 endless task list --json
@@ -148,13 +148,31 @@ endless task clear <id> --<field>                    # clear a single field
 ```bash
 endless task block <a> --by <b>                      # A is blocked by B
 endless task unblock <a> --by <b>
-endless task deps <id>                               # all relations grouped by type
-endless task relations <id>                          # alias of deps with grouping
-endless task link <a> --to <b> --type implements     # generic typed link
+endless task deps <id>                               # all relations for a task
+endless task links <id>                              # show typed relations, grouped by type
+endless task link <a> --to <b> --type implements     # create a typed link
 endless task unlink <a> --to <b> --type implements
 ```
 
-Available `--type` values include `blocks`, `relates_to`, `implements`, `cleans_up`, `cleaned_up_by`, `documents`, `replaces` (see `endless guide decisions` for documents-link semantics).
+### When to use each relation type
+
+| Type            | Use when                                                                                                                  |
+|-----------------|---------------------------------------------------------------------------------------------------------------------------|
+| `blocks`        | A's work cannot start (or cannot land) until B is done. Strict ordering. Use `task block` rather than `task link --type blocks` — it's the same thing with a friendlier surface. |
+| `relates_to`    | A and B share context but neither blocks the other. The weakest typed link. Reach for it when nothing more specific fits. |
+| `implements`    | A is the implementation of a plan, idea, or decision recorded in B. Common pattern: B is type=`plan` or type=`decision`, A is the work. |
+| `cleans_up` / `cleaned_up_by` | A handles a loose end discovered while working on B. **This is the canonical "follow-up" link** — use it for follow-up tasks filed mid-stream. (We considered `follows_up` and rejected it in favor of `cleans_up` to keep the vocabulary tight.) |
+| `documents`    | A is a decision that explains B. Auto-created when you use `--decision "..."` on `task add` / `task update`.              |
+| `replaces`     | A supersedes B (B is now obsolete). Typically paired with `task replace`.                                                 |
+
+**Quick decision tree:**
+
+- *"B has to be done before A can land"* → `blocks`.
+- *"I noticed an issue while doing B; here's a separate task A to fix it"* → `cleans_up`.
+- *"A is the work and B is the spec/decision behind it"* → `implements` (or `documents` if B is a decision).
+- *"They're related, no firm dependency"* → `relates_to`.
+
+If you find yourself reaching for an undocumented type or `relates_to` for everything, that's a signal — surface it to the user.
 
 ---
 
@@ -168,7 +186,7 @@ endless task chat                                    # start a chat-only session
 
 ## Verbs
 
-Verbs are the registered action words that may start a task title (E-723, E-947). When you `task add`, Endless validates that the title begins with a registered verb.
+Verbs are the registered action words that may start a task title. When you `task add`, Endless validates that the title begins with a registered verb.
 
 **Why:** verb-first titles enforce that every task names an action — "Fix login redirect", "Refactor task_cmd", "Document the guide command" — rather than vague nouns like "Login bug". This makes task lists readable at a glance.
 
@@ -184,4 +202,4 @@ When `task add` rejects a title:
 2. **Register a new verb** if no existing one fits and the verb genuinely adds value: `endless verb add <verb>`. Use sparingly — the verb list is a contract for readability.
 3. **`--force`** bypasses validation. Don't habituate to this — it's an escape hatch, not a workflow.
 
-Verbs auto-commit to main on `worktree land` (E-1141).
+Verbs are stored in `verbs.json` at the project root and auto-commit to `main` directly (they're treated as global-config artifacts, not task work).
