@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strings"
 
 	_ "modernc.org/sqlite"
 
@@ -93,6 +94,7 @@ func buildMenuItems(binPath string, info *monitor.ActiveTaskInfo) []menuItem {
 			`run-shell "tmux display-popup -E 'endless task list --tree | less'"`},
 		{}, // separator
 		{"Refresh", "r", "refresh-client -S"},
+		rowToggleItem(),
 	}
 
 	// Dim task-dependent items when there is no active task.
@@ -105,6 +107,45 @@ func buildMenuItems(binPath string, info *monitor.ActiveTaskInfo) []menuItem {
 		}
 	}
 	return items
+}
+
+// rowToggleItem returns a menu entry that flips the Endless status row
+// on/off, with the label adapting to the current state. When the second
+// status row is visible ("status 2"), the item reads "Hide Endless row"
+// and the action sets status to 1; when hidden, the item reads "Show
+// Endless row" and sets status back to 2. A refresh-client -S follows
+// the toggle so the change is visible immediately.
+//
+// Tmux's `status` option is server-scoped, so this affects every client
+// attached to the server — there is no per-window granularity. That's
+// noted in the task plan; the auto-collapse-when-empty case is E-1259.
+func rowToggleItem() menuItem {
+	if statusRowVisible() {
+		return menuItem{
+			Label: "Hide Endless row", Key: "H",
+			Action: "set-option -g status 1 ; refresh-client -S",
+		}
+	}
+	return menuItem{
+		Label: "Show Endless row", Key: "H",
+		Action: "set-option -g status 2 ; refresh-client -S",
+	}
+}
+
+// statusRowVisible returns true when tmux's `status` option is "2" or
+// higher (i.e., the second status row — Endless's row — is being drawn).
+// Best-effort: returns true on any tmux error, since the apply path
+// always sets status to 2.
+func statusRowVisible() bool {
+	out, err := exec.Command("tmux", "show-options", "-gv", "status").Output()
+	if err != nil {
+		return true
+	}
+	val := strings.TrimSpace(string(out))
+	// `status N` for any N >= 2 means row 1 (the Endless row) is shown.
+	// `status on` (boolean form) is the historical equivalent of 1 — no
+	// row 1. `status off` means no status at all.
+	return val != "1" && val != "on" && val != "off"
 }
 
 // buildDisplayMenuArgs translates a position keyword into tmux's
