@@ -18,7 +18,7 @@ type ActiveTaskInfo struct {
 }
 
 // ErrNoActiveTask is returned when no working session, in either the
-// requested pane or anywhere else in the same tmux session, has a
+// requested pane or anywhere else in the same tmux window, has a
 // non-NULL active_task_id. Callers should render an empty/placeholder
 // status line rather than treat this as a fatal error.
 var ErrNoActiveTask = errors.New("no active task for this tmux context")
@@ -30,14 +30,16 @@ var ErrNoActiveTask = errors.New("no active task for this tmux context")
 // Lookup order:
 //  1. Pane-specific: an Endless session whose process column matches
 //     this exact pane and whose active_task_id is non-NULL.
-//  2. Session-scoped fallback: any pane in the same tmux session has
-//     an Endless session with a non-NULL active_task_id. Most recent
+//  2. Window-scoped fallback: any pane in the same tmux WINDOW has an
+//     Endless session with a non-NULL active_task_id. Most recent
 //     last_activity wins.
 //
 // The fallback exists because tmux's #() substitution runs in the
 // FOCUSED pane's environment. Without it, focusing on a shell pane
-// next to a Claude pane would blank out the status line for every
-// pane in the session.
+// next to a Claude pane in the same window would blank the status
+// row. Limiting the fallback to the focused WINDOW (not the entire
+// tmux session) ensures different windows show different tasks when
+// the user has multiple Claude sessions across windows.
 //
 // Returns ErrNoActiveTask when both lookups come up empty.
 func GetActiveTaskForPane(tmuxPane string) (*ActiveTaskInfo, error) {
@@ -56,7 +58,7 @@ func GetActiveTaskForPane(tmuxPane string) (*ActiveTaskInfo, error) {
 		return nil, err
 	}
 
-	panes, err := listPanesInSameSession(tmuxPane)
+	panes, err := listPanesInSameWindow(tmuxPane)
 	if err != nil || len(panes) == 0 {
 		return nil, ErrNoActiveTask
 	}
@@ -96,12 +98,14 @@ func queryActiveTaskForPanes(db *sql.DB, panes []string) (*ActiveTaskInfo, error
 	return &info, nil
 }
 
-// listPanesInSameSession asks tmux for every pane in the tmux session
-// that contains targetPane. Returns the list of pane IDs (`%N` form)
-// that share that tmux session.
-func listPanesInSameSession(targetPane string) ([]string, error) {
+// listPanesInSameWindow asks tmux for every pane in the same tmux
+// WINDOW as targetPane. Returns the list of pane IDs (`%N` form).
+// Uses `tmux list-panes -t <pane>` (no `-s`/`-a` flag) so the result
+// is scoped to the target's window only — not the whole session, not
+// all sessions on the server.
+func listPanesInSameWindow(targetPane string) ([]string, error) {
 	out, err := exec.Command("tmux",
-		"list-panes", "-s", "-t", targetPane, "-F", "#{pane_id}",
+		"list-panes", "-t", targetPane, "-F", "#{pane_id}",
 	).Output()
 	if err != nil {
 		return nil, err
