@@ -446,5 +446,13 @@
   {
     "value": "strengthen",
     "definition": "Make or become stronger, more secure, or more effective."
+  },
+  {
+    "value": "register",
+    "definition": "Record an entity in a registry so it can be looked up or validated later"
+  },
+  {
+    "value": "promote",
+    "definition": "Advance to a higher status, rank, level, or visibility"
   }
 ]
