@@ -1880,13 +1880,47 @@ def _current_endless_session_id() -> int | None:
     return None
 
 
-def _check_task_ownership(item_id: int) -> bool:
-    """Resolve the live ownership state of `item_id`.
+def _find_sibling_claude_session() -> tuple[int | None, int]:
+    """Find a live Claude session in a sibling tmux pane (same window).
 
-    Returns True if the current session already owns the task (caller
-    should short-circuit with an "already active" notice instead of
-    re-emitting events). Returns False if the task is free. Raises
-    click.ClickException if a different live session owns the task.
+    Returns (session_eid, num_matches):
+      - (None, 0) — no sibling Claude session (or not in tmux)
+      - (eid, 1)  — exactly one match; bind to that session
+      - (None, n) — n>1 matches; ambiguous (caller refuses with E-1244 pointer)
+    """
+    from endless.session_cmd import (
+        _read_live_companions,
+        _project_root_for_cwd,
+        _tmux_window_pane_ids,
+    )
+    pane_ids = _tmux_window_pane_ids()
+    if not pane_ids:
+        return None, 0
+    my_pane = os.environ.get("TMUX_PANE")
+    sibling_panes = {p for p in pane_ids if p != my_pane}
+    if not sibling_panes:
+        return None, 0
+    project_root = _project_root_for_cwd()
+    live = _read_live_companions(project_root / ".endless" / "sessions")
+    matches = [
+        c for c in live
+        if c.get("pane_id") in sibling_panes
+        and isinstance(c.get("endless_session_id"), int)
+    ]
+    if not matches:
+        return None, 0
+    if len(matches) > 1:
+        return None, len(matches)
+    return matches[0]["endless_session_id"], 1
+
+
+def _check_task_ownership(item_id: int, current_eid: int | None) -> bool:
+    """Resolve the live ownership state of `item_id` from `current_eid`'s view.
+
+    Returns True if `current_eid` already owns the task (caller short-
+    circuits with an "already active" notice). Returns False if the task
+    is free (or only stale sessions hold it). Raises click.ClickException
+    if a *different* live session owns the task.
     """
     rows = db.query(
         "SELECT id AS eid FROM sessions "
@@ -1896,7 +1930,6 @@ def _check_task_ownership(item_id: int) -> bool:
     if not rows:
         return False
 
-    current_eid = _current_endless_session_id()
     owned_by_current = current_eid is not None and any(
         r["eid"] == current_eid for r in rows
     )
@@ -1933,14 +1966,19 @@ _CLAIM_REQUIRES_FORCE: frozenset[str] = frozenset({
 
 
 def claim_item(item_id: int, force: bool = False):
-    """Claim ownership of a task for this session and mark it in_progress.
+    """Claim ownership of a task and bind a Claude session to it.
 
-    Refuses (without `force`) when the task is in a status the user
-    explicitly chose as terminal-ish or done-ish (verify, confirmed,
-    declined, obsolete, assumed). Re-claiming such a task silently
-    demotes it to in_progress, which has bitten me twice when running
-    smoke tests against tasks I'd just verified. Force allows the
-    deliberate override.
+    `force` covers two distinct override gates (single flag for one
+    "I know what I'm doing" intent):
+      - Bypasses the done-ish status gate (verify/confirmed/declined/
+        obsolete/assumed/completed → in_progress demotion)
+      - Allows claim WITHOUT a Claude session binding when no session
+        can be resolved (manual-work-without-Claude case, E-1242)
+
+    Resolves the binding target as: (1) current Endless session via
+    ENDLESS_SESSION_ID / TMUX_PANE; (2) sibling Claude session in the
+    same tmux window. If neither resolves and not force: refuse. If 2+
+    sibling Claude sessions: refuse with pointer to E-1244.
     """
     from endless.event_bridge import emit_event
 
@@ -1963,11 +2001,30 @@ def claim_item(item_id: int, force: bool = False):
             "first if that's not what you intended."
         )
 
-    if _check_task_ownership(item_id):
+    target_session = _current_endless_session_id()
+    if target_session is None:
+        sibling_eid, n_matches = _find_sibling_claude_session()
+        if n_matches > 1:
+            raise click.ClickException(
+                f"Found {n_matches} Claude sessions in this tmux window. "
+                f"Ambiguous — claim from one of those panes directly.\n"
+                "(E-1244 will design auto-disambiguation rules.)"
+            )
+        if n_matches == 0 and not force:
+            raise click.ClickException(
+                "No Claude session available to bind this task to "
+                "(not running inside a Claude session, and no sibling "
+                "Claude pane in this tmux window).\n"
+                "Pass --force to claim without a session binding "
+                "(manual work, no Claude assistance)."
+            )
+        target_session = sibling_eid  # may be None when --force used with 0 matches
+
+    if _check_task_ownership(item_id, target_session):
         from endless.worktree_cmd import create_task_worktree, _project_root
         click.echo(
             click.style("•", fg="cyan")
-            + f" E-{item_id} is already active in this session"
+            + f" E-{item_id} is already active in session {target_session}"
         )
         try:
             project_root = _project_root()
@@ -2003,6 +2060,20 @@ def claim_item(item_id: int, force: bool = False):
         row[0]["title"],
         [("status", row[0]["status"], "in_progress")],
     )
+
+    if target_session is not None:
+        emit_event(
+            kind="task.claimed",
+            project=proj_name,
+            entity_type="task",
+            entity_id=str(item_id),
+            payload={"session_id": target_session},
+        )
+        click.echo(
+            click.style("•", fg="cyan")
+            + f" bound to session {target_session}"
+        )
+
     click.echo("")
 
     from endless.worktree_cmd import create_task_worktree, _project_root

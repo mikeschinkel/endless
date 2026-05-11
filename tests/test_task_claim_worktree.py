@@ -73,10 +73,57 @@ def test_claim_with_force_demotes_done_status(project_with_task, capsys):
     assert row["status"] == "in_progress"
 
 
+def test_claim_refuses_when_no_session_and_no_force(project_with_task):
+    """E-1242: claim with no resolvable session refuses without --force."""
+    from unittest.mock import patch
+    from endless.task_cmd import claim_item
+
+    tid = project_with_task["task_id"]
+    with patch("endless.task_cmd._current_endless_session_id", return_value=None), \
+         patch("endless.task_cmd._find_sibling_claude_session", return_value=(None, 0)):
+        with pytest.raises(click.ClickException) as exc:
+            claim_item(tid)
+    msg = str(exc.value)
+    assert "No Claude session available" in msg
+    assert "--force" in msg
+
+
+def test_claim_refuses_when_two_sibling_claude_sessions(project_with_task):
+    """E-1242: 2+ sibling Claude sessions = ambiguous, refuse with E-1244 pointer."""
+    from unittest.mock import patch
+    from endless.task_cmd import claim_item
+
+    tid = project_with_task["task_id"]
+    with patch("endless.task_cmd._current_endless_session_id", return_value=None), \
+         patch("endless.task_cmd._find_sibling_claude_session", return_value=(None, 3)):
+        with pytest.raises(click.ClickException) as exc:
+            claim_item(tid)
+    msg = str(exc.value)
+    assert "Found 3 Claude sessions" in msg
+    assert "E-1244" in msg
+
+
+def test_claim_binds_sibling_claude_session(project_with_task):
+    """E-1242: 1 sibling Claude session resolves; binding event emitted."""
+    from unittest.mock import patch
+    from endless.task_cmd import claim_item
+
+    tid = project_with_task["task_id"]
+    SIBLING_EID = 4242
+
+    with patch("endless.task_cmd._current_endless_session_id", return_value=None), \
+         patch("endless.task_cmd._find_sibling_claude_session", return_value=(SIBLING_EID, 1)):
+        claim_item(tid)
+
+    # task status flipped (event-sourced through Go executor)
+    row = db.query("SELECT status FROM tasks WHERE id = ?", (tid,))[0]
+    assert row["status"] == "in_progress"
+
+
 def test_claim_creates_worktree_no_plan_file(project_with_task, capsys):
     from endless.task_cmd import claim_item
 
-    claim_item(project_with_task["task_id"])
+    claim_item(project_with_task["task_id"], force=True)
 
     repo = project_with_task["project_root"]
     tid = project_with_task["task_id"]
@@ -113,10 +160,10 @@ def test_claim_creates_worktree_no_plan_file(project_with_task, capsys):
 def test_claim_idempotent_on_second_run(project_with_task, capsys):
     from endless.task_cmd import claim_item
 
-    claim_item(project_with_task["task_id"])
+    claim_item(project_with_task["task_id"], force=True)
     capsys.readouterr()  # clear
 
-    claim_item(project_with_task["task_id"])
+    claim_item(project_with_task["task_id"], force=True)
     captured = capsys.readouterr()
     assert "worktree already exists:" in captured.out
     # Re-run still shows the same two-option block
@@ -143,7 +190,7 @@ def test_claim_refuses_when_plan_file_uncommitted(project_with_task, capsys):
     (plans / f"E-{tid}.md").write_text("plan content\n")
 
     with pytest.raises(click.ClickException) as exc_info:
-        claim_item(tid)
+        claim_item(tid, force=True)
 
     msg = exc_info.value.message
     assert f".endless/plans/E-{tid}.md" in msg
@@ -166,7 +213,7 @@ def test_claim_succeeds_when_plan_file_committed(project_with_task):
     _run(["git", "add", f".endless/plans/E-{tid}.md"], repo)
     _run(["git", "commit", "-q", "-m", "add plan"], repo)
 
-    claim_item(tid)
+    claim_item(tid, force=True)
 
     wt = repo / ".endless" / "worktrees" / f"e-{tid}"
     assert wt.exists()
@@ -194,7 +241,7 @@ def test_claim_uses_task_fallback_for_all_filler_title(seeded_project_at_cwd):
     )
     tid = db.query("SELECT id FROM tasks WHERE title = ?", ("The to from",))[0]["id"]
 
-    claim_item(tid)
+    claim_item(tid, force=True)
 
     companion = json.loads(
         (repo / ".endless" / "worktrees" / f"e-{tid}" / ".endless" / "worktree.json").read_text()
@@ -207,7 +254,7 @@ def test_claim_skips_eval_line_when_eswt_already_defined(project_with_task, caps
     from endless import task_cmd
 
     monkeypatch.setattr(task_cmd, "_eswt_defined_in_user_shell", lambda: True)
-    task_cmd.claim_item(project_with_task["task_id"])
+    task_cmd.claim_item(project_with_task["task_id"], force=True)
     captured = capsys.readouterr()
     tid = project_with_task["task_id"]
     assert f"eswt E-{tid}" in captured.out
@@ -219,7 +266,7 @@ def test_claim_worktree_discoverable_via_for_task(project_with_task):
     from endless.task_cmd import claim_item
     from endless.worktree_cmd import _branch_for_task, _enriched_list
 
-    claim_item(project_with_task["task_id"])
+    claim_item(project_with_task["task_id"], force=True)
 
     repo = project_with_task["project_root"]
     tid = project_with_task["task_id"]

@@ -55,6 +55,10 @@ type TaskReleasedPayload struct {
 	SessionID int64 `json:"session_id"`
 }
 
+type TaskClaimedPayload struct {
+	SessionID int64 `json:"session_id"`
+}
+
 // Task dependency payloads
 
 type TaskDepCreatedPayload struct {
