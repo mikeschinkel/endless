@@ -7,7 +7,7 @@ import (
 )
 
 func isActive(item data.TaskView) bool {
-	return item.Status != "confirmed" && item.Status != "verify" && item.Status != "declined" && item.Status != "obsolete"
+	return item.Status != "confirmed" && item.Status != "completed" && item.Status != "verify" && item.Status != "declined" && item.Status != "obsolete"
 }
 
 // taskTreeSmartOpen returns Alpine.js init for open state.
@@ -22,7 +22,7 @@ func taskTreeSmartOpen(items []data.TaskView) string {
 	hasActive := make(map[int64]bool)
 	for i := len(items) - 1; i >= 0; i-- {
 		item := items[i]
-		if item.Status == "confirmed" {
+		if item.Status == "confirmed" || item.Status == "completed" {
 			continue
 		}
 		if expandFor[item.ID] || hasActive[item.ID] {
@@ -33,7 +33,7 @@ func taskTreeSmartOpen(items []data.TaskView) string {
 	}
 	var parts []string
 	for _, item := range items {
-		if item.Status == "confirmed" {
+		if item.Status == "confirmed" || item.Status == "completed" {
 			continue
 		}
 		if item.ChildCount > 0 || hasActive[item.ID] {
@@ -48,7 +48,7 @@ func taskTreeSmartOpen(items []data.TaskView) string {
 func taskTreeParentMap(items []data.TaskView) string {
 	var parts []string
 	for _, item := range items {
-		if item.Status == "confirmed" {
+		if item.Status == "confirmed" || item.Status == "completed" {
 			continue
 		}
 		pid := int64(0)
@@ -106,6 +106,8 @@ func statusLabel(status string) string {
 		return "Confirmed"
 	case "assumed":
 		return "Assumed"
+	case "completed":
+		return "Completed"
 	case "obsolete":
 		return "Obsolete"
 	default:
@@ -179,7 +181,7 @@ func taskTreeChildSummary(items []data.TaskView) string {
 	parentCounts := make(map[int64]*counts)
 	for _, item := range items {
 		if item.ParentID == nil || item.Status == "confirmed" || item.Status == "assumed" ||
-			item.Status == "declined" || item.Status == "obsolete" {
+			item.Status == "completed" || item.Status == "declined" || item.Status == "obsolete" {
 			continue
 		}
 		pid := *item.ParentID
@@ -315,6 +317,7 @@ func statusChoices() []statusChoice {
 	return []statusChoice{
 		{"confirmed", "Confirmed", "Verified and done"},
 		{"assumed", "Assumed", "Believed done, verify on use"},
+		{"completed", "Completed", "Findings delivered (audit / research)"},
 		{"verify", "Verify", "Done, awaiting confirmation"},
 		{"in_progress", "In progress", "Actively being worked on"},
 		{"ready", "Ready", "Planned, ready to implement"},
@@ -359,6 +362,8 @@ func statusSphereClass(status string) string {
 		return "bg-gray-400"
 	case "assumed":
 		return "bg-emerald-300"
+	case "completed":
+		return "bg-teal-400"
 	case "obsolete":
 		return "bg-gray-600"
 	default:
@@ -657,7 +662,7 @@ templ taskDetailPane(item data.TaskView) {
 					<td class="detail-value">{ data.SmartDate(item.UpdatedAt) }</td>
 				}
 			</tr>
-			if item.CompletedAt != "" && item.Status == "confirmed" {
+			if item.CompletedAt != "" && (item.Status == "confirmed" || item.Status == "completed") {
 				<tr>
 					<td class="detail-label">Completed:</td>
 					<td class="detail-value" colspan="3">{ data.SmartDate(item.CompletedAt) }</td>

@@ -217,7 +217,7 @@ func execTaskStatusChanged(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 
 	var completedAt *string
 	tier := 0
-	if p.NewStatus == "confirmed" {
+	if p.NewStatus == "confirmed" || p.NewStatus == "completed" {
 		ts := now()
 		completedAt = &ts
 	}
@@ -301,7 +301,7 @@ func execTaskFieldsUpdated(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 		statusStr := fmt.Sprintf("%v", status)
 		terminalStatuses := map[string]bool{
 			"verify": true, "confirmed": true, "assumed": true,
-			"declined": true, "obsolete": true,
+			"completed": true, "declined": true, "obsolete": true,
 		}
 		if terminalStatuses[statusStr] {
 			if _, tierSet := p.Fields["tier"]; !tierSet {
@@ -309,7 +309,7 @@ func execTaskFieldsUpdated(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 				args = append(args, 0)
 			}
 		}
-		if statusStr == "confirmed" {
+		if statusStr == "confirmed" || statusStr == "completed" {
 			setClauses = append(setClauses, "completed_at = ?")
 			args = append(args, now())
 		} else {

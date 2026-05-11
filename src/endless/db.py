@@ -264,12 +264,13 @@ def _migrate_v2(conn: sqlite3.Connection):
             conn.execute("ALTER TABLE tasks ADD COLUMN tier INTEGER")
             conn.commit()
 
-    # Safe data updates: rename completed → confirmed, fix tier 1 status
+    # Safe data updates: fix completed_at on non-confirmed (legacy completed->confirmed
+    # rename removed in E-1240; `completed` is once again a real terminal status with
+    # findings-as-deliverable semantics, distinct from `confirmed`).
     if _has_table(conn, "tasks"):
-        conn.execute("UPDATE tasks SET status = 'confirmed' WHERE status = 'completed'")
         conn.execute(
             "UPDATE tasks SET completed_at = NULL "
-            "WHERE completed_at IS NOT NULL AND status != 'confirmed'"
+            "WHERE completed_at IS NOT NULL AND status NOT IN ('confirmed', 'completed')"
         )
         conn.execute(
             "UPDATE tasks SET status = 'ready' "
@@ -277,12 +278,12 @@ def _migrate_v2(conn: sqlite3.Connection):
         )
         conn.commit()
 
-    # Step 13: Clear tier to 0 (n/a) on terminal and verify tasks (E-856)
+    # Step 13: Clear tier to 0 (n/a) on terminal and verify tasks (E-856, E-1240)
     if _has_table(conn, "tasks"):
         conn.execute(
             "UPDATE tasks SET tier = 0 "
             "WHERE tier IS NOT NULL AND tier != 0 "
-            "AND status IN ('verify', 'confirmed', 'assumed', 'declined', 'obsolete')"
+            "AND status IN ('verify', 'confirmed', 'assumed', 'completed', 'declined', 'obsolete')"
         )
         conn.commit()
 

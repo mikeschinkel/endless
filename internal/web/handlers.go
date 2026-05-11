@@ -152,7 +152,7 @@ func handleUpdateTaskStatus(w http.ResponseWriter, r *http.Request) {
 	newStatus := strings.TrimSpace(r.FormValue("status"))
 	valid := map[string]bool{
 		"needs_plan": true, "ready": true, "in_progress": true,
-		"verify": true, "confirmed": true, "assumed": true,
+		"verify": true, "confirmed": true, "assumed": true, "completed": true,
 		"blocked": true, "revisit": true, "declined": true, "obsolete": true,
 	}
 	if !valid[newStatus] {

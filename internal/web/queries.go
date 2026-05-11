@@ -308,7 +308,7 @@ func GetStatusDetail(name string) (*data.StatusDetail, error) {
 		return nil, err
 	}
 
-	taskItems := GetProjectTasks(project.ID, "confirmed", "assumed", "declined", "obsolete")
+	taskItems := GetProjectTasks(project.ID, "confirmed", "assumed", "completed", "declined", "obsolete")
 
 	return &data.StatusDetail{
 		Project:      *project,

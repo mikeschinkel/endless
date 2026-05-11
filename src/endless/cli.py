@@ -36,7 +36,8 @@ class TaskIDType(click.ParamType):
 TASK_ID = TaskIDType()
 
 TASK_STATUSES = ["needs_plan", "ready", "in_progress",
-                 "verify", "confirmed", "assumed", "blocked", "revisit", "declined", "obsolete"]
+                 "verify", "confirmed", "assumed", "completed",
+                 "blocked", "revisit", "declined", "obsolete"]
 
 
 class MultiChoice(click.ParamType):
@@ -819,8 +820,7 @@ def task_search(query, project, show_all, status, phase, parent_id,
               type=click.Choice(["task", "plan", "bug", "research", "spike", "chore", "decision"]),
               help="Task type (default: task)")
 @click.option("--status", default=None,
-              type=click.Choice(["needs_plan", "ready", "in_progress",
-                                 "verify", "confirmed", "assumed", "blocked", "revisit", "declined", "obsolete"]),
+              type=click.Choice(TASK_STATUSES),
               help="Initial status (default: needs_plan)")
 @click.option("--tier", default=None,
               help="Tier (1-4 or auto/quick/deep/discuss)")
@@ -975,6 +975,23 @@ def task_decline(item_ids, reason):
         decline_item(item_id, reason=reason)
 
 
+@task_cmd.command("complete")
+@click.argument("item_ids", type=TASK_ID, nargs=-1, required=True)
+@click.option("--outcome", required=True,
+              help="Findings / deliverable text (required — IS the deliverable)")
+def task_complete_cmd(item_ids, outcome):
+    """Mark one or more tasks as `completed` (E-1240).
+
+    For findings-as-deliverable tasks (audits, research, reviews, etc.)
+    whose deliverable is the outcome text itself, not behavior. Gated:
+    the task's title's lead verb must be marked `completable: true` in
+    verbs.json. For implementation tasks, use `task confirm` / `task assume`.
+    """
+    from endless.task_cmd import mark_completed_item
+    for item_id in item_ids:
+        mark_completed_item(item_id, outcome=outcome)
+
+
 @task_cmd.command("claim")
 @click.argument("item_id", type=TASK_ID)
 @click.option("--force", is_flag=True,
@@ -1106,7 +1123,7 @@ def task_block(item_id, blocker_id):
 @click.option("--by", "replacement_id", type=TASK_ID, required=True,
               help="Task ID that replaces this task")
 @click.option("--status", "new_status", default="obsolete",
-              type=click.Choice(["obsolete", "declined", "confirmed", "assumed"]),
+              type=click.Choice(["obsolete", "declined", "confirmed", "assumed", "completed"]),
               help="Status to set on the replaced task (default: obsolete)")
 @click.option("--outcome", default=None,
               help="Outcome — why this was replaced (required if --status=declined)")

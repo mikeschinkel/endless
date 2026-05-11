@@ -830,7 +830,7 @@ def show_plan(
         where += f" AND pi.status IN ({placeholders})"
         params.extend(status_filter)
     elif not show_all:
-        where += " AND pi.status NOT IN ('confirmed', 'assumed', 'declined', 'obsolete')"
+        where += " AND pi.status NOT IN ('confirmed', 'assumed', 'completed', 'declined', 'obsolete')"
     if phase_filter:
         where += " AND pi.phase = ?"
         params.append(phase_filter)
@@ -944,6 +944,7 @@ def show_plan(
             "in_progress": click.style("◉", fg="blue"),
             "verify": click.style("◉", fg="magenta"),
             "confirmed": click.style("●", fg="green"),
+            "completed": click.style("◆", fg="green"),
             "blocked": click.style("✗", fg="red"),
         }
 
@@ -985,13 +986,14 @@ def next_tasks(
     """Show top actionable leaf tasks, ranked by priority."""
     where = (
         "WHERE t.type != 'decision' "
-        "AND t.status NOT IN ('confirmed', 'assumed', 'blocked', 'declined', 'obsolete', 'in_progress', 'verify') "
+        "AND t.status NOT IN ('confirmed', 'assumed', 'completed', 'blocked', 'declined', 'obsolete', 'in_progress', 'verify') "
         "AND (SELECT count(*) FROM tasks c WHERE c.parent_id = t.id) = 0 "
         "AND t.id NOT IN ("
         "  SELECT td.target_id FROM task_deps td"
         "  WHERE td.target_type = 'task' AND td.dep_type = 'blocks'"
         "    AND td.source_id IN ("
-        "      SELECT t2.id FROM tasks t2 WHERE t2.status != 'confirmed'"
+        "      SELECT t2.id FROM tasks t2 "
+        "      WHERE t2.status NOT IN ('confirmed', 'assumed', 'completed')"
         "    )"
         ")"
     )
@@ -1577,6 +1579,52 @@ def _require_outcome_for_declined(status: str | None, outcome: str | None):
         )
 
 
+def _lead_verb(title: str | None) -> str:
+    """Return the lowercased first whitespace-delimited word of `title`, with
+    surrounding punctuation stripped. Returns '' if title is empty or missing."""
+    if not title:
+        return ""
+    first = title.strip().split(None, 1)[0] if title.strip() else ""
+    return first.strip(".,:;!?\"'()[]{}").lower()
+
+
+def _require_completable_verb_for_completed(
+    status: str | None,
+    title: str | None,
+):
+    """E-1240: `completed` is gated to tasks whose title's lead verb is
+    marked `completable: true` in verbs.json. Reserves the status for
+    findings-as-deliverable work (audits, research, reviews, …) and keeps
+    implementation tasks on the `verify`/`confirmed`/`assumed` track."""
+    if status != "completed":
+        return
+    from endless.matchers import is_completable_verb
+    verb = _lead_verb(title)
+    if not is_completable_verb(verb):
+        shown = verb or "(none)"
+        raise click.ClickException(
+            f"Status 'completed' requires a completable lead verb in the "
+            f"task title. Title's lead verb is {shown!r}, which is not "
+            f"marked `completable: true` in verbs.json.\n"
+            f"Completable verbs (e.g. audit, research, investigate, review, "
+            f"analyze) signal that the deliverable is text/findings, not "
+            f"behavior. For implementation tasks, use 'verify' → 'confirmed' "
+            f"or 'assumed' instead."
+        )
+
+
+def _require_outcome_for_completed(status: str | None, outcome: str | None):
+    """E-1240: `completed` requires --outcome because the outcome text IS
+    the deliverable for findings-style tasks."""
+    if status == "completed" and not (outcome and outcome.strip()):
+        raise click.ClickException(
+            "An outcome is required when completing a task. "
+            "The outcome captures the findings/deliverable — use --outcome "
+            "to provide it. (For implementation tasks where behavior is "
+            "the deliverable, use 'verify' → 'confirmed' / 'assumed' instead.)"
+        )
+
+
 def complete_item(item_id: int, cascade: bool = False, outcome: str | None = None):
     """Mark a task as confirmed."""
     from endless.event_bridge import emit_event
@@ -1683,6 +1731,57 @@ def assume_item(item_id: int, cascade: bool = False, outcome: str | None = None)
         ) or 1
         suffix = f"(cascaded to {count - 1} descendant(s))"
     _emit_field_changes(item_id, row[0]["title"], changes, suffix=suffix)
+
+
+def mark_completed_item(item_id: int, outcome: str):
+    """E-1240: Mark a findings-as-deliverable task as `completed`.
+
+    Gated by `--outcome` (required) and by `completable: true` on the
+    task title's lead verb in verbs.json. Distinct from `confirmed`
+    (behavior verified) and `assumed` (behavior believed correct,
+    awaiting promotion). Use for Audit/Research/Investigate/Review-style
+    tasks whose deliverable is the outcome text itself."""
+    from endless.event_bridge import emit_event
+
+    row = db.query(
+        "SELECT id, COALESCE(title, description) as title, status FROM tasks "
+        "WHERE id = ?",
+        (item_id,),
+    )
+    if not row:
+        raise click.ClickException(
+            f"No task found with id {item_id}"
+        )
+
+    _require_outcome_for_completed("completed", outcome)
+    _require_completable_verb_for_completed("completed", row[0]["title"])
+
+    if row[0]["status"] == "completed":
+        click.echo(
+            click.style("•", fg="cyan")
+            + f" Item {task_id_display(item_id)} is already completed"
+        )
+        return
+
+    _, proj_name = _resolve_project(None)
+    payload = {
+        "old_status": row[0]["status"],
+        "new_status": "completed",
+        "outcome": outcome,
+    }
+    emit_event(
+        kind="task.status_changed",
+        project=proj_name,
+        entity_type="task",
+        entity_id=str(item_id),
+        payload=payload,
+    )
+
+    changes = [
+        ("status", row[0]["status"], "completed"),
+        ("outcome", None, outcome),
+    ]
+    _emit_field_changes(item_id, row[0]["title"], changes)
 
 
 def decline_item(item_id: int, reason: str):
@@ -1829,7 +1928,7 @@ def _check_task_ownership(item_id: int) -> bool:
 
 
 _CLAIM_REQUIRES_FORCE: frozenset[str] = frozenset({
-    "verify", "confirmed", "declined", "obsolete", "assumed",
+    "verify", "confirmed", "declined", "obsolete", "assumed", "completed",
 })
 
 
@@ -2011,6 +2110,7 @@ def update_plan(
     from endless.event_bridge import emit_event
 
     _require_outcome_for_declined(status, outcome)
+    _require_outcome_for_completed(status, outcome)
 
     row = db.query(
         "SELECT id, title, description, text, prompt, status, type, "
@@ -2031,12 +2131,18 @@ def update_plan(
     # Validate status if provided
     if status is not None:
         valid = ("needs_plan", "ready", "in_progress",
-                 "verify", "confirmed", "assumed", "blocked", "revisit", "declined", "obsolete")
+                 "verify", "confirmed", "assumed", "completed",
+                 "blocked", "revisit", "declined", "obsolete")
         if status not in valid:
             raise click.ClickException(
                 f"Invalid status '{status}'. "
                 f"Valid: {', '.join(valid)}"
             )
+        # E-1240: gate `completed` on a completable lead verb. Use the
+        # incoming title if provided (the title is being changed in the
+        # same call), else the existing title on the row.
+        effective_title = title if title is not None else row[0]["title"]
+        _require_completable_verb_for_completed(status, effective_title)
 
     # Build the fields map for the event payload, plus an ordered list of
     # (name, old, new) tuples for change-output rendering.
@@ -2230,7 +2336,7 @@ def detail_item(
     click.echo(f"{label('Type:')} {val(item['type'])}")
     click.echo(f"{label('Phase:')} {val(item['phase'])}")
     click.echo(f"{label('Status:')} {val(item['status'])}")
-    if item["outcome"] and (show_outcome or item["status"] == "declined"):
+    if item["outcome"] and (show_outcome or item["status"] in ("declined", "completed")):
         click.echo(f"{label('Outcome:')} {val(item['outcome'])}")
     if item["tier"]:
         click.echo(f"{label('Tier:')} {val(tier_display(item['tier']))}")
@@ -2488,7 +2594,7 @@ def search_tasks(
         where += f" AND t.status IN ({placeholders})"
         params.extend(status_filter)
     elif not show_all:
-        where += " AND t.status NOT IN ('confirmed', 'assumed', 'declined', 'obsolete')"
+        where += " AND t.status NOT IN ('confirmed', 'assumed', 'completed', 'declined', 'obsolete')"
     if phase_filter:
         where += " AND t.phase = ?"
         params.append(phase_filter)
@@ -3038,7 +3144,7 @@ def show_relations(item_id: int, llm: bool = False):
         return
 
     label = lambda s: click.style(s, fg="cyan")
-    terminal = ("confirmed", "assumed", "declined", "obsolete")
+    terminal = ("confirmed", "assumed", "completed", "declined", "obsolete")
 
     click.echo()
     click.echo(click.style(f"Relations for {task_id_display(item_id)}", fg="green", bold=True))

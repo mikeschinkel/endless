@@ -169,35 +169,76 @@ def _save_verbs_list(path: Path, verbs: list[dict]) -> None:
     path.write_text(json.dumps(verbs, indent=2) + "\n")
 
 
-DEFAULT_VERBS: list[dict[str, str]] = [
+def _resolved_verbs() -> list[dict]:
+    """Resolve the active verbs list: project > machine > defaults.
+
+    Returns the first source that exists and parses to a list. Used by the
+    `completed`-status gate (E-1240) and any future verb-property lookups.
+    """
+    proj_path = project_verbs_path()
+    if proj_path is not None:
+        verbs = _load_verbs_list(proj_path)
+        if verbs:
+            return verbs
+    machine_verbs = _load_verbs_list(machine_verbs_path())
+    if machine_verbs:
+        return machine_verbs
+    return DEFAULT_VERBS
+
+
+def is_completable_verb(verb: str) -> bool:
+    """Return True if `verb` is defined with `completable: true` in the
+    resolved verbs list (project > machine > defaults).
+
+    Lookup is case-insensitive. Verbs without the `completable` field
+    default to False.
+    """
+    if not verb:
+        return False
+    target = verb.strip().lower()
+    for entry in _resolved_verbs():
+        if not isinstance(entry, dict):
+            continue
+        if str(entry.get("value", "")).lower() == target:
+            return bool(entry.get("completable", False))
+    return False
+
+
+DEFAULT_VERBS: list[dict] = [
     {"value": "accept", "definition": "to receive or agree to"},
     {"value": "add", "definition": "to introduce or include something new"},
+    {"value": "analyze", "definition": "to break down systematically into components", "completable": True},
     {"value": "apply", "definition": "to put into effect"},
+    {"value": "assess", "definition": "to form a judgment about", "completable": True},
     {"value": "assume", "definition": "to take to be complete pending verification"},
-    {"value": "audit", "definition": "to examine systematically"},
+    {"value": "audit", "definition": "to examine systematically", "completable": True},
     {"value": "backfill", "definition": "to fill in missing data after the fact"},
     {"value": "build", "definition": "to construct or compile"},
     {"value": "capture", "definition": "to record or take in"},
     {"value": "change", "definition": "to alter"},
     {"value": "clean", "definition": "to remove unwanted state"},
     {"value": "clear", "definition": "to remove or empty"},
+    {"value": "compare", "definition": "to identify similarities and differences", "completable": True},
     {"value": "confirm", "definition": "to verify and finalize"},
     {"value": "configure", "definition": "to set options or parameters"},
     {"value": "consolidate", "definition": "to combine multiple things into one"},
     {"value": "convert", "definition": "to change form or representation"},
     {"value": "create", "definition": "to bring into existence"},
-    {"value": "decide", "definition": "to make a determination"},
+    {"value": "decide", "definition": "to make a determination", "completable": True},
     {"value": "define", "definition": "to specify meaning or scope"},
     {"value": "defer", "definition": "to postpone"},
     {"value": "deploy", "definition": "to release for use"},
-    {"value": "design", "definition": "to plan structure or behavior"},
+    {"value": "design", "definition": "to plan structure or behavior", "completable": True},
+    {"value": "diagnose", "definition": "to identify the cause of a problem", "completable": True},
     {"value": "disable", "definition": "to turn off or block"},
     {"value": "distinguish", "definition": "to make a difference between"},
-    {"value": "document", "definition": "to record in writing"},
+    {"value": "document", "definition": "to record in writing", "completable": True},
     {"value": "enable", "definition": "to turn on or allow"},
     {"value": "enforce", "definition": "to compel observance of"},
-    {"value": "evaluate", "definition": "to assess"},
+    {"value": "evaluate", "definition": "to assess", "completable": True},
+    {"value": "examine", "definition": "to inspect closely", "completable": True},
     {"value": "expand", "definition": "to make larger or more inclusive"},
+    {"value": "explore", "definition": "to investigate possibilities in a space", "completable": True},
     {"value": "extract", "definition": "to take out or pull from"},
     {"value": "fix", "definition": "to repair or correct"},
     {"value": "generate", "definition": "to produce"},
@@ -206,7 +247,7 @@ DEFAULT_VERBS: list[dict[str, str]] = [
     {"value": "improve", "definition": "to make better"},
     {"value": "increase", "definition": "to raise in number or magnitude"},
     {"value": "integrate", "definition": "to combine into a working whole"},
-    {"value": "investigate", "definition": "to examine in depth"},
+    {"value": "investigate", "definition": "to examine in depth", "completable": True},
     {"value": "merge", "definition": "to combine branches or items"},
     {"value": "migrate", "definition": "to move from one system to another"},
     {"value": "move", "definition": "to change location"},
@@ -217,15 +258,16 @@ DEFAULT_VERBS: list[dict[str, str]] = [
     {"value": "raise", "definition": "to lift or signal (as in raise an error)"},
     {"value": "read", "definition": "to examine and interpret"},
     {"value": "reconcile", "definition": "to bring into agreement"},
-    {"value": "redesign", "definition": "to design again"},
+    {"value": "redesign", "definition": "to design again", "completable": True},
     {"value": "refactor", "definition": "to restructure code without changing behavior"},
     {"value": "remove", "definition": "to take away"},
     {"value": "rename", "definition": "to give a new name"},
     {"value": "render", "definition": "to produce visual or textual output"},
     {"value": "replace", "definition": "to substitute"},
     {"value": "require", "definition": "to demand as necessary"},
-    {"value": "research", "definition": "to investigate systematically"},
+    {"value": "research", "definition": "to investigate systematically", "completable": True},
     {"value": "resolve", "definition": "to settle or fix"},
+    {"value": "review", "definition": "to examine critically and form a judgment", "completable": True},
     {"value": "search", "definition": "to look for"},
     {"value": "show", "definition": "to display"},
     {"value": "simplify", "definition": "to make simpler"},
@@ -233,6 +275,7 @@ DEFAULT_VERBS: list[dict[str, str]] = [
     {"value": "split", "definition": "to divide into parts"},
     {"value": "support", "definition": "to provide for or assist with"},
     {"value": "surface", "definition": "to bring to attention"},
+    {"value": "survey", "definition": "to take stock of a landscape", "completable": True},
     {"value": "sync", "definition": "to bring into alignment"},
     {"value": "test", "definition": "to check behavior or correctness"},
     {"value": "track", "definition": "to follow or monitor"},

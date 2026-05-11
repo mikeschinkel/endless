@@ -243,6 +243,8 @@ templ taskStatusIcon(status string) {
 			switch status {
 				case "confirmed":
 					<span class="text-emerald-500 text-sm">●</span>
+				case "completed":
+					<span class="text-teal-400 text-sm">◆</span>
 				case "in_progress":
 					<span class="text-amber-400 text-sm">◐</span>
 				case "blocked":

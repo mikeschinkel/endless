@@ -21,7 +21,8 @@
   },
   {
     "value": "audit",
-    "definition": "to examine systematically"
+    "definition": "to examine systematically",
+    "completable": true
   },
   {
     "value": "backfill",
@@ -69,7 +70,8 @@
   },
   {
     "value": "decide",
-    "definition": "to make a determination"
+    "definition": "to make a determination",
+    "completable": true
   },
   {
     "value": "define",
@@ -85,7 +87,8 @@
   },
   {
     "value": "design",
-    "definition": "to plan structure or behavior"
+    "definition": "to plan structure or behavior",
+    "completable": true
   },
   {
     "value": "disable",
@@ -97,7 +100,8 @@
   },
   {
     "value": "document",
-    "definition": "to record in writing"
+    "definition": "to record in writing",
+    "completable": true
   },
   {
     "value": "enable",
@@ -109,7 +113,8 @@
   },
   {
     "value": "evaluate",
-    "definition": "to assess"
+    "definition": "to assess",
+    "completable": true
   },
   {
     "value": "expand",
@@ -141,7 +146,8 @@
   },
   {
     "value": "investigate",
-    "definition": "to examine in depth"
+    "definition": "to examine in depth",
+    "completable": true
   },
   {
     "value": "hide",
@@ -193,7 +199,8 @@
   },
   {
     "value": "redesign",
-    "definition": "to design again"
+    "definition": "to design again",
+    "completable": true
   },
   {
     "value": "refactor",
@@ -221,7 +228,8 @@
   },
   {
     "value": "research",
-    "definition": "to investigate systematically"
+    "definition": "to investigate systematically",
+    "completable": true
   },
   {
     "value": "resolve",
@@ -325,7 +333,8 @@
   },
   {
     "value": "review",
-    "definition": "Assessment, evaluation, or re-examination"
+    "definition": "Assessment, evaluation, or re-examination",
+    "completable": true
   },
   {
     "value": "allow",
@@ -398,5 +407,40 @@
   {
     "value": "bind",
     "definition": "to associate or attach two things together (e.g., a session to a task)"
+  },
+  {
+    "value": "analyze",
+    "definition": "to break down systematically into components",
+    "completable": true
+  },
+  {
+    "value": "survey",
+    "definition": "to take stock of a landscape",
+    "completable": true
+  },
+  {
+    "value": "compare",
+    "definition": "to identify similarities and differences",
+    "completable": true
+  },
+  {
+    "value": "examine",
+    "definition": "to inspect closely",
+    "completable": true
+  },
+  {
+    "value": "assess",
+    "definition": "to form a judgment about",
+    "completable": true
+  },
+  {
+    "value": "explore",
+    "definition": "to investigate possibilities in a space",
+    "completable": true
+  },
+  {
+    "value": "diagnose",
+    "definition": "to identify the cause of a problem",
+    "completable": true
   }
 ]

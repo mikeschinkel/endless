@@ -68,6 +68,14 @@ endless task assume <id>
 
 This marks the task as believed complete but not yet verified. It will be confirmed when the feature is used naturally.
 
+### 7. If the task IS the deliverable (audit / research / review)
+
+```bash
+endless task complete <id> --outcome "Findings: ..."
+```
+
+For tasks whose deliverable is text/findings rather than behavior — Audit, Research, Investigate, Review, Analyze, etc. The outcome text IS the deliverable, so `--outcome` is required. The title's lead verb must be marked `completable: true` in `.endless/verbs.json`. Use this instead of `verify`/`assumed` when there is no behavior to verify.
+
 ## Key Commands Reference
 
 ### Viewing Tasks
@@ -214,10 +222,24 @@ endless status --project <name>
 | `verify`      | Implementation done, awaiting Mike's verification. **Still blocks dependents.** |
 | `confirmed`   | Verified and done. **Unblocks dependents.**               |
 | `assumed`     | Believed complete, will verify when used naturally. **Unblocks dependents.** |
+| `completed`   | Findings/deliverable produced — for audit/research/review tasks where the outcome text IS the deliverable. **Unblocks dependents.** |
 | `blocked`     | Waiting on something else                                 |
 | `revisit`     | Was partially planned but needs re-evaluation             |
 | `declined`    | Active decision not to do this                            |
 | `obsolete`    | Made irrelevant by other changes                          |
+
+### When to use `completed` vs `confirmed` vs `assumed`
+
+These three are all terminal "done" states. They differ in what kind of correctness applies:
+
+- **`confirmed`** — Behavior was verified. Use after a manual check confirms the implementation works.
+- **`assumed`** — Behavior is believed correct, will be promoted to `confirmed` once real-world use validates it. Use when the only realistic verification is downstream use.
+- **`completed`** — The deliverable IS the outcome text (findings, research, recommendations). Use for tasks whose lead verb is in `{audit, research, investigate, review, analyze, survey, evaluate, compare, examine, assess, explore, diagnose, document, design, redesign, decide}`. Gated: `task complete` requires `--outcome` and the title's lead verb must be marked `completable: true` in `.endless/verbs.json`.
+
+```bash
+# Mark an audit task as completed with required findings
+endless task complete <id> --outcome "Findings: <what you found and what to do about it>"
+```
 
 ## Task Phases
 
@@ -233,7 +255,7 @@ endless status --project <name>
 When task A is blocked by task B (`endless task block A --by B`):
 
 - B in `verify` → A is **still blocked**. Verify means "needs Mike to check" — the work isn't confirmed yet.
-- B in `confirmed` or `assumed` → A is **unblocked**. The dependency is resolved.
+- B in `confirmed`, `assumed`, or `completed` → A is **unblocked**. The dependency is resolved.
 - B in `declined` or `obsolete` → A is **unblocked**. The dependency is moot.
 
 **When to use `assumed` vs `verify` for blockers:** If the only way to test B is by implementing A (the dependent task IS the test), change B from `verify` to `assumed`. This unblocks A while acknowledging B hasn't been independently verified.
