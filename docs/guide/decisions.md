@@ -97,4 +97,4 @@ What doesn't:
 ## See also
 
 - `endless guide tasks` — `--decision` flag on task add/update
-- `endless guide lifecycle` — when status changes warrant a decision
+- `endless guide` (index) — status semantics, when transitions warrant a decision
