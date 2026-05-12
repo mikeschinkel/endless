@@ -156,7 +156,7 @@ def test_task_add_cleans_up_flag(isolated_env, monkeypatch):
 
     def _stub(title, description=None, text_file=None, phase="now", project_name=None,
               after=None, parent_id=None, task_type=None, status=None,
-              tier=None, force=False):
+              tier=None, force=False, **kwargs):
         cur = db.execute(
             "INSERT INTO tasks (project_id, title, description, status, type, phase, created_at) "
             "VALUES (1, ?, ?, ?, ?, ?, datetime('now'))",
@@ -196,7 +196,7 @@ def test_task_add_cleaned_up_by_flag(isolated_env, monkeypatch):
 
     def _stub(title, description=None, text_file=None, phase="now", project_name=None,
               after=None, parent_id=None, task_type=None, status=None,
-              tier=None, force=False):
+              tier=None, force=False, **kwargs):
         cur = db.execute(
             "INSERT INTO tasks (project_id, title, description, status, type, phase, created_at) "
             "VALUES (1, ?, ?, ?, ?, ?, datetime('now'))",

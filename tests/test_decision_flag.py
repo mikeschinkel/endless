@@ -23,7 +23,7 @@ def fake_add_item(monkeypatch, isolated_env):
 
     def _stub(title, description=None, text_file=None, phase="now", project_name=None,
               after=None, parent_id=None, task_type=None, status=None,
-              tier=None, force=False):
+              tier=None, force=False, **kwargs):
         task_type = task_type or "task"
         status = status or "needs_plan"
         cur = db.execute(

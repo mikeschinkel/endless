@@ -875,15 +875,18 @@ def task_search(query, project, show_all, status, phase, parent_id,
               help="Task ID(s) that clean up after this new task (repeatable)")
 @click.option("--decision", "decision_text", default=None,
               help="Rationale text — creates a paired decision-type task linked via 'documents'")
+@click.option("--no-create-worktree", "no_create_worktree", is_flag=True,
+              help="With --text: refuse to auto-create a worktree if none exists (default is to create one). E-1216.")
 def task_add(title, description, text_file, phase, project, parent, after, task_type, status, tier, force,
              blocks_ids, blocked_by_ids, relates_to_ids, implements_ids,
-             cleans_up_ids, cleaned_up_by_ids, decision_text):
+             cleans_up_ids, cleaned_up_by_ids, decision_text, no_create_worktree):
     """Add a task."""
     from endless.task_cmd import add_item, parse_tier, link_tasks
     tier_val = parse_tier(tier) if tier else None
     new_id = add_item(title, description=description, text_file=text_file,
                       phase=phase, project_name=project, after=after, parent_id=parent,
-                      task_type=task_type, status=status, tier=tier_val, force=force)
+                      task_type=task_type, status=status, tier=tier_val, force=force,
+                      allow_create_worktree=not no_create_worktree)
     if new_id is None:
         return
     for tid in blocks_ids:
@@ -930,8 +933,10 @@ def task_add(title, description, text_file, phase, project, parent, after, task_
               help="Outcome / reason for status (required if status=declined)")
 @click.option("--decision", "decision_text", default=None,
               help="Rationale text — creates a paired decision-type task linked via 'documents' to each updated task")
+@click.option("--no-create-worktree", "no_create_worktree", is_flag=True,
+              help="With --text: refuse to auto-create a worktree if none exists (default is to create one). E-1216.")
 def task_update(item_ids, status, title, description, text_file, prompt_file, parent, phase, tier, force,
-                outcome, decision_text):
+                outcome, decision_text, no_create_worktree):
     """Update fields on one or more tasks."""
     from endless.task_cmd import update_plan, add_item, link_tasks, parse_tier
     tier_val = parse_tier(tier) if tier else None
@@ -939,7 +944,8 @@ def task_update(item_ids, status, title, description, text_file, prompt_file, pa
         update_plan(item_id, status=status, title=title,
                     description=description, text_file=text_file,
                     prompt_file=prompt_file, parent_id=parent,
-                    phase=phase, tier=tier_val, outcome=outcome, force=force)
+                    phase=phase, tier=tier_val, outcome=outcome, force=force,
+                    allow_create_worktree=not no_create_worktree)
         if decision_text:
             decision_id = add_item(decision_text,
                                    task_type="decision", status="confirmed", force=True)

@@ -107,9 +107,25 @@ def seeded_project_at_cwd(isolated_env, monkeypatch):
     need cwd to resolve to a registered project. The default cwd is the endless repo,
     whose .endless/config.json gives a name that won't be in the test DB. This
     fixture chdir's to a clean tmp dir and seeds the project record at that path.
+
+    Initializes a git repo with one empty commit so that `git worktree add`
+    succeeds in any test that triggers worktree creation (e.g. E-1216's
+    auto-create-worktree on `task update --text`).
     """
+    import subprocess
+
     proj_dir = isolated_env["projects_root"]
     monkeypatch.chdir(proj_dir)
+
+    def _git(*args: str) -> None:
+        subprocess.run(["git", *args], cwd=str(proj_dir), check=True,
+                       capture_output=True)
+
+    _git("init", "-q", "-b", "main")
+    _git("config", "user.email", "test@example.com")
+    _git("config", "user.name", "Test")
+    _git("commit", "--allow-empty", "-q", "-m", "initial")
+
     db.execute(
         "INSERT INTO projects (name, path, status, created_at, updated_at) "
         "VALUES ('test', ?, 'active', datetime('now'), datetime('now'))",

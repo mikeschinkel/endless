@@ -368,21 +368,8 @@ def parse_task_id(value: str) -> int:
     return int(s)
 
 
-def _project_root_for_task(task_id: int) -> Path | None:
-    """Return the appropriate working-tree root for writing per-task files.
-
-    Resolution (E-1004):
-    - If cwd is inside a git worktree of the registered project, return the
-      worktree's root so per-task files land in the worktree's checkout
-      and ride along with the worktree branch's commits.
-    - Otherwise return the registered project path.
-
-    Detection uses 'git rev-parse --git-common-dir' to find the main repo's
-    .git directory; its parent is the main repo root. If that matches the
-    registered project path, the current 'git rev-parse --show-toplevel' is
-    the working tree (whether main or a worktree) and is what we want.
-    """
-    import subprocess
+def _main_root_for_task(task_id: int) -> Path | None:
+    """Return the registered main-checkout root of the project that owns this task."""
     row = db.query(
         "SELECT p.path FROM projects p "
         "JOIN tasks t ON t.project_id = p.id "
@@ -391,52 +378,107 @@ def _project_root_for_task(task_id: int) -> Path | None:
     )
     if not row:
         return None
-    registered = Path(row[0]["path"]).expanduser().resolve()
-
-    cwd = Path.cwd()
-    try:
-        common_dir = subprocess.run(
-            ["git", "rev-parse", "--git-common-dir"],
-            capture_output=True, text=True, check=True, cwd=str(cwd),
-        ).stdout.strip()
-        toplevel = subprocess.run(
-            ["git", "rev-parse", "--show-toplevel"],
-            capture_output=True, text=True, check=True, cwd=str(cwd),
-        ).stdout.strip()
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        return registered
-    if not common_dir or not toplevel:
-        return registered
-
-    # common_dir may be relative (e.g. '.git') or absolute; normalize via cwd.
-    common_path = Path(common_dir)
-    if not common_path.is_absolute():
-        common_path = (cwd / common_path).resolve()
-    else:
-        common_path = common_path.resolve()
-    main_root = common_path.parent
-
-    if main_root == registered:
-        # cwd is in a checkout (main or worktree) of THIS project.
-        return Path(toplevel).resolve()
-    # cwd is unrelated to this task's project.
-    return registered
+    return Path(row[0]["path"]).expanduser().resolve()
 
 
-def _write_task_plan_file(task_id: int, content: str) -> None:
-    """Write a stable per-task copy of plan content to <project>/.endless/plans/<task-id>.md.
+def _worktree_for_task(task_id: int) -> Path | None:
+    """Return the worktree Path for a task if one exists, else None.
 
-    The DB's tasks.text column remains source of truth; this file is an
-    endless-owned, predictable export at a path that doesn't get clobbered
-    by harness plan-file naming.
+    E-1216: plan files for a task live in its worktree, not in main. This is
+    the canonical "where do plan-file writes go?" resolver. Lookup is by
+    deterministic path (<main>/.endless/worktrees/e-<id>/) with the
+    `.endless/worktree.json` companion validating ownership.
     """
-    root = _project_root_for_task(task_id)
-    if root is None:
-        return  # task lookup failed; emit_event would have raised below anyway
-    plans_dir = root / ".endless" / "plans"
+    main_root = _main_root_for_task(task_id)
+    if main_root is None:
+        return None
+    wt_dir = main_root / ".endless" / "worktrees" / f"e-{task_id}"
+    companion = wt_dir / ".endless" / "worktree.json"
+    if not wt_dir.is_dir() or not companion.exists():
+        return None
+    import json
+    try:
+        data = json.loads(companion.read_text())
+    except (OSError, json.JSONDecodeError):
+        return None
+    if data.get("task_id") != f"E-{task_id}":
+        return None
+    return wt_dir
+
+
+def _display_path(p: Path) -> str:
+    """Display a Path with $HOME collapsed to ~."""
+    s = str(p)
+    home = str(Path.home())
+    return s.replace(home, "~", 1) if s.startswith(home) else s
+
+
+def _write_task_plan_file(
+    task_id: int,
+    content: str,
+    *,
+    title_hint: str | None = None,
+    allow_create_worktree: bool = True,
+) -> Path | None:
+    """Write the plan file for `task_id` to its worktree (E-1216).
+
+    Resolution:
+      1. Task has an existing worktree → write there ("Using existing").
+      2. No worktree AND `allow_create_worktree` → create one
+         (via `worktree_cmd.create_task_worktree`) and write there
+         ("Worktree created").
+      3. No worktree AND `allow_create_worktree=False` → raise, directing
+         the caller to drop `--no-create-worktree` or run `task claim`.
+
+    Plan files NEVER land in main directly. The DB's `tasks.text` column
+    remains source of truth; this file is the on-disk mirror that lives
+    with the worktree branch.
+    """
+    from endless.worktree_cmd import create_task_worktree
+
+    wt_path = _worktree_for_task(task_id)
+    created = False
+    if wt_path is None:
+        if not allow_create_worktree:
+            raise click.ClickException(
+                f"No worktree exists for E-{task_id}. "
+                f"Drop --no-create-worktree to auto-create one, "
+                f"or run `endless task claim E-{task_id}` first."
+            )
+        main_root = _main_root_for_task(task_id)
+        if main_root is None:
+            # Task lookup failed; emit_event would have raised earlier.
+            return None
+        title = title_hint
+        if title is None:
+            row = db.query(
+                "SELECT COALESCE(title, description) as title "
+                "FROM tasks WHERE id = ?",
+                (task_id,),
+            )
+            title = row[0]["title"] if row else f"task-{task_id}"
+        wt_path, created = create_task_worktree(task_id, title, main_root)
+
+    if created:
+        click.echo(
+            click.style("✓", fg="green")
+            + f" Worktree created for E-{task_id} at {_display_path(wt_path)}/"
+        )
+    else:
+        click.echo(
+            click.style("•", fg="cyan")
+            + f" Using existing worktree for E-{task_id}"
+        )
+
+    plans_dir = wt_path / ".endless" / "plans"
     plans_dir.mkdir(parents=True, exist_ok=True)
     target = plans_dir / f"E-{task_id}.md"
     target.write_text(content)
+    click.echo(
+        click.style("✓", fg="green")
+        + f" Wrote plan to {_display_path(target)}"
+    )
+    return target
 
 
 def _resolve_project(name: str | None) -> tuple[int, str]:
@@ -1466,6 +1508,7 @@ def add_item(
     status: str | None = None,
     tier: int | None = None,
     force: bool = False,
+    allow_create_worktree: bool = True,
 ):
     """Add a single task."""
     from endless.event_bridge import emit_event
@@ -1508,12 +1551,16 @@ def add_item(
         payload=payload,
     )
     item_id = int(result["id"].replace("E-", ""))
-    if text_content is not None:
-        _write_task_plan_file(item_id, text_content)
     click.echo(
         click.style("•", fg="cyan")
         + f" Added {task_id_display(item_id)}: {title}"
     )
+    if text_content is not None:
+        _write_task_plan_file(
+            item_id, text_content,
+            title_hint=title,
+            allow_create_worktree=allow_create_worktree,
+        )
     return item_id
 
 
@@ -2349,6 +2396,7 @@ def update_plan(
     tier: int | None = None,
     outcome: str | None = None,
     force: bool = False,
+    allow_create_worktree: bool = True,
 ):
     """Update fields on a task."""
     from endless.event_bridge import emit_event
@@ -2415,7 +2463,12 @@ def update_plan(
             raise click.ClickException(f"File not found: {p}")
         text_content = p.read_text()
         _add("text", text_content)
-        _write_task_plan_file(item_id, text_content)
+        effective_title = title if title is not None else row[0]["title"]
+        _write_task_plan_file(
+            item_id, text_content,
+            title_hint=effective_title,
+            allow_create_worktree=allow_create_worktree,
+        )
 
     if prompt_file is not None:
         p = Path(prompt_file).expanduser()
