@@ -44,6 +44,7 @@ func runEmit() {
 	entityID := fs.String("entity-id", "", "Entity ID")
 	actorKind := fs.String("actor-kind", "", "Actor kind (cli, session, hook, system, web)")
 	actorID := fs.String("actor-id", "", "Actor identifier")
+	sessionID := fs.String("session-id", "", "Endless session ID (optional; sets actor.session_id)")
 	nodeID := fs.String("node-id", "", "Kairos node ID (4-char hex)")
 	projectRoot := fs.String("project-root", "", "Project root directory (for .endless/db-ledger/)")
 	payload := fs.String("payload", "{}", "Event payload as JSON")
@@ -52,14 +53,14 @@ func runEmit() {
 	fs.Parse(os.Args[2:])
 
 	if err := run(*kind, *project, *entityType, *entityID, *actorKind, *actorID,
-		*nodeID, *projectRoot, *payload, *correlationID); err != nil {
+		*sessionID, *nodeID, *projectRoot, *payload, *correlationID); err != nil {
 		fmt.Fprintf(os.Stderr, "endless-event: error: %v\n", err)
 		os.Exit(1)
 	}
 }
 
 func run(kindStr, project, entityTypeStr, entityID, actorKindStr, actorID,
-	nodeIDStr, projectRoot, payloadStr, correlationID string) error {
+	sessionID, nodeIDStr, projectRoot, payloadStr, correlationID string) error {
 
 	// Validate required flags
 	if kindStr == "" {
@@ -121,8 +122,9 @@ func run(kindStr, project, entityTypeStr, entityID, actorKindStr, actorID,
 				ID:   fmt.Sprintf("%d", taskID),
 			},
 			Actor: events.Actor{
-				Kind: events.ActorKind(actorKindStr),
-				ID:   actorID,
+				Kind:      events.ActorKind(actorKindStr),
+				ID:        actorID,
+				SessionID: sessionID,
 			},
 			CorrelationID: correlationID,
 			Payload:       json.RawMessage(payloadStr),
@@ -178,8 +180,9 @@ func run(kindStr, project, entityTypeStr, entityID, actorKindStr, actorID,
 				ID:   entityID,
 			},
 			Actor: events.Actor{
-				Kind: events.ActorKind(actorKindStr),
-				ID:   actorID,
+				Kind:      events.ActorKind(actorKindStr),
+				ID:        actorID,
+				SessionID: sessionID,
 			},
 			CorrelationID: correlationID,
 			Payload:       json.RawMessage(payloadStr),

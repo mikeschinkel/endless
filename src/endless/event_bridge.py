@@ -21,6 +21,7 @@ def emit_event(
     payload: dict,
     actor_kind: str = "cli",
     actor_id: str | None = None,
+    session_id: str | None = None,
     project_root: str | None = None,
     correlation_id: str | None = None,
 ) -> dict | None:
@@ -29,12 +30,31 @@ def emit_event(
     Returns the parsed JSON output from endless-event (contains ts, kind, and
     optionally id for created tasks), or None if stdout was empty.
 
+    `session_id` populates `actor.session_id` on the emitted event so per-
+    session activity queries can later filter events by session. When None,
+    the resolver `_current_endless_session_id()` (from task_cmd) is called
+    automatically — so most callers don't need to pass it.
+
     Raises click.ClickException on failure.
     """
     node_id = _get_or_create_node_id()
 
     if actor_id is None:
         actor_id = f"{os.getenv('USER', 'unknown')}@{socket.gethostname()}"
+
+    if session_id is None:
+        # Best-effort: read from env / sibling-pane companion. Returns None
+        # when there's no resolvable session, which leaves session_id off
+        # the event — fine, the actor is still session-less-CLI.
+        try:
+            from endless.task_cmd import _current_endless_session_id
+            eid = _current_endless_session_id()
+            if eid is not None:
+                session_id = str(eid)
+        except Exception:
+            # task_cmd not importable here yet (during early bootstrap),
+            # or resolver errored — neither should block event emission.
+            session_id = None
 
     if project_root is None:
         # Look up the project's registered path so events always land in the
@@ -71,6 +91,9 @@ def emit_event(
         "--project-root", project_root,
         "--payload", json.dumps(payload),
     ]
+
+    if session_id:
+        cmd.extend(["--session-id", session_id])
 
     if correlation_id:
         cmd.extend(["--cid", correlation_id])

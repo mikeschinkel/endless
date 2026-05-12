@@ -32,9 +32,21 @@ type EntityRef struct {
 }
 
 // Actor identifies who or what produced an event.
+//
+// SessionID is optional context: when the event was emitted from
+// within a Claude session's reach (CLI runs in a Claude pane, or
+// the Claude hook fires), SessionID is the numeric Endless session
+// id ("356"). When empty (e.g. system events, manual sqlite edits,
+// pre-2026-05-12 events), the actor is not session-attributable.
+//
+// Kind/ID still describe WHERE the event came from (cli, hook, web).
+// SessionID separately captures WHICH session it was part of, when
+// known. The two are orthogonal — a cli actor with a session_id
+// means "the user ran a CLI command from inside a Claude session."
 type Actor struct {
-	Kind ActorKind `json:"kind"`
-	ID   string    `json:"id"`
+	Kind      ActorKind `json:"kind"`
+	ID        string    `json:"id"`
+	SessionID string    `json:"session_id,omitempty"`
 }
 
 // Kind is a closed enumeration of event types.
