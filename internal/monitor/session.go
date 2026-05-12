@@ -20,9 +20,13 @@ type SessionInfo struct {
 	StartedAt    string
 }
 
-// StartWorkSession creates or updates a session linked to a specific task.
-// Also marks the task as in_progress.
-func StartWorkSession(sessionID string, projectID int64, taskID int64) error {
+// BindSessionToTask creates or updates a session row and points its
+// active_task_id at taskID. Does NOT change task status — the caller
+// (typically the Python claim_item via emitted events, or the spawn
+// pre-claim flow) owns that. Used by SessionStart's spawn-marker
+// auto-bind (claude.go) where the status was already flipped by spawn
+// before Claude launched.
+func BindSessionToTask(sessionID string, projectID int64, taskID int64) error {
 	db, err := DB()
 	if err != nil {
 		return err
@@ -43,7 +47,22 @@ func StartWorkSession(sessionID string, projectID int64, taskID int64) error {
 	if err != nil {
 		return fmt.Errorf("upsert session: %w", err)
 	}
+	return nil
+}
 
+// StartWorkSession binds the session AND marks the task as in_progress.
+// Defense-in-depth mirror of Python claim_item's emitted events for the
+// post-bash `endless task claim` detector — runs in the hook so the next
+// hook invocation sees a consistent DB even if the event executor hasn't
+// processed task.claimed / task.status_changed yet.
+func StartWorkSession(sessionID string, projectID int64, taskID int64) error {
+	if err := BindSessionToTask(sessionID, projectID, taskID); err != nil {
+		return err
+	}
+	db, err := DB()
+	if err != nil {
+		return err
+	}
 	_, err = db.Exec(
 		"UPDATE tasks SET status='in_progress' WHERE id=? AND status IN ('needs_plan','ready','blocked')",
 		taskID,

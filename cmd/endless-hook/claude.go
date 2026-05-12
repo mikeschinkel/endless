@@ -138,11 +138,18 @@ func runClaude(args []string) error {
 		if payload.TranscriptPath != "" {
 			monitor.SetTranscriptPath(payload.SessionID, payload.TranscriptPath)
 		}
-		// Auto-associate session with task from tmux @endless_task_id
-		// before writing the companion file, so worktree_path reflects
-		// the bound task on first write (E-1027).
-		if taskID := tmuxTaskID(); taskID > 0 {
-			monitor.StartWorkSession(payload.SessionID, projectID, taskID)
+		// Spawn-flow auto-bind: when `endless task spawn` launches a new
+		// Claude window, it sets `@endless_spawned_by` and pre-claims the
+		// task (status flip + worktree creation) before launching. This
+		// hook just records the session→task binding so the companion
+		// file's worktree_path reflects the bound task on first write
+		// (E-1027). Status is NOT flipped here (spawn already did it).
+		// Use case 2 (end-user starts Claude directly without spawn) has
+		// no spawn marker, so this path doesn't fire.
+		if spawnedBy := tmuxSpawnedBy(); spawnedBy != "" {
+			if taskID := tmuxTaskID(); taskID > 0 {
+				monitor.BindSessionToTask(payload.SessionID, projectID, taskID)
+			}
 		}
 		// Companion file for sibling-pane discovery (E-989).
 		// Fatal on error: foundational primitive for E-990/991/992/1014.
@@ -1012,6 +1019,24 @@ func tmuxTaskID() int64 {
 		return 0
 	}
 	return id
+}
+
+// tmuxSpawnedBy reads @endless_spawned_by from the current tmux window.
+// Set only by `endless task spawn` (carries the spawning session's id or
+// a `pid-<n>` fallback for non-Claude spawners). Empty string means this
+// window was not created by spawn — callers should skip spawn-flow logic.
+func tmuxSpawnedBy() string {
+	pane := os.Getenv("TMUX_PANE")
+	if pane == "" {
+		return ""
+	}
+	out, err := exec.Command(
+		"tmux", "display-message", "-p", "-t", pane, "#{@endless_spawned_by}",
+	).Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
 }
 
 // resolveParentTaskID determines the parent task ID for auto-import.

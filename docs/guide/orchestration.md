@@ -138,21 +138,25 @@ endless task show <id> --prompt    # decorated output
 ```bash
 endless task spawn <id>
 endless task spawn <id> --no-plan                # skip /plan mode; send prompt directly
-endless task spawn <id> --worktree <path>        # cd to <path> before launching claude
+endless task spawn <id> --worktree <path>        # cd to <path> instead of the spawn-created worktree
+endless task spawn <id> --force                  # allow spawn on a done-ish task (demotes status)
 ```
 
 What it does:
 
 1. Validates tmux is running (fails otherwise).
-2. Reads the task's prompt.
-3. Creates a new tmux window named `<project>_<slug>[E-NNNN]`.
-4. Sets tmux window variables `@endless_task_id` and `@endless_project_id`.
-5. `cd`s to the project's main checkout (or `--worktree <path>` if given).
-6. Launches `~/.local/bin/claude` (falls back to `claude` on PATH).
-7. Waits ~5s for Claude to start, then enters `/plan` mode (unless `--no-plan`).
-8. Pastes the prompt and presses Enter.
+2. Reads the task's prompt; refuses if absent.
+3. Refuses if the task is in a done-ish status (`verify`/`confirmed`/`declined`/`obsolete`/`assumed`/`completed`) without `--force`, or if another live session already owns the task.
+4. **Pre-claims the task**: flips status to `in_progress` (emitting `task.status_changed`) and creates the per-task worktree at `.endless/worktrees/e-<id>/`. The spawned session lands in a fully-claimed state.
+5. Creates a new tmux window named `<project>_<slug>[E-NNNN]`.
+6. Sets tmux window variables `@endless_spawned_by` (spawn marker keyed off by SessionStart), `@endless_task_id`, and `@endless_project_id`.
+7. `cd`s into the spawn-created worktree (or `--worktree <path>` if given).
+8. Launches `~/.local/bin/claude` (falls back to `claude` on PATH).
+9. The spawned Claude's `SessionStart` hook reads `@endless_spawned_by` and records the session→task binding (no status flip — spawn already did it).
+10. Waits ~5s for Claude to start, then enters `/plan` mode (unless `--no-plan`).
+11. Pastes the prompt and presses Enter.
 
-The spawned session sees the prompt as if you'd typed it. Spawn does *not* auto-claim the task — the spawned session must run `endless task claim <id>` explicitly.
+The spawned session sees the prompt as if you'd typed it. Spawn auto-claims the task — the spawned session does **not** need to run `endless task claim <id>` (claim is idempotent if it does — a friendly notice, no error).
 
 The spawned session can discover its task ID from the tmux window variable:
 
@@ -172,8 +176,8 @@ The spawned session is a fresh Claude. It will only do what the prompt directs i
 - Tell it to run `endless guide` (or the relevant section) for general Endless context.
 - Tell it to run `endless task show <id> --text --prompt` for the specific plan.
 
-**3. Claim and work.**
-- Tell it to `endless task claim <id>` before writing any code.
+**3. Work.**
+- Spawn has already claimed the task and the spawned session lands in the worktree — no need to instruct an explicit `endless task claim <id>`.
 - Describe the work briefly (the full plan lives in `--text`; don't duplicate it in the prompt).
 
 **4. Goal: drive to completion, not just implementation.**
@@ -202,11 +206,10 @@ When complete, the user can return to the spawning session via:
 
 1. Run `endless guide` to learn the workflow.
 2. Run `endless task show E-NNNN --text --prompt` to read the plan.
-3. `endless task claim E-NNNN` to claim, then cd into the worktree.
-4. Do the work.
-5. When implementation is done: `endless task update E-NNNN --status verify`,
+3. Spawn has already claimed the task; you're in the worktree. Just do the work.
+4. When implementation is done: `endless task update E-NNNN --status verify`,
    then tell the user how to test, and print the tmux-return line above.
-6. Do not run `endless worktree land` or `endless worktree drop` without asking
+5. Do not run `endless worktree land` or `endless worktree drop` without asking
    the user first. Any new tasks you file mid-stream — confirm with the user
    before claiming/implementing them.
 

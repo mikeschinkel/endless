@@ -2074,6 +2074,76 @@ _CLAIM_REQUIRES_FORCE: frozenset[str] = frozenset({
 })
 
 
+def _perform_claim_work(
+    item_id: int,
+    title: str | None,
+    current_status: str,
+    target_session: int | None,
+    proj_name: str,
+):
+    """Emit claim events, print status/binding/worktree lines, create the worktree.
+
+    Returns (wt_path, created). Caller has already validated the
+    done-ish-status gate and the multi-owner refusal — this helper only
+    does the mutation half of a claim.
+
+    target_session=None is the spawn pre-claim case (Claude not yet
+    started); skips the task.claimed event entirely. SessionStart's
+    spawn-marker auto-bind records the binding once Claude is up.
+    """
+    from endless.event_bridge import emit_event
+    from endless.worktree_cmd import create_task_worktree, _project_root
+
+    if current_status != "in_progress":
+        emit_event(
+            kind="task.status_changed",
+            project=proj_name,
+            entity_type="task",
+            entity_id=str(item_id),
+            payload={
+                "old_status": current_status,
+                "new_status": "in_progress",
+            },
+        )
+        _emit_field_changes(
+            item_id, title,
+            [("status", current_status, "in_progress")],
+        )
+
+    if target_session is not None:
+        emit_event(
+            kind="task.claimed",
+            project=proj_name,
+            entity_type="task",
+            entity_id=str(item_id),
+            payload={"session_id": target_session},
+        )
+        click.echo(
+            click.style("•", fg="cyan")
+            + f" bound to session {target_session}"
+        )
+
+    click.echo("")
+
+    project_root = _project_root()
+    slug_source = title or "task"
+    wt_path, created = create_task_worktree(item_id, slug_source, project_root)
+
+    home = str(Path.home())
+    wt_display = (
+        str(wt_path).replace(home, "~", 1)
+        if str(wt_path).startswith(home)
+        else str(wt_path)
+    )
+    state = "created" if created else "already exists"
+    click.echo(
+        click.style("•", fg="cyan")
+        + f" worktree {state}: {wt_display}"
+    )
+
+    return wt_path, created
+
+
 def claim_item(item_id: int, force: bool = False):
     """Claim ownership of a task and bind a Claude session to it.
 
@@ -2089,8 +2159,6 @@ def claim_item(item_id: int, force: bool = False):
     same tmux window. If neither resolves and not force: refuse. If 2+
     sibling Claude sessions: refuse with pointer to E-1244.
     """
-    from endless.event_bridge import emit_event
-
     row = db.query(
         "SELECT id, COALESCE(title, description) as title, status FROM tasks "
         "WHERE id = ?",
@@ -2156,56 +2224,14 @@ def claim_item(item_id: int, force: bool = False):
         return
 
     _, proj_name = _resolve_project(None)
-    emit_event(
-        kind="task.status_changed",
-        project=proj_name,
-        entity_type="task",
-        entity_id=str(item_id),
-        payload={
-            "old_status": row[0]["status"],
-            "new_status": "in_progress",
-        },
-    )
-    _emit_field_changes(
-        item_id,
-        row[0]["title"],
-        [("status", row[0]["status"], "in_progress")],
+    _perform_claim_work(
+        item_id=item_id,
+        title=row[0]["title"],
+        current_status=current_status,
+        target_session=target_session,
+        proj_name=proj_name,
     )
 
-    if target_session is not None:
-        emit_event(
-            kind="task.claimed",
-            project=proj_name,
-            entity_type="task",
-            entity_id=str(item_id),
-            payload={"session_id": target_session},
-        )
-        click.echo(
-            click.style("•", fg="cyan")
-            + f" bound to session {target_session}"
-        )
-
-    click.echo("")
-
-    from endless.worktree_cmd import create_task_worktree, _project_root
-
-    try:
-        project_root = _project_root()
-    except click.ClickException:
-        return
-
-    slug_source = row[0]["title"] or "task"
-    wt_path, created = create_task_worktree(
-        item_id, slug_source, project_root,
-    )
-
-    home = str(Path.home())
-    wt_display = str(wt_path).replace(home, "~", 1) if str(wt_path).startswith(home) else str(wt_path)
-    state = "created" if created else "already exists"
-    click.echo(
-        click.style("•", fg="cyan")
-        + f" worktree {state}: {wt_display}"
-    )
     click.echo("")
     click.echo("  To work on this task, choose one:")
     click.echo("    1. Delegate to a fresh Claude session:")
@@ -2724,8 +2750,16 @@ def _spawn_window_name(project_name: str, title: str, item_id: int) -> str:
 
 
 def spawn_plan(item_id: int, project_name: str | None = None, no_plan: bool = False,
-               worktree: str | None = None):
-    """Spawn a new tmux window with Claude working on a task's prompt."""
+               worktree: str | None = None, force: bool = False):
+    """Spawn a new tmux window with Claude working on a task's prompt.
+
+    Pre-claims the task (status flip + worktree creation) BEFORE launching
+    Claude, so the spawned session lands in a worktree on a task that is
+    already in_progress. The SessionStart hook reads
+    `@endless_spawned_by` from the new tmux window and records the
+    session→task binding via `BindSessionToTask` (no redundant status
+    flip). See E-1274.
+    """
     import shutil
     import subprocess
     import tempfile
@@ -2741,7 +2775,7 @@ def spawn_plan(item_id: int, project_name: str | None = None, no_plan: bool = Fa
 
     # Get the plan item and its prompt
     row = db.query(
-        "SELECT p.id, p.title, p.prompt, p.project_id, "
+        "SELECT p.id, p.title, p.prompt, p.status, p.project_id, "
         "proj.path as project_path, proj.name as project_name "
         "FROM tasks p "
         "JOIN projects proj ON p.project_id = proj.id "
@@ -2759,8 +2793,8 @@ def spawn_plan(item_id: int, project_name: str | None = None, no_plan: bool = Fa
             f"Set one first."
         )
 
-    project_path = item["project_path"]
     title = item["title"]
+    current_status = item["status"]
 
     # --worktree overrides the cd target so the spawned session reads
     # .claude/settings.json from the worktree (worktree-local hook override
@@ -2774,7 +2808,42 @@ def spawn_plan(item_id: int, project_name: str | None = None, no_plan: bool = Fa
                 f"{cd_target}"
             )
     else:
-        cd_target = project_path
+        cd_target = None  # default below to the spawn-created worktree
+
+    # Mirror claim's done-ish-status gate
+    if not force and current_status in _CLAIM_REQUIRES_FORCE:
+        raise click.ClickException(
+            f"E-{item_id} is in status '{current_status}'; spawning "
+            f"would demote it to 'in_progress'.\n"
+            "Pass --force to confirm the demotion, or update the status "
+            "first if that's not what you intended."
+        )
+
+    # Refuse if another live session already owns the task. Passing
+    # current_eid=None treats any owner as "other" — spawn never claims
+    # ownership for the spawning session.
+    _check_task_ownership(item_id, current_eid=None)
+
+    # Pre-claim: emit status_changed, create worktree. No session binding
+    # yet — Claude hasn't started. SessionStart's @endless_spawned_by
+    # path will record the binding once the new session is up.
+    _, proj_name = _resolve_project(None)
+    wt_path, _ = _perform_claim_work(
+        item_id=item_id,
+        title=title,
+        current_status=current_status,
+        target_session=None,
+        proj_name=proj_name,
+    )
+
+    if cd_target is None:
+        cd_target = str(wt_path)
+
+    # Spawner identity for the @endless_spawned_by marker. Prefer the
+    # current Endless session id; fall back to a pid-prefixed value so
+    # non-Claude spawners (CLI from a plain shell) still set a non-empty
+    # marker that SessionStart can key off.
+    spawner_id = _current_endless_session_id() or f"pid-{os.getpid()}"
 
     # Build window name: <project>_<one_or_two_words>[E-nnn]
     window_name = _spawn_window_name(
@@ -2796,6 +2865,11 @@ def spawn_plan(item_id: int, project_name: str | None = None, no_plan: bool = Fa
     )
     subprocess.run(
         ["tmux", "set", "-w", "-t", window_name,
+         "@endless_spawned_by", str(spawner_id)],
+        check=True,
+    )
+    subprocess.run(
+        ["tmux", "set", "-w", "-t", window_name,
          "@endless_task_id", str(item_id)],
         check=True,
     )
@@ -2805,7 +2879,7 @@ def spawn_plan(item_id: int, project_name: str | None = None, no_plan: bool = Fa
         check=True,
     )
 
-    # cd to target directory (project main checkout, or --worktree path)
+    # cd to target directory (spawn-created worktree, or --worktree path)
     subprocess.run(
         ["tmux", "send-keys", "-t", window_name,
          f"cd {cd_target}", "Enter"],

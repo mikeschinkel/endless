@@ -1123,15 +1123,19 @@ def task_prompt(item_id):
               help="Skip plan mode, send prompt directly")
 @click.option("--worktree", default=None,
               help="cd to this path (e.g. a git worktree) before launching "
-                   "claude, instead of the project's main checkout. The "
+                   "claude, instead of the spawn-created task worktree. The "
                    "spawned session reads .claude/settings.json from this "
                    "directory, so a worktree-local hook override (see "
                    "'just claude-settings-init') applies.")
-def task_spawn(item_id, project, no_plan, worktree):
+@click.option("--force", is_flag=True,
+              help="Allow spawn on a task in a done-ish status "
+                   "(verify/confirmed/declined/obsolete/assumed/completed); "
+                   "demotes it back to in_progress. Mirrors `claim --force`.")
+def task_spawn(item_id, project, no_plan, worktree, force):
     """Spawn a new tmux window with Claude working on a task's prompt."""
     from endless.task_cmd import spawn_plan
     spawn_plan(item_id, project_name=project, no_plan=no_plan,
-               worktree=worktree)
+               worktree=worktree, force=force)
 
 
 @task_cmd.command("chat")
