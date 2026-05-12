@@ -28,6 +28,8 @@ def add_verb(value: str, definition: str | None, machine_only: bool) -> None:
         )
     except ValueError as e:
         raise click.ClickException(str(e))
+    except RuntimeError as e:
+        raise click.ClickException(str(e))
 
     where = []
     if wrote_project:

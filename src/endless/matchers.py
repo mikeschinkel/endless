@@ -111,22 +111,32 @@ def machine_config_path() -> Path:
 
 
 def project_verbs_path() -> Path | None:
-    """Return the nearest .endless/verbs.jsonl walking up from cwd, else None.
+    """Return the registered project's .endless/verbs.jsonl path, else None.
 
-    Co-located with project_config_path's resolution per E-1140. Returns the
-    path even if the file does not yet exist — callers may need to create
-    it. Returns None only when cwd is not in a project at all (no ancestor
-    has .endless/config.json).
+    Diverges from project_config_path's cwd-walk-up resolution. Per E-1208,
+    the verb registry is global config: writes route to main's tree (the
+    registered project path) regardless of which worktree the caller is in,
+    and a single-file commit lands directly on main. Worktree-local copies
+    are dead weight after E-1208 — read paths consult main's file, not the
+    worktree's local one.
 
-    E-1268: migrated from verbs.json (array) to verbs.jsonl (line-per-entry)
-    so concurrent appends auto-merge via the `merge=union` driver. The legacy
-    verbs.json is migrated on first load.
+    Returns None when no project is registered for cwd (typical at first
+    install or in a non-project directory). Callers must handle None as a
+    machine-layer-only operation.
+
+    E-1268: file is JSONL (line-per-entry) with `merge=union` in
+    .gitattributes so concurrent appends merge cleanly.
     """
-    cwd = Path.cwd()
-    for parent in [cwd] + list(cwd.parents):
-        if (parent / ".endless" / "config.json").exists():
-            return parent / ".endless" / "verbs.jsonl"
-    return None
+    try:
+        from endless.task_cmd import _resolve_project
+        from endless import db
+        project_id, _ = _resolve_project(None)
+        row = db.query("SELECT path FROM projects WHERE id = ? LIMIT 1", (project_id,))
+    except Exception:
+        return None
+    if not row:
+        return None
+    return Path(row[0]["path"]).expanduser().resolve() / ".endless" / "verbs.jsonl"
 
 
 def machine_verbs_path() -> Path:
@@ -861,11 +871,15 @@ def add_verb(
     definition: str,
     machine_only: bool = False,
 ) -> tuple[bool, bool]:
-    """Add a verb to the appropriate verbs.json files.
+    """Add a verb to the appropriate verbs.jsonl files.
 
     Returns (wrote_project, wrote_machine). Either may be False if the
     value was already present (no-op) or writing was skipped (e.g.,
-    no project at cwd and machine_only=False).
+    no registered project and machine_only=False).
+
+    E-1208: when wrote_project is True, the project verbs.jsonl is also
+    committed to main as `Endless: register verb '<value>'`. Raises
+    RuntimeError on git failure (the file write persists regardless).
     """
     if not value or not value.strip():
         raise ValueError("verb value is required")
@@ -879,11 +893,13 @@ def add_verb(
     if project_vp is not None and not machine_only:
         wrote_project = _add_verb_to_file(project_vp, entry)
     wrote_machine = _add_verb_to_file(machine_verbs_path(), entry)
+    if wrote_project:
+        _commit_project_verbs(entry["value"])
     return wrote_project, wrote_machine
 
 
 def _add_verb_to_file(path: Path, entry: dict) -> bool:
-    """Append a verb entry to the verbs.json at `path`. No-op if value exists."""
+    """Append a verb entry to the verbs.jsonl at `path`. No-op if value exists."""
     verbs = _load_verbs_list(path)
     for v in verbs:
         if isinstance(v, dict) and v.get("value") == entry["value"]:
@@ -891,6 +907,47 @@ def _add_verb_to_file(path: Path, entry: dict) -> bool:
     verbs.append(entry)
     _save_verbs_list(path, verbs)
     return True
+
+
+def _commit_project_verbs(verb_value: str) -> None:
+    """Commit just .endless/verbs.jsonl on main (E-1208).
+
+    Two-step: `git add <path>` then `git commit -o <path>`. The add is needed
+    because a brand-new file (first verb ever registered, or fresh clone)
+    isn't yet known to git; `commit -o` alone would fail with a pathspec
+    error. The `-o` flag then ensures only that one path is committed,
+    leaving the rest of main's index/working tree exactly as it was. Other
+    dirt on main (staged or unstaged for other paths) is preserved.
+
+    Raises RuntimeError on subprocess failure. The file write that preceded
+    this call is not rolled back; the caller surfaces the failure but the
+    verb is still persisted in the file.
+    """
+    import subprocess
+    project_vp = project_verbs_path()
+    if project_vp is None:
+        raise RuntimeError("no registered project; cannot commit verbs.jsonl")
+    main_root = project_vp.parent.parent
+    rel_path = ".endless/verbs.jsonl"
+    msg = f"Endless: register verb '{verb_value}'"
+    add_res = subprocess.run(
+        ["git", "-C", str(main_root), "add", "--", rel_path],
+        capture_output=True, text=True,
+    )
+    if add_res.returncode != 0:
+        raise RuntimeError(
+            f"git add failed for {rel_path}: "
+            f"{(add_res.stderr or add_res.stdout or '').strip()}"
+        )
+    res = subprocess.run(
+        ["git", "-C", str(main_root), "commit", "-o", rel_path, "-m", msg],
+        capture_output=True, text=True,
+    )
+    if res.returncode != 0:
+        raise RuntimeError(
+            f"git commit failed for {rel_path}: "
+            f"{(res.stderr or res.stdout or '').strip()}"
+        )
 
 
 def remove_verb(*, value: str, machine_only: bool = False) -> tuple[int, int]:

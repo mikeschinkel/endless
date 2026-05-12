@@ -1,12 +1,14 @@
 """Tests for the verb-gate redesign (E-1106), verb storage (E-1117),
-the verbs.json file split (E-1124), and the JSONL format (E-1268)."""
+the verbs.json file split (E-1124), the JSONL format (E-1268), and the
+write-time auto-commit (E-1208)."""
 
 import json
+import subprocess
 
 import click
 import pytest
 
-from endless import task_cmd, matchers, verb_cmd
+from endless import db, task_cmd, matchers, verb_cmd
 
 
 def _read_jsonl(path):
@@ -16,6 +18,39 @@ def _read_jsonl(path):
         for line in path.read_text().splitlines()
         if line.strip()
     ]
+
+
+def _git(args, cwd):
+    """Run a git command in cwd; raises on non-zero. Returns stdout."""
+    res = subprocess.run(
+        ["git", *args], capture_output=True, text=True, check=True, cwd=str(cwd),
+    )
+    return res.stdout.rstrip("\n")
+
+
+@pytest.fixture
+def git_project_at_cwd(isolated_env, monkeypatch):
+    """Registered project at cwd backed by a real git repo with HEAD.
+
+    Used by E-1208 tests that exercise the write-time auto-commit path.
+    """
+    proj_dir = isolated_env["projects_root"]
+    (proj_dir / ".endless").mkdir(parents=True, exist_ok=True)
+    # Seed a config.json so resolve helpers find a project here.
+    (proj_dir / ".endless" / "config.json").write_text('{"name": "test"}\n')
+    monkeypatch.chdir(proj_dir)
+    db.execute(
+        "INSERT INTO projects (name, path, status, created_at, updated_at) "
+        "VALUES ('test', ?, 'active', datetime('now'), datetime('now'))",
+        (str(proj_dir),),
+    )
+    _git(["init", "-q", "-b", "main"], cwd=proj_dir)
+    _git(["config", "user.email", "test@example.com"], cwd=proj_dir)
+    _git(["config", "user.name", "Test"], cwd=proj_dir)
+    _git(["config", "commit.gpgsign", "false"], cwd=proj_dir)
+    _git(["add", ".endless/config.json"], cwd=proj_dir)
+    _git(["commit", "-q", "-m", "init"], cwd=proj_dir)
+    return proj_dir
 
 
 def test_verb_gate_human_form_omits_force_and_alternatives(monkeypatch):
@@ -72,6 +107,109 @@ def test_verb_add_persists_in_verbs_file(isolated_env):
     assert "verbs" not in cfg, "config.json must not contain 'verbs' key"
     matcher_verbs = [m for m in cfg.get("matchers", []) if m.get("type") == "verb"]
     assert not matcher_verbs, "config.json must not contain verb matchers"
+
+
+# --- E-1208: write-time auto-commit to main --------------------------------
+
+def test_verb_add_commits_to_main(git_project_at_cwd):
+    """A project-side verb add commits .endless/verbs.jsonl to main."""
+    head_before = _git(["rev-parse", "HEAD"], cwd=git_project_at_cwd)
+    verb_cmd.add_verb("ponder", "to deliberate over", machine_only=False)
+    head_after = _git(["rev-parse", "HEAD"], cwd=git_project_at_cwd)
+    assert head_after != head_before, "HEAD must advance after verb add"
+    subj = _git(["log", "-1", "--format=%s"], cwd=git_project_at_cwd)
+    assert subj == "Endless: register verb 'ponder'"
+    status = _git(["status", "--porcelain", "--", ".endless/verbs.jsonl"],
+                  cwd=git_project_at_cwd)
+    assert status == "", "verbs.jsonl should be clean after commit"
+
+
+def test_verb_add_commits_with_unrelated_main_dirt(git_project_at_cwd):
+    """Unrelated dirt on main does not block the commit and is preserved."""
+    (git_project_at_cwd / "stray.txt").write_text("user work in flight\n")
+    _git(["add", "stray.txt"], cwd=git_project_at_cwd)  # staged but uncommitted
+    head_before = _git(["rev-parse", "HEAD"], cwd=git_project_at_cwd)
+    verb_cmd.add_verb("ponder", "to deliberate over", machine_only=False)
+    head_after = _git(["rev-parse", "HEAD"], cwd=git_project_at_cwd)
+    assert head_after != head_before
+    # The unrelated staged change must remain staged after our -o commit.
+    status = _git(["status", "--porcelain", "--", "stray.txt"],
+                  cwd=git_project_at_cwd)
+    assert status.startswith("A "), (
+        f"stray.txt should still be staged-only, got: {status!r}"
+    )
+
+
+def test_verb_add_no_commit_on_noop(git_project_at_cwd):
+    """Re-adding the same verb does not advance HEAD."""
+    verb_cmd.add_verb("ponder", "to deliberate over", machine_only=False)
+    head_after_first = _git(["rev-parse", "HEAD"], cwd=git_project_at_cwd)
+    verb_cmd.add_verb("ponder", "to deliberate over", machine_only=False)
+    head_after_second = _git(["rev-parse", "HEAD"], cwd=git_project_at_cwd)
+    assert head_after_first == head_after_second
+
+
+def test_verb_add_machine_only_no_commit(git_project_at_cwd):
+    """machine_only=True writes only the machine layer; no commit on main."""
+    head_before = _git(["rev-parse", "HEAD"], cwd=git_project_at_cwd)
+    verb_cmd.add_verb("ponder", "to deliberate over", machine_only=True)
+    head_after = _git(["rev-parse", "HEAD"], cwd=git_project_at_cwd)
+    assert head_after == head_before
+
+
+def _patched_run_factory(real_run):
+    """Build a subprocess.run replacement that fails any `git commit ...`
+    call and delegates everything else to `real_run`. Captured outside the
+    monkeypatch to avoid recursing into ourselves."""
+    def fail_on_commit(args, **kwargs):
+        if isinstance(args, (list, tuple)) and "commit" in args:
+            return subprocess.CompletedProcess(
+                args=args, returncode=1, stdout="", stderr="forced failure\n",
+            )
+        return real_run(args, **kwargs)
+    return fail_on_commit
+
+
+def test_verb_add_commit_failure_raises(git_project_at_cwd, monkeypatch):
+    """When git commit fails, verb_cmd.add_verb raises ClickException
+    and the file write persists on disk."""
+    monkeypatch.setattr(
+        subprocess, "run", _patched_run_factory(subprocess.run),
+    )
+
+    with pytest.raises(click.ClickException) as exc:
+        verb_cmd.add_verb("ponder", "to deliberate over", machine_only=False)
+    assert "forced failure" in exc.value.message
+
+    # The file write happened before the failed commit.
+    verbs_path = git_project_at_cwd / ".endless" / "verbs.jsonl"
+    assert verbs_path.exists()
+    entries = _read_jsonl(verbs_path)
+    assert any(e.get("value") == "ponder" for e in entries), (
+        "verb must be persisted in file even when commit fails"
+    )
+
+
+def test_auto_register_propagates_commit_failure(git_project_at_cwd, monkeypatch):
+    """task_cmd.validate_title's auto-register path does not catch RuntimeError;
+    a commit failure surfaces as a task add failure."""
+    # Force the haiku verb-check to say YES with a definition so auto-register fires.
+    monkeypatch.setattr(
+        task_cmd, "_check_verb_via_haiku",
+        lambda _word: (True, "to chew over thoughtfully"),
+    )
+    monkeypatch.setattr(
+        subprocess, "run", _patched_run_factory(subprocess.run),
+    )
+
+    with pytest.raises(RuntimeError) as exc:
+        task_cmd.validate_title("mull over the design")
+    assert "forced failure" in str(exc.value)
+
+    # File write happened before commit failed.
+    verbs_path = git_project_at_cwd / ".endless" / "verbs.jsonl"
+    entries = _read_jsonl(verbs_path)
+    assert any(e.get("value") == "mull" for e in entries)
 
 
 def test_phrase_add_rejects_type_verb(isolated_env):
