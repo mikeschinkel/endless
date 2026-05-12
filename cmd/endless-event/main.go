@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	_ "modernc.org/sqlite"
 
@@ -152,6 +153,15 @@ func run(kindStr, project, entityTypeStr, entityID, actorKindStr, actorID,
 			return err
 		}
 
+		// E-1206: commit the just-written ledger segment immediately. Fail
+		// loudly on git error; the JSONL line has already been written, so a
+		// commit failure surfaces a problem (e.g., not a git repo) without
+		// rolling back the WAL.
+		segRel := filepath.Join(".endless", events.LedgerDirName, writer.CurrentSegment())
+		if err := events.CommitLedgerSegment(projectRoot, segRel); err != nil {
+			return fmt.Errorf("commit ledger segment: %w", err)
+		}
+
 		// Execute SQL mutation and commit (releases write lock)
 		if _, err := execAndCommit(&evt); err != nil {
 			return err
@@ -204,6 +214,12 @@ func run(kindStr, project, entityTypeStr, entityID, actorKindStr, actorID,
 		}
 		if err := writer.Append(line); err != nil {
 			return err
+		}
+
+		// E-1206: commit the just-written ledger segment immediately.
+		segRel := filepath.Join(".endless", events.LedgerDirName, writer.CurrentSegment())
+		if err := events.CommitLedgerSegment(projectRoot, segRel); err != nil {
+			return fmt.Errorf("commit ledger segment: %w", err)
 		}
 
 		// Execute SQL mutation (side effect of the event)

@@ -33,9 +33,23 @@ def _seed_project_at_cwd(monkeypatch, isolated_env):
     because _resolve_project(None) inspects cwd. The default cwd (the endless
     repo) has a .endless/config.json that resolves to a name not present in the
     test DB, so we chdir to a clean tmp dir and seed the project at that path.
+
+    E-1206: also git-inits the project so the write-time auto-commit of
+    db-ledger segments has a git work tree to commit against.
     """
+    import subprocess
     proj_dir = isolated_env["projects_root"]
     monkeypatch.chdir(proj_dir)
+
+    def _git(*args):
+        subprocess.run(["git", *args], cwd=str(proj_dir), check=True,
+                       capture_output=True)
+
+    _git("init", "-q", "-b", "main")
+    _git("config", "user.email", "test@example.com")
+    _git("config", "user.name", "Test")
+    _git("commit", "--allow-empty", "-q", "-m", "initial")
+
     db.execute(
         "INSERT INTO projects (name, path, status, created_at, updated_at) "
         "VALUES ('test', ?, 'active', datetime('now'), datetime('now'))",
