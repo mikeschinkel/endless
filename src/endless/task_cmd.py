@@ -1968,9 +1968,20 @@ def _eswt_defined_in_user_shell() -> bool:
 def _current_endless_session_id() -> int | None:
     """Best-effort lookup of the current Endless session id (int PK).
 
-    Returns None when neither ENDLESS_SESSION_ID nor a TMUX_PANE-matching
-    companion file resolves the current session. Callers must treat None
-    as "no exclusion possible".
+    Three-layer resolution:
+      1. ENDLESS_SESSION_ID env var (digit form).
+      2. TMUX_PANE-matching companion file (the pane is a Claude pane).
+      3. Sibling Claude pane in the same tmux window, when there is
+         EXACTLY ONE such sibling. Lets a shell pane in a Claude-using
+         window transparently attribute commands to its sibling Claude
+         session (E-1294, follow-up to E-1287). On 0 or 2+ sibling
+         matches, returns None — callers needing policy refusals
+         (claim_item / bind_item) call `_find_sibling_claude_session`
+         directly to enforce them.
+
+    Returns None when none of the layers resolve. Callers must treat
+    None as "no current session"; for event-emission contexts that
+    means actor.session_id stays empty.
     """
     env_id = os.environ.get("ENDLESS_SESSION_ID")
     if env_id and env_id.isdigit():
@@ -1986,6 +1997,12 @@ def _current_endless_session_id() -> int | None:
             eid = c.get("endless_session_id")
             if isinstance(eid, int):
                 return eid
+
+    # Pane-direct didn't match — try sibling Claude pane in the same
+    # tmux window. Single-match only; 0 or 2+ falls through to None.
+    sibling_eid, n = _find_sibling_claude_session()
+    if n == 1 and sibling_eid is not None:
+        return sibling_eid
     return None
 
 

@@ -43,28 +43,12 @@ def emit_event(
         actor_id = f"{os.getenv('USER', 'unknown')}@{socket.gethostname()}"
 
     if session_id is None:
-        # Resolve in three layers:
-        #   1. ENDLESS_SESSION_ID env / pane-direct companion match
-        #      (covers Claude pane invocations)
-        #   2. Sibling Claude pane in the same tmux window
-        #      (covers shell-pane invocations next to a Claude pane —
-        #      `task add`, `task update`, etc. from a shell while Claude
-        #      runs adjacent)
-        #   3. Give up — leave session_id empty (no attribution)
-        #
-        # Layer 2 mirrors `task claim` (E-1242): on 0 sibling matches
-        # we leave it empty; on 2+ matches we ALSO leave it empty
-        # (ambiguous — refuse to guess).
+        # Defer to the unified resolver. As of E-1294 it does the full
+        # 3-layer lookup (env / pane-direct / single-sibling), so no
+        # inline fallback is needed here.
         try:
-            from endless.task_cmd import (
-                _current_endless_session_id,
-                _find_sibling_claude_session,
-            )
+            from endless.task_cmd import _current_endless_session_id
             eid = _current_endless_session_id()
-            if eid is None:
-                sibling_eid, n = _find_sibling_claude_session()
-                if n == 1 and sibling_eid is not None:
-                    eid = sibling_eid
             if eid is not None:
                 session_id = str(eid)
         except Exception:
