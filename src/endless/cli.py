@@ -404,8 +404,16 @@ def sql_query(query, write, tsv):
         )
 
     try:
-        cursor = db.get_db().execute(query)
+        conn = db.get_db()
+        cursor = conn.execute(query)
         rows = cursor.fetchall()
+        # sqlite3's default isolation_level is "deferred" — an implicit
+        # BEGIN opens on first mutation, and without an explicit commit()
+        # the transaction rolls back on connection close. cursor.rowcount
+        # reports affected rows even when uncommitted, which is what made
+        # writes appear to succeed while silently being lost.
+        if write:
+            conn.commit()
     except sqlite3.Error as e:
         raise click.ClickException(f"SQL error: {e}")
 

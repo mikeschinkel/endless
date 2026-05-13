@@ -60,6 +60,35 @@ def test_sql_surfaces_real_sql_error(isolated_env):
     assert "no such table" in result.output
 
 
+def test_sql_write_commits_mutation(isolated_env):
+    """E-1313: --write must commit the implicit transaction. Before the fix,
+    cursor.rowcount reported success but the row rolled back on close, so
+    a follow-up SELECT (which closes/reopens the connection in CliRunner
+    invocations) saw zero rows."""
+    from endless import db
+    # Seed a project so the projects table has somewhere to write.
+    runner = CliRunner()
+    insert = runner.invoke(main, [
+        "sql", "--write",
+        "INSERT INTO projects (name, path, status, created_at, updated_at) "
+        "VALUES ('e1313test', '/tmp/e1313test', 'active', "
+        "datetime('now'), datetime('now'))",
+    ])
+    assert insert.exit_code == 0, insert.output
+    assert "OK" in insert.output
+
+    # Reset the cached connection so the next read uses a fresh one —
+    # mimics what `endless sql ...` from a second CLI invocation does.
+    db._conn = None
+    select = runner.invoke(main, [
+        "sql", "SELECT name FROM projects WHERE name='e1313test'",
+    ])
+    assert select.exit_code == 0, select.output
+    assert "e1313test" in select.output, (
+        "INSERT must persist; before fix, the row was rolled back"
+    )
+
+
 def test_register_and_list(isolated_env):
     project_dir = isolated_env["projects_root"] / "cli-test"
     project_dir.mkdir()
