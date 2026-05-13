@@ -133,6 +133,54 @@ def _read_companion(worktree_path: Path) -> dict | None:
         return None
 
 
+# E-1301: path convention is the canonical source of truth for "what task
+# does this worktree belong to". The companion's task_id field is no longer
+# trusted (it can outlive the worktree's actual identity — see E-1298's
+# E-1186 stale-companion incident). Match anchored to /.endless/worktrees/
+# under any project root so trailing path components (subdirs of the
+# worktree) match too. Optional `-slug` suffix is allowed per the
+# create_task_worktree convention.
+_WORKTREE_TASK_ID_RE = re.compile(
+    r"/\.endless/worktrees/e-(\d+)(?:-[a-z0-9-]+)?(?:/|$)"
+)
+
+
+def _task_id_from_worktree_path(path: Path) -> str | None:
+    """Return the canonical 'E-NNN' task id encoded in a worktree path,
+    or None if the path is not under a recognized worktree directory.
+
+    Pure function — no filesystem or DB I/O. The directory name is the
+    authoritative source per E-971's convention + E-1301's audit.
+    """
+    m = _WORKTREE_TASK_ID_RE.search(str(path))
+    if m is None:
+        return None
+    return f"E-{m.group(1)}"
+
+
+def _warn_if_companion_disagrees(worktree_path: Path, companion: dict | None) -> None:
+    """If a legacy companion carries a task_id that disagrees with the
+    path-derived task_id, emit a stderr warning. Path always wins; the
+    warning is informational so stale companions become visible (E-1301).
+
+    No-op for new companions (task_id no longer written) and for path/
+    companion pairs that agree.
+    """
+    if not companion:
+        return
+    legacy = companion.get("task_id")
+    if not legacy:
+        return
+    from_path = _task_id_from_worktree_path(worktree_path)
+    if from_path is not None and legacy != from_path:
+        import sys
+        sys.stderr.write(
+            f"endless: stale companion in {worktree_path}/.endless/worktree.json: "
+            f"task_id={legacy!r} disagrees with path-derived {from_path!r}; "
+            f"using {from_path!r}.\n"
+        )
+
+
 def _check_worktree_lock_liveness(worktree_path: Path) -> tuple[str, dict | None]:
     """Inspect <worktree>/.endless/worktree.lock for liveness (E-1209).
 
@@ -233,9 +281,11 @@ def list_worktrees(state_filter: str | None, as_json: bool) -> None:
     click.echo(f"{'State':<8}  {'Branch':<40}  {'Task':<8}  Path")
     click.echo("-" * 8 + "  " + "-" * 40 + "  " + "-" * 8 + "  " + "-" * 40)
     for r in rows:
-        task = ""
+        # E-1301: task_id comes from the path convention, not the
+        # companion's task_id field (which can lie when stale).
+        task = _task_id_from_worktree_path(Path(r["path"])) or ""
         if r["companion"]:
-            task = r["companion"].get("task_id", "")
+            _warn_if_companion_disagrees(Path(r["path"]), r["companion"])
         branch = r["branch"] or ("(detached)" if r["detached"] else "")
         if len(branch) > 40:
             branch = branch[:39] + "…"
@@ -271,10 +321,14 @@ def current_worktree(as_json: bool) -> None:
     click.echo(f"Path:    {match['path']}")
     click.echo(f"Branch:  {match['branch'] or '(detached)'}")
     click.echo(f"HEAD:    {match['head']}")
+    # E-1301: Task id comes from the path convention, not from the companion's
+    # task_id field. The companion's other fields (base_branch, created_at)
+    # remain authoritative — they're set on create and don't drift.
+    if task_id := _task_id_from_worktree_path(Path(match["path"])):
+        click.echo(f"Task:    {task_id}")
     if match["companion"]:
+        _warn_if_companion_disagrees(Path(match["path"]), match["companion"])
         sc = match["companion"]
-        if "task_id" in sc:
-            click.echo(f"Task:    {sc['task_id']}")
         if "base_branch" in sc:
             click.echo(f"Base:    {sc['base_branch']}")
         if "created_at" in sc:
@@ -332,8 +386,10 @@ def for_task(task_id: str, as_json: bool) -> None:
 
     root = _project_root()
     rows = _enriched_list(root)
+    # E-1301: match by path-derived task id, not companion task_id.
     match = next(
-        (r for r in rows if r["companion"] and r["companion"].get("task_id") == canonical),
+        (r for r in rows
+         if _task_id_from_worktree_path(Path(r["path"])) == canonical),
         None,
     )
 
@@ -514,9 +570,13 @@ def _dedup_worktree_verbs_against_main(worktree_path: Path, main_root: Path) -> 
 
 
 def _branch_for_task(rows: list[dict], task_id: str) -> dict | None:
-    """Find the worktree row whose companion's task_id matches."""
+    """Find the worktree row whose path encodes the given task id (E-1301).
+
+    Path convention `.endless/worktrees/e-NNN[-slug]` is the canonical
+    source; the companion's task_id field is no longer trusted.
+    """
     for r in rows:
-        if r["companion"] and r["companion"].get("task_id") == task_id:
+        if _task_id_from_worktree_path(Path(r["path"])) == task_id:
             return r
     return None
 
@@ -620,8 +680,10 @@ def create_task_worktree(
     base = _default_base_branch(project_root)
 
     if wt_dir.exists():
-        existing = _read_companion(wt_dir)
-        if existing and existing.get("task_id") == canonical:
+        # E-1301: path convention IS the identity. The directory's name
+        # (`e-{task_id}`) is its identity by construction here; the
+        # companion's existence is the "endless-managed marker" check.
+        if _task_id_from_worktree_path(wt_dir) == canonical and _read_companion(wt_dir):
             return wt_dir, False
         raise click.ClickException(
             f"Path {_tilde(wt_dir)} exists but does not belong to {canonical}. "
@@ -645,9 +707,12 @@ def create_task_worktree(
 
     companion_dir = wt_dir / ".endless"
     companion_dir.mkdir(parents=True, exist_ok=True)
+    # E-1301: `task_id` is no longer written. The path convention
+    # (`.endless/worktrees/e-NNN`) is the canonical source. The companion
+    # file's other fields document the worktree's provenance; its mere
+    # presence is the "this is an endless-managed worktree" marker.
     companion = {
         "kind": "task",
-        "task_id": canonical,
         "base_branch": base,
         "branch": branch,
         "created_at": datetime.now(timezone.utc).isoformat(),

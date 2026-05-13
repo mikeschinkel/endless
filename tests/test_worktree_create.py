@@ -156,3 +156,73 @@ def test_check_plan_file_modified_tracked_returns_message(git_repo):
     msg = _check_plan_file_committed(1170, git_repo)
     assert msg is not None
     assert ".endless/plans/E-1170.md" in msg
+
+
+# --- E-1301: task ID extraction from worktree path -------------------------
+
+from pathlib import Path
+
+from endless.worktree_cmd import _task_id_from_worktree_path, _warn_if_companion_disagrees
+
+
+def test_task_id_from_worktree_path_basic_match():
+    p = Path("/Users/x/Projects/foo/.endless/worktrees/e-967")
+    assert _task_id_from_worktree_path(p) == "E-967"
+
+
+def test_task_id_from_worktree_path_with_slug():
+    p = Path("/Users/x/Projects/foo/.endless/worktrees/e-1208-record-verbs")
+    assert _task_id_from_worktree_path(p) == "E-1208"
+
+
+def test_task_id_from_worktree_path_subdir():
+    p = Path("/Users/x/Projects/foo/.endless/worktrees/e-967/src/main.go")
+    assert _task_id_from_worktree_path(p) == "E-967"
+
+
+def test_task_id_from_worktree_path_main_returns_none():
+    p = Path("/Users/x/Projects/foo")
+    assert _task_id_from_worktree_path(p) is None
+
+
+def test_task_id_from_worktree_path_no_match():
+    p = Path("/Users/x/Projects/foo/.endless/worktrees/random-name")
+    assert _task_id_from_worktree_path(p) is None
+
+
+def test_task_id_from_worktree_path_no_digits():
+    p = Path("/Users/x/Projects/foo/.endless/worktrees/e-abc")
+    assert _task_id_from_worktree_path(p) is None
+
+
+def test_warn_if_companion_disagrees_silent_when_matches(capsys):
+    p = Path("/x/.endless/worktrees/e-100")
+    _warn_if_companion_disagrees(p, {"task_id": "E-100"})
+    captured = capsys.readouterr()
+    assert captured.err == ""
+
+
+def test_warn_if_companion_disagrees_warns_on_disagreement(capsys):
+    # Simulates the E-1186 stale-companion case: path says E-100 but
+    # the companion's task_id field claims E-1186.
+    p = Path("/x/.endless/worktrees/e-100")
+    _warn_if_companion_disagrees(p, {"task_id": "E-1186"})
+    captured = capsys.readouterr()
+    assert "stale companion" in captured.err
+    assert "E-1186" in captured.err
+    assert "E-100" in captured.err
+
+
+def test_warn_if_companion_disagrees_silent_when_field_absent(capsys):
+    # New companions (post-E-1301) omit task_id. No warning.
+    p = Path("/x/.endless/worktrees/e-100")
+    _warn_if_companion_disagrees(p, {"kind": "task", "base_branch": "main"})
+    captured = capsys.readouterr()
+    assert captured.err == ""
+
+
+def test_warn_if_companion_disagrees_silent_when_companion_none(capsys):
+    p = Path("/x/.endless/worktrees/e-100")
+    _warn_if_companion_disagrees(p, None)
+    captured = capsys.readouterr()
+    assert captured.err == ""

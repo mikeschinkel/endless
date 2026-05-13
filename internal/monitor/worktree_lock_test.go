@@ -266,3 +266,39 @@ func trimSpaceForTest(s string) string {
 	}
 	return s
 }
+
+func TestTaskIDFromWorktreePath_BasicMatch(t *testing.T) {
+	cases := []struct {
+		path string
+		want string
+	}{
+		{"/Users/x/Projects/foo/.endless/worktrees/e-967", "E-967"},
+		{"/Users/x/Projects/foo/.endless/worktrees/e-967/", "E-967"},
+		{"/Users/x/Projects/foo/.endless/worktrees/e-967/src/main.go", "E-967"},
+		{"/Users/x/Projects/foo/.endless/worktrees/e-1208-record-verbs", "E-1208"},
+		{"/Users/x/Projects/foo/.endless/worktrees/e-1208-record-verbs/sub", "E-1208"},
+		{"/Users/x/Projects/foo", ""},
+		{"/Users/x/Projects/foo/.endless/worktrees", ""},
+		{"/Users/x/Projects/foo/.endless/worktrees/", ""},
+		{"/Users/x/Projects/foo/.endless/worktrees/random-name", ""},
+		{"/Users/x/Projects/foo/.endless/worktrees/e-", ""},
+		{"/Users/x/Projects/foo/.endless/worktrees/e-abc", ""},
+	}
+	for _, c := range cases {
+		got := TaskIDFromWorktreePath(c.path)
+		if got != c.want {
+			t.Errorf("TaskIDFromWorktreePath(%q) = %q, want %q", c.path, got, c.want)
+		}
+	}
+}
+
+func TestTaskIDFromWorktreePath_IgnoresCompanionField(t *testing.T) {
+	// Even if a path's neighboring companion claims a different task_id,
+	// the helper trusts the path alone. (E-1301: companion no longer source
+	// of truth.) This test is purely about the function's purity; we don't
+	// touch the filesystem.
+	got := TaskIDFromWorktreePath("/x/.endless/worktrees/e-100/.endless/worktree.json")
+	if got != "E-100" {
+		t.Errorf("path-derived ID should be E-100, got %q", got)
+	}
+}

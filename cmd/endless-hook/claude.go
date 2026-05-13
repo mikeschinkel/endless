@@ -1090,20 +1090,27 @@ func autoBindFromCwd(projectID int64, payload claudePayload) {
 }
 
 // resolveCwdTaskID walks up from cwd looking for an endless worktree
-// companion and returns its task_id as int64. Pure filesystem; no DB
-// access, no side effects — safe to test without infrastructure.
-// Returns 0 when there's no companion or the companion's task_id is
-// missing/malformed.
+// directory and returns its task ID (encoded in the directory name) as
+// int64. Pure filesystem; no DB access, no side effects — safe to test
+// without infrastructure.
+//
+// E-1301: derives the task ID from the path convention
+// (`.endless/worktrees/e-NNN`), not from the companion file's task_id
+// field. The companion's mere existence is the "endless-managed marker"
+// (FindWorktreeRoot's check); the path encodes the identity.
+//
+// Returns 0 when cwd isn't inside an endless worktree, or when the
+// worktree path doesn't follow the convention.
 func resolveCwdTaskID(projectRoot, cwd string) int64 {
 	wtRoot, err := monitor.FindWorktreeRoot(cwd, projectRoot)
 	if err != nil || wtRoot == "" {
 		return 0
 	}
-	comp, err := monitor.ReadWorktreeCompanion(wtRoot)
-	if err != nil || comp == nil || comp.TaskID == "" {
+	tidStr := monitor.TaskIDFromWorktreePath(wtRoot)
+	if tidStr == "" {
 		return 0
 	}
-	taskID, err := parseEndlessTaskID(comp.TaskID)
+	taskID, err := parseEndlessTaskID(tidStr)
 	if err != nil || taskID <= 0 {
 		return 0
 	}
@@ -1368,10 +1375,11 @@ func enforceWorktreeGate(projectID int64, payload claudePayload) {
 			ownerHint))
 	}
 
-	// (b) Task mismatch: worktree's task_id != session's active task.
-	comp, _ := monitor.ReadWorktreeCompanion(worktreePath)
-	if comp != nil && comp.TaskID != "" && session != nil && session.ActiveTaskID != nil {
-		worktreeTaskNum, parseErr := parseEndlessTaskID(comp.TaskID)
+	// (b) Task mismatch: worktree's identity (from path convention,
+	// E-1301) != session's active task.
+	worktreeTaskID := monitor.TaskIDFromWorktreePath(worktreePath)
+	if worktreeTaskID != "" && session != nil && session.ActiveTaskID != nil {
+		worktreeTaskNum, parseErr := parseEndlessTaskID(worktreeTaskID)
 		if parseErr == nil && worktreeTaskNum != *session.ActiveTaskID {
 			blockToolUse(fmt.Sprintf(
 				"This worktree is bound to %s, but your active task is E-%d.\n\n"+
@@ -1379,7 +1387,7 @@ func enforceWorktreeGate(projectID int64, payload claudePayload) {
 					"  endless task claim E-%d\n\n"+
 					"Or move to the worktree for your active task:\n"+
 					"  endless worktree for-task E-%d",
-				comp.TaskID, *session.ActiveTaskID,
+				worktreeTaskID, *session.ActiveTaskID,
 				worktreeTaskNum, *session.ActiveTaskID))
 		}
 	}

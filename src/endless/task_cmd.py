@@ -386,23 +386,26 @@ def _worktree_for_task(task_id: int) -> Path | None:
 
     E-1216: plan files for a task live in its worktree, not in main. This is
     the canonical "where do plan-file writes go?" resolver. Lookup is by
-    deterministic path (<main>/.endless/worktrees/e-<id>/) with the
-    `.endless/worktree.json` companion validating ownership.
+    deterministic path (<main>/.endless/worktrees/e-<id>/), with the
+    `.endless/worktree.json` companion's mere presence (not its task_id
+    field) acting as the "endless-managed marker" per E-1301.
     """
+    from endless.worktree_cmd import (
+        _task_id_from_worktree_path,
+        _warn_if_companion_disagrees,
+        _read_companion,
+    )
     main_root = _main_root_for_task(task_id)
     if main_root is None:
         return None
     wt_dir = main_root / ".endless" / "worktrees" / f"e-{task_id}"
-    companion = wt_dir / ".endless" / "worktree.json"
-    if not wt_dir.is_dir() or not companion.exists():
+    companion_path = wt_dir / ".endless" / "worktree.json"
+    if not wt_dir.is_dir() or not companion_path.exists():
         return None
-    import json
-    try:
-        data = json.loads(companion.read_text())
-    except (OSError, json.JSONDecodeError):
+    if _task_id_from_worktree_path(wt_dir) != f"E-{task_id}":
         return None
-    if data.get("task_id") != f"E-{task_id}":
-        return None
+    companion = _read_companion(wt_dir)
+    _warn_if_companion_disagrees(wt_dir, companion)
     return wt_dir
 
 

@@ -25,13 +25,17 @@ func TestResolveCwdTaskID_CwdInWorktreeNoTaskID(t *testing.T) {
 	}
 }
 
-func TestResolveCwdTaskID_CwdInWorktreeMalformedTaskID(t *testing.T) {
+// E-1301: companion's task_id is no longer the source of truth — the
+// path encodes the authoritative task ID. Repurposed as a stale-companion
+// immunity regression test: companion lies, path-extraction still returns
+// the right ID.
+func TestResolveCwdTaskID_PathOverridesStaleCompanion(t *testing.T) {
 	projectRoot := t.TempDir()
 	worktreeRoot := filepath.Join(projectRoot, ".endless", "worktrees", "e-1291")
 	writeTestFile(t, filepath.Join(worktreeRoot, ".endless", "worktree.json"),
-		`{"task_id":"not-a-task-id"}`)
-	if got := resolveCwdTaskID(projectRoot, worktreeRoot); got != 0 {
-		t.Fatalf("expected 0 for malformed task_id; got %d", got)
+		`{"task_id":"E-9999"}`) // companion lies
+	if got := resolveCwdTaskID(projectRoot, worktreeRoot); got != 1291 {
+		t.Fatalf("expected 1291 (path-derived, companion ignored); got %d", got)
 	}
 }
 

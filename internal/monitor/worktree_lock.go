@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"syscall"
 	"time"
 )
@@ -207,6 +208,31 @@ func FindLockBySessionID(projectID int64, sessionID string) (string, error) {
 		}
 	}
 	return "", nil
+}
+
+// taskIDFromWorktreePathRe matches the canonical task-worktree path
+// segment `.endless/worktrees/e-NNN[-slug]` and captures the digits.
+// Anchored on the path component so subdirectories of the worktree
+// also match.
+var taskIDFromWorktreePathRe = regexp.MustCompile(
+	`/\.endless/worktrees/e-(\d+)(?:-[a-z0-9-]+)?(?:/|$)`,
+)
+
+// TaskIDFromWorktreePath extracts the canonical "E-NNN" task ID encoded
+// in a worktree path, or "" if the path is not under a recognized
+// worktree directory.
+//
+// E-1301: this is the canonical source of truth for "what task does this
+// worktree belong to". The companion file's task_id field is no longer
+// trusted; it can outlive a worktree's actual identity (see the E-1186
+// stale-companion incident that defeated E-1298's first fix). Pure
+// function: no filesystem or DB I/O.
+func TaskIDFromWorktreePath(path string) string {
+	m := taskIDFromWorktreePathRe.FindStringSubmatch(path)
+	if m == nil {
+		return ""
+	}
+	return "E-" + m[1]
 }
 
 // FindWorktreeRoot walks up from cwd looking for .endless/worktree.json.

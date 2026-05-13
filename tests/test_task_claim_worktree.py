@@ -133,7 +133,11 @@ def test_claim_creates_worktree_no_plan_file(project_with_task, capsys):
 
     companion = json.loads((wt / ".endless" / "worktree.json").read_text())
     assert companion["kind"] == "task"
-    assert companion["task_id"] == f"E-{tid}"
+    # E-1301: task_id is no longer written; the worktree's identity comes
+    # from the path convention `.endless/worktrees/e-NNN`. The companion's
+    # presence is the "endless-managed" marker; its content documents the
+    # worktree's provenance (base_branch, branch, created_at).
+    assert "task_id" not in companion
     assert companion["base_branch"] == "main"
     assert companion["branch"].startswith(f"task/{tid}-")
     assert "created_at" in companion
