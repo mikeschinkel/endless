@@ -1,4 +1,4 @@
-"""CLI implementation for `endless session status add` (E-1312).
+"""CLI implementation for `endless session status add` (E-1312 / E-1314).
 
 Reads XML from a file path or stdin, validates the schema, packages the
 parsed contents as a payload, and emits a `session_status.recorded` event
@@ -7,12 +7,16 @@ session id from the payload's `process` field, dedups against the latest
 row, INSERTs into `session_statuses`, and returns rendered markdown for
 chat display.
 
+E-1314 schema: tasks live under a flat `<tasks>` container; disposition
+is derived from each task's status at render time (no separate columns).
+New `<summary>` element captures structured per-layer implementation
+breakdowns.
+
 This module performs no DB access. All persistence lives behind
 event_bridge → endless-event → events.Execute per E-894's "DB access in
 Go" policy.
 """
 
-import json
 import os
 import re
 import sys
@@ -32,8 +36,6 @@ _VALID_STATUSES = frozenset({
 
 _TASK_ID_RE = re.compile(r"^E-\d+$")
 _SHA_RE = re.compile(r"^[0-9a-f]{7,40}$")
-
-_TASK_SECTIONS = ("resolved", "pending", "blocked", "verify")
 
 
 def session_status_add(input_file: str | None, session_id_override: int | None) -> None:
@@ -137,13 +139,11 @@ def _parse_and_validate(xml_text: str) -> dict:
 
     payload = {
         "headline": "",
-        "resolved": "",
-        "pending": "",
-        "blocked": "",
-        "verify": "",
+        "tasks": "",
         "decisions": "",
         "commits": "",
         "memory": "",
+        "summary": "",
         "notes": "",
     }
 
@@ -153,14 +153,16 @@ def _parse_and_validate(xml_text: str) -> dict:
             payload["headline"] = (child.text or "").strip()
         elif tag == "notes":
             payload["notes"] = (child.text or "").strip()
-        elif tag in _TASK_SECTIONS:
-            payload[tag] = _serialize_tasks(child, section=tag)
+        elif tag == "tasks":
+            payload["tasks"] = _serialize_tasks(child)
         elif tag == "decisions":
             payload["decisions"] = _serialize_decisions(child)
         elif tag == "commits":
             payload["commits"] = _serialize_commits(child)
         elif tag == "memory":
             payload["memory"] = _serialize_memory(child)
+        elif tag == "summary":
+            payload["summary"] = _serialize_summary(child)
         else:
             raise click.ClickException(
                 f"session status: unknown element <{tag}> under <session-status>"
@@ -169,13 +171,18 @@ def _parse_and_validate(xml_text: str) -> dict:
     return payload
 
 
-def _serialize_tasks(section_el: ET.Element, *, section: str) -> str:
-    """Serialize each <task> child as one line; validate attrs."""
+def _serialize_tasks(section_el: ET.Element) -> str:
+    """Serialize each <task> child as one line; validate attrs.
+
+    E-1314: tasks live under a single flat <tasks> container; disposition
+    is derived from `status` at render time. Schema validates `id`,
+    `status`, and the optional `filed` attribute.
+    """
     lines = []
     for el in section_el:
         if el.tag != "task":
             raise click.ClickException(
-                f"session status: unexpected <{el.tag}> inside <{section}>; "
+                f"session status: unexpected <{el.tag}> inside <tasks>; "
                 f"only <task> elements allowed"
             )
         tid = el.attrib.get("id", "")
@@ -194,6 +201,27 @@ def _serialize_tasks(section_el: ET.Element, *, section: str) -> str:
             raise click.ClickException(
                 f"session status: <task id={tid!r}> filed must be 'true' "
                 f"or 'false', got {filed!r}"
+            )
+        lines.append(_element_to_line(el))
+    return "\n".join(lines)
+
+
+def _serialize_summary(section_el: ET.Element) -> str:
+    """Serialize <layer> children. Each must have name + files attrs."""
+    lines = []
+    for el in section_el:
+        if el.tag != "layer":
+            raise click.ClickException(
+                f"session status: unexpected <{el.tag}> inside <summary>; "
+                f"only <layer> elements allowed"
+            )
+        if not el.attrib.get("name"):
+            raise click.ClickException(
+                "session status: <layer> requires a name attribute"
+            )
+        if not el.attrib.get("files"):
+            raise click.ClickException(
+                "session status: <layer> requires a files attribute"
             )
         lines.append(_element_to_line(el))
     return "\n".join(lines)

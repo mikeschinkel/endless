@@ -218,6 +218,83 @@ func migrateV7(db *sql.DB) error {
 	return nil
 }
 
+// migrateV8 consolidates session_statuses task columns and adds
+// active_task_id + summary (E-1314).
+//
+// Pre-E-1314 shape (after V7): resolved, pending, blocked, verify each
+// held XML fragments. Disposition was a separate axis.
+//
+// Post-E-1314 shape: single `tasks` column holds all <task> elements;
+// disposition derives from the task's status attribute at render time.
+// `active_task_id` joins to tasks.id; `summary` carries structured
+// <layer ...> children.
+//
+// Idempotent in three phases:
+//  1. Add new columns if missing (active_task_id, summary, tasks).
+//  2. If any pre-V8 task columns exist, migrate their content into
+//     `tasks` (concatenate with disposition derivable from status; no
+//     attribute injection needed since status carries the info).
+//  3. DROP the pre-V8 columns if still present.
+//
+// Fresh installs (post-V8) never have the old columns; migrate just adds
+// what's missing.
+func migrateV8(db *sql.DB) error {
+	if !hasTable(db, "session_statuses") {
+		// Table didn't exist pre-V7 either; V7 would have created the
+		// pre-E-1314 shape, but if migrations run in order from a fresh
+		// install, V7 already did the work and we just add the new
+		// columns here.
+		return nil
+	}
+
+	// Phase 1: ensure new columns exist.
+	if !hasColumn(db, "session_statuses", "active_task_id") {
+		db.Exec(`ALTER TABLE session_statuses ADD COLUMN active_task_id INTEGER REFERENCES tasks(id) ON DELETE SET NULL`)
+	}
+	if !hasColumn(db, "session_statuses", "summary") {
+		db.Exec(`ALTER TABLE session_statuses ADD COLUMN summary TEXT`)
+	}
+	if !hasColumn(db, "session_statuses", "tasks") {
+		db.Exec(`ALTER TABLE session_statuses ADD COLUMN tasks TEXT`)
+	}
+
+	// Phase 2: migrate old-column content to the new `tasks` column.
+	// Disposition is derivable from each task's status, so we just
+	// concatenate the four old columns (no attribute injection needed).
+	// Skip rows where `tasks` is already populated (idempotency safety).
+	hasOldCols := hasColumn(db, "session_statuses", "resolved") ||
+		hasColumn(db, "session_statuses", "pending") ||
+		hasColumn(db, "session_statuses", "blocked") ||
+		hasColumn(db, "session_statuses", "verify")
+	if hasOldCols {
+		// Build a concat expression using COALESCE for whichever columns
+		// still exist. SQLite returns NULL for missing-column references
+		// only if we compile-time-protect; safer to do the concat in two
+		// steps with conditional checks.
+		parts := []string{}
+		for _, col := range []string{"resolved", "pending", "blocked", "verify"} {
+			if hasColumn(db, "session_statuses", col) {
+				parts = append(parts, "COALESCE("+col+", '')")
+			}
+		}
+		if len(parts) > 0 {
+			expr := "TRIM(" + strings.Join(parts, " || char(10) || ") + ")"
+			query := `UPDATE session_statuses SET tasks = ` + expr +
+				` WHERE (tasks IS NULL OR tasks = '')`
+			db.Exec(query)
+		}
+	}
+
+	// Phase 3: drop the old columns.
+	for _, col := range []string{"resolved", "pending", "blocked", "verify"} {
+		if hasColumn(db, "session_statuses", col) {
+			db.Exec(`ALTER TABLE session_statuses DROP COLUMN ` + col)
+		}
+	}
+
+	return nil
+}
+
 // migrateV4 adds task_files (per-task edit-set, E-917) and
 // suggestions (AI-agent calibration suggestions, E-918) tables.
 func migrateV4(db *sql.DB) error {

@@ -1,6 +1,15 @@
-// Session-status event handling (E-1312). Inserts a row into the
-// session_statuses table after dedup against the latest row for the
+// Session-status event handling (E-1312 / E-1314). Inserts a row into
+// the session_statuses table after dedup against the latest row for the
 // same session. Renders the row back as markdown for chat display.
+//
+// E-1314 schema:
+// - One `tasks` column carries all task elements; disposition (resolved/
+//   pending/blocked/verify) is derived at render time from each task's
+//   status attribute, removing the redundant 4-column shape.
+// - `active_task_id` resolved from sessions at INSERT time; not in
+//   payload (Go-side concern).
+// - `summary` carries structured `<layer name="..." files="...">purpose
+//   </layer>` children that render as a 3-column markdown table.
 
 package events
 
@@ -34,11 +43,19 @@ func execSessionStatusRecorded(db dbQuerier, evt *Event) (*ExecuteResult, error)
 		)
 	}
 
+	// E-1314: pull the session's currently bound task at the moment of
+	// the status row, so SQL joins to tasks can find this row without an
+	// extra subquery against sessions.
+	activeTaskID, err := sessionActiveTaskID(db, sessionID)
+	if err != nil {
+		return nil, fmt.Errorf("events: lookup session active_task_id: %w", err)
+	}
+
 	if dup, err := isDuplicateOfLatest(db, sessionID, &p); err != nil {
 		return nil, fmt.Errorf("events: dedup check: %w", err)
 	} else if dup {
 		return &ExecuteResult{
-			Skipped:  true,
+			Skipped: true,
 			Markdown: renderSessionStatusMarkdown(&p) +
 				"\n\n_(skipped: identical to latest status for this session)_\n",
 		}, nil
@@ -46,12 +63,11 @@ func execSessionStatusRecorded(db dbQuerier, evt *Event) (*ExecuteResult, error)
 
 	res, err := db.Exec(
 		`INSERT INTO session_statuses
-		 (session_id, headline, resolved, pending, blocked, verify,
-		  decisions, commits, memory, notes)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		sessionID,
-		p.Headline, p.Resolved, p.Pending, p.Blocked, p.Verify,
-		p.Decisions, p.Commits, p.Memory, p.Notes,
+		 (session_id, active_task_id, headline, tasks, decisions,
+		  commits, memory, summary, notes)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		sessionID, activeTaskID,
+		p.Headline, p.Tasks, p.Decisions, p.Commits, p.Memory, p.Summary, p.Notes,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("events: insert session_status: %w", err)
@@ -67,39 +83,47 @@ func execSessionStatusRecorded(db dbQuerier, evt *Event) (*ExecuteResult, error)
 	}, nil
 }
 
+// sessionActiveTaskID returns the session's currently bound task id, or
+// nil if no task is bound. Wrapped in *int64 so the INSERT can pass it
+// straight through to the nullable column.
+func sessionActiveTaskID(db dbQuerier, sessionID int64) (*int64, error) {
+	var atid *int64
+	err := db.QueryRow(
+		`SELECT active_task_id FROM sessions WHERE id = ?`,
+		sessionID,
+	).Scan(&atid)
+	if err != nil {
+		return nil, err
+	}
+	return atid, nil
+}
+
 // isDuplicateOfLatest returns true iff the latest row for sessionID has
 // every text column byte-equal to the payload's. NULL columns in the
 // existing row compare against "" in the payload — they're equivalent
 // for the "no content" case.
 func isDuplicateOfLatest(db dbQuerier, sessionID int64, p *SessionStatusRecordedPayload) (bool, error) {
 	var (
-		headline, resolved, pending, blocked, verify  *string
-		decisions, commits, memoryCol, notes          *string
+		headline, tasks, decisions, commits, memoryCol, summary, notes *string
 	)
 	err := db.QueryRow(
-		`SELECT headline, resolved, pending, blocked, verify,
-		        decisions, commits, memory, notes
+		`SELECT headline, tasks, decisions, commits, memory, summary, notes
 		 FROM session_statuses
 		 WHERE session_id = ?
 		 ORDER BY created_at DESC, id DESC
 		 LIMIT 1`,
 		sessionID,
-	).Scan(&headline, &resolved, &pending, &blocked, &verify,
-		&decisions, &commits, &memoryCol, &notes)
+	).Scan(&headline, &tasks, &decisions, &commits, &memoryCol, &summary, &notes)
 	if err != nil {
-		// No prior row → not a duplicate. The "no rows" sentinel from
-		// sql is sql.ErrNoRows but dbQuerier.QueryRow may wrap it; the
-		// simplest correct check is "any error means not-dup."
+		// No prior row → not a duplicate.
 		return false, nil
 	}
 	return nullableEq(headline, p.Headline) &&
-		nullableEq(resolved, p.Resolved) &&
-		nullableEq(pending, p.Pending) &&
-		nullableEq(blocked, p.Blocked) &&
-		nullableEq(verify, p.Verify) &&
+		nullableEq(tasks, p.Tasks) &&
 		nullableEq(decisions, p.Decisions) &&
 		nullableEq(commits, p.Commits) &&
 		nullableEq(memoryCol, p.Memory) &&
+		nullableEq(summary, p.Summary) &&
 		nullableEq(notes, p.Notes), nil
 }
 
@@ -114,8 +138,8 @@ func nullableEq(col *string, payload string) bool {
 }
 
 // renderSessionStatusMarkdown formats a payload as markdown for chat
-// display. Sections render as tables for task-shaped data and bulleted
-// lists for free-text decisions. Empty sections render `(empty)` so the
+// display. Tasks are grouped by status-derived disposition; structured
+// sections render as tables; empty sections render `(empty)` so the
 // document structure stays visible.
 func renderSessionStatusMarkdown(p *SessionStatusRecordedPayload) string {
 	var b strings.Builder
@@ -125,13 +149,11 @@ func renderSessionStatusMarkdown(p *SessionStatusRecordedPayload) string {
 		b.WriteString("\n\n")
 	}
 
-	renderTaskSection(&b, "Resolved", p.Resolved)
-	renderTaskSection(&b, "Pending", p.Pending)
-	renderTaskSection(&b, "Blocked", p.Blocked)
-	renderTaskSection(&b, "Verify", p.Verify)
+	renderTasksGrouped(&b, p.Tasks)
 	renderDecisions(&b, p.Decisions)
 	renderCommits(&b, p.Commits)
 	renderMemory(&b, p.Memory)
+	renderSummary(&b, p.Summary)
 
 	if p.Notes != "" {
 		b.WriteString("## Notes\n")
@@ -141,36 +163,77 @@ func renderSessionStatusMarkdown(p *SessionStatusRecordedPayload) string {
 	return b.String()
 }
 
-// renderTaskSection emits a `## <heading>` markdown section. body holds
-// zero-or-more `<task ...>note</task>` elements; the storage convention
-// puts them one-per-top-level-line, but a task's body text may itself
-// contain newlines (preserved verbatim in storage). To handle both, we
-// split on the `</task>` boundary rather than on bare `\n`.
-func renderTaskSection(b *strings.Builder, heading, body string) {
-	b.WriteString("## ")
-	b.WriteString(heading)
-	b.WriteString("\n")
+// renderTasksGrouped walks the flat <task> list and emits 4 sections
+// (Resolved / Pending / Blocked / Verify), with each task placed by a
+// status→disposition mapping. Sections with no tasks render `(empty)`.
+//
+// Status → disposition mapping:
+//   - resolved: confirmed, assumed, completed, obsolete, declined
+//   - pending:  needs_plan, ready, in_progress, revisit
+//   - blocked:  blocked
+//   - verify:   verify
+//
+// An unknown status falls into Pending so it surfaces somewhere rather
+// than silently disappearing.
+func renderTasksGrouped(b *strings.Builder, body string) {
 	body = strings.TrimSpace(body)
-	if body == "" {
-		b.WriteString("(empty)\n\n")
-		return
+	buckets := map[string][]string{
+		"Resolved": nil,
+		"Pending":  nil,
+		"Blocked":  nil,
+		"Verify":   nil,
 	}
-	b.WriteString("| Task | Status | Note |\n|---|---|---|\n")
-	for _, elem := range splitElements(body, "task") {
-		id, status, filed, note := parseTaskLine(elem)
-		idCell := id
-		if filed {
-			idCell += " (filed)"
+	if body != "" {
+		for _, elem := range splitElements(body, "task") {
+			_, status, _, _ := parseTaskLine(elem)
+			buckets[statusToDisposition(status)] = append(
+				buckets[statusToDisposition(status)], elem,
+			)
 		}
-		b.WriteString("| ")
-		b.WriteString(idCell)
-		b.WriteString(" | ")
-		b.WriteString(status)
-		b.WriteString(" | ")
-		b.WriteString(escapeNewlinesForMarkdown(note))
-		b.WriteString(" |\n")
 	}
-	b.WriteString("\n")
+	for _, heading := range []string{"Resolved", "Pending", "Blocked", "Verify"} {
+		b.WriteString("## ")
+		b.WriteString(heading)
+		b.WriteString("\n")
+		elems := buckets[heading]
+		if len(elems) == 0 {
+			b.WriteString("(empty)\n\n")
+			continue
+		}
+		b.WriteString("| Task | Status | Note |\n|---|---|---|\n")
+		for _, elem := range elems {
+			id, status, filed, note := parseTaskLine(elem)
+			idCell := id
+			if filed {
+				idCell += " (filed)"
+			}
+			b.WriteString("| ")
+			b.WriteString(idCell)
+			b.WriteString(" | ")
+			b.WriteString(status)
+			b.WriteString(" | ")
+			b.WriteString(escapeNewlinesForMarkdown(note))
+			b.WriteString(" |\n")
+		}
+		b.WriteString("\n")
+	}
+}
+
+// statusToDisposition maps a task status to the bucket the renderer
+// places it in. Unknown statuses fall into "Pending" so they surface.
+func statusToDisposition(status string) string {
+	switch status {
+	case "confirmed", "assumed", "completed", "obsolete", "declined":
+		return "Resolved"
+	case "blocked":
+		return "Blocked"
+	case "verify":
+		return "Verify"
+	case "needs_plan", "ready", "in_progress", "revisit":
+		return "Pending"
+	default:
+		return "Pending"
+	}
 }
 
 // splitElements walks a body containing one or more <tag>...</tag>
@@ -190,7 +253,6 @@ func splitElements(body, tag string) []string {
 		start += cursor
 		endTag := strings.Index(body[start:], close)
 		if endTag < 0 {
-			// Malformed; stop. Whatever validation upstream did failed.
 			break
 		}
 		endTag += start + len(close)
@@ -259,10 +321,33 @@ func renderMemory(b *strings.Builder, body string) {
 	b.WriteString("\n")
 }
 
+// renderSummary emits a `| Layer | Files | Purpose |` table from
+// <layer name="..." files="...">purpose</layer> children (E-1314).
+func renderSummary(b *strings.Builder, body string) {
+	b.WriteString("## Summary\n")
+	body = strings.TrimSpace(body)
+	if body == "" {
+		b.WriteString("(empty)\n\n")
+		return
+	}
+	b.WriteString("| Layer | Files | Purpose |\n|---|---|---|\n")
+	for _, elem := range splitElements(body, "layer") {
+		name := extractAttr(elem, "name")
+		files := extractAttr(elem, "files")
+		text := extractElementText(elem, "layer")
+		b.WriteString("| ")
+		b.WriteString(name)
+		b.WriteString(" | ")
+		b.WriteString(escapeNewlinesForMarkdown(files))
+		b.WriteString(" | ")
+		b.WriteString(escapeNewlinesForMarkdown(text))
+		b.WriteString(" |\n")
+	}
+	b.WriteString("\n")
+}
+
 // parseTaskLine extracts the id, status, filed-bool, and body text from
-// a single `<task id=... status=... filed=...>note</task>` line. Returns
-// best-effort empty strings on malformed lines (validation already ran
-// in Python; this is rendering, not validation).
+// a single `<task id=... status=... filed=...>note</task>` line.
 func parseTaskLine(line string) (id, status string, filed bool, note string) {
 	id = extractAttr(line, "id")
 	status = extractAttr(line, "status")
@@ -272,7 +357,6 @@ func parseTaskLine(line string) (id, status string, filed bool, note string) {
 }
 
 // extractAttr returns the value of attr from a single-element XML line.
-// Naive substring match; payload was already parsed/validated upstream.
 func extractAttr(line, attr string) string {
 	needle := attr + `="`
 	idx := strings.Index(line, needle)
@@ -287,8 +371,7 @@ func extractAttr(line, attr string) string {
 	return line[start : start+end]
 }
 
-// extractElementText returns the body text of <tag>text</tag>. Naive;
-// assumes element appears once on the line.
+// extractElementText returns the body text of <tag>text</tag>.
 func extractElementText(line, tag string) string {
 	open := ">"
 	openIdx := strings.Index(line, open)

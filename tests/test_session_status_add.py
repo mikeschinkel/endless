@@ -1,4 +1,5 @@
-"""Tests for `endless session status add` XML parsing + validation (E-1312).
+"""Tests for `endless session status add` XML parsing + validation
+(E-1312 / E-1314 schema: <tasks> flat container; <summary>).
 
 The Python layer's job is parse + validate + payload-build. End-to-end
 flow through endless-event + the Go handler is tested separately on the
@@ -18,19 +19,13 @@ def test_parses_full_schema():
     xml = """
     <session-status>
       <headline>One-line summary.</headline>
-      <resolved>
+      <tasks>
         <task id="E-1208" status="confirmed">verbs.jsonl write-time</task>
         <task id="E-1206" status="confirmed" filed="true">db-ledger write-time</task>
-      </resolved>
-      <pending>
         <task id="E-1302" status="needs_plan" filed="true">endless task id CLI</task>
-      </pending>
-      <blocked>
         <task id="E-9999" status="blocked">waiting on something</task>
-      </blocked>
-      <verify>
         <task id="E-1312" status="verify">awaiting confirm</task>
-      </verify>
+      </tasks>
       <decisions>
         <decision>chose XML over markdown for deterministic parsing</decision>
         <decision>kept filed as an attribute rather than a separate section</decision>
@@ -41,37 +36,38 @@ def test_parses_full_schema():
       <memory>
         <entry path="feedback_no_autonomous_remediation.md">report and ask on partial fail</entry>
       </memory>
+      <summary>
+        <layer name="Schema" files="internal/monitor/migrate.go">V8 migration</layer>
+      </summary>
       <notes>free-form prose.</notes>
     </session-status>
     """
     p = _parse_and_validate(xml)
     assert p["headline"] == "One-line summary."
-    assert "E-1208" in p["resolved"]
-    assert "E-1206" in p["resolved"]
-    assert 'filed="true"' in p["resolved"]
-    assert "E-1302" in p["pending"]
-    assert "E-9999" in p["blocked"]
-    assert "E-1312" in p["verify"]
+    for tid in ("E-1208", "E-1206", "E-1302", "E-9999", "E-1312"):
+        assert tid in p["tasks"], f"missing {tid} in tasks column"
+    assert 'filed="true"' in p["tasks"]
     assert "chose XML" in p["decisions"]
     assert "1e3bbfc" in p["commits"]
     assert "feedback_no_autonomous_remediation.md" in p["memory"]
+    assert "Schema" in p["summary"]
     assert p["notes"] == "free-form prose."
 
 
 def test_each_task_serialized_one_per_line():
     xml = """
     <session-status>
-      <resolved>
+      <tasks>
         <task id="E-1" status="confirmed">a</task>
         <task id="E-2" status="confirmed">b</task>
         <task id="E-3" status="confirmed">c</task>
-      </resolved>
+      </tasks>
     </session-status>
     """
     p = _parse_and_validate(xml)
-    assert p["resolved"].count("\n") == 2  # 3 tasks → 2 newlines between
+    assert p["tasks"].count("\n") == 2  # 3 tasks -> 2 newlines
     for tid in ("E-1", "E-2", "E-3"):
-        assert tid in p["resolved"]
+        assert tid in p["tasks"]
 
 
 def test_missing_sections_become_empty_string():
@@ -82,8 +78,8 @@ def test_missing_sections_become_empty_string():
     """
     p = _parse_and_validate(xml)
     assert p["headline"] == "Only a headline."
-    for section in ("resolved", "pending", "blocked", "verify",
-                    "decisions", "commits", "memory", "notes"):
+    for section in ("tasks", "decisions", "commits", "memory",
+                    "summary", "notes"):
         assert p[section] == ""
 
 
@@ -114,12 +110,28 @@ def test_rejects_unknown_top_level_element():
     assert "random-tag" in exc.value.message
 
 
-def test_rejects_invalid_task_id():
+def test_rejects_old_resolved_element():
+    """E-1314: <resolved>/<pending>/<blocked>/<verify> are no longer
+    top-level; tasks live under <tasks>. The old shape is rejected."""
     xml = """
     <session-status>
       <resolved>
-        <task id="not-an-id" status="confirmed">x</task>
+        <task id="E-1" status="confirmed">x</task>
       </resolved>
+    </session-status>
+    """
+    with pytest.raises(click.ClickException) as exc:
+        _parse_and_validate(xml)
+    assert "unknown element" in exc.value.message
+    assert "resolved" in exc.value.message
+
+
+def test_rejects_invalid_task_id():
+    xml = """
+    <session-status>
+      <tasks>
+        <task id="not-an-id" status="confirmed">x</task>
+      </tasks>
     </session-status>
     """
     with pytest.raises(click.ClickException) as exc:
@@ -130,9 +142,9 @@ def test_rejects_invalid_task_id():
 def test_rejects_invalid_status():
     xml = """
     <session-status>
-      <resolved>
+      <tasks>
         <task id="E-1" status="not-a-status">x</task>
-      </resolved>
+      </tasks>
     </session-status>
     """
     with pytest.raises(click.ClickException) as exc:
@@ -143,9 +155,9 @@ def test_rejects_invalid_status():
 def test_rejects_invalid_filed_value():
     xml = """
     <session-status>
-      <resolved>
+      <tasks>
         <task id="E-1" status="confirmed" filed="yes">x</task>
-      </resolved>
+      </tasks>
     </session-status>
     """
     with pytest.raises(click.ClickException) as exc:
@@ -153,12 +165,12 @@ def test_rejects_invalid_filed_value():
     assert "filed must be" in exc.value.message
 
 
-def test_rejects_non_task_inside_task_section():
+def test_rejects_non_task_inside_tasks_container():
     xml = """
     <session-status>
-      <resolved>
+      <tasks>
         <not-task id="E-1" status="confirmed">x</not-task>
-      </resolved>
+      </tasks>
     </session-status>
     """
     with pytest.raises(click.ClickException) as exc:
@@ -192,6 +204,45 @@ def test_rejects_memory_entry_missing_path():
     assert "requires a path attribute" in exc.value.message
 
 
+def test_rejects_summary_layer_missing_name():
+    xml = """
+    <session-status>
+      <summary>
+        <layer files="a, b">purpose</layer>
+      </summary>
+    </session-status>
+    """
+    with pytest.raises(click.ClickException) as exc:
+        _parse_and_validate(xml)
+    assert "requires a name attribute" in exc.value.message
+
+
+def test_rejects_summary_layer_missing_files():
+    xml = """
+    <session-status>
+      <summary>
+        <layer name="Schema">purpose</layer>
+      </summary>
+    </session-status>
+    """
+    with pytest.raises(click.ClickException) as exc:
+        _parse_and_validate(xml)
+    assert "requires a files attribute" in exc.value.message
+
+
+def test_rejects_non_layer_inside_summary():
+    xml = """
+    <session-status>
+      <summary>
+        <not-layer name="x" files="y">z</not-layer>
+      </summary>
+    </session-status>
+    """
+    with pytest.raises(click.ClickException) as exc:
+        _parse_and_validate(xml)
+    assert "only <layer> elements allowed" in exc.value.message
+
+
 # --- Input handling --------------------------------------------------------
 
 def test_read_input_from_file(tmp_path):
@@ -214,14 +265,14 @@ def test_read_input_empty_errors(monkeypatch):
 def test_filed_attribute_preserved_in_serialization():
     xml = """
     <session-status>
-      <resolved>
+      <tasks>
         <task id="E-1" status="confirmed" filed="true">recently filed</task>
         <task id="E-2" status="confirmed">already there</task>
-      </resolved>
+      </tasks>
     </session-status>
     """
     p = _parse_and_validate(xml)
-    lines = p["resolved"].split("\n")
+    lines = p["tasks"].split("\n")
     # Order preserved; filed attr survives on the first task only.
     assert 'filed="true"' in lines[0]
     assert "filed=" not in lines[1]

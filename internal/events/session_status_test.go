@@ -33,7 +33,7 @@ func TestRenderSessionStatusMarkdown_EmptySectionsShowEmpty(t *testing.T) {
 
 func TestRenderSessionStatusMarkdown_TaskTable(t *testing.T) {
 	p := &SessionStatusRecordedPayload{
-		Resolved: `<task id="E-1208" status="confirmed">verbs.jsonl write-time</task>` +
+		Tasks:`<task id="E-1208" status="confirmed">verbs.jsonl write-time</task>` +
 			"\n" +
 			`<task id="E-1206" status="confirmed" filed="true">db-ledger write-time</task>`,
 	}
@@ -53,7 +53,7 @@ func TestRenderSessionStatusMarkdown_MultiLineNote(t *testing.T) {
 	// Multi-line task body: newlines should render as <br> in the markdown
 	// table cell.
 	p := &SessionStatusRecordedPayload{
-		Resolved: `<task id="E-1" status="confirmed">line one
+		Tasks:`<task id="E-1" status="confirmed">line one
 line two</task>`,
 	}
 	md := renderSessionStatusMarkdown(p)

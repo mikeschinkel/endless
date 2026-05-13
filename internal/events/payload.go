@@ -164,22 +164,27 @@ type NoteCreatedPayload struct {
 // NoteResolvedPayload is intentionally empty; the entity ref carries the note ID.
 type NoteResolvedPayload struct{}
 
-// Session status payloads (E-1312)
+// Session status payloads (E-1312 / E-1314)
 
 // SessionStatusRecordedPayload carries the parsed contents of a
 // <session-status> XML document, ready to be inserted as a row in
 // session_statuses. All section fields are TEXT; empty string means
-// "no content for this section." Decisions/commits/memory follow the
-// same per-line element-per-entry convention as the task sections.
+// "no content for this section."
+//
+// E-1314: collapsed the four task-disposition columns
+// (resolved/pending/blocked/verify) into a single `tasks` column.
+// Disposition is derived at render time from each task's `status`
+// attribute, removing redundant information. Added `summary` (structured
+// per-layer implementation breakdown); `active_task_id` is populated by
+// the Go handler from the resolved session's sessions.active_task_id at
+// insert time — not carried in the payload.
 type SessionStatusRecordedPayload struct {
-	Process   string `json:"process"`   // tmux pane id (or other process identifier)
+	Process   string `json:"process"` // tmux pane id (or other process identifier)
 	Headline  string `json:"headline"`
-	Resolved  string `json:"resolved"`
-	Pending   string `json:"pending"`
-	Blocked   string `json:"blocked"`
-	Verify    string `json:"verify"`
+	Tasks     string `json:"tasks"`
 	Decisions string `json:"decisions"`
 	Commits   string `json:"commits"`
 	Memory    string `json:"memory"`
+	Summary   string `json:"summary"`
 	Notes     string `json:"notes"`
 }
