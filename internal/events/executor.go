@@ -20,7 +20,10 @@ type dbQuerier interface {
 
 // ExecuteResult holds the output of a successful execution.
 type ExecuteResult struct {
-	TaskID int64 `json:"task_id,omitempty"` // for task.created/imported
+	TaskID          int64  `json:"task_id,omitempty"`           // for task.created/imported
+	SessionStatusID int64  `json:"session_status_id,omitempty"` // for session_status.recorded (E-1312)
+	Skipped         bool   `json:"skipped,omitempty"`           // dedup-skip path (no row written)
+	Markdown        string `json:"markdown,omitempty"`          // rendered output for chat display
 }
 
 // PreAllocateTaskID acquires a write lock via BEGIN IMMEDIATE, reads the next
@@ -112,6 +115,8 @@ func dispatch(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 		return execTaskReleased(db, evt)
 	case KindTaskClaimed:
 		return execTaskClaimed(db, evt)
+	case KindSessionStatusRecorded:
+		return execSessionStatusRecorded(db, evt)
 	default:
 		return nil, fmt.Errorf("events: executor does not handle kind %q", evt.Kind)
 	}

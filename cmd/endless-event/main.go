@@ -222,14 +222,29 @@ func run(kindStr, project, entityTypeStr, entityID, actorKindStr, actorID,
 			return fmt.Errorf("commit ledger segment: %w", err)
 		}
 
-		// Execute SQL mutation (side effect of the event)
-		if _, err := events.Execute(&evt); err != nil {
+		// Execute SQL mutation (side effect of the event).
+		execRes, err := events.Execute(&evt)
+		if err != nil {
 			return err
 		}
 
-		output := map[string]string{
+		// E-1312: include ExecuteResult fields so callers (e.g. the
+		// Python session_status_cmd CLI) can render the result for chat.
+		// Switching to map[string]any so non-string fields serialize cleanly.
+		output := map[string]any{
 			"ts":   ts.String(),
 			"kind": kindStr,
+		}
+		if execRes != nil {
+			if execRes.SessionStatusID != 0 {
+				output["session_status_id"] = execRes.SessionStatusID
+			}
+			if execRes.Skipped {
+				output["skipped"] = true
+			}
+			if execRes.Markdown != "" {
+				output["markdown"] = execRes.Markdown
+			}
 		}
 		outJSON, _ := json.Marshal(output)
 		fmt.Println(string(outJSON))

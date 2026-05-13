@@ -631,6 +631,42 @@ def session_unhide(session_ids):
     unhide_sessions(list(session_ids))
 
 
+@session_cmd.group("status")
+def session_status_cmd():
+    """Record and query session status snapshots (E-1312)."""
+    pass
+
+
+@session_status_cmd.command("add")
+@click.argument("input_file", required=False,
+                type=click.Path(exists=True, dir_okay=False))
+@click.option("--session-id", "session_id_override", type=int, default=None,
+              help="Override tmux-pane session lookup (reserved; not "
+                   "implemented in v1).")
+def session_status_add(input_file, session_id_override):
+    """Record a session status snapshot from XML on stdin or a file path.
+
+    Reads XML matching the <session-status>/<task>/<decision>/<commit>/
+    <entry> schema, validates strictly, and emits a
+    session_status.recorded event. The Go-side handler dedups against
+    the latest row for this session and renders markdown for chat.
+
+    Example:
+
+      \b
+      endless session status add <<'EOF'
+      <session-status>
+        <headline>E-1312 v1 landed.</headline>
+        <resolved>
+          <task id="E-1312" status="verify">CLI + Go handler + tests</task>
+        </resolved>
+      </session-status>
+      EOF
+    """
+    from endless.session_status_cmd import session_status_add as impl
+    impl(input_file, session_id_override)
+
+
 @main.group("task")
 def task_cmd():
     """Manage project tasks."""

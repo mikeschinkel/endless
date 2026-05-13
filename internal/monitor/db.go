@@ -176,6 +176,48 @@ func migrateV6(db *sql.DB) error {
 	return nil
 }
 
+// migrateV7 adds the session_statuses table (E-1312). Each row is a
+// snapshot of what a session reports about its current state — headline,
+// task lists (resolved/pending/blocked/verify), plus structured columns
+// for decisions, commits, memory updates, and free-form notes. Latest
+// row by created_at is the current status.
+//
+// Idempotent in two phases: if the table doesn't exist, create it from
+// scratch; if it exists (Mike's local pre-E-1312 install), ALTER to add
+// the columns introduced by E-1312's design refinement.
+func migrateV7(db *sql.DB) error {
+	if !hasTable(db, "session_statuses") {
+		db.Exec(`CREATE TABLE session_statuses (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			session_id INTEGER,
+			headline TEXT,
+			resolved TEXT,
+			pending TEXT,
+			blocked TEXT,
+			verify TEXT,
+			decisions TEXT,
+			commits TEXT,
+			memory TEXT,
+			notes TEXT,
+			created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
+			FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE SET NULL
+		)`)
+	} else {
+		if !hasColumn(db, "session_statuses", "decisions") {
+			db.Exec(`ALTER TABLE session_statuses ADD COLUMN decisions TEXT`)
+		}
+		if !hasColumn(db, "session_statuses", "commits") {
+			db.Exec(`ALTER TABLE session_statuses ADD COLUMN commits TEXT`)
+		}
+		if !hasColumn(db, "session_statuses", "memory") {
+			db.Exec(`ALTER TABLE session_statuses ADD COLUMN memory TEXT`)
+		}
+	}
+	db.Exec(`CREATE INDEX IF NOT EXISTS session_statuses_session_recent_idx
+		ON session_statuses (session_id, created_at DESC)`)
+	return nil
+}
+
 // migrateV4 adds task_files (per-task edit-set, E-917) and
 // suggestions (AI-agent calibration suggestions, E-918) tables.
 func migrateV4(db *sql.DB) error {

@@ -56,13 +56,14 @@ type Kind string
 type EntityType string
 
 const (
-	EntityTask         EntityType = "task"
-	EntityTaskDep      EntityType = "task_dep"
-	EntityProject      EntityType = "project"
-	EntitySession      EntityType = "session"
-	EntityConversation EntityType = "conversation"
-	EntityMessage      EntityType = "message"
-	EntityNote         EntityType = "note"
+	EntityTask          EntityType = "task"
+	EntityTaskDep       EntityType = "task_dep"
+	EntityProject       EntityType = "project"
+	EntitySession       EntityType = "session"
+	EntitySessionStatus EntityType = "session_status"
+	EntityConversation  EntityType = "conversation"
+	EntityMessage       EntityType = "message"
+	EntityNote          EntityType = "note"
 )
 
 // ActorKind enumerates actor categories.
@@ -134,6 +135,11 @@ const (
 	KindNoteResolved Kind = "note.resolved"
 )
 
+// Session status event kinds (E-1312).
+const (
+	KindSessionStatusRecorded Kind = "session_status.recorded"
+)
+
 // ValidKinds is the closed set of all recognized event kinds.
 var ValidKinds = map[Kind]bool{
 	// Task
@@ -173,12 +179,15 @@ var ValidKinds = map[Kind]bool{
 	// Note
 	KindNoteCreated:  true,
 	KindNoteResolved: true,
+	// Session status (E-1312)
+	KindSessionStatusRecorded: true,
 }
 
 // validEntityTypes is the closed set of recognized entity types.
 var validEntityTypes = map[EntityType]bool{
-	EntityTask:         true,
-	EntityTaskDep:      true,
+	EntityTask:          true,
+	EntityTaskDep:       true,
+	EntitySessionStatus: true,
 	EntityProject:      true,
 	EntitySession:      true,
 	EntityConversation: true,

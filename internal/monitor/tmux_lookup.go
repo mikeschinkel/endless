@@ -260,3 +260,32 @@ func paneIsRunningClaude(tmuxPane string) bool {
 	cmd := strings.TrimSpace(string(out))
 	return cmd == "claude" || cmd == "claude-code"
 }
+
+// GetLiveSessionByProcess returns the most-recently-active live session
+// whose `process` column matches the given identifier (typically a tmux
+// pane id like "%124"). Filters out state='ended' rows so the result is
+// always the live binding for the given process.
+//
+// Per E-1312, this is the canonical session-discovery function for
+// callers that know their process identifier — used by `endless session
+// status add` and `endless task id` to map "I'm running in this tmux
+// pane" to "I'm session N."
+//
+// Returns sql.ErrNoRows when no live session matches.
+func GetLiveSessionByProcess(process string) (int64, error) {
+	if process == "" {
+		return 0, sql.ErrNoRows
+	}
+	db, err := DB()
+	if err != nil {
+		return 0, err
+	}
+	var id int64
+	err = db.QueryRow(
+		`SELECT id FROM sessions
+		 WHERE process = ? AND state != 'ended'
+		 ORDER BY last_activity DESC LIMIT 1`,
+		process,
+	).Scan(&id)
+	return id, err
+}

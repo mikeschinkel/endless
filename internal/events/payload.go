@@ -163,3 +163,23 @@ type NoteCreatedPayload struct {
 
 // NoteResolvedPayload is intentionally empty; the entity ref carries the note ID.
 type NoteResolvedPayload struct{}
+
+// Session status payloads (E-1312)
+
+// SessionStatusRecordedPayload carries the parsed contents of a
+// <session-status> XML document, ready to be inserted as a row in
+// session_statuses. All section fields are TEXT; empty string means
+// "no content for this section." Decisions/commits/memory follow the
+// same per-line element-per-entry convention as the task sections.
+type SessionStatusRecordedPayload struct {
+	Process   string `json:"process"`   // tmux pane id (or other process identifier)
+	Headline  string `json:"headline"`
+	Resolved  string `json:"resolved"`
+	Pending   string `json:"pending"`
+	Blocked   string `json:"blocked"`
+	Verify    string `json:"verify"`
+	Decisions string `json:"decisions"`
+	Commits   string `json:"commits"`
+	Memory    string `json:"memory"`
+	Notes     string `json:"notes"`
+}
