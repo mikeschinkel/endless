@@ -14,6 +14,9 @@ help:
     @echo "  just css          Build CSS (one-shot)"
     @echo "  just go           Build Go binaries only"
     @echo ""
+    @echo "Workflow:"
+    @echo "  just land [E-NNNN]  Land a task (derives ID from cwd if omitted), then refresh binaries"
+    @echo ""
     @echo "Git:"
     @echo "  just git-commit \"msg\"  Export DB + commit"
     @echo "  just git-push \"msg\"    Export DB + commit + push"
@@ -71,6 +74,37 @@ install:
     ln -sfn "$(pwd)/bin/endless-sandbox" /usr/local/bin/endless-sandbox
     ln -sfn "$(pwd)/bin/endless-tmux" /usr/local/bin/endless-tmux
     uv tool install -e . --force
+
+# Land a task's worktree (calls `endless worktree land`), then rebuild
+# binaries so the symlinked /usr/local/bin/endless-* binaries pick up
+# any new Go code committed in the just-landed branch.
+#
+# If no task ID is given, derives it from cwd by asking
+# `endless worktree current` for the active worktree's task companion.
+# This means `just land` from inside a task worktree is equivalent to
+# `just land E-NNNN` for that task.
+#
+# This recipe is the canonical way to land while developing endless
+# itself. Mike-only / dev-workflow ergonomics; product code (Python in
+# src/endless/, Go in cmd/ and internal/) does NOT auto-rebuild on
+# `endless worktree land` because beta-tester users never rebuild.
+land task_id="":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    tid="{{task_id}}"
+    if [ -z "$tid" ]; then
+        tid=$(endless worktree current --json 2>/dev/null \
+              | jq -r '.companion.task_id // empty')
+        if [ -z "$tid" ]; then
+            echo "just land: not inside a task worktree and no task ID given." >&2
+            echo "  Usage: just land [E-NNNN]" >&2
+            exit 1
+        fi
+        echo "→ Derived task ID from cwd: $tid"
+    fi
+    endless worktree land "$tid"
+    echo "→ Refreshing binaries (just build)"
+    just build
 
 # Generate go.work for the current checkout/worktree (E-996).
 #
