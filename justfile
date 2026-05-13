@@ -79,10 +79,9 @@ install:
 # binaries so the symlinked /usr/local/bin/endless-* binaries pick up
 # any new Go code committed in the just-landed branch.
 #
-# If no task ID is given, derives it from cwd by asking
-# `endless worktree current` for the active worktree's task companion.
-# This means `just land` from inside a task worktree is equivalent to
-# `just land E-NNNN` for that task.
+# If no task ID is given, derives it from cwd by matching the path
+# pattern `.endless/worktrees/e-NNN`. This means `just land` from inside
+# a task worktree is equivalent to `just land E-NNNN` for that task.
 #
 # This recipe is the canonical way to land while developing endless
 # itself. Mike-only / dev-workflow ergonomics; product code (Python in
@@ -93,17 +92,31 @@ land task_id="":
     set -euo pipefail
     tid="{{task_id}}"
     if [ -z "$tid" ]; then
-        tid=$(endless worktree current --json 2>/dev/null \
-              | jq -r '.companion.task_id // empty')
-        if [ -z "$tid" ]; then
+        # Derive task ID from cwd via a path-pattern match.
+        # We avoid `endless worktree current` here because a stale
+        # .endless/worktree.json left in main from older sessions can
+        # poison its answer (it reads any companion file present, even
+        # one that doesn't reflect the current cwd's worktree identity).
+        cwd=$(pwd)
+        if [[ "$cwd" =~ /\.endless/worktrees/e-([0-9]+)(/|$) ]]; then
+            tid="E-${BASH_REMATCH[1]}"
+            echo "→ Derived task ID from cwd: $tid"
+        else
             echo "just land: not inside a task worktree and no task ID given." >&2
             echo "  Usage: just land [E-NNNN]" >&2
             exit 1
         fi
-        echo "→ Derived task ID from cwd: $tid"
     fi
+    # Capture main's checkout path BEFORE the land removes the worktree.
+    # If cwd is the worktree being landed, the recipe's directory will
+    # vanish mid-execution and any subprocess that consults cwd (just,
+    # go, etc.) will fail with "no such file or directory" (os error 2).
+    # Computing main_root first and cd'ing there after the land sidesteps
+    # that race.
+    main_root=$(cd "$(dirname "$(git rev-parse --git-common-dir)")" && pwd)
     endless worktree land "$tid"
     echo "→ Refreshing binaries (just build)"
+    cd "$main_root"
     just build
 
 # Generate go.work for the current checkout/worktree (E-996).
