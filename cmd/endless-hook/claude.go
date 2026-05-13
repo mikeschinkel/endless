@@ -47,6 +47,9 @@ type claudePayload struct {
 	ToolInput      json.RawMessage `json:"tool_input,omitempty"`
 	TranscriptPath string          `json:"transcript_path,omitempty"`
 	Prompt         string          `json:"prompt,omitempty"` // UserPromptSubmit only
+	Source         string          `json:"source,omitempty"` // SessionStart: "startup" | "resume" | "clear" | "compact"
+	AgentID        string          `json:"agent_id,omitempty"`
+	AgentType      string          `json:"agent_type,omitempty"`
 }
 
 type toolInputWrite struct {
@@ -165,6 +168,16 @@ func runClaude(args []string) error {
 			return json.NewEncoder(os.Stdout).Encode(hookResponse{
 				AdditionalContext: refusal,
 			})
+		}
+		// Cwd-based auto-bind (E-1291): if cwd is inside an endless
+		// worktree and the spawn-marker path didn't already bind, set
+		// the session's active_task_id from the worktree companion.
+		// Skipped for Agent-tool subagents — they share the parent's
+		// cwd but represent tool use, not user claim intent; binding
+		// them would create a phantom co-owner. Bind only — does not
+		// flip task status.
+		if payload.AgentID == "" && tmuxSpawnedBy() == "" {
+			autoBindFromCwd(projectID, payload)
 		}
 		return handleTaskContextInjection(projectID, payload)
 
@@ -1037,6 +1050,46 @@ func tmuxSpawnedBy() string {
 		return ""
 	}
 	return strings.TrimSpace(string(out))
+}
+
+// autoBindFromCwd implements the E-1291 cwd-based SessionStart auto-bind.
+// If payload.CWD is inside an endless worktree, read the companion
+// file's task_id and bind the session. Best-effort: any failure along
+// the way (no project root, no worktree, missing companion, malformed
+// task_id, DB write error) results in no binding — the user can still
+// run `endless task claim` to bind explicitly. Caller must already
+// have screened out subagents and the spawn-marker case.
+func autoBindFromCwd(projectID int64, payload claudePayload) {
+	projectRoot, err := monitor.ProjectPath(projectID)
+	if err != nil {
+		return
+	}
+	taskID := resolveCwdTaskID(projectRoot, payload.CWD)
+	if taskID <= 0 {
+		return
+	}
+	_ = monitor.BindSessionToTask(payload.SessionID, projectID, taskID)
+}
+
+// resolveCwdTaskID walks up from cwd looking for an endless worktree
+// companion and returns its task_id as int64. Pure filesystem; no DB
+// access, no side effects — safe to test without infrastructure.
+// Returns 0 when there's no companion or the companion's task_id is
+// missing/malformed.
+func resolveCwdTaskID(projectRoot, cwd string) int64 {
+	wtRoot, err := monitor.FindWorktreeRoot(cwd, projectRoot)
+	if err != nil || wtRoot == "" {
+		return 0
+	}
+	comp, err := monitor.ReadWorktreeCompanion(wtRoot)
+	if err != nil || comp == nil || comp.TaskID == "" {
+		return 0
+	}
+	taskID, err := parseEndlessTaskID(comp.TaskID)
+	if err != nil || taskID <= 0 {
+		return 0
+	}
+	return taskID
 }
 
 // resolveParentTaskID determines the parent task ID for auto-import.
