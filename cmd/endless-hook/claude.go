@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mikeschinkel/endless/internal/events"
 	"github.com/mikeschinkel/endless/internal/matchers"
 	"github.com/mikeschinkel/endless/internal/monitor"
 )
@@ -389,17 +390,20 @@ func handlePostToolUse(projectID int64, payload claudePayload) error {
 
 	// Snapshot the plan content so within-session overwrites and never-attached
 	// plans don't lose data (E-969). Per-session, content-addressed by SHA-256.
+	//
+	// E-1275 changes the failure contract from non-fatal-log to fail-loudly:
+	// the snapshot writer now also commits the snapshot pair to git (so plan
+	// history lands at write time, not accumulated as dirt). Surfacing every
+	// failure makes the actual failure modes visible; we'll soften specific
+	// paths once telemetry shows benign noise. Pre-E-1275 the rationale was:
+	// snapshots are best-effort posterity, canonical content still lives in
+	// the harness file and (once attached) the task's text field, and the
+	// next Write to the same plan self-heals via existingSnapshot's content
+	// hash. That self-healing still applies for file-write failures — just no
+	// longer for the git commit step, where staleness silently misses
+	// history.
 	if err := snapshotPlanFile(projectID, payload.SessionID, input.FilePath); err != nil {
-		// Why non-fatal: snapshots are best-effort redundancy (hook error-policy
-		// criterion 1: opportunistic by design). The canonical plan content still
-		// lives in the harness file at input.FilePath and, once attached, in the
-		// task's text field; no automated path currently reads the snapshots dir —
-		// only the human-driven `endless snapshots list/show`. Failure is also
-		// self-healing (criterion 2) for plans that iterate: the next harness Write
-		// to the same plan re-runs this path, and existingSnapshot keys on
-		// session+content-hash so a missed snapshot fills in on retry. A backstop
-		// for one-shot plans (Write once, never iterated) is tracked as E-1097.
-		log.Printf("plan snapshot: %v", err)
+		return fmt.Errorf("plan snapshot: %w", err)
 	}
 
 	// NOTE: Auto-import disabled. Sessions should use `endless task update <id> --text <file>`
@@ -935,6 +939,14 @@ func snapshotPlanFile(projectID int64, sessionID, srcPath string) error {
 	jsonBytes, _ := json.MarshalIndent(sidecar, "", "  ")
 	if err := os.WriteFile(jsonPath, jsonBytes, 0644); err != nil {
 		return fmt.Errorf("write snapshot json: %w", err)
+	}
+
+	// E-1275: commit the snapshot pair immediately so plan history lands
+	// in git at write time instead of accumulating as dirt on main.
+	mdRel := filepath.Join(".endless", "plans", "snapshots", stem+".md")
+	jsonRel := filepath.Join(".endless", "plans", "snapshots", stem+".json")
+	if err := events.CommitSnapshotPair(projectRoot, mdRel, jsonRel); err != nil {
+		return fmt.Errorf("commit plan snapshot: %w", err)
 	}
 	return nil
 }

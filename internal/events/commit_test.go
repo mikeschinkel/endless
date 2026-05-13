@@ -244,3 +244,211 @@ func TestCommitLedgerSegment_NonGitProjectFailsLoudly(t *testing.T) {
 		t.Fatalf("error message should mention non-git, got: %v", err)
 	}
 }
+
+// --- E-1275: snapshot commit tests ---------------------------------------
+
+// initRepoForSnapshot mirrors initRepo but seeds a snapshot pair instead of
+// a ledger segment. Returns the project root plus the two snapshot paths
+// (md and json) relative to the root.
+func initRepoForSnapshot(t *testing.T) (root, mdRel, jsonRel string) {
+	t.Helper()
+	root = t.TempDir()
+	mustGit(t, root, "init", "-q", "-b", "main")
+	mustGit(t, root, "config", "user.email", "test@example.com")
+	mustGit(t, root, "config", "user.name", "Test")
+	mustGit(t, root, "config", "commit.gpgsign", "false")
+	if err := os.WriteFile(filepath.Join(root, "README"), []byte("hi\n"), 0644); err != nil {
+		t.Fatalf("write README: %v", err)
+	}
+	mustGit(t, root, "add", "README")
+	mustGit(t, root, "commit", "-q", "-m", "init")
+
+	snapsDir := filepath.Join(root, ".endless", "plans", "snapshots")
+	if err := os.MkdirAll(snapsDir, 0755); err != nil {
+		t.Fatalf("mkdir snapshots: %v", err)
+	}
+	stem := "20260513T120000-aaaaaaaa"
+	mdAbs := filepath.Join(snapsDir, stem+".md")
+	jsonAbs := filepath.Join(snapsDir, stem+".json")
+	if err := os.WriteFile(mdAbs, []byte("# plan v1\n"), 0644); err != nil {
+		t.Fatalf("write snapshot md: %v", err)
+	}
+	if err := os.WriteFile(jsonAbs, []byte(`{"sha256":"aaaaaaaa"}`), 0644); err != nil {
+		t.Fatalf("write snapshot json: %v", err)
+	}
+	mdRel = filepath.Join(".endless", "plans", "snapshots", stem+".md")
+	jsonRel = filepath.Join(".endless", "plans", "snapshots", stem+".json")
+	return root, mdRel, jsonRel
+}
+
+// addSnapshot creates a second snapshot pair with a different stem and
+// returns its relative md/json paths. Simulates a subsequent snapshotPlanFile
+// call for fresh content.
+func addSnapshot(t *testing.T, root, stem string) (mdRel, jsonRel string) {
+	t.Helper()
+	snapsDir := filepath.Join(root, ".endless", "plans", "snapshots")
+	mdAbs := filepath.Join(snapsDir, stem+".md")
+	jsonAbs := filepath.Join(snapsDir, stem+".json")
+	if err := os.WriteFile(mdAbs, []byte("# plan v2\n"), 0644); err != nil {
+		t.Fatalf("write snapshot md: %v", err)
+	}
+	if err := os.WriteFile(jsonAbs, []byte(`{"sha256":"`+stem[16:]+`"}`), 0644); err != nil {
+		t.Fatalf("write snapshot json: %v", err)
+	}
+	mdRel = filepath.Join(".endless", "plans", "snapshots", stem+".md")
+	jsonRel = filepath.Join(".endless", "plans", "snapshots", stem+".json")
+	return mdRel, jsonRel
+}
+
+func TestCommitSnapshotPair_FirstWriteCreatesCommit(t *testing.T) {
+	root, mdRel, jsonRel := initRepoForSnapshot(t)
+	headBefore := mustGit(t, root, "rev-parse", "HEAD")
+
+	if err := CommitSnapshotPair(root, mdRel, jsonRel); err != nil {
+		t.Fatalf("CommitSnapshotPair: %v", err)
+	}
+
+	headAfter := mustGit(t, root, "rev-parse", "HEAD")
+	if headBefore == headAfter {
+		t.Fatalf("HEAD should advance after first snapshot commit")
+	}
+	subj := mustGit(t, root, "log", "-1", "--format=%s")
+	if subj != SnapshotCommitSubject {
+		t.Fatalf("unexpected commit subject: %q", subj)
+	}
+	// Both files should be present in the committed tree.
+	files := mustGit(t, root, "show", "--name-only", "--format=", "HEAD")
+	for _, want := range []string{mdRel, jsonRel} {
+		if !strings.Contains(files, want) {
+			t.Fatalf("commit should contain %q; got files: %q", want, files)
+		}
+	}
+	// Both should be clean in the working tree.
+	for _, p := range []string{mdRel, jsonRel} {
+		status := mustGit(t, root, "status", "--porcelain", "--", p)
+		if status != "" {
+			t.Fatalf("%s should be clean after commit, got: %q", p, status)
+		}
+	}
+}
+
+func TestCommitSnapshotPair_SecondWriteAmends(t *testing.T) {
+	root, mdRel, jsonRel := initRepoForSnapshot(t)
+
+	if err := CommitSnapshotPair(root, mdRel, jsonRel); err != nil {
+		t.Fatalf("first commit: %v", err)
+	}
+	parentAfterFirst := mustGit(t, root, "rev-parse", "HEAD^")
+	headAfterFirst := mustGit(t, root, "rev-parse", "HEAD")
+
+	md2, json2 := addSnapshot(t, root, "20260513T130000-bbbbbbbb")
+	if err := CommitSnapshotPair(root, md2, json2); err != nil {
+		t.Fatalf("second commit: %v", err)
+	}
+
+	parentAfterSecond := mustGit(t, root, "rev-parse", "HEAD^")
+	headAfterSecond := mustGit(t, root, "rev-parse", "HEAD")
+
+	if parentAfterFirst != parentAfterSecond {
+		t.Fatalf("amend should not change HEAD's parent: %q vs %q",
+			parentAfterFirst, parentAfterSecond)
+	}
+	if headAfterFirst == headAfterSecond {
+		t.Fatalf("amend should produce a new HEAD hash (content changed)")
+	}
+	// The amended commit should contain ALL four snapshot files.
+	files := mustGit(t, root, "show", "--name-only", "--format=", "HEAD")
+	for _, want := range []string{mdRel, jsonRel, md2, json2} {
+		if !strings.Contains(files, want) {
+			t.Fatalf("amended commit missing %q; got files: %q", want, files)
+		}
+	}
+}
+
+func TestCommitSnapshotPair_LedgerHeadStartsNewCommit(t *testing.T) {
+	root, mdRel, jsonRel := initRepoForSnapshot(t)
+
+	// First land a ledger commit so HEAD's subject is the ledger one.
+	ledgerDir := filepath.Join(root, ".endless", "db-ledger")
+	if err := os.MkdirAll(ledgerDir, 0755); err != nil {
+		t.Fatalf("mkdir ledger: %v", err)
+	}
+	segAbs := filepath.Join(ledgerDir, "db-entries-a7f3-000001.jsonl")
+	if err := os.WriteFile(segAbs, []byte(`{"v":"1"}`+"\n"), 0644); err != nil {
+		t.Fatalf("write segment: %v", err)
+	}
+	segRel := filepath.Join(".endless", "db-ledger", "db-entries-a7f3-000001.jsonl")
+	if err := CommitLedgerSegment(root, segRel); err != nil {
+		t.Fatalf("ledger commit: %v", err)
+	}
+	ledgerHead := mustGit(t, root, "rev-parse", "HEAD")
+
+	// Now commit a snapshot. Subjects differ → new commit, not amend.
+	if err := CommitSnapshotPair(root, mdRel, jsonRel); err != nil {
+		t.Fatalf("snapshot commit: %v", err)
+	}
+	parent := mustGit(t, root, "rev-parse", "HEAD^")
+	if parent != ledgerHead {
+		t.Fatalf("snapshot commit parent should be the ledger commit; "+
+			"parent=%q expected=%q", parent, ledgerHead)
+	}
+	subj := mustGit(t, root, "log", "-1", "--format=%s")
+	if subj != SnapshotCommitSubject {
+		t.Fatalf("snapshot commit subject mismatch: %q", subj)
+	}
+}
+
+func TestCommitSnapshotPair_StagedUnrelatedPathPreventsAmend(t *testing.T) {
+	root, mdRel, jsonRel := initRepoForSnapshot(t)
+
+	if err := CommitSnapshotPair(root, mdRel, jsonRel); err != nil {
+		t.Fatalf("first commit: %v", err)
+	}
+	headAfterFirst := mustGit(t, root, "rev-parse", "HEAD")
+
+	// Stage an unrelated file.
+	if err := os.WriteFile(filepath.Join(root, "user_work.txt"), []byte("wip\n"), 0644); err != nil {
+		t.Fatalf("write user_work: %v", err)
+	}
+	mustGit(t, root, "add", "user_work.txt")
+
+	// Second snapshot. Index isn't clean modulo snapshots dir → new commit.
+	md2, json2 := addSnapshot(t, root, "20260513T130000-cccccccc")
+	if err := CommitSnapshotPair(root, md2, json2); err != nil {
+		t.Fatalf("second commit: %v", err)
+	}
+
+	parentAfterSecond := mustGit(t, root, "rev-parse", "HEAD^")
+	if parentAfterSecond != headAfterFirst {
+		t.Fatalf("second commit should be a child of first; parent=%q expected=%q",
+			parentAfterSecond, headAfterFirst)
+	}
+	status := mustGit(t, root, "status", "--porcelain", "--", "user_work.txt")
+	if !strings.HasPrefix(status, "A ") {
+		t.Fatalf("user_work.txt should still be staged-only, got: %q", status)
+	}
+}
+
+func TestCommitSnapshotPair_NonGitProjectFailsLoudly(t *testing.T) {
+	root := t.TempDir()
+	snapsDir := filepath.Join(root, ".endless", "plans", "snapshots")
+	if err := os.MkdirAll(snapsDir, 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	mdRel := filepath.Join(".endless", "plans", "snapshots", "stem.md")
+	jsonRel := filepath.Join(".endless", "plans", "snapshots", "stem.json")
+	if err := os.WriteFile(filepath.Join(root, mdRel), []byte("# x\n"), 0644); err != nil {
+		t.Fatalf("write md: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, jsonRel), []byte("{}"), 0644); err != nil {
+		t.Fatalf("write json: %v", err)
+	}
+
+	err := CommitSnapshotPair(root, mdRel, jsonRel)
+	if err == nil {
+		t.Fatalf("expected error for non-git project")
+	}
+	if !strings.Contains(err.Error(), "not a git work tree") {
+		t.Fatalf("error message should mention non-git, got: %v", err)
+	}
+}

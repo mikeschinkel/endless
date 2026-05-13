@@ -1,67 +1,117 @@
-// Package events: write-time auto-commit of db-ledger segments (E-1206).
+// Package events: write-time auto-commit of endless-managed files (E-1206 / E-1275).
 //
-// CommitLedgerSegment is called after every successful Writer.Append so each
-// ledger event becomes part of git history immediately. To bound commit
-// volume, successive ledger commits between non-ledger commits are amended
-// into a single rolling commit — never amends a pushed commit, never
-// bundles unrelated staged user work.
+// Two callers:
+//   - cmd/endless-event: commits the just-appended db-ledger segment after every
+//     Writer.Append (E-1206).
+//   - cmd/endless-hook:  commits the just-written plan snapshot pair (md + json)
+//     after every snapshotPlanFile call (E-1275).
+//
+// Both flow through commitPaths, which decides amend-vs-new-commit based on
+// HEAD's subject (must match the subject we're about to commit), pushed
+// status (never amend a commit reachable from origin/*), and index hygiene
+// (never bundle unrelated user-staged work into our amend).
 
 package events
 
 import (
 	"fmt"
 	"os/exec"
-	"path/filepath"
 	"strings"
 )
 
 // LedgerCommitSubject is the exact `git log --format=%s` value for ledger
-// auto-commits. The amend decision keys off this prefix.
+// auto-commits (E-1206). The amend decision keys off this prefix.
 const LedgerCommitSubject = "Endless: record ledger entry"
 
+// SnapshotCommitSubject is the exact `git log --format=%s` value for plan
+// snapshot auto-commits (E-1275).
+const SnapshotCommitSubject = "Endless: snapshot plan"
+
 // CommitLedgerSegment commits the given ledger segment path on the
-// project's git repo.
+// project's git repo (E-1206). Thin wrapper around commitPaths.
+func CommitLedgerSegment(projectRoot, segmentRelPath string) error {
+	return commitPaths(
+		projectRoot,
+		[]string{segmentRelPath},
+		LedgerCommitSubject,
+		".endless/db-ledger/*.jsonl",
+	)
+}
+
+// CommitSnapshotPair commits the .md/.json snapshot pair on the project's
+// git repo (E-1275). Thin wrapper around commitPaths.
+func CommitSnapshotPair(projectRoot, mdRelPath, jsonRelPath string) error {
+	return commitPaths(
+		projectRoot,
+		[]string{mdRelPath, jsonRelPath},
+		SnapshotCommitSubject,
+		".endless/plans/snapshots/*",
+	)
+}
+
+// commitPaths makes one commit containing exactly the named paths.
 //
 // Decision:
 //
-//	HEAD subject == LedgerCommitSubject
+//	HEAD subject == subject
 //	AND HEAD not reachable from any origin/* ref
-//	AND index has no staged paths outside the ledger dir
-//	→ git commit -o <path> --amend --no-edit
+//	AND index has no staged paths outside excludeGlob
+//	→ git add -- <paths>...
+//	  git commit -o <paths>... --amend --no-edit
 //	otherwise
-//	→ git add <path>
-//	  git commit -o <path> -m LedgerCommitSubject
+//	→ git add -- <paths>...
+//	  git commit -o <paths>... -m subject
+//
+// The `git add` step happens in both branches because `git commit -o
+// <path>` can't resolve a pathspec for an untracked file — even on amend.
+// For snapshot writes (E-1275) each call introduces brand-new files; for
+// ledger writes (E-1206) the file already exists after the first commit
+// but `git add` is still a cheap no-op for unchanged content.
+//
+// excludeGlob is a single pathspec glob (e.g. ".endless/db-ledger/*.jsonl")
+// that scopes the index-cleanliness check — staged changes inside that glob
+// don't block amend; staged changes outside it do.
 //
 // Fails loudly: returns a non-nil error if the project is not a git repo,
-// or if any git subprocess returns non-zero. Per E-1208's pattern.
-//
-// projectRoot must be an absolute path to a directory containing a .git
-// (or pointing into a worktree). segmentRelPath is the segment path
-// relative to projectRoot (e.g. ".endless/db-ledger/db-entries-a7f3-000001.jsonl").
-func CommitLedgerSegment(projectRoot, segmentRelPath string) error {
+// or if any git subprocess returns non-zero. Per Mike's "fail loudly until
+// we know what failure modes look like" stance.
+func commitPaths(projectRoot string, paths []string, subject, excludeGlob string) error {
 	if err := ensureGitRepo(projectRoot); err != nil {
 		return err
 	}
 
-	canAmend, err := canAmendLedgerCommit(projectRoot, segmentRelPath)
+	canAmend, err := canAmend(projectRoot, subject, excludeGlob)
 	if err != nil {
 		return err
 	}
 
-	if canAmend {
-		return runGit(projectRoot, "commit", "-o", segmentRelPath, "--amend", "--no-edit")
-	}
-
-	if err := runGit(projectRoot, "add", "--", segmentRelPath); err != nil {
+	addArgs := append([]string{"add", "--"}, paths...)
+	if err := runGit(projectRoot, addArgs...); err != nil {
 		return err
 	}
-	return runGit(projectRoot, "commit", "-o", segmentRelPath, "-m", LedgerCommitSubject)
+
+	commitArgs := append([]string{"commit"}, prefixOnly(paths)...)
+	if canAmend {
+		commitArgs = append(commitArgs, "--amend", "--no-edit")
+	} else {
+		commitArgs = append(commitArgs, "-m", subject)
+	}
+	return runGit(projectRoot, commitArgs...)
+}
+
+// prefixOnly returns a flat slice of "-o", path, "-o", path, ... so the
+// resulting `git commit -o A -o B ...` stages only those paths from the
+// working tree and commits exactly that set.
+func prefixOnly(paths []string) []string {
+	out := make([]string, 0, len(paths)*2)
+	for _, p := range paths {
+		out = append(out, "-o", p)
+	}
+	return out
 }
 
 // ensureGitRepo returns nil if projectRoot is inside a git work tree,
-// otherwise returns a descriptive error. Fail-loudly is intentional per
-// E-1206's resolved design: Mike's projects are all git-tracked, and
-// surfacing the failure beats silently dropping commits in v1.
+// otherwise returns a descriptive error.
 func ensureGitRepo(projectRoot string) error {
 	cmd := exec.Command("git", "-C", projectRoot, "rev-parse", "--is-inside-work-tree")
 	out, err := cmd.CombinedOutput()
@@ -72,20 +122,20 @@ func ensureGitRepo(projectRoot string) error {
 	return nil
 }
 
-// canAmendLedgerCommit returns true iff all three preconditions hold:
-//  1. HEAD's subject == LedgerCommitSubject
-//  2. HEAD is not reachable from any origin/* remote-tracking ref
-//  3. Index has no staged changes outside the ledger directory
+// canAmend returns true iff all three preconditions hold:
+//  1. HEAD's subject equals the subject we're about to commit.
+//  2. HEAD is not reachable from any origin/* remote-tracking ref.
+//  3. Index has no staged paths outside excludeGlob.
 //
 // Errors only on subprocess failure; a "no" answer to any precondition
 // returns (false, nil).
-func canAmendLedgerCommit(projectRoot, segmentRelPath string) (bool, error) {
-	subj, err := runGitOutput(projectRoot, "log", "-1", "--format=%s")
+func canAmend(projectRoot, subject, excludeGlob string) (bool, error) {
+	headSubj, err := runGitOutput(projectRoot, "log", "-1", "--format=%s")
 	if err != nil {
 		// New repo with no commits yet: HEAD doesn't exist. Cannot amend.
 		return false, nil
 	}
-	if strings.TrimSpace(subj) != LedgerCommitSubject {
+	if strings.TrimSpace(headSubj) != subject {
 		return false, nil
 	}
 
@@ -99,10 +149,9 @@ func canAmendLedgerCommit(projectRoot, segmentRelPath string) (bool, error) {
 		return false, nil
 	}
 
-	ledgerDir := filepath.Dir(segmentRelPath)
 	staged, err := runGitOutput(projectRoot,
 		"diff-index", "--cached", "--name-only", "HEAD",
-		"--", ":!"+ledgerDir+"/*.jsonl",
+		"--", ":!"+excludeGlob,
 	)
 	if err != nil {
 		return false, fmt.Errorf("check staged paths: %w", err)
