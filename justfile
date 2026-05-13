@@ -79,9 +79,17 @@ install:
 # binaries so the symlinked /usr/local/bin/endless-* binaries pick up
 # any new Go code committed in the just-landed branch.
 #
-# If no task ID is given, derives it from cwd by matching the path
-# pattern `.endless/worktrees/e-NNN`. This means `just land` from inside
-# a task worktree is equivalent to `just land E-NNNN` for that task.
+# Task ID derivation, in order:
+#   1. Explicit arg: `just land E-NNNN`
+#   2. `endless-tmux active-id` — DB-backed session→task binding. Same
+#      source tmux's status row uses, so it's authoritative wherever
+#      tmux is running.
+#   3. Path-pattern match on cwd (`.endless/worktrees/e-NNN`). Cheap
+#      fallback when outside tmux.
+#
+# We deliberately do NOT consult `.endless/worktree.json` — that
+# companion file can go stale and disagree with the DB (see also a
+# follow-up task to audit its other readers).
 #
 # This recipe is the canonical way to land while developing endless
 # itself. Mike-only / dev-workflow ergonomics; product code (Python in
@@ -92,17 +100,16 @@ land task_id="":
     set -euo pipefail
     tid="{{task_id}}"
     if [ -z "$tid" ]; then
-        # Derive task ID from cwd via a path-pattern match.
-        # We avoid `endless worktree current` here because a stale
-        # .endless/worktree.json left in main from older sessions can
-        # poison its answer (it reads any companion file present, even
-        # one that doesn't reflect the current cwd's worktree identity).
-        cwd=$(pwd)
-        if [[ "$cwd" =~ /\.endless/worktrees/e-([0-9]+)(/|$) ]]; then
+        # Prefer the DB-backed source. Works from any cwd — main, the
+        # worktree, or even outside the project — as long as the shell
+        # is running in a tmux pane whose session has an active task.
+        if tid=$(endless-tmux active-id 2>/dev/null) && [ -n "$tid" ]; then
+            echo "→ Derived task ID from session: $tid"
+        elif [[ "$(pwd)" =~ /\.endless/worktrees/e-([0-9]+)(/|$) ]]; then
             tid="E-${BASH_REMATCH[1]}"
             echo "→ Derived task ID from cwd: $tid"
         else
-            echo "just land: not inside a task worktree and no task ID given." >&2
+            echo "just land: no active session task and not inside a task worktree." >&2
             echo "  Usage: just land [E-NNNN]" >&2
             exit 1
         fi
