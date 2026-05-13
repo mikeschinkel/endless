@@ -149,9 +149,15 @@ func runClaude(args []string) error {
 		// (E-1027). Status is NOT flipped here (spawn already did it).
 		// Use case 2 (end-user starts Claude directly without spawn) has
 		// no spawn marker, so this path doesn't fire.
-		if spawnedBy := tmuxSpawnedBy(); spawnedBy != "" {
-			if taskID := tmuxTaskID(); taskID > 0 {
-				monitor.BindSessionToTask(payload.SessionID, projectID, taskID)
+		// Skipped for Agent-tool subagents — they share the parent's
+		// tmux window (and thus its @endless_spawned_by marker) but
+		// have their own session_id; binding them would create a
+		// phantom co-owner on the spawned task (E-1300).
+		if payload.AgentID == "" {
+			if spawnedBy := tmuxSpawnedBy(); spawnedBy != "" {
+				if taskID := tmuxTaskID(); taskID > 0 {
+					monitor.BindSessionToTask(payload.SessionID, projectID, taskID)
+				}
 			}
 		}
 		// Companion file for sibling-pane discovery (E-989).
