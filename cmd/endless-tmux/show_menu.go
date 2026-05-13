@@ -92,6 +92,8 @@ func buildMenuItems(binPath string, info *monitor.ActiveTaskInfo) []menuItem {
 			`run-shell "endless task update %s --status verify"`, taskRef)},
 		{"Task tree", "t",
 			`run-shell "tmux display-popup -E 'endless task list --tree | less'"`},
+		{"Session Activity", "a",
+			`run-shell "tmux display-popup -w 80% -h 80% -E 'endless session activity | less'"`},
 		{}, // separator
 		{"Refresh", "r", "refresh-client -S"},
 		rowToggleItem(),

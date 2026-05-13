@@ -473,6 +473,33 @@ def session_show(session_ref, as_json):
     session_show_resolve(session_ref, as_json=as_json)
 
 
+@session_cmd.command("activity")
+@click.argument("session_ref", required=False, default=None)
+@click.option("--kinds", default=None,
+              help="Comma-separated event kinds to include "
+                   "(e.g. task.created,task.claimed). Default: all.")
+@click.option("--json", "as_json", is_flag=True, help="JSON output")
+def session_activity(session_ref, kinds, as_json):
+    """Report what this session (or another) did, projected from the event ledger.
+
+    Filters events by `actor.session_id` (populated since E-1284) and
+    groups by kind: Filed, Decisions, Claimed, Shipped → verify,
+    Confirmed, etc. Default session is the current one (resolved via
+    the same 3-layer fallback as task claim — env, pane-direct,
+    single-sibling Claude pane).
+    """
+    from endless.session_activity import session_activity as run_activity
+    kinds_list = (
+        [k.strip() for k in kinds.split(",") if k.strip()]
+        if kinds else None
+    )
+    run_activity(
+        session_ref=session_ref,
+        kinds_filter=kinds_list,
+        as_json=as_json,
+    )
+
+
 @session_cmd.command("history")
 @click.argument("session_id", required=False, default=None)
 @click.option("--tools", "show_tools", default=None, flag_value="truncated",
