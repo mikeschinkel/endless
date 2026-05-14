@@ -1,0 +1,1 @@
+{"v":1,"ts":"5X6EDV1K2ZG0S4E","kind":"task.created","project":"endless","entity":{"type":"task","id":"1"},"actor":{"kind":"cli","id":"mikeschinkel@m4macmini.local"},"payload":{"title":"sandbox write test 1","description":"","phase":"now","status":"needs_plan","type":"task"}}
