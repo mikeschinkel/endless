@@ -478,8 +478,12 @@ def session_show(session_ref, as_json):
 @click.option("--kinds", default=None,
               help="Comma-separated event kinds to include "
                    "(e.g. task.created,task.claimed). Default: all.")
+@click.option("--pane", "pane", default=None,
+              help="Override $TMUX_PANE for session resolution. "
+                   "Used by the tmux menu binding to bypass the popup's "
+                   "own pane id (which has no Endless session).")
 @click.option("--json", "as_json", is_flag=True, help="JSON output")
-def session_activity(session_ref, kinds, as_json):
+def session_activity(session_ref, kinds, pane, as_json):
     """Report what this session (or another) did, projected from the event ledger.
 
     Filters events by `actor.session_id` (populated since E-1284) and
@@ -497,6 +501,7 @@ def session_activity(session_ref, kinds, as_json):
         session_ref=session_ref,
         kinds_filter=kinds_list,
         as_json=as_json,
+        pane=pane,
     )
 
 

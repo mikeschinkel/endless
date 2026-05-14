@@ -44,9 +44,18 @@ def session_activity(
     session_ref: str | None = None,
     kinds_filter: list[str] | None = None,
     as_json: bool = False,
+    pane: str | None = None,
 ) -> None:
-    """Entry point for the `endless session activity` CLI verb."""
-    session_id = _resolve_session_id(session_ref)
+    """Entry point for the `endless session activity` CLI verb.
+
+    When `pane` is given, it overrides $TMUX_PANE for the duration of
+    session resolution. Required when the command runs inside a
+    `tmux display-popup` (the popup has its own pane id which doesn't
+    match any Claude session); the menu binding passes #{pane_id} of
+    the focused pane at menu-invocation time. Mirrors the same trick
+    used by `endless-tmux status-line --pane=...` (E-1236).
+    """
+    session_id = _resolve_session_id(session_ref, pane_override=pane)
     project_root = _project_root_for_cwd()
     events = _read_session_events(project_root, str(session_id))
 
@@ -64,17 +73,35 @@ def session_activity(
     _render(session_id, events)
 
 
-def _resolve_session_id(session_ref: str | None) -> int:
+def _resolve_session_id(
+    session_ref: str | None,
+    pane_override: str | None = None,
+) -> int:
     """Resolve a session reference to its integer id.
 
     Accepts:
       - None → current session via the unified resolver (E-1294).
+        Resolver reads $TMUX_PANE; if `pane_override` is set, $TMUX_PANE
+        is temporarily replaced so the resolver sees the caller's
+        intended pane (used by the menu binding to redirect away from
+        the ephemeral popup's pane).
       - Plain integer string ("356").
       - "ES-NNN" / "es-NNN" / "E-NNN" forms (lenient prefix strip).
     """
     if session_ref is None:
         from endless.task_cmd import _current_endless_session_id
-        eid = _current_endless_session_id()
+        import os
+        prev = os.environ.get("TMUX_PANE")
+        if pane_override:
+            os.environ["TMUX_PANE"] = pane_override
+        try:
+            eid = _current_endless_session_id()
+        finally:
+            if pane_override:
+                if prev is None:
+                    os.environ.pop("TMUX_PANE", None)
+                else:
+                    os.environ["TMUX_PANE"] = prev
         if eid is None:
             raise click.ClickException(
                 "No current session resolvable. Pass an explicit session id "
