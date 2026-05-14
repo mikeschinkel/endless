@@ -105,6 +105,7 @@ For details, run `endless guide <section>`:
 - **tasks** — task CRUD reference, field semantics (title/description/text/prompt/analysis/notes/outcome), and verbs.
 - **orchestration** — per-task worktrees, spawning sessions, inter-session channels, commit-to-main policy.
 - **decisions** — documenting decisions as first-class items, **including STRONG guidance about preference vs prohibition — read this**.
+- **sessions** — recording session status (`endless session status add`), the `session_statuses` row shape, when to call it, and discovery patterns for "who am I."
 - **reference** — projects, SQL, snapshots, tmux integration, file layout.
 
 Run `endless guide --list` to print just the section slugs.
