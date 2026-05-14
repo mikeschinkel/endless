@@ -8,6 +8,7 @@ The session-status subsystem turns "what are you working on right now" from chat
 
 Each row in `session_statuses` is a snapshot of one session's reported state at one moment:
 
+- `active_task_id` — populated automatically by the handler from `sessions.active_task_id` at insert time; makes joins to `tasks` trivial.
 - `headline` — one-line summary of what just changed.
 - `tasks` — every task the session is touching (resolved / pending / blocked / verify, all in one column post-E-1318; the renderer derives the disposition bucket from each task's status).
 - `decisions` — design choices, framings, insights too lightweight to be `endless task --decision` items but worth capturing.
@@ -15,7 +16,6 @@ Each row in `session_statuses` is a snapshot of one session's reported state at 
 - `memory` — entries created or modified in `~/.claude/projects/.../memory/`.
 - `summary` — structured implementation breakdown (per-layer: name, files, purpose).
 - `notes` — free-form prose for anything that doesn't fit a typed slot.
-- `active_task_id` — populated automatically by the handler from `sessions.active_task_id` at insert time; makes joins to `tasks` trivial.
 
 Latest row by `created_at` is the current status. Older rows are history — useful for "what did this session do over its lifetime" or "what's the activity trace for task E-NNN."
 
@@ -137,3 +137,7 @@ endless sql "SELECT id, session_id, active_task_id, headline, created_at
 - Don't write directly to `session_statuses` via `endless sql --write` once the CLI is in place. The CLI handles dedup, child-table insertion, and active_task_id resolution; raw SQL writes bypass all three.
 - Don't include `endless task assume <id> --outcome` content in the headline — outcomes belong on the task itself, not on session-status snapshots.
 - Don't try to encode "this task is filed by this session" in the parent row's columns — use the `filed="true"` attribute on the relevant `<task>` element. The renderer marks filed tasks visually.
+
+## Post-mortem
+
+Tell the user if there was anything about your recording of this session which felt like there was no place to capture it, or that you had to capture it in a sub-optimal place? And if you have any other suggestions about how to improve process of recording session status, please also tell the user.
