@@ -2440,6 +2440,8 @@ def update_plan(
     parent_id: int | None = None,
     phase: str | None = None,
     tier: int | None = None,
+    task_type: str | None = None,
+    analysis: str | None = None,
     outcome: str | None = None,
     force: bool = False,
     allow_create_worktree: bool = True,
@@ -2452,7 +2454,7 @@ def update_plan(
 
     row = db.query(
         "SELECT id, title, description, text, prompt, status, type, "
-        "       phase, tier, parent_id, outcome "
+        "       phase, tier, parent_id, outcome, analysis "
         "FROM   tasks WHERE id = ?",
         (item_id,),
     )
@@ -2536,6 +2538,24 @@ def update_plan(
 
     if outcome is not None:
         _add("outcome", outcome)
+
+    if task_type is not None:
+        valid_types = ("task", "plan", "bug", "research",
+                       "spike", "chore", "decision")
+        if task_type not in valid_types:
+            raise click.ClickException(
+                f"Invalid task type {task_type!r}. "
+                f"Valid: {', '.join(valid_types)}"
+            )
+        # Map to the event payload key, which uses the column name
+        # "type" (renamed in the row dict via the SELECT alias would
+        # collide with Python's `type` builtin in the function-arg
+        # signature; the wire field is "type").
+        fields["type"] = task_type
+        changes.append(("type", row[0]["type"], task_type))
+
+    if analysis is not None:
+        _add("analysis", analysis)
 
     if not fields:
         raise click.ClickException(

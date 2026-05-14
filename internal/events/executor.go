@@ -294,7 +294,7 @@ func execTaskFieldsUpdated(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 		"title": "title", "description": "description", "text": "text",
 		"prompt": "prompt", "phase": "phase", "tier": "tier",
 		"type": "type", "status": "status", "parent_id": "parent_id",
-		"outcome": "outcome",
+		"outcome": "outcome", "analysis": "analysis",
 	}
 
 	for field, value := range p.Fields {

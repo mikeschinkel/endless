@@ -1003,6 +1003,11 @@ def task_add(title, description, text_file, phase, project, parent, after, task_
               help="Phase: now, next, later, maybe")
 @click.option("--tier", default=None,
               help="Tier (0=n/a, 1-4 or auto/quick/deep/discuss, none=clear)")
+@click.option("--type", "task_type", default=None,
+              type=click.Choice(["task", "plan", "bug", "research", "spike", "chore", "decision"]),
+              help="Task type — closes the prior gap that forced direct SQL writes (E-1329)")
+@click.option("--analysis", "analysis_text", default=None,
+              help="Analysis content (string, or @path/to/file to load from file). Closes the prior gap that forced direct SQL writes (E-1329)")
 @click.option("--force", is_flag=True,
               help="Bypass title validation")
 @click.option("--outcome", default=None,
@@ -1011,16 +1016,25 @@ def task_add(title, description, text_file, phase, project, parent, after, task_
               help="Rationale text — creates a paired decision-type task linked via 'documents' to each updated task")
 @click.option("--no-create-worktree", "no_create_worktree", is_flag=True,
               help="With --text: refuse to auto-create a worktree if none exists (default is to create one). E-1216.")
-def task_update(item_ids, status, title, description, text_file, prompt_file, parent, phase, tier, force,
-                outcome, decision_text, no_create_worktree):
+def task_update(item_ids, status, title, description, text_file, prompt_file, parent, phase, tier,
+                task_type, analysis_text, force, outcome, decision_text, no_create_worktree):
     """Update fields on one or more tasks."""
     from endless.task_cmd import update_plan, add_item, link_tasks, parse_tier
     tier_val = parse_tier(tier) if tier else None
+    # Support `--analysis @path/to/file` for content too long for the shell.
+    if analysis_text is not None and analysis_text.startswith("@"):
+        from pathlib import Path
+        p = Path(analysis_text[1:]).expanduser()
+        if not p.exists():
+            raise click.ClickException(f"Analysis file not found: {p}")
+        analysis_text = p.read_text()
     for item_id in item_ids:
         update_plan(item_id, status=status, title=title,
                     description=description, text_file=text_file,
                     prompt_file=prompt_file, parent_id=parent,
-                    phase=phase, tier=tier_val, outcome=outcome, force=force,
+                    phase=phase, tier=tier_val, task_type=task_type,
+                    analysis=analysis_text,
+                    outcome=outcome, force=force,
                     allow_create_worktree=not no_create_worktree)
         if decision_text:
             decision_id = add_item(decision_text,
