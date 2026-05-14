@@ -14,11 +14,10 @@
 package events
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"strings"
-
-	"github.com/mikeschinkel/endless/internal/monitor"
 )
 
 // execSessionStatusRecorded handles the KindSessionStatusRecorded event.
@@ -36,7 +35,12 @@ func execSessionStatusRecorded(db dbQuerier, evt *Event) (*ExecuteResult, error)
 		return nil, fmt.Errorf("events: unmarshal session_status.recorded payload: %w", err)
 	}
 
-	sessionID, err := monitor.GetLiveSessionByProcess(p.Process)
+	// E-1315: do the lookup against the same dbQuerier (the open
+	// transaction) instead of monitor.GetLiveSessionByProcess. The
+	// public function uses monitor.DB() and tries to acquire a fresh
+	// connection from the pool; the sqlite driver's single-connection
+	// pool deadlocks because Execute's transaction is already holding it.
+	sessionID, err := liveSessionByProcessTx(db, p.Process)
 	if err != nil {
 		return nil, fmt.Errorf(
 			"events: no live session for process %q: %w", p.Process, err,
@@ -81,6 +85,24 @@ func execSessionStatusRecorded(db dbQuerier, evt *Event) (*ExecuteResult, error)
 		SessionStatusID: rowID,
 		Markdown:        renderSessionStatusMarkdown(&p),
 	}, nil
+}
+
+// liveSessionByProcessTx is the in-transaction equivalent of
+// monitor.GetLiveSessionByProcess (E-1315). Uses the passed dbQuerier
+// (the open Execute transaction) so we don't try to acquire a second
+// sqlite connection while the first is still locked.
+func liveSessionByProcessTx(db dbQuerier, process string) (int64, error) {
+	if process == "" {
+		return 0, sql.ErrNoRows
+	}
+	var id int64
+	err := db.QueryRow(
+		`SELECT id FROM sessions
+		 WHERE process = ? AND state != 'ended'
+		 ORDER BY last_activity DESC LIMIT 1`,
+		process,
+	).Scan(&id)
+	return id, err
 }
 
 // sessionActiveTaskID returns the session's currently bound task id, or
