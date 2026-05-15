@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/mikeschinkel/endless/internal/schema"
 	"github.com/mikeschinkel/go-doterr"
 )
 
@@ -203,6 +204,16 @@ func migrate(db *sql.DB, opts MigrateOpts) (result MigrateResult, err error) {
 		goto end
 	}
 
+	// Apply the V0 baseline before consulting user_version. schema.SQL is
+	// fully CREATE-IF-NOT-EXISTS, so it is a no-op on populated DBs and
+	// creates the foundational tables (projects, tasks, notes, activity,
+	// project_deps, ...) that migrateV1 only patches rather than creates.
+	_, err = db.Exec(schema.SQL)
+	if err != nil {
+		err = doterr.NewErr(ErrMigrationFailed, doterr.StringKV("phase", "baseline"), err)
+		goto end
+	}
+
 	cur, err = userVersion(db)
 	if err != nil {
 		goto end
@@ -222,28 +233,6 @@ func migrate(db *sql.DB, opts MigrateOpts) (result MigrateResult, err error) {
 				Version: m.Version,
 				Name:    m.Name,
 				Reason:  "already applied",
-			})
-		}
-		goto end
-	}
-
-	// Pre-framework existing install: pragma=0 but the schema is already
-	// at V4. Don't re-run V1-V4 bodies (they're idempotent but the rerun
-	// triggers an unwanted backup on every existing user). Fast-path.
-	if cur == 0 && hasTable(db, "suggestions") {
-		err = setUserVersion(db, CurrentSchemaVersion)
-		if err != nil {
-			goto end
-		}
-		err = backfillSchemaVersion(db, CurrentSchemaVersion)
-		if err != nil {
-			goto end
-		}
-		for _, m := range migrations {
-			result.Skipped = append(result.Skipped, MigrationStep{
-				Version: m.Version,
-				Name:    m.Name,
-				Reason:  "post-V4 install, backfilled",
 			})
 		}
 		goto end
