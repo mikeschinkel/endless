@@ -29,7 +29,7 @@ This:
 
 If the same task ever needs an additional worktree (testing, alternate experiment, etc.), it lives at `.endless/worktrees/e-<id>-<slug>/`. The primary worktree is always `e-<id>/`.
 
-If the task has an uncommitted plan file in main (`.endless/plans/E-NNNN.md`), `claim` refuses with a message telling you to commit it first. Plan files are global-config artifacts and direct commit to main is allowed for them — `git add` the plan in the main checkout, commit, and retry the claim.
+Plan files for a task live in the task's worktree at `<worktree>/.endless/plans/E-NNNN.md`, not in main. They're written by `endless task update <id> --text <path>` (which auto-creates the worktree if one doesn't exist yet) and ride into main when the task lands. The DB's `tasks.text` column is the source of truth; the on-disk file is a mirror that lives with the branch.
 
 ### Getting into the worktree
 
@@ -66,7 +66,7 @@ endless worktree land <id> --dry-run        # preview without making changes
 3. Fast-forwards `main` to the rebased tip.
 4. Removes the worktree.
 
-**Do not merge to main any other way.** `worktree land` is the single sanctioned path. The exception is global-config artifacts (verbs.jsonl, db-ledger entries, plan files) which auto-commit to main directly.
+**Do not merge to main any other way.** `worktree land` is the single sanctioned path. The exception is global-config artifacts (verbs.jsonl, db-ledger entries) which auto-commit to main directly.
 
 ### Abandoning a worktree
 
@@ -81,13 +81,13 @@ Use `drop` when the work is being abandoned (task declined/obsolete). Don't `dro
 
 `main`'s working tree stays clean. The full policy:
 
-| What                                | Where it commits          | How                                                       |
-|-------------------------------------|---------------------------|-----------------------------------------------------------|
-| Task work (code, docs, tests)       | Worktree branch → main    | `worktree land` only                                      |
-| Plan files (`.endless/plans/`)      | Main directly             | Manual `git commit` from main; required before `task claim` |
-| DB ledger (`.endless/db-ledger/`)   | Main directly             | Auto by endless-event hook                                |
-| Verbs (`verbs.jsonl`)                | Main directly             | Auto on `worktree land`                                   |
-| Project config (`.endless/config.json`) | Worktree branch → main | Follows task work; not auto                              |
+| What                                    | Where it commits          | How                                                                 |
+|-----------------------------------------|---------------------------|---------------------------------------------------------------------|
+| Task work (code, docs, tests)           | Worktree branch → main    | `worktree land` only                                                |
+| Plan files (`.endless/plans/E-NNNN.md`) | Worktree branch → main    | Written to the worktree by `task update --text`; rides in via `worktree land` |
+| DB ledger (`.endless/db-ledger/`)       | Main directly             | Auto by endless-event hook                                          |
+| Verbs (`verbs.jsonl`)                   | Main directly             | Auto on `worktree land`                                             |
+| Project config (`.endless/config.json`) | Worktree branch → main    | Follows task work; not auto                                         |
 
 If you see uncommitted changes in main that aren't on the allowlist above, that's a bug worth filing as a task.
 
@@ -106,7 +106,7 @@ This adds the following functions:
 | Function | What it does                                                                                                                          | Typical use                                              |
 |----------|---------------------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------|
 | `esu`    | "Endless session use." Resolves a Claude session (active one by default, or `<id>` if given) and (a) cd's to its worktree and (b) exports `ENDLESS_SESSION_ID`. Subsequent endless commands then route through that worktree's source. | After `task claim`, run `esu` to drop into the worktree fully bound. |
-| `esp`    | "Endless session project." cd's to the project root (main checkout) of the active or given session.                                   | When you need to do something in `main` (e.g. commit a plan file) and want to come back. |
+| `esp`    | "Endless session project." cd's to the project root (main checkout) of the active or given session.                                   | When you need to do something in `main` (e.g. inspect `git log` or pull) and want to come back. |
 | `esf`    | "Endless session forget." Unsets `ENDLESS_SESSION_ID` in the current shell. The session keeps running; only the shell's pointer is cleared. | When you're done coordinating one session and want a fresh shell. |
 | `eswt`   | *(Planned, not yet shipped.)* "Endless switch worktree." Pure `cd` to a task's worktree, given a task ID. Distinct from `esu` in that it does not export `ENDLESS_SESSION_ID`. | Quick navigation without binding. Until shipped, use `cd "$(endless worktree for-task <id>)"`. |
 

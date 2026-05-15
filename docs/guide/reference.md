@@ -107,7 +107,7 @@ A quick map of the files and directories Endless manages.
 |--------------------------------------------------------------|------------------------------------------------------------------------------------------|
 | `.endless/config.json`                                       | Project-local Endless config (tracking mode, custom settings).                            |
 | `.endless/db-ledger/db-entries-<node>-<seq>.jsonl`           | Write-ahead log of all DB writes. **Committed to git** — the SQLite DB is rebuilt from these on every clone.  |
-| `.endless/plans/E-NNNN.md`                                   | Plan files attached to tasks. Committed to git; required before `task claim`.            |
+| `<worktree>/.endless/plans/E-NNNN.md`                        | Plan file attached to a task. Lives in the task's worktree (written by `task update --text`); rides into main via `worktree land`. The DB's `tasks.text` column is source of truth — the file is the on-disk mirror. |
 | `.endless/plans/snapshots/<timestamp>-<hash>.md`             | Plan snapshots from the PostToolUse hook. Committed to git per project (choice on first snapshot). |
 | `.endless/worktrees/e-<id>/`                                 | Primary per-task git worktree. **Gitignored.**                                           |
 | `.endless/worktrees/e-<id>-<slug>/`                          | Ad-hoc additional worktree for a task (testing, alternate experiments). **Gitignored.**  |
