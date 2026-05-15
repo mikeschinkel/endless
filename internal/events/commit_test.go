@@ -9,10 +9,14 @@ import (
 )
 
 // mustGit runs git in dir and t.Fatals on failure. Used by setup helpers.
+// Uses sanitizedGitEnv so a GIT_DIR set in the test process (intentionally,
+// by some E-1309 tests) doesn't redirect the verification reads.
 func mustGit(t *testing.T, dir string, args ...string) string {
 	t.Helper()
 	full := append([]string{"-C", dir}, args...)
-	out, err := exec.Command("git", full...).CombinedOutput()
+	cmd := exec.Command("git", full...)
+	cmd.Env = sanitizedGitEnv()
+	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("git %s: %v: %s", strings.Join(args, " "), err, string(out))
 	}
@@ -450,5 +454,145 @@ func TestCommitSnapshotPair_NonGitProjectFailsLoudly(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "not a git work tree") {
 		t.Fatalf("error message should mention non-git, got: %v", err)
+	}
+}
+
+// --- E-1309: env sanitization + worktree-detection guard -----------------
+
+// addWorktree creates a linked worktree off `root` and returns its
+// absolute path. Used by the worktree-redirect tests.
+func addWorktree(t *testing.T, root string) string {
+	t.Helper()
+	wtPath := filepath.Join(t.TempDir(), "wt")
+	mustGit(t, root, "worktree", "add", "-q", "-b", "task/wt", wtPath)
+	return wtPath
+}
+
+// TestCommitLedgerSegment_GitDirEnvIgnored sets GIT_DIR in the test
+// process's env pointing at a bogus path. Without the E-1309 fix, the
+// subprocess inherits it and `git -C <projectRoot>` is silently
+// redirected → either a commit error or a commit landing in the wrong
+// repo. With the fix, the env var is stripped at the subprocess
+// boundary and the commit lands in projectRoot's repo as expected.
+func TestCommitLedgerSegment_GitDirEnvIgnored(t *testing.T) {
+	root, segRel := initRepo(t)
+	t.Setenv("GIT_DIR", filepath.Join(t.TempDir(), "nonexistent-gitdir"))
+
+	if err := CommitLedgerSegment(root, segRel); err != nil {
+		t.Fatalf("CommitLedgerSegment with bogus GIT_DIR: %v", err)
+	}
+
+	subj := mustGit(t, root, "log", "-1", "--format=%s")
+	if subj != LedgerCommitSubject {
+		t.Fatalf("commit should have landed in projectRoot's repo; subj=%q", subj)
+	}
+}
+
+// TestCommitLedgerSegment_WorktreeProjectRootRefused passes a linked
+// worktree's path as projectRoot. The guard should refuse with a
+// "linked worktree" error rather than committing on the worktree's
+// branch. Belt to the suspenders of env sanitization: catches any
+// path that resolves into a worktree, regardless of how it got there.
+func TestCommitLedgerSegment_WorktreeProjectRootRefused(t *testing.T) {
+	root, _ := initRepo(t)
+	wt := addWorktree(t, root)
+
+	// Seed a ledger segment in the worktree so the path exists; the guard
+	// should fire before any staging happens.
+	wtLedgerDir := filepath.Join(wt, ".endless", LedgerDirName)
+	if err := os.MkdirAll(wtLedgerDir, 0755); err != nil {
+		t.Fatalf("mkdir worktree ledger: %v", err)
+	}
+	wtSeg := filepath.Join(wtLedgerDir, "db-entries-a7f3-000001.jsonl")
+	if err := os.WriteFile(wtSeg, []byte("{}\n"), 0644); err != nil {
+		t.Fatalf("write worktree segment: %v", err)
+	}
+	segRel := filepath.Join(".endless", LedgerDirName, "db-entries-a7f3-000001.jsonl")
+
+	wtHeadBefore := mustGit(t, wt, "rev-parse", "HEAD")
+
+	err := CommitLedgerSegment(wt, segRel)
+	if err == nil {
+		t.Fatalf("expected refusal when projectRoot is a linked worktree")
+	}
+	if !strings.Contains(err.Error(), "linked worktree") {
+		t.Fatalf("error should mention 'linked worktree', got: %v", err)
+	}
+
+	wtHeadAfter := mustGit(t, wt, "rev-parse", "HEAD")
+	if wtHeadBefore != wtHeadAfter {
+		t.Fatalf("worktree HEAD must not advance when guard refuses; before=%q after=%q",
+			wtHeadBefore, wtHeadAfter)
+	}
+}
+
+// TestCommitLedgerSegment_GitDirPointingAtWorktreeStillLandsOnMain is
+// the full E-1309 regression test: the parent process has GIT_DIR set
+// to a linked worktree's gitdir (simulating the production bug). The
+// auto-commit's projectRoot is main. Without the fix, the commit lands
+// on the worktree's branch. With the fix, the env is stripped and the
+// commit lands on main's HEAD as expected; the worktree's HEAD does
+// not advance.
+func TestCommitLedgerSegment_GitDirPointingAtWorktreeStillLandsOnMain(t *testing.T) {
+	root, segRel := initRepo(t)
+	wt := addWorktree(t, root)
+
+	wtGitDir := mustGit(t, wt, "rev-parse", "--git-dir")
+	if !filepath.IsAbs(wtGitDir) {
+		wtGitDir = filepath.Join(wt, wtGitDir)
+	}
+	t.Setenv("GIT_DIR", wtGitDir)
+
+	mainHeadBefore := mustGit(t, root, "rev-parse", "HEAD")
+	wtHeadBefore := mustGit(t, wt, "rev-parse", "HEAD")
+
+	if err := CommitLedgerSegment(root, segRel); err != nil {
+		t.Fatalf("CommitLedgerSegment with GIT_DIR pointing at worktree: %v", err)
+	}
+
+	mainHeadAfter := mustGit(t, root, "rev-parse", "HEAD")
+	wtHeadAfter := mustGit(t, wt, "rev-parse", "HEAD")
+
+	if mainHeadAfter == mainHeadBefore {
+		t.Fatalf("main HEAD should advance; before=%q after=%q",
+			mainHeadBefore, mainHeadAfter)
+	}
+	if wtHeadAfter != wtHeadBefore {
+		t.Fatalf("worktree HEAD must NOT advance (this is the bug); before=%q after=%q",
+			wtHeadBefore, wtHeadAfter)
+	}
+	mainSubj := mustGit(t, root, "log", "-1", "--format=%s")
+	if mainSubj != LedgerCommitSubject {
+		t.Fatalf("main's HEAD subject should be ledger; got %q", mainSubj)
+	}
+}
+
+// TestSanitizedGitEnv_StripsRedirectVars is a unit test for the env
+// builder. Sets each git-redirect var to a sentinel value in the test
+// process, asserts none of them appear in sanitizedGitEnv's output,
+// and asserts an unrelated var (HOME) is still passed through.
+func TestSanitizedGitEnv_StripsRedirectVars(t *testing.T) {
+	for _, k := range gitRedirectVars {
+		t.Setenv(k, "sentinel-"+k)
+	}
+	t.Setenv("HOME_E1309_PROBE", "kept")
+
+	got := sanitizedGitEnv()
+	gotMap := make(map[string]string, len(got))
+	for _, kv := range got {
+		eq := strings.IndexByte(kv, '=')
+		if eq <= 0 {
+			continue
+		}
+		gotMap[kv[:eq]] = kv[eq+1:]
+	}
+
+	for _, k := range gitRedirectVars {
+		if _, present := gotMap[k]; present {
+			t.Errorf("sanitizedGitEnv leaked %s=%q", k, gotMap[k])
+		}
+	}
+	if gotMap["HOME_E1309_PROBE"] != "kept" {
+		t.Errorf("sanitizedGitEnv dropped unrelated var; got %q", gotMap["HOME_E1309_PROBE"])
 	}
 }

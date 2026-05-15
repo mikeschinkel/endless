@@ -157,3 +157,17 @@ def test_default_seed_uses_eprefix_pattern(isolated_env):
     complete = next(m for m in data["matchers"]
                     if m.get("type") == "complete" and m.get("scope") == "task")
     assert "(?:[Ee]-)?" in complete["match"]
+
+
+def test_sanitized_git_env_strips_redirect_vars(monkeypatch):
+    """E-1309: _sanitized_git_env drops git-locating vars so verbs.jsonl
+    auto-commits can't be silently redirected to a worktree's gitdir."""
+    for k in matchers._GIT_REDIRECT_VARS:
+        monkeypatch.setenv(k, f"sentinel-{k}")
+    monkeypatch.setenv("HOME_E1309_PROBE", "kept")
+
+    env = matchers._sanitized_git_env()
+
+    for k in matchers._GIT_REDIRECT_VARS:
+        assert k not in env, f"sanitized env leaked {k}"
+    assert env.get("HOME_E1309_PROBE") == "kept"

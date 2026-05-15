@@ -909,6 +909,31 @@ def _add_verb_to_file(path: Path, entry: dict) -> bool:
     return True
 
 
+# Git env vars that override `git -C <path>` for repo resolution.
+# Stripped from `_commit_project_verbs`'s subprocess env so a stray
+# GIT_DIR in the caller chain can't silently redirect the commit to a
+# linked worktree's gitdir (E-1309). Mirrors gitRedirectVars in
+# internal/events/commit.go.
+_GIT_REDIRECT_VARS = (
+    "GIT_DIR",
+    "GIT_WORK_TREE",
+    "GIT_INDEX_FILE",
+    "GIT_OBJECT_DIRECTORY",
+    "GIT_COMMON_DIR",
+    "GIT_NAMESPACE",
+    "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+)
+
+
+def _sanitized_git_env() -> dict:
+    """Return os.environ minus git-locating vars (E-1309)."""
+    import os
+    env = dict(os.environ)
+    for k in _GIT_REDIRECT_VARS:
+        env.pop(k, None)
+    return env
+
+
 def _commit_project_verbs(verb_value: str) -> None:
     """Commit just .endless/verbs.jsonl on main (E-1208).
 
@@ -918,6 +943,10 @@ def _commit_project_verbs(verb_value: str) -> None:
     error. The `-o` flag then ensures only that one path is committed,
     leaving the rest of main's index/working tree exactly as it was. Other
     dirt on main (staged or unstaged for other paths) is preserved.
+
+    The subprocess env is sanitized of GIT_DIR and siblings (E-1309) so
+    `git -C <main_root>` cannot be overridden by an inherited env var
+    pointing at a linked worktree's gitdir.
 
     Raises RuntimeError on subprocess failure. The file write that preceded
     this call is not rolled back; the caller surfaces the failure but the
@@ -930,9 +959,10 @@ def _commit_project_verbs(verb_value: str) -> None:
     main_root = project_vp.parent.parent
     rel_path = ".endless/verbs.jsonl"
     msg = f"Endless: register verb '{verb_value}'"
+    env = _sanitized_git_env()
     add_res = subprocess.run(
         ["git", "-C", str(main_root), "add", "--", rel_path],
-        capture_output=True, text=True,
+        capture_output=True, text=True, env=env,
     )
     if add_res.returncode != 0:
         raise RuntimeError(
@@ -941,7 +971,7 @@ def _commit_project_verbs(verb_value: str) -> None:
         )
     res = subprocess.run(
         ["git", "-C", str(main_root), "commit", "-o", rel_path, "-m", msg],
-        capture_output=True, text=True,
+        capture_output=True, text=True, env=env,
     )
     if res.returncode != 0:
         raise RuntimeError(
