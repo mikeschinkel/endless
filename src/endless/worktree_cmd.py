@@ -58,6 +58,16 @@ AUTO_COMMIT_GLOBS = (
     ".endless/verbs.json",  # legacy — still seen during E-1268 migration
 )
 
+# Mirrors internal/events/commit.go:23,29 (E-1342). Subjects whose
+# auto-commits can amend in place via canAmend, producing orphans at
+# the base of task branches when main amends past a branch's
+# fork-point SHA. The orphan-drop pre-step in land_worktree() filters
+# on this set.
+AMENDABLE_COMMIT_SUBJECTS = (
+    "Endless: record ledger entry",   # LedgerCommitSubject
+    "Endless: snapshot plan",         # SnapshotCommitSubject
+)
+
 # Land's retry cap for the race-with-concurrent-writers loop (E-987).
 LAND_MAX_RETRIES = 8
 
@@ -214,6 +224,59 @@ def _check_worktree_lock_liveness(worktree_path: Path) -> tuple[str, dict | None
     except OSError:
         return ("alive", data)
     return ("alive", data)
+
+
+def _drop_orphan_amendable_commits(
+    worktree_path: Path, base_branch: str
+) -> tuple[int, str | None]:
+    """Drop contiguous orphan auto-amend commits at branch base (E-1342).
+
+    canAmend (internal/events/commit.go) rewrites the SHA of ledger and
+    snapshot auto-commits on main as new events are appended. Branches
+    forked off the old SHA carry an orphan that conflicts on rebase even
+    though main has the equivalent (superset) content under a new SHA.
+    This helper detects contiguous orphans at the BASE of the branch
+    and strips them via a single 'rebase --onto base last-orphan HEAD'.
+
+    Returns (count_dropped, first_subject):
+      - (0, None) when no orphans found; helper is a no-op.
+      - (N, subj) when N >= 1 orphans dropped; subj is the oldest
+        dropped commit's subject (for the caller's advisory log).
+
+    Mid-branch orphans (a non-amendable commit followed by an amendable
+    one) are out of scope per D2: such layouts only arise from
+    pre-E-1309 contamination, and dropping a mid-branch commit risks
+    deleting work the user intended.
+    """
+    out = _git_run(
+        ["log", "--reverse", "--format=%H %s", f"{base_branch}..HEAD"],
+        cwd=worktree_path,
+    )
+    lines = [ln for ln in out.stdout.splitlines() if ln.strip()]
+    if not lines:
+        return (0, None)
+
+    last_orphan_sha: str | None = None
+    first_subject: str | None = None
+    n = 0
+    for line in lines:
+        sha, _, subject = line.partition(" ")
+        if subject in AMENDABLE_COMMIT_SUBJECTS:
+            last_orphan_sha = sha
+            if first_subject is None:
+                first_subject = subject
+            n += 1
+        else:
+            break
+
+    if last_orphan_sha is None:
+        return (0, None)
+
+    _git_run(
+        ["rebase", "--onto", base_branch, last_orphan_sha, "HEAD"],
+        cwd=worktree_path,
+    )
+    return (n, first_subject)
 
 
 def _short_branch(ref: str | None) -> str:
@@ -850,6 +913,28 @@ def land_worktree(task_id: str, dry_run: bool) -> None:
         except subprocess.CalledProcessError as e:
             raise click.ClickException(
                 f"verbs.json dedup on worktree failed: {e.stderr or e}"
+            )
+
+        # Step 3.7: drop orphan auto-amend commits at branch base (E-1342).
+        # canAmend in commit.go rewrites the ledger/snapshot commit SHAs on
+        # main as new events are appended; a branch forked off the old SHA
+        # carries an orphan that conflicts on rebase. Strip them before
+        # Step 4 so the rebase sees only the user's real commits.
+        try:
+            n_orphans, first_subj = _drop_orphan_amendable_commits(
+                worktree_path, base_branch
+            )
+        except subprocess.CalledProcessError as e:
+            _git_run(["rebase", "--abort"], cwd=worktree_path, check=False)
+            raise click.ClickException(
+                f"orphan auto-amend cleanup failed: "
+                f"{(e.stderr or '') + (e.stdout or '')}"
+            )
+        if n_orphans:
+            noun = "commit" if n_orphans == 1 else "commits"
+            click.echo(
+                click.style("•", fg="yellow")
+                + f" Dropped {n_orphans} orphan auto-amend {noun} ({first_subj})"
             )
 
         # Step 4: rebase the worktree branch onto main.
