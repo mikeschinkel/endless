@@ -16,8 +16,9 @@ import (
 type sandboxMode string
 
 const (
-	modeEphemeral sandboxMode = "ephemeral"
-	modeKeep      sandboxMode = "keep"
+	modeEphemeral  sandboxMode = "ephemeral"
+	modeKeep       sandboxMode = "keep"
+	modePersistent sandboxMode = "persistent"
 )
 
 const metaFilename = ".sandbox-meta.json"

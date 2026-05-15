@@ -8,5 +8,6 @@
   "documents": {
     "rules": []
   },
-  "matchers": []
+  "matchers": [],
+  "worktree_sandbox": true
 }

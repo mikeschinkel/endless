@@ -22,9 +22,12 @@ Run `just install` from the **main checkout**, never from a worktree — `uv too
 git worktree add .endless/worktrees/e-NNN main
 cd .endless/worktrees/e-NNN
 just go-work-init
-just claude-settings-init   # see below — only when you'll run Claude inside this worktree
-just build                  # builds bin/endless-hook for the override above to call
+just build                  # builds bin/* binaries the wrappers will exec
+just dev-sandbox-init       # see "Worktree DB sandbox" below
+just claude-settings-init   # see "Claude hook override" below
 ```
+
+`endless task claim` and `endless task spawn` invoke `dev-sandbox-init` automatically; the manual `just dev-sandbox-init` is for worktrees created by hand or to re-wire the sandbox after rebuilding binaries.
 
 `just go-work-init` generates a `go.work` file with absolute paths to the user's local `go-pkgs/` modules. `go.work` is gitignored (per-developer). When present, it overrides go.mod's `replace` directives.
 
@@ -43,6 +46,23 @@ Run AFTER `git worktree add` and BEFORE spawning Claude inside the worktree. `ju
 The recipe refuses to run from the main checkout (would clobber the committed `.claude/settings.json`). Inside a worktree it (a) mirrors the endless-hook entries from `~/.claude/settings.json` with the path swapped, (b) preserves `enabledPlugins` from the main-branch HEAD `.claude/settings.json`, and (c) sets `git update-index --skip-worktree .claude/settings.json` so the regenerated content stays out of `git status` for this worktree only.
 
 Idempotent: re-running produces the same file. Removing the worktree takes the file with it (no cleanup needed).
+
+## Worktree DB sandbox — E-1281
+
+Endless self-dev worktrees route DB writes to a per-worktree sandbox so dev-time CLI usage and tests don't pollute the user's real task ledger at `~/.config/endless/endless.db`. Sandbox lives at `~/.cache/endless/sandboxes/worktree-e-NNN/`.
+
+Inside a Claude session spawned from the worktree, routing is transparent: `endless task ...` reads/writes the sandbox via the PATH/`XDG_CONFIG_HOME` injected into `<worktree>/.claude/settings.json`. From a bare shell inside the worktree, prefix with `bin-sandbox/` (`./bin-sandbox/endless ...`) or export `XDG_CONFIG_HOME` manually. From the main checkout or any non-endless project, endless reads/writes the real DB.
+
+Opt-in is per project. Endless's own `.endless/config.json` sets `"worktree_sandbox": true`. Downstream projects that *use* endless as a tool leave the flag unset so their worktree tasks land in the real DB (real audit data, not pollution).
+
+`endless task claim` and `endless task spawn` auto-invoke the setup when the flag is true; no extra step from the user. For worktrees created via `git worktree add` directly, run `just dev-sandbox-init` from the worktree.
+
+The setup writes:
+
+- Wrapper scripts in `<worktree>/bin-sandbox/` that export `XDG_CONFIG_HOME=<sandbox>` and exec the worktree-built binary (so candidate code is exercised, not the global install).
+- A PATH-prepend and `XDG_CONFIG_HOME` value in `<worktree>/.claude/settings.json`'s `env` block so Claude-spawned subprocesses (including the endless-hook fired on every event) inherit the sandbox routing.
+
+Sandbox cleanup on worktree drop/land is not yet automatic; manually `endless-sandbox destroy worktree-e-NNN` if the cache needs reclaiming.
 
 ## Tests
 

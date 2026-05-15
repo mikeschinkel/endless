@@ -211,15 +211,22 @@ claude-settings-init:
         exit 1
     fi
     mkdir -p .claude
-    # Capture the committed settings.json content (enabledPlugins etc.) before
-    # we overwrite the working-tree copy, so we can preserve non-hook keys.
+    # Capture the committed settings.json content (enabledPlugins etc.) and
+    # the working-tree copy (which may carry an env block from
+    # 'endless sandbox bind') so we can preserve non-hook keys from both.
     committed_json="$(git show HEAD:.claude/settings.json 2>/dev/null || echo '{}')"
-    python3 - "$user_settings" "$worktree_root" .claude/settings.json "$committed_json" <<'PY'
+    if [ -f .claude/settings.json ]; then
+        working_json="$(cat .claude/settings.json)"
+    else
+        working_json='{}'
+    fi
+    python3 - "$user_settings" "$worktree_root" .claude/settings.json "$committed_json" "$working_json" <<'PY'
     import json, sys
-    user_path, worktree_root, out_path, committed_raw = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
+    user_path, worktree_root, out_path, committed_raw, working_raw = sys.argv[1:6]
     with open(user_path) as f:
         user = json.load(f)
     committed = json.loads(committed_raw or "{}")
+    working = json.loads(working_raw or "{}")
     new_bin = f"{worktree_root}/bin/endless-hook"
     out_hooks = {}
     for event, entries in (user.get("hooks") or {}).items():
@@ -239,7 +246,14 @@ claude-settings-init:
                 rewritten.append({"hooks": new_entry_hooks})
         if rewritten:
             out_hooks[event] = rewritten
+    # Start from committed (enabledPlugins, etc.), overlay working-tree
+    # additions (env block from 'endless sandbox bind'), then replace hooks
+    # with the freshly-rewritten ones.
     out = {k: v for k, v in committed.items() if k != "hooks"}
+    for k, v in working.items():
+        if k in ("hooks",):
+            continue
+        out[k] = v
     if out_hooks:
         out["hooks"] = out_hooks
     with open(out_path, "w") as f:
@@ -249,6 +263,44 @@ claude-settings-init:
     PY
     git update-index --skip-worktree .claude/settings.json
     echo "claude-settings-init: $worktree_root/.claude/settings.json (skip-worktree set)"
+
+# Provision a per-worktree sandbox DB for self-dev work (E-1281).
+#
+# Generates wrappers in <worktree>/bin-sandbox/ that redirect endless DB writes
+# to ~/.cache/endless/sandboxes/worktree-e-NNN/. Sessions inside the worktree
+# pick up the wrappers via the PATH-prepend in <worktree>/.claude/settings.json
+# written by 'endless sandbox bind'.
+#
+# Auto-invoked by 'endless task claim' and 'endless task spawn' when the
+# project's .endless/config.json has "worktree_sandbox": true (endless's own
+# config does). Run manually for worktrees created by hand or to re-wire after
+# moving binaries.
+#
+# Recipe must run from a worktree (not main). Refuses otherwise.
+dev-sandbox-init:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    git_dir="$(cd "$(git rev-parse --git-dir)" && pwd)"
+    git_common_dir="$(cd "$(git rev-parse --git-common-dir)" && pwd)"
+    if [ "$git_dir" = "$git_common_dir" ]; then
+        echo "dev-sandbox-init: must run from a worktree, not main." >&2
+        exit 1
+    fi
+    task_id="$(basename "$(pwd)" | sed -n 's/^e-\([0-9][0-9]*\).*/\1/p')"
+    if [ -z "$task_id" ]; then
+        echo "dev-sandbox-init: cannot parse task ID from $(pwd) (expected .endless/worktrees/e-NNN)" >&2
+        exit 1
+    fi
+    name="worktree-e-${task_id}"
+    # Prefer the worktree-built binary so changes to endless-sandbox itself
+    # are exercised in self-dev. Fall back to PATH for fresh worktrees.
+    if [ -x "$(pwd)/bin/endless-sandbox" ]; then
+        sandbox_bin="$(pwd)/bin/endless-sandbox"
+    else
+        sandbox_bin=endless-sandbox
+    fi
+    "$sandbox_bin" init --mode empty "$name"
+    "$sandbox_bin" bind "$(pwd)" "$name"
 
 # Run Python tests
 test:

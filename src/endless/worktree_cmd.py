@@ -32,6 +32,7 @@ import fnmatch
 import json
 import os
 import re
+import shutil
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
@@ -720,7 +721,55 @@ def create_task_worktree(
     (companion_dir / "worktree.json").write_text(
         json.dumps(companion, indent=2) + "\n"
     )
+    _maybe_auto_sandbox_bind(project_root, wt_dir, task_id)
     return wt_dir, True
+
+
+def _maybe_auto_sandbox_bind(project_root: Path, worktree_path: Path, task_id: int) -> None:
+    """If the project opts in, provision and bind a per-worktree sandbox DB.
+
+    Triggered by `worktree_sandbox: true` in the project's .endless/config.json
+    (see config.project_wants_worktree_sandbox). Endless's own config has the
+    flag set so dev-time worktrees don't pollute the user's real DB; downstream
+    projects using endless as a tool leave it unset.
+
+    Failures are surfaced as warnings rather than aborting the worktree
+    creation — a failed sandbox setup is recoverable via `just dev-sandbox-init`
+    or direct `endless-sandbox init` / `bind` invocation.
+    """
+    from endless import config
+    if not config.project_wants_worktree_sandbox(project_root):
+        return
+    binary = shutil.which("endless-sandbox")
+    if not binary:
+        click.echo(
+            "  warning: endless-sandbox binary not found on PATH; "
+            "worktree-sandbox setup skipped. Run 'just build' then "
+            "'just dev-sandbox-init' from the worktree.",
+            err=True,
+        )
+        return
+    name = f"worktree-e-{task_id}"
+    for cmd in (
+        [binary, "init", "--mode", "empty", name],
+        [binary, "bind", str(worktree_path), name],
+    ):
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True)
+        except OSError as e:
+            click.echo(f"  warning: {' '.join(cmd)}: {e}", err=True)
+            return
+        if result.returncode != 0:
+            click.echo(
+                f"  warning: {' '.join(cmd)} failed: "
+                f"{(result.stderr or result.stdout).strip()}",
+                err=True,
+            )
+            return
+    click.echo(
+        click.style("•", fg="cyan")
+        + f" sandbox provisioned: ~/.cache/endless/sandboxes/{name}"
+    )
 
 
 def land_worktree(task_id: str, dry_run: bool) -> None:

@@ -15,6 +15,10 @@ func main() {
 		runCmd(os.Args[2:])
 	case "enter":
 		enterCmd(os.Args[2:])
+	case "init":
+		initCmd(os.Args[2:])
+	case "bind":
+		bindCmd(os.Args[2:])
 	case "list":
 		listCmd(os.Args[2:])
 	case "prune":
@@ -35,6 +39,8 @@ func usage(w *os.File) {
 	fmt.Fprintln(w, "Commands:")
 	fmt.Fprintln(w, "  run     [--clone] [--name N] [--keep] -- <cmd> [args]")
 	fmt.Fprintln(w, "  enter   [--clone] <name>")
+	fmt.Fprintln(w, "  init    [--mode empty|seed|clone] [--force] <name>")
+	fmt.Fprintln(w, "  bind    <worktree-path> [<sandbox-name>]")
 	fmt.Fprintln(w, "  list")
 	fmt.Fprintln(w, "  prune   [--older-than DURATION]")
 	fmt.Fprintln(w, "  destroy [--force] [--if-exists] <name>")

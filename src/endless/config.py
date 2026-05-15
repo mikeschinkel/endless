@@ -100,6 +100,20 @@ def project_config_read(project_path: Path) -> dict | None:
         return json.load(f)
 
 
+def project_wants_worktree_sandbox(project_path: Path) -> bool:
+    """True if the project opts into per-worktree DB sandboxing.
+
+    Set by adding `"worktree_sandbox": true` to <project>/.endless/config.json.
+    Endless's own config has this enabled so dev-time worktrees don't pollute
+    the user's real DB; downstream projects using endless as a tool leave it
+    unset so their tasks land in the real DB.
+    """
+    cfg = project_config_read(project_path)
+    if cfg is None:
+        return False
+    return bool(cfg.get("worktree_sandbox", False))
+
+
 def project_config_write(project_path: Path, data: dict):
     p = project_config_path(project_path)
     p.parent.mkdir(parents=True, exist_ok=True)

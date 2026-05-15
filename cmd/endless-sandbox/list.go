@@ -80,7 +80,7 @@ func scanSandboxes() ([]listEntry, error) {
 }
 
 func classify(meta SandboxMeta) sandboxState {
-	if meta.Mode == modeKeep {
+	if meta.Mode == modeKeep || meta.Mode == modePersistent {
 		return stateInUse
 	}
 	if isAlive(meta.CreatorPID) {
