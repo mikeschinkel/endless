@@ -298,8 +298,16 @@ def _drop_orphan_amendable_commits(
     if last_orphan_sha is None:
         return (0, None)
 
+    # NOTE: do NOT pass "HEAD" as the third positional arg. `git rebase
+    # --onto X Y HEAD` detaches HEAD before replaying commits, leaving
+    # the branch ref pinned at its pre-rebase tip (E-1355). When the
+    # subsequent ff-merge in land Step 5 targets the branch name, it
+    # tries to fast-forward main to an ancestor commit and fails with
+    # "diverging branches" — permanently, regardless of retry count.
+    # Omitting the third arg keeps HEAD attached and moves the branch
+    # ref with the rebase.
     _git_run(
-        ["rebase", "--onto", base_branch, last_orphan_sha, "HEAD"],
+        ["rebase", "--onto", base_branch, last_orphan_sha],
         cwd=worktree_path,
     )
     return (n, first_subject)

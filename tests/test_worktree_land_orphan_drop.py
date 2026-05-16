@@ -193,3 +193,45 @@ def test_mid_branch_amendable_subject_is_preserved(repo_with_worktree):
 
     post_subjects = _log_subjects(wt, "main..HEAD")
     assert post_subjects == ["user work", SNAPSHOT_SUBJECT]
+
+
+def test_drop_keeps_head_attached_to_branch(repo_with_worktree):
+    """E-1355: after orphan-drop, HEAD must remain attached to the task
+    branch and the branch ref must point at the new HEAD. Earlier
+    behavior used `git rebase --onto X Y HEAD` which detaches HEAD,
+    stranding the branch ref at the pre-rebase tip — Step 5's ff-merge
+    in land then targets an ancestor of main and fails permanently
+    with 'diverging branches' (no retry count helps)."""
+    main = repo_with_worktree["main"]
+    _commit(main, LEDGER_SUBJECT, {".endless/db-ledger/x.jsonl": '{"a":1}\n'})
+
+    wt = _create_task_branch(main, repo_with_worktree["tmp"], name="task/x")
+    _commit(wt, "user work", {"hello.txt": "hello\n"})
+    _amend_with_extra_line(main, ".endless/db-ledger/x.jsonl", '{"a":2}\n')
+
+    pre_branch_ref = _run(["git", "rev-parse", "task/x"], wt).stdout.strip()
+    pre_head = _head_sha(wt)
+    assert pre_branch_ref == pre_head, "sanity: HEAD on branch before drop"
+
+    count, _ = _drop_orphan_amendable_commits(wt, "main")
+    assert count == 1
+
+    # HEAD must still be a symbolic ref to the task branch (not detached).
+    symref = _run(
+        ["git", "symbolic-ref", "HEAD"], wt, check=True
+    ).stdout.strip()
+    assert symref == "refs/heads/task/x", (
+        f"HEAD became detached after orphan-drop: {symref!r}"
+    )
+
+    # And the branch ref must point at the post-drop HEAD, not the
+    # pre-drop tip.
+    post_head = _head_sha(wt)
+    post_branch_ref = _run(["git", "rev-parse", "task/x"], wt).stdout.strip()
+    assert post_branch_ref == post_head, (
+        f"branch ref {post_branch_ref} not aligned with HEAD {post_head} "
+        f"after orphan-drop (pre-drop tip was {pre_head})"
+    )
+    assert post_branch_ref != pre_head, (
+        "branch ref unchanged after drop; orphan-drop did not advance it"
+    )
