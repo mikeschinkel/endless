@@ -37,9 +37,18 @@ func upsertSessionTask(db dbQuerier, sessionIDStr string, taskID int64) error {
 }
 
 // shouldRecordSessionTouch reports whether an event should produce a
-// session_tasks row. Strict per E-1322 spec: ActorKind == ActorSession
-// only, even though CLI/hook actors may carry a session_id. Don't bind
-// cli/hook/system actors as "sessions" in this materialized view.
+// session_tasks row. The semantic is "session N touched task M" — what
+// matters is whether the event is attributable to a Claude session, not
+// the actor channel (cli/hook/web) it came through.
+//
+// Per event.go's Actor docstring: SessionID is populated whenever the
+// event was emitted from within a Claude session's reach, regardless of
+// Kind. A `cli` actor with SessionID="42" means "the user ran a CLI
+// command from inside Claude session 42" — exactly the touch we want
+// to record. The user-facing endless CLI (Python emit_event in
+// src/endless/event_bridge.py) defaults actor_kind="cli" but populates
+// SessionID via _current_endless_session_id, so the strict
+// Kind==ActorSession check used to reject every legitimate touch.
 func shouldRecordSessionTouch(evt *Event) bool {
-	return evt.Actor.Kind == ActorSession && evt.Actor.SessionID != ""
+	return evt.Actor.SessionID != ""
 }

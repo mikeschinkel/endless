@@ -190,9 +190,15 @@ func TestSessionTasks_UpdateAdvancesUpdatedAt(t *testing.T) {
 	}
 }
 
-// TestSessionTasks_NoRowForCLIActor verifies the strict ActorSession
-// guard: a CLI actor carrying a session_id does NOT produce a row.
-func TestSessionTasks_NoRowForCLIActor(t *testing.T) {
+// TestSessionTasks_CLIActorWithSessionID verifies that a CLI actor
+// carrying a session_id DOES produce a row. This is the path the
+// user-facing endless CLI takes — Python's emit_event defaults
+// actor_kind="cli" but populates session_id via the resolver. Per
+// event.go's Actor docstring, that combination means "the user ran a
+// CLI command from inside a Claude session"; the touch IS session-
+// attributable. (Regression guard for the bug where shouldRecordSession
+// Touch's strict Kind==ActorSession check rejected every real touch.)
+func TestSessionTasks_CLIActorWithSessionID(t *testing.T) {
 	db := newSessionTasksTestDB(t)
 
 	evt := taskCreatedEvent(t, 100, Actor{Kind: ActorCLI, ID: "user@host", SessionID: "42"})
@@ -200,8 +206,27 @@ func TestSessionTasks_NoRowForCLIActor(t *testing.T) {
 		t.Fatalf("dispatch: %v", err)
 	}
 
+	if n := countSessionTasks(t, db); n != 1 {
+		t.Errorf("expected 1 session_tasks row for ActorCLI with SessionID set, got %d", n)
+	}
+	if _, _, ok := sessionTasksRow(t, db, 42, 100); !ok {
+		t.Error("expected (42, 100) row to exist from cli+session_id event")
+	}
+}
+
+// TestSessionTasks_NoRowForCLIActorWithoutSessionID verifies the
+// session_id presence requirement: a CLI actor with no session_id does
+// NOT produce a row (no session to attribute the touch to).
+func TestSessionTasks_NoRowForCLIActorWithoutSessionID(t *testing.T) {
+	db := newSessionTasksTestDB(t)
+
+	evt := taskCreatedEvent(t, 100, Actor{Kind: ActorCLI, ID: "user@host", SessionID: ""})
+	if _, err := dispatch(db, evt); err != nil {
+		t.Fatalf("dispatch: %v", err)
+	}
+
 	if n := countSessionTasks(t, db); n != 0 {
-		t.Errorf("expected 0 session_tasks rows for ActorCLI even with SessionID set, got %d", n)
+		t.Errorf("expected 0 session_tasks rows for ActorCLI with no SessionID, got %d", n)
 	}
 }
 
