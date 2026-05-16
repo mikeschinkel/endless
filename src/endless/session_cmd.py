@@ -1048,13 +1048,26 @@ def _project_root_for_cwd() -> Path:
 
 
 def _tmux_window_pane_ids() -> list[str] | None:
-    """Return pane ids in the current tmux window, or None if not in tmux."""
+    """Return pane ids in the tmux window containing TMUX_PANE, or None
+    if not in tmux / TMUX_PANE unset.
+
+    MUST scope with -t $TMUX_PANE. A bare `tmux list-panes` resolves
+    against tmux's *currently active* pane in the user's client, not
+    the pane of the calling process — so a subprocess spawned from
+    pane %150 would see panes for whatever window the user happened to
+    be focused on at that instant (E-1395). The bug silently
+    misattributed claim/bind/emit_event session resolution to siblings
+    in unrelated windows.
+    """
     if not os.environ.get("TMUX"):
+        return None
+    pane = os.environ.get("TMUX_PANE")
+    if not pane:
         return None
     import subprocess
     try:
         result = subprocess.run(
-            ["tmux", "list-panes", "-F", "#{pane_id}"],
+            ["tmux", "list-panes", "-t", pane, "-F", "#{pane_id}"],
             capture_output=True, text=True, timeout=2,
         )
     except (FileNotFoundError, subprocess.SubprocessError):
