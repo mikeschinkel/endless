@@ -15,9 +15,10 @@ import (
 //
 // sessionIDStr is Actor.SessionID — the numeric sessions.id encoded as
 // text ("356"). Malformed values are skipped without error: the caller's
-// guard already restricts this to ActorSession events, but defense in
-// depth keeps the upsert from poisoning a task mutation over a stray
-// session_id format issue.
+// guard already restricts this to events where Actor.SessionID is
+// non-empty, but defense in depth keeps the upsert from poisoning a
+// task mutation if a non-numeric SessionID ever slips through an
+// upstream emitter.
 func upsertSessionTask(db dbQuerier, sessionIDStr string, taskID int64) error {
 	sessionID, parseErr := strconv.ParseInt(sessionIDStr, 10, 64)
 	if parseErr != nil {

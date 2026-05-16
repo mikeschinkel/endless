@@ -230,12 +230,14 @@ func TestSessionTasks_NoRowForCLIActorWithoutSessionID(t *testing.T) {
 	}
 }
 
-// TestSessionTasks_NoRowForEmptySessionID verifies the empty-string guard:
-// an ActorSession with no SessionID does NOT produce a row.
+// TestSessionTasks_NoRowForEmptySessionID verifies the empty-string guard
+// using the realistic production shape: a CLI emit from outside any tmux
+// session resolves no session_id, so the actor arrives as ActorCLI with
+// SessionID="" and must NOT produce a row.
 func TestSessionTasks_NoRowForEmptySessionID(t *testing.T) {
 	db := newSessionTasksTestDB(t)
 
-	evt := taskCreatedEvent(t, 100, Actor{Kind: ActorSession, ID: "s1", SessionID: ""})
+	evt := taskCreatedEvent(t, 100, Actor{Kind: ActorCLI, ID: "user@host", SessionID: ""})
 	if _, err := dispatch(db, evt); err != nil {
 		t.Fatalf("dispatch: %v", err)
 	}
