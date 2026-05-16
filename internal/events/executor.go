@@ -192,6 +192,12 @@ func execTaskCreated(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 		return nil, fmt.Errorf("events: insert task: %w", err)
 	}
 
+	if shouldRecordSessionTouch(evt) {
+		if err := upsertSessionTask(db, evt.Actor.SessionID, taskID); err != nil {
+			return nil, fmt.Errorf("events: %w", err)
+		}
+	}
+
 	return &ExecuteResult{TaskID: taskID}, nil
 }
 
@@ -220,6 +226,12 @@ func execTaskImported(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 	)
 	if err != nil {
 		return nil, fmt.Errorf("events: insert imported task: %w", err)
+	}
+
+	if shouldRecordSessionTouch(evt) {
+		if err := upsertSessionTask(db, evt.Actor.SessionID, taskID); err != nil {
+			return nil, fmt.Errorf("events: %w", err)
+		}
 	}
 
 	return &ExecuteResult{TaskID: taskID}, nil
@@ -269,6 +281,12 @@ func execTaskStatusChanged(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 			p.Outcome, taskID,
 		); err != nil {
 			return nil, fmt.Errorf("events: set outcome: %w", err)
+		}
+	}
+
+	if shouldRecordSessionTouch(evt) {
+		if err := upsertSessionTask(db, evt.Actor.SessionID, mustParseInt64(evt.Entity.ID)); err != nil {
+			return nil, fmt.Errorf("events: %w", err)
 		}
 	}
 
@@ -362,6 +380,12 @@ func execTaskFieldsUpdated(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 		return nil, fmt.Errorf("events: update task fields: %w", err)
 	}
 
+	if shouldRecordSessionTouch(evt) {
+		if err := upsertSessionTask(db, evt.Actor.SessionID, mustParseInt64(evt.Entity.ID)); err != nil {
+			return nil, fmt.Errorf("events: %w", err)
+		}
+	}
+
 	return &ExecuteResult{}, nil
 }
 
@@ -396,6 +420,12 @@ func execTaskMoved(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 		return nil, fmt.Errorf("events: move task: %w", err)
 	}
 
+	if shouldRecordSessionTouch(evt) {
+		if err := upsertSessionTask(db, evt.Actor.SessionID, mustParseInt64(evt.Entity.ID)); err != nil {
+			return nil, fmt.Errorf("events: %w", err)
+		}
+	}
+
 	return &ExecuteResult{}, nil
 }
 
@@ -425,6 +455,15 @@ func execTaskDeleted(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 		}
 	}
 
+	// Record only the primary entity even on cascade — cascaded child
+	// deletes are derived effects, not direct touches by the session.
+	// session_tasks has no FK on task_id, so the row survives the delete.
+	if shouldRecordSessionTouch(evt) {
+		if err := upsertSessionTask(db, evt.Actor.SessionID, mustParseInt64(evt.Entity.ID)); err != nil {
+			return nil, fmt.Errorf("events: %w", err)
+		}
+	}
+
 	return &ExecuteResult{}, nil
 }
 
@@ -437,6 +476,34 @@ func execTaskBulkCleared(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 	projectID, err := resolveProjectID(db, evt.Project)
 	if err != nil {
 		return nil, err
+	}
+
+	// Enumerate target task IDs BEFORE the delete so session_tasks can
+	// record per-cleared-task touches. session_tasks has no FK on
+	// task_id, so the rows survive the subsequent delete.
+	if shouldRecordSessionTouch(evt) {
+		rows, err := db.Query(
+			"SELECT id FROM tasks WHERE project_id = ? AND source_file = ?",
+			projectID, p.SourceFile,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("events: enumerate bulk_cleared tasks: %w", err)
+		}
+		var ids []int64
+		for rows.Next() {
+			var id int64
+			if err := rows.Scan(&id); err != nil {
+				rows.Close()
+				return nil, fmt.Errorf("events: scan bulk_cleared id: %w", err)
+			}
+			ids = append(ids, id)
+		}
+		rows.Close()
+		for _, id := range ids {
+			if err := upsertSessionTask(db, evt.Actor.SessionID, id); err != nil {
+				return nil, fmt.Errorf("events: %w", err)
+			}
+		}
 	}
 
 	db.Exec(
@@ -466,6 +533,11 @@ func execTaskClaimed(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 	); err != nil {
 		return nil, fmt.Errorf("events: claim task: %w", err)
 	}
+	if shouldRecordSessionTouch(evt) {
+		if err := upsertSessionTask(db, evt.Actor.SessionID, mustParseInt64(evt.Entity.ID)); err != nil {
+			return nil, fmt.Errorf("events: %w", err)
+		}
+	}
 	return &ExecuteResult{}, nil
 }
 
@@ -480,6 +552,11 @@ func execTaskReleased(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 		p.SessionID, taskID,
 	); err != nil {
 		return nil, fmt.Errorf("events: release task: %w", err)
+	}
+	if shouldRecordSessionTouch(evt) {
+		if err := upsertSessionTask(db, evt.Actor.SessionID, mustParseInt64(evt.Entity.ID)); err != nil {
+			return nil, fmt.Errorf("events: %w", err)
+		}
 	}
 	return &ExecuteResult{}, nil
 }

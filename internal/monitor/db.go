@@ -309,6 +309,30 @@ func migrateV8(db *sql.DB) error {
 	return nil
 }
 
+// migrateV9 adds the session_tasks table (E-1322). One row per
+// (session_id, task_id) pair, recording which sessions touched which tasks.
+// Materialized index complementing the events JSONL ledger; rows are
+// upserted by every task.* event handler when the actor is a session.
+//
+// No FK constraints by design: session_tasks must outlive its referenced
+// session/task so the "session N touched task M" record survives task
+// deletion and bulk_cleared operations. The events JSONL is the audit
+// source of truth; this table is a query-speed projection.
+//
+// Idempotent: CREATE TABLE IF NOT EXISTS / CREATE INDEX IF NOT EXISTS.
+func migrateV9(db *sql.DB) error {
+	db.Exec(`CREATE TABLE IF NOT EXISTS session_tasks (
+		session_id INTEGER NOT NULL,
+		task_id    INTEGER NOT NULL,
+		created_at TEXT    NOT NULL,
+		updated_at TEXT    NOT NULL,
+		UNIQUE(session_id, task_id)
+	)`)
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_session_tasks_task
+		ON session_tasks(task_id)`)
+	return nil
+}
+
 // migrateV4 adds task_files (per-task edit-set, E-917) and
 // suggestions (AI-agent calibration suggestions, E-918) tables.
 func migrateV4(db *sql.DB) error {
