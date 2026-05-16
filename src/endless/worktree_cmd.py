@@ -72,6 +72,32 @@ AMENDABLE_COMMIT_SUBJECTS = (
 LAND_MAX_RETRIES = 8
 
 
+def _is_retryable_ff_merge_error(err_text: str) -> bool:
+    """True when a Step 5 ff-merge failure is from a concurrent writer
+    rather than a hard error, and the land loop should retry.
+
+    Two race windows produce retryable errors:
+
+    1. Worktree-side: a concurrent writer dirtied auto-files between
+       Step 3's auto-commit and Step 5's merge. Git surfaces this as
+       "uncommitted changes" / "would be overwritten".
+    2. Main-side (E-1351): a concurrent writer appended a commit to
+       main between Step 4's rebase and Step 5's ff-merge, so the
+       branches diverge. Git surfaces this as "diverging branches" /
+       "not possible to fast-forward".
+
+    In both cases the next loop iteration converges (re-runs auto-commit
+    and rebase against main's new tip).
+    """
+    err_lower = err_text.lower()
+    return (
+        "uncommitted" in err_lower
+        or "would be overwritten" in err_lower
+        or "diverging" in err_lower
+        or "not possible to fast-forward" in err_lower
+    )
+
+
 def _project_root() -> Path:
     """Return the registered project root path for cwd's project."""
     project_id, _ = _resolve_project(None)
@@ -962,9 +988,7 @@ def land_worktree(task_id: str, dry_run: bool) -> None:
             _git_run(["merge", "--ff-only", branch], cwd=main_root)
         except subprocess.CalledProcessError as e:
             err_text = (e.stderr or "") + (e.stdout or "")
-            if "uncommitted" in err_text.lower() or "would be overwritten" in err_text.lower():
-                # Concurrent writer dirtied auto-files between our auto-commit
-                # and the merge attempt. Loop.
+            if _is_retryable_ff_merge_error(err_text):
                 last_error = err_text
                 continue
             raise click.ClickException(
