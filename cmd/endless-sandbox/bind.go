@@ -204,7 +204,37 @@ func updateClaudeSettings(worktree, binSandbox, sandboxDir string) error {
 	delete(env, "PATH")
 	settings["env"] = env
 
-	return writeSettings(settingsPath, settings)
+	if err := writeSettings(settingsPath, settings); err != nil {
+		return err
+	}
+	return markSettingsSkipWorktree(worktree)
+}
+
+// markSettingsSkipWorktree sets the skip-worktree index bit on
+// <worktree>/.claude/settings.json so the generated env block stays out of
+// `git status` and doesn't block rebase during `endless worktree land`.
+// Mirrors the contract of `just claude-settings-init`, which sets the same
+// bit after it writes its hook-rewrite block.
+//
+// No-op if the file isn't tracked or the worktree isn't a git repository —
+// downstream projects may not commit .claude/settings.json.
+func markSettingsSkipWorktree(worktree string) error {
+	rel := filepath.Join(".claude", "settings.json")
+
+	chk := exec.Command("git", "-C", worktree, "ls-files", "--error-unmatch", rel)
+	chk.Stdout = io.Discard
+	chk.Stderr = io.Discard
+	if err := chk.Run(); err != nil {
+		return nil
+	}
+
+	cmd := exec.Command("git", "-C", worktree, "update-index", "--skip-worktree", rel)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("git update-index --skip-worktree %s: %w: %s",
+			rel, err, strings.TrimSpace(string(out)))
+	}
+	return nil
 }
 
 func readSettings(path string) (map[string]any, error) {
