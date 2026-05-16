@@ -943,6 +943,18 @@ func snapshotPlanFile(projectID int64, sessionID, srcPath string) error {
 
 	// E-1275: commit the snapshot pair immediately so plan history lands
 	// in git at write time instead of accumulating as dirt on main.
+	//
+	// E-1353/E-1354: skip the commit when the E-1281 sandbox is active.
+	// In a sandbox, projectRoot resolves to the worktree path (the sandbox
+	// DB registers the worktree as its own project), so the commit would
+	// target the worktree's task branch — which the E-1309 guard correctly
+	// refuses. Sandbox sessions are isolated by design; snapshot files stay
+	// in the worktree's tree and are dropped with the sandbox. The
+	// non-sandbox case is unchanged: projectRoot is the project's main
+	// checkout and the commit lands on main.
+	if monitor.IsSandboxActive() {
+		return nil
+	}
 	mdRel := filepath.Join(".endless", "plans", "snapshots", stem+".md")
 	jsonRel := filepath.Join(".endless", "plans", "snapshots", stem+".json")
 	if err := events.CommitSnapshotPair(projectRoot, mdRel, jsonRel); err != nil {
