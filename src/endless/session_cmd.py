@@ -1280,6 +1280,55 @@ def session_cd_resolve(
     _emit_resolution_status(c, target_path, target=target)
 
 
+def session_id_resolve() -> None:
+    """Print the current Endless session's integer id for shell substitution.
+
+    Designed for `ENDLESS_SESSION_ID="$(endless session id)"`. Success
+    prints just the integer on stdout. Failure writes a one-line
+    diagnostic to stderr and exits non-zero; stdout stays empty so the
+    command substitution assigns the empty string rather than a
+    diagnostic.
+    """
+    from endless.task_cmd import (
+        _current_endless_session_id,
+        _find_sibling_claude_session,
+    )
+    eid = _current_endless_session_id()
+    if eid is not None:
+        click.echo(eid)
+        return
+
+    env_id = os.environ.get("ENDLESS_SESSION_ID")
+    pane = os.environ.get("TMUX_PANE")
+    if env_id and not env_id.isdigit():
+        msg = (
+            f"ENDLESS_SESSION_ID={env_id!r} is not an integer; "
+            "the resolver only accepts digit strings."
+        )
+    elif not pane:
+        msg = (
+            "No current Endless session: not in a tmux pane and "
+            "ENDLESS_SESSION_ID is unset. Run from a Claude pane or "
+            "export ENDLESS_SESSION_ID=<id>."
+        )
+    else:
+        _, n = _find_sibling_claude_session()
+        if n == 0:
+            msg = (
+                "No current Endless session: this pane is not a Claude "
+                "pane and no sibling Claude pane was found in this tmux "
+                "window."
+            )
+        else:
+            msg = (
+                f"Ambiguous Endless session: {n} sibling Claude panes "
+                "in this tmux window. Run `endless session id` from the "
+                "intended Claude pane, or export ENDLESS_SESSION_ID=<id>."
+            )
+    click.echo(msg, err=True)
+    raise SystemExit(1)
+
+
 def session_show_resolve(session_ref: str | None, as_json: bool = False) -> None:
     """Show details for a Claude session — current by default, or specified by ref.
 

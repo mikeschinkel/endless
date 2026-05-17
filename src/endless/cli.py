@@ -629,6 +629,20 @@ def session_cd(session_ref, show_all, target):
     session_cd_resolve(session_ref, show_all=show_all, target=target)
 
 
+@session_cmd.command("id")
+def session_id():
+    """Print the current Endless session's integer id to stdout.
+
+    Designed for shell substitution: `ENDLESS_SESSION_ID="$(endless session id)"`.
+    Resolves via the same 3-layer logic as cli/hook event attribution:
+    ENDLESS_SESSION_ID env var, TMUX_PANE companion match, or a single
+    sibling Claude pane in the current tmux window. On ambiguity or no
+    match, exits non-zero with a diagnostic on stderr (stdout stays empty).
+    """
+    from endless.session_cmd import session_id_resolve
+    session_id_resolve()
+
+
 @session_cmd.command("reimport")
 @click.argument("session_id", required=False, default=None)
 def session_reimport(session_id):

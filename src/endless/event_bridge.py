@@ -79,15 +79,10 @@ def emit_event(
             session_id = None
 
     if actor_kind in _ATTRIBUTION_REQUIRED and not session_id:
-        # NOTE: once `endless session id` ships, drop the
-        # "Export ENDLESS_SESSION_ID=<id>; see `endless session show`"
-        # hint below in favor of the command-substitution form.
         raise click.ClickException(
             "Cannot determine the Endless session for this pane.\n\n"
             "To fix, do one of:\n"
             "  - Run this command from a Claude session pane.\n"
-            "  - Export ENDLESS_SESSION_ID=<id> in this shell; "
-            "see `endless session show` for live session ids.\n"
             "  - Export ENDLESS_SESSION_ID=\"$(endless session id)\".\n"
             "  - Run `endless task bind <task-id>` from this pane to "
             "connect it to a sibling Claude session in the same tmux "
