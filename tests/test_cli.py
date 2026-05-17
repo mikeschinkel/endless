@@ -221,5 +221,15 @@ def test_task_add_rejects_invalid_phase_at_parse_time(isolated_env):
     )
     assert result.exit_code != 0
     assert "'foo' is not one of" in result.output
-    for valid in ("now", "next", "later", "maybe"):
+    for valid in ("urgent", "now", "next", "later", "maybe"):
         assert valid in result.output
+
+
+def test_phase_help_lists_urgent_first():
+    """E-1405: --phase help text should list `urgent` as the first option
+    on commands where help text enumerates phases."""
+    runner = CliRunner()
+    result = runner.invoke(main, ["task", "add", "--help"])
+    assert result.exit_code == 0
+    assert "urgent" in result.output
+    assert result.output.index("urgent") < result.output.index("now")

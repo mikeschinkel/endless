@@ -8,7 +8,7 @@ import (
 )
 
 func TestValidatePhase_AcceptsKnownValues(t *testing.T) {
-	for _, phase := range []string{"now", "next", "later", "maybe"} {
+	for _, phase := range []string{"urgent", "now", "next", "later", "maybe"} {
 		if err := events.ValidatePhase(phase); err != nil {
 			t.Errorf("ValidatePhase(%q) returned error: %v", phase, err)
 		}
@@ -29,7 +29,7 @@ func TestValidatePhase_RejectsUnknown(t *testing.T) {
 }
 
 func TestValidPhases_HasExactlyExpectedKeys(t *testing.T) {
-	want := map[string]bool{"now": true, "next": true, "later": true, "maybe": true}
+	want := map[string]bool{"urgent": true, "now": true, "next": true, "later": true, "maybe": true}
 	if len(events.ValidPhases) != len(want) {
 		t.Errorf("ValidPhases has %d entries, want %d", len(events.ValidPhases), len(want))
 	}

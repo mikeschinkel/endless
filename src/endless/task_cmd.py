@@ -517,7 +517,13 @@ def _resolve_project(name: str | None) -> tuple[int, str]:
 
 def _phase_for_heading(text: str) -> str:
     """Map a heading's text to a phase name."""
+    # Order matters: substring matching, first hit wins. Keep `urgent`
+    # aliases ahead of everything else so a heading like "Urgent now"
+    # maps to `urgent` rather than `now`.
     phase_map = {
+        "urgent": "urgent",
+        "asap": "urgent",
+        "five-alarm": "urgent",
         "now": "now",
         "current": "now",
         "in progress": "now",
@@ -532,7 +538,6 @@ def _phase_for_heading(text: str) -> str:
         "maybe": "maybe",
         "considering": "maybe",
         "tentative": "maybe",
-        "blocked": "blocked",
         "done": "confirmed",
         "completed": "confirmed",
         "confirmed": "confirmed",
@@ -966,7 +971,7 @@ def show_plan(
     sort_col_map = {
         "id": "pi.id",
         "status": "pi.status",
-        "phase": "CASE pi.phase WHEN 'now' THEN 0 WHEN 'next' THEN 1 WHEN 'later' THEN 2 WHEN 'maybe' THEN 3 ELSE 4 END",
+        "phase": "CASE pi.phase WHEN 'urgent' THEN 0 WHEN 'now' THEN 1 WHEN 'next' THEN 2 WHEN 'later' THEN 3 WHEN 'maybe' THEN 4 ELSE 5 END",
         "tier": "CASE WHEN pi.tier IS NULL THEN 99 ELSE pi.tier END",
         "created": "pi.created_at",
         "title": "pi.title",
@@ -1145,8 +1150,8 @@ def next_tasks(
         f"{where} "
         f"ORDER BY "
         f"  CASE t.phase "
-        f"    WHEN 'now' THEN 0 WHEN 'next' THEN 1 "
-        f"    WHEN 'later' THEN 2 WHEN 'maybe' THEN 3 ELSE 4 END, "
+        f"    WHEN 'urgent' THEN 0 WHEN 'now' THEN 1 WHEN 'next' THEN 2 "
+        f"    WHEN 'later' THEN 3 WHEN 'maybe' THEN 4 ELSE 5 END, "
         f"  CASE t.status "
         f"    WHEN 'ready' THEN 0 WHEN 'needs_plan' THEN 1 "
         f"    WHEN 'revisit' THEN 2 ELSE 3 END, "

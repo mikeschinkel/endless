@@ -54,12 +54,13 @@ Use `assumed` (not `verify`) when the only way to test the work is by using it i
 
 ## Task phases
 
-| Phase   | Meaning                                                                                                                              |
-|---------|--------------------------------------------------------------------------------------------------------------------------------------|
-| `now`   | Current priority.                                                                                                                    |
-| `next`  | Up next.                                                                                                                             |
-| `later` | Future work, not urgent — **committed to do eventually**.                                                                            |
-| `maybe` | Considered but not committed — **may or may not be done**. Distinct from `later`. Promote to `now` or `next` when decided.           |
+| Phase    | Meaning                                                                                                                              |
+|----------|--------------------------------------------------------------------------------------------------------------------------------------|
+| `urgent` | Time-critical priority; takes precedence over `now`. Use sparingly.                                                                  |
+| `now`    | Current priority.                                                                                                                    |
+| `next`   | Up next.                                                                                                                             |
+| `later`  | Future work, not urgent — **committed to do eventually**.                                                                            |
+| `maybe`  | Considered but not committed — **may or may not be done**. Distinct from `later`. Promote to `now` or `next` when decided.           |
 
 Don't conflate `blocked` ("will do when X resolves") with `maybe` ("might do at all").
 

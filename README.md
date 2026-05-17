@@ -122,7 +122,7 @@ endless task detail 445
 endless task add <title> \
   [--description <text>] \
   [--parent <task_id>] \
-  [--phase now|next|later] \
+  [--phase urgent|now|next|later|maybe] \
   [--type task|plan|bug|research|spike|chore] \
   [--project <name>]
 ```

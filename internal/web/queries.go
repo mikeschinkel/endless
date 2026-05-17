@@ -178,11 +178,12 @@ func GetProjectTasks(projectID int64, excludeStatuses ...string) []data.TaskView
 		 WHERE pi.project_id = ? AND pi.type != 'decision'
 		 ORDER BY pi.parent_id,
 		 CASE pi.phase
-		   WHEN 'now' THEN 0
-		   WHEN 'next' THEN 1
-		   WHEN 'later' THEN 2
-		   WHEN 'maybe' THEN 3
-		   ELSE 4
+		   WHEN 'urgent' THEN 0
+		   WHEN 'now' THEN 1
+		   WHEN 'next' THEN 2
+		   WHEN 'later' THEN 3
+		   WHEN 'maybe' THEN 4
+		   ELSE 5
 		 END,
 		 CASE pi.status
 		   WHEN 'in_progress' THEN 0
