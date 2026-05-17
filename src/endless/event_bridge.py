@@ -85,6 +85,9 @@ def emit_event(
             "  - Run this command from a Claude session pane.\n"
             "  - Export ENDLESS_SESSION_ID=<id> in this shell; "
             "see `endless session show` for live session ids.\n"
+            "  - Run `endless task bind <task-id>` from this pane to "
+            "connect it to a sibling Claude session in the same tmux "
+            "window.\n"
         )
 
     if project_root is None:
