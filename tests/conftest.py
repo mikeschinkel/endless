@@ -99,6 +99,29 @@ def disable_haiku_verb_check(monkeypatch, request):
     monkeypatch.setattr(task_cmd, "_check_verb_via_haiku", lambda _word: (False, None))
 
 
+@pytest.fixture(autouse=True)
+def stub_current_session_id(monkeypatch, request):
+    """E-1401: provide a deterministic session id so emit_event's attribution
+    gate doesn't fire in tests.
+
+    The test environment has no TMUX_PANE / sibling Claude pane / env
+    binding, so the real resolver returns None — which after E-1401 makes
+    every cli/hook event emission refuse. Returning a stable fake id keeps
+    the test suite running as if each test were inside a real bound
+    session.
+
+    Tests that specifically exercise the gate (or the resolver) opt out
+    with the `@pytest.mark.no_session_stub` marker and stub the resolver
+    themselves.
+    """
+    if request.node.get_closest_marker("no_session_stub"):
+        return
+    from endless import task_cmd
+    monkeypatch.setattr(
+        task_cmd, "_current_endless_session_id", lambda: 1
+    )
+
+
 @pytest.fixture
 def seeded_project_at_cwd(isolated_env, monkeypatch):
     """Chdir into a clean tmp project dir and register a project there.

@@ -2114,6 +2114,12 @@ def _perform_claim_work(
     from endless.event_bridge import emit_event
     from endless.worktree_cmd import create_task_worktree, _project_root
 
+    # E-1401: pass the resolved session explicitly so emit_event doesn't
+    # re-resolve via _current_endless_session_id (which would race the
+    # binding we just established, or fail outright when called from a
+    # plain shell during spawn pre-claim).
+    session_id_arg = str(target_session) if target_session is not None else None
+
     if current_status != "in_progress":
         emit_event(
             kind="task.status_changed",
@@ -2124,6 +2130,7 @@ def _perform_claim_work(
                 "old_status": current_status,
                 "new_status": "in_progress",
             },
+            session_id=session_id_arg,
         )
         _emit_field_changes(
             item_id, title,
@@ -2137,6 +2144,7 @@ def _perform_claim_work(
             entity_type="task",
             entity_id=str(item_id),
             payload={"session_id": target_session},
+            session_id=str(target_session),
         )
         click.echo(
             click.style("•", fg="cyan")
@@ -2326,6 +2334,9 @@ def bind_item(item_id: int) -> None:
         entity_type="task",
         entity_id=str(item_id),
         payload={"session_id": target_session},
+        # E-1401: bind_item just resolved target_session above; pass it
+        # explicitly so emit_event doesn't re-resolve.
+        session_id=str(target_session),
     )
     click.echo(
         click.style("•", fg="cyan")
@@ -2423,6 +2434,11 @@ def release_item(item_id: int | None, ignore_missing: bool = False) -> None:
         entity_type="task",
         entity_id=str(target_id),
         payload={"session_id": target_session},
+        # E-1401: release_item resolved target_session above (either
+        # current session releasing its own claim, or owner of E-NNN
+        # when a specific id was passed); pass it explicitly so
+        # emit_event doesn't re-resolve via the live resolver.
+        session_id=str(target_session),
     )
     click.echo(
         click.style("•", fg="cyan")

@@ -13,6 +13,17 @@ import click
 from endless import config
 
 
+# Actor kinds for which session attribution is mandatory. If the resolver
+# cannot produce a session_id for these kinds, emit_event refuses to fire
+# rather than silently losing attribution downstream (E-1401).
+#   - "cli":    interactive commands from a Claude pane; the resolver MUST
+#               find a binding or the event is unattributable.
+#   - "hook":   Claude hook callbacks; same as cli — bound to a session.
+#   - "system": cron / migrations / one-shot tools; no session expected.
+#   - "web":    web UI; attribution is via user_id, not session.
+_ATTRIBUTION_REQUIRED: frozenset[str] = frozenset({"cli", "hook"})
+
+
 def emit_event(
     kind: str,
     project: str,
@@ -35,6 +46,12 @@ def emit_event(
     the resolver `_current_endless_session_id()` (from task_cmd) is called
     automatically — so most callers don't need to pass it.
 
+    For actor_kind in {"cli", "hook"}, an unresolvable session_id is a hard
+    error: emit_event raises click.ClickException with an actionable message
+    rather than firing an event whose attribution will be silently dropped
+    (E-1401). For actor_kind in {"system", "web"}, an empty session_id is
+    fine — system has no session, web attributes via user_id.
+
     Raises click.ClickException on failure.
     """
     node_id = _get_or_create_node_id()
@@ -42,6 +59,9 @@ def emit_event(
     if actor_id is None:
         actor_id = f"{os.getenv('USER', 'unknown')}@{socket.gethostname()}"
 
+    # Track whether session_id was provided by the caller. An explicit None
+    # is still "resolver-derived" — the gate only fires when both the caller
+    # AND the resolver couldn't produce one.
     if session_id is None:
         # Defer to the unified resolver. As of E-1294 it does the full
         # 3-layer lookup (env / pane-direct / single-sibling), so no
@@ -53,8 +73,19 @@ def emit_event(
                 session_id = str(eid)
         except Exception:
             # task_cmd not importable here yet (during early bootstrap),
-            # or resolver errored — neither should block event emission.
+            # or resolver errored — neither should block event emission
+            # here; the gate below handles refusal for kinds that require
+            # attribution.
             session_id = None
+
+    if actor_kind in _ATTRIBUTION_REQUIRED and not session_id:
+        raise click.ClickException(
+            "Cannot determine the Endless session for this pane. "
+            "Run `endless task bind <task-id>` to bind this pane to a task, "
+            "or pass session_id explicitly. "
+            "Silent attribution loss is not acceptable; refusing to emit "
+            f"this event (actor_kind={actor_kind!r}). (E-1401)"
+        )
 
     if project_root is None:
         # Look up the project's registered path so events always land in the
