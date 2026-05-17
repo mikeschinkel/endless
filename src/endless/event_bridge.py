@@ -84,7 +84,7 @@ def emit_event(
             "To fix, do one of:\n"
             "  - Run this command from a Claude session pane.\n"
             "  - Export ENDLESS_SESSION_ID=<id> in this shell; "
-            "see `endless session show` for live session ids."
+            "see `endless session show` for live session ids.\n"
         )
 
     if project_root is None:
