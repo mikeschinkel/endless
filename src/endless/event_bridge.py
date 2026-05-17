@@ -35,6 +35,7 @@ def emit_event(
     session_id: str | None = None,
     project_root: str | None = None,
     correlation_id: str | None = None,
+    prompt_verb: str | None = None,
 ) -> dict | None:
     """Shell out to endless-event to write an event and execute the DB mutation.
 
@@ -43,8 +44,15 @@ def emit_event(
 
     `session_id` populates `actor.session_id` on the emitted event so per-
     session activity queries can later filter events by session. When None,
-    the resolver `_current_endless_session_id()` (from task_cmd) is called
-    automatically — so most callers don't need to pass it.
+    the resolver `_resolve_session_id_with_prompt()` (from task_cmd) is
+    called automatically — so most callers don't need to pass it. That
+    resolver prompts on a tty when n>1 sibling Claude panes are alive
+    and refuses loudly off-tty.
+
+    `prompt_verb` is forwarded to the resolver so the prompt question
+    can describe the action concretely, e.g. "claimed for" yields
+    "Which session should this be claimed for? [ID]:". When None, the
+    resolver falls back to "associated with".
 
     For actor_kind in {"cli", "hook"}, an unresolvable session_id is a hard
     error: emit_event raises click.ClickException with an actionable message
@@ -63,20 +71,21 @@ def emit_event(
     # is still "resolver-derived" — the gate only fires when both the caller
     # AND the resolver couldn't produce one.
     if session_id is None:
-        # Defer to the unified resolver. As of E-1294 it does the full
-        # 3-layer lookup (env / pane-direct / single-sibling), so no
-        # inline fallback is needed here.
         try:
-            from endless.task_cmd import _current_endless_session_id
-            eid = _current_endless_session_id()
+            from endless.task_cmd import _resolve_session_id_with_prompt
+        except ImportError:
+            # Early bootstrap: task_cmd not yet importable. Emit without
+            # a session_id; the event lands attribution-less rather than
+            # blocking the call. ClickException from the resolver (off-
+            # tty ambiguity) deliberately propagates.
+            pass
+        else:
+            eid = _resolve_session_id_with_prompt(
+                project_name=project,
+                prompt_verb=prompt_verb,
+            )
             if eid is not None:
                 session_id = str(eid)
-        except Exception:
-            # task_cmd not importable here yet (during early bootstrap),
-            # or resolver errored — neither should block event emission
-            # here; the gate below handles refusal for kinds that require
-            # attribution.
-            session_id = None
 
     if actor_kind in _ATTRIBUTION_REQUIRED and not session_id:
         raise click.ClickException(

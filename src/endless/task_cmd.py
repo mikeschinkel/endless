@@ -1983,13 +1983,16 @@ def _current_endless_session_id() -> int | None:
          EXACTLY ONE such sibling. Lets a shell pane in a Claude-using
          window transparently attribute commands to its sibling Claude
          session (E-1294, follow-up to E-1287). On 0 or 2+ sibling
-         matches, returns None — callers needing policy refusals
-         (claim_item / bind_item) call `_find_sibling_claude_session`
-         directly to enforce them.
+         matches, returns None.
+
+    For the n>1 case, callers that emit events should use
+    `_resolve_session_id_with_prompt()` instead — it surfaces a list of
+    candidate sessions and asks the user to pick. This entry point
+    stays heuristic-free so background / non-interactive code paths
+    can ask "is there an obvious session?" without ever prompting.
 
     Returns None when none of the layers resolve. Callers must treat
-    None as "no current session"; for event-emission contexts that
-    means actor.session_id stays empty.
+    None as "no current session".
     """
     env_id = os.environ.get("ENDLESS_SESSION_ID")
     if env_id and env_id.isdigit():
@@ -2014,13 +2017,14 @@ def _current_endless_session_id() -> int | None:
     return None
 
 
-def _find_sibling_claude_session() -> tuple[int | None, int]:
-    """Find a live Claude session in a sibling tmux pane (same window).
+def _list_sibling_claude_session_eids() -> list[int]:
+    """Return the live Endless session ids in sibling tmux panes
+    (same window as TMUX_PANE).
 
-    Returns (session_eid, num_matches):
-      - (None, 0) — no sibling Claude session (or not in tmux)
-      - (eid, 1)  — exactly one match; bind to that session
-      - (None, n) — n>1 matches; ambiguous (caller refuses with E-1244 pointer)
+    Returns [] when not in tmux, when there are no sibling panes, or
+    when no sibling pane has a live companion file. This is the
+    candidate set that `_resolve_session_id_with_prompt` validates the
+    user's prompt input against.
     """
     from endless.session_cmd import (
         _read_live_companions,
@@ -2029,23 +2033,122 @@ def _find_sibling_claude_session() -> tuple[int | None, int]:
     )
     pane_ids = _tmux_window_pane_ids()
     if not pane_ids:
-        return None, 0
+        return []
     my_pane = os.environ.get("TMUX_PANE")
     sibling_panes = {p for p in pane_ids if p != my_pane}
     if not sibling_panes:
-        return None, 0
+        return []
     project_root = _project_root_for_cwd()
     live = _read_live_companions(project_root / ".endless" / "sessions")
-    matches = [
-        c for c in live
+    return [
+        c["endless_session_id"] for c in live
         if c.get("pane_id") in sibling_panes
         and isinstance(c.get("endless_session_id"), int)
     ]
-    if not matches:
+
+
+def _find_sibling_claude_session() -> tuple[int | None, int]:
+    """Find a live Claude session in a sibling tmux pane (same window).
+
+    Returns (session_eid, num_matches):
+      - (None, 0) — no sibling Claude session (or not in tmux)
+      - (eid, 1)  — exactly one match; bind to that session
+      - (None, n) — n>1 matches; ambiguous (heuristic resolution refused)
+    """
+    eids = _list_sibling_claude_session_eids()
+    if not eids:
         return None, 0
-    if len(matches) > 1:
-        return None, len(matches)
-    return matches[0]["endless_session_id"], 1
+    if len(eids) > 1:
+        return None, len(eids)
+    return eids[0], 1
+
+
+# Per-process cache so a single command that emits multiple events only
+# prompts the user once. Reset between tests via the
+# `_reset_session_choice_cache` helper at the bottom of this module.
+_session_choice_cache: int | None = None
+
+
+def _resolve_session_id_with_prompt(
+    *,
+    project_name: str | None = None,
+    prompt_verb: str | None = None,
+) -> int | None:
+    """Resolve the current Endless session id, prompting on ambiguity.
+
+    Layered like `_current_endless_session_id`:
+      1. ENDLESS_SESSION_ID env var.
+      2. TMUX_PANE-direct companion match.
+      3. Single sibling Claude pane → auto-pick.
+
+    If those fail AND there are n>1 sibling Claude panes alive in the
+    current tmux window:
+      - On a tty: display `endless session list --project <project>`
+        and prompt for a session ID. The input is validated against
+        the live sibling-pane candidate set.
+      - On non-tty: raise `click.ClickException`. Claude-spawned
+        commands inherit `ENDLESS_SESSION_ID` and never reach this
+        branch; only humans running interactive commands from a shell
+        pane do. Errors loudly so a misfire is recognizable.
+
+    The chosen id is cached at module scope for the lifetime of the
+    process; subsequent calls return it without re-prompting. Tests
+    reset the cache via `_reset_session_choice_cache()`.
+
+    `prompt_verb` shapes the question — e.g. "claimed for" yields
+    "Which session should this be claimed for? [ID]:". When None,
+    falls back to "associated with".
+    """
+    global _session_choice_cache
+    if _session_choice_cache is not None:
+        return _session_choice_cache
+
+    eid = _current_endless_session_id()
+    if eid is not None:
+        _session_choice_cache = eid
+        return eid
+
+    candidate_eids = _list_sibling_claude_session_eids()
+    if len(candidate_eids) <= 1:
+        # 0 candidates: no fallback possible. 1 candidate: already auto-
+        # picked above (layer 3) — only reachable if that path returned
+        # None for some other reason (defensive).
+        return None
+
+    import sys
+    n = len(candidate_eids)
+    if not sys.stdin.isatty():
+        raise click.ClickException(
+            f"There are {n} live Claude sessions in this tmux window "
+            f"and stdin is not a tty, so the session id cannot be "
+            f"resolved interactively.\n"
+            f"Set ENDLESS_SESSION_ID=<id> for this command, or run it "
+            f"interactively to choose."
+        )
+
+    from endless.session_cmd import list_sessions
+    click.echo("There are multiple Claude sessions in this tmux window:")
+    click.echo("")
+    list_sessions(project_name=project_name)
+    click.echo("")
+    verb = prompt_verb or "associated with"
+    question = f"Which session should this be {verb}? [ID]"
+    candidate_set = set(candidate_eids)
+    while True:
+        choice = click.prompt(question, type=int)
+        if choice in candidate_set:
+            _session_choice_cache = choice
+            return choice
+        click.echo(
+            f"Session {choice} is not in this window's candidate set "
+            f"({sorted(candidate_set)}). Try again."
+        )
+
+
+def _reset_session_choice_cache() -> None:
+    """Test helper: clear the per-process session-choice cache."""
+    global _session_choice_cache
+    _session_choice_cache = None
 
 
 def _check_task_ownership(item_id: int, current_eid: int | None) -> bool:
@@ -2188,9 +2291,11 @@ def claim_item(item_id: int, force: bool = False):
         can be resolved (manual-work-without-Claude case, E-1242)
 
     Resolves the binding target as: (1) current Endless session via
-    ENDLESS_SESSION_ID / TMUX_PANE; (2) sibling Claude session in the
-    same tmux window. If neither resolves and not force: refuse. If 2+
-    sibling Claude sessions: refuse with pointer to E-1244.
+    ENDLESS_SESSION_ID / TMUX_PANE; (2) single sibling Claude session in
+    the same tmux window (auto-pick); (3) on a tty, multi-sibling case
+    displays `endless session list --project <project>` and prompts for
+    a session ID. Off-tty multi-sibling refuses loudly. If no session
+    resolves and not force: refuse.
     """
     row = db.query(
         "SELECT id, COALESCE(title, description) as title, status FROM tasks "
@@ -2214,15 +2319,13 @@ def claim_item(item_id: int, force: bool = False):
             "you intended."
         )
 
-    target_session = _current_endless_session_id()
+    _, proj_name = _resolve_project(None)
+    target_session = _resolve_session_id_with_prompt(
+        project_name=proj_name,
+        prompt_verb="claimed for",
+    )
     if target_session is None:
-        sibling_eid, n_matches = _find_sibling_claude_session()
-        if n_matches > 1:
-            raise click.ClickException(
-                f"Found {n_matches} Claude sessions in this tmux window. "
-                f"Ambiguous — claim from one of those panes directly."
-            )
-        if n_matches == 0 and not force:
+        if not force:
             raise click.ClickException(
                 "No Claude session available to bind this task to "
                 "(not running inside a Claude session, and no sibling "
@@ -2230,7 +2333,7 @@ def claim_item(item_id: int, force: bool = False):
                 "Pass --force to claim without a session binding "
                 "(manual work, no Claude assistance)."
             )
-        target_session = sibling_eid  # may be None when --force used with 0 matches
+        # --force with no resolvable session: claim without a binding.
 
     if _check_task_ownership(item_id, target_session):
         from endless.worktree_cmd import create_task_worktree, _project_root
@@ -2256,7 +2359,6 @@ def claim_item(item_id: int, force: bool = False):
         )
         return
 
-    _, proj_name = _resolve_project(None)
     _perform_claim_work(
         item_id=item_id,
         title=row[0]["title"],
@@ -2292,11 +2394,10 @@ def bind_item(item_id: int) -> None:
     `claim --force` is the wrong tool there because it demotes status
     back to `in_progress`.
 
-    Target session resolution mirrors `claim_item` (current Endless
-    session, else sibling Claude pane in the same tmux window). Refuses
-    when no session resolves or when multiple sibling Claude panes
-    exist — bind without a session is meaningless (nothing to display
-    for) and an ambiguous choice should not be silently picked.
+    Target session resolution mirrors `claim_item`: env var / pane-
+    direct / single-sibling auto-pick / on-a-tty multi-sibling prompt.
+    Refuses when no session resolves — bind without a session is
+    meaningless (nothing for the status bar to display).
 
     Emits a `task.claimed` event (the existing event added in E-1242);
     the Go executor performs the sessions DB write.
@@ -2314,25 +2415,20 @@ def bind_item(item_id: int) -> None:
         )
     current_status = row[0]["status"]
 
-    target_session = _current_endless_session_id()
-    if target_session is None:
-        sibling_eid, n_matches = _find_sibling_claude_session()
-        if n_matches > 1:
-            raise click.ClickException(
-                f"Found {n_matches} Claude sessions in this tmux window. "
-                f"Ambiguous — bind from one of those panes directly."
-            )
-        if n_matches == 0:
-            raise click.ClickException(
-                "No Claude session available to bind this task to "
-                "(not running inside a Claude session, and no sibling "
-                "Claude pane in this tmux window).\n"
-                "Bind only makes sense when a session exists for the "
-                "status bar to read from."
-            )
-        target_session = sibling_eid
-
     _, proj_name = _resolve_project(None)
+    target_session = _resolve_session_id_with_prompt(
+        project_name=proj_name,
+        prompt_verb="bound to",
+    )
+    if target_session is None:
+        raise click.ClickException(
+            "No Claude session available to bind this task to "
+            "(not running inside a Claude session, and no sibling "
+            "Claude pane in this tmux window).\n"
+            "Bind only makes sense when a session exists for the "
+            "status bar to read from."
+        )
+
     emit_event(
         kind="task.claimed",
         project=proj_name,

@@ -76,11 +76,14 @@ def test_claim_with_force_demotes_done_status(project_with_task, capsys):
 def test_claim_refuses_when_no_session_and_no_force(project_with_task):
     """E-1242: claim with no resolvable session refuses without --force."""
     from unittest.mock import patch
-    from endless.task_cmd import claim_item
+    from endless.task_cmd import claim_item, _reset_session_choice_cache
 
+    _reset_session_choice_cache()
     tid = project_with_task["task_id"]
-    with patch("endless.task_cmd._current_endless_session_id", return_value=None), \
-         patch("endless.task_cmd._find_sibling_claude_session", return_value=(None, 0)):
+    with patch(
+        "endless.task_cmd._resolve_session_id_with_prompt",
+        return_value=None,
+    ):
         with pytest.raises(click.ClickException) as exc:
             claim_item(tid)
     msg = str(exc.value)
@@ -88,31 +91,19 @@ def test_claim_refuses_when_no_session_and_no_force(project_with_task):
     assert "--force" in msg
 
 
-def test_claim_refuses_when_two_sibling_claude_sessions(project_with_task):
-    """E-1242: 2+ sibling Claude sessions = ambiguous, refuse with E-1244 pointer."""
-    from unittest.mock import patch
-    from endless.task_cmd import claim_item
-
-    tid = project_with_task["task_id"]
-    with patch("endless.task_cmd._current_endless_session_id", return_value=None), \
-         patch("endless.task_cmd._find_sibling_claude_session", return_value=(None, 3)):
-        with pytest.raises(click.ClickException) as exc:
-            claim_item(tid)
-    msg = str(exc.value)
-    assert "Found 3 Claude sessions" in msg
-    assert "claim from one of those panes directly" in msg
-
-
 def test_claim_binds_sibling_claude_session(project_with_task):
-    """E-1242: 1 sibling Claude session resolves; binding event emitted."""
+    """E-1242: a resolved (or user-picked) sibling Claude session is used."""
     from unittest.mock import patch
-    from endless.task_cmd import claim_item
+    from endless.task_cmd import claim_item, _reset_session_choice_cache
 
+    _reset_session_choice_cache()
     tid = project_with_task["task_id"]
     SIBLING_EID = 4242
 
-    with patch("endless.task_cmd._current_endless_session_id", return_value=None), \
-         patch("endless.task_cmd._find_sibling_claude_session", return_value=(SIBLING_EID, 1)):
+    with patch(
+        "endless.task_cmd._resolve_session_id_with_prompt",
+        return_value=SIBLING_EID,
+    ):
         claim_item(tid)
 
     # task status flipped (event-sourced through Go executor)
