@@ -111,8 +111,11 @@ def test_cli_actor_unresolvable_session_raises(captured_emit, monkeypatch):
     with pytest.raises(click.ClickException) as exc:
         _emit(actor_kind="cli")
     msg = exc.value.message
-    assert "endless task bind" in msg
-    assert "E-1401" in msg
+    # Headline names the actual problem.
+    assert "Cannot determine the Endless session" in msg
+    # Both actionable fixes are present.
+    assert "Claude session pane" in msg
+    assert "ENDLESS_SESSION_ID" in msg
     # And the subprocess was never spawned.
     assert captured_emit["calls"] == []
 
@@ -122,7 +125,7 @@ def test_hook_actor_unresolvable_session_raises(captured_emit, monkeypatch):
     _force_resolver(monkeypatch, None)
     with pytest.raises(click.ClickException) as exc:
         _emit(actor_kind="hook")
-    assert "endless task bind" in exc.value.message
+    assert "Cannot determine the Endless session" in exc.value.message
     assert captured_emit["calls"] == []
 
 

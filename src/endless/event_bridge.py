@@ -80,11 +80,11 @@ def emit_event(
 
     if actor_kind in _ATTRIBUTION_REQUIRED and not session_id:
         raise click.ClickException(
-            "Cannot determine the Endless session for this pane. "
-            "Run `endless task bind <task-id>` to bind this pane to a task, "
-            "or pass session_id explicitly. "
-            "Silent attribution loss is not acceptable; refusing to emit "
-            f"this event (actor_kind={actor_kind!r}). (E-1401)"
+            "Cannot determine the Endless session for this pane.\n\n"
+            "To fix, do one of:\n"
+            "  - Run this command from a Claude session pane.\n"
+            "  - Export ENDLESS_SESSION_ID=<id> in this shell; "
+            "see `endless session show` for live session ids."
         )
 
     if project_root is None:
