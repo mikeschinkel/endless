@@ -46,6 +46,13 @@ def isolated_env(tmp_path, monkeypatch):
     # shell function table.
     monkeypatch.delenv("SHELL", raising=False)
 
+    # Strip TMUX env vars leaked from the runner's shell. Resolver helpers
+    # branch on these and will issue real `tmux list-panes` subprocess
+    # calls otherwise — which hits test fakes that don't expect them.
+    # Tests that exercise tmux paths set TMUX / TMUX_PANE explicitly.
+    monkeypatch.delenv("TMUX", raising=False)
+    monkeypatch.delenv("TMUX_PANE", raising=False)
+
     # Prepend this worktree's bin/ to PATH so subprocesses (e.g. endless-event
     # invoked by event_bridge.emit_event) find the locally-built binary, not
     # the globally-installed one symlinked from a sibling worktree.
@@ -83,6 +90,17 @@ def isolated_env(tmp_path, monkeypatch):
             db._conn.close()
         except sqlite3.Error:
             pass
+
+
+@pytest.fixture(autouse=True)
+def reset_session_choice_cache():
+    """E-1402: the resolver caches a single chosen session id at module
+    scope so a multi-event command only prompts once. Reset before AND
+    after every test so cache state can't leak across tests."""
+    from endless import task_cmd
+    task_cmd._session_choice_cache = None
+    yield
+    task_cmd._session_choice_cache = None
 
 
 @pytest.fixture(autouse=True)

@@ -75,17 +75,26 @@ def emit_event(
             from endless.task_cmd import _resolve_session_id_with_prompt
         except ImportError:
             # Early bootstrap: task_cmd not yet importable. Emit without
-            # a session_id; the event lands attribution-less rather than
-            # blocking the call. ClickException from the resolver (off-
-            # tty ambiguity) deliberately propagates.
+            # a session_id; the gate below handles refusal for cli/hook.
             pass
         else:
-            eid = _resolve_session_id_with_prompt(
-                project_name=project,
-                prompt_verb=prompt_verb,
-            )
-            if eid is not None:
-                session_id = str(eid)
+            try:
+                eid = _resolve_session_id_with_prompt(
+                    project_name=project,
+                    prompt_verb=prompt_verb,
+                )
+                if eid is not None:
+                    session_id = str(eid)
+            except click.ClickException:
+                # Loud refusal from the resolver (off-tty multi-sibling
+                # case). Propagate so the user sees the actionable
+                # message and the gate below stays silent.
+                raise
+            except Exception:
+                # Other resolver errors (defensive): swallow per E-1401's
+                # contract — the gate below handles cli/hook refusal via
+                # the missing-session-id path.
+                pass
 
     if actor_kind in _ATTRIBUTION_REQUIRED and not session_id:
         raise click.ClickException(

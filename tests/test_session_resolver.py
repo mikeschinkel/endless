@@ -22,6 +22,11 @@ import pytest
 from endless import db
 
 
+# E-1402: these tests exercise the resolver itself, so they own
+# `_current_endless_session_id` and opt out of E-1401's autouse stub.
+pytestmark = pytest.mark.no_session_stub
+
+
 def _insert_session(
     *,
     pk: int,
