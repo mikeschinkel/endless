@@ -569,6 +569,51 @@ def _git_run(args: list[str], cwd: Path, check: bool = True) -> subprocess.Compl
     )
 
 
+def _guard_dirty_worktree(worktree_path: Path, branch: str, canonical: str) -> None:
+    """Refuse land if the worktree's working tree has uncommitted files (E-1416).
+
+    Step 1's partition runs on main; Step 4's rebase runs in the worktree.
+    Without this guard, uncommitted files in the worktree make rebase abort
+    with git's generic "You have unstaged changes" error — no file list,
+    wrong recovery hint.
+
+    Refuses separately for auto-managed dirt (an upstream writer bug worth
+    surfacing rather than papering over) and unmanaged user dirt (offers
+    worktree-specific recovery options).
+    """
+    try:
+        wt_auto, wt_user = _git_status_partition(worktree_path)
+    except subprocess.CalledProcessError as e:
+        raise click.ClickException(
+            f"git status in worktree failed: {e.stderr or e}"
+        )
+    if wt_auto:
+        file_list = "\n  ".join(wt_auto[:20])
+        more = "" if len(wt_auto) <= 20 else f"\n  ... and {len(wt_auto) - 20} more"
+        raise click.ClickException(
+            f"worktree for {canonical} has uncommitted auto-managed files; "
+            f"cannot land.\n\n"
+            f"Files:\n  {file_list}{more}\n\n"
+            f"These paths are owned by endless writers that commit them at "
+            f"write time. Their presence here means a writer is broken or "
+            f"skipped its commit. Report the writer that produced these "
+            f"files; do not auto-commit them manually."
+        )
+    if wt_user:
+        file_list = "\n  ".join(wt_user[:20])
+        more = "" if len(wt_user) <= 20 else f"\n  ... and {len(wt_user) - 20} more"
+        raise click.ClickException(
+            f"worktree for {canonical} has uncommitted user changes; "
+            f"cannot land.\n\n"
+            f"Files:\n  {file_list}{more}\n\n"
+            f"Resolve from inside the worktree:\n"
+            f"  - commit on {branch} (most common)\n"
+            f"  - move the file aside (mv outside the worktree)\n"
+            f"  - revert if unwanted (git checkout -- <file>)\n"
+            f"then retry land."
+        )
+
+
 def _read_verbs_list(path: Path) -> list[dict]:
     """Read a verbs.jsonl file as a list of dicts (E-1268).
 
@@ -970,6 +1015,9 @@ def land_worktree(task_id: str, dry_run: bool) -> None:
                 click.style("•", fg="yellow")
                 + f" Dropped {n_orphans} orphan auto-amend {noun} ({first_subj})"
             )
+
+        # Step 3.8 (E-1416): guard against dirty worktree tree before rebase.
+        _guard_dirty_worktree(worktree_path, branch, canonical)
 
         # Step 4: rebase the worktree branch onto main.
         try:
