@@ -118,7 +118,7 @@ def show_history(
     """
     if session_value is None:
         project_root = _project_root_for_cwd()
-        live = _read_live_companions(project_root / ".endless" / "sessions")
+        live = _live_sessions(project_root)
         c = _resolve_companion(None, live, list_hint="endless session list")
         session_value = str(c.get("endless_session_id"))
     session = _resolve_session(session_value)
@@ -981,48 +981,119 @@ def _format_ts(ts: str) -> str:
 
 # --- session cd (E-990) -----------------------------------------------------
 
-def _pid_alive(pid: int) -> bool:
-    """Return True if a process with the given pid exists."""
-    if pid <= 0:
-        return False
-    try:
-        os.kill(pid, 0)
-    except ProcessLookupError:
-        return False
-    except PermissionError:
-        # Process exists but we can't signal it — counts as alive.
-        return True
-    except OSError:
-        return False
-    return True
+def _tmux_pane_cwd_map() -> dict[str, str]:
+    """Return {pane_id: pane_current_path} for every live tmux pane.
 
+    Used to enrich live-session records with `cwd` on demand (E-1426),
+    replacing the companion file's stored `cwd` field. One tmux call
+    serves N sessions. Returns an empty dict when tmux is unavailable;
+    callers fall back to "" for cwd on miss.
 
-def _read_live_companions(sessions_dir: Path, harness: str = "claude") -> list[dict]:
-    """Read companion files for the given harness, prune stale ones.
-
-    A companion is considered stale if its `pid` is not alive. Stale files
-    are unlinked as a side effect (the lazy cleanup E-989 promised).
+    Tmux-specific by design — non-tmux harnesses (e.g. a future Claude
+    started outside tmux with a `pid:N` process value) get no entry and
+    therefore an empty cwd. Their own platform helper adds the lookup
+    when the time comes.
     """
-    if not sessions_dir.is_dir():
+    import subprocess
+    try:
+        result = subprocess.run(
+            ["tmux", "list-panes", "-a", "-F", "#{pane_id} #{pane_current_path}"],
+            capture_output=True, text=True, timeout=2,
+        )
+    except (FileNotFoundError, subprocess.SubprocessError):
+        return {}
+    if result.returncode != 0:
+        return {}
+    out: dict[str, str] = {}
+    for line in result.stdout.splitlines():
+        parts = line.split(" ", 1)
+        if len(parts) == 2 and parts[0]:
+            out[parts[0]] = parts[1]
+    return out
+
+
+def _worktree_path_for_task(project_root: Path, task_id: int | None) -> str:
+    """Return the absolute worktree path for `task_id`, or "" if none.
+
+    Mirrors the Go helper monitor.WorktreePathForTask: looks for
+    <project_root>/.endless/worktrees/e-<task_id> or .../e-<task_id>-*.
+    Lexicographically-first match wins; result is "" when nothing exists.
+    """
+    if not task_id or task_id <= 0:
+        return ""
+    worktrees_dir = project_root / ".endless" / "worktrees"
+    if not worktrees_dir.is_dir():
+        return ""
+    prefix = f"e-{task_id}"
+    candidates: list[Path] = []
+    bare = worktrees_dir / prefix
+    if bare.is_dir():
+        candidates.append(bare)
+    for child in worktrees_dir.iterdir():
+        if child.name.startswith(prefix + "-") and child.is_dir():
+            candidates.append(child)
+    if not candidates:
+        return ""
+    candidates.sort(key=lambda p: p.name)
+    return str(candidates[0])
+
+
+def _live_sessions(project_root: Path, harness: str = "claude") -> list[dict]:
+    """Return live Claude sessions for the project, sourced from the DB.
+
+    Replaces `_read_live_companions` (E-1426). Shells out to the
+    `endless-session-query list-live` Go binary so this Python layer
+    doesn't extend the legacy `db.query` pattern (per E-894).
+
+    Each dict carries the fields the rest of this module expects from a
+    companion record — endless_session_id, harness_session_id, harness,
+    pane_id, cwd, worktree_path, started_at — plus richer DB fields
+    (state, active_task_id, last_activity, summary). The `pid` field of
+    the old companion record is intentionally absent: liveness is now
+    `state != 'ended'` (filtered by the Go side), and crashed-pane
+    detection is handled by `ReapDeadTmuxPanes` at SessionStart.
+
+    The `harness` filter currently only accepts "claude"; future
+    harnesses would each get their own per-platform list helper.
+    """
+    import subprocess
+    try:
+        result = subprocess.run(
+            ["endless-session-query", "list-live", "--project-root", str(project_root)],
+            capture_output=True, text=True, timeout=5,
+        )
+    except (FileNotFoundError, subprocess.SubprocessError):
         return []
+    if result.returncode != 0:
+        return []
+    try:
+        raw = json_mod.loads(result.stdout) or []
+    except ValueError:
+        return []
+    if not isinstance(raw, list):
+        return []
+
+    pane_cwds = _tmux_pane_cwd_map()
     live: list[dict] = []
-    prefix = f"{harness}-"
-    for entry in sorted(sessions_dir.iterdir()):
-        if not entry.is_file() or not entry.name.startswith(prefix) or not entry.name.endswith(".json"):
+    for r in raw:
+        if not isinstance(r, dict):
             continue
-        try:
-            data = json_mod.loads(entry.read_text())
-        except (OSError, ValueError):
+        if r.get("platform") != harness:
             continue
-        pid = int(data.get("pid") or 0)
-        if not _pid_alive(pid):
-            try:
-                entry.unlink()
-            except OSError:
-                pass
-            continue
-        data["_path"] = str(entry)
-        live.append(data)
+        pane_id = r.get("pane_id")
+        live.append({
+            "endless_session_id": r.get("endless_session_id"),
+            "harness_session_id": r.get("session_id"),
+            "harness": r.get("platform"),
+            "pane_id": pane_id or "",
+            "cwd": pane_cwds.get(pane_id or "", ""),
+            "worktree_path": _worktree_path_for_task(project_root, r.get("active_task_id")),
+            "started_at": r.get("started_at") or "",
+            "state": r.get("state"),
+            "active_task_id": r.get("active_task_id"),
+            "last_activity": r.get("last_activity") or "",
+            "summary": r.get("summary") or "",
+        })
     return live
 
 
@@ -1260,8 +1331,7 @@ def session_cd_resolve(
     non-zero exit.
     """
     project_root = _project_root_for_cwd()
-    sessions_dir = project_root / ".endless" / "sessions"
-    live = _read_live_companions(sessions_dir)
+    live = _live_sessions(project_root)
 
     if show_all:
         if not live:
@@ -1337,8 +1407,7 @@ def session_show_resolve(session_ref: str | None, as_json: bool = False) -> None
     a focused per-session view.
     """
     project_root = _project_root_for_cwd()
-    sessions_dir = project_root / ".endless" / "sessions"
-    live = _read_live_companions(sessions_dir)
+    live = _live_sessions(project_root)
     c = _resolve_companion(session_ref, live, list_hint="endless session list")
 
     eid = c.get("endless_session_id")
@@ -1380,7 +1449,6 @@ def session_show_resolve(session_ref: str | None, as_json: bool = False) -> None
             "pane_id": c.get("pane_id") or None,
             "cwd": c.get("cwd"),
             "worktree_path": c.get("worktree_path") or None,
-            "pid": c.get("pid"),
             "active_task": (
                 {"id": task_info["id"], "title": task_info["title"], "status": task_info["status"]}
                 if task_info else None
@@ -1403,7 +1471,6 @@ def session_show_resolve(session_ref: str | None, as_json: bool = False) -> None
     click.echo(f"  Cwd:           {c.get('cwd', '')}")
     if c.get("worktree_path"):
         click.echo(f"  Worktree:      {c.get('worktree_path')}")
-    click.echo(f"  PID:           {c.get('pid')}")
     if task_info:
         click.echo(
             f"  Active task:   E-{task_info['id']} [{task_info['status']}] {task_info['title']}"
@@ -1439,8 +1506,7 @@ def session_use_resolve(session_ref: str | None) -> None:
     import shlex
 
     project_root = _project_root_for_cwd()
-    sessions_dir = project_root / ".endless" / "sessions"
-    live = _read_live_companions(sessions_dir)
+    live = _live_sessions(project_root)
     c = _resolve_companion(session_ref, live, list_hint="endless session list")
 
     eid = c.get("endless_session_id", "")

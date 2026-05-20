@@ -21,6 +21,7 @@ var goBinaries = []string{
 	"endless-event",
 	"endless-sandbox",
 	"endless-tmux",
+	"endless-session-query",
 }
 
 // pythonBinary is the Python CLI. It's installed globally by 'uv tool install'

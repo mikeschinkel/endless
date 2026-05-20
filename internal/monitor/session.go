@@ -160,22 +160,6 @@ func GetPlanFilePath(sessionID string) string {
 	return *path
 }
 
-// SetProcess records which process identifier this session is running in.
-func SetProcess(sessionID, process string) error {
-	if process == "" {
-		return nil
-	}
-	db, err := DB()
-	if err != nil {
-		return err
-	}
-	_, err = db.Exec(
-		"UPDATE sessions SET process=? WHERE session_id=?",
-		process, sessionID,
-	)
-	return err
-}
-
 // RegisterChannelPort upserts the channel plugin's HTTP port in the channels table.
 // The process key is typically TMUX_PANE or another session-unique identifier.
 func RegisterChannelPort(process string, port, pid int) error {
@@ -222,35 +206,77 @@ func LookupChannelPort(process string) (int, int, error) {
 	return port, pid, nil
 }
 
-// BackfillProcess sets process only if it's currently NULL.
-func BackfillProcess(sessionID, process string) error {
-	if process == "" {
-		return nil
+// TouchSession is the per-event UPSERT helper. It records the session's
+// presence in the sessions table (creating the row if absent), refreshes
+// last_activity, and overwrites `process` when the new value is non-empty
+// (so a pane-reattach is tracked; an empty TMUX_PANE never stomps a
+// previously-known value). Lifecycle transitions (working/idle/ended) are
+// owned by the dedicated helpers (BindSessionToTask, IdleSession,
+// EndSession) — TouchSession deliberately does not change `state` on
+// UPDATE, so it can safely fire on every hook event.
+//
+// Collision invalidation: when `process` is non-empty and matches a row
+// other than this session, that other row is marked ended in the same
+// transaction. A pane can only host one harness at a time, so the prior
+// occupant must be dead.
+//
+// The platform parameter lets future non-Claude harnesses share this
+// helper; today the only caller passes "claude".
+func TouchSession(sessionID, platform, process string, projectID int64) error {
+	if sessionID == "" {
+		return fmt.Errorf("touch session: session_id required")
 	}
-	db, err := DB()
-	if err != nil {
-		return err
+	if platform == "" {
+		return fmt.Errorf("touch session: platform required")
 	}
-	_, err = db.Exec(
-		"UPDATE sessions SET process=? WHERE session_id=? AND process IS NULL",
-		process, sessionID,
-	)
-	return err
-}
 
-// TouchSession updates last_activity timestamp.
-func TouchSession(sessionID string) error {
 	db, err := DB()
 	if err != nil {
 		return err
 	}
 
 	now := time.Now().UTC().Format("2006-01-02T15:04:05")
-	_, err = db.Exec(
-		"UPDATE sessions SET last_activity=? WHERE session_id=?",
-		now, sessionID,
+
+	tx, err := db.Begin()
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback()
+
+	// UPSERT: process is NULL on INSERT when the new value is empty, and
+	// COALESCEd against the existing value on UPDATE so an empty input
+	// never overwrites a known-good process. state defaults to
+	// 'needs_input' only on INSERT (matches InitSession semantics); UPDATE
+	// never touches state.
+	_, err = tx.Exec(
+		`INSERT INTO sessions (session_id, project_id, platform, state, process, started_at, last_activity)
+		 VALUES (?, ?, ?, 'needs_input', NULLIF(?, ''), ?, ?)
+		 ON CONFLICT(session_id) DO UPDATE SET
+		   last_activity = excluded.last_activity,
+		   process       = COALESCE(NULLIF(excluded.process, ''), sessions.process)`,
+		sessionID, projectID, platform, process, now, now,
 	)
-	return err
+	if err != nil {
+		return fmt.Errorf("upsert session: %w", err)
+	}
+
+	// Collision invalidation: only meaningful when the incoming process
+	// is non-empty (otherwise we can't be claiming any pane).
+	if process != "" {
+		_, err = tx.Exec(
+			`UPDATE sessions
+			 SET state = 'ended', last_activity = ?
+			 WHERE process = ?
+			   AND session_id != ?
+			   AND state != 'ended'`,
+			now, process, sessionID,
+		)
+		if err != nil {
+			return fmt.Errorf("collision invalidation: %w", err)
+		}
+	}
+
+	return tx.Commit()
 }
 
 // CompleteTask marks a task as confirmed and clears the session's active task.

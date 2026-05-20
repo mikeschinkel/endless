@@ -2000,9 +2000,9 @@ def _current_endless_session_id() -> int | None:
     pane = os.environ.get("TMUX_PANE")
     if not pane:
         return None
-    from endless.session_cmd import _read_live_companions, _project_root_for_cwd
+    from endless.session_cmd import _live_sessions, _project_root_for_cwd
     project_root = _project_root_for_cwd()
-    live = _read_live_companions(project_root / ".endless" / "sessions")
+    live = _live_sessions(project_root)
     for c in live:
         if c.get("pane_id") == pane:
             eid = c.get("endless_session_id")
@@ -2027,7 +2027,7 @@ def _list_sibling_claude_session_eids() -> list[int]:
     user's prompt input against.
     """
     from endless.session_cmd import (
-        _read_live_companions,
+        _live_sessions,
         _project_root_for_cwd,
         _tmux_window_pane_ids,
     )
@@ -2039,7 +2039,7 @@ def _list_sibling_claude_session_eids() -> list[int]:
     if not sibling_panes:
         return []
     project_root = _project_root_for_cwd()
-    live = _read_live_companions(project_root / ".endless" / "sessions")
+    live = _live_sessions(project_root)
     return [
         c["endless_session_id"] for c in live
         if c.get("pane_id") in sibling_panes
@@ -2174,9 +2174,9 @@ def _check_task_ownership(item_id: int, current_eid: int | None) -> bool:
     if not candidate_eids:
         return owned_by_current
 
-    from endless.session_cmd import _read_live_companions, _project_root_for_cwd
+    from endless.session_cmd import _live_sessions, _project_root_for_cwd
     project_root = _project_root_for_cwd()
-    live = _read_live_companions(project_root / ".endless" / "sessions")
+    live = _live_sessions(project_root)
     live_by_eid = {
         c["endless_session_id"]: c
         for c in live
@@ -2187,10 +2187,10 @@ def _check_task_ownership(item_id: int, current_eid: int | None) -> bool:
         comp = live_by_eid.get(eid)
         if comp is None:
             continue
-        pane = comp.get("pane_id", "?")
+        pane = comp.get("pane_id") or "?"
         raise click.ClickException(
             f"E-{item_id} is already active in session {eid} "
-            f"(pid {comp['pid']}, tmux pane {pane}).\n"
+            f"(tmux pane {pane}).\n"
             "Switch to that session or have it release the task first."
         )
 
@@ -2464,7 +2464,7 @@ def release_item(item_id: int | None, ignore_missing: bool = False) -> None:
     a `task.released` event whose Go executor clears the binding.
     """
     from endless.event_bridge import emit_event
-    from endless.session_cmd import _read_live_companions, _project_root_for_cwd
+    from endless.session_cmd import _live_sessions, _project_root_for_cwd
 
     current_eid = _current_endless_session_id()
 
@@ -2502,9 +2502,7 @@ def release_item(item_id: int | None, ignore_missing: bool = False) -> None:
         owning_session = rows[0]["id"]
         if owning_session != current_eid:
             project_root = _project_root_for_cwd()
-            live = _read_live_companions(
-                project_root / ".endless" / "sessions",
-            )
+            live = _live_sessions(project_root)
             live_match = next(
                 (
                     c for c in live
@@ -2513,10 +2511,10 @@ def release_item(item_id: int | None, ignore_missing: bool = False) -> None:
                 None,
             )
             if live_match is not None:
-                pane = live_match.get("pane_id", "?")
+                pane = live_match.get("pane_id") or "?"
                 raise click.ClickException(
                     f"E-{item_id} is held by session {owning_session} "
-                    f"(live; pid {live_match['pid']}, tmux pane {pane}).\n"
+                    f"(live; tmux pane {pane}).\n"
                     "Refusing to release another live session's claim."
                 )
             click.echo(

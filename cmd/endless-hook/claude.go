@@ -128,15 +128,32 @@ func runClaude(args []string) error {
 		}
 	}
 
+	// Per-event session UPSERT (E-1426). Records process + last_activity
+	// and creates the row if absent. Runs on every event so a NULL/stale
+	// `process` self-heals within one tool call (E-1408 / E-1422), and a
+	// pane-reattach is picked up on the next event. Collision invalidation
+	// inside TouchSession marks any prior occupant of this pane `ended`.
+	if err := monitor.TouchSession(payload.SessionID, "claude", os.Getenv("TMUX_PANE"), projectID); err != nil {
+		return fmt.Errorf("touching session: %w", err)
+	}
+
 	// Event-specific handling
 	switch payload.EventName {
 	case "SessionStart":
-		// Track the session from the start — DB errors here are critical
+		// Track the session from the start — DB errors here are critical.
+		// TouchSession at the top of runClaude already recorded process +
+		// state='needs_input' on INSERT; InitSession is retained for the
+		// transcript-path side effect path below and a defensive no-op
+		// UPDATE if the row exists.
 		if err := monitor.InitSession(payload.SessionID, projectID); err != nil {
 			return fmt.Errorf("initializing session: %w", err)
 		}
-		if err := monitor.SetProcess(payload.SessionID, os.Getenv("TMUX_PANE")); err != nil {
-			return fmt.Errorf("setting process: %w", err)
+		// Opportunistic dead-pane reaper (E-1426). Marks rows whose tmux
+		// pane no longer exists as `ended`, so `session list` and pane
+		// resolution don't surface ghosts. Cleanly no-ops when tmux is
+		// unavailable.
+		if err := monitor.ReapDeadTmuxPanes(projectID); err != nil {
+			log.Printf("reaping dead tmux panes: %v", err)
 		}
 		// Store transcript path for reimport
 		if payload.TranscriptPath != "" {
@@ -145,11 +162,10 @@ func runClaude(args []string) error {
 		// Spawn-flow auto-bind: when `endless task spawn` launches a new
 		// Claude window, it sets `@endless_spawned_by` and pre-claims the
 		// task (status flip + worktree creation) before launching. This
-		// hook just records the session→task binding so the companion
-		// file's worktree_path reflects the bound task on first write
-		// (E-1027). Status is NOT flipped here (spawn already did it).
-		// Use case 2 (end-user starts Claude directly without spawn) has
-		// no spawn marker, so this path doesn't fire.
+		// hook just records the session→task binding (E-1027). Status is
+		// NOT flipped here (spawn already did it). Use case 2 (end-user
+		// starts Claude directly without spawn) has no spawn marker, so
+		// this path doesn't fire.
 		// Skipped for Agent-tool subagents — they share the parent's
 		// tmux window (and thus its @endless_spawned_by marker) but
 		// have their own session_id; binding them would create a
@@ -160,11 +176,6 @@ func runClaude(args []string) error {
 					monitor.BindSessionToTask(payload.SessionID, projectID, taskID)
 				}
 			}
-		}
-		// Companion file for sibling-pane discovery (E-989).
-		// Fatal on error: foundational primitive for E-990/991/992/1014.
-		if err := writeClaudeCompanion(projectID, payload); err != nil {
-			return fmt.Errorf("writing companion file: %w", err)
 		}
 		// Worktree adoption (E-971 Layer D). If cwd is inside an
 		// endless-managed worktree, claim the lock or refuse if
@@ -195,14 +206,6 @@ func runClaude(args []string) error {
 		if err := monitor.ScanRecentSuggestions(payload.SessionID, projectID); err != nil {
 			log.Printf("scanning suggestions: %v", err)
 		}
-		// Backfill process if not yet recorded
-		if err := monitor.BackfillProcess(payload.SessionID, os.Getenv("TMUX_PANE")); err != nil {
-			return fmt.Errorf("backfilling process: %w", err)
-		}
-		// Refresh companion file unconditionally (E-1033).
-		if err := writeClaudeCompanion(projectID, payload); err != nil {
-			return fmt.Errorf("refreshing companion file: %w", err)
-		}
 		return handleUserPromptSubmit(projectID, payload)
 
 	case "PreToolUse":
@@ -228,10 +231,6 @@ func runClaude(args []string) error {
 		// Final parse
 		monitor.ParseTranscript(payload.SessionID, payload.TranscriptPath)
 		monitor.FlagNeedsRecap(payload.SessionID)
-		// Remove companion file (E-989). Idempotent — missing file is fine.
-		if err := monitor.RemoveCompanion(projectID, "claude", payload.SessionID); err != nil {
-			return fmt.Errorf("removing companion file: %w", err)
-		}
 		// Release any worktree lock owned by this session (E-971 Layer D).
 		// Use session-id scan rather than walk-up: the user may have cd'd
 		// out before /quit, or the lock may live in a worktree the session
@@ -524,10 +523,8 @@ func handlePreToolUse(projectID int64, isRegistered bool, payload claudePayload)
 					"Run `endless task claim <id>` to resume working on a task.\n" +
 					"Run `endless task show` to see available tasks.")
 			}
-			// Active and valid — allow through, touch session
-			if err := monitor.TouchSession(payload.SessionID); err != nil {
-				log.Printf("touching session: %v", err)
-			}
+			// Active and valid — allow through (per-event TouchSession in
+			// runClaude already refreshed last_activity).
 			// Drift detection (E-917): if enabled, ensure target file is in scope.
 			if monitor.IsCheckEnabled(projectID, "drift_detection") && session.ActiveTaskID != nil {
 				path := extractFilePath(payload.ToolName, payload.ToolInput)
@@ -630,12 +627,6 @@ func handlePostToolUseSession(projectID int64, payload claudePayload) error {
 				if err := monitor.ClearGatePending(payload.SessionID, "task_claim"); err != nil {
 					log.Printf("clearing gate after task claim: %v", err)
 				}
-				// Refresh companion file: active_task_id changed, worktree_path
-				// must follow (E-1027). Non-fatal: stale worktree_path is a
-				// minor inconsistency, not a session-breaker.
-				if err := writeClaudeCompanion(projectID, payload); err != nil {
-					log.Printf("refreshing companion file: %v", err)
-				}
 			}
 			return nil
 		}
@@ -651,9 +642,6 @@ func handlePostToolUseSession(projectID int64, payload claudePayload) error {
 				}
 				if err := monitor.ClearGatePending(payload.SessionID, "task_confirm"); err != nil {
 					log.Printf("clearing gate after task confirm: %v", err)
-				}
-				if err := writeClaudeCompanion(projectID, payload); err != nil {
-					log.Printf("refreshing companion file: %v", err)
 				}
 			}
 			return nil
@@ -673,18 +661,15 @@ func handlePostToolUseSession(projectID int64, payload claudePayload) error {
 		if err := monitor.StartChatSession(payload.SessionID, projectID); err != nil {
 			return fmt.Errorf("starting chat session: %w", err)
 		}
-		if err := writeClaudeCompanion(projectID, payload); err != nil {
-			log.Printf("refreshing companion file: %v", err)
-		}
 		return nil
 	}
 
-	// Detect: endless channel beacon/connect/send (for activity tracking)
+	// Detect: endless channel beacon/connect/send. last_activity was
+	// already refreshed by the per-event TouchSession in runClaude; this
+	// block is kept only to short-circuit so unrelated post-tool logic
+	// doesn't fire on a channel action.
 	for _, action := range []string{actionBeacon, actionConnect, actionSend} {
 		if re := matchers.ActionRegex(all, action, scopeChannel); re != nil && re.MatchString(input.Command) {
-			if err := monitor.TouchSession(payload.SessionID); err != nil {
-				return fmt.Errorf("touching session: %w", err)
-			}
 			return nil
 		}
 	}
@@ -997,47 +982,6 @@ func existingSnapshot(snapsDir, sha8, sessionID string) bool {
 		}
 	}
 	return false
-}
-
-// writeClaudeCompanion builds and writes the per-session companion file
-// for a Claude session (E-989). Used by SessionStart, by the
-// UserPromptSubmit backfill (E-1011), and by post-task-mutation refresh
-// (E-1027). Sourcing StartedAt from the DB ensures backfilled and
-// freshly-written files are identical for the same session. WorktreePath
-// reflects the session's active task's worktree, if any.
-func writeClaudeCompanion(projectID int64, payload claudePayload) error {
-	session, err := monitor.GetActiveSession(payload.SessionID)
-	if err != nil {
-		return fmt.Errorf("looking up session: %w", err)
-	}
-	startedAt := time.Now().UTC().Format(time.RFC3339)
-	if session.StartedAt != "" {
-		// DB stores naive UTC ("2006-01-02T15:04:05"); reformat to RFC3339 with Z.
-		if t, err := time.Parse("2006-01-02T15:04:05", session.StartedAt); err == nil {
-			startedAt = t.UTC().Format(time.RFC3339)
-		}
-	}
-	worktreePath := ""
-	if session.ActiveTaskID != nil {
-		// Failure here is non-fatal: empty worktree_path is a defensible
-		// fallback. The companion still serves sibling-pane discovery.
-		if wp, err := monitor.WorktreePathForTask(projectID, *session.ActiveTaskID); err == nil {
-			worktreePath = wp
-		} else {
-			log.Printf("worktree path lookup: %v", err)
-		}
-	}
-	c := monitor.CompanionFile{
-		Harness:          "claude",
-		HarnessSessionID: payload.SessionID,
-		EndlessSessionID: session.ID,
-		PaneID:           os.Getenv("TMUX_PANE"),
-		CWD:              payload.CWD,
-		PID:              os.Getppid(),
-		StartedAt:        startedAt,
-		WorktreePath:     worktreePath,
-	}
-	return monitor.WriteCompanion(projectID, c)
 }
 
 // tmuxTaskID reads @endless_task_id from the current tmux window.

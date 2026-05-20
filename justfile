@@ -58,6 +58,7 @@ build: _link-templui
     go build -o bin/endless-event ./cmd/endless-event
     go build -o bin/endless-sandbox ./cmd/endless-sandbox
     go build -o bin/endless-tmux ./cmd/endless-tmux
+    go build -o bin/endless-session-query ./cmd/endless-session-query
 
 # Build and install everything: Go binaries symlinked to /usr/local/bin,
 # Python CLI installed via uv tool in EDITABLE mode (-e). Editable means the
@@ -73,6 +74,7 @@ install:
     ln -sfn "$(pwd)/bin/endless-event" /usr/local/bin/endless-event
     ln -sfn "$(pwd)/bin/endless-sandbox" /usr/local/bin/endless-sandbox
     ln -sfn "$(pwd)/bin/endless-tmux" /usr/local/bin/endless-tmux
+    ln -sfn "$(pwd)/bin/endless-session-query" /usr/local/bin/endless-session-query
     uv tool install -e . --force
 
 # Land a task's worktree (calls `endless worktree land`), then rebuild
