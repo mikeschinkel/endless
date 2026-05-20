@@ -2,29 +2,10 @@
 default-to-current (E-992)."""
 
 import json
-import os
-from pathlib import Path
 
 import pytest
 
 from endless import db, session_cmd
-
-
-def _write_companion(sessions_dir: Path, **fields) -> Path:
-    sessions_dir.mkdir(parents=True, exist_ok=True)
-    data = {
-        "harness": "claude",
-        "harness_session_id": "f41f263e-c708-4c42-af7c-083b5be04943",
-        "endless_session_id": 247,
-        "pane_id": "%53",
-        "cwd": "/Users/mike/Projects/endless",
-        "pid": os.getpid(),
-        "started_at": "2026-04-29T03:51:23Z",
-    }
-    data.update(fields)
-    path = sessions_dir / f"{data['harness']}-{data['harness_session_id']}.json"
-    path.write_text(json.dumps(data))
-    return path
 
 
 def _insert_session(
@@ -59,20 +40,19 @@ def _project_id(name: str) -> int:
 
 
 @pytest.fixture
-def project_with_session(registered_project, monkeypatch):
-    sessions_dir = registered_project / ".endless" / "sessions"
-    sessions_dir.mkdir(parents=True, exist_ok=True)
+def project_with_session(registered_project, monkeypatch, stage_live_session):
+    sessions_dir = registered_project / ".endless" / "sessions"  # legacy; unused
     monkeypatch.chdir(registered_project)
     pid = _project_id("my-project")
     _insert_session(pk=247, session_id="f41f263e-c708-4c42-af7c-083b5be04943", project_id=pid)
-    return registered_project, sessions_dir, pid
+    return registered_project, sessions_dir, pid, stage_live_session
 
 
 # ---------- session show -----------------------------------------------------
 
 def test_show_explicit_id(project_with_session, capsys):
-    _, sessions_dir, _ = project_with_session
-    _write_companion(sessions_dir)
+    _, sessions_dir, _, stage = project_with_session
+    stage()
 
     session_cmd.session_show_resolve("247")
     out = capsys.readouterr().out
@@ -84,10 +64,10 @@ def test_show_explicit_id(project_with_session, capsys):
 
 
 def test_show_with_active_task(project_with_session, capsys):
-    _, sessions_dir, pid = project_with_session
+    _, sessions_dir, pid, stage = project_with_session
     _insert_task(pk=999, project_id=pid, title="Wire up backfill", status="in_progress")
     db.execute("UPDATE sessions SET active_task_id = 999 WHERE id = 247")
-    _write_companion(sessions_dir)
+    stage()
 
     session_cmd.session_show_resolve("247")
     out = capsys.readouterr().out
@@ -97,8 +77,8 @@ def test_show_with_active_task(project_with_session, capsys):
 
 
 def test_show_json_output(project_with_session, capsys):
-    _, sessions_dir, _ = project_with_session
-    _write_companion(sessions_dir, worktree_path="/some/worktree")
+    _, sessions_dir, _, stage = project_with_session
+    stage(worktree_path="/some/worktree")
 
     session_cmd.session_show_resolve("247", as_json=True)
     out = capsys.readouterr().out
@@ -112,12 +92,12 @@ def test_show_json_output(project_with_session, capsys):
 
 
 def test_show_summary_flattened(project_with_session, capsys):
-    _, sessions_dir, _ = project_with_session
+    _, sessions_dir, _, stage = project_with_session
     db.execute(
         "UPDATE sessions SET summary = ? WHERE id = 247",
         ("Line one.\n\nLine two with    multiple   spaces.\nLine three.",),
     )
-    _write_companion(sessions_dir)
+    stage()
 
     session_cmd.session_show_resolve("247")
     out = capsys.readouterr().out
@@ -125,8 +105,8 @@ def test_show_summary_flattened(project_with_session, capsys):
 
 
 def test_show_no_match(project_with_session, capsys):
-    _, sessions_dir, _ = project_with_session
-    _write_companion(sessions_dir)
+    _, sessions_dir, _, stage = project_with_session
+    stage()
 
     with pytest.raises(SystemExit) as exc:
         session_cmd.session_show_resolve("999")
@@ -136,8 +116,8 @@ def test_show_no_match(project_with_session, capsys):
 
 
 def test_show_uuid_prefix(project_with_session, capsys):
-    _, sessions_dir, _ = project_with_session
-    _write_companion(sessions_dir)
+    _, sessions_dir, _, stage = project_with_session
+    stage()
 
     session_cmd.session_show_resolve("f41f263e")
     out = capsys.readouterr().out
@@ -145,8 +125,8 @@ def test_show_uuid_prefix(project_with_session, capsys):
 
 
 def test_show_no_arg_in_tmux(project_with_session, monkeypatch, capsys):
-    _, sessions_dir, _ = project_with_session
-    _write_companion(sessions_dir, pane_id="%99")
+    _, sessions_dir, _, stage = project_with_session
+    stage(pane_id="%99")
     monkeypatch.setenv("TMUX", "/tmp/x")
     monkeypatch.setenv("TMUX_PANE", "%53")
     monkeypatch.setattr(session_cmd, "_tmux_window_pane_ids", lambda: ["%53", "%99"])
@@ -157,8 +137,8 @@ def test_show_no_arg_in_tmux(project_with_session, monkeypatch, capsys):
 
 
 def test_show_no_arg_outside_tmux(project_with_session, monkeypatch, capsys):
-    _, sessions_dir, _ = project_with_session
-    _write_companion(sessions_dir)
+    _, sessions_dir, _, stage = project_with_session
+    stage()
     monkeypatch.delenv("TMUX", raising=False)
     monkeypatch.delenv("TMUX_PANE", raising=False)
 
@@ -172,8 +152,8 @@ def test_show_no_arg_outside_tmux(project_with_session, monkeypatch, capsys):
 # ---------- session history default-to-current ------------------------------
 
 def test_history_no_arg_resolves_via_companion(project_with_session, monkeypatch, capsys):
-    _, sessions_dir, _ = project_with_session
-    _write_companion(sessions_dir, pane_id="%99")
+    _, sessions_dir, _, stage = project_with_session
+    stage(pane_id="%99")
     # Insert one message so history has something to render.
     db.execute(
         "INSERT INTO session_messages (session_id, role, content, created_at) "
@@ -190,8 +170,8 @@ def test_history_no_arg_resolves_via_companion(project_with_session, monkeypatch
 
 
 def test_history_no_arg_outside_tmux_errors(project_with_session, monkeypatch, capsys):
-    _, sessions_dir, _ = project_with_session
-    _write_companion(sessions_dir)
+    _, sessions_dir, _, stage = project_with_session
+    stage()
     monkeypatch.delenv("TMUX", raising=False)
 
     with pytest.raises(SystemExit) as exc:

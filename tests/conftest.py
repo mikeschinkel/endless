@@ -204,3 +204,51 @@ def registered_project(sample_project):
     from endless.register import register_project
     register_project(sample_project, infer=True)
     return sample_project
+
+
+@pytest.fixture
+def stage_live_session(monkeypatch):
+    """Stage live-session dicts and patch session_cmd._live_sessions to
+    return them.
+
+    E-1426 retired the per-session JSON companion files; readers now get
+    their dicts from session_cmd._live_sessions, which shells out to the
+    endless-session-query Go binary and reads the DB. Tests that used to
+    write JSON files into .endless/sessions/ stage their data through
+    this fixture instead, which patches _live_sessions to return a
+    test-controlled list without needing the binary or DB plumbing.
+
+    Usage:
+        def test_x(stage_live_session, ...):
+            stage_live_session(endless_session_id=247, pane_id="%5", ...)
+
+    Field defaults match the historical companion shape; tests override
+    only what they care about. Multiple stage_live_session(...) calls
+    accumulate.
+    """
+    staged: list[dict] = []
+
+    def _stage(**fields) -> dict:
+        data = {
+            "endless_session_id": 247,
+            "harness_session_id": "f41f263e-c708-4c42-af7c-083b5be04943",
+            "harness": "claude",
+            "pane_id": "%53",
+            "cwd": "/Users/mike/Projects/endless",
+            "worktree_path": "",
+            "started_at": "2026-04-29T03:51:23Z",
+            "state": "working",
+            "active_task_id": None,
+            "last_activity": "2026-04-29T05:00:00",
+            "summary": "",
+        }
+        data.update(fields)
+        staged.append(data)
+        return data
+
+    def _patched(project_root, harness: str = "claude") -> list[dict]:
+        return [d for d in staged if d.get("harness") == harness]
+
+    from endless import session_cmd
+    monkeypatch.setattr(session_cmd, "_live_sessions", _patched)
+    return _stage

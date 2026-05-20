@@ -8,9 +8,6 @@ Exercises release_item across the four scenarios from E-1243:
   - release E-NNN when a different LIVE session has it (refuse)
 """
 
-import json
-import os
-from pathlib import Path
 from unittest.mock import patch
 
 import click
@@ -41,20 +38,6 @@ def _insert_task(*, pk: int, project_id: int, status: str = "in_progress"):
         "VALUES (?, ?, 'test task', ?)",
         (pk, project_id, status),
     )
-
-
-def _write_companion(sessions_dir: Path, *, eid: int, pid: int, uuid: str):
-    sessions_dir.mkdir(parents=True, exist_ok=True)
-    data = {
-        "harness": "claude",
-        "harness_session_id": uuid,
-        "endless_session_id": eid,
-        "pane_id": f"%{eid}",
-        "cwd": str(sessions_dir.parent.parent),
-        "pid": pid,
-        "started_at": "2026-05-11T00:00:00Z",
-    }
-    (sessions_dir / f"claude-{uuid}.json").write_text(json.dumps(data))
 
 
 @pytest.fixture
@@ -108,17 +91,19 @@ def test_release_id_no_session_has_it_with_ignore_missing(project_at_cwd, capsys
     assert "E-501 is not currently claimed" in captured.out
 
 
-def test_release_id_held_by_live_other_session_refuses(project_at_cwd, tmp_path):
+def test_release_id_held_by_live_other_session_refuses(project_at_cwd, stage_live_session):
     """Refuse when a DIFFERENT live session has the task bound."""
     from endless.task_cmd import release_item
-    proj_root = project_at_cwd["project_root"]
     _insert_task(pk=600, project_id=project_at_cwd["project_id"])
     _insert_session(
         pk=200, session_id="s-200", project_id=project_at_cwd["project_id"],
         active_task_id=600,
     )
-    sessions_dir = proj_root / ".endless" / "sessions"
-    _write_companion(sessions_dir, eid=200, pid=os.getpid(), uuid="s-200-uuid")
+    stage_live_session(
+        endless_session_id=200,
+        harness_session_id="s-200-uuid",
+        pane_id="%200",
+    )
 
     with patch("endless.task_cmd._current_endless_session_id", return_value=None):
         with pytest.raises(click.ClickException) as exc:
@@ -131,7 +116,7 @@ def test_release_id_held_by_live_other_session_refuses(project_at_cwd, tmp_path)
     assert row["active_task_id"] == 600
 
 
-def test_release_id_stale_binding_auto_clears(project_at_cwd, capsys):
+def test_release_id_stale_binding_auto_clears(project_at_cwd, capsys, stage_live_session):
     """No live companion → binding is stale → clear it with a notice."""
     from endless.task_cmd import release_item
     _insert_task(pk=700, project_id=project_at_cwd["project_id"])
@@ -139,7 +124,9 @@ def test_release_id_stale_binding_auto_clears(project_at_cwd, capsys):
         pk=300, session_id="s-300", project_id=project_at_cwd["project_id"],
         active_task_id=700,
     )
-    # NOTE: no companion file written → session is stale
+    # NOTE: stage_live_session fixture is taken to activate the _live_sessions
+    # patch; nothing is staged so the patched _live_sessions returns [],
+    # mirroring the no-live-companion / stale-binding scenario.
 
     with patch("endless.task_cmd._current_endless_session_id", return_value=None):
         release_item(700)

@@ -1,6 +1,7 @@
 package monitor
 
 import (
+	"database/sql"
 	"fmt"
 	"os"
 	"time"
@@ -229,12 +230,17 @@ func TouchSession(sessionID, platform, process string, projectID int64) error {
 	if platform == "" {
 		return fmt.Errorf("touch session: platform required")
 	}
-
 	db, err := DB()
 	if err != nil {
 		return err
 	}
+	return touchSessionDB(db, sessionID, platform, process, projectID)
+}
 
+// touchSessionDB is the testable inner of TouchSession. Takes the DB
+// explicitly so tests can use freshDB(t); TouchSession itself looks up
+// the singleton DB before delegating here.
+func touchSessionDB(db *sql.DB, sessionID, platform, process string, projectID int64) error {
 	now := time.Now().UTC().Format("2006-01-02T15:04:05")
 
 	tx, err := db.Begin()

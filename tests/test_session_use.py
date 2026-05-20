@@ -1,6 +1,5 @@
 """Tests for `endless session use` (E-1014) — shell-evaluable activation."""
 
-import json
 import os
 import shlex
 from pathlib import Path
@@ -10,37 +9,22 @@ import pytest
 from endless import session_cmd
 
 
-def _write_companion(sessions_dir: Path, **fields) -> Path:
-    sessions_dir.mkdir(parents=True, exist_ok=True)
-    data = {
-        "harness": "claude",
-        "harness_session_id": "f41f263e-c708-4c42-af7c-083b5be04943",
-        "endless_session_id": 247,
-        "pane_id": "%53",
-        "cwd": "/Users/mike/Projects/endless",
-        "pid": os.getpid(),
-        "started_at": "2026-04-29T03:51:23Z",
-    }
-    data.update(fields)
-    path = sessions_dir / f"{data['harness']}-{data['harness_session_id']}.json"
-    path.write_text(json.dumps(data))
-    return path
-
-
 @pytest.fixture
-def project_with_companion(registered_project, monkeypatch):
+def project_with_companion(registered_project, monkeypatch, stage_live_session):
+    # Historically created a sessions_dir for companion files; E-1426 retired
+    # those files. Fixture stays for the chdir + the stage_live_session
+    # callable the tests use to inject live-session dicts.
     sessions_dir = registered_project / ".endless" / "sessions"
-    sessions_dir.mkdir(parents=True, exist_ok=True)
     monkeypatch.chdir(registered_project)
-    return registered_project, sessions_dir
+    return registered_project, sessions_dir, stage_live_session
 
 
 # ---------- default activation block ----------------------------------------
 
 def test_use_emits_minimal_block(project_with_companion, capsys):
     """Activation block is minimal: cd + ENDLESS_SESSION_ID. (E-1038.)"""
-    project_root, sessions_dir = project_with_companion
-    _write_companion(sessions_dir, cwd=str(project_root))
+    project_root, sessions_dir, stage = project_with_companion
+    stage(cwd=str(project_root))
 
     session_cmd.session_use_resolve("247")
     out = capsys.readouterr().out
@@ -56,10 +40,10 @@ def test_use_emits_minimal_block(project_with_companion, capsys):
 
 
 def test_use_cds_to_existing_worktree(project_with_companion, capsys, tmp_path):
-    _, sessions_dir = project_with_companion
+    _, sessions_dir, stage = project_with_companion
     real_worktree = tmp_path / "real-worktree"
     real_worktree.mkdir()
-    _write_companion(sessions_dir, worktree_path=str(real_worktree), cwd="/the/cwd")
+    stage(worktree_path=str(real_worktree), cwd="/the/cwd")
 
     session_cmd.session_use_resolve("247")
     out = capsys.readouterr().out
@@ -68,8 +52,8 @@ def test_use_cds_to_existing_worktree(project_with_companion, capsys, tmp_path):
 
 def test_use_falls_back_to_cwd_when_worktree_missing(project_with_companion, capsys):
     """If companion's worktree_path doesn't exist on disk, cd to cwd. (E-1037 / E-1038.)"""
-    _, sessions_dir = project_with_companion
-    _write_companion(sessions_dir, worktree_path="/this/path/does/not/exist", cwd="/the/cwd")
+    _, sessions_dir, stage = project_with_companion
+    stage(worktree_path="/this/path/does/not/exist", cwd="/the/cwd")
 
     session_cmd.session_use_resolve("247")
     out = capsys.readouterr().out
@@ -78,8 +62,8 @@ def test_use_falls_back_to_cwd_when_worktree_missing(project_with_companion, cap
 
 
 def test_use_no_extension_only_minimal_block(project_with_companion, capsys):
-    project_root, sessions_dir = project_with_companion
-    _write_companion(sessions_dir)
+    project_root, sessions_dir, stage = project_with_companion
+    stage()
 
     session_cmd.session_use_resolve("247")
     out = capsys.readouterr().out
@@ -101,8 +85,8 @@ def _write_extension(project_root: Path, body: str, executable: bool = True) -> 
 
 
 def test_use_extension_stdout_appended(project_with_companion, capsys):
-    project_root, sessions_dir = project_with_companion
-    _write_companion(sessions_dir)
+    project_root, sessions_dir, stage = project_with_companion
+    stage()
     _write_extension(
         project_root,
         '#!/bin/sh\necho "export FOO=bar"\necho "alias hi=\'echo hi\'"\n',
@@ -121,8 +105,8 @@ def test_use_extension_receives_only_session_id(project_with_companion, capsys):
     ENDLESS_*-prefixed. Other fields are looked up via 'endless session show'.
     (E-1038.)
     """
-    project_root, sessions_dir = project_with_companion
-    _write_companion(sessions_dir, worktree_path="/the/wt")
+    project_root, sessions_dir, stage = project_with_companion
+    stage(worktree_path="/the/wt")
     _write_extension(
         project_root,
         '#!/bin/sh\n'
@@ -142,8 +126,8 @@ def test_use_extension_receives_only_session_id(project_with_companion, capsys):
 
 
 def test_use_extension_nonzero_exit_warns_but_continues(project_with_companion, capsys):
-    project_root, sessions_dir = project_with_companion
-    _write_companion(sessions_dir)
+    project_root, sessions_dir, stage = project_with_companion
+    stage()
     _write_extension(
         project_root,
         '#!/bin/sh\necho "export PARTIAL=yes"\nexit 7\n',
@@ -160,8 +144,8 @@ def test_use_extension_nonzero_exit_warns_but_continues(project_with_companion, 
 
 
 def test_use_extension_stderr_passed_through(project_with_companion, capsys):
-    project_root, sessions_dir = project_with_companion
-    _write_companion(sessions_dir)
+    project_root, sessions_dir, stage = project_with_companion
+    stage()
     _write_extension(
         project_root,
         '#!/bin/sh\necho "diagnostic message" >&2\necho "export OK=1"\n',
@@ -175,8 +159,8 @@ def test_use_extension_stderr_passed_through(project_with_companion, capsys):
 
 
 def test_use_extension_world_writable_refused(project_with_companion, capsys):
-    project_root, sessions_dir = project_with_companion
-    _write_companion(sessions_dir)
+    project_root, sessions_dir, stage = project_with_companion
+    stage()
     ext = _write_extension(project_root, '#!/bin/sh\necho "export EVIL=1"\n')
     os.chmod(ext, 0o646)  # world-writable
 
@@ -190,8 +174,8 @@ def test_use_extension_world_writable_refused(project_with_companion, capsys):
 
 
 def test_use_extension_timeout(project_with_companion, monkeypatch, capsys):
-    project_root, sessions_dir = project_with_companion
-    _write_companion(sessions_dir)
+    project_root, sessions_dir, stage = project_with_companion
+    stage()
     _write_extension(
         project_root,
         '#!/bin/sh\nsleep 1\necho "export NEVER=1"\n',
@@ -209,8 +193,8 @@ def test_use_extension_timeout(project_with_companion, monkeypatch, capsys):
 def test_use_no_extension_no_warning(project_with_companion, capsys):
     """When no extension exists, only the status line appears on stderr —
     no extension-related warnings (E-1047)."""
-    _, sessions_dir = project_with_companion
-    _write_companion(sessions_dir)
+    _, sessions_dir, stage = project_with_companion
+    stage()
 
     session_cmd.session_use_resolve("247")
     cap = capsys.readouterr()
@@ -224,8 +208,8 @@ def test_use_no_extension_no_warning(project_with_companion, capsys):
 # ---------- resolution (mirrors session cd / show) --------------------------
 
 def test_use_no_arg_in_tmux(project_with_companion, monkeypatch, capsys):
-    _, sessions_dir = project_with_companion
-    _write_companion(sessions_dir, pane_id="%99", cwd="/sibling/cwd")
+    _, sessions_dir, stage = project_with_companion
+    stage(pane_id="%99", cwd="/sibling/cwd")
     monkeypatch.setenv("TMUX", "/tmp/x")
     monkeypatch.setenv("TMUX_PANE", "%53")
     monkeypatch.setattr(session_cmd, "_tmux_window_pane_ids", lambda: ["%53", "%99"])
@@ -236,8 +220,8 @@ def test_use_no_arg_in_tmux(project_with_companion, monkeypatch, capsys):
 
 
 def test_use_no_arg_outside_tmux_errors(project_with_companion, monkeypatch, capsys):
-    _, sessions_dir = project_with_companion
-    _write_companion(sessions_dir)
+    _, sessions_dir, stage = project_with_companion
+    stage()
     monkeypatch.delenv("TMUX", raising=False)
 
     with pytest.raises(SystemExit) as exc:
@@ -248,8 +232,8 @@ def test_use_no_arg_outside_tmux_errors(project_with_companion, monkeypatch, cap
 
 
 def test_use_unknown_id_errors(project_with_companion, capsys):
-    _, sessions_dir = project_with_companion
-    _write_companion(sessions_dir)
+    _, sessions_dir, stage = project_with_companion
+    stage()
 
     with pytest.raises(SystemExit) as exc:
         session_cmd.session_use_resolve("99999")
@@ -262,8 +246,8 @@ def test_use_unknown_id_errors(project_with_companion, capsys):
 
 def test_use_emits_status_to_stderr(project_with_companion, capsys):
     """Successful activation emits a • Session N → <path> line to stderr."""
-    project_root, sessions_dir = project_with_companion
-    _write_companion(sessions_dir, cwd=str(project_root))
+    project_root, sessions_dir, stage = project_with_companion
+    stage(cwd=str(project_root))
 
     session_cmd.session_use_resolve("247")
     cap = capsys.readouterr()
@@ -277,9 +261,8 @@ def test_use_emits_status_to_stderr(project_with_companion, capsys):
 
 def test_use_warns_when_worktree_path_stale(project_with_companion, capsys):
     """Companion's worktree_path set but dir gone -> stderr warning + status."""
-    _, sessions_dir = project_with_companion
-    _write_companion(
-        sessions_dir,
+    _, sessions_dir, stage = project_with_companion
+    stage(
         worktree_path="/this/is/very/much/gone",
         cwd="/the/cwd",
     )
@@ -298,8 +281,8 @@ def test_use_warns_when_worktree_path_stale(project_with_companion, capsys):
 def test_use_silent_when_no_worktree_path_set(project_with_companion, capsys):
     """No worktree_path on companion (no active task) -> no stale warning,
     just the status line."""
-    project_root, sessions_dir = project_with_companion
-    _write_companion(sessions_dir, cwd=str(project_root))  # no worktree_path
+    project_root, sessions_dir, stage = project_with_companion
+    stage(cwd=str(project_root))  # no worktree_path
 
     session_cmd.session_use_resolve("247")
     cap = capsys.readouterr()
@@ -336,9 +319,8 @@ def test_short_path_empty(monkeypatch):
 def test_status_uses_short_path_for_warning(project_with_companion, capsys, monkeypatch):
     """Stale-worktree warning uses ~ for display when path is under home."""
     monkeypatch.setenv("HOME", "/Users/mike")
-    _, sessions_dir = project_with_companion
-    _write_companion(
-        sessions_dir,
+    _, sessions_dir, stage = project_with_companion
+    stage(
         worktree_path="/Users/mike/Projects/foo/.endless/worktrees/e-99",
         cwd="/the/cwd",
     )
