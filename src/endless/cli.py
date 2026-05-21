@@ -1559,6 +1559,19 @@ def worktree_drop(name_or_path, force):
     drop_worktree(name_or_path, force)
 
 
+@worktree_cmd.command("reap")
+def worktree_reap():
+    """Sweep stale landed worktrees (E-1337).
+
+    Removes worktree directories whose owning task has at least one row
+    in task_landings older than worktree_ttl (.endless/config.json,
+    default 14d) AND has no live process holding cwd inside. Pre-existing
+    orphan directories without landing records are skipped.
+    """
+    from endless.worktree_cmd import _project_root, _reap_stale_worktrees
+    _reap_stale_worktrees(_project_root())
+
+
 @main.group("verb")
 def verb_cmd():
     """Manage verbs — the registered actions that can start task titles."""

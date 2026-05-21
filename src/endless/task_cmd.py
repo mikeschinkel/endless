@@ -2277,6 +2277,13 @@ def _perform_claim_work(
         + f" worktree {state}: {wt_display}"
     )
 
+    # Best-effort post-claim sweep of stale landed worktrees (E-1337).
+    try:
+        from endless.worktree_cmd import _reap_stale_worktrees
+        _reap_stale_worktrees(project_root)
+    except Exception:
+        pass
+
     return wt_path, created
 
 
@@ -2357,6 +2364,12 @@ def claim_item(item_id: int, force: bool = False):
             click.style("•", fg="cyan")
             + f" worktree: {wt_display}"
         )
+        # Best-effort post-claim sweep (E-1337).
+        try:
+            from endless.worktree_cmd import _reap_stale_worktrees
+            _reap_stale_worktrees(project_root)
+        except Exception:
+            pass
         return
 
     _perform_claim_work(

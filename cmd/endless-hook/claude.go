@@ -155,6 +155,12 @@ func runClaude(args []string) error {
 		if err := monitor.ReapDeadTmuxPanes(projectID); err != nil {
 			log.Printf("reaping dead tmux panes: %v", err)
 		}
+		// Opportunistic stale-worktree reaper (E-1337). Removes worktree
+		// dirs whose owning task has a landing record past worktree_ttl
+		// and no live process holding cwd. Cheap when nothing to reap.
+		if err := monitor.ReapWorktreesForProject(projectID); err != nil {
+			log.Printf("reaping stale worktrees: %v", err)
+		}
 		// Store transcript path for reimport
 		if payload.TranscriptPath != "" {
 			monitor.SetTranscriptPath(payload.SessionID, payload.TranscriptPath)
@@ -209,9 +215,15 @@ func runClaude(args []string) error {
 		return handleUserPromptSubmit(projectID, payload)
 
 	case "PreToolUse":
+		if err := monitor.ReapWorktreesForProject(projectID); err != nil {
+			log.Printf("reaping stale worktrees: %v", err)
+		}
 		return handlePreToolUse(projectID, isRegistered, payload)
 
 	case "PostToolUse":
+		if err := monitor.ReapWorktreesForProject(projectID); err != nil {
+			log.Printf("reaping stale worktrees: %v", err)
+		}
 		return handlePostToolUse(projectID, payload)
 
 	case "ExitPlanMode":
@@ -223,6 +235,9 @@ func runClaude(args []string) error {
 		monitor.FlagNeedsRecap(payload.SessionID)
 		if err := monitor.IdleSession(payload.SessionID); err != nil {
 			return fmt.Errorf("idling session: %w", err)
+		}
+		if err := monitor.ReapWorktreesForProject(projectID); err != nil {
+			log.Printf("reaping stale worktrees: %v", err)
 		}
 	case "PreCompact":
 		// Capture everything before compaction
@@ -246,6 +261,9 @@ func runClaude(args []string) error {
 		}
 		if err := monitor.EndSession(payload.SessionID); err != nil {
 			return fmt.Errorf("ending session: %w", err)
+		}
+		if err := monitor.ReapWorktreesForProject(projectID); err != nil {
+			log.Printf("reaping stale worktrees: %v", err)
 		}
 	}
 

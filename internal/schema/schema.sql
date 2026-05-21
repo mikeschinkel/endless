@@ -214,3 +214,21 @@ CREATE TABLE IF NOT EXISTS suggestions (
     FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS idx_suggestions_open ON suggestions(project_id, created_at DESC);
+
+-- Per-task landing history (E-1337). Append-only: every successful
+-- `endless worktree land` writes one row. The reaper queries
+-- MAX(landed_at) per task_id to decide when a worktree dir is eligible
+-- for removal. Re-landing (post-land bug fix) appends a second row;
+-- the first row is preserved.
+CREATE TABLE IF NOT EXISTS task_landings (
+    id               INTEGER PRIMARY KEY,
+    task_id          INTEGER NOT NULL,
+    session_id       INTEGER,
+    branch           TEXT    NOT NULL,
+    merge_commit_sha TEXT    NOT NULL,
+    landed_at        TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
+    FOREIGN KEY (task_id)    REFERENCES tasks(id)    ON DELETE CASCADE,
+    FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE SET NULL
+);
+CREATE INDEX IF NOT EXISTS idx_task_landings_task
+    ON task_landings(task_id, landed_at DESC);

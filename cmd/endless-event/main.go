@@ -17,7 +17,7 @@ import (
 func main() {
 	if len(os.Args) < 2 {
 		fmt.Fprintf(os.Stderr, "Usage: endless-event <command> [flags]\n")
-		fmt.Fprintf(os.Stderr, "Commands: emit, validate-db, rebuild-db, migrate-db\n")
+		fmt.Fprintf(os.Stderr, "Commands: emit, validate-db, rebuild-db, migrate-db, reap-worktrees\n")
 		os.Exit(1)
 	}
 
@@ -30,6 +30,8 @@ func main() {
 		runRebuildDB()
 	case "migrate-db":
 		runMigrateDB()
+	case "reap-worktrees":
+		runReapWorktrees()
 	default:
 		fmt.Fprintf(os.Stderr, "Unknown command: %s\n", os.Args[1])
 		os.Exit(1)
@@ -387,6 +389,38 @@ func runRebuildDB() {
 	currentDB.Exec("DETACH DATABASE proj")
 	os.Remove(tempPath)
 	fmt.Printf("Rebuilt: tasks table replaced with %d projected tasks.\n", projResult.TasksCreated)
+}
+
+func runReapWorktrees() {
+	fs := flag.NewFlagSet("reap-worktrees", flag.ExitOnError)
+	projectRoot := fs.String("project-root", "", "Project root directory")
+	ttlOverride := fs.String("ttl", "", "TTL override (default: read from .endless/config.json, fallback 14d)")
+	fs.Parse(os.Args[2:])
+
+	if *projectRoot == "" {
+		fmt.Fprintf(os.Stderr, "endless-event: reap-worktrees: --project-root is required\n")
+		os.Exit(1)
+	}
+
+	ttlStr := *ttlOverride
+	if ttlStr == "" {
+		ttlStr = monitor.ReadWorktreeTTLConfig(*projectRoot)
+	}
+	ttl := monitor.DefaultWorktreeTTL
+	if ttlStr != "" {
+		parsed, err := monitor.ParseWorktreeTTL(ttlStr)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "endless-event: reap-worktrees: parse ttl %q: %v (using default %s)\n",
+				ttlStr, err, monitor.DefaultWorktreeTTL)
+		} else {
+			ttl = parsed
+		}
+	}
+
+	if err := monitor.ReapStaleWorktrees(*projectRoot, ttl); err != nil {
+		fmt.Fprintf(os.Stderr, "endless-event: reap-worktrees: %v\n", err)
+		os.Exit(1)
+	}
 }
 
 func runMigrateDB() {

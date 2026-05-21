@@ -333,6 +333,29 @@ func migrateV9(db *sql.DB) error {
 	return nil
 }
 
+// migrateV10 adds the task_landings table (E-1337). One row per
+// successful `endless worktree land`. Replaces the prior
+// delete-the-worktree-on-land behavior; the worktree dir and branch
+// stay until a separate reaper sweep removes them after a TTL.
+// Append-only: re-landing appends; the projector never updates these
+// rows. task_id cascades on delete (matching task_files); session_id
+// is SET NULL because the landing record should outlive its session.
+func migrateV10(db *sql.DB) error {
+	db.Exec(`CREATE TABLE IF NOT EXISTS task_landings (
+		id               INTEGER PRIMARY KEY,
+		task_id          INTEGER NOT NULL,
+		session_id       INTEGER,
+		branch           TEXT    NOT NULL,
+		merge_commit_sha TEXT    NOT NULL,
+		landed_at        TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
+		FOREIGN KEY (task_id)    REFERENCES tasks(id)    ON DELETE CASCADE,
+		FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE SET NULL
+	)`)
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_task_landings_task
+		ON task_landings(task_id, landed_at DESC)`)
+	return nil
+}
+
 // migrateV4 adds task_files (per-task edit-set, E-917) and
 // suggestions (AI-agent calibration suggestions, E-918) tables.
 func migrateV4(db *sql.DB) error {

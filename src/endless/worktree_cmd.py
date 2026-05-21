@@ -724,6 +724,21 @@ def _branch_for_task(rows: list[dict], task_id: str) -> dict | None:
     return None
 
 
+def _reap_stale_worktrees(project_root: Path) -> None:
+    """Run the worktree reaper sweep (E-1337). Best-effort: shells out
+    to `endless-event reap-worktrees`. Stderr from the helper is
+    forwarded so reaped-dir log lines reach the user; non-zero exit
+    raises subprocess.CalledProcessError (caller decides how loud).
+    """
+    binary = shutil.which("endless-event")
+    if not binary:
+        return
+    subprocess.run(
+        [binary, "reap-worktrees", "--project-root", str(project_root)],
+        check=True,
+    )
+
+
 def _normalize_task_id(task_id: str) -> str:
     m = re.fullmatch(r"(?:[Ee]-)?(\d+)", task_id.strip())
     if m is None:
@@ -915,7 +930,7 @@ def _maybe_auto_sandbox_bind(project_root: Path, worktree_path: Path, task_id: i
 
 
 def land_worktree(task_id: str, dry_run: bool) -> None:
-    """Land the worktree for <task-id> into main per E-987's algorithm.
+    """Land the worktree for <task-id> into main per E-987 + E-1337.
 
     Loop:
       1. Partition git status into auto-commit vs user-work.
@@ -924,10 +939,13 @@ def land_worktree(task_id: str, dry_run: bool) -> None:
          'Endless: auto-record session activity'.
       4. Rebase the worktree branch onto main (in the worktree).
       5. ff-merge from main.
-      6. Remove the worktree.
+      6. Emit task.landed event. Worktree dir and branch stay; a
+         separate reaper sweep removes them after worktree_ttl.
 
     Retry up to LAND_MAX_RETRIES if a concurrent writer dirties auto-files
-    between auto-commit and merge attempt.
+    between auto-commit and merge attempt. Re-landing after a follow-up
+    commit is supported: each successful land appends a new row to
+    task_landings; the dir and branch are reused.
     """
     canonical = _normalize_task_id(task_id)
     main_root = _project_root()
@@ -1051,52 +1069,53 @@ def land_worktree(task_id: str, dry_run: bool) -> None:
                 f"ff-merge failed: {err_text}"
             )
 
-        # Step 5.5: pre-cleanup of per-worktree state files (E-1209).
-        # `git worktree remove` refuses on non-gitignored untracked files;
-        # E-1218 gitignored .endless/worktree.{json,lock}, but land still
-        # owns its cleanup contract. Refuse if the lock points at a live
-        # session — clobbering it would strand that session on next FS write.
-        state, lock_data = _check_worktree_lock_liveness(worktree_path)
-        if state == "alive":
-            assert lock_data is not None
-            raise click.ClickException(
-                f"Worktree for {canonical} is owned by a live session "
-                f"(PID {lock_data.get('pid', '?')}, "
-                f"session {lock_data.get('session_id', '?')}, "
-                f"claimed at {lock_data.get('claimed_at', '?')}). "
-                f"End that session before landing this task."
-            )
-        # Stale, absent, or malformed: safe to delete both files.
-        for rel in (LOCK_FILENAME, COMPANION_FILENAME):
-            p = worktree_path / rel
-            try:
-                p.unlink(missing_ok=True)
-            except OSError as e:
-                # Don't block land on a cleanup error; let `git worktree
-                # remove` surface whatever's actually wrong.
-                click.echo(
-                    click.style("•", fg="yellow")
-                    + f" pre-cleanup: failed to remove {p}: {e} (continuing)"
-                )
-
-        # Step 6: remove the worktree.
+        # Step 6 (E-1337): record the landing in task_landings via the
+        # events bridge. Worktree directory and branch stay in place; a
+        # separate reaper sweep removes them after worktree_ttl. The
+        # state files .endless/worktree.{json,lock} are gitignored
+        # (E-1218) and stay too — the reaper deletes the dir wholesale
+        # when it eventually runs.
         try:
-            _git_run(["worktree", "remove", str(worktree_path)], cwd=main_root)
+            merge_sha = subprocess.check_output(
+                ["git", "rev-parse", "HEAD"],
+                cwd=main_root,
+                text=True,
+            ).strip()
         except subprocess.CalledProcessError as e:
-            err_text = (e.stderr or "") + (e.stdout or "")
-            click.echo(
-                click.style("•", fg="yellow")
-                + f" Landed {canonical} but worktree removal failed: {err_text}\n"
-                f"Manual cleanup: git worktree remove {worktree_path}"
+            raise click.ClickException(
+                f"Landed {canonical} but reading merge SHA failed: {e.stderr or e}"
             )
-        else:
-            # Also delete the branch since it's fully merged
-            _git_run(["branch", "-d", branch], cwd=main_root, check=False)
+
+        from endless.event_bridge import emit_event
+
+        _, proj_name = _resolve_project(None)
+        item_id = int(canonical[2:])
+        emit_event(
+            kind="task.landed",
+            project=proj_name,
+            entity_type="task",
+            entity_id=str(item_id),
+            payload={
+                "branch": branch,
+                "merge_commit_sha": merge_sha,
+            },
+            prompt_verb="landed for",
+        )
 
         click.echo(
             click.style("•", fg="green")
             + f" Landed {canonical} ({branch}) into {base_branch}"
         )
+
+        # Best-effort sweep: clean up older landed worktrees that have
+        # passed their TTL. Failure here doesn't unwind the land.
+        try:
+            _reap_stale_worktrees(main_root)
+        except Exception as e:
+            click.echo(
+                click.style("•", fg="yellow")
+                + f" reap sweep after land failed (non-fatal): {e}"
+            )
         return
 
     raise click.ClickException(

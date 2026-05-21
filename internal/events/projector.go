@@ -85,6 +85,8 @@ func replayEvent(db *sql.DB, evt *Event, result *ProjectResult) error {
 		return replayTaskDeleted(db, evt, result)
 	case KindTaskBulkCleared:
 		return replayTaskBulkCleared(db, evt, result)
+	case KindTaskLanded:
+		return replayTaskLanded(db, evt, result)
 	default:
 		// Skip non-task events silently (sessions, notes, etc.)
 		return nil
@@ -364,6 +366,28 @@ func replayTaskBulkCleared(db *sql.DB, evt *Event, result *ProjectResult) error 
 		return err
 	}
 	result.TasksDeleted++
+	return nil
+}
+
+func replayTaskLanded(db *sql.DB, evt *Event, result *ProjectResult) error {
+	var p TaskLandedPayload
+	if err := json.Unmarshal(evt.Payload, &p); err != nil {
+		return err
+	}
+	taskID := mustParseInt64(evt.Entity.ID)
+	var sessionID any
+	if evt.Actor.SessionID != "" {
+		sessionID = mustParseInt64(evt.Actor.SessionID)
+	}
+	ts := kairosToISO(evt.TS)
+	_, err := db.Exec(
+		`INSERT INTO task_landings (task_id, session_id, branch, merge_commit_sha, landed_at)
+		 VALUES (?, ?, ?, ?, ?)`,
+		taskID, sessionID, p.Branch, p.MergeCommitSHA, ts,
+	)
+	if err != nil {
+		return fmt.Errorf("insert task_landing for task %d: %w", taskID, err)
+	}
 	return nil
 }
 

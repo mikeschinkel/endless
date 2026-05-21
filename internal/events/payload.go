@@ -59,6 +59,17 @@ type TaskClaimedPayload struct {
 	SessionID int64 `json:"session_id"`
 }
 
+// TaskLandedPayload records one successful `endless worktree land`
+// (E-1337). One row inserted into task_landings per event; re-landing
+// (post-land bug fix on the same branch) appends a second event/row.
+// The acting session is read from the envelope's actor.session_id —
+// it's the session that ran the land. When empty (system actor,
+// pre-bridge call), task_landings.session_id is NULL.
+type TaskLandedPayload struct {
+	Branch         string `json:"branch"`
+	MergeCommitSHA string `json:"merge_commit_sha"`
+}
+
 // Task dependency payloads
 
 type TaskDepCreatedPayload struct {

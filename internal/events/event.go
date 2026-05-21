@@ -88,6 +88,7 @@ const (
 	KindTaskBulkCleared   Kind = "task.bulk_cleared"
 	KindTaskReleased      Kind = "task.released"
 	KindTaskClaimed       Kind = "task.claimed"
+	KindTaskLanded        Kind = "task.landed"
 )
 
 // Task dependency event kinds.
@@ -152,6 +153,7 @@ var ValidKinds = map[Kind]bool{
 	KindTaskBulkCleared:   true,
 	KindTaskReleased:      true,
 	KindTaskClaimed:       true,
+	KindTaskLanded:        true,
 	// Task dependency
 	KindTaskDepCreated: true,
 	KindTaskDepDeleted: true,

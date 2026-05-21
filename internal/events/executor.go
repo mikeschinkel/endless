@@ -115,6 +115,8 @@ func dispatch(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 		return execTaskReleased(db, evt)
 	case KindTaskClaimed:
 		return execTaskClaimed(db, evt)
+	case KindTaskLanded:
+		return execTaskLanded(db, evt)
 	case KindSessionStatusRecorded:
 		return execSessionStatusRecorded(db, evt)
 	default:
@@ -535,6 +537,31 @@ func execTaskClaimed(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 	}
 	if shouldRecordSessionTouch(evt) {
 		if err := upsertSessionTask(db, evt.Actor.SessionID, mustParseInt64(evt.Entity.ID)); err != nil {
+			return nil, fmt.Errorf("events: %w", err)
+		}
+	}
+	return &ExecuteResult{}, nil
+}
+
+func execTaskLanded(db dbQuerier, evt *Event) (*ExecuteResult, error) {
+	var p TaskLandedPayload
+	if err := json.Unmarshal(evt.Payload, &p); err != nil {
+		return nil, fmt.Errorf("events: unmarshal task.landed payload: %w", err)
+	}
+	taskID := mustParseInt64(evt.Entity.ID)
+	var sessionID any
+	if evt.Actor.SessionID != "" {
+		sessionID = mustParseInt64(evt.Actor.SessionID)
+	}
+	if _, err := db.Exec(
+		`INSERT INTO task_landings (task_id, session_id, branch, merge_commit_sha, landed_at)
+		 VALUES (?, ?, ?, ?, ?)`,
+		taskID, sessionID, p.Branch, p.MergeCommitSHA, now(),
+	); err != nil {
+		return nil, fmt.Errorf("events: insert task_landing: %w", err)
+	}
+	if shouldRecordSessionTouch(evt) {
+		if err := upsertSessionTask(db, evt.Actor.SessionID, taskID); err != nil {
 			return nil, fmt.Errorf("events: %w", err)
 		}
 	}
