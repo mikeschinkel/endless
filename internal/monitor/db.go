@@ -356,6 +356,86 @@ func migrateV10(db *sql.DB) error {
 	return nil
 }
 
+// migrateV11 retrofits session_tasks (E-1322) with a surrogate
+// id INTEGER PRIMARY KEY column to satisfy the project-wide rule that every
+// table has a stable surrogate row identifier. SQLite cannot add a PRIMARY
+// KEY column via ALTER TABLE, so the table is rebuilt: create new, copy
+// rows ordered by created_at (so older touches get smaller ids), drop old,
+// rename new, recreate the index. UNIQUE(session_id, task_id) is preserved
+// as a constraint.
+//
+// Wrapped in BEGIN IMMEDIATE TRANSACTION so concurrent writers block on the
+// RESERVED lock until COMMIT; a row landing between the copy and the drop
+// would otherwise be lost.
+//
+// Idempotent: if session_tasks already has the id column (e.g., a fresh DB
+// where some later V9 revision created it directly), the rebuild is a
+// no-op.
+func migrateV11(db *sql.DB) (err error) {
+	if !hasTable(db, "session_tasks") {
+		return nil
+	}
+	if hasColumn(db, "session_tasks", "id") {
+		return nil
+	}
+
+	_, err = db.Exec("BEGIN IMMEDIATE TRANSACTION")
+	if err != nil {
+		return fmt.Errorf("migrateV11: begin: %w", err)
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			_, rbErr := db.Exec("ROLLBACK")
+			if rbErr != nil && err != nil {
+				err = fmt.Errorf("%w; rollback also failed: %v", err, rbErr)
+			}
+		}
+	}()
+
+	_, err = db.Exec(`CREATE TABLE session_tasks_new (
+		id         INTEGER PRIMARY KEY,
+		session_id INTEGER NOT NULL,
+		task_id    INTEGER NOT NULL,
+		created_at TEXT    NOT NULL,
+		updated_at TEXT    NOT NULL,
+		UNIQUE(session_id, task_id)
+	)`)
+	if err != nil {
+		return fmt.Errorf("migrateV11: create session_tasks_new: %w", err)
+	}
+
+	_, err = db.Exec(`INSERT INTO session_tasks_new (session_id, task_id, created_at, updated_at)
+		SELECT session_id, task_id, created_at, updated_at FROM session_tasks
+		ORDER BY created_at`)
+	if err != nil {
+		return fmt.Errorf("migrateV11: copy session_tasks rows: %w", err)
+	}
+
+	_, err = db.Exec(`DROP TABLE session_tasks`)
+	if err != nil {
+		return fmt.Errorf("migrateV11: drop old session_tasks: %w", err)
+	}
+
+	_, err = db.Exec(`ALTER TABLE session_tasks_new RENAME TO session_tasks`)
+	if err != nil {
+		return fmt.Errorf("migrateV11: rename session_tasks_new: %w", err)
+	}
+
+	_, err = db.Exec(`CREATE INDEX IF NOT EXISTS idx_session_tasks_task
+		ON session_tasks(task_id)`)
+	if err != nil {
+		return fmt.Errorf("migrateV11: recreate idx_session_tasks_task: %w", err)
+	}
+
+	_, err = db.Exec("COMMIT")
+	if err != nil {
+		return fmt.Errorf("migrateV11: commit: %w", err)
+	}
+	committed = true
+	return nil
+}
+
 // migrateV4 adds task_files (per-task edit-set, E-917) and
 // suggestions (AI-agent calibration suggestions, E-918) tables.
 func migrateV4(db *sql.DB) error {

@@ -12,9 +12,9 @@ import (
 )
 
 // newSessionTasksTestDB opens a file-backed SQLite DB in t.TempDir() and
-// applies the V0 baseline schema plus the session_tasks table (V9). Seeds
-// one project so task inserts satisfy their project_id FK. The connection
-// is closed automatically on test cleanup.
+// applies the V0 baseline schema plus the session_tasks table (V9 +
+// V11 retrofit). Seeds one project so task inserts satisfy their
+// project_id FK. The connection is closed automatically on test cleanup.
 func newSessionTasksTestDB(t *testing.T) *sql.DB {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "test.db")
@@ -28,6 +28,7 @@ func newSessionTasksTestDB(t *testing.T) *sql.DB {
 		t.Fatalf("apply schema: %v", err)
 	}
 	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS session_tasks (
+		id         INTEGER PRIMARY KEY,
 		session_id INTEGER NOT NULL,
 		task_id    INTEGER NOT NULL,
 		created_at TEXT    NOT NULL,
