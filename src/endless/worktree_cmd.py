@@ -53,19 +53,16 @@ LOCK_FILENAME = ".endless/worktree.lock"
 # before the worktree's commits.
 AUTO_COMMIT_GLOBS = (
     ".endless/db-ledger/*.jsonl",
-    ".endless/plans/snapshots/*",
     ".endless/verbs.jsonl",
     ".endless/verbs.json",  # legacy — still seen during E-1268 migration
 )
 
-# Mirrors internal/events/commit.go:23,29 (E-1342). Subjects whose
-# auto-commits can amend in place via canAmend, producing orphans at
-# the base of task branches when main amends past a branch's
-# fork-point SHA. The orphan-drop pre-step in land_worktree() filters
-# on this set.
+# Mirrors internal/events/commit.go (E-1342). Subjects whose auto-commits
+# can amend in place via canAmend, producing orphans at the base of task
+# branches when main amends past a branch's fork-point SHA. The orphan-drop
+# pre-step in land_worktree() filters on this set.
 AMENDABLE_COMMIT_SUBJECTS = (
     "Endless: record ledger entry",   # LedgerCommitSubject
-    "Endless: snapshot plan",         # SnapshotCommitSubject
 )
 
 # Land's retry cap for the race-with-concurrent-writers loop (E-987).
@@ -257,8 +254,8 @@ def _drop_orphan_amendable_commits(
 ) -> tuple[int, str | None]:
     """Drop contiguous orphan auto-amend commits at branch base (E-1342).
 
-    canAmend (internal/events/commit.go) rewrites the SHA of ledger and
-    snapshot auto-commits on main as new events are appended. Branches
+    canAmend (internal/events/commit.go) rewrites the SHA of ledger
+    auto-commits on main as new events are appended. Branches
     forked off the old SHA carry an orphan that conflicts on rebase even
     though main has the equivalent (superset) content under a new SHA.
     This helper detects contiguous orphans at the BASE of the branch
@@ -1013,7 +1010,7 @@ def land_worktree(task_id: str, dry_run: bool) -> None:
             )
 
         # Step 3.7: drop orphan auto-amend commits at branch base (E-1342).
-        # canAmend in commit.go rewrites the ledger/snapshot commit SHAs on
+        # canAmend in commit.go rewrites the ledger commit SHAs on
         # main as new events are appended; a branch forked off the old SHA
         # carries an orphan that conflicts on rebase. Strip them before
         # Step 4 so the rebase sees only the user's real commits.
@@ -1047,7 +1044,7 @@ def land_worktree(task_id: str, dry_run: bool) -> None:
             raise click.ClickException(
                 f"rebase of {branch} onto {base_branch} failed.\n\n"
                 f"Likely cause: a worktree branch commit modifies an "
-                f"endless-managed auto-file (db-ledger entry, snapshot, or "
+                f"endless-managed auto-file (db-ledger entry or "
                 f"config.json). This violates the E-972 routing rule and "
                 f"shouldn't normally happen.\n\n"
                 f"Recover: from the worktree, run\n"

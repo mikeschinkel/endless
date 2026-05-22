@@ -1,12 +1,10 @@
-// Package events: write-time auto-commit of endless-managed files (E-1206 / E-1275).
+// Package events: write-time auto-commit of endless-managed files (E-1206).
 //
-// Two callers:
+// One caller:
 //   - cmd/endless-event: commits the just-appended db-ledger segment after every
 //     Writer.Append (E-1206).
-//   - cmd/endless-hook:  commits the just-written plan snapshot pair (md + json)
-//     after every snapshotPlanFile call (E-1275).
 //
-// Both flow through commitPaths, which decides amend-vs-new-commit based on
+// It flows through commitPaths, which decides amend-vs-new-commit based on
 // HEAD's subject (must match the subject we're about to commit), pushed
 // status (never amend a commit reachable from origin/*), and index hygiene
 // (never bundle unrelated user-staged work into our amend).
@@ -23,10 +21,6 @@ import (
 // LedgerCommitSubject is the exact `git log --format=%s` value for ledger
 // auto-commits (E-1206). The amend decision keys off this prefix.
 const LedgerCommitSubject = "Endless: record ledger entry"
-
-// SnapshotCommitSubject is the exact `git log --format=%s` value for plan
-// snapshot auto-commits (E-1275).
-const SnapshotCommitSubject = "Endless: snapshot plan"
 
 // gitRedirectVars lists env vars that override git's repo resolution
 // (E-1309). Stripped from the subprocess env so `git -C <projectRoot>`
@@ -54,17 +48,6 @@ func CommitLedgerSegment(projectRoot, segmentRelPath string) error {
 	)
 }
 
-// CommitSnapshotPair commits the .md/.json snapshot pair on the project's
-// git repo (E-1275). Thin wrapper around commitPaths.
-func CommitSnapshotPair(projectRoot, mdRelPath, jsonRelPath string) error {
-	return commitPaths(
-		projectRoot,
-		[]string{mdRelPath, jsonRelPath},
-		SnapshotCommitSubject,
-		".endless/plans/snapshots/*",
-	)
-}
-
 // commitPaths makes one commit containing exactly the named paths.
 //
 // Decision:
@@ -80,8 +63,7 @@ func CommitSnapshotPair(projectRoot, mdRelPath, jsonRelPath string) error {
 //
 // The `git add` step happens in both branches because `git commit -o
 // <path>` can't resolve a pathspec for an untracked file — even on amend.
-// For snapshot writes (E-1275) each call introduces brand-new files; for
-// ledger writes (E-1206) the file already exists after the first commit
+// For ledger writes (E-1206) the file already exists after the first commit,
 // but `git add` is still a cheap no-op for unchanged content.
 //
 // excludeGlob is a single pathspec glob (e.g. ".endless/db-ledger/*.jsonl")

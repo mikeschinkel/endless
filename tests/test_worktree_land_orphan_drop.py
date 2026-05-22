@@ -1,9 +1,9 @@
 """Tests for E-1342: pre-rebase orphan auto-amend commit drop in land.
 
 Covers _drop_orphan_amendable_commits, which strips contiguous ledger
-and snapshot orphan commits at the base of a task branch before the
-regular `git rebase main` in land_worktree(). Uses real git repos
-because the helper shells out to git log + rebase.
+orphan commits at the base of a task branch before the regular
+`git rebase main` in land_worktree(). Uses real git repos because the
+helper shells out to git log + rebase.
 """
 
 import subprocess
@@ -18,7 +18,6 @@ from endless.worktree_cmd import (
 
 
 LEDGER_SUBJECT = "Endless: record ledger entry"
-SNAPSHOT_SUBJECT = "Endless: snapshot plan"
 
 
 def _run(cmd, cwd, check=True):
@@ -77,9 +76,8 @@ def _create_task_branch(main: Path, tmp: Path, name: str = "task/x") -> Path:
 # Constants sanity
 # ---------------------------------------------------------------------------
 
-def test_amendable_subjects_includes_ledger_and_snapshot():
+def test_amendable_subjects_includes_ledger():
     assert LEDGER_SUBJECT in AMENDABLE_COMMIT_SUBJECTS
-    assert SNAPSHOT_SUBJECT in AMENDABLE_COMMIT_SUBJECTS
 
 
 # ---------------------------------------------------------------------------
@@ -141,23 +139,22 @@ def test_single_ledger_orphan_at_base_dropped(repo_with_worktree):
     assert post_subjects == ["user work"]
 
 
-def test_two_orphans_ledger_then_snapshot_dropped(repo_with_worktree):
-    """Two contiguous orphans at base (ledger, then snapshot):
-    drop both, keep the user commit. Constructs the orphan layout
-    directly on the task branch rather than via canAmend simulation —
-    the helper's contract is about branch shape, not about how the
-    shape arose."""
+def test_two_contiguous_ledger_orphans_dropped(repo_with_worktree):
+    """Two contiguous orphans at base: drop both, keep the user commit.
+    Constructs the orphan layout directly on the task branch rather than
+    via canAmend simulation — the helper's contract is about branch shape,
+    not about how the shape arose."""
     main = repo_with_worktree["main"]
     wt = _create_task_branch(main, repo_with_worktree["tmp"])
 
-    # Put both amendable-subject commits at the branch base, then a user
+    # Put two amendable-subject commits at the branch base, then a user
     # commit on top. None of these are reachable from main.
     _commit(wt, LEDGER_SUBJECT, {".endless/db-ledger/x.jsonl": '{"a":1}\n'})
-    _commit(wt, SNAPSHOT_SUBJECT, {".endless/plans/snapshots/s.md": "s\n"})
+    _commit(wt, LEDGER_SUBJECT, {".endless/db-ledger/y.jsonl": '{"b":2}\n'})
     _commit(wt, "user work", {"hello.txt": "hello\n"})
 
     pre_subjects = _log_subjects(wt, "main..HEAD")
-    assert pre_subjects == [LEDGER_SUBJECT, SNAPSHOT_SUBJECT, "user work"]
+    assert pre_subjects == [LEDGER_SUBJECT, LEDGER_SUBJECT, "user work"]
 
     count, subj = _drop_orphan_amendable_commits(wt, "main")
     assert count == 2
@@ -180,19 +177,19 @@ def test_mid_branch_amendable_subject_is_preserved(repo_with_worktree):
     # An "amendable subject" commit mid-branch (e.g., a stray pre-E-1309
     # contamination, or — implausibly — a user commit that happens to be
     # subject-titled like an auto-commit). Helper must NOT drop it.
-    _commit(wt, SNAPSHOT_SUBJECT, {"snap.txt": "looks like an auto-commit\n"})
+    _commit(wt, LEDGER_SUBJECT, {"ledgerish.txt": "looks like an auto-commit\n"})
 
     _amend_with_extra_line(main, ".endless/db-ledger/x.jsonl", '{"a":2}\n')
 
     pre_subjects = _log_subjects(wt, "main..HEAD")
-    assert pre_subjects == [LEDGER_SUBJECT, "user work", SNAPSHOT_SUBJECT]
+    assert pre_subjects == [LEDGER_SUBJECT, "user work", LEDGER_SUBJECT]
 
     count, subj = _drop_orphan_amendable_commits(wt, "main")
     assert count == 1
     assert subj == LEDGER_SUBJECT
 
     post_subjects = _log_subjects(wt, "main..HEAD")
-    assert post_subjects == ["user work", SNAPSHOT_SUBJECT]
+    assert post_subjects == ["user work", LEDGER_SUBJECT]
 
 
 def test_drop_keeps_head_attached_to_branch(repo_with_worktree):

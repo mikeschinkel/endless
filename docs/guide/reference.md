@@ -63,23 +63,6 @@ For straightforward task queries, prefer `endless task list --json --status <...
 
 ---
 
-## Plan snapshots
-
-When Claude writes a plan file (typically via `/plan` mode), the PostToolUse hook captures a snapshot at `.endless/plans/snapshots/<timestamp>-<hash>.md`. Snapshots are read-only history.
-
-```bash
-endless snapshots list                          # all snapshots in the current project
-endless snapshots show <name>                   # metadata + content of one
-```
-
-The snapshot name is the filename stem (the `<timestamp>-<hash>` portion).
-
-**When useful:** reviewing how a plan was iterated, auditing what was promised vs what shipped, recovering accidentally-overwritten plan content.
-
-**Not the source of truth:** the canonical plan for a task is its `text` field, populated via `task update <id> --text <plan-file>`. Snapshots are write-once history — don't delete them manually.
-
----
-
 ## Tmux integration
 
 Endless ships a tmux integration that puts the active task ID, project, and status on a second status row, plus popup menus for common actions.
@@ -108,7 +91,6 @@ A quick map of the files and directories Endless manages.
 | `.endless/config.json`                                       | Project-local Endless config (tracking mode, custom settings).                            |
 | `.endless/db-ledger/db-entries-<node>-<seq>.jsonl`           | Write-ahead log of all DB writes. **Committed to git** — the SQLite DB is rebuilt from these on every clone.  |
 | `<worktree>/.endless/plans/E-NNNN.md`                        | Plan file attached to a task. Lives in the task's worktree (written by `task update --text`); rides into main via `worktree land`. The DB's `tasks.text` column is source of truth — the file is the on-disk mirror. |
-| `.endless/plans/snapshots/<timestamp>-<hash>.md`             | Plan snapshots from the PostToolUse hook. Committed to git per project (choice on first snapshot). |
 | `.endless/worktrees/e-<id>/`                                 | Primary per-task git worktree. **Gitignored.**                                           |
 | `.endless/worktrees/e-<id>-<slug>/`                          | Ad-hoc additional worktree for a task (testing, alternate experiments). **Gitignored.**  |
 | `.endless/worktree.json`                                     | Current session's task → worktree mapping (companion file).                              |
@@ -120,7 +102,7 @@ The `.endless/db-ledger/` directory holds the database write-ahead record — JS
 
 This directory was previously named `.endless/events/`. The old name biased readers (human and LLM) to treat the files as discardable logs — which they are not. Existing installs auto-migrate.
 
-If you see "Endless: auto-record session activity" commits in `git log`, those are the ledger / verbs.jsonl / snapshot auto-commits. **Never discard those commits.** They are durable state.
+If you see "Endless: auto-record session activity" commits in `git log`, those are the ledger / verbs.jsonl auto-commits. **Never discard those commits.** They are durable state.
 
 ### Global (per-machine)
 

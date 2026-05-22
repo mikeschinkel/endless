@@ -1680,32 +1680,6 @@ def phrase_remove(type_, value, scope, machine_only):
     remove_phrase(type_, value, scope, machine_only)
 
 
-@main.group("snapshots")
-def snapshots_cmd():
-    """Inspect plan-file snapshots written by the PostToolUse hook."""
-    pass
-
-
-@snapshots_cmd.command("list")
-@click.option("--session", "session_id", default=None,
-              help="Filter by session ID (exact match)")
-@click.option("--today", is_flag=True, help="Only snapshots written today")
-@click.option("--json", "as_json", is_flag=True, help="JSON output")
-def snapshots_list(session_id, today, as_json):
-    """List plan snapshots in the current project."""
-    from endless.plan_cmd import list_snapshots
-    list_snapshots(session_id=session_id, today_only=today, as_json=as_json)
-
-
-@snapshots_cmd.command("show")
-@click.argument("snap_id")
-@click.option("--json", "as_json", is_flag=True, help="JSON output")
-def snapshots_show(snap_id, as_json):
-    """Show a single plan snapshot's metadata and content."""
-    from endless.plan_cmd import show_snapshot
-    show_snapshot(snap_id, as_json=as_json)
-
-
 @main.command("docs")
 @click.argument("name", default=None, required=False)
 @click.option("--type", "type_filter", default=None,

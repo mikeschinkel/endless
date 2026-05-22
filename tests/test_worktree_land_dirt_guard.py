@@ -33,8 +33,7 @@ def worktree_repo(tmp_path):
     _run(["git", "config", "user.email", "t@t.t"], repo)
     _run(["git", "config", "user.name", "t"], repo)
     (repo / "README.md").write_text("init\n")
-    for sub in (".endless", ".endless/plans", ".endless/plans/snapshots",
-                ".endless/db-ledger"):
+    for sub in (".endless", ".endless/db-ledger"):
         d = repo / sub
         d.mkdir(parents=True, exist_ok=True)
         (d / ".gitkeep").write_text("")
@@ -50,18 +49,18 @@ def test_clean_worktree_passes(worktree_repo):
 
 
 def test_auto_managed_dirt_refuses_with_writer_message(worktree_repo):
-    # Snapshot pair (matches .endless/plans/snapshots/* glob).
-    snaps = worktree_repo / ".endless" / "plans" / "snapshots"
-    (snaps / "20260518T000000-abcd1234.md").write_text("# snap\n")
-    (snaps / "20260518T000000-abcd1234.json").write_text("{}\n")
+    # Two db-ledger segments (match .endless/db-ledger/*.jsonl glob).
+    ledger = worktree_repo / ".endless" / "db-ledger"
+    (ledger / "db-entries-abcd-000001.jsonl").write_text('{"e": 1}\n')
+    (ledger / "db-entries-abcd-000002.jsonl").write_text('{"e": 2}\n')
 
     with pytest.raises(click.ClickException) as exc:
         _guard_dirty_worktree(worktree_repo, branch="feat", canonical="E-1416")
     msg = exc.value.message
     assert "uncommitted auto-managed files" in msg
     assert "E-1416" in msg
-    assert "20260518T000000-abcd1234.md" in msg
-    assert "20260518T000000-abcd1234.json" in msg
+    assert "db-entries-abcd-000001.jsonl" in msg
+    assert "db-entries-abcd-000002.jsonl" in msg
     assert "Report the writer" in msg
 
 
@@ -81,9 +80,9 @@ def test_unmanaged_dirt_refuses_with_recovery_hints(worktree_repo):
 
 
 def test_auto_managed_dirt_wins_when_both_kinds_present(worktree_repo):
-    # Auto-managed (snapshot) AND unmanaged (source) dirt both present.
-    snaps = worktree_repo / ".endless" / "plans" / "snapshots"
-    (snaps / "20260518T000000-abcd1234.md").write_text("# snap\n")
+    # Auto-managed (db-ledger) AND unmanaged (source) dirt both present.
+    ledger = worktree_repo / ".endless" / "db-ledger"
+    (ledger / "db-entries-abcd-000001.jsonl").write_text('{"e": 1}\n')
     (worktree_repo / "main.go").write_text("package main\n")
 
     with pytest.raises(click.ClickException) as exc:
@@ -91,9 +90,9 @@ def test_auto_managed_dirt_wins_when_both_kinds_present(worktree_repo):
     msg = exc.value.message
     # Auto-managed message wins because it's checked first.
     assert "uncommitted auto-managed files" in msg
-    assert "20260518T000000-abcd1234.md" in msg
+    assert "db-entries-abcd-000001.jsonl" in msg
     # Unmanaged file is NOT in the auto-managed message — it would surface
-    # on retry after the writer bug is fixed and the snapshot committed.
+    # on retry after the writer bug is fixed and the auto-file committed.
     assert "main.go" not in msg
 
 

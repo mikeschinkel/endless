@@ -37,20 +37,6 @@ func CacheDir() string {
 	return filepath.Join(cacheDir, "endless")
 }
 
-// IsSandboxActive reports whether the current process is reading/writing
-// through an E-1281 per-worktree sandbox. Detection: ConfigDir() resolves
-// under CacheDir()/sandboxes/. Callers use this to skip operations that
-// would touch the user's real repo (e.g. snapshot auto-commits) when the
-// session is intentionally isolated. See E-1353.
-func IsSandboxActive() bool {
-	sandboxRoot := filepath.Join(CacheDir(), "sandboxes")
-	rel, err := filepath.Rel(sandboxRoot, ConfigDir())
-	if err != nil {
-		return false
-	}
-	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
-}
-
 // DBPath returns the path to the Endless SQLite database.
 func DBPath() string {
 	return filepath.Join(ConfigDir(), "endless.db")
