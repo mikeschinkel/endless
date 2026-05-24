@@ -422,6 +422,78 @@ func migrateV11(db *sql.DB) (err error) {
 	return nil
 }
 
+// migrateV12 adds the project_next family of tables (E-1421). Five tables
+// model a curated, persistent, per-project "next" list:
+//
+//   - project_next            one row per project (header + FK target)
+//   - project_next_lanes      lanes within a project's list
+//   - project_next_items      items within a lane, ordered by position
+//   - project_next_pending    auto-added urgent tasks awaiting curation
+//   - project_next_revisions  audit trail of revisions
+//
+// Schema source: <main>/.endless/plans/E-1421.md, "SQL schema (5 tables)".
+// Idempotent: CREATE TABLE / CREATE INDEX IF NOT EXISTS.
+func migrateV12(db *sql.DB) error {
+	db.Exec(`CREATE TABLE IF NOT EXISTS project_next (
+		id         INTEGER PRIMARY KEY,
+		project_id INTEGER NOT NULL UNIQUE,
+		FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+	)`)
+
+	db.Exec(`CREATE TABLE IF NOT EXISTS project_next_lanes (
+		id              INTEGER PRIMARY KEY,
+		project_next_id INTEGER NOT NULL,
+		lane_id         TEXT    NOT NULL,
+		priority        INTEGER NOT NULL,
+		rationale       TEXT    NOT NULL,
+		UNIQUE(project_next_id, lane_id),
+		FOREIGN KEY (project_next_id) REFERENCES project_next(id) ON DELETE CASCADE
+	)`)
+
+	db.Exec(`CREATE TABLE IF NOT EXISTS project_next_items (
+		id                   INTEGER PRIMARY KEY,
+		project_next_lane_id INTEGER NOT NULL,
+		task_id              TEXT    NOT NULL,
+		reason               TEXT    NOT NULL,
+		position             INTEGER NOT NULL,
+		UNIQUE(project_next_lane_id, task_id),
+		UNIQUE(project_next_lane_id, position),
+		FOREIGN KEY (project_next_lane_id) REFERENCES project_next_lanes(id) ON DELETE CASCADE
+	)`)
+
+	db.Exec(`CREATE TABLE IF NOT EXISTS project_next_pending (
+		id              INTEGER PRIMARY KEY,
+		project_next_id INTEGER NOT NULL,
+		task_id         TEXT    NOT NULL,
+		reason          TEXT    NOT NULL,
+		added_at        TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
+		UNIQUE(project_next_id, task_id),
+		FOREIGN KEY (project_next_id) REFERENCES project_next(id) ON DELETE CASCADE
+	)`)
+
+	db.Exec(`CREATE TABLE IF NOT EXISTS project_next_revisions (
+		id              INTEGER PRIMARY KEY,
+		project_next_id INTEGER NOT NULL,
+		session_id      INTEGER NOT NULL,
+		revised_at      TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
+		change_kind     TEXT    NOT NULL,
+		json_snapshot   TEXT,
+		FOREIGN KEY (project_next_id) REFERENCES project_next(id),
+		FOREIGN KEY (session_id)      REFERENCES sessions(id)
+	)`)
+
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_project_next_lanes_priority
+		ON project_next_lanes(project_next_id, priority)`)
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_project_next_revisions_recent
+		ON project_next_revisions(project_next_id, revised_at DESC)`)
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_project_next_pending_added
+		ON project_next_pending(project_next_id, added_at)`)
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_project_next_items_task
+		ON project_next_items(task_id)`)
+
+	return nil
+}
+
 // migrateV4 adds task_files (per-task edit-set, E-917) and
 // suggestions (AI-agent calibration suggestions, E-918) tables.
 func migrateV4(db *sql.DB) error {

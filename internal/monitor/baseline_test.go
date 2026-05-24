@@ -51,6 +51,11 @@ func TestMigrateFreshDB_CreatesBaselineTables(t *testing.T) {
 		"suggestions",
 		"session_gates",
 		"session_statuses",
+		"project_next",
+		"project_next_lanes",
+		"project_next_items",
+		"project_next_pending",
+		"project_next_revisions",
 	}
 	for _, name := range wantTables {
 		if !hasTable(db, name) {
