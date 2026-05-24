@@ -15,6 +15,10 @@ var (
 	dbOnce sync.Once
 	dbConn *sql.DB
 	dbErr  error
+
+	// dbPathOverride, when set, forces DBPath() to a fixed location regardless
+	// of XDG_CONFIG_HOME routing. Set once by ForceRealDB() at process entry.
+	dbPathOverride string
 )
 
 // ConfigDir returns the Endless configuration directory.
@@ -37,9 +41,49 @@ func CacheDir() string {
 	return filepath.Join(cacheDir, "endless")
 }
 
+// IsSandboxActive reports whether the current process is reading/writing
+// through an E-1281 per-worktree sandbox. Detection: ConfigDir() resolves
+// under CacheDir()/sandboxes/. ForceRealDB() uses this to decide whether
+// hook-fired DB writes must be redirected to the real database. (Originally
+// added for the plan-snapshot sandbox-skip removed in E-1449; reintroduced
+// here as E-1362's ledger entry anticipated it might be "useful elsewhere".)
+// See E-1450.
+func IsSandboxActive() bool {
+	sandboxRoot := filepath.Join(CacheDir(), "sandboxes")
+	rel, err := filepath.Rel(sandboxRoot, ConfigDir())
+	if err != nil {
+		return false
+	}
+	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+}
+
 // DBPath returns the path to the Endless SQLite database.
 func DBPath() string {
+	if dbPathOverride != "" {
+		return dbPathOverride
+	}
 	return filepath.Join(ConfigDir(), "endless.db")
+}
+
+// ForceRealDB routes monitor.DB() and DBPath()-derived artifacts (e.g. backups)
+// to the real database under ~/.config/endless, ignoring the E-1281 sandbox
+// XDG_CONFIG_HOME routing. It overrides only the DB path: log files and global
+// config.json reads keep following ConfigDir(), and because XDG_CONFIG_HOME is
+// never mutated, IsSandboxActive() still reports true for any other
+// sandbox-aware behavior. The endless-hook binary calls this at startup so
+// hook-fired writes (session registration, activity, state transitions) reflect
+// real-world activity and land in the real DB rather than throwaway sandbox
+// fixtures. No-op when not sandbox-routed; must be called before the first
+// DB()/DBPath() use. See E-1450.
+func ForceRealDB() {
+	if !IsSandboxActive() {
+		return
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return
+	}
+	dbPathOverride = filepath.Join(home, ".config", "endless", "endless.db")
 }
 
 // DB returns a connection to the Endless SQLite database.
@@ -112,7 +156,11 @@ func BackupDB() {
 		return
 	}
 
-	backupDir := filepath.Join(ConfigDir(), "backups")
+	// Backups follow the DB: when ForceRealDB() has redirected DBPath() to the
+	// real database, its backups land beside it rather than in the sandbox
+	// (E-1450). In the normal case DBPath() is ConfigDir()/endless.db, so this
+	// resolves to ConfigDir()/backups exactly as before.
+	backupDir := filepath.Join(filepath.Dir(DBPath()), "backups")
 	os.MkdirAll(backupDir, 0755)
 
 	// Check if backup is needed (last backup > 60s ago)

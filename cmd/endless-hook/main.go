@@ -5,10 +5,18 @@ import (
 	"log"
 	"os"
 
+	"github.com/mikeschinkel/endless/internal/monitor"
+
 	_ "modernc.org/sqlite"
 )
 
 func main() {
+	// E-1450: hook-fired writes (session registration, activity, state
+	// transitions) reflect real-world activity and must target the real DB,
+	// even when this binary runs inside an E-1281 sandboxed worktree. No-op
+	// outside a sandbox. Must precede the first monitor.DB() call.
+	monitor.ForceRealDB()
+
 	if len(os.Args) < 2 {
 		fmt.Fprintln(os.Stderr, "Usage: endless-hook <command> [args...]")
 		fmt.Fprintln(os.Stderr, "Commands: prompt, claude, codex, recap")
