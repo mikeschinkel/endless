@@ -625,7 +625,7 @@ def recap_session(session_value: str | None = None, force: bool = False):
     if session_value:
         # Recap a specific session
         session = _resolve_session(session_value)
-        _generate_recap(session, claude_bin, force=force)
+        _generate_recap(session, force=force)
         return
 
     # Recap all sessions that need it
@@ -641,12 +641,13 @@ def recap_session(session_value: str | None = None, force: bool = False):
 
     for row in rows:
         session = _resolve_session(str(row["id"]))
-        _generate_recap(session, claude_bin, force=False)
+        _generate_recap(session, force=False)
 
 
-def _generate_recap(session: dict, claude_bin: str, force: bool = False):
+def _generate_recap(session: dict, force: bool = False):
     """Generate a recap for a single session."""
     import subprocess
+    from endless import internal_claude
 
     session_id = session["session_id"]
     summary_seq = session.get("summary_seq", 0) or 0
@@ -714,14 +715,13 @@ def _generate_recap(session: dict, claude_bin: str, force: bool = False):
     )
 
     try:
-        # Use --allowedTools "" to prevent tool use, reducing noise.
-        # Note: this still creates a session via hooks — we hide those after.
-        result = subprocess.run(
-            [claude_bin, "-p", prompt, "--allowedTools", ""],
-            capture_output=True,
-            text=True,
-            timeout=60,
-        )
+        # Hook-suppressed (E-1470). Routing through the shared helper sets
+        # ENDLESS_NO_HOOKS and disables tools/MCP/persistence, so this headless
+        # call no longer registers a session that false-ends the live caller
+        # (and writes no throwaway transcript). No --model: recap keeps
+        # claude's default model. The session_list filter that hid recap rows
+        # now only covers sessions created before this fix.
+        result = internal_claude.run_internal_claude(prompt, timeout=60)
         if result.returncode != 0:
             click.echo(
                 click.style("  Error: ", fg="red")

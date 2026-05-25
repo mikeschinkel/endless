@@ -11,6 +11,17 @@ import (
 )
 
 func main() {
+	// E-1470: internal headless `claude -p` calls (verb-check, recap) run with
+	// ENDLESS_NO_HOOKS=true. They inherit the caller's TMUX_PANE; if this hook
+	// ran it would register a fresh session for the headless call, and the
+	// pane-collision rule (internal/monitor) would then mark the live caller's
+	// session ended (same pane, different UUID). Short-circuit before any DB
+	// work so the hook fires no session registration, activity, or SessionEnd
+	// side effect. Must be the first thing in main.
+	if os.Getenv("ENDLESS_NO_HOOKS") == "true" {
+		return
+	}
+
 	// E-1450: hook-fired writes (session registration, activity, state
 	// transitions) reflect real-world activity and must target the real DB,
 	// even when this binary runs inside an E-1281 sandboxed worktree. No-op

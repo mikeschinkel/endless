@@ -252,11 +252,13 @@ def _check_verb_via_haiku(word: str) -> tuple[bool, str | None]:
     the caller to fall through to the standard verb-rejection error.
     """
     import subprocess
+    from endless import internal_claude
     prompt = _VERB_CHECK_PROMPT_TEMPLATE.format(word=word)
     try:
-        result = subprocess.run(
-            ["claude", "--model", "haiku", "-p", prompt],
-            capture_output=True, text=True, timeout=30,
+        # Hook-suppressed (E-1470): a bare `claude -p` here inherits the
+        # caller's TMUX_PANE and false-ends the live caller's session.
+        result = internal_claude.run_internal_claude(
+            prompt, model="haiku", timeout=30,
         )
     except (subprocess.TimeoutExpired, FileNotFoundError):
         return False, None
