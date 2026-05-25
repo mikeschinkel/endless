@@ -866,3 +866,4 @@
 {"v":1,"ts":"5XCZVHNX3CG19ZK","kind":"task.fields_updated","project":"endless","entity":{"type":"task","id":"1429"},"actor":{"kind":"cli","id":"mikeschinkel@m4macmini.local","session_id":"523"},"payload":{"fields":{"status":"verify"}}}
 {"v":1,"ts":"5XCZVRX05YG19ZK","kind":"task.status_changed","project":"endless","entity":{"type":"task","id":"1445"},"actor":{"kind":"cli","id":"mikeschinkel@m4macmini.local","session_id":"524"},"payload":{"old_status":"ready","new_status":"in_progress"}}
 {"v":1,"ts":"5XCZVRXSBQR19ZK","kind":"task.claimed","project":"endless","entity":{"type":"task","id":"1445"},"actor":{"kind":"cli","id":"mikeschinkel@m4macmini.local","session_id":"524"},"payload":{"session_id":524}}
+{"v":1,"ts":"5XD026VK3Q019ZK","kind":"task.fields_updated","project":"endless","entity":{"type":"task","id":"1445"},"actor":{"kind":"cli","id":"mikeschinkel@m4macmini.local","session_id":"524"},"payload":{"fields":{"status":"verify"}}}
