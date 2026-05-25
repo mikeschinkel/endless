@@ -1,5 +1,13 @@
 -- Endless: Project Awareness System
--- SQLite Schema v3
+-- Authoritative database schema (single source of truth).
+--
+-- Every table the codebase relies on is defined here, in its current shape,
+-- as CREATE ... IF NOT EXISTS. This file is executed on every connection
+-- (monitor.DB()), so it is a no-op on a populated DB and creates everything
+-- on a fresh one. Additive change (new tables / nullable columns / indexes)
+-- goes here directly. Destructive, one-off change goes in a per-ticket file
+-- under internal/schema/changes/, applied once at land time.
+--
 -- NOTE: No CHECK constraints. SQLite cannot ALTER/DROP them without
 -- rebuilding the entire table, which caused catastrophic data loss.
 -- All validation is done in application code (Go + Python).
@@ -7,6 +15,15 @@
 PRAGMA journal_mode=WAL;
 PRAGMA busy_timeout=5000;
 PRAGMA foreign_keys=ON;
+
+-- Schema-change marker. One row per applied per-ticket change file
+-- (internal/schema/changes/<name>), keyed by the change's basename. Empty on
+-- a fresh DB; populated by `endless db apply-change` at land time. Re-applying
+-- a change is gated by the presence of its row.
+CREATE TABLE IF NOT EXISTS _schema_version (
+    name       TEXT PRIMARY KEY,
+    applied_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now'))
+);
 
 -- Projects
 CREATE TABLE IF NOT EXISTS projects (
@@ -232,3 +249,111 @@ CREATE TABLE IF NOT EXISTS task_landings (
 );
 CREATE INDEX IF NOT EXISTS idx_task_landings_task
     ON task_landings(task_id, landed_at DESC);
+
+-- Pivot gates (E-971 Layer E). One row per pivot trigger; an "open" gate has
+-- cleared_at IS NULL. cleared_by names the verb that resolved it.
+CREATE TABLE IF NOT EXISTS session_gates (
+    id INTEGER PRIMARY KEY,
+    session_id TEXT NOT NULL,
+    matcher_phrase TEXT NOT NULL,
+    triggered_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
+    cleared_at TEXT,
+    cleared_by TEXT,
+    FOREIGN KEY (session_id) REFERENCES sessions(session_id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_session_gates_session
+    ON session_gates(session_id, triggered_at DESC);
+
+-- Session status snapshots (E-1312 / E-1314). Latest row by created_at is the
+-- current status. `tasks` holds all <task> elements; `summary` holds <layer>
+-- children; active_task_id joins to tasks.id.
+CREATE TABLE IF NOT EXISTS session_statuses (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id INTEGER,
+    active_task_id INTEGER,
+    created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
+    headline TEXT,
+    summary TEXT,
+    tasks TEXT,
+    decisions TEXT,
+    commits TEXT,
+    memory TEXT,
+    notes TEXT,
+    FOREIGN KEY (active_task_id) REFERENCES tasks(id) ON DELETE SET NULL
+);
+CREATE INDEX IF NOT EXISTS session_statuses_session_recent_idx
+    ON session_statuses (session_id, created_at DESC);
+
+-- Which sessions touched which tasks (E-1322). Query-speed projection of the
+-- events ledger. No FKs by design: rows must outlive their referenced
+-- session/task so the "session N touched task M" record survives deletion.
+CREATE TABLE IF NOT EXISTS session_tasks (
+    id INTEGER PRIMARY KEY,
+    session_id INTEGER NOT NULL,
+    task_id INTEGER NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE(session_id, task_id)
+);
+CREATE INDEX IF NOT EXISTS idx_session_tasks_task
+    ON session_tasks(task_id);
+
+-- Curated, persistent per-project "next" list (E-1421). Five tables: header,
+-- lanes, items, auto-added pending items awaiting curation, and a revision
+-- audit trail.
+CREATE TABLE IF NOT EXISTS project_next (
+    id INTEGER PRIMARY KEY,
+    project_id INTEGER NOT NULL UNIQUE,
+    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS project_next_lanes (
+    id INTEGER PRIMARY KEY,
+    project_next_id INTEGER NOT NULL,
+    lane_id TEXT NOT NULL,
+    priority INTEGER NOT NULL,
+    rationale TEXT NOT NULL,
+    UNIQUE(project_next_id, lane_id),
+    FOREIGN KEY (project_next_id) REFERENCES project_next(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS project_next_items (
+    id INTEGER PRIMARY KEY,
+    project_next_lane_id INTEGER NOT NULL,
+    task_id TEXT NOT NULL,
+    reason TEXT NOT NULL,
+    position INTEGER NOT NULL,
+    UNIQUE(project_next_lane_id, task_id),
+    UNIQUE(project_next_lane_id, position),
+    FOREIGN KEY (project_next_lane_id) REFERENCES project_next_lanes(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS project_next_pending (
+    id INTEGER PRIMARY KEY,
+    project_next_id INTEGER NOT NULL,
+    task_id TEXT NOT NULL,
+    reason TEXT NOT NULL,
+    added_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
+    UNIQUE(project_next_id, task_id),
+    FOREIGN KEY (project_next_id) REFERENCES project_next(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS project_next_revisions (
+    id INTEGER PRIMARY KEY,
+    project_next_id INTEGER NOT NULL,
+    session_id INTEGER NOT NULL,
+    revised_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
+    change_kind TEXT NOT NULL,
+    json_snapshot TEXT,
+    FOREIGN KEY (project_next_id) REFERENCES project_next(id),
+    FOREIGN KEY (session_id) REFERENCES sessions(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_project_next_lanes_priority
+    ON project_next_lanes(project_next_id, priority);
+CREATE INDEX IF NOT EXISTS idx_project_next_revisions_recent
+    ON project_next_revisions(project_next_id, revised_at DESC);
+CREATE INDEX IF NOT EXISTS idx_project_next_pending_added
+    ON project_next_pending(project_next_id, added_at);
+CREATE INDEX IF NOT EXISTS idx_project_next_items_task
+    ON project_next_items(task_id);

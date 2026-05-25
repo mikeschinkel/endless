@@ -1,11 +1,15 @@
 package main
 
 import (
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 
 	_ "modernc.org/sqlite"
 
@@ -17,7 +21,7 @@ import (
 func main() {
 	if len(os.Args) < 2 {
 		fmt.Fprintf(os.Stderr, "Usage: endless-event <command> [flags]\n")
-		fmt.Fprintf(os.Stderr, "Commands: emit, validate-db, rebuild-db, migrate-db, reap-worktrees\n")
+		fmt.Fprintf(os.Stderr, "Commands: emit, validate-db, rebuild-db, apply-change, backup, reap-worktrees\n")
 		os.Exit(1)
 	}
 
@@ -28,8 +32,10 @@ func main() {
 		runValidateDB()
 	case "rebuild-db":
 		runRebuildDB()
-	case "migrate-db":
-		runMigrateDB()
+	case "apply-change":
+		runApplyChange()
+	case "backup":
+		runBackup()
 	case "reap-worktrees":
 		runReapWorktrees()
 	default:
@@ -423,35 +429,130 @@ func runReapWorktrees() {
 	}
 }
 
-func runMigrateDB() {
-	fs := flag.NewFlagSet("migrate-db", flag.ExitOnError)
-	dryRun := fs.Bool("dry-run", false, "Report pending migrations without applying")
-	forceRebuild := fs.Bool("force-rebuild", false, "Allow migrations marked RequiresRebuild")
-	target := fs.Int("target", 0, "Highest version to apply (0 = current)")
+// schemaVersionDDL matches the shape in internal/schema/schema.sql. Created
+// defensively before checking/recording the applied marker.
+const schemaVersionDDL = `CREATE TABLE IF NOT EXISTS _schema_version (
+	name       TEXT PRIMARY KEY,
+	applied_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now'))
+)`
+
+// runApplyChange applies one per-ticket schema-change file
+// (internal/schema/changes/<name>.{sql,go}) and records it in _schema_version.
+// The change name is the file's basename without extension; the same name is
+// used both as the applied marker and (for .go) by the runner helper. Already
+// applied changes are skipped. Effects and the marker insert commit together.
+func runApplyChange() {
+	fs := flag.NewFlagSet("apply-change", flag.ExitOnError)
 	fs.Parse(os.Args[2:])
 
-	runner := monitor.RunnerExplicit
-	if *forceRebuild {
-		runner = monitor.RunnerForceRebuild
+	args := fs.Args()
+	if len(args) != 1 {
+		emitChangeErr("", "apply-change requires exactly one <path> argument")
 	}
-
-	result, err := monitor.Migrate(monitor.MigrateOpts{
-		Runner:       runner,
-		AllowRebuild: *forceRebuild,
-		DryRun:       *dryRun,
-		Target:       *target,
-	})
+	path, err := filepath.Abs(args[0])
 	if err != nil {
-		out := map[string]any{
-			"applied": result.Applied,
-			"skipped": result.Skipped,
-			"error":   err.Error(),
-		}
-		b, _ := json.Marshal(out)
-		fmt.Println(string(b))
-		os.Exit(1)
+		emitChangeErr("", fmt.Sprintf("resolve path: %v", err))
+	}
+	if _, err = os.Stat(path); err != nil {
+		emitChangeErr("", fmt.Sprintf("change file not found: %s", path))
 	}
 
-	b, _ := json.Marshal(result)
+	ext := strings.ToLower(filepath.Ext(path))
+	name := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
+
+	db, err := monitor.DB()
+	if err != nil {
+		emitChangeErr(name, fmt.Sprintf("open db: %v", err))
+	}
+	if _, err = db.Exec(schemaVersionDDL); err != nil {
+		emitChangeErr(name, fmt.Sprintf("ensure _schema_version: %v", err))
+	}
+	var applied int
+	db.QueryRow("SELECT count(*) FROM _schema_version WHERE name = ?", name).Scan(&applied)
+	if applied > 0 {
+		emitChangeResult(name, "skipped", "already applied")
+		return
+	}
+
+	switch ext {
+	case ".sql":
+		applySQLChange(db, path, name)
+	case ".go":
+		applyGoChange(path, name)
+	default:
+		emitChangeErr(name, fmt.Sprintf("unsupported change extension %q (only .sql and .go)", ext))
+	}
+}
+
+// applySQLChange runs a .sql change file's statements and the marker insert in
+// a single BEGIN IMMEDIATE transaction on the shared single connection. The
+// file may itself reshape _schema_version (as the E-1459 reshape does); the
+// marker insert runs after the file's statements, against whatever shape the
+// file leaves behind.
+func applySQLChange(db *sql.DB, path, name string) {
+	content, err := os.ReadFile(path)
+	if err != nil {
+		emitChangeErr(name, fmt.Sprintf("read change file: %v", err))
+	}
+	if _, err = db.Exec("BEGIN IMMEDIATE TRANSACTION"); err != nil {
+		emitChangeErr(name, fmt.Sprintf("begin: %v", err))
+	}
+	if _, err = db.Exec(string(content)); err != nil {
+		db.Exec("ROLLBACK")
+		emitChangeErr(name, fmt.Sprintf("apply: %v", err))
+	}
+	if _, err = db.Exec("INSERT INTO _schema_version (name) VALUES (?)", name); err != nil {
+		db.Exec("ROLLBACK")
+		emitChangeErr(name, fmt.Sprintf("record marker: %v", err))
+	}
+	if _, err = db.Exec("COMMIT"); err != nil {
+		db.Exec("ROLLBACK")
+		emitChangeErr(name, fmt.Sprintf("commit: %v", err))
+	}
+	emitChangeResult(name, "applied", "")
+}
+
+// applyGoChange runs a .go change via `go run`. The script uses the runner
+// helper to do its own BEGIN IMMEDIATE + work + marker insert + COMMIT. The DB
+// path is passed via ENDLESS_CHANGE_DB so the subprocess targets the exact same
+// file this process resolved. The script's logs go to stderr; this process's
+// stdout stays clean JSON. The runner's exit code is propagated on failure.
+func applyGoChange(path, name string) {
+	cmd := exec.Command("go", "run", path)
+	cmd.Env = append(os.Environ(), "ENDLESS_CHANGE_DB="+monitor.DBPath())
+	cmd.Stdout = os.Stderr
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			os.Exit(exitErr.ExitCode())
+		}
+		emitChangeErr(name, fmt.Sprintf("go run %s: %v", path, err))
+	}
+	emitChangeResult(name, "applied", "")
+}
+
+func runBackup() {
+	monitor.BackupDB()
+	b, _ := json.Marshal(map[string]any{"status": "ok"})
 	fmt.Println(string(b))
+}
+
+func emitChangeResult(name, status, reason string) {
+	out := map[string]any{"name": name, "status": status}
+	if reason != "" {
+		out["reason"] = reason
+	}
+	b, _ := json.Marshal(out)
+	fmt.Println(string(b))
+}
+
+func emitChangeErr(name, msg string) {
+	out := map[string]any{"status": "error", "error": msg}
+	if name != "" {
+		out["name"] = name
+	}
+	b, _ := json.Marshal(out)
+	fmt.Println(string(b))
+	os.Exit(1)
 }

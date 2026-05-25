@@ -5,14 +5,12 @@ import (
 	"testing"
 )
 
-// freshSessionsDB returns a freshly-migrated DB seeded with project rows
-// for ids 1 and 2 so sessions inserts referencing them satisfy the FK.
+// freshSessionsDB returns a DB with schema.sql applied, seeded with project
+// rows for ids 1 and 2 so sessions inserts referencing them satisfy the FK.
 func freshSessionsDB(t *testing.T) *sql.DB {
 	t.Helper()
 	db := freshDB(t)
-	if _, err := migrate(db, MigrateOpts{Runner: RunnerAuto, SkipBackup: true}); err != nil {
-		t.Fatalf("migrate: %v", err)
-	}
+	applySchema(t, db)
 	for id := int64(1); id <= 2; id++ {
 		suffix := string(rune('0' + id))
 		if _, err := db.Exec(

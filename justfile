@@ -123,6 +123,29 @@ land task_id="":
     # Computing main_root first and cd'ing there after the land sidesteps
     # that race.
     main_root=$(cd "$(dirname "$(git rev-parse --git-common-dir)")" && pwd)
+    # Apply this branch's schema-change files to the DB before the
+    # (irreversible) ff-merge, backing up first as cheap insurance. The
+    # worktree still exists here; `main...HEAD` lists only the change files
+    # this branch added since diverging from main. The runner/ helper package
+    # is excluded — it is library code, not a change script. If any apply
+    # fails, the land aborts before main advances (clean recovery).
+    wt="$main_root/.endless/worktrees/e-${tid#[Ee]-}"
+    if [ -d "$wt" ]; then
+        changes=$(git -C "$wt" diff main...HEAD --diff-filter=A --name-only \
+            -- internal/schema/changes/ ':(exclude)internal/schema/changes/runner/')
+        if [ -n "$changes" ]; then
+            echo "→ Backing up DB before applying schema changes"
+            endless db backup
+            for f in $changes; do
+                case "$f" in
+                    *.sql|*.go)
+                        echo "→ Applying schema change: $f"
+                        endless db apply-change "$wt/$f"
+                        ;;
+                esac
+            done
+        fi
+    fi
     endless worktree land "$tid"
     echo "→ Refreshing binaries (just build)"
     cd "$main_root"

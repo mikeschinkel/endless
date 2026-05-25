@@ -243,11 +243,12 @@ def _migrate_v2(conn: sqlite3.Connection):
             conn.execute("ALTER TABLE messages RENAME COLUMN channel_id TO conversation_id")
     conn.commit()
 
-    # Steps 4-12: Table rebuild migrations — MOVED TO MANUAL
+    # Steps 4-12: Table rebuild migrations — MOVED OUT
     # These previously ran automatically but caused data loss when rebuild
     # migrations dropped columns or failed to copy new columns.
-    # Now only safe data UPDATEs run automatically.
-    # Run 'endless db migrate' for table rebuilds (with backup).
+    # Now only safe data UPDATEs run automatically. Destructive, one-off
+    # changes live in internal/schema/changes/ and are applied at land time
+    # via 'endless db apply-change'.
 
     # Safe data updates from former rebuild migrations:
     if _has_table(conn, "task_deps"):

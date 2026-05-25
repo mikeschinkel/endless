@@ -6,10 +6,11 @@ import (
 	"testing"
 
 	_ "modernc.org/sqlite"
+
+	"github.com/mikeschinkel/endless/internal/schema"
 )
 
-// freshDB opens a file-backed empty SQLite DB in t.TempDir() and applies the
-// connection-level pragmas that monitor.DB() normally sets. It returns the
+// freshDB opens a file-backed empty SQLite DB in t.TempDir(). It returns the
 // open handle; the test runner cleans up the tempdir.
 func freshDB(t *testing.T) *sql.DB {
 	t.Helper()
@@ -23,19 +24,28 @@ func freshDB(t *testing.T) *sql.DB {
 	return db
 }
 
-// TestMigrateFreshDB_CreatesBaselineTables verifies that running migrate()
-// against an empty database produces every table the rest of the codebase
-// expects to exist — both the V0 baseline (created by schema.SQL) and the
-// versioned migration additions (session_gates, session_statuses).
-func TestMigrateFreshDB_CreatesBaselineTables(t *testing.T) {
-	db := freshDB(t)
-
-	_, err := migrate(db, MigrateOpts{Runner: RunnerAuto, SkipBackup: true})
-	if err != nil {
-		t.Fatalf("migrate: %v", err)
+// applySchema executes schema.SQL against db — the same call monitor.DB() makes
+// on every connection. schema.SQL is the authoritative schema (all CREATE ...
+// IF NOT EXISTS), so this creates every table on a fresh DB and is a no-op on a
+// populated one. Tests use it where they previously called the deleted migrate().
+func applySchema(t *testing.T, db *sql.DB) {
+	t.Helper()
+	if _, err := db.Exec(schema.SQL); err != nil {
+		t.Fatalf("apply schema: %v", err)
 	}
+}
+
+// TestSchemaFreshDB_CreatesAllTables verifies that applying schema.SQL to an
+// empty database produces every table the rest of the codebase expects to
+// exist. With the V-migration framework gone, schema.sql is the single source
+// of truth, so all of these (formerly split between schema.sql and migrateV*)
+// must be present after one apply.
+func TestSchemaFreshDB_CreatesAllTables(t *testing.T) {
+	db := freshDB(t)
+	applySchema(t, db)
 
 	wantTables := []string{
+		"_schema_version",
 		"projects",
 		"project_deps",
 		"notes",
@@ -49,8 +59,10 @@ func TestMigrateFreshDB_CreatesBaselineTables(t *testing.T) {
 		"session_messages",
 		"task_files",
 		"suggestions",
+		"task_landings",
 		"session_gates",
 		"session_statuses",
+		"session_tasks",
 		"project_next",
 		"project_next_lanes",
 		"project_next_items",
@@ -59,35 +71,27 @@ func TestMigrateFreshDB_CreatesBaselineTables(t *testing.T) {
 	}
 	for _, name := range wantTables {
 		if !hasTable(db, name) {
-			t.Errorf("expected table %q to exist after migrate(); missing", name)
+			t.Errorf("expected table %q to exist after applying schema.sql; missing", name)
 		}
 	}
 }
 
-// TestMigrateIdempotent verifies that calling migrate() twice on the same
-// DB is a no-op on the second pass: no errors, no duplicate audit rows, and
-// the schema is unchanged. The V0 baseline is executed every migrate() call,
-// so this guards against schema.sql growing a non-idempotent statement.
-func TestMigrateIdempotent(t *testing.T) {
+// TestSchemaReexecIdempotent verifies that applying schema.SQL twice on the
+// same DB is a no-op on the second pass: no errors and no duplicated objects.
+// Idempotency is now a property of schema.sql itself (every statement is
+// IF NOT EXISTS), which monitor.DB() relies on running schema.SQL per connect.
+func TestSchemaReexecIdempotent(t *testing.T) {
 	db := freshDB(t)
+	applySchema(t, db) // applySchema t.Fatalf's on any error...
+	applySchema(t, db) // ...so a second clean apply is the idempotency assertion.
 
-	if _, err := migrate(db, MigrateOpts{Runner: RunnerAuto, SkipBackup: true}); err != nil {
-		t.Fatalf("first migrate: %v", err)
+	var n int
+	if err := db.QueryRow(
+		"SELECT count(*) FROM sqlite_master WHERE type='table' AND name='tasks'",
+	).Scan(&n); err != nil {
+		t.Fatalf("count tasks table: %v", err)
 	}
-	if _, err := migrate(db, MigrateOpts{Runner: RunnerAuto, SkipBackup: true}); err != nil {
-		t.Fatalf("second migrate: %v", err)
-	}
-
-	rows, err := db.Query("SELECT version, count(*) FROM _schema_version GROUP BY version HAVING count(*) > 1")
-	if err != nil {
-		t.Fatalf("query duplicates: %v", err)
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var version, n int
-		if err := rows.Scan(&version, &n); err != nil {
-			t.Fatalf("scan: %v", err)
-		}
-		t.Errorf("schema_version %d has %d audit rows after second migrate; want exactly 1", version, n)
+	if n != 1 {
+		t.Errorf("tasks table defined %d times after re-exec; want 1", n)
 	}
 }

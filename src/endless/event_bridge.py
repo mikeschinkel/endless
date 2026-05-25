@@ -159,12 +159,37 @@ def emit_event(
     return None
 
 
-def migrate_db(
-    dry_run: bool = False,
-    force_rebuild: bool = False,
-    target: int = 0,
-) -> dict:
-    """Shell out to `endless-event migrate-db` and return parsed JSON.
+def apply_change(path: str) -> dict:
+    """Shell out to `endless-event apply-change <path>` and return parsed JSON.
+
+    Applies one per-ticket schema-change file (internal/schema/changes/<name>)
+    and records it in _schema_version. Returns {"name", "status"[, "reason"]}.
+    Raises click.ClickException on failure (binary missing or non-zero exit).
+    """
+    event_bin = shutil.which("endless-event")
+    if not event_bin:
+        raise click.ClickException(
+            "endless-event binary not found on PATH. Build it: just build"
+        )
+
+    cmd = [event_bin, "apply-change", str(path)]
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        # endless-event prints JSON with an "error" field on failure.
+        try:
+            payload = json.loads(result.stdout.strip()) if result.stdout.strip() else {}
+        except json.JSONDecodeError:
+            payload = {}
+        msg = payload.get("error") or result.stderr.strip() or "apply-change failed"
+        raise click.ClickException(f"apply-change failed: {msg}")
+
+    if not result.stdout.strip():
+        return {}
+    return json.loads(result.stdout.strip())
+
+
+def backup_db() -> dict:
+    """Shell out to `endless-event backup` (VACUUM INTO a timestamped copy).
 
     Raises click.ClickException on failure (binary missing or non-zero exit).
     """
@@ -174,26 +199,13 @@ def migrate_db(
             "endless-event binary not found on PATH. Build it: just build"
         )
 
-    cmd = [event_bin, "migrate-db"]
-    if dry_run:
-        cmd.append("--dry-run")
-    if force_rebuild:
-        cmd.append("--force-rebuild")
-    if target > 0:
-        cmd.extend(["--target", str(target)])
-
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    result = subprocess.run([event_bin, "backup"], capture_output=True, text=True)
     if result.returncode != 0:
-        # endless-event prints JSON with an "error" field on failure.
-        try:
-            payload = json.loads(result.stdout.strip()) if result.stdout.strip() else {}
-        except json.JSONDecodeError:
-            payload = {}
-        msg = payload.get("error") or result.stderr.strip() or "migrate-db failed"
-        raise click.ClickException(f"migrate-db failed: {msg}")
+        msg = result.stderr.strip() or "backup failed"
+        raise click.ClickException(f"backup failed: {msg}")
 
     if not result.stdout.strip():
-        return {"applied": [], "skipped": []}
+        return {"status": "ok"}
     return json.loads(result.stdout.strip())
 
 

@@ -1868,28 +1868,27 @@ def db_cmd():
     pass
 
 
-@db_cmd.command("migrate")
-@click.option("--dry-run", is_flag=True,
-              help="Report pending migrations without applying")
-@click.option("--force-rebuild", is_flag=True,
-              help="Allow migrations that rebuild whole tables")
-@click.option("--target", type=int, default=0,
-              help="Highest version to apply (0 = current)")
-def db_migrate(dry_run, force_rebuild, target):
-    """Run pending schema migrations."""
-    from endless.event_bridge import migrate_db
-    result = migrate_db(dry_run=dry_run, force_rebuild=force_rebuild, target=target)
-    applied = result.get("applied") or []
-    skipped = result.get("skipped") or []
-    if not applied:
-        if dry_run:
-            click.echo("Dry run: no migrations pending.")
-        else:
-            click.echo("No migrations to run.")
+@db_cmd.command("apply-change")
+@click.argument("path", type=click.Path(exists=True))
+def db_apply_change(path):
+    """Apply one per-ticket schema-change file (internal/schema/changes/<name>).
+
+    Records the change in _schema_version; re-applying an already-applied change
+    is a no-op. Driven by `just land`, one file per invocation.
+    """
+    from endless.event_bridge import apply_change
+    result = apply_change(path)
+    name = result.get("name") or path
+    status = result.get("status") or "applied"
+    if status == "skipped":
+        click.echo(f"Change {name}: already applied (skipped).")
     else:
-        verb = "Would apply" if dry_run else "Applied"
-        click.echo(f"{verb} {len(applied)} migration(s):")
-        for step in applied:
-            click.echo(f"  v{step['version']}: {step['name']}")
-    if skipped:
-        click.echo(f"Skipped {len(skipped)} migration(s).")
+        click.echo(f"Change {name}: applied.")
+
+
+@db_cmd.command("backup")
+def db_backup():
+    """Back up the database (VACUUM INTO a timestamped copy under backups/)."""
+    from endless.event_bridge import backup_db
+    backup_db()
+    click.echo("Database backed up.")

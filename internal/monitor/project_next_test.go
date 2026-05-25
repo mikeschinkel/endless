@@ -6,7 +6,8 @@ import (
 	"testing"
 )
 
-// projectNextTables are the five tables added by migrateV11.
+// projectNextTables are the five project_next tables defined in schema.sql
+// (originally added by migrateV12, E-1421).
 var projectNextTables = []string{
 	"project_next",
 	"project_next_lanes",
@@ -20,9 +21,7 @@ var projectNextTables = []string{
 // column 0 is named "id" with pk=1.
 func TestProjectNextHasIDColumns(t *testing.T) {
 	db := freshDB(t)
-	if _, err := migrate(db, MigrateOpts{Runner: RunnerAuto, SkipBackup: true}); err != nil {
-		t.Fatalf("migrate: %v", err)
-	}
+	applySchema(t, db)
 
 	for _, table := range projectNextTables {
 		rows, err := db.Query("PRAGMA table_info(" + table + ")")
@@ -76,9 +75,7 @@ func TestProjectNextHasIDColumns(t *testing.T) {
 // out of scope for the cascade test.
 func TestProjectNextCascadeDeletes(t *testing.T) {
 	db := freshDB(t)
-	if _, err := migrate(db, MigrateOpts{Runner: RunnerAuto, SkipBackup: true}); err != nil {
-		t.Fatalf("migrate: %v", err)
-	}
+	applySchema(t, db)
 	if _, err := db.Exec("PRAGMA foreign_keys = ON"); err != nil {
 		t.Fatalf("enable foreign_keys: %v", err)
 	}
@@ -148,9 +145,7 @@ func TestProjectNextCascadeDeletes(t *testing.T) {
 // same (project_next_id, lane_id) tuple are rejected by the UNIQUE constraint.
 func TestProjectNextLaneUniqueRejectsDuplicate(t *testing.T) {
 	db := freshDB(t)
-	if _, err := migrate(db, MigrateOpts{Runner: RunnerAuto, SkipBackup: true}); err != nil {
-		t.Fatalf("migrate: %v", err)
-	}
+	applySchema(t, db)
 
 	res, err := db.Exec("INSERT INTO projects (name, path) VALUES (?, ?)", "p", "/tmp/p")
 	if err != nil {
@@ -185,9 +180,7 @@ func TestProjectNextLaneUniqueRejectsDuplicate(t *testing.T) {
 // with the same (project_next_lane_id, position) tuple are rejected.
 func TestProjectNextItemPositionUniqueRejectsDuplicate(t *testing.T) {
 	db := freshDB(t)
-	if _, err := migrate(db, MigrateOpts{Runner: RunnerAuto, SkipBackup: true}); err != nil {
-		t.Fatalf("migrate: %v", err)
-	}
+	applySchema(t, db)
 
 	res, err := db.Exec("INSERT INTO projects (name, path) VALUES (?, ?)", "p", "/tmp/p")
 	if err != nil {
@@ -232,9 +225,7 @@ func TestProjectNextItemPositionUniqueRejectsDuplicate(t *testing.T) {
 // loudly rather than silently passing.
 func TestProjectNextItemFKRejectsOrphan(t *testing.T) {
 	db := freshDB(t)
-	if _, err := migrate(db, MigrateOpts{Runner: RunnerAuto, SkipBackup: true}); err != nil {
-		t.Fatalf("migrate: %v", err)
-	}
+	applySchema(t, db)
 	if _, err := db.Exec("PRAGMA foreign_keys = ON"); err != nil {
 		t.Fatalf("enable foreign_keys: %v", err)
 	}
