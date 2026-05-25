@@ -312,7 +312,7 @@ func execTaskFieldsUpdated(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 
 	allowedFields := map[string]string{
 		"title": "title", "description": "description", "text": "text",
-		"prompt": "prompt", "phase": "phase", "tier": "tier",
+		"phase": "phase", "tier": "tier",
 		"type": "type", "status": "status", "parent_id": "parent_id",
 		"outcome": "outcome", "analysis": "analysis",
 	}

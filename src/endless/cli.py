@@ -798,8 +798,6 @@ def task_list(project, show_all, status, phase, tier, parent_id, related_to_id, 
               help="Hide description")
 @click.option("--text", "show_text", is_flag=True,
               help="Show text field")
-@click.option("--prompt", "show_prompt", is_flag=True,
-              help="Show prompt field")
 @click.option("--children", "show_children", is_flag=True,
               help="Show direct children")
 @click.option("--outcome", "show_outcome", is_flag=True,
@@ -808,13 +806,13 @@ def task_list(project, show_all, status, phase, tier, parent_id, related_to_id, 
               help="Token-efficient output for LLMs")
 @click.option("--json", "as_json", is_flag=True,
               help="JSON output")
-def task_show(item_ids, no_description, show_text, show_prompt,
+def task_show(item_ids, no_description, show_text,
               show_children, show_outcome, llm, as_json):
     """Show detail for one or more tasks."""
     from endless.task_cmd import detail_item
     for item_id in item_ids:
         detail_item(item_id, show_description=not no_description,
-                    show_text=show_text, show_prompt=show_prompt,
+                    show_text=show_text,
                     show_children=show_children, show_outcome=show_outcome,
                     llm=llm, as_json=as_json)
 
@@ -906,8 +904,6 @@ def task_recent(project, show_all, limit, llm, as_json, parent_id):
               help="Filter to children of this task (e.g. E-799), or 'none' for root tasks")
 @click.option("--text", "search_text", is_flag=True,
               help="Also search in text field")
-@click.option("--prompt", "search_prompt", is_flag=True,
-              help="Also search in prompt field")
 @click.option("--limit", default=20, type=int,
               help="Max results (default: 20)")
 @click.option("--llm", is_flag=True,
@@ -915,14 +911,14 @@ def task_recent(project, show_all, limit, llm, as_json, parent_id):
 @click.option("--json", "as_json", is_flag=True,
               help="JSON output")
 def task_search(query, project, show_all, status, phase, parent_id,
-                search_text, search_prompt, limit, llm, as_json):
+                search_text, limit, llm, as_json):
     """Search tasks by query string."""
     from endless.task_cmd import search_tasks, parse_parent_filter
     parent_val = parse_parent_filter(parent_id) if parent_id else None
     search_tasks(query, project_name=project, show_all=show_all,
                  status_filter=status, phase_filter=phase,
                  parent_id=parent_val,
-                 search_text=search_text, search_prompt=search_prompt,
+                 search_text=search_text,
                  limit=limit, llm=llm, as_json=as_json)
 
 
@@ -1008,8 +1004,6 @@ def task_add(title, description, text_file, phase, project, parent, after, task_
               help="New description")
 @click.option("--text", "text_file", default=None,
               help="Load full task text from file")
-@click.option("--prompt", "prompt_file", default=None,
-              help="Load prompt from file")
 @click.option("--parent", type=TASK_ID, default=None,
               help="Set parent task ID (0 to make root)")
 @click.option("--phase", default=None,
@@ -1030,7 +1024,7 @@ def task_add(title, description, text_file, phase, project, parent, after, task_
               help="Rationale text — creates a paired decision-type task linked via 'documents' to each updated task")
 @click.option("--no-create-worktree", "no_create_worktree", is_flag=True,
               help="With --text: refuse to auto-create a worktree if none exists (default is to create one). E-1216.")
-def task_update(item_ids, status, title, description, text_file, prompt_file, parent, phase, tier,
+def task_update(item_ids, status, title, description, text_file, parent, phase, tier,
                 task_type, analysis_text, force, outcome, decision_text, no_create_worktree):
     """Update fields on one or more tasks."""
     from endless.task_cmd import update_plan, add_item, link_tasks, parse_tier
@@ -1045,7 +1039,7 @@ def task_update(item_ids, status, title, description, text_file, prompt_file, pa
     for item_id in item_ids:
         update_plan(item_id, status=status, title=title,
                     description=description, text_file=text_file,
-                    prompt_file=prompt_file, parent_id=parent,
+                    parent_id=parent,
                     phase=phase, tier=tier_val, task_type=task_type,
                     analysis=analysis_text,
                     outcome=outcome, force=force,
@@ -1211,12 +1205,12 @@ def task_move(item_id, parent, root, with_children, children_of, project):
               project_name=project)
 
 
-@task_cmd.command("prompt")
+@task_cmd.command("handoff")
 @click.argument("item_id", type=TASK_ID)
-def task_prompt(item_id):
-    """Output the raw prompt for a task (for piping to a session)."""
-    from endless.task_cmd import show_prompt
-    show_prompt(item_id)
+def task_handoff(item_id):
+    """Render the spawn handoff for a task (the text spawn pastes)."""
+    from endless.task_cmd import show_handoff
+    show_handoff(item_id)
 
 
 @task_cmd.command("spawn")
@@ -1224,7 +1218,7 @@ def task_prompt(item_id):
 @click.option("--project", default=None,
               help="Project name (default: detect from cwd)")
 @click.option("--no-plan", is_flag=True,
-              help="Skip plan mode, send prompt directly")
+              help="Skip plan mode, send the handoff directly")
 @click.option("--worktree", default=None,
               help="cd to this path (e.g. a git worktree) before launching "
                    "claude, instead of the spawn-created task worktree. The "
@@ -1236,7 +1230,10 @@ def task_prompt(item_id):
                    "(verify/confirmed/declined/obsolete/assumed/completed); "
                    "demotes it back to in_progress. Mirrors `claim --force`.")
 def task_spawn(item_id, project, no_plan, worktree, force):
-    """Spawn a new tmux window with Claude working on a task's prompt."""
+    """Spawn a new tmux window with Claude working on a task.
+
+    Pastes the handoff generated from the template (no stored prompt — E-1469).
+    """
     from endless.task_cmd import spawn_plan
     spawn_plan(item_id, project_name=project, no_plan=no_plan,
                worktree=worktree, force=force)

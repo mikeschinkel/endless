@@ -95,7 +95,6 @@ CREATE TABLE IF NOT EXISTS tasks (
     title TEXT NOT NULL,
     description TEXT,
     text TEXT,
-    prompt TEXT,
     phase TEXT NOT NULL DEFAULT 'now',
     status TEXT NOT NULL DEFAULT 'needs_plan',
     source_file TEXT,

@@ -21,7 +21,7 @@ Endless is in active development — paving the cowpaths. Expect rough edges, ex
 
 When your user gives you a task ID:
 
-1. `endless task show <id> --text --prompt` — read the task and any attached plan.
+1. `endless task show <id> --text` — read the task and any attached plan.
 2. `endless task claim <id>` — claim the task. This automatically creates a git worktree at `.endless/worktrees/e-<id>/` for your work. Every task gets its own worktree so multiple sessions can work in parallel without stepping on each other, and `main`'s working tree stays clean.
 3. Get into the worktree:
    - `cd "$(endless worktree for-task <id>)"`, or
@@ -96,14 +96,14 @@ endless task release <id>                        # then the other session: task 
 endless task spawn <id>                          # or spawn a fresh Claude session
 
 # Read a task you didn't claim — no claim needed for reads
-endless task show <id> --text --prompt --children --llm
+endless task show <id> --text --children --llm
 ```
 
 ## Sections
 
 For details, run `endless guide <section>`:
 
-- **tasks** — task CRUD reference, field semantics (title/description/text/prompt/analysis/notes/outcome), and verbs.
+- **tasks** — task CRUD reference, field semantics (title/description/text/analysis/notes/outcome), and verbs.
 - **orchestration** — per-task worktrees, spawning sessions, inter-session channels, commit-to-main policy.
 - **decisions** — documenting decisions as first-class items, **including STRONG guidance about preference vs prohibition — read this**.
 - **sessions** — recording session status (`endless session status add`), the `session_statuses` row shape, when to call it, and discovery patterns for "who am I."

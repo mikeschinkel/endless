@@ -242,8 +242,12 @@ func replayTaskFieldsUpdated(db *sql.DB, evt *Event, result *ProjectResult) erro
 	var args []any
 
 	allowedFields := map[string]string{
+		// "prompt" is intentionally absent (E-1469 dropped tasks.prompt):
+		// historical task.fields_updated events still carry it, and the
+		// unknown-field branch below skips them rather than writing to the
+		// dropped column on rebuild.
 		"title": "title", "description": "description", "text": "text",
-		"prompt": "prompt", "phase": "phase", "tier": "tier",
+		"phase": "phase", "tier": "tier",
 		"type": "type", "status": "status", "parent_id": "parent_id",
 		"outcome": "outcome", "analysis": "analysis",
 	}

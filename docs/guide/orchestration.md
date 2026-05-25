@@ -116,28 +116,23 @@ This adds the following functions:
 
 ## Spawning another Claude session
 
-`endless task spawn` opens a new tmux window, launches Claude inside it, and pastes the task's prompt as the opening input. Use it to delegate independent work to a fresh session.
+`endless task spawn <id>` opens a new tmux window, launches Claude inside it, and pastes a **generated handoff** as the opening input. Use it to delegate independent work to a fresh session.
 
-### Prerequisite: set the prompt
+### The handoff is generated, not authored
 
-The task must have a `prompt` field set. Without one, `spawn` errors:
+There is nothing to write. The handoff is rendered from a single template (`docs/templates/handoff.md`) merged with the task's id and title plus runtime context (the spawning pane, the spawning session's task). The substantive design lives in the task's `--text` plan, which the handoff tells the spawned session to read — so a prompt can no longer drift from the plan.
 
-```bash
-endless task update <id> --prompt /path/to/prompt.md
-```
-
-Inspect with:
+Inspect the exact text spawn will paste:
 
 ```bash
-endless task prompt <id>           # raw output, suitable for piping
-endless task show <id> --prompt    # decorated output
+endless task handoff <id>
 ```
 
 ### Spawn
 
 ```bash
 endless task spawn <id>
-endless task spawn <id> --no-plan                # skip /plan mode; send prompt directly
+endless task spawn <id> --no-plan                # skip /plan mode; send the handoff directly
 endless task spawn <id> --worktree <path>        # cd to <path> instead of the spawn-created worktree
 endless task spawn <id> --force                  # allow spawn on a done-ish task (demotes status)
 ```
@@ -145,18 +140,17 @@ endless task spawn <id> --force                  # allow spawn on a done-ish tas
 What it does:
 
 1. Validates tmux is running (fails otherwise).
-2. Reads the task's prompt; refuses if absent.
-3. Refuses if the task is in a done-ish status (`verify`/`confirmed`/`declined`/`obsolete`/`assumed`/`completed`) without `--force`, or if another live session already owns the task.
-4. **Pre-claims the task**: flips status to `in_progress` (emitting `task.status_changed`) and creates the per-task worktree at `.endless/worktrees/e-<id>/`. The spawned session lands in a fully-claimed state.
-5. Creates a new tmux window named `<project>_<slug>[E-NNNN]`.
-6. Sets tmux window variables `@endless_spawned_by` (spawn marker keyed off by SessionStart), `@endless_task_id`, and `@endless_project_id`.
-7. `cd`s into the spawn-created worktree (or `--worktree <path>` if given).
-8. Launches `~/.local/bin/claude` (falls back to `claude` on PATH).
-9. The spawned Claude's `SessionStart` hook reads `@endless_spawned_by` and records the session→task binding (no status flip — spawn already did it).
-10. Waits ~5s for Claude to start, then enters `/plan` mode (unless `--no-plan`).
-11. Pastes the prompt and presses Enter.
+2. Refuses if the task is in a done-ish status (`verify`/`confirmed`/`declined`/`obsolete`/`assumed`/`completed`) without `--force`, or if another live session already owns the task.
+3. **Pre-claims the task**: flips status to `in_progress` (emitting `task.status_changed`) and creates the per-task worktree at `.endless/worktrees/e-<id>/`. The spawned session lands in a fully-claimed state.
+4. Creates a new tmux window named `<project>_<slug>[E-NNNN]`.
+5. Sets tmux window variables `@endless_spawned_by` (spawn marker keyed off by SessionStart), `@endless_task_id`, and `@endless_project_id`.
+6. `cd`s into the spawn-created worktree (or `--worktree <path>` if given).
+7. Launches `~/.local/bin/claude` (falls back to `claude` on PATH).
+8. The spawned Claude's `SessionStart` hook reads `@endless_spawned_by` and records the session→task binding (no status flip — spawn already did it).
+9. Waits ~5s for Claude to start, then enters `/plan` mode (unless `--no-plan`).
+10. Renders the handoff, pastes it, and presses Enter.
 
-The spawned session sees the prompt as if you'd typed it. Spawn auto-claims the task — the spawned session does **not** need to run `endless task claim <id>` (claim is idempotent if it does — a friendly notice, no error).
+The spawned session sees the handoff as if you'd typed it. Spawn auto-claims the task — the spawned session does **not** need to run `endless task claim <id>` (claim is idempotent if it does — a friendly notice, no error).
 
 The spawned session can discover its task ID from the tmux window variable:
 
@@ -164,62 +158,17 @@ The spawned session can discover its task ID from the tmux window variable:
 tmux show-window-options -v @endless_task_id    # prints the task ID
 ```
 
-### Authoring the prompt (important — read this whole section)
+### What the handoff carries
 
-The spawned session is a fresh Claude. It will only do what the prompt directs it to do, plus what the guide tells it (since you should direct it to read `endless guide`). Until tmux integration takes over more of this orchestration automatically, you (the spawning session) are responsible for writing prompts that drive the spawned session to **completion** — not just "implementation done" but "task closed, worktree landed, no loose ends." A good prompt includes:
+The handoff is deliberately lean — it delegates the workflow rules to `endless guide` rather than restating them. It gives the spawned session:
 
-**1. Identity and origin.**
-- The spawned task ID up front.
-- The **spawning session's task ID** and the **spawning session's window/pane** (the user's "where did I come from" anchor). Include the tmux command the user can run to return to your window once the spawned session is complete, e.g. `tmux select-window -t <window_name>`.
+- **Identity and origin** — the spawned task's id and title, the spawning session's task, and the `tmux select-window` line back to your window.
+- **Context-gathering** — run `endless guide` for the workflow and `endless task show <id> --text` for the plan.
+- **Drive to completion** — flip to `verify` with how-to-test when done; don't `worktree land`/`drop` without asking; file drive-by work as separate tasks (`--cleans-up <id>`) and confirm before implementing.
 
-**2. Context-gathering directive.**
-- Tell it to run `endless guide` (or the relevant section) for general Endless context.
-- Tell it to run `endless task show <id> --text --prompt` for the specific plan.
+To change what every spawned session is told, edit `docs/templates/handoff.md` — there is no per-task prompt to maintain.
 
-**3. Work.**
-- Spawn has already claimed the task and the spawned session lands in the worktree — no need to instruct an explicit `endless task claim <id>`.
-- Describe the work briefly (the full plan lives in `--text`; don't duplicate it in the prompt).
-
-**4. Goal: drive to completion, not just implementation.**
-- The session's goal is to **close the task** so the user can confirm/assume and archive — not just to write the code.
-- When implementation is done: set status to `verify` **and include "how to test" instructions** in its handoff message.
-- It should not leave its git worktree unmerged and undeleted unless the user explicitly asks it to.
-- **Before** merging (`worktree land`) or dropping (`worktree drop`), it must **ask the user**. Don't auto-merge.
-
-**5. Handle loose ends.**
-- If it discovers new tasks during implementation (drive-by bugs, follow-ups), file them as separate tasks with `task add` (the canonical relation is `--cleans-up <id>` linking back to the spawned task).
-- For any new task it filed, **agree with the user before claiming and implementing it**. Don't quietly scope-creep.
-- Pay close attention to any session-channel messages from the spawning session — they may carry corrections or context discovered after the spawn.
-
-**6. Return path for the user.**
-- After flipping status to `verify`, the spawned session should print a single `tmux select-window -t <spawning-window-name>` line so the user can copy-paste back to your window with zero ceremony.
-
-**7. Tone.**
-- The session should be proactive about closing the task, but **not overbearing** — if the user wants to keep exploring or extending scope from the chat, follow the user's lead.
-
-A minimal but correct prompt looks like:
-
-```text
-You are working on E-NNNN. Spawning session: E-MMMM in tmux window "<window_name>".
-When complete, the user can return to the spawning session via:
-  tmux select-window -t <window_name>
-
-1. Run `endless guide` to learn the workflow.
-2. Run `endless task show E-NNNN --text --prompt` to read the plan.
-3. Spawn has already claimed the task; you're in the worktree. Just do the work.
-4. When implementation is done: `endless task update E-NNNN --status verify`,
-   then tell the user how to test, and print the tmux-return line above.
-5. Do not run `endless worktree land` or `endless worktree drop` without asking
-   the user first. Any new tasks you file mid-stream — confirm with the user
-   before claiming/implementing them.
-
-Goal: drive this task to a state where the user can confirm and the worktree
-can be landed cleanly. Don't leave loose ends.
-```
-
-Keep the prompt short — the substantive plan belongs in `--text`, not duplicated here.
-
-> **Note:** Much of this orchestration (return paths, completion-pressure, status display) is being absorbed by the `endless tmux` integration over time. Until then, the spawning session does this work by writing thoughtful prompts.
+> **Note:** Much of this orchestration (return paths, completion-pressure, status display) is being absorbed by the `endless tmux` integration over time.
 
 ---
 

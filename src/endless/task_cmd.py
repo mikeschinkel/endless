@@ -5,6 +5,7 @@ import re
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
+from string import Template
 
 import click
 from tabulate import tabulate
@@ -156,7 +157,6 @@ _FIELD_LABELS = {
     "title":       "Title",
     "description": "Description",
     "text":        "Text",
-    "prompt":      "Prompt",
     "parent_id":   "Parent",
     "tier":        "Tier",
     "outcome":     "Outcome",
@@ -185,7 +185,7 @@ def _format_field_value(name: str, value) -> str:
             return task_id_display(int(value))
         except (TypeError, ValueError):
             return str(value)
-    if name in ("text", "prompt"):
+    if name == "text":
         return "<set>" if value else "<cleared>"
     if name in ("title", "description", "outcome"):
         s = str(value)
@@ -1973,6 +1973,25 @@ def _eswt_defined_in_user_shell() -> bool:
         return False
 
 
+def _current_session_active_task_id() -> int | None:
+    """The active task id of the current Endless session, if any.
+
+    Fills the spawn handoff's "Spawning session: E-NNNN" origin line (E-1469).
+    Returns None when there is no resolvable current session or it has no
+    active task.
+    """
+    eid = _current_endless_session_id()
+    if eid is None:
+        return None
+    rows = db.query(
+        "SELECT active_task_id FROM sessions WHERE id = ?",
+        (eid,),
+    )
+    if not rows or rows[0]["active_task_id"] is None:
+        return None
+    return rows[0]["active_task_id"]
+
+
 def _current_endless_session_id() -> int | None:
     """Best-effort lookup of the current Endless session id (int PK).
 
@@ -2564,7 +2583,6 @@ def update_plan(
     title: str | None = None,
     description: str | None = None,
     text_file: str | None = None,
-    prompt_file: str | None = None,
     parent_id: int | None = None,
     phase: str | None = None,
     tier: int | None = None,
@@ -2581,7 +2599,7 @@ def update_plan(
     _require_outcome_for_completed(status, outcome)
 
     row = db.query(
-        "SELECT id, title, description, text, prompt, status, type, "
+        "SELECT id, title, description, text, status, type, "
         "       phase, tier, parent_id, outcome, analysis "
         "FROM   tasks WHERE id = ?",
         (item_id,),
@@ -2645,12 +2663,6 @@ def update_plan(
             title_hint=effective_title,
             allow_create_worktree=allow_create_worktree,
         )
-
-    if prompt_file is not None:
-        p = Path(prompt_file).expanduser()
-        if not p.exists():
-            raise click.ClickException(f"File not found: {p}")
-        _add("prompt", p.read_text())
 
     if parent_id is not None:
         _add("parent_id", parent_id if parent_id > 0 else None)
@@ -2719,7 +2731,6 @@ def detail_item(
     item_id: int,
     show_description: bool = True,
     show_text: bool = False,
-    show_prompt: bool = False,
     show_children: bool = False,
     show_outcome: bool = False,
     llm: bool = False,
@@ -2728,7 +2739,7 @@ def detail_item(
     """Show full detail for a task."""
     row = db.query(
         "SELECT t.id, t.title, t.description, t.text, t.phase, t.status, t.type, "
-        "t.parent_id, t.source_file, t.prompt, t.created_at, t.updated_at, "
+        "t.parent_id, t.source_file, t.created_at, t.updated_at, "
         "t.completed_at, t.sort_order, t.tier, t.outcome, p.name as project_name "
         "FROM tasks t JOIN projects p ON t.project_id = p.id WHERE t.id = ?",
         (item_id,),
@@ -2758,7 +2769,6 @@ def detail_item(
             "outcome": item["outcome"] or None,
             "description": item["description"] if show_description else None,
             "text": item["text"] if show_text else None,
-            "prompt": item["prompt"] if show_prompt else None,
         }
         if show_children:
             children = db.query(
@@ -2797,8 +2807,6 @@ def detail_item(
             click.echo(f"\n## Description\n{item['description']}")
         if show_text and item["text"]:
             click.echo(f"\n## Text\n{item['text']}")
-        if show_prompt and item["prompt"]:
-            click.echo(f"\n## Prompt\n{item['prompt']}")
         if show_children:
             children = db.query(
                 "SELECT id, COALESCE(title, description) as title, status, phase "
@@ -2857,11 +2865,6 @@ def detail_item(
         click.echo(click.style("— Text —", fg="cyan"))
         click.echo(item["text"])
 
-    if show_prompt and item["prompt"]:
-        click.echo()
-        click.echo(click.style("— Prompt —", fg="cyan"))
-        click.echo(item["prompt"])
-
     if show_children:
         children = db.query(
             "SELECT id, COALESCE(title, description) as title, status, phase "
@@ -2879,22 +2882,52 @@ def detail_item(
     click.echo()
 
 
-def show_prompt(item_id: int):
-    """Output just the prompt text for a task."""
+# The spawn handoff is generated, not stored (E-1469). Per-task variables
+# (id, title) plus runtime context (the spawning pane, the spawning session's
+# task) are merged into this template at spawn time. Loaded by __file__-relative
+# path the same way `endless guide` loads docs/guide/*.md — works because the
+# install is editable.
+_HANDOFF_TEMPLATE_PATH = (
+    Path(__file__).resolve().parent.parent.parent
+    / "docs" / "templates" / "handoff.md"
+)
+
+
+def render_handoff(spawned_id: int, title: str,
+                   return_anchor: str | None,
+                   spawner_task_id: int | None) -> str:
+    """Render the spawn handoff for a task from the template.
+
+    The handoff is mostly boilerplate (orient, read the guide + plan, default
+    interaction rules, return path, closing); only the task id, title, and the
+    spawning pane vary. Generating it means agents no longer author prompts, so
+    prompt-vs-plan drift cannot occur. See E-1469.
+    """
+    tmpl = Template(_HANDOFF_TEMPLATE_PATH.read_text())
+    return tmpl.safe_substitute(
+        spawned_id=spawned_id,
+        title=title,
+        spawner_task=spawner_task_id if spawner_task_id is not None else "?",
+        return_anchor=return_anchor or "%<spawning-pane>",
+    )
+
+
+def show_handoff(item_id: int):
+    """Render the spawn handoff for a task and print it."""
     row = db.query(
-        "SELECT prompt FROM tasks WHERE id = ?",
+        "SELECT id, title FROM tasks WHERE id = ?",
         (item_id,),
     )
     if not row:
         raise click.ClickException(
             f"No task found with id {item_id}"
         )
-    if not row[0]["prompt"]:
-        raise click.ClickException(
-            f"No prompt set for item {task_id_display(item_id)}"
-        )
-    # Raw output, no decoration — suitable for piping
-    click.echo(row[0]["prompt"])
+    click.echo(render_handoff(
+        item_id,
+        row[0]["title"],
+        os.environ.get("TMUX_PANE"),
+        _current_session_active_task_id(),
+    ))
 
 
 _SPAWN_WINDOW_STOP_WORDS = frozenset({
@@ -2941,9 +2974,9 @@ def spawn_plan(item_id: int, project_name: str | None = None, no_plan: bool = Fa
             "endless spawn requires tmux."
         )
 
-    # Get the plan item and its prompt
+    # Get the plan item
     row = db.query(
-        "SELECT p.id, p.title, p.prompt, p.status, p.project_id, "
+        "SELECT p.id, p.title, p.status, p.project_id, "
         "proj.path as project_path, proj.name as project_name "
         "FROM tasks p "
         "JOIN projects proj ON p.project_id = proj.id "
@@ -2955,11 +2988,6 @@ def spawn_plan(item_id: int, project_name: str | None = None, no_plan: bool = Fa
             f"No task found with id {item_id}"
         )
     item = row[0]
-    if not item["prompt"]:
-        raise click.ClickException(
-            f"No prompt set for task {task_id_display(item_id)}. "
-            f"Set one first."
-        )
 
     title = item["title"]
     current_status = item["status"]
@@ -3018,13 +3046,19 @@ def spawn_plan(item_id: int, project_name: str | None = None, no_plan: bool = Fa
         item["project_name"], title, item_id,
     )
 
-    # Write prompt to a temp file for tmux load-buffer
-    prompt_file = tempfile.NamedTemporaryFile(
-        mode="w", suffix=".md", prefix="endless-prompt-",
+    # Render the handoff from the template (no stored prompt — E-1469) and
+    # write it to a temp file for tmux load-buffer. The spawning pane is the
+    # return anchor; the spawning session's active task is the origin line.
+    handoff_text = render_handoff(
+        item_id, title, os.environ.get("TMUX_PANE"),
+        _current_session_active_task_id(),
+    )
+    handoff_file = tempfile.NamedTemporaryFile(
+        mode="w", suffix=".md", prefix="endless-handoff-",
         delete=False,
     )
-    prompt_file.write(item["prompt"])
-    prompt_file.close()
+    handoff_file.write(handoff_text)
+    handoff_file.close()
 
     # Create tmux window and set plan metadata
     subprocess.run(
@@ -3079,7 +3113,7 @@ def spawn_plan(item_id: int, project_name: str | None = None, no_plan: bool = Fa
 
     # Load the prompt into tmux buffer and paste it
     subprocess.run(
-        ["tmux", "load-buffer", prompt_file.name],
+        ["tmux", "load-buffer", handoff_file.name],
         check=True,
     )
     subprocess.run(
@@ -3095,7 +3129,7 @@ def spawn_plan(item_id: int, project_name: str | None = None, no_plan: bool = Fa
     )
 
     # Clean up temp file
-    os.unlink(prompt_file.name)
+    os.unlink(handoff_file.name)
 
     click.echo(
         click.style("•", fg="cyan")
@@ -3117,7 +3151,6 @@ def search_tasks(
     phase_filter: str | None = None,
     parent_id: int | None = None,
     search_text: bool = False,
-    search_prompt: bool = False,
     limit: int = 20,
     llm: bool = False,
     as_json: bool = False,
@@ -3165,10 +3198,6 @@ def search_tasks(
 
     if search_text:
         search_clauses.append("COALESCE(t.text, '') LIKE ? COLLATE NOCASE")
-        search_params.append(like_pattern)
-
-    if search_prompt:
-        search_clauses.append("COALESCE(t.prompt, '') LIKE ? COLLATE NOCASE")
         search_params.append(like_pattern)
 
     where += " AND (" + " OR ".join(search_clauses) + ")"

@@ -13,7 +13,6 @@ Every task has multiple body fields. Knowing which to use prevents long descript
 | `title`       | One line       | The task name. Verb-first (see Verbs below).                                                     | Positional arg on `task add`; `--title` on update. |
 | `description` | < 200 words    | Brief pitch — *what* and *why* in a paragraph or two. Shown by default in `task list` / `task show`. | `--description` on `task add` / `task update`.     |
 | `text`        | Long-form      | Full implementation plan, including approach, file paths, verification steps. Shown with `task show --text`. | `--text <file>` on `task add` / `task update`.     |
-| `prompt`      | Long-form      | LLM prompt — what a spawned Claude session sees as its opening instructions for this task.       | `--prompt <file>` on `task update`.                |
 | `analysis`    | Long-form      | Supporting research / exploration content that is *not* a proper plan — comparisons, findings, evidence gathered before the plan is written. | DB column; CLI flag may not yet be wired — set via DB or via web UI. |
 | `notes`       | Freeform       | Catch-all for content that doesn't fit elsewhere. Use sparingly.                                 | DB column; CLI flag may not yet be wired.          |
 | `outcome`     | Short to long  | Result / reason at terminal status. Required for `confirm`/`assume`/`decline`.                   | `--outcome` on `task confirm` / `task assume` / `task update`; `--reason` on `task decline` (stored as outcome). |
@@ -21,7 +20,7 @@ Every task has multiple body fields. Knowing which to use prevents long descript
 ### Distinctions in practice
 
 - **Description vs text.** Description is a pitch — max 1024 character — readable in 30 seconds, fits in a list view. Text is the plan you'd hand to an engineer. If you're writing four paragraphs into `--description`, stop — put it in a plan file and load with `--text`.
-- **Text vs prompt.** Text is for humans (and you, reading the task). Prompt is what gets pasted into a *spawned* Claude session as its starting input. Often similar but not identical: a prompt typically includes directives like "claim the task, do the work"; the text describes approach without imperatives.
+- **Text vs handoff.** Text is the plan — for humans and for the spawned session, which `endless task spawn` directs it to read. The session's *opening input* (the handoff) is generated from a template at spawn time, not stored on the task; see `endless guide orchestration`.
 - **Analysis vs text.** Analysis is research output — comparisons, findings, evidence. Text is the actionable plan. An audit task's deliverable lives in `outcome`, not `text` or `analysis`.
 - **Outcome.** Single field for "how this task ended." Required at terminal statuses so the *why* is captured at the moment of the decision. `task decline` uses `--reason` as the CLI flag (stored as outcome internally).
 
@@ -47,7 +46,6 @@ endless task list --json
 # Detail for one task
 endless task show <id>
 endless task show <id> --text
-endless task show <id> --prompt
 endless task show <id> --children
 endless task show <id> --outcome
 endless task show <id> --no-description
@@ -67,8 +65,7 @@ endless task recent                                  # recently updated
 endless task active                                  # in_progress + verify
 endless task search "query"                          # ID, title, description
 endless task search "query" --text                   # also search text field
-endless task search "query" --prompt
-endless task prompt <id>                             # raw prompt, undecorated
+endless task handoff <id>                            # render the spawn handoff
 ```
 
 Reach for `--llm` whenever you're parsing output yourself — it's token-efficient.
@@ -100,7 +97,6 @@ Use the task ID printed by `task add` **literally**. IDs advance globally across
 endless task update <id> --title "New title"
 endless task update <id> --description "..."
 endless task update <id> --text /path/to/plan.md
-endless task update <id> --prompt /path/to/prompt.md
 endless task update <id> --status ready
 endless task update <id> --phase later
 endless task update <id> --tier 2
