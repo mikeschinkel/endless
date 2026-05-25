@@ -5,7 +5,7 @@ import sqlite3
 import click
 import pytest
 
-from endless import db
+from endless import config, db
 
 
 def _build_empty_db_at(path) -> None:
@@ -16,18 +16,20 @@ def _build_empty_db_at(path) -> None:
 
 
 def _swap_db_path(monkeypatch, new_path) -> None:
-    """Replace db.DB_PATH with new_path and reset the cached connection.
+    """Point config.DB_PATH at new_path and reset the cached connection.
 
-    Closes any currently-open connection first so the test doesn't leak file
-    descriptors across the suite (macOS default ulimit -n is 256; the
-    autouse isolated_env fixture already opens one per test).
+    db.py reads config.DB_PATH dynamically (E-1429), so patching the config
+    module is what redirects get_db(). Closes any currently-open connection
+    first so the test doesn't leak file descriptors across the suite (macOS
+    default ulimit -n is 256; the autouse isolated_env fixture already opens
+    one per test).
     """
     if db._conn is not None:
         try:
             db._conn.close()
         except sqlite3.Error:
             pass
-    monkeypatch.setattr(db, "DB_PATH", new_path)
+    monkeypatch.setattr(config, "DB_PATH", new_path)
     monkeypatch.setattr(db, "_conn", None)
 
 

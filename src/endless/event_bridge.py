@@ -130,8 +130,11 @@ def emit_event(
             "Build it: just build"
         )
 
+    # E-1429: refuse early with the friendly message if --db is required but
+    # missing, then thread the resolved DB context to endless-event.
+    config.require_db_context()
     cmd = [
-        event_bin, "emit",
+        event_bin, *config.go_db_context_args(), "emit",
         "--kind", kind,
         "--project", project,
         "--entity-type", entity_type,
@@ -172,7 +175,8 @@ def apply_change(path: str) -> dict:
             "endless-event binary not found on PATH. Build it: just build"
         )
 
-    cmd = [event_bin, "apply-change", str(path)]
+    config.require_db_context()  # E-1429
+    cmd = [event_bin, *config.go_db_context_args(), "apply-change", str(path)]
     result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode != 0:
         # endless-event prints JSON with an "error" field on failure.
@@ -199,7 +203,11 @@ def backup_db() -> dict:
             "endless-event binary not found on PATH. Build it: just build"
         )
 
-    result = subprocess.run([event_bin, "backup"], capture_output=True, text=True)
+    config.require_db_context()  # E-1429
+    result = subprocess.run(
+        [event_bin, *config.go_db_context_args(), "backup"],
+        capture_output=True, text=True,
+    )
     if result.returncode != 0:
         msg = result.stderr.strip() or "backup failed"
         raise click.ClickException(f"backup failed: {msg}")

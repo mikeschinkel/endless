@@ -15,6 +15,10 @@ import (
 )
 
 func main() {
+	// E-1429: accept the explicit DB context the Python CLI threads through
+	// (--db main|worktree -> --config-dir <dir>).
+	monitor.ConsumeDBContextFlag()
+
 	if len(os.Args) < 2 {
 		usage()
 		os.Exit(2)

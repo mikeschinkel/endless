@@ -1057,9 +1057,12 @@ def _live_sessions(project_root: Path, harness: str = "claude") -> list[dict]:
     harnesses would each get their own per-platform list helper.
     """
     import subprocess
+
+    from endless import config
     try:
         result = subprocess.run(
-            ["endless-session-query", "list-live", "--project-root", str(project_root)],
+            ["endless-session-query", *config.go_db_context_args(),
+             "list-live", "--project-root", str(project_root)],
             capture_output=True, text=True, timeout=5,
         )
     except (FileNotFoundError, subprocess.SubprocessError):

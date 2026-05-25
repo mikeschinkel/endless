@@ -61,6 +61,12 @@ func processID() string {
 }
 
 func main() {
+	// E-1429: the MCP host spawns this server (no --db, worktree cwd, possibly
+	// XDG=sandbox). Pin the DB to main unconditionally — channel/session state
+	// is real-world activity in the real ledger — which also satisfies the
+	// worktree gate. config.json and logs keep following ConfigDir().
+	monitor.PinMainDB()
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 

@@ -19,6 +19,11 @@ import (
 )
 
 func main() {
+	// E-1429: accept the explicit DB context the Python CLI threads through
+	// (--db main|worktree -> --config-dir <dir>). Stripped before subcommand
+	// dispatch so existing positional parsing is unaffected.
+	monitor.ConsumeDBContextFlag()
+
 	if len(os.Args) < 2 {
 		fmt.Fprintf(os.Stderr, "Usage: endless-event <command> [flags]\n")
 		fmt.Fprintf(os.Stderr, "Commands: emit, validate-db, rebuild-db, apply-change, backup, reap-worktrees\n")

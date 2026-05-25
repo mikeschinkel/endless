@@ -18,9 +18,19 @@ package main
 import (
 	"fmt"
 	"os"
+
+	"github.com/mikeschinkel/endless/internal/monitor"
 )
 
 func main() {
+	// E-1429: tmux invokes this binary directly (often with XDG unset and a
+	// worktree cwd), so it can't receive --db. Pin the DB to main
+	// unconditionally — pane/task status is real-world state in the real
+	// ledger — which also satisfies the worktree gate. config.json and logs
+	// keep following ConfigDir(). Negligible cost (well under the latency
+	// budget): a home-dir lookup and a path join.
+	monitor.PinMainDB()
+
 	if len(os.Args) < 2 {
 		usage(os.Stderr)
 		os.Exit(2)

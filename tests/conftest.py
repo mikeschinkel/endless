@@ -26,11 +26,16 @@ def isolated_env(tmp_path, monkeypatch):
     projects_root = tmp_path / "Projects"
     projects_root.mkdir()
 
-    # Override config module paths
+    # Override config module paths. db.py reads config.DB_PATH dynamically
+    # (E-1429), so patching the config module is sufficient.
     monkeypatch.setattr(config, "CONFIG_DIR", config_dir)
     monkeypatch.setattr(config, "CONFIG_FILE", config_dir / "config.json")
     monkeypatch.setattr(config, "DB_PATH", config_dir / "endless.db")
-    monkeypatch.setattr(db, "DB_PATH", config_dir / "endless.db")
+
+    # E-1429: the test binary's cwd is this self-dev worktree, which trips the
+    # --db gate. Provide an explicit resolved context (as production does via
+    # --db) so get_db() and Go-subprocess threading both target the tmp DB.
+    monkeypatch.setattr(config, "RESOLVED_CONFIG_DIR", config_dir)
 
     # Set XDG_CONFIG_HOME so Go subprocesses (e.g. endless-event invoked by
     # event_bridge.emit_event) resolve to the same isolated DB as the Python

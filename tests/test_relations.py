@@ -351,7 +351,7 @@ def test_migration_strips_check_and_swaps(tmp_path, monkeypatch):
     db_path = tmp_path / "legacy.db"
     monkeypatch.setattr(config, "CONFIG_DIR", tmp_path)
     monkeypatch.setattr(config, "DB_PATH", db_path)
-    monkeypatch.setattr(db, "DB_PATH", db_path)
+    # db.py reads config.DB_PATH dynamically (E-1429); no db.DB_PATH to patch.
     monkeypatch.setattr(db, "_conn", None)
 
     # Pre-create with legacy schema (CHECK on dep_type) and legacy 'needs' rows.

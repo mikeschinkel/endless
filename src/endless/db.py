@@ -6,7 +6,8 @@ from pathlib import Path
 
 import click
 
-from endless.config import DB_PATH, ensure_config_dir
+from endless import config
+from endless.config import ensure_config_dir
 
 _conn: sqlite3.Connection | None = None
 
@@ -21,11 +22,14 @@ def _should_auto_migrate() -> bool:
 
 def get_db() -> sqlite3.Connection:
     global _conn
+    # E-1429: refuse a direct DB read inside a self-dev worktree unless an
+    # explicit --db was resolved. Choke point for the Python-side gate.
+    config.require_db_context()
     if _conn is not None:
         return _conn
     ensure_config_dir()
-    is_new = not DB_PATH.exists()
-    _conn = sqlite3.connect(str(DB_PATH))
+    is_new = not config.DB_PATH.exists()
+    _conn = sqlite3.connect(str(config.DB_PATH))
     _conn.row_factory = sqlite3.Row
     _conn.execute("PRAGMA journal_mode=WAL")
     _conn.execute("PRAGMA busy_timeout=5000")
@@ -55,10 +59,10 @@ def _backup_db():
     """Backup DB using SQLite backup API if last backup is > 60 seconds old. Keeps last 60."""
     import time as _time
 
-    if not DB_PATH.exists():
+    if not config.DB_PATH.exists():
         return
 
-    backup_dir = DB_PATH.parent / "backups"
+    backup_dir = config.DB_PATH.parent / "backups"
     backup_dir.mkdir(exist_ok=True)
 
     # Check if recent backup exists
@@ -72,7 +76,7 @@ def _backup_db():
     # Use SQLite backup API for a consistent copy
     ts = _time.strftime("%Y%m%d-%H%M%S")
     dst = backup_dir / f"endless-{ts}.db"
-    src_conn = sqlite3.connect(str(DB_PATH))
+    src_conn = sqlite3.connect(str(config.DB_PATH))
     dst_conn = sqlite3.connect(str(dst))
     src_conn.backup(dst_conn)
     dst_conn.close()
@@ -546,16 +550,16 @@ def _missing_schema_hint() -> click.ClickException:
         mechanism = "resolved via default ~/.config (XDG_CONFIG_HOME unset)"
         suggestion = ("    Initialize with 'endless register <project-path>' "
                       "or check that you're invoking the expected endless install.")
-    if DB_PATH.exists():
+    if config.DB_PATH.exists():
         try:
-            size = DB_PATH.stat().st_size
+            size = config.DB_PATH.stat().st_size
             file_state = f"exists ({size} bytes) but has no endless schema"
         except OSError:
             file_state = "exists but cannot be stat'd"
     else:
         file_state = "does not exist"
     return click.ClickException(
-        f"endless database is uninitialized at {DB_PATH}\n"
+        f"endless database is uninitialized at {config.DB_PATH}\n"
         f"    {mechanism}\n"
         f"    db file: {file_state}\n"
         f"{suggestion}"

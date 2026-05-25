@@ -62,9 +62,18 @@ class MultiChoice(click.ParamType):
 
 
 @click.group()
+@click.option(
+    "--db",
+    "db_choice",
+    type=click.Choice(["main", "worktree"]),
+    default=None,
+    help="Inside a self-dev worktree, select the DB: 'main' (real ledger) "
+    "or 'worktree' (this worktree's sandbox). Required there; ignored "
+    "elsewhere.",
+)
 @click.version_option(__version__, prog_name="endless")
 @click.pass_context
-def main(ctx):
+def main(ctx, db_choice):
     """Project awareness system for solo developers."""
     try:
         os.getcwd()
@@ -76,6 +85,17 @@ def main(ctx):
             err=True,
         )
         ctx.exit(1)
+    if db_choice is not None:
+        # E-1429: resolve --db to a config dir and pin it for this process.
+        # Enforcement of "required inside a worktree" happens at the DB-access
+        # choke points (db.get_db / go_db_context_args), not here, so commands
+        # that never touch the DB stay flag-free.
+        from endless import config
+
+        try:
+            config.apply_db_choice(db_choice)
+        except ValueError as e:
+            raise click.ClickException(str(e))
     sandbox = os.environ.get("ENDLESS_SANDBOX")
     if sandbox and ctx.invoked_subcommand not in SANDBOX_SAFE_SUBCOMMANDS:
         click.echo(
@@ -188,8 +208,12 @@ def serve(port, watch):
             "Build it: go build -o /usr/local/bin/endless-serve "
             "./cmd/endless-serve/"
         )
+    # E-1429: require an explicit --db inside a worktree, then thread it.
+    from endless import config
+    config.require_db_context()
+    db_args = config.go_db_context_args()
     if not watch:
-        subprocess.run([serve_bin, str(port)])
+        subprocess.run([serve_bin, *db_args, str(port)])
         return
 
     import os
@@ -210,7 +234,7 @@ def serve(port, watch):
                 click.style("•", fg="cyan")
                 + f" Starting endless-serve (watching {serve_bin} for changes)"
             )
-            proc = subprocess.Popen([serve_bin, str(port)])
+            proc = subprocess.Popen([serve_bin, *db_args, str(port)])
             while True:
                 time.sleep(1)
                 if proc.poll() is not None:
@@ -1889,3 +1913,34 @@ def db_backup():
     from endless.event_bridge import backup_db
     backup_db()
     click.echo("Database backed up.")
+
+
+@db_cmd.command("path")
+@click.option(
+    "--db",
+    "db_choice",
+    type=click.Choice(["main", "worktree"]),
+    required=True,
+    help="Which database to resolve: main (real ledger) or worktree "
+    "(this worktree's sandbox).",
+)
+def db_path(db_choice):
+    """Print the absolute path to the main or worktree-sandbox database.
+
+    For SQL-client debugging or scripting, and referenced by the --db gate's
+    refusal message. --db=worktree resolves the current worktree's sandbox the
+    same way the gate does (so it must be run from inside a worktree).
+    """
+    from endless import config
+
+    if db_choice == "main":
+        config_dir = config.main_config_dir()
+    else:
+        task_id = config.worktree_task_id()
+        if task_id is None:
+            raise click.ClickException(
+                "--db worktree only applies inside a self-dev worktree "
+                "(.endless/worktrees/e-NNN); cwd is not in one"
+            )
+        config_dir = config.sandbox_config_dir(task_id)
+    click.echo(str(config_dir / "endless.db"))

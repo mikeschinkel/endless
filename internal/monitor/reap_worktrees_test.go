@@ -158,6 +158,14 @@ func TestReapStaleWorktrees_NoWorktreesDir(t *testing.T) {
 // that don't fit the e-NNNN naming pattern are silently skipped
 // (no panic, no errant SQL queries for unparseable IDs).
 func TestReapStaleWorktrees_SkipsNonMatchingDirNames(t *testing.T) {
+	// ReapStaleWorktrees opens DB() once it finds worktree dirs. The test
+	// binary's cwd is inside this self-dev worktree, so the E-1429 gate
+	// refuses unless an explicit DB context is set — provide an isolated
+	// throwaway, as production satisfies the gate via --db.
+	dbContextDir = ""
+	SetDBContextDir(t.TempDir())
+	t.Cleanup(func() { dbContextDir = "" })
+
 	proj := t.TempDir()
 	wtroot := filepath.Join(proj, ".endless", "worktrees")
 	for _, name := range []string{"e-abc", "not-a-task", "e-", ".hidden"} {
