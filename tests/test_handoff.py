@@ -15,6 +15,8 @@ def test_render_handoff_includes_task_and_return_path():
         title="Render handoff from template",
         return_anchor="%7",
         spawner_task_id=1400,
+        worktree_path="/repo/.endless/worktrees/e-1469",
+        branch="task/1469-render-handoff",
     )
     assert "E-1469" in out
     assert "Render handoff from template" in out
@@ -22,9 +24,15 @@ def test_render_handoff_includes_task_and_return_path():
     assert "tmux select-window -t %7" in out
     # Origin line names the spawning session's task.
     assert "E-1400" in out
+    # Worktree + branch substituted.
+    assert "/repo/.endless/worktrees/e-1469" in out
+    assert "task/1469-render-handoff" in out
     # Delegates the workflow to the guide and points at the plan.
     assert "endless guide" in out
     assert "endless task show E-1469 --text" in out
+    # Generic handoff rules that apply to every spawn.
+    assert "STOP and ask" in out
+    assert "Don't mark `confirmed`/`assumed`" in out
 
 
 def test_render_handoff_degrades_without_runtime_context():
@@ -39,3 +47,5 @@ def test_render_handoff_degrades_without_runtime_context():
     assert "E-1469" in out
     assert "E-?" in out
     assert "%<spawning-pane>" in out
+    assert "<task worktree>" in out
+    assert "<task branch>" in out

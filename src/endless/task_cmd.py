@@ -2895,15 +2895,31 @@ _HANDOFF_TEMPLATE_PATH = (
 )
 
 
+def _branch_for_worktree(wt_path) -> str | None:
+    """Current git branch of a worktree, or None if it can't be read."""
+    import subprocess
+    try:
+        out = subprocess.run(
+            ["git", "-C", str(wt_path), "branch", "--show-current"],
+            capture_output=True, text=True, check=True,
+        )
+        return out.stdout.strip() or None
+    except Exception:
+        return None
+
+
 def render_handoff(spawned_id: int, title: str,
                    return_anchor: str | None,
-                   spawner_task_id: int | None) -> str:
+                   spawner_task_id: int | None,
+                   worktree_path: str | None = None,
+                   branch: str | None = None) -> str:
     """Render the spawn handoff for a task from the template.
 
     The handoff is mostly boilerplate (orient, read the guide + plan, default
-    interaction rules, return path, closing); only the task id, title, and the
-    spawning pane vary. Generating it means agents no longer author prompts, so
-    prompt-vs-plan drift cannot occur. See E-1469.
+    interaction rules, return path, closing); only the task id, title, the
+    spawning pane, and the task's worktree/branch vary. Generating it means
+    agents no longer author prompts, so prompt-vs-plan drift cannot occur.
+    See E-1469.
     """
     tmpl = Template(_HANDOFF_TEMPLATE_PATH.read_text())
     return tmpl.safe_substitute(
@@ -2911,6 +2927,8 @@ def render_handoff(spawned_id: int, title: str,
         title=title,
         spawner_task=spawner_task_id if spawner_task_id is not None else "?",
         return_anchor=return_anchor or "%<spawning-pane>",
+        worktree_path=worktree_path or "<task worktree>",
+        branch=branch or "<task branch>",
     )
 
 
@@ -2924,11 +2942,14 @@ def show_handoff(item_id: int):
         raise click.ClickException(
             f"No task found with id {item_id}"
         )
+    wt = _worktree_for_task(item_id)
     click.echo(render_handoff(
         item_id,
         row[0]["title"],
         os.environ.get("TMUX_PANE"),
         _current_session_active_task_id(),
+        worktree_path=str(wt) if wt else None,
+        branch=_branch_for_worktree(wt) if wt else None,
     ))
 
 
@@ -3050,10 +3071,13 @@ def spawn_plan(item_id: int, project_name: str | None = None, no_plan: bool = Fa
 
     # Render the handoff from the template (no stored prompt — E-1469) and
     # write it to a temp file for tmux load-buffer. The spawning pane is the
-    # return anchor; the spawning session's active task is the origin line.
+    # return anchor; the spawning session's active task is the origin line;
+    # cd_target is the worktree the spawned session lands in.
     handoff_text = render_handoff(
         item_id, title, os.environ.get("TMUX_PANE"),
         _current_session_active_task_id(),
+        worktree_path=cd_target,
+        branch=_branch_for_worktree(cd_target),
     )
     handoff_file = tempfile.NamedTemporaryFile(
         mode="w", suffix=".md", prefix="endless-handoff-",
