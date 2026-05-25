@@ -29,7 +29,7 @@ This:
 
 If the same task ever needs an additional worktree (testing, alternate experiment, etc.), it lives at `.endless/worktrees/e-<id>-<slug>/`. The primary worktree is always `e-<id>/`.
 
-Plan files for a task live in the task's worktree at `<worktree>/.endless/plans/E-NNNN.md`, not in main. They're written by `endless task update <id> --text <path>` (which auto-creates the worktree if one doesn't exist yet) and ride into main when the task lands. The DB's `tasks.text` column is the source of truth; the on-disk file is a mirror that lives with the branch.
+Plan files for a task live in the task's worktree at `<worktree>/.endless/plans/E-NNNN.md`, not in main, and ride into main when the task lands. The DB's `tasks.text` column is the source of truth; the on-disk file is a mirror that lives with the branch. `endless task update <id> --text <path>` writes `tasks.text`; it does **not** create a worktree. The plan file is materialized from `tasks.text` when the worktree is born (at `task claim`/`task spawn`); if a worktree already exists, `--text` also mirrors into it. So setting plan text on an unclaimed task touches only the DB — no stray worktrees for tasks you aren't working on yet.
 
 ### Getting into the worktree
 

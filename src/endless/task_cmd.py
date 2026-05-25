@@ -418,62 +418,26 @@ def _display_path(p: Path) -> str:
     return s.replace(home, "~", 1) if s.startswith(home) else s
 
 
-def _write_task_plan_file(
-    task_id: int,
-    content: str,
-    *,
-    title_hint: str | None = None,
-    allow_create_worktree: bool = True,
-) -> Path | None:
-    """Write the plan file for `task_id` to its worktree (E-1216).
+def _mirror_plan_to_worktree(task_id: int, content: str) -> Path | None:
+    """Mirror plan text into the task's worktree IF one exists (E-1445).
 
-    Resolution:
-      1. Task has an existing worktree → write there ("Using existing").
-      2. No worktree AND `allow_create_worktree` → create one
-         (via `worktree_cmd.create_task_worktree`) and write there
-         ("Worktree created").
-      3. No worktree AND `allow_create_worktree=False` → raise, directing
-         the caller to drop `--no-create-worktree` or run `task claim`.
+    The DB's `tasks.text` column is the source of truth and is written
+    separately via the task event payload. This only mirrors that content to
+    `<worktree>/.endless/plans/E-NNN.md` as a convenience when a worktree
+    already exists.
 
-    Plan files NEVER land in main directly. The DB's `tasks.text` column
-    remains source of truth; this file is the on-disk mirror that lives
-    with the worktree branch.
+    It NEVER creates a worktree (rescinds the E-1216 auto-create default,
+    which surprised callers by provisioning worktrees + sandboxes for tasks
+    they had no intention of working on yet). When no worktree exists, the DB
+    is updated and nothing is written to disk; the plan file materializes
+    later when the worktree is born at claim/spawn
+    (`worktree_cmd.create_task_worktree` → `_materialize_plan_file`).
+
+    Returns the written path, or None when no worktree exists.
     """
-    from endless.worktree_cmd import create_task_worktree
-
     wt_path = _worktree_for_task(task_id)
-    created = False
     if wt_path is None:
-        if not allow_create_worktree:
-            raise click.ClickException(
-                f"No worktree exists for E-{task_id}. "
-                f"Drop --no-create-worktree to auto-create one, "
-                f"or run `endless task claim E-{task_id}` first."
-            )
-        main_root = _main_root_for_task(task_id)
-        if main_root is None:
-            # Task lookup failed; emit_event would have raised earlier.
-            return None
-        title = title_hint
-        if title is None:
-            row = db.query(
-                "SELECT COALESCE(title, description) as title "
-                "FROM tasks WHERE id = ?",
-                (task_id,),
-            )
-            title = row[0]["title"] if row else f"task-{task_id}"
-        wt_path, created = create_task_worktree(task_id, title, main_root)
-
-    if created:
-        click.echo(
-            click.style("✓", fg="green")
-            + f" Worktree created for E-{task_id} at {_display_path(wt_path)}/"
-        )
-    else:
-        click.echo(
-            click.style("•", fg="cyan")
-            + f" Using existing worktree for E-{task_id}"
-        )
+        return None
 
     plans_dir = wt_path / ".endless" / "plans"
     plans_dir.mkdir(parents=True, exist_ok=True)
@@ -1518,7 +1482,6 @@ def add_item(
     status: str | None = None,
     tier: int | None = None,
     force: bool = False,
-    allow_create_worktree: bool = True,
 ):
     """Add a single task."""
     from endless.event_bridge import emit_event
@@ -1566,11 +1529,7 @@ def add_item(
         + f" Added {task_id_display(item_id)}: {title}"
     )
     if text_content is not None:
-        _write_task_plan_file(
-            item_id, text_content,
-            title_hint=title,
-            allow_create_worktree=allow_create_worktree,
-        )
+        _mirror_plan_to_worktree(item_id, text_content)
     return item_id
 
 
@@ -2592,7 +2551,6 @@ def update_plan(
     analysis: str | None = None,
     outcome: str | None = None,
     force: bool = False,
-    allow_create_worktree: bool = True,
 ):
     """Update fields on a task."""
     from endless.event_bridge import emit_event
@@ -2659,12 +2617,7 @@ def update_plan(
             raise click.ClickException(f"File not found: {p}")
         text_content = p.read_text()
         _add("text", text_content)
-        effective_title = title if title is not None else row[0]["title"]
-        _write_task_plan_file(
-            item_id, text_content,
-            title_hint=effective_title,
-            allow_create_worktree=allow_create_worktree,
-        )
+        _mirror_plan_to_worktree(item_id, text_content)
 
     if parent_id is not None:
         _add("parent_id", parent_id if parent_id > 0 else None)

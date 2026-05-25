@@ -1,6 +1,8 @@
 package monitor
 
 import (
+	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 )
@@ -124,6 +126,29 @@ func MarkContextInjected(projectID int64, sessionID, workingDir string) {
 		"event":          "task_context_injected",
 		"injected_tasks": "true",
 	})
+}
+
+// TaskText returns the tasks.text content for a task id (E-1445). Returns an
+// empty string (no error) when the row or the text is absent — the caller
+// treats "no text" as "no plan file to materialize". This is the Go-side read
+// that lets create_task_worktree materialize a plan file without a Python DB
+// read (E-894).
+func TaskText(taskID int64) (string, error) {
+	db, err := DB()
+	if err != nil {
+		return "", err
+	}
+	var text string
+	err = db.QueryRow(
+		"SELECT COALESCE(text, '') FROM tasks WHERE id = ?", taskID,
+	).Scan(&text)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	return text, nil
 }
 
 // GetProjectName returns the project name for a project ID.

@@ -29,6 +29,11 @@ func main() {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
+	case "task-text":
+		if err := runTaskText(os.Args[2:]); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
 	case "-h", "--help", "help":
 		usage()
 	default:
@@ -42,6 +47,28 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "usage: endless-session-query <subcommand>")
 	fmt.Fprintln(os.Stderr, "subcommands:")
 	fmt.Fprintln(os.Stderr, "  list-live --project-root <path>   JSON array of live sessions for the project")
+	fmt.Fprintln(os.Stderr, "  task-text --id <task-id>          raw tasks.text for the task (empty if none)")
+}
+
+// runTaskText prints the raw tasks.text for a task id to stdout, so the Python
+// side can materialize a plan file at claim time without a Python DB read
+// (E-894 / E-1445). Output is the raw text (not JSON) — it is written verbatim
+// to <worktree>/.endless/plans/E-NNN.md. Empty output means "no plan".
+func runTaskText(args []string) error {
+	fs := flag.NewFlagSet("task-text", flag.ContinueOnError)
+	id := fs.Int64("id", 0, "task id")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *id == 0 {
+		return fmt.Errorf("--id is required")
+	}
+	text, err := monitor.TaskText(*id)
+	if err != nil {
+		return fmt.Errorf("read task text for E-%d: %w", *id, err)
+	}
+	_, err = os.Stdout.WriteString(text)
+	return err
 }
 
 func runListLive(args []string) error {

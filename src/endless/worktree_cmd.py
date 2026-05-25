@@ -875,8 +875,57 @@ def create_task_worktree(
     (companion_dir / "worktree.json").write_text(
         json.dumps(companion, indent=2) + "\n"
     )
+    _materialize_plan_file(task_id, wt_dir)
     _maybe_auto_sandbox_bind(project_root, wt_dir, task_id)
     return wt_dir, True
+
+
+def _materialize_plan_file(task_id: int, worktree_path: Path) -> None:
+    """Write <worktree>/.endless/plans/E-NNN.md from tasks.text (E-1445).
+
+    This is the single point where a plan file is created on disk. `task
+    update --text` no longer provisions a worktree; instead the plan
+    materializes here when the worktree is born (at claim/spawn).
+
+    Reads tasks.text via the endless-session-query Go helper — Python DB
+    reads are forbidden (E-894). Empty/absent text writes nothing. Failures
+    warn and skip rather than abort worktree creation; a missing plan file is
+    recoverable by re-running `endless task update --text` once the worktree
+    exists (which mirrors into it).
+    """
+    binary = shutil.which("endless-session-query")
+    if not binary:
+        click.echo(
+            "  warning: endless-session-query not found on PATH; plan file "
+            "not materialized. Run 'just build' / 'just install'.",
+            err=True,
+        )
+        return
+    try:
+        result = subprocess.run(
+            [binary, "task-text", "--id", str(task_id)],
+            capture_output=True, text=True,
+        )
+    except OSError as e:
+        click.echo(f"  warning: endless-session-query task-text: {e}", err=True)
+        return
+    if result.returncode != 0:
+        click.echo(
+            f"  warning: could not read plan text for E-{task_id}: "
+            f"{(result.stderr or '').strip()}",
+            err=True,
+        )
+        return
+    if not result.stdout.strip():
+        return
+    plans_dir = worktree_path / ".endless" / "plans"
+    plans_dir.mkdir(parents=True, exist_ok=True)
+    target = plans_dir / f"E-{task_id}.md"
+    target.write_text(result.stdout)
+    click.echo(
+        click.style("✓", fg="green")
+        + f" Materialized plan to {_tilde(target)}"
+    )
 
 
 def _maybe_auto_sandbox_bind(project_root: Path, worktree_path: Path, task_id: int) -> None:
