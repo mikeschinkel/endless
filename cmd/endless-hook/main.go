@@ -22,11 +22,17 @@ func main() {
 		return
 	}
 
-	// E-1450: hook-fired writes (session registration, activity, state
-	// transitions) reflect real-world activity and must target the real DB,
-	// even when this binary runs inside an E-1281 sandboxed worktree. No-op
-	// outside a sandbox. Must precede the first monitor.DB() call.
-	monitor.ForceRealDB()
+	// E-1450/E-1429: hook-fired writes (session registration, activity, state
+	// transitions) are real-world activity and must ALWAYS target the real DB,
+	// regardless of cwd or XDG_CONFIG_HOME. PinMainDB pins the DB to main
+	// unconditionally; it also satisfies the E-1429 self-dev-worktree gate so
+	// monitor.DB() never refuses the hook. (The earlier ForceRealDB only
+	// redirected when XDG pointed at a sandbox — so a hook firing with a
+	// worktree cwd but no sandbox injection, e.g. a main-launched session
+	// cd'd into the worktree, hit the gate and was refused. E-1429 regression.)
+	// ConfigDir() is left on XDG, so config.json/logs still follow the
+	// worktree. Must precede the first monitor.DB() call.
+	monitor.PinMainDB()
 
 	if len(os.Args) < 2 {
 		fmt.Fprintln(os.Stderr, "Usage: endless-hook <command> [args...]")
