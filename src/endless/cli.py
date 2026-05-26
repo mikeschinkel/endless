@@ -882,7 +882,7 @@ def task_show(item_ids, no_description, show_text,
 task_cmd.add_command(task_show, name="detail")
 
 
-@task_cmd.command("next")
+@task_cmd.group("next", invoke_without_command=True)
 @click.option("--project", default=None,
               help="Project name (default: detect from cwd)")
 @click.option("--all", "show_all", is_flag=True,
@@ -900,14 +900,32 @@ task_cmd.add_command(task_show, name="detail")
               help="Filter by phase")
 @click.option("--parent", "parent_id", default=None,
               help="Filter to children of this task (e.g. E-799), or 'none' for root tasks")
-def task_next(project, show_all, limit, llm, as_json, tier, phase, parent_id):
+@click.pass_context
+def task_next(ctx, project, show_all, limit, llm, as_json, tier, phase, parent_id):
     """Show top actionable tasks, ranked by priority."""
+    # `next` is a group so it can host `revise` (and future `move`/`briefing`),
+    # but bare `endless task next` keeps its heuristic-list behavior.
+    if ctx.invoked_subcommand is not None:
+        return
     from endless.task_cmd import next_tasks, parse_tier_filter, parse_parent_filter
     tier_val = parse_tier_filter(tier) if tier else None
     parent_val = parse_parent_filter(parent_id) if parent_id else None
     next_tasks(project_name=project, show_all=show_all,
                limit=limit, llm=llm, as_json=as_json, tier=tier_val,
                phase_filter=phase, parent_id=parent_val)
+
+
+@task_next.command("revise")
+@click.option("--file", "file_path", required=True,
+              help="Path to a JSON file holding the full new curated list")
+@click.option("--project", default=None,
+              help="Project name (default: detect from cwd)")
+@click.option("--json", "as_json", is_flag=True,
+              help="Emit the resulting list as JSON")
+def task_next_revise(file_path, project, as_json):
+    """Replace the curated 'next' list from a JSON file (full rewrite)."""
+    from endless.task_cmd import revise_next_list
+    revise_next_list(file_path=file_path, project_name=project, as_json=as_json)
 
 
 @task_cmd.command("active")

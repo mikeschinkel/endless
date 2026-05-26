@@ -113,6 +113,28 @@ type ProjectPurgedPayload struct {
 	Path string `json:"path"`
 }
 
+// Curated next-list payloads (E-1421)
+
+// ProjectNextRevisedPayload is the full new state of a project's curated
+// "next" list — revise is a full rewrite. Order of lanes and items is
+// intrinsic in the arrays. A pending_triage field, if present, is ignored:
+// the pending bucket is hook-managed and untouched by revise (E-1421).
+type ProjectNextRevisedPayload struct {
+	Lanes []ProjectNextLanePayload `json:"lanes"`
+}
+
+type ProjectNextLanePayload struct {
+	ID        string                   `json:"id"`
+	Priority  int                      `json:"priority"`
+	Rationale string                   `json:"rationale"`
+	Items     []ProjectNextItemPayload `json:"items"`
+}
+
+type ProjectNextItemPayload struct {
+	TaskID string `json:"task_id"`
+	Reason string `json:"reason"`
+}
+
 // Session payloads
 
 type SessionWorkStartedPayload struct {

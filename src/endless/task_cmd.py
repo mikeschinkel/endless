@@ -1182,6 +1182,91 @@ def next_tasks(
         click.echo()
 
 
+def _format_relative(iso_ts: str | None) -> str:
+    """Render a UTC ISO-8601 timestamp ('2026-05-26T12:00:00') as a coarse
+    relative age: '<n>s ago' / '<n>m ago' / '<n>h ago' / '<n>d ago'."""
+    if not iso_ts:
+        return "an unknown time ago"
+    try:
+        dt = datetime.strptime(iso_ts, "%Y-%m-%dT%H:%M:%S").replace(tzinfo=timezone.utc)
+    except ValueError:
+        return iso_ts
+    delta = max(0, int((datetime.now(timezone.utc) - dt).total_seconds()))
+    if delta < 60:
+        return f"{delta}s ago"
+    if delta < 3600:
+        return f"{delta // 60}m ago"
+    if delta < 86400:
+        return f"{delta // 3600}h ago"
+    return f"{delta // 86400}d ago"
+
+
+def revise_next_list(
+    file_path: str,
+    project_name: str | None = None,
+    as_json: bool = False,
+):
+    """Replace a project's curated 'next' list from a JSON file (full rewrite).
+
+    Schema validation, the soft/hard item caps, the cross-session collision read,
+    and the BEGIN IMMEDIATE transaction all live in the Go event executor
+    (`endless-event`). This reads the file, parses it (rejecting malformed JSON),
+    and emits the `project_next.revised` event. On success it prints the
+    collision notice, any soft-cap warning, then either the resulting JSON
+    (`--json`) or a one-line human summary.
+    """
+    import json
+
+    _, name = _resolve_project(project_name)
+
+    p = Path(file_path).expanduser()
+    if not p.exists():
+        raise click.ClickException(f"File not found: {p}")
+    try:
+        data = json.loads(p.read_text())
+    except json.JSONDecodeError as e:
+        raise click.ClickException(f"Invalid JSON in {p}: {e}")
+
+    from endless.event_bridge import emit_event
+
+    result = emit_event(
+        kind="project_next.revised",
+        project=name,
+        entity_type="project_next",
+        entity_id=name,
+        payload=data,
+        prompt_verb="revised for",
+    ) or {}
+
+    # Collision visibility: the prior revision was read inside the Go
+    # transaction and returned here (E-894 keeps the read in Go).
+    prior = result.get("prior_revision")
+    if prior:
+        collision = (
+            f"list last revised {_format_relative(prior.get('revised_at'))} "
+            f"by session {prior.get('session_id')}"
+        )
+    else:
+        collision = "first revision"
+
+    warning = result.get("warning")
+    state = result.get("state") or {}
+
+    if as_json:
+        # Keep stdout pure JSON for piping; advisory lines go to stderr.
+        click.echo(collision, err=True)
+        if warning:
+            click.echo(f"warning: {warning}", err=True)
+        click.echo(json.dumps(state, indent=2))
+    else:
+        click.echo(collision)
+        if warning:
+            click.echo(f"warning: {warning}", err=True)
+        lanes = state.get("lanes") or []
+        item_count = sum(len(lane.get("items") or []) for lane in lanes)
+        click.echo(f"Revised: {len(lanes)} lane(s), {item_count} item(s).")
+
+
 def active_tasks(
     project_name: str | None = None,
     show_all: bool = False,

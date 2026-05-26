@@ -20,10 +20,11 @@ type dbQuerier interface {
 
 // ExecuteResult holds the output of a successful execution.
 type ExecuteResult struct {
-	TaskID          int64  `json:"task_id,omitempty"`           // for task.created/imported
-	SessionStatusID int64  `json:"session_status_id,omitempty"` // for session_status.recorded (E-1312)
-	Skipped         bool   `json:"skipped,omitempty"`           // dedup-skip path (no row written)
-	Markdown        string `json:"markdown,omitempty"`          // rendered output for chat display
+	TaskID          int64              `json:"task_id,omitempty"`           // for task.created/imported
+	SessionStatusID int64              `json:"session_status_id,omitempty"` // for session_status.recorded (E-1312)
+	Skipped         bool               `json:"skipped,omitempty"`           // dedup-skip path (no row written)
+	Markdown        string             `json:"markdown,omitempty"`          // rendered output for chat display
+	ProjectNext     *ProjectNextResult `json:"-"`                           // for project_next.revised (E-1436)
 }
 
 // PreAllocateTaskID acquires a write lock via BEGIN IMMEDIATE, reads the next
@@ -68,6 +69,47 @@ func PreAllocateTaskID() (id int64, execAndCommit func(*Event) (*ExecuteResult, 
 	}
 
 	return id, doExecAndCommit, doRollback, nil
+}
+
+// BeginImmediate acquires a write lock via BEGIN IMMEDIATE and returns
+// functions to finish the transaction. Unlike PreAllocateTaskID it reads
+// nothing up front — it exists so a multi-row rewrite (E-1436 revise) can
+// take the write lock BEFORE the events-authoritative ledger append, the
+// same ordering as the create path. A losing concurrent writer then fails
+// at BEGIN (SQLITE_BUSY) without leaving an orphan ledger line.
+//
+// Usage:
+//  1. Call BeginImmediate() to lock the DB
+//  2. Append the event to the segment file
+//  3. Call execAndCommit(evt) to run the SQL mutation and release the lock
+//  4. If anything fails before step 3, call rollback() to release the lock
+func BeginImmediate() (execAndCommit func(*Event) (*ExecuteResult, error), rollback func(), err error) {
+	db, err := monitor.DB()
+	if err != nil {
+		return nil, nil, fmt.Errorf("events: db connection: %w", err)
+	}
+
+	if _, err := db.Exec("BEGIN IMMEDIATE"); err != nil {
+		return nil, nil, fmt.Errorf("events: begin immediate: %w", err)
+	}
+
+	doRollback := func() {
+		db.Exec("ROLLBACK")
+	}
+
+	doExecAndCommit := func(evt *Event) (*ExecuteResult, error) {
+		result, err := dispatch(db, evt)
+		if err != nil {
+			db.Exec("ROLLBACK")
+			return nil, err
+		}
+		if _, err := db.Exec("COMMIT"); err != nil {
+			return nil, fmt.Errorf("events: commit: %w", err)
+		}
+		return result, nil
+	}
+
+	return doExecAndCommit, doRollback, nil
 }
 
 // Execute processes an event: runs the corresponding SQL mutation.
@@ -119,6 +161,8 @@ func dispatch(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 		return execTaskLanded(db, evt)
 	case KindSessionStatusRecorded:
 		return execSessionStatusRecorded(db, evt)
+	case KindProjectNextRevised:
+		return execProjectNextRevised(db, evt)
 	default:
 		return nil, fmt.Errorf("events: executor does not handle kind %q", evt.Kind)
 	}

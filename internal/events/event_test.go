@@ -204,7 +204,7 @@ func TestValidate_Errors(t *testing.T) {
 func TestValidKinds_Count(t *testing.T) {
 	// Ensures we don't accidentally add a kind constant without registering it.
 	// Update this count when adding new kinds.
-	want := 32
+	want := 33
 	got := len(events.ValidKinds)
 	if got != want {
 		t.Errorf("ValidKinds has %d entries, want %d", got, want)

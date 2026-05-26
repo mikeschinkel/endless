@@ -59,6 +59,7 @@ const (
 	EntityTask          EntityType = "task"
 	EntityTaskDep       EntityType = "task_dep"
 	EntityProject       EntityType = "project"
+	EntityProjectNext   EntityType = "project_next"
 	EntitySession       EntityType = "session"
 	EntitySessionStatus EntityType = "session_status"
 	EntityConversation  EntityType = "conversation"
@@ -141,6 +142,11 @@ const (
 	KindSessionStatusRecorded Kind = "session_status.recorded"
 )
 
+// Curated next-list event kinds (E-1421).
+const (
+	KindProjectNextRevised Kind = "project_next.revised"
+)
+
 // ValidKinds is the closed set of all recognized event kinds.
 var ValidKinds = map[Kind]bool{
 	// Task
@@ -183,6 +189,8 @@ var ValidKinds = map[Kind]bool{
 	KindNoteResolved: true,
 	// Session status (E-1312)
 	KindSessionStatusRecorded: true,
+	// Curated next list (E-1421)
+	KindProjectNextRevised: true,
 }
 
 // validEntityTypes is the closed set of recognized entity types.
@@ -190,11 +198,12 @@ var validEntityTypes = map[EntityType]bool{
 	EntityTask:          true,
 	EntityTaskDep:       true,
 	EntitySessionStatus: true,
-	EntityProject:      true,
-	EntitySession:      true,
-	EntityConversation: true,
-	EntityMessage:      true,
-	EntityNote:         true,
+	EntityProject:       true,
+	EntityProjectNext:   true,
+	EntitySession:       true,
+	EntityConversation:  true,
+	EntityMessage:       true,
+	EntityNote:          true,
 }
 
 // validActorKinds is the closed set of recognized actor kinds.
