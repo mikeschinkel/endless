@@ -2835,10 +2835,10 @@ def detail_item(
             click.echo(f"outcome={item['outcome']}")
         if item["parent_id"]:
             click.echo(f"parent=E-{item['parent_id']}")
-        relations = get_all_relations(item_id)
-        for display_name, items in relations.items():
-            ids = ",".join(f"E-{d['id']}" for d in items)
-            click.echo(f"{display_name}={ids}")
+        links = _flatten_relations(item_id)
+        if links:
+            link_str = ",".join(f"E-{r['id']} ({r['rel']})" for r in links)
+            click.echo(f"links={link_str}")
         click.echo(f"created={item['created_at']}")
         click.echo(f"updated={item['updated_at']}")
         if item["completed_at"]:
@@ -2861,7 +2861,7 @@ def detail_item(
         return
 
     # Human-readable output
-    col_w = 13  # width of label column (longest: "Replaced by:" = 12 + 1 space)
+    col_w = 11  # width of label column (longest: "Confirmed:" = 10 + 1 space)
     label = lambda s: click.style(f"{s:<{col_w}}", fg="cyan")
     val = lambda s: click.style(str(s), fg="white", bold=True)
 
@@ -2881,11 +2881,7 @@ def detail_item(
         click.echo(f"{label('Tier:')} {val(tier_display(item['tier']))}")
     if item["parent_id"]:
         click.echo(f"{label('Parent:')} {val(task_id_display(item['parent_id']))}")
-    relations = get_all_relations(item_id)
-    for display_name, items in relations.items():
-        heading = RELATION_LABELS.get(display_name, display_name) + ":"
-        dep_str = ", ".join(task_id_display(d["id"]) for d in items)
-        click.echo(f"{label(heading)} {val(dep_str)}")
+    _echo_links_section(item_id)
     click.echo(f"{label('Created:')} {val(_format_timestamp(item['created_at']))}")
     if item["updated_at"] and item["updated_at"] != item["created_at"]:
         click.echo(f"{label('Updated:')} {val(_format_timestamp(item['updated_at']))}")
@@ -3713,6 +3709,41 @@ def get_all_relations(item_id: int) -> dict[str, list]:
     return ordered
 
 
+# Statuses that count as "done" for relation-row coloring (E-1477).
+_RELATION_TERMINAL_STATUSES = ("confirmed", "assumed", "completed", "declined", "obsolete")
+
+
+def _flatten_relations(item_id: int) -> list[dict]:
+    """Flatten get_all_relations into one id-ascending list, each entry carrying the
+    directional, lower-cased relation label, for the unified 'Links:' rendering (E-1477)."""
+    flat: list[dict] = []
+    for display_name, items in get_all_relations(item_id).items():
+        rel = RELATION_LABELS.get(display_name, display_name).lower()
+        for d in items:
+            flat.append({"id": d["id"], "rel": rel,
+                         "status": d["status"], "title": d["title"]})
+    flat.sort(key=lambda r: r["id"])
+    return flat
+
+
+def _echo_links_section(item_id: int) -> bool:
+    """Emit the unified multi-line 'Links:' section (E-1477): a cyan 'Links:' heading,
+    then one indented, colored row per relation (id-ascending) —
+    'E-NNN (relation type) [status] title'. Emits nothing and returns False when the
+    task has no relations; returns True otherwise. Shared by task show/detail and
+    relations/deps so both render identically."""
+    links = _flatten_relations(item_id)
+    if not links:
+        return False
+    click.echo(click.style("Links:", fg="cyan"))
+    for r in links:
+        color = "green" if r["status"] in _RELATION_TERMINAL_STATUSES else "yellow"
+        click.echo(
+            f"  {task_id_display(r['id'])} ({r['rel']}) "
+            f"[{click.style(r['status'], fg=color)}] {r['title']}")
+    return True
+
+
 def _related_task_ids(item_id: int, rel_type: str | None = None) -> list[int]:
     """Return task IDs related to item_id, optionally narrowed by rel_type display name."""
     if rel_type is not None and rel_type not in CANONICAL_DEP_TYPES:
@@ -3757,44 +3788,23 @@ def _related_task_ids(item_id: int, rel_type: str | None = None) -> list[int]:
 
 
 def show_relations(item_id: int, llm: bool = False):
-    """Show all typed relations for a task, grouped by display-name."""
+    """Show all of a task's relations under a single 'Links:' section (E-1477)."""
     if not db.exists("SELECT 1 FROM tasks WHERE id = ?", (item_id,)):
         raise click.ClickException(f"Task {task_id_display(item_id)} not found.")
 
-    relations = get_all_relations(item_id)
-
     if llm:
         click.echo(f"# Relations for E-{item_id}")
-        if not relations:
+        links = _flatten_relations(item_id)
+        if not links:
             click.echo("(none)")
             return
-        for display, items in relations.items():
-            for it in items:
-                click.echo(
-                    f"{display} E-{it['id']} {it['status']} {it['title']}"
-                )
+        link_str = ", ".join(f"E-{r['id']} ({r['rel']})" for r in links)
+        click.echo(f"Links: {link_str}")
         return
-
-    label = lambda s: click.style(s, fg="cyan")
-    terminal = ("confirmed", "assumed", "completed", "declined", "obsolete")
 
     click.echo()
     click.echo(click.style(f"Relations for {task_id_display(item_id)}", fg="green", bold=True))
     click.echo(click.style("─" * 30, dim=True))
-
-    if not relations:
+    if not _echo_links_section(item_id):
         click.echo("  (none)")
-        click.echo()
-        return
-
-    for display, items in relations.items():
-        heading = RELATION_LABELS.get(display, display) + ":"
-        click.echo(label(heading))
-        for it in items:
-            color = "green" if it["status"] in terminal else "yellow"
-            click.echo(
-                f"  {task_id_display(it['id'])} "
-                f"[{click.style(it['status'], fg=color)}] "
-                f"{it['title']}"
-            )
     click.echo()

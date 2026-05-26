@@ -396,3 +396,105 @@ def test_migration_strips_check_and_swaps(tmp_path, monkeypatch):
     # CHECK should be gone; 'needs' should be 'blocks' with swap
     assert "CHECK" not in sql
     assert rows == [(200, 100, "blocks")]
+
+
+# --- E-1477: unified "Links:" rendering ---------------------------------------
+
+
+def _invoke(*args):
+    """Run the endless CLI under CliRunner; assert success and return output."""
+    from click.testing import CliRunner
+
+    from endless.cli import main
+
+    result = CliRunner().invoke(main, list(args))
+    assert result.exit_code == 0, result.output
+    return result.output
+
+
+def test_flatten_relations_id_ascending_directional(isolated_env):
+    """E-1477: relations flatten into one id-ascending list with lower-cased
+    directional labels."""
+    _seed_project()
+    a = _add_task("A")
+    b = _add_task("B")
+    c = _add_task("C")
+
+    task_cmd.link_tasks(a, b, "blocks")        # A blocks B
+    task_cmd.link_tasks(c, a, "blocks")        # C blocks A → A blocked_by C
+    task_cmd.link_tasks(a, b, "relates_to")    # symmetric
+
+    flat = task_cmd._flatten_relations(a)
+    ids = [r["id"] for r in flat]
+    assert ids == sorted(ids)                  # id-ascending
+    pairs = {(r["id"], r["rel"]) for r in flat}
+    assert (b, "blocks") in pairs
+    assert (b, "relates to") in pairs
+    assert (c, "blocked by") in pairs
+
+
+def test_task_show_renders_links_section(isolated_env):
+    """E-1477: `task show` renders a single multi-line Links: section, no per-type headings."""
+    _seed_project()
+    a = _add_task("A", status="ready")
+    b = _add_task("B", status="ready")
+    c = _add_task("C", status="confirmed")
+    task_cmd.link_tasks(a, b, "blocks")        # A blocks B
+    task_cmd.link_tasks(c, a, "blocks")        # A blocked_by C
+
+    out = _invoke("task", "show", str(a))
+    assert "Links:" in out
+    assert f"E-{b} (blocks)" in out
+    assert f"E-{c} (blocked by)" in out
+    assert "[ready]" in out                    # rich rows carry status
+    assert "[confirmed]" in out
+    assert "Blocks:" not in out                # old per-type headings gone
+    assert "Blocked by:" not in out
+
+
+def test_task_show_llm_links_line(isolated_env):
+    """E-1477: `task show --llm` emits a single compact links= line."""
+    _seed_project()
+    a = _add_task("A")
+    b = _add_task("B")
+    task_cmd.link_tasks(a, b, "blocks")
+
+    out = _invoke("task", "show", str(a), "--llm")
+    assert f"links=E-{b} (blocks)" in out
+    assert "blocked_by=" not in out            # old per-type key gone
+    assert "blocks=" not in out
+
+
+def test_task_relations_renders_links_section(isolated_env):
+    """E-1477: `task relations` renders one Links: section with rich rows, ungrouped."""
+    _seed_project()
+    a = _add_task("A", status="ready")
+    b = _add_task("B", status="ready")
+    task_cmd.link_tasks(a, b, "blocks")
+    task_cmd.link_tasks(a, b, "relates_to")
+
+    out = _invoke("task", "relations", str(a))
+    assert "Links:" in out
+    assert f"E-{b} (blocks)" in out
+    assert f"E-{b} (relates to)" in out
+    assert "[ready]" in out
+    assert "Relates to:" not in out            # old per-type heading gone
+
+
+def test_task_relations_llm_links_line(isolated_env):
+    """E-1477: `task relations --llm` emits a single Links: line."""
+    _seed_project()
+    a = _add_task("A")
+    b = _add_task("B")
+    task_cmd.link_tasks(a, b, "relates_to")
+
+    out = _invoke("task", "relations", str(a), "--llm")
+    assert f"Links: E-{b} (relates to)" in out
+
+
+def test_task_relations_none(isolated_env):
+    """E-1477: a task with no relations still reports (none)."""
+    _seed_project()
+    a = _add_task("A")
+    out = _invoke("task", "relations", str(a))
+    assert "(none)" in out

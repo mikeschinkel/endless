@@ -1396,7 +1396,7 @@ def task_deps(item_id, llm):
 @click.option("--llm", is_flag=True,
               help="Token-efficient output for LLMs")
 def task_relations(item_id, llm):
-    """Show all typed relations for a task, grouped by type."""
+    """Show all of a task's relations under a single 'Links:' section."""
     from endless.task_cmd import show_relations
     show_relations(item_id, llm=llm)
 
