@@ -72,7 +72,7 @@ When task A is blocked by task B (`endless task block A --by B`):
 - B in `confirmed` or `assumed` → A is **unblocked**.
 - B in `declined` or `obsolete` → A is **unblocked**.
 
-In `task show`, dependencies display as **Needs:** (active blocker), **Enabled by:** (resolved blocker), **Enables:** (tasks depending on this one).
+In `task show`, blocking relations appear in the **Links:** section: `(blocked by)` for a task that blocks this one and `(blocks)` for a task this one blocks, each tagged with the related task's `[status]` — which tells you whether a blocker is still active (e.g. `verify`) or resolved (`confirmed`/`assumed`).
 
 ## Common patterns
 
