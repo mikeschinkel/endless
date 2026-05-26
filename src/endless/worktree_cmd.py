@@ -975,6 +975,48 @@ def _maybe_auto_sandbox_bind(project_root: Path, worktree_path: Path, task_id: i
     )
 
 
+def _record_landing(
+    item_id: int,
+    proj_name: str,
+    branch: str,
+    base_branch: str,
+    canonical: str,
+    merge_sha: str,
+) -> None:
+    """Emit the task.landed event after a successful ff-merge (E-1337).
+
+    The ff-merge in land_worktree() Step 5 has already advanced main, so the
+    land has HAPPENED by the time this runs. If the emit fails (e.g. the
+    session-attribution gate, or any transient), main is still advanced — so
+    re-raise as a clearly re-runnable error that says main was advanced and
+    recording failed, rather than one that implies nothing landed. The
+    ff-merge is idempotent, so re-running `just land` records the landing once
+    the cause is resolved (E-1474).
+    """
+    from endless.event_bridge import emit_event
+
+    try:
+        emit_event(
+            kind="task.landed",
+            project=proj_name,
+            entity_type="task",
+            entity_id=str(item_id),
+            payload={
+                "branch": branch,
+                "merge_commit_sha": merge_sha,
+            },
+            prompt_verb="landed for",
+        )
+    except Exception as e:
+        detail = e.message if isinstance(e, click.ClickException) else str(e)
+        raise click.ClickException(
+            f"Landed {canonical} ({branch}) into {base_branch}: main was "
+            f"advanced, but recording the landing failed:\n\n{detail}\n\n"
+            f"The ff-merge is idempotent. Re-run `just land {canonical}` to "
+            f"record the landing once the cause above is resolved."
+        )
+
+
 def land_worktree(task_id: str, dry_run: bool) -> None:
     """Land the worktree for <task-id> into main per E-987 + E-1337.
 
@@ -1132,20 +1174,14 @@ def land_worktree(task_id: str, dry_run: bool) -> None:
                 f"Landed {canonical} but reading merge SHA failed: {e.stderr or e}"
             )
 
-        from endless.event_bridge import emit_event
-
         _, proj_name = _resolve_project(None)
         item_id = int(canonical[2:])
-        emit_event(
-            kind="task.landed",
-            project=proj_name,
-            entity_type="task",
-            entity_id=str(item_id),
-            payload={
-                "branch": branch,
-                "merge_commit_sha": merge_sha,
-            },
-            prompt_verb="landed for",
+        # E-1474: the ff-merge above already advanced main, so the land has
+        # happened. _record_landing surfaces any task.landed emit failure as a
+        # re-runnable "main advanced, recording failed" error rather than one
+        # that implies nothing landed.
+        _record_landing(
+            item_id, proj_name, branch, base_branch, canonical, merge_sha
         )
 
         click.echo(
