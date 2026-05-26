@@ -2881,7 +2881,6 @@ def detail_item(
         click.echo(f"{label('Tier:')} {val(tier_display(item['tier']))}")
     if item["parent_id"]:
         click.echo(f"{label('Parent:')} {val(task_id_display(item['parent_id']))}")
-    _echo_links_section(item_id)
     click.echo(f"{label('Created:')} {val(_format_timestamp(item['created_at']))}")
     if item["updated_at"] and item["updated_at"] != item["created_at"]:
         click.echo(f"{label('Updated:')} {val(_format_timestamp(item['updated_at']))}")
@@ -2889,6 +2888,8 @@ def detail_item(
         click.echo(f"{label('Confirmed:')} {val(_format_timestamp(item['completed_at']))}")
     if item["source_file"]:
         click.echo(f"{label('Source:')} {val(item['source_file'])}")
+    # Links last: multi-line block sits below the single-line fields (E-1477).
+    _echo_links_section(item_id)
 
     # Large text sections
     if show_description and item["description"] and item["description"] != item["title"]:
@@ -3720,18 +3721,17 @@ def _flatten_relations(item_id: int) -> list[dict]:
     for display_name, items in get_all_relations(item_id).items():
         rel = RELATION_LABELS.get(display_name, display_name).lower()
         for d in items:
-            flat.append({"id": d["id"], "rel": rel,
-                         "status": d["status"], "title": d["title"]})
+            flat.append({"id": d["id"], "rel": rel, "status": d["status"]})
     flat.sort(key=lambda r: r["id"])
     return flat
 
 
 def _echo_links_section(item_id: int) -> bool:
     """Emit the unified multi-line 'Links:' section (E-1477): a cyan 'Links:' heading,
-    then one indented, colored row per relation (id-ascending) —
-    'E-NNN (relation type) [status] title'. Emits nothing and returns False when the
-    task has no relations; returns True otherwise. Shared by task show/detail and
-    relations/deps so both render identically."""
+    then one indented, colored row per relation (id-ascending) — 'E-NNN (relation
+    type) [status]'. Titles are intentionally omitted to keep every row on one line.
+    Emits nothing and returns False when the task has no relations; returns True
+    otherwise. Shared by task show/detail and relations/deps so both render identically."""
     links = _flatten_relations(item_id)
     if not links:
         return False
@@ -3740,7 +3740,7 @@ def _echo_links_section(item_id: int) -> bool:
         color = "green" if r["status"] in _RELATION_TERMINAL_STATUSES else "yellow"
         click.echo(
             f"  {task_id_display(r['id'])} ({r['rel']}) "
-            f"[{click.style(r['status'], fg=color)}] {r['title']}")
+            f"[{click.style(r['status'], fg=color)}]")
     return True
 
 

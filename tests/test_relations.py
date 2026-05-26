@@ -434,22 +434,24 @@ def test_flatten_relations_id_ascending_directional(isolated_env):
 
 
 def test_task_show_renders_links_section(isolated_env):
-    """E-1477: `task show` renders a single multi-line Links: section, no per-type headings."""
+    """E-1477: `task show` renders one Links: section (id, type, status; titles
+    omitted), placed below Created:."""
     _seed_project()
     a = _add_task("A", status="ready")
-    b = _add_task("B", status="ready")
-    c = _add_task("C", status="confirmed")
+    b = _add_task("Distinctive beta title", status="ready")
+    c = _add_task("Distinctive gamma title", status="confirmed")
     task_cmd.link_tasks(a, b, "blocks")        # A blocks B
     task_cmd.link_tasks(c, a, "blocks")        # A blocked_by C
 
     out = _invoke("task", "show", str(a))
     assert "Links:" in out
-    assert f"E-{b} (blocks)" in out
-    assert f"E-{c} (blocked by)" in out
-    assert "[ready]" in out                    # rich rows carry status
-    assert "[confirmed]" in out
-    assert "Blocks:" not in out                # old per-type headings gone
+    assert f"E-{b} (blocks) [ready]" in out
+    assert f"E-{c} (blocked by) [confirmed]" in out
+    assert "Distinctive beta title" not in out      # titles omitted from rows
+    assert "Distinctive gamma title" not in out
+    assert "Blocks:" not in out                     # old per-type headings gone
     assert "Blocked by:" not in out
+    assert out.index("Created:") < out.index("Links:")  # multi-line block sits last
 
 
 def test_task_show_llm_links_line(isolated_env):
@@ -466,19 +468,19 @@ def test_task_show_llm_links_line(isolated_env):
 
 
 def test_task_relations_renders_links_section(isolated_env):
-    """E-1477: `task relations` renders one Links: section with rich rows, ungrouped."""
+    """E-1477: `task relations` renders one ungrouped Links: section (titles omitted)."""
     _seed_project()
     a = _add_task("A", status="ready")
-    b = _add_task("B", status="ready")
+    b = _add_task("Distinctive beta title", status="ready")
     task_cmd.link_tasks(a, b, "blocks")
     task_cmd.link_tasks(a, b, "relates_to")
 
     out = _invoke("task", "relations", str(a))
     assert "Links:" in out
-    assert f"E-{b} (blocks)" in out
-    assert f"E-{b} (relates to)" in out
-    assert "[ready]" in out
-    assert "Relates to:" not in out            # old per-type heading gone
+    assert f"E-{b} (blocks) [ready]" in out
+    assert f"E-{b} (relates to) [ready]" in out
+    assert "Distinctive beta title" not in out  # title omitted
+    assert "Relates to:" not in out             # old per-type heading gone
 
 
 def test_task_relations_llm_links_line(isolated_env):
