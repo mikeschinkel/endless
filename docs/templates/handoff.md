@@ -13,7 +13,10 @@ Worktree: $worktree_path (branch $branch) — confirm with `pwd`. Don't edit the
    me how to test. Don't mark `confirmed`/`assumed` yourself.
 7. Don't run `endless worktree land`/`drop` without asking.
 
-Final message: a 1–2 sentence summary, the how-to-test, and the
-`tmux select-window -t $return_anchor` return line — make the return line prominent.
+Final message: a 1–2 sentence summary, the how-to-test, and this return line  — make the return line prominent:
+
+```
+tmux move-window -t archive: && tmux switch-client -t $return_anchor`.
+```
 
 Goal: drive this task to a state I can confirm and land cleanly. Don't leave loose ends.
