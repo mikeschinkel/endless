@@ -727,11 +727,17 @@ def _reap_stale_worktrees(project_root: Path) -> None:
     forwarded so reaped-dir log lines reach the user; non-zero exit
     raises subprocess.CalledProcessError (caller decides how loud).
     """
+    from endless import config
+
     binary = shutil.which("endless-event")
     if not binary:
         return
+    # E-1429: thread the resolved --db context so this DB-opening subprocess
+    # isn't refused by the self-dev-worktree gate when land runs from inside a
+    # worktree. Empty (no flag) outside a gated worktree, so a no-op there.
     subprocess.run(
-        [binary, "reap-worktrees", "--project-root", str(project_root)],
+        [binary, *config.go_db_context_args(), "reap-worktrees",
+         "--project-root", str(project_root)],
         check=True,
     )
 
@@ -893,6 +899,8 @@ def _materialize_plan_file(task_id: int, worktree_path: Path) -> None:
     recoverable by re-running `endless task update --text` once the worktree
     exists (which mirrors into it).
     """
+    from endless import config
+
     binary = shutil.which("endless-session-query")
     if not binary:
         click.echo(
@@ -902,8 +910,11 @@ def _materialize_plan_file(task_id: int, worktree_path: Path) -> None:
         )
         return
     try:
+        # E-1429: thread the resolved --db context (no-op outside a gated
+        # worktree) so this DB read isn't refused when claim runs from a
+        # worktree cwd.
         result = subprocess.run(
-            [binary, "task-text", "--id", str(task_id)],
+            [binary, *config.go_db_context_args(), "task-text", "--id", str(task_id)],
             capture_output=True, text=True,
         )
     except OSError as e:

@@ -112,7 +112,9 @@ def test_mirror_plan_to_worktree_noop_without_worktree(
 
 def _fake_run_factory(stdout: str, returncode: int = 0):
     def _run(argv, **kwargs):
-        assert argv[1] == "task-text"
+        # "task-text" is the subcommand; it may be preceded by the E-1429
+        # --config-dir context pair, so assert membership, not position.
+        assert "task-text" in argv
         return types.SimpleNamespace(
             returncode=returncode, stdout=stdout, stderr="",
         )
