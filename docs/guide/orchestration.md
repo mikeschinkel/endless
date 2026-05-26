@@ -41,6 +41,31 @@ cd "$(endless worktree for-task <id>)"
 
 Or via shell helpers (next section).
 
+### Choosing the database (`--db`)
+
+When endless develops endless, a self-dev worktree (a `.endless/worktrees/e-NNN`
+checkout of a project whose `.endless/config.json` has `"worktree_sandbox": true`)
+must say which database every command operates on. There is no default — you
+pick per invocation:
+
+- `--db main` — the real ledger at `~/.config/endless/endless.db`. Use it for
+  **managing the project**: filing tasks, claiming, status updates, ledger entries.
+- `--db sandbox` — this worktree's throwaway DB under
+  `~/.cache/endless/sandboxes/worktree-e-NNN/`. Use it for **testing endless
+  itself** so experiments never touch the real ledger.
+
+```bash
+endless --db main task add "Fix the thing"     # before the command
+endless task add "Fix the thing" --db main      # or after — position doesn't matter
+endless db path --db=sandbox                    # print a DB path without opening it
+```
+
+The flag is **mandatory by design** inside such a worktree, and is never an
+environment variable: an exported value could silently route every later
+command to the wrong DB. Outside a self-dev worktree (the main checkout, or any
+downstream project that uses endless as a tool) `--db` is neither required nor
+needed.
+
 ### Inspecting
 
 ```bash

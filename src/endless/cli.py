@@ -1,6 +1,7 @@
 """Endless CLI — Click entry point."""
 
 import os
+import sys
 from pathlib import Path
 
 import click
@@ -61,19 +62,63 @@ class MultiChoice(click.ParamType):
         return parts
 
 
-@click.group()
-@click.option(
-    "--db",
-    "db_choice",
-    type=click.Choice(["main", "worktree"]),
-    default=None,
-    help="Inside a self-dev worktree, select the DB: 'main' (real ledger) "
-    "or 'worktree' (this worktree's sandbox). Required there; ignored "
-    "elsewhere.",
+class DBAwareGroup(click.Group):
+    """Click group that accepts the global --db flag in ANY argument position.
+
+    Click only parses group options *before* the subcommand, which forces an
+    awkward `endless --db main task show` and rejects the natural
+    `endless task show --db main`. This override pre-extracts `--db <val>` /
+    `--db=<val>` from anywhere in argv before normal parsing (mirroring the Go
+    side's monitor.ConsumeDBContextFlag), applies it via config.apply_db_choice
+    (the single resolver), and hands the cleaned args to Click. Because
+    click.testing.CliRunner.invoke also calls Command.main(), the test suite
+    gets the same position-agnostic behavior, and there is one extraction site
+    (no separate entry-point wrapper, no pyproject change). E-1476.
+    """
+
+    def main(self, args=None, **extra):
+        from endless import config
+
+        argv = list(args) if args is not None else sys.argv[1:]
+        cleaned: list[str] = []
+        db_value: str | None = None
+        i = 0
+        while i < len(argv):
+            arg = argv[i]
+            if arg == "--db":
+                if i + 1 >= len(argv):
+                    click.echo("Error: --db requires a value: main or sandbox", err=True)
+                    sys.exit(2)
+                db_value = argv[i + 1]
+                i += 2
+                continue
+            if arg.startswith("--db="):
+                db_value = arg[len("--db="):]
+                i += 1
+                continue
+            cleaned.append(arg)
+            i += 1
+        if db_value is not None:
+            # apply_db_choice validates the value and resolves+pins the context;
+            # it raises ValueError for an unknown value or for --db sandbox
+            # outside a worktree. Format like a Click usage error (exit 2).
+            try:
+                config.apply_db_choice(db_value)
+            except ValueError as e:
+                click.echo(f"Error: {e}", err=True)
+                sys.exit(2)
+        return super().main(args=cleaned, **extra)
+
+
+@click.group(
+    cls=DBAwareGroup,
+    epilog="Inside a self-dev worktree, pass --db (accepted in any position): "
+    "--db main (the real ledger) or --db sandbox (this worktree's test DB). "
+    "Resolve paths with `endless db path --db=main|sandbox`.",
 )
 @click.version_option(__version__, prog_name="endless")
 @click.pass_context
-def main(ctx, db_choice):
+def main(ctx):
     """Project awareness system for solo developers."""
     try:
         os.getcwd()
@@ -85,17 +130,10 @@ def main(ctx, db_choice):
             err=True,
         )
         ctx.exit(1)
-    if db_choice is not None:
-        # E-1429: resolve --db to a config dir and pin it for this process.
-        # Enforcement of "required inside a worktree" happens at the DB-access
-        # choke points (db.get_db / go_db_context_args), not here, so commands
-        # that never touch the DB stay flag-free.
-        from endless import config
-
-        try:
-            config.apply_db_choice(db_choice)
-        except ValueError as e:
-            raise click.ClickException(str(e))
+    # E-1429/E-1476: --db is consumed and applied by DBAwareGroup.main() before
+    # Click parses (so it works in any position). Enforcement of "required
+    # inside a worktree" happens at the DB-access choke points (db.get_db /
+    # go_db_context_args), so commands that never touch the DB stay flag-free.
     sandbox = os.environ.get("ENDLESS_SANDBOX")
     if sandbox and ctx.invoked_subcommand not in SANDBOX_SAFE_SUBCOMMANDS:
         click.echo(
@@ -1910,31 +1948,21 @@ def db_backup():
 
 
 @db_cmd.command("path")
-@click.option(
-    "--db",
-    "db_choice",
-    type=click.Choice(["main", "worktree"]),
-    required=True,
-    help="Which database to resolve: main (real ledger) or worktree "
-    "(this worktree's sandbox).",
-)
-def db_path(db_choice):
-    """Print the absolute path to the main or worktree-sandbox database.
+def db_path():
+    """Print the absolute path to the database selected by the global --db.
 
     For SQL-client debugging or scripting, and referenced by the --db gate's
-    refusal message. --db=worktree resolves the current worktree's sandbox the
-    same way the gate does (so it must be run from inside a worktree).
+    refusal message. Uses the single global --db (E-1476): run
+    `endless db path --db=main` or `endless db path --db=sandbox`. Resolving
+    --db=sandbox requires running from inside a self-dev worktree (the global
+    --db handler errors otherwise). This command does not open the DB, so it is
+    not subject to the worktree gate.
     """
     from endless import config
 
-    if db_choice == "main":
-        config_dir = config.main_config_dir()
-    else:
-        task_id = config.worktree_task_id()
-        if task_id is None:
-            raise click.ClickException(
-                "--db worktree only applies inside a self-dev worktree "
-                "(.endless/worktrees/e-NNN); cwd is not in one"
-            )
-        config_dir = config.sandbox_config_dir(task_id)
-    click.echo(str(config_dir / "endless.db"))
+    if config.RESOLVED_CONFIG_DIR is None:
+        raise click.ClickException(
+            "db path needs an explicit --db value: "
+            "'endless db path --db=main' or 'endless db path --db=sandbox'."
+        )
+    click.echo(str(config.DB_PATH))

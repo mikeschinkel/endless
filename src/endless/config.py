@@ -18,8 +18,8 @@ CONFIG_FILE = CONFIG_DIR / "config.json"
 DB_PATH = CONFIG_DIR / "endless.db"
 
 # RESOLVED_CONFIG_DIR records an explicit DB/config directory chosen for this
-# invocation via the root `--db main|worktree` flag (E-1429). None means no
-# explicit choice was made. When set, it both (a) satisfies the self-dev
+# invocation via the global `--db main|sandbox` flag (E-1429/E-1476). None means
+# no explicit choice was made. When set, it both (a) satisfies the self-dev
 # worktree gate and (b) is threaded to Go subprocesses via --config-dir.
 RESOLVED_CONFIG_DIR: Path | None = None
 
@@ -154,7 +154,7 @@ def mark_as_group(dir_path: Path):
 #
 # Inside a self-dev worktree (a .endless/worktrees/e-NNN checkout of a project
 # whose config.json sets "worktree_sandbox": true), the implicit XDG-driven DB
-# routing is replaced by a mandatory, per-invocation --db main|worktree flag.
+# routing is replaced by a mandatory, per-invocation --db main|sandbox flag.
 # The choice is never an env var: an exported var could silently route every
 # later command to the wrong DB. The flag resolves to a config directory, which
 # pins this process's reads and is threaded to Go subprocesses via --config-dir.
@@ -166,10 +166,11 @@ _WORKTREE_PATH_RE = re.compile(r"/\.endless/worktrees/e-(\d+)(?:-[a-z0-9-]+)?(?:
 # The locked refusal message. Click prepends "Error: " to produce the final
 # wording. Intentionally has no E-NNN ticket refs (user-facing).
 WORKTREE_DB_REFUSAL = (
-    "running inside self-dev worktree requires an explicit --db value:\n\n"
-    "  --db main      the real ledger — managing the project\n"
-    "  --db worktree  this worktree's sandbox — testing endless itself\n\n"
-    "Need paths? Run `endless db path --db=main|worktree`."
+    "running inside a self-dev worktree requires an explicit --db value "
+    "(accepted in any position):\n\n"
+    "  --db main     the real ledger — managing the project\n"
+    "  --db sandbox  this worktree's throwaway test DB — testing endless itself\n\n"
+    "Need paths? Run `endless db path --db=main|sandbox`."
 )
 
 
@@ -230,22 +231,26 @@ def set_db_context(config_dir: Path):
 
 
 def apply_db_choice(choice: str):
-    """Resolve a --db main|worktree choice to a config dir and pin it.
+    """Resolve a --db main|sandbox choice to a config dir and pin it.
 
-    Raises ValueError for --db worktree outside a worktree.
+    Raises ValueError for an unknown value, or for --db sandbox outside a
+    worktree. This is the single validator for the flag (DBAwareGroup consumes
+    --db from argv and calls here; there is no Click Choice to pre-validate).
     """
     if choice == "main":
         set_db_context(main_config_dir())
-    elif choice == "worktree":
+    elif choice == "sandbox":
         task_id = worktree_task_id()
         if task_id is None:
             raise ValueError(
-                "--db worktree only applies inside a self-dev worktree "
+                "--db sandbox only applies inside a self-dev worktree "
                 "(.endless/worktrees/e-NNN); cwd is not in one"
             )
         set_db_context(sandbox_config_dir(task_id))
-    else:  # pragma: no cover - click.Choice prevents this
-        raise ValueError(f"unknown --db value: {choice!r}")
+    else:
+        raise ValueError(
+            f"unknown --db value {choice!r}: expected 'main' or 'sandbox'"
+        )
 
 
 def require_db_context():

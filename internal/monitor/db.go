@@ -223,7 +223,7 @@ func projectWantsWorktreeSandbox(root string) bool {
 var worktreeDBContextRefusal = errors.New(
 	"refusing to open the database: this process runs inside a self-dev " +
 		"worktree but was given no explicit DB context. Invoke through the " +
-		"endless CLI with --db main|worktree, which threads --config-dir to " +
+		"endless CLI with --db main|sandbox, which threads --config-dir to " +
 		"this binary.")
 
 // guardWorktreeDBContext implements the E-1429 gate. When this process runs
