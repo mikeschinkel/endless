@@ -7,6 +7,8 @@ from pathlib import Path
 import click
 
 from endless import __version__
+from endless import agent_help
+from endless.agent_help import AgentHelpMixin
 
 # Subcommands that are safe to run inside an endless-sandbox subshell
 # (no project/global I/O — pure stdout). Anything else is refused at
@@ -82,6 +84,7 @@ class DBAwareGroup(click.Group):
         argv = list(args) if args is not None else sys.argv[1:]
         cleaned: list[str] = []
         db_value: str | None = None
+        agent_view = False
         i = 0
         while i < len(argv):
             arg = argv[i]
@@ -96,8 +99,17 @@ class DBAwareGroup(click.Group):
                 db_value = arg[len("--db="):]
                 i += 1
                 continue
+            # --agent-view forces the agent --help rendering in any position so a
+            # human can see/debug what an agent sees. Consumed here (like --db)
+            # so per-command --help doesn't reject it as an unknown option.
+            if arg == "--agent-view":
+                agent_view = True
+                i += 1
+                continue
             cleaned.append(arg)
             i += 1
+        if agent_view:
+            agent_help.set_agent_view(True)
         if db_value is not None:
             # apply_db_choice validates the value and resolves+pins the context;
             # it raises ValueError for an unknown value or for --db sandbox
@@ -110,8 +122,23 @@ class DBAwareGroup(click.Group):
         return super().main(args=cleaned, **extra)
 
 
+class AgentAwareCommand(AgentHelpMixin, click.Command):
+    """Leaf command whose --help is augmented for agents (E-1502)."""
+
+
+class AgentAwareGroup(AgentHelpMixin, DBAwareGroup):
+    """Group whose --help is augmented for agents, and whose children inherit
+    the augmenting classes so one root `cls=` propagates across the whole tree."""
+
+
+# Make the decorators on any AgentAwareGroup (including the root) mint augmented
+# children, so every command and subgroup gets the agent --help treatment.
+AgentAwareGroup.command_class = AgentAwareCommand
+AgentAwareGroup.group_class = AgentAwareGroup
+
+
 @click.group(
-    cls=DBAwareGroup,
+    cls=AgentAwareGroup,
     epilog="Inside a self-dev worktree, pass --db (accepted in any position): "
     "--db main (the real ledger) or --db sandbox (this worktree's test DB). "
     "Resolve paths with `endless db path --db=main|sandbox`.",

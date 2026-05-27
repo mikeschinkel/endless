@@ -111,6 +111,57 @@ For details, run `endless guide <section>`:
 
 Run `endless guide --list` to print just the section slugs.
 
+<!-- BEGIN generated: command/topic cross-reference (regenerate via /regenerate-guide) -->
+## Where to look (command / topic → section)
+
+Have a command or topic and need the guidance for it? Find the row, then
+run `endless guide <section>`. Subcommands inherit their group's row unless
+listed separately. (Generated — do not hand-edit; run `/regenerate-guide`.)
+
+| Command / topic | Section | Covers |
+|---|---|---|
+| `endless channel` | orchestration | Inter-session channels: messaging between concurrent sessions. |
+| `endless db` | orchestration | Choosing the database (--db main/sandbox) in self-dev worktrees. |
+| `endless decision` | decisions | Decisions as first-class items; preference vs prohibition (read this). |
+| `endless discover` | reference | Finding and registering unregistered projects. |
+| `endless docs` | _(none yet)_ | the `docs` command is temporarily disabled and not covered by the guide. |
+| `endless guide` | reference | The session guide; run `endless guide` for the index, `--list` for sections. |
+| `endless list` | reference | Listing registered projects. |
+| `endless note` | _(none yet)_ | project notes aren't covered by the guide yet. |
+| `endless notes` | _(none yet)_ | project notes aren't covered by the guide yet. |
+| `endless phrase` | _(none yet)_ | matchers (pivots, action regexes) config isn't covered by the guide yet. |
+| `endless plan` | tasks | 'plan' is the former name for 'task' (renamed); use 'task'. |
+| `endless purge` | reference | Removing the .endless/ directory from a project. |
+| `endless register` | reference | Registering a directory as a project. |
+| `endless rename` | reference | Renaming a project. |
+| `endless scan` | reference | Scanning and reconciling registered projects. |
+| `endless serve` | reference | The web dashboard at http://localhost:8484. |
+| `endless session` | sessions | Recording session status; discovery (who am I); reading status. |
+| `endless set` | reference | Setting a project field. |
+| `endless setup` | _(none yet)_ | hook/integration setup (claude-hook, prompt-hook, channel-plugin) isn't covered by the guide yet. |
+| `endless shell-init` | orchestration | Shell helpers (esu/eswt) to enter your task's worktree. |
+| `endless sql` | reference | Read-only SQL against the Endless DB. |
+| `endless status` | reference | Detailed status of a project. |
+| `endless suggestions` | _(none yet)_ | the enforcement-relaxation suggestions workflow isn't covered by the guide yet. |
+| `endless task` | tasks | Task CRUD, field semantics (title/description/text/analysis/notes/outcome), status transitions, relations. |
+| `endless task claim` | orchestration | Claiming a task: creates the per-task worktree and binds your session. |
+| `endless task handoff` | orchestration | The generated handoff text for a spawned session. |
+| `endless task release` | orchestration | Releasing a task so another session can claim it. |
+| `endless task spawn` | orchestration | Spawning a fresh Claude session on a task. |
+| `endless tmux` | reference | Tmux status-line and popup integration. |
+| `endless unregister` | reference | Unregistering a project (config preserved on disk). |
+| `endless verb` | tasks | Verbs: the registered actions that can begin a task title. |
+| `endless worktree` | orchestration | Per-task git worktrees: getting in, landing, abandoning, inspecting. |
+| _topic:_ commit-to-main policy | orchestration | When to commit to main vs work only in a worktree. |
+| _topic:_ who am I / current session | sessions | Discovering your session id and the task it's bound to. |
+| _topic:_ preference vs prohibition | decisions | Soft signals ('ideally','usually') are not rules - verify before recording. |
+| _topic:_ the handoff (generated, not authored) | orchestration | Spawned sessions get a rendered handoff; agents never write it. |
+| _topic:_ worktree DB sandbox (--db main vs sandbox) | orchestration | Self-dev DB routing and the --db choice. |
+| _topic:_ shell helpers (esu / eswt) | orchestration | cd into your worktree and export ENDLESS_SESSION_ID. |
+| _topic:_ blocking semantics | tasks | How verify/confirmed/assumed affect whether a blocker is still active. |
+| _topic:_ verbs | tasks | The registered action words that can begin a task title. |
+<!-- END generated -->
+
 ## Important notes (always relevant)
 
 - **Don't mark items `confirmed`.** Set them to `verify` and let your user confirm — or `assume` if you can't easily verify.

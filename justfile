@@ -24,6 +24,11 @@ help:
     @echo "Database:"
     @echo "  just db-export    Export project data to .endless/data.sql"
     @echo ""
+    @echo "Guide docs:"
+    @echo "  just guide-check    Validate command->section map coverage (pre-land gate)"
+    @echo "  just guide-index    Rebuild the cross-reference block in docs/guide/index.md"
+    @echo "  just guide-scaffold Print the skeleton for /regenerate-guide"
+    @echo ""
     @echo "Demo:"
     @echo "  cd deploy/machine && just demo-sync     Sync to demo machine"
     @echo "  cd deploy/machine && just demo-prepare  Prepare demo machine"
@@ -330,6 +335,27 @@ dev-sandbox-init:
 # Run Python tests
 test:
     uv run pytest tests/ -v
+
+# Guide cross-reference / agent --help map (E-1502).
+#
+# Deterministic primitives live in src/endless/guide_map.py (graduation-ready);
+# these recipes are dev-side wrappers. The semantic mapping of a command to its
+# guide section is filled in by the /regenerate-guide slash command, not here.
+
+# Print the skeleton (every command + each section's headers) the LLM fills in.
+guide-scaffold:
+    uv run python -m endless.guide_map scaffold
+
+# Rebuild the generated cross-reference block in docs/guide/index.md from the
+# docs/guide/help/*.md map files. Idempotent.
+guide-index:
+    uv run python -m endless.guide_map index
+
+# Validate map coverage: every command resolves to a section or an acknowledged
+# gap, no dangling section refs, no orphan files, index block in sync. Non-zero
+# exit on drift — a pre-land / CI gate. Acknowledged gaps are reported, not failed.
+guide-check:
+    uv run python -m endless.guide_map check
 
 # Generate templ files (one-shot)
 generate:
