@@ -303,17 +303,19 @@ def assemble_index_block() -> str:
     inherited subcommands would be repetitive), in command order, then topics.
     """
     present = _present_stems()
-    rows: list[str] = []
+    cmd_rows: list[str] = []
     for cmd in walk_commands():
         if command_path_to_filename(cmd) not in present:
             continue
         p = _parse_entry(_file_for(cmd).read_text())
         if p.gap and not p.sections:
-            rows.append(f"| `endless {cmd}` | _(none yet)_ | {p.gap} |")
+            cmd_rows.append(f"| `{cmd}` | _(none yet)_ | {p.gap} |")
         else:
-            rows.append(f"| `endless {cmd}` | {', '.join(p.sections)} | {p.covers} |")
-    for topic in load_topics():
-        rows.append(f"| _topic:_ {topic.key} | {', '.join(topic.sections)} | {topic.covers} |")
+            cmd_rows.append(f"| `{cmd}` | {', '.join(p.sections)} | {p.covers} |")
+    topic_rows = [
+        f"| {t.key} | {', '.join(t.sections)} | {t.covers} |"
+        for t in load_topics()
+    ]
 
     body = [
         BEGIN_MARKER,
@@ -323,9 +325,17 @@ def assemble_index_block() -> str:
         "run `endless guide <section>`. Subcommands inherit their group's row unless",
         "listed separately. (Generated — do not hand-edit; run `/regenerate-guide`.)",
         "",
-        "| Command / topic | Section | Covers |",
+        "### Commands",
+        "",
+        "| Command | Section | Covers |",
         "|---|---|---|",
-        *rows,
+        *cmd_rows,
+        "",
+        "### Topics",
+        "",
+        "| Topic | Section | Covers |",
+        "|---|---|---|",
+        *topic_rows,
         END_MARKER,
     ]
     return "\n".join(body)

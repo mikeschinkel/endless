@@ -148,7 +148,7 @@ def test_index_block_idempotent_and_stale_detection(guide_tree, monkeypatch):
     assert guide_map._index_in_sync() is True
 
     block = guide_map._current_index_block(guide_map.INDEX_FILE.read_text())
-    assert "`endless task`" in block
+    assert "`task`" in block
     assert "footer" in guide_map.INDEX_FILE.read_text()  # surrounding text preserved
 
     _write(guide_tree, "task", "section: orchestration\ncovers: changed\n")
@@ -161,7 +161,8 @@ def test_topics_feed_index(guide_tree, monkeypatch):
         "topic: who am I\nsection: sessions\ncovers: current session\n"
     )
     block = guide_map.assemble_index_block()
-    assert "_topic:_ who am I" in block
+    assert "### Topics" in block
+    assert "| who am I |" in block
 
 
 # --------------------------------------------------------------------------- #
