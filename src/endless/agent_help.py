@@ -65,9 +65,13 @@ def agent_block(ctx: click.Context) -> str | None:
         lines.append("    No guide section is mapped to this command yet. Run "
                      "`endless guide` for the index.")
     elif entry.sections:
+        # Just the directive — the agent is being told which section to read,
+        # not choosing among sections, so the section's `covers` summary adds
+        # noise here. `covers` earns its place in the index table (`endless
+        # guide`), where you scan to *find* the section. Command-specific notes
+        # stay: they're not in the guide.
         for slug in entry.sections:
-            covers = f"   ({entry.covers})" if entry.covers else ""
-            lines.append(f"    endless guide {slug}{covers}")
+            lines.append(f"    endless guide {slug}")
         if entry.note:
             for note_line in entry.note.splitlines():
                 lines.append(f"    {note_line}")
