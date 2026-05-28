@@ -21,7 +21,7 @@ def test_render_handoff_includes_task_and_return_path():
     assert "E-1469" in out
     assert "Render handoff from template" in out
     # Return path names the spawning pane verbatim.
-    assert "tmux select-window -t %7" in out
+    assert "tmux switch-client -t %7" in out
     # Origin line names the spawning session's task.
     assert "E-1400" in out
     # Worktree + branch substituted.
