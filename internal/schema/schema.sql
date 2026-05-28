@@ -129,6 +129,49 @@ CREATE TABLE IF NOT EXISTS task_deps (
     UNIQUE(source_type, source_id, target_type, target_id, dep_type)
 );
 
+-- Decisions (E-1378). Lifecycle: proposed (initial) -> accepted | rejected
+-- (both terminal). status validation enforced in application code.
+CREATE TABLE IF NOT EXISTS decisions (
+    id INTEGER PRIMARY KEY,
+    project_id INTEGER NOT NULL,
+    title TEXT NOT NULL,
+    description TEXT,
+    text TEXT,
+    status TEXT NOT NULL DEFAULT 'proposed',
+    origin_task_id INTEGER,
+    origin_session_id INTEGER,
+    notes TEXT,
+    rejection_reason TEXT,
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
+    updated_at TEXT NOT NULL DEFAULT '',
+    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+    FOREIGN KEY (origin_task_id) REFERENCES tasks(id) ON DELETE SET NULL,
+    FOREIGN KEY (origin_session_id) REFERENCES sessions(id) ON DELETE SET NULL
+);
+
+CREATE TRIGGER IF NOT EXISTS decisions_updated_at AFTER UPDATE ON decisions
+BEGIN
+    UPDATE decisions SET updated_at = strftime('%Y-%m-%dT%H:%M:%S', 'now')
+    WHERE id = NEW.id AND updated_at != strftime('%Y-%m-%dT%H:%M:%S', 'now');
+END;
+
+-- Decision-sourced relations (E-1378). Source-table mapping: rows where the
+-- source is a decision live here; task-sourced rows (incl. task->decision)
+-- stay in task_deps until E-1389 renames. target_kind in {'task','decision'};
+-- validation in application code.
+CREATE TABLE IF NOT EXISTS decision_relations (
+    id INTEGER PRIMARY KEY,
+    source_decision_id INTEGER NOT NULL,
+    target_kind TEXT NOT NULL,
+    target_id INTEGER NOT NULL,
+    relation_type TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
+    UNIQUE(source_decision_id, target_kind, target_id, relation_type),
+    FOREIGN KEY (source_decision_id) REFERENCES decisions(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_decision_relations_target
+    ON decision_relations(target_kind, target_id);
+
 -- Activity log (from hooks)
 CREATE TABLE IF NOT EXISTS activity (
     id INTEGER PRIMARY KEY,
