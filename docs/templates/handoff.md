@@ -1,6 +1,10 @@
-You're a worktree-bound Claude Code session spawned to take E-$spawned_id end to end: $title.
-Spawning session: E-$spawner_task — return there with `tmux switch-client -t $return_anchor`.
-Worktree: $worktree_path (branch $branch) — confirm with `pwd`. Don't edit the main checkout; the spawning session owns landing.
+You're a worktree-bound Claude Code session spawned to take this task end to end:
+
+- E-$spawned_id: $title.
+
+Your spawning session's task is: E-$spawner_task — return to that session with `tmux switch-client -t $return_anchor`.
+
+Your worktree is: $worktree_path (branch $branch) — confirm with `pwd`. Don't edit the main checkout; the spawning session owns landing.
 
 1. Run `endless guide` to learn the Endless workflow.
 2. Run `endless task show E-$spawned_id --text --db main` to read the plan.
@@ -19,4 +23,4 @@ Final message: a 1–2 sentence summary, the how-to-test, and this return line  
 tmux move-window -t archive: && tmux switch-client -t $return_anchor`.
 ```
 
-Goal: drive this task to a state I can confirm and land cleanly. Don't leave loose ends.
+Goal: drive this task to a state I can confirm and land cleanly and then be able to archive this session. Don't leave loose ends.
