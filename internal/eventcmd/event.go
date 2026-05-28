@@ -121,15 +121,28 @@ func run(kindStr, project, entityTypeStr, entityID, actorKindStr, actorID,
 			correlationID, ts.String())
 	}
 
-	// Determine if this is a create event that needs ID pre-allocation
-	needsPreAlloc := evtKind == events.KindTaskCreated || evtKind == events.KindTaskImported
+	// Determine if this is a create event that needs ID pre-allocation.
+	// task.created / task.imported pre-allocate a tasks.id; decision.created
+	// (E-1378) pre-allocates a decisions.id and emits an ED-prefixed display
+	// form.
+	needsTaskPreAlloc := evtKind == events.KindTaskCreated || evtKind == events.KindTaskImported
+	needsDecisionPreAlloc := evtKind == events.KindDecisionCreated
+	needsPreAlloc := needsTaskPreAlloc || needsDecisionPreAlloc
 
 	if needsPreAlloc {
 		// Events-authoritative flow for creates:
 		// 1. Pre-allocate ID (acquires write lock)
 		// 2. Build and write event to segment file
 		// 3. Execute SQL and commit (releases lock)
-		taskID, execAndCommit, rollback, err := events.PreAllocateTaskID()
+		var newID int64
+		var execAndCommit func(*events.Event) (*events.ExecuteResult, error)
+		var rollback func()
+		var err error
+		if needsTaskPreAlloc {
+			newID, execAndCommit, rollback, err = events.PreAllocateTaskID()
+		} else {
+			newID, execAndCommit, rollback, err = events.PreAllocateDecisionID()
+		}
 		if err != nil {
 			return err
 		}
@@ -141,7 +154,7 @@ func run(kindStr, project, entityTypeStr, entityID, actorKindStr, actorID,
 			Project: project,
 			Entity: events.EntityRef{
 				Type: events.EntityType(entityTypeStr),
-				ID:   fmt.Sprintf("%d", taskID),
+				ID:   fmt.Sprintf("%d", newID),
 			},
 			Actor: events.Actor{
 				Kind:      events.ActorKind(actorKindStr),
@@ -188,10 +201,14 @@ func run(kindStr, project, entityTypeStr, entityID, actorKindStr, actorID,
 			return err
 		}
 
+		idPrefix := "E-"
+		if needsDecisionPreAlloc {
+			idPrefix = "ED-"
+		}
 		output := map[string]string{
 			"ts":   ts.String(),
 			"kind": kindStr,
-			"id":   fmt.Sprintf("E-%d", taskID),
+			"id":   fmt.Sprintf("%s%d", idPrefix, newID),
 		}
 		outJSON, _ := json.Marshal(output)
 		fmt.Println(string(outJSON))
@@ -490,6 +507,33 @@ func runRebuildDB(args []string) {
 		tx.Rollback()
 		os.Remove(tempPath)
 		fmt.Fprintf(os.Stderr, "endless-go event: error inserting projected tasks: %v\n", err)
+		os.Exit(1)
+	}
+
+	// E-1378: also replace decisions and decision_relations from the projection.
+	// decision_relations rows reference decisions(id) with ON DELETE CASCADE,
+	// so deleting decisions first clears its relations atomically.
+	if _, err := tx.Exec("DELETE FROM decisions WHERE project_id IN (SELECT id FROM projects WHERE name IN (SELECT name FROM proj.projects))"); err != nil {
+		tx.Rollback()
+		os.Remove(tempPath)
+		fmt.Fprintf(os.Stderr, "endless-event: error clearing decisions: %v\n", err)
+		os.Exit(1)
+	}
+
+	if _, err := tx.Exec("INSERT INTO decisions SELECT * FROM proj.decisions"); err != nil {
+		tx.Rollback()
+		os.Remove(tempPath)
+		fmt.Fprintf(os.Stderr, "endless-event: error inserting projected decisions: %v\n", err)
+		os.Exit(1)
+	}
+
+	// decision_relations: same project filter, joined via decisions.project_id.
+	// The previous DELETE FROM decisions has already cleared the corresponding
+	// rows via the FK cascade; insert the projected rows fresh.
+	if _, err := tx.Exec("INSERT INTO decision_relations SELECT * FROM proj.decision_relations"); err != nil {
+		tx.Rollback()
+		os.Remove(tempPath)
+		fmt.Fprintf(os.Stderr, "endless-event: error inserting projected decision_relations: %v\n", err)
 		os.Exit(1)
 	}
 

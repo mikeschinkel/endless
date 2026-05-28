@@ -1,6 +1,7 @@
 package events
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 )
@@ -242,4 +243,196 @@ func execDecisionRelationDeleted(db dbQuerier, evt *Event) (*ExecuteResult, erro
 		return nil, fmt.Errorf("events: delete decision_relation: no matching row")
 	}
 	return &ExecuteResult{}, nil
+}
+
+// =====================================================================
+// Projector replay functions (rebuild-db path).
+//
+// The projector reads JSONL events and produces a fresh DB projection. For
+// decision events it inserts/updates the decisions and decision_relations
+// tables directly. Lossless replay of legacy task.created events with
+// type='decision' is handled in projector.go (replayTaskCreated routes them
+// here via mapLegacyDecisionStatus + a direct INSERT into decisions).
+// =====================================================================
+
+// mapLegacyDecisionStatus reflects the pre-E-1378 status vocabulary onto the
+// new 3-state lifecycle. Mirrors the SQL mapping in
+// internal/schema/changes/e-1378-extract-decisions.sql so replay and
+// change-file produce the same projection.
+func mapLegacyDecisionStatus(legacy string) string {
+	switch legacy {
+	case "confirmed", "completed", "assumed":
+		return "accepted"
+	case "needs_plan", "ready":
+		return "proposed"
+	default:
+		return "accepted"
+	}
+}
+
+func replayDecisionCreated(db *sql.DB, evt *Event, result *ProjectResult) error {
+	var p DecisionCreatedPayload
+	if err := json.Unmarshal(evt.Payload, &p); err != nil {
+		return fmt.Errorf("unmarshal decision.created: %w", err)
+	}
+	projectID, err := ensureProject(db, evt.Project)
+	if err != nil {
+		return err
+	}
+
+	status := p.Status
+	if status == "" {
+		status = "proposed"
+	}
+	if !validDecisionStatuses[status] {
+		return fmt.Errorf("invalid decision status %q", status)
+	}
+
+	decisionID := mustParseInt64(evt.Entity.ID)
+	ts := kairosToISO(evt.TS)
+
+	var originTaskID, originSessionID any
+	if p.OriginTaskID != 0 {
+		originTaskID = p.OriginTaskID
+	}
+	if p.OriginSessionID != 0 {
+		originSessionID = p.OriginSessionID
+	}
+
+	_, err = db.Exec(
+		`INSERT INTO decisions
+		   (id, project_id, title, description, text, status,
+		    origin_task_id, origin_session_id, notes,
+		    created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		decisionID, projectID, p.Title, p.Description, p.Text, status,
+		originTaskID, originSessionID, p.Notes, ts, ts,
+	)
+	if err != nil {
+		return fmt.Errorf("insert decision %d: %w", decisionID, err)
+	}
+	return nil
+}
+
+func replayDecisionFieldsUpdated(db *sql.DB, evt *Event, result *ProjectResult) error {
+	var p DecisionFieldsUpdatedPayload
+	if err := json.Unmarshal(evt.Payload, &p); err != nil {
+		return fmt.Errorf("unmarshal decision.fields_updated: %w", err)
+	}
+	if len(p.Fields) == 0 {
+		return nil
+	}
+
+	var setClauses []string
+	var args []any
+	for field, value := range p.Fields {
+		col, ok := allowedDecisionFields[field]
+		if !ok {
+			return fmt.Errorf("unknown field %q in decision.fields_updated", field)
+		}
+		setClauses = append(setClauses, col+" = ?")
+		args = append(args, value)
+	}
+	args = append(args, evt.Entity.ID)
+	query := fmt.Sprintf("UPDATE decisions SET %s WHERE id = ?",
+		joinStrings(setClauses, ", "))
+	if _, err := db.Exec(query, args...); err != nil {
+		return fmt.Errorf("update decision %s fields: %w", evt.Entity.ID, err)
+	}
+	return nil
+}
+
+func replayDecisionAccepted(db *sql.DB, evt *Event, result *ProjectResult) error {
+	_, err := db.Exec(
+		`UPDATE decisions SET status = 'accepted' WHERE id = ? AND status = 'proposed'`,
+		evt.Entity.ID,
+	)
+	if err != nil {
+		return fmt.Errorf("accept decision %s: %w", evt.Entity.ID, err)
+	}
+	return nil
+}
+
+func replayDecisionRejected(db *sql.DB, evt *Event, result *ProjectResult) error {
+	var p DecisionRejectedPayload
+	if err := json.Unmarshal(evt.Payload, &p); err != nil {
+		return fmt.Errorf("unmarshal decision.rejected: %w", err)
+	}
+	_, err := db.Exec(
+		`UPDATE decisions
+		    SET status = 'rejected', rejection_reason = ?
+		  WHERE id = ? AND status = 'proposed'`,
+		p.Reason, evt.Entity.ID,
+	)
+	if err != nil {
+		return fmt.Errorf("reject decision %s: %w", evt.Entity.ID, err)
+	}
+	return nil
+}
+
+func replayDecisionDeleted(db *sql.DB, evt *Event, result *ProjectResult) error {
+	if _, err := db.Exec(
+		"DELETE FROM decisions WHERE id = ?",
+		evt.Entity.ID,
+	); err != nil {
+		return fmt.Errorf("delete decision %s: %w", evt.Entity.ID, err)
+	}
+	return nil
+}
+
+func replayDecisionRelationCreated(db *sql.DB, evt *Event, result *ProjectResult) error {
+	var p DecisionRelationCreatedPayload
+	if err := json.Unmarshal(evt.Payload, &p); err != nil {
+		return fmt.Errorf("unmarshal decision_relation.created: %w", err)
+	}
+	if _, err := db.Exec(
+		`INSERT INTO decision_relations
+		   (source_decision_id, target_kind, target_id, relation_type)
+		 VALUES (?, ?, ?, ?)`,
+		p.SourceDecisionID, p.TargetKind, p.TargetID, p.RelationType,
+	); err != nil {
+		return fmt.Errorf("insert decision_relation: %w", err)
+	}
+	return nil
+}
+
+func replayDecisionRelationDeleted(db *sql.DB, evt *Event, result *ProjectResult) error {
+	var p DecisionRelationDeletedPayload
+	if err := json.Unmarshal(evt.Payload, &p); err != nil {
+		return fmt.Errorf("unmarshal decision_relation.deleted: %w", err)
+	}
+	if _, err := db.Exec(
+		`DELETE FROM decision_relations
+		  WHERE source_decision_id = ? AND target_kind = ? AND target_id = ? AND relation_type = ?`,
+		p.SourceDecisionID, p.TargetKind, p.TargetID, p.RelationType,
+	); err != nil {
+		return fmt.Errorf("delete decision_relation: %w", err)
+	}
+	return nil
+}
+
+// replayLegacyDecisionCreated handles pre-E-1378 task.created events where
+// the payload's type was 'decision'. It inserts the row into the decisions
+// table with the legacy status mapped through mapLegacyDecisionStatus so
+// the replay projection matches the post-change-file shape.
+//
+// Called from projector.go's replayTaskCreated when payload.Type == "decision".
+func replayLegacyDecisionCreated(db *sql.DB, evt *Event, p *TaskCreatedPayload) error {
+	projectID, err := ensureProject(db, evt.Project)
+	if err != nil {
+		return err
+	}
+	decisionID := mustParseInt64(evt.Entity.ID)
+	ts := kairosToISO(evt.TS)
+	status := mapLegacyDecisionStatus(p.Status)
+	_, err = db.Exec(
+		`INSERT INTO decisions
+		   (id, project_id, title, description, text, status, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		decisionID, projectID, p.Title, p.Description, p.Text, status, ts, ts,
+	)
+	if err != nil {
+		return fmt.Errorf("insert legacy decision %d: %w", decisionID, err)
+	}
+	return nil
 }

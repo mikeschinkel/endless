@@ -87,16 +87,48 @@ func replayEvent(db *sql.DB, evt *Event, result *ProjectResult) error {
 		return replayTaskBulkCleared(db, evt, result)
 	case KindTaskLanded:
 		return replayTaskLanded(db, evt, result)
+	case KindDecisionCreated:
+		return replayDecisionCreated(db, evt, result)
+	case KindDecisionFieldsUpdated:
+		return replayDecisionFieldsUpdated(db, evt, result)
+	case KindDecisionAccepted:
+		return replayDecisionAccepted(db, evt, result)
+	case KindDecisionRejected:
+		return replayDecisionRejected(db, evt, result)
+	case KindDecisionDeleted:
+		return replayDecisionDeleted(db, evt, result)
+	case KindDecisionRelationCreated:
+		return replayDecisionRelationCreated(db, evt, result)
+	case KindDecisionRelationDeleted:
+		return replayDecisionRelationDeleted(db, evt, result)
 	default:
 		// Skip non-task events silently (sessions, notes, etc.)
 		return nil
 	}
 }
 
+// isDecisionID reports whether the given ID already exists in the decisions
+// table of the (in-progress) projection. Used by legacy task.* replay
+// functions to route updates/deletes targeting a legacy decision row to the
+// decisions table instead of trying to mutate a non-existent tasks row.
+func isDecisionID(db *sql.DB, id string) bool {
+	var n int
+	db.QueryRow("SELECT COUNT(*) FROM decisions WHERE id = ?", id).Scan(&n)
+	return n > 0
+}
+
 func replayTaskCreated(db *sql.DB, evt *Event, result *ProjectResult) error {
 	var p TaskCreatedPayload
 	if err := json.Unmarshal(evt.Payload, &p); err != nil {
 		return err
+	}
+
+	// Legacy E-1378 routing: pre-extraction, decisions were created as
+	// task.created events with type='decision' in the payload. Route them
+	// to the decisions table so a fresh replay matches the post-change-file
+	// projection (decisions in decisions, not tasks).
+	if p.Type == "decision" {
+		return replayLegacyDecisionCreated(db, evt, &p)
 	}
 
 	if err := ValidatePhase(p.Phase); err != nil {
@@ -181,6 +213,20 @@ func replayTaskStatusChanged(db *sql.DB, evt *Event, result *ProjectResult) erro
 		return err
 	}
 
+	// Legacy E-1378 routing: status_changed against a row that the projection
+	// already routed to the decisions table (was a type='decision' task.created)
+	// updates decisions.status with the legacy-mapped vocabulary.
+	if isDecisionID(db, evt.Entity.ID) {
+		mappedStatus := mapLegacyDecisionStatus(p.NewStatus)
+		if _, err := db.Exec(
+			"UPDATE decisions SET status = ? WHERE id = ?",
+			mappedStatus, evt.Entity.ID,
+		); err != nil {
+			return fmt.Errorf("decision status change %s: %w", evt.Entity.ID, err)
+		}
+		return nil
+	}
+
 	taskID := evt.Entity.ID
 
 	var completedAt *string
@@ -233,6 +279,40 @@ func replayTaskFieldsUpdated(db *sql.DB, evt *Event, result *ProjectResult) erro
 	}
 
 	if len(p.Fields) == 0 {
+		return nil
+	}
+
+	// Legacy E-1378 routing: fields_updated against a row that the projection
+	// routed to decisions. Only the subset of fields that exist on decisions
+	// is applied (title/description/text/notes); task-only fields are silently
+	// dropped — they have no meaningful target on a decision row.
+	if isDecisionID(db, evt.Entity.ID) {
+		var setClauses []string
+		var args []any
+		for field, value := range p.Fields {
+			col, ok := allowedDecisionFields[field]
+			if !ok {
+				continue // skip task-only fields (phase, type, parent_id, tier, ...)
+			}
+			setClauses = append(setClauses, col+" = ?")
+			args = append(args, value)
+		}
+		// Legacy status field on decisions maps through the same legacy table.
+		if statusRaw, ok := p.Fields["status"]; ok {
+			if s, isStr := statusRaw.(string); isStr {
+				setClauses = append(setClauses, "status = ?")
+				args = append(args, mapLegacyDecisionStatus(s))
+			}
+		}
+		if len(setClauses) == 0 {
+			return nil
+		}
+		args = append(args, evt.Entity.ID)
+		query := fmt.Sprintf("UPDATE decisions SET %s WHERE id = ?",
+			joinStrings(setClauses, ", "))
+		if _, err := db.Exec(query, args...); err != nil {
+			return fmt.Errorf("decision fields_updated %s: %w", evt.Entity.ID, err)
+		}
 		return nil
 	}
 
@@ -322,6 +402,15 @@ func replayTaskDeleted(db *sql.DB, evt *Event, result *ProjectResult) error {
 	var p TaskDeletedPayload
 	if err := json.Unmarshal(evt.Payload, &p); err != nil {
 		return err
+	}
+
+	// Legacy E-1378 routing: delete against a row routed to decisions deletes
+	// from decisions (FK cascade clears its decision_relations rows).
+	if isDecisionID(db, evt.Entity.ID) {
+		if _, err := db.Exec("DELETE FROM decisions WHERE id = ?", evt.Entity.ID); err != nil {
+			return fmt.Errorf("decision delete %s: %w", evt.Entity.ID, err)
+		}
+		return nil
 	}
 
 	taskID := evt.Entity.ID
