@@ -2293,6 +2293,13 @@ def _perform_claim_work(
     # plain shell during spawn pre-claim).
     session_id_arg = str(target_session) if target_session is not None else None
 
+    # E-1500: secure the worktree FIRST. If creation refuses (orphan branch
+    # carrying real work, a DB/file plan mismatch, an undeletable branch),
+    # the task's status is left untouched rather than stranded in_progress.
+    project_root = _project_root()
+    slug_source = title or "task"
+    wt_path, created = create_task_worktree(item_id, slug_source, project_root)
+
     if current_status != "in_progress":
         emit_event(
             kind="task.status_changed",
@@ -2325,10 +2332,6 @@ def _perform_claim_work(
         )
 
     click.echo("")
-
-    project_root = _project_root()
-    slug_source = title or "task"
-    wt_path, created = create_task_worktree(item_id, slug_source, project_root)
 
     home = str(Path.home())
     wt_display = (
@@ -2754,6 +2757,27 @@ def update_plan(
     # Header title reflects the new title if it was changed in this update.
     header_title = fields.get("title", row[0]["title"]) or row[0]["description"]
     _emit_field_changes(item_id, header_title, changes)
+
+
+def recover_task_text(item_id: int, text: str) -> None:
+    """Set tasks.text for item_id, emitting task.fields_updated.
+
+    Used by create_task_worktree (E-1500) to recover a plan from an orphan
+    branch's committed plan file back into the DB — the source of truth —
+    when tasks.text was empty. Kept separate from update_item so worktree_cmd
+    can call it without dragging in the full update flow (and to avoid the
+    worktree-mirroring step: the worktree is recreated fresh right after).
+    """
+    from endless.event_bridge import emit_event
+
+    _, proj_name = _resolve_project(None)
+    emit_event(
+        kind="task.fields_updated",
+        project=proj_name,
+        entity_type="task",
+        entity_id=str(item_id),
+        payload={"fields": {"text": text}},
+    )
 
 
 def _format_timestamp(ts: str) -> str:

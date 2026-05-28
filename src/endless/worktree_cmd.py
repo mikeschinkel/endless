@@ -39,7 +39,7 @@ from pathlib import Path
 
 import click
 
-from endless.task_cmd import _resolve_project
+from endless.task_cmd import _resolve_project, recover_task_text
 
 
 COMPANION_FILENAME = ".endless/worktree.json"
@@ -67,6 +67,12 @@ AMENDABLE_COMMIT_SUBJECTS = (
 
 # Land's retry cap for the race-with-concurrent-writers loop (E-987).
 LAND_MAX_RETRIES = 8
+
+# E-1500: minimum stripped length for tasks.text (or a committed plan file)
+# to count as a viable plan. Empirically derived from the task ledger: every
+# junk/placeholder plan is <=34 chars and every genuine plan is >=351 chars,
+# so 128 rejects all observed junk while accepting all observed real plans.
+PLAN_VIABILITY_MIN_CHARS = 128
 
 
 def _is_retryable_ff_merge_error(err_text: str) -> bool:
@@ -824,6 +830,228 @@ def _check_plan_file_committed(task_id: int, project_root: Path) -> str | None:
     )
 
 
+# --- E-1500: orphan-branch recovery ----------------------------------------
+#
+# `worktree drop` (git worktree remove) and the land/reap path both leave the
+# task branch behind after the worktree directory is gone. The next claim/spawn
+# then hits `git worktree add -b <branch>` -> "a branch already exists" with no
+# remediation. These helpers let create_task_worktree recover instead: classify
+# the orphan branch's unique delta from main, and either recreate fresh
+# (plan-only / no work) or refuse with an actionable message (real work).
+
+
+def _branch_exists(branch: str, project_root: Path) -> bool:
+    return _git_run(
+        ["rev-parse", "--verify", "--quiet", f"refs/heads/{branch}"],
+        cwd=project_root, check=False,
+    ).returncode == 0
+
+
+def _branch_unique_files(base: str, branch: str, project_root: Path) -> list[str]:
+    """Repo-relative paths changed on `branch` since it forked from `base`.
+
+    Three-dot diff: changes on the branch side of the merge-base only. Empty
+    when the branch is an ancestor of base (behind/equal, no unique work).
+    """
+    res = _git_run(
+        ["diff", "--name-only", f"{base}...{branch}"],
+        cwd=project_root, check=False,
+    )
+    if res.returncode != 0:
+        # Don't risk deleting a branch we couldn't analyze — refuse loudly.
+        raise click.ClickException(
+            f"Could not compare {branch} to {base}:\n{res.stderr or res.stdout}"
+        )
+    return [ln for ln in res.stdout.splitlines() if ln.strip()]
+
+
+def _read_branch_file(branch: str, rel_path: str, project_root: Path) -> str | None:
+    res = _git_run(
+        ["show", f"{branch}:{rel_path}"], cwd=project_root, check=False,
+    )
+    return res.stdout if res.returncode == 0 else None
+
+
+def _read_task_text(task_id: int, project_root: Path) -> str:
+    """Current tasks.text via the endless-session-query Go helper.
+
+    Returns '' when empty/absent or the helper is unavailable. Python SQLite
+    reads are forbidden (E-894), so there is no DB fallback.
+    """
+    from endless import config
+
+    binary = shutil.which("endless-session-query")
+    if not binary:
+        return ""
+    try:
+        result = subprocess.run(
+            [binary, *config.go_db_context_args(), "task-text", "--id", str(task_id)],
+            capture_output=True, text=True,
+        )
+    except OSError:
+        return ""
+    return result.stdout if result.returncode == 0 else ""
+
+
+def _plan_viable(text: str) -> bool:
+    return len(text.strip()) >= PLAN_VIABILITY_MIN_CHARS
+
+
+def _plan_preview(text: str, n: int = 80) -> str:
+    """One-line, length-capped preview for error messages (never a full dump)."""
+    one_line = " ".join(text.strip().split())
+    return one_line[:n] + ("…" if len(one_line) > n else "")
+
+
+def _delete_orphan_branch(branch: str, project_root: Path) -> None:
+    """Delete an orphan branch so creation can recreate it fresh.
+
+    If a stale/prunable worktree registration still claims the branch (its dir
+    is already gone), `git worktree prune` clears that bookkeeping — it touches
+    no live work — and we retry the delete once.
+    """
+    res = _git_run(["branch", "-D", branch], cwd=project_root, check=False)
+    if res.returncode == 0:
+        return
+    err = (res.stderr or "") + (res.stdout or "")
+    if "checked out" in err or "used by worktree" in err:
+        _git_run(["worktree", "prune"], cwd=project_root, check=False)
+        res = _git_run(["branch", "-D", branch], cwd=project_root, check=False)
+        if res.returncode == 0:
+            return
+        err = (res.stderr or "") + (res.stdout or "")
+    root = _tilde(project_root)
+    raise click.ClickException(
+        f"Could not delete orphan branch {branch}:\n{err}\n"
+        f"Resolve manually, then retry:\n"
+        f"  git -C {root} worktree prune\n"
+        f"  git -C {root} branch -D {branch}"
+    )
+
+
+def _orphan_real_work_msg(
+    task_id: int, branch: str, base: str, non_plan: list[str], project_root: Path,
+) -> str:
+    root = _tilde(project_root)
+    shown = "\n  ".join(non_plan[:20])
+    more = "" if len(non_plan) <= 20 else f"\n  ... and {len(non_plan) - 20} more"
+    return (
+        f"E-{task_id}: branch {branch} has commits beyond {base} touching "
+        f"non-plan files:\n  {shown}{more}\n\n"
+        f"Inspect:\n"
+        f"  git -C {root} log {base}..{branch}\n"
+        f"  git -C {root} diff {base}...{branch}\n"
+        f"Resume that work manually, or discard it and retry:\n"
+        f"  git -C {root} branch -D {branch}"
+    )
+
+
+def _orphan_plan_mismatch_msg(
+    task_id: int, branch: str, db_text: str, file_text: str, project_root: Path,
+) -> str:
+    root = _tilde(project_root)
+    plan_rel = f".endless/plans/E-{task_id}.md"
+    return (
+        f"E-{task_id}: the plan in tasks.text differs from the plan committed "
+        f"on branch {branch}.\n\n"
+        f"  tasks.text  ({len(db_text.strip())} chars): \"{_plan_preview(db_text)}\"\n"
+        f"  branch file ({len(file_text.strip())} chars): \"{_plan_preview(file_text)}\"\n\n"
+        f"View full:\n"
+        f"  endless task show E-{task_id} --text\n"
+        f"  git -C {root} show {branch}:{plan_rel}\n"
+        f"Keep the DB version, discard the branch:\n"
+        f"  git -C {root} branch -D {branch}          # then retry\n"
+        f"Adopt the branch's version into the DB:\n"
+        f"  git -C {root} show {branch}:{plan_rel} > /tmp/E-{task_id}.md\n"
+        f"  endless task update E-{task_id} --text /tmp/E-{task_id}.md   # then retry"
+    )
+
+
+def _orphan_text_not_viable_msg(
+    task_id: int, branch: str, db_text: str, file_text: str, project_root: Path,
+) -> str:
+    root = _tilde(project_root)
+    plan_rel = f".endless/plans/E-{task_id}.md"
+    extra = ""
+    if _plan_viable(file_text):
+        extra = (
+            f"\nThe branch's committed plan ({len(file_text.strip())} chars) may "
+            f"be the one you want:\n  git -C {root} show {branch}:{plan_rel}"
+        )
+    return (
+        f"E-{task_id}: tasks.text is too short to be a viable plan "
+        f"({len(db_text.strip())} chars):\n  \"{_plan_preview(db_text)}\"\n\n"
+        f"Write a real plan, then retry:\n"
+        f"  endless task update E-{task_id} --text <file>{extra}"
+    )
+
+
+def _orphan_no_viable_plan_msg(task_id: int, branch: str) -> str:
+    return (
+        f"E-{task_id}: no viable plan in tasks.text or on branch {branch}.\n\n"
+        f"Add one, then retry:\n"
+        f"  endless task update E-{task_id} --text <file>"
+    )
+
+
+def _reconcile_orphan_plan(
+    task_id: int, branch: str, plan_rel: str, project_root: Path,
+) -> None:
+    """Plan-only orphan branch. tasks.text (the DB) is the source of truth; the
+    committed plan file is a derived mirror. Decide adopt / proceed / refuse.
+
+    Returns normally when it's safe to delete the branch and recreate fresh
+    (the plan re-materializes from tasks.text). Raises ClickException, with an
+    actionable message, when the DB and file disagree or no viable plan exists.
+    """
+    file_text = _read_branch_file(branch, plan_rel, project_root) or ""
+    db_text = _read_task_text(task_id, project_root)
+    db_s, file_s = db_text.strip(), file_text.strip()
+
+    if not db_s:
+        # The DB has no plan; the committed file is all we have.
+        if _plan_viable(file_s):
+            recover_task_text(task_id, file_text)
+            click.echo(
+                click.style("•", fg="cyan")
+                + f" Recovered plan for E-{task_id} from branch {branch} "
+                f"into tasks.text"
+            )
+            return
+        raise click.ClickException(_orphan_no_viable_plan_msg(task_id, branch))
+
+    if not _plan_viable(db_s):
+        raise click.ClickException(
+            _orphan_text_not_viable_msg(task_id, branch, db_text, file_text, project_root)
+        )
+
+    if not file_s or file_s == db_s:
+        return  # DB and file agree (or no file) -> recreate fresh from tasks.text
+
+    raise click.ClickException(
+        _orphan_plan_mismatch_msg(task_id, branch, db_text, file_text, project_root)
+    )
+
+
+def _handle_orphan_branch(
+    task_id: int, branch: str, base: str, project_root: Path,
+) -> None:
+    """The branch exists but its worktree dir is gone. Either delete the branch
+    (caller recreates fresh) or raise with actionable guidance.
+    """
+    plan_rel = f".endless/plans/E-{task_id}.md"
+    unique = _branch_unique_files(base, branch, project_root)
+    non_plan = [f for f in unique if f != plan_rel]
+    if non_plan:
+        raise click.ClickException(
+            _orphan_real_work_msg(task_id, branch, base, non_plan, project_root)
+        )
+    if plan_rel in unique:
+        _reconcile_orphan_plan(task_id, branch, plan_rel, project_root)
+    # Empty delta, or a plan-only delta that reconciled cleanly -> safe.
+    _delete_orphan_branch(branch, project_root)
+
+
 def create_task_worktree(
     task_id: int, title: str, project_root: Path,
 ) -> tuple[Path, bool]:
@@ -854,6 +1082,13 @@ def create_task_worktree(
     msg = _check_plan_file_committed(task_id, project_root)
     if msg:
         raise click.ClickException(msg)
+
+    # E-1500: the dir is gone but the branch may still exist (orphan branch
+    # left by `worktree drop` / land-reap). Recover instead of failing on
+    # `git worktree add -b`: either delete the branch so we recreate it fresh
+    # below, or raise with actionable guidance if it carries real work.
+    if _branch_exists(branch, project_root):
+        _handle_orphan_branch(task_id, branch, base, project_root)
 
     wt_dir.parent.mkdir(parents=True, exist_ok=True)
     try:
