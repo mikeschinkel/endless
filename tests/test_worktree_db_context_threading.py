@@ -3,8 +3,8 @@ resolved --db context (--config-dir) so they aren't refused by the self-dev
 worktree gate when run from inside a worktree.
 
 Two sites were missed in the original E-1429 wiring:
-  - _reap_stale_worktrees  -> `endless-event reap-worktrees` (land's reap sweep)
-  - _materialize_plan_file -> `endless-session-query task-text` (claim)
+  - _reap_stale_worktrees  -> `endless-go event reap-worktrees` (land's reap sweep)
+  - _materialize_plan_file -> `endless-go session-query task-text` (claim)
 
 Both open the DB and neither self-pins to main, so each needs --config-dir
 threaded when a --db context is resolved, and nothing when it isn't.

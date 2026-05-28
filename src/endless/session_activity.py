@@ -53,7 +53,7 @@ def session_activity(
     `tmux display-popup` (the popup has its own pane id which doesn't
     match any Claude session); the menu binding passes #{pane_id} of
     the focused pane at menu-invocation time. Mirrors the same trick
-    used by `endless-tmux status-line --pane=...` (E-1236).
+    used by `endless-go tmux status-line --pane=...` (E-1236).
     """
     session_id = _resolve_session_id(session_ref, pane_override=pane)
     project_root = _project_root_for_cwd()

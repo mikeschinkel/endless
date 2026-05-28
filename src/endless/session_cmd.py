@@ -381,7 +381,7 @@ def list_sessions(
             click.echo()
             click.echo(
                 click.style(f"  {recap_count} session(s) need recaps. ", dim=True)
-                + click.style("Run: endless-hook recap", fg="cyan", dim=True)
+                + click.style("Run: endless-go hook recap", fg="cyan", dim=True)
             )
 
     click.echo()
@@ -1041,9 +1041,9 @@ def _worktree_path_for_task(project_root: Path, task_id: int | None) -> str:
 def _live_sessions(project_root: Path, harness: str = "claude") -> list[dict]:
     """Return live Claude sessions for the project, sourced from the DB.
 
-    Replaces `_read_live_companions` (E-1426). Shells out to the
-    `endless-session-query list-live` Go binary so this Python layer
-    doesn't extend the legacy `db.query` pattern (per E-894).
+    Replaces `_read_live_companions` (E-1426). Shells out to
+    `endless-go session-query list-live` so this Python layer doesn't
+    extend the legacy `db.query` pattern (per E-894).
 
     Each dict carries the fields the rest of this module expects from a
     companion record — endless_session_id, harness_session_id, harness,
@@ -1061,8 +1061,8 @@ def _live_sessions(project_root: Path, harness: str = "claude") -> list[dict]:
     from endless import config
     try:
         result = subprocess.run(
-            ["endless-session-query", *config.go_db_context_args(),
-             "list-live", "--project-root", str(project_root)],
+            ["endless-go", *config.go_db_context_args(),
+             "session-query", "list-live", "--project-root", str(project_root)],
             capture_output=True, text=True, timeout=5,
         )
     except (FileNotFoundError, subprocess.SubprocessError):

@@ -1,0 +1,121 @@
+// Command endless-go is the single Go binary for endless's seven former
+// per-binary tools, collapsed into one dispatcher with seven subcommands
+// (E-1367).
+//
+// Subcommand layout — preserves the inner verbs each former binary
+// already parsed:
+//
+//	endless-go event         emit|validate-db|rebuild-db|apply-change|backup|reap-worktrees
+//	endless-go hook          prompt|claude|codex|recap
+//	endless-go channel       (MCP server; no verbs)
+//	endless-go sandbox       run|enter|init|bind|list|prune|destroy
+//	endless-go serve         [port]
+//	endless-go tmux          apply|status-line|active-id|show-menu
+//	endless-go session-query list-live|task-text
+//
+// Per-subcommand DB-context contract (must run BEFORE the subcommand
+// body):
+//
+//   - hook → ENDLESS_NO_HOOKS=true short-circuit (E-1470), then PinMainDB (E-1450/E-1429).
+//   - channel, tmux → PinMainDB (E-1429).
+//   - event, serve, session-query → ConsumeDBContextFlag (E-1429).
+//   - sandbox → no DB-context init.
+//
+// The ENDLESS_NO_HOOKS gate is scoped to the `hook` subcommand only —
+// it must not bleed into other subcommands.
+package main
+
+import (
+	"fmt"
+	"os"
+
+	_ "modernc.org/sqlite"
+
+	"github.com/mikeschinkel/endless/internal/channelcmd"
+	"github.com/mikeschinkel/endless/internal/eventcmd"
+	"github.com/mikeschinkel/endless/internal/hookcmd"
+	"github.com/mikeschinkel/endless/internal/monitor"
+	"github.com/mikeschinkel/endless/internal/sandboxcmd"
+	"github.com/mikeschinkel/endless/internal/servecmd"
+	"github.com/mikeschinkel/endless/internal/sessionquerycmd"
+	"github.com/mikeschinkel/endless/internal/tmuxcmd"
+)
+
+func main() {
+	// E-1429: the Python CLI threads --db main|sandbox through as
+	// --config-dir <dir>. Consume scans os.Args, strips the flag, and
+	// applies the config dir. Must run BEFORE reading os.Args[1] so
+	// the subcommand is identified after the flag has been removed —
+	// otherwise `endless-go --config-dir /path event emit ...` would
+	// mistake "--config-dir" for the subcommand. Safe to always call:
+	// when the flag is absent it is a no-op, and for hook/channel/tmux
+	// the PinMainDB override below still wins via dbPathOverride.
+	monitor.ConsumeDBContextFlag()
+
+	if len(os.Args) < 2 {
+		usage(os.Stderr)
+		os.Exit(2)
+	}
+	sub := os.Args[1]
+	rest := os.Args[2:]
+
+	switch sub {
+	case "-h", "--help", "help":
+		usage(os.Stdout)
+		return
+	}
+
+	// E-1470: ENDLESS_NO_HOOKS short-circuit. Scoped to `hook` only —
+	// internal headless `claude -p` calls (verb-check, recap) set this
+	// env var to suppress hook side effects (session registration,
+	// activity, pane-collision). Must run BEFORE PinMainDB and before
+	// any DB work.
+	if sub == "hook" && os.Getenv("ENDLESS_NO_HOOKS") == "true" {
+		return
+	}
+
+	// E-1450/E-1429: PinMainDB for surfaces whose writes are real-world
+	// activity in the real ledger regardless of cwd or XDG_CONFIG_HOME
+	// (hook-fired writes, MCP channel state, tmux pane/task status).
+	// Pin pins the DB to main unconditionally and satisfies the
+	// worktree gate via dbPathOverride. Other subcommands stay on
+	// whatever --config-dir (or absence of one) ConsumeDBContextFlag
+	// already established above.
+	switch sub {
+	case "hook", "channel", "tmux":
+		monitor.PinMainDB()
+	}
+
+	switch sub {
+	case "event":
+		eventcmd.Run(rest)
+	case "hook":
+		hookcmd.Run(rest)
+	case "channel":
+		channelcmd.Run(rest)
+	case "sandbox":
+		sandboxcmd.Run(rest)
+	case "serve":
+		servecmd.Run(rest)
+	case "tmux":
+		tmuxcmd.Run(rest)
+	case "session-query":
+		sessionquerycmd.Run(rest)
+	default:
+		fmt.Fprintf(os.Stderr, "endless-go: unknown subcommand %q\n", sub)
+		usage(os.Stderr)
+		os.Exit(2)
+	}
+}
+
+func usage(w *os.File) {
+	fmt.Fprintln(w, "Usage: endless-go <subcommand> [args...]")
+	fmt.Fprintln(w, "Subcommands:")
+	fmt.Fprintln(w, "  event          emit|validate-db|rebuild-db|apply-change|backup|reap-worktrees")
+	fmt.Fprintln(w, "  hook           prompt|claude|codex|recap")
+	fmt.Fprintln(w, "  channel        MCP server for inter-session channels")
+	fmt.Fprintln(w, "  sandbox        run|enter|init|bind|list|prune|destroy")
+	fmt.Fprintln(w, "  serve          [port]  (web dashboard)")
+	fmt.Fprintln(w, "  tmux           apply|status-line|active-id|show-menu")
+	fmt.Fprintln(w, "  session-query  list-live|task-text")
+}

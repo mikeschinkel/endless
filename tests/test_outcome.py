@@ -213,15 +213,15 @@ def test_rebuild_db_preserves_outcome(seeded_project_at_cwd):
     assert status == "declined"
     assert outcome == "round-trip reason"
 
-    # Run endless-event rebuild-db against this project root.
+    # Run `endless-go event rebuild-db` against this project root.
     # Subprocess inherits XDG_CONFIG_HOME from conftest, so it resolves to the
     # same isolated DB. --confirm actually replaces the tasks table.
-    binary = Path(__file__).resolve().parent.parent / "bin" / "endless-event"
+    binary = Path(__file__).resolve().parent.parent / "bin" / "endless-go"
     if not binary.exists():
-        pytest.skip(f"endless-event binary not built at {binary}; run `just build` first")
+        pytest.skip(f"endless-go binary not built at {binary}; run `just build` first")
 
     result = subprocess.run(
-        [str(binary), "rebuild-db",
+        [str(binary), "event", "rebuild-db",
          "--project-root", str(seeded_project_at_cwd),
          "--confirm"],
         capture_output=True, text=True,

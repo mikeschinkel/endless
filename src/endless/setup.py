@@ -11,7 +11,7 @@ CLAUDE_JSON_PATH = Path.home() / ".claude.json"
 HOOK_COMMENT = "# Endless: project activity monitor (prompt hook)"
 HOOK_CODE = """\
 _endless_prompt_hook() {
-  (endless-hook prompt "$PWD" &>/dev/null &)
+  (endless-go hook prompt "$PWD" &>/dev/null &)
 }
 precmd_functions+=(_endless_prompt_hook)"""
 
@@ -21,8 +21,8 @@ DEFAULT_ZSHRC = Path.home() / ".zshrc"
 
 
 def _find_endless_hook() -> str | None:
-    """Check if endless-hook binary is on PATH."""
-    return shutil.which("endless-hook")
+    """Check if endless-go binary is on PATH (provides the `hook` subcommand)."""
+    return shutil.which("endless-go")
 
 
 def _file_contains_hook(path: Path) -> bool:
@@ -38,14 +38,13 @@ def setup_prompt_hook():
     hook_bin = _find_endless_hook()
     if not hook_bin:
         raise click.ClickException(
-            "endless-hook binary not found on PATH. "
-            "Build it first: go build -o /usr/local/bin/endless-hook "
-            "./cmd/endless-hook/"
+            "endless-go binary not found on PATH. "
+            "Build it first: just install"
         )
 
     click.echo(
         click.style("•", fg="cyan")
-        + f" Found endless-hook at {hook_bin}"
+        + f" Found endless-go at {hook_bin}"
     )
 
     # Ask about zshrc location
@@ -210,7 +209,7 @@ def _make_hook_entry(hook_bin: str, is_async: bool = True) -> dict:
         "hooks": [
             {
                 "type": "command",
-                "command": hook_bin + " claude",
+                "command": hook_bin + " hook claude",
                 "async": is_async,
             }
         ]
@@ -226,7 +225,7 @@ def _has_endless_hook(settings: dict) -> bool:
         entries = hooks.get(event, [])
         for entry in entries:
             for h in entry.get("hooks", []):
-                if "endless-hook" in h.get("command", ""):
+                if "endless-go" in h.get("command", ""):
                     return True
     return False
 
@@ -235,14 +234,13 @@ def setup_claude_hook():
     hook_bin = _find_endless_hook()
     if not hook_bin:
         raise click.ClickException(
-            "endless-hook binary not found on PATH. "
-            "Build it first: go build -o /usr/local/bin/endless-hook "
-            "./cmd/endless-hook/"
+            "endless-go binary not found on PATH. "
+            "Build it first: just install"
         )
 
     click.echo(
         click.style("•", fg="cyan")
-        + f" Found endless-hook at {hook_bin}"
+        + f" Found endless-go at {hook_bin}"
     )
 
     settings = _load_claude_settings()
@@ -267,7 +265,7 @@ def setup_claude_hook():
         mode = "sync" if event in SYNC_EVENTS else "async"
         click.echo(
             f"  {click.style(event, fg='green')}"
-            f" → {hook_bin} claude ({mode})"
+            f" → {hook_bin} hook claude ({mode})"
         )
     click.echo()
 
@@ -282,7 +280,7 @@ def setup_claude_hook():
         for event in CLAUDE_HOOK_EVENTS:
             click.echo(f'  "{event}": '
                         f'[{{"hooks": [{{"type": "command", '
-                        f'"command": "{hook_bin} claude", '
+                        f'"command": "{hook_bin} hook claude", '
                         f'"async": true}}]}}]')
         click.echo()
         return
@@ -294,7 +292,7 @@ def setup_claude_hook():
         entry = _make_hook_entry(hook_bin, is_async=is_async)
         event_hooks = hooks.setdefault(event, [])
         already = any(
-            "endless-hook" in h.get("command", "")
+            "endless-go" in h.get("command", "")
             for e in event_hooks
             for h in e.get("hooks", [])
         )
@@ -326,7 +324,7 @@ def remove_claude_hook():
         hooks[event] = [
             entry for entry in entries
             if not any(
-                "endless-hook" in h.get("command", "")
+                "endless-go" in h.get("command", "")
                 for h in entry.get("hooks", [])
             )
         ]
@@ -346,8 +344,8 @@ def remove_claude_hook():
 
 
 def _find_endless_channel() -> str | None:
-    """Check if endless-channel binary is on PATH."""
-    return shutil.which("endless-channel")
+    """Check if endless-go binary is on PATH (provides the `channel` subcommand)."""
+    return shutil.which("endless-go")
 
 
 def _load_claude_json() -> dict:
@@ -367,13 +365,13 @@ def setup_channel_plugin():
     channel_bin = _find_endless_channel()
     if not channel_bin:
         raise click.ClickException(
-            "endless-channel binary not found on PATH. "
+            "endless-go binary not found on PATH. "
             "Build it first: just install"
         )
 
     click.echo(
         click.style("•", fg="cyan")
-        + f" Found endless-channel at {channel_bin}"
+        + f" Found endless-go at {channel_bin}"
     )
 
     data = _load_claude_json()
@@ -389,7 +387,7 @@ def setup_channel_plugin():
 
     servers["endless-channel"] = {
         "command": channel_bin,
-        "args": [],
+        "args": ["channel"],
     }
     data["mcpServers"] = servers
     _save_claude_json(data)

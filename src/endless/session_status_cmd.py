@@ -2,7 +2,7 @@
 
 Reads XML from a file path or stdin, validates the schema, packages the
 parsed contents as a payload, and emits a `session_status.recorded` event
-via the existing endless-event bridge. The Go-side handler resolves the
+via the existing `endless-go event` bridge. The Go-side handler resolves the
 session id from the payload's `process` field, dedups against the latest
 row, INSERTs into `session_statuses`, and returns rendered markdown for
 chat display.
@@ -13,7 +13,7 @@ New `<summary>` element captures structured per-layer implementation
 breakdowns.
 
 This module performs no DB access. All persistence lives behind
-event_bridge → endless-event → events.Execute per E-894's "DB access in
+event_bridge → endless-go event → events.Execute per E-894's "DB access in
 Go" policy.
 """
 
@@ -61,7 +61,7 @@ def session_status_add(input_file: str | None, session_id_override: int | None) 
 
     if result is None:
         raise click.ClickException(
-            "endless-event returned no output; nothing to display."
+            "`endless-go event` returned no output; nothing to display."
         )
 
     markdown = result.get("markdown", "")

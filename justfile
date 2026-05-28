@@ -7,7 +7,7 @@ help:
     @echo "  just install      Build + symlink binaries + install Python CLI"
     @echo "  just dev          Run templ + tailwind watchers for development"
     @echo "  just test         Run Python tests"
-    @echo "  just kill         Kill any running endless-serve process"
+    @echo "  just kill         Kill any running endless-go serve process"
     @echo ""
     @echo "Build (individual):"
     @echo "  just generate     Generate templ files (one-shot)"
@@ -47,7 +47,7 @@ dev:
 
 # Watch and regenerate templ files, proxy to Go server
 templ:
-    templ generate --watch --proxy="http://localhost:8484" --cmd="go run ./cmd/endless-serve"
+    templ generate --watch --proxy="http://localhost:8484" --cmd="go run ./cmd/endless-go serve"
 
 # Watch and rebuild Tailwind CSS
 tailwind: _link-templui
@@ -57,13 +57,7 @@ tailwind: _link-templui
 build: _link-templui
     templ generate
     tailwindcss -i internal/web/assets/css/input.css -o internal/web/assets/css/output.css
-    go build -o bin/endless-serve ./cmd/endless-serve
-    go build -o bin/endless-hook ./cmd/endless-hook
-    go build -o bin/endless-channel ./cmd/endless-channel
-    go build -o bin/endless-event ./cmd/endless-event
-    go build -o bin/endless-sandbox ./cmd/endless-sandbox
-    go build -o bin/endless-tmux ./cmd/endless-tmux
-    go build -o bin/endless-session-query ./cmd/endless-session-query
+    go build -o bin/endless-go ./cmd/endless-go
 
 # Build and install everything: Go binaries symlinked to /usr/local/bin,
 # Python CLI installed via uv tool in EDITABLE mode (-e). Editable means the
@@ -73,13 +67,9 @@ build: _link-templui
 # would point the global tool at a transient directory.
 install:
     just build
-    ln -sfn "$(pwd)/bin/endless-serve" /usr/local/bin/endless-serve
-    ln -sfn "$(pwd)/bin/endless-hook" /usr/local/bin/endless-hook
-    ln -sfn "$(pwd)/bin/endless-channel" /usr/local/bin/endless-channel
-    ln -sfn "$(pwd)/bin/endless-event" /usr/local/bin/endless-event
-    ln -sfn "$(pwd)/bin/endless-sandbox" /usr/local/bin/endless-sandbox
-    ln -sfn "$(pwd)/bin/endless-tmux" /usr/local/bin/endless-tmux
-    ln -sfn "$(pwd)/bin/endless-session-query" /usr/local/bin/endless-session-query
+    # E-1367 cleanup: remove pre-consolidation per-binary symlinks. Idempotent.
+    rm -f /usr/local/bin/endless-serve /usr/local/bin/endless-hook /usr/local/bin/endless-channel /usr/local/bin/endless-event /usr/local/bin/endless-sandbox /usr/local/bin/endless-tmux /usr/local/bin/endless-session-query
+    ln -sfn "$(pwd)/bin/endless-go" /usr/local/bin/endless-go
     uv tool install -e . --force
 
 # Land a task's worktree (calls `endless worktree land`), then rebuild
@@ -88,7 +78,7 @@ install:
 #
 # Task ID derivation, in order:
 #   1. Explicit arg: `just land E-NNNN`
-#   2. `endless-tmux active-id` — DB-backed session→task binding. Same
+#   2. `endless-go tmux active-id` — DB-backed session→task binding. Same
 #      source tmux's status row uses, so it's authoritative wherever
 #      tmux is running.
 #   3. Path-pattern match on cwd (`.endless/worktrees/e-NNN`). Cheap
@@ -110,7 +100,7 @@ land task_id="":
         # Prefer the DB-backed source. Works from any cwd — main, the
         # worktree, or even outside the project — as long as the shell
         # is running in a tmux pane whose session has an active task.
-        if tid=$(endless-tmux active-id 2>/dev/null) && [ -n "$tid" ]; then
+        if tid=$(endless-go tmux active-id 2>/dev/null) && [ -n "$tid" ]; then
             echo "→ Derived task ID from session: $tid"
         elif [[ "$(pwd)" =~ /\.endless/worktrees/e-([0-9]+)(/|$) ]]; then
             tid="E-${BASH_REMATCH[1]}"
@@ -198,18 +188,18 @@ go-work-init:
     echo "go.work generated at $(pwd)/go.work"
 
 # Generate per-worktree .claude/settings.json that overrides hook command
-# paths to point at this worktree's own bin/endless-hook (E-998).
+# paths to point at this worktree's own bin/endless-go (E-998, E-1367).
 #
 # Without this, exercising new hook code in a Claude session requires
-# repointing /usr/local/bin/endless-hook at the worktree's binary, which
+# repointing /usr/local/bin/endless-go at the worktree's binary, which
 # affects every other live Claude session on the machine. Claude Code's
 # project-level .claude/settings.json takes precedence over the user-level
 # config for matching keys (including 'hooks'), so this file scopes the
 # override to sessions whose cwd is inside this worktree.
 #
-# Mirrors the endless-hook entries from ~/.claude/settings.json verbatim
+# Mirrors the endless-go hook entries from ~/.claude/settings.json verbatim
 # (event, async flag, args after the binary), then rewrites the binary
-# path to "$(pwd)/bin/endless-hook". enabledPlugins from the committed
+# path to "$(pwd)/bin/endless-go". enabledPlugins from the committed
 # main-checkout settings.json is preserved so Claude sessions in the
 # worktree don't lose plugin enablement.
 #
@@ -223,7 +213,7 @@ go-work-init:
 # main or other worktrees.
 #
 # Run AFTER `just build` (or `just go` / `just go-work-init` then `just go`)
-# so that bin/endless-hook exists. The recipe writes the absolute path
+# so that bin/endless-go exists. The recipe writes the absolute path
 # regardless, since hook fire-time cwd is unpredictable.
 claude-settings-init:
     #!/usr/bin/env bash
@@ -257,7 +247,7 @@ claude-settings-init:
         user = json.load(f)
     committed = json.loads(committed_raw or "{}")
     working = json.loads(working_raw or "{}")
-    new_bin = f"{worktree_root}/bin/endless-hook"
+    new_bin = f"{worktree_root}/bin/endless-go"
     out_hooks = {}
     for event, entries in (user.get("hooks") or {}).items():
         rewritten = []
@@ -265,7 +255,7 @@ claude-settings-init:
             new_entry_hooks = []
             for h in entry.get("hooks", []):
                 cmd = h.get("command", "")
-                if "endless-hook" not in cmd:
+                if "endless-go" not in cmd:
                     continue
                 parts = cmd.split(None, 1)
                 tail = f" {parts[1]}" if len(parts) > 1 else ""
@@ -322,15 +312,15 @@ dev-sandbox-init:
         exit 1
     fi
     name="worktree-e-${task_id}"
-    # Prefer the worktree-built binary so changes to endless-sandbox itself
-    # are exercised in self-dev. Fall back to PATH for fresh worktrees.
-    if [ -x "$(pwd)/bin/endless-sandbox" ]; then
-        sandbox_bin="$(pwd)/bin/endless-sandbox"
+    # Prefer the worktree-built binary so changes to the sandbox subcommand
+    # itself are exercised in self-dev. Fall back to PATH for fresh worktrees.
+    if [ -x "$(pwd)/bin/endless-go" ]; then
+        sandbox_bin="$(pwd)/bin/endless-go"
     else
-        sandbox_bin=endless-sandbox
+        sandbox_bin=endless-go
     fi
-    "$sandbox_bin" init --mode empty "$name"
-    "$sandbox_bin" bind "$(pwd)" "$name"
+    "$sandbox_bin" sandbox init --mode empty "$name"
+    "$sandbox_bin" sandbox bind "$(pwd)" "$name"
 
 # Run Python tests
 test:
@@ -365,21 +355,17 @@ generate:
 css: _link-templui
     tailwindcss -i internal/web/assets/css/input.css -o internal/web/assets/css/output.css
 
-# Build just the Go binaries
+# Build just the Go binary
 go:
-    go build -o bin/endless-serve ./cmd/endless-serve
-    go build -o bin/endless-hook ./cmd/endless-hook
-    go build -o bin/endless-channel ./cmd/endless-channel
-    go build -o bin/endless-event ./cmd/endless-event
-    go build -o bin/endless-sandbox ./cmd/endless-sandbox
+    go build -o bin/endless-go ./cmd/endless-go
 
 # Run Go tests
 test-go:
-    go test ./internal/kairos/... ./internal/events/... ./cmd/endless-sandbox/... -v
+    go test ./internal/kairos/... ./internal/events/... ./internal/sandboxcmd/... -v
 
-# Kill any running endless-serve process
+# Kill any running endless-go serve process
 kill:
-    pkill -f endless-serve || true
+    pkill -f 'endless-go serve' || true
 
 # Export this project's Endless data (tasks, notes, deps) for version control
 db-export:

@@ -545,7 +545,7 @@ def _missing_schema_hint() -> click.ClickException:
     if xdg:
         mechanism = f"resolved via XDG_CONFIG_HOME={xdg}"
         suggestion = ("    If unintentional: 'unset XDG_CONFIG_HOME' "
-                      "(or 'exit' if you're in an endless-sandbox subshell).")
+                      "(or 'exit' if you're in an `endless-go sandbox` subshell).")
     else:
         mechanism = "resolved via default ~/.config (XDG_CONFIG_HOME unset)"
         suggestion = ("    Initialize with 'endless register <project-path>' "

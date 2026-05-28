@@ -1210,7 +1210,7 @@ def revise_next_list(
 
     Schema validation, the soft/hard item caps, the cross-session collision read,
     and the BEGIN IMMEDIATE transaction all live in the Go event executor
-    (`endless-event`). This reads the file, parses it (rejecting malformed JSON),
+    (`endless-go event`). This reads the file, parses it (rejecting malformed JSON),
     and emits the `project_next.revised` event. On success it prints the
     collision notice, any soft-cap warning, then either the resulting JSON
     (`--json`) or a one-line human summary.

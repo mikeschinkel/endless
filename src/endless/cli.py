@@ -10,7 +10,7 @@ from endless import __version__
 from endless import agent_help
 from endless.agent_help import AgentHelpMixin
 
-# Subcommands that are safe to run inside an endless-sandbox subshell
+# Subcommands that are safe to run inside an `endless-go sandbox` subshell
 # (no project/global I/O — pure stdout). Anything else is refused at
 # CLI entry when ENDLESS_SANDBOX is set. New subcommands inherit the
 # refusal automatically; opt in here only with a one-line justification
@@ -165,7 +165,7 @@ def main(ctx):
     if sandbox and ctx.invoked_subcommand not in SANDBOX_SAFE_SUBCOMMANDS:
         click.echo(
             f"endless: refusing to run '{ctx.invoked_subcommand}' inside "
-            f"endless-sandbox at {sandbox}",
+            f"endless-go sandbox at {sandbox}",
             err=True,
         )
         click.echo(
@@ -266,19 +266,18 @@ def serve(port, watch):
     """Start the web dashboard."""
     import shutil
     import subprocess
-    serve_bin = shutil.which("endless-serve")
+    serve_bin = shutil.which("endless-go")
     if not serve_bin:
         raise click.ClickException(
-            "endless-serve binary not found on PATH. "
-            "Build it: go build -o /usr/local/bin/endless-serve "
-            "./cmd/endless-serve/"
+            "endless-go binary not found on PATH. "
+            "Build it: just install"
         )
     # E-1429: require an explicit --db inside a worktree, then thread it.
     from endless import config
     config.require_db_context()
     db_args = config.go_db_context_args()
     if not watch:
-        subprocess.run([serve_bin, *db_args, str(port)])
+        subprocess.run([serve_bin, *db_args, "serve", str(port)])
         return
 
     import os
@@ -297,9 +296,9 @@ def serve(port, watch):
         while True:
             click.echo(
                 click.style("•", fg="cyan")
-                + f" Starting endless-serve (watching {serve_bin} for changes)"
+                + f" Starting endless-go serve (watching {serve_bin} for changes)"
             )
-            proc = subprocess.Popen([serve_bin, *db_args, str(port)])
+            proc = subprocess.Popen([serve_bin, *db_args, "serve", str(port)])
             while True:
                 time.sleep(1)
                 if proc.poll() is not None:
@@ -1914,7 +1913,7 @@ def tmux_status_line():
     """Print one styled line for tmux's status-format[1].
 
     Normally invoked by tmux on each refresh, not by humans. The tmux
-    config calls the `endless-tmux` Go binary directly to stay under the
+    config calls the `endless-go tmux` Go binary directly to stay under the
     latency budget; this Python wrapper exists for parity and debugging.
     """
     from endless.tmux_cmd import run_status_line

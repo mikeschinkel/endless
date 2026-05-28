@@ -38,7 +38,7 @@ from endless import config
 # "matchers" property exists. Includes the verb whitelist that previously
 # lived in src/endless/task_cmd.py:_TITLE_VERBS, the pivot triggers
 # planned for the W3 behavioral gate, and the action regexes lifted from
-# cmd/endless-hook/claude.go.
+# internal/hookcmd/claude.go.
 DEFAULT_MATCHERS: list[dict[str, Any]] = [
     {
         "type": "pivot",

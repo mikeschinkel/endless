@@ -1,4 +1,4 @@
-"""Bridge to the endless-event Go binary for event-sourced writes."""
+"""Bridge to the `endless-go event` subcommand for event-sourced writes."""
 
 import json
 import os
@@ -37,9 +37,9 @@ def emit_event(
     correlation_id: str | None = None,
     prompt_verb: str | None = None,
 ) -> dict | None:
-    """Shell out to endless-event to write an event and execute the DB mutation.
+    """Shell out to `endless-go event emit` to write an event and execute the DB mutation.
 
-    Returns the parsed JSON output from endless-event (contains ts, kind, and
+    Returns the parsed JSON output (contains ts, kind, and
     optionally id for created tasks), or None if stdout was empty.
 
     `session_id` populates `actor.session_id` on the emitted event so per-
@@ -123,18 +123,18 @@ def emit_event(
         else:
             project_root = str(Path.cwd())
 
-    event_bin = shutil.which("endless-event")
+    event_bin = shutil.which("endless-go")
     if not event_bin:
         raise click.ClickException(
-            "endless-event binary not found on PATH. "
-            "Build it: just build"
+            "endless-go binary not found on PATH. "
+            "Build it: just install"
         )
 
     # E-1429: refuse early with the friendly message if --db is required but
     # missing, then thread the resolved DB context to endless-event.
     config.require_db_context()
     cmd = [
-        event_bin, *config.go_db_context_args(), "emit",
+        event_bin, *config.go_db_context_args(), "event", "emit",
         "--kind", kind,
         "--project", project,
         "--entity-type", entity_type,
@@ -176,7 +176,7 @@ def apply_change(path: str) -> dict:
         )
 
     config.require_db_context()  # E-1429
-    cmd = [event_bin, *config.go_db_context_args(), "apply-change", str(path)]
+    cmd = [event_bin, *config.go_db_context_args(), "event", "apply-change", str(path)]
     result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode != 0:
         # endless-event prints JSON with an "error" field on failure.
@@ -205,7 +205,7 @@ def backup_db() -> dict:
 
     config.require_db_context()  # E-1429
     result = subprocess.run(
-        [event_bin, *config.go_db_context_args(), "backup"],
+        [event_bin, *config.go_db_context_args(), "event", "backup"],
         capture_output=True, text=True,
     )
     if result.returncode != 0:

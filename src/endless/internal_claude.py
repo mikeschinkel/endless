@@ -3,14 +3,15 @@
 Endless makes a couple of internal `claude -p` calls — the verb-check in
 `task_cmd` and the recap summary in `session_cmd`. They run as subprocesses
 that inherit the caller's `TMUX_PANE`. Each gets a fresh Claude session UUID
-and, left unguarded, fires `endless-hook`; the hook's pane-collision rule then
-marks the LIVE caller's session `ended` (same pane string, different UUID),
-which breaks session resolution until the caller's next Stop hook revives it.
+and, left unguarded, fires the `endless-go hook` subcommand; the hook's
+pane-collision rule then marks the LIVE caller's session `ended` (same pane
+string, different UUID), which breaks session resolution until the caller's
+next Stop hook revives it.
 
 Routing every internal call through here closes that hole. It:
 
-  * sets ``ENDLESS_NO_HOOKS=true`` so ``endless-hook`` exits before any session
-    registration, collision, or SessionEnd work (see cmd/endless-hook/main.go);
+  * sets ``ENDLESS_NO_HOOKS=true`` so ``endless-go hook`` exits before any session
+    registration, collision, or SessionEnd work (see cmd/endless-go/main.go);
   * disables tools (no PreToolUse/PostToolUse surface), MCP servers, and
     session persistence (no throwaway transcript under ~/.claude/projects);
   * runs at low effort, since these are trivial calls.
@@ -25,7 +26,7 @@ on.
 import os
 import subprocess
 
-# Set in the child env; checked verbatim by cmd/endless-hook/main.go.
+# Set in the child env; checked verbatim by cmd/endless-go/main.go.
 NO_HOOKS_ENV = "ENDLESS_NO_HOOKS"
 
 

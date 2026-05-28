@@ -156,7 +156,7 @@ def test_materialize_plan_file_warns_when_binary_missing(tmp_path, monkeypatch, 
     worktree_cmd._materialize_plan_file(779, wt)
 
     assert not (wt / ".endless" / "plans" / "E-779.md").exists()
-    assert "endless-session-query not found" in capsys.readouterr().err
+    assert "endless-go not found" in capsys.readouterr().err
 
 
 # ─── --no-create-worktree is gone ─────────────────────────────────────────────

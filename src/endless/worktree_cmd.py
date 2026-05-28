@@ -729,20 +729,20 @@ def _branch_for_task(rows: list[dict], task_id: str) -> dict | None:
 
 def _reap_stale_worktrees(project_root: Path) -> None:
     """Run the worktree reaper sweep (E-1337). Best-effort: shells out
-    to `endless-event reap-worktrees`. Stderr from the helper is
+    to `endless-go event reap-worktrees`. Stderr from the helper is
     forwarded so reaped-dir log lines reach the user; non-zero exit
     raises subprocess.CalledProcessError (caller decides how loud).
     """
     from endless import config
 
-    binary = shutil.which("endless-event")
+    binary = shutil.which("endless-go")
     if not binary:
         return
     # E-1429: thread the resolved --db context so this DB-opening subprocess
     # isn't refused by the self-dev-worktree gate when land runs from inside a
     # worktree. Empty (no flag) outside a gated worktree, so a no-op there.
     subprocess.run(
-        [binary, *config.go_db_context_args(), "reap-worktrees",
+        [binary, *config.go_db_context_args(), "event", "reap-worktrees",
          "--project-root", str(project_root)],
         check=True,
     )
@@ -873,19 +873,19 @@ def _read_branch_file(branch: str, rel_path: str, project_root: Path) -> str | N
 
 
 def _read_task_text(task_id: int, project_root: Path) -> str:
-    """Current tasks.text via the endless-session-query Go helper.
+    """Current tasks.text via the `endless-go session-query` Go helper.
 
     Returns '' when empty/absent or the helper is unavailable. Python SQLite
     reads are forbidden (E-894), so there is no DB fallback.
     """
     from endless import config
 
-    binary = shutil.which("endless-session-query")
+    binary = shutil.which("endless-go")
     if not binary:
         return ""
     try:
         result = subprocess.run(
-            [binary, *config.go_db_context_args(), "task-text", "--id", str(task_id)],
+            [binary, *config.go_db_context_args(), "session-query", "task-text", "--id", str(task_id)],
             capture_output=True, text=True,
         )
     except OSError:
@@ -1128,7 +1128,7 @@ def _materialize_plan_file(task_id: int, worktree_path: Path) -> None:
     update --text` no longer provisions a worktree; instead the plan
     materializes here when the worktree is born (at claim/spawn).
 
-    Reads tasks.text via the endless-session-query Go helper — Python DB
+    Reads tasks.text via the `endless-go session-query` Go helper — Python DB
     reads are forbidden (E-894). Empty/absent text writes nothing. Failures
     warn and skip rather than abort worktree creation; a missing plan file is
     recoverable by re-running `endless task update --text` once the worktree
@@ -1136,11 +1136,11 @@ def _materialize_plan_file(task_id: int, worktree_path: Path) -> None:
     """
     from endless import config
 
-    binary = shutil.which("endless-session-query")
+    binary = shutil.which("endless-go")
     if not binary:
         click.echo(
-            "  warning: endless-session-query not found on PATH; plan file "
-            "not materialized. Run 'just build' / 'just install'.",
+            "  warning: endless-go not found on PATH; plan file "
+            "not materialized. Run 'just install'.",
             err=True,
         )
         return
@@ -1149,11 +1149,11 @@ def _materialize_plan_file(task_id: int, worktree_path: Path) -> None:
         # worktree) so this DB read isn't refused when claim runs from a
         # worktree cwd.
         result = subprocess.run(
-            [binary, *config.go_db_context_args(), "task-text", "--id", str(task_id)],
+            [binary, *config.go_db_context_args(), "session-query", "task-text", "--id", str(task_id)],
             capture_output=True, text=True,
         )
     except OSError as e:
-        click.echo(f"  warning: endless-session-query task-text: {e}", err=True)
+        click.echo(f"  warning: endless-go session-query task-text: {e}", err=True)
         return
     if result.returncode != 0:
         click.echo(
@@ -1184,24 +1184,24 @@ def _maybe_auto_sandbox_bind(project_root: Path, worktree_path: Path, task_id: i
 
     Failures are surfaced as warnings rather than aborting the worktree
     creation — a failed sandbox setup is recoverable via `just dev-sandbox-init`
-    or direct `endless-sandbox init` / `bind` invocation.
+    or direct `endless-go sandbox init` / `bind` invocation.
     """
     from endless import config
     if not config.project_wants_worktree_sandbox(project_root):
         return
-    binary = shutil.which("endless-sandbox")
+    binary = shutil.which("endless-go")
     if not binary:
         click.echo(
-            "  warning: endless-sandbox binary not found on PATH; "
-            "worktree-sandbox setup skipped. Run 'just build' then "
+            "  warning: endless-go binary not found on PATH; "
+            "worktree-sandbox setup skipped. Run 'just install' then "
             "'just dev-sandbox-init' from the worktree.",
             err=True,
         )
         return
     name = f"worktree-e-{task_id}"
     for cmd in (
-        [binary, "init", "--mode", "empty", name],
-        [binary, "bind", str(worktree_path), name],
+        [binary, "sandbox", "init", "--mode", "empty", name],
+        [binary, "sandbox", "bind", str(worktree_path), name],
     ):
         try:
             result = subprocess.run(cmd, capture_output=True, text=True)
