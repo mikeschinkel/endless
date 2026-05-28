@@ -21,6 +21,7 @@ type dbQuerier interface {
 // ExecuteResult holds the output of a successful execution.
 type ExecuteResult struct {
 	TaskID          int64              `json:"task_id,omitempty"`           // for task.created/imported
+	DecisionID      int64              `json:"decision_id,omitempty"`       // for decision.created (E-1378)
 	SessionStatusID int64              `json:"session_status_id,omitempty"` // for session_status.recorded (E-1312)
 	Skipped         bool               `json:"skipped,omitempty"`           // dedup-skip path (no row written)
 	Markdown        string             `json:"markdown,omitempty"`          // rendered output for chat display
@@ -50,6 +51,46 @@ func PreAllocateTaskID() (id int64, execAndCommit func(*Event) (*ExecuteResult, 
 	if err != nil {
 		db.Exec("ROLLBACK")
 		return 0, nil, nil, fmt.Errorf("events: pre-allocate task id: %w", err)
+	}
+
+	doRollback := func() {
+		db.Exec("ROLLBACK")
+	}
+
+	doExecAndCommit := func(evt *Event) (*ExecuteResult, error) {
+		result, err := dispatch(db, evt)
+		if err != nil {
+			db.Exec("ROLLBACK")
+			return nil, err
+		}
+		if _, err := db.Exec("COMMIT"); err != nil {
+			return nil, fmt.Errorf("events: commit: %w", err)
+		}
+		return result, nil
+	}
+
+	return id, doExecAndCommit, doRollback, nil
+}
+
+// PreAllocateDecisionID is the decision-table parallel of PreAllocateTaskID.
+// Decisions use their own auto-increment column (E-1378); the ID space is
+// independent of tasks (display prefix ED- disambiguates).
+//
+// Usage mirrors PreAllocateTaskID — see that docstring.
+func PreAllocateDecisionID() (id int64, execAndCommit func(*Event) (*ExecuteResult, error), rollback func(), err error) {
+	db, err := monitor.DB()
+	if err != nil {
+		return 0, nil, nil, fmt.Errorf("events: db connection: %w", err)
+	}
+
+	if _, err := db.Exec("BEGIN IMMEDIATE"); err != nil {
+		return 0, nil, nil, fmt.Errorf("events: begin immediate: %w", err)
+	}
+
+	err = db.QueryRow("SELECT COALESCE(MAX(id), 0) + 1 FROM decisions").Scan(&id)
+	if err != nil {
+		db.Exec("ROLLBACK")
+		return 0, nil, nil, fmt.Errorf("events: pre-allocate decision id: %w", err)
 	}
 
 	doRollback := func() {
@@ -163,6 +204,20 @@ func dispatch(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 		return execSessionStatusRecorded(db, evt)
 	case KindProjectNextRevised:
 		return execProjectNextRevised(db, evt)
+	case KindDecisionCreated:
+		return execDecisionCreated(db, evt)
+	case KindDecisionFieldsUpdated:
+		return execDecisionFieldsUpdated(db, evt)
+	case KindDecisionAccepted:
+		return execDecisionAccepted(db, evt)
+	case KindDecisionRejected:
+		return execDecisionRejected(db, evt)
+	case KindDecisionDeleted:
+		return execDecisionDeleted(db, evt)
+	case KindDecisionRelationCreated:
+		return execDecisionRelationCreated(db, evt)
+	case KindDecisionRelationDeleted:
+		return execDecisionRelationDeleted(db, evt)
 	default:
 		return nil, fmt.Errorf("events: executor does not handle kind %q", evt.Kind)
 	}

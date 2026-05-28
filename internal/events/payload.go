@@ -83,6 +83,49 @@ type TaskDepDeletedPayload struct {
 	TargetID int64 `json:"target_id"`
 }
 
+// Decision payloads (E-1378). status defaults to 'proposed' when omitted.
+// origin_task_id and origin_session_id are 0 when unknown — Python emit
+// only populates them when a triggering task / session is identifiable.
+
+type DecisionCreatedPayload struct {
+	Title           string `json:"title"`
+	Description     string `json:"description,omitempty"`
+	Text            string `json:"text,omitempty"`
+	Status          string `json:"status,omitempty"`
+	OriginTaskID    int64  `json:"origin_task_id,omitempty"`
+	OriginSessionID int64  `json:"origin_session_id,omitempty"`
+	Notes           string `json:"notes,omitempty"`
+}
+
+type DecisionFieldsUpdatedPayload struct {
+	Fields map[string]any `json:"fields"`
+}
+
+type DecisionAcceptedPayload struct{}
+
+type DecisionRejectedPayload struct {
+	Reason string `json:"reason"`
+}
+
+type DecisionDeletedPayload struct {
+	Title string `json:"title"`
+}
+
+// Decision relation payloads (E-1378).
+type DecisionRelationCreatedPayload struct {
+	SourceDecisionID int64  `json:"source_decision_id"`
+	TargetKind       string `json:"target_kind"`
+	TargetID         int64  `json:"target_id"`
+	RelationType     string `json:"relation_type"`
+}
+
+type DecisionRelationDeletedPayload struct {
+	SourceDecisionID int64  `json:"source_decision_id"`
+	TargetKind       string `json:"target_kind"`
+	TargetID         int64  `json:"target_id"`
+	RelationType     string `json:"relation_type"`
+}
+
 // Project payloads
 
 type ProjectRegisteredPayload struct {

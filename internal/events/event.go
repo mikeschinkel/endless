@@ -56,15 +56,17 @@ type Kind string
 type EntityType string
 
 const (
-	EntityTask          EntityType = "task"
-	EntityTaskDep       EntityType = "task_dep"
-	EntityProject       EntityType = "project"
-	EntityProjectNext   EntityType = "project_next"
-	EntitySession       EntityType = "session"
-	EntitySessionStatus EntityType = "session_status"
-	EntityConversation  EntityType = "conversation"
-	EntityMessage       EntityType = "message"
-	EntityNote          EntityType = "note"
+	EntityTask             EntityType = "task"
+	EntityTaskDep          EntityType = "task_dep"
+	EntityProject          EntityType = "project"
+	EntityProjectNext      EntityType = "project_next"
+	EntitySession          EntityType = "session"
+	EntitySessionStatus    EntityType = "session_status"
+	EntityConversation     EntityType = "conversation"
+	EntityMessage          EntityType = "message"
+	EntityNote             EntityType = "note"
+	EntityDecision         EntityType = "decision"          // E-1378
+	EntityDecisionRelation EntityType = "decision_relation" // E-1378
 )
 
 // ActorKind enumerates actor categories.
@@ -147,6 +149,25 @@ const (
 	KindProjectNextRevised Kind = "project_next.revised"
 )
 
+// Decision event kinds (E-1378). Decisions are first-class items extracted
+// from the tasks table; their lifecycle (proposed -> accepted | rejected) has
+// no analog in the task event vocabulary.
+const (
+	KindDecisionCreated       Kind = "decision.created"
+	KindDecisionFieldsUpdated Kind = "decision.fields_updated"
+	KindDecisionAccepted      Kind = "decision.accepted"
+	KindDecisionRejected      Kind = "decision.rejected"
+	KindDecisionDeleted       Kind = "decision.deleted"
+)
+
+// Decision relation event kinds (E-1378). Source-table mapping: rows where
+// the source is a decision live in decision_relations; task-sourced rows
+// remain governed by task_dep events.
+const (
+	KindDecisionRelationCreated Kind = "decision_relation.created"
+	KindDecisionRelationDeleted Kind = "decision_relation.deleted"
+)
+
 // ValidKinds is the closed set of all recognized event kinds.
 var ValidKinds = map[Kind]bool{
 	// Task
@@ -191,19 +212,30 @@ var ValidKinds = map[Kind]bool{
 	KindSessionStatusRecorded: true,
 	// Curated next list (E-1421)
 	KindProjectNextRevised: true,
+	// Decision (E-1378)
+	KindDecisionCreated:       true,
+	KindDecisionFieldsUpdated: true,
+	KindDecisionAccepted:      true,
+	KindDecisionRejected:      true,
+	KindDecisionDeleted:       true,
+	// Decision relation (E-1378)
+	KindDecisionRelationCreated: true,
+	KindDecisionRelationDeleted: true,
 }
 
 // validEntityTypes is the closed set of recognized entity types.
 var validEntityTypes = map[EntityType]bool{
-	EntityTask:          true,
-	EntityTaskDep:       true,
-	EntitySessionStatus: true,
-	EntityProject:       true,
-	EntityProjectNext:   true,
-	EntitySession:       true,
-	EntityConversation:  true,
-	EntityMessage:       true,
-	EntityNote:          true,
+	EntityTask:             true,
+	EntityTaskDep:          true,
+	EntitySessionStatus:    true,
+	EntityProject:          true,
+	EntityProjectNext:      true,
+	EntitySession:          true,
+	EntityConversation:     true,
+	EntityMessage:          true,
+	EntityNote:             true,
+	EntityDecision:         true,
+	EntityDecisionRelation: true,
 }
 
 // validActorKinds is the closed set of recognized actor kinds.
