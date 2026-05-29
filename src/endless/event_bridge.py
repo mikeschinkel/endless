@@ -36,9 +36,14 @@ def _resolve_endless_go() -> str:
     wt_bin = config.resolved_worktree_endless_go()
     if wt_bin is not None:
         if not wt_bin.is_file() or not os.access(wt_bin, os.X_OK):
+            home = str(Path.home())
+            displayed = str(wt_bin)
+            if displayed.startswith(home):
+                displayed = "~" + displayed[len(home):]
+            click.echo("", err=True)
             raise click.ClickException(
-                f"--db sandbox is active but the worktree's endless-go "
-                f"binary is missing or not executable:\n  {wt_bin}"
+                f"The worktree's endless-go binary is missing or "
+                f"not executable:\n\n    {displayed}\n"
             )
         return str(wt_bin)
     found = shutil.which("endless-go")

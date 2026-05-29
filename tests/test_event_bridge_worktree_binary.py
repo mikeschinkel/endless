@@ -127,8 +127,11 @@ def test_emit_event_uses_worktree_binary_under_db_sandbox(
 
 def test_missing_worktree_binary_fails_loudly(tmp_path, monkeypatch):
     """--db sandbox active + worktree bin/endless-go absent → ClickException
-    with a 'just build' hint. Silent fallback to main's binary would
+    naming the missing binary. Silent fallback to main's binary would
     re-introduce the schema-baseline mismatch."""
+    # Anchor $HOME at tmp_path so the path the helper builds lives under it
+    # and we can assert ~-collapsing in the displayed message.
+    monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / ".cache"))
     wt, wt_bin = _make_worktree_layout(
         tmp_path, task_id="9999", binary_present=False
@@ -140,13 +143,21 @@ def test_missing_worktree_binary_fails_loudly(tmp_path, monkeypatch):
     with pytest.raises(click.ClickException) as exc:
         event_bridge.apply_change("ignored")
     msg = exc.value.message
-    assert str(wt_bin) in msg
+    # Path is shown with $HOME collapsed to ~, indented 4 spaces, with a
+    # blank line between the headline and the path, and a trailing newline.
+    home = str(tmp_path)
+    tilde_path = "~" + str(wt_bin)[len(home):]
+    assert tilde_path in msg
+    assert home not in msg
+    assert ":\n\n    " + tilde_path + "\n" in msg
     # PRODUCT: shipped code in src/endless/ must not prescribe dev-machine
     # actions (no `just`, no `go build`, no source paths). The error names
     # the bad state; how to recover is not the product's concern.
     assert "just" not in msg
     assert "go build" not in msg
     assert "./cmd" not in msg
+    # Less verbose: dropped "--db sandbox is active but" prefix.
+    assert "--db sandbox" not in msg
 
 
 # --- PATH fallback branches ---------------------------------------------------
