@@ -34,7 +34,7 @@ func init() {
 		log.SetOutput(io.MultiWriter(os.Stderr, logFile))
 	}
 	log.SetFlags(log.Ldate | log.Ltime)
-	log.SetPrefix("endless-hook: ")
+	log.SetPrefix("endless-go hook: ")
 }
 
 type claudePayload struct {
@@ -995,7 +995,7 @@ func autoImportTask(projectID int64, sessionID, filePath string) error {
 var osExecutable = os.Executable
 
 // worktreeOverrideRegistered returns true when the worktree's
-// .claude/settings.json references the worktree's own bin/endless-hook
+// .claude/settings.json references the worktree's own bin/endless-go
 // path — i.e. claude-settings-init was run and the override is active.
 //
 // Why: every worktree inherits the committed .claude/settings.json from
@@ -1012,7 +1012,7 @@ func worktreeOverrideRegistered(worktreeRoot, worktreeBin string) bool {
 }
 
 // shouldSkipForWorktree returns true when this binary should yield to a
-// worktree-local copy of endless-hook for the same hook event.
+// worktree-local copy of endless-go for the same hook event.
 //
 // Why: Claude Code merges hook entries across user/project settings scopes
 // (concatenate + dedupe, not replace), so a session whose cwd is inside a
@@ -1043,7 +1043,7 @@ func shouldSkipForWorktreeAt(cwd, projectRoot string) bool {
 	if worktreeRoot == "" {
 		return false
 	}
-	worktreeBin := filepath.Join(worktreeRoot, "bin", "endless-hook")
+	worktreeBin := filepath.Join(worktreeRoot, "bin", "endless-go")
 	if !worktreeOverrideRegistered(worktreeRoot, worktreeBin) {
 		// No worktree-level Claude override is configured, so the global is
 		// the only binary firing for events here. Nothing to skip and no
@@ -1053,7 +1053,7 @@ func shouldSkipForWorktreeAt(cwd, projectRoot string) bool {
 	worktreeStat, err := os.Stat(worktreeBin)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			log.Printf("WARN: cwd %s is inside worktree %s but %s does not exist — running global as fallback. Run 'just build' in the worktree to enable the override.", cwd, worktreeRoot, worktreeBin)
+			log.Printf("WARN: cwd %s is inside worktree %s but %s does not exist — running global as fallback.", cwd, worktreeRoot, worktreeBin)
 		} else {
 			log.Printf("self-skip check: stat %s: %v", worktreeBin, err)
 		}

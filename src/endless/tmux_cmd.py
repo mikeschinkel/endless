@@ -18,7 +18,7 @@ def _binary() -> str:
     path = shutil.which("endless-go")
     if not path:
         raise click.ClickException(
-            "endless-go binary not found on PATH. Build it: just install"
+            "endless-go binary not found on PATH."
         )
     return path
 

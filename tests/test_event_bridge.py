@@ -33,8 +33,8 @@ def _seed_node_id(isolated_env):
 
 @pytest.fixture
 def captured_emit(isolated_env, monkeypatch):
-    """Stub subprocess.run (the endless-event Go subprocess) and capture the
-    --actor-kind / --session-id arguments emit_event was about to pass.
+    """Stub subprocess.run (the `endless-go event` Go subprocess) and capture
+    the --actor-kind / --session-id arguments emit_event was about to pass.
 
     Returns a dict that callers can read after invocation:
       - calls: list of arg lists, one per subprocess.run invocation
@@ -48,9 +48,9 @@ def captured_emit(isolated_env, monkeypatch):
         "VALUES ('sample', '/tmp/sample', 'active', datetime('now'), datetime('now'))"
     )
 
-    # shutil.which("endless-event") must return SOMETHING truthy so we proceed
+    # shutil.which("endless-go") must return SOMETHING truthy so we proceed
     # to the subprocess call (which we then intercept).
-    monkeypatch.setattr(event_bridge.shutil, "which", lambda _name: "/fake/endless-event")
+    monkeypatch.setattr(event_bridge.shutil, "which", lambda _name: "/fake/endless-go")
 
     captured: dict = {"calls": []}
 

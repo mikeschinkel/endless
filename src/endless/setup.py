@@ -38,8 +38,7 @@ def setup_prompt_hook():
     hook_bin = _find_endless_hook()
     if not hook_bin:
         raise click.ClickException(
-            "endless-go binary not found on PATH. "
-            "Build it first: just install"
+            "endless-go binary not found on PATH."
         )
 
     click.echo(
@@ -234,8 +233,7 @@ def setup_claude_hook():
     hook_bin = _find_endless_hook()
     if not hook_bin:
         raise click.ClickException(
-            "endless-go binary not found on PATH. "
-            "Build it first: just install"
+            "endless-go binary not found on PATH."
         )
 
     click.echo(
@@ -365,8 +363,7 @@ def setup_channel_plugin():
     channel_bin = _find_endless_channel()
     if not channel_bin:
         raise click.ClickException(
-            "endless-go binary not found on PATH. "
-            "Build it first: just install"
+            "endless-go binary not found on PATH."
         )
 
     click.echo(

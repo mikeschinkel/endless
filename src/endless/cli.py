@@ -269,8 +269,7 @@ def serve(port, watch):
     serve_bin = shutil.which("endless-go")
     if not serve_bin:
         raise click.ClickException(
-            "endless-go binary not found on PATH. "
-            "Build it: just install"
+            "endless-go binary not found on PATH."
         )
     # E-1429: require an explicit --db inside a worktree, then thread it.
     from endless import config

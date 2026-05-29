@@ -1140,7 +1140,7 @@ def _materialize_plan_file(task_id: int, worktree_path: Path) -> None:
     if not binary:
         click.echo(
             "  warning: endless-go not found on PATH; plan file "
-            "not materialized. Run 'just install'.",
+            "not materialized.",
             err=True,
         )
         return
@@ -1193,8 +1193,7 @@ def _maybe_auto_sandbox_bind(project_root: Path, worktree_path: Path, task_id: i
     if not binary:
         click.echo(
             "  warning: endless-go binary not found on PATH; "
-            "worktree-sandbox setup skipped. Run 'just install' then "
-            "'just dev-sandbox-init' from the worktree.",
+            "worktree-sandbox setup skipped.",
             err=True,
         )
         return

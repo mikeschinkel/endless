@@ -66,7 +66,7 @@ func runEmit(args []string) {
 
 	if err := run(*kind, *project, *entityType, *entityID, *actorKind, *actorID,
 		*sessionID, *nodeID, *projectRoot, *payload, *correlationID); err != nil {
-		fmt.Fprintf(os.Stderr, "endless-event: error: %v\n", err)
+		fmt.Fprintf(os.Stderr, "endless-go event: error: %v\n", err)
 		os.Exit(1)
 	}
 }
@@ -374,7 +374,7 @@ func runValidateDB(args []string) {
 	fs.Parse(args)
 
 	if *projectRoot == "" {
-		fmt.Fprintf(os.Stderr, "endless-event: error: --project-root is required\n")
+		fmt.Fprintf(os.Stderr, "endless-go event: error: --project-root is required\n")
 		os.Exit(1)
 	}
 
@@ -382,7 +382,7 @@ func runValidateDB(args []string) {
 	// Project events into temp DB
 	tempPath, projResult, err := events.ProjectToTempDB(*projectRoot)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "endless-event: error: %v\n", err)
+		fmt.Fprintf(os.Stderr, "endless-go event: error: %v\n", err)
 		os.Exit(1)
 	}
 	defer os.Remove(tempPath)
@@ -396,13 +396,13 @@ func runValidateDB(args []string) {
 	// Compare against current DB
 	currentDB, err := monitor.DB()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "endless-event: error: %v\n", err)
+		fmt.Fprintf(os.Stderr, "endless-go event: error: %v\n", err)
 		os.Exit(1)
 	}
 
 	valResult, err := events.ValidateTasks(currentDB, tempPath)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "endless-event: error: %v\n", err)
+		fmt.Fprintf(os.Stderr, "endless-go event: error: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -435,13 +435,13 @@ func runRebuildDB(args []string) {
 	fs.Parse(args)
 
 	if *projectRoot == "" {
-		fmt.Fprintf(os.Stderr, "endless-event: error: --project-root is required\n")
+		fmt.Fprintf(os.Stderr, "endless-go event: error: --project-root is required\n")
 		os.Exit(1)
 	}
 
 	tempPath, projResult, err := events.ProjectToTempDB(*projectRoot)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "endless-event: error: %v\n", err)
+		fmt.Fprintf(os.Stderr, "endless-go event: error: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -461,20 +461,20 @@ func runRebuildDB(args []string) {
 	currentDB, err := monitor.DB()
 	if err != nil {
 		os.Remove(tempPath)
-		fmt.Fprintf(os.Stderr, "endless-event: error: %v\n", err)
+		fmt.Fprintf(os.Stderr, "endless-go event: error: %v\n", err)
 		os.Exit(1)
 	}
 
 	if _, err := currentDB.Exec(fmt.Sprintf("ATTACH DATABASE '%s' AS proj", tempPath)); err != nil {
 		os.Remove(tempPath)
-		fmt.Fprintf(os.Stderr, "endless-event: error attaching temp db: %v\n", err)
+		fmt.Fprintf(os.Stderr, "endless-go event: error attaching temp db: %v\n", err)
 		os.Exit(1)
 	}
 
 	tx, err := currentDB.Begin()
 	if err != nil {
 		os.Remove(tempPath)
-		fmt.Fprintf(os.Stderr, "endless-event: error: %v\n", err)
+		fmt.Fprintf(os.Stderr, "endless-go event: error: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -482,20 +482,20 @@ func runRebuildDB(args []string) {
 	if _, err := tx.Exec("DELETE FROM tasks WHERE project_id IN (SELECT id FROM projects WHERE name IN (SELECT name FROM proj.projects))"); err != nil {
 		tx.Rollback()
 		os.Remove(tempPath)
-		fmt.Fprintf(os.Stderr, "endless-event: error clearing tasks: %v\n", err)
+		fmt.Fprintf(os.Stderr, "endless-go event: error clearing tasks: %v\n", err)
 		os.Exit(1)
 	}
 
 	if _, err := tx.Exec("INSERT INTO tasks SELECT * FROM proj.tasks"); err != nil {
 		tx.Rollback()
 		os.Remove(tempPath)
-		fmt.Fprintf(os.Stderr, "endless-event: error inserting projected tasks: %v\n", err)
+		fmt.Fprintf(os.Stderr, "endless-go event: error inserting projected tasks: %v\n", err)
 		os.Exit(1)
 	}
 
 	if err := tx.Commit(); err != nil {
 		os.Remove(tempPath)
-		fmt.Fprintf(os.Stderr, "endless-event: error committing: %v\n", err)
+		fmt.Fprintf(os.Stderr, "endless-go event: error committing: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -511,7 +511,7 @@ func runReapWorktrees(args []string) {
 	fs.Parse(args)
 
 	if *projectRoot == "" {
-		fmt.Fprintf(os.Stderr, "endless-event: reap-worktrees: --project-root is required\n")
+		fmt.Fprintf(os.Stderr, "endless-go event: reap-worktrees: --project-root is required\n")
 		os.Exit(1)
 	}
 
@@ -523,7 +523,7 @@ func runReapWorktrees(args []string) {
 	if ttlStr != "" {
 		parsed, err := monitor.ParseWorktreeTTL(ttlStr)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "endless-event: reap-worktrees: parse ttl %q: %v (using default %s)\n",
+			fmt.Fprintf(os.Stderr, "endless-go event: reap-worktrees: parse ttl %q: %v (using default %s)\n",
 				ttlStr, err, monitor.DefaultWorktreeTTL)
 		} else {
 			ttl = parsed
@@ -531,7 +531,7 @@ func runReapWorktrees(args []string) {
 	}
 
 	if err := monitor.ReapStaleWorktrees(*projectRoot, ttl); err != nil {
-		fmt.Fprintf(os.Stderr, "endless-event: reap-worktrees: %v\n", err)
+		fmt.Fprintf(os.Stderr, "endless-go event: reap-worktrees: %v\n", err)
 		os.Exit(1)
 	}
 }

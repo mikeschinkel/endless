@@ -126,8 +126,7 @@ def emit_event(
     event_bin = shutil.which("endless-go")
     if not event_bin:
         raise click.ClickException(
-            "endless-go binary not found on PATH. "
-            "Build it: just install"
+            "endless-go binary not found on PATH."
         )
 
     # E-1429: refuse early with the friendly message if --db is required but
@@ -163,16 +162,16 @@ def emit_event(
 
 
 def apply_change(path: str) -> dict:
-    """Shell out to `endless-event apply-change <path>` and return parsed JSON.
+    """Shell out to `endless-go event apply-change <path>` and return parsed JSON.
 
     Applies one per-ticket schema-change file (internal/schema/changes/<name>)
     and records it in _schema_version. Returns {"name", "status"[, "reason"]}.
     Raises click.ClickException on failure (binary missing or non-zero exit).
     """
-    event_bin = shutil.which("endless-event")
+    event_bin = shutil.which("endless-go")
     if not event_bin:
         raise click.ClickException(
-            "endless-event binary not found on PATH. Build it: just build"
+            "endless-go binary not found on PATH."
         )
 
     config.require_db_context()  # E-1429
@@ -193,14 +192,14 @@ def apply_change(path: str) -> dict:
 
 
 def backup_db() -> dict:
-    """Shell out to `endless-event backup` (VACUUM INTO a timestamped copy).
+    """Shell out to `endless-go event backup` (VACUUM INTO a timestamped copy).
 
     Raises click.ClickException on failure (binary missing or non-zero exit).
     """
-    event_bin = shutil.which("endless-event")
+    event_bin = shutil.which("endless-go")
     if not event_bin:
         raise click.ClickException(
-            "endless-event binary not found on PATH. Build it: just build"
+            "endless-go binary not found on PATH."
         )
 
     config.require_db_context()  # E-1429
