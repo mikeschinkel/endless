@@ -361,7 +361,7 @@ go:
 
 # Run Go tests
 test-go:
-    go test ./internal/kairos/... ./internal/events/... ./internal/sandboxcmd/... -v
+    go test ./internal/kairos/... ./internal/events/... ./internal/sandboxcmd/... ./internal/monitor/... ./internal/sessionquerycmd/... -v
 
 # Kill any running endless-go serve process
 kill:
