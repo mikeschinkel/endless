@@ -12,8 +12,6 @@ backup_db, emit_event) route through the same _resolve_endless_go helper.
 """
 
 import json
-import os
-import subprocess
 from pathlib import Path
 
 import click
@@ -142,7 +140,10 @@ def test_missing_worktree_binary_fails_loudly(tmp_path, monkeypatch):
     with pytest.raises(click.ClickException) as exc:
         event_bridge.apply_change("ignored")
     msg = exc.value.message
-    assert "just build" in msg
+    # PRODUCT: surface the underlying `go build` command, never the `just`
+    # wrapper — shipped code paths must not reference the dev-side Justfile.
+    assert "go build -o bin/endless-go ./cmd/endless-go" in msg
+    assert "just" not in msg
     assert str(wt_bin) in msg
 
 

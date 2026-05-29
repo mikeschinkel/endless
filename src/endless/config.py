@@ -292,7 +292,8 @@ def resolved_worktree_endless_go(cwd: Path | None = None) -> Path | None:
     silently absent unless the worktree binary is used.
 
     Does not check existence — callers handle the missing-binary case
-    explicitly so the error message can prescribe `just build` (E-1510).
+    explicitly so the error message can prescribe the build command
+    (E-1510).
     """
     if RESOLVED_CONFIG_DIR is None:
         return None

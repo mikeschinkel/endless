@@ -39,7 +39,7 @@ def _resolve_endless_go() -> str:
             raise click.ClickException(
                 f"--db sandbox is active but the worktree's endless-go "
                 f"binary is missing or not executable:\n  {wt_bin}\n"
-                f"Run `just build` from the worktree."
+                f"Build it: go build -o bin/endless-go ./cmd/endless-go"
             )
         return str(wt_bin)
     found = shutil.which("endless-go")
