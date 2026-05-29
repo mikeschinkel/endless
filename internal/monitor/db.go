@@ -332,6 +332,12 @@ func BackupDB() {
 	}
 	defer backupDB.Close()
 
+	// Match the main DB connection's busy_timeout so VACUUM INTO waits for
+	// concurrent writers instead of failing immediately with SQLITE_BUSY.
+	if _, err := backupDB.Exec("PRAGMA busy_timeout=5000"); err != nil {
+		log.Printf("backup PRAGMA busy_timeout=5000: %v", err)
+	}
+
 	_, err = backupDB.Exec("VACUUM INTO ?", dst)
 	if err != nil {
 		log.Printf("backup failed: %v", err)
