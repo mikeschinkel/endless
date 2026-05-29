@@ -24,6 +24,30 @@ from endless import config
 _ATTRIBUTION_REQUIRED: frozenset[str] = frozenset({"cli", "hook"})
 
 
+def _resolve_endless_go() -> str:
+    """Resolve which endless-go binary to exec for a schema-mutating call.
+
+    Under --db sandbox in a self-dev worktree, prefer <worktree>/bin/endless-go
+    so the embedded schema.sql matches the sandbox DB (E-1510). Otherwise fall
+    back to the PATH-resolved global. Fails loudly if --db sandbox is active
+    but the worktree binary is missing — silently using main's binary would
+    re-introduce the schema-baseline mismatch this routing exists to prevent.
+    """
+    wt_bin = config.resolved_worktree_endless_go()
+    if wt_bin is not None:
+        if not wt_bin.is_file() or not os.access(wt_bin, os.X_OK):
+            raise click.ClickException(
+                f"--db sandbox is active but the worktree's endless-go "
+                f"binary is missing or not executable:\n  {wt_bin}\n"
+                f"Run `just build` from the worktree."
+            )
+        return str(wt_bin)
+    found = shutil.which("endless-go")
+    if not found:
+        raise click.ClickException("endless-go binary not found on PATH.")
+    return found
+
+
 def emit_event(
     kind: str,
     project: str,
@@ -123,15 +147,10 @@ def emit_event(
         else:
             project_root = str(Path.cwd())
 
-    event_bin = shutil.which("endless-go")
-    if not event_bin:
-        raise click.ClickException(
-            "endless-go binary not found on PATH."
-        )
-
     # E-1429: refuse early with the friendly message if --db is required but
     # missing, then thread the resolved DB context to endless-event.
     config.require_db_context()
+    event_bin = _resolve_endless_go()
     cmd = [
         event_bin, *config.go_db_context_args(), "event", "emit",
         "--kind", kind,
@@ -168,13 +187,8 @@ def apply_change(path: str) -> dict:
     and records it in _schema_version. Returns {"name", "status"[, "reason"]}.
     Raises click.ClickException on failure (binary missing or non-zero exit).
     """
-    event_bin = shutil.which("endless-go")
-    if not event_bin:
-        raise click.ClickException(
-            "endless-go binary not found on PATH."
-        )
-
     config.require_db_context()  # E-1429
+    event_bin = _resolve_endless_go()
     cmd = [event_bin, *config.go_db_context_args(), "event", "apply-change", str(path)]
     result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode != 0:
@@ -196,13 +210,8 @@ def backup_db() -> dict:
 
     Raises click.ClickException on failure (binary missing or non-zero exit).
     """
-    event_bin = shutil.which("endless-go")
-    if not event_bin:
-        raise click.ClickException(
-            "endless-go binary not found on PATH."
-        )
-
     config.require_db_context()  # E-1429
+    event_bin = _resolve_endless_go()
     result = subprocess.run(
         [event_bin, *config.go_db_context_args(), "event", "backup"],
         capture_output=True, text=True,

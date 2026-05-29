@@ -280,3 +280,31 @@ def go_db_context_args() -> list[str]:
     if RESOLVED_CONFIG_DIR is None:
         return []
     return ["--config-dir", str(RESOLVED_CONFIG_DIR)]
+
+
+def resolved_worktree_endless_go(cwd: Path | None = None) -> Path | None:
+    """Path to <worktree>/bin/endless-go when --db sandbox is the active DB
+    context AND cwd is inside a self-dev worktree, else None.
+
+    Used by event_bridge to prefer the worktree-built binary (which embeds
+    the worktree's schema.sql) over the PATH-resolved global. The global
+    symlink points at main's binary, so additive schema in this branch is
+    silently absent unless the worktree binary is used.
+
+    Does not check existence — callers handle the missing-binary case
+    explicitly so the error message can prescribe `just build` (E-1510).
+    """
+    if RESOLVED_CONFIG_DIR is None:
+        return None
+    task_id = worktree_task_id(cwd)
+    if task_id is None:
+        return None
+    # Only fire when RESOLVED_CONFIG_DIR is EXACTLY the sandbox path for this
+    # worktree. Anything else (--db main, conftest's tmp config dir, a stray
+    # external override) keeps the PATH-resolved global.
+    if RESOLVED_CONFIG_DIR != sandbox_config_dir(task_id):
+        return None
+    root = gated_worktree_root(cwd)
+    if root is None:
+        return None
+    return root / ".endless" / "worktrees" / f"e-{task_id}" / "bin" / "endless-go"

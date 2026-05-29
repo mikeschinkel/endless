@@ -129,13 +129,18 @@ land task_id="":
         changes=$(git -C "$wt" diff main...HEAD --diff-filter=A --name-only \
             -- internal/schema/changes/ ':(exclude)internal/schema/changes/runner/')
         if [ -n "$changes" ]; then
+            # E-1510: PATH-prepend so the Python wrapper's shutil.which finds
+            # the worktree-built endless-go (whose embedded schema.sql matches
+            # this branch). The global /usr/local/bin/endless-go is main's
+            # binary; using it here applies changes against main's baseline
+            # and 'no such table' errors follow.
             echo "→ Backing up DB before applying schema changes"
-            endless db backup
+            PATH="$wt/bin:$PATH" endless db backup
             for f in $changes; do
                 case "$f" in
                     *.sql|*.go)
                         echo "→ Applying schema change: $f"
-                        endless db apply-change "$wt/$f"
+                        PATH="$wt/bin:$PATH" endless db apply-change "$wt/$f"
                         ;;
                 esac
             done
