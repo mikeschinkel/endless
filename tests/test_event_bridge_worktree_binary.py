@@ -140,11 +140,13 @@ def test_missing_worktree_binary_fails_loudly(tmp_path, monkeypatch):
     with pytest.raises(click.ClickException) as exc:
         event_bridge.apply_change("ignored")
     msg = exc.value.message
-    # PRODUCT: surface the underlying `go build` command, never the `just`
-    # wrapper — shipped code paths must not reference the dev-side Justfile.
-    assert "go build -o bin/endless-go ./cmd/endless-go" in msg
-    assert "just" not in msg
     assert str(wt_bin) in msg
+    # PRODUCT: shipped code in src/endless/ must not prescribe dev-machine
+    # actions (no `just`, no `go build`, no source paths). The error names
+    # the bad state; how to recover is not the product's concern.
+    assert "just" not in msg
+    assert "go build" not in msg
+    assert "./cmd" not in msg
 
 
 # --- PATH fallback branches ---------------------------------------------------
