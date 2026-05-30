@@ -20,10 +20,13 @@ var goBinaries = []string{
 	"endless-go",
 }
 
-// pythonBinary is the Python CLI. It's installed globally by 'uv tool install'
-// and points at the main checkout's source; to route through the worktree's
-// source we exec 'uv run --directory <worktree> endless'.
-const pythonBinary = "endless"
+// retiredWrappers are files writeWrappers actively removes on each bind so
+// older worktrees re-bound after a CLI self-detect lands stop carrying a
+// stale wrapper that bypasses the in-process gate. E-1513 retired the
+// Python wrapper (cli.DBAwareGroup re-execs under `--db sandbox` itself).
+var retiredWrappers = []string{
+	"endless",
+}
 
 func bindCmd(args []string) {
 	fs := flag.NewFlagSet("bind", flag.ExitOnError)
@@ -103,8 +106,13 @@ func writeWrappers(binSandbox, worktree, sandboxDir string) error {
 			return err
 		}
 	}
-	body := pythonWrapperBody(sandboxDir, worktree)
-	return writeWrapper(filepath.Join(binSandbox, pythonBinary), body)
+	for _, name := range retiredWrappers {
+		path := filepath.Join(binSandbox, name)
+		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("removing retired wrapper %s: %w", path, err)
+		}
+	}
+	return nil
 }
 
 // goWrapperTarget returns the absolute path the wrapper should exec.

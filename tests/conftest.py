@@ -123,6 +123,23 @@ def disable_haiku_verb_check(monkeypatch, request):
 
 
 @pytest.fixture(autouse=True)
+def stub_cli_execvp(monkeypatch):
+    """E-1513: under `--db sandbox` from a self-dev worktree, cli.DBAwareGroup
+    re-execs into the worktree's Python source via `uv run --directory ...
+    endless`. In tests that build a synthetic worktree at <tmp>/proj and
+    invoke the CLI with --db=sandbox, that re-exec would replace the test
+    process and try to run uv against a directory with no pyproject.toml.
+
+    Default stub: no-op execvp so the in-process flow continues as it did
+    before E-1513. Tests verifying the re-exec gate itself install their
+    own capture stub via `monkeypatch.setattr(cli.os, "execvp", ...)`
+    (later-fixture-wins ordering keeps both stubs cleanly torn down).
+    """
+    from endless import cli
+    monkeypatch.setattr(cli.os, "execvp", lambda *a, **k: None)
+
+
+@pytest.fixture(autouse=True)
 def stub_current_session_id(monkeypatch, request):
     """E-1401: provide a deterministic session id so emit_event's attribution
     gate doesn't fire in tests.

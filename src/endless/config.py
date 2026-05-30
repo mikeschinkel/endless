@@ -308,3 +308,38 @@ def resolved_worktree_endless_go(cwd: Path | None = None) -> Path | None:
     if root is None:
         return None
     return root / ".endless" / "worktrees" / f"e-{task_id}" / "bin" / "endless-go"
+
+
+def worktree_python_reexec_target(
+    cwd: Path | None = None,
+    source_file: Path | None = None,
+) -> Path | None:
+    """Path of the self-dev worktree whose Python source `endless` should
+    re-exec into, or None when the current process is already inside that
+    source (or isn't in a gated worktree at all).
+
+    The global `endless` script is the editable install of main's source, so
+    running it inside a worktree exercises main's Python — not the worktree's
+    candidate changes — against the worktree's sandbox DB. cli.DBAwareGroup
+    calls this when `--db sandbox` is in argv and execvp's `uv run --directory
+    <target> endless ...` so the worktree's source runs instead. The
+    symmetric Python-layer fix to E-1510 (Go binary self-detect).
+
+    `source_file` defaults to this module's __file__ and is the re-entrancy
+    guard: after the uv-run exec, this module loads from inside the worktree
+    and the helper returns None so the process doesn't loop. Exposed for
+    tests that simulate a different source location.
+    """
+    task_id = worktree_task_id(cwd)
+    if task_id is None:
+        return None
+    root = gated_worktree_root(cwd)
+    if root is None:
+        return None
+    worktree = (root / ".endless" / "worktrees" / f"e-{task_id}").resolve()
+    src = (source_file if source_file is not None else Path(__file__)).resolve()
+    try:
+        src.relative_to(worktree)
+    except ValueError:
+        return worktree
+    return None

@@ -64,6 +64,31 @@ class MultiChoice(click.ParamType):
         return parts
 
 
+def _scan_db_choice(argv: list[str]) -> str | None:
+    """Return the LAST `--db <val>` / `--db=<val>` value in argv, or None.
+
+    Matches DBAwareGroup.main()'s consumption rule (last value wins) so the
+    pre-Click re-exec gate (E-1513) sees the same effective --db as the
+    cleaned-argv apply_db_choice call further down. Argv-agnostic helper so
+    it's testable without a click.testing.CliRunner.
+    """
+    last: str | None = None
+    i = 0
+    while i < len(argv):
+        a = argv[i]
+        if a == "--db":
+            if i + 1 < len(argv):
+                last = argv[i + 1]
+            i += 2
+            continue
+        if a.startswith("--db="):
+            last = a[len("--db="):]
+            i += 1
+            continue
+        i += 1
+    return last
+
+
 class DBAwareGroup(click.Group):
     """Click group that accepts the global --db flag in ANY argument position.
 
@@ -82,6 +107,24 @@ class DBAwareGroup(click.Group):
         from endless import config
 
         argv = list(args) if args is not None else sys.argv[1:]
+
+        # E-1513: under `--db sandbox` inside a self-dev worktree, re-exec into
+        # the worktree's Python source via `uv run --directory <worktree>
+        # endless ...`. The global `endless` script is the editable install of
+        # main's source (one uv tool install), so without this gate the
+        # worktree's Python changes never get exercised against its sandbox
+        # DB — the symmetric gap to E-1510 (Go binary self-detect).
+        # worktree_python_reexec_target's source_file check is the re-entrancy
+        # guard: once we've re-exec'd, this module loads from inside the
+        # worktree and the helper returns None.
+        if _scan_db_choice(argv) == "sandbox":
+            target = config.worktree_python_reexec_target()
+            if target is not None:
+                os.execvp(
+                    "uv",
+                    ["uv", "run", "--directory", str(target), "endless", *argv],
+                )
+
         cleaned: list[str] = []
         db_value: str | None = None
         agent_view = False
