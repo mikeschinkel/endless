@@ -60,3 +60,9 @@ settings.local.json
 # tracked file, and gitignore does not affect tracked files. It is kept
 # per-worktree via `git update-index --skip-worktree .claude/settings.json`
 # (run by the recipe) — not by gitignore.
+
+# Claude Code harness writes these per-session in .claude/ to track wakeups
+# scheduled via the ScheduleWakeup tool. Transient, session-scoped, never
+# meant for the repo. See https://github.com/anthropics/claude-code/issues/33565.
+.claude/scheduled_tasks.lock
+.claude/scheduled_tasks.json
