@@ -289,20 +289,23 @@ def validate_title(title: str, force: bool = False):
     Add new verbs manually with: endless verb add <new-verb> --definition "<def>"
     """
     if len(title) > TITLE_MAX_LENGTH:
+        click.echo("", err=True)
         raise click.ClickException(
             f"Title is {len(title)} characters; max is {TITLE_MAX_LENGTH}.\n"
             f"\n"
-            f"  Shape: <verb> <subject>'s <symptom> on/when <trigger> [via <mechanism>]\n"
+            f"If it does not fit in {TITLE_MAX_LENGTH} chars, the title is usually naming HOW instead\n"
+            f"of WHAT. Long-form (analysis, design, mechanism detail) belongs in the\n"
+            f"description (--description) and/or the plan (--text), not the title.\n"
+            f"\n"
+            f"Consider using this template:\n"
+            f"\n"
+            f"    Shape: <verb> <subject>'s <symptom> on/when <trigger> [via <mechanism>]\n"
             f"    Subject   = user-facing name (e.g. 'just land'), not internal symbol\n"
             f"    Symptom   = what the user observes breaking (e.g. 'recording failure'),\n"
             f"                not the implementation cause\n"
             f"    Trigger   = when the symptom shows up (e.g. 'on self-modifying branches')\n"
             f"    Mechanism = optional; the flag/verb that fixes it (e.g. 'via --no-record').\n"
             f"                Include only when it sharpens understanding.\n"
-            f"\n"
-            f"  If it doesn't fit in {TITLE_MAX_LENGTH} chars, the title is usually naming\n"
-            f"  HOW instead of WHAT. Long-form (analysis, design, mechanism detail) belongs\n"
-            f"  in the plan (--text), not the title."
         )
     first_word = title.split()[0].lower() if title.strip() else ""
     from endless import matchers
