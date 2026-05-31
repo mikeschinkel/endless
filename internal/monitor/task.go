@@ -29,7 +29,7 @@ func GetActiveTasks(projectID int64) ([]Task, error) {
 	}
 
 	rows, err := db.Query(
-		"SELECT id, phase, description, status "+
+		"SELECT id, phase, COALESCE(description, ''), status "+
 			"FROM live_tasks "+
 			"WHERE project_id = ? AND status IN ("+taskstatus.SQLList(taskstatus.Open)+") "+
 			"ORDER BY CASE status WHEN '"+taskstatus.Underway+"' THEN 0 ELSE 1 END, sort_order",

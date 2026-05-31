@@ -191,6 +191,48 @@ func TestGetActiveTasks_ReturnsInProgressNeedsPlanReady(t *testing.T) {
 	}
 }
 
+// TestGetActiveTasks_NullDescriptionNotDropped pins the COALESCE on
+// description: a row whose description is NULL must still be returned
+// (with Text == ""). Before the fix, Scan into a Go string failed and
+// the loop silently continued, so underway tasks with no description
+// vanished from SessionStart's task-context prompt.
+func TestGetActiveTasks_NullDescriptionNotDropped(t *testing.T) {
+	db := withTestDB(t)
+	seedProject(t, db, 1, "proj-test-1", "/tmp/proj-test-1")
+	if _, err := db.Exec(
+		"INSERT INTO tasks (id, project_id, title, description, status) VALUES (?, ?, ?, NULL, ?)",
+		401, 1, "no description", "underway",
+	); err != nil {
+		t.Fatalf("seed 401: %v", err)
+	}
+	if _, err := db.Exec(
+		"INSERT INTO tasks (id, project_id, title, description, status) VALUES (?, ?, ?, ?, ?)",
+		402, 1, "has description", "real desc", "ready",
+	); err != nil {
+		t.Fatalf("seed 402: %v", err)
+	}
+
+	got, err := GetActiveTasks(1)
+	if err != nil {
+		t.Fatalf("GetActiveTasks: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("got %d tasks, want 2 (NULL-description row must not be dropped): %#v", len(got), got)
+	}
+	var nullRow *Task
+	for i := range got {
+		if got[i].ID == 401 {
+			nullRow = &got[i]
+		}
+	}
+	if nullRow == nil {
+		t.Fatalf("task id 401 (NULL description) missing from results: %#v", got)
+	}
+	if nullRow.Text != "" {
+		t.Errorf("NULL description should COALESCE to \"\", got %q", nullRow.Text)
+	}
+}
+
 // TestGetActiveTasks_InProgressOrderedFirst pins the ORDER BY: rows
 // with status underway sort before the others (CASE 0 vs CASE 1),
 // then secondary ordering by sort_order. This is what FormatTasks
