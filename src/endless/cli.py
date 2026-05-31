@@ -21,13 +21,25 @@ SANDBOX_SAFE_SUBCOMMANDS = frozenset({
 
 
 class TaskIDType(click.ParamType):
-    """Click parameter type that accepts task IDs with optional E- prefix."""
+    """Click parameter type that accepts task IDs with optional E- prefix.
+
+    Also routes ED-NN inputs (decision IDs) to a redirect error so users
+    pointing a task verb at a decision get a clear, actionable message
+    instead of an opaque "not found".
+    """
     name = "task_id"
 
     def convert(self, value, param, ctx):
         if isinstance(value, int):
             return value
         s = str(value).strip()
+        if s.upper().startswith("ED-"):
+            self.fail(
+                f"{value!r} is a decision ID (ED-NN); this command operates on tasks. "
+                f"Use the corresponding 'decision' verb instead "
+                f"(e.g. 'endless decision accept {value}').",
+                param, ctx,
+            )
         if s.upper().startswith("E-"):
             s = s[2:]
         try:
@@ -37,6 +49,74 @@ class TaskIDType(click.ParamType):
 
 
 TASK_ID = TaskIDType()
+
+
+class DecisionIDType(click.ParamType):
+    """Click parameter type that accepts decision IDs with optional ED- prefix.
+
+    E-NN inputs (task IDs) are redirected with a clear error pointing at the
+    task verbs, so a user / agent that confuses the namespaces gets actionable
+    output rather than a silent "not found".
+    """
+    name = "decision_id"
+
+    def convert(self, value, param, ctx):
+        if isinstance(value, int):
+            return value
+        s = str(value).strip()
+        if s.upper().startswith("ED-"):
+            s = s[3:]
+        elif s.upper().startswith("E-"):
+            self.fail(
+                f"{value!r} is a task ID (E-NN); this command operates on decisions. "
+                f"Use the corresponding 'task' verb instead.",
+                param, ctx,
+            )
+        try:
+            return int(s)
+        except ValueError:
+            self.fail(
+                f"{value!r} is not a valid decision ID (expected integer or ED-NNN)",
+                param, ctx,
+            )
+
+
+DECISION_ID = DecisionIDType()
+
+
+class TaskOrDecisionIDType(click.ParamType):
+    """Click type that accepts either E-NN or ED-NN and returns (kind, id).
+
+    Used by kind-agnostic dispatchers (`task link --to <id>`, `decision link
+    --to <id>`) so the verb can route on the parsed kind without re-parsing.
+    """
+    name = "task_or_decision_id"
+
+    def convert(self, value, param, ctx):
+        if isinstance(value, tuple):
+            return value
+        s = str(value).strip()
+        upper = s.upper()
+        if upper.startswith("ED-"):
+            try:
+                return ("decision", int(s[3:]))
+            except ValueError:
+                self.fail(f"{value!r} is not a valid decision ID", param, ctx)
+        if upper.startswith("E-"):
+            try:
+                return ("task", int(s[2:]))
+            except ValueError:
+                self.fail(f"{value!r} is not a valid task ID", param, ctx)
+        try:
+            return ("task", int(s))
+        except ValueError:
+            self.fail(
+                f"{value!r} is not a valid ID (expected E-NN, ED-NN, or integer)",
+                param, ctx,
+            )
+
+
+TASK_OR_DECISION_ID = TaskOrDecisionIDType()
 
 TASK_STATUSES = ["needs_plan", "ready", "in_progress",
                  "verify", "confirmed", "assumed", "completed",
@@ -1086,7 +1166,7 @@ def task_search(query, project, show_all, status, phase, parent_id,
 @click.option("--after", type=TASK_ID, default=None,
               help="Insert after this task ID")
 @click.option("--type", "task_type", default=None,
-              type=click.Choice(["task", "plan", "bug", "research", "spike", "chore", "decision"]),
+              type=click.Choice(["task", "plan", "bug", "research", "spike", "chore"]),
               help="Task type (default: task)")
 @click.option("--status", default=None,
               type=click.Choice(TASK_STATUSES),
@@ -1107,11 +1187,9 @@ def task_search(query, project, show_all, status, phase, parent_id,
               help="Task ID(s) that this new task cleans up after (repeatable)")
 @click.option("--cleaned-up-by", "cleaned_up_by_ids", type=TASK_ID, multiple=True,
               help="Task ID(s) that clean up after this new task (repeatable)")
-@click.option("--decision", "decision_text", default=None,
-              help="Rationale text — creates a paired decision-type task linked via 'documents'")
 def task_add(title, description, text_file, phase, project, parent, after, task_type, status, tier, force,
              blocks_ids, blocked_by_ids, relates_to_ids, implements_ids,
-             cleans_up_ids, cleaned_up_by_ids, decision_text):
+             cleans_up_ids, cleaned_up_by_ids):
     """Add a task."""
     from endless.task_cmd import add_item, parse_tier, link_tasks
     tier_val = parse_tier(tier) if tier else None
@@ -1132,11 +1210,6 @@ def task_add(title, description, text_file, phase, project, parent, after, task_
         link_tasks(new_id, tid, "cleans_up")
     for tid in cleaned_up_by_ids:
         link_tasks(new_id, tid, "cleaned_up_by")
-    if decision_text:
-        decision_id = add_item(decision_text, project_name=project,
-                               task_type="decision", status="confirmed", force=True)
-        if decision_id is not None:
-            link_tasks(decision_id, new_id, "documents")
 
 
 @task_cmd.command("update")
@@ -1157,7 +1230,7 @@ def task_add(title, description, text_file, phase, project, parent, after, task_
 @click.option("--tier", default=None,
               help="Tier (0=n/a, 1-4 or auto/quick/deep/discuss, none=clear)")
 @click.option("--type", "task_type", default=None,
-              type=click.Choice(["task", "plan", "bug", "research", "spike", "chore", "decision"]),
+              type=click.Choice(["task", "plan", "bug", "research", "spike", "chore"]),
               help="Task type — closes the prior gap that forced direct SQL writes (E-1329)")
 @click.option("--analysis", "analysis_text", default=None,
               help="Analysis content (string, or @path/to/file to load from file). Closes the prior gap that forced direct SQL writes (E-1329)")
@@ -1165,12 +1238,10 @@ def task_add(title, description, text_file, phase, project, parent, after, task_
               help="Bypass title validation")
 @click.option("--outcome", default=None,
               help="Outcome / reason for status (required if status=declined)")
-@click.option("--decision", "decision_text", default=None,
-              help="Rationale text — creates a paired decision-type task linked via 'documents' to each updated task")
 def task_update(item_ids, status, title, description, text_file, parent, phase, tier,
-                task_type, analysis_text, force, outcome, decision_text):
+                task_type, analysis_text, force, outcome):
     """Update fields on one or more tasks."""
-    from endless.task_cmd import update_plan, add_item, link_tasks, parse_tier
+    from endless.task_cmd import update_plan, parse_tier
     tier_val = parse_tier(tier) if tier else None
     # Support `--analysis @path/to/file` for content too long for the shell.
     if analysis_text is not None and analysis_text.startswith("@"):
@@ -1186,11 +1257,6 @@ def task_update(item_ids, status, title, description, text_file, parent, phase, 
                     phase=phase, tier=tier_val, task_type=task_type,
                     analysis=analysis_text,
                     outcome=outcome, force=force)
-        if decision_text:
-            decision_id = add_item(decision_text,
-                                   task_type="decision", status="confirmed", force=True)
-            if decision_id is not None:
-                link_tasks(decision_id, item_id, "documents")
 
 
 @task_cmd.command("remove")
@@ -1390,28 +1456,40 @@ def task_chat():
 
 @task_cmd.command("link")
 @click.argument("source_id", type=TASK_ID)
-@click.option("--to", "target_id", type=TASK_ID, required=True,
-              help="Target task ID")
+@click.option("--to", "target", type=TASK_OR_DECISION_ID, required=True,
+              help="Target ID (E-NN for a task, ED-NN for a decision)")
 @click.option("--type", "dep_type", required=True,
-              help="Relation type: blocks, blocked_by, implements, implemented_by, "
+              help="Relation type — legal set depends on target kind "
+                   "(task→task: blocks, blocked_by, implements, implemented_by, "
                    "replaces, replaced_by, documents, documented_by, "
-                   "cleans_up, cleaned_up_by, relates_to")
-def task_link(source_id, target_id, dep_type):
-    """Create a typed relation between two tasks."""
-    from endless.task_cmd import link_tasks
-    link_tasks(source_id, target_id, dep_type)
+                   "cleans_up, cleaned_up_by, relates_to; "
+                   "task→decision: implements, cleans_up, documents, relates_to)")
+def task_link(source_id, target, dep_type):
+    """Create a typed relation from a task to a task or decision."""
+    target_kind, target_id = target
+    if target_kind == "decision":
+        from endless.decision_cmd import link_task_to_decision
+        link_task_to_decision(source_id, target_id, dep_type)
+    else:
+        from endless.task_cmd import link_tasks
+        link_tasks(source_id, target_id, dep_type)
 
 
 @task_cmd.command("unlink")
 @click.argument("source_id", type=TASK_ID)
-@click.option("--to", "target_id", type=TASK_ID, required=True,
-              help="Target task ID")
+@click.option("--to", "target", type=TASK_OR_DECISION_ID, required=True,
+              help="Target ID (E-NN for a task, ED-NN for a decision)")
 @click.option("--type", "dep_type", default=None,
               help="Relation type to remove (omit to auto-detect when unambiguous)")
-def task_unlink(source_id, target_id, dep_type):
-    """Remove a typed relation between two tasks."""
-    from endless.task_cmd import unlink_tasks
-    unlink_tasks(source_id, target_id, dep_type)
+def task_unlink(source_id, target, dep_type):
+    """Remove a typed relation from a task to a task or decision."""
+    target_kind, target_id = target
+    if target_kind == "decision":
+        from endless.decision_cmd import unlink_task_from_decision
+        unlink_task_from_decision(source_id, target_id, dep_type)
+    else:
+        from endless.task_cmd import unlink_tasks
+        unlink_tasks(source_id, target_id, dep_type)
 
 
 @task_cmd.command("block")
@@ -1507,7 +1585,7 @@ def decision_cmd():
               help="JSON output")
 def decision_list(project, show_all, sort, llm, as_json):
     """List decisions for a project."""
-    from endless.task_cmd import list_decisions
+    from endless.decision_cmd import list_decisions
     list_decisions(project_name=project, show_all=show_all,
                    sort_by=sort, llm=llm, as_json=as_json)
 
@@ -1523,62 +1601,75 @@ def decision_list(project, show_all, sort, llm, as_json):
 @click.option("--decides", "decides_ids", type=TASK_ID, multiple=True,
               help="Task ID(s) that implement this decision (repeatable; hard link)")
 def decision_add(title, description, project, about_ids, decides_ids):
-    """Record a decision."""
-    if title.lower().startswith("record that "):
-        raise click.ClickException(
-            "Decision titles should state the decision, not narrate recording it.\n"
-            f"  Try: {title[len('record that '):]}"
-        )
-    from endless.task_cmd import add_item, link_tasks
-    new_id = add_item(title, description=description, project_name=project,
-                      task_type="decision", status="confirmed", force=True)
-    if new_id is None:
-        return
-    for tid in about_ids:
-        link_tasks(new_id, tid, "documents")
-    for tid in decides_ids:
-        # task IMPLEMENTS decision: source=task, target=decision
-        link_tasks(tid, new_id, "implements")
+    """Record a decision (starts as `proposed`)."""
+    from endless.decision_cmd import add_decision
+    add_decision(
+        title,
+        description=description,
+        project_name=project,
+        about_task_ids=tuple(about_ids),
+        decides_task_ids=tuple(decides_ids),
+    )
 
 
 @decision_cmd.command("show")
-@click.argument("item_ids", type=TASK_ID, nargs=-1, required=True)
+@click.argument("item_ids", type=DECISION_ID, nargs=-1, required=True)
 @click.option("--llm", is_flag=True,
               help="Token-efficient output for LLMs")
 @click.option("--json", "as_json", is_flag=True,
               help="JSON output")
 def decision_show(item_ids, llm, as_json):
     """Show detail for one or more decisions."""
-    from endless.task_cmd import detail_item
+    from endless.decision_cmd import detail_decision
     for item_id in item_ids:
-        detail_item(item_id, llm=llm, as_json=as_json)
+        detail_decision(item_id, llm=llm, as_json=as_json)
+
+
+@decision_cmd.command("accept")
+@click.argument("item_ids", type=DECISION_ID, nargs=-1, required=True)
+def decision_accept(item_ids):
+    """Accept one or more decisions (proposed → accepted)."""
+    from endless.decision_cmd import accept_decision
+    for item_id in item_ids:
+        accept_decision(item_id)
+
+
+@decision_cmd.command("reject")
+@click.argument("item_ids", type=DECISION_ID, nargs=-1, required=True)
+@click.option("--reason", required=True,
+              help="Why this decision is being rejected (stored on the row)")
+def decision_reject(item_ids, reason):
+    """Reject one or more decisions (proposed → rejected) with a stored reason."""
+    from endless.decision_cmd import reject_decision
+    for item_id in item_ids:
+        reject_decision(item_id, reason)
 
 
 @decision_cmd.command("link")
-@click.argument("source_id", type=TASK_ID)
-@click.option("--to", "target_id", type=TASK_ID, required=True,
-              help="Target decision ID")
-@click.option("--type", "dep_type", required=True,
-              help="Relation type: reverses, reversed_by, modifies, modified_by, "
-                   "documents, documented_by, relates_to")
-def decision_link(source_id, target_id, dep_type):
-    """Create a typed relation between two decisions (E-1156)."""
-    from endless.task_cmd import link_tasks, require_decision_pair
-    require_decision_pair(source_id, target_id)
-    link_tasks(source_id, target_id, dep_type)
+@click.argument("source_id", type=DECISION_ID)
+@click.option("--to", "target", type=TASK_OR_DECISION_ID, required=True,
+              help="Target ID (E-NN for a task, ED-NN for a decision)")
+@click.option("--type", "relation_type", required=True,
+              help="Relation type — legal set depends on the pair "
+                   "(see 'Relation-type vocabulary by pair' in the plan)")
+def decision_link(source_id, target, relation_type):
+    """Link a decision to a task or another decision."""
+    from endless.decision_cmd import link_decision
+    target_kind, target_id = target
+    link_decision(source_id, target_kind, target_id, relation_type)
 
 
 @decision_cmd.command("unlink")
-@click.argument("source_id", type=TASK_ID)
-@click.option("--to", "target_id", type=TASK_ID, required=True,
-              help="Target decision ID")
-@click.option("--type", "dep_type", default=None,
+@click.argument("source_id", type=DECISION_ID)
+@click.option("--to", "target", type=TASK_OR_DECISION_ID, required=True,
+              help="Target ID (E-NN for a task, ED-NN for a decision)")
+@click.option("--type", "relation_type", default=None,
               help="Relation type to remove (omit to auto-detect when unambiguous)")
-def decision_unlink(source_id, target_id, dep_type):
-    """Remove a typed relation between two decisions."""
-    from endless.task_cmd import unlink_tasks, require_decision_pair
-    require_decision_pair(source_id, target_id)
-    unlink_tasks(source_id, target_id, dep_type)
+def decision_unlink(source_id, target, relation_type):
+    """Remove a decision-sourced relation."""
+    from endless.decision_cmd import unlink_decision
+    target_kind, target_id = target
+    unlink_decision(source_id, target_kind, target_id, relation_type)
 
 
 @main.group("channel")
@@ -1990,7 +2081,7 @@ def suggestions_show(suggestion_id):
 @suggestions_cmd.command("accept")
 @click.argument("suggestion_id", type=int)
 @click.option("--type", "task_type",
-              type=click.Choice(["task", "chore", "bug", "decision", "spike", "research"]),
+              type=click.Choice(["task", "chore", "bug", "spike", "research"]),
               default="chore",
               help="Type of task to create (default: chore)")
 @click.option("--parent", type=TASK_ID, default=None, help="Parent task ID")

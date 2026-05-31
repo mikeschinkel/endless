@@ -929,7 +929,7 @@ def show_plan(
     """Show tasks for a project as a tree, or flat sorted list."""
     project_id, proj_name = _resolve_project(project_name)
 
-    where = "WHERE pi.project_id = ? AND pi.type != 'decision'"
+    where = "WHERE pi.project_id = ?"
     params: list = [project_id]
     if status_filter:
         placeholders = ",".join("?" for _ in status_filter)
@@ -1091,8 +1091,7 @@ def next_tasks(
 ):
     """Show top actionable leaf tasks, ranked by priority."""
     where = (
-        "WHERE t.type != 'decision' "
-        "AND t.status NOT IN ('confirmed', 'assumed', 'completed', 'blocked', 'declined', 'obsolete', 'in_progress', 'verify') "
+        "WHERE t.status NOT IN ('confirmed', 'assumed', 'completed', 'blocked', 'declined', 'obsolete', 'in_progress', 'verify') "
         "AND (SELECT count(*) FROM tasks c WHERE c.parent_id = t.id) = 0 "
         "AND t.id NOT IN ("
         "  SELECT td.target_id FROM task_deps td"
@@ -1303,7 +1302,7 @@ def active_tasks(
     parent_id: int | None = None,
 ):
     """Show tasks that are in progress or awaiting verification."""
-    where = "WHERE t.type != 'decision' AND t.status IN ('in_progress', 'verify')"
+    where = "WHERE t.status IN ('in_progress', 'verify')"
     params: list = []
 
     if parent_id is not None:
@@ -1392,7 +1391,7 @@ def recent_tasks(
     parent_id: int | None = None,
 ):
     """Show most recently updated tasks."""
-    where = "WHERE t.type != 'decision'"
+    where = "WHERE 1=1"
     params: list = []
 
     if parent_id is not None:
@@ -1471,118 +1470,6 @@ def recent_tasks(
         click.echo()
 
 
-def list_decisions(
-    project_name: str | None = None,
-    show_all: bool = False,
-    sort_by: str | None = None,
-    llm: bool = False,
-    as_json: bool = False,
-):
-    """List decisions for a project (or all projects with --all)."""
-    where = "WHERE t.type = 'decision'"
-    params: list = []
-
-    if not show_all:
-        project_id, proj_name = _resolve_project(project_name)
-        where += " AND t.project_id = ?"
-        params.append(project_id)
-    elif project_name:
-        project_id, proj_name = _resolve_project(project_name)
-        where += " AND t.project_id = ?"
-        params.append(project_id)
-    else:
-        proj_name = "all projects"
-
-    sort_col_map = {
-        "id": "t.id DESC",
-        "created": "t.created_at DESC, t.id DESC",
-        "title": "t.title",
-    }
-    order_by = sort_col_map.get(sort_by or "id", "t.id DESC")
-
-    rows = db.query(
-        f"SELECT t.id, COALESCE(t.title, t.description) as title, t.description, "
-        f"t.created_at, p.name as project_name "
-        f"FROM tasks t JOIN projects p ON t.project_id = p.id "
-        f"{where} ORDER BY {order_by}",
-        tuple(params),
-    )
-
-    if not rows:
-        if as_json:
-            click.echo("[]")
-        elif llm:
-            click.echo(f"# {proj_name}\n(no decisions)")
-        else:
-            click.echo(
-                click.style("•", fg="cyan")
-                + f" No decisions for "
-                + click.style(proj_name, bold=True)
-            )
-        return
-
-    if as_json:
-        import json
-        out = [
-            {
-                "id": f"E-{row['id']}",
-                "title": row["title"],
-                "created": row["created_at"],
-            }
-            for row in rows
-        ]
-        click.echo(json.dumps(out, indent=2))
-        return
-
-    if llm:
-        click.echo(f"# {proj_name} decisions")
-        for row in rows:
-            prefix = f"[{row['project_name']}] " if show_all else ""
-            click.echo(f"E-{row['id']} {prefix}{row['title']}")
-    else:
-        try:
-            term_width = os.get_terminal_size().columns
-        except OSError:
-            term_width = 80
-
-        id_w = max(2, max(len(task_id_display(r["id"])) for r in rows))
-        date_w = max(7, max(len(_format_timestamp(r["created_at"])) for r in rows))
-        gap = "  "
-        fixed_width = id_w + date_w + len(gap) * 2
-        if show_all:
-            proj_w = max(7, max(len(r["project_name"]) for r in rows))
-            fixed_width += proj_w + len(gap)
-        title_width = max(20, term_width - fixed_width)
-
-        display_titles = []
-        for row in rows:
-            title = row["title"]
-            if len(title) > title_width:
-                title = title[:title_width - 1] + "…"
-            display_titles.append(title)
-
-        header = f"{'ID':<{id_w}}{gap}{'Created':<{date_w}}"
-        sep = f"{'─'*id_w}{gap}{'─'*date_w}"
-        if show_all:
-            header += f"{gap}{'Project':<{proj_w}}"
-            sep += f"{gap}{'─'*proj_w}"
-        max_title_len = max(len(t) for t in display_titles) if display_titles else 5
-        header += f"{gap}Title"
-        sep += f"{gap}{'─'*max_title_len}"
-        click.echo(header)
-        click.echo(sep)
-
-        for row, title in zip(rows, display_titles):
-            line = (
-                f"{task_id_display(row['id']):<{id_w}}{gap}"
-                f"{_format_timestamp(row['created_at']):<{date_w}}"
-            )
-            if show_all:
-                line += f"{gap}{row['project_name']:<{proj_w}}"
-            line += f"{gap}{title}"
-            click.echo(line)
-
-
 def add_item(
     title: str,
     description: str | None = None,
@@ -1600,8 +1487,7 @@ def add_item(
     from endless.event_bridge import emit_event
 
     task_type = task_type or "task"
-    if task_type != "decision":
-        validate_title(title, force=force)
+    validate_title(title, force=force)
     validate_description(description)
     _, proj_name = _resolve_project(project_name)
     status = status or ("ready" if tier == 1 else "needs_plan")
@@ -2684,7 +2570,7 @@ def update_plan(
         raise click.ClickException(
             f"No task found with id {item_id}"
         )
-    if title is not None and row[0]["type"] != "decision":
+    if title is not None:
         validate_title(title, force=force)
 
     if description is not None:
@@ -2752,7 +2638,7 @@ def update_plan(
 
     if task_type is not None:
         valid_types = ("task", "plan", "bug", "research",
-                       "spike", "chore", "decision")
+                       "spike", "chore")
         if task_type not in valid_types:
             raise click.ClickException(
                 f"Invalid task type {task_type!r}. "
@@ -3271,7 +3157,7 @@ def search_tasks(
     """Search tasks by query string across ID, title, and description."""
     project_id, proj_name = _resolve_project(project_name)
 
-    where = "WHERE t.project_id = ? AND t.type != 'decision'"
+    where = "WHERE t.project_id = ?"
     params: list = [project_id]
 
     if status_filter:
@@ -3508,33 +3394,6 @@ def start_chat():
 
 
 # ── Task relations (E-957) ─────────────────────────────────────────
-
-
-def require_decision_pair(source_id: int, target_id: int) -> None:
-    """Raise ClickException unless both IDs reference rows with type='decision'.
-
-    Used by 'endless decision link' / 'unlink' (E-1156) to enforce that the
-    decision-specific commands only operate on decisions; 'endless task link'
-    remains permissive and accepts any task or decision ID.
-    """
-    rows = db.query(
-        "SELECT id, type FROM tasks WHERE id IN (?, ?)",
-        (source_id, target_id),
-    )
-    by_id = {r["id"]: r["type"] for r in rows}
-    bad: list[str] = []
-    for tid in (source_id, target_id):
-        ttype = by_id.get(tid)
-        if ttype is None:
-            bad.append(f"{task_id_display(tid)} (not found)")
-        elif ttype != "decision":
-            bad.append(f"{task_id_display(tid)} (type='{ttype}')")
-    if bad:
-        raise click.ClickException(
-            "endless decision link/unlink requires both arguments to be "
-            "decisions. Offending: " + ", ".join(bad) + ". Use 'endless "
-            "task link' if either side is a task."
-        )
 
 
 def link_tasks(source_id: int, target_id: int, dep_type: str):

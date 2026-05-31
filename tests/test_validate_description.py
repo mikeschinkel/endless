@@ -29,8 +29,7 @@ def fake_add_item(monkeypatch, isolated_env):
               after=None, parent_id=None, task_type=None, status=None,
               tier=None, force=False, **kwargs):
         task_type = task_type or "task"
-        if task_type != "decision":
-            task_cmd.validate_title(title, force=force)
+        task_cmd.validate_title(title, force=force)
         real_validate(description)
         status = status or ("ready" if tier == 1 else "needs_plan")
         cur = db.execute(

@@ -95,9 +95,11 @@ func TestGetDashboardProjects_FiltersByStatus(t *testing.T) {
 }
 
 // TestGetDashboardProjects_TaskCounts pins the four COALESCE/scalar
-// subselects: TaskTotal, TaskCompleted, TaskInProgress, ActiveTasks all
-// exclude type='decision', and each filter slices the same project's
-// tasks differently.
+// subselects: TaskTotal, TaskCompleted, TaskInProgress, ActiveTasks each
+// slice the same project's tasks differently. After E-1507 the queries
+// no longer filter out type='decision' — decisions live in their own
+// table, so the prior filter is unnecessary; this test verifies decisions
+// in the dedicated table don't leak into the task counts.
 func TestGetDashboardProjects_TaskCounts(t *testing.T) {
 	db := withMonitorDB(t)
 	seedProject(t, db, 1, "p", "/tmp/p", "active")
@@ -105,10 +107,11 @@ func TestGetDashboardProjects_TaskCounts(t *testing.T) {
 	seedTask(t, db, 11, 1, "done", "completed")
 	seedTask(t, db, 12, 1, "ready", "ready")
 	seedTask(t, db, 13, 1, "plan", "needs_plan")
-	// A decision item must not be counted in any of the four counts.
+	// A row in the decisions table (E-1378) is in a different table and
+	// must not contribute to any of the four task counts.
 	if _, err := db.Exec(
-		"INSERT INTO tasks (id, project_id, title, description, status, type) VALUES (?, ?, ?, ?, ?, ?)",
-		14, 1, "decision", "decision desc", "ready", "decision",
+		"INSERT INTO decisions (id, project_id, title, status) VALUES (?, ?, ?, ?)",
+		1, 1, "decision-x", "accepted",
 	); err != nil {
 		t.Fatalf("seed decision: %v", err)
 	}
@@ -119,7 +122,7 @@ func TestGetDashboardProjects_TaskCounts(t *testing.T) {
 	}
 	p := got[0]
 	if p.TaskTotal != 4 {
-		t.Errorf("TaskTotal = %d, want 4 (decision excluded)", p.TaskTotal)
+		t.Errorf("TaskTotal = %d, want 4 (decisions live in a separate table)", p.TaskTotal)
 	}
 	if p.TaskCompleted != 1 {
 		t.Errorf("TaskCompleted = %d, want 1", p.TaskCompleted)
@@ -321,24 +324,27 @@ func TestGetProjectDetail_MissingReturnsError(t *testing.T) {
 // GetProjectTasks
 // ---------------------------------------------------------------------
 
-// TestGetProjectTasks_FiltersByProjectAndType pins the WHERE clause:
-// only rows with project_id=? and type!='decision' appear.
-func TestGetProjectTasks_FiltersByProjectAndType(t *testing.T) {
+// TestGetProjectTasks_FiltersByProject pins the WHERE clause: only rows
+// with project_id=? appear. After E-1507 the queries no longer filter
+// type='decision' (decisions live in their own table — E-1378), so this
+// test also verifies that a row in the decisions table doesn't leak
+// into the task list.
+func TestGetProjectTasks_FiltersByProject(t *testing.T) {
 	db := withMonitorDB(t)
 	seedProject(t, db, 1, "p1", "/tmp/p1", "active")
 	seedProject(t, db, 2, "p2", "/tmp/p2", "active")
 	seedTask(t, db, 10, 1, "p1-task", "ready")
 	seedTask(t, db, 11, 2, "p2-task", "ready")
 	if _, err := db.Exec(
-		"INSERT INTO tasks (id, project_id, title, description, status, type) VALUES (?, ?, ?, ?, ?, ?)",
-		12, 1, "p1-decision", "p1-decision desc", "ready", "decision",
+		"INSERT INTO decisions (id, project_id, title, status) VALUES (?, ?, ?, ?)",
+		1, 1, "p1-decision", "accepted",
 	); err != nil {
 		t.Fatalf("seed decision: %v", err)
 	}
 
 	got := web.GetProjectTasks(1)
 	if len(got) != 1 {
-		t.Fatalf("len = %d, want 1 (only p1's non-decision task)", len(got))
+		t.Fatalf("len = %d, want 1 (only p1's task; decisions live elsewhere)", len(got))
 	}
 	if got[0].ID != 10 {
 		t.Errorf("ID = %d, want 10", got[0].ID)

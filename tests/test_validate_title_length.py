@@ -66,8 +66,7 @@ def fake_add_item(monkeypatch, isolated_env):
               after=None, parent_id=None, task_type=None, status=None,
               tier=None, force=False, **kwargs):
         task_type = task_type or "task"
-        if task_type != "decision":
-            task_cmd.validate_title(title, force=force)
+        task_cmd.validate_title(title, force=force)
         task_cmd.validate_description(description)
         status = status or ("ready" if tier == 1 else "needs_plan")
         cur = db.execute(
@@ -131,8 +130,20 @@ def test_task_update_rejects_oversized_title(isolated_env, monkeypatch):
     assert str(task_cmd.TITLE_MAX_LENGTH) in result.output
 
 
-def test_decision_add_skips_title_length_check(fake_add_item):
+def test_decision_add_skips_title_length_check(fake_add_item, monkeypatch):
     """Decisions bypass validate_title entirely (E-1517 scope: tasks only)."""
+    from endless import decision_cmd
+
+    # Stub add_decision: real one shells out to endless-go event emit, which
+    # the test environment doesn't provide. validate_description still fires
+    # in this stub because it's where add_decision's user-facing validation
+    # lives in the new module.
+    def _stub(title, description=None, project_name=None,
+              about_task_ids=(), decides_task_ids=()):
+        decision_cmd.validate_description(description)
+        return 1
+
+    monkeypatch.setattr(decision_cmd, "add_decision", _stub)
     runner = CliRunner()
     long_title = "Use " + "x" * (task_cmd.TITLE_MAX_LENGTH - len("Use ") + 1)
     result = runner.invoke(main, ["decision", "add", long_title])
