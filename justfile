@@ -324,7 +324,7 @@ dev-sandbox-init:
     else
         sandbox_bin=endless-go
     fi
-    "$sandbox_bin" sandbox init --mode empty "$name"
+    "$sandbox_bin" sandbox init --mode worktree "$name"
     "$sandbox_bin" sandbox bind "$(pwd)" "$name"
 
 # Run Python tests

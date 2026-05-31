@@ -3,6 +3,7 @@
 import json
 import os
 import re
+import subprocess
 from pathlib import Path
 
 
@@ -280,6 +281,39 @@ def go_db_context_args() -> list[str]:
     if RESOLVED_CONFIG_DIR is None:
         return []
     return ["--config-dir", str(RESOLVED_CONFIG_DIR)]
+
+
+def resolution_cwd() -> Path:
+    """Effective cwd for project resolution.
+
+    When --db main is in effect AND cwd is inside a git worktree (not the
+    main checkout), walk to the main checkout via the git-dir vs
+    git-common-dir discriminator and return that. Otherwise return Path.cwd().
+
+    Lets cwd-keyed project lookups (`<cwd>/.endless/config.json`, then
+    `SELECT ... FROM projects WHERE path = ?`) find the canonical project
+    row in the main DB when run from inside a per-task worktree — without
+    forcing the caller to pass --project explicitly.
+    """
+    cwd = Path.cwd()
+    if RESOLVED_CONFIG_DIR != main_config_dir():
+        return cwd
+    try:
+        git_dir = subprocess.run(
+            ["git", "rev-parse", "--git-dir"],
+            cwd=str(cwd), capture_output=True, text=True, check=True,
+        ).stdout.strip()
+        common_dir = subprocess.run(
+            ["git", "rev-parse", "--git-common-dir"],
+            cwd=str(cwd), capture_output=True, text=True, check=True,
+        ).stdout.strip()
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return cwd
+    git_dir_abs = (cwd / git_dir).resolve()
+    common_dir_abs = (cwd / common_dir).resolve()
+    if git_dir_abs == common_dir_abs:
+        return cwd
+    return common_dir_abs.parent
 
 
 def resolved_worktree_endless_go(cwd: Path | None = None) -> Path | None:

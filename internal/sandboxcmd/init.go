@@ -9,7 +9,7 @@ import (
 
 func initCmd(args []string) {
 	fs := flag.NewFlagSet("init", flag.ExitOnError)
-	mode := fs.String("mode", "empty", "Initial state: empty | seed | clone")
+	mode := fs.String("mode", "empty", "Initial state: empty | worktree | seed | clone")
 	force := fs.Bool("force", false, "Recreate the sandbox if it already exists")
 	if err := fs.Parse(args); err != nil {
 		os.Exit(2)
@@ -27,15 +27,19 @@ func initCmd(args []string) {
 
 	switch *mode {
 	case "empty":
-		// supported
+		// supported — bare sandbox directory, no DB seeding.
+	case "worktree":
+		// supported — seeds projects/sessions from the current worktree's
+		// main checkout so first-invocation CLI calls have a real project
+		// row to resolve and a real session row to attribute to.
 	case "seed":
-		fmt.Fprintln(os.Stderr, "endless-sandbox init: --mode seed not yet implemented; use --mode empty")
+		fmt.Fprintln(os.Stderr, "endless-sandbox init: --mode seed not yet implemented; use --mode empty or --mode worktree")
 		os.Exit(1)
 	case "clone":
-		fmt.Fprintln(os.Stderr, "endless-sandbox init: --mode clone not yet implemented (see E-1087); use --mode empty")
+		fmt.Fprintln(os.Stderr, "endless-sandbox init: --mode clone not yet implemented (see E-1087); use --mode empty or --mode worktree")
 		os.Exit(1)
 	default:
-		fmt.Fprintf(os.Stderr, "endless-sandbox init: unknown --mode %q (want: empty | seed | clone)\n", *mode)
+		fmt.Fprintf(os.Stderr, "endless-sandbox init: unknown --mode %q (want: empty | worktree | seed | clone)\n", *mode)
 		os.Exit(1)
 	}
 
@@ -66,5 +70,13 @@ func initCmd(args []string) {
 		sb.root.Close()
 		sb.root = nil
 	}
+
+	if *mode == "worktree" {
+		if err := seedFromWorktree(sb.Dir); err != nil {
+			fmt.Fprintf(os.Stderr, "endless-sandbox init: seeding from worktree: %v\n", err)
+			os.Exit(1)
+		}
+	}
+
 	fmt.Println(sb.Dir)
 }

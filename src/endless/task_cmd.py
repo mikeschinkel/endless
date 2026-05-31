@@ -478,7 +478,10 @@ def _mirror_plan_to_worktree(task_id: int, content: str) -> Path | None:
 def _resolve_project(name: str | None) -> tuple[int, str]:
     """Resolve project name, return (id, name)."""
     if not name:
-        cwd = Path.cwd()
+        # Under --db main inside a worktree, walk to the main checkout
+        # so cwd-keyed lookups find the canonical project row instead of
+        # the worktree's path. See config.resolution_cwd.
+        cwd = config.resolution_cwd()
         pcfg = config.project_config_read(cwd)
         if pcfg:
             name = pcfg.get("name")

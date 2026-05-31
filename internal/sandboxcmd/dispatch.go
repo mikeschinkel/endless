@@ -41,7 +41,7 @@ func usage(w *os.File) {
 	fmt.Fprintln(w, "Commands:")
 	fmt.Fprintln(w, "  run     [--clone] [--name N] [--keep] -- <cmd> [args]")
 	fmt.Fprintln(w, "  enter   [--clone] <name>")
-	fmt.Fprintln(w, "  init    [--mode empty|seed|clone] [--force] <name>")
+	fmt.Fprintln(w, "  init    [--mode empty|worktree|seed|clone] [--force] <name>")
 	fmt.Fprintln(w, "  bind    <worktree-path> [<sandbox-name>]")
 	fmt.Fprintln(w, "  list")
 	fmt.Fprintln(w, "  prune   [--older-than DURATION]")

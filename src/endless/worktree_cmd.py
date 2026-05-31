@@ -1199,11 +1199,15 @@ def _maybe_auto_sandbox_bind(project_root: Path, worktree_path: Path, task_id: i
         return
     name = f"worktree-e-{task_id}"
     for cmd in (
-        [binary, "sandbox", "init", "--mode", "empty", name],
+        [binary, "sandbox", "init", "--mode", "worktree", name],
         [binary, "sandbox", "bind", str(worktree_path), name],
     ):
         try:
-            result = subprocess.run(cmd, capture_output=True, text=True)
+            # cwd is the worktree so `init --mode worktree` can resolve the
+            # main checkout via git-common-dir from there.
+            result = subprocess.run(
+                cmd, capture_output=True, text=True, cwd=str(worktree_path),
+            )
         except OSError as e:
             click.echo(f"  warning: {' '.join(cmd)}: {e}", err=True)
             return
