@@ -215,17 +215,20 @@ func TestSupervisorSignalForwarding(t *testing.T) {
 	}
 }
 
-// waitFor polls cond every 20ms up to 2s, fatal if it never becomes true.
+// waitFor polls cond every 20ms up to 10s, fatal if it never becomes
+// true. The 10s ceiling absorbs scheduler latency when `just test-go`
+// fans packages out in parallel (E-1506); the success path early-returns
+// in milliseconds so the bumped ceiling does not slow normal runs.
 func waitFor(t *testing.T, cond func() bool) {
 	t.Helper()
-	deadline := time.Now().Add(2 * time.Second)
+	deadline := time.Now().Add(10 * time.Second)
 	for time.Now().Before(deadline) {
 		if cond() {
 			return
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
-	t.Fatal("condition not met within 2s")
+	t.Fatal("condition not met within 10s")
 }
 
 func mustAtoi(t *testing.T, s string) int {

@@ -16,7 +16,7 @@ import (
 )
 
 var (
-	dbOnce sync.Once
+	dbOnce = &sync.Once{}
 	dbConn *sql.DB
 	dbErr  error
 

@@ -248,15 +248,21 @@ func GetProjectTaskGroups(projectID int64) []data.TaskGroup {
 		return nil
 	}
 
-	// Get active tasks grouped by plan, ordered so in_progress comes first
+	// Get active tasks grouped by their parent task ("plan"), ordered so
+	// in_progress comes first. The original schema had a self-FK column
+	// `plans.plan_id` referencing a parent plan; the plans→tasks rename
+	// (commit 1b51c61) left the SQL referencing a stale `task_id` column
+	// that does not exist in the tasks table. The correct self-FK is
+	// `parent_id`. Tasks with parent_id IS NULL group together as the
+	// catch-all "Ungrouped" entry.
 	rows, err := db.Query(
-		`SELECT pi.task_id,
-		 COALESCE((SELECT COALESCE(p2.title, p2.description) FROM tasks p2 WHERE p2.id = pi.task_id), 'Ungrouped') as group_name,
+		`SELECT COALESCE(pi.parent_id, 0) as group_id,
+		 COALESCE((SELECT COALESCE(p2.title, p2.description) FROM tasks p2 WHERE p2.id = pi.parent_id), 'Ungrouped') as group_name,
 		 pi.id, COALESCE(pi.title, substr(pi.description, 1, 80)) as title,
 		 pi.description, pi.phase, pi.status
 		 FROM tasks pi
 		 WHERE pi.project_id = ? AND pi.status IN ('in_progress', 'needs_plan', 'ready')
-		 ORDER BY pi.task_id,
+		 ORDER BY COALESCE(pi.parent_id, 0),
 		   CASE pi.status WHEN 'in_progress' THEN 0 ELSE 1 END,
 		   pi.sort_order`, projectID)
 	if err != nil {
@@ -287,11 +293,11 @@ func GetProjectTaskGroups(projectID int64) []data.TaskGroup {
 	for _, pid := range planOrder {
 		p := planMap[pid]
 		db.QueryRow(
-			"SELECT count(*) FROM tasks WHERE project_id=? AND task_id=?",
+			"SELECT count(*) FROM tasks WHERE project_id=? AND parent_id=?",
 			projectID, pid,
 		).Scan(&p.Total)
 		db.QueryRow(
-			"SELECT count(*) FROM tasks WHERE project_id=? AND task_id=? AND status='completed'",
+			"SELECT count(*) FROM tasks WHERE project_id=? AND parent_id=? AND status='completed'",
 			projectID, pid,
 		).Scan(&p.Done)
 	}

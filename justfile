@@ -364,9 +364,10 @@ css: _link-templui
 go:
     go build -o bin/endless-go ./cmd/endless-go
 
-# Run Go tests
+# Run Go tests across every internal/ package (E-1506: was a hand-maintained
+# list of five; the wildcard auto-includes new packages as they grow tests).
 test-go:
-    go test ./internal/kairos/... ./internal/events/... ./internal/sandboxcmd/... ./internal/monitor/... ./internal/sessionquerycmd/... -v
+    go test ./internal/... -v
 
 # Kill any running endless-go serve process
 kill:

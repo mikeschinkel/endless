@@ -7,18 +7,16 @@ import (
 
 // freshSessionsDB returns a DB with schema.sql applied, seeded with project
 // rows for ids 1 and 2 so sessions inserts referencing them satisfy the FK.
+// This helper is for tests that work with the DB directly (e.g. the
+// ListLiveSessions SQL-shape test below); tests of the singleton-using
+// public wrappers (TouchSession, etc.) use withTestDB + seedProject.
 func freshSessionsDB(t *testing.T) *sql.DB {
 	t.Helper()
 	db := freshDB(t)
 	applySchema(t, db)
 	for id := int64(1); id <= 2; id++ {
 		suffix := string(rune('0' + id))
-		if _, err := db.Exec(
-			"INSERT INTO projects (id, name, path) VALUES (?, ?, ?)",
-			id, "proj-test-"+suffix, "/tmp/proj-test-"+suffix,
-		); err != nil {
-			t.Fatalf("seed project %d: %v", id, err)
-		}
+		seedProject(t, db, id, "proj-test-"+suffix, "/tmp/proj-test-"+suffix)
 	}
 	return db
 }
@@ -37,10 +35,14 @@ func sessionRow(t *testing.T, db *sql.DB, sessionID string) (state, process, pla
 
 // TestTouchSession_InsertCreatesNeedsInput is the SessionStart-happy-path
 // shape: no prior row, first touch creates one with state='needs_input'
-// and the supplied process.
+// and the supplied process. Exercises the public TouchSession wrapper
+// (and thus monitor.DB()) via the withTestDB seam — previously this test
+// targeted the unexported touchSessionDB carve-out (E-1506).
 func TestTouchSession_InsertCreatesNeedsInput(t *testing.T) {
-	db := freshSessionsDB(t)
-	if err := touchSessionDB(db, "sess-A", "claude", "%5", 1); err != nil {
+	db := withTestDB(t)
+	seedProject(t, db, 1, "proj-test-1", "/tmp/proj-test-1")
+
+	if err := TouchSession("sess-A", "claude", "%5", 1); err != nil {
 		t.Fatalf("touch: %v", err)
 	}
 	state, process, platform := sessionRow(t, db, "sess-A")
@@ -61,9 +63,11 @@ func TestTouchSession_InsertCreatesNeedsInput(t *testing.T) {
 // silently lost the second value because the first attempt left the
 // column NULL and the next event also passed empty.
 func TestTouchSession_E1408_EmptyProcessDoesNotStomp(t *testing.T) {
-	db := freshSessionsDB(t)
+	db := withTestDB(t)
+	seedProject(t, db, 1, "proj-test-1", "/tmp/proj-test-1")
+
 	// Empty TMUX_PANE at SessionStart (the E-1408 scenario).
-	if err := touchSessionDB(db, "sess-A", "claude", "", 1); err != nil {
+	if err := TouchSession("sess-A", "claude", "", 1); err != nil {
 		t.Fatalf("touch 1: %v", err)
 	}
 	_, process, _ := sessionRow(t, db, "sess-A")
@@ -71,7 +75,7 @@ func TestTouchSession_E1408_EmptyProcessDoesNotStomp(t *testing.T) {
 		t.Errorf("after empty touch, process = %q, want empty", process)
 	}
 	// Next event has the real pane id; row must repair.
-	if err := touchSessionDB(db, "sess-A", "claude", "%7", 1); err != nil {
+	if err := TouchSession("sess-A", "claude", "%7", 1); err != nil {
 		t.Fatalf("touch 2: %v", err)
 	}
 	_, process, _ = sessionRow(t, db, "sess-A")
@@ -79,7 +83,7 @@ func TestTouchSession_E1408_EmptyProcessDoesNotStomp(t *testing.T) {
 		t.Errorf("after second touch, process = %q, want %%7", process)
 	}
 	// A subsequent empty touch must not erase the known value.
-	if err := touchSessionDB(db, "sess-A", "claude", "", 1); err != nil {
+	if err := TouchSession("sess-A", "claude", "", 1); err != nil {
 		t.Fatalf("touch 3: %v", err)
 	}
 	_, process, _ = sessionRow(t, db, "sess-A")
@@ -93,8 +97,10 @@ func TestTouchSession_E1408_EmptyProcessDoesNotStomp(t *testing.T) {
 // IdleSession → 'idle') stay authoritative and TouchSession can safely
 // fire on every hook event including PreToolUse mid-turn.
 func TestTouchSession_StatePreservedAcrossUpdate(t *testing.T) {
-	db := freshSessionsDB(t)
-	if err := touchSessionDB(db, "sess-A", "claude", "%5", 1); err != nil {
+	db := withTestDB(t)
+	seedProject(t, db, 1, "proj-test-1", "/tmp/proj-test-1")
+
+	if err := TouchSession("sess-A", "claude", "%5", 1); err != nil {
 		t.Fatalf("touch 1: %v", err)
 	}
 	if _, err := db.Exec(
@@ -103,7 +109,7 @@ func TestTouchSession_StatePreservedAcrossUpdate(t *testing.T) {
 	); err != nil {
 		t.Fatalf("force working: %v", err)
 	}
-	if err := touchSessionDB(db, "sess-A", "claude", "%5", 1); err != nil {
+	if err := TouchSession("sess-A", "claude", "%5", 1); err != nil {
 		t.Fatalf("touch 2: %v", err)
 	}
 	state, _, _ := sessionRow(t, db, "sess-A")
@@ -116,11 +122,13 @@ func TestTouchSession_StatePreservedAcrossUpdate(t *testing.T) {
 // on a different pane (e.g. Claude --resume in a new window) updates
 // process to the new value.
 func TestTouchSession_PaneReattachOverwritesProcess(t *testing.T) {
-	db := freshSessionsDB(t)
-	if err := touchSessionDB(db, "sess-A", "claude", "%5", 1); err != nil {
+	db := withTestDB(t)
+	seedProject(t, db, 1, "proj-test-1", "/tmp/proj-test-1")
+
+	if err := TouchSession("sess-A", "claude", "%5", 1); err != nil {
 		t.Fatalf("touch 1: %v", err)
 	}
-	if err := touchSessionDB(db, "sess-A", "claude", "%12", 1); err != nil {
+	if err := TouchSession("sess-A", "claude", "%12", 1); err != nil {
 		t.Fatalf("touch 2: %v", err)
 	}
 	_, process, _ := sessionRow(t, db, "sess-A")
@@ -134,8 +142,10 @@ func TestTouchSession_PaneReattachOverwritesProcess(t *testing.T) {
 // prior occupant 'ended' in the same transaction. A pane can only host
 // one harness at a time, so the prior must be dead.
 func TestTouchSession_CollisionInvalidationMarksPriorEnded(t *testing.T) {
-	db := freshSessionsDB(t)
-	if err := touchSessionDB(db, "sess-A", "claude", "%5", 1); err != nil {
+	db := withTestDB(t)
+	seedProject(t, db, 1, "proj-test-1", "/tmp/proj-test-1")
+
+	if err := TouchSession("sess-A", "claude", "%5", 1); err != nil {
 		t.Fatalf("touch A: %v", err)
 	}
 	// Force A into a non-default live state to verify the invalidation.
@@ -147,7 +157,7 @@ func TestTouchSession_CollisionInvalidationMarksPriorEnded(t *testing.T) {
 	}
 
 	// New session B takes over pane %5.
-	if err := touchSessionDB(db, "sess-B", "claude", "%5", 1); err != nil {
+	if err := TouchSession("sess-B", "claude", "%5", 1); err != nil {
 		t.Fatalf("touch B: %v", err)
 	}
 
@@ -174,16 +184,39 @@ func TestTouchSession_CollisionInvalidationMarksPriorEnded(t *testing.T) {
 // process (TMUX_PANE unset) must NOT trigger collision invalidation —
 // otherwise a non-tmux event would mark every tmux row ended.
 func TestTouchSession_EmptyProcessDoesNotInvalidate(t *testing.T) {
-	db := freshSessionsDB(t)
-	if err := touchSessionDB(db, "sess-A", "claude", "%5", 1); err != nil {
+	db := withTestDB(t)
+	seedProject(t, db, 1, "proj-test-1", "/tmp/proj-test-1")
+
+	if err := TouchSession("sess-A", "claude", "%5", 1); err != nil {
 		t.Fatalf("touch A: %v", err)
 	}
-	if err := touchSessionDB(db, "sess-B", "claude", "", 1); err != nil {
+	if err := TouchSession("sess-B", "claude", "", 1); err != nil {
 		t.Fatalf("touch B: %v", err)
 	}
 	stateA, _, _ := sessionRow(t, db, "sess-A")
 	if stateA == "ended" {
 		t.Errorf("empty-process touch invalidated unrelated session: A.state=%q", stateA)
+	}
+}
+
+// TestTouchSession_RejectsEmptySessionID confirms the input-validation
+// branch of the public wrapper. The unexported helper (now inlined) had
+// no such check; covering it here is the reason the seam matters.
+func TestTouchSession_RejectsEmptySessionID(t *testing.T) {
+	withTestDB(t)
+	err := TouchSession("", "claude", "%5", 1)
+	if err == nil {
+		t.Fatal("TouchSession(\"\", ...) returned nil, want error")
+	}
+}
+
+// TestTouchSession_RejectsEmptyPlatform mirrors the session-id check for
+// the platform argument.
+func TestTouchSession_RejectsEmptyPlatform(t *testing.T) {
+	withTestDB(t)
+	err := TouchSession("sess-A", "", "%5", 1)
+	if err == nil {
+		t.Fatal("TouchSession(..., \"\", ...) returned nil, want error")
 	}
 }
 
@@ -212,10 +245,10 @@ func TestListLiveSessions_FiltersEndedAndScopesToProject(t *testing.T) {
 		}
 	}
 
-	// listLiveSessionsDB wraps ListLiveSessions's body for testability;
-	// the real ListLiveSessions uses DB() but the SQL is identical, so we
-	// run the query directly and compare. Keeps the test free of the
-	// dbOnce singleton.
+	// The real ListLiveSessions uses DB() — running the same SQL directly
+	// against the local db confirms the filter shape without competing
+	// with the singleton seam. ListLiveSessions itself is covered by the
+	// sessionquerycmd binary-integration tests in Phase 2.
 	out, err := db.Query(
 		`SELECT session_id FROM sessions
 		 WHERE state != 'ended' AND project_id = ?

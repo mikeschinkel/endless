@@ -370,3 +370,86 @@ func TestTaskIDFromWorktreePath_IgnoresCompanionField(t *testing.T) {
 		t.Errorf("path-derived ID should be E-100, got %q", got)
 	}
 }
+
+// TestFindLockBySessionID_FindsMatchingLock pins the happy path: a
+// worktree whose lock file carries the requested session_id resolves to
+// that worktree's path. Uses real lock files under a temp project root
+// because the function is filesystem-driven.
+func TestFindLockBySessionID_FindsMatchingLock(t *testing.T) {
+	db := withTestDB(t)
+	projectRoot := t.TempDir()
+	seedProject(t, db, 1, "acme", projectRoot)
+
+	wantWT := filepath.Join(projectRoot, ".endless", "worktrees", "e-808")
+	if err := os.MkdirAll(filepath.Join(wantWT, ".endless"), 0755); err != nil {
+		t.Fatalf("mkdir wt: %v", err)
+	}
+	if err := ClaimWorktreeLock(wantWT, WorktreeLock{
+		SessionID: "sess-target", PID: 1234,
+	}); err != nil {
+		t.Fatalf("claim: %v", err)
+	}
+
+	got, err := FindLockBySessionID(1, "sess-target")
+	if err != nil {
+		t.Fatalf("FindLockBySessionID: %v", err)
+	}
+	if got != wantWT {
+		t.Errorf("got %q, want %q", got, wantWT)
+	}
+}
+
+// TestFindLockBySessionID_NoMatchReturnsEmpty pins the negative branch: a
+// worktrees directory with locks but no matching session_id returns "",
+// nil — not an error, so SessionEnd can early-out cleanly.
+func TestFindLockBySessionID_NoMatchReturnsEmpty(t *testing.T) {
+	db := withTestDB(t)
+	projectRoot := t.TempDir()
+	seedProject(t, db, 1, "acme", projectRoot)
+
+	wt := filepath.Join(projectRoot, ".endless", "worktrees", "e-808")
+	if err := os.MkdirAll(filepath.Join(wt, ".endless"), 0755); err != nil {
+		t.Fatalf("mkdir wt: %v", err)
+	}
+	if err := ClaimWorktreeLock(wt, WorktreeLock{SessionID: "other", PID: 1}); err != nil {
+		t.Fatalf("claim: %v", err)
+	}
+
+	got, err := FindLockBySessionID(1, "sess-missing")
+	if err != nil {
+		t.Fatalf("FindLockBySessionID: %v", err)
+	}
+	if got != "" {
+		t.Errorf("no match: got %q, want \"\"", got)
+	}
+}
+
+// TestFindLockBySessionID_MissingWorktreesDirReturnsEmpty pins the
+// "project has no managed worktrees yet" branch: an absent
+// .endless/worktrees directory is normal, not an error.
+func TestFindLockBySessionID_MissingWorktreesDirReturnsEmpty(t *testing.T) {
+	db := withTestDB(t)
+	projectRoot := t.TempDir()
+	seedProject(t, db, 1, "acme", projectRoot)
+
+	got, err := FindLockBySessionID(1, "sess-anything")
+	if err != nil {
+		t.Fatalf("FindLockBySessionID: %v", err)
+	}
+	if got != "" {
+		t.Errorf("missing worktrees dir: got %q, want \"\"", got)
+	}
+}
+
+// TestFindLockBySessionID_EmptySessionIDReturnsEmpty pins the input guard:
+// an empty session_id returns "" without doing any filesystem work.
+func TestFindLockBySessionID_EmptySessionIDReturnsEmpty(t *testing.T) {
+	withTestDB(t)
+	got, err := FindLockBySessionID(1, "")
+	if err != nil {
+		t.Fatalf("FindLockBySessionID: %v", err)
+	}
+	if got != "" {
+		t.Errorf("empty session id: got %q, want \"\"", got)
+	}
+}

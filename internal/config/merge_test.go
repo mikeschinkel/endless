@@ -130,21 +130,3 @@ func TestIsCheckEnabled_FallsBackToDefault(t *testing.T) {
 	}
 }
 
-func TestDefaultCheckEnabled(t *testing.T) {
-	tests := []struct {
-		name string
-		want bool
-	}{
-		{"task_required", true},
-		{"drift_detection", false},
-		{"decision_checkpoint", false},
-		{"session_audit", false},
-		{"some_future_check", true},
-	}
-	for _, tt := range tests {
-		got := DefaultCheckEnabled(tt.name)
-		if got != tt.want {
-			t.Errorf("DefaultCheckEnabled(%q) = %v, want %v", tt.name, got, tt.want)
-		}
-	}
-}

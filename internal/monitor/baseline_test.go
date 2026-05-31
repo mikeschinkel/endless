@@ -3,6 +3,7 @@ package monitor
 import (
 	"database/sql"
 	"path/filepath"
+	"sync"
 	"testing"
 
 	_ "modernc.org/sqlite"
@@ -33,6 +34,53 @@ func applySchema(t *testing.T, db *sql.DB) {
 	if _, err := db.Exec(schema.SQL); err != nil {
 		t.Fatalf("apply schema: %v", err)
 	}
+}
+
+// withTestDB rebinds monitor.DB()'s singleton to a fresh schema-applied DB for
+// the lifetime of t. Restores the previous state on cleanup so tests run
+// sequentially without dbOnce leaking. Use this for any test that exercises a
+// public monitor.* wrapper that calls DB() internally — TouchSession, TaskText,
+// BindSessionToTask, etc. Tests must NOT t.Parallel() while the seam is held.
+//
+// The seam also satisfies guardWorktreeDBContext (E-1429) by setting
+// dbContextDir to a non-empty path, so tests running from inside this
+// self-dev worktree don't trip the gate.
+func withTestDB(t *testing.T) *sql.DB {
+	t.Helper()
+	db := freshDB(t)
+	applySchema(t, db)
+
+	prevOnce, prevConn, prevErr := dbOnce, dbConn, dbErr
+	prevCtxDir, prevPathOverride := dbContextDir, dbPathOverride
+
+	dbOnce = &sync.Once{}
+	dbOnce.Do(func() {}) // mark consumed so DB() returns dbConn directly
+	dbConn = db
+	dbErr = nil
+	dbContextDir = t.TempDir() // satisfy the E-1429 gate
+
+	t.Cleanup(func() {
+		dbOnce = prevOnce
+		dbConn = prevConn
+		dbErr = prevErr
+		dbContextDir = prevCtxDir
+		dbPathOverride = prevPathOverride
+	})
+	return db
+}
+
+// seedProject inserts a row into projects with the given id/name/path. Tests
+// that exercise functions whose SQL joins or FKs reference projects use this
+// to satisfy foreign-key constraints. Returns the seeded id for chained calls.
+func seedProject(t *testing.T, db *sql.DB, id int64, name, path string) int64 {
+	t.Helper()
+	if _, err := db.Exec(
+		"INSERT INTO projects (id, name, path) VALUES (?, ?, ?)",
+		id, name, path,
+	); err != nil {
+		t.Fatalf("seed project id=%d: %v", id, err)
+	}
+	return id
 }
 
 // TestSchemaFreshDB_CreatesAllTables verifies that applying schema.SQL to an
