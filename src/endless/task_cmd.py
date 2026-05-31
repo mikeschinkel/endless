@@ -472,6 +472,10 @@ def _mirror_plan_to_worktree(task_id: int, content: str) -> Path | None:
         click.style("✓", fg="green")
         + f" Wrote plan to {_display_path(target)}"
     )
+    from endless.worktree_cmd import _commit_plan_file_in_worktree
+    _commit_plan_file_in_worktree(
+        wt_path, task_id, f"Endless: update plan for E-{task_id}",
+    )
     return target
 
 

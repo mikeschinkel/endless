@@ -1172,6 +1172,43 @@ def _materialize_plan_file(task_id: int, worktree_path: Path) -> None:
         click.style("✓", fg="green")
         + f" Materialized plan to {_tilde(target)}"
     )
+    _commit_plan_file_in_worktree(
+        worktree_path, task_id, f"Endless: add plan for E-{task_id}",
+    )
+
+
+def _commit_plan_file_in_worktree(
+    worktree_path: Path, task_id: int, subject: str,
+) -> None:
+    """Stage and commit <worktree>/.endless/plans/E-NNN.md on the worktree branch (E-1525).
+
+    Called at both plan-file write sites — claim/spawn materialization and
+    `task update --text` mirror — so the file rides to main on `worktree
+    land` instead of sitting untracked and getting rejected by the dirty-
+    worktree guard.
+
+    `commit -o <plan_rel>` scopes the commit to just the plan file even if
+    the worktree has unrelated dirt (user mid-edit, other auto-managed
+    files). Returns silently when the file already matches HEAD — re-running
+    a write with identical content is a no-op.
+    """
+    plan_rel = f".endless/plans/E-{task_id}.md"
+    status = _git_run(
+        ["status", "--porcelain", "--", plan_rel],
+        cwd=worktree_path,
+    ).stdout
+    if not status.strip():
+        return
+    try:
+        _git_run(["add", "--", plan_rel], cwd=worktree_path)
+        _git_run(
+            ["commit", "-o", plan_rel, "-m", subject], cwd=worktree_path,
+        )
+    except subprocess.CalledProcessError as e:
+        detail = (e.stderr or e.stdout or str(e)).strip()
+        raise click.ClickException(
+            f"Failed to commit {plan_rel} in worktree: {detail}"
+        )
 
 
 def _maybe_auto_sandbox_bind(project_root: Path, worktree_path: Path, task_id: int) -> None:

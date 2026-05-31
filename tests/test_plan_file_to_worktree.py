@@ -84,12 +84,29 @@ def test_add_text_does_not_create_worktree(tmp_path, seeded_project_at_cwd):
 # ─── mirror into an existing worktree ─────────────────────────────────────────
 
 
+def _git_init_wt(wt) -> None:
+    """Initialize a minimal git repo with a HEAD commit (E-1525 commit step)."""
+    subprocess.run(["git", "init", "-q", "-b", "main", str(wt)], check=True)
+    subprocess.run(
+        ["git", "-C", str(wt), "config", "user.email", "test@example.com"],
+        check=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(wt), "config", "user.name", "Test"], check=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(wt), "commit", "--allow-empty", "-q", "-m", "init"],
+        check=True,
+    )
+
+
 def test_update_text_mirrors_into_existing_worktree(
     tmp_path, seeded_project_at_cwd, monkeypatch,
 ):
     tid = _add_minimal_task()
     fake_wt = tmp_path / "wt"
     fake_wt.mkdir()
+    _git_init_wt(fake_wt)
     monkeypatch.setattr(task_cmd, "_worktree_for_task", lambda _tid: fake_wt)
 
     plan_src = tmp_path / "plan.md"
@@ -98,6 +115,19 @@ def test_update_text_mirrors_into_existing_worktree(
 
     mirrored = fake_wt / ".endless" / "plans" / f"E-{tid}.md"
     assert mirrored.read_text() == "# v2\n"
+    # E-1525: the mirror must also commit the file on the worktree branch.
+    log = subprocess.run(
+        ["git", "-C", str(fake_wt), "log", "--format=%s", "-n", "1"],
+        capture_output=True, text=True, check=True,
+    ).stdout.strip()
+    assert log == f"Endless: update plan for E-{tid}"
+    # And re-running with the same content is a no-op (no second commit).
+    task_cmd.update_plan(tid, text_file=str(plan_src))
+    count = subprocess.run(
+        ["git", "-C", str(fake_wt), "rev-list", "--count", "HEAD"],
+        capture_output=True, text=True, check=True,
+    ).stdout.strip()
+    assert count == "2"  # init + single plan commit
 
 
 def test_mirror_plan_to_worktree_noop_without_worktree(
@@ -111,7 +141,14 @@ def test_mirror_plan_to_worktree_noop_without_worktree(
 
 
 def _fake_run_factory(stdout: str, returncode: int = 0):
+    # Capture the real subprocess.run before any test-time monkeypatch so the
+    # E-1525 commit step (git status/add/commit) can pass through to a real
+    # git repo while the endless-go task-text spawn stays mocked.
+    real_run = subprocess.run
+
     def _run(argv, **kwargs):
+        if argv and argv[0] == "git":
+            return real_run(argv, **kwargs)
         # "task-text" is the subcommand; it may be preceded by the E-1429
         # --config-dir context pair, so assert membership, not position.
         assert "task-text" in argv
@@ -124,6 +161,7 @@ def _fake_run_factory(stdout: str, returncode: int = 0):
 def test_materialize_plan_file_writes_from_db_text(tmp_path, monkeypatch):
     wt = tmp_path / "wt"
     wt.mkdir()
+    _git_init_wt(wt)
     monkeypatch.setattr(worktree_cmd.shutil, "which", lambda _b: "/fake/esq")
     monkeypatch.setattr(
         worktree_cmd.subprocess, "run", _fake_run_factory("# materialized\n"),
@@ -133,6 +171,12 @@ def test_materialize_plan_file_writes_from_db_text(tmp_path, monkeypatch):
 
     plan = wt / ".endless" / "plans" / "E-777.md"
     assert plan.read_text() == "# materialized\n"
+    # E-1525: the materialize step must also commit the file.
+    log = subprocess.run(
+        ["git", "-C", str(wt), "log", "--format=%s", "-n", "1"],
+        capture_output=True, text=True, check=True,
+    ).stdout.strip()
+    assert log == "Endless: add plan for E-777"
 
 
 def test_materialize_plan_file_skips_when_db_text_empty(tmp_path, monkeypatch):
