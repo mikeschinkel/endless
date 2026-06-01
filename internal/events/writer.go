@@ -15,8 +15,12 @@ import (
 // of size.
 const MaxEventLineBytes = 1024 * 1024 // 1MB
 
-// DefaultMaxEventsPerSegment is the default rotation threshold.
-const DefaultMaxEventsPerSegment = 10000
+// DefaultMaxEventsPerSegment is the default rotation threshold. Sized so
+// each segment stays IDE-loadable when a user needs to open the ledger
+// by hand: at ~1.1KB per JSONL entry, 500 entries yields ~550KB
+// segments, comfortably under the 1-2MB threshold where JetBrains
+// (and many other editors) start to lag.
+const DefaultMaxEventsPerSegment = 500
 
 // Path/naming constants for the durable event ledger (write-ahead record for
 // the Endless SQLite DB). See decision E-1198 / task E-1197 for why these are
