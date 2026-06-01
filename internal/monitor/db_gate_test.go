@@ -163,7 +163,7 @@ func TestPinMainDB(t *testing.T) {
 	// XDG points into a sandbox; PinMainDB must move the DB to main while
 	// leaving ConfigDir() (config.json, logs) on the sandbox.
 	cache := t.TempDir()
-	sandbox := filepath.Join(cache, "endless", "sandboxes", "worktree-e-test")
+	sandbox := filepath.Join(cache, "endless", "sandboxes", "e-test")
 	t.Setenv("XDG_CACHE_HOME", cache)
 	t.Setenv("XDG_CONFIG_HOME", sandbox)
 

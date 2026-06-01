@@ -8,12 +8,13 @@ from endless import config
 from endless.cli import main
 
 
-def _make_worktree(tmp_path, sandbox: bool, task_id: str = "555"):
-    """Build <tmp>/proj/.endless/{config.json, worktrees/e-<id>} and return the
-    worktree dir. config.json sets self_dev to `sandbox`."""
+def _make_worktree(tmp_path, sandbox: bool, task_id: str = "555", slug: str = ""):
+    """Build <tmp>/proj/.endless/{config.json, worktrees/e-<id>[-<slug>]} and
+    return the worktree dir. config.json sets self_dev to `sandbox`."""
     proj = tmp_path / "proj"
     endless = proj / ".endless"
-    wt = endless / "worktrees" / f"e-{task_id}"
+    dir_name = f"e-{task_id}" + (f"-{slug}" if slug else "")
+    wt = endless / "worktrees" / dir_name
     wt.mkdir(parents=True)
     (endless / "config.json").write_text(
         '{"self_dev": %s}\n' % ("true" if sandbox else "false")
@@ -32,6 +33,20 @@ def test_worktree_task_id_detects_segment():
         __import__("pathlib").Path("/x/proj/.endless/worktrees/e-77-some-slug")
     ) == "77"
     assert config.worktree_task_id(__import__("pathlib").Path("/x/proj")) is None
+
+
+def test_worktree_dir_name_detects_segment():
+    pathlib = __import__("pathlib")
+    assert config.worktree_dir_name(
+        pathlib.Path("/x/proj/.endless/worktrees/e-1429/internal")
+    ) == "e-1429"
+    assert config.worktree_dir_name(
+        pathlib.Path("/x/proj/.endless/worktrees/e-77-some-slug")
+    ) == "e-77-some-slug"
+    assert config.worktree_dir_name(
+        pathlib.Path("/x/proj/.endless/worktrees/e-77-some-slug/sub")
+    ) == "e-77-some-slug"
+    assert config.worktree_dir_name(pathlib.Path("/x/proj")) is None
 
 
 def test_gated_worktree_root_requires_sandbox_flag(tmp_path, monkeypatch):
@@ -56,9 +71,22 @@ def test_apply_db_choice_sandbox(tmp_path, monkeypatch):
     monkeypatch.chdir(wt)
     monkeypatch.setattr(config, "RESOLVED_CONFIG_DIR", None)
     config.apply_db_choice("sandbox")
-    assert config.RESOLVED_CONFIG_DIR == config.sandbox_config_dir("909")
+    assert config.RESOLVED_CONFIG_DIR == config.sandbox_config_dir("e-909")
     assert config.RESOLVED_CONFIG_DIR.name == "endless"
-    assert "sandboxes/worktree-e-909/endless" in str(config.RESOLVED_CONFIG_DIR)
+    assert "sandboxes/e-909/endless" in str(config.RESOLVED_CONFIG_DIR)
+
+
+def test_apply_db_choice_sandbox_with_slug(tmp_path, monkeypatch):
+    """A slug-bearing worktree resolves to its own sandbox, distinct from the
+    un-slugged sandbox for the same task id. This is the core E-1446 behavior."""
+    wt = _make_worktree(tmp_path, sandbox=True, task_id="909", slug="testing")
+    monkeypatch.chdir(wt)
+    monkeypatch.setattr(config, "RESOLVED_CONFIG_DIR", None)
+    config.apply_db_choice("sandbox")
+    assert config.RESOLVED_CONFIG_DIR == config.sandbox_config_dir("e-909-testing")
+    assert "sandboxes/e-909-testing/endless" in str(config.RESOLVED_CONFIG_DIR)
+    # Distinct from the un-slugged sandbox for the same task id.
+    assert config.sandbox_config_dir("e-909") != config.sandbox_config_dir("e-909-testing")
 
 
 def test_apply_db_choice_sandbox_outside_worktree(tmp_path, monkeypatch):
@@ -164,7 +192,7 @@ def test_db_path_sandbox(tmp_path, monkeypatch):
     result = CliRunner().invoke(main, ["db", "path", "--db=sandbox"])
     assert result.exit_code == 0, result.output
     out = result.output.strip()
-    assert out.endswith("/sandboxes/worktree-e-1234/endless/endless.db")
+    assert out.endswith("/sandboxes/e-1234/endless/endless.db")
 
 
 def test_db_path_sandbox_outside_worktree(tmp_path, monkeypatch):

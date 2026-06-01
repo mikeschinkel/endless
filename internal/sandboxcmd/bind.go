@@ -104,9 +104,12 @@ func bindCmd(args []string) {
 }
 
 // defaultSandboxName derives a stable sandbox name from a worktree path.
-// e.g. /path/to/.endless/worktrees/e-1281 → worktree-e-1281
+// The sandbox dir basename equals the worktree dir basename, so each worktree
+// maps 1-to-1 to its own sandbox (slug included when present).
+// e.g. /path/to/.endless/worktrees/e-1281 → e-1281
+//      /path/to/.endless/worktrees/e-1281-testing → e-1281-testing
 func defaultSandboxName(worktree string) string {
-	return "worktree-" + filepath.Base(worktree)
+	return filepath.Base(worktree)
 }
 
 func writeWrappers(binSandbox, worktree, sandboxDir, sessionID string) error {

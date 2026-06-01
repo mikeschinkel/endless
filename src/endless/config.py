@@ -161,9 +161,13 @@ def mark_as_group(dir_path: Path):
 # later command to the wrong DB. The flag resolves to a config directory, which
 # pins this process's reads and is threaded to Go subprocesses via --config-dir.
 
-# Matches the canonical task-worktree path segment, capturing the task-id
-# digits. Mirrors monitor.TaskIDFromWorktreePath on the Go side.
-_WORKTREE_PATH_RE = re.compile(r"/\.endless/worktrees/e-(\d+)(?:-[a-z0-9-]+)?(?:/|$)")
+# Matches the canonical task-worktree path segment. Group 1 captures the full
+# worktree dir basename (e-NNN or e-NNN-slug) — the source of the per-worktree
+# sandbox dir name. Group 2 captures the task-id digits. Mirrors
+# monitor.TaskIDFromWorktreePath on the Go side (digits only).
+_WORKTREE_PATH_RE = re.compile(
+    r"/\.endless/worktrees/(e-(\d+)(?:-[a-z0-9-]+)?)(?:/|$)"
+)
 
 # The locked refusal message. Click prepends "Error: " to produce the final
 # wording. Intentionally has no E-NNN ticket refs (user-facing).
@@ -189,21 +193,30 @@ def main_config_dir() -> Path:
     return Path.home() / ".config" / "endless"
 
 
-def sandbox_config_dir(task_id: str) -> Path:
+def sandbox_config_dir(worktree_dir_name: str) -> Path:
     """The endless config dir inside a worktree's per-worktree sandbox.
 
-    Matches the on-disk layout produced by the XDG mechanism today: the
-    sandbox dir is <cache>/endless/sandboxes/worktree-e-<id>, and endless
-    appends its own "endless" segment (as ConfigDir does to XDG_CONFIG_HOME),
-    so the DB lives at <sandbox>/endless/endless.db.
+    Sandbox dir basename is the worktree dir's basename (e-NNN or e-NNN-slug),
+    so each worktree maps 1-to-1 to its own sandbox. Endless appends its own
+    "endless" segment (as ConfigDir does to XDG_CONFIG_HOME), so the DB lives
+    at <cache>/endless/sandboxes/<worktree-dir-name>/endless/endless.db.
     """
-    sandbox = _cache_root() / "endless" / "sandboxes" / f"worktree-e-{task_id}"
+    sandbox = _cache_root() / "endless" / "sandboxes" / worktree_dir_name
     return sandbox / "endless"
 
 
 def worktree_task_id(cwd: Path | None = None) -> str | None:
     """Task-id digits if cwd is inside a .endless/worktrees/e-NNN worktree,
     else None. Pure: no filesystem or config reads."""
+    s = str(cwd if cwd is not None else Path.cwd())
+    m = _WORKTREE_PATH_RE.search(s)
+    return m.group(2) if m else None
+
+
+def worktree_dir_name(cwd: Path | None = None) -> str | None:
+    """Worktree dir basename (e-NNN or e-NNN-slug) if cwd is inside a
+    .endless/worktrees/e-NNN[-slug] worktree, else None. Pure: no filesystem
+    or config reads. Used to derive the per-worktree sandbox dir name."""
     s = str(cwd if cwd is not None else Path.cwd())
     m = _WORKTREE_PATH_RE.search(s)
     return m.group(1) if m else None
@@ -242,13 +255,13 @@ def apply_db_choice(choice: str):
     if choice == "main":
         set_db_context(main_config_dir())
     elif choice == "sandbox":
-        task_id = worktree_task_id()
-        if task_id is None:
+        dir_name = worktree_dir_name()
+        if dir_name is None:
             raise ValueError(
                 "--db sandbox only applies inside a self-dev worktree "
                 "(.endless/worktrees/e-NNN); cwd is not in one"
             )
-        set_db_context(sandbox_config_dir(task_id))
+        set_db_context(sandbox_config_dir(dir_name))
     else:
         raise ValueError(
             f"unknown --db value {choice!r}: expected 'main' or 'sandbox'"

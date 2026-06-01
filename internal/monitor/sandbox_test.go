@@ -25,7 +25,7 @@ func TestIsSandboxActive(t *testing.T) {
 		},
 		{
 			name:     "config under sandbox root",
-			xdgCfg:   filepath.Join(sandboxRoot, "worktree-e-1354"),
+			xdgCfg:   filepath.Join(sandboxRoot, "e-1354"),
 			xdgCache: cache,
 			want:     true,
 		},
@@ -65,7 +65,7 @@ func TestForceRealDB(t *testing.T) {
 		reset()
 		t.Cleanup(reset)
 		cache := t.TempDir()
-		sandbox := filepath.Join(cache, "endless", "sandboxes", "worktree-e-test")
+		sandbox := filepath.Join(cache, "endless", "sandboxes", "e-test")
 		t.Setenv("XDG_CACHE_HOME", cache)
 		t.Setenv("XDG_CONFIG_HOME", sandbox)
 

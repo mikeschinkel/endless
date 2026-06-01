@@ -1234,7 +1234,7 @@ def _maybe_auto_sandbox_bind(project_root: Path, worktree_path: Path, task_id: i
             err=True,
         )
         return
-    name = f"worktree-e-{task_id}"
+    name = worktree_path.name
     for cmd in (
         [binary, "sandbox", "init", "--mode", "worktree", name],
         [binary, "sandbox", "bind", str(worktree_path), name],

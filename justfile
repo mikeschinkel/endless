@@ -292,7 +292,7 @@ claude-settings-init:
 # Provision a per-worktree sandbox DB for self-dev work (E-1281).
 #
 # Generates wrappers in <worktree>/bin-sandbox/ that redirect endless DB writes
-# to ~/.cache/endless/sandboxes/worktree-e-NNN/. Sessions inside the worktree
+# to ~/.cache/endless/sandboxes/e-NNN[-slug]/. Sessions inside the worktree
 # pick up the wrappers via the PATH-prepend in <worktree>/.claude/settings.json
 # written by 'endless sandbox bind'.
 #
@@ -311,12 +311,14 @@ dev-sandbox-init:
         echo "dev-sandbox-init: must run from a worktree, not main." >&2
         exit 1
     fi
-    task_id="$(basename "$(pwd)" | sed -n 's/^e-\([0-9][0-9]*\).*/\1/p')"
-    if [ -z "$task_id" ]; then
-        echo "dev-sandbox-init: cannot parse task ID from $(pwd) (expected .endless/worktrees/e-NNN)" >&2
-        exit 1
-    fi
-    name="worktree-e-${task_id}"
+    name="$(basename "$(pwd)")"
+    case "$name" in
+        e-[0-9]*) ;;
+        *)
+            echo "dev-sandbox-init: cannot derive sandbox name from $(pwd) (expected .endless/worktrees/e-NNN[-slug])" >&2
+            exit 1
+            ;;
+    esac
     # Prefer the worktree-built binary so changes to the sandbox subcommand
     # itself are exercised in self-dev. Fall back to PATH for fresh worktrees.
     if [ -x "$(pwd)/bin/endless-go" ]; then
