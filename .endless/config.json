@@ -9,5 +9,5 @@
     "rules": []
   },
   "matchers": [],
-  "worktree_sandbox": true
+  "self_dev": true
 }

@@ -1214,9 +1214,9 @@ def _commit_plan_file_in_worktree(
 def _maybe_auto_sandbox_bind(project_root: Path, worktree_path: Path, task_id: int) -> None:
     """If the project opts in, provision and bind a per-worktree sandbox DB.
 
-    Triggered by `worktree_sandbox: true` in the project's .endless/config.json
-    (see config.project_wants_worktree_sandbox). Endless's own config has the
-    flag set so dev-time worktrees don't pollute the user's real DB; downstream
+    Triggered by `self_dev: true` in the project's .endless/config.json
+    (see config.project_is_self_dev). Endless's own config has the flag set
+    so dev-time worktrees don't pollute the user's real DB; downstream
     projects using endless as a tool leave it unset.
 
     Failures are surfaced as warnings rather than aborting the worktree
@@ -1224,13 +1224,13 @@ def _maybe_auto_sandbox_bind(project_root: Path, worktree_path: Path, task_id: i
     or direct `endless-go sandbox init` / `bind` invocation.
     """
     from endless import config
-    if not config.project_wants_worktree_sandbox(project_root):
+    if not config.project_is_self_dev(project_root):
         return
     binary = shutil.which("endless-go")
     if not binary:
         click.echo(
             "  warning: endless-go binary not found on PATH; "
-            "worktree-sandbox setup skipped.",
+            "sandbox setup skipped.",
             err=True,
         )
         return

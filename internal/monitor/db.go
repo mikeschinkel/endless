@@ -199,22 +199,22 @@ func selfDevProjectRoot(dir string) string {
 	return dir[:i]
 }
 
-// projectWantsWorktreeSandbox reports whether <root>/.endless/config.json has
-// "worktree_sandbox": true. Mirrors the Python
-// config.project_wants_worktree_sandbox. A missing or unreadable config (or
-// the flag unset) is false, so non-self-dev projects never trip the gate.
-func projectWantsWorktreeSandbox(root string) bool {
+// projectIsSelfDev reports whether <root>/.endless/config.json has
+// "self_dev": true. Mirrors the Python config.project_is_self_dev. A missing
+// or unreadable config (or the flag unset) is false, so non-self-dev projects
+// never trip the gate.
+func projectIsSelfDev(root string) bool {
 	data, err := os.ReadFile(filepath.Join(root, ".endless", "config.json"))
 	if err != nil {
 		return false
 	}
 	var cfg struct {
-		WorktreeSandbox bool `json:"worktree_sandbox"`
+		SelfDev bool `json:"self_dev"`
 	}
 	if err := json.Unmarshal(data, &cfg); err != nil {
 		return false
 	}
-	return cfg.WorktreeSandbox
+	return cfg.SelfDev
 }
 
 // worktreeDBContextRefusal is the error returned by the gate. It is the
@@ -227,7 +227,7 @@ var worktreeDBContextRefusal = errors.New(
 		"this binary.")
 
 // guardWorktreeDBContext implements the E-1429 gate. When this process runs
-// inside a self-dev worktree of a worktree_sandbox project and no explicit DB
+// inside a self-dev worktree of a self_dev project and no explicit DB
 // context was provided (flag or ForceRealDB), it refuses to open the DB.
 // Bypass-proof: it sits at the single DB() entry point, so any binary that
 // opens the DB is covered, including future ones, without an allowlist.
@@ -242,7 +242,7 @@ func guardWorktreeDBContext() error {
 		return nil
 	}
 	root := selfDevProjectRoot(cwd)
-	if root == "" || !projectWantsWorktreeSandbox(root) {
+	if root == "" || !projectIsSelfDev(root) {
 		return nil
 	}
 	return worktreeDBContextRefusal

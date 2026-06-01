@@ -23,7 +23,7 @@ git worktree add .endless/worktrees/e-NNN main
 cd .endless/worktrees/e-NNN
 just go-work-init
 just build                  # builds bin/* binaries the wrappers will exec
-just dev-sandbox-init       # see "Worktree DB sandbox" below
+just dev-sandbox-init       # see "Self-dev DB sandbox" below
 just claude-settings-init   # see "Claude hook override" below
 ```
 
@@ -47,13 +47,13 @@ The recipe refuses to run from the main checkout (would clobber the committed `.
 
 Idempotent: re-running produces the same file. Removing the worktree takes the file with it (no cleanup needed).
 
-## Worktree DB sandbox — E-1281
+## Self-dev DB sandbox — E-1281
 
 Endless self-dev worktrees route DB writes to a per-worktree sandbox so dev-time CLI usage and tests don't pollute the user's real task ledger at `~/.config/endless/endless.db`. Sandbox lives at `~/.cache/endless/sandboxes/worktree-e-NNN/`.
 
 Inside a Claude session spawned from the worktree, routing is transparent: `endless task ...` reads/writes the sandbox via the PATH/`XDG_CONFIG_HOME` injected into `<worktree>/.claude/settings.json`. From a bare shell inside the worktree, prefix with `bin-sandbox/` (`./bin-sandbox/endless ...`) or export `XDG_CONFIG_HOME` manually. From the main checkout or any non-endless project, endless reads/writes the real DB.
 
-Opt-in is per project. Endless's own `.endless/config.json` sets `"worktree_sandbox": true`. Downstream projects that *use* endless as a tool leave the flag unset so their worktree tasks land in the real DB (real audit data, not pollution).
+Opt-in is per project. Endless's own `.endless/config.json` sets `"self_dev": true`. Downstream projects that *use* endless as a tool leave the flag unset so their worktree tasks land in the real DB (real audit data, not pollution).
 
 `endless task claim` and `endless task spawn` auto-invoke the setup when the flag is true; no extra step from the user. For worktrees created via `git worktree add` directly, run `just dev-sandbox-init` from the worktree.
 

@@ -44,7 +44,7 @@ Or via shell helpers (next section).
 ### Choosing the database (`--db`)
 
 When endless develops endless, a self-dev worktree (a `.endless/worktrees/e-NNN`
-checkout of a project whose `.endless/config.json` has `"worktree_sandbox": true`)
+checkout of a project whose `.endless/config.json` has `"self_dev": true`)
 must say which database every command operates on. There is no default — you
 pick per invocation:
 

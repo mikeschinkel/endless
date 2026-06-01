@@ -297,7 +297,7 @@ claude-settings-init:
 # written by 'endless sandbox bind'.
 #
 # Auto-invoked by 'endless task claim' and 'endless task spawn' when the
-# project's .endless/config.json has "worktree_sandbox": true (endless's own
+# project's .endless/config.json has "self_dev": true (endless's own
 # config does). Run manually for worktrees created by hand or to re-wire after
 # moving binaries.
 #

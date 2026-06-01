@@ -32,7 +32,7 @@ def _make_worktree_layout(tmp_path: Path, task_id: str = "9999",
     proj = tmp_path / "proj"
     endless = proj / ".endless"
     (endless).mkdir(parents=True)
-    (endless / "config.json").write_text('{"worktree_sandbox": true}\n')
+    (endless / "config.json").write_text('{"self_dev": true}\n')
     wt = endless / "worktrees" / f"e-{task_id}"
     (wt / "bin").mkdir(parents=True)
     wt_bin = wt / "bin" / "endless-go"

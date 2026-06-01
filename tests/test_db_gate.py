@@ -10,13 +10,13 @@ from endless.cli import main
 
 def _make_worktree(tmp_path, sandbox: bool, task_id: str = "555"):
     """Build <tmp>/proj/.endless/{config.json, worktrees/e-<id>} and return the
-    worktree dir. config.json sets worktree_sandbox to `sandbox`."""
+    worktree dir. config.json sets self_dev to `sandbox`."""
     proj = tmp_path / "proj"
     endless = proj / ".endless"
     wt = endless / "worktrees" / f"e-{task_id}"
     wt.mkdir(parents=True)
     (endless / "config.json").write_text(
-        '{"worktree_sandbox": %s}\n' % ("true" if sandbox else "false")
+        '{"self_dev": %s}\n' % ("true" if sandbox else "false")
     )
     return wt
 

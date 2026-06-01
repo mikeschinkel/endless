@@ -30,13 +30,13 @@ from endless.cli import _scan_db_choice, main
 
 def _make_worktree(tmp_path: Path, sandbox: bool, task_id: str = "1513") -> Path:
     """Build <tmp>/proj/.endless/{config.json, worktrees/e-<id>} and return the
-    worktree dir. config.json sets worktree_sandbox to `sandbox`."""
+    worktree dir. config.json sets self_dev to `sandbox`."""
     proj = tmp_path / "proj"
     endless = proj / ".endless"
     wt = endless / "worktrees" / f"e-{task_id}"
     wt.mkdir(parents=True)
     (endless / "config.json").write_text(
-        '{"worktree_sandbox": %s}\n' % ("true" if sandbox else "false")
+        '{"self_dev": %s}\n' % ("true" if sandbox else "false")
     )
     return wt
 
@@ -109,7 +109,7 @@ def test_reexec_target_returns_none_when_cwd_not_in_worktree(tmp_path, monkeypat
 
 def test_reexec_target_returns_none_when_project_does_not_opt_in(tmp_path, monkeypatch):
     # Worktree path shape matches, but the project's config.json has
-    # `worktree_sandbox: false` — `--db sandbox` would never apply here, so
+    # `self_dev: false` — `--db sandbox` would never apply here, so
     # the re-exec gate must not fire either.
     wt = _make_worktree(tmp_path, sandbox=False, task_id="1513")
     monkeypatch.chdir(wt)

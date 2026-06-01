@@ -61,7 +61,7 @@ func TestSelfDevProjectRoot(t *testing.T) {
 	}
 }
 
-func TestProjectWantsWorktreeSandbox(t *testing.T) {
+func TestProjectIsSelfDev(t *testing.T) {
 	writeConfig := func(t *testing.T, body string) string {
 		root := t.TempDir()
 		dir := filepath.Join(root, ".endless")
@@ -77,26 +77,26 @@ func TestProjectWantsWorktreeSandbox(t *testing.T) {
 	}
 
 	t.Run("flag true", func(t *testing.T) {
-		root := writeConfig(t, `{"worktree_sandbox": true}`)
-		if !projectWantsWorktreeSandbox(root) {
-			t.Error("want true for worktree_sandbox: true")
+		root := writeConfig(t, `{"self_dev": true}`)
+		if !projectIsSelfDev(root) {
+			t.Error("want true for self_dev: true")
 		}
 	})
 	t.Run("flag false", func(t *testing.T) {
-		root := writeConfig(t, `{"worktree_sandbox": false}`)
-		if projectWantsWorktreeSandbox(root) {
-			t.Error("want false for worktree_sandbox: false")
+		root := writeConfig(t, `{"self_dev": false}`)
+		if projectIsSelfDev(root) {
+			t.Error("want false for self_dev: false")
 		}
 	})
 	t.Run("flag absent", func(t *testing.T) {
 		root := writeConfig(t, `{"name": "proj"}`)
-		if projectWantsWorktreeSandbox(root) {
+		if projectIsSelfDev(root) {
 			t.Error("want false when flag absent")
 		}
 	})
 	t.Run("config missing", func(t *testing.T) {
 		root := writeConfig(t, "")
-		if projectWantsWorktreeSandbox(root) {
+		if projectIsSelfDev(root) {
 			t.Error("want false when config.json missing")
 		}
 	})
@@ -194,9 +194,9 @@ func TestGuardWorktreeDBContext(t *testing.T) {
 		if err := os.MkdirAll(wt, 0755); err != nil {
 			t.Fatal(err)
 		}
-		body := `{"worktree_sandbox": false}`
+		body := `{"self_dev": false}`
 		if sandbox {
-			body = `{"worktree_sandbox": true}`
+			body = `{"self_dev": true}`
 		}
 		if err := os.WriteFile(filepath.Join(endless, "config.json"), []byte(body), 0644); err != nil {
 			t.Fatal(err)
@@ -208,7 +208,7 @@ func TestGuardWorktreeDBContext(t *testing.T) {
 		resetDBContext(t)
 		t.Chdir(newProject(t, true))
 		if err := guardWorktreeDBContext(); err == nil {
-			t.Fatal("want refusal in a worktree_sandbox worktree without explicit context")
+			t.Fatal("want refusal in a self_dev worktree without explicit context")
 		}
 	})
 
@@ -234,7 +234,7 @@ func TestGuardWorktreeDBContext(t *testing.T) {
 		resetDBContext(t)
 		t.Chdir(newProject(t, false))
 		if err := guardWorktreeDBContext(); err != nil {
-			t.Fatalf("a project without worktree_sandbox must never trip the gate: %v", err)
+			t.Fatalf("a project without self_dev must never trip the gate: %v", err)
 		}
 	})
 

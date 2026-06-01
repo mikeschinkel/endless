@@ -108,10 +108,11 @@ def project_config_read(project_path: Path) -> dict | None:
         return json.load(f)
 
 
-def project_wants_worktree_sandbox(project_path: Path) -> bool:
-    """True if the project opts into per-worktree DB sandboxing.
+def project_is_self_dev(project_path: Path) -> bool:
+    """True if the project is endless self-development, so its worktrees
+    sandbox DB writes.
 
-    Set by adding `"worktree_sandbox": true` to <project>/.endless/config.json.
+    Set by adding `"self_dev": true` to <project>/.endless/config.json.
     Endless's own config has this enabled so dev-time worktrees don't pollute
     the user's real DB; downstream projects using endless as a tool leave it
     unset so their tasks land in the real DB.
@@ -119,7 +120,7 @@ def project_wants_worktree_sandbox(project_path: Path) -> bool:
     cfg = project_config_read(project_path)
     if cfg is None:
         return False
-    return bool(cfg.get("worktree_sandbox", False))
+    return bool(cfg.get("self_dev", False))
 
 
 def project_config_write(project_path: Path, data: dict):
@@ -154,7 +155,7 @@ def mark_as_group(dir_path: Path):
 # === E-1429: explicit DB selection inside self-dev worktrees ===
 #
 # Inside a self-dev worktree (a .endless/worktrees/e-NNN checkout of a project
-# whose config.json sets "worktree_sandbox": true), the implicit XDG-driven DB
+# whose config.json sets "self_dev": true), the implicit XDG-driven DB
 # routing is replaced by a mandatory, per-invocation --db main|sandbox flag.
 # The choice is never an env var: an exported var could silently route every
 # later command to the wrong DB. The flag resolves to a config directory, which
@@ -209,14 +210,14 @@ def worktree_task_id(cwd: Path | None = None) -> str | None:
 
 
 def gated_worktree_root(cwd: Path | None = None) -> Path | None:
-    """Project root if cwd is inside a self-dev worktree of a worktree_sandbox
+    """Project root if cwd is inside a self-dev worktree of a self_dev
     project (so --db is required), else None."""
     s = str(cwd if cwd is not None else Path.cwd())
     m = _WORKTREE_PATH_RE.search(s)
     if not m:
         return None
     root = Path(s[: m.start()])
-    return root if project_wants_worktree_sandbox(root) else None
+    return root if project_is_self_dev(root) else None
 
 
 def set_db_context(config_dir: Path):
