@@ -58,6 +58,15 @@ def isolated_env(tmp_path, monkeypatch):
     monkeypatch.delenv("TMUX", raising=False)
     monkeypatch.delenv("TMUX_PANE", raising=False)
 
+    # E-1455: strip Claude Code env vars leaked from a runner shell whose
+    # parent IS a Claude Code session. The env-vars-as-truth layer in
+    # _current_endless_session_id branches on CLAUDECODE=1 and would
+    # otherwise lazy-create a sessions row for the runner's UUID in
+    # every test's isolated DB. Tests exercising the env-var path set
+    # these explicitly.
+    monkeypatch.delenv("CLAUDECODE", raising=False)
+    monkeypatch.delenv("CLAUDE_CODE_SESSION_ID", raising=False)
+
     # Prepend this worktree's bin/ to PATH so subprocesses (e.g. endless-event
     # invoked by event_bridge.emit_event) find the locally-built binary, not
     # the globally-installed one symlinked from a sibling worktree.

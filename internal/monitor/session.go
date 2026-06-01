@@ -278,6 +278,37 @@ func TouchSession(sessionID, platform, process string, projectID int64) error {
 	return tx.Commit()
 }
 
+// EnsureClaudeSessionID looks up (or lazy-creates) the integer sessions.id
+// for an env-identified Claude session and returns it. Used by the Python
+// resolver's env-vars-as-truth layer (E-1455): when CLAUDECODE=1 and
+// CLAUDE_CODE_SESSION_ID are set, the current pane unambiguously identifies
+// itself as a Claude session — but the DB row may not exist yet if no hook
+// event has fired in this session. This helper composes TouchSession (which
+// idempotently INSERT-or-UPSERTs the session row, with collision
+// invalidation on `process`) with a follow-up id lookup.
+//
+// process is the TMUX_PANE value (may be empty when running outside tmux).
+// projectID is the resolved current-cwd project id; pass 0 if unresolved.
+func EnsureClaudeSessionID(sessionID, process string, projectID int64) (int64, error) {
+	if sessionID == "" {
+		return 0, fmt.Errorf("ensure claude session id: session_id required")
+	}
+	if err := TouchSession(sessionID, "claude", process, projectID); err != nil {
+		return 0, err
+	}
+	db, err := DB()
+	if err != nil {
+		return 0, err
+	}
+	var id int64
+	if err := db.QueryRow(
+		"SELECT id FROM sessions WHERE session_id = ?", sessionID,
+	).Scan(&id); err != nil {
+		return 0, fmt.Errorf("lookup sessions.id for %s: %w", sessionID, err)
+	}
+	return id, nil
+}
+
 // CompleteTask marks a task as confirmed and clears the session's active task.
 func CompleteTask(sessionID string, taskID int64) error {
 	db, err := DB()

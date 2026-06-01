@@ -31,6 +31,11 @@ func Run(args []string) {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
+	case "ensure-claude-id":
+		if err := runEnsureClaudeID(args[1:]); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
 	case "-h", "--help", "help":
 		usage()
 	default:
@@ -45,6 +50,8 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "subcommands:")
 	fmt.Fprintln(os.Stderr, "  list-live --project-root <path>   JSON array of live sessions for the project")
 	fmt.Fprintln(os.Stderr, "  task-text --id <task-id>          raw tasks.text for the task (empty if none)")
+	fmt.Fprintln(os.Stderr, "  ensure-claude-id --session-id <uuid> --project-root <path> [--process <pane>]")
+	fmt.Fprintln(os.Stderr, "                                    look up (or lazy-create) sessions.id; prints integer id")
 }
 
 // runTaskText prints the raw tasks.text for a task id to stdout, so the Python
@@ -93,4 +100,45 @@ func runListLive(args []string) error {
 		return fmt.Errorf("list live sessions: %w", err)
 	}
 	return json.NewEncoder(os.Stdout).Encode(sessions)
+}
+
+// runEnsureClaudeID prints the integer sessions.id for an env-identified
+// Claude session, lazy-creating the row when no hook event has fired yet
+// (E-1455). The Python resolver invokes this when CLAUDECODE=1 and
+// CLAUDE_CODE_SESSION_ID are set, treating the env vars as authoritative
+// identification of the current pane.
+//
+// --session-id is the Claude harness session UUID (required).
+// --project-root is the cwd-resolved project path (required); the
+//   helper passes it through monitor.ProjectIDForPath which auto-registers
+//   unknown paths.
+// --process is the TMUX_PANE value (optional; absent outside tmux).
+//
+// Output is the integer id followed by a newline. Exit 0 on success.
+func runEnsureClaudeID(args []string) error {
+	fs := flag.NewFlagSet("ensure-claude-id", flag.ContinueOnError)
+	sessionID := fs.String("session-id", "", "Claude harness session UUID")
+	projectRoot := fs.String("project-root", "", "absolute path of the project root")
+	process := fs.String("process", "", "TMUX_PANE value (optional)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *sessionID == "" {
+		return fmt.Errorf("--session-id is required")
+	}
+	if *projectRoot == "" {
+		return fmt.Errorf("--project-root is required")
+	}
+
+	projectID, _, err := monitor.ProjectIDForPath(*projectRoot)
+	if err != nil {
+		return fmt.Errorf("resolve project for %s: %w", *projectRoot, err)
+	}
+
+	id, err := monitor.EnsureClaudeSessionID(*sessionID, *process, projectID)
+	if err != nil {
+		return err
+	}
+	fmt.Println(id)
+	return nil
 }

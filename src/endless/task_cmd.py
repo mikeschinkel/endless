@@ -1959,10 +1959,16 @@ def _current_session_active_task_id() -> int | None:
 def _current_endless_session_id() -> int | None:
     """Best-effort lookup of the current Endless session id (int PK).
 
-    Three-layer resolution:
-      1. ENDLESS_SESSION_ID env var (digit form).
-      2. TMUX_PANE-matching companion file (the pane is a Claude pane).
-      3. Sibling Claude pane in the same tmux window, when there is
+    Four-layer resolution:
+      1. ENDLESS_SESSION_ID env var (digit form) — explicit caller override.
+      2. CLAUDECODE=1 + CLAUDE_CODE_SESSION_ID (E-1455) — env-vars-as-truth
+         for current-pane identification. The current process IS the Claude
+         pane; identity is in-process. Resolves (and lazy-INSERTs on first-
+         event-timing race) via Go's `session-query ensure-claude-id`.
+      3. TMUX_PANE-matching live session — used by shell panes whose env
+         doesn't carry CLAUDECODE but whose pane id matches a DB-known
+         Claude pane.
+      4. Sibling Claude pane in the same tmux window, when there is
          EXACTLY ONE such sibling. Lets a shell pane in a Claude-using
          window transparently attribute commands to its sibling Claude
          session (E-1294, follow-up to E-1287). On 0 or 2+ sibling
@@ -1980,6 +1986,17 @@ def _current_endless_session_id() -> int | None:
     env_id = os.environ.get("ENDLESS_SESSION_ID")
     if env_id and env_id.isdigit():
         return int(env_id)
+
+    # Layer 2 (E-1455): env-vars-as-truth for current-pane Claude identity.
+    # Avoids the first-event-timing race where the resolver runs before
+    # the hook has registered the pane in the DB.
+    if os.environ.get("CLAUDECODE") == "1":
+        claude_session_id = os.environ.get("CLAUDE_CODE_SESSION_ID")
+        if claude_session_id:
+            eid = _ensure_claude_session_id(claude_session_id)
+            if eid is not None:
+                return eid
+
     pane = os.environ.get("TMUX_PANE")
     if not pane:
         return None
@@ -1998,6 +2015,50 @@ def _current_endless_session_id() -> int | None:
     if n == 1 and sibling_eid is not None:
         return sibling_eid
     return None
+
+
+def _ensure_claude_session_id(claude_session_id: str) -> int | None:
+    """Resolve sessions.id for the env-identified Claude session (E-1455).
+
+    Shells out to `endless-go session-query ensure-claude-id`, which
+    composes TouchSession (idempotent INSERT-or-UPSERT with collision
+    invalidation) and a follow-up id lookup. Lazy-creates the row when
+    no hook event has fired yet — the first-event-timing race the env-
+    var path exists to solve. Subsequent hook events upsert the same row
+    idempotently, so this path produces the same row the hook would.
+
+    Returns the integer id on success; None on any failure (caller falls
+    through to the remaining resolver layers).
+    """
+    import subprocess
+    from endless import config
+    from endless.session_cmd import _project_root_for_cwd
+
+    try:
+        project_root = _project_root_for_cwd()
+    except Exception:
+        return None
+    pane = os.environ.get("TMUX_PANE", "")
+
+    args = [
+        "endless-go", *config.go_db_context_args(),
+        "session-query", "ensure-claude-id",
+        "--session-id", claude_session_id,
+        "--project-root", str(project_root),
+    ]
+    if pane:
+        args += ["--process", pane]
+
+    try:
+        result = subprocess.run(args, capture_output=True, text=True, timeout=5)
+    except (FileNotFoundError, subprocess.SubprocessError):
+        return None
+    if result.returncode != 0:
+        return None
+    text = result.stdout.strip()
+    if not text.isdigit():
+        return None
+    return int(text)
 
 
 def _list_sibling_claude_session_eids() -> list[int]:
@@ -2032,6 +2093,12 @@ def _list_sibling_claude_session_eids() -> list[int]:
 
 def _find_sibling_claude_session() -> tuple[int | None, int]:
     """Find a live Claude session in a sibling tmux pane (same window).
+
+    Cross-pane lookup only — a pane cannot read another pane's process env,
+    so DB query is the right (and only) mechanism here. The current pane's
+    own identity short-circuits in `_current_endless_session_id` via the
+    CLAUDECODE/CLAUDE_CODE_SESSION_ID env vars (E-1455) before this
+    sibling search runs. Precedence: same-pane → env vars; cross-pane → DB.
 
     Returns (session_eid, num_matches):
       - (None, 0) — no sibling Claude session (or not in tmux)
