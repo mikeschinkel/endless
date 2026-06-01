@@ -24,6 +24,14 @@ from endless import db
 pytestmark = pytest.mark.no_session_stub
 
 
+@pytest.fixture(autouse=True)
+def _clear_endless_session_id(monkeypatch):
+    """Clear ENDLESS_SESSION_ID so each test exercises the resolver's
+    pane/session-table layers, not its Layer 1 env-var short-circuit
+    (task_cmd.py:2052)."""
+    monkeypatch.delenv("ENDLESS_SESSION_ID", raising=False)
+
+
 def _insert_session(
     *,
     pk: int,
