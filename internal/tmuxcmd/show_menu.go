@@ -24,7 +24,7 @@ import (
 //   - mouse:  -x M -y M  (anchored at the mouse click; default for
 //     the right-click bindings)
 //
-// Invoked from bindings via `run-shell '<binPath> show-menu
+// Invoked from bindings via `run-shell '<binPath> tmux show-menu
 // --pane=#{pane_id} --position=center'`.
 func runShowMenu(args []string) {
 	fs := flag.NewFlagSet("show-menu", flag.ContinueOnError)
@@ -83,7 +83,7 @@ func buildMenuItems(binPath string, info *monitor.ActiveTaskInfo) []menuItem {
 	// time too — that way, if the user claimed a different task
 	// between opening the menu and selecting an item, the item still
 	// targets the latest active task.
-	taskRef := fmt.Sprintf("$(%s active-id --pane=#{pane_id})", binPath)
+	taskRef := fmt.Sprintf("$(%s tmux active-id --pane=#{pane_id})", binPath)
 
 	items := []menuItem{
 		{"Task Details", "d", fmt.Sprintf(

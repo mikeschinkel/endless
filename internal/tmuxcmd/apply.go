@@ -62,15 +62,20 @@ func runApply(args []string) {
 // commands invoked via #() — relying on the env var alone causes the
 // binary to see an empty pane and render the placeholder dot.
 //
-// Menu bindings delegate to `endless-tmux show-menu` so the menu's
+// Menu bindings delegate to `endless-go tmux show-menu` so the menu's
 // title and items can include the live task ID (resolved at click
 // time, not at apply time) and so changing the menu doesn't require
 // re-running apply.
+//
+// All printer/menu invocations route through the `tmux` subcommand of
+// the unified `endless-go` dispatcher (E-1367) — the inner verbs
+// (status-line, show-menu, active-id) live under that one subcommand,
+// not at the top level of the binary.
 func buildApplySteps(binPath, hotkey string, statusInterval int) [][]string {
-	statusFmt := fmt.Sprintf("#[align=centre]#(%s status-line --pane=#{pane_id})", binPath)
+	statusFmt := fmt.Sprintf("#[align=centre]#(%s tmux status-line --pane=#{pane_id})", binPath)
 
 	// Hotkey binding: no mouse context needed; single-quoted is fine.
-	hotkeyMenu := fmt.Sprintf("run-shell '%s show-menu --pane=#{pane_id} --position=center'", binPath)
+	hotkeyMenu := fmt.Sprintf("run-shell '%s tmux show-menu --pane=#{pane_id} --position=center'", binPath)
 	// Mouse binding: must capture mouse_x/mouse_y at binding time —
 	// tmux substitutes #{mouse_x}/#{mouse_y} inline, then run-shell
 	// invokes our binary with the resolved coordinates. We cannot rely
@@ -79,7 +84,7 @@ func buildApplySteps(binPath, hotkey string, statusInterval int) [][]string {
 	// processes #{...} substitutions; single quotes would pass the
 	// literal "#{mouse_x}" text through.
 	mouseMenu := fmt.Sprintf(
-		`run-shell "%s show-menu --pane=#{pane_id} --position=mouse --mouse-x=#{mouse_x} --mouse-y=#{mouse_y}"`,
+		`run-shell "%s tmux show-menu --pane=#{pane_id} --position=mouse --mouse-x=#{mouse_x} --mouse-y=#{mouse_y}"`,
 		binPath)
 
 	return [][]string{
