@@ -380,8 +380,8 @@ CREATE INDEX IF NOT EXISTS idx_session_tasks_task
     ON session_tasks(task_id);
 
 -- Curated, persistent per-project "next" list (E-1421). Five tables: header,
--- lanes, items, auto-added pending items awaiting curation, and a revision
--- audit trail.
+-- lanes, tasks, auto-added pending tasks awaiting curation, and an event-
+-- sourced audit log of every mutation.
 CREATE TABLE IF NOT EXISTS project_next (
     id INTEGER PRIMARY KEY,
     project_id INTEGER NOT NULL UNIQUE,
@@ -394,16 +394,20 @@ CREATE TABLE IF NOT EXISTS project_next_lanes (
     lane_id TEXT NOT NULL,
     priority INTEGER NOT NULL,
     rationale TEXT NOT NULL,
+    added_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
+    updated_at TEXT,
     UNIQUE(project_next_id, lane_id),
     FOREIGN KEY (project_next_id) REFERENCES project_next(id) ON DELETE CASCADE
 );
 
-CREATE TABLE IF NOT EXISTS project_next_items (
+CREATE TABLE IF NOT EXISTS project_next_tasks (
     id INTEGER PRIMARY KEY,
     project_next_lane_id INTEGER NOT NULL,
     task_id TEXT NOT NULL,
     reason TEXT NOT NULL,
     position INTEGER NOT NULL,
+    added_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
+    updated_at TEXT,
     UNIQUE(project_next_lane_id, task_id),
     UNIQUE(project_next_lane_id, position),
     FOREIGN KEY (project_next_lane_id) REFERENCES project_next_lanes(id) ON DELETE CASCADE
@@ -419,22 +423,23 @@ CREATE TABLE IF NOT EXISTS project_next_pending (
     FOREIGN KEY (project_next_id) REFERENCES project_next(id) ON DELETE CASCADE
 );
 
-CREATE TABLE IF NOT EXISTS project_next_revisions (
+CREATE TABLE IF NOT EXISTS project_next_events (
     id INTEGER PRIMARY KEY,
     project_next_id INTEGER NOT NULL,
     session_id INTEGER NOT NULL,
-    revised_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
-    change_kind TEXT NOT NULL,
-    json_snapshot TEXT,
+    event_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
+    kind TEXT NOT NULL,
+    payload TEXT,
+    batch_id INTEGER,
     FOREIGN KEY (project_next_id) REFERENCES project_next(id),
     FOREIGN KEY (session_id) REFERENCES sessions(id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_project_next_lanes_priority
     ON project_next_lanes(project_next_id, priority);
-CREATE INDEX IF NOT EXISTS idx_project_next_revisions_recent
-    ON project_next_revisions(project_next_id, revised_at DESC);
+CREATE INDEX IF NOT EXISTS idx_project_next_events_recent
+    ON project_next_events(project_next_id, event_at DESC);
 CREATE INDEX IF NOT EXISTS idx_project_next_pending_added
     ON project_next_pending(project_next_id, added_at);
-CREATE INDEX IF NOT EXISTS idx_project_next_items_task
-    ON project_next_items(task_id);
+CREATE INDEX IF NOT EXISTS idx_project_next_tasks_task
+    ON project_next_tasks(task_id);

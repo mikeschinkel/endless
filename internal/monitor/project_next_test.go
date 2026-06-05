@@ -7,13 +7,13 @@ import (
 )
 
 // projectNextTables are the five project_next tables defined in schema.sql
-// (originally added by migrateV12, E-1421).
+// (E-1421).
 var projectNextTables = []string{
 	"project_next",
 	"project_next_lanes",
-	"project_next_items",
+	"project_next_tasks",
 	"project_next_pending",
-	"project_next_revisions",
+	"project_next_events",
 }
 
 // TestProjectNextHasIDColumns enforces the house rule that every new table
@@ -64,14 +64,64 @@ func TestProjectNextHasIDColumns(t *testing.T) {
 	}
 }
 
+// TestProjectNextRenameColumnsPresent guards the columns that distinguish
+// E-1421's 2026-06-01 plan revision from the original V12 shape: added_at +
+// updated_at on lanes and tasks, and batch_id on events. Regressing this
+// means the schema drifted back to the pre-revision shape.
+func TestProjectNextRenameColumnsPresent(t *testing.T) {
+	db := freshDB(t)
+	applySchema(t, db)
+	want := map[string][]string{
+		"project_next_lanes":  {"added_at", "updated_at"},
+		"project_next_tasks":  {"added_at", "updated_at"},
+		"project_next_events": {"kind", "payload", "batch_id"},
+	}
+	for table, cols := range want {
+		got := tableColumns(t, db, table)
+		for _, col := range cols {
+			if _, ok := got[col]; !ok {
+				t.Errorf("%s.%s missing; want column to exist", table, col)
+			}
+		}
+	}
+}
+
+// tableColumns returns the set of column names reported by
+// PRAGMA table_info(<table>). t.Fatalf's on query error so callers can use
+// the result without nil-checking.
+func tableColumns(t *testing.T, db *sql.DB, table string) map[string]struct{} {
+	t.Helper()
+	rows, err := db.Query("PRAGMA table_info(" + table + ")")
+	if err != nil {
+		t.Fatalf("PRAGMA table_info(%s): %v", table, err)
+	}
+	defer rows.Close()
+	cols := map[string]struct{}{}
+	for rows.Next() {
+		var (
+			cid     int
+			name    string
+			ctype   string
+			notnull int
+			dflt    sql.NullString
+			pk      int
+		)
+		if err := rows.Scan(&cid, &name, &ctype, &notnull, &dflt, &pk); err != nil {
+			t.Fatalf("scan %s: %v", table, err)
+		}
+		cols[name] = struct{}{}
+	}
+	return cols
+}
+
 // TestProjectNextCascadeDeletes inserts a row chain across the four
-// cascade-linked tables (project_next, lanes, items, pending), deletes the
+// cascade-linked tables (project_next, lanes, tasks, pending), deletes the
 // projects row, and asserts each of those tables is empty.
 //
-// project_next_revisions is deliberately NOT inserted into in this test:
+// project_next_events is deliberately NOT inserted into in this test:
 // per the E-1421 schema, its FKs have no ON DELETE clause (NO ACTION
 // default). The audit trail is immutable — deleting a project_next row
-// while revisions reference it is blocked by SQLite. That property is
+// while events reference it is blocked by SQLite. That property is
 // out of scope for the cascade test.
 func TestProjectNextCascadeDeletes(t *testing.T) {
 	db := freshDB(t)
@@ -107,10 +157,10 @@ func TestProjectNextCascadeDeletes(t *testing.T) {
 	laneID, _ = res.LastInsertId()
 
 	if _, err := db.Exec(
-		"INSERT INTO project_next_items (project_next_lane_id, task_id, reason, position) VALUES (?, ?, ?, ?)",
+		"INSERT INTO project_next_tasks (project_next_lane_id, task_id, reason, position) VALUES (?, ?, ?, ?)",
 		laneID, "E-9999", "test reason", 0,
 	); err != nil {
-		t.Fatalf("insert item: %v", err)
+		t.Fatalf("insert task: %v", err)
 	}
 
 	if _, err := db.Exec(
@@ -127,7 +177,7 @@ func TestProjectNextCascadeDeletes(t *testing.T) {
 	cascadingTables := []string{
 		"project_next",
 		"project_next_lanes",
-		"project_next_items",
+		"project_next_tasks",
 		"project_next_pending",
 	}
 	for _, table := range cascadingTables {
@@ -176,9 +226,9 @@ func TestProjectNextLaneUniqueRejectsDuplicate(t *testing.T) {
 	}
 }
 
-// TestProjectNextItemPositionUniqueRejectsDuplicate verifies that two items
+// TestProjectNextTaskPositionUniqueRejectsDuplicate verifies that two tasks
 // with the same (project_next_lane_id, position) tuple are rejected.
-func TestProjectNextItemPositionUniqueRejectsDuplicate(t *testing.T) {
+func TestProjectNextTaskPositionUniqueRejectsDuplicate(t *testing.T) {
 	db := freshDB(t)
 	applySchema(t, db)
 
@@ -202,13 +252,13 @@ func TestProjectNextItemPositionUniqueRejectsDuplicate(t *testing.T) {
 	laneID, _ := res.LastInsertId()
 
 	if _, err := db.Exec(
-		"INSERT INTO project_next_items (project_next_lane_id, task_id, reason, position) VALUES (?, ?, ?, ?)",
+		"INSERT INTO project_next_tasks (project_next_lane_id, task_id, reason, position) VALUES (?, ?, ?, ?)",
 		laneID, "E-1", "r1", 0,
 	); err != nil {
-		t.Fatalf("first item insert: %v", err)
+		t.Fatalf("first task insert: %v", err)
 	}
 	_, err = db.Exec(
-		"INSERT INTO project_next_items (project_next_lane_id, task_id, reason, position) VALUES (?, ?, ?, ?)",
+		"INSERT INTO project_next_tasks (project_next_lane_id, task_id, reason, position) VALUES (?, ?, ?, ?)",
 		laneID, "E-2", "r2", 0,
 	)
 	if err == nil {
@@ -219,11 +269,11 @@ func TestProjectNextItemPositionUniqueRejectsDuplicate(t *testing.T) {
 	}
 }
 
-// TestProjectNextItemFKRejectsOrphan verifies that inserting an item with a
+// TestProjectNextTaskFKRejectsOrphan verifies that inserting a task with a
 // nonexistent project_next_lane_id is rejected by the FK constraint. Confirms
 // PRAGMA foreign_keys is ON before testing so a disabled-FK regression fails
 // loudly rather than silently passing.
-func TestProjectNextItemFKRejectsOrphan(t *testing.T) {
+func TestProjectNextTaskFKRejectsOrphan(t *testing.T) {
 	db := freshDB(t)
 	applySchema(t, db)
 	if _, err := db.Exec("PRAGMA foreign_keys = ON"); err != nil {
@@ -238,7 +288,7 @@ func TestProjectNextItemFKRejectsOrphan(t *testing.T) {
 	}
 
 	_, err := db.Exec(
-		"INSERT INTO project_next_items (project_next_lane_id, task_id, reason, position) VALUES (?, ?, ?, ?)",
+		"INSERT INTO project_next_tasks (project_next_lane_id, task_id, reason, position) VALUES (?, ?, ?, ?)",
 		99999, "E-orphan", "r", 0,
 	)
 	if err == nil {
