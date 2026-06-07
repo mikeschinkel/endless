@@ -36,6 +36,33 @@ def run_apply(hotkey: str, status_interval: int) -> None:
         sys.exit(result.returncode)
 
 
+def run_init(hotkey: str, status_interval: int) -> None:
+    """Shell out to `endless-go tmux init` with the given options.
+
+    Self-gates via @server_uuid: first call after a tmux server start
+    runs reset + apply and stamps a UUID; subsequent calls no-op.
+    """
+    cmd = [
+        _binary(), "tmux", "init",
+        "--hotkey", hotkey,
+        "--status-interval", str(status_interval),
+    ]
+    result = subprocess.run(cmd)
+    if result.returncode != 0:
+        sys.exit(result.returncode)
+
+
+def run_reset() -> None:
+    """Shell out to `endless-go tmux reset`.
+
+    Marks session rows for the current project ended (and NULLs their
+    process) when their tmux pane no longer exists on the live server.
+    """
+    result = subprocess.run([_binary(), "tmux", "reset"])
+    if result.returncode != 0:
+        sys.exit(result.returncode)
+
+
 def run_status_line() -> None:
     """Shell out to `endless-go tmux status-line` and pass stdout through.
 

@@ -2053,6 +2053,33 @@ def tmux_status_line():
     run_status_line()
 
 
+@tmux_cmd.command("init")
+@click.option("--hotkey", default="e",
+              help="Prefix-table key to bind for the popup menu (default: e)")
+@click.option("--status-interval", type=int, default=2,
+              help="tmux status-interval seconds (default: 2)")
+def tmux_init(hotkey, status_interval):
+    """Init the current tmux server for Endless (gated by @server_uuid).
+
+    Target for `set-hook -g session-created "run-shell 'endless tmux init'"`
+    in ~/.tmux.conf. First call after a tmux server start runs reset +
+    apply and stamps a fresh @server_uuid; subsequent calls no-op.
+    """
+    from endless.tmux_cmd import run_init
+    run_init(hotkey, status_interval)
+
+
+@tmux_cmd.command("reset")
+def tmux_reset():
+    """Mark dead-pane session rows ended for the current project.
+
+    Wraps `endless-go tmux reset`. Useful for debugging when sessions
+    survive a tmux server restart and won't get reaped naturally.
+    """
+    from endless.tmux_cmd import run_reset
+    run_reset()
+
+
 # Suggestions command group (E-918) — AI-agent rule-relaxation suggestions
 @main.group("suggestions")
 def suggestions_cmd():
