@@ -46,10 +46,12 @@ func ReapDeadTmuxPanes(projectID int64) error {
 	now := time.Now().UTC().Format("2006-01-02T15:04:05")
 
 	// No live %-panes at all (tmux running but empty, or only non-pane
-	// output): every tmux-format row in this project is dead.
+	// output): every tmux-format row in this project is dead. NULL out
+	// `process` along with the state flip so reused pane ids can't pull
+	// these rows back into a lookup (E-1530, Layer A).
 	if len(alive) == 0 {
 		_, err = db.Exec(
-			`UPDATE sessions SET state='ended', last_activity=?
+			`UPDATE sessions SET state='ended', process=NULL, last_activity=?
 			 WHERE state != 'ended' AND process GLOB '%[0-9]*' AND project_id = ?`,
 			now, projectID,
 		)
@@ -65,7 +67,7 @@ func ReapDeadTmuxPanes(projectID int64) error {
 	// The GLOB literal contains a `%` which fmt.Sprintf reads as a verb;
 	// escape it as `%%` so the final SQL has `'%[0-9]*'`.
 	query := fmt.Sprintf(
-		`UPDATE sessions SET state='ended', last_activity=?
+		`UPDATE sessions SET state='ended', process=NULL, last_activity=?
 		 WHERE state != 'ended'
 		   AND process GLOB '%%[0-9]*'
 		   AND project_id = ?

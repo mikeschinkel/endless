@@ -85,12 +85,18 @@ func queryActiveTaskForPanes(db *sql.DB, panes []string) (*ActiveTaskInfo, error
 		args[i] = p
 	}
 
+	// state != 'ended' filter is mandatory: tmux pane ids (`%N`) are
+	// reused after a tmux server restart. Without it, stale ended-session
+	// rows from a prior server win the lookup for currently-live panes
+	// (E-1530). Sibling readers (anySessionForPanes, GetLiveSessionByProcess)
+	// apply the same filter.
 	q := `SELECT t.id, t.title, t.status, t.type, t.phase, t.tier, COALESCE(p.name, '')
 	      FROM sessions s
 	      JOIN tasks t ON t.id = s.active_task_id
 	      LEFT JOIN projects p ON p.id = t.project_id
 	      WHERE s.process IN (` + placeholders + `)
 	        AND s.active_task_id IS NOT NULL
+	        AND s.state != 'ended'
 	      ORDER BY s.last_activity DESC
 	      LIMIT 1`
 
@@ -234,7 +240,7 @@ func anySessionForPanes(panes []string) (bool, error) {
 
 	var found int
 	err = db.QueryRow(
-		"SELECT 1 FROM sessions WHERE process IN ("+placeholders+") LIMIT 1",
+		"SELECT 1 FROM sessions WHERE process IN ("+placeholders+") AND state != 'ended' LIMIT 1",
 		args...,
 	).Scan(&found)
 	if errors.Is(err, sql.ErrNoRows) {

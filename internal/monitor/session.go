@@ -260,11 +260,16 @@ func TouchSession(sessionID, platform, process string, projectID int64) error {
 	}
 
 	// Collision invalidation: only meaningful when the incoming process
-	// is non-empty (otherwise we can't be claiming any pane).
+	// is non-empty (otherwise we can't be claiming any pane). NULLs the
+	// displaced row's `process` so reused pane ids after a tmux server
+	// restart can't pull it back into a lookup (E-1530, Layer A).
+	// E-1468 plans to revisit this site's logic (the displaced row may
+	// not actually be dead — a tmux server restart can reissue the same
+	// pane id to a different session); the NULL is independent of that.
 	if process != "" {
 		_, err = tx.Exec(
 			`UPDATE sessions
-			 SET state = 'ended', last_activity = ?
+			 SET state = 'ended', process = NULL, last_activity = ?
 			 WHERE process = ?
 			   AND session_id != ?
 			   AND state != 'ended'`,
@@ -350,7 +355,9 @@ func IdleSession(sessionID string) error {
 	return err
 }
 
-// EndSession marks a session as ended.
+// EndSession marks a session as ended. Also NULLs `process` so reused
+// tmux pane ids can't pull the ended row into a lookup after a tmux
+// server restart (E-1530, Layer A).
 func EndSession(sessionID string) error {
 	db, err := DB()
 	if err != nil {
@@ -359,7 +366,7 @@ func EndSession(sessionID string) error {
 
 	now := time.Now().UTC().Format("2006-01-02T15:04:05")
 	_, err = db.Exec(
-		"UPDATE sessions SET state='ended', last_activity=? WHERE session_id=?",
+		"UPDATE sessions SET state='ended', process=NULL, last_activity=? WHERE session_id=?",
 		now, sessionID,
 	)
 	return err

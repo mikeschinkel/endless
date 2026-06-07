@@ -165,11 +165,12 @@ func TestTouchSession_CollisionInvalidationMarksPriorEnded(t *testing.T) {
 	if stateA != "ended" {
 		t.Errorf("prior occupant A.state = %q, want ended", stateA)
 	}
-	// A's process is left in place — we only flip state. Readers filter
-	// by state != 'ended', so the value doesn't matter; preserving it
-	// keeps audit trails honest.
-	if processA != "%5" {
-		t.Errorf("prior occupant A.process = %q, want %%5 (state-only flip)", processA)
+	// A's process is NULL'd along with the state flip (E-1530, Layer A).
+	// Required because tmux pane ids (`%N`) are reused after a tmux server
+	// restart — leaving the value behind lets the ghost row win the lookup
+	// for the next server's pane with the same id.
+	if processA != "" {
+		t.Errorf("prior occupant A.process = %q, want NULL (E-1530)", processA)
 	}
 	stateB, processB, _ := sessionRow(t, db, "sess-B")
 	if stateB == "ended" {

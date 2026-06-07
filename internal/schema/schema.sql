@@ -87,6 +87,28 @@ CREATE TABLE IF NOT EXISTS sessions (
     FOREIGN KEY (active_task_id) REFERENCES tasks(id) ON DELETE SET NULL
 );
 
+-- E-1530 invariant: a session in state='ended' has process IS NULL. Code
+-- writes also NULL process at end-of-life (Layer A); these triggers are
+-- the schema-level backstop (Layer B). Required because tmux pane ids
+-- (`%N`) are reused after a tmux server restart — without NULLing
+-- `process` at end-of-life, lookups for new-server panes hit ghost rows
+-- from the prior server. SQLite's recursive_triggers is OFF by default,
+-- and the WHEN clause short-circuits anyway, so the inner UPDATE doesn't
+-- recurse the AFTER UPDATE trigger.
+CREATE TRIGGER IF NOT EXISTS sessions_null_process_on_end_update
+AFTER UPDATE OF state ON sessions
+WHEN NEW.state = 'ended' AND NEW.process IS NOT NULL
+BEGIN
+    UPDATE sessions SET process = NULL WHERE id = NEW.id;
+END;
+
+CREATE TRIGGER IF NOT EXISTS sessions_null_process_on_end_insert
+AFTER INSERT ON sessions
+WHEN NEW.state = 'ended' AND NEW.process IS NOT NULL
+BEGIN
+    UPDATE sessions SET process = NULL WHERE id = NEW.id;
+END;
+
 -- Task items
 CREATE TABLE IF NOT EXISTS tasks (
     id INTEGER PRIMARY KEY,

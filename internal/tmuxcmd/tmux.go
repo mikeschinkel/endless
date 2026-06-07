@@ -33,6 +33,10 @@ func Run(args []string) {
 	switch args[0] {
 	case "apply":
 		runApply(args[1:])
+	case "init":
+		runInit(args[1:])
+	case "reset":
+		runReset(args[1:])
 	case "status-line":
 		runStatusLine(args[1:])
 	case "active-id":
@@ -51,6 +55,8 @@ func Run(args []string) {
 func usage(w *os.File) {
 	fmt.Fprintf(w, "Usage: endless-go tmux <command> [flags]\n")
 	fmt.Fprintf(w, "Commands:\n")
+	fmt.Fprintf(w, "  init         Init the current tmux server (reset+apply, gated by @server_uuid)\n")
 	fmt.Fprintf(w, "  apply        Configure the running tmux server (ephemeral)\n")
+	fmt.Fprintf(w, "  reset        Mark dead-pane session rows ended for the current project\n")
 	fmt.Fprintf(w, "  status-line  Print one styled line for status-format[1]\n")
 }
