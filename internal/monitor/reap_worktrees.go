@@ -111,6 +111,24 @@ func ReapStaleWorktrees(projectRoot string, ttl time.Duration) error {
 // maybeReapWorktree applies the per-directory decision logic and
 // performs the reap when eligible. Returns (true, nil) when the dir
 // was removed.
+//
+// Eligibility (all must hold):
+//  1. A task_landings row exists for the task.
+//  2. The latest activity timestamp — MAX(landed_at, session_tasks.updated_at)
+//     — is older than cutoff. session_tasks.updated_at is upserted by every
+//     task.* event from a session actor, so claim / status flip / decision /
+//     etc. all advance it (see internal/events/session_tasks.go).
+//  3. No active (state != 'ended') session has active_task_id pointing at
+//     the task.
+//  4. The worktree's branch has no commits not yet on main
+//     (`git -C <wt> rev-list main..HEAD --count` == 0).
+//  5. The worktree's working tree is clean
+//     (`git -C <wt> status --porcelain` empty).
+//  6. No live process holds cwd inside the dir.
+//
+// Any git error while running 4 or 5 is treated as "in use" — the
+// reaper would rather skip a candidate it can't reason about than
+// destroy in-flight work.
 func maybeReapWorktree(db *sql.DB, projectRoot, dir string, taskID int64, cutoff time.Time) (bool, error) {
 	var landedAt, branch string
 	err := db.QueryRow(
@@ -132,7 +150,55 @@ func maybeReapWorktree(db *sql.DB, projectRoot, dir string, taskID int64, cutoff
 	if err != nil {
 		return false, fmt.Errorf("parse landed_at %q: %w", landedAt, err)
 	}
-	if landed.After(cutoff) {
+	latest := landed
+
+	var sessionTouched sql.NullString
+	err = db.QueryRow(
+		`SELECT MAX(updated_at) FROM session_tasks WHERE task_id = ?`,
+		taskID,
+	).Scan(&sessionTouched)
+	if err != nil && err != sql.ErrNoRows {
+		return false, fmt.Errorf("query session_tasks: %w", err)
+	}
+	if sessionTouched.Valid && sessionTouched.String != "" {
+		if t, perr := time.Parse("2006-01-02T15:04:05", sessionTouched.String); perr == nil && t.After(latest) {
+			latest = t
+		}
+	}
+	if latest.After(cutoff) {
+		return false, nil
+	}
+
+	var activeSessions int
+	err = db.QueryRow(
+		`SELECT count(*) FROM sessions WHERE active_task_id = ? AND state != 'ended'`,
+		taskID,
+	).Scan(&activeSessions)
+	if err != nil {
+		return false, fmt.Errorf("query active sessions: %w", err)
+	}
+	if activeSessions > 0 {
+		return false, nil
+	}
+
+	// Unmerged commits on the branch → skip. Hardcoded `main` matches
+	// the endless convention (consistent with `just land`). Treat any
+	// git error as "in use" — better to skip than destroy a worktree
+	// we can't inspect.
+	out, gerr := runGit(dir, "rev-list", "main..HEAD", "--count")
+	if gerr != nil {
+		return false, nil
+	}
+	if n, perr := strconv.Atoi(strings.TrimSpace(out)); perr != nil || n > 0 {
+		return false, nil
+	}
+
+	// Dirty working tree → skip.
+	out, gerr = runGit(dir, "status", "--porcelain")
+	if gerr != nil {
+		return false, nil
+	}
+	if strings.TrimSpace(out) != "" {
 		return false, nil
 	}
 
@@ -167,7 +233,12 @@ func maybeReapWorktree(db *sql.DB, projectRoot, dir string, taskID int64, cutoff
 // system /Volumes/.timemachine/..." warnings on macOS with mounted
 // Time Machine drives. Those warnings are about unrelated filesystems
 // and have no bearing on whether the worktree directory is in use.
-func hasLiveProcessInDir(dir string) (bool, error) {
+//
+// Held in a var (paired with runGit above) so reaper tests can swap
+// in a deterministic stub.
+var hasLiveProcessInDir = realHasLiveProcessInDir
+
+func realHasLiveProcessInDir(dir string) (bool, error) {
 	cmd := exec.Command("lsof", "-d", "cwd", "+D", dir)
 	var stdout bytes.Buffer
 	cmd.Stdout = &stdout
@@ -184,10 +255,17 @@ func hasLiveProcessInDir(dir string) (bool, error) {
 	return false, err
 }
 
-// runGit executes `git -C <projectRoot> <args...>` and returns the
-// combined stdout+stderr along with the error.
-func runGit(projectRoot string, args ...string) (string, error) {
-	full := append([]string{"-C", projectRoot}, args...)
+// runGit executes `git -C <dir> <args...>` and returns the combined
+// stdout+stderr along with the error. dir is the directory passed to
+// `git -C`; callers pass projectRoot for repo-level operations
+// (`worktree remove`, `branch -D`) and the worktree dir itself for
+// per-worktree inspection (`rev-list`, `status`).
+//
+// Held as a var rather than a plain func so reaper tests can substitute
+// a fixture-driven implementation without building real git fixtures.
+// Restore the original via the returned func from SetRunGitForTest.
+var runGit = func(dir string, args ...string) (string, error) {
+	full := append([]string{"-C", dir}, args...)
 	cmd := exec.Command("git", full...)
 	out, err := cmd.CombinedOutput()
 	return string(out), err

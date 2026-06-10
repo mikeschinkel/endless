@@ -2,6 +2,7 @@ package monitor
 
 import (
 	"database/sql"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -141,6 +142,258 @@ func TestMaybeReapWorktree_LandingTooRecent(t *testing.T) {
 	}
 	if reaped {
 		t.Errorf("expected reap=false for landing < ttl old, got true")
+	}
+}
+
+// reaperFixture seeds the common state for E-1549 multi-signal-guard
+// tests: a single task_landings row at landedAt and an installed
+// runGit/hasLiveProcessInDir pair that records its calls and answers
+// according to the supplied callbacks. The returned dir is created
+// (so lsof has a real target) but contains no .git.
+type reaperFixture struct {
+	db       *sql.DB
+	dir      string
+	projRoot string
+	calls    []string
+
+	// answers — left as defaults to make the worktree look fully reapable.
+	revListOut    string // "0" → no unmerged commits
+	statusOut     string // "" → clean
+	revListErr    error
+	statusErr     error
+	worktreeRmErr error
+	branchDelErr  error
+	live          bool
+}
+
+func newReaperFixture(t *testing.T, landedAt time.Time) *reaperFixture {
+	t.Helper()
+	f := &reaperFixture{
+		db:         newReaperTestDB(t),
+		dir:        t.TempDir(),
+		projRoot:   t.TempDir(),
+		revListOut: "0",
+		statusOut:  "",
+	}
+	if _, err := f.db.Exec(
+		`INSERT INTO task_landings (task_id, branch, merge_commit_sha, landed_at)
+		 VALUES (42, 'task/42-probe', 'deadbeef', ?)`,
+		landedAt.UTC().Format("2006-01-02T15:04:05"),
+	); err != nil {
+		t.Fatalf("seed landing: %v", err)
+	}
+
+	prevRunGit := runGit
+	prevLive := hasLiveProcessInDir
+	runGit = func(dir string, args ...string) (string, error) {
+		key := args[0]
+		f.calls = append(f.calls, key)
+		switch key {
+		case "rev-list":
+			return f.revListOut, f.revListErr
+		case "status":
+			return f.statusOut, f.statusErr
+		case "worktree":
+			return "", f.worktreeRmErr
+		case "branch":
+			return "", f.branchDelErr
+		}
+		return "", nil
+	}
+	hasLiveProcessInDir = func(string) (bool, error) { return f.live, nil }
+	t.Cleanup(func() {
+		runGit = prevRunGit
+		hasLiveProcessInDir = prevLive
+	})
+	return f
+}
+
+// TestMaybeReapWorktree_ReapsCleanAbandoned covers the happy path:
+// landed long ago, no session activity, clean tree, no unmerged
+// commits, no active session, no live process → reaped.
+func TestMaybeReapWorktree_ReapsCleanAbandoned(t *testing.T) {
+	f := newReaperFixture(t, time.Now().Add(-30*24*time.Hour))
+	cutoff := time.Now().UTC().Add(-14 * 24 * time.Hour)
+	reaped, err := maybeReapWorktree(f.db, f.projRoot, f.dir, 42, cutoff)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !reaped {
+		t.Errorf("expected reap=true for clean abandoned worktree, got false")
+	}
+	// Sanity: the destructive git ops were attempted.
+	var sawRemove, sawBranchDel bool
+	for _, c := range f.calls {
+		if c == "worktree" {
+			sawRemove = true
+		}
+		if c == "branch" {
+			sawBranchDel = true
+		}
+	}
+	if !sawRemove || !sawBranchDel {
+		t.Errorf("expected worktree remove + branch -D, got calls=%v", f.calls)
+	}
+}
+
+// TestMaybeReapWorktree_SessionTaskActivityProtects covers the E-1549
+// bug: landed >TTL ago, but session_tasks.updated_at is within TTL
+// (reopened-after-landing). Reaper must leave the worktree alone.
+func TestMaybeReapWorktree_SessionTaskActivityProtects(t *testing.T) {
+	f := newReaperFixture(t, time.Now().Add(-30*24*time.Hour))
+	// Seed a recent session_tasks row (within TTL).
+	now := time.Now().UTC().Format("2006-01-02T15:04:05")
+	if _, err := f.db.Exec(
+		`INSERT INTO sessions (id, session_id, project_id, state)
+		 VALUES (7, 'sess-7', 1, 'ended')`,
+	); err != nil {
+		t.Fatalf("seed session: %v", err)
+	}
+	if _, err := f.db.Exec(
+		`INSERT INTO session_tasks (session_id, task_id, created_at, updated_at)
+		 VALUES (7, 42, ?, ?)`,
+		now, now,
+	); err != nil {
+		t.Fatalf("seed session_tasks: %v", err)
+	}
+	cutoff := time.Now().UTC().Add(-14 * 24 * time.Hour)
+	reaped, err := maybeReapWorktree(f.db, f.projRoot, f.dir, 42, cutoff)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if reaped {
+		t.Errorf("expected reap=false when session_tasks.updated_at is within TTL, got true")
+	}
+}
+
+// TestMaybeReapWorktree_OldSessionTaskActivityReaps confirms that
+// session_tasks.updated_at also older than TTL doesn't save the
+// worktree — post-grace abandonment still reaps.
+func TestMaybeReapWorktree_OldSessionTaskActivityReaps(t *testing.T) {
+	f := newReaperFixture(t, time.Now().Add(-30*24*time.Hour))
+	old := time.Now().Add(-30 * 24 * time.Hour).UTC().Format("2006-01-02T15:04:05")
+	if _, err := f.db.Exec(
+		`INSERT INTO sessions (id, session_id, project_id, state)
+		 VALUES (7, 'sess-7', 1, 'ended')`,
+	); err != nil {
+		t.Fatalf("seed session: %v", err)
+	}
+	if _, err := f.db.Exec(
+		`INSERT INTO session_tasks (session_id, task_id, created_at, updated_at)
+		 VALUES (7, 42, ?, ?)`,
+		old, old,
+	); err != nil {
+		t.Fatalf("seed session_tasks: %v", err)
+	}
+	cutoff := time.Now().UTC().Add(-14 * 24 * time.Hour)
+	reaped, err := maybeReapWorktree(f.db, f.projRoot, f.dir, 42, cutoff)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !reaped {
+		t.Errorf("expected reap=true when both landed_at and session_tasks.updated_at are past TTL, got false")
+	}
+}
+
+// TestMaybeReapWorktree_UnmergedCommitsProtect: a branch with commits
+// not yet on main must not be reaped.
+func TestMaybeReapWorktree_UnmergedCommitsProtect(t *testing.T) {
+	f := newReaperFixture(t, time.Now().Add(-30*24*time.Hour))
+	f.revListOut = "3"
+	cutoff := time.Now().UTC().Add(-14 * 24 * time.Hour)
+	reaped, err := maybeReapWorktree(f.db, f.projRoot, f.dir, 42, cutoff)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if reaped {
+		t.Errorf("expected reap=false when branch has unmerged commits, got true")
+	}
+}
+
+// TestMaybeReapWorktree_ActiveSessionProtects: a non-ended session
+// pointing at the task via active_task_id blocks reap.
+func TestMaybeReapWorktree_ActiveSessionProtects(t *testing.T) {
+	f := newReaperFixture(t, time.Now().Add(-30*24*time.Hour))
+	if _, err := f.db.Exec(
+		`INSERT INTO sessions (id, session_id, project_id, state, active_task_id)
+		 VALUES (9, 'sess-9', 1, 'working', 42)`,
+	); err != nil {
+		t.Fatalf("seed active session: %v", err)
+	}
+	cutoff := time.Now().UTC().Add(-14 * 24 * time.Hour)
+	reaped, err := maybeReapWorktree(f.db, f.projRoot, f.dir, 42, cutoff)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if reaped {
+		t.Errorf("expected reap=false when an active session is bound to the task, got true")
+	}
+}
+
+// TestMaybeReapWorktree_EndedSessionDoesNotProtect: a session in
+// state='ended' must not save the worktree (the bug's belt+suspenders
+// guard fires only for state != 'ended').
+func TestMaybeReapWorktree_EndedSessionDoesNotProtect(t *testing.T) {
+	f := newReaperFixture(t, time.Now().Add(-30*24*time.Hour))
+	if _, err := f.db.Exec(
+		`INSERT INTO sessions (id, session_id, project_id, state, active_task_id)
+		 VALUES (9, 'sess-9', 1, 'ended', 42)`,
+	); err != nil {
+		t.Fatalf("seed ended session: %v", err)
+	}
+	cutoff := time.Now().UTC().Add(-14 * 24 * time.Hour)
+	reaped, err := maybeReapWorktree(f.db, f.projRoot, f.dir, 42, cutoff)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !reaped {
+		t.Errorf("expected reap=true when only blocker is an ended session, got false")
+	}
+}
+
+// TestMaybeReapWorktree_DirtyTreeProtects: uncommitted edits in the
+// worktree block reap.
+func TestMaybeReapWorktree_DirtyTreeProtects(t *testing.T) {
+	f := newReaperFixture(t, time.Now().Add(-30*24*time.Hour))
+	f.statusOut = " M internal/monitor/reap_worktrees.go\n"
+	cutoff := time.Now().UTC().Add(-14 * 24 * time.Hour)
+	reaped, err := maybeReapWorktree(f.db, f.projRoot, f.dir, 42, cutoff)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if reaped {
+		t.Errorf("expected reap=false for dirty working tree, got true")
+	}
+}
+
+// TestMaybeReapWorktree_GitStatusErrorProtects: when git itself fails,
+// the reaper treats the worktree as in-use and skips. The plan calls
+// for conservatism: don't destroy a worktree we can't inspect.
+func TestMaybeReapWorktree_GitStatusErrorProtects(t *testing.T) {
+	f := newReaperFixture(t, time.Now().Add(-30*24*time.Hour))
+	f.statusErr = fmt.Errorf("fatal: not a git repository")
+	cutoff := time.Now().UTC().Add(-14 * 24 * time.Hour)
+	reaped, err := maybeReapWorktree(f.db, f.projRoot, f.dir, 42, cutoff)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if reaped {
+		t.Errorf("expected reap=false when git status errors, got true")
+	}
+}
+
+// TestMaybeReapWorktree_GitRevListErrorProtects: same conservatism
+// applies to the unmerged-commits probe.
+func TestMaybeReapWorktree_GitRevListErrorProtects(t *testing.T) {
+	f := newReaperFixture(t, time.Now().Add(-30*24*time.Hour))
+	f.revListErr = fmt.Errorf("fatal: ambiguous argument 'main'")
+	cutoff := time.Now().UTC().Add(-14 * 24 * time.Hour)
+	reaped, err := maybeReapWorktree(f.db, f.projRoot, f.dir, 42, cutoff)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if reaped {
+		t.Errorf("expected reap=false when git rev-list errors, got true")
 	}
 }
 
