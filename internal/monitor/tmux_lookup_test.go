@@ -265,3 +265,154 @@ func TestGetLiveSessionByProcess_EmptyInputReturnsErrNoRows(t *testing.T) {
 // two synthetic panes are needed in the same test (e.g., differentiating
 // pane vs window fallback). Removed once a test consumes it; harmless here.
 var _ = fakePane2
+
+// seedBlocks inserts a task_deps row meaning "blockerID blocks taskID".
+// task_deps uses source→target with dep_type='blocks'; source is the
+// blocker, target is the blocked task.
+func seedBlocks(t *testing.T, db *sql.DB, blockerID, taskID int64) {
+	t.Helper()
+	if _, err := db.Exec(
+		`INSERT INTO task_deps (source_type, source_id, target_type, target_id, dep_type)
+		 VALUES ('task', ?, 'task', ?, 'blocks')`,
+		blockerID, taskID,
+	); err != nil {
+		t.Fatalf("seed blocks %d→%d: %v", blockerID, taskID, err)
+	}
+}
+
+// TestGetActiveBlockers_EmptyWhenNone pins the no-blockers case: a task
+// with no rows in task_deps returns a nil slice and no error, so the
+// status-line renderer omits the segment entirely.
+func TestGetActiveBlockers_EmptyWhenNone(t *testing.T) {
+	db := withTestDB(t)
+	seedProject(t, db, 1, "acme", "/tmp/acme")
+	seedTask(t, db, 100, 1, "current task", "in_progress")
+
+	ids, err := GetActiveBlockers(100)
+	if err != nil {
+		t.Fatalf("GetActiveBlockers: %v", err)
+	}
+	if len(ids) != 0 {
+		t.Errorf("got %v, want empty", ids)
+	}
+}
+
+// TestGetActiveBlockers_FiltersTerminalStatuses pins the active-only
+// contract: blockers whose status is in {confirmed,assumed,declined,
+// obsolete} are excluded — those statuses unblock the dependent per
+// `endless guide tasks`.
+func TestGetActiveBlockers_FiltersTerminalStatuses(t *testing.T) {
+	db := withTestDB(t)
+	seedProject(t, db, 1, "acme", "/tmp/acme")
+	seedTask(t, db, 100, 1, "current task", "in_progress")
+	seedTask(t, db, 201, 1, "blocker confirmed", "confirmed")
+	seedTask(t, db, 202, 1, "blocker assumed", "assumed")
+	seedTask(t, db, 203, 1, "blocker declined", "declined")
+	seedTask(t, db, 204, 1, "blocker obsolete", "obsolete")
+	seedBlocks(t, db, 201, 100)
+	seedBlocks(t, db, 202, 100)
+	seedBlocks(t, db, 203, 100)
+	seedBlocks(t, db, 204, 100)
+
+	ids, err := GetActiveBlockers(100)
+	if err != nil {
+		t.Fatalf("GetActiveBlockers: %v", err)
+	}
+	if len(ids) != 0 {
+		t.Errorf("got %v, want empty (all blockers terminal)", ids)
+	}
+}
+
+// TestGetActiveBlockers_KeepsActiveDropsTerminal pins the mixed case:
+// only blockers in non-terminal statuses appear, terminal ones are
+// dropped, and id order is ASC for stable display across refreshes.
+func TestGetActiveBlockers_KeepsActiveDropsTerminal(t *testing.T) {
+	db := withTestDB(t)
+	seedProject(t, db, 1, "acme", "/tmp/acme")
+	seedTask(t, db, 100, 1, "current task", "in_progress")
+	seedTask(t, db, 301, 1, "active 301", "in_progress")  // active
+	seedTask(t, db, 302, 1, "terminal 302", "confirmed")  // terminal, excluded
+	seedTask(t, db, 303, 1, "active 303", "ready")        // active
+	seedTask(t, db, 304, 1, "terminal 304", "obsolete")   // terminal, excluded
+	seedBlocks(t, db, 304, 100)
+	seedBlocks(t, db, 301, 100)
+	seedBlocks(t, db, 303, 100)
+	seedBlocks(t, db, 302, 100)
+
+	ids, err := GetActiveBlockers(100)
+	if err != nil {
+		t.Fatalf("GetActiveBlockers: %v", err)
+	}
+	want := []int64{301, 303}
+	if len(ids) != len(want) || ids[0] != want[0] || ids[1] != want[1] {
+		t.Errorf("got %v, want %v", ids, want)
+	}
+}
+
+// TestGetActiveBlockers_CapsAtThree pins the LIMIT 3 contract: the
+// query never returns more than three rows, so the renderer's "+"
+// overflow logic gets a stable signal ("len == 3 → there is more")
+// without scanning every blocker.
+func TestGetActiveBlockers_CapsAtThree(t *testing.T) {
+	db := withTestDB(t)
+	seedProject(t, db, 1, "acme", "/tmp/acme")
+	seedTask(t, db, 100, 1, "current task", "in_progress")
+	for id := int64(401); id <= 405; id++ {
+		seedTask(t, db, id, 1, "blocker", "ready")
+		seedBlocks(t, db, id, 100)
+	}
+
+	ids, err := GetActiveBlockers(100)
+	if err != nil {
+		t.Fatalf("GetActiveBlockers: %v", err)
+	}
+	if len(ids) != 3 {
+		t.Errorf("len=%d, want 3 (LIMIT 3 cap)", len(ids))
+	}
+	want := []int64{401, 402, 403}
+	for i, w := range want {
+		if ids[i] != w {
+			t.Errorf("ids[%d]=%d, want %d", i, ids[i], w)
+		}
+	}
+}
+
+// TestGetActiveBlockers_ZeroTaskIDReturnsNil pins the input guard: a
+// caller without a known current task (taskID==0) gets nil with no
+// error so the renderer skips the segment cleanly.
+func TestGetActiveBlockers_ZeroTaskIDReturnsNil(t *testing.T) {
+	withTestDB(t)
+	ids, err := GetActiveBlockers(0)
+	if err != nil {
+		t.Fatalf("GetActiveBlockers(0): %v", err)
+	}
+	if ids != nil {
+		t.Errorf("got %v, want nil", ids)
+	}
+}
+
+// TestGetActiveBlockers_OnlyTaskSourcedRows pins that project- or
+// decision-sourced blocker rows do not appear in the per-task status
+// segment — only source_type='task' counts.
+func TestGetActiveBlockers_OnlyTaskSourcedRows(t *testing.T) {
+	db := withTestDB(t)
+	seedProject(t, db, 1, "acme", "/tmp/acme")
+	seedTask(t, db, 100, 1, "current task", "in_progress")
+	seedTask(t, db, 501, 1, "task-sourced blocker", "in_progress") // task-sourced active blocker
+	seedBlocks(t, db, 501, 100)
+	// Project-sourced blocker row (source_type='project') — must be ignored.
+	if _, err := db.Exec(
+		`INSERT INTO task_deps (source_type, source_id, target_type, target_id, dep_type)
+		 VALUES ('project', 1, 'task', 100, 'blocks')`,
+	); err != nil {
+		t.Fatalf("seed project blocker: %v", err)
+	}
+
+	ids, err := GetActiveBlockers(100)
+	if err != nil {
+		t.Fatalf("GetActiveBlockers: %v", err)
+	}
+	if len(ids) != 1 || ids[0] != 501 {
+		t.Errorf("got %v, want [501]", ids)
+	}
+}

@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 
 	_ "modernc.org/sqlite"
 
@@ -54,13 +55,16 @@ func runStatusLine(args []string) {
 
 // format renders the active-task status line in the order:
 //
-//	[E-NNN] · project · type · phase · tier · status
+//	[E-NNN] · project · type · phase · tier · status [· {E-AAA E-BBB +}]
 //
 // Title is intentionally omitted — bar space is scarce; title lives
 // in the menu popup. Style mirrors the user's right-status "Help"
 // marker (bold yellow) for the ID, then inherits status-style default
 // for the rest so it matches the user's theme. Fields are omitted
 // when their value is empty/nil so the row stays compact.
+//
+// The trailing blockers segment is appended only when the task has at
+// least one active blocker; absence is the unblocked signal (E-1550).
 func format(info *monitor.ActiveTaskInfo) string {
 	out := fmt.Sprintf("#[fg=colour226,bold][E-%d]#[default]", info.TaskID)
 	for _, field := range []string{
@@ -74,7 +78,49 @@ func format(info *monitor.ActiveTaskInfo) string {
 			out += " · " + field
 		}
 	}
+	if seg := blockersSegment(info.TaskID); seg != "" {
+		out += " · " + seg
+	}
 	return out
+}
+
+// blockersSegment renders the trailing `{E-NNNN E-MMMM +}` chip showing
+// the task's active blockers (E-1550). Returns the empty string when
+// there are no active blockers or when the DB query fails — silence is
+// the unblocked signal, and a transient DB error should not blank the
+// rest of the row.
+//
+// Layout:
+//   - 0 blockers   → ""               (caller drops the leading " · ")
+//   - 1 blocker    → "{E-N}"
+//   - 2 blockers   → "{E-N E-M}"
+//   - 3+ blockers  → "{E-N E-M +}"    ("+" overflow; trio order is id ASC)
+//
+// The whole chip (braces + IDs + spaces) is wrapped in a single orange
+// color group so the shape is unmistakable at a glance and color is
+// reset on exit so downstream segments inherit the theme default.
+func blockersSegment(taskID int64) string {
+	ids, err := monitor.GetActiveBlockers(taskID)
+	if err != nil || len(ids) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString("#[fg=colour208,bold]{")
+	show := ids
+	if len(show) > 2 {
+		show = show[:2]
+	}
+	for i, id := range show {
+		if i > 0 {
+			b.WriteByte(' ')
+		}
+		fmt.Fprintf(&b, "E-%d", id)
+	}
+	if len(ids) > 2 {
+		b.WriteString(" +")
+	}
+	b.WriteString("}#[default]")
+	return b.String()
 }
 
 // tierString formats the nullable tier integer for display, returning

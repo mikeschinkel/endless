@@ -268,6 +268,61 @@ func paneIsRunningClaude(tmuxPane string) bool {
 	return cmd == "claude" || cmd == "claude-code"
 }
 
+// GetActiveBlockers returns up to 3 task IDs that currently block taskID,
+// ordered by id ASC. "Active" means the blocker's status is NOT in the
+// terminal set {confirmed, assumed, declined, obsolete} — those statuses
+// unblock dependents (see `endless guide tasks`, blocking semantics), so
+// they don't belong in the status-line segment.
+//
+// The cap is 3 because the renderer shows at most two IDs inline plus a
+// `+` overflow marker; fetching a third row tells the caller "there is
+// more" without fetching all of them. Caller (status_line.format) limits
+// display to the first two IDs and appends "+" when len == 3.
+//
+// Source rows are restricted to source_type='task' — project- and
+// decision-sourced blockers are not surfaced in the per-task status
+// segment.
+//
+// Returns nil (no error) when taskID has no active blockers.
+func GetActiveBlockers(taskID int64) ([]int64, error) {
+	if taskID == 0 {
+		return nil, nil
+	}
+	db, err := DB()
+	if err != nil {
+		return nil, err
+	}
+	rows, err := db.Query(
+		`SELECT t.id
+		   FROM task_deps td
+		   JOIN tasks t ON t.id = td.source_id
+		  WHERE td.target_type = 'task'
+		    AND td.target_id = ?
+		    AND td.source_type = 'task'
+		    AND td.dep_type = 'blocks'
+		    AND t.status NOT IN ('confirmed', 'assumed', 'declined', 'obsolete')
+		  ORDER BY t.id ASC
+		  LIMIT 3`,
+		taskID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var ids []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return ids, nil
+}
+
 // GetLiveSessionByProcess returns the most-recently-active live session
 // whose `process` column matches the given identifier (typically a tmux
 // pane id like "%124"). Filters out state='ended' rows so the result is
