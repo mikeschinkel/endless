@@ -42,8 +42,8 @@ func freshTaskDB(t *testing.T, dir string, dbName string) (*sql.DB, string) {
 func seedSimpleTask(t *testing.T, db *sql.DB, id int64, title, status string) {
 	t.Helper()
 	if _, err := db.Exec(
-		`INSERT INTO tasks (id, project_id, title, phase, status, type)
-		 VALUES (?, 1, ?, 'now', ?, 'task')`,
+		`INSERT INTO tasks (id, project_id, title, phase, status, type_id)
+		 VALUES (?, 1, ?, 'now', ?, 1)`,
 		id, title, status,
 	); err != nil {
 		t.Fatalf("seed task %d: %v", id, err)

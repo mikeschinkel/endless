@@ -109,6 +109,23 @@ BEGIN
     UPDATE sessions SET process = NULL WHERE id = NEW.id;
 END;
 
+-- Task types (E-1538). SQL mirror of the TaskType Go enum (ED-1506: const-in-code
+-- is the source of truth, table exists for FK enforcement and queryability).
+-- The startup integrity check fails closed on drift between this table and the
+-- AllTaskTypes() enum. Adding a value = add an enum constant + add a seed row
+-- here. Seed inserts below are idempotent on a populated DB.
+CREATE TABLE IF NOT EXISTS task_types (
+    id    INTEGER PRIMARY KEY,
+    slug  TEXT UNIQUE NOT NULL,
+    label TEXT NOT NULL
+);
+
+INSERT OR IGNORE INTO task_types (id, slug, label) VALUES
+    (1, 'task',     'Task'),
+    (2, 'bug',      'Bug'),
+    (3, 'research', 'Research'),
+    (4, 'epic',     'Epic');
+
 -- Task items
 CREATE TABLE IF NOT EXISTS tasks (
     id INTEGER PRIMARY KEY,
@@ -123,7 +140,7 @@ CREATE TABLE IF NOT EXISTS tasks (
     sort_order INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
     completed_at TEXT,
-    type TEXT NOT NULL DEFAULT 'task',
+    type_id INTEGER REFERENCES task_types(id),
     updated_at TEXT NOT NULL DEFAULT '',
     tier INTEGER,
     outcome TEXT,

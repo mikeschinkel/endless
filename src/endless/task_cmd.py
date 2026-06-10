@@ -2632,7 +2632,8 @@ def update_plan(
     _require_outcome_for_completed(status, outcome)
 
     row = db.query(
-        "SELECT id, title, description, text, status, type, "
+        "SELECT id, title, description, text, status, "
+        "       COALESCE((SELECT slug FROM task_types WHERE id = tasks.type_id), '') AS type, "
         "       phase, tier, parent_id, outcome, analysis "
         "FROM   tasks WHERE id = ?",
         (item_id,),
@@ -2708,8 +2709,7 @@ def update_plan(
         _add("outcome", outcome)
 
     if task_type is not None:
-        valid_types = ("task", "plan", "bug", "research",
-                       "spike", "chore")
+        valid_types = ("task", "bug", "research", "epic")
         if task_type not in valid_types:
             raise click.ClickException(
                 f"Invalid task type {task_type!r}. "
@@ -2787,10 +2787,14 @@ def detail_item(
 ):
     """Show full detail for a task."""
     row = db.query(
-        "SELECT t.id, t.title, t.description, t.text, t.phase, t.status, t.type, "
+        "SELECT t.id, t.title, t.description, t.text, t.phase, t.status, "
+        "COALESCE(tt.slug, '') AS type, "
         "t.parent_id, t.source_file, t.created_at, t.updated_at, "
         "t.completed_at, t.sort_order, t.tier, t.outcome, p.name as project_name "
-        "FROM tasks t JOIN projects p ON t.project_id = p.id WHERE t.id = ?",
+        "FROM tasks t "
+        "JOIN projects p ON t.project_id = p.id "
+        "LEFT JOIN task_types tt ON tt.id = t.type_id "
+        "WHERE t.id = ?",
         (item_id,),
     )
     if not row:

@@ -1166,7 +1166,7 @@ def task_search(query, project, show_all, status, phase, parent_id,
 @click.option("--after", type=TASK_ID, default=None,
               help="Insert after this task ID")
 @click.option("--type", "task_type", default=None,
-              type=click.Choice(["task", "plan", "bug", "research", "spike", "chore"]),
+              type=click.Choice(["task", "bug", "research", "epic"]),
               help="Task type (default: task)")
 @click.option("--status", default=None,
               type=click.Choice(TASK_STATUSES),
@@ -1230,7 +1230,7 @@ def task_add(title, description, text_file, phase, project, parent, after, task_
 @click.option("--tier", default=None,
               help="Tier (0=n/a, 1-4 or auto/quick/deep/discuss, none=clear)")
 @click.option("--type", "task_type", default=None,
-              type=click.Choice(["task", "plan", "bug", "research", "spike", "chore"]),
+              type=click.Choice(["task", "bug", "research", "epic"]),
               help="Task type — closes the prior gap that forced direct SQL writes (E-1329)")
 @click.option("--analysis", "analysis_text", default=None,
               help="Analysis content (string, or @path/to/file to load from file). Closes the prior gap that forced direct SQL writes (E-1329)")

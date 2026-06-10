@@ -16,14 +16,14 @@ func TestGetActiveTaskForPane_SkipsEndedRows(t *testing.T) {
 	db := withTestDB(t)
 	seedProject(t, db, 1, "acme", "/tmp/acme")
 	if _, err := db.Exec(
-		"INSERT INTO tasks (id, project_id, title, status, type, phase) VALUES (?, ?, ?, ?, ?, ?)",
-		111, 1, "ghost task", "in_progress", "task", "now",
+		"INSERT INTO tasks (id, project_id, title, status, type_id, phase) VALUES (?, ?, ?, ?, ?, ?)",
+		111, 1, "ghost task", "in_progress", 1, "now",
 	); err != nil {
 		t.Fatalf("seed ghost task: %v", err)
 	}
 	if _, err := db.Exec(
-		"INSERT INTO tasks (id, project_id, title, status, type, phase) VALUES (?, ?, ?, ?, ?, ?)",
-		222, 1, "live task", "in_progress", "task", "now",
+		"INSERT INTO tasks (id, project_id, title, status, type_id, phase) VALUES (?, ?, ?, ?, ?, ?)",
+		222, 1, "live task", "in_progress", 1, "now",
 	); err != nil {
 		t.Fatalf("seed live task: %v", err)
 	}
@@ -64,8 +64,8 @@ func TestGetActiveTaskForPane_GhostOnlyReturnsNoTask(t *testing.T) {
 	db := withTestDB(t)
 	seedProject(t, db, 1, "acme", "/tmp/acme")
 	if _, err := db.Exec(
-		"INSERT INTO tasks (id, project_id, title, status, type, phase) VALUES (?, ?, ?, ?, ?, ?)",
-		333, 1, "ghost only", "in_progress", "task", "now",
+		"INSERT INTO tasks (id, project_id, title, status, type_id, phase) VALUES (?, ?, ?, ?, ?, ?)",
+		333, 1, "ghost only", "in_progress", 1, "now",
 	); err != nil {
 		t.Fatalf("seed task: %v", err)
 	}

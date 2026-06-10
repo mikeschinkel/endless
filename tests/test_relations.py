@@ -12,8 +12,8 @@ from endless import db, task_cmd
 def _add_task(title: str, status: str = "ready") -> int:
     """Create a task directly in the DB; return its id."""
     cur = db.execute(
-        "INSERT INTO tasks (project_id, title, status, type, phase, created_at) "
-        "VALUES (1, ?, ?, 'task', 'now', datetime('now'))",
+        "INSERT INTO tasks (project_id, title, status, type_id, phase, created_at) "
+        "VALUES (1, ?, ?, 1, 'now', datetime('now'))",
         (title, status),
     )
     return cur.lastrowid
@@ -172,8 +172,8 @@ def test_task_add_cleans_up_flag(isolated_env, monkeypatch):
               after=None, parent_id=None, task_type=None, status=None,
               tier=None, force=False, **kwargs):
         cur = db.execute(
-            "INSERT INTO tasks (project_id, title, description, status, type, phase, created_at) "
-            "VALUES (1, ?, ?, ?, ?, ?, datetime('now'))",
+            "INSERT INTO tasks (project_id, title, description, status, type_id, phase, created_at) "
+            "VALUES (1, ?, ?, ?, (SELECT id FROM task_types WHERE slug = ?), ?, datetime('now'))",
             (title, description or "", status or "needs_plan", task_type or "task", phase),
         )
         return cur.lastrowid
@@ -212,8 +212,8 @@ def test_task_add_cleaned_up_by_flag(isolated_env, monkeypatch):
               after=None, parent_id=None, task_type=None, status=None,
               tier=None, force=False, **kwargs):
         cur = db.execute(
-            "INSERT INTO tasks (project_id, title, description, status, type, phase, created_at) "
-            "VALUES (1, ?, ?, ?, ?, ?, datetime('now'))",
+            "INSERT INTO tasks (project_id, title, description, status, type_id, phase, created_at) "
+            "VALUES (1, ?, ?, ?, (SELECT id FROM task_types WHERE slug = ?), ?, datetime('now'))",
             (title, description or "", status or "needs_plan", task_type or "task", phase),
         )
         return cur.lastrowid

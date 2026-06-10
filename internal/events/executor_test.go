@@ -118,8 +118,8 @@ func TestBeginImmediate_CommitAndRollback(t *testing.T) {
 
 	// Path A: commit flow with a status_change against a pre-existing task.
 	if _, err := db.Exec(
-		`INSERT INTO tasks (id, project_id, title, phase, status, type)
-		 VALUES (100, 1, 'preexisting', 'now', 'ready', 'task')`,
+		`INSERT INTO tasks (id, project_id, title, phase, status, type_id)
+		 VALUES (100, 1, 'preexisting', 'now', 'ready', 1)`,
 	); err != nil {
 		t.Fatalf("seed task: %v", err)
 	}

@@ -21,8 +21,8 @@ func TestGetActiveTaskForPane_DirectMatch(t *testing.T) {
 	db := withTestDB(t)
 	seedProject(t, db, 1, "acme", "/tmp/acme")
 	if _, err := db.Exec(
-		"INSERT INTO tasks (id, project_id, title, status, type, phase) VALUES (?, ?, ?, ?, ?, ?)",
-		55, 1, "build the widget", "in_progress", "task", "now",
+		"INSERT INTO tasks (id, project_id, title, status, type_id, phase) VALUES (?, ?, ?, ?, ?, ?)",
+		55, 1, "build the widget", "in_progress", 1, "now",
 	); err != nil {
 		t.Fatalf("seed task: %v", err)
 	}
@@ -116,8 +116,8 @@ func TestGetPaneStatus_ActiveTaskReturnsActiveKind(t *testing.T) {
 	db := withTestDB(t)
 	seedProject(t, db, 1, "acme", "/tmp/acme")
 	if _, err := db.Exec(
-		"INSERT INTO tasks (id, project_id, title, status, type, phase) VALUES (?, ?, ?, ?, ?, ?)",
-		66, 1, "ship it", "in_progress", "task", "now",
+		"INSERT INTO tasks (id, project_id, title, status, type_id, phase) VALUES (?, ?, ?, ?, ?, ?)",
+		66, 1, "ship it", "in_progress", 1, "now",
 	); err != nil {
 		t.Fatalf("seed task: %v", err)
 	}

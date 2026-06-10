@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/mikeschinkel/endless/internal/schema"
+	"github.com/mikeschinkel/endless/internal/tasktype"
 )
 
 var (
@@ -286,6 +287,19 @@ func DB() (*sql.DB, error) {
 			dbErr = fmt.Errorf("applying schema to %s: %w", path, err)
 			dbConn = nil
 			return
+		}
+		// E-1538: enum/table integrity check. task_types is seeded by
+		// schema.SQL on every connection; if a row is missing or drifted from
+		// the Go TaskType enum we fail closed, since downstream INSERTs would
+		// either violate the FK or write an id that has no enum constant.
+		// Skipped on populated DBs that have not yet had the E-1538 migration
+		// applied (the table will not exist; the migration creates it).
+		if hasTable(dbConn, "task_types") {
+			if err := tasktype.VerifyIntegrity(dbConn); err != nil {
+				dbErr = fmt.Errorf("task_types integrity check on %s: %w", path, err)
+				dbConn = nil
+				return
+			}
 		}
 	})
 	return dbConn, dbErr

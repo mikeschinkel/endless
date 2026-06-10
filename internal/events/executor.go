@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/mikeschinkel/endless/internal/monitor"
+	"github.com/mikeschinkel/endless/internal/tasktype"
 )
 
 // dbQuerier is satisfied by both *sql.Tx and *sql.DB, allowing the executor
@@ -244,6 +245,10 @@ func execTaskCreated(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 	if err := ValidatePhase(p.Phase); err != nil {
 		return nil, err
 	}
+	typeID, err := tasktype.Parse(p.Type)
+	if err != nil {
+		return nil, err
+	}
 
 	projectID, err := resolveProjectID(db, evt.Project)
 	if err != nil {
@@ -284,9 +289,9 @@ func execTaskCreated(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 	}
 
 	_, err = db.Exec(
-		`INSERT INTO tasks (id, project_id, phase, title, description, text, status, type, sort_order, parent_id, tier, created_at, updated_at)
+		`INSERT INTO tasks (id, project_id, phase, title, description, text, status, type_id, sort_order, parent_id, tier, created_at, updated_at)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		taskID, projectID, p.Phase, p.Title, p.Description, p.Text, status, p.Type,
+		taskID, projectID, p.Phase, p.Title, p.Description, p.Text, status, int(typeID),
 		sortOrder, p.ParentID, p.Tier, ts, ts,
 	)
 	if err != nil {
@@ -412,7 +417,7 @@ func execTaskFieldsUpdated(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 	allowedFields := map[string]string{
 		"title": "title", "description": "description", "text": "text",
 		"phase": "phase", "tier": "tier",
-		"type": "type", "status": "status", "parent_id": "parent_id",
+		"type": "type_id", "status": "status", "parent_id": "parent_id",
 		"outcome": "outcome", "analysis": "analysis",
 	}
 
@@ -429,6 +434,17 @@ func execTaskFieldsUpdated(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 			if err := ValidatePhase(phaseStr); err != nil {
 				return nil, err
 			}
+		}
+		if field == "type" {
+			typeStr, ok := value.(string)
+			if !ok {
+				return nil, fmt.Errorf("events: type field must be string, got %T", value)
+			}
+			tt, err := tasktype.Parse(typeStr)
+			if err != nil {
+				return nil, err
+			}
+			value = int(tt)
 		}
 		setClauses = append(setClauses, col+" = ?")
 		args = append(args, value)

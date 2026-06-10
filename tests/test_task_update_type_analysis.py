@@ -8,8 +8,8 @@ from endless import db, task_cmd
 
 def _add_task(title: str, status: str = "ready", task_type: str = "task") -> int:
     cur = db.execute(
-        "INSERT INTO tasks (project_id, title, status, type, phase, created_at) "
-        "VALUES (1, ?, ?, ?, 'now', datetime('now'))",
+        "INSERT INTO tasks (project_id, title, status, type_id, phase, created_at) "
+        "VALUES (1, ?, ?, (SELECT id FROM task_types WHERE slug = ?), 'now', datetime('now'))",
         (title, status, task_type),
     )
     return cur.lastrowid
@@ -17,7 +17,8 @@ def _add_task(title: str, status: str = "ready", task_type: str = "task") -> int
 
 def _type_analysis(task_id: int) -> tuple[str, str | None]:
     row = db.query(
-        "SELECT type, analysis FROM tasks WHERE id = ?",
+        "SELECT COALESCE((SELECT slug FROM task_types WHERE id = tasks.type_id), '') AS type, "
+        "analysis FROM tasks WHERE id = ?",
         (task_id,),
     )
     return row[0]["type"], row[0]["analysis"]

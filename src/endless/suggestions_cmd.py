@@ -79,8 +79,8 @@ def accept_suggestion(
     )
 
     cursor = db.execute(
-        "INSERT INTO tasks (project_id, parent_id, title, description, type, status, phase) "
-        "VALUES (?, ?, ?, ?, ?, 'needs_plan', 'now')",
+        "INSERT INTO tasks (project_id, parent_id, title, description, type_id, status, phase) "
+        "VALUES (?, ?, ?, ?, (SELECT id FROM task_types WHERE slug = ?), 'needs_plan', 'now')",
         (project_id, parent, title[:200], description, task_type),
     )
     new_task_id = cursor.lastrowid

@@ -159,7 +159,7 @@ func GetProjectTasks(projectID int64, excludeStatuses ...string) []data.TaskView
 
 	rows, err := db.Query(
 		fmt.Sprintf(`SELECT pi.id, COALESCE(pi.title,'') as title, pi.description, pi.phase, pi.status,
-		 COALESCE(pi.type,'task') as type, pi.parent_id,
+		 COALESCE((SELECT tt.slug FROM task_types tt WHERE tt.id = pi.type_id),'') as type, pi.parent_id,
 		 (SELECT count(*) FROM tasks c WHERE c.parent_id = pi.id AND c.status NOT IN (%s)) as child_count,
 		 COALESCE((SELECT GROUP_CONCAT('E-' || td.source_id || ': ' ||
 		   CASE td.source_type

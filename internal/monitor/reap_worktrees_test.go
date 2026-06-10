@@ -34,8 +34,8 @@ func newReaperTestDB(t *testing.T) *sql.DB {
 		t.Fatalf("seed project: %v", err)
 	}
 	if _, err := db.Exec(
-		`INSERT INTO tasks (id, project_id, title, phase, status, type)
-		 VALUES (42, 1, 'probe', 'now', 'in_progress', 'task')`,
+		`INSERT INTO tasks (id, project_id, title, phase, status, type_id)
+		 VALUES (42, 1, 'probe', 'now', 'in_progress', 1)`,
 	); err != nil {
 		t.Fatalf("seed task: %v", err)
 	}

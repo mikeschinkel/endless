@@ -18,8 +18,8 @@ from endless.cli import main
 
 def _add_task(title: str, status: str = "in_progress") -> int:
     cur = db.execute(
-        "INSERT INTO tasks (project_id, title, status, type, phase, created_at) "
-        "VALUES (1, ?, ?, 'task', 'now', datetime('now'))",
+        "INSERT INTO tasks (project_id, title, status, type_id, phase, created_at) "
+        "VALUES (1, ?, ?, 1, 'now', datetime('now'))",
         (title, status),
     )
     return cur.lastrowid

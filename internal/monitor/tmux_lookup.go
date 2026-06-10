@@ -90,10 +90,11 @@ func queryActiveTaskForPanes(db *sql.DB, panes []string) (*ActiveTaskInfo, error
 	// rows from a prior server win the lookup for currently-live panes
 	// (E-1530). Sibling readers (anySessionForPanes, GetLiveSessionByProcess)
 	// apply the same filter.
-	q := `SELECT t.id, t.title, t.status, t.type, t.phase, t.tier, COALESCE(p.name, '')
+	q := `SELECT t.id, t.title, t.status, COALESCE(tt.slug, ''), t.phase, t.tier, COALESCE(p.name, '')
 	      FROM sessions s
 	      JOIN tasks t ON t.id = s.active_task_id
 	      LEFT JOIN projects p ON p.id = t.project_id
+	      LEFT JOIN task_types tt ON tt.id = t.type_id
 	      WHERE s.process IN (` + placeholders + `)
 	        AND s.active_task_id IS NOT NULL
 	        AND s.state != 'ended'

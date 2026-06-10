@@ -9,6 +9,7 @@ import (
 
 	"github.com/mikeschinkel/endless/internal/kairos"
 	"github.com/mikeschinkel/endless/internal/schema"
+	"github.com/mikeschinkel/endless/internal/tasktype"
 	_ "modernc.org/sqlite"
 )
 
@@ -164,10 +165,15 @@ func replayTaskCreated(db *sql.DB, evt *Event, result *ProjectResult) error {
 	// Extract timestamp from kairos for created_at
 	ts := kairosToISO(evt.TS)
 
+	// Translate the legacy slug to a type_id. Unknown slugs (e.g. legacy
+	// `chore`/`plan`) become NULL — the row still projects, but with no
+	// type assigned. E-1548 reclassifies them.
+	typeID := projectorTypeID(p.Type)
+
 	_, err = db.Exec(
-		`INSERT INTO tasks (id, project_id, phase, title, description, text, status, type, sort_order, parent_id, tier, created_at, updated_at)
+		`INSERT INTO tasks (id, project_id, phase, title, description, text, status, type_id, sort_order, parent_id, tier, created_at, updated_at)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		taskID, projectID, p.Phase, p.Title, p.Description, p.Text, p.Status, p.Type,
+		taskID, projectID, p.Phase, p.Title, p.Description, p.Text, p.Status, typeID,
 		sortOrder, p.ParentID, p.Tier, ts, ts,
 	)
 	if err != nil {
@@ -328,7 +334,7 @@ func replayTaskFieldsUpdated(db *sql.DB, evt *Event, result *ProjectResult) erro
 		// dropped column on rebuild.
 		"title": "title", "description": "description", "text": "text",
 		"phase": "phase", "tier": "tier",
-		"type": "type", "status": "status", "parent_id": "parent_id",
+		"type": "type_id", "status": "status", "parent_id": "parent_id",
 		"outcome": "outcome", "analysis": "analysis",
 	}
 
@@ -344,6 +350,17 @@ func replayTaskFieldsUpdated(db *sql.DB, evt *Event, result *ProjectResult) erro
 			}
 			if err := ValidatePhase(phaseStr); err != nil {
 				return err
+			}
+		}
+		if field == "type" {
+			// Legacy events may carry unauthorized slugs (`plan`, `chore`,
+			// etc.). The projector tolerates them by setting type_id NULL;
+			// E-1548 reclassifies the affected rows. Non-string values are
+			// ignored (history before the slug convention was enforced).
+			if typeStr, ok := value.(string); ok {
+				value = projectorTypeID(typeStr)
+			} else {
+				value = nil
 			}
 		}
 		setClauses = append(setClauses, col+" = ?")
@@ -510,4 +527,18 @@ func kairosToISO(ts string) string {
 		return ""
 	}
 	return parsed.Physical().UTC().Format("2006-01-02T15:04:05")
+}
+
+// projectorTypeID maps a legacy task-type slug to a task_types.id for
+// projector inserts/updates. Unauthorized slugs (e.g. `chore`, `plan`)
+// return nil, which inserts NULL — the row replays but with no type.
+// E-1548 reclassifies those rows. The live event boundary (executor) is
+// strict; only the rebuild path is lenient, because the events ledger
+// records history and cannot be rewritten.
+func projectorTypeID(slug string) any {
+	tt, err := tasktype.Parse(slug)
+	if err != nil {
+		return nil
+	}
+	return int(tt)
 }

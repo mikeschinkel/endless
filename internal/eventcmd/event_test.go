@@ -101,8 +101,8 @@ func seedTaskRow(t *testing.T, dbPath string, projectName string, taskID int64, 
 		t.Fatalf("seed project: %v", err)
 	}
 	if _, err := db.Exec(
-		`INSERT INTO tasks (id, project_id, title, phase, status, type, sort_order)
-		 VALUES (?, 1, ?, 'now', 'ready', 'task', 10)`,
+		`INSERT INTO tasks (id, project_id, title, phase, status, type_id, sort_order)
+		 VALUES (?, 1, ?, 'now', 'ready', 1, 10)`,
 		taskID, title,
 	); err != nil {
 		t.Fatalf("seed task: %v", err)
