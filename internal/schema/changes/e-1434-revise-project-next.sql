@@ -7,11 +7,25 @@
 --
 -- The apply-change dispatcher wraps this file in a BEGIN IMMEDIATE
 -- transaction and records this change's _schema_version marker after the
--- statements below. This runs once, at land time (`just land`), against the
--- populated real DB. The sandbox (`endless-sandbox init --mode empty`) and
--- tests build from schema.sql, which already declares the new shape, and
--- never apply change files — so there is no "tables already correct" path
--- to guard.
+-- statements below. This runs once, at land time (`just land`).
+--
+-- Idempotent against any state of the real DB at land time:
+--   * Old shape only (project_next_items, project_next_revisions) — the
+--     pre-E-1434 baseline, what was shipped via the deleted V-framework.
+--   * Mixed shape — `just land` runs the worktree's endless-go binary,
+--     which embeds the new schema.sql; that runs on connect via
+--     monitor.DB() BEFORE this change file applies, and its CREATE TABLE
+--     IF NOT EXISTS statements add project_next_tasks +
+--     project_next_events alongside the surviving old tables. The DROP
+--     IF EXISTS sweep below covers both names so the subsequent CREATEs
+--     never collide.
+--   * New shape only — would only happen if this file is re-applied,
+--     which the _schema_version marker prevents.
+--
+-- The sandbox (`endless-sandbox init --mode empty`) and tests build from
+-- schema.sql, which already declares the new shape, and never apply
+-- change files — so there is no "tables already correct" path to guard
+-- for those callers.
 --
 -- Changes:
 --   * project_next_items     -> project_next_tasks (matches JSON tasks array)
@@ -27,10 +41,14 @@
 
 DROP INDEX IF EXISTS idx_project_next_lanes_priority;
 DROP INDEX IF EXISTS idx_project_next_revisions_recent;
+DROP INDEX IF EXISTS idx_project_next_events_recent;
 DROP INDEX IF EXISTS idx_project_next_pending_added;
 DROP INDEX IF EXISTS idx_project_next_items_task;
+DROP INDEX IF EXISTS idx_project_next_tasks_task;
 
+DROP TABLE IF EXISTS project_next_events;
 DROP TABLE IF EXISTS project_next_revisions;
+DROP TABLE IF EXISTS project_next_tasks;
 DROP TABLE IF EXISTS project_next_items;
 DROP TABLE IF EXISTS project_next_pending;
 DROP TABLE IF EXISTS project_next_lanes;
