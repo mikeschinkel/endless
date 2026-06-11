@@ -304,6 +304,12 @@ func execTaskCreated(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 		}
 	}
 
+	if p.Phase == "urgent" {
+		if err := autoAddUrgentPending(db, evt, taskID); err != nil {
+			return nil, fmt.Errorf("events: %w", err)
+		}
+	}
+
 	return &ExecuteResult{TaskID: taskID}, nil
 }
 
@@ -500,6 +506,14 @@ func execTaskFieldsUpdated(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 	if shouldRecordSessionTouch(evt) {
 		if err := upsertSessionTask(db, evt.Actor.SessionID, mustParseInt64(evt.Entity.ID)); err != nil {
 			return nil, fmt.Errorf("events: %w", err)
+		}
+	}
+
+	if phaseVal, hasPhase := p.Fields["phase"]; hasPhase {
+		if phaseStr, ok := phaseVal.(string); ok && phaseStr == "urgent" {
+			if err := autoAddUrgentPending(db, evt, mustParseInt64(evt.Entity.ID)); err != nil {
+				return nil, fmt.Errorf("events: %w", err)
+			}
 		}
 	}
 
