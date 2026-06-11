@@ -2322,6 +2322,17 @@ _CLAIM_REQUIRES_FORCE: frozenset[str] = frozenset({
 })
 
 
+# E-1555: statuses a task can be reopened from. `declined`/`obsolete` carry an
+# explicit "we chose not to do this" decision — reversing them is an
+# intentional act that should use `task update --status` and `--reason`,
+# not a generic reopen. `verify` is not terminal: it's "implementation done,
+# trust pending" — reopening it would discard pending verification rather
+# than reactivate completed work.
+_REOPENABLE_TERMINAL_STATUSES: frozenset[str] = frozenset({
+    "assumed", "confirmed", "completed",
+})
+
+
 def _perform_claim_work(
     item_id: int,
     title: str | None,
@@ -2679,6 +2690,97 @@ def release_item(item_id: int | None, ignore_missing: bool = False) -> None:
         click.style("•", fg="cyan")
         + f" released claim on E-{target_id} (session {target_session})"
     )
+
+
+def _reopen_task_core(item_id: int) -> tuple[str, str, bool]:
+    """Reopen a terminal-status task back to `ready` or `needs_plan`.
+
+    Shared core for the `task reopen` verb and `task spawn --reopen` flag.
+    Validates eligibility, releases any lingering session→task binding,
+    and emits `task.status_changed`. Caller renders the result line.
+
+    Returns (prev_status, new_status, text_present).
+    """
+    from endless.event_bridge import emit_event
+
+    row = db.query(
+        "SELECT id, COALESCE(title, description) as title, status, text "
+        "FROM tasks WHERE id = ?",
+        (item_id,),
+    )
+    if not row:
+        raise click.ClickException(
+            f"No task found with id {item_id}"
+        )
+
+    current_status = row[0]["status"]
+
+    if current_status in ("declined", "obsolete"):
+        raise click.ClickException(
+            f"E-{item_id} is '{current_status}'; reverse that decision "
+            f"explicitly via `endless task update E-{item_id} --status "
+            f"<status>` (and supply `--reason` if reopening a declined "
+            f"task)."
+        )
+
+    if current_status not in _REOPENABLE_TERMINAL_STATUSES:
+        raise click.ClickException(
+            f"E-{item_id} is '{current_status}'; reopen is only valid from "
+            f"a terminal status ({', '.join(sorted(_REOPENABLE_TERMINAL_STATUSES))})."
+        )
+
+    text_present = bool((row[0]["text"] or "").strip())
+    new_status = "ready" if text_present else "needs_plan"
+
+    _, proj_name = _resolve_project(None)
+
+    # Clear any lingering session→task binding before flipping status.
+    # Rare for terminal tasks (worktree land releases), but the plan calls
+    # for it explicitly so retrospective queries see a clean handoff.
+    bound_sessions = db.query(
+        "SELECT id AS eid FROM sessions WHERE active_task_id = ?",
+        (item_id,),
+    )
+    for s in bound_sessions:
+        emit_event(
+            kind="task.released",
+            project=proj_name,
+            entity_type="task",
+            entity_id=str(item_id),
+            payload={"session_id": s["eid"]},
+            session_id=str(s["eid"]),
+        )
+
+    emit_event(
+        kind="task.status_changed",
+        project=proj_name,
+        entity_type="task",
+        entity_id=str(item_id),
+        payload={
+            "old_status": current_status,
+            "new_status": new_status,
+            "cascade": False,
+        },
+    )
+
+    _emit_field_changes(
+        item_id,
+        row[0]["title"],
+        [("status", current_status, new_status)],
+        suffix=f"(text: {'present' if text_present else 'absent'})",
+    )
+
+    return current_status, new_status, text_present
+
+
+def reopen_item(item_id: int) -> None:
+    """Flip a terminal-status task back to actionable state.
+
+    Standalone verb: no worktree side effects, no session binding. Caller
+    decides next step (spawn, claim, or hand-back). For spawn-with-reopen
+    in one shot, use `endless task spawn <id> --reopen`.
+    """
+    _reopen_task_core(item_id)
 
 
 def update_plan(
@@ -3109,7 +3211,8 @@ def _spawn_window_name(project_name: str, title: str, item_id: int) -> str:
 
 
 def spawn_plan(item_id: int, project_name: str | None = None, no_plan: bool = False,
-               worktree: str | None = None, force: bool = False):
+               worktree: str | None = None, force: bool = False,
+               reopen: bool = False):
     """Spawn a new tmux window with Claude working on a task's prompt.
 
     Pre-claims the task (status flip + worktree creation) BEFORE launching
@@ -3118,10 +3221,22 @@ def spawn_plan(item_id: int, project_name: str | None = None, no_plan: bool = Fa
     `@endless_spawned_by` from the new tmux window and records the
     session→task binding via `BindSessionToTask` (no redundant status
     flip). See E-1274.
+
+    `reopen=True` (E-1555) reopens an `assumed`/`confirmed`/`completed`
+    target as a pre-step (status → `ready`/`needs_plan` based on text
+    presence) before proceeding with spawn. Errors on non-terminal or
+    decision-bearing (`declined`/`obsolete`) statuses.
     """
     import shutil
     import subprocess
     import tempfile
+
+    if reopen and force:
+        raise click.ClickException(
+            "--reopen and --force are mutually exclusive: --reopen sets "
+            "status to ready/needs_plan (handoff intent), --force demotes "
+            "to in_progress (self-pickup intent). Pick one."
+        )
 
     # Verify tmux is available and we're in a tmux session
     if not shutil.which("tmux"):
@@ -3164,8 +3279,38 @@ def spawn_plan(item_id: int, project_name: str | None = None, no_plan: bool = Fa
     else:
         cd_target = None  # default below to the spawn-created worktree
 
+    # E-1555: --reopen explicit intent gate.
+    if reopen:
+        if current_status not in _REOPENABLE_TERMINAL_STATUSES:
+            if current_status in ("declined", "obsolete"):
+                raise click.ClickException(
+                    f"E-{item_id} is '{current_status}'; reverse that "
+                    f"decision explicitly via `endless task update "
+                    f"E-{item_id} --status <status>` (and supply "
+                    f"`--reason` if reopening a declined task)."
+                )
+            raise click.ClickException(
+                f"--reopen passed but E-{item_id} is '{current_status}', "
+                f"not terminal (reopen targets "
+                f"{', '.join(sorted(_REOPENABLE_TERMINAL_STATUSES))})."
+            )
+        # Reopen pre-step: flip terminal → ready/needs_plan, release any
+        # lingering session binding, emit audit event.
+        _reopen_task_core(item_id)
+        # _perform_claim_work below sees the post-reopen status and
+        # promotes ready/needs_plan → in_progress on its own.
+        current_status = db.query(
+            "SELECT status FROM tasks WHERE id = ?", (item_id,),
+        )[0]["status"]
+
     # Mirror claim's done-ish-status gate
-    if not force and current_status in _CLAIM_REQUIRES_FORCE:
+    elif not force and current_status in _CLAIM_REQUIRES_FORCE:
+        if current_status in _REOPENABLE_TERMINAL_STATUSES:
+            raise click.ClickException(
+                f"E-{item_id} is '{current_status}'; pass --reopen to "
+                f"reopen-and-spawn, or run `endless task reopen "
+                f"E-{item_id}` first."
+            )
         raise click.ClickException(
             f"E-{item_id} is in status '{current_status}'; spawning "
             f"would demote it to 'in_progress'.\n"

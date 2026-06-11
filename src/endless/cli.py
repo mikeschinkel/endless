@@ -1446,14 +1446,33 @@ def task_handoff(item_id):
               help="Allow spawn on a task in a done-ish status "
                    "(verify/confirmed/declined/obsolete/assumed/completed); "
                    "demotes it back to in_progress. Mirrors `claim --force`.")
-def task_spawn(item_id, project, no_plan, worktree, force):
+@click.option("--reopen", is_flag=True,
+              help="Reopen an assumed/confirmed/completed target before "
+                   "spawning (status → ready/needs_plan based on text "
+                   "presence). Use for handoff to a fresh session; "
+                   "mutually exclusive with --force.")
+def task_spawn(item_id, project, no_plan, worktree, force, reopen):
     """Spawn a new tmux window with Claude working on a task.
 
     Pastes the handoff generated from the template (no stored prompt — E-1469).
     """
     from endless.task_cmd import spawn_plan
     spawn_plan(item_id, project_name=project, no_plan=no_plan,
-               worktree=worktree, force=force)
+               worktree=worktree, force=force, reopen=reopen)
+
+
+@task_cmd.command("reopen")
+@click.argument("item_id", type=TASK_ID)
+def task_reopen(item_id):
+    """Reopen a terminal-status task back to actionable state.
+
+    Flips assumed/confirmed/completed → ready (if a plan is attached)
+    or needs_plan (if not). Metadata-only: no worktree creation, no
+    session binding. Caller chooses the next step (spawn, claim, or
+    hand-back).
+    """
+    from endless.task_cmd import reopen_item
+    reopen_item(item_id)
 
 
 @task_cmd.command("chat")
