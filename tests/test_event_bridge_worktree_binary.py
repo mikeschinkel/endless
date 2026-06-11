@@ -20,9 +20,9 @@ import pytest
 from endless import config, event_bridge
 
 
-def _make_worktree_layout(tmp_path: Path, task_id: str = "9999",
+def _make_worktree_layout(tmp_path: Path, worktree_dir: str = "e-9999",
                           binary_present: bool = True) -> tuple[Path, Path]:
-    """Build a synthetic self-dev worktree at <tmp>/proj/.endless/worktrees/e-<id>.
+    """Build a synthetic self-dev worktree at <tmp>/proj/.endless/worktrees/<dir>.
 
     Returns (worktree_dir, worktree_bin_endless_go_path). When binary_present
     is True, the bin/endless-go file is created and made executable; when
@@ -33,7 +33,7 @@ def _make_worktree_layout(tmp_path: Path, task_id: str = "9999",
     endless = proj / ".endless"
     (endless).mkdir(parents=True)
     (endless / "config.json").write_text('{"self_dev": true}\n')
-    wt = endless / "worktrees" / f"e-{task_id}"
+    wt = endless / "worktrees" / worktree_dir
     (wt / "bin").mkdir(parents=True)
     wt_bin = wt / "bin" / "endless-go"
     if binary_present:
@@ -52,9 +52,9 @@ def synthetic_sandbox(tmp_path, monkeypatch):
     cmd argv lists captured from subprocess.run).
     """
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / ".cache"))
-    wt, wt_bin = _make_worktree_layout(tmp_path, task_id="9999")
+    wt, wt_bin = _make_worktree_layout(tmp_path, worktree_dir="e-9999")
     monkeypatch.chdir(wt)
-    sandbox_dir = config.sandbox_config_dir("9999")
+    sandbox_dir = config.sandbox_config_dir("e-9999")
     monkeypatch.setattr(config, "RESOLVED_CONFIG_DIR", sandbox_dir)
 
     calls: list[list[str]] = []
@@ -134,11 +134,11 @@ def test_missing_worktree_binary_fails_loudly(tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / ".cache"))
     wt, wt_bin = _make_worktree_layout(
-        tmp_path, task_id="9999", binary_present=False
+        tmp_path, worktree_dir="e-9999", binary_present=False
     )
     monkeypatch.chdir(wt)
     monkeypatch.setattr(
-        config, "RESOLVED_CONFIG_DIR", config.sandbox_config_dir("9999")
+        config, "RESOLVED_CONFIG_DIR", config.sandbox_config_dir("e-9999")
     )
     with pytest.raises(click.ClickException) as exc:
         event_bridge.apply_change("ignored")
@@ -252,10 +252,27 @@ def test_resolver_helper_returns_none_for_main_dir(tmp_path, monkeypatch):
 
 def test_resolver_helper_returns_path_for_sandbox(tmp_path, monkeypatch):
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / ".cache"))
-    wt, wt_bin = _make_worktree_layout(tmp_path, task_id="7777")
+    wt, wt_bin = _make_worktree_layout(tmp_path, worktree_dir="e-7777")
     monkeypatch.chdir(wt)
     monkeypatch.setattr(
-        config, "RESOLVED_CONFIG_DIR", config.sandbox_config_dir("7777")
+        config, "RESOLVED_CONFIG_DIR", config.sandbox_config_dir("e-7777")
     )
     result = config.resolved_worktree_endless_go()
     assert result == wt_bin
+
+
+def test_resolver_helper_returns_path_for_slugged_sandbox(tmp_path, monkeypatch):
+    """Regression: slugged worktree dirs (e-NNN-slug) must round-trip through
+    the resolver without dropping the slug suffix. Pre-fix, the helper
+    reconstructed `f"e-{task_id}"` from digits-only and lost the slug."""
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / ".cache"))
+    wt, wt_bin = _make_worktree_layout(tmp_path, worktree_dir="e-7777-add-foo")
+    monkeypatch.chdir(wt)
+    monkeypatch.setattr(
+        config, "RESOLVED_CONFIG_DIR",
+        config.sandbox_config_dir("e-7777-add-foo"),
+    )
+    result = config.resolved_worktree_endless_go()
+    assert result == wt_bin
+    assert "e-7777-add-foo" in str(result)
+    assert str(result).endswith("/e-7777-add-foo/bin/endless-go")

@@ -207,7 +207,10 @@ def sandbox_config_dir(worktree_dir_name: str) -> Path:
 
 def worktree_task_id(cwd: Path | None = None) -> str | None:
     """Task-id digits if cwd is inside a .endless/worktrees/e-NNN worktree,
-    else None. Pure: no filesystem or config reads."""
+    else None. Pure: no filesystem or config reads.
+
+    NOT suitable for constructing sandbox/worktree paths — slugged worktrees
+    (e-NNN-slug) would drop their suffix. Use `worktree_dir_name` for paths."""
     s = str(cwd if cwd is not None else Path.cwd())
     m = _WORKTREE_PATH_RE.search(s)
     return m.group(2) if m else None
@@ -344,18 +347,18 @@ def resolved_worktree_endless_go(cwd: Path | None = None) -> Path | None:
     """
     if RESOLVED_CONFIG_DIR is None:
         return None
-    task_id = worktree_task_id(cwd)
-    if task_id is None:
+    dir_name = worktree_dir_name(cwd)
+    if dir_name is None:
         return None
     # Only fire when RESOLVED_CONFIG_DIR is EXACTLY the sandbox path for this
     # worktree. Anything else (--db main, conftest's tmp config dir, a stray
     # external override) keeps the PATH-resolved global.
-    if RESOLVED_CONFIG_DIR != sandbox_config_dir(task_id):
+    if RESOLVED_CONFIG_DIR != sandbox_config_dir(dir_name):
         return None
     root = gated_worktree_root(cwd)
     if root is None:
         return None
-    return root / ".endless" / "worktrees" / f"e-{task_id}" / "bin" / "endless-go"
+    return root / ".endless" / "worktrees" / dir_name / "bin" / "endless-go"
 
 
 def worktree_python_reexec_target(
@@ -378,13 +381,13 @@ def worktree_python_reexec_target(
     and the helper returns None so the process doesn't loop. Exposed for
     tests that simulate a different source location.
     """
-    task_id = worktree_task_id(cwd)
-    if task_id is None:
+    dir_name = worktree_dir_name(cwd)
+    if dir_name is None:
         return None
     root = gated_worktree_root(cwd)
     if root is None:
         return None
-    worktree = (root / ".endless" / "worktrees" / f"e-{task_id}").resolve()
+    worktree = (root / ".endless" / "worktrees" / dir_name).resolve()
     src = (source_file if source_file is not None else Path(__file__)).resolve()
     try:
         src.relative_to(worktree)
