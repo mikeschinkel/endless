@@ -98,11 +98,11 @@ func ReapStaleWorktrees(projectRoot string, ttl time.Duration) error {
 		dir := filepath.Join(worktreeRoot, e.Name())
 		reaped, err := maybeReapWorktree(db, projectRoot, dir, taskID, cutoff)
 		if err != nil {
-			log.Printf("reap worktrees: %s: %v", dir, err)
+			log.Printf("reap worktrees: %s: %v", displayPath(dir), err)
 			continue
 		}
 		if reaped {
-			log.Printf("reap worktrees: removed %s", dir)
+			log.Printf("reap worktrees: removed %s", displayPath(dir))
 		}
 	}
 	return nil
@@ -228,7 +228,7 @@ func maybeReapWorktree(db *sql.DB, projectRoot, dir string, taskID int64, cutoff
 	if out, err := runGit(projectRoot, "branch", "-D", branch); err != nil {
 		// Branch deletion failure shouldn't unwind the dir removal —
 		// log it but treat the reap as successful.
-		log.Printf("reap worktrees: %s: git branch -D %s: %v: %s", dir, branch, err, out)
+		log.Printf("reap worktrees: %s: git branch -D %s: %v: %s", displayPath(dir), branch, err, out)
 	}
 	return true, nil
 }
@@ -281,6 +281,31 @@ var runGit = func(dir string, args ...string) (string, error) {
 	cmd := exec.Command("git", full...)
 	out, err := cmd.CombinedOutput()
 	return string(out), err
+}
+
+// displayPath returns a human-friendly form of path for log output:
+//  1. cwd-relative (no "./" prefix) when path is a descendant of cwd
+//  2. "~/..." when path is a descendant of $HOME
+//  3. unchanged otherwise
+//
+// Best-effort: an os.Getwd / os.UserHomeDir error falls through to the
+// next branch. Avoids "../"-prefixed results (those are uglier than
+// the alternative). Held as a var so reaper tests can pin cwd
+// behavior without manipulating the real process cwd.
+var displayPath = func(path string) string {
+	if cwd, err := os.Getwd(); err == nil {
+		if rel, err := filepath.Rel(cwd, path); err == nil &&
+			rel != "." && !strings.HasPrefix(rel, "..") {
+			return rel
+		}
+	}
+	if home, err := os.UserHomeDir(); err == nil && home != "" {
+		if rel, err := filepath.Rel(home, path); err == nil &&
+			rel != "." && !strings.HasPrefix(rel, "..") {
+			return filepath.Join("~", rel)
+		}
+	}
+	return path
 }
 
 // ReadWorktreeTTLConfig reads the worktree_ttl string field from

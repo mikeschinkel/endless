@@ -42,6 +42,54 @@ func newReaperTestDB(t *testing.T) *sql.DB {
 	return db
 }
 
+// TestDisplayPath exercises the cwd-relative / ~ / absolute fallback
+// chain. We swap the package-var displayPath's reads of cwd and HOME
+// by relying on os.Chdir + a HOME env override.
+func TestDisplayPath(t *testing.T) {
+	prevHome := os.Getenv("HOME")
+	t.Cleanup(func() { _ = os.Setenv("HOME", prevHome) })
+	prevCwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(prevCwd) })
+
+	// t.TempDir() returns /var/... on macOS; os.Getwd() resolves the
+	// /private/var/... symlink. Canonicalize so the prefix match in
+	// displayPath sees both sides agree.
+	home, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatalf("evalsymlinks home: %v", err)
+	}
+	cwd := filepath.Join(home, "proj")
+	if err := os.MkdirAll(cwd, 0o755); err != nil {
+		t.Fatalf("mkdir cwd: %v", err)
+	}
+	if err := os.Setenv("HOME", home); err != nil {
+		t.Fatalf("setenv HOME: %v", err)
+	}
+	if err := os.Chdir(cwd); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+
+	cases := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"descendant of cwd", filepath.Join(cwd, ".endless", "worktrees", "e-1396"), filepath.Join(".endless", "worktrees", "e-1396")},
+		{"descendant of HOME but not cwd", filepath.Join(home, "other", "dir"), filepath.Join("~", "other", "dir")},
+		{"outside cwd and HOME", "/var/log/system.log", "/var/log/system.log"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := displayPath(tc.in); got != tc.want {
+				t.Errorf("displayPath(%q) = %q, want %q", tc.in, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestParseWorktreeTTL(t *testing.T) {
 	tests := []struct {
 		in    string
