@@ -6,6 +6,7 @@ type TaskCreatedPayload struct {
 	Title       string `json:"title"`
 	Description string `json:"description,omitempty"`
 	Text        string `json:"text,omitempty"`
+	Notes       string `json:"notes,omitempty"`
 	Phase       string `json:"phase"`
 	Status      string `json:"status"`
 	Type        string `json:"type"`

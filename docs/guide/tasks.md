@@ -89,6 +89,24 @@ endless task add "Title here" --decision "<rationale>"  # creates paired decisio
 
 Use the task ID printed by `task add` **literally**. IDs advance globally across parallel sessions — never guess.
 
+### Research-type gate
+
+`--type research` discourages casual use: a research task is justified only when its findings can't be inlined as a do-task. The CLI enforces this:
+
+- **Exempt:** `--parent <id>` where `<id>` is an `--type epic --status in_progress` task. No `--justification` required.
+- **Otherwise:** `--justification "<reason>"` is required and stored under a `## Justification` heading in the task's notes.
+
+```bash
+# Exempt: parent is an in-progress epic
+endless task add "Compare X vs Y" --type research --parent E-100
+
+# Standalone: justification required
+endless task add "Compare X vs Y" --type research \
+    --justification "Needs benchmarks across 3 datasets before plan."
+```
+
+The same gate fires on `endless task update --type research <id>` (promoting an existing task to research). Setting `--justification` twice on a task whose notes already contain a `## Justification` heading is refused; clear or hand-edit notes first.
+
 ---
 
 ## Updating tasks

@@ -1175,6 +1175,9 @@ def task_search(query, project, show_all, status, phase, parent_id,
               help="Tier (1-4 or auto/quick/deep/discuss)")
 @click.option("--force", is_flag=True,
               help="Bypass title validation")
+@click.option("--justification", default=None,
+              help="Justification text for --type research (stored under '## Justification' in notes). "
+                   "Required for --type research unless --parent is an in-progress epic.")
 @click.option("--blocks", "blocks_ids", type=TASK_ID, multiple=True,
               help="Task ID(s) this new task blocks (repeatable)")
 @click.option("--blocked-by", "blocked_by_ids", type=TASK_ID, multiple=True,
@@ -1188,6 +1191,7 @@ def task_search(query, project, show_all, status, phase, parent_id,
 @click.option("--cleaned-up-by", "cleaned_up_by_ids", type=TASK_ID, multiple=True,
               help="Task ID(s) that clean up after this new task (repeatable)")
 def task_add(title, description, text_file, phase, project, parent, after, task_type, status, tier, force,
+             justification,
              blocks_ids, blocked_by_ids, relates_to_ids, implements_ids,
              cleans_up_ids, cleaned_up_by_ids):
     """Add a task."""
@@ -1195,7 +1199,8 @@ def task_add(title, description, text_file, phase, project, parent, after, task_
     tier_val = parse_tier(tier) if tier else None
     new_id = add_item(title, description=description, text_file=text_file,
                       phase=phase, project_name=project, after=after, parent_id=parent,
-                      task_type=task_type, status=status, tier=tier_val, force=force)
+                      task_type=task_type, status=status, tier=tier_val, force=force,
+                      justification=justification)
     if new_id is None:
         return
     for tid in blocks_ids:
@@ -1238,8 +1243,11 @@ def task_add(title, description, text_file, phase, project, parent, after, task_
               help="Bypass title validation")
 @click.option("--outcome", default=None,
               help="Outcome / reason for status (required if status=declined)")
+@click.option("--justification", default=None,
+              help="Justification text when setting --type research (stored under '## Justification' in notes). "
+                   "Required unless the effective parent is an in-progress epic.")
 def task_update(item_ids, status, title, description, text_file, parent, phase, tier,
-                task_type, analysis_text, force, outcome):
+                task_type, analysis_text, force, outcome, justification):
     """Update fields on one or more tasks."""
     from endless.task_cmd import update_plan, parse_tier
     tier_val = parse_tier(tier) if tier else None
@@ -1256,7 +1264,8 @@ def task_update(item_ids, status, title, description, text_file, parent, phase, 
                     parent_id=parent,
                     phase=phase, tier=tier_val, task_type=task_type,
                     analysis=analysis_text,
-                    outcome=outcome, force=force)
+                    outcome=outcome, force=force,
+                    justification=justification)
 
 
 @task_cmd.command("remove")

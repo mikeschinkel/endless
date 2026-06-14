@@ -288,10 +288,14 @@ func execTaskCreated(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 		status = "ready"
 	}
 
+	var notes any
+	if p.Notes != "" {
+		notes = p.Notes
+	}
 	_, err = db.Exec(
-		`INSERT INTO tasks (id, project_id, phase, title, description, text, status, type_id, sort_order, parent_id, tier, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		taskID, projectID, p.Phase, p.Title, p.Description, p.Text, status, int(typeID),
+		`INSERT INTO tasks (id, project_id, phase, title, description, text, notes, status, type_id, sort_order, parent_id, tier, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		taskID, projectID, p.Phase, p.Title, p.Description, p.Text, notes, status, int(typeID),
 		sortOrder, p.ParentID, p.Tier, ts, ts,
 	)
 	if err != nil {
@@ -422,6 +426,7 @@ func execTaskFieldsUpdated(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 
 	allowedFields := map[string]string{
 		"title": "title", "description": "description", "text": "text",
+		"notes": "notes",
 		"phase": "phase", "tier": "tier",
 		"type": "type_id", "status": "status", "parent_id": "parent_id",
 		"outcome": "outcome", "analysis": "analysis",

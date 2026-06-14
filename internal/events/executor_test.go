@@ -12,6 +12,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	_ "modernc.org/sqlite"
@@ -187,6 +188,49 @@ func TestExecute_TaskCreatedInsertsRow(t *testing.T) {
 	}
 	if status != "needs_plan" {
 		t.Errorf("status = %q, want needs_plan", status)
+	}
+}
+
+// TestExecute_TaskCreatedStoresNotes verifies that the optional Notes
+// field on TaskCreatedPayload is persisted to tasks.notes (E-1544 —
+// research-gate justification storage).
+func TestExecute_TaskCreatedStoresNotes(t *testing.T) {
+	db := withExecutorDB(t)
+
+	payload, err := json.Marshal(events.TaskCreatedPayload{
+		Title:  "research-with-just",
+		Phase:  "now",
+		Status: "needs_plan",
+		Type:   "research",
+		Notes:  "## Justification\n\nNeeds cross-system comparison.\n",
+	})
+	if err != nil {
+		t.Fatalf("marshal payload: %v", err)
+	}
+	evt := &events.Event{
+		V:       events.Version,
+		TS:      "5WYM00000099",
+		Kind:    events.KindTaskCreated,
+		Project: "test",
+		Entity:  events.EntityRef{Type: events.EntityTask, ID: itoaInt64(501)},
+		Actor:   events.Actor{Kind: events.ActorCLI, ID: "tester"},
+		Payload: payload,
+	}
+	if _, err := events.Execute(evt); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	var notes sql.NullString
+	if err := db.QueryRow(
+		"SELECT notes FROM tasks WHERE id = ?", 501,
+	).Scan(&notes); err != nil {
+		t.Fatalf("query inserted task: %v", err)
+	}
+	if !notes.Valid || notes.String == "" {
+		t.Fatalf("notes = %v, want non-empty justification", notes)
+	}
+	if !strings.Contains(notes.String, "## Justification") {
+		t.Errorf("notes = %q, want '## Justification' heading", notes.String)
 	}
 }
 

@@ -1474,6 +1474,67 @@ def recent_tasks(
         click.echo()
 
 
+# E-1544: research-gate helpers. ED-1504 requires `--type research` to be
+# justified unless `--parent` is a type=epic, status=in_progress task.
+
+_RESEARCH_GATE_MSG = (
+    "--type research requires --justification explaining why the "
+    "research can't be inline in a do-task."
+)
+
+_JUSTIFICATION_HEADING_RE = re.compile(r"(?m)^##\s+Justification\b")
+
+
+def _research_gate_check(parent_id: int | None, justification: str | None) -> None:
+    """Raise click.ClickException if the research gate fails.
+
+    Pass when (a) `justification` is non-empty, or (b) parent is a
+    type=epic, status=in_progress task. Sticky-override statuses
+    (revisit/blocked/declined/obsolete) do NOT exempt.
+    """
+    if justification:
+        return
+    if parent_id is None:
+        raise click.ClickException(_RESEARCH_GATE_MSG)
+    row = db.query(
+        "SELECT t.status, COALESCE(tt.slug, '') AS type_slug "
+        "FROM tasks t LEFT JOIN task_types tt ON tt.id = t.type_id "
+        "WHERE t.id = ?",
+        (parent_id,),
+    )
+    if not row:
+        raise click.ClickException(
+            f"Parent task E-{parent_id} not found"
+        )
+    if row[0]["type_slug"] != "epic" or row[0]["status"] != "in_progress":
+        raise click.ClickException(_RESEARCH_GATE_MSG)
+
+
+def _compose_justification_notes(
+    existing_notes: str | None,
+    justification: str | None,
+) -> str | None:
+    """Return notes-string with a '## Justification' section appended.
+
+    - If `justification` is empty/None, returns None (no notes change).
+    - If existing notes already contains a '## Justification' heading,
+      raises click.ClickException (no overwrite — collision is loud).
+    - Otherwise appends `## Justification\\n\\n<text>\\n`, preserving any
+      existing content.
+    """
+    if not justification:
+        return None
+    section = "## Justification\n\n" + justification.strip() + "\n"
+    if existing_notes and _JUSTIFICATION_HEADING_RE.search(existing_notes):
+        raise click.ClickException(
+            "notes already contains a '## Justification' section; "
+            "clear or edit it manually before re-justifying."
+        )
+    if not existing_notes:
+        return section
+    return existing_notes.rstrip() + "\n\n" + section
+
+
 def add_item(
     title: str,
     description: str | None = None,
@@ -1486,6 +1547,7 @@ def add_item(
     status: str | None = None,
     tier: int | None = None,
     force: bool = False,
+    justification: str | None = None,
 ):
     """Add a single task."""
     from endless.event_bridge import emit_event
@@ -1495,6 +1557,12 @@ def add_item(
     validate_description(description)
     _, proj_name = _resolve_project(project_name)
     status = status or ("ready" if tier == 1 else "needs_plan")
+
+    # E-1544: research-gate. Justification (when present) accepted-and-stored
+    # even if parent is epic+in_progress (gate only governs *requiring* it).
+    if task_type == "research":
+        _research_gate_check(parent_id, justification)
+    notes_value = _compose_justification_notes(None, justification)
 
     text_content: str | None = None
     if text_file is not None:
@@ -1512,6 +1580,8 @@ def add_item(
     }
     if text_content is not None:
         payload["text"] = text_content
+    if notes_value is not None:
+        payload["notes"] = notes_value
     if tier is not None:
         payload["tier"] = tier
     if parent_id is not None:
@@ -2624,6 +2694,7 @@ def update_plan(
     analysis: str | None = None,
     outcome: str | None = None,
     force: bool = False,
+    justification: str | None = None,
 ):
     """Update fields on a task."""
     from endless.event_bridge import emit_event
@@ -2632,7 +2703,7 @@ def update_plan(
     _require_outcome_for_completed(status, outcome)
 
     row = db.query(
-        "SELECT id, title, description, text, status, "
+        "SELECT id, title, description, text, notes, status, "
         "       COALESCE((SELECT slug FROM task_types WHERE id = tasks.type_id), '') AS type, "
         "       phase, tier, parent_id, outcome, analysis "
         "FROM   tasks WHERE id = ?",
@@ -2721,6 +2792,22 @@ def update_plan(
         # signature; the wire field is "type").
         fields["type"] = task_type
         changes.append(("type", row[0]["type"], task_type))
+
+    # E-1544: research-gate fires on update only when --type research is
+    # being set in this update (regardless of the task's current type).
+    # Effective parent = the new --parent if changing, else the existing
+    # parent_id from the row. PARENT_NONE (0) means "make root" → None.
+    if task_type == "research":
+        if parent_id is not None:
+            effective_parent = None if parent_id == PARENT_NONE else parent_id
+        else:
+            effective_parent = row[0]["parent_id"]
+        _research_gate_check(effective_parent, justification)
+
+    if justification:
+        new_notes = _compose_justification_notes(row[0]["notes"], justification)
+        if new_notes is not None:
+            _add("notes", new_notes)
 
     if analysis is not None:
         _add("analysis", analysis)
