@@ -159,6 +159,7 @@ type reaperFixture struct {
 	// answers — left as defaults to make the worktree look fully reapable.
 	revListOut    string // "0" → no unmerged commits
 	statusOut     string // "" → clean
+	worktreeRmOut string // stub output for the "worktree" branch (e.g. git's stderr)
 	revListErr    error
 	statusErr     error
 	worktreeRmErr error
@@ -194,7 +195,7 @@ func newReaperFixture(t *testing.T, landedAt time.Time) *reaperFixture {
 		case "status":
 			return f.statusOut, f.statusErr
 		case "worktree":
-			return "", f.worktreeRmErr
+			return f.worktreeRmOut, f.worktreeRmErr
 		case "branch":
 			return "", f.branchDelErr
 		}
@@ -394,6 +395,78 @@ func TestMaybeReapWorktree_GitRevListErrorProtects(t *testing.T) {
 	}
 	if reaped {
 		t.Errorf("expected reap=false when git rev-list errors, got true")
+	}
+}
+
+// TestMaybeReapWorktree_StrandedLeftover_Reaped covers E-1575: when
+// `git worktree remove` aborts with "is not a working tree" (the dir
+// exists on disk but git's worktree admin doesn't know it — leftover
+// from a prior reap), the reaper treats it as benign, rmdir's the
+// empty dir, skips branch -D, and reports the dir as reaped.
+func TestMaybeReapWorktree_StrandedLeftover_Reaped(t *testing.T) {
+	f := newReaperFixture(t, time.Now().Add(-30*24*time.Hour))
+	f.worktreeRmErr = fmt.Errorf("exit status 128")
+	f.worktreeRmOut = "fatal: '" + f.dir + "' is not a working tree\n"
+	cutoff := time.Now().UTC().Add(-14 * 24 * time.Hour)
+	reaped, err := maybeReapWorktree(f.db, f.projRoot, f.dir, 42, cutoff)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !reaped {
+		t.Errorf("expected reap=true for stranded leftover, got false")
+	}
+	if _, statErr := os.Stat(f.dir); !os.IsNotExist(statErr) {
+		t.Errorf("expected stranded dir to be rmdir'd, stat err=%v", statErr)
+	}
+	for _, c := range f.calls {
+		if c == "branch" {
+			t.Errorf("expected branch -D to be SKIPPED on stranded path, got calls=%v", f.calls)
+		}
+	}
+}
+
+// TestMaybeReapWorktree_StrandedLeftover_NonEmptyDirSurvives confirms
+// the rmdir step uses os.Remove (not RemoveAll): if the stranded dir
+// somehow has contents (user's leftover files), the rmdir fails
+// harmlessly and the dir stays put. The reap is still treated as
+// successful (no loud error on subsequent sweeps).
+func TestMaybeReapWorktree_StrandedLeftover_NonEmptyDirSurvives(t *testing.T) {
+	f := newReaperFixture(t, time.Now().Add(-30*24*time.Hour))
+	f.worktreeRmErr = fmt.Errorf("exit status 128")
+	f.worktreeRmOut = "fatal: '" + f.dir + "' is not a working tree\n"
+	// Plant a file so os.Remove on the dir fails (non-empty).
+	planted := filepath.Join(f.dir, "user-leftover.txt")
+	if err := os.WriteFile(planted, []byte("important"), 0o644); err != nil {
+		t.Fatalf("plant file: %v", err)
+	}
+	cutoff := time.Now().UTC().Add(-14 * 24 * time.Hour)
+	reaped, err := maybeReapWorktree(f.db, f.projRoot, f.dir, 42, cutoff)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !reaped {
+		t.Errorf("expected reap=true for stranded leftover, got false")
+	}
+	if _, statErr := os.Stat(planted); statErr != nil {
+		t.Errorf("expected planted file to survive (non-empty dir not removed), stat err=%v", statErr)
+	}
+}
+
+// TestMaybeReapWorktree_GitWorktreeRemoveOtherErrorSurfaces confirms
+// that errors from `git worktree remove` OTHER than "is not a working
+// tree" still surface as before — the stranded-leftover branch is
+// scoped tightly to that one message.
+func TestMaybeReapWorktree_GitWorktreeRemoveOtherErrorSurfaces(t *testing.T) {
+	f := newReaperFixture(t, time.Now().Add(-30*24*time.Hour))
+	f.worktreeRmErr = fmt.Errorf("exit status 128")
+	f.worktreeRmOut = "fatal: working tree contains modified or untracked files\n"
+	cutoff := time.Now().UTC().Add(-14 * 24 * time.Hour)
+	reaped, err := maybeReapWorktree(f.db, f.projRoot, f.dir, 42, cutoff)
+	if err == nil {
+		t.Errorf("expected error to surface for non-stranded git failure")
+	}
+	if reaped {
+		t.Errorf("expected reap=false when git worktree remove fails for an unrecognized reason")
 	}
 }
 
