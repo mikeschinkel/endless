@@ -216,10 +216,10 @@ func maybeReapWorktree(db *sql.DB, projectRoot, dir string, taskID int64, cutoff
 		// so `git worktree remove` aborts with "is not a working tree".
 		// Treat as benign: best-effort rmdir of the leftover dir, skip
 		// branch -D (we can't reason about the branch from a dir git
-		// doesn't track), report as reaped. os.Remove (not RemoveAll)
-		// refuses non-empty dirs so we never destroy user files.
+		// doesn't track), report as reaped so the outer sweep's calm
+		// "removed <dir>" line fires. os.Remove (not RemoveAll) refuses
+		// non-empty dirs so we never destroy user files.
 		if strings.Contains(out, "is not a working tree") {
-			log.Printf("reap worktrees: %s: stranded leftover (git no longer tracks); attempting rmdir", dir)
 			_ = os.Remove(dir)
 			return true, nil
 		}
