@@ -122,8 +122,8 @@ func execProjectNextRevised(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 			sessID    int64
 		)
 		rerr := db.QueryRow(
-			`SELECT revised_at, session_id FROM project_next_revisions
-			 WHERE project_next_id = ? ORDER BY revised_at DESC, id DESC LIMIT 1`,
+			`SELECT event_at, session_id FROM project_next_events
+			 WHERE project_next_id = ? ORDER BY event_at DESC, id DESC LIMIT 1`,
 			projectNextID,
 		).Scan(&revisedAt, &sessID)
 		switch {
@@ -152,7 +152,7 @@ func execProjectNextRevised(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 		laneID, _ := res.LastInsertId()
 		for pos, item := range lane.Items {
 			if _, err := db.Exec(
-				`INSERT INTO project_next_items (project_next_lane_id, task_id, reason, position)
+				`INSERT INTO project_next_tasks (project_next_lane_id, task_id, reason, position)
 				 VALUES (?, ?, ?, ?)`,
 				laneID, item.TaskID, item.Reason, pos,
 			); err != nil {
@@ -166,8 +166,8 @@ func execProjectNextRevised(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 	sessionID := mustParseInt64(evt.Actor.SessionID)
 	revisedAt := now()
 	if _, err := db.Exec(
-		`INSERT INTO project_next_revisions
-		   (project_next_id, session_id, revised_at, change_kind, json_snapshot)
+		`INSERT INTO project_next_events
+		   (project_next_id, session_id, event_at, kind, payload)
 		 VALUES (?, ?, ?, 'revise', ?)`,
 		projectNextID, sessionID, revisedAt, string(evt.Payload),
 	); err != nil {

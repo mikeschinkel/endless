@@ -33,7 +33,7 @@ func newProjectNextTestDB(t *testing.T) *sql.DB {
 	); err != nil {
 		t.Fatalf("seed project: %v", err)
 	}
-	// Sessions referenced by project_next_revisions.session_id (NOT NULL FK).
+	// Sessions referenced by project_next_events.session_id (NOT NULL FK).
 	for _, id := range []int{41, 42} {
 		if _, err := db.Exec(
 			`INSERT INTO sessions (id, session_id, project_id, started_at)
@@ -92,8 +92,8 @@ func TestExecProjectNextRevised_FromScratch(t *testing.T) {
 
 	var laneCount, itemCount, revCount int
 	db.QueryRow("SELECT COUNT(*) FROM project_next_lanes").Scan(&laneCount)
-	db.QueryRow("SELECT COUNT(*) FROM project_next_items").Scan(&itemCount)
-	db.QueryRow("SELECT COUNT(*) FROM project_next_revisions WHERE change_kind='revise'").Scan(&revCount)
+	db.QueryRow("SELECT COUNT(*) FROM project_next_tasks").Scan(&itemCount)
+	db.QueryRow("SELECT COUNT(*) FROM project_next_events WHERE kind='revise'").Scan(&revCount)
 	if laneCount != 2 {
 		t.Errorf("lanes: got %d, want 2", laneCount)
 	}
@@ -105,7 +105,7 @@ func TestExecProjectNextRevised_FromScratch(t *testing.T) {
 	}
 
 	var sessID int64
-	db.QueryRow("SELECT session_id FROM project_next_revisions LIMIT 1").Scan(&sessID)
+	db.QueryRow("SELECT session_id FROM project_next_events LIMIT 1").Scan(&sessID)
 	if sessID != 42 {
 		t.Errorf("revision session_id: got %d, want 42", sessID)
 	}
@@ -125,7 +125,7 @@ func TestExecProjectNextRevised_FromScratch(t *testing.T) {
 
 	// positions are 0-based per lane
 	var positions []int
-	rows, _ := db.Query("SELECT position FROM project_next_items ORDER BY project_next_lane_id, position")
+	rows, _ := db.Query("SELECT position FROM project_next_tasks ORDER BY project_next_lane_id, position")
 	for rows.Next() {
 		var pos int
 		rows.Scan(&pos)
@@ -165,14 +165,14 @@ func TestExecProjectNextRevised_ReplacesAndCapturesPrior(t *testing.T) {
 		t.Errorf("lane_id: got %q, want \"new\"", laneID)
 	}
 	var itemCount int
-	db.QueryRow("SELECT COUNT(*) FROM project_next_items").Scan(&itemCount)
+	db.QueryRow("SELECT COUNT(*) FROM project_next_tasks").Scan(&itemCount)
 	if itemCount != 1 {
 		t.Errorf("items after replace: got %d, want 1", itemCount)
 	}
 
 	// Two revision rows appended.
 	var revCount int
-	db.QueryRow("SELECT COUNT(*) FROM project_next_revisions").Scan(&revCount)
+	db.QueryRow("SELECT COUNT(*) FROM project_next_events").Scan(&revCount)
 	if revCount != 2 {
 		t.Errorf("revisions: got %d, want 2", revCount)
 	}
@@ -204,8 +204,8 @@ func TestExecProjectNextRevised_EmptyClears(t *testing.T) {
 
 	var laneCount, itemCount, revCount int
 	db.QueryRow("SELECT COUNT(*) FROM project_next_lanes").Scan(&laneCount)
-	db.QueryRow("SELECT COUNT(*) FROM project_next_items").Scan(&itemCount)
-	db.QueryRow("SELECT COUNT(*) FROM project_next_revisions").Scan(&revCount)
+	db.QueryRow("SELECT COUNT(*) FROM project_next_tasks").Scan(&itemCount)
+	db.QueryRow("SELECT COUNT(*) FROM project_next_events").Scan(&revCount)
 	if laneCount != 0 || itemCount != 0 {
 		t.Errorf("expected empty list, got %d lanes / %d items", laneCount, itemCount)
 	}
