@@ -23,7 +23,7 @@ def _bin() -> str:
     return str(Path(__file__).resolve().parent.parent / "bin" / "endless-go")
 
 
-def _run_render(cwd: Path, name: str = "handoff.md", vars_payload: dict | None = None) -> subprocess.CompletedProcess:
+def _run_render(cwd: Path, name: str = "handoff", vars_payload: dict | None = None) -> subprocess.CompletedProcess:
     payload = vars_payload if vars_payload is not None else {
         "spawned_id": 4242,
         "title": "Materialize test",

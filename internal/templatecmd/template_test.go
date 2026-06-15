@@ -94,7 +94,7 @@ func runRenderInProject(t *testing.T, projectRoot, name, stdin string, extraArgs
 // every {{.var}} placeholder.
 func TestRender_FullVars_ContainsExpectedSubstitutions(t *testing.T) {
 	root := projectFixture(t)
-	out, errOut, err := runRenderInProject(t, root, "handoff.md", fullHandoffVars())
+	out, errOut, err := runRenderInProject(t, root, "handoff", fullHandoffVars())
 	if err != nil {
 		t.Fatalf("render: %v\nstderr: %s", err, errOut)
 	}
@@ -114,7 +114,7 @@ func TestRender_FullVars_ContainsExpectedSubstitutions(t *testing.T) {
 func TestRender_MissingVar_PrintsNoValuePlaceholder(t *testing.T) {
 	root := projectFixture(t)
 	vars := `{"spawned_id": 1, "title": "X"}`
-	out, errOut, err := runRenderInProject(t, root, "handoff.md", vars)
+	out, errOut, err := runRenderInProject(t, root, "handoff", vars)
 	if err != nil {
 		t.Fatalf("render: %v\nstderr: %s", err, errOut)
 	}
@@ -150,7 +150,7 @@ func TestRender_MaterializesEmbedded(t *testing.T) {
 		t.Fatalf("seed gitignore: %v", err)
 	}
 
-	_, errOut, err := runRenderInProject(t, root, "handoff.md", fullHandoffVars())
+	_, errOut, err := runRenderInProject(t, root, "handoff", fullHandoffVars())
 	if err != nil {
 		t.Fatalf("render: %v\nstderr: %s", err, errOut)
 	}
@@ -184,7 +184,7 @@ func TestRender_UserEditPersists(t *testing.T) {
 		t.Fatalf("seed: %v", err)
 	}
 
-	out, errOut, err := runRenderInProject(t, root, "handoff.md", fullHandoffVars())
+	out, errOut, err := runRenderInProject(t, root, "handoff", fullHandoffVars())
 	if err != nil {
 		t.Fatalf("render: %v\nstderr: %s", err, errOut)
 	}
@@ -213,7 +213,7 @@ func TestRender_DeleteToRestore(t *testing.T) {
 	if err := os.Remove(dst); err != nil {
 		t.Fatalf("remove: %v", err)
 	}
-	out, errOut, err := runRenderInProject(t, root, "handoff.md", fullHandoffVars())
+	out, errOut, err := runRenderInProject(t, root, "handoff", fullHandoffVars())
 	if err != nil {
 		t.Fatalf("render: %v\nstderr: %s", err, errOut)
 	}
@@ -240,7 +240,7 @@ func TestRender_LocalTmplPrecedence(t *testing.T) {
 	if err := os.WriteFile(local, []byte("LOCAL"), 0644); err != nil {
 		t.Fatalf("seed local: %v", err)
 	}
-	out, errOut, err := runRenderInProject(t, root, "handoff.md", fullHandoffVars())
+	out, errOut, err := runRenderInProject(t, root, "handoff", fullHandoffVars())
 	if err != nil {
 		t.Fatalf("render: %v\nstderr: %s", err, errOut)
 	}
@@ -272,7 +272,7 @@ func TestRender_NoProjectContext_ExitsNonZero(t *testing.T) {
 		t.Skipf("test fixture path %s has a .endless ancestor; skip", bareSub)
 	}
 
-	_, errOut, err := runRenderInProject(t, bareSub, "handoff.md", fullHandoffVars())
+	_, errOut, err := runRenderInProject(t, bareSub, "handoff", fullHandoffVars())
 	if err == nil {
 		t.Fatalf("expected non-zero exit with no project context; got success")
 	}
@@ -298,7 +298,7 @@ func TestRender_ProjectFlagResolvesViaDB(t *testing.T) {
 		"--config-dir", cfgDir,
 		"template", "render",
 		"--project", "test-proj",
-		"handoff.md",
+		"handoff",
 	)
 	cmd.Dir = cwdDir
 	cmd.Stdin = strings.NewReader(fullHandoffVars())
@@ -330,7 +330,7 @@ func TestRender_UnknownProjectFlag_ExitsNonZero(t *testing.T) {
 		"--config-dir", cfgDir,
 		"template", "render",
 		"--project", "no-such-project",
-		"handoff.md",
+		"handoff",
 	)
 	cmd.Dir = cwdDir
 	cmd.Stdin = strings.NewReader(`{}`)
@@ -362,6 +362,45 @@ func seedProject(t *testing.T, cfgDir, name, path string) {
 		name, path,
 	); err != nil {
 		t.Fatalf("seed projects row: %v", err)
+	}
+}
+
+// TestNormalizeName_AppliesDefaultExtension covers the bare-name shorthand:
+// no `.` in the basename → append `.md`; already has a `.` → leave alone.
+func TestNormalizeName_AppliesDefaultExtension(t *testing.T) {
+	cases := []struct {
+		in, want string
+	}{
+		{"handoff", "handoff.md"},
+		{"handoff.md", "handoff.md"},
+		{"handoff.txt", "handoff.txt"},
+		{"handoff/task", "handoff/task.md"},
+		{"handoff/task.md", "handoff/task.md"},
+		{"report.json", "report.json"},
+	}
+	for _, c := range cases {
+		got := normalizeName(c.in)
+		if got != c.want {
+			t.Errorf("normalizeName(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+
+// TestRender_BareNameAndExplicitMd_AreEquivalent verifies the convenience
+// shorthand: `handoff` and `handoff.md` both resolve to handoff.md.tmpl.
+func TestRender_BareNameAndExplicitMd_AreEquivalent(t *testing.T) {
+	root := projectFixture(t)
+	out1, _, err := runRenderInProject(t, root, "handoff", fullHandoffVars())
+	if err != nil {
+		t.Fatalf("bare: %v", err)
+	}
+	// Second invocation in the same project — file is now materialized.
+	out2, _, err := runRenderInProject(t, root, "handoff.md", fullHandoffVars())
+	if err != nil {
+		t.Fatalf("explicit: %v", err)
+	}
+	if out1 != out2 {
+		t.Errorf("bare vs explicit .md produced different output:\nbare:\n%s\nexplicit:\n%s", out1, out2)
 	}
 }
 

@@ -70,7 +70,7 @@ func runRender(args []string, stdin io.Reader, stdout io.Writer) error {
 	if len(rest) != 1 {
 		return errors.New("usage: endless-go template render [--project <name>] <name>")
 	}
-	name := rest[0]
+	name := normalizeName(rest[0])
 
 	projectRoot, err := resolveProjectRoot(*projectName)
 	if err != nil {
@@ -157,6 +157,18 @@ func projectRootFromCwd() (string, error) {
 // templatesSubdir returns the project-scoped templates directory.
 func templatesSubdir(projectRoot string) string {
 	return filepath.Join(projectRoot, ".endless", "templates")
+}
+
+// normalizeName applies the default-extension rule: when the basename of
+// the user-supplied name has no `.`, append `.md`. Otherwise use as-is.
+// So `handoff` → `handoff.md`, `handoff.md` → `handoff.md` (idempotent),
+// `handoff.txt` → `handoff.txt`, `handoff/task` → `handoff/task.md`.
+func normalizeName(raw string) string {
+	base := filepath.Base(raw)
+	if strings.Contains(base, ".") {
+		return raw
+	}
+	return raw + ".md"
 }
 
 // embeddedContent reads the embedded template content for name. Returns

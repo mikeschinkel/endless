@@ -3169,7 +3169,7 @@ def render_handoff(spawned_id: int, title: str,
     }
     binary = _resolve_endless_go()
     result = subprocess.run(
-        [binary, "template", "render", "handoff.md"],
+        [binary, "template", "render", "handoff"],
         input=json.dumps(vars_payload),
         capture_output=True, text=True, check=False,
     )
