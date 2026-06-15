@@ -56,33 +56,33 @@ def test_from_worktree_returns_worktree_config_not_main(project_with_worktree, m
 
 def test_writes_from_worktree_land_in_worktree_not_main(project_with_worktree, monkeypatch):
     """E-1140 (reverses E-1112): writes from a worktree dirty the worktree's
-    own config, not main's. Use a pivot here (verbs go through a different
-    API as of E-1117); project_config_path() resolution applies to all
-    matcher writes."""
+    own config, not main's. Use a non-verb matcher here (verbs go through a
+    different API as of E-1117); project_config_path() resolution applies to
+    all matcher writes."""
     monkeypatch.chdir(project_with_worktree["worktree"])
 
     matchers.add_match_value(
-        type_="pivot", value="testpivotvalue", method="substring",
+        type_="start", value="testmatchvalue", method="substring",
         machine_only=False,
     )
 
     wt_cfg_path = project_with_worktree["worktree"] / ".endless" / "config.json"
     wt_data = json.loads(wt_cfg_path.read_text())
-    wt_pivots: list[str] = []
+    wt_values: list[str] = []
     for m in wt_data.get("matchers", []):
-        if m.get("type") == "pivot":
-            wt_pivots.extend(m.get("match") or [])
-    assert "testpivotvalue" in wt_pivots, (
-        "Pivot did not land in worktree's .endless/config.json"
+        if m.get("type") == "start":
+            wt_values.extend(m.get("match") or [])
+    assert "testmatchvalue" in wt_values, (
+        "Matcher did not land in worktree's .endless/config.json"
     )
 
     main_cfg = json.loads(project_with_worktree["main_cfg"].read_text())
-    main_pivots: list[str] = []
+    main_values: list[str] = []
     for m in main_cfg.get("matchers", []):
-        if m.get("type") == "pivot":
-            main_pivots.extend(m.get("match") or [])
-    assert "testpivotvalue" not in main_pivots, (
-        "Pivot leaked into main's .endless/config.json — anchor-to-main was not fully reverted"
+        if m.get("type") == "start":
+            main_values.extend(m.get("match") or [])
+    assert "testmatchvalue" not in main_values, (
+        "Matcher leaked into main's .endless/config.json — anchor-to-main was not fully reverted"
     )
 
 

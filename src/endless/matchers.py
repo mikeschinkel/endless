@@ -1,8 +1,8 @@
-"""Matcher patterns: pivots, action regexes — sourced from config files.
+"""Matcher patterns: action regexes — sourced from config files.
 
 Verbs were extracted from this module in E-1117. They live as their own
 top-level `verbs` array of objects (`{value, definition, ...}`); see verb_cmd.py.
-This module is now the home for non-verb pattern matchers (pivot, regex
+This module is now the home for non-verb pattern matchers (regex
 command-patterns, channel matchers).
 
 Two layers, merged additively at read time:
@@ -13,7 +13,7 @@ Two layers, merged additively at read time:
 A matcher object:
 
     {
-      "type":            <required, e.g. "pivot" | "start" | "complete" | ...>
+      "type":            <required, e.g. "start" | "complete" | "beacon" | ...>
       "scope":           <optional, e.g. "task" | "channel">
       "method":          <required, "exact" | "substring" | "regex">
       "match":           <required, list[str] for exact/substring, str for regex>
@@ -22,8 +22,7 @@ A matcher object:
     }
 
 The verb-gate calls get_verbs() which reads from the top-level `verbs`
-array. Pattern detection helpers (get_pivot_matchers, get_action_regex)
-still read from `matchers`.
+array. Action-regex lookup (get_action_regex) still reads from `matchers`.
 """
 
 import json
@@ -35,26 +34,9 @@ from endless import config
 
 
 # Default matchers seeded into the machine config on first run if no
-# "matchers" property exists. Includes the verb whitelist that previously
-# lived in src/endless/task_cmd.py:_TITLE_VERBS, the pivot triggers
-# planned for the W3 behavioral gate, and the action regexes lifted from
+# "matchers" property exists. Holds the action regexes lifted from
 # internal/hookcmd/claude.go.
 DEFAULT_MATCHERS: list[dict[str, Any]] = [
-    {
-        "type": "pivot",
-        "method": "substring",
-        "match": [
-            "actually", "wait", "also can you", "by the way", "btw",
-            "different", "switch to", "while you're at it", "instead",
-            "and can you",
-        ],
-    },
-    {
-        "type": "pivot",
-        "method": "substring",
-        "case_sensitive": True,
-        "match": ["PIVOT"],
-    },
     {
         "type": "start", "scope": "task", "method": "regex",
         "match": r"endless\s+task\s+claim\s+(?:[Ee]-)?(\d+)",
@@ -632,14 +614,6 @@ def get_verb_definition(value: str) -> str | None:
             d = v.get("definition")
             return d if isinstance(d, str) else None
     return None
-
-
-def get_pivot_matchers() -> list[dict]:
-    """Return enabled pivot matchers in match-evaluation order."""
-    return [
-        m for m in load_all_matchers()
-        if m.get("type") == "pivot" and m.get("enabled", True) is not False
-    ]
 
 
 def get_action_regex(action_type: str, scope: str) -> re.Pattern | None:

@@ -1868,7 +1868,7 @@ def verb_remove(value, machine_only):
 
 @main.group("phrase")
 def phrase_cmd():
-    """Manage matchers (pivots, action regexes) in config files."""
+    """Manage matchers (action regexes) in config files."""
     pass
 
 
@@ -1879,7 +1879,7 @@ def phrase_cmd():
               help="Optional scope qualifier (e.g., 'task', 'channel')")
 @click.option("--method", default=None,
               type=click.Choice(["exact", "substring", "regex"]),
-              help="Match algorithm (default: by type — pivot=substring, others=regex)")
+              help="Match algorithm (default: regex)")
 @click.option("--case-sensitive", is_flag=True,
               help="Match exact case (default: case-insensitive)")
 @click.option("--machine-only", is_flag=True,

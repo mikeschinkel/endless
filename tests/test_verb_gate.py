@@ -224,15 +224,6 @@ def test_phrase_add_rejects_type_verb(isolated_env):
     assert "endless verb add" in exc.value.message
 
 
-def test_phrase_add_pivot_still_works(isolated_env):
-    from endless import phrase_cmd
-    phrase_cmd.add_phrase(
-        type_="pivot", value="testpivot",
-        scope=None, method=None, case_sensitive=False,
-        machine_only=True,
-    )
-
-
 def test_legacy_verb_matcher_migrated_to_verbs_file(isolated_env, monkeypatch):
     """A pre-E-1117 config with type=verb matcher (with the bad 'definitions'
     field from E-1108) is migrated into the verbs file on first load."""
@@ -246,8 +237,8 @@ def test_legacy_verb_matcher_migrated_to_verbs_file(isolated_env, monkeypatch):
             "definitions": {"ponder": "to deliberate over"},
         },
         {
-            "type": "pivot", "method": "substring",
-            "match": ["actually"],
+            "type": "start", "scope": "task", "method": "regex",
+            "match": r"endless\s+task\s+claim\s+(?:[Ee]-)?(\d+)",
         },
     ]
     legacy.pop("verbs", None)
@@ -262,8 +253,8 @@ def test_legacy_verb_matcher_migrated_to_verbs_file(isolated_env, monkeypatch):
     assert "verbs" not in cfg_after, "verbs key must be stripped from config.json"
     matcher_verbs = [m for m in cfg_after["matchers"] if m.get("type") == "verb"]
     assert not matcher_verbs, "verb matcher must be removed from config.json"
-    pivots = [m for m in cfg_after["matchers"] if m.get("type") == "pivot"]
-    assert pivots, "non-verb matchers must remain in config.json"
+    non_verb = [m for m in cfg_after["matchers"] if m.get("type") != "verb"]
+    assert non_verb, "non-verb matchers must remain in config.json"
 
     assert verbs_path.exists(), "verbs.jsonl must be created"
     verbs = _read_jsonl(verbs_path)

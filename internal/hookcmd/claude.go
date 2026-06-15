@@ -278,15 +278,12 @@ func handleTaskContextInjection(projectID int64, payload claudePayload) error {
 	return json.NewEncoder(os.Stdout).Encode(hookResponse{AdditionalContext: ctx})
 }
 
-// handleUserPromptSubmit composes the per-prompt response. Three pieces,
+// handleUserPromptSubmit composes the per-prompt response. Two pieces,
 // any subset may be present:
 //
 //  1. Pending inter-session message banner (existing fallback).
 //  2. Layer 1: first-time full task list (one-shot) OR per-prompt
 //     "Active task: E-XXX — <title>." reminder.
-//  3. Layer 2 (E-971 Layer E): pivot trigger detection. On match, opens
-//     a session_gates row and surfaces the gate notice; PreToolUse will
-//     refuse Write/Edit until the gate clears.
 func handleUserPromptSubmit(projectID int64, payload claudePayload) error {
 	var parts []string
 
@@ -309,23 +306,6 @@ func handleUserPromptSubmit(projectID int64, payload claudePayload) error {
 			if title, err := monitor.GetTaskTitle(*session.ActiveTaskID); err == nil && title != "" {
 				parts = append(parts, fmt.Sprintf("Active task: E-%d — %s.", *session.ActiveTaskID, title))
 			}
-		}
-	}
-
-	// Layer 2: pivot detection
-	if payload.Prompt != "" {
-		all, err := matchers.Load(projectID)
-		if err != nil {
-			log.Printf("loading matchers: %v", err)
-		} else if matched := matchers.FindPivotMatch(all, payload.Prompt); matched != "" {
-			if err := monitor.SetGatePending(payload.SessionID, matched); err != nil {
-				log.Printf("setting gate-pending: %v", err)
-			}
-			parts = append(parts, fmt.Sprintf(
-				"Pivot trigger detected (matched: %q). Confirm or update active task before any "+
-					"Write/Edit. Cleared by `endless task add ...` (new task), `endless task claim <id>` "+
-					"(continue/switch), or `endless task confirm <id>` (continue/wrap up).",
-				matched))
 		}
 	}
 
@@ -450,7 +430,6 @@ func extractFilePath(toolName string, raw json.RawMessage) string {
 const (
 	actionStart   = "start"
 	actionConfirm = "confirm"
-	actionAdd     = "add"
 	actionChat    = "chat"
 	scopeTask     = "task"
 
@@ -490,19 +469,6 @@ func handlePreToolUse(projectID int64, isRegistered bool, payload claudePayload)
 	// E-1012: even with per-task tracking off, edits in main and edits
 	// to a worktree owned by another session are refused.
 	enforceWorktreeGate(projectID, payload)
-
-	// Pivot gate (E-971 Layer E). Independent of tracking_mode for the
-	// same reason: a deliberate pivot phrase from the user must pause
-	// edits even when per-task tracking is off.
-	if pending, phrase := monitor.IsGatePending(payload.SessionID); pending {
-		blockToolUse(fmt.Sprintf(
-			"BLOCKED (pivot gate): your last user message contained %q.\n\n"+
-				"Edits are paused until you declare your task. Run one of:\n"+
-				"  endless task add \"<title>\"      (new task)\n"+
-				"  endless task claim E-NNN          (switch to / resume an existing task)\n"+
-				"  endless task confirm E-NNN        (continue with / wrap up the current task)",
-			phrase))
-	}
 
 	// Check tracking mode
 	mode := monitor.GetTrackingMode(projectID)
@@ -621,9 +587,6 @@ func handlePostToolUseSession(projectID int64, payload claudePayload) error {
 				if err := monitor.StartWorkSession(payload.SessionID, projectID, taskID); err != nil {
 					return fmt.Errorf("starting work session: %w", err)
 				}
-				if err := monitor.ClearGatePending(payload.SessionID, "task_claim"); err != nil {
-					log.Printf("clearing gate after task claim: %v", err)
-				}
 			}
 			return nil
 		}
@@ -637,20 +600,9 @@ func handlePostToolUseSession(projectID int64, payload claudePayload) error {
 				if err := monitor.CompleteTask(payload.SessionID, taskID); err != nil {
 					return fmt.Errorf("confirming task: %w", err)
 				}
-				if err := monitor.ClearGatePending(payload.SessionID, "task_confirm"); err != nil {
-					log.Printf("clearing gate after task confirm: %v", err)
-				}
 			}
 			return nil
 		}
-	}
-
-	// Detect: endless task add (clears the pivot gate; no other side effects)
-	if re := matchers.ActionRegex(all, actionAdd, scopeTask); re != nil && re.MatchString(input.Command) {
-		if err := monitor.ClearGatePending(payload.SessionID, "task_add"); err != nil {
-			log.Printf("clearing gate after task add: %v", err)
-		}
-		return nil
 	}
 
 	// Detect: endless task chat

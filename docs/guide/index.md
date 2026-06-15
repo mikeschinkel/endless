@@ -131,7 +131,7 @@ listed separately. (Generated — do not hand-edit; run `/regenerate-guide`.)
 | `list` | reference | Listing registered projects. |
 | `note` | _(none yet)_ | project notes aren't covered by the guide yet. |
 | `notes` | _(none yet)_ | project notes aren't covered by the guide yet. |
-| `phrase` | _(none yet)_ | matchers (pivots, action regexes) config isn't covered by the guide yet. |
+| `phrase` | _(none yet)_ | matchers (action regexes) config isn't covered by the guide yet. |
 | `plan` | tasks | 'plan' is the former name for 'task' (renamed); use 'task'. |
 | `purge` | reference | Removing the .endless/ directory from a project. |
 | `register` | reference | Registering a directory as a project. |

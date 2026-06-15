@@ -14,9 +14,7 @@ from endless import matchers
 
 
 VALID_METHODS = ("exact", "substring", "regex")
-DEFAULT_METHOD_FOR_TYPE = {
-    "pivot": "substring",
-}
+DEFAULT_METHOD_FOR_TYPE: dict[str, str] = {}
 
 
 def _default_method(type_: str) -> str:
@@ -27,7 +25,7 @@ def _validate_type(type_: str) -> None:
     if not type_ or not re.fullmatch(r"[a-z][a-z0-9-]*", type_):
         raise click.ClickException(
             f"Invalid type {type_!r}. Must be lowercase kebab-case "
-            f"(e.g., verb, pivot, start, complete, beacon)."
+            f"(e.g., verb, start, complete, beacon)."
         )
 
 

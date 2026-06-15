@@ -108,7 +108,6 @@ func TestSchemaFreshDB_CreatesAllTables(t *testing.T) {
 		"task_files",
 		"suggestions",
 		"task_landings",
-		"session_gates",
 		"session_statuses",
 		"session_tasks",
 		"project_next",

@@ -331,20 +331,6 @@ CREATE TABLE IF NOT EXISTS task_landings (
 CREATE INDEX IF NOT EXISTS idx_task_landings_task
     ON task_landings(task_id, landed_at DESC);
 
--- Pivot gates (E-971 Layer E). One row per pivot trigger; an "open" gate has
--- cleared_at IS NULL. cleared_by names the verb that resolved it.
-CREATE TABLE IF NOT EXISTS session_gates (
-    id INTEGER PRIMARY KEY,
-    session_id TEXT NOT NULL,
-    matcher_phrase TEXT NOT NULL,
-    triggered_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
-    cleared_at TEXT,
-    cleared_by TEXT,
-    FOREIGN KEY (session_id) REFERENCES sessions(session_id) ON DELETE CASCADE
-);
-CREATE INDEX IF NOT EXISTS idx_session_gates_session
-    ON session_gates(session_id, triggered_at DESC);
-
 -- Session status snapshots (E-1312 / E-1314). Latest row by created_at is the
 -- current status. `tasks` holds all <task> elements; `summary` holds <layer>
 -- children; active_task_id joins to tasks.id.
