@@ -5,7 +5,6 @@ import re
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from string import Template
 
 import click
 from tabulate import tabulate
@@ -3123,13 +3122,9 @@ def detail_item(
 
 # The spawn handoff is generated, not stored (E-1469). Per-task variables
 # (id, title) plus runtime context (the spawning pane, the spawning session's
-# task) are merged into this template at spawn time. Loaded by __file__-relative
-# path the same way `endless guide` loads docs/guide/*.md — works because the
-# install is editable.
-_HANDOFF_TEMPLATE_PATH = (
-    Path(__file__).resolve().parent.parent.parent
-    / "docs" / "templates" / "handoff.md"
-)
+# task) are merged into the embedded `handoff` template at spawn time. The
+# rendering lives in `endless-go template render` (E-1565); this module
+# shells out per render.
 
 
 def _branch_for_worktree(wt_path) -> str | None:
@@ -3150,23 +3145,39 @@ def render_handoff(spawned_id: int, title: str,
                    spawner_task_id: int | None,
                    worktree_path: str | None = None,
                    branch: str | None = None) -> str:
-    """Render the spawn handoff for a task from the template.
+    """Render the spawn handoff for a task by invoking `endless-go template render`.
 
     The handoff is mostly boilerplate (orient, read the guide + plan, default
     interaction rules, return path, closing); only the task id, title, the
     spawning pane, and the task's worktree/branch vary. Generating it means
     agents no longer author prompts, so prompt-vs-plan drift cannot occur.
-    See E-1469.
+    See E-1469. E-1565 moved the rendering surface from Python's
+    string.Template to Go's text/template — Python builds the var map and
+    shells out per render.
     """
-    tmpl = Template(_HANDOFF_TEMPLATE_PATH.read_text())
-    return tmpl.safe_substitute(
-        spawned_id=spawned_id,
-        title=title,
-        spawner_task=spawner_task_id if spawner_task_id is not None else "?",
-        return_anchor=return_anchor or "%<spawning-pane>",
-        worktree_path=worktree_path or "<task worktree>",
-        branch=branch or "<task branch>",
+    import json
+    import subprocess
+    from endless.event_bridge import _resolve_endless_go
+
+    vars_payload = {
+        "spawned_id": spawned_id,
+        "title": title,
+        "spawner_task": spawner_task_id if spawner_task_id is not None else "?",
+        "return_anchor": return_anchor or "%<spawning-pane>",
+        "worktree_path": worktree_path or "<task worktree>",
+        "branch": branch or "<task branch>",
+    }
+    binary = _resolve_endless_go()
+    result = subprocess.run(
+        [binary, "template", "render", "handoff.md"],
+        input=json.dumps(vars_payload),
+        capture_output=True, text=True, check=False,
     )
+    if result.returncode != 0:
+        raise click.ClickException(
+            f"endless-go template render failed: {result.stderr.strip()}"
+        )
+    return result.stdout
 
 
 def show_handoff(item_id: int):

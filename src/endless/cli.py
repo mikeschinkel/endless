@@ -2198,3 +2198,50 @@ def db_path():
             "'endless db path --db=main' or 'endless db path --db=sandbox'."
         )
     click.echo(str(config.DB_PATH))
+
+
+# Hidden `endless internal` group: debug surfaces that shell through to
+# endless-go internals. Hidden so they don't clutter the main help; reachable
+# by name for debugging (E-1565).
+@main.group("internal", hidden=True)
+def internal_cmd():
+    """Hidden helpers that shell through to endless-go internals."""
+    pass
+
+
+@internal_cmd.group("template")
+def internal_template_cmd():
+    """Render templates via the embedded Go renderer (E-1565)."""
+    pass
+
+
+@internal_template_cmd.command("render")
+@click.argument("name")
+@click.option("--project", default=None,
+              help="Registered project name (overrides cwd-based resolution)")
+def internal_template_render(name, project):
+    """Render <name> from embedded templates; reads JSON vars on stdin.
+
+    Lookup order at render time: <project_root>/.endless/templates/<name>.local.tmpl,
+    then <name>.tmpl, then embedded. The committed `.tmpl` is materialized
+    from embed on first render so users can customize it on disk.
+    """
+    import subprocess
+    import sys
+
+    from endless.event_bridge import _resolve_endless_go
+
+    binary = _resolve_endless_go()
+    args = [binary, "template", "render"]
+    if project:
+        args.extend(["--project", project])
+    args.append(name)
+    result = subprocess.run(
+        args,
+        input=sys.stdin.read(),
+        capture_output=True, text=True, check=False,
+    )
+    sys.stdout.write(result.stdout)
+    if result.stderr:
+        sys.stderr.write(result.stderr)
+    sys.exit(result.returncode)

@@ -12,6 +12,7 @@
 //	endless-go serve         [port]
 //	endless-go tmux          apply|status-line|active-id|show-menu
 //	endless-go session-query list-live|task-text
+//	endless-go template      render
 //
 // Per-subcommand DB-context contract (must run BEFORE the subcommand
 // body):
@@ -38,6 +39,7 @@ import (
 	"github.com/mikeschinkel/endless/internal/sandboxcmd"
 	"github.com/mikeschinkel/endless/internal/servecmd"
 	"github.com/mikeschinkel/endless/internal/sessionquerycmd"
+	"github.com/mikeschinkel/endless/internal/templatecmd"
 	"github.com/mikeschinkel/endless/internal/tmuxcmd"
 )
 
@@ -101,6 +103,8 @@ func main() {
 		tmuxcmd.Run(rest)
 	case "session-query":
 		sessionquerycmd.Run(rest)
+	case "template":
+		templatecmd.Run(rest)
 	default:
 		fmt.Fprintf(os.Stderr, "endless-go: unknown subcommand %q\n", sub)
 		usage(os.Stderr)
@@ -118,4 +122,5 @@ func usage(w *os.File) {
 	fmt.Fprintln(w, "  serve          [port]  (web dashboard)")
 	fmt.Fprintln(w, "  tmux           apply|status-line|active-id|show-menu")
 	fmt.Fprintln(w, "  session-query  list-live|task-text")
+	fmt.Fprintln(w, "  template       render")
 }

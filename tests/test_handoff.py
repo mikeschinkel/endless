@@ -1,12 +1,23 @@
-"""Tests for the generated spawn handoff (E-1469).
+"""Tests for the generated spawn handoff (E-1469, E-1565).
 
-The handoff is rendered from docs/templates/handoff.md merged with the task's
-id/title and runtime context (spawning pane, spawning session's task). These
-assert the substitution and the graceful degradation when no tmux/active-task
-context is available.
+The handoff is rendered from the embedded `handoff.md.tmpl` template, merged
+with the task's id/title and runtime context (spawning pane, spawning
+session's task). E-1565 moved rendering from Python string.Template to a
+shell-out to `endless-go template render`, so the test chdirs into a tmp
+project (one with a `.endless/` subdir) so the renderer can resolve a
+project context.
 """
 
+import pytest
+
 from endless.task_cmd import render_handoff
+
+
+@pytest.fixture(autouse=True)
+def chdir_to_handoff_project(tmp_path, monkeypatch):
+    """Renderer resolves project root from cwd; give it a `.endless/` dir."""
+    (tmp_path / ".endless").mkdir()
+    monkeypatch.chdir(tmp_path)
 
 
 def test_render_handoff_includes_task_and_return_path():
