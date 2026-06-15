@@ -1735,6 +1735,9 @@ def add_item(
     _, proj_name = _resolve_project(project_name)
     status = status or ("ready" if tier == 1 else "needs_plan")
 
+    # E-1577: research/epic tasks cannot be created in 'assumed'/'confirmed'.
+    _require_terminal_allowed_for_type(status, task_type)
+
     # E-1544: research-gate. Justification (when present) accepted-and-stored
     # even if parent is epic+in_progress (gate only governs *requiring* it).
     if task_type == "research":
@@ -1953,19 +1956,72 @@ def _require_outcome_for_completed(status: str | None, outcome: str | None):
         )
 
 
+_TYPE_REJECTS_ASSUMED_CONFIRMED = ("research", "epic")
+
+
+def _require_terminal_allowed_for_type(status: str | None, task_type: str | None):
+    """E-1577: research and epic tasks reject 'assumed'/'confirmed' — their
+    only type-specific terminal is 'completed' (per E-1537 §3). Universal
+    terminals 'obsolete' and 'declined' remain allowed for all types."""
+    if status in ("assumed", "confirmed") and task_type in _TYPE_REJECTS_ASSUMED_CONFIRMED:
+        raise click.ClickException(
+            f"Task type {task_type!r} cannot use status {status!r}. "
+            f"Use --status completed (or `endless task complete`) with --outcome."
+        )
+
+
+def _refuse_cascade_across_typed_descendants(item_id: int, status: str):
+    """E-1577: when --cascade would set 'assumed'/'confirmed' on a subtree,
+    refuse loudly if any descendant is research/epic. Naming offenders
+    matches the 'loud failure on invalid state' rule."""
+    if status not in ("assumed", "confirmed"):
+        return
+    offenders = db.query(
+        "WITH RECURSIVE tree(id) AS ("
+        "  SELECT id FROM tasks WHERE id = ?"
+        "  UNION ALL"
+        "  SELECT t.id FROM tasks t JOIN tree ON t.parent_id = tree.id"
+        ") "
+        "SELECT t.id, COALESCE(t.title, t.description) AS title, "
+        "       COALESCE(tt.slug, '') AS type "
+        "FROM   tasks t "
+        "LEFT JOIN task_types tt ON tt.id = t.type_id "
+        "WHERE  t.id IN (SELECT id FROM tree) "
+        "  AND  COALESCE(tt.slug, '') IN ('research', 'epic') "
+        "  AND  t.id != ?",
+        (item_id, item_id),
+    )
+    if offenders:
+        lines = ", ".join(
+            f"{task_id_display(r['id'])} ({r['type']})" for r in offenders
+        )
+        raise click.ClickException(
+            f"Cannot cascade status {status!r}: subtree contains "
+            f"research/epic descendant(s) that reject this terminal: {lines}. "
+            f"Handle those separately with --status completed."
+        )
+
+
 def complete_item(item_id: int, cascade: bool = False, outcome: str | None = None):
     """Mark a task as confirmed."""
     from endless.event_bridge import emit_event
 
     row = db.query(
-        "SELECT id, COALESCE(title, description) as title, status FROM tasks "
-        "WHERE id = ?",
+        "SELECT t.id, COALESCE(t.title, t.description) as title, t.status, "
+        "       COALESCE(tt.slug, '') AS type "
+        "FROM   tasks t "
+        "LEFT JOIN task_types tt ON tt.id = t.type_id "
+        "WHERE  t.id = ?",
         (item_id,),
     )
     if not row:
         raise click.ClickException(
             f"No task found with id {item_id}"
         )
+
+    _require_terminal_allowed_for_type("confirmed", row[0]["type"])
+    if cascade:
+        _refuse_cascade_across_typed_descendants(item_id, "confirmed")
 
     if row[0]["status"] == "confirmed" and not cascade:
         click.echo(
@@ -2012,14 +2068,21 @@ def assume_item(item_id: int, cascade: bool = False, outcome: str | None = None)
     from endless.event_bridge import emit_event
 
     row = db.query(
-        "SELECT id, COALESCE(title, description) as title, status FROM tasks "
-        "WHERE id = ?",
+        "SELECT t.id, COALESCE(t.title, t.description) as title, t.status, "
+        "       COALESCE(tt.slug, '') AS type "
+        "FROM   tasks t "
+        "LEFT JOIN task_types tt ON tt.id = t.type_id "
+        "WHERE  t.id = ?",
         (item_id,),
     )
     if not row:
         raise click.ClickException(
             f"No task found with id {item_id}"
         )
+
+    _require_terminal_allowed_for_type("assumed", row[0]["type"])
+    if cascade:
+        _refuse_cascade_across_typed_descendants(item_id, "assumed")
 
     if row[0]["status"] == "assumed" and not cascade:
         click.echo(
@@ -3035,7 +3098,6 @@ def update_plan(
     from endless.event_bridge import emit_event
 
     _require_outcome_for_declined(status, outcome)
-    _require_outcome_for_completed(status, outcome)
 
     row = db.query(
         "SELECT id, title, description, text, notes, status, "
@@ -3048,6 +3110,13 @@ def update_plan(
         raise click.ClickException(
             f"No task found with id {item_id}"
         )
+
+    # E-1577: outcome-required check considers the merged value (incoming
+    # --outcome overrides existing DB value; otherwise existing satisfies).
+    # Lets the workflow "author outcome first → flip status later" work
+    # without forcing a redundant --outcome re-pass.
+    effective_outcome = outcome if (outcome and outcome.strip()) else row[0]["outcome"]
+    _require_outcome_for_completed(status, effective_outcome)
     if title is not None:
         validate_title(title, force=force)
 
@@ -3069,6 +3138,11 @@ def update_plan(
         # same call), else the existing title on the row.
         effective_title = title if title is not None else row[0]["title"]
         _require_completable_verb_for_completed(status, effective_title)
+        # E-1577: research/epic tasks reject 'assumed'/'confirmed' terminals.
+        # Use the incoming task_type if --type is also being set in this
+        # update, else the existing type on the row.
+        effective_type = task_type if task_type is not None else row[0]["type"]
+        _require_terminal_allowed_for_type(status, effective_type)
 
     # Build the fields map for the event payload, plus an ordered list of
     # (name, old, new) tuples for change-output rendering.
@@ -3352,8 +3426,6 @@ def detail_item(
     click.echo(f"{label('Type:')} {val(item['type'])}")
     click.echo(f"{label('Phase:')} {val(item['phase'])}")
     click.echo(f"{label('Status:')} {val(item['status'])}")
-    if item["outcome"] and (show_outcome or item["status"] in ("declined", "completed")):
-        click.echo(f"{label('Outcome:')} {val(item['outcome'])}")
     if item["tier"]:
         click.echo(f"{label('Tier:')} {val(tier_display(item['tier']))}")
     if item["parent_id"]:
@@ -3380,6 +3452,11 @@ def detail_item(
         click.echo()
         click.echo(click.style("— Text —", fg="cyan"))
         click.echo(item["text"])
+
+    if item["outcome"] and (show_outcome or item["status"] in ("declined", "completed")):
+        click.echo()
+        click.echo(click.style("— Outcome —", fg="cyan"))
+        click.echo(item["outcome"])
 
     if show_children:
         children = db.query(

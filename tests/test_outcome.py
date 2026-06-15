@@ -148,6 +148,10 @@ def test_task_show_outcome_flag_renders_outcome(seeded_project_at_cwd):
     result = runner.invoke(main, ["task", "show", f"E-{tid}", "--outcome"])
     assert result.exit_code == 0
     assert "some context" in result.output
+    # E-1577: outcome renders as a "— Outcome —" section, not inline.
+    assert "— Outcome —" in result.output
+    # And the inline "Outcome:" label-value field is NOT used anymore.
+    assert "Outcome:" not in result.output
 
 
 def test_task_show_declined_always_shows_outcome(seeded_project_at_cwd):
@@ -157,6 +161,26 @@ def test_task_show_declined_always_shows_outcome(seeded_project_at_cwd):
     result = runner.invoke(main, ["task", "show", f"E-{tid}"])
     assert result.exit_code == 0
     assert "declined for testing" in result.output
+    # E-1577: outcome renders as a section.
+    assert "— Outcome —" in result.output
+    assert "Outcome:" not in result.output
+
+
+def test_task_show_outcome_section_renders_after_text(seeded_project_at_cwd):
+    """E-1577: the outcome section appears AFTER the text section."""
+    tid = _add_task("Sample")
+    db.execute(
+        "UPDATE tasks SET text = ?, outcome = ? WHERE id = ?",
+        ("body text content", "outcome content", tid),
+    )
+    runner = CliRunner()
+    result = runner.invoke(main, ["task", "show", f"E-{tid}", "--text", "--outcome"])
+    assert result.exit_code == 0
+    text_idx = result.output.find("— Text —")
+    outcome_idx = result.output.find("— Outcome —")
+    assert text_idx != -1
+    assert outcome_idx != -1
+    assert outcome_idx > text_idx, "outcome section must follow text section"
 
 
 def test_task_show_llm_includes_outcome(seeded_project_at_cwd):

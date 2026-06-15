@@ -227,3 +227,165 @@ def test_update_gate_does_not_fire_when_type_not_in_update(seeded_project_at_cwd
     task_cmd.update_plan(tid, parent_id=parent)  # no --type, no raise
     row = db.query("SELECT parent_id FROM tasks WHERE id = ?", (tid,))
     assert row[0]["parent_id"] == parent
+
+
+# ---------- E-1577: research/epic terminal gate ----------
+
+
+@pytest.mark.parametrize("task_type", ["research", "epic"])
+def test_confirm_refused_for_research_and_epic(seeded_project_at_cwd, task_type):
+    tid = _add_task(
+        "Research the cache" if task_type == "research" else "Epic container",
+        task_type=task_type,
+        status="in_progress",
+    )
+    with pytest.raises(click.ClickException) as exc:
+        task_cmd.complete_item(tid)
+    msg = exc.value.message.lower()
+    assert task_type in msg
+    assert "'confirmed'" in msg
+    assert "completed" in msg  # error directs to --status completed
+
+
+@pytest.mark.parametrize("task_type", ["research", "epic"])
+def test_assume_refused_for_research_and_epic(seeded_project_at_cwd, task_type):
+    tid = _add_task(
+        "Research the cache" if task_type == "research" else "Epic container",
+        task_type=task_type,
+        status="in_progress",
+    )
+    with pytest.raises(click.ClickException) as exc:
+        task_cmd.assume_item(tid)
+    msg = exc.value.message.lower()
+    assert task_type in msg
+    assert "'assumed'" in msg
+    assert "completed" in msg
+
+
+@pytest.mark.parametrize("task_type", ["research", "epic"])
+@pytest.mark.parametrize("status", ["confirmed", "assumed"])
+def test_update_status_refused_for_research_and_epic(
+    seeded_project_at_cwd, task_type, status,
+):
+    title = "Research the cache" if task_type == "research" else "Epic container"
+    tid = _add_task(title, task_type=task_type, status="in_progress")
+    with pytest.raises(click.ClickException) as exc:
+        task_cmd.update_plan(tid, status=status)
+    msg = exc.value.message.lower()
+    assert task_type in msg
+    assert f"'{status}'" in msg
+
+
+@pytest.mark.parametrize("task_type", ["research", "epic"])
+@pytest.mark.parametrize("status", ["confirmed", "assumed"])
+def test_add_status_refused_for_research_and_epic(
+    seeded_project_at_cwd, task_type, status,
+):
+    """Direct creation of a research/epic task in 'confirmed' or 'assumed' is refused."""
+    epic = _add_task("Anchor epic", status="in_progress", task_type="epic")
+    title = "Research foo" if task_type == "research" else "Build foo"
+    with pytest.raises(click.ClickException) as exc:
+        task_cmd.add_item(
+            title,
+            task_type=task_type,
+            status=status,
+            parent_id=epic if task_type == "research" else None,
+        )
+    msg = exc.value.message.lower()
+    assert task_type in msg
+    assert f"'{status}'" in msg
+
+
+def test_update_task_type_change_to_research_blocks_assumed_status_in_same_call(
+    seeded_project_at_cwd,
+):
+    """If --type research AND --status assumed are set in the same call,
+    the gate uses the incoming type and refuses."""
+    epic = _add_task("Anchor epic", status="in_progress", task_type="epic")
+    tid = _add_task("Plain task", parent_id=epic)
+    with pytest.raises(click.ClickException) as exc:
+        task_cmd.update_plan(tid, task_type="research", status="assumed")
+    assert "'assumed'" in exc.value.message.lower()
+
+
+def test_update_task_to_research_then_existing_status_change(
+    seeded_project_at_cwd,
+):
+    """A task already typed research, then setting --status confirmed in a
+    separate call, also refuses (using the existing row's type)."""
+    epic = _add_task("Anchor epic", status="in_progress", task_type="epic")
+    tid = _add_task("Research bubble tea", task_type="research", parent_id=epic)
+    with pytest.raises(click.ClickException) as exc:
+        task_cmd.update_plan(tid, status="confirmed")
+    assert "'confirmed'" in exc.value.message.lower()
+
+
+def test_research_completed_still_allowed(seeded_project_at_cwd):
+    """Bug 1's gate refuses assumed/confirmed but allows completed."""
+    epic = _add_task("Anchor epic", status="in_progress", task_type="epic")
+    tid = _add_task("Research bubble tea", task_type="research", parent_id=epic)
+    task_cmd.update_plan(tid, status="completed", outcome="findings text")
+    row = db.query("SELECT status FROM tasks WHERE id = ?", (tid,))
+    assert row[0]["status"] == "completed"
+
+
+def test_research_declined_and_obsolete_still_allowed(seeded_project_at_cwd):
+    """Universal terminals (declined, obsolete) are not gated by type."""
+    epic = _add_task("Anchor epic", status="in_progress", task_type="epic")
+    tid = _add_task("Research X", task_type="research", parent_id=epic)
+    task_cmd.update_plan(tid, status="obsolete")
+    row = db.query("SELECT status FROM tasks WHERE id = ?", (tid,))
+    assert row[0]["status"] == "obsolete"
+
+
+def test_plain_task_still_accepts_confirmed_and_assumed(seeded_project_at_cwd):
+    """Bug 1 gate must not regress non-research/non-epic types."""
+    tid = _add_task("Plain task")
+    task_cmd.complete_item(tid)
+    row = db.query("SELECT status FROM tasks WHERE id = ?", (tid,))
+    assert row[0]["status"] == "confirmed"
+
+    tid2 = _add_task("Other plain task")
+    task_cmd.assume_item(tid2)
+    row2 = db.query("SELECT status FROM tasks WHERE id = ?", (tid2,))
+    assert row2[0]["status"] == "assumed"
+
+
+# ---------- E-1577: cascade refuses across research/epic descendants ----------
+
+
+def test_cascade_confirm_refused_when_research_descendant(seeded_project_at_cwd):
+    """`task confirm --cascade` on a parent with a research descendant
+    refuses loudly and names the offender."""
+    parent = _add_task("Implement X", task_type="task")
+    epic = _add_task("Anchor", task_type="epic", status="in_progress")
+    research = _add_task(
+        "Research subtree", task_type="research", parent_id=parent,
+    )
+    # epic just for the seeded_project (research-gate doesn't fire on _add_task)
+    _ = epic
+    with pytest.raises(click.ClickException) as exc:
+        task_cmd.complete_item(parent, cascade=True)
+    msg = exc.value.message.lower()
+    assert "cascade" in msg
+    assert "research" in msg
+    assert f"e-{research}" in msg.lower()
+
+
+def test_cascade_assume_refused_when_epic_descendant(seeded_project_at_cwd):
+    parent = _add_task("Implement Y", task_type="task")
+    nested_epic = _add_task("Sub-epic", task_type="epic", parent_id=parent)
+    with pytest.raises(click.ClickException) as exc:
+        task_cmd.assume_item(parent, cascade=True)
+    msg = exc.value.message.lower()
+    assert "cascade" in msg
+    assert "epic" in msg
+    assert f"e-{nested_epic}" in msg.lower()
+
+
+def test_cascade_confirm_passes_when_no_typed_descendants(seeded_project_at_cwd):
+    parent = _add_task("Implement Z", task_type="task")
+    _add_task("Sub-task", task_type="task", parent_id=parent)
+    task_cmd.complete_item(parent, cascade=True)
+    row = db.query("SELECT status FROM tasks WHERE id = ?", (parent,))
+    assert row[0]["status"] == "confirmed"

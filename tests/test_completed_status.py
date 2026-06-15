@@ -161,6 +161,38 @@ def test_update_status_completed_uses_new_title_if_provided(seeded_project_at_cw
     assert status == "completed"
 
 
+# ─── E-1577: completed accepts existing DB outcome (merge) ────────────────────
+
+
+def test_update_status_completed_satisfied_by_existing_db_outcome(seeded_project_at_cwd):
+    """Bug 2: --outcome should not be required on the same call if
+    tasks.outcome already holds a non-empty value."""
+    tid = _add_task("Audit X")
+    task_cmd.update_plan(tid, outcome="findings drafted")  # standalone
+    # Now flip status without re-passing --outcome
+    task_cmd.update_plan(tid, status="completed")
+    status, outcome = _status_outcome(tid)
+    assert status == "completed"
+    assert outcome == "findings drafted"
+
+
+def test_update_status_completed_new_outcome_overrides_existing(seeded_project_at_cwd):
+    tid = _add_task("Audit X")
+    task_cmd.update_plan(tid, outcome="old draft")
+    task_cmd.update_plan(tid, status="completed", outcome="final findings")
+    status, outcome = _status_outcome(tid)
+    assert status == "completed"
+    assert outcome == "final findings"
+
+
+def test_update_status_completed_still_refused_when_both_empty(seeded_project_at_cwd):
+    """If neither existing nor new outcome is non-empty, still refused."""
+    tid = _add_task("Audit X")  # no outcome ever set
+    with pytest.raises(click.ClickException) as exc:
+        task_cmd.update_plan(tid, status="completed")
+    assert "outcome is required" in str(exc.value.message).lower()
+
+
 # ─── CLI ──────────────────────────────────────────────────────────────────────
 
 
