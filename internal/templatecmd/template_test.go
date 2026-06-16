@@ -54,7 +54,8 @@ func fullHandoffVars() string {
 		"spawner_task": 7777,
 		"return_anchor": "%1",
 		"worktree_path": "/tmp/wt/e-9999",
-		"branch": "task/9999-test"
+		"branch": "task/9999-test",
+		"child_count": 0
 	}`
 }
 
@@ -94,7 +95,7 @@ func runRenderInProject(t *testing.T, projectRoot, name, stdin string, extraArgs
 // every {{.var}} placeholder.
 func TestRender_FullVars_ContainsExpectedSubstitutions(t *testing.T) {
 	root := projectFixture(t)
-	out, errOut, err := runRenderInProject(t, root, "handoff", fullHandoffVars())
+	out, errOut, err := runRenderInProject(t, root, "handoff/task", fullHandoffVars())
 	if err != nil {
 		t.Fatalf("render: %v\nstderr: %s", err, errOut)
 	}
@@ -114,7 +115,7 @@ func TestRender_FullVars_ContainsExpectedSubstitutions(t *testing.T) {
 func TestRender_MissingVar_PrintsNoValuePlaceholder(t *testing.T) {
 	root := projectFixture(t)
 	vars := `{"spawned_id": 1, "title": "X"}`
-	out, errOut, err := runRenderInProject(t, root, "handoff", vars)
+	out, errOut, err := runRenderInProject(t, root, "handoff/task", vars)
 	if err != nil {
 		t.Fatalf("render: %v\nstderr: %s", err, errOut)
 	}
@@ -140,7 +141,7 @@ func TestRender_UnknownTemplate_ExitsNonZero(t *testing.T) {
 // content, and .gitignore is untouched.
 func TestRender_MaterializesEmbedded(t *testing.T) {
 	root := projectFixture(t)
-	dst := filepath.Join(root, ".endless", "templates", "handoff.md.tmpl")
+	dst := filepath.Join(root, ".endless", "templates", "handoff", "task.md.tmpl")
 	if _, err := os.Stat(dst); err == nil {
 		t.Fatalf("precondition: %s should not exist yet", dst)
 	}
@@ -150,7 +151,7 @@ func TestRender_MaterializesEmbedded(t *testing.T) {
 		t.Fatalf("seed gitignore: %v", err)
 	}
 
-	_, errOut, err := runRenderInProject(t, root, "handoff", fullHandoffVars())
+	_, errOut, err := runRenderInProject(t, root, "handoff/task", fullHandoffVars())
 	if err != nil {
 		t.Fatalf("render: %v\nstderr: %s", err, errOut)
 	}
@@ -174,17 +175,17 @@ func TestRender_MaterializesEmbedded(t *testing.T) {
 // over the embedded copy; render does not overwrite.
 func TestRender_UserEditPersists(t *testing.T) {
 	root := projectFixture(t)
-	dir := filepath.Join(root, ".endless", "templates")
+	dir := filepath.Join(root, ".endless", "templates", "handoff")
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
 	custom := "MODIFIED CONTENT {{.spawned_id}}"
-	dst := filepath.Join(dir, "handoff.md.tmpl")
+	dst := filepath.Join(dir, "task.md.tmpl")
 	if err := os.WriteFile(dst, []byte(custom), 0644); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 
-	out, errOut, err := runRenderInProject(t, root, "handoff", fullHandoffVars())
+	out, errOut, err := runRenderInProject(t, root, "handoff/task", fullHandoffVars())
 	if err != nil {
 		t.Fatalf("render: %v\nstderr: %s", err, errOut)
 	}
@@ -202,18 +203,18 @@ func TestRender_UserEditPersists(t *testing.T) {
 // the embedded copy on the next render.
 func TestRender_DeleteToRestore(t *testing.T) {
 	root := projectFixture(t)
-	dir := filepath.Join(root, ".endless", "templates")
+	dir := filepath.Join(root, ".endless", "templates", "handoff")
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
-	dst := filepath.Join(dir, "handoff.md.tmpl")
+	dst := filepath.Join(dir, "task.md.tmpl")
 	if err := os.WriteFile(dst, []byte("CUSTOM"), 0644); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 	if err := os.Remove(dst); err != nil {
 		t.Fatalf("remove: %v", err)
 	}
-	out, errOut, err := runRenderInProject(t, root, "handoff", fullHandoffVars())
+	out, errOut, err := runRenderInProject(t, root, "handoff/task", fullHandoffVars())
 	if err != nil {
 		t.Fatalf("render: %v\nstderr: %s", err, errOut)
 	}
@@ -228,19 +229,19 @@ func TestRender_DeleteToRestore(t *testing.T) {
 // TestRender_LocalTmplPrecedence verifies that .local.tmpl beats .tmpl.
 func TestRender_LocalTmplPrecedence(t *testing.T) {
 	root := projectFixture(t)
-	dir := filepath.Join(root, ".endless", "templates")
+	dir := filepath.Join(root, ".endless", "templates", "handoff")
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
-	committed := filepath.Join(dir, "handoff.md.tmpl")
-	local := filepath.Join(dir, "handoff.md.local.tmpl")
+	committed := filepath.Join(dir, "task.md.tmpl")
+	local := filepath.Join(dir, "task.md.local.tmpl")
 	if err := os.WriteFile(committed, []byte("COMMITTED"), 0644); err != nil {
 		t.Fatalf("seed committed: %v", err)
 	}
 	if err := os.WriteFile(local, []byte("LOCAL"), 0644); err != nil {
 		t.Fatalf("seed local: %v", err)
 	}
-	out, errOut, err := runRenderInProject(t, root, "handoff", fullHandoffVars())
+	out, errOut, err := runRenderInProject(t, root, "handoff/task", fullHandoffVars())
 	if err != nil {
 		t.Fatalf("render: %v\nstderr: %s", err, errOut)
 	}
@@ -272,7 +273,7 @@ func TestRender_NoProjectContext_ExitsNonZero(t *testing.T) {
 		t.Skipf("test fixture path %s has a .endless ancestor; skip", bareSub)
 	}
 
-	_, errOut, err := runRenderInProject(t, bareSub, "handoff", fullHandoffVars())
+	_, errOut, err := runRenderInProject(t, bareSub, "handoff/task", fullHandoffVars())
 	if err == nil {
 		t.Fatalf("expected non-zero exit with no project context; got success")
 	}
@@ -298,7 +299,7 @@ func TestRender_ProjectFlagResolvesViaDB(t *testing.T) {
 		"--config-dir", cfgDir,
 		"template", "render",
 		"--project", "test-proj",
-		"handoff",
+		"handoff/task",
 	)
 	cmd.Dir = cwdDir
 	cmd.Stdin = strings.NewReader(fullHandoffVars())
@@ -308,7 +309,7 @@ func TestRender_ProjectFlagResolvesViaDB(t *testing.T) {
 	if err := cmd.Run(); err != nil {
 		t.Fatalf("render --project: %v\nstderr: %s", err, stderr.String())
 	}
-	dst := filepath.Join(projRoot, ".endless", "templates", "handoff.md.tmpl")
+	dst := filepath.Join(projRoot, ".endless", "templates", "handoff", "task.md.tmpl")
 	if _, err := os.Stat(dst); err != nil {
 		t.Fatalf("expected materialized file at %s: %v", dst, err)
 	}
@@ -330,7 +331,7 @@ func TestRender_UnknownProjectFlag_ExitsNonZero(t *testing.T) {
 		"--config-dir", cfgDir,
 		"template", "render",
 		"--project", "no-such-project",
-		"handoff",
+		"handoff/task",
 	)
 	cmd.Dir = cwdDir
 	cmd.Stdin = strings.NewReader(`{}`)
@@ -387,15 +388,18 @@ func TestNormalizeName_AppliesDefaultExtension(t *testing.T) {
 }
 
 // TestRender_BareNameAndExplicitMd_AreEquivalent verifies the convenience
-// shorthand: `handoff` and `handoff.md` both resolve to handoff.md.tmpl.
+// shorthand: `handoff/task` and `handoff/task.md` both resolve to
+// handoff/task.md.tmpl. (E-1566: bare top-level `handoff` no longer
+// resolves to a file — the template moved under handoff/ as a per-type
+// variant; the bare-vs-explicit convenience still applies to the leaf.)
 func TestRender_BareNameAndExplicitMd_AreEquivalent(t *testing.T) {
 	root := projectFixture(t)
-	out1, _, err := runRenderInProject(t, root, "handoff", fullHandoffVars())
+	out1, _, err := runRenderInProject(t, root, "handoff/task", fullHandoffVars())
 	if err != nil {
 		t.Fatalf("bare: %v", err)
 	}
 	// Second invocation in the same project — file is now materialized.
-	out2, _, err := runRenderInProject(t, root, "handoff.md", fullHandoffVars())
+	out2, _, err := runRenderInProject(t, root, "handoff/task.md", fullHandoffVars())
 	if err != nil {
 		t.Fatalf("explicit: %v", err)
 	}

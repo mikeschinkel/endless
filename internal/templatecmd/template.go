@@ -30,7 +30,7 @@ import (
 	"github.com/mikeschinkel/endless/internal/monitor"
 )
 
-//go:embed templates/*.tmpl
+//go:embed templates
 var embedded embed.FS
 
 // Run dispatches `endless-go template <verb> [args]`.

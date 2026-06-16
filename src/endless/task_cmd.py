@@ -3140,11 +3140,15 @@ def _branch_for_worktree(wt_path) -> str | None:
         return None
 
 
+_HANDOFF_TYPES = frozenset({"task", "bug", "research", "epic"})
+
+
 def render_handoff(spawned_id: int, title: str,
                    return_anchor: str | None,
                    spawner_task_id: int | None,
                    worktree_path: str | None = None,
-                   branch: str | None = None) -> str:
+                   branch: str | None = None,
+                   task_type: str | None = None) -> str:
     """Render the spawn handoff for a task by invoking `endless-go template render`.
 
     The handoff is mostly boilerplate (orient, read the guide + plan, default
@@ -3153,11 +3157,22 @@ def render_handoff(spawned_id: int, title: str,
     agents no longer author prompts, so prompt-vs-plan drift cannot occur.
     See E-1469. E-1565 moved the rendering surface from Python's
     string.Template to Go's text/template — Python builds the var map and
-    shells out per render.
+    shells out per render. E-1566 split the single template into
+    per-type variants under `handoff/{task,bug,research,epic}.md.tmpl`;
+    unknown or null `task_type` falls back to the task variant. The child
+    count is universal — per E-1552, every variant includes a conditional
+    line naming the count when nonzero.
     """
     import json
     import subprocess
     from endless.event_bridge import _resolve_endless_go
+
+    effective_type = task_type if task_type in _HANDOFF_TYPES else "task"
+    child_rows = db.query(
+        "SELECT count(*) AS n FROM tasks WHERE parent_id = ?",
+        (spawned_id,),
+    )
+    child_count = child_rows[0]["n"] if child_rows else 0
 
     vars_payload = {
         "spawned_id": spawned_id,
@@ -3166,10 +3181,11 @@ def render_handoff(spawned_id: int, title: str,
         "return_anchor": return_anchor or "%<spawning-pane>",
         "worktree_path": worktree_path or "<task worktree>",
         "branch": branch or "<task branch>",
+        "child_count": child_count,
     }
     binary = _resolve_endless_go()
     result = subprocess.run(
-        [binary, "template", "render", "handoff"],
+        [binary, "template", "render", f"handoff/{effective_type}"],
         input=json.dumps(vars_payload),
         capture_output=True, text=True, check=False,
     )
@@ -3183,7 +3199,9 @@ def render_handoff(spawned_id: int, title: str,
 def show_handoff(item_id: int):
     """Render the spawn handoff for a task and print it."""
     row = db.query(
-        "SELECT id, title FROM tasks WHERE id = ?",
+        "SELECT t.id, t.title, COALESCE(tt.slug, '') AS type_slug "
+        "FROM tasks t LEFT JOIN task_types tt ON tt.id = t.type_id "
+        "WHERE t.id = ?",
         (item_id,),
     )
     if not row:
@@ -3198,6 +3216,7 @@ def show_handoff(item_id: int):
         _current_session_active_task_id(),
         worktree_path=str(wt) if wt else None,
         branch=_branch_for_worktree(wt) if wt else None,
+        task_type=row[0]["type_slug"] or None,
     ))
 
 
@@ -3261,9 +3280,11 @@ def spawn_plan(item_id: int, project_name: str | None = None, no_plan: bool = Fa
     # Get the plan item
     row = db.query(
         "SELECT p.id, p.title, p.status, p.project_id, "
-        "proj.path as project_path, proj.name as project_name "
+        "proj.path as project_path, proj.name as project_name, "
+        "COALESCE(tt.slug, '') AS type_slug "
         "FROM tasks p "
         "JOIN projects proj ON p.project_id = proj.id "
+        "LEFT JOIN task_types tt ON tt.id = p.type_id "
         "WHERE p.id = ?",
         (item_id,),
     )
@@ -3369,6 +3390,7 @@ def spawn_plan(item_id: int, project_name: str | None = None, no_plan: bool = Fa
         _current_session_active_task_id(),
         worktree_path=cd_target,
         branch=_branch_for_worktree(cd_target),
+        task_type=item["type_slug"] or None,
     )
     handoff_file = tempfile.NamedTemporaryFile(
         mode="w", suffix=".md", prefix="endless-handoff-",
