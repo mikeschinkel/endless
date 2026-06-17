@@ -59,18 +59,89 @@ build: _link-templui
     tailwindcss -i internal/web/assets/css/input.css -o internal/web/assets/css/output.css
     go build -o bin/endless-go ./cmd/endless-go
 
-# Build and install everything: Go binaries symlinked to /usr/local/bin,
-# Python CLI installed via uv tool in EDITABLE mode (-e). Editable means the
-# tool's site-packages contains a pointer to this checkout's src/endless/
-# rather than a copy, so subsequent Python source changes go live without
-# rerunning install. Run from the main checkout — running from a worktree
-# would point the global tool at a transient directory.
-install:
+# Build and install everything, overloaded by checkout context (E-1036).
+#
+#   just install              Context-detected:
+#                               - From the MAIN checkout: the global install.
+#                                 Go binaries symlinked into /usr/local/bin,
+#                                 Python CLI installed via `uv tool install -e .`
+#                                 in EDITABLE mode (-e). Editable means the tool's
+#                                 site-packages points at this checkout's
+#                                 src/endless/ rather than a copy, so subsequent
+#                                 Python changes go live without reinstalling.
+#                               - From a WORKTREE: the worktree-SCOPED install.
+#
+#   just install worktree     Force the worktree-SCOPED install explicitly
+#                             (must be run from a worktree). `just install
+#                             --worktree` is accepted as the same thing.
+#
+# The scoped install NEVER touches the global symlink or the global uv tool —
+# scoping is achieved purely by injection (.claude/settings.json + PATH/XDG) via
+# the existing recipes (go-work-init + build + dev-sandbox-init +
+# claude-settings-init). This turns the `just install`-from-a-worktree footgun
+# (which used to silently repoint the system-default toolchain at transient
+# worktree code — live incident 2026-06-15) into the right outcome.
+#
+# Hardening: warns loudly if /usr/local/bin/endless-go already resolves into a
+# worktree, surfacing an existing mispointed symlink instead of letting it fester.
+
+# Build and install; global from main, scoped from a worktree (E-1036).
+install mode="":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    mode="{{mode}}"
+    case "$mode" in
+        ""|worktree|--worktree) ;;
+        *)
+            echo "install: unknown argument '$mode' (expected: worktree)" >&2
+            exit 1
+            ;;
+    esac
+    git_dir="$(cd "$(git rev-parse --git-dir)" && pwd)"
+    git_common_dir="$(cd "$(git rev-parse --git-common-dir)" && pwd)"
+    is_worktree=false
+    [ "$git_dir" != "$git_common_dir" ] && is_worktree=true
+    # Second-layer hardening (all paths): if the global symlink already points
+    # into a worktree, the system-default endless-go is serving transient code.
+    if [ -L /usr/local/bin/endless-go ]; then
+        target="$(readlink /usr/local/bin/endless-go)"
+        case "$target" in
+            */.endless/worktrees/*)
+                echo "WARNING: /usr/local/bin/endless-go points into a worktree:" >&2
+                echo "    $target" >&2
+                echo "  The system-default endless-go is serving transient worktree code." >&2
+                echo "  Run 'just install' from the main checkout to repoint it at main." >&2
+                ;;
+        esac
+    fi
+    # Decide scoped vs global: explicit `worktree` arg, or auto-detected worktree.
+    if [ "$mode" = "worktree" ] || [ "$mode" = "--worktree" ]; then
+        if [ "$is_worktree" = false ]; then
+            echo "install worktree: must run from a worktree, not main." >&2
+            exit 1
+        fi
+    elif [ "$is_worktree" = true ]; then
+        echo "→ Worktree checkout detected — performing worktree-scoped install."
+        echo "  /usr/local/bin and the global uv tool are left untouched."
+    else
+        # Main checkout, no explicit arg: the global install.
+        just build
+        # E-1367 cleanup: remove pre-consolidation per-binary symlinks. Idempotent.
+        rm -f /usr/local/bin/endless-serve /usr/local/bin/endless-hook /usr/local/bin/endless-channel /usr/local/bin/endless-event /usr/local/bin/endless-sandbox /usr/local/bin/endless-tmux /usr/local/bin/endless-session-query
+        ln -sfn "$(pwd)/bin/endless-go" /usr/local/bin/endless-go
+        uv tool install -e . --force
+        exit 0
+    fi
+    # Worktree-scoped install: bundle the existing injection-based recipes and
+    # NEVER run `ln -sfn` or `uv tool install`. dev-sandbox-init runs before
+    # claude-settings-init so the latter preserves the env block 'sandbox bind'
+    # wrote.
+    just go-work-init
     just build
-    # E-1367 cleanup: remove pre-consolidation per-binary symlinks. Idempotent.
-    rm -f /usr/local/bin/endless-serve /usr/local/bin/endless-hook /usr/local/bin/endless-channel /usr/local/bin/endless-event /usr/local/bin/endless-sandbox /usr/local/bin/endless-tmux /usr/local/bin/endless-session-query
-    ln -sfn "$(pwd)/bin/endless-go" /usr/local/bin/endless-go
-    uv tool install -e . --force
+    just dev-sandbox-init
+    just claude-settings-init
+    echo "install: worktree-scoped setup complete for $(pwd)"
+    echo "  Wired: go.work, bin/*, bin-sandbox/, .claude/settings.json. Global /usr/local/bin untouched."
 
 # Land a task's worktree (calls `endless worktree land`), then rebuild
 # binaries so the symlinked /usr/local/bin/endless-* binaries pick up
