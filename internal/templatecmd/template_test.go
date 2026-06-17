@@ -408,6 +408,129 @@ func TestRender_BareNameAndExplicitMd_AreEquivalent(t *testing.T) {
 	}
 }
 
+// selfDevFixture creates a project root whose .endless/config.json marks
+// it self_dev, so materialization is skipped (the embedded copy is the
+// source of truth for endless itself).
+func selfDevFixture(t *testing.T) string {
+	t.Helper()
+	root := projectFixture(t)
+	cfg := filepath.Join(root, ".endless", "config.json")
+	if err := os.WriteFile(cfg, []byte(`{"self_dev": true}`), 0644); err != nil {
+		t.Fatalf("write config.json: %v", err)
+	}
+	return root
+}
+
+// gitFixture creates a consumer project root that is an initialized git
+// work tree with a committer identity, so the auto-commit path runs.
+func gitFixture(t *testing.T) string {
+	t.Helper()
+	root := projectFixture(t)
+	for _, args := range [][]string{
+		{"init"},
+		{"config", "user.email", "test@example.com"},
+		{"config", "user.name", "Test"},
+		{"commit", "--allow-empty", "-m", "root"},
+	} {
+		cmd := exec.Command("git", append([]string{"-C", root}, args...)...)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	return root
+}
+
+// gitOut runs a read-only git command in root and returns trimmed stdout.
+func gitOut(t *testing.T, root string, args ...string) string {
+	t.Helper()
+	cmd := exec.Command("git", append([]string{"-C", root}, args...)...)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git %v: %v\n%s", args, err, out)
+	}
+	return strings.TrimSpace(string(out))
+}
+
+// TestRender_SelfDev_SkipsMaterialize confirms a self_dev project renders
+// from embedded and writes no .endless/templates/ file (the fix for the
+// `just land` block).
+func TestRender_SelfDev_SkipsMaterialize(t *testing.T) {
+	root := selfDevFixture(t)
+	out, errOut, err := runRenderInProject(t, root, "handoff/task", fullHandoffVars())
+	if err != nil {
+		t.Fatalf("render: %v\nstderr: %s", err, errOut)
+	}
+	if !strings.Contains(out, "E-9999") {
+		t.Errorf("expected rendered output; got:\n%s", out)
+	}
+	dst := filepath.Join(root, ".endless", "templates", "handoff", "task.md.tmpl")
+	if _, err := os.Stat(dst); err == nil {
+		t.Errorf("self_dev project should not materialize %s", dst)
+	}
+	if _, err := os.Stat(filepath.Join(root, ".endless", "templates")); err == nil {
+		t.Errorf("self_dev project should not create .endless/templates/")
+	}
+}
+
+// TestRender_Consumer_AutoCommitsMaterialized confirms a non-self_dev git
+// project materializes AND commits exactly the one file on first render,
+// leaving a clean working tree, and no-ops on the second render.
+func TestRender_Consumer_AutoCommitsMaterialized(t *testing.T) {
+	root := gitFixture(t)
+	relPath := ".endless/templates/handoff/task.md.tmpl"
+
+	before := gitOut(t, root, "rev-list", "--count", "HEAD")
+
+	_, errOut, err := runRenderInProject(t, root, "handoff/task", fullHandoffVars())
+	if err != nil {
+		t.Fatalf("render: %v\nstderr: %s", err, errOut)
+	}
+
+	if _, err := os.Stat(filepath.Join(root, relPath)); err != nil {
+		t.Fatalf("expected materialized file: %v", err)
+	}
+	if status := gitOut(t, root, "status", "--porcelain"); status != "" {
+		t.Errorf("expected clean working tree after auto-commit; got:\n%s", status)
+	}
+	after := gitOut(t, root, "rev-list", "--count", "HEAD")
+	if before == after {
+		t.Errorf("expected one new commit; rev count unchanged at %s", after)
+	}
+	files := gitOut(t, root, "show", "--name-only", "--format=", "HEAD")
+	if files != relPath {
+		t.Errorf("commit touched unexpected paths; got %q want %q", files, relPath)
+	}
+
+	// Second render is a no-op: no new commit, still clean.
+	_, errOut, err = runRenderInProject(t, root, "handoff/task", fullHandoffVars())
+	if err != nil {
+		t.Fatalf("second render: %v\nstderr: %s", err, errOut)
+	}
+	if again := gitOut(t, root, "rev-list", "--count", "HEAD"); again != after {
+		t.Errorf("second render created a commit; rev count %s != %s", again, after)
+	}
+	if status := gitOut(t, root, "status", "--porcelain"); status != "" {
+		t.Errorf("second render dirtied the tree:\n%s", status)
+	}
+}
+
+// TestRender_Consumer_NonGit_NoError confirms a non-self_dev, non-git
+// project still renders and materializes (file left untracked, no error).
+func TestRender_Consumer_NonGit_NoError(t *testing.T) {
+	root := projectFixture(t) // no git, no self_dev
+	out, errOut, err := runRenderInProject(t, root, "handoff/task", fullHandoffVars())
+	if err != nil {
+		t.Fatalf("render: %v\nstderr: %s", err, errOut)
+	}
+	if !strings.Contains(out, "E-9999") {
+		t.Errorf("expected rendered output; got:\n%s", out)
+	}
+	dst := filepath.Join(root, ".endless", "templates", "handoff", "task.md.tmpl")
+	if _, err := os.Stat(dst); err != nil {
+		t.Errorf("expected materialized file in non-git consumer: %v", err)
+	}
+}
+
 // hasEndlessAncestor walks up from dir looking for a `.endless`
 // directory. Returns true if one exists at any ancestor.
 func hasEndlessAncestor(dir string) bool {

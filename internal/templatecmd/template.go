@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"text/template"
@@ -77,8 +78,19 @@ func runRender(args []string, stdin io.Reader, stdout io.Writer) error {
 		return err
 	}
 
-	if err := materializeIfMissing(projectRoot, name); err != nil {
-		return err
+	// self_dev projects (endless itself) render from the embedded source —
+	// materializing would write an untracked on-disk copy into the main
+	// checkout that shadows the embedded template and blocks `just land`.
+	// Consumer projects keep the write-on-read convenience and additionally
+	// auto-commit the materialized file so it is tracked and discoverable.
+	if !monitor.ProjectIsSelfDev(projectRoot) {
+		wrote, err := materializeIfMissing(projectRoot, name)
+		if err != nil {
+			return err
+		}
+		if wrote {
+			commitMaterialized(projectRoot, name)
+		}
 	}
 
 	content, err := loadTemplate(projectRoot, name)
@@ -184,20 +196,105 @@ func embeddedContent(name string) ([]byte, error) {
 // materializeIfMissing writes the embedded template content to
 // <project_root>/.endless/templates/<name>.tmpl when that file does not
 // exist. Per-file: only the requested name is materialized; siblings are
-// untouched.
-func materializeIfMissing(projectRoot, name string) error {
+// untouched. Returns wrote=true only when it actually created the file, so
+// callers can auto-commit on first render and no-op on subsequent ones.
+func materializeIfMissing(projectRoot, name string) (wrote bool, err error) {
 	dst := filepath.Join(templatesSubdir(projectRoot), name+".tmpl")
 	if _, err := os.Stat(dst); err == nil {
-		return nil
+		return false, nil
 	}
 	data, err := embeddedContent(name)
 	if err != nil {
-		return err
+		return false, err
 	}
 	if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
-		return err
+		return false, err
 	}
-	return os.WriteFile(dst, data, 0644)
+	if err := os.WriteFile(dst, data, 0644); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// gitRedirectVars lists the env vars that override git's repo resolution.
+// They are stripped from the auto-commit subprocess env so `git -C
+// <projectRoot>` is authoritative and an inherited GIT_DIR (e.g. from a
+// caller running inside a worktree) cannot misroute the commit.
+var gitRedirectVars = []string{
+	"GIT_DIR",
+	"GIT_WORK_TREE",
+	"GIT_INDEX_FILE",
+	"GIT_OBJECT_DIRECTORY",
+	"GIT_COMMON_DIR",
+	"GIT_NAMESPACE",
+	"GIT_ALTERNATE_OBJECT_DIRECTORIES",
+}
+
+// commitMaterialized commits exactly the just-materialized template on
+// projectRoot's git repo (consumer projects only). Best-effort: when
+// projectRoot is not a git work tree, or any git step fails, it logs to
+// stderr and returns — a failed auto-commit must never fail the render.
+// It stages only the single pathspec (never `git add -A`) so unrelated
+// working-tree changes are untouched.
+func commitMaterialized(projectRoot, name string) {
+	relPath := filepath.Join(".endless", "templates", name+".tmpl")
+	if !isGitWorkTree(projectRoot) {
+		return
+	}
+	if err := runGit(projectRoot, "add", "--", relPath); err != nil {
+		fmt.Fprintf(os.Stderr, "endless-go template: auto-commit skipped: %v\n", err)
+		return
+	}
+	msg := "Endless: materialize handoff template " + name
+	if err := runGit(projectRoot, "commit", "-m", msg, "--", relPath); err != nil {
+		fmt.Fprintf(os.Stderr, "endless-go template: auto-commit skipped: %v\n", err)
+	}
+}
+
+// isGitWorkTree reports whether projectRoot is inside a git work tree.
+func isGitWorkTree(projectRoot string) bool {
+	cmd := exec.Command("git", "-C", projectRoot, "rev-parse", "--is-inside-work-tree")
+	cmd.Env = sanitizedGitEnv()
+	out, err := cmd.Output()
+	return err == nil && strings.TrimSpace(string(out)) == "true"
+}
+
+// runGit runs `git -C projectRoot <args>` with a sanitized env and returns
+// an error with stderr folded in on non-zero exit.
+func runGit(projectRoot string, args ...string) error {
+	full := append([]string{"-C", projectRoot}, args...)
+	cmd := exec.Command("git", full...)
+	cmd.Env = sanitizedGitEnv()
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("git %s: %w: %s",
+			strings.Join(args, " "), err, strings.TrimSpace(string(out)))
+	}
+	return nil
+}
+
+// sanitizedGitEnv returns os.Environ() with every variable in
+// gitRedirectVars stripped, so `git -C <projectRoot>` cannot be overridden
+// by an inherited GIT_DIR or sibling var pointing at another repo's gitdir.
+func sanitizedGitEnv() []string {
+	skip := make(map[string]struct{}, len(gitRedirectVars))
+	for _, k := range gitRedirectVars {
+		skip[k] = struct{}{}
+	}
+	env := os.Environ()
+	out := make([]string, 0, len(env))
+	for _, kv := range env {
+		eq := strings.IndexByte(kv, '=')
+		if eq <= 0 {
+			out = append(out, kv)
+			continue
+		}
+		if _, drop := skip[kv[:eq]]; drop {
+			continue
+		}
+		out = append(out, kv)
+	}
+	return out
 }
 
 // loadTemplate returns the template content honoring the lookup order:

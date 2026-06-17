@@ -219,6 +219,11 @@ func projectIsSelfDev(root string) bool {
 	return cfg.SelfDev
 }
 
+// ProjectIsSelfDev reports whether <root>/.endless/config.json sets
+// "self_dev": true. Exported wrapper over projectIsSelfDev for callers
+// outside the monitor package (e.g. templatecmd).
+func ProjectIsSelfDev(root string) bool { return projectIsSelfDev(root) }
+
 // worktreeDBContextRefusal is the error returned by the gate. It is the
 // backstop wording for direct Go-binary invocations; the Python CLI emits its
 // own user-facing --db message (the locked text) before ever reaching here.
