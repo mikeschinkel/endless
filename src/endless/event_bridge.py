@@ -95,10 +95,17 @@ def emit_event(
     if actor_id is None:
         actor_id = f"{os.getenv('USER', 'unknown')}@{socket.gethostname()}"
 
-    # Track whether session_id was provided by the caller. An explicit None
-    # is still "resolver-derived" — the gate only fires when both the caller
-    # AND the resolver couldn't produce one.
-    if session_id is None:
+    # E-1444: position-anywhere --no-session flag (set by DBAwareGroup.main)
+    # downgrades cli/hook callers to system, the explicit escape hatch for
+    # plain-shell triage filings, cron, and scripts. system is already exempt
+    # from the gate, so the rest of this function proceeds unchanged.
+    if config.NO_SESSION and actor_kind in _ATTRIBUTION_REQUIRED:
+        actor_kind = "system"
+        session_id = None
+    elif session_id is None:
+        # Track whether session_id was provided by the caller. An explicit None
+        # is still "resolver-derived" — the gate only fires when both the caller
+        # AND the resolver couldn't produce one.
         try:
             from endless.task_cmd import _resolve_session_id_with_prompt
         except ImportError:
@@ -133,6 +140,9 @@ def emit_event(
             "  - Run `endless task bind <task-id>` from this pane to "
             "connect it to a sibling Claude session in the same tmux "
             "window.\n"
+            "  - Pass --no-session (accepted in any position) to file "
+            "without a Claude session binding (actor.kind=system; for "
+            "cron, scripts, plain-shell triage filings).\n"
         )
 
     if project_root is None:

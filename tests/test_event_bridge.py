@@ -179,3 +179,133 @@ def test_resolver_exception_still_gates_cli(captured_emit, monkeypatch):
     with pytest.raises(click.ClickException):
         _emit(actor_kind="cli")
     assert captured_emit["calls"] == []
+
+
+# --- E-1444: --no-session bypass ---
+
+
+def _actor_kind_from_cmd(cmd: list[str]) -> str | None:
+    """Extract the --actor-kind value from a captured subprocess argv, or None."""
+    if "--actor-kind" not in cmd:
+        return None
+    idx = cmd.index("--actor-kind")
+    return cmd[idx + 1]
+
+
+def test_no_session_flag_downgrades_cli_to_system(captured_emit, monkeypatch):
+    """config.NO_SESSION=True + actor_kind='cli' + resolver None  →
+    emits as system, no session_id, no gate refusal.
+
+    The position-anywhere --no-session flag (set by DBAwareGroup.main) is
+    the explicit escape hatch for plain-shell triage filings, cron, and
+    scripts with no Claude session.
+    """
+    from endless import config
+    monkeypatch.setattr(config, "NO_SESSION", True)
+    _force_resolver(monkeypatch, None)
+
+    _emit(actor_kind="cli")
+
+    assert len(captured_emit["calls"]) == 1
+    assert _actor_kind_from_cmd(captured_emit["calls"][0]) == "system"
+    assert _session_id_from_cmd(captured_emit["calls"][0]) is None
+
+
+def test_no_session_flag_downgrades_hook_to_system(captured_emit, monkeypatch):
+    """Same downgrade applies to actor_kind='hook' (both gate-required kinds)."""
+    from endless import config
+    monkeypatch.setattr(config, "NO_SESSION", True)
+    _force_resolver(monkeypatch, None)
+
+    _emit(actor_kind="hook")
+
+    assert len(captured_emit["calls"]) == 1
+    assert _actor_kind_from_cmd(captured_emit["calls"][0]) == "system"
+    assert _session_id_from_cmd(captured_emit["calls"][0]) is None
+
+
+def test_no_session_flag_skips_resolver(captured_emit, monkeypatch):
+    """With --no-session, the resolver is not consulted at all.
+
+    Force the resolver to raise; if --no-session correctly short-circuits
+    before the resolver block, no exception leaks and the event emits as
+    system. Pins that the downgrade happens BEFORE resolution.
+    """
+    from endless import config
+    monkeypatch.setattr(config, "NO_SESSION", True)
+    _force_resolver(monkeypatch, RuntimeError("resolver must not be called"))
+
+    _emit(actor_kind="cli")
+
+    assert len(captured_emit["calls"]) == 1
+    assert _actor_kind_from_cmd(captured_emit["calls"][0]) == "system"
+
+
+def test_no_session_flag_leaves_system_actor_unchanged(captured_emit, monkeypatch):
+    """--no-session is a no-op for actor_kind='system' (already exempt) —
+    we only downgrade cli/hook, not pre-existing system/web events."""
+    from endless import config
+    monkeypatch.setattr(config, "NO_SESSION", True)
+    _force_resolver(monkeypatch, None)
+
+    _emit(actor_kind="system")
+
+    assert len(captured_emit["calls"]) == 1
+    assert _actor_kind_from_cmd(captured_emit["calls"][0]) == "system"
+    assert _session_id_from_cmd(captured_emit["calls"][0]) is None
+
+
+def test_no_session_flag_off_preserves_gate(captured_emit, monkeypatch):
+    """Default config.NO_SESSION=False  →  gate still refuses cli + no session.
+
+    Regression-protects E-1401's contract for the unflagged path.
+    """
+    from endless import config
+    monkeypatch.setattr(config, "NO_SESSION", False)
+    _force_resolver(monkeypatch, None)
+
+    with pytest.raises(click.ClickException):
+        _emit(actor_kind="cli")
+    assert captured_emit["calls"] == []
+
+
+def test_gate_error_advertises_no_session_flag(captured_emit, monkeypatch):
+    """The refusal message must include the --no-session bullet so callers
+    discover the escape hatch."""
+    from endless import config
+    monkeypatch.setattr(config, "NO_SESSION", False)
+    _force_resolver(monkeypatch, None)
+
+    with pytest.raises(click.ClickException) as exc:
+        _emit(actor_kind="cli")
+
+    assert "--no-session" in exc.value.message
+
+
+# --- E-1444: --no-session is position-anywhere (DBAwareGroup pre-extractor) ---
+
+
+def test_no_session_flag_position_anywhere(monkeypatch):
+    """--no-session is consumed by the argv pre-extractor in any position,
+    same shape as --db. Both `endless --no-session task ...` and
+    `endless task ... --no-session` set config.NO_SESSION before any
+    subcommand parses, so leaf commands stay flag-free."""
+    from click.testing import CliRunner
+
+    from endless import config
+    from endless.cli import main
+
+    # Before the subcommand.
+    monkeypatch.setattr(config, "NO_SESSION", False)
+    CliRunner().invoke(main, ["--no-session", "--version"])
+    assert config.NO_SESSION is True
+
+    # After the subcommand.
+    monkeypatch.setattr(config, "NO_SESSION", False)
+    CliRunner().invoke(main, ["--version", "--no-session"])
+    assert config.NO_SESSION is True
+
+    # Absent: flag stays False.
+    monkeypatch.setattr(config, "NO_SESSION", False)
+    CliRunner().invoke(main, ["--version"])
+    assert config.NO_SESSION is False

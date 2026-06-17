@@ -24,6 +24,13 @@ DB_PATH = CONFIG_DIR / "endless.db"
 # worktree gate and (b) is threaded to Go subprocesses via --config-dir.
 RESOLVED_CONFIG_DIR: Path | None = None
 
+# NO_SESSION records the global `--no-session` flag (E-1444). When True,
+# emit_event downgrades actor_kind from cli/hook to system and skips session
+# resolution — for plain-shell triage filings, cron, and scripts with no Claude
+# session to attribute to. Set by DBAwareGroup.main() via the same
+# position-anywhere argv pre-extractor that consumes --db.
+NO_SESSION: bool = False
+
 DEFAULT_CONFIG = {
     "roots": ["~/Projects"],
     "scan_interval": 300,

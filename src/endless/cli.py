@@ -208,6 +208,7 @@ class DBAwareGroup(click.Group):
         cleaned: list[str] = []
         db_value: str | None = None
         agent_view = False
+        no_session = False
         i = 0
         while i < len(argv):
             arg = argv[i]
@@ -229,10 +230,20 @@ class DBAwareGroup(click.Group):
                 agent_view = True
                 i += 1
                 continue
+            # --no-session (E-1444): downgrade actor.kind to system at the write
+            # layer for callers with no Claude session to attribute to (plain
+            # shell, cron, scripts). Consumed here so it's accepted in any
+            # position and applies uniformly to every subcommand's emit_event.
+            if arg == "--no-session":
+                no_session = True
+                i += 1
+                continue
             cleaned.append(arg)
             i += 1
         if agent_view:
             agent_help.set_agent_view(True)
+        if no_session:
+            config.NO_SESSION = True
         if db_value is not None:
             # apply_db_choice validates the value and resolves+pins the context;
             # it raises ValueError for an unknown value or for --db sandbox
