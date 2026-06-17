@@ -120,7 +120,15 @@ If you see uncommitted changes in main that aren't on the allowlist above, that'
 
 ## Shell helpers
 
-Source the helpers once per shell:
+Install the helpers permanently with:
+
+```bash
+endless setup shell-helpers
+```
+
+This appends `eval "$(endless shell-init)"` to your `~/.zshrc`, so the helpers
+regenerate on every shell launch and always reflect the current snippet. To
+load them in the current shell without installing, run that eval line directly:
 
 ```bash
 eval "$(endless shell-init)"

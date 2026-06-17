@@ -671,14 +671,16 @@ def shell_init():
     """Print shell helper functions for bash/zsh.
 
     Wraps 'endless session use', 'session cd --target project', and
-    'session forget' with short functions (esu, esp, esf). One-time
-    setup:
+    'session forget' with short functions (esu, esp, esf).
 
-      endless shell-init >> ~/.zshrc        # or ~/.bashrc
+    To install, run:
 
-    Re-running replaces nothing automatically — find the marker
-    block ('endless shell helpers') in your rc file and replace
-    it manually if the snippet changes.
+      endless setup shell-helpers
+
+    which adds 'eval "$(endless shell-init)"' to your ~/.zshrc so the
+    helpers regenerate on every shell launch and always reflect the
+    current snippet. For a manual install, add that eval line to your
+    rc file directly (or, for bash, your ~/.bashrc).
     """
     click.echo(_SHELL_INIT_SNIPPET, nl=False)
 
@@ -2092,6 +2094,20 @@ def setup_remove_channel_plugin_cmd():
     """Remove the MCP channel plugin."""
     from endless.setup import remove_channel_plugin
     remove_channel_plugin()
+
+
+@setup.command("shell-helpers")
+def setup_shell_helpers_cmd():
+    """Install the esu/esp/esf session shell helpers into ~/.zshrc."""
+    from endless.setup import install_shell_helpers
+    install_shell_helpers()
+
+
+@setup.command("remove-shell-helpers")
+def setup_remove_shell_helpers_cmd():
+    """Remove the esu/esp/esf session shell helpers."""
+    from endless.setup import remove_shell_helpers
+    remove_shell_helpers()
 
 
 # tmux integration command group (E-1236)

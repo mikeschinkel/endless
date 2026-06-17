@@ -174,6 +174,144 @@ def remove_prompt_hook():
     )
 
 
+# --- Session shell helpers (esu/esp/esf) ---
+
+SHELL_HELPERS_COMMENT = "# Endless: session shell helpers (esu/esp/esf)"
+SHELL_HELPERS_EVAL = 'eval "$(endless shell-init)"'
+SHELL_HELPERS_BLOCK = f"{SHELL_HELPERS_COMMENT}\n{SHELL_HELPERS_EVAL}"
+
+
+def _file_contains_shell_helpers(path: Path) -> bool:
+    """Check if a file already installs the Endless session shell helpers."""
+    if not path.exists():
+        return False
+    content = path.read_text()
+    return SHELL_HELPERS_COMMENT in content or SHELL_HELPERS_EVAL in content
+
+
+def install_shell_helpers():
+    """Install the esu/esp/esf session shell helpers into a ZSH startup file.
+
+    Appends an `eval "$(endless shell-init)"` line (not the static snippet) so
+    helper fixes reach the user on next shell launch with no rc surgery.
+    """
+    click.echo(
+        "The session shell helpers (esu/esp/esf) need to be added to your "
+        "ZSH startup file."
+    )
+    click.echo(
+        "The standard location is "
+        + click.style(str(DEFAULT_ZSHRC), bold=True)
+    )
+    click.echo()
+
+    is_standard = click.confirm(
+        f"Is {DEFAULT_ZSHRC} where we should add it?",
+        default=True,
+    )
+
+    if is_standard:
+        target = DEFAULT_ZSHRC
+    else:
+        click.echo()
+        click.echo("Enter the path to your ZSH startup file:")
+        target_str = click.prompt("Path")
+        target = Path(target_str).expanduser()
+        if not target.exists():
+            raise click.ClickException(
+                f"File not found: {target}"
+            )
+
+    # Check if already installed
+    if _file_contains_shell_helpers(target):
+        click.echo(
+            click.style("•", fg="cyan")
+            + " Session shell helpers are already installed in "
+            + click.style(str(target), bold=True)
+        )
+        return
+
+    # Show what we'll add
+    click.echo()
+    click.echo("The following will be added to "
+               + click.style(str(target), bold=True) + ":")
+    click.echo()
+    for line in SHELL_HELPERS_BLOCK.splitlines():
+        click.echo(f"  {click.style(line, fg='green')}")
+    click.echo()
+
+    if not click.confirm("Proceed?", default=True):
+        # Show manual instructions instead
+        click.echo()
+        click.echo("To install manually, add this to your "
+                    "ZSH startup file:")
+        click.echo()
+        for line in SHELL_HELPERS_BLOCK.splitlines():
+            click.echo(f"  {line}")
+        click.echo()
+        return
+
+    # Append to file
+    content = target.read_text() if target.exists() else ""
+    if content and not content.endswith("\n"):
+        content += "\n"
+    content += f"\n{SHELL_HELPERS_BLOCK}\n"
+    target.write_text(content)
+
+    click.echo(
+        click.style("•", fg="cyan")
+        + " Session shell helpers installed in "
+        + click.style(str(target), bold=True)
+    )
+    click.echo(
+        click.style("•", fg="cyan")
+        + " Run "
+        + click.style(f"source {target}", bold=True)
+        + " or open a new terminal to activate."
+    )
+
+
+def remove_shell_helpers():
+    """Remove the Endless session shell helpers from a ZSH startup file."""
+    click.echo(
+        "Enter the path to the file containing "
+        "the Endless session shell helpers:"
+    )
+    target_str = click.prompt(
+        "Path", default=str(DEFAULT_ZSHRC),
+    )
+    target = Path(target_str).expanduser()
+
+    if not target.exists():
+        raise click.ClickException(f"File not found: {target}")
+
+    if not _file_contains_shell_helpers(target):
+        click.echo(
+            click.style("•", fg="cyan")
+            + " No Endless session shell helpers found in "
+            + click.style(str(target), bold=True)
+        )
+        return
+
+    content = target.read_text()
+    lines = content.splitlines()
+    new_lines = []
+    for line in lines:
+        if line.strip() == SHELL_HELPERS_COMMENT:
+            continue
+        if line.strip() == SHELL_HELPERS_EVAL:
+            continue
+        new_lines.append(line)
+
+    target.write_text("\n".join(new_lines) + "\n")
+
+    click.echo(
+        click.style("•", fg="cyan")
+        + " Removed session shell helpers from "
+        + click.style(str(target), bold=True)
+    )
+
+
 # --- Claude Code hook ---
 
 CLAUDE_SETTINGS_PATH = Path.home() / ".claude" / "settings.json"
