@@ -135,6 +135,23 @@ This adds the following functions:
 | `esf`    | "Endless session forget." Unsets `ENDLESS_SESSION_ID` in the current shell. The session keeps running; only the shell's pointer is cleared. | When you're done coordinating one session and want a fresh shell. |
 | `eswt`   | *(Planned, not yet shipped.)* "Endless switch worktree." Pure `cd` to a task's worktree, given a task ID. Distinct from `esu` in that it does not export `ENDLESS_SESSION_ID`. | Quick navigation without binding. Until shipped, use `cd "$(endless worktree for-task <id>)"`. |
 
+These helpers move the **shell's** working directory and (for `esu`) set session
+routing. They do **not** change **Claude's own** working directory — the one
+Read/Write/Edit and a fresh Bash default to. For that, run the `/cd` slash
+command inside the Claude session with the worktree's **absolute** path (printed
+by `task claim`, or from `endless worktree for-task <id>`):
+
+```
+/cd /abs/path/to/.endless/worktrees/e-<id>
+```
+
+`/cd` needs an absolute path — it does not expand `~` or `$(...)`. The first
+`/cd` into a directory triggers a one-time trust prompt, and `/cd` requires
+Claude Code v2.1.169+. Run it once after `task claim` so every tool defaults to
+the worktree instead of main. `/cd` and `esu`/`eswt` are complementary: `/cd`
+fixes Claude's working directory, `esu` fixes shell session routing. A claimed
+session that hasn't `/cd`'d into its worktree is refused tool use until it does.
+
 `esu`, `esp`, and `esf` all auto-resolve to the sibling Claude pane in tmux when called with no argument.
 
 ---

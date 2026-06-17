@@ -24,8 +24,9 @@ When your user gives you a task ID:
 1. `endless task show <id> --text` — read the task and any attached plan.
 2. `endless task claim <id>` — claim the task. This automatically creates a git worktree at `.endless/worktrees/e-<id>/` for your work. Every task gets its own worktree so multiple sessions can work in parallel without stepping on each other, and `main`'s working tree stays clean.
 3. Get into the worktree:
-   - `cd "$(endless worktree for-task <id>)"`, or
-   - run `eval "$(endless shell-init)"` once per shell, then `esu` to cd to your session's worktree *and* export `ENDLESS_SESSION_ID` so subsequent endless commands route through the worktree's source (not the global install). See **Shell helpers** in `endless guide orchestration`.
+   - **`/cd <worktree-path>`** — the primary move for a Claude Code session. `task claim` prints the exact `/cd` line; running it changes Claude's own working directory, so every later tool (Read/Write/Edit, and a fresh Bash) defaults to the worktree instead of main. Do this once, right after claiming, and you no longer have to qualify paths to avoid editing main by accident. Pass an **absolute** path — `/cd` does not expand `~` or `$(...)`, and the first `/cd` into a directory prompts you to trust it.
+   - `cd "$(endless worktree for-task <id>)"` moves only the Bash shell's cwd, not Claude's — file tools still default to main. Prefer `/cd`.
+   - run `eval "$(endless shell-init)"` once per shell, then `esu` to cd to your session's worktree *and* export `ENDLESS_SESSION_ID` so subsequent endless commands route through the worktree's source (not the global install). `esu`/`eswt` are complementary to `/cd`: they handle session routing, `/cd` handles Claude's working directory. See **Shell helpers** in `endless guide orchestration`.
 4. Do the work in the worktree.
 5. When implementation is complete:
    - `endless task update <id> --status verify`, **and**

@@ -24,6 +24,37 @@ func GetTaskTitle(taskID int64) (string, error) {
 	return title.String, nil
 }
 
+// GetTaskStatus returns the status of the given task, or empty string if not
+// found.
+func GetTaskStatus(taskID int64) (string, error) {
+	db, err := DB()
+	if err != nil {
+		return "", err
+	}
+	var status sql.NullString
+	err = db.QueryRow(`SELECT status FROM tasks WHERE id=?`, taskID).Scan(&status)
+	if err == sql.ErrNoRows {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("loading task status: %w", err)
+	}
+	return status.String, nil
+}
+
+// IsTerminalTaskStatus reports whether a status represents finished or abandoned
+// work — confirmed, assumed, declined, obsolete, completed. These are tasks no
+// longer actively worked (the first four also unblock dependents; see the
+// blocker-filter set in tmux_lookup.go). The E-1586 cwd gate ignores them so a
+// display-only bind of a done task, or a landed/retained worktree, never trips.
+func IsTerminalTaskStatus(status string) bool {
+	switch status {
+	case "confirmed", "assumed", "declined", "obsolete", "completed":
+		return true
+	}
+	return false
+}
+
 // RegisterTaskFile records that a file was edited under the given task.
 // Idempotent: subsequent edits to the same (task_id, file_path) are no-ops.
 func RegisterTaskFile(taskID int64, sessionID, filePath string) error {

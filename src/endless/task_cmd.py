@@ -2517,15 +2517,22 @@ def claim_item(item_id: int, force: bool = False):
     click.echo("  To work on this task, choose one:")
     click.echo("    1. Delegate to a fresh Claude session:")
     click.echo(f"         endless task spawn E-{item_id}")
-    click.echo("    2. Do it yourself (edit, run tests, etc.):")
+    click.echo("    2. Do it yourself in THIS Claude session:")
+    wt = _worktree_for_task(item_id)
+    if wt is not None:
+        # /cd points Claude's own working directory at the worktree, so every
+        # tool (Read/Write/Edit + a fresh Bash) defaults to it instead of main.
+        # Absolute path: /cd does not expand ~ or $(...). Until you run this, a
+        # claimed session is refused tool use from main (E-1586).
+        click.echo(f"         /cd {wt}   # point Claude's working dir at the worktree (do this first)")
     eswt_cmd = f"eswt E-{item_id}"
     if _eswt_defined_in_user_shell():
-        click.echo(f"         {eswt_cmd}   # Changes to Git worktree dir")
+        click.echo(f"         {eswt_cmd}   # (shell only) cd + ENDLESS_SESSION_ID routing")
     else:
         eval_cmd = 'eval "$(endless shell-init)"'
         pad = " " * (len(eval_cmd) - len(eswt_cmd))
-        click.echo(f"         {eval_cmd}  # Adds eswt shell helper func")
-        click.echo(f"         {eswt_cmd}{pad}  # Changes to Git worktree dir")
+        click.echo(f"         {eval_cmd}  # adds eswt shell helper func")
+        click.echo(f"         {eswt_cmd}{pad}  # (shell only) cd + ENDLESS_SESSION_ID routing")
 
 
 def bind_item(item_id: int) -> None:

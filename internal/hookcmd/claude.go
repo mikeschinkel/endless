@@ -457,10 +457,16 @@ func handlePreToolUse(projectID int64, isRegistered bool, payload claudePayload)
 	// per-task tracking is in 'off' mode.
 	if payload.ToolName == "Bash" {
 		blockCommitOnMainIfApplicable(payload)
-		return nil
 	}
 
-	// Only enforce on file-writing tools
+	// E-1586: cwd-invariant gate for ALL tools (no allowlist). If this session
+	// owns a live (claimed) worktree but its cwd has drifted outside it, refuse
+	// the tool and direct it to `/cd` so the *default* working directory is the
+	// worktree, not main. Runs before the write-tool gate so Bash and every
+	// other tool that defaults to cwd are covered, not just file writes.
+	enforceClaimedCwd(projectID, payload)
+
+	// Only enforce the remaining gates on file-writing tools.
 	if !writeTools[payload.ToolName] {
 		return nil
 	}
@@ -1198,6 +1204,92 @@ func enforceWorktreeGate(projectID int64, payload claudePayload) {
 				*session.ActiveTaskID, activeWP, activeWP))
 		}
 	}
+}
+
+// enforceClaimedCwd implements the E-1586 cwd invariant: a session actively
+// working a task must have its working directory inside that task's worktree.
+// When cwd has drifted out — to main or another tree — any tool is refused with
+// a `/cd` directive so the *default* working directory becomes the worktree, not
+// main. Unlike enforceWorktreeGate this is not limited to write tools (Bash and
+// everything else default to cwd too).
+//
+// Keyed on the active task's status, not on lock ownership: the worktree lock is
+// claimed by a SessionStart *inside* the worktree (worktree adoption), which
+// does not fire for the common "claim in main, then /cd" flow — so requiring the
+// lock would leave that flow ungated. Instead we gate any non-terminal active
+// task (the status `claim` sets is in_progress), which excludes a display-only
+// `bind` of a done task and a landed/retained worktree (both terminal). The lock
+// is consulted only to *avoid* redirecting into a worktree another live session
+// owns.
+func enforceClaimedCwd(projectID int64, payload claudePayload) {
+	session, _ := monitor.GetActiveSession(payload.SessionID)
+	if session == nil || session.ActiveTaskID == nil {
+		return
+	}
+	status, _ := monitor.GetTaskStatus(*session.ActiveTaskID)
+	if status == "" || monitor.IsTerminalTaskStatus(status) {
+		// Not actively worked (e.g. display-only bind of a done task) — ignore.
+		return
+	}
+	worktreePath, _ := monitor.WorktreePathForTask(projectID, *session.ActiveTaskID)
+	if worktreePath == "" {
+		// No worktree to anchor cwd to (e.g. a not-yet-claimed task).
+		return
+	}
+	if lock, err := monitor.ReadWorktreeLock(worktreePath); err == nil && lock != nil &&
+		lock.SessionID != payload.SessionID && !monitor.IsWorktreeLockStale(lock) {
+		// A different live session owns this worktree — don't redirect into it.
+		return
+	}
+	if pathWithin(worktreePath, payload.CWD) {
+		// cwd is already the worktree (or a descendant) — invariant holds.
+		return
+	}
+	blockToolUse(cdRedirect(*session.ActiveTaskID, worktreePath, payload.CWD))
+}
+
+// cdRedirect builds the E-1586 block message: cwd has drifted out of the
+// session's owned worktree, so direct Claude to move its working directory back
+// with `/cd`. Display paths render home-relative; the literal `/cd <path>` stays
+// absolute for paste-safety.
+func cdRedirect(taskID int64, worktreePath, cwd string) string {
+	return fmt.Sprintf(
+		"Your working directory is %s, but you have task E-%d claimed and its "+
+			"worktree is %s.\n\n"+
+			"Move Claude's working directory into the worktree so edits and shell "+
+			"commands default to it, not main:\n\n"+
+			"  /cd %s\n\n"+
+			"After /cd every tool defaults to the worktree; you can still reach "+
+			"another directory by passing an explicit absolute path.",
+		tildePath(cwd), taskID, tildePath(worktreePath), worktreePath)
+}
+
+// tildePath renders an absolute path home-relative (~/...) for display in hook
+// messages, falling back to the raw path when it is not under $HOME.
+func tildePath(p string) string {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return p
+	}
+	if p == home {
+		return "~"
+	}
+	if strings.HasPrefix(p, home+string(os.PathSeparator)) {
+		return "~" + p[len(home):]
+	}
+	return p
+}
+
+// pathWithin reports whether child is parent or a descendant of it.
+func pathWithin(parent, child string) bool {
+	rel, err := filepath.Rel(filepath.Clean(parent), filepath.Clean(child))
+	if err != nil {
+		return false
+	}
+	if rel == "." {
+		return true
+	}
+	return rel != ".." && !strings.HasPrefix(rel, ".."+string(os.PathSeparator))
 }
 
 // parseEndlessTaskID parses an "E-NNN" task identifier into its numeric
