@@ -56,6 +56,26 @@ def test_shell_init_routing_helper_present():
     assert "uv run --directory" in out
 
 
+def test_shell_init_endless_run_passes_db_main():
+    """E-1591: every endless invocation inside _endless_run carries --db main.
+
+    esu cd's the user into the session's worktree; once cwd is a self-dev
+    worktree, any bare 'endless' call hits the WORKTREE_DB_REFUSAL gate. The
+    session helpers only touch the real ledger, so --db main is both required
+    (to clear the gate) and correct. All three calls — the worktree lookup, the
+    'uv run --directory' route, and the bare fallback — must pass it."""
+    runner = CliRunner()
+    out = runner.invoke(main, ["shell-init"]).output
+    start = out.index("_endless_run()")
+    body = out[start:out.index("\n}\n", start) + 2]
+    assert "endless --db main session cd --target worktree" in body
+    assert "uv run --directory \"$wt\" endless --db main" in body
+    # The fallback must also carry --db main (cwd may be a self-dev worktree).
+    assert "endless --db main \"$@\"" in body
+    # No remaining bare 'endless "$@"' call that would skip the gate.
+    assert "uv run --directory" in body  # sanity: routing block present
+
+
 def test_shell_init_helpers_route_via_endless_run():
     """E-1164: each helper body invokes _endless_run, never bare 'endless'.
     Inspect each function block to confirm it uses the routing helper."""

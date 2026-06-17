@@ -526,15 +526,24 @@ _SHELL_INIT_SNIPPET = """\
 _endless_run() {
     # ${VAR:-} expansion keeps us safe under 'set -u' (nounset) — bare
     # "$ENDLESS_SESSION_ID" would error there when the var is unset.
+    #
+    # Every endless call here passes --db main. esu/esp/esf only ever wrap
+    # 'session use/cd/forget', which operate on the real session ledger
+    # (~/.config/endless), never a per-worktree sandbox. --db main is the
+    # default ledger anyway (a no-op for non-self-dev users), but it's
+    # mandatory once cwd is a self-dev worktree: esu cd's us into the
+    # session's worktree, so without it the self-dev --db gate rejects every
+    # subsequent call (the lookup line gates first, then the fallback). It
+    # never re-execs — only --db sandbox triggers the worktree re-exec. (E-1591.)
     if [ -n "${ENDLESS_SESSION_ID:-}" ]; then
         local wt
-        wt="$(endless session cd --target worktree "$ENDLESS_SESSION_ID" 2>/dev/null)"
+        wt="$(endless --db main session cd --target worktree "$ENDLESS_SESSION_ID" 2>/dev/null)"
         if [ -n "$wt" ] && [ -d "$wt" ]; then
-            uv run --directory "$wt" endless "$@"
+            uv run --directory "$wt" endless --db main "$@"
             return $?
         fi
     fi
-    endless "$@"
+    endless --db main "$@"
 }
 
 # esu — activate a Claude session in this shell (cd to its worktree
