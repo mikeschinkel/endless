@@ -64,7 +64,34 @@ CREATE TABLE IF NOT EXISTS notes (
     FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
 );
 
+-- Session kinds (E-1571). SQL mirror of the SessionKind Go enum (ED-1506:
+-- const-in-code is the source of truth, table exists for FK enforcement and
+-- queryability). The startup integrity check fails closed on drift between
+-- this table and the sessionkind.All() enum. Adding a value = add an enum
+-- constant + add a seed row here. Seed inserts below are idempotent.
+CREATE TABLE IF NOT EXISTS session_kinds (
+    id    INTEGER PRIMARY KEY,
+    slug  TEXT UNIQUE NOT NULL,
+    label TEXT NOT NULL
+);
+
+INSERT OR IGNORE INTO session_kinds (id, slug, label) VALUES
+    (1, 'tmux',       'Tmux'),
+    (2, 'background', 'Background');
+
 -- AI coding sessions
+--
+-- active_epic_id (E-1571): nullable FK to tasks(id). When the session is
+-- working under an epic, this holds the epic's task id while active_task_id
+-- tracks the specific child the user is viewing. NULL for non-epic sessions.
+-- The window-name renderer reads both: active_epic_id IS NULL -> [E-<task>];
+-- equal to active_task_id -> [E-<epic>] (viewing the epic itself); different
+-- -> [E-<epic>:E-<child>].
+--
+-- kind_id (E-1571): FK to session_kinds. 'tmux' rows are pane-bound (process
+-- holds the tmux pane id); 'background' rows are headless agents that
+-- legitimately leave process NULL. Defaults to 1 (tmux) for every existing
+-- and foreground-spawned row.
 CREATE TABLE IF NOT EXISTS sessions (
     id INTEGER PRIMARY KEY,
     session_id TEXT NOT NULL,
@@ -72,6 +99,8 @@ CREATE TABLE IF NOT EXISTS sessions (
     platform TEXT NOT NULL DEFAULT 'claude',
     state TEXT NOT NULL DEFAULT 'working',
     active_task_id INTEGER,
+    active_epic_id INTEGER,
+    kind_id INTEGER NOT NULL DEFAULT 1,
     plan_file_path TEXT,
     process TEXT,
     started_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
@@ -84,7 +113,9 @@ CREATE TABLE IF NOT EXISTS sessions (
     summary_seq INTEGER NOT NULL DEFAULT 0,
     UNIQUE (session_id),
     FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL,
-    FOREIGN KEY (active_task_id) REFERENCES tasks(id) ON DELETE SET NULL
+    FOREIGN KEY (active_task_id) REFERENCES tasks(id) ON DELETE SET NULL,
+    FOREIGN KEY (active_epic_id) REFERENCES tasks(id) ON DELETE SET NULL,
+    FOREIGN KEY (kind_id) REFERENCES session_kinds(id)
 );
 
 -- E-1530 invariant: a session in state='ended' has process IS NULL. Code

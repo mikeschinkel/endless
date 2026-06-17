@@ -3,6 +3,8 @@ package monitor
 import (
 	"database/sql"
 	"testing"
+
+	"github.com/mikeschinkel/endless/internal/sessionkind"
 )
 
 // freshSessionsDB returns a DB with schema.sql applied, seeded with project
@@ -218,6 +220,59 @@ func TestTouchSession_RejectsEmptyPlatform(t *testing.T) {
 	err := TouchSession("sess-A", "", "%5", 1)
 	if err == nil {
 		t.Fatal("TouchSession(..., \"\", ...) returned nil, want error")
+	}
+}
+
+// TestGetActiveSession_RoundTripsKindAndEpic pins the E-1571 columns through
+// the GetActiveSession read path: a background-agent row with active_epic_id
+// set round-trips to ActiveEpicID + Kind=background, and a default foreground
+// row reports Kind=tmux with a nil ActiveEpicID.
+func TestGetActiveSession_RoundTripsKindAndEpic(t *testing.T) {
+	db := withTestDB(t)
+	seedProject(t, db, 1, "proj-test-1", "/tmp/proj-test-1")
+	epicID := seedTask(t, db, 100, 1, "epic", "in_progress")
+	childID := seedTask(t, db, 137, 1, "child", "in_progress")
+
+	// Background agent: process NULL, kind_id=background, epic + child set.
+	if _, err := db.Exec(
+		`INSERT INTO sessions (session_id, project_id, platform, state, active_task_id, active_epic_id, kind_id, last_activity)
+		 VALUES ('bg-1', 1, 'claude', 'working', ?, ?, ?, '2026-06-16T00:00:00')`,
+		childID, epicID, int64(sessionkind.SessionKindBackground),
+	); err != nil {
+		t.Fatalf("seed bg session: %v", err)
+	}
+
+	got, err := GetActiveSession("bg-1")
+	if err != nil {
+		t.Fatalf("GetActiveSession(bg-1): %v", err)
+	}
+	if got.Kind != sessionkind.SessionKindBackground {
+		t.Errorf("Kind = %v, want background", got.Kind)
+	}
+	if got.ActiveEpicID == nil || *got.ActiveEpicID != epicID {
+		t.Errorf("ActiveEpicID = %v, want %d", got.ActiveEpicID, epicID)
+	}
+	if got.ActiveTaskID == nil || *got.ActiveTaskID != childID {
+		t.Errorf("ActiveTaskID = %v, want %d", got.ActiveTaskID, childID)
+	}
+
+	// Foreground default row: kind defaults to tmux, no epic context.
+	if _, err := db.Exec(
+		`INSERT INTO sessions (session_id, project_id, platform, state, active_task_id, last_activity)
+		 VALUES ('fg-1', 1, 'claude', 'working', ?, '2026-06-16T00:00:00')`,
+		childID,
+	); err != nil {
+		t.Fatalf("seed fg session: %v", err)
+	}
+	fg, err := GetActiveSession("fg-1")
+	if err != nil {
+		t.Fatalf("GetActiveSession(fg-1): %v", err)
+	}
+	if fg.Kind != sessionkind.SessionKindTmux {
+		t.Errorf("default Kind = %v, want tmux", fg.Kind)
+	}
+	if fg.ActiveEpicID != nil {
+		t.Errorf("default ActiveEpicID = %v, want nil", fg.ActiveEpicID)
 	}
 }
 

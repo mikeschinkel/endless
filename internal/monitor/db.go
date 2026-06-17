@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/mikeschinkel/endless/internal/schema"
+	"github.com/mikeschinkel/endless/internal/sessionkind"
 	"github.com/mikeschinkel/endless/internal/tasktype"
 )
 
@@ -297,6 +298,16 @@ func DB() (*sql.DB, error) {
 		if hasTable(dbConn, "task_types") {
 			if err := tasktype.VerifyIntegrity(dbConn); err != nil {
 				dbErr = fmt.Errorf("task_types integrity check on %s: %w", path, err)
+				dbConn = nil
+				return
+			}
+		}
+		// E-1571: same fail-closed contract for the session_kinds enum mirror.
+		// Skipped on populated DBs that have not yet had the E-1571 migration
+		// applied (the table will not exist; the migration creates it).
+		if hasTable(dbConn, "session_kinds") {
+			if err := sessionkind.VerifyIntegrity(dbConn); err != nil {
+				dbErr = fmt.Errorf("session_kinds integrity check on %s: %w", path, err)
 				dbConn = nil
 				return
 			}

@@ -66,7 +66,7 @@ func runStatusLine(args []string) {
 // The trailing blockers segment is appended only when the task has at
 // least one active blocker; absence is the unblocked signal (E-1550).
 func format(info *monitor.ActiveTaskInfo) string {
-	out := fmt.Sprintf("#[fg=colour226,bold][E-%d]#[default]", info.TaskID)
+	out := fmt.Sprintf("#[fg=colour226,bold][%s]#[default]", taskIDPrefix(info))
 	for _, field := range []string{
 		info.ProjectName,
 		info.Type,
@@ -121,6 +121,24 @@ func blockersSegment(taskID int64) string {
 	}
 	b.WriteString("}#[default]")
 	return b.String()
+}
+
+// taskIDPrefix renders the bare task-id token (no brackets, no styling) for
+// the status line and menu header, encoding the session's epic context
+// (E-1571):
+//
+//   - ActiveEpicID nil                  → "E-<task>"          (no epic context)
+//   - ActiveEpicID == TaskID            → "E-<epic>"          (viewing the epic itself)
+//   - ActiveEpicID != TaskID            → "E-<epic>:E-<task>" (viewing a child of the epic)
+//
+// TaskID is the session's active_task_id (the item currently in view); when an
+// epic is active and a child is in view, the epic id leads and the child
+// trails.
+func taskIDPrefix(info *monitor.ActiveTaskInfo) string {
+	if info.ActiveEpicID == nil || *info.ActiveEpicID == info.TaskID {
+		return fmt.Sprintf("E-%d", info.TaskID)
+	}
+	return fmt.Sprintf("E-%d:E-%d", *info.ActiveEpicID, info.TaskID)
 }
 
 // tierString formats the nullable tier integer for display, returning

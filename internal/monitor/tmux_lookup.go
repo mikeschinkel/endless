@@ -14,14 +14,19 @@ import (
 //
 // Tier is a *int64 because `tasks.tier` is nullable; nil means
 // "not set", which the renderer skips so the row doesn't show "tier: ".
+//
+// ActiveEpicID is the session's active_epic_id (E-1571): nil for a non-epic
+// session, the epic task id otherwise. The renderer compares it against TaskID
+// to pick the [E-NNNN] / [E-EEEE] / [E-EEEE:E-CCCC] prefix shape.
 type ActiveTaskInfo struct {
-	TaskID      int64
-	Title       string
-	Status      string
-	Type        string
-	Phase       string
-	Tier        *int64
-	ProjectName string
+	TaskID       int64
+	Title        string
+	Status       string
+	Type         string
+	Phase        string
+	Tier         *int64
+	ProjectName  string
+	ActiveEpicID *int64
 }
 
 // ErrNoActiveTask is returned when no working session, in either the
@@ -90,7 +95,7 @@ func queryActiveTaskForPanes(db *sql.DB, panes []string) (*ActiveTaskInfo, error
 	// rows from a prior server win the lookup for currently-live panes
 	// (E-1530). Sibling readers (anySessionForPanes, GetLiveSessionByProcess)
 	// apply the same filter.
-	q := `SELECT t.id, t.title, t.status, COALESCE(tt.slug, ''), t.phase, t.tier, COALESCE(p.name, '')
+	q := `SELECT t.id, t.title, t.status, COALESCE(tt.slug, ''), t.phase, t.tier, COALESCE(p.name, ''), s.active_epic_id
 	      FROM sessions s
 	      JOIN tasks t ON t.id = s.active_task_id
 	      LEFT JOIN projects p ON p.id = t.project_id
@@ -104,7 +109,7 @@ func queryActiveTaskForPanes(db *sql.DB, panes []string) (*ActiveTaskInfo, error
 	var info ActiveTaskInfo
 	err := db.QueryRow(q, args...).Scan(
 		&info.TaskID, &info.Title, &info.Status,
-		&info.Type, &info.Phase, &info.Tier, &info.ProjectName,
+		&info.Type, &info.Phase, &info.Tier, &info.ProjectName, &info.ActiveEpicID,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNoActiveTask

@@ -144,6 +144,42 @@ func TestTierString_HandlesNilAndZero(t *testing.T) {
 	}
 }
 
+// TestTaskIDPrefix pins the three epic-context prefix shapes (E-1571):
+// no epic → "E-<task>"; epic == task (viewing the epic) → "E-<epic>";
+// epic != task (viewing a child) → "E-<epic>:E-<child>". Pure function,
+// no DB needed.
+func TestTaskIDPrefix(t *testing.T) {
+	epic := int64(100)
+	tests := []struct {
+		name string
+		info *monitor.ActiveTaskInfo
+		want string
+	}{
+		{
+			name: "no epic context",
+			info: &monitor.ActiveTaskInfo{TaskID: 42, ActiveEpicID: nil},
+			want: "E-42",
+		},
+		{
+			name: "viewing the epic itself",
+			info: &monitor.ActiveTaskInfo{TaskID: 100, ActiveEpicID: &epic},
+			want: "E-100",
+		},
+		{
+			name: "viewing a child of the epic",
+			info: &monitor.ActiveTaskInfo{TaskID: 137, ActiveEpicID: &epic},
+			want: "E-100:E-137",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := taskIDPrefix(tc.info); got != tc.want {
+				t.Errorf("taskIDPrefix() = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
 // TestBlockersSegment_EmptyWhenNoBlockers pins case (1) from the plan:
 // a task with no rows in task_deps yields an empty segment so the
 // status line shows no trailing chip and no leading ` · ` separator.

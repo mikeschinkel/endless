@@ -6,15 +6,22 @@ import (
 	"time"
 
 	"github.com/mikeschinkel/endless/internal/config"
+	"github.com/mikeschinkel/endless/internal/sessionkind"
 	"github.com/mikeschinkel/go-dt"
 )
 
 // SessionInfo represents an active AI coding session.
+//
+// ActiveEpicID is the epic task id when the session works under an epic (and
+// ActiveTaskID tracks the viewed child); nil otherwise. Kind discriminates a
+// pane-bound 'tmux' session from a headless 'background' agent (E-1571).
 type SessionInfo struct {
 	ID           int64
 	SessionID    string
 	ProjectID    int64
 	ActiveTaskID *int64
+	ActiveEpicID *int64
+	Kind         sessionkind.SessionKind
 	State        string
 	LastActivity string
 	StartedAt    string
@@ -119,14 +126,16 @@ func GetActiveSession(sessionID string) (*SessionInfo, error) {
 	}
 
 	var s SessionInfo
+	var kindID int64
 	err = db.QueryRow(
-		`SELECT id, session_id, COALESCE(project_id,0), active_task_id, state, COALESCE(last_activity,''), COALESCE(started_at,'')
+		`SELECT id, session_id, COALESCE(project_id,0), active_task_id, active_epic_id, kind_id, state, COALESCE(last_activity,''), COALESCE(started_at,'')
 		 FROM sessions WHERE session_id=?`,
 		sessionID,
-	).Scan(&s.ID, &s.SessionID, &s.ProjectID, &s.ActiveTaskID, &s.State, &s.LastActivity, &s.StartedAt)
+	).Scan(&s.ID, &s.SessionID, &s.ProjectID, &s.ActiveTaskID, &s.ActiveEpicID, &kindID, &s.State, &s.LastActivity, &s.StartedAt)
 	if err != nil {
 		return nil, err
 	}
+	s.Kind = sessionkind.SessionKind(kindID)
 	return &s, nil
 }
 

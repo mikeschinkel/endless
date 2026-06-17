@@ -72,7 +72,7 @@ func buildMenuTitle(info *monitor.ActiveTaskInfo) string {
 	if info == nil {
 		return "#[align=centre]Endless"
 	}
-	return fmt.Sprintf("#[align=centre]Endless [E-%d]", info.TaskID)
+	return fmt.Sprintf("#[align=centre]Endless [%s]", taskIDPrefix(info))
 }
 
 // buildMenuItems returns the menu items for the current task. When no
