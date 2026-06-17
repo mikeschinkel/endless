@@ -279,6 +279,11 @@ go-work-init:
 # main-checkout settings.json is preserved so Claude sessions in the
 # worktree don't lose plugin enablement.
 #
+# Also writes worktree.bgIsolation:"none" (Claude v2.1.143+) so background
+# agents launched in the worktree don't create a nested .claude/worktrees/
+# under endless's tracker worktree. Required by the bg-agent dispatch system;
+# see docs/research-2026-06-12-claude-background-agents.md §3.
+#
 # Idempotent: re-running produces the same file (sorted keys, stable
 # JSON). Refuses to run from the main checkout to avoid clobbering the
 # committed .claude/settings.json there.
@@ -352,6 +357,11 @@ claude-settings-init:
         out[k] = v
     if out_hooks:
         out["hooks"] = out_hooks
+    # bgIsolation: "none" stops Claude from creating a nested .claude/worktrees/
+    # under endless's tracker worktree when background agents launch (v2.1.143+
+    # schema). Required by the bg-agent dispatch system; plain assignment is
+    # correct because no other code populates the "worktree" key today.
+    out["worktree"] = {"bgIsolation": "none"}
     with open(out_path, "w") as f:
         json.dump(out, f, indent=2, sort_keys=True)
         f.write("\n")
