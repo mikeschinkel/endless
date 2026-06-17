@@ -2,6 +2,7 @@ package sandboxcmd
 
 import (
 	"database/sql"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -147,6 +148,43 @@ func TestSeedFromWorktree_CopiesProjectAndSeedsSessionFromEnv(t *testing.T) {
 	}
 	if projID == 0 {
 		t.Errorf("project_id = 0, want non-zero FK to projects.id")
+	}
+}
+
+func TestSeedFromWorktree_WritesConfigJSON(t *testing.T) {
+	_, worktree, mainDBPath := initTestMainCheckoutWithWorktree(t, "test-proj-cfg")
+	home := filepath.Dir(filepath.Dir(mainDBPath))
+	cfgEndless := filepath.Join(home, ".config", "endless")
+	os.MkdirAll(cfgEndless, 0o755)
+	os.Rename(mainDBPath, filepath.Join(cfgEndless, "endless.db"))
+
+	withHomeAndSessionEnv(t, home, "claude-sess-cfg")
+	withChdir(t, worktree)
+
+	sandboxDir := filepath.Join(t.TempDir(), "sandbox")
+	os.MkdirAll(sandboxDir, 0o755)
+
+	if err := seedFromWorktree(sandboxDir); err != nil {
+		t.Fatalf("seedFromWorktree: %v", err)
+	}
+
+	configPath := filepath.Join(sandboxDir, "endless", "config.json")
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("read sandbox config.json: %v", err)
+	}
+	var cfg sandboxConfig
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		t.Fatalf("config.json is not valid JSON: %v\n%s", err, data)
+	}
+	if len(cfg.Roots) != 1 || cfg.Roots[0] != "~/Projects" {
+		t.Errorf("roots = %v, want [~/Projects]", cfg.Roots)
+	}
+	if cfg.ScanInterval != 300 {
+		t.Errorf("scan_interval = %d, want 300", cfg.ScanInterval)
+	}
+	if cfg.Ignore == nil {
+		t.Errorf("ignore = nil, want [] (must serialize as a JSON array)")
 	}
 }
 

@@ -2,6 +2,7 @@ package sandboxcmd
 
 import (
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -86,6 +87,41 @@ func seedFromWorktree(sandboxDir string) error {
 	)
 	if err != nil {
 		return fmt.Errorf("inserting session row: %w", err)
+	}
+
+	if err := writeSandboxConfig(sandboxDir); err != nil {
+		return err
+	}
+	return nil
+}
+
+// sandboxConfig mirrors the Python CLI's DEFAULT_CONFIG (src/endless/config.py).
+// A struct (not a map) keeps the JSON field order deterministic.
+type sandboxConfig struct {
+	Roots        []string `json:"roots"`
+	ScanInterval int      `json:"scan_interval"`
+	Ignore       []string `json:"ignore"`
+}
+
+// writeSandboxConfig provisions <sandbox>/endless/config.json with the default
+// config so the Python CLI works under --db sandbox. event_bridge.py's
+// _get_or_create_node_id() hard-requires config.json (it does not auto-create),
+// and adds node_id lazily on first event. Generated locally — the sandbox never
+// reads the main config at ~/.config/endless (E-1585). No-op-safe to overwrite:
+// only written once at seed time.
+func writeSandboxConfig(sandboxDir string) error {
+	cfg := sandboxConfig{
+		Roots:        []string{"~/Projects"},
+		ScanInterval: 300,
+		Ignore:       []string{},
+	}
+	data, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshaling sandbox config: %w", err)
+	}
+	configPath := filepath.Join(sandboxDir, "endless", "config.json")
+	if err := os.WriteFile(configPath, append(data, '\n'), 0o644); err != nil {
+		return fmt.Errorf("writing sandbox config %s: %w", configPath, err)
 	}
 	return nil
 }

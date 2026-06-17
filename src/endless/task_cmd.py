@@ -2078,6 +2078,18 @@ def _current_endless_session_id() -> int | None:
             if isinstance(eid, int):
                 return eid
 
+    # Sibling shell pane (no CLAUDECODE env): read the Claude session UUID
+    # the sibling Claude session's hook published to the tmux window
+    # (@endless_session_uuid, E-1585) and resolve/populate it in the active
+    # DB context (the sandbox under --db sandbox). Unambiguous — one UUID per
+    # window — so it runs before the heuristic n==1 sibling-DB lookup. process=""
+    # so this shell's own pane is not recorded as the Claude session's process.
+    window_uuid = _tmux_window_session_uuid()
+    if window_uuid:
+        eid = _ensure_claude_session_id(window_uuid, process="")
+        if eid is not None:
+            return eid
+
     # Pane-direct didn't match — try sibling Claude pane in the same
     # tmux window. Single-match only; 0 or 2+ falls through to None.
     sibling_eid, n = _find_sibling_claude_session()
@@ -2086,7 +2098,36 @@ def _current_endless_session_id() -> int | None:
     return None
 
 
-def _ensure_claude_session_id(claude_session_id: str) -> int | None:
+def _tmux_window_session_uuid() -> str | None:
+    """Read @endless_session_uuid from the current tmux window (E-1585).
+
+    The sibling Claude session's hook publishes its CLAUDE_CODE_SESSION_ID
+    to the window via this option; any pane in the window (including a plain
+    shell with no Claude env) can read it. Returns the UUID string, or None
+    when not in tmux or the option is unset/empty.
+    """
+    import subprocess
+
+    pane = os.environ.get("TMUX_PANE")
+    if not pane:
+        return None
+    try:
+        result = subprocess.run(
+            ["tmux", "display-message", "-p", "-t", pane,
+             "#{@endless_session_uuid}"],
+            capture_output=True, text=True, timeout=5,
+        )
+    except (FileNotFoundError, subprocess.SubprocessError):
+        return None
+    if result.returncode != 0:
+        return None
+    uuid = result.stdout.strip()
+    return uuid or None
+
+
+def _ensure_claude_session_id(
+    claude_session_id: str, process: str | None = None
+) -> int | None:
     """Resolve sessions.id for the env-identified Claude session (E-1455).
 
     Shells out to `endless-go session-query ensure-claude-id`, which
@@ -2095,6 +2136,14 @@ def _ensure_claude_session_id(claude_session_id: str) -> int | None:
     no hook event has fired yet — the first-event-timing race the env-
     var path exists to solve. Subsequent hook events upsert the same row
     idempotently, so this path produces the same row the hook would.
+
+    `process` is the tmux pane to record for the session row. When None
+    (the E-1455 env-vars-as-truth caller), the current pane is used —
+    correct there because the calling process IS the Claude pane. The
+    E-1585 window-option caller is a *sibling shell*, so it passes ""
+    to avoid recording its own pane as the Claude session's process
+    (which TouchSession's collision invalidation would then hijack); the
+    row is resolved purely by UUID.
 
     Returns the integer id on success; None on any failure (caller falls
     through to the remaining resolver layers).
@@ -2107,7 +2156,7 @@ def _ensure_claude_session_id(claude_session_id: str) -> int | None:
         project_root = _project_root_for_cwd()
     except Exception:
         return None
-    pane = os.environ.get("TMUX_PANE", "")
+    pane = process if process is not None else os.environ.get("TMUX_PANE", "")
 
     args = [
         "endless-go", *config.go_db_context_args(),

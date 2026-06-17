@@ -134,6 +134,11 @@ func runClaude(args []string) error {
 		return fmt.Errorf("touching session: %w", err)
 	}
 
+	// Publish this session's UUID to the tmux window so sibling shell panes
+	// can discover and resolve it under --db sandbox (E-1585). Best-effort,
+	// every event, to self-heal after a tmux server restart.
+	setTmuxSessionUUID(payload.SessionID)
+
 	// Event-specific handling
 	switch payload.EventName {
 	case "SessionStart":
@@ -848,6 +853,24 @@ func tmuxTaskID() int64 {
 		return 0
 	}
 	return id
+}
+
+// setTmuxSessionUUID publishes the Claude session UUID to the current tmux
+// window as the @endless_session_uuid window option (E-1585). Window options
+// are shared by every pane in the window, so a sibling shell pane (which has no
+// CLAUDECODE / CLAUDE_CODE_SESSION_ID env of its own) can read this to discover
+// the Claude session it sits next to and resolve/populate the session row in
+// its --db sandbox context. Best-effort: no-op when not in tmux or sessionID is
+// empty; tmux errors are ignored. Called every event so the option self-heals
+// after a tmux server restart, mirroring TouchSession's per-event upsert.
+func setTmuxSessionUUID(sessionID string) {
+	pane := os.Getenv("TMUX_PANE")
+	if pane == "" || sessionID == "" {
+		return
+	}
+	_ = exec.Command(
+		"tmux", "set", "-w", "-t", pane, "@endless_session_uuid", sessionID,
+	).Run()
 }
 
 // tmuxSpawnedBy reads @endless_spawned_by from the current tmux window.
