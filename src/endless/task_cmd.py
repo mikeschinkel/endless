@@ -1473,6 +1473,184 @@ def recent_tasks(
         click.echo()
 
 
+def _render_landed_table(rows):
+    """Render landed-task rows: ID, Landed, Lands, Title (E-1478)."""
+    try:
+        term_width = os.get_terminal_size().columns
+    except OSError:
+        term_width = 80
+
+    id_w = max(2, max(len(task_id_display(r["id"])) for r in rows))
+    landed_strs = [_format_timestamp(r["last_landed"]) for r in rows]
+    la_w = max(6, max(len(s) for s in landed_strs))
+    cnt_strs = [str(r["land_count"]) for r in rows]
+    cn_w = max(5, max(len(s) for s in cnt_strs))
+    gap = "  "
+    fixed_width = id_w + la_w + cn_w + len(gap) * 3
+    title_width = max(20, term_width - fixed_width)
+
+    display_titles = []
+    for r in rows:
+        title = r["title"]
+        if len(title) > title_width:
+            title = title[:title_width - 1] + "…"
+        display_titles.append(title)
+    max_title_len = max(len(t) for t in display_titles) if display_titles else 5
+
+    header = (f"{'ID':<{id_w}}{gap}{'Landed':<{la_w}}{gap}"
+              f"{'Lands':<{cn_w}}{gap}Title")
+    sep = f"{'─'*id_w}{gap}{'─'*la_w}{gap}{'─'*cn_w}{gap}{'─'*max_title_len}"
+    click.echo(header)
+    click.echo(sep)
+    for r, landed, cnt, title in zip(rows, landed_strs, cnt_strs, display_titles):
+        click.echo(
+            f"{task_id_display(r['id']):<{id_w}}{gap}"
+            f"{landed:<{la_w}}{gap}{cnt:<{cn_w}}{gap}{title}"
+        )
+
+
+def landed_list(
+    project_name: str | None = None,
+    show_all: bool = False,
+    limit: int = 20,
+    llm: bool = False,
+    as_json: bool = False,
+):
+    """List tasks that have landed at least once, most-recent landing first (E-1478)."""
+    where = "WHERE 1=1"
+    params: list = []
+
+    if not show_all:
+        project_id, proj_name = _resolve_project(project_name)
+        where += " AND t.project_id = ?"
+        params.append(project_id)
+    elif project_name:
+        project_id, proj_name = _resolve_project(project_name)
+        where += " AND t.project_id = ?"
+        params.append(project_id)
+
+    params.append(limit)
+
+    rows = db.query(
+        f"SELECT t.id, t.phase, COALESCE(t.title, t.description) AS title, "
+        f"t.status, t.tier, p.name AS project_name, "
+        f"MAX(l.landed_at) AS last_landed, COUNT(l.id) AS land_count "
+        f"FROM task_landings l "
+        f"JOIN tasks t ON t.id = l.task_id "
+        f"JOIN projects p ON t.project_id = p.id "
+        f"{where} "
+        f"GROUP BY t.id "
+        f"ORDER BY last_landed DESC "
+        f"LIMIT ?",
+        tuple(params),
+    )
+
+    if not rows:
+        if as_json:
+            click.echo("[]")
+        elif llm:
+            click.echo("# no landed tasks")
+        else:
+            click.echo(click.style("•", fg="cyan") + " No landed tasks")
+        return
+
+    if as_json:
+        import json
+        out = [
+            {
+                "id": f"E-{r['id']}",
+                "phase": r["phase"],
+                "status": r["status"],
+                "title": r["title"],
+                "project": r["project_name"],
+                "last_landed": r["last_landed"],
+                "count": r["land_count"],
+            }
+            for r in rows
+        ]
+        click.echo(json.dumps(out, indent=2))
+        return
+
+    # Group by project
+    groups: dict[str, list] = {}
+    for r in rows:
+        groups.setdefault(r["project_name"], []).append(r)
+
+    for proj, items in groups.items():
+        if llm:
+            click.echo(f"# {proj}")
+            for r in items:
+                suffix = f" x{r['land_count']}" if r["land_count"] > 1 else ""
+                click.echo(
+                    f"E-{r['id']} {_format_timestamp(r['last_landed'])}{suffix} "
+                    f"{r['status']} {r['title']}"
+                )
+        else:
+            click.echo()
+            click.echo(click.style(f"Landed ({proj}):", bold=True))
+            _render_landed_table(items)
+    if not llm:
+        click.echo()
+
+
+def landed_item(item_id: int, llm: bool = False, as_json: bool = False):
+    """Show the full landing history for a single task, newest first (E-1478)."""
+    row = db.query(
+        "SELECT t.id, COALESCE(t.title, t.description) AS title, "
+        "p.name AS project_name "
+        "FROM tasks t JOIN projects p ON t.project_id = p.id "
+        "WHERE t.id = ?",
+        (item_id,),
+    )
+    if not row:
+        raise click.ClickException(f"No task found with id {item_id}")
+    item = row[0]
+    landings = _task_landings(item_id)
+
+    if as_json:
+        import json
+        out = {
+            "id": f"E-{item['id']}",
+            "title": item["title"],
+            "project": item["project_name"],
+            "landings": [
+                {
+                    "landed_at": land["landed_at"],
+                    "merge_commit_sha": land["merge_commit_sha"],
+                    "branch": land["branch"],
+                }
+                for land in landings
+            ],
+        }
+        click.echo(json.dumps(out, indent=2))
+        return
+
+    if llm:
+        click.echo(f"# E-{item['id']} {item['title']}")
+        if not landings:
+            click.echo("# never landed")
+            return
+        for land in landings:
+            sha = (land["merge_commit_sha"] or "")[:7]
+            click.echo(f"{land['landed_at']} {sha} {land['branch']}")
+        return
+
+    # Human-readable
+    click.echo()
+    click.echo(click.style(
+        f"Landings for {task_id_display(item['id'])} ({item['title']}):",
+        bold=True))
+    if not landings:
+        click.echo(click.style("•", fg="cyan") + " Never landed")
+        click.echo()
+        return
+    for land in landings:
+        sha = (land["merge_commit_sha"] or "")[:7]
+        ts = _format_timestamp(land["landed_at"])
+        click.echo(f"  {ts}  {sha}  {land['branch']}")
+    click.echo()
+
+
 # E-1544: research-gate helpers. ED-1504 requires `--type research` to be
 # justified unless `--parent` is a type=epic, status=in_progress task.
 
@@ -3020,6 +3198,36 @@ def _format_timestamp(ts: str) -> str:
         return ts
 
 
+def _task_landings(item_id: int) -> list:
+    """All landing rows for a task, newest first (E-1478).
+
+    Landing is append-only — `endless worktree land` writes one
+    task_landings row per land — so a task can have more than one.
+    """
+    return db.query(
+        "SELECT branch, merge_commit_sha, landed_at "
+        "FROM task_landings WHERE task_id = ? "
+        "ORDER BY landed_at DESC, id DESC",
+        (item_id,),
+    )
+
+
+def _format_landed_line(landings: list) -> str:
+    """Render the most recent landing as 'TS  shortsha  (landed N times)'.
+
+    Caller guarantees `landings` is non-empty and newest-first. The
+    '(landed N times)' suffix appears only when more than one landing exists.
+    """
+    latest = landings[0]
+    sha = (latest["merge_commit_sha"] or "")[:7]
+    parts = [_format_timestamp(latest["landed_at"])]
+    if sha:
+        parts.append(sha)
+    if len(landings) > 1:
+        parts.append(f"(landed {len(landings)} times)")
+    return "  ".join(parts)
+
+
 def detail_item(
     item_id: int,
     show_description: bool = True,
@@ -3047,6 +3255,7 @@ def detail_item(
         )
 
     item = row[0]
+    landings = _task_landings(item_id)
 
     if as_json:
         import json
@@ -3061,6 +3270,15 @@ def detail_item(
             "created": item["created_at"],
             "updated": item["updated_at"],
             "confirmed": item["completed_at"] or None,
+            "landed": (
+                {
+                    "landed_at": landings[0]["landed_at"],
+                    "merge_commit_sha": landings[0]["merge_commit_sha"],
+                    "branch": landings[0]["branch"],
+                    "count": len(landings),
+                }
+                if landings else None
+            ),
             "source_file": item["source_file"] or None,
             "tier": item["tier"],
             "outcome": item["outcome"] or None,
@@ -3100,6 +3318,8 @@ def detail_item(
         click.echo(f"updated={item['updated_at']}")
         if item["completed_at"]:
             click.echo(f"confirmed={item['completed_at']}")
+        if landings:
+            click.echo(f"landed={_format_landed_line(landings)}")
         if show_description and item["description"] and item["description"] != item["title"]:
             click.echo(f"\n## Description\n{item['description']}")
         if show_text and item["text"]:
@@ -3143,6 +3363,8 @@ def detail_item(
         click.echo(f"{label('Updated:')} {val(_format_timestamp(item['updated_at']))}")
     if item["completed_at"]:
         click.echo(f"{label('Confirmed:')} {val(_format_timestamp(item['completed_at']))}")
+    if landings:
+        click.echo(f"{label('Landed:')} {val(_format_landed_line(landings))}")
     if item["source_file"]:
         click.echo(f"{label('Source:')} {val(item['source_file'])}")
     # Links last: multi-line block sits below the single-line fields (E-1477).

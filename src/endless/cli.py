@@ -1128,6 +1128,33 @@ def task_recent(project, show_all, limit, llm, as_json, parent_id):
                  limit=limit, llm=llm, as_json=as_json, parent_id=parent_val)
 
 
+@task_cmd.command("landed")
+@click.argument("item_id", type=TASK_ID, required=False)
+@click.option("--project", default=None,
+              help="Project name (default: detect from cwd)")
+@click.option("--all", "show_all", is_flag=True,
+              help="Show tasks from all projects")
+@click.option("--limit", default=20, type=int,
+              help="Max items to show in the list (default: 20)")
+@click.option("--llm", is_flag=True,
+              help="Token-efficient output for LLMs")
+@click.option("--json", "as_json", is_flag=True,
+              help="JSON output")
+def task_landed(item_id, project, show_all, limit, llm, as_json):
+    """List landed tasks, or show one task's landing history.
+
+    Bare `task landed` lists tasks that have landed at least once, most
+    recent first. `task landed <id>` shows that task's full landing history
+    (every land's timestamp, branch, and merge SHA).
+    """
+    from endless.task_cmd import landed_list, landed_item
+    if item_id is not None:
+        landed_item(item_id, llm=llm, as_json=as_json)
+    else:
+        landed_list(project_name=project, show_all=show_all,
+                    limit=limit, llm=llm, as_json=as_json)
+
+
 @task_cmd.command("search")
 @click.argument("query")
 @click.option("--project", default=None,
