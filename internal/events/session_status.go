@@ -17,8 +17,18 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 )
+
+// sessionIDSentinelPrefix marks a payload `process` field that already
+// carries a resolved Endless session id (E-1588). The Python command
+// resolves the id via the unified _current_endless_session_id resolver
+// (or an explicit --session-id) and sends "__session_id=N" so Go uses
+// the id directly instead of re-resolving by tmux pane — which requires
+// a pre-existing sessions row at that pane and so breaks on a fresh
+// --db sandbox in a worktree.
+const sessionIDSentinelPrefix = "__session_id="
 
 // execSessionStatusRecorded handles the KindSessionStatusRecorded event.
 // Resolves the session via the payload's `process` identifier, runs a
@@ -35,16 +45,25 @@ func execSessionStatusRecorded(db dbQuerier, evt *Event) (*ExecuteResult, error)
 		return nil, fmt.Errorf("events: unmarshal session_status.recorded payload: %w", err)
 	}
 
-	// E-1315: do the lookup against the same dbQuerier (the open
-	// transaction) instead of monitor.GetLiveSessionByProcess. The
-	// public function uses monitor.DB() and tries to acquire a fresh
-	// connection from the pool; the sqlite driver's single-connection
-	// pool deadlocks because Execute's transaction is already holding it.
-	sessionID, err := liveSessionByProcessTx(db, p.Process)
+	// E-1588: when the caller already resolved the session id (sentinel
+	// "__session_id=N"), validate and use it directly, skipping the
+	// pane lookup that needs a pre-existing sessions row at the pane.
+	sessionID, ok, err := sessionIDFromSentinel(db, p.Process)
 	if err != nil {
-		return nil, fmt.Errorf(
-			"events: no live session for process %q: %w", p.Process, err,
-		)
+		return nil, err
+	}
+	if !ok {
+		// E-1315: do the lookup against the same dbQuerier (the open
+		// transaction) instead of monitor.GetLiveSessionByProcess. The
+		// public function uses monitor.DB() and tries to acquire a fresh
+		// connection from the pool; the sqlite driver's single-connection
+		// pool deadlocks because Execute's transaction is already holding it.
+		sessionID, err = liveSessionByProcessTx(db, p.Process)
+		if err != nil {
+			return nil, fmt.Errorf(
+				"events: no live session for process %q: %w", p.Process, err,
+			)
+		}
 	}
 
 	// E-1314: pull the session's currently bound task at the moment of
@@ -85,6 +104,41 @@ func execSessionStatusRecorded(db dbQuerier, evt *Event) (*ExecuteResult, error)
 		SessionStatusID: rowID,
 		Markdown:        renderSessionStatusMarkdown(&p),
 	}, nil
+}
+
+// sessionIDFromSentinel detects and resolves the "__session_id=N"
+// process sentinel (E-1588). When process carries the sentinel it parses
+// N, validates the row exists and is live (state != 'ended'), and returns
+// (id, true, nil). Absent the sentinel it returns (0, false, nil) so the
+// caller falls through to the tmux-pane lookup. A malformed or
+// non-live id returns a clear error.
+func sessionIDFromSentinel(db dbQuerier, process string) (int64, bool, error) {
+	raw, found := strings.CutPrefix(process, sessionIDSentinelPrefix)
+	if !found {
+		return 0, false, nil
+	}
+	id, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil {
+		return 0, false, fmt.Errorf(
+			"events: malformed session id sentinel %q: %w", process, err,
+		)
+	}
+	var got int64
+	err = db.QueryRow(
+		`SELECT id FROM sessions WHERE id = ? AND state != 'ended'`,
+		id,
+	).Scan(&got)
+	if err == sql.ErrNoRows {
+		return 0, false, fmt.Errorf(
+			"events: session id %d is not a live session", id,
+		)
+	}
+	if err != nil {
+		return 0, false, fmt.Errorf(
+			"events: validate session id %d: %w", id, err,
+		)
+	}
+	return got, true, nil
 }
 
 // liveSessionByProcessTx is the in-transaction equivalent of

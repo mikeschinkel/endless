@@ -26,7 +26,7 @@ from pathlib import Path
 import click
 
 from endless import event_bridge
-from endless.task_cmd import _resolve_project
+from endless.task_cmd import _current_endless_session_id, _resolve_project
 
 
 _VALID_STATUSES = frozenset({
@@ -99,22 +99,30 @@ def _read_input(input_file: str | None) -> str:
 # --- Process identifier ----------------------------------------------------
 
 def _resolve_process(session_id_override: int | None) -> str:
-    """Return the process identifier to send to Go.
+    """Return the process identifier to send to Go (E-1588).
 
-    With --session-id N, return f"__session_id={N}" as a sentinel that the
-    Go side recognizes as 'skip pane lookup, use this id directly.' (Not
-    implemented in v1 — override path will be wired when test fixtures
-    need it.)
+    Resolves the Endless session id and returns the reserved sentinel
+    `f"__session_id={N}"`, which the Go side recognizes as "skip the
+    tmux-pane lookup, use this id directly." Two ways an id becomes known:
 
-    Otherwise return TMUX_PANE env var. Go validates and errors clearly
-    if the value doesn't resolve to a live session.
+    1. An explicit `--session-id N` override (test fixtures, non-tmux
+       callers).
+    2. The unified `_current_endless_session_id()` resolver, which covers
+       the CLAUDECODE-env tier and the E-1585 `@endless_session_uuid`
+       window-option tier — so a fresh `--db sandbox` works in a worktree
+       and a sibling shell pane resolves to its window's Claude session.
+       This entry point is heuristic-free (no prompting), preserving the
+       command's non-interactive behavior.
+
+    When neither yields an id, fall back to the raw TMUX_PANE so Go's
+    pane lookup still runs and emits its clear "no live session for
+    process" error.
     """
     if session_id_override is not None:
-        # Reserved for future override wiring; for v1 just error so the
-        # caller knows this path isn't supported yet.
-        raise click.ClickException(
-            "--session-id override is reserved for tests; not implemented in v1"
-        )
+        return f"__session_id={session_id_override}"
+    eid = _current_endless_session_id()
+    if eid is not None:
+        return f"__session_id={eid}"
     return os.environ.get("TMUX_PANE", "")
 
 

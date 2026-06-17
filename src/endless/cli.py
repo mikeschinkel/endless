@@ -908,8 +908,9 @@ def session_status_cmd():
 @click.argument("input_file", required=False,
                 type=click.Path(exists=True, dir_okay=False))
 @click.option("--session-id", "session_id_override", type=int, default=None,
-              help="Override tmux-pane session lookup (reserved; not "
-                   "implemented in v1).")
+              help="Use this Endless session id directly instead of "
+                   "resolving the current session (test fixtures / "
+                   "non-tmux callers).")
 def session_status_add(input_file, session_id_override):
     """Record a session status snapshot from XML on stdin or a file path.
 

@@ -9,7 +9,11 @@ Go side; here we focus on the Python contract.
 import pytest
 import click
 
-from endless.session_status_cmd import _parse_and_validate, _read_input
+from endless.session_status_cmd import (
+    _parse_and_validate,
+    _read_input,
+    _resolve_process,
+)
 from pathlib import Path
 
 
@@ -276,3 +280,39 @@ def test_filed_attribute_preserved_in_serialization():
     # Order preserved; filed attr survives on the first task only.
     assert 'filed="true"' in lines[0]
     assert "filed=" not in lines[1]
+
+
+# --- Process resolution (E-1588) ------------------------------------------
+
+def test_resolve_process_explicit_override():
+    # An explicit --session-id produces the sentinel directly, regardless
+    # of env / resolver.
+    assert _resolve_process(42) == "__session_id=42"
+
+
+def test_resolve_process_uses_resolver(monkeypatch):
+    monkeypatch.setattr(
+        "endless.session_status_cmd._current_endless_session_id",
+        lambda: 7,
+    )
+    assert _resolve_process(None) == "__session_id=7"
+
+
+def test_resolve_process_falls_back_to_pane(monkeypatch):
+    # Resolver returns None → fall back to the raw TMUX_PANE so Go's
+    # pane lookup still runs and emits its clear error.
+    monkeypatch.setattr(
+        "endless.session_status_cmd._current_endless_session_id",
+        lambda: None,
+    )
+    monkeypatch.setenv("TMUX_PANE", "%88")
+    assert _resolve_process(None) == "%88"
+
+
+def test_resolve_process_no_session_no_pane(monkeypatch):
+    monkeypatch.setattr(
+        "endless.session_status_cmd._current_endless_session_id",
+        lambda: None,
+    )
+    monkeypatch.delenv("TMUX_PANE", raising=False)
+    assert _resolve_process(None) == ""

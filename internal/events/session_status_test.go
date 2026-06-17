@@ -1,9 +1,119 @@
 package events
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 )
+
+// --- Sentinel session-id resolution (E-1588) ------------------------------
+
+// sessionStatusEvent builds a session_status.recorded Event whose payload's
+// process field is `process` (e.g. "__session_id=42" or a tmux pane).
+func sessionStatusEvent(t *testing.T, process string) *Event {
+	t.Helper()
+	payload, err := json.Marshal(SessionStatusRecordedPayload{
+		Process:  process,
+		Headline: "probe",
+	})
+	if err != nil {
+		t.Fatalf("marshal payload: %v", err)
+	}
+	return &Event{
+		V:       1,
+		TS:      "2026-06-17T00:00:00",
+		Kind:    KindSessionStatusRecorded,
+		Project: "test",
+		Entity:  EntityRef{Type: "session_status", ID: "0"},
+		Payload: payload,
+	}
+}
+
+func TestExecSessionStatus_SentinelUsesIDDirectly(t *testing.T) {
+	db := newLandingTestDB(t)
+	// A live session whose process does NOT match what we'll send — the
+	// sentinel path must resolve by id, not by pane.
+	if _, err := db.Exec(
+		`INSERT INTO sessions (id, session_id, project_id, state, process, started_at)
+		 VALUES (42, 'sess-42', 1, 'working', '%99', '2026-06-17T00:00:00')`,
+	); err != nil {
+		t.Fatalf("seed session: %v", err)
+	}
+
+	res, err := execSessionStatusRecorded(db, sessionStatusEvent(t, "__session_id=42"))
+	if err != nil {
+		t.Fatalf("execSessionStatusRecorded: %v", err)
+	}
+	if res.SessionStatusID == 0 {
+		t.Fatalf("expected an inserted row, got %+v", res)
+	}
+
+	var sessionID int64
+	if err := db.QueryRow(
+		`SELECT session_id FROM session_statuses WHERE id = ?`,
+		res.SessionStatusID,
+	).Scan(&sessionID); err != nil {
+		t.Fatalf("read inserted row: %v", err)
+	}
+	if sessionID != 42 {
+		t.Errorf("session_id = %d, want 42", sessionID)
+	}
+}
+
+func TestExecSessionStatus_SentinelNonexistentIDErrors(t *testing.T) {
+	db := newLandingTestDB(t)
+	_, err := execSessionStatusRecorded(db, sessionStatusEvent(t, "__session_id=999"))
+	if err == nil {
+		t.Fatal("expected error for non-existent session id, got nil")
+	}
+	if !strings.Contains(err.Error(), "not a live session") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestExecSessionStatus_SentinelEndedIDErrors(t *testing.T) {
+	db := newLandingTestDB(t)
+	// state='ended' rows are not live; the sessions_null_process trigger
+	// nulls process at end-of-life, so seed with NULL process.
+	if _, err := db.Exec(
+		`INSERT INTO sessions (id, session_id, project_id, state, started_at)
+		 VALUES (7, 'sess-7', 1, 'ended', '2026-06-17T00:00:00')`,
+	); err != nil {
+		t.Fatalf("seed session: %v", err)
+	}
+	_, err := execSessionStatusRecorded(db, sessionStatusEvent(t, "__session_id=7"))
+	if err == nil {
+		t.Fatal("expected error for ended session id, got nil")
+	}
+	if !strings.Contains(err.Error(), "not a live session") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestExecSessionStatus_NoSentinelResolvesByPane(t *testing.T) {
+	db := newLandingTestDB(t)
+	if _, err := db.Exec(
+		`INSERT INTO sessions (id, session_id, project_id, state, process, started_at)
+		 VALUES (5, 'sess-5', 1, 'working', '%88', '2026-06-17T00:00:00')`,
+	); err != nil {
+		t.Fatalf("seed session: %v", err)
+	}
+
+	res, err := execSessionStatusRecorded(db, sessionStatusEvent(t, "%88"))
+	if err != nil {
+		t.Fatalf("execSessionStatusRecorded: %v", err)
+	}
+	var sessionID int64
+	if err := db.QueryRow(
+		`SELECT session_id FROM session_statuses WHERE id = ?`,
+		res.SessionStatusID,
+	).Scan(&sessionID); err != nil {
+		t.Fatalf("read inserted row: %v", err)
+	}
+	if sessionID != 5 {
+		t.Errorf("session_id = %d, want 5 (resolved by pane)", sessionID)
+	}
+}
 
 func TestRenderSessionStatusMarkdown_Headline(t *testing.T) {
 	p := &SessionStatusRecordedPayload{Headline: "E-1312 v1 landed."}
