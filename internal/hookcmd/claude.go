@@ -125,6 +125,17 @@ func runClaude(args []string) error {
 		}
 	}
 
+	// Background-agent decoration (E-1568). A bg agent dispatched by
+	// `task spawn --bg` has a sessions row inserted at dispatch with
+	// session_id NULL + short_id (kind_id=2); its real UUID first appears
+	// here. Attach the UUID to that row BEFORE TouchSession runs — TouchSession
+	// keys on session_id and would otherwise INSERT a second, duplicate row
+	// (the dispatch row's session_id is still NULL, so no conflict catches it).
+	// Best-effort: a no-match (race: hook fired before the dispatch INSERT
+	// committed, or a stray CLAUDE_JOB_DIR per research §7 issue #59848) just
+	// falls through to the normal new-row path.
+	decorateBgSession(payload)
+
 	// Per-event session UPSERT (E-1426). Records process + last_activity
 	// and creates the row if absent. Runs on every event so a NULL/stale
 	// `process` self-heals within one tool call (E-1408 / E-1422), and a
@@ -202,7 +213,11 @@ func runClaude(args []string) error {
 		// cwd but represent tool use, not user claim intent; binding
 		// them would create a phantom co-owner. Bind only — does not
 		// flip task status.
-		if payload.AgentID == "" && tmuxSpawnedBy() == "" {
+		// Skipped for background agents (E-1568): their dispatch row
+		// already carries active_task_id/active_epic_id, and the tmux-
+		// oriented bind (process=TMUX_PANE, state flips) is meaningless
+		// for a headless agent — decorateBgSession above is their path.
+		if payload.AgentID == "" && tmuxSpawnedBy() == "" && os.Getenv("CLAUDE_JOB_DIR") == "" {
 			autoBindFromCwd(projectID, payload)
 		}
 		return handleTaskContextInjection(projectID, payload)
@@ -871,6 +886,36 @@ func setTmuxSessionUUID(sessionID string) {
 	_ = exec.Command(
 		"tmux", "set", "-w", "-t", pane, "@endless_session_uuid", sessionID,
 	).Run()
+}
+
+// decorateBgSession attaches this session's real UUID to a background agent's
+// dispatch row (E-1568). A bg agent launched by `claude --bg` runs with
+// CLAUDE_JOB_DIR=~/.claude/jobs/<short_id> (research §6); the basename is the
+// short_id used as the dispatch handle. monitor.DecorateBgSession UPDATEs the
+// matching kind_id=2 row (session_id IS NULL) with payload.SessionID. This must
+// run before TouchSession so the row is keyed by its real UUID before any
+// generic upsert can insert a duplicate. Best-effort: only acts on SessionStart
+// (the one event where the UUID first appears for an undecorated row); a no-
+// match or error just logs and lets the normal session-tracking path proceed.
+func decorateBgSession(payload claudePayload) {
+	if payload.EventName != "SessionStart" {
+		return
+	}
+	jobDir := os.Getenv("CLAUDE_JOB_DIR")
+	if jobDir == "" {
+		return
+	}
+	short := filepath.Base(jobDir)
+	rows, err := monitor.DecorateBgSession(short, payload.SessionID)
+	if err != nil {
+		log.Printf("bg-decorate: short_id %s: %v", short, err)
+		return
+	}
+	if rows == 0 {
+		log.Printf("bg-decorate: no undecorated bg row for short_id %s (falling through to normal tracking)", short)
+		return
+	}
+	log.Printf("bg-decorate: bound session %s to dispatch row short_id %s", payload.SessionID, short)
 }
 
 // tmuxSpawnedBy reads @endless_spawned_by from the current tmux window.

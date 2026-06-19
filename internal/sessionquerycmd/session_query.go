@@ -36,6 +36,11 @@ func Run(args []string) {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
+	case "record-bg-agent":
+		if err := runRecordBgAgent(args[1:]); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
 	case "-h", "--help", "help":
 		usage()
 	default:
@@ -52,6 +57,35 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "  task-text --id <task-id>          raw tasks.text for the task (empty if none)")
 	fmt.Fprintln(os.Stderr, "  ensure-claude-id --session-id <uuid> --project-root <path> [--process <pane>]")
 	fmt.Fprintln(os.Stderr, "                                    look up (or lazy-create) sessions.id; prints integer id")
+	fmt.Fprintln(os.Stderr, "  record-bg-agent --task-id <id> --short-id <handle>")
+	fmt.Fprintln(os.Stderr, "                                    insert a background-agent dispatch row; prints sessions.id")
+}
+
+// runRecordBgAgent inserts the dispatch-time sessions row for a background
+// agent launched by `task spawn --bg` (E-1568). The Python side has the task id
+// (from the spawn target) and the short id (parsed from `claude --bg` stdout);
+// project_id and the epic ancestor are resolved Go-side so the Python flow
+// needs no DB read (E-1486). Prints the inserted sessions.id on success.
+func runRecordBgAgent(args []string) error {
+	fs := flag.NewFlagSet("record-bg-agent", flag.ContinueOnError)
+	taskID := fs.Int64("task-id", 0, "spawn target task id")
+	shortID := fs.String("short-id", "", "dispatch short id from `claude --bg` stdout")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *taskID == 0 {
+		return fmt.Errorf("--task-id is required")
+	}
+	if *shortID == "" {
+		return fmt.Errorf("--short-id is required")
+	}
+
+	id, err := monitor.RecordBgAgentSession(*taskID, *shortID)
+	if err != nil {
+		return err
+	}
+	fmt.Println(id)
+	return nil
 }
 
 // runTaskText prints the raw tasks.text for a task id to stdout, so the Python

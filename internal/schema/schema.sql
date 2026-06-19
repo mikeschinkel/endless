@@ -92,9 +92,20 @@ INSERT OR IGNORE INTO session_kinds (id, slug, label) VALUES
 -- holds the tmux pane id); 'background' rows are headless agents that
 -- legitimately leave process NULL. Defaults to 1 (tmux) for every existing
 -- and foreground-spawned row.
+--
+-- session_id (E-1568): nullable. Background agents (kind_id=2) are dispatched
+-- with session_id NULL because `claude --bg` returns only the short_id at
+-- dispatch; the real UUID arrives later when the bg agent's SessionStart hook
+-- fires and UPDATEs this column (keyed by short_id). UNIQUE treats multiple
+-- NULLs as distinct, so concurrent pending bg rows coexist.
+--
+-- short_id (E-1568): harness-agnostic dispatch handle. For Claude it is the
+-- ~8-hex id from `claude --bg` stdout (`claude attach <short_id>`); future
+-- harnesses reuse the column with their own format. The discriminator for
+-- interpreting it is the existing `platform` column. Unique where NOT NULL.
 CREATE TABLE IF NOT EXISTS sessions (
     id INTEGER PRIMARY KEY,
-    session_id TEXT NOT NULL,
+    session_id TEXT,
     project_id INTEGER,
     platform TEXT NOT NULL DEFAULT 'claude',
     state TEXT NOT NULL DEFAULT 'working',
@@ -111,12 +122,16 @@ CREATE TABLE IF NOT EXISTS sessions (
     hidden INTEGER NOT NULL DEFAULT 0,
     needs_recap INTEGER NOT NULL DEFAULT 0,
     summary_seq INTEGER NOT NULL DEFAULT 0,
+    short_id TEXT,
     UNIQUE (session_id),
     FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL,
     FOREIGN KEY (active_task_id) REFERENCES tasks(id) ON DELETE SET NULL,
     FOREIGN KEY (active_epic_id) REFERENCES tasks(id) ON DELETE SET NULL,
     FOREIGN KEY (kind_id) REFERENCES session_kinds(id)
 );
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_sessions_short_id_unique
+    ON sessions(short_id) WHERE short_id IS NOT NULL;
 
 -- E-1530 invariant: a session in state='ended' has process IS NULL. Code
 -- writes also NULL process at end-of-life (Layer A); these triggers are

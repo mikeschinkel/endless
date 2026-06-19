@@ -152,6 +152,63 @@ def test_render_handoff_unknown_type_falls_back_to_task():
     assert "--status verify" in out
 
 
+def test_render_handoff_bg_variant_omits_tmux_return():
+    """E-1568: the bg variant drops every tmux-specific return instruction a
+    headless agent cannot execute, and tells it to stop when done."""
+    out = render_handoff(
+        spawned_id=1568,
+        title="Add --bg to spawn",
+        return_anchor="%216",
+        spawner_task_id=1564,
+        task_type="task",
+        bg=True,
+    )
+    # No tmux return lines.
+    assert "tmux switch-client" not in out
+    assert "tmux move-window" not in out
+    # The return-anchor pane id never leaks into bg output.
+    assert "%216" not in out
+    # bg-specific framing.
+    assert "headless background agent" in out
+    assert "claude attach" in out
+    # Core workflow rules still present.
+    assert "E-1568" in out
+    assert "STOP and ask" in out
+    assert "--status verify" in out
+    # The "(with the return line above)" parenthetical is gone for bg.
+    assert "return line above" not in out
+
+
+def test_render_handoff_fg_keeps_tmux_return():
+    """Foreground default still carries the tmux return path."""
+    out = render_handoff(
+        spawned_id=1568,
+        title="t",
+        return_anchor="%216",
+        spawner_task_id=1564,
+        task_type="task",
+        bg=False,
+    )
+    assert "tmux switch-client -t %216" in out
+    assert "headless background agent" not in out
+
+
+@pytest.mark.parametrize("ttype", ["task", "bug", "research", "epic"])
+def test_render_handoff_bg_variant_all_types(ttype):
+    """Every per-type template has a working bg branch."""
+    out = render_handoff(
+        spawned_id=2500,
+        title="x",
+        return_anchor="%9",
+        spawner_task_id=1000,
+        task_type=ttype,
+        bg=True,
+    )
+    assert "tmux switch-client" not in out
+    assert "tmux move-window" not in out
+    assert "headless background agent" in out
+
+
 @pytest.mark.parametrize("count", [0, 3])
 def test_render_handoff_includes_child_count_when_nonzero(count):
     _seed_project_and_parent(parent_id=2100, child_count=count)

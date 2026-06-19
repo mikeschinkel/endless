@@ -1501,14 +1501,19 @@ def task_handoff(item_id):
                    "spawning (status → ready/needs_plan based on text "
                    "presence). Use for handoff to a fresh session; "
                    "mutually exclusive with --force.")
-def task_spawn(item_id, project, no_plan, worktree, force, reopen):
-    """Spawn a new tmux window with Claude working on a task.
+@click.option("--bg", is_flag=True,
+              help="Dispatch the agent headless via `claude --bg --name "
+                   "E-<id>` instead of a tmux window. No tmux required; the "
+                   "agent runs in the background and is reachable with "
+                   "`claude attach <short-id>`. Ignores --no-plan.")
+def task_spawn(item_id, project, no_plan, worktree, force, reopen, bg):
+    """Spawn Claude working on a task — a tmux window, or headless with --bg.
 
     Pastes the handoff generated from the template (no stored prompt — E-1469).
     """
     from endless.task_cmd import spawn_plan
     spawn_plan(item_id, project_name=project, no_plan=no_plan,
-               worktree=worktree, force=force, reopen=reopen)
+               worktree=worktree, force=force, reopen=reopen, bg=bg)
 
 
 @task_cmd.command("reopen")

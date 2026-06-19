@@ -3503,7 +3503,8 @@ def render_handoff(spawned_id: int, title: str,
                    spawner_task_id: int | None,
                    worktree_path: str | None = None,
                    branch: str | None = None,
-                   task_type: str | None = None) -> str:
+                   task_type: str | None = None,
+                   bg: bool = False) -> str:
     """Render the spawn handoff for a task by invoking `endless-go template render`.
 
     The handoff is mostly boilerplate (orient, read the guide + plan, default
@@ -3517,6 +3518,13 @@ def render_handoff(spawned_id: int, title: str,
     unknown or null `task_type` falls back to the task variant. The child
     count is universal — per E-1552, every variant includes a conditional
     line naming the count when nonzero.
+
+    `bg=True` (E-1568) renders the background-agent variant of each template:
+    a headless `claude --bg` agent has no spawning pane to return to and no
+    tmux window to move, so the `{{if .bg}}` branch in each template drops the
+    `tmux switch-client`/`tmux move-window` return lines and instead tells the
+    agent to do the work, flip the task to `verify`, and stop (the user attaches
+    later via `claude attach <short_id>`).
     """
     import json
     import subprocess
@@ -3537,6 +3545,7 @@ def render_handoff(spawned_id: int, title: str,
         "worktree_path": worktree_path or "<task worktree>",
         "branch": branch or "<task branch>",
         "child_count": child_count,
+        "bg": bg,
     }
     binary = _resolve_endless_go()
     result = subprocess.run(
@@ -3597,7 +3606,7 @@ def _spawn_window_name(project_name: str, title: str, item_id: int) -> str:
 
 def spawn_plan(item_id: int, project_name: str | None = None, no_plan: bool = False,
                worktree: str | None = None, force: bool = False,
-               reopen: bool = False):
+               reopen: bool = False, bg: bool = False):
     """Spawn a new tmux window with Claude working on a task's prompt.
 
     Pre-claims the task (status flip + worktree creation) BEFORE launching
@@ -3611,6 +3620,13 @@ def spawn_plan(item_id: int, project_name: str | None = None, no_plan: bool = Fa
     target as a pre-step (status → `ready`/`needs_plan` based on text
     presence) before proceeding with spawn. Errors on non-terminal or
     decision-bearing (`declined`/`obsolete`) statuses.
+
+    `bg=True` (E-1568) dispatches the agent headless via `claude --bg --name
+    E-<id>` instead of a tmux window. No tmux is required; the same done-ish
+    gate, pre-claim, and worktree creation run first. The dispatch row is
+    written with session_id NULL + the short id parsed from `claude --bg`
+    stdout; the agent's SessionStart hook fills in the real UUID later. `--bg`
+    ignores `--no-plan` (headless agents have no `/plan` slash concept).
     """
     import shutil
     import subprocess
@@ -3623,14 +3639,16 @@ def spawn_plan(item_id: int, project_name: str | None = None, no_plan: bool = Fa
             "to in_progress (self-pickup intent). Pick one."
         )
 
-    # Verify tmux is available and we're in a tmux session
-    if not shutil.which("tmux"):
-        raise click.ClickException("tmux is not installed")
-    if not os.environ.get("TMUX"):
-        raise click.ClickException(
-            "Not in a tmux session. "
-            "endless spawn requires tmux."
-        )
+    # tmux is the delivery surface for the foreground path only; a `--bg`
+    # agent is headless, so the tmux requirement is bypassed for it.
+    if not bg:
+        if not shutil.which("tmux"):
+            raise click.ClickException("tmux is not installed")
+        if not os.environ.get("TMUX"):
+            raise click.ClickException(
+                "Not in a tmux session. "
+                "endless spawn requires tmux."
+            )
 
     # Get the plan item
     row = db.query(
@@ -3724,6 +3742,20 @@ def spawn_plan(item_id: int, project_name: str | None = None, no_plan: bool = Fa
 
     if cd_target is None:
         cd_target = str(wt_path)
+
+    # E-1568: background dispatch. Diverges from the tmux flow entirely — no
+    # window, no send-keys, no plan-mode paste. Render the bg handoff variant,
+    # launch `claude --bg --name E-<id>` with the handoff as positional argv,
+    # parse the short id from stdout, and record the dispatch row.
+    if bg:
+        _spawn_bg_dispatch(
+            item_id=item_id,
+            title=title,
+            cd_target=cd_target,
+            task_type=item["type_slug"] or None,
+            worktree_override=worktree is not None,
+        )
+        return
 
     # Spawner identity for the @endless_spawned_by marker. Prefer the
     # current Endless session id; fall back to a pid-prefixed value so
@@ -3835,6 +3867,94 @@ def spawn_plan(item_id: int, project_name: str | None = None, no_plan: bool = Fa
     click.echo(
         f"  Switch to it: tmux select-window -t {window_name}"
     )
+
+
+# First stdout line of `claude --bg`:  "backgrounded · <short-id> · <name>"
+# (`·` is U+00B7; no ANSI codes per docs/research-2026-06-12-claude-background-
+# agents.md §2). The short id is the dispatch handle used by `claude attach`.
+_BG_SHORT_ID_RE = re.compile(r"^backgrounded\s+·\s+([0-9a-f]+)\s+·\s+", re.M)
+
+
+def _parse_bg_short_id(stdout: str) -> str | None:
+    """Extract the dispatch short id from `claude --bg` stdout, or None."""
+    m = _BG_SHORT_ID_RE.search(stdout)
+    return m.group(1) if m else None
+
+
+def _spawn_bg_dispatch(item_id: int, title: str, cd_target: str,
+                       task_type: str | None, worktree_override: bool):
+    """Dispatch a background agent for an already-pre-claimed task (E-1568).
+
+    Renders the bg handoff variant, launches `claude --bg --name E-<id>` with
+    the handoff as a positional argv (well under ARG_MAX), parses the short id
+    from stdout, and records the dispatch sessions row (session_id NULL +
+    short_id, kind background) via the `session-query record-bg-agent` Go
+    helper. The agent's SessionStart hook attaches the real UUID later.
+    """
+    import subprocess
+    from endless import config
+    from endless.event_bridge import _resolve_endless_go
+
+    # No spawning pane / origin return for a headless agent — the bg template
+    # branch omits the tmux return lines, so return_anchor is unused.
+    handoff_text = render_handoff(
+        item_id, title, None,
+        _current_session_active_task_id(),
+        worktree_path=cd_target,
+        branch=_branch_for_worktree(cd_target),
+        task_type=task_type,
+        bg=True,
+    )
+
+    claude_bin = os.path.expanduser("~/.local/bin/claude")
+    if not os.path.exists(claude_bin):
+        claude_bin = "claude"
+
+    try:
+        result = subprocess.run(
+            [claude_bin, "--bg", "--name", f"E-{item_id}", handoff_text],
+            cwd=cd_target, capture_output=True, text=True,
+        )
+    except FileNotFoundError as e:
+        raise click.ClickException(f"claude not found: {e}")
+    if result.returncode != 0:
+        raise click.ClickException(
+            f"claude --bg failed (exit {result.returncode}):\n"
+            f"{result.stderr.strip() or result.stdout.strip()}"
+        )
+
+    short_id = _parse_bg_short_id(result.stdout)
+    if not short_id:
+        # Never proceed with a missing handle — the dispatch row would be
+        # un-attachable and un-decoratable.
+        raise click.ClickException(
+            "could not parse the dispatch short id from `claude --bg` stdout:\n"
+            f"{result.stdout.strip()}"
+        )
+
+    # Write the dispatch row Go-side (resolves project_id + epic ancestor;
+    # no Python DB read, per E-1486).
+    binary = _resolve_endless_go()
+    rec = subprocess.run(
+        [binary, *config.go_db_context_args(),
+         "session-query", "record-bg-agent",
+         "--task-id", str(item_id), "--short-id", short_id],
+        capture_output=True, text=True,
+    )
+    if rec.returncode != 0:
+        raise click.ClickException(
+            f"recording bg-agent session failed: {rec.stderr.strip()}"
+        )
+
+    click.echo(
+        click.style("•", fg="cyan")
+        + " Backgrounded "
+        + click.style(f"{task_id_display(item_id)}: {title}", bold=True)
+        + f" as {short_id}"
+    )
+    if worktree_override:
+        click.echo(f"  cwd: {cd_target}")
+    click.echo(f"  Attach: claude attach {short_id}")
 
 
 def search_tasks(

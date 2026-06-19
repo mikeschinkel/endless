@@ -1,6 +1,8 @@
 package monitor
 
 import (
+	"database/sql"
+	"errors"
 	"fmt"
 	"os"
 	"time"
@@ -321,6 +323,111 @@ func EnsureClaudeSessionID(sessionID, process string, projectID int64) (int64, e
 		return 0, fmt.Errorf("lookup sessions.id for %s: %w", sessionID, err)
 	}
 	return id, nil
+}
+
+// RecordBgAgentSession inserts the dispatch-time row for a background agent
+// (E-1568). The Python `task spawn --bg` flow calls this (via the
+// `session-query record-bg-agent` helper) right after `claude --bg` returns a
+// short id but before the bg agent's SessionStart hook fires. The row carries:
+//   - session_id NULL    — the real UUID does not exist yet; SessionStart
+//                          UPDATEs it later via DecorateBgSession, keyed by
+//                          short_id.
+//   - kind_id = 2        — background.
+//   - active_epic_id     — nearest type='epic' ancestor of taskID (NULL if none).
+//   - process NULL       — bg agents have no tmux pane.
+//
+// project_id and the epic ancestor are resolved here in Go (not Python) to
+// avoid a new Python DB read (E-1486). Returns the inserted sessions.id.
+func RecordBgAgentSession(taskID int64, shortID string) (int64, error) {
+	if shortID == "" {
+		return 0, fmt.Errorf("record bg agent session: short_id required")
+	}
+	db, err := DB()
+	if err != nil {
+		return 0, err
+	}
+
+	// project_id is nullable on both tasks and sessions; a nil pointer inserts
+	// NULL rather than 0 (which would be a dangling FK to projects).
+	var projectID *int64
+	if err = db.QueryRow(
+		"SELECT project_id FROM tasks WHERE id=?", taskID,
+	).Scan(&projectID); err != nil {
+		return 0, fmt.Errorf("resolve project for E-%d: %w", taskID, err)
+	}
+
+	epicID, err := nearestEpicAncestor(db, taskID)
+	if err != nil {
+		return 0, err
+	}
+
+	now := time.Now().UTC().Format("2006-01-02T15:04:05")
+	res, err := db.Exec(
+		`INSERT INTO sessions
+		   (session_id, project_id, platform, state, active_task_id, active_epic_id, kind_id, short_id, started_at, last_activity)
+		 VALUES (NULL, ?, 'claude', 'working', ?, ?, ?, ?, ?, ?)`,
+		projectID, taskID, epicID, int64(sessionkind.SessionKindBackground), shortID, now, now,
+	)
+	if err != nil {
+		return 0, fmt.Errorf("insert bg agent session for E-%d: %w", taskID, err)
+	}
+	return res.LastInsertId()
+}
+
+// nearestEpicAncestor walks up tasks.parent_id from taskID and returns the id
+// of the nearest ancestor whose type is 'epic', or nil if none. taskID itself
+// is included in the walk (depth 0), so dispatching an epic task directly
+// returns its own id.
+func nearestEpicAncestor(db *sql.DB, taskID int64) (*int64, error) {
+	const q = `
+		WITH RECURSIVE ancestry(id, parent_id, type_id, depth) AS (
+			SELECT id, parent_id, type_id, 0 FROM tasks WHERE id = ?
+			UNION ALL
+			SELECT t.id, t.parent_id, t.type_id, a.depth + 1
+			FROM tasks t JOIN ancestry a ON t.id = a.parent_id
+		)
+		SELECT a.id
+		FROM ancestry a
+		JOIN task_types tt ON tt.id = a.type_id
+		WHERE tt.slug = 'epic'
+		ORDER BY a.depth
+		LIMIT 1`
+	var epicID int64
+	err := db.QueryRow(q, taskID).Scan(&epicID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("resolve epic ancestor for E-%d: %w", taskID, err)
+	}
+	return &epicID, nil
+}
+
+// DecorateBgSession attaches the real session UUID to a background agent's
+// dispatch row once its SessionStart hook fires (E-1568). The row was inserted
+// by RecordBgAgentSession with session_id NULL and a short_id; this UPDATEs
+// session_id (and bumps last_activity), keyed by short_id and scoped to
+// still-undecorated background rows. Returns the number of rows affected — 0
+// means no matching dispatch row, so the caller falls through to the normal
+// new-row path defensively.
+func DecorateBgSession(shortID, sessionID string) (int64, error) {
+	if shortID == "" || sessionID == "" {
+		return 0, fmt.Errorf("decorate bg session: short_id and session_id required")
+	}
+	db, err := DB()
+	if err != nil {
+		return 0, err
+	}
+	now := time.Now().UTC().Format("2006-01-02T15:04:05")
+	res, err := db.Exec(
+		`UPDATE sessions SET session_id=?, last_activity=?
+		 WHERE short_id=? AND kind_id=? AND session_id IS NULL`,
+		sessionID, now, shortID, int64(sessionkind.SessionKindBackground),
+	)
+	if err != nil {
+		return 0, fmt.Errorf("decorate bg session %s: %w", shortID, err)
+	}
+	return res.RowsAffected()
 }
 
 // CompleteTask marks a task as confirmed and clears the session's active task.
