@@ -1506,14 +1506,36 @@ def task_handoff(item_id):
                    "E-<id>` instead of a tmux window. No tmux required; the "
                    "agent runs in the background and is reachable with "
                    "`claude attach <short-id>`. Ignores --no-plan.")
-def task_spawn(item_id, project, no_plan, worktree, force, reopen, bg):
+@click.option("--attach", is_flag=True,
+              help="Open a NEW tmux window onto the task's already-live "
+                   "background agent (via `claude attach`). Does NOT dispatch; "
+                   "requires an existing --bg agent. Mutually exclusive with "
+                   "--bg. Detaching leaves the agent running.")
+def task_spawn(item_id, project, no_plan, worktree, force, reopen, bg, attach):
     """Spawn Claude working on a task — a tmux window, or headless with --bg.
 
     Pastes the handoff generated from the template (no stored prompt — E-1469).
     """
     from endless.task_cmd import spawn_plan
     spawn_plan(item_id, project_name=project, no_plan=no_plan,
-               worktree=worktree, force=force, reopen=reopen, bg=bg)
+               worktree=worktree, force=force, reopen=reopen, bg=bg,
+               attach=attach)
+
+
+@task_cmd.command("attach")
+@click.argument("item_id", type=TASK_ID)
+@click.option("--force", is_flag=True,
+              help="Proceed even when run inside a Claude session "
+                   "(CLAUDECODE=1). The exec replaces the current process, so "
+                   "this kills the calling coordinator/session.")
+def task_attach(item_id, force):
+    """Drop the current shell into a task's running background agent.
+
+    Execs `claude attach <short-id>` in place — the calling process is replaced.
+    Run from a fresh shell. Detaching leaves the background agent running.
+    """
+    from endless.task_cmd import task_attach_impl
+    task_attach_impl(item_id, force=force)
 
 
 @task_cmd.command("reopen")

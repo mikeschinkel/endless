@@ -3604,9 +3604,42 @@ def _spawn_window_name(project_name: str, title: str, item_id: int) -> str:
     return f"{project_name}_{slug}[{task_id_display(item_id)}]"
 
 
+def _claude_binary() -> str:
+    """Resolve the `claude` binary path, avoiding shell function wrappers.
+
+    Prefers `~/.local/bin/claude` if present (the canonical install location),
+    else falls back to `claude` on PATH. Shared by the foreground spawn flow,
+    the `--bg` dispatch flow, and the attach verbs (E-1570).
+    """
+    claude_bin = os.path.expanduser("~/.local/bin/claude")
+    if not os.path.exists(claude_bin):
+        claude_bin = "claude"
+    return claude_bin
+
+
+def _lookup_bg_short_id(task_id: int) -> str | None:
+    """Return the short id of the live background agent for a task, or None.
+
+    Single source of truth for both attach verbs (E-1570). Matches the row
+    written by `--bg` dispatch: a `working` session of kind `background`
+    bound to this task. The `session_kinds` subselect keeps the lookup
+    resolving even if the seed row id ever changes. ORDER BY id DESC LIMIT 1
+    returns the most recent dispatch if more than one exists.
+    """
+    rows = db.query(
+        "SELECT short_id FROM sessions "
+        "WHERE active_task_id = ? "
+        "AND kind_id = (SELECT id FROM session_kinds WHERE slug = 'background') "
+        "AND state = 'working' "
+        "ORDER BY id DESC LIMIT 1",
+        (task_id,),
+    )
+    return rows[0]["short_id"] if rows else None
+
+
 def spawn_plan(item_id: int, project_name: str | None = None, no_plan: bool = False,
                worktree: str | None = None, force: bool = False,
-               reopen: bool = False, bg: bool = False):
+               reopen: bool = False, bg: bool = False, attach: bool = False):
     """Spawn a new tmux window with Claude working on a task's prompt.
 
     Pre-claims the task (status flip + worktree creation) BEFORE launching
@@ -3627,10 +3660,24 @@ def spawn_plan(item_id: int, project_name: str | None = None, no_plan: bool = Fa
     written with session_id NULL + the short id parsed from `claude --bg`
     stdout; the agent's SessionStart hook fills in the real UUID later. `--bg`
     ignores `--no-plan` (headless agents have no `/plan` slash concept).
+
+    `attach=True` (E-1570) is a view modifier, not a dispatcher: it opens a NEW
+    tmux window running `claude attach <short-id>` against the task's already
+    live background agent. It requires a `--bg` row to exist (does NOT dispatch)
+    and is mutually exclusive with `--bg`. Detaching the attached window leaves
+    the background agent running.
     """
     import shutil
     import subprocess
     import tempfile
+
+    if attach and bg:
+        raise click.ClickException(
+            "--attach and --bg are mutually exclusive: --bg dispatches a new "
+            "background agent, --attach opens a window onto an existing one. "
+            "To do both, run `endless task spawn --bg` then "
+            "`endless task spawn --attach`."
+        )
 
     if reopen and force:
         raise click.ClickException(
@@ -3669,6 +3716,46 @@ def spawn_plan(item_id: int, project_name: str | None = None, no_plan: bool = Fa
 
     title = item["title"]
     current_status = item["status"]
+
+    # E-1570: --attach is a view modifier. It opens a NEW tmux window onto the
+    # task's already-live background agent (via `claude attach`); it does NOT
+    # pre-claim, dispatch, or render a handoff. Branch here, after the task
+    # lookup (needed for the window name) and the tmux gate above.
+    if attach:
+        short_id = _lookup_bg_short_id(item_id)
+        if not short_id:
+            raise click.ClickException(
+                f"{task_id_display(item_id)} has no live bg agent. Dispatch "
+                f"with `endless task spawn --bg {task_id_display(item_id)}` "
+                f"first."
+            )
+        window_name = _spawn_window_name(
+            item["project_name"], title, item_id,
+        )
+        subprocess.run(
+            ["tmux", "new-window", "-n", window_name],
+            check=True,
+        )
+        # Diagnostic only; not load-bearing for the attach itself.
+        subprocess.run(
+            ["tmux", "set", "-w", "-t", window_name,
+             "@endless_attached_short_id", short_id],
+            check=True,
+        )
+        subprocess.run(
+            ["tmux", "send-keys", "-t", window_name,
+             f"{_claude_binary()} attach {short_id}", "Enter"],
+            check=True,
+        )
+        click.echo(
+            click.style("•", fg="cyan")
+            + f" Attached window '{window_name}' to bg agent "
+            + click.style(f"{task_id_display(item_id)}: {title}", bold=True)
+            + f" ({short_id})"
+        )
+        click.echo(f"  Switch to it: tmux select-window -t {window_name}")
+        click.echo("  Detach (leaves the agent running): ← or Ctrl+Z")
+        return
 
     # --worktree overrides the cd target so the spawned session reads
     # .claude/settings.json from the worktree (worktree-local hook override
@@ -3815,9 +3902,7 @@ def spawn_plan(item_id: int, project_name: str | None = None, no_plan: bool = Fa
     )
 
     # Launch claude (use binary directly to avoid shell function wrappers)
-    claude_bin = os.path.expanduser("~/.local/bin/claude")
-    if not os.path.exists(claude_bin):
-        claude_bin = "claude"
+    claude_bin = _claude_binary()
     subprocess.run(
         ["tmux", "send-keys", "-t", window_name,
          claude_bin, "Enter"],
@@ -3906,9 +3991,7 @@ def _spawn_bg_dispatch(item_id: int, title: str, cd_target: str,
         bg=True,
     )
 
-    claude_bin = os.path.expanduser("~/.local/bin/claude")
-    if not os.path.exists(claude_bin):
-        claude_bin = "claude"
+    claude_bin = _claude_binary()
 
     try:
         result = subprocess.run(
@@ -3955,6 +4038,44 @@ def _spawn_bg_dispatch(item_id: int, title: str, cd_target: str,
     if worktree_override:
         click.echo(f"  cwd: {cd_target}")
     click.echo(f"  Attach: claude attach {short_id}")
+
+
+def task_attach_impl(item_id: int, force: bool = False):
+    """Replace the current process with `claude attach` for a task's bg agent.
+
+    The `attach` verb (E-1570) is meant to be run from a fresh shell: it execs
+    `claude attach <short-id>` in place, so the calling process is GONE on
+    success (no return). Detaching the attached view leaves the bg agent
+    running.
+
+    Refuses (unless --force) when run inside a Claude session
+    (`CLAUDECODE == "1"`), because the exec would replace — and thus kill — the
+    caller's own Claude/coordinator process.
+
+    Go-port note: this becomes `exec.LookPath("claude")` +
+    `syscall.Exec(path, ["claude", "attach", short_id], os.Environ())`; POSIX
+    execve semantics are identical, only PATH lookup becomes explicit.
+    """
+    short_id = _lookup_bg_short_id(item_id)
+    if not short_id:
+        raise click.ClickException(
+            f"{task_id_display(item_id)} has no live bg agent."
+        )
+
+    if os.environ.get("CLAUDECODE") == "1" and not force:
+        click.echo(
+            click.style(
+                "You are inside a Claude session. `endless task attach` "
+                "replaces the current process; you will lose this session.\n"
+                "Re-run with --force to proceed, or open a fresh terminal.",
+                fg="red",
+            ),
+            err=True,
+        )
+        raise SystemExit(1)
+
+    # Replaces this process; nothing after this line runs on success.
+    os.execvp("claude", ["claude", "attach", short_id])
 
 
 def search_tasks(
