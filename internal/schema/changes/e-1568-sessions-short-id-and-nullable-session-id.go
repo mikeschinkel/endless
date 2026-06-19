@@ -9,7 +9,14 @@
 // inserted with session_id NULL + short_id set, and SessionStart later UPDATEs
 // session_id to the real UUID (keyed by short_id). That requires:
 //
-//   1. short_id TEXT — new, unique where NOT NULL.
+//   1. short_id TEXT — new, with an inline UNIQUE (short_id) constraint. SQLite
+//      treats each NULL as distinct, so every tmux/foreground row (short_id
+//      NULL) coexists while non-NULL handles stay unique — the same semantics a
+//      partial `... WHERE short_id IS NOT NULL` index would give, but inline so
+//      schema.sql stays a no-op on a pre-E-1568 DB (a standalone index would
+//      error there: CREATE TABLE IF NOT EXISTS skips the old table, leaving no
+//      short_id column for the index to reference, and apply-change opens
+//      monitor.DB() — applying schema.sql — before running this change).
 //   2. session_id TEXT — drop NOT NULL (keep UNIQUE; SQLite treats NULLs as
 //      distinct, so multiple pending bg rows coexist).
 //
@@ -66,6 +73,7 @@ func main() {
 				summary_seq INTEGER NOT NULL DEFAULT 0,
 				short_id TEXT,
 				UNIQUE (session_id),
+				UNIQUE (short_id),
 				FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL,
 				FOREIGN KEY (active_task_id) REFERENCES tasks(id) ON DELETE SET NULL,
 				FOREIGN KEY (active_epic_id) REFERENCES tasks(id) ON DELETE SET NULL,
@@ -99,8 +107,6 @@ func main() {
 				BEGIN
 					UPDATE sessions SET process = NULL WHERE id = NEW.id;
 				END`,
-			`CREATE UNIQUE INDEX idx_sessions_short_id_unique
-				ON sessions(short_id) WHERE short_id IS NOT NULL`,
 		}
 		for _, s := range stmts {
 			if _, err := tx.Exec(s); err != nil {

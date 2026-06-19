@@ -102,7 +102,18 @@ INSERT OR IGNORE INTO session_kinds (id, slug, label) VALUES
 -- short_id (E-1568): harness-agnostic dispatch handle. For Claude it is the
 -- ~8-hex id from `claude --bg` stdout (`claude attach <short_id>`); future
 -- harnesses reuse the column with their own format. The discriminator for
--- interpreting it is the existing `platform` column. Unique where NOT NULL.
+-- interpreting it is the existing `platform` column. The UNIQUE (short_id)
+-- constraint enforces uniqueness on non-NULL handles while allowing many NULLs
+-- (every tmux/foreground row leaves it NULL): SQLite treats each NULL as
+-- distinct for UNIQUE. It is an inline table constraint rather than a separate
+-- `CREATE UNIQUE INDEX ... WHERE short_id IS NOT NULL` ON PURPOSE — schema.sql
+-- is re-applied on every monitor.DB() connection, including against a
+-- pre-E-1568 DB (e.g. inside `endless db apply-change` before the e-1568 change
+-- file has rebuilt the table). A standalone index statement referencing
+-- short_id would error there ("no such column") because the CREATE TABLE IF NOT
+-- EXISTS above no-ops on the existing old table. An inline constraint lives
+-- entirely inside that skipped CREATE TABLE, so schema.sql stays a clean no-op
+-- on old DBs and the change file installs the real constraint at land time.
 CREATE TABLE IF NOT EXISTS sessions (
     id INTEGER PRIMARY KEY,
     session_id TEXT,
@@ -124,14 +135,12 @@ CREATE TABLE IF NOT EXISTS sessions (
     summary_seq INTEGER NOT NULL DEFAULT 0,
     short_id TEXT,
     UNIQUE (session_id),
+    UNIQUE (short_id),
     FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL,
     FOREIGN KEY (active_task_id) REFERENCES tasks(id) ON DELETE SET NULL,
     FOREIGN KEY (active_epic_id) REFERENCES tasks(id) ON DELETE SET NULL,
     FOREIGN KEY (kind_id) REFERENCES session_kinds(id)
 );
-
-CREATE UNIQUE INDEX IF NOT EXISTS idx_sessions_short_id_unique
-    ON sessions(short_id) WHERE short_id IS NOT NULL;
 
 -- E-1530 invariant: a session in state='ended' has process IS NULL. Code
 -- writes also NULL process at end-of-life (Layer A); these triggers are
