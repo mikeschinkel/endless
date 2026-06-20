@@ -4720,27 +4720,35 @@ def _flatten_relations(item_id: int) -> list[dict]:
     directional, lower-cased relation label, for the unified 'Links:' rendering (E-1477)."""
     flat: list[dict] = []
     for display_name, items in get_all_relations(item_id).items():
-        rel = RELATION_LABELS.get(display_name, display_name).lower()
+        rel_label = RELATION_LABELS.get(display_name, display_name)
+        rel = rel_label.lower()
         for d in items:
-            flat.append({"id": d["id"], "rel": rel, "status": d["status"]})
+            flat.append(
+                {"id": d["id"], "rel": rel, "rel_label": rel_label,
+                 "status": d["status"]})
     flat.sort(key=lambda r: r["id"])
     return flat
 
 
 def _echo_links_section(item_id: int) -> bool:
-    """Emit the unified multi-line 'Links:' section (E-1477): a cyan 'Links:' heading,
-    then one indented, colored row per relation (id-ascending) — 'E-NNN (relation
-    type) [status]'. Titles are intentionally omitted to keep every row on one line.
-    Emits nothing and returns False when the task has no relations; returns True
-    otherwise. Shared by task show/detail and relations/deps so both render identically."""
+    """Emit the unified multi-line links section (E-1576): a cyan 'This task:' heading,
+    then one indented, colored row per relation (id-ascending) — '<Relation phrase>:
+    E-NNN [status]'. The heading supplies the subject and the leading directional phrase
+    (Blocks / Blocked by / Cleans up / Cleaned up by / …) carries the full direction, so
+    the row reads as a sentence about the current task. Phrases are left-aligned in a
+    fixed column so the ids line up. Titles are intentionally omitted to keep every row
+    on one line. Emits nothing and returns False when the task has no relations; returns
+    True otherwise. Shared by task show/detail and relations/deps so both render identically."""
     links = _flatten_relations(item_id)
     if not links:
         return False
-    click.echo(click.style("Links:", fg="cyan"))
+    width = max(len(r["rel_label"]) for r in links) + 1 + 2  # ':' + two trailing spaces
+    click.echo(click.style("This task:", fg="cyan"))
     for r in links:
         color = "green" if r["status"] in _RELATION_TERMINAL_STATUSES else "yellow"
+        label = (r["rel_label"] + ":").ljust(width)
         click.echo(
-            f"  {task_id_display(r['id'])} ({r['rel']}) "
+            f"  {label}{task_id_display(r['id'])} "
             f"[{click.style(r['status'], fg=color)}]")
     return True
 

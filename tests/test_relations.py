@@ -431,6 +431,9 @@ def test_flatten_relations_id_ascending_directional(isolated_env):
     assert (b, "blocks") in pairs
     assert (b, "relates to") in pairs
     assert (c, "blocked by") in pairs
+    # E-1576: each entry also carries the proper-cased directional phrase
+    labels = {(r["id"], r["rel_label"]) for r in flat}
+    assert (c, "Blocked by") in labels
 
 
 def test_task_show_renders_links_section(isolated_env):
@@ -444,14 +447,14 @@ def test_task_show_renders_links_section(isolated_env):
     task_cmd.link_tasks(c, a, "blocks")        # A blocked_by C
 
     out = _invoke("task", "show", str(a))
-    assert "Links:" in out
-    assert f"E-{b} (blocks) [ready]" in out
-    assert f"E-{c} (blocked by) [confirmed]" in out
+    assert "This task:" in out                      # E-1576: subject heading
+    assert f"Blocks:" in out and f"E-{b} [ready]" in out
+    assert f"Blocked by:" in out and f"E-{c} [confirmed]" in out
     assert "Distinctive beta title" not in out      # titles omitted from rows
     assert "Distinctive gamma title" not in out
-    assert "Blocks:" not in out                     # old per-type headings gone
-    assert "Blocked by:" not in out
-    assert out.index("Created:") < out.index("Links:")  # multi-line block sits last
+    assert "(blocks)" not in out                    # old parenthetical format gone
+    assert "(blocked by)" not in out
+    assert out.index("Created:") < out.index("This task:")  # multi-line block sits last
 
 
 def test_task_show_llm_links_line(isolated_env):
@@ -476,11 +479,13 @@ def test_task_relations_renders_links_section(isolated_env):
     task_cmd.link_tasks(a, b, "relates_to")
 
     out = _invoke("task", "relations", str(a))
-    assert "Links:" in out
-    assert f"E-{b} (blocks) [ready]" in out
-    assert f"E-{b} (relates to) [ready]" in out
+    assert "This task:" in out                  # E-1576: subject heading
+    assert "Blocks:" in out
+    assert "Relates to:" in out
+    assert f"E-{b} [ready]" in out
     assert "Distinctive beta title" not in out  # title omitted
-    assert "Relates to:" not in out             # old per-type heading gone
+    assert "(blocks)" not in out                # old parenthetical format gone
+    assert "(relates to)" not in out
 
 
 def test_task_relations_llm_links_line(isolated_env):

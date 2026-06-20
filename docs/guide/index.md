@@ -73,7 +73,7 @@ When task A is blocked by task B (`endless task block A --by B`):
 - B in `confirmed` or `assumed` → A is **unblocked**.
 - B in `declined` or `obsolete` → A is **unblocked**.
 
-In `task show`, blocking relations appear in the **Links:** section: `(blocked by)` for a task that blocks this one and `(blocks)` for a task this one blocks, each tagged with the related task's `[status]` — which tells you whether a blocker is still active (e.g. `verify`) or resolved (`confirmed`/`assumed`).
+In `task show`, blocking relations appear in the **This task:** section, where each row opens with a directional phrase that names what the current task does: a `Blocked by:` row points to a task that blocks this one, a `Blocks:` row points to a task this one blocks, each tagged with the related task's `[status]` — which tells you whether a blocker is still active (e.g. `verify`) or resolved (`confirmed`/`assumed`).
 
 ## Common patterns
 
