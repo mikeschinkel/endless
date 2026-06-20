@@ -140,4 +140,4 @@ endless sql "SELECT id, session_id, active_task_id, headline, created_at
 
 ## Post-mortem
 
-If there was anything about your recording of this session which felt like there was no place to capture it, or if you had to capture it in a sub-optimal place, or if you have any other suggestions about how to improve process of recording session status then please add a task to review it. Add your suggestions to the tasks.analysis field. Use `endless sql` since `endless task add` nor `endless task update` have an --analysis flag yet. And please also tell the user that you added the task.
+If there was anything about your recording of this session which felt like there was no place to capture it, or if you had to capture it in a sub-optimal place, or if you have any other suggestions about how to improve process of recording session status then please add a task to review it. Add your suggestions to the tasks.analysis field via `endless task update <id> --analysis '<text>'` (or `--analysis-file <path>` for long content). And please also tell the user that you added the task.
