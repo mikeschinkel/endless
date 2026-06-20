@@ -15,7 +15,17 @@ You're the coordinator on this epic. Don't implement directly — draft plans, d
 1. Run `endless guide` to learn the Endless workflow.
 2. Run `endless task show E-{{.spawned_id}} --text --db main` to read the plan.
 3. Read the children: `endless task show E-{{.spawned_id}} --children` — these are the units of work to dispatch and verify.
-{{/* E-1567: inject children-state breakdown here */}}
+
+Children: {{.children_state}}.
+
+Pick your operational mode from that breakdown:
+- **Zero children** — drive decomposition: plan-mode + AskUserQuestion + parallel Explore sub-agents.
+- **All `needs_plan`** — planning orchestrator: draft the children's plans inline.
+- **All `ready`** — dispatcher: fan out via `endless task spawn --bg <child-id>`.
+- **All `in_progress`** — observe; no dispatch.
+- **All terminal** — ask whether to reopen.
+- **Mixed** — surface the breakdown and ask the user.
+
 4. Stay focused on E-{{.spawned_id}}. File unrelated discoveries as new tasks
    (`--cleans-up E-{{.spawned_id}}`) and confirm before implementing them — don't fix them inline.
 5. If anything is ambiguous, the plan is insufficient, or you hit a design choice the plan
@@ -23,10 +33,6 @@ You're the coordinator on this epic. Don't implement directly — draft plans, d
 6. When all children are `confirmed`/`assumed`: `endless task update E-{{.spawned_id}} --status completed --db main`, then tell
    me. Don't mark the epic complete while children are still open.
 7. Don't run `endless worktree land`/`drop` without asking.
-{{- if .child_count}}
-
-This task has {{.child_count}} children — read them with `endless task show E-{{.spawned_id}} --children`.
-{{- end}}
 
 {{if .bg -}}
 Final message: a 1–2 sentence summary and the state of the children. You're a background agent — just stop when done; the user reads this with `claude attach`.

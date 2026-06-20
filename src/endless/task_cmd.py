@@ -3508,6 +3508,62 @@ def _branch_for_worktree(wt_path) -> str | None:
 
 _HANDOFF_TYPES = frozenset({"task", "bug", "research", "epic"})
 
+# Terminal statuses collapse into a single "terminal" bucket in the
+# children-state breakdown (E-1567). Covers every status a finished child
+# can hold: task/bug land on confirmed/assumed, research/epic land on
+# completed (E-1577/E-1537 §3), and obsolete/declined are universal
+# terminals.
+_TERMINAL_STATUSES = frozenset(
+    {"confirmed", "assumed", "completed", "declined", "obsolete"}
+)
+
+# Display order for the children-state breakdown: lifecycle progression of
+# the in-flight statuses, then the collapsed terminal bucket last. Every
+# valid task status maps to one of these buckets so no child is silently
+# dropped and the "(N total)" suffix always reconciles with the child count.
+_CHILDREN_STATE_ORDER = (
+    "needs_plan",
+    "ready",
+    "in_progress",
+    "blocked",
+    "revisit",
+    "verify",
+    "terminal",
+)
+
+
+def _children_state(parent_id: int) -> str:
+    """Return a pre-formatted children-state breakdown for an epic handoff.
+
+    Groups the task's direct children by status, collapses all terminal
+    statuses into a single ``terminal`` bucket, and renders the non-empty
+    buckets in lifecycle order followed by a total, e.g.
+    ``"2 needs_plan, 3 ready, 1 in_progress, 4 terminal (10 total)"``.
+    A single bucket still gets the total: ``"3 ready (3 total)"``. With no
+    children it returns ``"no children yet"``. See E-1567.
+    """
+    rows = db.query(
+        "SELECT status, count(*) AS n FROM tasks WHERE parent_id = ? "
+        "GROUP BY status",
+        (parent_id,),
+    )
+    counts: dict[str, int] = {}
+    total = 0
+    for row in rows:
+        status = row["status"]
+        n = row["n"]
+        total += n
+        bucket = "terminal" if status in _TERMINAL_STATUSES else status
+        counts[bucket] = counts.get(bucket, 0) + n
+    if total == 0:
+        return "no children yet"
+    parts = [
+        f"{counts[bucket]} {bucket}"
+        for bucket in _CHILDREN_STATE_ORDER
+        if counts.get(bucket)
+    ]
+    return f"{', '.join(parts)} ({total} total)"
+
 
 def render_handoff(spawned_id: int, title: str,
                    return_anchor: str | None,
@@ -3556,6 +3612,7 @@ def render_handoff(spawned_id: int, title: str,
         "worktree_path": worktree_path or "<task worktree>",
         "branch": branch or "<task branch>",
         "child_count": child_count,
+        "children_state": _children_state(spawned_id),
         "bg": bg,
     }
     binary = _resolve_endless_go()
