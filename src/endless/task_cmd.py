@@ -293,8 +293,8 @@ def validate_title(title: str, force: bool = False):
             f"Title is {len(title)} characters; max is {TITLE_MAX_LENGTH}.\n"
             f"\n"
             f"If it does not fit in {TITLE_MAX_LENGTH} chars, the title is usually naming HOW instead\n"
-            f"of WHAT. Long-form (analysis, design, mechanism detail) belongs in the\n"
-            f"description (--description) and/or the plan (--text), not the title.\n"
+            f"of WHAT. Long-form belongs elsewhere: analysis in --analysis, design/plan in\n"
+            f"--text, a brief blurb in --description — not the title.\n"
             f"\n"
             f"Consider using this template:\n"
             f"\n"
@@ -372,12 +372,13 @@ def validate_description(description: str | None):
         raise click.ClickException(
             f"Description is {len(description)} characters; max is {DESCRIPTION_MAX_LENGTH}.\n"
             f"  Description is a 2-3 sentence blurb, not a dissertation. Long-form context\n"
-            f"  (analysis, plans, verification) belongs in a plan file (--text)."
+            f"  belongs in a dedicated field: analysis in --analysis, plans/verification in --text."
         )
     if "\n" in description or "\r" in description:
         raise click.ClickException(
             "Description must be a single line; embedded newlines are not allowed.\n"
-            "  Description is a brief blurb. Long-form context belongs in a plan file (--text)."
+            "  Description is a brief blurb. Long-form context belongs in a dedicated field:\n"
+            "  analysis in --analysis, plans/verification in --text."
         )
 
 
@@ -3305,6 +3306,7 @@ def _format_landed_line(landings: list) -> str:
 def detail_item(
     item_id: int,
     show_description: bool = True,
+    show_analysis: bool = False,
     show_text: bool = False,
     show_children: bool = False,
     show_outcome: bool = False,
@@ -3313,7 +3315,7 @@ def detail_item(
 ):
     """Show full detail for a task."""
     row = db.query(
-        "SELECT t.id, t.title, t.description, t.text, t.phase, t.status, "
+        "SELECT t.id, t.title, t.description, t.analysis, t.text, t.phase, t.status, "
         "COALESCE(tt.slug, '') AS type, "
         "t.parent_id, t.source_file, t.created_at, t.updated_at, "
         "t.completed_at, t.sort_order, t.tier, t.outcome, p.name as project_name "
@@ -3357,6 +3359,7 @@ def detail_item(
             "tier": item["tier"],
             "outcome": item["outcome"] or None,
             "description": item["description"] if show_description else None,
+            "analysis": item["analysis"] if show_analysis else None,
             "text": item["text"] if show_text else None,
         }
         if show_children:
@@ -3396,6 +3399,8 @@ def detail_item(
             click.echo(f"landed={_format_landed_line(landings)}")
         if show_description and item["description"] and item["description"] != item["title"]:
             click.echo(f"\n## Description\n{item['description']}")
+        if show_analysis and item["analysis"]:
+            click.echo(f"\n## Analysis\n{item['analysis']}")
         if show_text and item["text"]:
             click.echo(f"\n## Text\n{item['text']}")
         if show_children:
@@ -3447,6 +3452,12 @@ def detail_item(
         click.echo()
         click.echo(click.style("— Description —", fg="cyan"))
         click.echo(item["description"])
+
+    # Analysis precedes Text: it is pre-plan design content (E-999).
+    if show_analysis and item["analysis"]:
+        click.echo()
+        click.echo(click.style("— Analysis —", fg="cyan"))
+        click.echo(item["analysis"])
 
     if show_text and item["text"]:
         click.echo()

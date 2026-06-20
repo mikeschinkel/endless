@@ -1029,23 +1029,30 @@ def task_list(project, show_all, status, phase, tier, parent_id, related_to_id, 
 @click.argument("item_ids", type=TASK_ID, nargs=-1, required=True)
 @click.option("--no-description", is_flag=True,
               help="Hide description")
+@click.option("--analysis", "show_analysis", is_flag=True,
+              help="Show analysis field")
 @click.option("--text", "show_text", is_flag=True,
               help="Show text field")
 @click.option("--children", "show_children", is_flag=True,
               help="Show direct children")
 @click.option("--outcome", "show_outcome", is_flag=True,
               help="Show outcome field (always shown for declined tasks)")
+@click.option("--all-fields", "all_fields", is_flag=True,
+              help="Show every content section (description, analysis, text, "
+                   "outcome, children)")
 @click.option("--llm", is_flag=True,
               help="Token-efficient output for LLMs")
 @click.option("--json", "as_json", is_flag=True,
               help="JSON output")
-def task_show(item_ids, no_description, show_text,
-              show_children, show_outcome, llm, as_json):
+def task_show(item_ids, no_description, show_analysis, show_text,
+              show_children, show_outcome, all_fields, llm, as_json):
     """Show detail for one or more tasks."""
     from endless.task_cmd import detail_item
+    if all_fields:
+        show_analysis = show_text = show_children = show_outcome = True
     for item_id in item_ids:
         detail_item(item_id, show_description=not no_description,
-                    show_text=show_text,
+                    show_analysis=show_analysis, show_text=show_text,
                     show_children=show_children, show_outcome=show_outcome,
                     llm=llm, as_json=as_json)
 
