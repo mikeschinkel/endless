@@ -215,7 +215,7 @@ test_analysis_before_text() {
         >/dev/null 2>&1
     text_file=$(mktemp)
     printf 'ordering plan body\n' > "${text_file}"
-    endless task update "${tid}" --text "${text_file}" >/dev/null 2>&1
+    endless task update "${tid}" --text-file "${text_file}" >/dev/null 2>&1
     rm -f "${text_file}"
 
     assert_ordering "'— Analysis —' renders BEFORE '— Text —'" \
@@ -234,7 +234,7 @@ test_all_fields() {
         >/dev/null 2>&1
     text_file=$(mktemp)
     printf 'all-fields plan body\n' > "${text_file}"
-    endless task update "${tid}" --text "${text_file}" >/dev/null 2>&1
+    endless task update "${tid}" --text-file "${text_file}" >/dev/null 2>&1
     rm -f "${text_file}"
     endless task update "${tid}" --outcome "all-fields outcome body" \
         >/dev/null 2>&1

@@ -159,8 +159,7 @@ endless task update <id> \
   [--status needs_plan|ready|in_progress|verify|completed|blocked|revisit] \
   [--title <title>] \
   [--description <text>] \
-  [--text <file>] \
-  [--prompt <file>] \
+  [--text <inline> | --text-file <path>] \
   [--parent <task_id>]
 ```
 

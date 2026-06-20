@@ -1716,7 +1716,7 @@ def _compose_justification_notes(
 def add_item(
     title: str,
     description: str | None = None,
-    text_file: str | None = None,
+    text: str | None = None,
     phase: str = "now",
     project_name: str | None = None,
     after: int | None = None,
@@ -1745,12 +1745,7 @@ def add_item(
         _research_gate_check(parent_id, justification)
     notes_value = _compose_justification_notes(None, justification)
 
-    text_content: str | None = None
-    if text_file is not None:
-        p = Path(text_file).expanduser()
-        if not p.exists():
-            raise click.ClickException(f"File not found: {p}")
-        text_content = p.read_text()
+    text_content: str | None = text
 
     payload = {
         "title": title,
@@ -3085,7 +3080,7 @@ def update_plan(
     status: str | None = None,
     title: str | None = None,
     description: str | None = None,
-    text_file: str | None = None,
+    text: str | None = None,
     parent_id: int | None = None,
     phase: str | None = None,
     tier: int | None = None,
@@ -3166,13 +3161,9 @@ def update_plan(
     if description is not None:
         _add("description", description)
 
-    if text_file is not None:
-        p = Path(text_file).expanduser()
-        if not p.exists():
-            raise click.ClickException(f"File not found: {p}")
-        text_content = p.read_text()
-        _add("text", text_content)
-        _mirror_plan_to_worktree(item_id, text_content)
+    if text is not None:
+        _add("text", text)
+        _mirror_plan_to_worktree(item_id, text)
 
     if parent_id is not None:
         _add("parent_id", parent_id if parent_id > 0 else None)

@@ -64,8 +64,8 @@ def test_update_type_and_analysis_together(seeded_project_at_cwd):
     assert a == "findings: X is broken"
 
 
-def test_update_analysis_via_at_file_loads_content(seeded_project_at_cwd, tmp_path):
-    """The --analysis @file form should load file content (CLI-level test)."""
+def test_update_analysis_file_loads_content(seeded_project_at_cwd, tmp_path):
+    """E-1001: --analysis-file loads file content (replaces the @file magic)."""
     from click.testing import CliRunner
     from endless.cli import main
 
@@ -76,8 +76,69 @@ def test_update_analysis_via_at_file_loads_content(seeded_project_at_cwd, tmp_pa
     runner = CliRunner()
     result = runner.invoke(main, [
         "task", "update", f"E-{tid}",
-        "--analysis", f"@{p}",
+        "--analysis-file", str(p),
     ])
     assert result.exit_code == 0, result.output
     _, a = _type_analysis(tid)
     assert a == "Loaded from file.\nMulti-line."
+
+
+def test_update_analysis_at_path_no_longer_file_loads(seeded_project_at_cwd, tmp_path):
+    """E-1001: the removed @file magic — `--analysis @path` is now stored
+    literally as inline content, not loaded from the file."""
+    from click.testing import CliRunner
+    from endless.cli import main
+
+    tid = _add_task("Audit the X system")
+    p = tmp_path / "analysis.md"
+    p.write_text("Loaded from file.")
+
+    runner = CliRunner()
+    result = runner.invoke(main, [
+        "task", "update", f"E-{tid}",
+        "--analysis", f"@{p}",
+    ])
+    assert result.exit_code == 0, result.output
+    _, a = _type_analysis(tid)
+    assert a == f"@{p}"
+
+
+def test_update_text_inline_and_file_forms(seeded_project_at_cwd, tmp_path):
+    """E-1001: --text stores inline content; --text-file loads from a path;
+    passing both is an error."""
+    from click.testing import CliRunner
+    from endless.cli import main
+
+    def _text_of(task_id: int) -> str | None:
+        return db.query("SELECT text FROM tasks WHERE id = ?", (task_id,))[0]["text"]
+
+    runner = CliRunner()
+
+    tid = _add_task("Audit the X system")
+    assert runner.invoke(main, ["task", "update", f"E-{tid}", "--text", "inline body"]).exit_code == 0
+    assert _text_of(tid) == "inline body"
+
+    p = tmp_path / "plan.md"
+    p.write_text("file body\nmore")
+    assert runner.invoke(main, ["task", "update", f"E-{tid}", "--text-file", str(p)]).exit_code == 0
+    assert _text_of(tid) == "file body\nmore"
+
+    both = runner.invoke(main, ["task", "update", f"E-{tid}", "--text", "x", "--text-file", str(p)])
+    assert both.exit_code != 0
+    assert "not both" in both.output
+
+
+def test_update_outcome_file_loads_content(seeded_project_at_cwd, tmp_path):
+    """E-1001: --outcome-file loads outcome content from a path."""
+    from click.testing import CliRunner
+    from endless.cli import main
+
+    tid = _add_task("Audit the X system")
+    p = tmp_path / "outcome.md"
+    p.write_text("findings live here")
+
+    runner = CliRunner()
+    result = runner.invoke(main, ["task", "update", f"E-{tid}", "--outcome-file", str(p)])
+    assert result.exit_code == 0, result.output
+    row = db.query("SELECT outcome FROM tasks WHERE id = ?", (tid,))
+    assert row[0]["outcome"] == "findings live here"

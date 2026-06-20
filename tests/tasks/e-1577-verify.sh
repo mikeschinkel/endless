@@ -294,7 +294,7 @@ test_bug3_outcome_section() {
     # Need text content for the ordering check.
     text_file=$(mktemp)
     printf 'body text content\n' > "${text_file}"
-    endless task update "${tid}" --text "${text_file}" >/dev/null 2>&1
+    endless task update "${tid}" --text-file "${text_file}" >/dev/null 2>&1
     rm -f "${text_file}"
     assert_ordering "'— Outcome —' renders AFTER '— Text —'" \
         "— Text —" "— Outcome —" \

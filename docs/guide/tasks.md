@@ -11,11 +11,11 @@ Every task has multiple body fields. Knowing which to use prevents long descript
 | Field         | Length         | Purpose                                                                                          | How to set                                         |
 |---------------|----------------|--------------------------------------------------------------------------------------------------|----------------------------------------------------|
 | `title`       | One line       | The task name. Verb-first (see Verbs below).                                                     | Positional arg on `task add`; `--title` on update. |
-| `description` | < 200 words    | Brief pitch — *what* and *why* in a paragraph or two. Shown by default in `task list` / `task show`. | `--description` on `task add` / `task update`.     |
-| `text`        | Long-form      | Full implementation plan, including approach, file paths, verification steps. Shown with `task show --text`. **On a research task, `text` instead holds the research *request* — see the Research-task field model below.** | `--text <file>` on `task add` / `task update`.     |
-| `analysis`    | Long-form      | Supporting research / exploration content that is *not* a proper plan — comparisons, findings, evidence gathered before the plan is written. | DB column; CLI flag may not yet be wired — set via DB or via web UI. |
+| `description` | < 200 words    | Brief pitch — *what* and *why* in a paragraph or two. Shown by default in `task list` / `task show`. | `--description` (inline) / `--description-file <path>` on `task add` / `task update`. |
+| `text`        | Long-form      | Full implementation plan, including approach, file paths, verification steps. Shown with `task show --text`. **On a research task, `text` instead holds the research *request* — see the Research-task field model below.** | `--text` (inline) / `--text-file <path>` on `task add` / `task update`. |
+| `analysis`    | Long-form      | Supporting research / exploration content that is *not* a proper plan — comparisons, findings, evidence gathered before the plan is written. | `--analysis` (inline) / `--analysis-file <path>` on `task update`. |
 | `notes`       | Freeform       | Catch-all for content that doesn't fit elsewhere. Use sparingly.                                 | DB column; CLI flag may not yet be wired.          |
-| `outcome`     | Short to long  | Result / reason at terminal status. Required for `confirm`/`assume`/`decline`.                   | `--outcome` on `task confirm` / `task assume` / `task update`; `--reason` on `task decline` (stored as outcome). |
+| `outcome`     | Short to long  | Result / reason at terminal status. Required for `confirm`/`assume`/`decline`.                   | `--outcome` (inline) / `--outcome-file <path>` on `task confirm` / `task assume` / `task update`; `--reason` on `task decline` (stored as outcome). |
 
 ### Distinctions in practice
 
@@ -78,7 +78,7 @@ Reach for `--llm` whenever you're parsing output yourself — it's token-efficie
 endless task add "Title here"
 endless task add "Title here" --parent <parent_id>
 endless task add "Title here" --description "Brief pitch" --phase now
-endless task add "Title here" --text /path/to/plan.md --status ready
+endless task add "Title here" --text-file /path/to/plan.md --status ready
 endless task add "Title here" --type bug             # task|plan|bug|research|spike|chore|decision
 endless task add "Title here" --tier 1               # 1-4 or auto|quick|deep|discuss
 endless task add "Title here" --blocked-by E-100     # also: --blocks, --relates-to,
@@ -127,7 +127,7 @@ Keep large standalone deliverables — a full research report or decision docume
 ```bash
 endless task update <id> --title "New title"
 endless task update <id> --description "..."
-endless task update <id> --text /path/to/plan.md
+endless task update <id> --text-file /path/to/plan.md
 endless task update <id> --status ready
 endless task update <id> --phase later
 endless task update <id> --tier 2

@@ -1207,12 +1207,32 @@ def task_search(query, project, show_all, status, phase, parent_id,
                  limit=limit, llm=llm, as_json=as_json)
 
 
+def _resolve_content_flag(inline, file_path, name):
+    """Resolve a paired `--<name>` (inline) / `--<name>-file` (path) option pair
+    into content. Returns the content string, or None if neither was given.
+    Raises if both were given or the file does not exist."""
+    if inline is not None and file_path is not None:
+        raise click.ClickException(
+            f"Pass either --{name} or --{name}-file, not both."
+        )
+    if file_path is not None:
+        p = Path(file_path).expanduser()
+        if not p.exists():
+            raise click.ClickException(f"File not found: {p}")
+        return p.read_text()
+    return inline
+
+
 @task_cmd.command("add")
 @click.argument("title")
 @click.option("--description", default=None,
-              help="Longer description of the task")
-@click.option("--text", "text_file", default=None,
-              help="Load full task text from file")
+              help="Longer description of the task (inline)")
+@click.option("--description-file", default=None,
+              help="Load the task description from a file")
+@click.option("--text", default=None,
+              help="Full task text / plan content (inline)")
+@click.option("--text-file", default=None,
+              help="Load the full task text / plan from a file")
 @click.option("--phase", default="now",
               type=click.Choice(["urgent", "now", "next", "later", "maybe"]),
               help="Phase: urgent, now, next, later, maybe (default: now)")
@@ -1247,14 +1267,16 @@ def task_search(query, project, show_all, status, phase, parent_id,
               help="Task ID(s) that this new task cleans up after (repeatable)")
 @click.option("--cleaned-up-by", "cleaned_up_by_ids", type=TASK_ID, multiple=True,
               help="Task ID(s) that clean up after this new task (repeatable)")
-def task_add(title, description, text_file, phase, project, parent, after, task_type, status, tier, force,
+def task_add(title, description, description_file, text, text_file, phase, project, parent, after, task_type, status, tier, force,
              justification,
              blocks_ids, blocked_by_ids, relates_to_ids, implements_ids,
              cleans_up_ids, cleaned_up_by_ids):
     """Add a task."""
     from endless.task_cmd import add_item, parse_tier, link_tasks
+    description = _resolve_content_flag(description, description_file, "description")
+    text = _resolve_content_flag(text, text_file, "text")
     tier_val = parse_tier(tier) if tier else None
-    new_id = add_item(title, description=description, text_file=text_file,
+    new_id = add_item(title, description=description, text=text,
                       phase=phase, project_name=project, after=after, parent_id=parent,
                       task_type=task_type, status=status, tier=tier_val, force=force,
                       justification=justification)
@@ -1281,9 +1303,13 @@ def task_add(title, description, text_file, phase, project, parent, after, task_
 @click.option("--title", default=None,
               help="New title")
 @click.option("--description", default=None,
-              help="New description")
-@click.option("--text", "text_file", default=None,
-              help="Load full task text from file")
+              help="New description (inline)")
+@click.option("--description-file", default=None,
+              help="Load the new description from a file")
+@click.option("--text", default=None,
+              help="Full task text / plan content (inline)")
+@click.option("--text-file", default=None,
+              help="Load the full task text / plan from a file")
 @click.option("--parent", type=TASK_ID, default=None,
               help="Set parent task ID (0 to make root)")
 @click.option("--phase", default=None,
@@ -1295,29 +1321,30 @@ def task_add(title, description, text_file, phase, project, parent, after, task_
               type=click.Choice(["task", "bug", "research", "epic"]),
               help="Task type — closes the prior gap that forced direct SQL writes (E-1329)")
 @click.option("--analysis", "analysis_text", default=None,
-              help="Analysis content (string, or @path/to/file to load from file). Closes the prior gap that forced direct SQL writes (E-1329)")
+              help="Analysis content (inline)")
+@click.option("--analysis-file", default=None,
+              help="Load the analysis content from a file")
 @click.option("--force", is_flag=True,
               help="Bypass title validation")
 @click.option("--outcome", default=None,
-              help="Outcome / reason for status (required if status=declined)")
+              help="Outcome / reason for status (inline; required if status=declined)")
+@click.option("--outcome-file", default=None,
+              help="Load the outcome from a file")
 @click.option("--justification", default=None,
               help="Justification text when setting --type research (stored under '## Justification' in notes). "
                    "Required unless the effective parent is an in-progress epic.")
-def task_update(item_ids, status, title, description, text_file, parent, phase, tier,
-                task_type, analysis_text, force, outcome, justification):
+def task_update(item_ids, status, title, description, description_file, text, text_file, parent, phase, tier,
+                task_type, analysis_text, analysis_file, force, outcome, outcome_file, justification):
     """Update fields on one or more tasks."""
     from endless.task_cmd import update_plan, parse_tier
+    description = _resolve_content_flag(description, description_file, "description")
+    text = _resolve_content_flag(text, text_file, "text")
+    analysis_text = _resolve_content_flag(analysis_text, analysis_file, "analysis")
+    outcome = _resolve_content_flag(outcome, outcome_file, "outcome")
     tier_val = parse_tier(tier) if tier else None
-    # Support `--analysis @path/to/file` for content too long for the shell.
-    if analysis_text is not None and analysis_text.startswith("@"):
-        from pathlib import Path
-        p = Path(analysis_text[1:]).expanduser()
-        if not p.exists():
-            raise click.ClickException(f"Analysis file not found: {p}")
-        analysis_text = p.read_text()
     for item_id in item_ids:
         update_plan(item_id, status=status, title=title,
-                    description=description, text_file=text_file,
+                    description=description, text=text,
                     parent_id=parent,
                     phase=phase, tier=tier_val, task_type=task_type,
                     analysis=analysis_text,
@@ -1356,10 +1383,13 @@ def task_clear_tier(item_ids):
 @click.option("--cascade", is_flag=True,
               help="Also confirm all descendants")
 @click.option("--outcome", default=None,
-              help="Outcome — what was confirmed (applies to root only on cascade)")
-def task_complete(item_ids, cascade, outcome):
+              help="Outcome — what was confirmed (inline; applies to root only on cascade)")
+@click.option("--outcome-file", default=None,
+              help="Load the outcome from a file")
+def task_complete(item_ids, cascade, outcome, outcome_file):
     """Confirm one or more tasks."""
     from endless.task_cmd import complete_item
+    outcome = _resolve_content_flag(outcome, outcome_file, "outcome")
     for item_id in item_ids:
         complete_item(item_id, cascade=cascade, outcome=outcome)
 
@@ -1369,10 +1399,13 @@ def task_complete(item_ids, cascade, outcome):
 @click.option("--cascade", is_flag=True,
               help="Also assume all descendants")
 @click.option("--outcome", default=None,
-              help="Outcome — what was assumed (applies to root only on cascade)")
-def task_assume(item_ids, cascade, outcome):
+              help="Outcome — what was assumed (inline; applies to root only on cascade)")
+@click.option("--outcome-file", default=None,
+              help="Load the outcome from a file")
+def task_assume(item_ids, cascade, outcome, outcome_file):
     """Assume one or more tasks (believed complete, not yet verified)."""
     from endless.task_cmd import assume_item
+    outcome = _resolve_content_flag(outcome, outcome_file, "outcome")
     for item_id in item_ids:
         assume_item(item_id, cascade=cascade, outcome=outcome)
 
@@ -1390,9 +1423,11 @@ def task_decline(item_ids, reason):
 
 @task_cmd.command("complete")
 @click.argument("item_ids", type=TASK_ID, nargs=-1, required=True)
-@click.option("--outcome", required=True,
-              help="Findings / deliverable text (required — IS the deliverable)")
-def task_complete_cmd(item_ids, outcome):
+@click.option("--outcome", default=None,
+              help="Findings / deliverable text, inline (required unless --outcome-file — IS the deliverable)")
+@click.option("--outcome-file", default=None,
+              help="Load the findings / deliverable from a file")
+def task_complete_cmd(item_ids, outcome, outcome_file):
     """Mark one or more tasks as `completed` (E-1240).
 
     For findings-as-deliverable tasks (audits, research, reviews, etc.)
@@ -1401,6 +1436,9 @@ def task_complete_cmd(item_ids, outcome):
     verbs.json. For implementation tasks, use `task confirm` / `task assume`.
     """
     from endless.task_cmd import mark_completed_item
+    outcome = _resolve_content_flag(outcome, outcome_file, "outcome")
+    if outcome is None:
+        raise click.ClickException("Provide --outcome or --outcome-file.")
     for item_id in item_ids:
         mark_completed_item(item_id, outcome=outcome)
 
@@ -1622,10 +1660,13 @@ def task_block(item_id, blocker_id):
               type=click.Choice(["obsolete", "declined", "confirmed", "assumed", "completed"]),
               help="Status to set on the replaced task (default: obsolete)")
 @click.option("--outcome", default=None,
-              help="Outcome — why this was replaced (required if --status=declined)")
-def task_replace(item_id, replacement_id, new_status, outcome):
+              help="Outcome — why this was replaced (inline; required if --status=declined)")
+@click.option("--outcome-file", default=None,
+              help="Load the outcome from a file")
+def task_replace(item_id, replacement_id, new_status, outcome, outcome_file):
     """Mark a task as replaced by another task (sets status, default 'obsolete')."""
     from endless.task_cmd import replace_task
+    outcome = _resolve_content_flag(outcome, outcome_file, "outcome")
     replace_task(item_id, replacement_id, status=new_status, outcome=outcome)
 
 
@@ -1705,16 +1746,19 @@ def decision_list(project, show_all, sort, llm, as_json):
 @decision_cmd.command("add")
 @click.argument("title")
 @click.option("--description", default=None,
-              help="Longer description of the decision")
+              help="Longer description of the decision (inline)")
+@click.option("--description-file", default=None,
+              help="Load the decision description from a file")
 @click.option("--project", default=None,
               help="Project name (default: detect from cwd)")
 @click.option("--about", "about_ids", type=TASK_ID, multiple=True,
               help="Task ID(s) this decision documents (repeatable; soft link)")
 @click.option("--decides", "decides_ids", type=TASK_ID, multiple=True,
               help="Task ID(s) that implement this decision (repeatable; hard link)")
-def decision_add(title, description, project, about_ids, decides_ids):
+def decision_add(title, description, description_file, project, about_ids, decides_ids):
     """Record a decision (starts as `proposed`)."""
     from endless.decision_cmd import add_decision
+    description = _resolve_content_flag(description, description_file, "description")
     add_decision(
         title,
         description=description,

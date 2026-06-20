@@ -40,7 +40,7 @@ When implementation is verified, land the work with `endless worktree land <id>`
 
 | Status        | Meaning                                                                                                       |
 |---------------|---------------------------------------------------------------------------------------------------------------|
-| `needs_plan`  | Not yet planned — needs design work. Attach a plan with `task update <id> --text <file>` and the task auto-promotes to `ready`. |
+| `needs_plan`  | Not yet planned — needs design work. Attach a plan with `task update <id> --text-file <path>` and the task auto-promotes to `ready`. |
 | `ready`       | Planned and ready to implement.                                                                                |
 | `in_progress` | A session has claimed the task and is working on it. Set automatically by `task claim`.                        |
 | `verify`      | Implementation done, awaiting verification. **Still blocks dependents.**                                       |

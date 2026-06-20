@@ -982,7 +982,7 @@ def _orphan_text_not_viable_msg(
         f"E-{task_id}: tasks.text is too short to be a viable plan "
         f"({len(db_text.strip())} chars):\n  \"{_plan_preview(db_text)}\"\n\n"
         f"Write a real plan, then retry:\n"
-        f"  endless task update E-{task_id} --text <file>{extra}"
+        f"  endless task update E-{task_id} --text-file <path>{extra}"
     )
 
 
@@ -990,7 +990,7 @@ def _orphan_no_viable_plan_msg(task_id: int, branch: str) -> str:
     return (
         f"E-{task_id}: no viable plan in tasks.text or on branch {branch}.\n\n"
         f"Add one, then retry:\n"
-        f"  endless task update E-{task_id} --text <file>"
+        f"  endless task update E-{task_id} --text-file <path>"
     )
 
 

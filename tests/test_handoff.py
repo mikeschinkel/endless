@@ -111,8 +111,8 @@ def test_render_handoff_research_variant():
     )
     # Research-specific framing.
     assert "Findings are the deliverable" in out
-    # End state guidance points at completed + outcome.
-    assert "--status completed --outcome" in out
+    # End state guidance points at completed + outcome (file form, E-1001).
+    assert "--status completed --outcome-file" in out
     # Research must NOT instruct --status verify (its own gate per ED-1502).
     assert "--status verify" not in out
 

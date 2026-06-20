@@ -168,7 +168,7 @@ def test_task_add_cleans_up_flag(isolated_env, monkeypatch):
     )
     parent = _add_task("Add feature flag")
 
-    def _stub(title, description=None, text_file=None, phase="now", project_name=None,
+    def _stub(title, description=None, text=None, phase="now", project_name=None,
               after=None, parent_id=None, task_type=None, status=None,
               tier=None, force=False, **kwargs):
         cur = db.execute(
@@ -208,7 +208,7 @@ def test_task_add_cleaned_up_by_flag(isolated_env, monkeypatch):
     )
     cleanup_task = _add_task("Existing cleanup task")
 
-    def _stub(title, description=None, text_file=None, phase="now", project_name=None,
+    def _stub(title, description=None, text=None, phase="now", project_name=None,
               after=None, parent_id=None, task_type=None, status=None,
               tier=None, force=False, **kwargs):
         cur = db.execute(

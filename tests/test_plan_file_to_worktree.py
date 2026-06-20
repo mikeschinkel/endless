@@ -52,7 +52,7 @@ def test_update_text_does_not_create_worktree(tmp_path, seeded_project_at_cwd):
     plan_src = tmp_path / "plan.md"
     plan_src.write_text("# plan\nbody\n")
 
-    task_cmd.update_plan(tid, text_file=str(plan_src))
+    task_cmd.update_plan(tid, text=plan_src.read_text())
 
     # No worktree, no sandbox-triggering side effects, nothing on disk.
     assert task_cmd._worktree_for_task(tid) is None
@@ -71,7 +71,7 @@ def test_add_text_does_not_create_worktree(tmp_path, seeded_project_at_cwd):
     plan_src = tmp_path / "plan.md"
     plan_src.write_text("# from add\nbody\n")
 
-    item_id = task_cmd.add_item(title="Audit the buffer", text_file=str(plan_src))
+    item_id = task_cmd.add_item(title="Audit the buffer", text=plan_src.read_text())
 
     assert task_cmd._worktree_for_task(item_id) is None
     assert not (
@@ -111,7 +111,7 @@ def test_update_text_mirrors_into_existing_worktree(
 
     plan_src = tmp_path / "plan.md"
     plan_src.write_text("# v2\n")
-    task_cmd.update_plan(tid, text_file=str(plan_src))
+    task_cmd.update_plan(tid, text=plan_src.read_text())
 
     mirrored = fake_wt / ".endless" / "plans" / f"E-{tid}.md"
     assert mirrored.read_text() == "# v2\n"
@@ -122,7 +122,7 @@ def test_update_text_mirrors_into_existing_worktree(
     ).stdout.strip()
     assert log == f"Endless: update plan for E-{tid}"
     # And re-running with the same content is a no-op (no second commit).
-    task_cmd.update_plan(tid, text_file=str(plan_src))
+    task_cmd.update_plan(tid, text=plan_src.read_text())
     count = subprocess.run(
         ["git", "-C", str(fake_wt), "rev-list", "--count", "HEAD"],
         capture_output=True, text=True, check=True,
@@ -214,7 +214,7 @@ def test_cli_update_no_create_worktree_flag_removed(
     plan_src.write_text("# plan\n")
     result = CliRunner().invoke(main, [
         "task", "update", f"E-{tid}",
-        "--text", str(plan_src),
+        "--text-file", str(plan_src),
         "--no-create-worktree",
     ])
     assert result.exit_code != 0
@@ -226,7 +226,7 @@ def test_cli_add_no_create_worktree_flag_removed(tmp_path, seeded_project_at_cwd
     plan_src.write_text("# plan\n")
     result = CliRunner().invoke(main, [
         "task", "add", "Audit something new",
-        "--text", str(plan_src),
+        "--text-file", str(plan_src),
         "--no-create-worktree",
     ])
     assert result.exit_code != 0
@@ -238,7 +238,7 @@ def test_cli_update_text_succeeds_without_worktree(tmp_path, seeded_project_at_c
     plan_src = tmp_path / "plan.md"
     plan_src.write_text("# plan\n")
     result = CliRunner().invoke(main, [
-        "task", "update", f"E-{tid}", "--text", str(plan_src),
+        "task", "update", f"E-{tid}", "--text-file", str(plan_src),
     ])
     assert result.exit_code == 0, result.output
     assert "Worktree created" not in result.output
