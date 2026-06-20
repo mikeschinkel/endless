@@ -168,6 +168,7 @@ listed separately. (Generated — do not hand-edit; run `/regenerate-guide`.)
 | shell helpers (esu / eswt) | orchestration | cd into your worktree and export ENDLESS_SESSION_ID. |
 | blocking semantics | tasks | How verify/confirmed/assumed affect whether a blocker is still active. |
 | verbs | tasks | The registered action words that can begin a task title. |
+| research-task field model | tasks | For a research task, text = the request, outcome = the deliverable. |
 <!-- END generated -->
 
 ## Important notes (always relevant)

@@ -29,3 +29,7 @@ covers: How verify/confirmed/assumed affect whether a blocker is still active.
 topic: verbs
 section: tasks
 covers: The registered action words that can begin a task title.
+
+topic: research-task field model
+section: tasks
+covers: For a research task, text = the request, outcome = the deliverable.
