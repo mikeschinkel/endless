@@ -312,7 +312,7 @@ The four handoff templates ship embedded in the `endless-go` binary. The first t
 To debug-render any template from JSON variables on stdin:
 
 ```bash
-echo '{"task_id":"E-1","title":"…"}' | endless internal template render handoff/task
+echo '{"task_id":"E-NNN","title":"…"}' | endless internal template render handoff/task
 endless internal template render handoff/epic --project <name> < vars.json
 ```
 
