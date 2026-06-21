@@ -147,10 +147,11 @@ listed separately. (Generated — do not hand-edit; run `/regenerate-guide`.)
 | `status` | reference | Detailed status of a project. |
 | `suggestions` | _(none yet)_ | the enforcement-relaxation suggestions workflow isn't covered by the guide yet. |
 | `task` | tasks | Task CRUD, field semantics (title/description/text/analysis/notes/outcome), status transitions, relations. |
+| `task attach` | orchestration | Attaching to a running background agent (replaces the current process; refuses inside a Claude session without --force). |
 | `task claim` | orchestration | Claiming a task: creates the per-task worktree and binds your session. |
 | `task handoff` | orchestration | The generated handoff text for a spawned session. |
 | `task release` | orchestration | Releasing a task so another session can claim it. |
-| `task spawn` | orchestration | Spawning a fresh Claude session on a task. |
+| `task spawn` | orchestration | Spawning a session on a task: foreground/background, attach verbs, coordinator pattern. |
 | `tmux` | reference | Tmux status-line and popup integration. |
 | `unregister` | reference | Unregistering a project (config preserved on disk). |
 | `verb` | tasks | Verbs: the registered actions that can begin a task title. |

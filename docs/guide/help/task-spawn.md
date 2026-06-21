@@ -1,4 +1,4 @@
 section: orchestration
-covers: Spawning a fresh Claude session on a task.
+covers: Spawning a session on a task: foreground/background, attach verbs, coordinator pattern.
 
-The handoff is generated from templates/handoff.md - you do not author it.
+The handoff is generated from per-type templates (handoff/<type>.md.tmpl) - you do not author it.

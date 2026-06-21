@@ -166,11 +166,39 @@ session that hasn't `/cd`'d into its worktree is refused tool use until it does.
 
 ## Spawning another Claude session
 
-`endless task spawn <id>` opens a new tmux window, launches Claude inside it, and pastes a **generated handoff** as the opening input. Use it to delegate independent work to a fresh session.
+`endless task spawn <id>` dispatches a fresh Claude session onto a target task and pastes a **generated handoff** as its opening input. Use it to delegate independent work without context-switching your own session.
+
+Spawn runs in one of two places:
+
+- **Foreground** (`endless task spawn <id>`) — a new tmux window, Claude visible and interactive.
+- **Background** (`endless task spawn <id> --bg`) — a headless agent under Anthropic's supervisor process, no terminal attached.
+
+Both **pre-claim** the task (status → `in_progress`, per-task worktree created) and run the same pre-flight refusals before launching, so the spawned session always lands in a fully-claimed state and never needs to run `endless task claim` itself.
+
+### Foreground vs background
+
+|                  | Foreground (`spawn`)                       | Background (`spawn --bg`)                              |
+|------------------|--------------------------------------------|-------------------------------------------------------|
+| Where it runs    | new tmux window                            | Anthropic supervisor (no terminal)                    |
+| When to use      | the work needs eyes; pairs well with `/plan` mode | a dispatched child of an epic you'll review later |
+| Survives         | terminal close (tmux server keeps it)      | terminal close, machine sleep, tmux server crash      |
+| Dies on          | tmux server kill, machine shutdown         | machine shutdown, `claude stop`, ~1h idle (unpinned)  |
+| Promote to focus | (already focused)                          | `endless task spawn --attach <id>` or `endless task attach <id>` |
+
+### Per-type handoff variants
+
+The handoff is rendered from a per-type template, chosen from the task's `type`:
+
+- **`task`** — frames the work around a verify end-state: implement, flip to `verify`, supply how-to-test.
+- **`bug`** — leads with "reproduce the bug first, before changing anything."
+- **`research`** — findings *are* the deliverable: end-state is `completed` with the conclusions written to the task's outcome, not a code-verify cycle.
+- **`epic`** — a coordinator role (see [Coordinator pattern for epics](#coordinator-pattern-for-epics)).
+
+Any other or unset type falls back to the `task` variant.
 
 ### The handoff is generated, not authored
 
-There is nothing to write. The handoff is rendered from a single template (`docs/templates/handoff.md`) merged with the task's id and title plus runtime context (the spawning pane, the spawning session's task). The substantive design lives in the task's `--text` plan, which the handoff tells the spawned session to read — so a prompt can no longer drift from the plan.
+There is nothing to write. The handoff is rendered from the per-type template (`handoff/<type>.md.tmpl`) merged with the task's id and title plus runtime context (the spawning pane, the spawning session's task). The substantive design lives in the task's `--text` plan, which the handoff tells the spawned session to read — so a prompt can no longer drift from the plan.
 
 Inspect the exact text spawn will paste:
 
@@ -178,29 +206,31 @@ Inspect the exact text spawn will paste:
 endless task handoff <id>
 ```
 
-### Spawn
+The handoff is deliberately lean — it delegates the workflow rules to `endless guide` rather than restating them. It carries: the spawned task's id and title, the spawning session's task, the `tmux select-window` line back to your window, the pointers to run `endless guide` and `endless task show <id> --text`, and the drive-to-completion rules (flip to `verify` with how-to-test; don't `worktree land`/`drop` without asking; file drive-by work as separate tasks with `--cleans-up <id>`).
+
+To change what every spawned session is told, edit the template — see [Customizing handoff templates](#customizing-handoff-templates). There is no per-task prompt to maintain.
+
+### `endless task spawn`
 
 ```bash
-endless task spawn <id>
-endless task spawn <id> --no-plan                # skip /plan mode; send the handoff directly
-endless task spawn <id> --worktree <path>        # cd to <path> instead of the spawn-created worktree
-endless task spawn <id> --force                  # allow spawn on a done-ish task (demotes status)
+endless task spawn <id>                           # foreground: new tmux window
+endless task spawn <id> --bg                      # background: headless supervised agent
+endless task spawn <id> --attach <id>             # open a tmux window onto an already-running bg agent
+endless task spawn <id> --no-plan                 # skip /plan mode; send the handoff directly (foreground only)
+endless task spawn <id> --worktree <path>         # cd to <path> instead of the spawn-created worktree
+endless task spawn <id> --reopen                  # reopen a terminal-status task before spawning
+endless task spawn <id> --force                   # allow spawn on a done-ish task (demotes status)
 ```
 
-What it does:
+Foreground flow:
 
 1. Validates tmux is running (fails otherwise).
-2. Refuses if the task is in a done-ish status (`verify`/`confirmed`/`declined`/`obsolete`/`assumed`/`completed`) without `--force`, or if another live session already owns the task.
-3. **Pre-claims the task**: flips status to `in_progress` (emitting `task.status_changed`) and creates the per-task worktree at `.endless/worktrees/e-<id>/`. The spawned session lands in a fully-claimed state.
-4. Creates a new tmux window named `<project>_<slug>[E-NNNN]`.
-5. Sets tmux window variables `@endless_spawned_by` (spawn marker keyed off by SessionStart), `@endless_task_id`, and `@endless_project_id`.
-6. `cd`s into the spawn-created worktree (or `--worktree <path>` if given).
-7. Launches `~/.local/bin/claude` (falls back to `claude` on PATH).
-8. The spawned Claude's `SessionStart` hook reads `@endless_spawned_by` and records the session→task binding (no status flip — spawn already did it).
-9. Waits ~5s for Claude to start, then enters `/plan` mode (unless `--no-plan`).
-10. Renders the handoff, pastes it, and presses Enter.
-
-The spawned session sees the handoff as if you'd typed it. Spawn auto-claims the task — the spawned session does **not** need to run `endless task claim <id>` (claim is idempotent if it does — a friendly notice, no error).
+2. Refuses if the task is in a done-ish status (`verify`/`confirmed`/`declined`/`obsolete`/`assumed`/`completed`) without `--force` or `--reopen`, or if another live session already owns the task.
+3. **Pre-claims the task**: flips status to `in_progress` (emitting `task.status_changed`) and creates the per-task worktree at `.endless/worktrees/e-<id>/`.
+4. Creates a new tmux window named `<project>_<slug>[E-NNNN]` and sets the window variables `@endless_spawned_by`, `@endless_task_id`, `@endless_project_id`.
+5. `cd`s into the spawn-created worktree (or `--worktree <path>` if given) and launches Claude.
+6. The spawned Claude's `SessionStart` hook reads `@endless_spawned_by` and records the session→task binding (no status flip — spawn already did it).
+7. Waits for Claude to start, enters `/plan` mode (unless `--no-plan`), then renders the handoff, pastes it, and presses Enter.
 
 The spawned session can discover its task ID from the tmux window variable:
 
@@ -208,15 +238,85 @@ The spawned session can discover its task ID from the tmux window variable:
 tmux show-window-options -v @endless_task_id    # prints the task ID
 ```
 
-### What the handoff carries
+### Background-agent dispatch (`--bg`)
 
-The handoff is deliberately lean — it delegates the workflow rules to `endless guide` rather than restating them. It gives the spawned session:
+`--bg` dispatches a detached, supervised agent instead of opening a window — no tmux required. The flow:
 
-- **Identity and origin** — the spawned task's id and title, the spawning session's task, and the `tmux select-window` line back to your window.
-- **Context-gathering** — run `endless guide` for the workflow and `endless task show <id> --text` for the plan.
-- **Drive to completion** — flip to `verify` with how-to-test when done; don't `worktree land`/`drop` without asking; file drive-by work as separate tasks (`--cleans-up <id>`) and confirm before implementing.
+1. Pre-claims the task (same status flip + worktree creation as foreground).
+2. Renders the handoff for the task's type.
+3. Launches a headless Claude agent named `E-<id>` with the handoff as its opening input (via the Anthropic CLI's background mode — see `claude --help`).
+4. Captures the short dispatch id the CLI prints.
+5. Writes a `sessions` row marked as a background kind (an FK to the `session_kinds` table), recording the short id and the task's nearest epic ancestor for coordinator visibility. The session UUID is filled in later when the agent's `SessionStart` hook fires.
 
-To change what every spawned session is told, edit `docs/templates/handoff.md` — there is no per-task prompt to maintain.
+`spawn --bg` returns immediately; the agent runs on its own. `--no-plan` does not apply (a bg agent has no interactive `/plan` step). To watch or steer it afterward, use an attach verb below.
+
+### Attach verbs
+
+Two ways to bring a running background agent into a terminal:
+
+```bash
+endless task spawn --attach <id>      # open a NEW tmux window running `claude attach <short-id>`
+endless task attach <id>              # replace the CURRENT process with `claude attach <short-id>`
+```
+
+- **`spawn --attach <id>`** opens a fresh tmux window onto the agent. It does not dispatch (it requires an existing `--bg` agent) and is mutually exclusive with `--bg`. The agent keeps running when you close or detach the window.
+- **`task attach <id>`** execs `claude attach` *in place*, replacing the current process. Because that destroys whatever is running in the current terminal, it **refuses to run from inside a Claude session** unless you pass `--force`:
+
+  > You are inside a Claude session. `endless task attach` replaces the current process; you will lose this session. Re-run with --force to proceed, or open a fresh terminal.
+
+Detaching from an attached agent (`←`, `Ctrl+Z`, or `/exit`) leaves it running in the background — attaching and detaching never stop the agent.
+
+### Coordinator pattern for epics
+
+Spawning a task whose type is `epic` opens a foreground window for a **coordinator**. The coordinator does **not** implement the epic's work directly — its job is to drive the epic's children through `needs_plan` → `ready` → `in_progress` → `verify`, dispatching child sessions (often with `spawn --bg`) and reviewing them.
+
+The epic handoff injects a breakdown of the children's current states and names the operational mode that breakdown implies:
+
+| Children state        | Coordinator's mode                                   |
+|-----------------------|------------------------------------------------------|
+| Zero children         | drive decomposition — break the epic into child tasks |
+| All `needs_plan`      | planning orchestrator — get each child a plan         |
+| All `ready`           | dispatcher — spawn children to implement              |
+| All `in_progress`     | observe — sessions are working; monitor and unblock   |
+| All terminal          | ask whether to reopen anything or close the epic      |
+| Mixed                 | surface the breakdown and ask what to do next         |
+
+(Terminal = `confirmed`/`assumed`/`completed`/`declined`/`obsolete`, collapsed into one bucket.)
+
+### Throttle warning
+
+When you dispatch a background agent and the project already has several active, spawn prints a **soft warning to stderr** — it never blocks. The threshold is `bg_throttle_warn` in the project's `.endless/config.json` (default `3`; set to `0` or negative to disable). The warning notes that each bg agent consumes a parallel-execution slot and that the community-observed sweet spot is 3–5 parallel agents.
+
+### Session lifecycle (background agents)
+
+A background agent is hosted by Anthropic's supervisor, independent of your terminal and tmux. It **survives**:
+
+- closing the terminal or shell that spawned it,
+- a tmux server crash,
+- the machine sleeping (Claude Code v2.1.142+ resumes on wake instead of treating the gap as idle).
+
+It **dies / stops** on:
+
+- machine shutdown,
+- `claude stop`,
+- roughly an hour idle while unattached (pinned sessions are exempt).
+
+### Customizing handoff templates
+
+The four handoff templates ship embedded in the `endless-go` binary. The first time a template renders in a consumer project, its embedded copy is **materialized** per-file to `<project_root>/.endless/templates/handoff/<type>.md.tmpl` and auto-committed, so the on-disk file is tracked and editable.
+
+- **Customize project-wide:** edit the materialized `.tmpl` file and commit it.
+- **Restore the default:** delete the materialized file — the embedded version renders again on the next spawn (and re-materializes).
+- **Per-developer override (not committed):** create `<project_root>/.endless/templates/handoff/<type>.md.local.tmpl`. The lookup order is `.local.tmpl` → committed `.tmpl` → embedded, so a `.local.tmpl` wins. Add `*.local.tmpl` to your `.gitignore` so personal overrides don't get committed by accident — Endless does not modify `.gitignore` for you.
+
+To debug-render any template from JSON variables on stdin:
+
+```bash
+echo '{"task_id":"E-1","title":"…"}' | endless internal template render handoff/task
+endless internal template render handoff/epic --project <name> < vars.json
+```
+
+(Self-dev projects render straight from the embedded source without materializing, to avoid an untracked on-disk copy shadowing the committed template.)
 
 > **Note:** Much of this orchestration (return paths, completion-pressure, status display) is being absorbed by the `endless tmux` integration over time.
 
