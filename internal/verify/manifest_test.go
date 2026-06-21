@@ -12,6 +12,7 @@ schema = 1
 task   = "E-1234"
 runner = "go test ./.endless/tasks/E-1234/..."
 format = "gotest-json"
+setup  = ["just build", ".endless/tasks/E-1234/setup.sh"]
 tiers  = ["smoke", "full"]
 seed   = ["fixtures/baseline.json"]
 needs  = []
@@ -47,6 +48,9 @@ func TestParseManifest_ValidFull(t *testing.T) {
 	if len(m.Seed) != 1 || m.Seed[0] != "fixtures/baseline.json" {
 		t.Errorf("Seed = %v, want [fixtures/baseline.json]", m.Seed)
 	}
+	if len(m.Setup) != 2 || m.Setup[0] != "just build" || m.Setup[1] != ".endless/tasks/E-1234/setup.sh" {
+		t.Errorf("Setup = %v, want [just build .endless/tasks/E-1234/setup.sh]", m.Setup)
+	}
 	if len(m.Needs) != 0 {
 		t.Errorf("Needs = %v, want []", m.Needs)
 	}
@@ -60,8 +64,8 @@ func TestParseManifest_ValidMinimal(t *testing.T) {
 	if m.Format != verify.FormatTAP {
 		t.Errorf("Format = %q, want %q", m.Format, verify.FormatTAP)
 	}
-	if len(m.Tiers) != 0 || len(m.Seed) != 0 || len(m.Needs) != 0 {
-		t.Errorf("optional fields should be empty: tiers=%v seed=%v needs=%v", m.Tiers, m.Seed, m.Needs)
+	if len(m.Setup) != 0 || len(m.Tiers) != 0 || len(m.Seed) != 0 || len(m.Needs) != 0 {
+		t.Errorf("optional fields should be empty: setup=%v tiers=%v seed=%v needs=%v", m.Setup, m.Tiers, m.Seed, m.Needs)
 	}
 }
 

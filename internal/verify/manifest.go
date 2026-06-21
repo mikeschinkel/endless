@@ -56,22 +56,52 @@ func (f Format) Valid() (valid bool) {
 
 // Manifest is a parsed verify.toml. It names the runner a bare clone executes
 // directly, the native result format that runner emits, and optional execution
-// hints (tiers, seed fixtures, isolation needs). The runner string alone must
-// exit 0 on all-pass and non-zero on any failure with no Endless present.
+// hints (setup, tiers, seed fixtures, isolation needs). The runner string alone
+// must exit 0 on all-pass and non-zero on any failure with no Endless present.
+//
+// A Manifest may be a per-task file (under .endless/tasks/<id>/) or the
+// effective manifest produced by merging a project-level ProjectConfig beneath a
+// per-task file (see Merge). The three precondition kinds are distinct: Needs
+// provisions the substrate, Setup prepares the project (build/install/migrate/
+// codegen), and Seed loads state. The runner executes them in the order
+// provision -> setup -> seed -> run.
 type Manifest struct {
 	Schema int      `toml:"schema"`
 	Task   string   `toml:"task"`
 	Runner string   `toml:"runner"`
 	Format Format   `toml:"format"`
+	Setup  []string `toml:"setup"`
 	Tiers  []string `toml:"tiers"`
 	Seed   []string `toml:"seed"`
 	Needs  []string `toml:"needs"`
 }
 
-// ParseManifest decodes a verify.toml document, rejects unknown keys, and
-// validates the result. It returns a fully validated Manifest or an error that
-// wraps ErrInvalidManifest.
+// ParseManifest decodes a complete verify.toml document, rejects unknown keys,
+// and validates the result. It returns a fully validated Manifest or an error
+// that wraps ErrInvalidManifest. Use this for a standalone, self-sufficient
+// manifest (the bare-clone case); the layered discovery path decodes per-task
+// files leniently and validates the merged effective manifest instead.
 func ParseManifest(data []byte) (m *Manifest, err error) {
+	m, err = decodeManifest(data)
+	if err != nil {
+		goto end
+	}
+
+	err = m.Validate()
+	if err != nil {
+		goto end
+	}
+
+end:
+	return m, err
+}
+
+// decodeManifest decodes a verify.toml document into a Manifest and rejects
+// unknown keys, but does NOT enforce required fields. The layered discovery path
+// decodes per-task files this way so a field a task omits (e.g. format) can be
+// supplied by the project-level config before the effective manifest is
+// validated. Errors wrap ErrInvalidManifest.
+func decodeManifest(data []byte) (m *Manifest, err error) {
 	var md toml.MetaData
 	var undecoded []toml.Key
 
@@ -86,11 +116,6 @@ func ParseManifest(data []byte) (m *Manifest, err error) {
 	if len(undecoded) > 0 {
 		err = doterr.NewErr(ErrInvalidManifest, ErrUnknownManifestKeys,
 			"keys", joinKeys(undecoded))
-		goto end
-	}
-
-	err = m.Validate()
-	if err != nil {
 		goto end
 	}
 
