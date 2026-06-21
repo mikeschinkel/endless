@@ -374,6 +374,40 @@ func RecordBgAgentSession(taskID int64, shortID string) (int64, error) {
 	return res.LastInsertId()
 }
 
+// CountActiveBgAgents returns how many background-agent sessions are currently
+// `working` for taskID's project (E-1572). The `task spawn --bg` soft-throttle
+// warning calls this before dispatch to tell the coordinator how many bg slots
+// the project is already burning; it never blocks. Scope is per project — bg
+// agents in unrelated projects do not count toward this project's budget.
+//
+// project_id is resolved Go-side from the task (mirroring RecordBgAgentSession)
+// so the Python flow needs no DB read (E-1486). The just-dispatched agent is not
+// yet recorded when this runs, so the count reflects only pre-existing agents.
+// The kind filter uses the typed sessionkind constant (not a hardcoded integer),
+// keeping it stable against any seed-id change.
+func CountActiveBgAgents(taskID int64) (int64, error) {
+	db, err := DB()
+	if err != nil {
+		return 0, err
+	}
+	// tasks.project_id is NOT NULL (schema), so a plain scan is safe.
+	var projectID int64
+	if err = db.QueryRow(
+		"SELECT project_id FROM tasks WHERE id=?", taskID,
+	).Scan(&projectID); err != nil {
+		return 0, fmt.Errorf("resolve project for E-%d: %w", taskID, err)
+	}
+	var n int64
+	if err = db.QueryRow(
+		`SELECT count(*) FROM sessions
+		 WHERE kind_id = ? AND state = 'working' AND project_id = ?`,
+		int64(sessionkind.SessionKindBackground), projectID,
+	).Scan(&n); err != nil {
+		return 0, fmt.Errorf("count active bg agents for E-%d: %w", taskID, err)
+	}
+	return n, nil
+}
+
 // nearestEpicAncestor walks up tasks.parent_id from taskID and returns the id
 // of the nearest ancestor whose type is 'epic', or nil if none. taskID itself
 // is included in the walk (depth 0), so dispatching an epic task directly

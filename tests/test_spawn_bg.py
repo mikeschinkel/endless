@@ -67,6 +67,10 @@ def patched_dispatch(monkeypatch):
                         lambda *a, **k: "RENDERED-HANDOFF")
     # _branch_for_worktree shells out to git; stub so it isn't in the call log.
     monkeypatch.setattr(task_cmd, "_branch_for_worktree", lambda p: "br")
+    # The soft-throttle warning (E-1572) shells out for the count; no-op it here
+    # so these dispatch-mechanics tests aren't perturbed. Covered separately in
+    # test_spawn_bg_throttle.py.
+    monkeypatch.setattr(task_cmd, "_bg_throttle_warn", lambda item_id: None)
 
     def fake_run(cmd, **kw):
         calls.append((list(cmd), kw))
@@ -110,6 +114,7 @@ def test_dispatch_parse_failure_raises_and_skips_record(monkeypatch):
     calls = []
     monkeypatch.setattr(task_cmd, "render_handoff", lambda *a, **k: "H")
     monkeypatch.setattr(task_cmd, "_branch_for_worktree", lambda p: "br")
+    monkeypatch.setattr(task_cmd, "_bg_throttle_warn", lambda item_id: None)
 
     def fake_run(cmd, **kw):
         calls.append(list(cmd))
@@ -129,6 +134,7 @@ def test_dispatch_parse_failure_raises_and_skips_record(monkeypatch):
 def test_dispatch_claude_nonzero_exit_raises(monkeypatch):
     monkeypatch.setattr(task_cmd, "render_handoff", lambda *a, **k: "H")
     monkeypatch.setattr(task_cmd, "_branch_for_worktree", lambda p: "br")
+    monkeypatch.setattr(task_cmd, "_bg_throttle_warn", lambda item_id: None)
 
     def fake_run(cmd, **kw):
         if "--bg" in cmd:

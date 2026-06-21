@@ -41,6 +41,11 @@ func Run(args []string) {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
+	case "count-bg-agents":
+		if err := runCountBgAgents(args[1:]); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
 	case "-h", "--help", "help":
 		usage()
 	default:
@@ -59,6 +64,7 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "                                    look up (or lazy-create) sessions.id; prints integer id")
 	fmt.Fprintln(os.Stderr, "  record-bg-agent --task-id <id> --short-id <handle>")
 	fmt.Fprintln(os.Stderr, "                                    insert a background-agent dispatch row; prints sessions.id")
+	fmt.Fprintln(os.Stderr, "  count-bg-agents --task-id <id>    count `working` bg agents in the task's project; prints the integer")
 }
 
 // runRecordBgAgent inserts the dispatch-time sessions row for a background
@@ -85,6 +91,27 @@ func runRecordBgAgent(args []string) error {
 		return err
 	}
 	fmt.Println(id)
+	return nil
+}
+
+// runCountBgAgents prints the number of `working` background-agent sessions in
+// the task's project (E-1572). The Python `task spawn --bg` soft-throttle
+// warning reads this before dispatch; project_id is resolved Go-side from the
+// task so the Python flow needs no DB read (E-1486). Prints the integer count.
+func runCountBgAgents(args []string) error {
+	fs := flag.NewFlagSet("count-bg-agents", flag.ContinueOnError)
+	taskID := fs.Int64("task-id", 0, "spawn target task id (project scope resolved from it)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *taskID == 0 {
+		return fmt.Errorf("--task-id is required")
+	}
+	n, err := monitor.CountActiveBgAgents(*taskID)
+	if err != nil {
+		return err
+	}
+	fmt.Println(n)
 	return nil
 }
 

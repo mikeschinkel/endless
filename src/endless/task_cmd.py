@@ -4056,6 +4056,64 @@ def _parse_bg_short_id(stdout: str) -> str | None:
     return m.group(1) if m else None
 
 
+# E-1572: default soft-throttle threshold. Warn once the project already has
+# this many bg agents `working`. Configurable per project via
+# .endless/config.json:bg_throttle_warn; set to 0 (or any value <= 0) to disable.
+_BG_THROTTLE_DEFAULT = 3
+
+
+def _bg_throttle_warn(item_id: int) -> None:
+    """Emit a soft throttle warning to stderr if the project already has at
+    least `bg_throttle_warn` background agents `working` (E-1572).
+
+    Advisory only: never blocks dispatch and never raises on its own failure —
+    a config or count hiccup must not abort the spawn. Reads the threshold from
+    the project config (default 3; <= 0 disables) and the live count from the
+    `session-query count-bg-agents` Go helper (no Python DB read, per E-1486).
+    """
+    import subprocess
+    from endless.event_bridge import _resolve_endless_go
+
+    cfg = config.project_config_read(config.resolution_cwd()) or {}
+    try:
+        threshold = int(cfg.get("bg_throttle_warn", _BG_THROTTLE_DEFAULT))
+    except (TypeError, ValueError):
+        threshold = _BG_THROTTLE_DEFAULT
+    if threshold <= 0:
+        return
+
+    binary = _resolve_endless_go()
+    res = subprocess.run(
+        [binary, *config.go_db_context_args(),
+         "session-query", "count-bg-agents", "--task-id", str(item_id)],
+        capture_output=True, text=True,
+    )
+    if res.returncode != 0:
+        return
+    try:
+        active = int(res.stdout.strip())
+    except ValueError:
+        return
+    if active < threshold:
+        return
+
+    click.echo(
+        f"warning: {active} bg agents already active for this project "
+        f"(threshold: {threshold}).",
+        err=True,
+    )
+    click.echo(
+        "  Each bg agent consumes a parallel-execution slot; quota burns "
+        "~linearly.",
+        err=True,
+    )
+    click.echo(
+        "  Community-observed sweet spot is 3–5 parallel agents. (Configure "
+        "via .endless/config.json:bg_throttle_warn.)",
+        err=True,
+    )
+
+
 def _spawn_bg_dispatch(item_id: int, title: str, cd_target: str,
                        task_type: str | None, worktree_override: bool):
     """Dispatch a background agent for an already-pre-claimed task (E-1568).
@@ -4080,6 +4138,12 @@ def _spawn_bg_dispatch(item_id: int, title: str, cd_target: str,
         task_type=task_type,
         bg=True,
     )
+
+    # E-1572: soft throttle warning. Count the bg agents already `working` for
+    # this project; if the count meets the configured threshold, warn (to
+    # stderr — keeps stdout clean for short-id parsing by any caller) but do
+    # NOT block. The coordinator decides whether one more is worth it.
+    _bg_throttle_warn(item_id)
 
     claude_bin = _claude_binary()
 
