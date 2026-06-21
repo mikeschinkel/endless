@@ -154,16 +154,94 @@ def test_task_show_outcome_flag_renders_outcome(seeded_project_at_cwd):
     assert "Outcome:" not in result.output
 
 
-def test_task_show_declined_always_shows_outcome(seeded_project_at_cwd):
+def test_task_show_declined_hides_outcome_by_default(seeded_project_at_cwd):
+    """E-1601: outcome is flag-gated for every status, declined included. With
+    no flag the snapshot shows a one-line char-count placeholder, not the
+    reason (replaces the old always-shows-for-declined behavior)."""
     tid = _add_task("Sample")
     task_cmd.decline_item(tid, reason="declined for testing")
     runner = CliRunner()
     result = runner.invoke(main, ["task", "show", f"E-{tid}"])
     assert result.exit_code == 0
-    assert "declined for testing" in result.output
-    # E-1577: outcome renders as a section.
+    assert "Outcome:" in result.output
+    assert "(--outcome to display)" in result.output
+    assert "— Outcome —" not in result.output
+    assert "declined for testing" not in result.output
+
+
+def test_task_show_declined_outcome_flag_reveals_reason(seeded_project_at_cwd):
+    """E-1601: --outcome restores the full section for a declined task."""
+    tid = _add_task("Sample")
+    task_cmd.decline_item(tid, reason="declined for testing")
+    runner = CliRunner()
+    result = runner.invoke(main, ["task", "show", f"E-{tid}", "--outcome"])
+    assert result.exit_code == 0
     assert "— Outcome —" in result.output
-    assert "Outcome:" not in result.output
+    assert "declined for testing" in result.output
+    assert "(--outcome to display)" not in result.output
+
+
+def test_task_show_outcome_placeholder_char_count(seeded_project_at_cwd):
+    """E-1601: the placeholder reports the exact len() of the outcome body."""
+    tid = _add_task("Sample")
+    body = "x" * 137
+    task_cmd.update_plan(tid, outcome=body)
+    runner = CliRunner()
+    result = runner.invoke(main, ["task", "show", f"E-{tid}"])
+    assert result.exit_code == 0
+    assert "Outcome: 137 chars (--outcome to display)" in result.output
+    assert body not in result.output
+
+
+def test_task_show_completed_hides_outcome_by_default(seeded_project_at_cwd):
+    """E-1601: the motivating case (E-1600) — a `completed` task's deliverable
+    no longer floods the snapshot; the old status-keyed auto-display is gone."""
+    tid = _add_task("Sample")
+    db.execute(
+        "UPDATE tasks SET status = 'completed', outcome = ? WHERE id = ?",
+        ("a long research deliverable body", tid),
+    )
+    runner = CliRunner()
+    result = runner.invoke(main, ["task", "show", f"E-{tid}"])
+    assert result.exit_code == 0
+    assert "Outcome:" in result.output
+    assert "(--outcome to display)" in result.output
+    assert "— Outcome —" not in result.output
+    assert "a long research deliverable body" not in result.output
+
+
+def test_task_show_text_and_analysis_placeholders(seeded_project_at_cwd):
+    """E-1601: text and analysis also collapse to flag-named placeholders."""
+    tid = _add_task("Sample")
+    db.execute(
+        "UPDATE tasks SET text = ?, analysis = ? WHERE id = ?",
+        ("body text content", "analysis design content", tid),
+    )
+    runner = CliRunner()
+    result = runner.invoke(main, ["task", "show", f"E-{tid}"])
+    assert result.exit_code == 0
+    assert "Text:" in result.output
+    assert "(--text to display)" in result.output
+    assert "Analysis:" in result.output
+    assert "(--analysis to display)" in result.output
+    assert "body text content" not in result.output
+    assert "analysis design content" not in result.output
+
+
+def test_task_show_all_fields_reveals_everything(seeded_project_at_cwd):
+    """E-1601: --all-fields shows every section with no placeholders left."""
+    tid = _add_task("Sample")
+    db.execute(
+        "UPDATE tasks SET text = ?, analysis = ?, outcome = ? WHERE id = ?",
+        ("body text content", "analysis design content", "outcome deliverable", tid),
+    )
+    runner = CliRunner()
+    result = runner.invoke(main, ["task", "show", f"E-{tid}", "--all-fields"])
+    assert result.exit_code == 0
+    assert "— Analysis —" in result.output
+    assert "— Text —" in result.output
+    assert "— Outcome —" in result.output
+    assert "to display)" not in result.output
 
 
 def test_task_show_outcome_section_renders_after_text(seeded_project_at_cwd):
@@ -183,23 +261,38 @@ def test_task_show_outcome_section_renders_after_text(seeded_project_at_cwd):
     assert outcome_idx > text_idx, "outcome section must follow text section"
 
 
-def test_task_show_llm_includes_outcome(seeded_project_at_cwd):
+def test_task_show_llm_outcome_gated(seeded_project_at_cwd):
+    """E-1601: --llm collapses outcome to a char marker by default; --outcome
+    pulls the body as a `## Outcome` section."""
     tid = _add_task("Sample")
     task_cmd.decline_item(tid, reason="llm-mode reason")
     runner = CliRunner()
-    result = runner.invoke(main, ["task", "show", f"E-{tid}", "--llm"])
-    assert result.exit_code == 0
-    assert "outcome=llm-mode reason" in result.output
+    default = runner.invoke(main, ["task", "show", f"E-{tid}", "--llm"])
+    assert default.exit_code == 0
+    assert f"outcome_chars={len('llm-mode reason')}" in default.output
+    assert "outcome=llm-mode reason" not in default.output
+    assert "## Outcome" not in default.output
+    revealed = runner.invoke(main, ["task", "show", f"E-{tid}", "--llm", "--outcome"])
+    assert revealed.exit_code == 0
+    assert "## Outcome" in revealed.output
+    assert "llm-mode reason" in revealed.output
 
 
-def test_task_show_json_includes_outcome(seeded_project_at_cwd):
+def test_task_show_json_outcome_gated(seeded_project_at_cwd):
+    """E-1601: --json nulls outcome by default but always reports
+    outcome_chars; --outcome includes the full body."""
     tid = _add_task("Sample")
     task_cmd.decline_item(tid, reason="json reason")
     runner = CliRunner()
-    result = runner.invoke(main, ["task", "show", f"E-{tid}", "--json"])
-    assert result.exit_code == 0
-    parsed = json.loads(result.output)
-    assert parsed["outcome"] == "json reason"
+    default = json.loads(
+        runner.invoke(main, ["task", "show", f"E-{tid}", "--json"]).output
+    )
+    assert default["outcome"] is None
+    assert default["outcome_chars"] == len("json reason")
+    revealed = json.loads(
+        runner.invoke(main, ["task", "show", f"E-{tid}", "--json", "--outcome"]).output
+    )
+    assert revealed["outcome"] == "json reason"
 
 
 # ─── event log ────────────────────────────────────────────────────────────────

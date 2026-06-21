@@ -3294,6 +3294,29 @@ def _format_landed_line(landings: list) -> str:
     return "  ".join(parts)
 
 
+def _echo_large_field(title: str, content: str | None, show: bool, flag: str):
+    """Render one large text field for `task show`'s human output.
+
+    When `show` is set, print the full body under a `— Title —` section. When
+    it isn't, print a one-line char-count placeholder naming the flag that
+    reveals it (e.g. `Outcome: 1275 chars (--outcome to display)`). Empty
+    fields print nothing. Keeps `task show` a snapshot by default while still
+    advertising the hidden detail (E-1601)."""
+    if not content:
+        return
+    click.echo()
+    if show:
+        click.echo(click.style(f"— {title} —", fg="cyan"))
+        click.echo(content)
+    else:
+        click.echo(
+            click.style(f"{title}:", fg="cyan")
+            + " "
+            + click.style(f"{len(content)} chars", fg="white", bold=True)
+            + click.style(f" ({flag} to display)", dim=True)
+        )
+
+
 def detail_item(
     item_id: int,
     show_description: bool = True,
@@ -3348,10 +3371,16 @@ def detail_item(
             ),
             "source_file": item["source_file"] or None,
             "tier": item["tier"],
-            "outcome": item["outcome"] or None,
+            "outcome": item["outcome"] if show_outcome else None,
             "description": item["description"] if show_description else None,
             "analysis": item["analysis"] if show_analysis else None,
             "text": item["text"] if show_text else None,
+            # Char counts are always present (independent of the show flags) so
+            # the JSON shape is stable and a consumer can see a hidden field's
+            # size without pulling its full body (E-1601).
+            "analysis_chars": len(item["analysis"]) if item["analysis"] else None,
+            "text_chars": len(item["text"]) if item["text"] else None,
+            "outcome_chars": len(item["outcome"]) if item["outcome"] else None,
         }
         if show_children:
             children = db.query(
@@ -3374,8 +3403,6 @@ def detail_item(
         tier_str = f" tier={tier_display(item['tier'])}" if item["tier"] else ""
         click.echo(f"type={item['type']} phase={item['phase']} "
                     f"status={item['status']}{tier_str}")
-        if item["outcome"]:
-            click.echo(f"outcome={item['outcome']}")
         if item["parent_id"]:
             click.echo(f"parent=E-{item['parent_id']}")
         links = _flatten_relations(item_id)
@@ -3388,12 +3415,24 @@ def detail_item(
             click.echo(f"confirmed={item['completed_at']}")
         if landings:
             click.echo(f"landed={_format_landed_line(landings)}")
+        # Large fields collapse to a char marker unless their flag is set, so
+        # `task show --llm` stays token-cheap on tasks whose outcome is a large
+        # deliverable; pass --outcome/--text/--analysis to pull the body (E-1601).
+        for name, content, shown in (
+            ("analysis", item["analysis"], show_analysis),
+            ("text", item["text"], show_text),
+            ("outcome", item["outcome"], show_outcome),
+        ):
+            if content and not shown:
+                click.echo(f"{name}_chars={len(content)}")
         if show_description and item["description"] and item["description"] != item["title"]:
             click.echo(f"\n## Description\n{item['description']}")
         if show_analysis and item["analysis"]:
             click.echo(f"\n## Analysis\n{item['analysis']}")
         if show_text and item["text"]:
             click.echo(f"\n## Text\n{item['text']}")
+        if show_outcome and item["outcome"]:
+            click.echo(f"\n## Outcome\n{item['outcome']}")
         if show_children:
             children = db.query(
                 "SELECT id, COALESCE(title, description) as title, status, phase "
@@ -3444,21 +3483,13 @@ def detail_item(
         click.echo(click.style("— Description —", fg="cyan"))
         click.echo(item["description"])
 
-    # Analysis precedes Text: it is pre-plan design content (E-999).
-    if show_analysis and item["analysis"]:
-        click.echo()
-        click.echo(click.style("— Analysis —", fg="cyan"))
-        click.echo(item["analysis"])
-
-    if show_text and item["text"]:
-        click.echo()
-        click.echo(click.style("— Text —", fg="cyan"))
-        click.echo(item["text"])
-
-    if item["outcome"] and (show_outcome or item["status"] in ("declined", "completed")):
-        click.echo()
-        click.echo(click.style("— Outcome —", fg="cyan"))
-        click.echo(item["outcome"])
+    # Analysis precedes Text: it is pre-plan design content (E-999). Each large
+    # field shows its full body only when its flag is set; otherwise it collapses
+    # to a one-line char-count placeholder so `task show` stays a snapshot while
+    # still advertising the hidden detail (E-1601).
+    _echo_large_field("Analysis", item["analysis"], show_analysis, "--analysis")
+    _echo_large_field("Text", item["text"], show_text, "--text")
+    _echo_large_field("Outcome", item["outcome"], show_outcome, "--outcome")
 
     if show_children:
         children = db.query(

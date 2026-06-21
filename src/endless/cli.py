@@ -1036,7 +1036,8 @@ def task_list(project, show_all, status, phase, tier, parent_id, related_to_id, 
 @click.option("--children", "show_children", is_flag=True,
               help="Show direct children")
 @click.option("--outcome", "show_outcome", is_flag=True,
-              help="Show outcome field (always shown for declined tasks)")
+              help="Show the full outcome field (hidden by default; a "
+                   "char-count placeholder shows otherwise)")
 @click.option("--all-fields", "all_fields", is_flag=True,
               help="Show every content section (description, analysis, text, "
                    "outcome, children)")
