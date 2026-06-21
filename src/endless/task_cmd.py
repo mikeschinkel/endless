@@ -4732,13 +4732,16 @@ def _flatten_relations(item_id: int) -> list[dict]:
 
 def _echo_links_section(item_id: int) -> bool:
     """Emit the unified multi-line links section (E-1576): a cyan 'This task:' heading,
-    then one indented, colored row per relation (id-ascending) — '<Relation phrase>:
-    E-NNN [status]'. The heading supplies the subject and the leading directional phrase
-    (Blocks / Blocked by / Cleans up / Cleaned up by / …) carries the full direction, so
-    the row reads as a sentence about the current task. Phrases are left-aligned in a
-    fixed column so the ids line up. Titles are intentionally omitted to keep every row
-    on one line. Emits nothing and returns False when the task has no relations; returns
-    True otherwise. Shared by task show/detail and relations/deps so both render identically."""
+    then one '- '-bulleted, colored row per relation (id-ascending) — '- <Relation
+    phrase>:  E-NNN [status]'. The heading supplies the subject and the leading
+    directional phrase (Blocks / Blocked by / Cleans up / Cleaned up by / …) carries the
+    full direction, so the row reads as a sentence about the current task. Phrases are
+    left-aligned in a fixed column so the ids line up. Rows lead with a '- ' marker (not
+    bare indentation) so markdown viewers that collapse leading whitespace (e.g. glow)
+    still render them as a list bound to the heading. Titles are intentionally omitted to
+    keep every row on one line. Emits nothing and returns False when the task has no
+    relations; returns True otherwise. Shared by task show/detail and relations/deps so
+    both render identically."""
     links = _flatten_relations(item_id)
     if not links:
         return False
@@ -4748,7 +4751,7 @@ def _echo_links_section(item_id: int) -> bool:
         color = "green" if r["status"] in _RELATION_TERMINAL_STATUSES else "yellow"
         label = (r["rel_label"] + ":").ljust(width)
         click.echo(
-            f"  {label}{task_id_display(r['id'])} "
+            f"- {label}{task_id_display(r['id'])} "
             f"[{click.style(r['status'], fg=color)}]")
     return True
 

@@ -134,12 +134,13 @@ assert_row() {
 }
 
 # assert_aligned DESC SHOW_OUTPUT — every row under 'This task:' starts its
-# id ('E-') at the same column (left-aligned phrase labels).
+# id ('E-') at the same column (left-aligned phrase labels). Rows are the
+# '- '-bulleted lines that follow the 'This task:' heading.
 assert_aligned() {
     local desc="$1" hay="$2"
     local rows cols line pre
     rows=$(printf '%s\n' "${hay}" \
-        | awk '/^This task:/{f=1;next} f&&/^  /{print} f&&!/^  /{f=0}')
+        | awk '/^This task:/{f=1;next} f&&/^- /{print} f&&!/^- /{f=0}')
     cols=()
     while IFS= read -r line; do
         [[ -z "${line}" ]] && continue
@@ -195,6 +196,10 @@ test_show_human() {
     out=$(endless task show "${A#E-}" 2>&1)
 
     assert_contains "renders 'This task:' subject heading" "This task:" "${out}"
+    # Rows lead with a markdown '- ' bullet (not bare indentation) so viewers
+    # that collapse leading whitespace (e.g. glow) keep them bound to the heading.
+    assert_contains "rows lead with '- ' bullet (markdown-safe)" "- Blocks:" "${out}"
+    assert_not_contains "rows are not bare-space indented" "  Blocks:" "${out}"
     assert_row  "'Blocks:' row points to ${B}"     "Blocks"      "${B}" "${out}"
     assert_row  "'Relates to:' row points to ${B}" "Relates to"  "${B}" "${out}"
     assert_row  "'Blocked by:' row points to ${C}" "Blocked by"  "${C}" "${out}"
