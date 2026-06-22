@@ -1736,8 +1736,9 @@ def add_item(
     _, proj_name = _resolve_project(project_name)
     status = status or ("ready" if tier == 1 else "needs_plan")
 
-    # E-1577: research/epic tasks cannot be created in 'assumed'/'confirmed'.
-    _require_terminal_allowed_for_type(status, task_type)
+    # E-1577/E-1579: research/epic tasks cannot be created in
+    # 'verify'/'assumed'/'confirmed'.
+    _require_status_allowed_for_type(status, task_type)
 
     # E-1544: research-gate. Justification (when present) accepted-and-stored
     # even if parent is epic+in_progress (gate only governs *requiring* it).
@@ -1960,17 +1961,35 @@ def _require_outcome_for_completed(status: str | None, outcome: str | None):
         )
 
 
-_TYPE_REJECTS_ASSUMED_CONFIRMED = ("research", "epic")
+# Per-type lookup table of statuses a task of that type may not be set to.
+# E-1577 seeded this for the 'assumed'/'confirmed' terminals; E-1579 adds
+# 'verify' — research and epic never go through user-testable verification
+# (epics auto-derive to 'completed' per E-1541; research ends in 'completed
+# --outcome' per ED-1502). Their only type-specific terminal is 'completed';
+# the universal terminals 'obsolete' and 'declined' remain allowed for all
+# types and are deliberately absent here. This Python table is the single
+# type→status policy gate (ED-1506 keeps the Go executor mechanical); E-1543's
+# epic-only super-gate will later extend the 'epic' entry.
+_TYPE_FORBIDDEN_STATUSES = {
+    "research": ("verify", "assumed", "confirmed"),
+    "epic":     ("verify", "assumed", "confirmed"),
+}
 
 
-def _require_terminal_allowed_for_type(status: str | None, task_type: str | None):
-    """E-1577: research and epic tasks reject 'assumed'/'confirmed' — their
-    only type-specific terminal is 'completed' (per E-1537 §3). Universal
-    terminals 'obsolete' and 'declined' remain allowed for all types."""
-    if status in ("assumed", "confirmed") and task_type in _TYPE_REJECTS_ASSUMED_CONFIRMED:
+def _require_status_allowed_for_type(status: str | None, task_type: str | None):
+    """E-1577/E-1579: reject type-inappropriate statuses up front. research and
+    epic tasks reject 'verify'/'assumed'/'confirmed' — they terminate via
+    'completed' (per E-1537 §3) and never go through verification. This is a
+    type-correctness invariant, not a soft policy: the fix for a rejected flip
+    is to change the task type, not to override the gate (so there is no
+    --force bypass, matching E-1577's hard gate)."""
+    forbidden = _TYPE_FORBIDDEN_STATUSES.get(task_type or "")
+    if forbidden and status in forbidden:
         raise click.ClickException(
-            f"Task type {task_type!r} cannot use status {status!r}. "
-            f"Use --status completed (or `endless task complete`) with --outcome."
+            f"Task type {task_type!r} cannot be set to status {status!r}. "
+            f"{task_type} tasks terminate via 'completed' (with --outcome) and "
+            f"never use 'verify'/'assumed'/'confirmed'. Use --status completed, "
+            f"or change the task type."
         )
 
 
@@ -2023,7 +2042,7 @@ def complete_item(item_id: int, cascade: bool = False, outcome: str | None = Non
             f"No task found with id {item_id}"
         )
 
-    _require_terminal_allowed_for_type("confirmed", row[0]["type"])
+    _require_status_allowed_for_type("confirmed", row[0]["type"])
     if cascade:
         _refuse_cascade_across_typed_descendants(item_id, "confirmed")
 
@@ -2084,7 +2103,7 @@ def assume_item(item_id: int, cascade: bool = False, outcome: str | None = None)
             f"No task found with id {item_id}"
         )
 
-    _require_terminal_allowed_for_type("assumed", row[0]["type"])
+    _require_status_allowed_for_type("assumed", row[0]["type"])
     if cascade:
         _refuse_cascade_across_typed_descendants(item_id, "assumed")
 
@@ -3150,8 +3169,9 @@ def update_plan(
         _require_completable_verb_for_completed(
             status, effective_title, effective_type
         )
-        # E-1577: research/epic tasks reject 'assumed'/'confirmed' terminals.
-        _require_terminal_allowed_for_type(status, effective_type)
+        # E-1577/E-1579: research/epic tasks reject 'verify'/'assumed'/
+        # 'confirmed'; their only type-specific terminal is 'completed'.
+        _require_status_allowed_for_type(status, effective_type)
 
     # Build the fields map for the event payload, plus an ordered list of
     # (name, old, new) tuples for change-output rendering.
