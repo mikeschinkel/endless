@@ -189,7 +189,9 @@ def test_task_show_outcome_placeholder_char_count(seeded_project_at_cwd):
     runner = CliRunner()
     result = runner.invoke(main, ["task", "show", f"E-{tid}"])
     assert result.exit_code == 0
-    assert "Outcome: 137 chars (--outcome to display)" in result.output
+    # Label column is padded, so match the count text independently of spacing.
+    assert "Outcome:" in result.output
+    assert "137 chars (--outcome to display)" in result.output
     assert body not in result.output
 
 
@@ -226,6 +228,45 @@ def test_task_show_text_and_analysis_placeholders(seeded_project_at_cwd):
     assert "(--analysis to display)" in result.output
     assert "body text content" not in result.output
     assert "analysis design content" not in result.output
+
+
+def test_task_show_placeholder_precedes_description(seeded_project_at_cwd):
+    """E-1601: hidden-field placeholders are single-line `Label: value` fields,
+    so they render with the header group ABOVE the multi-line Description, not
+    interleaved with the sections below it."""
+    tid = _add_task("Sample")
+    db.execute(
+        "UPDATE tasks SET description = ?, outcome = ? WHERE id = ?",
+        ("a multi-line description body", "the outcome deliverable", tid),
+    )
+    runner = CliRunner()
+    result = runner.invoke(main, ["task", "show", f"E-{tid}"])
+    assert result.exit_code == 0
+    outcome_idx = result.output.find("Outcome:")
+    desc_idx = result.output.find("— Description —")
+    assert outcome_idx != -1
+    assert desc_idx != -1
+    assert outcome_idx < desc_idx, \
+        "the Outcome placeholder must render before the Description section"
+
+
+def test_task_show_full_section_follows_description(seeded_project_at_cwd):
+    """E-1601: the full (flagged) body still renders as a section AFTER
+    Description."""
+    tid = _add_task("Sample")
+    db.execute(
+        "UPDATE tasks SET description = ?, outcome = ? WHERE id = ?",
+        ("a multi-line description body", "the outcome deliverable", tid),
+    )
+    runner = CliRunner()
+    result = runner.invoke(main, ["task", "show", f"E-{tid}", "--outcome"])
+    assert result.exit_code == 0
+    desc_idx = result.output.find("— Description —")
+    outcome_idx = result.output.find("— Outcome —")
+    assert desc_idx != -1
+    assert outcome_idx != -1
+    assert outcome_idx > desc_idx, \
+        "the full Outcome section must render after the Description section"
 
 
 def test_task_show_all_fields_reveals_everything(seeded_project_at_cwd):

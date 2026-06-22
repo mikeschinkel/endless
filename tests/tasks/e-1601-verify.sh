@@ -141,6 +141,32 @@ assert_not_contains() {
         "${output}"
 }
 
+# assert_ordering DESC FIRST SECOND CMD [ARGS...]
+#   Pass if both FIRST and SECOND appear in output AND SECOND appears AFTER FIRST.
+assert_ordering() {
+    local desc="$1"
+    local first="$2"
+    local second="$3"
+    shift 3
+    local output first_pos second_pos
+    output=$("$@" 2>&1)
+    first_pos=$(printf '%s\n' "${output}" \
+                | grep -n -F -- "${first}" \
+                | head -1 | cut -d: -f1)
+    second_pos=$(printf '%s\n' "${output}" \
+                 | grep -n -F -- "${second}" \
+                 | head -1 | cut -d: -f1)
+    if [[ -n "${first_pos}" ]] \
+        && [[ -n "${second_pos}" ]] \
+        && [[ "${second_pos}" -gt "${first_pos}" ]]; then
+        report_pass "${desc}"
+        return
+    fi
+    report_fail "${desc}" \
+        "'${first}' before '${second}'" \
+        "first_pos=${first_pos:-MISSING} second_pos=${second_pos:-MISSING} | output=${output}"
+}
+
 # ─── 1: default snapshot hides outcome + shows placeholder ───────────────────
 
 test_outcome_placeholder_default() {
@@ -233,8 +259,9 @@ test_char_count_accuracy() {
     body=$(repeat_a 137)
     endless task update "${tid}" --outcome "${body}" >/dev/null 2>&1
 
-    assert_contains "placeholder reports 'Outcome: 137 chars'" \
-        "Outcome: 137 chars (--outcome to display)" \
+    # Label column is padded, so match the count text independently of spacing.
+    assert_contains "placeholder reports '137 chars (--outcome to display)'" \
+        "137 chars (--outcome to display)" \
         endless task show "${tid}"
 }
 
@@ -303,10 +330,31 @@ test_json_gating() {
         endless task show "${tid}" --json --outcome
 }
 
-# ─── 9: pytest regression suite ──────────────────────────────────────────────
+# ─── 9: placeholder/section ordering around Description ──────────────────────
+
+test_field_ordering() {
+    section "9 — placeholder precedes Description; full section follows it"
+
+    local tid
+    tid=$(add_task_get_id "Audit field-ordering" \
+        --description "a distinct multi-line description body")
+    endless task update "${tid}" --outcome "ordering outcome body" \
+        >/dev/null 2>&1
+
+    # Hidden: the single-line 'Outcome:' placeholder renders ABOVE Description.
+    assert_ordering "default: 'Outcome:' placeholder precedes '— Description —'" \
+        "Outcome:" "— Description —" \
+        endless task show "${tid}"
+    # Shown: the full '— Outcome —' section renders BELOW Description.
+    assert_ordering "'--outcome': '— Description —' precedes '— Outcome —'" \
+        "— Description —" "— Outcome —" \
+        endless task show "${tid}" --outcome
+}
+
+# ─── 10: pytest regression suite ─────────────────────────────────────────────
 
 test_pytest_suite() {
-    section "9 — Python suite ('just test') passes"
+    section "10 — Python suite ('just test') passes"
 
     local output rc
     output=$(just test 2>&1)
@@ -350,6 +398,7 @@ main() {
     test_all_fields_reveals
     test_llm_gating
     test_json_gating
+    test_field_ordering
     test_pytest_suite
 
     summary

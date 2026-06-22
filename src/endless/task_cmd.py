@@ -3294,27 +3294,29 @@ def _format_landed_line(landings: list) -> str:
     return "  ".join(parts)
 
 
-def _echo_large_field(title: str, content: str | None, show: bool, flag: str):
-    """Render one large text field for `task show`'s human output.
+def _echo_field_placeholder(label, val, name, content, show, flag):
+    """One-line `Name: N chars (--flag to display)` for a large field that is
+    present but hidden. Rendered with the header `label`/`val` styling so it
+    groups with the other single-line `Label: value` fields above Description.
+    Nothing when the field is empty or is being shown in full below (E-1601)."""
+    if not content or show:
+        return
+    click.echo(
+        f"{label(name)} {val(f'{len(content)} chars')} "
+        + click.style(f"({flag} to display)", dim=True)
+    )
 
-    When `show` is set, print the full body under a `— Title —` section. When
-    it isn't, print a one-line char-count placeholder naming the flag that
-    reveals it (e.g. `Outcome: 1275 chars (--outcome to display)`). Empty
-    fields print nothing. Keeps `task show` a snapshot by default while still
-    advertising the hidden detail (E-1601)."""
-    if not content:
+
+def _echo_large_section(title: str, content: str | None, show: bool):
+    """Multi-line `— Title —` section carrying the full body, shown only when
+    its flag is set; the hidden form is the single-line placeholder grouped with
+    the header fields (see `_echo_field_placeholder`). Nothing when empty or
+    gated off (E-1601)."""
+    if not content or not show:
         return
     click.echo()
-    if show:
-        click.echo(click.style(f"— {title} —", fg="cyan"))
-        click.echo(content)
-    else:
-        click.echo(
-            click.style(f"{title}:", fg="cyan")
-            + " "
-            + click.style(f"{len(content)} chars", fg="white", bold=True)
-            + click.style(f" ({flag} to display)", dim=True)
-        )
+    click.echo(click.style(f"— {title} —", fg="cyan"))
+    click.echo(content)
 
 
 def detail_item(
@@ -3474,22 +3476,27 @@ def detail_item(
         click.echo(f"{label('Landed:')} {val(_format_landed_line(landings))}")
     if item["source_file"]:
         click.echo(f"{label('Source:')} {val(item['source_file'])}")
+    # A hidden large field collapses to a single-line `Name: N chars` placeholder
+    # grouped here with the other Label: value fields; its full body (when the
+    # matching flag is set) renders as a multi-line section after Description
+    # (E-1601). Analysis precedes Text: pre-plan design content (E-999).
+    _echo_field_placeholder(label, val, "Analysis:", item["analysis"], show_analysis, "--analysis")
+    _echo_field_placeholder(label, val, "Text:", item["text"], show_text, "--text")
+    _echo_field_placeholder(label, val, "Outcome:", item["outcome"], show_outcome, "--outcome")
     # Links last: multi-line block sits below the single-line fields (E-1477).
     _echo_links_section(item_id)
 
-    # Large text sections
+    # Multi-line sections after Description: Description first, then the full
+    # bodies of any large field whose flag is set (otherwise its placeholder
+    # showed above).
     if show_description and item["description"] and item["description"] != item["title"]:
         click.echo()
         click.echo(click.style("— Description —", fg="cyan"))
         click.echo(item["description"])
 
-    # Analysis precedes Text: it is pre-plan design content (E-999). Each large
-    # field shows its full body only when its flag is set; otherwise it collapses
-    # to a one-line char-count placeholder so `task show` stays a snapshot while
-    # still advertising the hidden detail (E-1601).
-    _echo_large_field("Analysis", item["analysis"], show_analysis, "--analysis")
-    _echo_large_field("Text", item["text"], show_text, "--text")
-    _echo_large_field("Outcome", item["outcome"], show_outcome, "--outcome")
+    _echo_large_section("Analysis", item["analysis"], show_analysis)
+    _echo_large_section("Text", item["text"], show_text)
+    _echo_large_section("Outcome", item["outcome"], show_outcome)
 
     if show_children:
         children = db.query(
