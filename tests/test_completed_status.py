@@ -16,11 +16,13 @@ from endless import db, matchers, task_cmd
 from endless.cli import main
 
 
-def _add_task(title: str, status: str = "in_progress") -> int:
+def _add_task(title: str, status: str = "in_progress", type_id: int = 1) -> int:
+    # type_id per task_types seed (internal/schema/schema.sql):
+    # 1=task, 2=bug, 3=research, 4=epic.
     cur = db.execute(
         "INSERT INTO tasks (project_id, title, status, type_id, phase, created_at) "
-        "VALUES (1, ?, ?, 1, 'now', datetime('now'))",
-        (title, status),
+        "VALUES (1, ?, ?, ?, 'now', datetime('now'))",
+        (title, status, type_id),
     )
     return cur.lastrowid
 
@@ -159,6 +161,47 @@ def test_update_status_completed_uses_new_title_if_provided(seeded_project_at_cw
     )
     status, _ = _status_outcome(tid)
     assert status == "completed"
+
+
+# ─── ED-1511 / E-1617: epics are exempt from the verb-completability gate ──────
+
+_EPIC = 4  # task_types seed: 4 = epic
+
+
+def test_completed_epic_exempt_from_verb_gate_via_mark(seeded_project_at_cwd):
+    """An epic titled with an implementation verb ('implement') must still
+    complete — its deliverable IS the outcome text, and the type gate already
+    forces epics to terminate via 'completed'. Pre-fix this deadlocked."""
+    tid = _add_task("Implement the foo subsystem", type_id=_EPIC)
+    task_cmd.mark_completed_item(tid, outcome="shipped via children E-a, E-b")
+    status, outcome = _status_outcome(tid)
+    assert status == "completed"
+    assert outcome == "shipped via children E-a, E-b"
+
+
+def test_completed_epic_exempt_from_verb_gate_via_update(seeded_project_at_cwd):
+    tid = _add_task("Implement the bar subsystem", type_id=_EPIC)
+    task_cmd.update_plan(tid, status="completed", outcome="coordination summary")
+    status, _ = _status_outcome(tid)
+    assert status == "completed"
+
+
+def test_completed_epic_still_requires_outcome(seeded_project_at_cwd):
+    """The exemption is narrow: it drops only the verb gate. The outcome
+    requirement (E-1240) still applies to epics."""
+    tid = _add_task("Implement the baz subsystem", type_id=_EPIC)
+    with pytest.raises(click.ClickException) as exc:
+        task_cmd.mark_completed_item(tid, outcome="")
+    assert "outcome is required" in str(exc.value.message).lower()
+
+
+def test_completed_non_epic_still_gated_by_verb(seeded_project_at_cwd):
+    """Regression guard: the exemption must not widen to non-epic types. A
+    plain task with the same implementation-verb title is still rejected."""
+    tid = _add_task("Implement the foo subsystem", type_id=1)
+    with pytest.raises(click.ClickException) as exc:
+        task_cmd.mark_completed_item(tid, outcome="done")
+    assert "completable" in str(exc.value.message).lower()
 
 
 # ─── E-1577: completed accepts existing DB outcome (merge) ────────────────────

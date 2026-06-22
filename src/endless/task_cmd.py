@@ -1918,12 +1918,20 @@ def _lead_verb(title: str | None) -> str:
 def _require_completable_verb_for_completed(
     status: str | None,
     title: str | None,
+    task_type: str | None = None,
 ):
     """E-1240: `completed` is gated to tasks whose title's lead verb is
     marked `completable: true` in verbs.json. Reserves the status for
     findings-as-deliverable work (audits, research, reviews, …) and keeps
-    implementation tasks on the `verify`/`confirmed`/`assumed` track."""
+    implementation tasks on the `verify`/`confirmed`/`assumed` track.
+
+    ED-1511: epics are exempt. An epic's deliverable IS its outcome text (a
+    coordination summary of what shipped in its children), and the type gate
+    already forces epics to terminate via `completed` — so applying the verb
+    gate to an implementation-verb-titled epic only deadlocks it."""
     if status != "completed":
+        return
+    if task_type == "epic":
         return
     from endless.matchers import is_completable_verb
     verb = _lead_verb(title)
@@ -2131,8 +2139,9 @@ def mark_completed_item(item_id: int, outcome: str):
     from endless.event_bridge import emit_event
 
     row = db.query(
-        "SELECT id, COALESCE(title, description) as title, status FROM tasks "
-        "WHERE id = ?",
+        "SELECT id, COALESCE(title, description) as title, status, "
+        "       COALESCE((SELECT slug FROM task_types WHERE id = tasks.type_id), '') AS type "
+        "FROM tasks WHERE id = ?",
         (item_id,),
     )
     if not row:
@@ -2141,7 +2150,9 @@ def mark_completed_item(item_id: int, outcome: str):
         )
 
     _require_outcome_for_completed("completed", outcome)
-    _require_completable_verb_for_completed("completed", row[0]["title"])
+    _require_completable_verb_for_completed(
+        "completed", row[0]["title"], row[0]["type"]
+    )
 
     if row[0]["status"] == "completed":
         click.echo(
@@ -3133,11 +3144,13 @@ def update_plan(
         # incoming title if provided (the title is being changed in the
         # same call), else the existing title on the row.
         effective_title = title if title is not None else row[0]["title"]
-        _require_completable_verb_for_completed(status, effective_title)
-        # E-1577: research/epic tasks reject 'assumed'/'confirmed' terminals.
         # Use the incoming task_type if --type is also being set in this
         # update, else the existing type on the row.
         effective_type = task_type if task_type is not None else row[0]["type"]
+        _require_completable_verb_for_completed(
+            status, effective_title, effective_type
+        )
+        # E-1577: research/epic tasks reject 'assumed'/'confirmed' terminals.
         _require_terminal_allowed_for_type(status, effective_type)
 
     # Build the fields map for the event payload, plus an ordered list of
