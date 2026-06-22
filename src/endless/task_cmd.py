@@ -1711,6 +1711,27 @@ def _research_gate_check(parent_id: int | None, justification: str | None) -> No
         raise click.ClickException(_RESEARCH_GATE_MSG)
 
 
+def _reject_maybe_with_parent(phase: str | None, parent_id: int | None) -> None:
+    """Reject a task that is both maybe-phase and parented.
+
+    maybe = uncommitted; parent-child = scope binding. A parent with
+    maybe-phase children has phantom scope — it appears done while
+    uncommitted commitments linger inside. Hard rejection, no override.
+
+    Callers pass the *effective* phase and parent_id (the values that would
+    result from the write), so the same check covers create, field-update,
+    and move.
+    """
+    if phase == "maybe" and parent_id is not None:
+        raise click.ClickException(
+            "A maybe-phase task cannot have a parent. "
+            "maybe = uncommitted; parent-child = scope binding, and mixing the "
+            "two creates phantom scope. Promote it (--phase now/next/later) to "
+            "place it under a parent, or link it with a relates_to relation "
+            "instead."
+        )
+
+
 def _compose_justification_notes(
     existing_notes: str | None,
     justification: str | None,
@@ -1756,6 +1777,7 @@ def add_item(
     task_type = task_type or "task"
     validate_title(title, force=force)
     validate_description(description)
+    _reject_maybe_with_parent(phase, parent_id)
     _, proj_name = _resolve_project(project_name)
     status = status or ("ready" if tier == 1 else "needs_plan")
 
@@ -3196,6 +3218,22 @@ def update_plan(
         # 'confirmed'; their only type-specific terminal is 'completed'.
         _require_status_allowed_for_type(status, effective_type)
 
+    # Reject a maybe-phase task gaining (or keeping) a parent. Only evaluate
+    # when this update touches phase or parent_id — an unrelated edit must not
+    # be blocked just because the row already violates (the pre-rule data set
+    # stays editable). Evaluate the *effective* state: the incoming flag wins,
+    # else the existing row value. PARENT_NONE (0) means "make root" → None.
+    # This single check covers `update <maybe> --parent X` and
+    # `update <child> --phase maybe`, while the atomic `--phase next --parent Y`
+    # promote+parent combo stays legal.
+    if phase is not None or parent_id is not None:
+        effective_phase = phase if phase is not None else row[0]["phase"]
+        if parent_id is not None:
+            effective_parent = None if parent_id == PARENT_NONE else parent_id
+        else:
+            effective_parent = row[0]["parent_id"]
+        _reject_maybe_with_parent(effective_phase, effective_parent)
+
     # Build the fields map for the event payload, plus an ordered list of
     # (name, old, new) tuples for change-output rendering.
     fields = {}
@@ -4512,13 +4550,17 @@ def move_task(
 
     # Verify task exists
     row = db.query(
-        "SELECT id, parent_id FROM tasks WHERE id = ?",
+        "SELECT id, parent_id, phase FROM tasks WHERE id = ?",
         (item_id,),
     )
     if not row:
         raise click.ClickException(
             f"Task {task_id_display(item_id)} not found."
         )
+
+    # A maybe-phase task cannot be moved under a parent. Moving to root
+    # (target_parent_id is None) is always fine.
+    _reject_maybe_with_parent(row[0]["phase"], target_parent_id)
 
     _, proj_name = _resolve_project(project_name)
     old_parent_id = row[0]["parent_id"]

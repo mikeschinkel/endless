@@ -21,3 +21,18 @@ func ValidatePhase(s string) error {
 	}
 	return nil
 }
+
+// ValidateMaybeParentless rejects a task that is both maybe-phase and
+// parented. maybe = uncommitted; parent-child = scope binding, and a parent
+// with maybe-phase children has phantom scope — it appears done while
+// uncommitted commitments linger inside. Callers pass the effective phase and
+// parent (the values the write would produce), so one check covers create,
+// field-update, and move. A nil parentID (root task) is always allowed.
+func ValidateMaybeParentless(phase string, parentID *int64) error {
+	if phase == "maybe" && parentID != nil {
+		return fmt.Errorf("events: a maybe-phase task cannot have a parent " +
+			"(maybe = uncommitted, parent-child = scope binding); promote it " +
+			"or use a relates_to relation instead")
+	}
+	return nil
+}

@@ -250,6 +250,9 @@ func execTaskCreated(db dbQuerier, evt *Event, emit DerivedEmitter) (*ExecuteRes
 	if err := ValidatePhase(p.Phase); err != nil {
 		return nil, err
 	}
+	if err := ValidateMaybeParentless(p.Phase, p.ParentID); err != nil {
+		return nil, err
+	}
 	typeID, err := tasktype.Parse(p.Type)
 	if err != nil {
 		return nil, err
@@ -506,6 +509,38 @@ func execTaskFieldsUpdated(db dbQuerier, evt *Event, emit DerivedEmitter) (*Exec
 		args = append(args, value)
 	}
 
+	// Reject a task that would be both maybe-phase and parented. Only
+	// evaluate when this update touches phase or parent_id — an unrelated
+	// edit must not be blocked just because the row already violates. The
+	// incoming field wins; the absent side is read from the current row.
+	// parent_id arrives as a JSON number (float64) or null; null/0 → root.
+	_, phaseSet := p.Fields["phase"]
+	rawParent, parentSet := p.Fields["parent_id"]
+	if phaseSet || parentSet {
+		var curPhase string
+		var curParent sql.NullInt64
+		if err := db.QueryRow("SELECT phase, parent_id FROM tasks WHERE id = ?",
+			taskID).Scan(&curPhase, &curParent); err != nil {
+			return nil, fmt.Errorf("events: load task for maybe-parent check: %w", err)
+		}
+		effPhase := curPhase
+		if v, ok := p.Fields["phase"].(string); ok {
+			effPhase = v
+		}
+		var effParent *int64
+		if parentSet {
+			if v, ok := rawParent.(float64); ok && v > 0 {
+				id := int64(v)
+				effParent = &id
+			}
+		} else if curParent.Valid {
+			effParent = &curParent.Int64
+		}
+		if err := ValidateMaybeParentless(effPhase, effParent); err != nil {
+			return nil, err
+		}
+	}
+
 	// Attaching a non-empty plan (--text) auto-promotes a `needs_plan`
 	// task to `ready`. Only fires when the same update does not already
 	// set status explicitly (caller wins).
@@ -599,6 +634,15 @@ func execTaskMoved(db dbQuerier, evt *Event, emit DerivedEmitter) (*ExecuteResul
 	taskID := evt.Entity.ID
 
 	if p.NewParentID != nil {
+		// Reject moving a maybe-phase task under a parent (root moves are fine).
+		var curPhase string
+		if err := db.QueryRow("SELECT phase FROM tasks WHERE id = ?", taskID).Scan(&curPhase); err != nil {
+			return nil, fmt.Errorf("events: load task for maybe-parent check: %w", err)
+		}
+		if err := ValidateMaybeParentless(curPhase, p.NewParentID); err != nil {
+			return nil, err
+		}
+
 		current := *p.NewParentID
 		for {
 			var parentID sql.NullInt64
