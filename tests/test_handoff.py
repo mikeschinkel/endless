@@ -70,6 +70,33 @@ def test_render_handoff_includes_task_and_return_path():
     assert "Don't mark `confirmed`/`assumed`" in out
 
 
+def test_render_handoff_root_label_has_no_parent_prefix():
+    """E-1620: a root task's opening identity line is `E-<id>: <title>`."""
+    out = render_handoff(
+        spawned_id=1620,
+        title="Render hierarchical labels",
+        return_anchor="%7",
+        spawner_task_id=1400,
+        task_type="task",
+    )
+    assert "- E-1620: Render hierarchical labels." in out
+
+
+def test_render_handoff_child_label_includes_parent_prefix():
+    """E-1620: a parented task's opening line is `E-<parent>/E-<id>: <title>`."""
+    out = render_handoff(
+        spawned_id=1620,
+        title="Render hierarchical labels",
+        return_anchor="%7",
+        spawner_task_id=1400,
+        task_type="bug",
+        parent_id=1564,
+    )
+    assert "- E-1564/E-1620: Render hierarchical labels." in out
+    # The bare-id references elsewhere in the handoff stay unprefixed.
+    assert "endless task show E-1620 --text" in out
+
+
 def test_render_handoff_degrades_without_runtime_context():
     out = render_handoff(
         spawned_id=1469,

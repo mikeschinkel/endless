@@ -387,6 +387,18 @@ def task_id_display(item_id: int) -> str:
     return f"E-{item_id}"
 
 
+def _hierarchical_label_prefix(item_id: int, parent_id: int | None) -> str:
+    """Hierarchical id prefix for bg-agent labels (E-1620).
+
+    A task with a parent renders `E-<parent>/E-<id>`; a root task (standalone
+    or epic) renders the bare `E-<id>`. The rule keys solely on parent
+    presence, regardless of the parent's type.
+    """
+    if parent_id:
+        return f"{task_id_display(parent_id)}/{task_id_display(item_id)}"
+    return task_id_display(item_id)
+
+
 def parse_task_id(value: str) -> int:
     """Parse a task ID from user input, stripping optional E- prefix."""
     s = value.strip()
@@ -3633,6 +3645,7 @@ def render_handoff(spawned_id: int, title: str,
                    worktree_path: str | None = None,
                    branch: str | None = None,
                    task_type: str | None = None,
+                   parent_id: int | None = None,
                    bg: bool = False) -> str:
     """Render the spawn handoff for a task by invoking `endless-go template render`.
 
@@ -3668,6 +3681,7 @@ def render_handoff(spawned_id: int, title: str,
 
     vars_payload = {
         "spawned_id": spawned_id,
+        "label_prefix": _hierarchical_label_prefix(spawned_id, parent_id),
         "title": title,
         "spawner_task": spawner_task_id if spawner_task_id is not None else "?",
         "return_anchor": return_anchor or "%<spawning-pane>",
@@ -3693,7 +3707,7 @@ def render_handoff(spawned_id: int, title: str,
 def show_handoff(item_id: int):
     """Render the spawn handoff for a task and print it."""
     row = db.query(
-        "SELECT t.id, t.title, COALESCE(tt.slug, '') AS type_slug "
+        "SELECT t.id, t.title, t.parent_id, COALESCE(tt.slug, '') AS type_slug "
         "FROM tasks t LEFT JOIN task_types tt ON tt.id = t.type_id "
         "WHERE t.id = ?",
         (item_id,),
@@ -3711,6 +3725,7 @@ def show_handoff(item_id: int):
         worktree_path=str(wt) if wt else None,
         branch=_branch_for_worktree(wt) if wt else None,
         task_type=row[0]["type_slug"] or None,
+        parent_id=row[0]["parent_id"],
     ))
 
 
@@ -3829,7 +3844,7 @@ def spawn_plan(item_id: int, project_name: str | None = None, no_plan: bool = Fa
 
     # Get the plan item
     row = db.query(
-        "SELECT p.id, p.title, p.status, p.project_id, "
+        "SELECT p.id, p.title, p.status, p.project_id, p.parent_id, "
         "proj.path as project_path, proj.name as project_name, "
         "COALESCE(tt.slug, '') AS type_slug "
         "FROM tasks p "
@@ -3970,6 +3985,7 @@ def spawn_plan(item_id: int, project_name: str | None = None, no_plan: bool = Fa
             title=title,
             cd_target=cd_target,
             task_type=item["type_slug"] or None,
+            parent_id=item["parent_id"],
             worktree_override=worktree is not None,
         )
         return
@@ -3995,6 +4011,7 @@ def spawn_plan(item_id: int, project_name: str | None = None, no_plan: bool = Fa
         worktree_path=cd_target,
         branch=_branch_for_worktree(cd_target),
         task_type=item["type_slug"] or None,
+        parent_id=item["parent_id"],
     )
     handoff_file = tempfile.NamedTemporaryFile(
         mode="w", suffix=".md", prefix="endless-handoff-",
@@ -4155,18 +4172,25 @@ def _bg_throttle_warn(item_id: int) -> None:
 
 
 def _spawn_bg_dispatch(item_id: int, title: str, cd_target: str,
-                       task_type: str | None, worktree_override: bool):
+                       task_type: str | None, parent_id: int | None,
+                       worktree_override: bool):
     """Dispatch a background agent for an already-pre-claimed task (E-1568).
 
-    Renders the bg handoff variant, launches `claude --bg --name E-<id>` with
+    Renders the bg handoff variant, launches `claude --bg --name <label>` with
     the handoff as a positional argv (well under ARG_MAX), parses the short id
     from stdout, and records the dispatch sessions row (session_id NULL +
     short_id, kind background) via the `session-query record-bg-agent` Go
     helper. The agent's SessionStart hook attaches the real UUID later.
+
+    The `--name` label carries the hierarchical task context (E-1620):
+    `E-<parent>/E-<id>: <title>` for a parented task, `E-<id>: <title>` for a
+    root, so Agent View rows self-identify by task and parent.
     """
     import subprocess
     from endless import config
     from endless.event_bridge import _resolve_endless_go
+
+    label = f"{_hierarchical_label_prefix(item_id, parent_id)}: {title}"
 
     # No spawning pane / origin return for a headless agent — the bg template
     # branch omits the tmux return lines, so return_anchor is unused.
@@ -4176,6 +4200,7 @@ def _spawn_bg_dispatch(item_id: int, title: str, cd_target: str,
         worktree_path=cd_target,
         branch=_branch_for_worktree(cd_target),
         task_type=task_type,
+        parent_id=parent_id,
         bg=True,
     )
 
@@ -4189,7 +4214,7 @@ def _spawn_bg_dispatch(item_id: int, title: str, cd_target: str,
 
     try:
         result = subprocess.run(
-            [claude_bin, "--bg", "--name", f"E-{item_id}", handoff_text],
+            [claude_bin, "--bg", "--name", label, handoff_text],
             cwd=cd_target, capture_output=True, text=True,
         )
     except FileNotFoundError as e:
@@ -4226,7 +4251,7 @@ def _spawn_bg_dispatch(item_id: int, title: str, cd_target: str,
     click.echo(
         click.style("•", fg="cyan")
         + " Backgrounded "
-        + click.style(f"{task_id_display(item_id)}: {title}", bold=True)
+        + click.style(label, bold=True)
         + f" as {short_id}"
     )
     if worktree_override:

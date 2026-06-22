@@ -50,6 +50,7 @@ func endlessGoBin(t *testing.T) string {
 func fullHandoffVars() string {
 	return `{
 		"spawned_id": 9999,
+		"label_prefix": "E-8888/E-9999",
 		"title": "Test task",
 		"spawner_task": 7777,
 		"return_anchor": "%1",
@@ -102,6 +103,8 @@ func TestRender_FullVars_ContainsExpectedSubstitutions(t *testing.T) {
 	wants := []string{
 		"E-9999", "Test task", "E-7777", "%1",
 		"/tmp/wt/e-9999", "task/9999-test",
+		// E-1620: the hierarchical identity prefix renders on the opening line.
+		"- E-8888/E-9999: Test task.",
 	}
 	for _, want := range wants {
 		if !strings.Contains(out, want) {
