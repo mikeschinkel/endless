@@ -100,6 +100,14 @@ const (
 	KindTaskDepDeleted Kind = "task_dep.deleted"
 )
 
+// Epic derivation event kinds (E-1541). An epic's status is auto-derived from
+// its children's statuses; epic.status_derived records each derivation so the
+// audit trail stays distinct from human-triggered task.status_changed events
+// and the projector can reproduce derivation by replaying the recorded events.
+const (
+	KindEpicStatusDerived Kind = "epic.status_derived"
+)
+
 // Project event kinds.
 const (
 	KindProjectRegistered   Kind = "project.registered"
@@ -184,6 +192,8 @@ var ValidKinds = map[Kind]bool{
 	// Task dependency
 	KindTaskDepCreated: true,
 	KindTaskDepDeleted: true,
+	// Epic derivation (E-1541)
+	KindEpicStatusDerived: true,
 	// Project
 	KindProjectRegistered:   true,
 	KindProjectUpdated:      true,

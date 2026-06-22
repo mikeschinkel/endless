@@ -135,7 +135,7 @@ func run(kindStr, project, entityTypeStr, entityID, actorKindStr, actorID,
 		// 2. Build and write event to segment file
 		// 3. Execute SQL and commit (releases lock)
 		var newID int64
-		var execAndCommit func(*events.Event) (*events.ExecuteResult, error)
+		var execAndCommit func(*events.Event, events.DerivedEmitter) (*events.ExecuteResult, error)
 		var rollback func()
 		var err error
 		if needsTaskPreAlloc {
@@ -196,8 +196,15 @@ func run(kindStr, project, entityTypeStr, entityID, actorKindStr, actorID,
 			return fmt.Errorf("commit ledger segment: %w", err)
 		}
 
+		// E-1541: only task creates can add a child to a parent epic and so
+		// trigger derivation; decision creates never do.
+		var emit events.DerivedEmitter
+		if needsTaskPreAlloc {
+			emit = makeDerivedEmitter(clock, project, nodeIDStr, projectRoot, writer)
+		}
+
 		// Execute SQL mutation and commit (releases write lock)
-		if _, err := execAndCommit(&evt); err != nil {
+		if _, err := execAndCommit(&evt, emit); err != nil {
 			return err
 		}
 
@@ -260,8 +267,11 @@ func run(kindStr, project, entityTypeStr, entityID, actorKindStr, actorID,
 			return fmt.Errorf("commit ledger segment: %w", err)
 		}
 
-		// Execute SQL mutation (side effect of the event).
-		execRes, err := events.Execute(&evt)
+		// Execute SQL mutation (side effect of the event). The derived emitter
+		// (E-1541) records any epic.status_derived entries the mutation
+		// cascades into, on the same writer, after this primary event.
+		emit := makeDerivedEmitter(clock, project, nodeIDStr, projectRoot, writer)
+		execRes, err := events.Execute(&evt, emit)
 		if err != nil {
 			return err
 		}
@@ -289,6 +299,55 @@ func run(kindStr, project, entityTypeStr, entityID, actorKindStr, actorID,
 	}
 
 	return nil
+}
+
+// makeDerivedEmitter builds the epic-derivation ledger emitter (E-1541) threaded
+// into the executor. When the executor's recompute changes an epic's status it
+// calls this closure, which builds an epic.status_derived event (fresh kairos
+// timestamp from the same clock, system/epic-derivation actor), appends it to
+// the same ledger segment writer as the triggering event, and commits it. The
+// emit fires inside the triggering mutation's open SQL transaction — same
+// segment-before-SQL-commit ordering as the primary event (E-1206).
+func makeDerivedEmitter(clock *kairos.Clock, project, nodeIDStr, projectRoot string,
+	writer *events.Writer) events.DerivedEmitter {
+
+	return func(epicID int64, oldStatus, newStatus string) error {
+		payload, err := json.Marshal(events.EpicStatusDerivedPayload{
+			TaskID:    epicID,
+			OldStatus: oldStatus,
+			NewStatus: newStatus,
+		})
+		if err != nil {
+			return fmt.Errorf("marshal epic.status_derived payload: %w", err)
+		}
+		evt := events.Event{
+			V:       events.Version,
+			TS:      clock.Now().String(),
+			Kind:    events.KindEpicStatusDerived,
+			Project: project,
+			Entity: events.EntityRef{
+				Type: events.EntityTask,
+				ID:   fmt.Sprintf("%d", epicID),
+			},
+			Actor: events.Actor{
+				Kind: events.ActorSystem,
+				ID:   "epic-derivation",
+			},
+			Payload: payload,
+		}
+		if err := evt.Validate(); err != nil {
+			return err
+		}
+		line, err := json.Marshal(evt)
+		if err != nil {
+			return fmt.Errorf("marshal epic.status_derived event: %w", err)
+		}
+		if err := writer.Append(line); err != nil {
+			return err
+		}
+		segRel := filepath.Join(".endless", events.LedgerDirName, writer.CurrentSegment())
+		return events.CommitLedgerSegment(projectRoot, segRel)
+	}
 }
 
 // projectNextReviseOutput is the stdout JSON for a project_next.revised emit.
@@ -366,7 +425,8 @@ func runProjectNextRevise(evtKind events.Kind, project, entityType, entityID,
 		return fmt.Errorf("commit ledger segment: %w", err)
 	}
 
-	execRes, err := execAndCommit(&evt)
+	// project_next.revised never touches the task tree, so no epic derivation.
+	execRes, err := execAndCommit(&evt, nil)
 	if err != nil {
 		return err
 	}

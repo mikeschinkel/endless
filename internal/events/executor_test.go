@@ -68,7 +68,7 @@ func TestPreAllocateTaskID_MonotonicallyIncreasing(t *testing.T) {
 	}
 
 	evt1 := newTaskCreatedEvent(t, id1, "first")
-	if _, err := execAndCommit1(evt1); err != nil {
+	if _, err := execAndCommit1(evt1, nil); err != nil {
 		t.Fatalf("execAndCommit 1: %v", err)
 	}
 
@@ -80,7 +80,7 @@ func TestPreAllocateTaskID_MonotonicallyIncreasing(t *testing.T) {
 		t.Errorf("second id = %d, want > %d", id2, id1)
 	}
 	evt2 := newTaskCreatedEvent(t, id2, "second")
-	if _, err := execAndCommit2(evt2); err != nil {
+	if _, err := execAndCommit2(evt2, nil); err != nil {
 		t.Fatalf("execAndCommit 2: %v", err)
 	}
 }
@@ -130,7 +130,7 @@ func TestBeginImmediate_CommitAndRollback(t *testing.T) {
 		t.Fatalf("BeginImmediate (commit path): %v", err)
 	}
 	evt := newStatusChangedEvent(t, 100, "ready", "in_progress")
-	if _, err := execAndCommit(evt); err != nil {
+	if _, err := execAndCommit(evt, nil); err != nil {
 		t.Fatalf("execAndCommit: %v", err)
 	}
 
@@ -163,7 +163,7 @@ func TestExecute_TaskCreatedInsertsRow(t *testing.T) {
 	db := withExecutorDB(t)
 
 	evt := newTaskCreatedEvent(t, 500, "exec-target")
-	res, err := events.Execute(evt)
+	res, err := events.Execute(evt, nil)
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
@@ -216,7 +216,7 @@ func TestExecute_TaskCreatedStoresNotes(t *testing.T) {
 		Actor:   events.Actor{Kind: events.ActorCLI, ID: "tester"},
 		Payload: payload,
 	}
-	if _, err := events.Execute(evt); err != nil {
+	if _, err := events.Execute(evt, nil); err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
 

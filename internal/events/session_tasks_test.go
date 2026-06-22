@@ -139,7 +139,7 @@ func TestSessionTasks_CreatedBySession(t *testing.T) {
 	db := newSessionTasksTestDB(t)
 
 	evt := taskCreatedEvent(t, 100, Actor{Kind: ActorSession, ID: "s1", SessionID: "42"})
-	if _, err := dispatch(db, evt); err != nil {
+	if _, err := dispatch(db, evt, nil); err != nil {
 		t.Fatalf("dispatch: %v", err)
 	}
 
@@ -164,7 +164,7 @@ func TestSessionTasks_UpdateAdvancesUpdatedAt(t *testing.T) {
 	db := newSessionTasksTestDB(t)
 
 	actor := Actor{Kind: ActorSession, ID: "s1", SessionID: "42"}
-	if _, err := dispatch(db, taskCreatedEvent(t, 100, actor)); err != nil {
+	if _, err := dispatch(db, taskCreatedEvent(t, 100, actor), nil); err != nil {
 		t.Fatalf("dispatch create: %v", err)
 	}
 	createdAt1, updatedAt1, _ := sessionTasksRow(t, db, 42, 100)
@@ -178,7 +178,7 @@ func TestSessionTasks_UpdateAdvancesUpdatedAt(t *testing.T) {
 		t.Fatalf("backdate: %v", err)
 	}
 
-	if _, err := dispatch(db, taskFieldsUpdatedEvent(t, 100, actor)); err != nil {
+	if _, err := dispatch(db, taskFieldsUpdatedEvent(t, 100, actor), nil); err != nil {
 		t.Fatalf("dispatch update: %v", err)
 	}
 
@@ -203,7 +203,7 @@ func TestSessionTasks_CLIActorWithSessionID(t *testing.T) {
 	db := newSessionTasksTestDB(t)
 
 	evt := taskCreatedEvent(t, 100, Actor{Kind: ActorCLI, ID: "user@host", SessionID: "42"})
-	if _, err := dispatch(db, evt); err != nil {
+	if _, err := dispatch(db, evt, nil); err != nil {
 		t.Fatalf("dispatch: %v", err)
 	}
 
@@ -222,7 +222,7 @@ func TestSessionTasks_NoRowForCLIActorWithoutSessionID(t *testing.T) {
 	db := newSessionTasksTestDB(t)
 
 	evt := taskCreatedEvent(t, 100, Actor{Kind: ActorCLI, ID: "user@host", SessionID: ""})
-	if _, err := dispatch(db, evt); err != nil {
+	if _, err := dispatch(db, evt, nil); err != nil {
 		t.Fatalf("dispatch: %v", err)
 	}
 
@@ -239,7 +239,7 @@ func TestSessionTasks_NoRowForEmptySessionID(t *testing.T) {
 	db := newSessionTasksTestDB(t)
 
 	evt := taskCreatedEvent(t, 100, Actor{Kind: ActorCLI, ID: "user@host", SessionID: ""})
-	if _, err := dispatch(db, evt); err != nil {
+	if _, err := dispatch(db, evt, nil); err != nil {
 		t.Fatalf("dispatch: %v", err)
 	}
 
@@ -253,12 +253,12 @@ func TestSessionTasks_NoRowForEmptySessionID(t *testing.T) {
 func TestSessionTasks_TwoSessionsSameTask(t *testing.T) {
 	db := newSessionTasksTestDB(t)
 
-	if _, err := dispatch(db, taskCreatedEvent(t, 100, Actor{Kind: ActorSession, ID: "s1", SessionID: "42"})); err != nil {
+	if _, err := dispatch(db, taskCreatedEvent(t, 100, Actor{Kind: ActorSession, ID: "s1", SessionID: "42"}), nil); err != nil {
 		t.Fatalf("dispatch s1: %v", err)
 	}
 	// Different session, same task — uses task.fields_updated since
 	// task.created on an existing id would fail the INSERT.
-	if _, err := dispatch(db, taskFieldsUpdatedEvent(t, 100, Actor{Kind: ActorSession, ID: "s2", SessionID: "43"})); err != nil {
+	if _, err := dispatch(db, taskFieldsUpdatedEvent(t, 100, Actor{Kind: ActorSession, ID: "s2", SessionID: "43"}), nil); err != nil {
 		t.Fatalf("dispatch s2: %v", err)
 	}
 
@@ -279,10 +279,10 @@ func TestSessionTasks_OneSessionTwoTasks(t *testing.T) {
 	db := newSessionTasksTestDB(t)
 
 	actor := Actor{Kind: ActorSession, ID: "s1", SessionID: "42"}
-	if _, err := dispatch(db, taskCreatedEvent(t, 100, actor)); err != nil {
+	if _, err := dispatch(db, taskCreatedEvent(t, 100, actor), nil); err != nil {
 		t.Fatalf("dispatch task 100: %v", err)
 	}
-	if _, err := dispatch(db, taskCreatedEvent(t, 101, actor)); err != nil {
+	if _, err := dispatch(db, taskCreatedEvent(t, 101, actor), nil); err != nil {
 		t.Fatalf("dispatch task 101: %v", err)
 	}
 
@@ -298,13 +298,13 @@ func TestSessionTasks_IdempotentReplay(t *testing.T) {
 	db := newSessionTasksTestDB(t)
 
 	actor := Actor{Kind: ActorSession, ID: "s1", SessionID: "42"}
-	if _, err := dispatch(db, taskCreatedEvent(t, 100, actor)); err != nil {
+	if _, err := dispatch(db, taskCreatedEvent(t, 100, actor), nil); err != nil {
 		t.Fatalf("dispatch create: %v", err)
 	}
-	if _, err := dispatch(db, taskFieldsUpdatedEvent(t, 100, actor)); err != nil {
+	if _, err := dispatch(db, taskFieldsUpdatedEvent(t, 100, actor), nil); err != nil {
 		t.Fatalf("dispatch update 1: %v", err)
 	}
-	if _, err := dispatch(db, taskFieldsUpdatedEvent(t, 100, actor)); err != nil {
+	if _, err := dispatch(db, taskFieldsUpdatedEvent(t, 100, actor), nil); err != nil {
 		t.Fatalf("dispatch update 2: %v", err)
 	}
 
@@ -321,10 +321,10 @@ func TestSessionTasks_DeletedTaskRetainsRow(t *testing.T) {
 	db := newSessionTasksTestDB(t)
 
 	actor := Actor{Kind: ActorSession, ID: "s1", SessionID: "42"}
-	if _, err := dispatch(db, taskCreatedEvent(t, 100, actor)); err != nil {
+	if _, err := dispatch(db, taskCreatedEvent(t, 100, actor), nil); err != nil {
 		t.Fatalf("dispatch create: %v", err)
 	}
-	if _, err := dispatch(db, taskDeletedEvent(t, 100, actor)); err != nil {
+	if _, err := dispatch(db, taskDeletedEvent(t, 100, actor), nil); err != nil {
 		t.Fatalf("dispatch delete: %v", err)
 	}
 

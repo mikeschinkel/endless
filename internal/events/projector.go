@@ -88,6 +88,8 @@ func replayEvent(db *sql.DB, evt *Event, result *ProjectResult) error {
 		return replayTaskBulkCleared(db, evt, result)
 	case KindTaskLanded:
 		return replayTaskLanded(db, evt, result)
+	case KindEpicStatusDerived:
+		return replayEpicStatusDerived(db, evt, result)
 	case KindDecisionCreated:
 		return replayDecisionCreated(db, evt, result)
 	case KindDecisionFieldsUpdated:
@@ -498,6 +500,34 @@ func replayTaskLanded(db *sql.DB, evt *Event, result *ProjectResult) error {
 	if err != nil {
 		return fmt.Errorf("insert task_landing for task %d: %w", taskID, err)
 	}
+	return nil
+}
+
+// replayEpicStatusDerived applies a recorded epic.status_derived event (E-1541):
+// the epic's status was auto-derived from its children on the live path and the
+// derivation was recorded as its own ledger entry. Replay just re-applies that
+// status (and completed_at), reproducing the live state without re-running
+// derivation — the projector never recomputes (see the E-1541 plan §0). This
+// keeps projection(ledger) == live DB so validate-db stays meaningful.
+func replayEpicStatusDerived(db *sql.DB, evt *Event, result *ProjectResult) error {
+	var p EpicStatusDerivedPayload
+	if err := json.Unmarshal(evt.Payload, &p); err != nil {
+		return err
+	}
+
+	var completedAt *string
+	if p.NewStatus == "completed" {
+		ts := kairosToISO(evt.TS)
+		completedAt = &ts
+	}
+
+	if _, err := db.Exec(
+		"UPDATE tasks SET status = ?, completed_at = ? WHERE id = ?",
+		p.NewStatus, completedAt, evt.Entity.ID,
+	); err != nil {
+		return fmt.Errorf("epic status derived %s: %w", evt.Entity.ID, err)
+	}
+	result.TasksUpdated++
 	return nil
 }
 

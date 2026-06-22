@@ -167,7 +167,7 @@ func pendingAddedEventCount(t *testing.T, db *sql.DB, taskID int64) int {
 func TestAutoAddUrgentPending_TaskCreated(t *testing.T) {
 	db := newPendingTestDB(t)
 
-	if _, err := execTaskCreated(db, taskCreatedUrgentEvent(t, 100, "42")); err != nil {
+	if _, err := execTaskCreated(db, taskCreatedUrgentEvent(t, 100, "42"), nil); err != nil {
 		t.Fatalf("execTaskCreated: %v", err)
 	}
 
@@ -195,14 +195,14 @@ func TestAutoAddUrgentPending_TaskCreated(t *testing.T) {
 func TestAutoAddUrgentPending_PhaseChanged(t *testing.T) {
 	db := newPendingTestDB(t)
 
-	if _, err := execTaskCreated(db, taskCreatedNonUrgentEvent(t, 200, "42")); err != nil {
+	if _, err := execTaskCreated(db, taskCreatedNonUrgentEvent(t, 200, "42"), nil); err != nil {
 		t.Fatalf("execTaskCreated: %v", err)
 	}
 	if got := pendingCount(t, db, 200); got != 0 {
 		t.Fatalf("precondition: pending after non-urgent create = %d, want 0", got)
 	}
 
-	if _, err := execTaskFieldsUpdated(db, taskFieldsUpdatedPhaseEvent(t, 200, "urgent", "42")); err != nil {
+	if _, err := execTaskFieldsUpdated(db, taskFieldsUpdatedPhaseEvent(t, 200, "urgent", "42"), nil); err != nil {
 		t.Fatalf("execTaskFieldsUpdated: %v", err)
 	}
 
@@ -220,13 +220,13 @@ func TestAutoAddUrgentPending_PhaseChanged(t *testing.T) {
 func TestAutoAddUrgentPending_Idempotent(t *testing.T) {
 	db := newPendingTestDB(t)
 
-	if _, err := execTaskCreated(db, taskCreatedUrgentEvent(t, 300, "42")); err != nil {
+	if _, err := execTaskCreated(db, taskCreatedUrgentEvent(t, 300, "42"), nil); err != nil {
 		t.Fatalf("execTaskCreated urgent: %v", err)
 	}
-	if _, err := execTaskFieldsUpdated(db, taskFieldsUpdatedPhaseEvent(t, 300, "next", "42")); err != nil {
+	if _, err := execTaskFieldsUpdated(db, taskFieldsUpdatedPhaseEvent(t, 300, "next", "42"), nil); err != nil {
 		t.Fatalf("execTaskFieldsUpdated -> next: %v", err)
 	}
-	if _, err := execTaskFieldsUpdated(db, taskFieldsUpdatedPhaseEvent(t, 300, "urgent", "42")); err != nil {
+	if _, err := execTaskFieldsUpdated(db, taskFieldsUpdatedPhaseEvent(t, 300, "urgent", "42"), nil); err != nil {
 		t.Fatalf("execTaskFieldsUpdated -> urgent: %v", err)
 	}
 
@@ -243,10 +243,10 @@ func TestAutoAddUrgentPending_Idempotent(t *testing.T) {
 func TestAutoAddUrgentPending_NonUrgentPhaseChange(t *testing.T) {
 	db := newPendingTestDB(t)
 
-	if _, err := execTaskCreated(db, taskCreatedNonUrgentEvent(t, 400, "42")); err != nil {
+	if _, err := execTaskCreated(db, taskCreatedNonUrgentEvent(t, 400, "42"), nil); err != nil {
 		t.Fatalf("execTaskCreated: %v", err)
 	}
-	if _, err := execTaskFieldsUpdated(db, taskFieldsUpdatedPhaseEvent(t, 400, "later", "42")); err != nil {
+	if _, err := execTaskFieldsUpdated(db, taskFieldsUpdatedPhaseEvent(t, 400, "later", "42"), nil); err != nil {
 		t.Fatalf("execTaskFieldsUpdated: %v", err)
 	}
 
@@ -269,7 +269,7 @@ func TestAutoAddUrgentPending_CreatesProjectNextOnDemand(t *testing.T) {
 		t.Fatalf("precondition: project_next rows = %d, want 0", preCount)
 	}
 
-	if _, err := execTaskCreated(db, taskCreatedUrgentEvent(t, 500, "42")); err != nil {
+	if _, err := execTaskCreated(db, taskCreatedUrgentEvent(t, 500, "42"), nil); err != nil {
 		t.Fatalf("execTaskCreated: %v", err)
 	}
 
@@ -289,10 +289,10 @@ func TestAutoAddUrgentPending_CreatesProjectNextOnDemand(t *testing.T) {
 func TestAutoAddUrgentPending_ReusesExistingProjectNext(t *testing.T) {
 	db := newPendingTestDB(t)
 
-	if _, err := execTaskCreated(db, taskCreatedUrgentEvent(t, 600, "42")); err != nil {
+	if _, err := execTaskCreated(db, taskCreatedUrgentEvent(t, 600, "42"), nil); err != nil {
 		t.Fatalf("first urgent create: %v", err)
 	}
-	if _, err := execTaskCreated(db, taskCreatedUrgentEvent(t, 601, "42")); err != nil {
+	if _, err := execTaskCreated(db, taskCreatedUrgentEvent(t, 601, "42"), nil); err != nil {
 		t.Fatalf("second urgent create: %v", err)
 	}
 
@@ -321,7 +321,7 @@ func TestAutoAddUrgentPending_SkipsWithoutSessionID(t *testing.T) {
 	db := newPendingTestDB(t)
 
 	evt := taskCreatedUrgentEvent(t, 700, "")
-	if _, err := execTaskCreated(db, evt); err != nil {
+	if _, err := execTaskCreated(db, evt, nil); err != nil {
 		t.Fatalf("execTaskCreated: %v", err)
 	}
 
@@ -342,7 +342,7 @@ func TestDispatch_TaskCreatedUrgent_AutoAddsPending(t *testing.T) {
 	db := newPendingTestDB(t)
 
 	evt := taskCreatedUrgentEvent(t, 900, "42")
-	res, err := dispatch(db, evt)
+	res, err := dispatch(db, evt, nil)
 	if err != nil {
 		t.Fatalf("dispatch: %v", err)
 	}
@@ -364,13 +364,13 @@ func TestDispatch_TaskCreatedUrgent_AutoAddsPending(t *testing.T) {
 func TestAutoAddUrgentPending_PayloadIncludesTrigger(t *testing.T) {
 	db := newPendingTestDB(t)
 
-	if _, err := execTaskCreated(db, taskCreatedUrgentEvent(t, 800, "42")); err != nil {
+	if _, err := execTaskCreated(db, taskCreatedUrgentEvent(t, 800, "42"), nil); err != nil {
 		t.Fatalf("urgent create: %v", err)
 	}
-	if _, err := execTaskCreated(db, taskCreatedNonUrgentEvent(t, 801, "42")); err != nil {
+	if _, err := execTaskCreated(db, taskCreatedNonUrgentEvent(t, 801, "42"), nil); err != nil {
 		t.Fatalf("non-urgent create: %v", err)
 	}
-	if _, err := execTaskFieldsUpdated(db, taskFieldsUpdatedPhaseEvent(t, 801, "urgent", "42")); err != nil {
+	if _, err := execTaskFieldsUpdated(db, taskFieldsUpdatedPhaseEvent(t, 801, "urgent", "42"), nil); err != nil {
 		t.Fatalf("phase flip: %v", err)
 	}
 

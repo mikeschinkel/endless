@@ -71,6 +71,15 @@ type TaskLandedPayload struct {
 	MergeCommitSHA string `json:"merge_commit_sha"`
 }
 
+// Epic derivation payloads (E-1541). Recorded once per epic whose status the
+// derivation rule changed. Mirrors TaskStatusChangedPayload's shape; the entity
+// ref carries the epic's task id and the actor is system/epic-derivation.
+type EpicStatusDerivedPayload struct {
+	TaskID    int64  `json:"task_id"`
+	OldStatus string `json:"old_status"`
+	NewStatus string `json:"new_status"`
+}
+
 // Task dependency payloads
 
 type TaskDepCreatedPayload struct {

@@ -37,7 +37,7 @@ type ExecuteResult struct {
 //  2. Write the event to the segment file using the returned ID
 //  3. Call execAndCommit(evt) to run the SQL mutation and release the lock
 //  4. If anything fails before step 3, call rollback() to release the lock
-func PreAllocateTaskID() (id int64, execAndCommit func(*Event) (*ExecuteResult, error), rollback func(), err error) {
+func PreAllocateTaskID() (id int64, execAndCommit func(*Event, DerivedEmitter) (*ExecuteResult, error), rollback func(), err error) {
 	db, err := monitor.DB()
 	if err != nil {
 		return 0, nil, nil, fmt.Errorf("events: db connection: %w", err)
@@ -58,8 +58,8 @@ func PreAllocateTaskID() (id int64, execAndCommit func(*Event) (*ExecuteResult, 
 		db.Exec("ROLLBACK")
 	}
 
-	doExecAndCommit := func(evt *Event) (*ExecuteResult, error) {
-		result, err := dispatch(db, evt)
+	doExecAndCommit := func(evt *Event, emit DerivedEmitter) (*ExecuteResult, error) {
+		result, err := dispatch(db, evt, emit)
 		if err != nil {
 			db.Exec("ROLLBACK")
 			return nil, err
@@ -78,7 +78,7 @@ func PreAllocateTaskID() (id int64, execAndCommit func(*Event) (*ExecuteResult, 
 // independent of tasks (display prefix ED- disambiguates).
 //
 // Usage mirrors PreAllocateTaskID — see that docstring.
-func PreAllocateDecisionID() (id int64, execAndCommit func(*Event) (*ExecuteResult, error), rollback func(), err error) {
+func PreAllocateDecisionID() (id int64, execAndCommit func(*Event, DerivedEmitter) (*ExecuteResult, error), rollback func(), err error) {
 	db, err := monitor.DB()
 	if err != nil {
 		return 0, nil, nil, fmt.Errorf("events: db connection: %w", err)
@@ -98,8 +98,8 @@ func PreAllocateDecisionID() (id int64, execAndCommit func(*Event) (*ExecuteResu
 		db.Exec("ROLLBACK")
 	}
 
-	doExecAndCommit := func(evt *Event) (*ExecuteResult, error) {
-		result, err := dispatch(db, evt)
+	doExecAndCommit := func(evt *Event, emit DerivedEmitter) (*ExecuteResult, error) {
+		result, err := dispatch(db, evt, emit)
 		if err != nil {
 			db.Exec("ROLLBACK")
 			return nil, err
@@ -125,7 +125,7 @@ func PreAllocateDecisionID() (id int64, execAndCommit func(*Event) (*ExecuteResu
 //  2. Append the event to the segment file
 //  3. Call execAndCommit(evt) to run the SQL mutation and release the lock
 //  4. If anything fails before step 3, call rollback() to release the lock
-func BeginImmediate() (execAndCommit func(*Event) (*ExecuteResult, error), rollback func(), err error) {
+func BeginImmediate() (execAndCommit func(*Event, DerivedEmitter) (*ExecuteResult, error), rollback func(), err error) {
 	db, err := monitor.DB()
 	if err != nil {
 		return nil, nil, fmt.Errorf("events: db connection: %w", err)
@@ -139,8 +139,8 @@ func BeginImmediate() (execAndCommit func(*Event) (*ExecuteResult, error), rollb
 		db.Exec("ROLLBACK")
 	}
 
-	doExecAndCommit := func(evt *Event) (*ExecuteResult, error) {
-		result, err := dispatch(db, evt)
+	doExecAndCommit := func(evt *Event, emit DerivedEmitter) (*ExecuteResult, error) {
+		result, err := dispatch(db, evt, emit)
 		if err != nil {
 			db.Exec("ROLLBACK")
 			return nil, err
@@ -155,8 +155,10 @@ func BeginImmediate() (execAndCommit func(*Event) (*ExecuteResult, error), rollb
 }
 
 // Execute processes an event: runs the corresponding SQL mutation.
-// Used for non-create events where ID pre-allocation is not needed.
-func Execute(evt *Event) (*ExecuteResult, error) {
+// Used for non-create events where ID pre-allocation is not needed. emit is the
+// epic-derivation ledger emitter (E-1541); it is nil for events that cannot
+// trigger derivation and from callers that record no derived events (tests).
+func Execute(evt *Event, emit DerivedEmitter) (*ExecuteResult, error) {
 	db, err := monitor.DB()
 	if err != nil {
 		return nil, fmt.Errorf("events: db connection: %w", err)
@@ -168,7 +170,7 @@ func Execute(evt *Event) (*ExecuteResult, error) {
 	}
 	defer tx.Rollback()
 
-	result, err := dispatch(tx, evt)
+	result, err := dispatch(tx, evt, emit)
 	if err != nil {
 		return nil, err
 	}
@@ -179,20 +181,23 @@ func Execute(evt *Event) (*ExecuteResult, error) {
 	return result, nil
 }
 
-func dispatch(db dbQuerier, evt *Event) (*ExecuteResult, error) {
+// dispatch routes an event to its executor. emit (E-1541) is threaded to the
+// six task mutations that can change an epic's derived status; the remaining
+// executors ignore derivation.
+func dispatch(db dbQuerier, evt *Event, emit DerivedEmitter) (*ExecuteResult, error) {
 	switch evt.Kind {
 	case KindTaskCreated:
-		return execTaskCreated(db, evt)
+		return execTaskCreated(db, evt, emit)
 	case KindTaskImported:
-		return execTaskImported(db, evt)
+		return execTaskImported(db, evt, emit)
 	case KindTaskStatusChanged:
-		return execTaskStatusChanged(db, evt)
+		return execTaskStatusChanged(db, evt, emit)
 	case KindTaskFieldsUpdated:
-		return execTaskFieldsUpdated(db, evt)
+		return execTaskFieldsUpdated(db, evt, emit)
 	case KindTaskMoved:
-		return execTaskMoved(db, evt)
+		return execTaskMoved(db, evt, emit)
 	case KindTaskDeleted:
-		return execTaskDeleted(db, evt)
+		return execTaskDeleted(db, evt, emit)
 	case KindTaskBulkCleared:
 		return execTaskBulkCleared(db, evt)
 	case KindTaskReleased:
@@ -237,7 +242,7 @@ func now() string {
 	return time.Now().UTC().Format("2006-01-02T15:04:05")
 }
 
-func execTaskCreated(db dbQuerier, evt *Event) (*ExecuteResult, error) {
+func execTaskCreated(db dbQuerier, evt *Event, emit DerivedEmitter) (*ExecuteResult, error) {
 	var p TaskCreatedPayload
 	if err := json.Unmarshal(evt.Payload, &p); err != nil {
 		return nil, fmt.Errorf("events: unmarshal task.created payload: %w", err)
@@ -314,10 +319,17 @@ func execTaskCreated(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 		}
 	}
 
+	// E-1541: a new child can change its parent epic's derived status.
+	if p.ParentID != nil {
+		if err := recomputeEpicStatus(db, emit, *p.ParentID); err != nil {
+			return nil, err
+		}
+	}
+
 	return &ExecuteResult{TaskID: taskID}, nil
 }
 
-func execTaskImported(db dbQuerier, evt *Event) (*ExecuteResult, error) {
+func execTaskImported(db dbQuerier, evt *Event, emit DerivedEmitter) (*ExecuteResult, error) {
 	var p TaskImportedPayload
 	if err := json.Unmarshal(evt.Payload, &p); err != nil {
 		return nil, fmt.Errorf("events: unmarshal task.imported payload: %w", err)
@@ -350,10 +362,17 @@ func execTaskImported(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 		}
 	}
 
+	// E-1541: an imported child can change its parent epic's derived status.
+	if p.ParentID != nil {
+		if err := recomputeEpicStatus(db, emit, *p.ParentID); err != nil {
+			return nil, err
+		}
+	}
+
 	return &ExecuteResult{TaskID: taskID}, nil
 }
 
-func execTaskStatusChanged(db dbQuerier, evt *Event) (*ExecuteResult, error) {
+func execTaskStatusChanged(db dbQuerier, evt *Event, emit DerivedEmitter) (*ExecuteResult, error) {
 	var p TaskStatusChangedPayload
 	if err := json.Unmarshal(evt.Payload, &p); err != nil {
 		return nil, fmt.Errorf("events: unmarshal task.status_changed payload: %w", err)
@@ -406,10 +425,21 @@ func execTaskStatusChanged(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 		}
 	}
 
+	// E-1541: the changed task's status may alter its parent epic chain.
+	// Recompute from the parent up; the changed task itself is never
+	// re-derived, so an explicit set (e.g. a cascade confirm) is preserved.
+	if parentID, ok, err := taskParentID(db, mustParseInt64(taskID)); err != nil {
+		return nil, err
+	} else if ok {
+		if err := recomputeEpicStatus(db, emit, parentID); err != nil {
+			return nil, err
+		}
+	}
+
 	return &ExecuteResult{}, nil
 }
 
-func execTaskFieldsUpdated(db dbQuerier, evt *Event) (*ExecuteResult, error) {
+func execTaskFieldsUpdated(db dbQuerier, evt *Event, emit DerivedEmitter) (*ExecuteResult, error) {
 	var p TaskFieldsUpdatedPayload
 	if err := json.Unmarshal(evt.Payload, &p); err != nil {
 		return nil, fmt.Errorf("events: unmarshal task.fields_updated payload: %w", err)
@@ -420,6 +450,21 @@ func execTaskFieldsUpdated(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 	}
 
 	taskID := evt.Entity.ID
+
+	// E-1541: a status or parent_id change can alter a parent epic's derived
+	// status. Capture the old parent before the update so a re-parent
+	// recomputes both the old and new chains.
+	_, statusChanging := p.Fields["status"]
+	_, parentChanging := p.Fields["parent_id"]
+	var oldParentID int64
+	var hasOldParent bool
+	if parentChanging {
+		var perr error
+		oldParentID, hasOldParent, perr = taskParentID(db, mustParseInt64(taskID))
+		if perr != nil {
+			return nil, perr
+		}
+	}
 
 	var setClauses []string
 	var args []any
@@ -522,10 +567,30 @@ func execTaskFieldsUpdated(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 		}
 	}
 
+	// E-1541: recompute the affected epic chains. The current (post-update)
+	// parent covers a status change and a re-parent's new chain; oldParentID
+	// covers the chain the task left.
+	if statusChanging || parentChanging {
+		var parentIDs []int64
+		if pid, ok, err := taskParentID(db, mustParseInt64(taskID)); err != nil {
+			return nil, err
+		} else if ok {
+			parentIDs = append(parentIDs, pid)
+		}
+		if parentChanging && hasOldParent {
+			parentIDs = append(parentIDs, oldParentID)
+		}
+		if len(parentIDs) > 0 {
+			if err := recomputeEpicStatus(db, emit, parentIDs...); err != nil {
+				return nil, err
+			}
+		}
+	}
+
 	return &ExecuteResult{}, nil
 }
 
-func execTaskMoved(db dbQuerier, evt *Event) (*ExecuteResult, error) {
+func execTaskMoved(db dbQuerier, evt *Event, emit DerivedEmitter) (*ExecuteResult, error) {
 	var p TaskMovedPayload
 	if err := json.Unmarshal(evt.Payload, &p); err != nil {
 		return nil, fmt.Errorf("events: unmarshal task.moved payload: %w", err)
@@ -562,16 +627,37 @@ func execTaskMoved(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 		}
 	}
 
+	// E-1541: both the old and new parent chains can change derived status.
+	var parentIDs []int64
+	if p.NewParentID != nil {
+		parentIDs = append(parentIDs, *p.NewParentID)
+	}
+	if p.OldParentID != nil {
+		parentIDs = append(parentIDs, *p.OldParentID)
+	}
+	if len(parentIDs) > 0 {
+		if err := recomputeEpicStatus(db, emit, parentIDs...); err != nil {
+			return nil, err
+		}
+	}
+
 	return &ExecuteResult{}, nil
 }
 
-func execTaskDeleted(db dbQuerier, evt *Event) (*ExecuteResult, error) {
+func execTaskDeleted(db dbQuerier, evt *Event, emit DerivedEmitter) (*ExecuteResult, error) {
 	var p TaskDeletedPayload
 	if err := json.Unmarshal(evt.Payload, &p); err != nil {
 		return nil, fmt.Errorf("events: unmarshal task.deleted payload: %w", err)
 	}
 
 	taskID := evt.Entity.ID
+
+	// E-1541: capture the parent before the row is gone so its epic chain can
+	// be recomputed after the deletion (the task left the parent's child set).
+	parentID, hasParent, err := taskParentID(db, mustParseInt64(taskID))
+	if err != nil {
+		return nil, err
+	}
 
 	if p.Cascade {
 		if _, err := db.Exec(
@@ -597,6 +683,12 @@ func execTaskDeleted(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 	if shouldRecordSessionTouch(evt) {
 		if err := upsertSessionTask(db, evt.Actor.SessionID, mustParseInt64(evt.Entity.ID)); err != nil {
 			return nil, fmt.Errorf("events: %w", err)
+		}
+	}
+
+	if hasParent {
+		if err := recomputeEpicStatus(db, emit, parentID); err != nil {
+			return nil, err
 		}
 	}
 

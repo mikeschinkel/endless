@@ -205,8 +205,8 @@ func TestValidKinds_Count(t *testing.T) {
 	// Ensures we don't accidentally add a kind constant without registering it.
 	// Update this count when adding new kinds.
 	// 33 (pre-E-1378) + 7 (decision.{created,fields_updated,accepted,rejected,deleted}
-	// + decision_relation.{created,deleted}) = 40.
-	want := 40
+	// + decision_relation.{created,deleted}) + 1 (E-1541 epic.status_derived) = 41.
+	want := 41
 	got := len(events.ValidKinds)
 	if got != want {
 		t.Errorf("ValidKinds has %d entries, want %d", got, want)
