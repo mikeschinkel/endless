@@ -1829,6 +1829,207 @@ def decision_unlink(source_id, target, relation_type):
     unlink_decision(source_id, target_kind, target_id, relation_type)
 
 
+@main.group("epic")
+def epic_cmd():
+    """Manage epics — task-tree items of type `epic`.
+
+    A thin convenience surface over `endless task ... --type epic`. Either form
+    works; `endless epic` is the shorter human-facing alias.
+    """
+    pass
+
+
+@epic_cmd.command("add")
+@click.argument("title")
+@click.option("--description", default=None,
+              help="Longer description of the epic (inline)")
+@click.option("--description-file", default=None,
+              help="Load the epic description from a file")
+@click.option("--text", default=None,
+              help="Full epic text / plan content (inline)")
+@click.option("--text-file", default=None,
+              help="Load the full epic text / plan from a file")
+@click.option("--phase", default="now",
+              type=click.Choice(["urgent", "now", "next", "later", "maybe"]),
+              help="Phase: urgent, now, next, later, maybe (default: now)")
+@click.option("--project", default=None,
+              help="Project name (default: detect from cwd)")
+@click.option("--parent", type=TASK_ID, default=None,
+              help="Parent task ID to add under")
+@click.option("--after", type=TASK_ID, default=None,
+              help="Insert after this task ID")
+@click.option("--status", default=None,
+              type=click.Choice(TASK_STATUSES),
+              help="Initial status (default: needs_plan)")
+@click.option("--tier", default=None,
+              help="Tier (1-4 or auto/quick/deep/discuss)")
+@click.option("--force", is_flag=True,
+              help="Bypass title validation")
+@click.option("--blocks", "blocks_ids", type=TASK_ID, multiple=True,
+              help="Task ID(s) this new epic blocks (repeatable)")
+@click.option("--blocked-by", "blocked_by_ids", type=TASK_ID, multiple=True,
+              help="Task ID(s) that block this new epic (repeatable)")
+@click.option("--relates-to", "relates_to_ids", type=TASK_ID, multiple=True,
+              help="Task ID(s) related to this new epic (repeatable)")
+@click.option("--implements", "implements_ids", type=TASK_ID, multiple=True,
+              help="Task ID(s) that this new epic implements (repeatable)")
+@click.option("--cleans-up", "cleans_up_ids", type=TASK_ID, multiple=True,
+              help="Task ID(s) that this new epic cleans up after (repeatable)")
+@click.option("--cleaned-up-by", "cleaned_up_by_ids", type=TASK_ID, multiple=True,
+              help="Task ID(s) that clean up after this new epic (repeatable)")
+def epic_add(title, description, description_file, text, text_file, phase, project,
+             parent, after, status, tier, force,
+             blocks_ids, blocked_by_ids, relates_to_ids, implements_ids,
+             cleans_up_ids, cleaned_up_by_ids):
+    """Add an epic (a task with type=epic)."""
+    from endless.epic_cmd import add_epic
+    from endless.task_cmd import parse_tier, link_tasks
+    description = _resolve_content_flag(description, description_file, "description")
+    text = _resolve_content_flag(text, text_file, "text")
+    tier_val = parse_tier(tier) if tier else None
+    new_id = add_epic(title, description=description, text=text,
+                      phase=phase, project_name=project, after=after,
+                      parent_id=parent, status=status, tier=tier_val, force=force)
+    if new_id is None:
+        return
+    for tid in blocks_ids:
+        link_tasks(new_id, tid, "blocks")
+    for tid in blocked_by_ids:
+        link_tasks(new_id, tid, "blocked_by")
+    for tid in relates_to_ids:
+        link_tasks(new_id, tid, "relates_to")
+    for tid in implements_ids:
+        link_tasks(new_id, tid, "implements")
+    for tid in cleans_up_ids:
+        link_tasks(new_id, tid, "cleans_up")
+    for tid in cleaned_up_by_ids:
+        link_tasks(new_id, tid, "cleaned_up_by")
+
+
+@epic_cmd.command("list")
+@click.option("--project", default=None,
+              help="Project name (default: detect from cwd)")
+@click.option("--all", "show_all", is_flag=True,
+              help="Include confirmed items")
+@click.option("--status", default=None,
+              type=MultiChoice(TASK_STATUSES),
+              help="Filter by status (comma-separated, e.g. needs_plan,ready)")
+@click.option("--phase", default=None,
+              type=click.Choice(["urgent", "now", "next", "later", "maybe"]),
+              help="Filter by phase")
+@click.option("--tier", default=None,
+              help="Filter by tier (1-4 or auto/quick/deep/discuss)")
+@click.option("--parent", "parent_id", default=None,
+              help="Filter to children of this task (e.g. E-799), or 'none' for root tasks")
+@click.option("--sort", default=None,
+              type=click.Choice(["id", "status", "phase", "tier", "created", "title"]),
+              help="Sort by column (default: id)")
+@click.option("--tree", "as_tree", is_flag=True,
+              help="Show as indented tree instead of flat table")
+@click.option("--llm", is_flag=True,
+              help="Token-efficient output for LLMs")
+@click.option("--json", "as_json", is_flag=True,
+              help="JSON output")
+def epic_list(project, show_all, status, phase, tier, parent_id, sort, as_tree,
+              llm, as_json):
+    """List epics for a project."""
+    from endless.epic_cmd import list_epics
+    from endless.task_cmd import parse_tier_filter, parse_parent_filter
+    tier_val = parse_tier_filter(tier) if tier else None
+    parent_val = parse_parent_filter(parent_id) if parent_id else None
+    list_epics(project_name=project, show_all=show_all,
+               status_filter=status, phase_filter=phase,
+               tier_filter=tier_val, parent_id=parent_val,
+               sort_by=sort, tree=as_tree, llm=llm, as_json=as_json)
+
+
+@epic_cmd.command("show")
+@click.argument("item_ids", type=TASK_ID, nargs=-1, required=True)
+@click.option("--no-description", is_flag=True,
+              help="Hide description")
+@click.option("--analysis", "show_analysis", is_flag=True,
+              help="Show analysis field")
+@click.option("--text", "show_text", is_flag=True,
+              help="Show text field")
+@click.option("--no-children", is_flag=True,
+              help="Hide child tasks (shown by default)")
+@click.option("--outcome", "show_outcome", is_flag=True,
+              help="Show the full outcome field (hidden by default; a "
+                   "char-count placeholder shows otherwise)")
+@click.option("--all-fields", "all_fields", is_flag=True,
+              help="Show every content section (description, analysis, text, "
+                   "outcome, children)")
+@click.option("--llm", is_flag=True,
+              help="Token-efficient output for LLMs")
+@click.option("--json", "as_json", is_flag=True,
+              help="JSON output")
+def epic_show(item_ids, no_description, show_analysis, show_text,
+              no_children, show_outcome, all_fields, llm, as_json):
+    """Show detail for one or more epics (children shown by default)."""
+    from endless.epic_cmd import show_epic
+    show_children = not no_children
+    if all_fields:
+        show_analysis = show_text = show_children = show_outcome = True
+    for item_id in item_ids:
+        show_epic(item_id, show_description=not no_description,
+                  show_analysis=show_analysis, show_text=show_text,
+                  show_children=show_children, show_outcome=show_outcome,
+                  llm=llm, as_json=as_json)
+
+
+@epic_cmd.command("update")
+@click.argument("item_ids", type=TASK_ID, nargs=-1, required=True)
+@click.option("--status", default=None,
+              help="Status: needs_plan, ready, in_progress, verify, confirmed, assumed, blocked, revisit, declined, obsolete")
+@click.option("--title", default=None,
+              help="New title")
+@click.option("--description", default=None,
+              help="New description (inline)")
+@click.option("--description-file", default=None,
+              help="Load the new description from a file")
+@click.option("--text", default=None,
+              help="Full epic text / plan content (inline)")
+@click.option("--text-file", default=None,
+              help="Load the full epic text / plan from a file")
+@click.option("--parent", type=TASK_ID, default=None,
+              help="Set parent task ID (0 to make root)")
+@click.option("--phase", default=None,
+              type=click.Choice(["urgent", "now", "next", "later", "maybe"]),
+              help="Phase: urgent, now, next, later, maybe")
+@click.option("--tier", default=None,
+              help="Tier (0=n/a, 1-4 or auto/quick/deep/discuss, none=clear)")
+@click.option("--analysis", "analysis_text", default=None,
+              help="Analysis content (inline)")
+@click.option("--analysis-file", default=None,
+              help="Load the analysis content from a file")
+@click.option("--force", is_flag=True,
+              help="Bypass title validation")
+@click.option("--outcome", default=None,
+              help="Outcome / reason for status (inline; required if status=declined)")
+@click.option("--outcome-file", default=None,
+              help="Load the outcome from a file")
+def epic_update(item_ids, status, title, description, description_file, text,
+                text_file, parent, phase, tier, analysis_text, analysis_file,
+                force, outcome, outcome_file):
+    """Update one or more epics (promotes type to epic).
+
+    Updating an existing task-typed row through this verb also promotes it to
+    an epic — e.g. `endless epic update E-NNN --status ready`.
+    """
+    from endless.epic_cmd import update_epic
+    from endless.task_cmd import parse_tier
+    description = _resolve_content_flag(description, description_file, "description")
+    text = _resolve_content_flag(text, text_file, "text")
+    analysis_text = _resolve_content_flag(analysis_text, analysis_file, "analysis")
+    outcome = _resolve_content_flag(outcome, outcome_file, "outcome")
+    tier_val = parse_tier(tier) if tier else None
+    for item_id in item_ids:
+        update_epic(item_id, status=status, title=title,
+                    description=description, text=text, parent_id=parent,
+                    phase=phase, tier=tier_val, analysis=analysis_text,
+                    outcome=outcome, force=force)
+
+
 @main.group("channel")
 def channel_cmd():
     """Inter-session messaging. Worker session beacons, human session connects."""

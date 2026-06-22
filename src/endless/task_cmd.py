@@ -941,12 +941,23 @@ def show_plan(
     tree: bool = False,
     llm: bool = False,
     as_json: bool = False,
+    type_filter: str | None = None,
 ):
-    """Show tasks for a project as a tree, or flat sorted list."""
+    """Show tasks for a project as a tree, or flat sorted list.
+
+    When type_filter is set (e.g. "epic"), the query joins task_types and
+    keeps only rows whose type slug matches — this is the single-source
+    listing path shared by `endless epic list`.
+    """
     project_id, proj_name = _resolve_project(project_name)
 
+    join = ""
     where = "WHERE pi.project_id = ?"
     params: list = [project_id]
+    if type_filter is not None:
+        join = " JOIN task_types tt ON tt.id = pi.type_id"
+        where += " AND tt.slug = ?"
+        params.append(type_filter)
     if status_filter:
         placeholders = ",".join("?" for _ in status_filter)
         where += f" AND pi.status IN ({placeholders})"
@@ -994,7 +1005,7 @@ def show_plan(
         f"SELECT pi.id, pi.phase, COALESCE(pi.title, pi.description) as title, "
         f"pi.description, pi.status, pi.parent_id, "
         f"pi.created_at, pi.completed_at, pi.tier "
-        f"FROM tasks pi {where} "
+        f"FROM tasks pi{join} {where} "
         f"ORDER BY {order_by}",
         tuple(params),
     )

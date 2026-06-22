@@ -128,6 +128,7 @@ listed separately. (Generated — do not hand-edit; run `/regenerate-guide`.)
 | `decision` | decisions | Decisions as first-class items; preference vs prohibition (read this). |
 | `discover` | reference | Finding and registering unregistered projects. |
 | `docs` | _(none yet)_ | the `docs` command is temporarily disabled and not covered by the guide. |
+| `epic` | _(none yet)_ | the `endless epic` convenience surface (add/show/list/update over type=epic tasks) isn't covered by the guide yet. |
 | `guide` | reference | The session guide; run `endless guide` for the index, `--list` for sections. |
 | `list` | reference | Listing registered projects. |
 | `note` | _(none yet)_ | project notes aren't covered by the guide yet. |
