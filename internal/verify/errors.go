@@ -25,4 +25,11 @@ var (
 	ErrFirstClassNeedsSelection  = errors.New("first-class runner requires tests, paths, or command")
 	ErrFirstClassCommandConflict = errors.New("command and tests/paths are mutually exclusive on a first-class runner")
 	ErrFormatMismatch            = errors.New("declared format does not match the runner's inferred format")
+
+	// Result normalization (the CTRF-subset writer and native parsers).
+	ErrNormalizingResults = errors.New("normalizing native result stream")
+	ErrParsingGotestJSON  = errors.New("parsing go test -json stream")
+	ErrParsingPytestJSON  = errors.New("parsing pytest JSON report")
+	ErrParsingTAP         = errors.New("parsing TAP stream")
+	ErrWritingReport      = errors.New("writing CTRF report")
 )
