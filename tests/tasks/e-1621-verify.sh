@@ -98,6 +98,11 @@ endless() {
 CANDIDATE_GO=""
 SANDBOX_CFG=""
 
+# Per-run-unique bg-agent short ids, set in §1, reused by §2. Derived from the
+# run's fresh child-task ids so re-runs never collide on the UNIQUE short_id.
+ALPHA_SHORT=""
+BETA_SHORT=""
+
 add_epic_get_id() {
     local output rc
     output=$(endless epic add "$1" 2>&1); rc=$?
@@ -122,11 +127,22 @@ bare() { printf '%s\n' "${1#E-}"; }
 
 # record_bg_agent TASK_ID SHORT_ID — insert a working bg-agent dispatch row
 # whose active_epic_id is TASK_ID's nearest epic ancestor, into the sandbox DB.
+# short_id is globally UNIQUE and the sandbox is not wiped between runs, so
+# callers must pass a per-run-unique value (derive it from a fresh task id).
+# A failed insert (e.g. a stray collision) aborts as a setup error rather than
+# silently leaving the epic empty.
 record_bg_agent() {
     local task_id="$1" short_id="$2"
-    "${CANDIDATE_GO}" --config-dir "${SANDBOX_CFG}" \
+    local output rc
+    output=$("${CANDIDATE_GO}" --config-dir "${SANDBOX_CFG}" \
         session-query record-bg-agent \
-        --task-id "$(bare "${task_id}")" --short-id "${short_id}" >/dev/null 2>&1
+        --task-id "$(bare "${task_id}")" --short-id "${short_id}" 2>&1)
+    rc=$?
+    if [[ "${rc}" -ne 0 ]]; then
+        printf 'ERROR: record-bg-agent failed for %s/%s: %s\n' \
+            "${task_id}" "${short_id}" "${output}" >&2
+        exit 2
+    fi
 }
 
 # ─── assertions ─────────────────────────────────────────────────────────────
@@ -175,19 +191,22 @@ test_agents_by_epic() {
     child_a=$(add_task_get_id "Build the alpha child task" --parent "${epic_a}") || exit 2
     child_b=$(add_task_get_id "Build the beta child task" --parent "${epic_b}") || exit 2
 
-    record_bg_agent "${child_a}" "verifyalpha"
-    record_bg_agent "${child_b}" "verifybeta"
+    # Unique per run: child ids are freshly allocated each invocation.
+    ALPHA_SHORT="alpha$(bare "${child_a}")"
+    BETA_SHORT="beta$(bare "${child_b}")"
+    record_bg_agent "${child_a}" "${ALPHA_SHORT}"
+    record_bg_agent "${child_b}" "${BETA_SHORT}"
 
     assert_succeeds "agents --epic exits 0" \
         endless agents --epic "${epic_a}"
     assert_contains "agents --epic lists the alpha agent" \
-        "verifyalpha" \
+        "${ALPHA_SHORT}" \
         endless agents --epic "${epic_a}"
     assert_contains "agents --epic shows the alpha child task id" \
         "${child_a}" \
         endless agents --epic "${epic_a}"
     assert_not_contains "agents --epic excludes the beta agent" \
-        "verifybeta" \
+        "${BETA_SHORT}" \
         endless agents --epic "${epic_a}"
 }
 
@@ -197,10 +216,10 @@ test_agents_all() {
     section "§2 — agents --all (drops epic filter; both agents present)"
 
     assert_contains "agents --all includes the alpha agent" \
-        "verifyalpha" \
+        "${ALPHA_SHORT}" \
         endless agents --all
     assert_contains "agents --all includes the beta agent" \
-        "verifybeta" \
+        "${BETA_SHORT}" \
         endless agents --all
 }
 
