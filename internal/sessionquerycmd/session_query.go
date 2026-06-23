@@ -46,6 +46,11 @@ func Run(args []string) {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
+	case "list-bg-agents":
+		if err := runListBgAgents(args[1:]); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
 	case "-h", "--help", "help":
 		usage()
 	default:
@@ -65,6 +70,8 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "  record-bg-agent --task-id <id> --short-id <handle>")
 	fmt.Fprintln(os.Stderr, "                                    insert a background-agent dispatch row; prints sessions.id")
 	fmt.Fprintln(os.Stderr, "  count-bg-agents --task-id <id>    count `working` bg agents in the task's project; prints the integer")
+	fmt.Fprintln(os.Stderr, "  list-bg-agents (--session-id <id> | --epic-id <id> | --all --project-root <path>)")
+	fmt.Fprintln(os.Stderr, "                                    JSON {scope, epic_id, agents} of working bg agents (E-1621)")
 }
 
 // runRecordBgAgent inserts the dispatch-time sessions row for a background
@@ -202,4 +209,82 @@ func runEnsureClaudeID(args []string) error {
 	}
 	fmt.Println(id)
 	return nil
+}
+
+// bgAgentList is the JSON contract for `list-bg-agents` (E-1621). Scope is
+// "epic" (filtered by EpicID) or "all" (the project-scoped --all path). EpicID
+// is null when scope is "all", or when a --session-id caller has no active epic
+// to resolve — the Python side renders the latter as a guidance error.
+type bgAgentList struct {
+	Scope  string            `json:"scope"`
+	EpicID *int64            `json:"epic_id"`
+	Agents []monitor.BgAgent `json:"agents"`
+}
+
+// runListBgAgents lists working background-agent sessions for `endless agents`.
+// Exactly one of --session-id / --epic-id / --all selects the scope:
+//   - --epic-id <id>   : agents whose active_epic_id = id.
+//   - --session-id <id>: resolve the caller's active_epic_id, then as above;
+//     a NULL epic returns {scope:"epic", epic_id:null, agents:[]}.
+//   - --all            : every working bg agent in --project-root's project.
+//
+// The DB read stays Go-side (no Python DB read, per E-1486); Python formats the
+// returned JSON as a plain-text table.
+func runListBgAgents(args []string) error {
+	fs := flag.NewFlagSet("list-bg-agents", flag.ContinueOnError)
+	sessionID := fs.Int64("session-id", 0, "caller's sessions.id; auto-resolves the active epic")
+	epicID := fs.Int64("epic-id", 0, "epic task id to scope by (overrides auto-resolve)")
+	all := fs.Bool("all", false, "drop the epic filter; list all bg agents in --project-root's project")
+	projectRoot := fs.String("project-root", "", "absolute path of the project root (required with --all)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	selected := 0
+	for _, on := range []bool{*sessionID != 0, *epicID != 0, *all} {
+		if on {
+			selected++
+		}
+	}
+	if selected != 1 {
+		return fmt.Errorf("exactly one of --session-id, --epic-id, or --all is required")
+	}
+
+	if *all {
+		if *projectRoot == "" {
+			return fmt.Errorf("--project-root is required with --all")
+		}
+		projectID, _, err := monitor.ProjectIDForPath(*projectRoot)
+		if err != nil {
+			return fmt.Errorf("resolve project for %s: %w", *projectRoot, err)
+		}
+		out := bgAgentList{Scope: "all", Agents: []monitor.BgAgent{}}
+		if projectID != 0 {
+			agents, err := monitor.ListBgAgentsForProject(projectID)
+			if err != nil {
+				return err
+			}
+			out.Agents = agents
+		}
+		return json.NewEncoder(os.Stdout).Encode(out)
+	}
+
+	resolved := epicID
+	if *sessionID != 0 {
+		ep, err := monitor.SessionActiveEpic(*sessionID)
+		if err != nil {
+			return err
+		}
+		resolved = ep
+	}
+
+	out := bgAgentList{Scope: "epic", EpicID: resolved, Agents: []monitor.BgAgent{}}
+	if resolved != nil {
+		agents, err := monitor.ListBgAgentsForEpic(*resolved)
+		if err != nil {
+			return err
+		}
+		out.Agents = agents
+	}
+	return json.NewEncoder(os.Stdout).Encode(out)
 }

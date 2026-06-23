@@ -123,6 +123,7 @@ listed separately. (Generated — do not hand-edit; run `/regenerate-guide`.)
 
 | Command | Section | Covers |
 |---|---|---|
+| `agents` | _(none yet)_ | the `endless agents` command (epic-scoped listing of working background agents) isn't covered by the guide yet. |
 | `channel` | orchestration | Inter-session channels: messaging between concurrent sessions. |
 | `db` | orchestration | Choosing the database (--db main/sandbox) in self-dev worktrees. |
 | `decision` | decisions | Decisions as first-class items; preference vs prohibition (read this). |

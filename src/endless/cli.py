@@ -393,6 +393,22 @@ def scan(project):
     run_scan(project_name=project)
 
 
+@main.command("agents")
+@click.option("--epic", "epic_id", type=TASK_ID, default=None,
+              help="List agents under this epic (E-NNNN); overrides auto-resolve")
+@click.option("--all", "show_all", is_flag=True,
+              help="List all working bg agents in the project (drop the epic filter)")
+def agents(epic_id, show_all):
+    """List working background agents scoped to the active epic.
+
+    With no flag, auto-resolves the epic from your current session. Use --epic
+    E-NNNN to target a specific epic, or --all to list every working background
+    agent in the current project.
+    """
+    from endless.agents_cmd import list_agents
+    list_agents(epic_id=epic_id, show_all=show_all)
+
+
 @main.command()
 @click.option("--port", default=8484, help="Port to serve on")
 @click.option("--watch", is_flag=True, help="Auto-restart when the binary is rebuilt")
