@@ -799,9 +799,31 @@ func execTaskClaimed(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 		return nil, fmt.Errorf("events: unmarshal task.claimed payload: %w", err)
 	}
 	taskID := evt.Entity.ID
+	// Also resolve and store active_epic_id: the nearest type='epic' ancestor of
+	// the claimed task (the task itself if it is an epic, NULL if no epic
+	// ancestor). E-1571 deferred this coordinator-side write; without it an
+	// interactive session's active_epic_id stays NULL, so the status-line epic
+	// prefix and `endless agents` auto-resolve never fire. The correlated
+	// subquery mirrors monitor.nearestEpicAncestor's recursive CTE, keeping the
+	// write a single atomic statement rather than exporting the helper. A NULL
+	// result also clears any stale epic id left from a prior claim.
 	if _, err := db.Exec(
-		"UPDATE sessions SET active_task_id = ? WHERE id = ?",
-		taskID, p.SessionID,
+		`UPDATE sessions
+		    SET active_task_id = ?,
+		        active_epic_id = (
+		          WITH RECURSIVE ancestry(id, parent_id, type_id, depth) AS (
+		            SELECT id, parent_id, type_id, 0 FROM tasks WHERE id = ?
+		            UNION ALL
+		            SELECT t.id, t.parent_id, t.type_id, a.depth + 1
+		              FROM tasks t JOIN ancestry a ON t.id = a.parent_id
+		          )
+		          SELECT a.id FROM ancestry a
+		            JOIN task_types tt ON tt.id = a.type_id
+		           WHERE tt.slug = 'epic'
+		           ORDER BY a.depth LIMIT 1
+		        )
+		  WHERE id = ?`,
+		taskID, taskID, p.SessionID,
 	); err != nil {
 		return nil, fmt.Errorf("events: claim task: %w", err)
 	}
@@ -844,8 +866,10 @@ func execTaskReleased(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 		return nil, fmt.Errorf("events: unmarshal task.released payload: %w", err)
 	}
 	taskID := evt.Entity.ID
+	// Clear active_epic_id alongside active_task_id so a released coordinator
+	// session does not keep a stale epic prefix / auto-resolve target.
 	if _, err := db.Exec(
-		"UPDATE sessions SET active_task_id = NULL WHERE id = ? AND active_task_id = ?",
+		"UPDATE sessions SET active_task_id = NULL, active_epic_id = NULL WHERE id = ? AND active_task_id = ?",
 		p.SessionID, taskID,
 	); err != nil {
 		return nil, fmt.Errorf("events: release task: %w", err)
