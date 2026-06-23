@@ -174,11 +174,12 @@ write_suite() {
     printf '%s' "${content}" > "${root}/.endless/tasks/${id}/verify.toml"
 }
 
-# manifest_for ID FORMAT — a minimal valid manifest body for ID.
+# manifest_for ID RUNNER — a minimal valid manifest body for ID with one
+# first-class check on RUNNER (revised [[check]] schema).
 manifest_for() {
-    local id="$1" format="$2"
-    printf 'schema = 1\ntask = "%s"\nrunner = "go test ./.endless/tasks/%s/..."\nformat = "%s"\n' \
-        "${id}" "${id}" "${format}"
+    local id="$1" runner="$2"
+    printf 'schema = 1\ntask = "%s"\n[[check]]\nrunner = "%s"\ntests = ["TestX"]\n' \
+        "${id}" "${runner}"
 }
 
 # discover ROOT — run the compiled harness against project root ROOT.
@@ -217,7 +218,7 @@ test_dependency() {
 test_unit() {
     section "3 — Unit tests (per acceptance criterion)"
 
-    assert_succeeds "sample verify.toml parses; missing field / unknown format / unknown schema fail loudly" \
+    assert_succeeds "sample verify.toml parses; missing field / no-checks / unknown schema fail loudly" \
         go test -run '^TestParseManifest' -count=1 ./internal/verify/
     assert_succeeds "Format enum validates the closed set (gotest-json|pytest-json|tap)" \
         go test -run '^TestFormat' -count=1 ./internal/verify/
@@ -235,18 +236,17 @@ test_behavioral() {
     local root out
 
     # Positive: two valid suites, plus a manifest-less subdir and a stray file
-    # that discovery must ignore. E-1234 uses the contract's exact runner shape.
+    # that discovery must ignore.
     root=$(mktemp -d)
-    write_suite "${root}" "E-1234" "$(manifest_for E-1234 gotest-json)"
-    write_suite "${root}" "E-5678" "$(manifest_for E-5678 pytest-json)"
+    write_suite "${root}" "E-1234" "$(manifest_for E-1234 gotest)"
+    write_suite "${root}" "E-5678" "$(manifest_for E-5678 pytest)"
     mkdir -p "${root}/.endless/tasks/E-0000"           # no verify.toml → ignored
     printf 'notes\n' > "${root}/.endless/tasks/README.md" # stray file → ignored
 
     assert_contains "discovers E-1234" "FOUND E-1234" discover "${root}"
     assert_contains "discovers E-5678" "FOUND E-5678" discover "${root}"
     assert_contains "finds exactly 2 suites" "COUNT 2" discover "${root}"
-    assert_contains "keeps the contract runner string verbatim" \
-        'runner="go test ./.endless/tasks/E-1234/..."' discover "${root}"
+    assert_contains "parses the check's runner" 'runner=gotest' discover "${root}"
     assert_not_contains "ignores the manifest-less subdir E-0000" "E-0000" discover "${root}"
     rm -rf "${root}"
 
@@ -263,32 +263,35 @@ test_behavioral() {
     # Missing required field → loud failure.
     root=$(mktemp -d)
     write_suite "${root}" "E-1234" 'schema = 1
-task = "E-1234"
-format = "tap"'
-    assert_fails_with "missing required 'runner' fails loudly" \
+[[check]]
+runner = "gotest"
+tests = ["TestX"]'
+    assert_fails_with "missing required 'task' fails loudly" \
         "missing required field" discover "${root}"
     rm -rf "${root}"
 
-    # Unknown format → loud failure.
+    # No [[check]] entries → loud failure.
     root=$(mktemp -d)
-    write_suite "${root}" "E-1234" "$(manifest_for E-1234 junit-xml)"
-    assert_fails_with "unknown format fails loudly" \
-        "unknown result-stream format" discover "${root}"
+    write_suite "${root}" "E-1234" 'schema = 1
+task = "E-1234"'
+    assert_fails_with "manifest with no checks fails loudly" \
+        "declares no [[check]] entries" discover "${root}"
     rm -rf "${root}"
 
     # Unknown schema version → loud failure.
     root=$(mktemp -d)
     write_suite "${root}" "E-1234" 'schema = 2
 task = "E-1234"
-runner = "go test ./..."
-format = "tap"'
+[[check]]
+runner = "gotest"
+tests = ["TestX"]'
     assert_fails_with "unknown schema version fails loudly" \
         "unknown manifest schema version" discover "${root}"
     rm -rf "${root}"
 
     # task id disagrees with its directory name → loud failure.
     root=$(mktemp -d)
-    write_suite "${root}" "E-1234" "$(manifest_for E-9999 tap)"
+    write_suite "${root}" "E-1234" "$(manifest_for E-9999 gotest)"
     assert_fails_with "task id / directory mismatch fails loudly" \
         "does not match suite directory" discover "${root}"
     rm -rf "${root}"
@@ -339,7 +342,10 @@ func main() {
 	}
 	fmt.Printf("COUNT %d\n", len(manifests))
 	for id, m := range manifests {
-		fmt.Printf("FOUND %s runner=%q format=%s\n", id, m.Runner, m.Format)
+		fmt.Printf("FOUND %s checks=%d\n", id, len(m.Checks))
+		for _, c := range m.Checks {
+			fmt.Printf("  runner=%s fmt=%s\n", c.Runner, c.ResolvedFormat())
+		}
 	}
 }
 GO

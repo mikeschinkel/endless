@@ -23,8 +23,10 @@ func writeSuite(t *testing.T, root, id, content string) {
 	}
 }
 
-func manifestFor(id, format string) string {
-	return "schema = 1\ntask = \"" + id + "\"\nrunner = \"go test ./...\"\nformat = \"" + format + "\"\n"
+// manifestFor builds a minimal valid manifest for id with a single first-class
+// check on runner.
+func manifestFor(id, runner string) string {
+	return "schema = 1\ntask = \"" + id + "\"\n[[check]]\nrunner = \"" + runner + "\"\ntests = [\"TestX\"]\n"
 }
 
 // writeProjectConfig writes a project-level <root>/.endless/verify.toml.
@@ -41,8 +43,8 @@ func writeProjectConfig(t *testing.T, root, content string) {
 
 func TestDiscover_FindsSuites(t *testing.T) {
 	root := t.TempDir()
-	writeSuite(t, root, "E-1234", manifestFor("E-1234", "gotest-json"))
-	writeSuite(t, root, "E-5678", manifestFor("E-5678", "pytest-json"))
+	writeSuite(t, root, "E-1234", manifestFor("E-1234", "gotest"))
+	writeSuite(t, root, "E-5678", manifestFor("E-5678", "pytest"))
 
 	// A subdirectory with no verify.toml is not a suite and must be ignored.
 	if err := os.MkdirAll(filepath.Join(root, ".endless", "tasks", "E-9999"), 0o755); err != nil {
@@ -60,10 +62,10 @@ func TestDiscover_FindsSuites(t *testing.T) {
 	if len(manifests) != 2 {
 		t.Fatalf("Discover found %d manifests, want 2 (keys: %v)", len(manifests), keysOf(manifests))
 	}
-	if manifests["E-1234"] == nil || manifests["E-1234"].Format != verify.FormatGotestJSON {
+	if m := manifests["E-1234"]; m == nil || len(m.Checks) != 1 || m.Checks[0].ResolvedFormat() != verify.FormatGotestJSON {
 		t.Errorf("E-1234 manifest wrong: %+v", manifests["E-1234"])
 	}
-	if manifests["E-5678"] == nil || manifests["E-5678"].Format != verify.FormatPytestJSON {
+	if m := manifests["E-5678"]; m == nil || len(m.Checks) != 1 || m.Checks[0].ResolvedFormat() != verify.FormatPytestJSON {
 		t.Errorf("E-5678 manifest wrong: %+v", manifests["E-5678"])
 	}
 }
@@ -80,7 +82,7 @@ func TestDiscover_NoTasksDir(t *testing.T) {
 
 func TestDiscover_TaskIDMismatchFailsLoudly(t *testing.T) {
 	root := t.TempDir()
-	writeSuite(t, root, "E-1234", manifestFor("E-9999", "tap"))
+	writeSuite(t, root, "E-1234", manifestFor("E-9999", "gotest"))
 
 	_, err := verify.Discover(dt.DirPath(root))
 	if err == nil {
@@ -93,7 +95,8 @@ func TestDiscover_TaskIDMismatchFailsLoudly(t *testing.T) {
 
 func TestDiscover_InvalidManifestFailsLoudly(t *testing.T) {
 	root := t.TempDir()
-	writeSuite(t, root, "E-1234", "schema = 1\ntask = \"E-1234\"\nformat = \"tap\"\n") // missing runner
+	// Missing required task field.
+	writeSuite(t, root, "E-1234", "schema = 1\n[[check]]\nrunner = \"gotest\"\ntests = [\"TestX\"]\n")
 
 	_, err := verify.Discover(dt.DirPath(root))
 	if err == nil {
@@ -104,15 +107,28 @@ func TestDiscover_InvalidManifestFailsLoudly(t *testing.T) {
 	}
 }
 
+// Discover validates the EFFECTIVE manifest, so a per-check rule violation (here
+// a raw runner with no command) surfaces loudly through discovery.
+func TestDiscover_ValidatesChecks(t *testing.T) {
+	root := t.TempDir()
+	writeSuite(t, root, "E-1234", "schema = 1\ntask = \"E-1234\"\n[[check]]\nrunner = \"bats\"\n")
+
+	_, err := verify.Discover(dt.DirPath(root))
+	if err == nil {
+		t.Fatal("Discover accepted a raw check with no command")
+	}
+	if !errors.Is(err, verify.ErrRawCheckNeedsCommand) {
+		t.Errorf("error did not wrap ErrRawCheckNeedsCommand: %v", err)
+	}
+}
+
 // A project-level verify.toml merges beneath each per-task manifest: project
-// setup runs first, and a per-task manifest may omit a field the project
-// supplies as a default (here, format).
+// setup runs first, then per-task setup appends.
 func TestDiscover_MergesProjectConfig(t *testing.T) {
 	root := t.TempDir()
-	writeProjectConfig(t, root, "schema = 1\nformat = \"gotest-json\"\nsetup = [\"just build\"]\n")
-	// Per-task manifest omits format (inherits project default) and adds its
-	// own setup step after the project's.
-	writeSuite(t, root, "E-1234", "schema = 1\ntask = \"E-1234\"\nrunner = \"go test ./...\"\nsetup = [\"task-setup\"]\n")
+	writeProjectConfig(t, root, "schema = 1\nsetup = [\"just build\"]\n")
+	// Per-task manifest adds its own setup step after the project's.
+	writeSuite(t, root, "E-1234", "schema = 1\ntask = \"E-1234\"\nsetup = [\"task-setup\"]\n[[check]]\nrunner = \"gotest\"\ntests = [\"TestX\"]\n")
 
 	manifests, err := verify.Discover(dt.DirPath(root))
 	if err != nil {
@@ -122,35 +138,17 @@ func TestDiscover_MergesProjectConfig(t *testing.T) {
 	if m == nil {
 		t.Fatalf("Discover did not find E-1234 (keys: %v)", keysOf(manifests))
 	}
-	if m.Format != verify.FormatGotestJSON {
-		t.Errorf("Format = %q, want inherited project default %q", m.Format, verify.FormatGotestJSON)
-	}
 	want := []string{"just build", "task-setup"}
 	if len(m.Setup) != 2 || m.Setup[0] != want[0] || m.Setup[1] != want[1] {
 		t.Errorf("Setup = %v, want %v (project first, then task)", m.Setup, want)
 	}
 }
 
-// Without a project config, a per-task manifest must still be self-sufficient:
-// an omitted format is not supplied by any layer and fails validation loudly.
-func TestDiscover_NoProjectConfigRequiresCompleteManifest(t *testing.T) {
-	root := t.TempDir()
-	writeSuite(t, root, "E-1234", "schema = 1\ntask = \"E-1234\"\nrunner = \"go test ./...\"\n") // no format
-
-	_, err := verify.Discover(dt.DirPath(root))
-	if err == nil {
-		t.Fatal("Discover accepted a manifest missing format with no project default")
-	}
-	if !errors.Is(err, verify.ErrMissingField) {
-		t.Errorf("error did not wrap ErrMissingField: %v", err)
-	}
-}
-
 // An invalid project-level verify.toml fails discovery loudly.
 func TestDiscover_InvalidProjectConfigFailsLoudly(t *testing.T) {
 	root := t.TempDir()
-	writeProjectConfig(t, root, "schema = 1\nformat = \"junit-xml\"\n") // bad default format
-	writeSuite(t, root, "E-1234", manifestFor("E-1234", "tap"))
+	writeProjectConfig(t, root, "schema = 2\n") // unknown schema version
+	writeSuite(t, root, "E-1234", manifestFor("E-1234", "gotest"))
 
 	_, err := verify.Discover(dt.DirPath(root))
 	if err == nil {

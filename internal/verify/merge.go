@@ -12,17 +12,20 @@ package verify
 //     (e.g. build the binaries, initialize schema) run before the task's own
 //     setup. This is the ordering the runner relies on: shared preparation of
 //     the project precedes task-specific preparation.
+//   - Teardown: list-append, PROJECT FIRST (same direction as Setup, for
+//     simplicity). A strict reverse-of-setup (LIFO) ordering is a possible
+//     future refinement; deferred because teardown has no live consumer until
+//     the runner (downstream) executes it.
 //   - Seed: list-append, PROJECT FIRST. Shared fixtures load before
 //     task-specific fixtures. (What a seed entry MEANS is E-1606's concern; the
 //     layering is defined here.)
-//   - Format: scalar default. The task value wins when set; an unset task
-//     format inherits the project default.
 //   - Needs: scalar-style default. The task value wins when it sets the key at
 //     all — including an explicit empty list (needs = []) to override the
 //     project default down to "no needs". A task that omits needs entirely
 //     (nil) inherits the project default.
-//   - Schema, Task, Runner, Tiers: per-task only; copied straight from the task
-//     manifest. The project config cannot carry them.
+//   - Schema, Task, Checks, Tiers: per-task only; copied straight from the task
+//     manifest. The project config cannot carry them. Format is per-check, not a
+//     manifest field, so it does not participate in the merge.
 //
 // A nil project config is the identity layer: Merge returns a copy of the task
 // manifest unchanged. A nil task manifest yields an empty effective manifest
@@ -39,12 +42,9 @@ func Merge(pc *ProjectConfig, task *Manifest) (eff *Manifest) {
 
 	// List-append preconditions: project's shared steps run first.
 	eff.Setup = concatStrings(pc.Setup, eff.Setup)
+	eff.Teardown = concatStrings(pc.Teardown, eff.Teardown)
 	eff.Seed = concatStrings(pc.Seed, eff.Seed)
 
-	// Scalar defaults: the task overrides; an unset task value inherits.
-	if eff.Format == "" {
-		eff.Format = pc.Format
-	}
 	// Needs distinguishes "unset" (nil -> inherit) from "explicit empty"
 	// (non-nil, len 0 -> override the default down to none).
 	if eff.Needs == nil {

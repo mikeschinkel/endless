@@ -19,20 +19,22 @@ const ProjectConfigFile = "verify.toml"
 const ProjectDir = ".endless"
 
 // ProjectConfig is the project-level .endless/verify.toml: shared verification
-// defaults layered beneath every per-task manifest. It carries no task or runner
-// (those are inherently per-task) and no tiers; supplying one is rejected as an
-// unknown key. It holds shared Setup steps and shared Seed fixtures (both run
-// before the per-task steps) plus default Format and Needs that a task inherits
-// when it omits them.
+// defaults layered beneath every per-task manifest. It carries no task, checks,
+// or tiers (those are inherently per-task); supplying one is rejected as an
+// unknown key. It also carries no format: with the [[check]] list, format is a
+// per-check concern (inferred for first-class runners, declared/tap-defaulted
+// for raw commands), so a single project-wide default is meaningless. It holds
+// shared Setup and Teardown steps and shared Seed fixtures (each merged around
+// the per-task steps) plus a default Needs a task inherits when it omits it.
 //
 // The project config is optional: a project with no .endless/verify.toml simply
 // contributes no shared layer, and each per-task manifest stands on its own.
 type ProjectConfig struct {
-	Schema int      `toml:"schema"`
-	Setup  []string `toml:"setup"`
-	Format Format   `toml:"format"`
-	Seed   []string `toml:"seed"`
-	Needs  []string `toml:"needs"`
+	Schema   int      `toml:"schema"`
+	Setup    []string `toml:"setup"`
+	Teardown []string `toml:"teardown"`
+	Seed     []string `toml:"seed"`
+	Needs    []string `toml:"needs"`
 }
 
 // ParseProjectConfig decodes a project-level verify.toml, rejects unknown keys
@@ -66,10 +68,10 @@ end:
 	return pc, err
 }
 
-// Validate checks the project config's schema and, when present, its default
-// format. Unlike a per-task manifest the project config has no required content
-// fields (task/runner are per-task); it need only declare a schema this build
-// understands. Errors wrap ErrInvalidProjectConfig.
+// Validate checks the project config's schema. Unlike a per-task manifest the
+// project config has no required content fields (task/checks are per-task); it
+// need only declare a schema this build understands. Errors wrap
+// ErrInvalidProjectConfig.
 func (pc *ProjectConfig) Validate() (err error) {
 	switch {
 	case pc.Schema == 0:
@@ -77,9 +79,6 @@ func (pc *ProjectConfig) Validate() (err error) {
 	case pc.Schema != SchemaVersion:
 		err = doterr.NewErr(ErrInvalidProjectConfig, ErrUnknownSchema,
 			"schema", pc.Schema, "supported", SchemaVersion)
-	case pc.Format != "" && !pc.Format.Valid():
-		err = doterr.NewErr(ErrInvalidProjectConfig, ErrUnknownFormat,
-			"format", string(pc.Format), "supported", formatList())
 	}
 	return err
 }

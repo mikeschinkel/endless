@@ -12,8 +12,9 @@ func taskManifest() *verify.Manifest {
 	return &verify.Manifest{
 		Schema: 1,
 		Task:   "E-1234",
-		Runner: "go test ./.endless/tasks/E-1234/...",
-		Format: verify.FormatGotestJSON,
+		Checks: []verify.Check{
+			{Runner: "gotest", Tests: []string{"TestFoo"}},
+		},
 	}
 }
 
@@ -24,7 +25,7 @@ func TestMerge_NilProjectIsIdentity(t *testing.T) {
 	if !reflect.DeepEqual(eff.Setup, []string{"task-step"}) {
 		t.Errorf("Setup = %v, want [task-step]", eff.Setup)
 	}
-	if eff.Runner != task.Runner || eff.Task != task.Task || eff.Format != task.Format {
+	if eff.Task != task.Task || !reflect.DeepEqual(eff.Checks, task.Checks) {
 		t.Errorf("identity merge changed a per-task field: %+v", eff)
 	}
 }
@@ -41,6 +42,18 @@ func TestMerge_SetupProjectFirstThenTask(t *testing.T) {
 	}
 }
 
+func TestMerge_TeardownProjectFirstThenTask(t *testing.T) {
+	pc := &verify.ProjectConfig{Schema: 1, Teardown: []string{"stop-shared"}}
+	task := taskManifest()
+	task.Teardown = []string{"stop-task"}
+
+	eff := verify.Merge(pc, task)
+	want := []string{"stop-shared", "stop-task"}
+	if !reflect.DeepEqual(eff.Teardown, want) {
+		t.Errorf("Teardown = %v, want %v", eff.Teardown, want)
+	}
+}
+
 func TestMerge_SeedProjectFirstThenTask(t *testing.T) {
 	pc := &verify.ProjectConfig{Schema: 1, Seed: []string{"fixtures/shared.json"}}
 	task := taskManifest()
@@ -50,23 +63,6 @@ func TestMerge_SeedProjectFirstThenTask(t *testing.T) {
 	want := []string{"fixtures/shared.json", "fixtures/task.json"}
 	if !reflect.DeepEqual(eff.Seed, want) {
 		t.Errorf("Seed = %v, want %v", eff.Seed, want)
-	}
-}
-
-func TestMerge_FormatTaskOverridesProjectDefault(t *testing.T) {
-	pc := &verify.ProjectConfig{Schema: 1, Format: verify.FormatTAP}
-
-	// Task sets its own format -> task wins.
-	task := taskManifest() // Format = gotest-json
-	if eff := verify.Merge(pc, task); eff.Format != verify.FormatGotestJSON {
-		t.Errorf("Format = %q, want task value %q", eff.Format, verify.FormatGotestJSON)
-	}
-
-	// Task omits format -> inherit project default.
-	bare := taskManifest()
-	bare.Format = ""
-	if eff := verify.Merge(pc, bare); eff.Format != verify.FormatTAP {
-		t.Errorf("Format = %q, want project default %q", eff.Format, verify.FormatTAP)
 	}
 }
 

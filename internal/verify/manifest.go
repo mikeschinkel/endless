@@ -1,16 +1,20 @@
 // Package verify defines the per-task verification-suite manifest (verify.toml)
 // and the discovery convention Endless uses to find suites. It implements
 // section A of the E-1596 epic's interface contract: the manifest is a POINTER
-// to a native test runner, never a re-description of the tests.
+// to native test runners, never a re-description of the tests.
 //
-// A verification suite lives in the product-controlled directory
-// .endless/tasks/<id>/, beside its runner files and an optional fixtures/. The
-// manifest is intentionally flat (no nesting); if a future need pushes toward
-// nesting, re-evaluate the format rather than nest.
+// A verification is a list of [[check]] entries (see Check): one ticket
+// composes multiple runner invocations into one proof. A first-class runner
+// (gotest, pytest) uses a structured selection Endless translates to the native
+// filter and a format Endless infers; any other runner uses a literal command
+// plus a declared format. A verification suite lives in the product-controlled
+// directory .endless/tasks/<id>/, beside its runner files and an optional
+// fixtures/.
 //
-// This package owns the schema and discovery only. Running a suite (creating
-// the isolated temp environment, invoking the runner, normalizing the native
-// result stream) belongs to the consumers of these manifests.
+// This package owns the schema, discovery, and the first-class translation /
+// bare-clone command emission only. Running a suite (creating the isolated temp
+// environment, invoking the checks, normalizing the native result streams)
+// belongs to the consumers of these manifests.
 package verify
 
 import (
@@ -54,26 +58,32 @@ func (f Format) Valid() (valid bool) {
 	return valid
 }
 
-// Manifest is a parsed verify.toml. It names the runner a bare clone executes
-// directly, the native result format that runner emits, and optional execution
-// hints (setup, tiers, seed fixtures, isolation needs). The runner string alone
-// must exit 0 on all-pass and non-zero on any failure with no Endless present.
+// Manifest is a parsed verify.toml. It holds the list of checks a bare clone
+// runs (each contributing to the proof), plus optional execution hints (setup,
+// teardown, tiers, seed fixtures, isolation needs). Every check's resolved
+// command must exit 0 on all-pass and non-zero on any failure with no Endless
+// present (see RenderRunScript for the bare-clone emission).
 //
 // A Manifest may be a per-task file (under .endless/tasks/<id>/) or the
 // effective manifest produced by merging a project-level ProjectConfig beneath a
 // per-task file (see Merge). The three precondition kinds are distinct: Needs
 // provisions the substrate, Setup prepares the project (build/install/migrate/
 // codegen), and Seed loads state. The runner executes them in the order
-// provision -> setup -> seed -> run.
+// provision -> setup -> seed -> checks -> teardown.
+//
+// TOML ordering note: because the [[check]] array is an array-of-tables, the
+// top-level scalar/array fields below must appear BEFORE the first [[check]]
+// block in a verify.toml file, or TOML binds them to that check table instead of
+// the document root (and the unknown-key check then rejects them).
 type Manifest struct {
-	Schema int      `toml:"schema"`
-	Task   string   `toml:"task"`
-	Runner string   `toml:"runner"`
-	Format Format   `toml:"format"`
-	Setup  []string `toml:"setup"`
-	Tiers  []string `toml:"tiers"`
-	Seed   []string `toml:"seed"`
-	Needs  []string `toml:"needs"`
+	Schema   int      `toml:"schema"`
+	Task     string   `toml:"task"`
+	Checks   []Check  `toml:"check"`
+	Setup    []string `toml:"setup"`
+	Teardown []string `toml:"teardown"`
+	Tiers    []string `toml:"tiers"`
+	Seed     []string `toml:"seed"`
+	Needs    []string `toml:"needs"`
 }
 
 // ParseManifest decodes a complete verify.toml document, rejects unknown keys,
@@ -123,26 +133,35 @@ end:
 	return m, err
 }
 
-// Validate checks that all required fields are present and that schema and
-// format hold known values. Optional fields (tiers, seed, needs) are not
-// constrained here. Errors wrap ErrInvalidManifest.
+// Validate checks the required top-level fields, that schema holds a known
+// value, and that the manifest declares at least one check, then validates each
+// check by its form (see validateCheck). Optional fields (setup, teardown,
+// tiers, seed, needs) are not constrained here. Errors wrap ErrInvalidManifest.
 func (m *Manifest) Validate() (err error) {
 	switch {
 	case m.Schema == 0:
 		err = doterr.NewErr(ErrInvalidManifest, ErrMissingField, "field", "schema")
+		goto end
 	case m.Schema != SchemaVersion:
 		err = doterr.NewErr(ErrInvalidManifest, ErrUnknownSchema,
 			"schema", m.Schema, "supported", SchemaVersion)
+		goto end
 	case m.Task == "":
 		err = doterr.NewErr(ErrInvalidManifest, ErrMissingField, "field", "task")
-	case m.Runner == "":
-		err = doterr.NewErr(ErrInvalidManifest, ErrMissingField, "field", "runner")
-	case m.Format == "":
-		err = doterr.NewErr(ErrInvalidManifest, ErrMissingField, "field", "format")
-	case !m.Format.Valid():
-		err = doterr.NewErr(ErrInvalidManifest, ErrUnknownFormat,
-			"format", string(m.Format), "supported", formatList())
+		goto end
+	case len(m.Checks) == 0:
+		err = doterr.NewErr(ErrInvalidManifest, ErrNoChecks)
+		goto end
 	}
+
+	for i, c := range m.Checks {
+		err = validateCheck(c, i)
+		if err != nil {
+			goto end
+		}
+	}
+
+end:
 	return err
 }
 

@@ -1,22 +1,21 @@
 #!/usr/bin/env bash
 #
-# E-1611 verification script — exercises the verify manifest's `setup` field and
-# the project-level .endless/verify.toml config layering (Go package
-# internal/verify, building on E-1602).
+# E-1618 verification script — exercises the verify.toml [[check]] list: the
+# first-class runner registry (gotest/pytest), tests/paths -> native-filter
+# translation, format inference, raw-command fallback, per-check validation, and
+# the bare-clone run.sh emission (Go package internal/verify, revising E-1602).
 #
 # Run from anywhere inside the worktree:
-#   ./tests/tasks/e-1611-verify.sh
+#   ./tests/tasks/e-1618-verify.sh
 #
-# E-1611 ships no CLI surface yet (the runner that executes `setup` is E-1603),
-# so this verifies the Go package three ways:
+# E-1618 ships no CLI surface yet (the runner that executes the checks is
+# E-1603), so this verifies the Go package three ways:
 #   1. Static analysis — builds, vet-clean, gofmt-clean, whole module compiles.
 #   2. Unit tests       — the *_test.go suite, named per acceptance criterion.
 #   3. Behavioral proof — a throwaway `main` (compiled fresh, independent of the
-#                         *_test.go files) runs verify.Discover against real
-#                         on-disk fixtures: a project-level .endless/verify.toml
-#                         merged beneath per-task manifests, asserting the
-#                         effective setup ordering, inherited defaults, and loud
-#                         failure on an invalid project config.
+#                         *_test.go files) runs verify.Discover + RenderRunScript
+#                         against real on-disk [[check]] fixtures and asserts the
+#                         observable results.
 #
 # Output: pass/fail per check, then a summary. Exit 0 on all-passed, 1 on any
 # failure, 2 on an environment problem.
@@ -152,6 +151,20 @@ assert_contains() {
     report_fail "${desc}" "output contains: ${pattern}" "${output}"
 }
 
+# assert_not_contains DESC PATTERN CMD [ARGS...]
+assert_not_contains() {
+    local desc="$1"
+    local pattern="$2"
+    shift 2
+    local output
+    output=$("$@" 2>&1)
+    if [[ "${output}" != *"${pattern}"* ]]; then
+        report_pass "${desc}"
+        return
+    fi
+    report_fail "${desc}" "output does NOT contain: ${pattern}" "${output}"
+}
+
 # ─── fixtures ───────────────────────────────────────────────────────────────
 
 # write_suite ROOT ID CONTENT — writes ROOT/.endless/tasks/ID/verify.toml.
@@ -161,15 +174,9 @@ write_suite() {
     printf '%s' "${content}" > "${root}/.endless/tasks/${id}/verify.toml"
 }
 
-# write_project_config ROOT CONTENT — writes ROOT/.endless/verify.toml.
-write_project_config() {
-    local root="$1" content="$2"
-    mkdir -p "${root}/.endless"
-    printf '%s' "${content}" > "${root}/.endless/verify.toml"
-}
-
-# discover ROOT — run the compiled harness against project root ROOT.
-discover() {
+# render ROOT — run the compiled harness against project root ROOT (prints the
+# discovered checks, their resolved commands/formats, and the run.sh emission).
+render() {
     go run "${HARNESS_DIR}/main.go" "$1"
 }
 
@@ -193,13 +200,23 @@ test_static() {
 test_unit() {
     section "2 — Unit tests (per acceptance criterion)"
 
-    assert_succeeds "manifest carries the 'setup'/'teardown' fields (parse round-trip)" \
-        go test -run '^TestParseManifest_ValidFull$' -count=1 ./internal/verify/
-    assert_succeeds "project-level verify.toml parses; missing schema / non-project keys fail loudly" \
-        go test -run '^TestParseProjectConfig' -count=1 ./internal/verify/
+    assert_succeeds "mixed gotest+pytest+bats manifest parses; minimal parses" \
+        go test -run '^TestParseManifest_Valid' -count=1 ./internal/verify/
+    assert_succeeds "per-check validation matrix (tests-on-raw / raw-no-command / first-class conflicts)" \
+        go test -run '^TestParseManifest_CheckValidation$' -count=1 ./internal/verify/
+    assert_succeeds "consistent first-class variants (matching format / command escape hatch / paths-only) accepted" \
+        go test -run '^TestParseManifest_FirstClassConsistentVariants$' -count=1 ./internal/verify/
+    assert_succeeds "no [[check]] entries fails loudly" \
+        go test -run '^TestParseManifest_NoChecks$' -count=1 ./internal/verify/
+    assert_succeeds "top-level key misplaced under [[check]] rejected (TOML ordering)" \
+        go test -run '^TestParseManifest_TopLevelKeyAfterCheckRejected$' -count=1 ./internal/verify/
+    assert_succeeds "Check translation/format/command resolution (gotest anchoring, pytest nodeids, paths)" \
+        go test -run '^TestCheck' -count=1 ./internal/verify/
+    assert_succeeds "RenderRunScript emits setup -> checks -> teardown, excludes seed/needs" \
+        go test -run '^TestRenderRunScript' -count=1 ./internal/verify/
     assert_succeeds "Merge layers project beneath task (setup/teardown/seed append, needs default)" \
         go test -run '^TestMerge' -count=1 ./internal/verify/
-    assert_succeeds "Discover merges project config and validates the effective manifest" \
+    assert_succeeds "Discover merges project config and validates effective checks" \
         go test -run '^TestDiscover' -count=1 ./internal/verify/
     assert_succeeds "full internal/verify package suite is green" \
         go test -count=1 ./internal/verify/
@@ -208,72 +225,93 @@ test_unit() {
 # ─── 3: behavioral proof (independent of *_test.go) ──────────────────────────
 
 test_behavioral() {
-    section "3 — Behavioral proof (fresh binary vs. real on-disk layering)"
+    section "3 — Behavioral proof (fresh binary vs. real [[check]] fixtures)"
 
-    local root out
+    local root
 
-    # Project-level config supplies shared first setup/teardown steps and a
-    # default needs; the per-task manifest appends its own setup/teardown. The
-    # effective manifest must reflect project-then-task order.
+    # A verification composing three runners: a first-class gotest (structured
+    # tests + paths), a first-class pytest (nodeids), and a raw bats command.
     root=$(mktemp -d)
-    write_project_config "${root}" 'schema   = 1
-setup    = ["just build", ".endless/verify/schema-init.sh"]
-teardown = ["stop-shared"]
-needs    = ["docker"]'
     write_suite "${root}" "E-1234" 'schema   = 1
 task     = "E-1234"
-setup    = ["task-prep.sh"]
-teardown = ["stop-task"]
+setup    = ["just build"]
+teardown = ["echo done"]
+seed     = ["fixtures/baseline.json"]
+
 [[check]]
 runner = "gotest"
-tests  = ["TestX"]'
+tests  = ["TestFoo", "TestBar"]
+paths  = ["./internal/verify/..."]
 
-    assert_contains "merges project + task setup, project first" \
-        'setup=[just build .endless/verify/schema-init.sh task-prep.sh]' discover "${root}"
-    assert_contains "merges project + task teardown, project first" \
-        'teardown=[stop-shared stop-task]' discover "${root}"
-    assert_contains "task inherits the project default needs" \
-        'needs=[docker]' discover "${root}"
+[[check]]
+runner = "pytest"
+tests  = ["tests/test_x.py::test_a"]
+
+[[check]]
+runner  = "bats"
+command = "bats ./.endless/tasks/E-1234/cli.bats"
+format  = "tap"'
+
+    assert_contains "discovers the suite with 3 checks" "FOUND E-1234 checks=3" render "${root}"
+    assert_contains "gotest tests/paths translate to an anchored -run filter" \
+        "cmd=<go test -run '^(TestFoo|TestBar)\$' ./internal/verify/...>" render "${root}"
+    assert_contains "gotest format inferred" "fmt=gotest-json" render "${root}"
+    assert_contains "pytest nodeids translate to positional args" \
+        "cmd=<pytest tests/test_x.py::test_a>" render "${root}"
+    assert_contains "pytest format inferred" "fmt=pytest-json" render "${root}"
+    assert_contains "raw bats command is literal with declared tap format" \
+        "cmd=<bats ./.endless/tasks/E-1234/cli.bats> fmt=tap" render "${root}"
+
+    # run.sh emission: setup -> checks -> teardown via trap; seed excluded.
+    assert_contains "run.sh wires the teardown trap" "trap teardown EXIT" render "${root}"
+    assert_contains "run.sh includes the setup step" "just build" render "${root}"
+    assert_contains "run.sh includes the resolved gotest check" \
+        "go test -run '^(TestFoo|TestBar)\$' ./internal/verify/..." render "${root}"
+    assert_not_contains "run.sh excludes Endless-only seed" "fixtures/baseline.json" render "${root}"
     rm -rf "${root}"
 
-    # A task needs = [] explicitly overrides the project default down to none.
+    # tests on a non-first-class runner fails loudly.
     root=$(mktemp -d)
-    write_project_config "${root}" 'schema = 1
-needs  = ["docker"]'
     write_suite "${root}" "E-2000" 'schema = 1
 task   = "E-2000"
-needs  = []
+
 [[check]]
-runner = "gotest"
-tests  = ["TestX"]'
-    assert_contains "task needs = [] overrides project default to none" \
-        'needs=[]' discover "${root}"
+runner = "bats"
+tests  = ["whatever"]'
+    assert_fails_with "tests on a raw runner fails loudly" \
+        "tests is only valid on a first-class runner" render "${root}"
     rm -rf "${root}"
 
-    # No project config: a per-task manifest with no checks is incomplete and
-    # fails loudly.
+    # raw runner without a command fails loudly.
     root=$(mktemp -d)
     write_suite "${root}" "E-3000" 'schema = 1
-task   = "E-3000"'
+task   = "E-3000"
+
+[[check]]
+runner = "bats"'
+    assert_fails_with "raw runner without command fails loudly" \
+        "non-first-class runner requires command" render "${root}"
+    rm -rf "${root}"
+
+    # first-class with a mismatched explicit format fails loudly.
+    root=$(mktemp -d)
+    write_suite "${root}" "E-4000" 'schema = 1
+task   = "E-4000"
+
+[[check]]
+runner = "gotest"
+tests  = ["TestX"]
+format = "tap"'
+    assert_fails_with "first-class mismatched format fails loudly" \
+        "declared format does not match" render "${root}"
+    rm -rf "${root}"
+
+    # a manifest with no checks fails loudly.
+    root=$(mktemp -d)
+    write_suite "${root}" "E-5000" 'schema = 1
+task   = "E-5000"'
     assert_fails_with "manifest with no checks fails loudly" \
-        "declares no [[check]] entries" discover "${root}"
-    rm -rf "${root}"
-
-    # An invalid project-level verify.toml fails discovery loudly.
-    root=$(mktemp -d)
-    write_project_config "${root}" 'schema = 2'
-    write_suite "${root}" "E-4000" "$(printf 'schema = 1\ntask = "E-4000"\n[[check]]\nrunner = "gotest"\ntests = ["TestX"]\n')"
-    assert_fails_with "invalid project config fails loudly" \
-        "invalid project-level .endless/verify.toml" discover "${root}"
-    rm -rf "${root}"
-
-    # A per-task key placed in the project config is rejected as unknown.
-    root=$(mktemp -d)
-    write_project_config "${root}" 'schema = 1
-task = "E-5000"'
-    write_suite "${root}" "E-5000" "$(printf 'schema = 1\ntask = "E-5000"\n[[check]]\nrunner = "gotest"\ntests = ["TestX"]\n')"
-    assert_fails_with "per-task 'task' in project config rejected" \
-        "unknown keys" discover "${root}"
+        "declares no [[check]] entries" render "${root}"
     rm -rf "${root}"
 }
 
@@ -293,10 +331,10 @@ main() {
         exit 2
     fi
 
-    # Compile the discovery harness once. A dot-prefixed temp dir under the
-    # module keeps it importable (internal/verify is module-private) while
-    # staying invisible to `./...` package patterns. Cleaned up on exit.
-    HARNESS_DIR=$(mktemp -d "${repo_root}/tests/tasks/.e1611harness.XXXXXX") || exit 2
+    # Compile the harness once. A dot-prefixed temp dir under the module keeps it
+    # importable (internal/verify is module-private) while staying invisible to
+    # `./...` package patterns. Cleaned up on exit.
+    HARNESS_DIR=$(mktemp -d "${repo_root}/tests/tasks/.e1618harness.XXXXXX") || exit 2
     trap 'rm -rf "${HARNESS_DIR}"' EXIT
     cat > "${HARNESS_DIR}/main.go" <<'GO'
 package main
@@ -304,7 +342,6 @@ package main
 import (
 	"fmt"
 	"os"
-	"strings"
 
 	"github.com/mikeschinkel/go-dt"
 
@@ -323,20 +360,20 @@ func main() {
 	}
 	fmt.Printf("COUNT %d\n", len(manifests))
 	for id, m := range manifests {
-		fmt.Printf("FOUND %s checks=%d setup=[%s] teardown=[%s] seed=[%s] needs=[%s]\n",
-			id, len(m.Checks),
-			strings.Join(m.Setup, " "),
-			strings.Join(m.Teardown, " "),
-			strings.Join(m.Seed, " "),
-			strings.Join(m.Needs, " "))
+		fmt.Printf("FOUND %s checks=%d\n", id, len(m.Checks))
+		for i, c := range m.Checks {
+			fmt.Printf("  CHECK #%d runner=%s cmd=<%s> fmt=%s\n",
+				i, c.Runner, c.ResolvedCommand(), c.ResolvedFormat())
+		}
+		fmt.Printf("RUNSCRIPT-BEGIN %s\n%sRUNSCRIPT-END\n", id, verify.RenderRunScript(m))
 	}
 }
 GO
 
-    printf '%sE-1611 verification%s\n' "${BOLD}" "${RESET}"
+    printf '%sE-1618 verification%s\n' "${BOLD}" "${RESET}"
     printf '%s\n' "${UNDERLINE}"
     printf '  cwd:     %s\n' "${repo_root}"
-    printf '  scope:   internal/verify (setup field + project-level config layering)\n'
+    printf '  scope:   internal/verify ([[check]] list + first-class translation + run.sh emit)\n'
     printf '  go:      %s\n' "$(go version 2>&1 | awk '{print $3}')"
 
     test_static

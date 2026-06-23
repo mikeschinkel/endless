@@ -8,11 +8,11 @@ import (
 )
 
 const validProjectConfig = `
-schema = 1
-format = "gotest-json"
-setup  = ["just build", ".endless/verify/setup.sh"]
-seed   = ["fixtures/shared.json"]
-needs  = []
+schema   = 1
+setup    = ["just build", ".endless/verify/setup.sh"]
+teardown = ["docker compose down"]
+seed     = ["fixtures/shared.json"]
+needs    = []
 `
 
 func TestParseProjectConfig_ValidFull(t *testing.T) {
@@ -23,11 +23,11 @@ func TestParseProjectConfig_ValidFull(t *testing.T) {
 	if pc.Schema != 1 {
 		t.Errorf("Schema = %d, want 1", pc.Schema)
 	}
-	if pc.Format != verify.FormatGotestJSON {
-		t.Errorf("Format = %q, want %q", pc.Format, verify.FormatGotestJSON)
-	}
 	if len(pc.Setup) != 2 || pc.Setup[0] != "just build" || pc.Setup[1] != ".endless/verify/setup.sh" {
 		t.Errorf("Setup = %v, want [just build .endless/verify/setup.sh]", pc.Setup)
+	}
+	if len(pc.Teardown) != 1 || pc.Teardown[0] != "docker compose down" {
+		t.Errorf("Teardown = %v, want [docker compose down]", pc.Teardown)
 	}
 	if len(pc.Seed) != 1 || pc.Seed[0] != "fixtures/shared.json" {
 		t.Errorf("Seed = %v, want [fixtures/shared.json]", pc.Seed)
@@ -45,7 +45,7 @@ func TestParseProjectConfig_MinimalSchemaOnly(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ParseProjectConfig returned error for schema-only config: %v", err)
 	}
-	if pc.Format != "" || len(pc.Setup) != 0 || len(pc.Seed) != 0 || len(pc.Needs) != 0 {
+	if len(pc.Setup) != 0 || len(pc.Teardown) != 0 || len(pc.Seed) != 0 || len(pc.Needs) != 0 {
 		t.Errorf("optional fields should be empty: %+v", pc)
 	}
 }
@@ -73,29 +73,21 @@ func TestParseProjectConfig_UnknownSchema(t *testing.T) {
 	}
 }
 
-func TestParseProjectConfig_InvalidDefaultFormat(t *testing.T) {
-	_, err := verify.ParseProjectConfig([]byte("schema = 1\nformat = \"junit-xml\"\n"))
-	if err == nil {
-		t.Fatal("ParseProjectConfig accepted invalid default format")
-	}
-	if !errors.Is(err, verify.ErrUnknownFormat) {
-		t.Errorf("error did not wrap ErrUnknownFormat: %v", err)
-	}
-}
-
-// The project config carries no per-task fields. runner/task/tiers must be
-// rejected as unknown keys so a misplaced per-task field is caught loudly.
-func TestParseProjectConfig_RejectsPerTaskKeys(t *testing.T) {
+// The project config carries no per-task fields and no format (format is now a
+// per-check concern). runner/task/tiers/checks/format must all be rejected as
+// unknown keys so a misplaced field is caught loudly.
+func TestParseProjectConfig_RejectsNonProjectKeys(t *testing.T) {
 	cases := map[string]string{
 		"runner": "schema = 1\nrunner = \"go test ./...\"\n",
 		"task":   "schema = 1\ntask = \"E-1\"\n",
 		"tiers":  "schema = 1\ntiers = [\"smoke\"]\n",
+		"format": "schema = 1\nformat = \"tap\"\n",
 	}
 	for name, toml := range cases {
 		t.Run(name, func(t *testing.T) {
 			_, err := verify.ParseProjectConfig([]byte(toml))
 			if err == nil {
-				t.Fatalf("ParseProjectConfig accepted per-task key %q", name)
+				t.Fatalf("ParseProjectConfig accepted non-project key %q", name)
 			}
 			if !errors.Is(err, verify.ErrUnknownManifestKeys) {
 				t.Errorf("error did not wrap ErrUnknownManifestKeys: %v", err)
