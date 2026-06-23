@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/mikeschinkel/endless/internal/gatekind"
 	"github.com/mikeschinkel/endless/internal/monitor"
 	_ "modernc.org/sqlite"
 )
@@ -51,6 +52,11 @@ func Run(args []string) {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
+	case "gate-clear":
+		if err := runGateClear(args[1:]); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
 	case "-h", "--help", "help":
 		usage()
 	default:
@@ -72,6 +78,47 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "  count-bg-agents --task-id <id>    count `working` bg agents in the task's project; prints the integer")
 	fmt.Fprintln(os.Stderr, "  list-bg-agents (--session-id <id> | --epic-id <id> | --all --project-root <path>)")
 	fmt.Fprintln(os.Stderr, "                                    JSON {scope, epic_id, agents} of working bg agents (E-1621)")
+	fmt.Fprintln(os.Stderr, "  gate-clear --session-id <id> --kind <slug> --cleared-by <reason>")
+	fmt.Fprintln(os.Stderr, "                                    clear the session's open gate of the kind; prints rows cleared")
+}
+
+// runGateClear closes the session's open gate of the given kind, recording the
+// cleared_by reason, and prints how many open rows were cleared (0 = nothing was
+// pending). It backs the `endless task continue` / `endless task pause` verbs so
+// the Python side clears a gate without a Python DB write (E-1486 / E-1542).
+// --session-id is the integer sessions.id PK (the Python resolver supplies it).
+func runGateClear(args []string) error {
+	fs := flag.NewFlagSet("gate-clear", flag.ContinueOnError)
+	sessionID := fs.Int64("session-id", 0, "sessions.id (integer PK) to clear")
+	kind := fs.String("kind", "", "gate kind slug (e.g. revisit)")
+	clearedBy := fs.String("cleared-by", "", "reason recorded in cleared_by")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *sessionID == 0 {
+		return fmt.Errorf("--session-id is required")
+	}
+	gk, err := gatekind.Parse(*kind)
+	if err != nil {
+		return err
+	}
+	// The verb-driven clear reasons are the only ones valid on this CLI surface;
+	// revisit_resolved / superseded are set by the hook directly via the monitor
+	// helper, never through here.
+	if *clearedBy != "revisit_continue" && *clearedBy != "revisit_pause" {
+		return fmt.Errorf("--cleared-by must be revisit_continue or revisit_pause")
+	}
+	switch gk {
+	case gatekind.GateKindRevisit:
+		n, err := monitor.ClearRevisitGate(*sessionID, *clearedBy)
+		if err != nil {
+			return err
+		}
+		fmt.Println(n)
+		return nil
+	default:
+		return fmt.Errorf("gate-clear: unsupported kind %q", gk)
+	}
 }
 
 // runRecordBgAgent inserts the dispatch-time sessions row for a background

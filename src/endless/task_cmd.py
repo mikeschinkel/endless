@@ -3059,6 +3059,74 @@ def release_item(item_id: int | None, ignore_missing: bool = False) -> None:
     )
 
 
+def _clear_revisit_gate(cleared_by: str) -> int:
+    """Clear the current session's open revisit gate via the Go helper.
+
+    Shells out to `endless-go session-query gate-clear`, which performs the
+    direct session_gates write (no Python DB write, per E-1486 / E-1542).
+    Returns the number of open rows cleared (0 = nothing pending). Raises if
+    the current session id can't be resolved or the helper fails.
+    """
+    import subprocess
+    from endless import config
+    from endless.event_bridge import _resolve_endless_go
+
+    current_eid = _current_endless_session_id()
+    if current_eid is None:
+        raise click.ClickException(
+            "Cannot resolve current session id "
+            "(set ENDLESS_SESSION_ID or run inside a tmux pane with a "
+            "known companion file)."
+        )
+    args = [
+        _resolve_endless_go(), *config.go_db_context_args(),
+        "session-query", "gate-clear",
+        "--session-id", str(current_eid),
+        "--kind", "revisit",
+        "--cleared-by", cleared_by,
+    ]
+    result = subprocess.run(args, capture_output=True, text=True)
+    if result.returncode != 0:
+        raise click.ClickException(
+            "gate-clear failed: " + (result.stderr.strip() or "unknown error")
+        )
+    text = result.stdout.strip()
+    return int(text) if text.isdigit() else 0
+
+
+def continue_item() -> None:
+    """Resume under the current plan, clearing the pending revisit prompt.
+
+    Clears the session's open revisit gate (cleared_by='revisit_continue') so
+    the PreToolUse hook stops intercepting tool calls. No other side effects.
+    """
+    if not _clear_revisit_gate("revisit_continue"):
+        click.echo("No pending revisit prompt for this session.")
+        return
+    click.echo(
+        click.style("•", fg="cyan")
+        + " continuing under the current plan; revisit prompt cleared"
+    )
+
+
+def pause_item() -> None:
+    """Pause until the strategy is re-set: clear the prompt and release the task.
+
+    Clears the session's open revisit gate (cleared_by='revisit_pause') and
+    then releases the session's claim on its active task (worktree stays
+    intact, per release semantics). No-op with a friendly message when no
+    revisit prompt is pending.
+    """
+    if not _clear_revisit_gate("revisit_pause"):
+        click.echo("No pending revisit prompt for this session.")
+        return
+    click.echo(
+        click.style("•", fg="cyan")
+        + " pausing until the strategy is re-set; revisit prompt cleared"
+    )
+    release_item(None)
+
+
 def _reopen_task_core(item_id: int) -> tuple[str, str, bool]:
     """Reopen a terminal-status task back to `ready` or `needs_plan`.
 

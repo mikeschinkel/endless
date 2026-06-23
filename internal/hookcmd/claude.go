@@ -64,6 +64,23 @@ type hookResponse struct {
 	AdditionalContext string `json:"additionalContext,omitempty"`
 }
 
+// preToolUseBlock is the JSON block response for PreToolUse (E-1542). decision
+// "block" prevents the tool call; reason is shown to Claude; additionalContext
+// is injected as a system reminder. The instruction is carried in BOTH fields so
+// the block stays reliable even if a given Claude build honors only one — see
+// E-1542 §4/§5: the decision+additionalContext interaction needs live
+// verification, and the always-works fallback is blockToolUse (stderr + exit 2).
+type preToolUseBlock struct {
+	Decision           string               `json:"decision"`
+	Reason             string               `json:"reason"`
+	HookSpecificOutput preToolUseHookOutput `json:"hookSpecificOutput"`
+}
+
+type preToolUseHookOutput struct {
+	HookEventName     string `json:"hookEventName"`
+	AdditionalContext string `json:"additionalContext"`
+}
+
 func runClaude(args []string) error {
 	data, err := io.ReadAll(os.Stdin)
 	if err != nil {
@@ -486,6 +503,13 @@ func handlePreToolUse(projectID int64, isRegistered bool, payload claudePayload)
 	// other tool that defaults to cwd are covered, not just file writes.
 	enforceClaimedCwd(projectID, payload)
 
+	// E-1542: pause-on-revisit gate. Intercepts a session whose claimed task
+	// descends from an epic in status='revisit'. Placed BEFORE the write-tool
+	// early-return so it fires for all tool kinds (Read/Bash/Grep too), and runs
+	// regardless of tracking_mode — a strategy revisit is coordination, not
+	// claim-enforcement.
+	enforceRevisitGate(payload)
+
 	// Only enforce the remaining gates on file-writing tools.
 	if !writeTools[payload.ToolName] {
 		return nil
@@ -568,6 +592,105 @@ func handlePreToolUse(projectID int64, isRegistered bool, payload claudePayload)
 func blockToolUse(message string) {
 	fmt.Fprint(os.Stderr, message)
 	os.Exit(2)
+}
+
+// revisitClearVerbRe matches the user's revisit gate-clearing commands so they
+// are never blocked by the gate itself (E-1542): `endless task continue` /
+// `endless task pause`, including wrapper-prefixed forms such as `uv run endless
+// task continue` or `./bin-sandbox/endless task pause`.
+var revisitClearVerbRe = regexp.MustCompile(`(?i)\bendless\s+task\s+(?:continue|pause)\b`)
+
+// enforceRevisitGate intercepts a session whose claimed task descends from an
+// epic currently in status='revisit' (E-1542). On the session's next tool call
+// (any tool kind) it blocks and instructs Claude to surface an AskUserQuestion:
+// continue under the current plan, or pause until the strategy is re-set. The
+// user's answer runs `endless task continue` / `endless task pause`, which clear
+// the gate. No-op when the session has no resolvable active task, and never
+// blocks the gate-clearing commands themselves.
+func enforceRevisitGate(payload claudePayload) {
+	if instruction, block := revisitGateDecision(payload); block {
+		blockToolUseWithRevisitPrompt(instruction)
+	}
+}
+
+// revisitGateDecision is the side-effect-free core of enforceRevisitGate: it
+// reads (and, when a gate fires for the first time, opens) the session's gate
+// state and reports whether the tool call should be blocked and with what
+// instruction. It does the gate-row writes (SetRevisitGate / auto-clear) but
+// performs no stdout/exit — the caller owns the block emission — so it is unit
+// testable against a seeded DB.
+func revisitGateDecision(payload claudePayload) (instruction string, block bool) {
+	// Never gate the user's own gate-clearing commands.
+	if payload.ToolName == "Bash" {
+		var input toolInputBash
+		if err := json.Unmarshal(payload.ToolInput, &input); err == nil &&
+			revisitClearVerbRe.MatchString(input.Command) {
+			return "", false
+		}
+	}
+
+	session, err := monitor.GetActiveSession(payload.SessionID)
+	if err != nil || session == nil || session.ActiveTaskID == nil {
+		return "", false
+	}
+	taskID := *session.ActiveTaskID
+
+	// Already gated: re-check the epic's status before blocking again, so a gate
+	// auto-clears the moment the epic leaves revisit.
+	if epicID, found, perr := monitor.PendingRevisitGate(session.ID); perr == nil && found {
+		if status, serr := monitor.GetTaskStatus(epicID); serr == nil && status != "revisit" {
+			_, _ = monitor.ClearRevisitGate(session.ID, "revisit_resolved")
+			return "", false
+		}
+		return revisitPromptInstruction(taskID, epicID), true
+	}
+
+	// Not yet gated: look for the nearest revisit epic ancestor.
+	epicID, found, err := monitor.NearestRevisitEpicAncestor(taskID)
+	if err != nil || !found {
+		return "", false
+	}
+	if serr := monitor.SetRevisitGate(session.ID, epicID); serr != nil {
+		log.Printf("set revisit gate for session %d: %v", session.ID, serr)
+		return "", false
+	}
+	return revisitPromptInstruction(taskID, epicID), true
+}
+
+// revisitPromptInstruction is the instruction Claude reads when the gate fires.
+func revisitPromptInstruction(taskID, epicID int64) string {
+	return fmt.Sprintf(
+		"Your active task E-%d is a descendant of epic E-%d, which the operator just set to "+
+			"status=revisit. The strategy under which this task was planned is being "+
+			"reconsidered. Surface this to the user as an AskUserQuestion with two options:\n\n"+
+			"  - Continue under the current plan (then call `endless task continue`)\n"+
+			"  - Pause until the strategy is re-set (then call `endless task pause`)",
+		taskID, epicID,
+	)
+}
+
+// revisitBlockResponse builds the PreToolUse block response carrying the
+// instruction in both reason and additionalContext (see preToolUseBlock).
+func revisitBlockResponse(instruction string) preToolUseBlock {
+	return preToolUseBlock{
+		Decision: "block",
+		Reason:   instruction,
+		HookSpecificOutput: preToolUseHookOutput{
+			HookEventName:     "PreToolUse",
+			AdditionalContext: instruction,
+		},
+	}
+}
+
+// blockToolUseWithRevisitPrompt emits the PreToolUse block response (decision
+// "block" + reason + additionalContext) and exits 0. If encoding fails it falls
+// back to the always-works stderr+exit-2 form.
+func blockToolUseWithRevisitPrompt(instruction string) {
+	if err := json.NewEncoder(os.Stdout).Encode(revisitBlockResponse(instruction)); err != nil {
+		blockToolUse(instruction)
+		return
+	}
+	os.Exit(0)
 }
 
 // blockDriftViolation blocks an edit that targets a file outside the active

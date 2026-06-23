@@ -211,6 +211,42 @@ BEGIN
     WHERE id = NEW.id AND updated_at != strftime('%Y-%m-%dT%H:%M:%S', 'now');
 END;
 
+-- Gate kinds (E-1542). SQL mirror of the GateKind Go enum (ED-1506: const-in-code
+-- is the source of truth, table exists for FK enforcement and queryability). The
+-- startup integrity check fails closed on drift between this table and the
+-- gatekind.All() enum. Adding a value = add an enum constant + add a seed row
+-- here. Seed inserts below are idempotent on a populated DB.
+CREATE TABLE IF NOT EXISTS gate_kinds (
+    id    INTEGER PRIMARY KEY,
+    slug  TEXT UNIQUE NOT NULL,
+    label TEXT NOT NULL
+);
+
+INSERT OR IGNORE INTO gate_kinds (id, slug, label) VALUES
+    (1, 'revisit', 'Revisit');
+
+-- Session gates (E-1542). A pending interception for a session: while an open
+-- row (cleared_at IS NULL) exists for a (session_id, kind_id) pair, the
+-- PreToolUse hook blocks the session's next tool call. kind_id discriminates the
+-- gate kind; named per-kind subject columns carry the kind's context (the
+-- 'revisit' kind sets epic_id). A polymorphic subject_id was rejected because it
+-- loses FK ON DELETE CASCADE. cleared_by records how an open row was resolved:
+-- revisit_continue, revisit_pause, revisit_resolved (epic left revisit before the
+-- user answered), or superseded (a newer gate replaced it). The partial index
+-- plus application-level supersede-on-insert keep at most one open row per pair.
+CREATE TABLE IF NOT EXISTS session_gates (
+    id INTEGER PRIMARY KEY,
+    session_id INTEGER NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+    kind_id INTEGER NOT NULL REFERENCES gate_kinds(id),
+    epic_id INTEGER REFERENCES tasks(id) ON DELETE CASCADE,
+    triggered_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
+    cleared_at TEXT,
+    cleared_by TEXT
+);
+
+CREATE INDEX IF NOT EXISTS session_gates_open
+    ON session_gates(session_id, kind_id) WHERE cleared_at IS NULL;
+
 -- Task dependencies (cross-project capable)
 CREATE TABLE IF NOT EXISTS task_deps (
     id INTEGER PRIMARY KEY,

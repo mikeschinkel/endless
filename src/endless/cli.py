@@ -1483,6 +1483,20 @@ def task_release(item_id, ignore_missing):
     release_item(item_id, ignore_missing=ignore_missing)
 
 
+@task_cmd.command("continue")
+def task_continue():
+    """Resume under the current plan, clearing a pending epic-revisit prompt."""
+    from endless.task_cmd import continue_item
+    continue_item()
+
+
+@task_cmd.command("pause")
+def task_pause():
+    """Pause for an epic-revisit prompt: clear it and release the active task."""
+    from endless.task_cmd import pause_item
+    pause_item()
+
+
 @task_cmd.command("bind")
 @click.argument("item_id", type=TASK_ID)
 def task_bind(item_id):
