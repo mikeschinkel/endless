@@ -22,7 +22,7 @@ func TestExecute_TaskCreated_RejectsMaybeWithParent(t *testing.T) {
 
 	// A real parent must exist for the FK.
 	parentEvt := newTaskCreatedEvent(t, 700, "parent")
-	if _, err := events.Execute(parentEvt); err != nil {
+	if _, err := events.Execute(parentEvt, nil); err != nil {
 		t.Fatalf("seed parent: %v", err)
 	}
 
@@ -46,7 +46,7 @@ func TestExecute_TaskCreated_RejectsMaybeWithParent(t *testing.T) {
 		Actor:   events.Actor{Kind: events.ActorCLI, ID: "tester"},
 		Payload: payload,
 	}
-	_, err = events.Execute(evt)
+	_, err = events.Execute(evt, nil)
 	if err == nil {
 		t.Fatal("Execute: want rejection, got nil error")
 	}
@@ -83,7 +83,7 @@ func TestExecute_TaskCreated_AllowsMaybeRoot(t *testing.T) {
 		Actor:   events.Actor{Kind: events.ActorCLI, ID: "tester"},
 		Payload: payload,
 	}
-	if _, err := events.Execute(evt); err != nil {
+	if _, err := events.Execute(evt, nil); err != nil {
 		t.Fatalf("Execute: want success, got %v", err)
 	}
 	var phase string
@@ -100,7 +100,7 @@ func TestExecute_TaskCreated_AllowsMaybeRoot(t *testing.T) {
 func TestExecute_TaskCreated_AllowsParentedNonMaybe(t *testing.T) {
 	withExecutorDB(t)
 
-	if _, err := events.Execute(newTaskCreatedEvent(t, 703, "parent")); err != nil {
+	if _, err := events.Execute(newTaskCreatedEvent(t, 703, "parent"), nil); err != nil {
 		t.Fatalf("seed parent: %v", err)
 	}
 	parentID := int64(703)
@@ -120,7 +120,7 @@ func TestExecute_TaskCreated_AllowsParentedNonMaybe(t *testing.T) {
 		Actor:   events.Actor{Kind: events.ActorCLI, ID: "tester"},
 		Payload: payload,
 	}
-	if _, err := events.Execute(evt); err != nil {
+	if _, err := events.Execute(evt, nil); err != nil {
 		t.Fatalf("Execute: want success, got %v", err)
 	}
 }
@@ -148,7 +148,7 @@ func fieldsUpdatedEvent(t *testing.T, id int64, fields map[string]any) *events.E
 func TestExecute_FieldsUpdated_RejectsReparentMaybe(t *testing.T) {
 	withExecutorDB(t)
 
-	if _, err := events.Execute(newTaskCreatedEvent(t, 710, "parent")); err != nil {
+	if _, err := events.Execute(newTaskCreatedEvent(t, 710, "parent"), nil); err != nil {
 		t.Fatalf("seed parent: %v", err)
 	}
 	// Create a parentless maybe task.
@@ -162,12 +162,12 @@ func TestExecute_FieldsUpdated_RejectsReparentMaybe(t *testing.T) {
 		Actor:   events.Actor{Kind: events.ActorCLI, ID: "tester"},
 		Payload: maybePayload,
 	}
-	if _, err := events.Execute(maybeEvt); err != nil {
+	if _, err := events.Execute(maybeEvt, nil); err != nil {
 		t.Fatalf("seed maybe task: %v", err)
 	}
 
 	evt := fieldsUpdatedEvent(t, 711, map[string]any{"parent_id": float64(710)})
-	_, err := events.Execute(evt)
+	_, err := events.Execute(evt, nil)
 	if err == nil || !strings.Contains(err.Error(), maybeParentErrFragment) {
 		t.Fatalf("Execute: want rejection with %q, got %v", maybeParentErrFragment, err)
 	}
@@ -178,7 +178,7 @@ func TestExecute_FieldsUpdated_RejectsReparentMaybe(t *testing.T) {
 func TestExecute_FieldsUpdated_RejectsPhaseMaybeOnChild(t *testing.T) {
 	withExecutorDB(t)
 
-	if _, err := events.Execute(newTaskCreatedEvent(t, 720, "parent")); err != nil {
+	if _, err := events.Execute(newTaskCreatedEvent(t, 720, "parent"), nil); err != nil {
 		t.Fatalf("seed parent: %v", err)
 	}
 	parentID := int64(720)
@@ -193,12 +193,12 @@ func TestExecute_FieldsUpdated_RejectsPhaseMaybeOnChild(t *testing.T) {
 		Actor:   events.Actor{Kind: events.ActorCLI, ID: "tester"},
 		Payload: childPayload,
 	}
-	if _, err := events.Execute(childEvt); err != nil {
+	if _, err := events.Execute(childEvt, nil); err != nil {
 		t.Fatalf("seed child: %v", err)
 	}
 
 	evt := fieldsUpdatedEvent(t, 721, map[string]any{"phase": "maybe"})
-	_, err := events.Execute(evt)
+	_, err := events.Execute(evt, nil)
 	if err == nil || !strings.Contains(err.Error(), maybeParentErrFragment) {
 		t.Fatalf("Execute: want rejection with %q, got %v", maybeParentErrFragment, err)
 	}
@@ -209,7 +209,7 @@ func TestExecute_FieldsUpdated_RejectsPhaseMaybeOnChild(t *testing.T) {
 func TestExecute_FieldsUpdated_AllowsAtomicPromoteAndParent(t *testing.T) {
 	db := withExecutorDB(t)
 
-	if _, err := events.Execute(newTaskCreatedEvent(t, 730, "parent")); err != nil {
+	if _, err := events.Execute(newTaskCreatedEvent(t, 730, "parent"), nil); err != nil {
 		t.Fatalf("seed parent: %v", err)
 	}
 	maybePayload, _ := json.Marshal(events.TaskCreatedPayload{
@@ -222,14 +222,14 @@ func TestExecute_FieldsUpdated_AllowsAtomicPromoteAndParent(t *testing.T) {
 		Actor:   events.Actor{Kind: events.ActorCLI, ID: "tester"},
 		Payload: maybePayload,
 	}
-	if _, err := events.Execute(maybeEvt); err != nil {
+	if _, err := events.Execute(maybeEvt, nil); err != nil {
 		t.Fatalf("seed maybe task: %v", err)
 	}
 
 	evt := fieldsUpdatedEvent(t, 731, map[string]any{
 		"phase": "next", "parent_id": float64(730),
 	})
-	if _, err := events.Execute(evt); err != nil {
+	if _, err := events.Execute(evt, nil); err != nil {
 		t.Fatalf("Execute: want success for atomic promote+parent, got %v", err)
 	}
 	var phase string
@@ -249,7 +249,7 @@ func TestExecute_FieldsUpdated_AllowsAtomicPromoteAndParent(t *testing.T) {
 func TestExecute_FieldsUpdated_AllowsUnrelatedEditOnViolatingRow(t *testing.T) {
 	db := withExecutorDB(t)
 
-	if _, err := events.Execute(newTaskCreatedEvent(t, 740, "parent")); err != nil {
+	if _, err := events.Execute(newTaskCreatedEvent(t, 740, "parent"), nil); err != nil {
 		t.Fatalf("seed parent: %v", err)
 	}
 	// Force a pre-existing violation directly in the DB (bypassing the gate).
@@ -261,7 +261,7 @@ func TestExecute_FieldsUpdated_AllowsUnrelatedEditOnViolatingRow(t *testing.T) {
 	}
 
 	evt := fieldsUpdatedEvent(t, 741, map[string]any{"description": "edited"})
-	if _, err := events.Execute(evt); err != nil {
+	if _, err := events.Execute(evt, nil); err != nil {
 		t.Fatalf("Execute: want success for unrelated edit, got %v", err)
 	}
 }
@@ -271,7 +271,7 @@ func TestExecute_FieldsUpdated_AllowsUnrelatedEditOnViolatingRow(t *testing.T) {
 func TestExecute_TaskMoved_RejectsMaybeUnderParent(t *testing.T) {
 	withExecutorDB(t)
 
-	if _, err := events.Execute(newTaskCreatedEvent(t, 750, "parent")); err != nil {
+	if _, err := events.Execute(newTaskCreatedEvent(t, 750, "parent"), nil); err != nil {
 		t.Fatalf("seed parent: %v", err)
 	}
 	maybePayload, _ := json.Marshal(events.TaskCreatedPayload{
@@ -284,7 +284,7 @@ func TestExecute_TaskMoved_RejectsMaybeUnderParent(t *testing.T) {
 		Actor:   events.Actor{Kind: events.ActorCLI, ID: "tester"},
 		Payload: maybePayload,
 	}
-	if _, err := events.Execute(maybeEvt); err != nil {
+	if _, err := events.Execute(maybeEvt, nil); err != nil {
 		t.Fatalf("seed maybe task: %v", err)
 	}
 
@@ -297,7 +297,7 @@ func TestExecute_TaskMoved_RejectsMaybeUnderParent(t *testing.T) {
 		Actor:   events.Actor{Kind: events.ActorCLI, ID: "tester"},
 		Payload: movePayload,
 	}
-	_, err := events.Execute(moveEvt)
+	_, err := events.Execute(moveEvt, nil)
 	if err == nil || !strings.Contains(err.Error(), maybeParentErrFragment) {
 		t.Fatalf("Execute: want rejection with %q, got %v", maybeParentErrFragment, err)
 	}
@@ -309,7 +309,7 @@ func TestExecute_TaskMoved_AllowsMaybeToRoot(t *testing.T) {
 	db := withExecutorDB(t)
 
 	// A parented maybe row (pre-existing violation) being moved to root.
-	if _, err := events.Execute(newTaskCreatedEvent(t, 760, "parent")); err != nil {
+	if _, err := events.Execute(newTaskCreatedEvent(t, 760, "parent"), nil); err != nil {
 		t.Fatalf("seed parent: %v", err)
 	}
 	if _, err := db.Exec(
@@ -327,7 +327,7 @@ func TestExecute_TaskMoved_AllowsMaybeToRoot(t *testing.T) {
 		Actor:   events.Actor{Kind: events.ActorCLI, ID: "tester"},
 		Payload: movePayload,
 	}
-	if _, err := events.Execute(moveEvt); err != nil {
+	if _, err := events.Execute(moveEvt, nil); err != nil {
 		t.Fatalf("Execute: want success moving maybe to root, got %v", err)
 	}
 	var parent any
