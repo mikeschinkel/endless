@@ -269,3 +269,32 @@ def test_target_project_returns_project_root(registered_with_sessions, capsys):
 
     session_cmd.session_cd_resolve("42", target="project")
     assert capsys.readouterr().out.strip() == str(project_dir)
+
+
+def test_target_project_no_session_ref_resolves_from_cwd(
+    registered_with_sessions, capsys
+):
+    """target=project with no session-ref resolves the project root from cwd,
+    even with no live session. This is what lets `esp` return to the project
+    root after the Claude session has exited (E-1650)."""
+    project_dir, sessions_dir, stage = registered_with_sessions
+    # No session staged, no session-ref passed.
+    session_cmd.session_cd_resolve(None, target="project")
+    out = capsys.readouterr()
+    assert out.out.strip() == str(project_dir)
+    # Status confirmation on stderr; stdout stays a clean cd target.
+    assert "project root" in out.err
+
+
+def test_target_project_no_session_ref_walks_up_from_subdir(
+    registered_with_sessions, monkeypatch, capsys
+):
+    """The cwd-based resolution walks up from a nested subdir to the
+    registered project root (E-1650)."""
+    project_dir, sessions_dir, stage = registered_with_sessions
+    subdir = project_dir / "src" / "deep"
+    subdir.mkdir(parents=True)
+    monkeypatch.chdir(subdir)
+
+    session_cmd.session_cd_resolve(None, target="project")
+    assert capsys.readouterr().out.strip() == str(project_dir)

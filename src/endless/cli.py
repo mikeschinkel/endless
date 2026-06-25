@@ -572,14 +572,15 @@ esu() {
     eval "$out"
 }
 
-# esp — cd into the project root of a Claude session.
-#   esp          → auto-resolve to sibling Claude pane in tmux
+# esp — cd into a project root.
+#   esp          → project root of the current session if one is active,
+#                  otherwise the project root resolved from the cwd (so it
+#                  works after the Claude session has exited)
 #   esp <id>     → explicit endless integer id or Claude UUID prefix
+# No session guard: resolving the project root only needs the cwd, not a
+# session. 'session cd --target project' with no session-ref walks up from
+# cwd to the registered project root.
 esp() {
-    if [ -z "${ENDLESS_SESSION_ID:-}" ] && [ $# -eq 0 ]; then
-        echo "esp: no active session, run 'esu <id>' first" >&2
-        return 1
-    fi
     local target
     target="$(_endless_run session cd --target project "$@")" || return $?
     cd "$target"

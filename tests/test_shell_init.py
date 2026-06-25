@@ -95,11 +95,13 @@ def test_shell_init_helpers_route_via_endless_run():
 
 
 def test_shell_init_precondition_checks():
-    """E-1164: esp and esf emit clear errors when no session is active."""
+    """esf emits a clear error when no session is active (E-1164). esp no
+    longer guards on a session — resolving the project root only needs the
+    cwd, so the guard was dropped (E-1650)."""
     runner = CliRunner()
     out = runner.invoke(main, ["shell-init"]).output
-    assert "esp: no active session" in out
     assert "esf: no active session" in out
+    assert "esp: no active session" not in out
 
 
 def test_shell_init_safe_under_nounset():

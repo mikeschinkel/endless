@@ -1345,6 +1345,22 @@ def session_cd_resolve(
             click.echo(_format_companion_row(c))
         return
 
+    # --target project with no explicit session-ref: the project root is a
+    # property of cwd, not of any session, so resolve it directly without
+    # requiring a session to resolve. This lets `esp` return to the project
+    # root even with no active session (e.g. after the Claude session has
+    # exited). Equivalent to the tmux-sibling auto-resolution for the
+    # in-tmux case, since siblings share the project root. An explicit
+    # session-ref still flows through _resolve_companion below so a session
+    # in a *different* project resolves to that project's root.
+    if target == "project" and session_ref is None:
+        click.echo(str(project_root))
+        click.echo(
+            f"• cwd → {_short_path(str(project_root))} (project root)",
+            err=True,
+        )
+        return
+
     c = _resolve_companion(session_ref, live, list_hint="endless session cd --all")
     target_path = _resolve_target(c, target)
     if target_path is None:
