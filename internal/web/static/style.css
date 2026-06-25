@@ -61,7 +61,7 @@ tr:hover { background: var(--bg-hover); }
 .status-archived { color: var(--text-dim); }
 
 .task-pending { color: var(--text-dim); }
-.task-in_progress { color: var(--yellow); font-weight: 600; }
+.task-underway { color: var(--yellow); font-weight: 600; }
 .task-completed { color: var(--green); }
 .task-blocked { color: var(--red); }
 

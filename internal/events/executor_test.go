@@ -129,7 +129,7 @@ func TestBeginImmediate_CommitAndRollback(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BeginImmediate (commit path): %v", err)
 	}
-	evt := newStatusChangedEvent(t, 100, "ready", "in_progress")
+	evt := newStatusChangedEvent(t, 100, "ready", "underway")
 	if _, err := execAndCommit(evt, nil); err != nil {
 		t.Fatalf("execAndCommit: %v", err)
 	}
@@ -138,8 +138,8 @@ func TestBeginImmediate_CommitAndRollback(t *testing.T) {
 	if err := db.QueryRow("SELECT status FROM tasks WHERE id = ?", 100).Scan(&status); err != nil {
 		t.Fatalf("query status: %v", err)
 	}
-	if status != "in_progress" {
-		t.Errorf("status = %q, want in_progress", status)
+	if status != "underway" {
+		t.Errorf("status = %q, want underway", status)
 	}
 
 	// Path B: rollback releases the lock so the next BeginImmediate succeeds.
@@ -186,8 +186,8 @@ func TestExecute_TaskCreatedInsertsRow(t *testing.T) {
 	if title != "exec-target" {
 		t.Errorf("title = %q, want exec-target", title)
 	}
-	if status != "needs_plan" {
-		t.Errorf("status = %q, want needs_plan", status)
+	if status != "unplanned" {
+		t.Errorf("status = %q, want unplanned", status)
 	}
 }
 
@@ -200,7 +200,7 @@ func TestExecute_TaskCreatedStoresNotes(t *testing.T) {
 	payload, err := json.Marshal(events.TaskCreatedPayload{
 		Title:  "research-with-just",
 		Phase:  "now",
-		Status: "needs_plan",
+		Status: "unplanned",
 		Type:   "research",
 		Notes:  "## Justification\n\nNeeds cross-system comparison.\n",
 	})
@@ -242,7 +242,7 @@ func newTaskCreatedEvent(t *testing.T, id int64, title string) *events.Event {
 	payload, err := json.Marshal(events.TaskCreatedPayload{
 		Title:  title,
 		Phase:  "now",
-		Status: "needs_plan",
+		Status: "unplanned",
 		Type:   "task",
 	})
 	if err != nil {

@@ -32,7 +32,7 @@ After registering, `endless list` should show the project and `endless status` s
 `endless sql` runs SQL against the Endless DB. Read-only by default.
 
 ```bash
-endless sql "SELECT COUNT(*) FROM tasks WHERE status='verify'"
+endless sql "SELECT COUNT(*) FROM tasks WHERE status='unverified'"
 endless sql "SELECT id, title FROM tasks WHERE phase='now' AND status='ready' LIMIT 10"
 endless sql "SELECT * FROM tasks WHERE id = 1248" --tsv
 ```
@@ -59,7 +59,7 @@ endless sql "SELECT name FROM pragma_table_info('tasks') ORDER BY cid" --tsv
 
 ### When to use `task list --json` instead
 
-For straightforward task queries, prefer `endless task list --json --status <...> --llm` — it's purpose-built for agent consumption and respects business logic (e.g., `verify` vs `confirmed` for blocking). Reach for `sql` when you need a count/aggregate or a join the CLI doesn't expose.
+For straightforward task queries, prefer `endless task list --json --status <...> --llm` — it's purpose-built for agent consumption and respects business logic (e.g., `unverified` vs `confirmed` for blocking). Reach for `sql` when you need a count/aggregate or a join the CLI doesn't expose.
 
 ---
 
@@ -72,7 +72,7 @@ endless tmux apply              # configure the running tmux server (ephemeral)
 endless tmux status-line        # the runtime printer tmux calls per refresh
 ```
 
-After `apply`, your tmux session shows a second status row like `[E-NNNN] · <project> · in_progress`.
+After `apply`, your tmux session shows a second status row like `[E-NNNN] · <project> · underway`.
 
 **This feature is evolving fast.** Menus, hotkeys, layout, permanent install, and theming are all in flight. **Don't memorize the UI** — run `endless tmux --help` for the currently shipping verbs and trust the help over any doc more than a few days old.
 

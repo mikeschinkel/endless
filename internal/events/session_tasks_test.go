@@ -55,7 +55,7 @@ func taskCreatedEvent(t *testing.T, taskID int64, actor Actor) *Event {
 	payload, err := json.Marshal(TaskCreatedPayload{
 		Title:  "probe",
 		Phase:  "now",
-		Status: "needs_plan",
+		Status: "unplanned",
 		Type:   "task",
 	})
 	if err != nil {

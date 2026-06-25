@@ -27,7 +27,7 @@ def _insert_session(
     )
 
 
-def _insert_task(*, pk: int, project_id: int, title: str = "Some work", status: str = "in_progress"):
+def _insert_task(*, pk: int, project_id: int, title: str = "Some work", status: str = "underway"):
     db.execute(
         "INSERT INTO tasks (id, project_id, title, status) VALUES (?, ?, ?, ?)",
         (pk, project_id, title, status),
@@ -65,14 +65,14 @@ def test_show_explicit_id(project_with_session, capsys):
 
 def test_show_with_active_task(project_with_session, capsys):
     _, sessions_dir, pid, stage = project_with_session
-    _insert_task(pk=999, project_id=pid, title="Wire up backfill", status="in_progress")
+    _insert_task(pk=999, project_id=pid, title="Wire up backfill", status="underway")
     db.execute("UPDATE sessions SET active_task_id = 999 WHERE id = 247")
     stage()
 
     session_cmd.session_show_resolve("247")
     out = capsys.readouterr().out
     assert "Active task:   E-999" in out
-    assert "[in_progress]" in out
+    assert "[underway]" in out
     assert "Wire up backfill" in out
 
 

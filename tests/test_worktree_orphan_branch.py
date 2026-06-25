@@ -187,7 +187,7 @@ def test_real_work_orphan_raises(project_with_task, monkeypatch):
 
 def test_status_untouched_when_orphan_refuses(project_with_task, monkeypatch):
     """E-1500: securing the worktree before the status flip means a refusal
-    leaves the task's status unchanged (no stranded in_progress)."""
+    leaves the task's status unchanged (no stranded underway)."""
     from endless.task_cmd import claim_item
 
     p = project_with_task

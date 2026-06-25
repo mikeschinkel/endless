@@ -22,7 +22,7 @@ func TestGetActiveTaskForPane_DirectMatch(t *testing.T) {
 	seedProject(t, db, 1, "acme", "/tmp/acme")
 	if _, err := db.Exec(
 		"INSERT INTO tasks (id, project_id, title, status, type_id, phase) VALUES (?, ?, ?, ?, ?, ?)",
-		55, 1, "build the widget", "in_progress", 1, "now",
+		55, 1, "build the widget", "underway", 1, "now",
 	); err != nil {
 		t.Fatalf("seed task: %v", err)
 	}
@@ -44,8 +44,8 @@ func TestGetActiveTaskForPane_DirectMatch(t *testing.T) {
 	if info.Title != "build the widget" {
 		t.Errorf("Title = %q, want %q", info.Title, "build the widget")
 	}
-	if info.Status != "in_progress" {
-		t.Errorf("Status = %q, want in_progress", info.Status)
+	if info.Status != "underway" {
+		t.Errorf("Status = %q, want underway", info.Status)
 	}
 	if info.ProjectName != "acme" {
 		t.Errorf("ProjectName = %q, want acme", info.ProjectName)
@@ -117,7 +117,7 @@ func TestGetPaneStatus_ActiveTaskReturnsActiveKind(t *testing.T) {
 	seedProject(t, db, 1, "acme", "/tmp/acme")
 	if _, err := db.Exec(
 		"INSERT INTO tasks (id, project_id, title, status, type_id, phase) VALUES (?, ?, ?, ?, ?, ?)",
-		66, 1, "ship it", "in_progress", 1, "now",
+		66, 1, "ship it", "underway", 1, "now",
 	); err != nil {
 		t.Fatalf("seed task: %v", err)
 	}
@@ -286,7 +286,7 @@ func seedBlocks(t *testing.T, db *sql.DB, blockerID, taskID int64) {
 func TestGetActiveBlockers_EmptyWhenNone(t *testing.T) {
 	db := withTestDB(t)
 	seedProject(t, db, 1, "acme", "/tmp/acme")
-	seedTask(t, db, 100, 1, "current task", "in_progress")
+	seedTask(t, db, 100, 1, "current task", "underway")
 
 	ids, err := GetActiveBlockers(100)
 	if err != nil {
@@ -304,7 +304,7 @@ func TestGetActiveBlockers_EmptyWhenNone(t *testing.T) {
 func TestGetActiveBlockers_FiltersTerminalStatuses(t *testing.T) {
 	db := withTestDB(t)
 	seedProject(t, db, 1, "acme", "/tmp/acme")
-	seedTask(t, db, 100, 1, "current task", "in_progress")
+	seedTask(t, db, 100, 1, "current task", "underway")
 	seedTask(t, db, 201, 1, "blocker confirmed", "confirmed")
 	seedTask(t, db, 202, 1, "blocker assumed", "assumed")
 	seedTask(t, db, 203, 1, "blocker declined", "declined")
@@ -329,8 +329,8 @@ func TestGetActiveBlockers_FiltersTerminalStatuses(t *testing.T) {
 func TestGetActiveBlockers_KeepsActiveDropsTerminal(t *testing.T) {
 	db := withTestDB(t)
 	seedProject(t, db, 1, "acme", "/tmp/acme")
-	seedTask(t, db, 100, 1, "current task", "in_progress")
-	seedTask(t, db, 301, 1, "active 301", "in_progress")  // active
+	seedTask(t, db, 100, 1, "current task", "underway")
+	seedTask(t, db, 301, 1, "active 301", "underway")  // active
 	seedTask(t, db, 302, 1, "terminal 302", "confirmed")  // terminal, excluded
 	seedTask(t, db, 303, 1, "active 303", "ready")        // active
 	seedTask(t, db, 304, 1, "terminal 304", "obsolete")   // terminal, excluded
@@ -356,7 +356,7 @@ func TestGetActiveBlockers_KeepsActiveDropsTerminal(t *testing.T) {
 func TestGetActiveBlockers_CapsAtThree(t *testing.T) {
 	db := withTestDB(t)
 	seedProject(t, db, 1, "acme", "/tmp/acme")
-	seedTask(t, db, 100, 1, "current task", "in_progress")
+	seedTask(t, db, 100, 1, "current task", "underway")
 	for id := int64(401); id <= 405; id++ {
 		seedTask(t, db, id, 1, "blocker", "ready")
 		seedBlocks(t, db, id, 100)
@@ -397,8 +397,8 @@ func TestGetActiveBlockers_ZeroTaskIDReturnsNil(t *testing.T) {
 func TestGetActiveBlockers_OnlyTaskSourcedRows(t *testing.T) {
 	db := withTestDB(t)
 	seedProject(t, db, 1, "acme", "/tmp/acme")
-	seedTask(t, db, 100, 1, "current task", "in_progress")
-	seedTask(t, db, 501, 1, "task-sourced blocker", "in_progress") // task-sourced active blocker
+	seedTask(t, db, 100, 1, "current task", "underway")
+	seedTask(t, db, 501, 1, "task-sourced blocker", "underway") // task-sourced active blocker
 	seedBlocks(t, db, 501, 100)
 	// Project-sourced blocker row (source_type='project') — must be ignored.
 	if _, err := db.Exec(

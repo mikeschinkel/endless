@@ -851,7 +851,7 @@ def _do_import(
                     "title": title,
                     "description": node["text"],
                     "phase": node["phase"],
-                    "status": "needs_plan",
+                    "status": "unplanned",
                     "source_file": source_file,
                     "sort_order": node["sort_order"],
                     "parent_id": db_parent_id,
@@ -1071,11 +1071,11 @@ def show_plan(
             children_of.setdefault(pid, []).append(row)
 
         status_indicators = {
-            "needs_plan": click.style("○", fg="yellow"),
+            "unplanned": click.style("○", fg="yellow"),
             "ready": click.style("●", fg="green"),
             "revisit": click.style("?", fg="cyan"),
-            "in_progress": click.style("◉", fg="blue"),
-            "verify": click.style("◉", fg="magenta"),
+            "underway": click.style("◉", fg="blue"),
+            "unverified": click.style("◉", fg="magenta"),
             "confirmed": click.style("●", fg="green"),
             "completed": click.style("◆", fg="green"),
             "blocked": click.style("✗", fg="red"),
@@ -1118,7 +1118,7 @@ def next_tasks(
 ):
     """Show top actionable leaf tasks, ranked by priority."""
     where = (
-        "WHERE t.status NOT IN ('confirmed', 'assumed', 'completed', 'blocked', 'declined', 'obsolete', 'in_progress', 'verify') "
+        "WHERE t.status NOT IN ('confirmed', 'assumed', 'completed', 'blocked', 'declined', 'obsolete', 'underway', 'unverified') "
         "AND (SELECT count(*) FROM tasks c WHERE c.parent_id = t.id) = 0 "
         "AND t.id NOT IN ("
         "  SELECT td.target_id FROM task_deps td"
@@ -1173,7 +1173,7 @@ def next_tasks(
         f"    WHEN 'urgent' THEN 0 WHEN 'now' THEN 1 WHEN 'next' THEN 2 "
         f"    WHEN 'later' THEN 3 WHEN 'maybe' THEN 4 ELSE 5 END, "
         f"  CASE t.status "
-        f"    WHEN 'ready' THEN 0 WHEN 'needs_plan' THEN 1 "
+        f"    WHEN 'ready' THEN 0 WHEN 'unplanned' THEN 1 "
         f"    WHEN 'revisit' THEN 2 ELSE 3 END, "
         f"  CASE WHEN t.tier IS NULL THEN 99 ELSE t.tier END, "
         f"  t.updated_at DESC "
@@ -1208,11 +1208,11 @@ def next_tasks(
         return
 
     status_indicators = {
-        "needs_plan": "○",
+        "unplanned": "○",
         "ready": "●",
         "revisit": "?",
-        "in_progress": "◉",
-        "verify": "◉",
+        "underway": "◉",
+        "unverified": "◉",
     }
 
     # Group by project
@@ -1328,8 +1328,8 @@ def active_tasks(
     as_json: bool = False,
     parent_id: int | None = None,
 ):
-    """Show tasks that are in progress or awaiting verification."""
-    where = "WHERE t.status IN ('in_progress', 'verify')"
+    """Show tasks that are underway or awaiting verification."""
+    where = "WHERE t.status IN ('underway', 'unverified')"
     params: list = []
 
     if parent_id is not None:
@@ -1356,7 +1356,7 @@ def active_tasks(
         f"{where} "
         f"ORDER BY "
         f"  CASE t.status "
-        f"    WHEN 'in_progress' THEN 0 WHEN 'verify' THEN 1 END, "
+        f"    WHEN 'underway' THEN 0 WHEN 'unverified' THEN 1 END, "
         f"  t.updated_at DESC",
         tuple(params),
     )
@@ -1676,7 +1676,7 @@ def landed_item(item_id: int, llm: bool = False, as_json: bool = False):
 
 
 # E-1544: research-gate helpers. ED-1504 requires `--type research` to be
-# justified unless `--parent` is a type=epic, status=in_progress task.
+# justified unless `--parent` is a type=epic, status=underway task.
 
 _RESEARCH_GATE_MSG = (
     "--type research requires --justification explaining why the "
@@ -1690,7 +1690,7 @@ def _research_gate_check(parent_id: int | None, justification: str | None) -> No
     """Raise click.ClickException if the research gate fails.
 
     Pass when (a) `justification` is non-empty, or (b) parent is a
-    type=epic, status=in_progress task. Sticky-override statuses
+    type=epic, status=underway task. Sticky-override statuses
     (revisit/blocked/declined/obsolete) do NOT exempt.
     """
     if justification:
@@ -1707,7 +1707,7 @@ def _research_gate_check(parent_id: int | None, justification: str | None) -> No
         raise click.ClickException(
             f"Parent task E-{parent_id} not found"
         )
-    if row[0]["type_slug"] != "epic" or row[0]["status"] != "in_progress":
+    if row[0]["type_slug"] != "epic" or row[0]["status"] != "underway":
         raise click.ClickException(_RESEARCH_GATE_MSG)
 
 
@@ -1779,14 +1779,14 @@ def add_item(
     validate_description(description)
     _reject_maybe_with_parent(phase, parent_id)
     _, proj_name = _resolve_project(project_name)
-    status = status or ("ready" if tier == 1 else "needs_plan")
+    status = status or ("ready" if tier == 1 else "unplanned")
 
     # E-1577/E-1579: research/epic tasks cannot be created in
-    # 'verify'/'assumed'/'confirmed'.
+    # 'unverified'/'assumed'/'confirmed'.
     _require_status_allowed_for_type(status, task_type)
 
     # E-1544: research-gate. Justification (when present) accepted-and-stored
-    # even if parent is epic+in_progress (gate only governs *requiring* it).
+    # even if parent is epic+underway (gate only governs *requiring* it).
     if task_type == "research":
         _research_gate_check(parent_id, justification)
     notes_value = _compose_justification_notes(None, justification)
@@ -1855,7 +1855,7 @@ def import_json(
             continue
         title = item.get("title", text[:80])
         phase = item.get("phase", "now")
-        status = item.get("status", "needs_plan")
+        status = item.get("status", "unplanned")
         emit_event(
             kind="task.imported",
             project=proj_name,
@@ -1969,7 +1969,7 @@ def _require_completable_verb_for_completed(
     """E-1240: `completed` is gated to tasks whose title's lead verb is
     marked `completable: true` in verbs.json. Reserves the status for
     findings-as-deliverable work (audits, research, reviews, …) and keeps
-    implementation tasks on the `verify`/`confirmed`/`assumed` track.
+    implementation tasks on the `unverified`/`confirmed`/`assumed` track.
 
     ED-1511: epics are exempt. An epic's deliverable IS its outcome text (a
     coordination summary of what shipped in its children), and the type gate
@@ -1989,7 +1989,7 @@ def _require_completable_verb_for_completed(
             f"marked `completable: true` in verbs.json.\n"
             f"Completable verbs (e.g. audit, research, investigate, review, "
             f"analyze) signal that the deliverable is text/findings, not "
-            f"behavior. For implementation tasks, use 'verify' → 'confirmed' "
+            f"behavior. For implementation tasks, use 'unverified' → 'confirmed' "
             f"or 'assumed' instead."
         )
 
@@ -2002,13 +2002,13 @@ def _require_outcome_for_completed(status: str | None, outcome: str | None):
             "An outcome is required when completing a task. "
             "The outcome captures the findings/deliverable — use --outcome "
             "to provide it. (For implementation tasks where behavior is "
-            "the deliverable, use 'verify' → 'confirmed' / 'assumed' instead.)"
+            "the deliverable, use 'unverified' → 'confirmed' / 'assumed' instead.)"
         )
 
 
 # Per-type lookup table of statuses a task of that type may not be set to.
 # E-1577 seeded this for the 'assumed'/'confirmed' terminals; E-1579 adds
-# 'verify' — research and epic never go through user-testable verification
+# 'unverified' — research and epic never go through user-testable verification
 # (epics auto-derive to 'completed' per E-1541; research ends in 'completed
 # --outcome' per ED-1502). Their only type-specific terminal is 'completed';
 # the universal terminals 'obsolete' and 'declined' remain allowed for all
@@ -2016,14 +2016,14 @@ def _require_outcome_for_completed(status: str | None, outcome: str | None):
 # type→status policy gate (ED-1506 keeps the Go executor mechanical); E-1543's
 # epic-only super-gate will later extend the 'epic' entry.
 _TYPE_FORBIDDEN_STATUSES = {
-    "research": ("verify", "assumed", "confirmed"),
-    "epic":     ("verify", "assumed", "confirmed"),
+    "research": ("unverified", "assumed", "confirmed"),
+    "epic":     ("unverified", "assumed", "confirmed"),
 }
 
 
 def _require_status_allowed_for_type(status: str | None, task_type: str | None):
     """E-1577/E-1579: reject type-inappropriate statuses up front. research and
-    epic tasks reject 'verify'/'assumed'/'confirmed' — they terminate via
+    epic tasks reject 'unverified'/'assumed'/'confirmed' — they terminate via
     'completed' (per E-1537 §3) and never go through verification. This is a
     type-correctness invariant, not a soft policy: the fix for a rejected flip
     is to change the task type, not to override the gate (so there is no
@@ -2033,7 +2033,7 @@ def _require_status_allowed_for_type(status: str | None, task_type: str | None):
         raise click.ClickException(
             f"Task type {task_type!r} cannot be set to status {status!r}. "
             f"{task_type} tasks terminate via 'completed' (with --outcome) and "
-            f"never use 'verify'/'assumed'/'confirmed'. Use --status completed, "
+            f"never use 'unverified'/'assumed'/'confirmed'. Use --status completed, "
             f"or change the task type."
         )
 
@@ -2678,14 +2678,14 @@ def _check_task_ownership(item_id: int, current_eid: int | None) -> bool:
 
 
 _CLAIM_REQUIRES_FORCE: frozenset[str] = frozenset({
-    "verify", "confirmed", "declined", "obsolete", "assumed", "completed",
+    "unverified", "confirmed", "declined", "obsolete", "assumed", "completed",
 })
 
 
 # E-1555: statuses a task can be reopened from. `declined`/`obsolete` carry an
 # explicit "we chose not to do this" decision — reversing them is an
 # intentional act that should use `task update --status` and `--reason`,
-# not a generic reopen. `verify` is not terminal: it's "implementation done,
+# not a generic reopen. `unverified` is not terminal: it's "implementation done,
 # trust pending" — reopening it would discard pending verification rather
 # than reactivate completed work.
 _REOPENABLE_TERMINAL_STATUSES: frozenset[str] = frozenset({
@@ -2721,12 +2721,12 @@ def _perform_claim_work(
 
     # E-1500: secure the worktree FIRST. If creation refuses (orphan branch
     # carrying real work, a DB/file plan mismatch, an undeletable branch),
-    # the task's status is left untouched rather than stranded in_progress.
+    # the task's status is left untouched rather than stranded underway.
     project_root = _project_root()
     slug_source = title or "task"
     wt_path, created = create_task_worktree(item_id, slug_source, project_root)
 
-    if current_status != "in_progress":
+    if current_status != "underway":
         emit_event(
             kind="task.status_changed",
             project=proj_name,
@@ -2734,13 +2734,13 @@ def _perform_claim_work(
             entity_id=str(item_id),
             payload={
                 "old_status": current_status,
-                "new_status": "in_progress",
+                "new_status": "underway",
             },
             session_id=session_id_arg,
         )
         _emit_field_changes(
             item_id, title,
-            [("status", current_status, "in_progress")],
+            [("status", current_status, "underway")],
         )
 
     if target_session is not None:
@@ -2786,8 +2786,8 @@ def claim_item(item_id: int, force: bool = False):
 
     `force` covers two distinct override gates (single flag for one
     "I know what I'm doing" intent):
-      - Bypasses the done-ish status gate (verify/confirmed/declined/
-        obsolete/assumed/completed → in_progress demotion)
+      - Bypasses the done-ish status gate (unverified/confirmed/declined/
+        obsolete/assumed/completed → underway demotion)
       - Allows claim WITHOUT a Claude session binding when no session
         can be resolved (manual-work-without-Claude case, E-1242)
 
@@ -2812,7 +2812,7 @@ def claim_item(item_id: int, force: bool = False):
     if not force and current_status in _CLAIM_REQUIRES_FORCE:
         raise click.ClickException(
             f"E-{item_id} is in status '{current_status}'; re-claiming "
-            f"would demote it to 'in_progress'.\n"
+            f"would demote it to 'underway'.\n"
             "Pass --force to confirm the demotion, run "
             f"`endless task bind E-{item_id}` to attach this session "
             "to the task for status-bar display without changing its "
@@ -2903,10 +2903,10 @@ def bind_item(item_id: int) -> None:
     active_task_id, release clears it. Unlike `claim_item`, bind does
     NOT change the task's status and does NOT create a worktree.
 
-    Use when the task is already in `assumed` / `confirmed` / `verify`
+    Use when the task is already in `assumed` / `confirmed` / `unverified`
     and the user wants the status row to keep showing it as context.
     `claim --force` is the wrong tool there because it demotes status
-    back to `in_progress`.
+    back to `underway`.
 
     Target session resolution mirrors `claim_item`: env var / pane-
     direct / single-sibling auto-pick / on-a-tty multi-sibling prompt.
@@ -3128,7 +3128,7 @@ def pause_item() -> None:
 
 
 def _reopen_task_core(item_id: int) -> tuple[str, str, bool]:
-    """Reopen a terminal-status task back to `ready` or `needs_plan`.
+    """Reopen a terminal-status task back to `ready` or `unplanned`.
 
     Shared core for the `task reopen` verb and `task spawn --reopen` flag.
     Validates eligibility, releases any lingering session→task binding,
@@ -3165,7 +3165,7 @@ def _reopen_task_core(item_id: int) -> tuple[str, str, bool]:
         )
 
     text_present = bool((row[0]["text"] or "").strip())
-    new_status = "ready" if text_present else "needs_plan"
+    new_status = "ready" if text_present else "unplanned"
 
     _, proj_name = _resolve_project(None)
 
@@ -3264,8 +3264,8 @@ def update_plan(
 
     # Validate status if provided
     if status is not None:
-        valid = ("needs_plan", "ready", "in_progress",
-                 "verify", "confirmed", "assumed", "completed",
+        valid = ("unplanned", "ready", "underway",
+                 "unverified", "confirmed", "assumed", "completed",
                  "blocked", "revisit", "declined", "obsolete")
         if status not in valid:
             raise click.ClickException(
@@ -3282,7 +3282,7 @@ def update_plan(
         _require_completable_verb_for_completed(
             status, effective_title, effective_type
         )
-        # E-1577/E-1579: research/epic tasks reject 'verify'/'assumed'/
+        # E-1577/E-1579: research/epic tasks reject 'unverified'/'assumed'/
         # 'confirmed'; their only type-specific terminal is 'completed'.
         _require_status_allowed_for_type(status, effective_type)
 
@@ -3335,8 +3335,8 @@ def update_plan(
             _add("tier", None)
         else:
             _add("tier", tier)
-            # Tier 1 tasks can't be needs_plan; auto-advance to ready
-            if tier == 1 and status is None and row[0]["status"] == "needs_plan":
+            # Tier 1 tasks can't be unplanned; auto-advance to ready
+            if tier == 1 and status is None and row[0]["status"] == "unplanned":
                 _add("status", "ready")
 
     if outcome is not None:
@@ -3713,12 +3713,12 @@ _TERMINAL_STATUSES = frozenset(
 # valid task status maps to one of these buckets so no child is silently
 # dropped and the "(N total)" suffix always reconciles with the child count.
 _CHILDREN_STATE_ORDER = (
-    "needs_plan",
+    "unplanned",
     "ready",
-    "in_progress",
+    "underway",
     "blocked",
     "revisit",
-    "verify",
+    "unverified",
     "terminal",
 )
 
@@ -3729,7 +3729,7 @@ def _children_state(parent_id: int) -> str:
     Groups the task's direct children by status, collapses all terminal
     statuses into a single ``terminal`` bucket, and renders the non-empty
     buckets in lifecycle order followed by a total, e.g.
-    ``"2 needs_plan, 3 ready, 1 in_progress, 4 terminal (10 total)"``.
+    ``"2 unplanned, 3 ready, 1 underway, 4 terminal (10 total)"``.
     A single bucket still gets the total: ``"3 ready (3 total)"``. With no
     children it returns ``"no children yet"``. See E-1567.
     """
@@ -3786,7 +3786,7 @@ def render_handoff(spawned_id: int, title: str,
     a headless `claude --bg` agent has no spawning pane to return to and no
     tmux window to move, so the `{{if .bg}}` branch in each template drops the
     `tmux switch-client`/`tmux move-window` return lines and instead tells the
-    agent to do the work, flip the task to `verify`, and stop (the user attaches
+    agent to do the work, flip the task to `unverified`, and stop (the user attaches
     later via `claude attach <short_id>`).
 
     `respawn=True` (E-1647) renders the flat, type-agnostic `handoff/respawn`
@@ -3925,13 +3925,13 @@ def spawn_plan(item_id: int, project_name: str | None = None, no_plan: bool = Fa
 
     Pre-claims the task (status flip + worktree creation) BEFORE launching
     Claude, so the spawned session lands in a worktree on a task that is
-    already in_progress. The SessionStart hook reads
+    already underway. The SessionStart hook reads
     `@endless_spawned_by` from the new tmux window and records the
     session→task binding via `BindSessionToTask` (no redundant status
     flip). See E-1274.
 
     `reopen=True` (E-1555) reopens an `assumed`/`confirmed`/`completed`
-    target as a pre-step (status → `ready`/`needs_plan` based on text
+    target as a pre-step (status → `ready`/`unplanned` based on text
     presence) before proceeding with spawn. Errors on non-terminal or
     decision-bearing (`declined`/`obsolete`) statuses.
 
@@ -3963,8 +3963,8 @@ def spawn_plan(item_id: int, project_name: str | None = None, no_plan: bool = Fa
     if reopen and force:
         raise click.ClickException(
             "--reopen and --force are mutually exclusive: --reopen sets "
-            "status to ready/needs_plan (handoff intent), --force demotes "
-            "to in_progress (self-pickup intent). Pick one."
+            "status to ready/unplanned (handoff intent), --force demotes "
+            "to underway (self-pickup intent). Pick one."
         )
 
     # tmux is the delivery surface for the foreground path only; a `--bg`
@@ -4067,11 +4067,11 @@ def spawn_plan(item_id: int, project_name: str | None = None, no_plan: bool = Fa
                 f"not terminal (reopen targets "
                 f"{', '.join(sorted(_REOPENABLE_TERMINAL_STATUSES))})."
             )
-        # Reopen pre-step: flip terminal → ready/needs_plan, release any
+        # Reopen pre-step: flip terminal → ready/unplanned, release any
         # lingering session binding, emit audit event.
         _reopen_task_core(item_id)
         # _perform_claim_work below sees the post-reopen status and
-        # promotes ready/needs_plan → in_progress on its own.
+        # promotes ready/unplanned → underway on its own.
         current_status = db.query(
             "SELECT status FROM tasks WHERE id = ?", (item_id,),
         )[0]["status"]
@@ -4086,7 +4086,7 @@ def spawn_plan(item_id: int, project_name: str | None = None, no_plan: bool = Fa
             )
         raise click.ClickException(
             f"E-{item_id} is in status '{current_status}'; spawning "
-            f"would demote it to 'in_progress'.\n"
+            f"would demote it to 'underway'.\n"
             "Pass --force to confirm the demotion, or update the status "
             "first if that's not what you intended."
         )

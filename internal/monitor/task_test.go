@@ -79,13 +79,13 @@ func TestFormatTasks_EmptyListInstructsImport(t *testing.T) {
 }
 
 // TestFormatTasks_GroupsInProgressAndAvailable pins the two-section
-// layout that drives the SessionStart prompt: in-progress items appear
+// layout that drives the SessionStart prompt: underway items appear
 // under IN PROGRESS, the rest under NEXT UP.
 func TestFormatTasks_GroupsInProgressAndAvailable(t *testing.T) {
 	items := []Task{
-		{ID: 11, Text: "active work", Status: "in_progress"},
+		{ID: 11, Text: "active work", Status: "underway"},
 		{ID: 22, Text: "queued work", Status: "ready"},
-		{ID: 33, Text: "needs plan", Status: "needs_plan"},
+		{ID: 33, Text: "needs plan", Status: "unplanned"},
 	}
 	got := FormatTasks("acme", items)
 	if !strings.Contains(got, "IN PROGRESS:") {
@@ -95,7 +95,7 @@ func TestFormatTasks_GroupsInProgressAndAvailable(t *testing.T) {
 		t.Errorf("missing NEXT UP header:\n%s", got)
 	}
 	if !strings.Contains(got, "E-11 active work") {
-		t.Errorf("missing in-progress item:\n%s", got)
+		t.Errorf("missing underway item:\n%s", got)
 	}
 	if !strings.Contains(got, "E-22 queued work") {
 		t.Errorf("missing next-up item:\n%s", got)
@@ -144,7 +144,7 @@ func TestFormatTasks_FiveAvailableNoTruncationLine(t *testing.T) {
 }
 
 // TestGetActiveTasks_ReturnsInProgressNeedsPlanReady pins the WHERE
-// clause: only rows whose status is one of in_progress / needs_plan /
+// clause: only rows whose status is one of underway / unplanned /
 // ready are returned. confirmed and blocked rows are filtered out.
 func TestGetActiveTasks_ReturnsInProgressNeedsPlanReady(t *testing.T) {
 	db := withTestDB(t)
@@ -153,8 +153,8 @@ func TestGetActiveTasks_ReturnsInProgressNeedsPlanReady(t *testing.T) {
 		id     int64
 		status string
 	}{
-		{101, "in_progress"},
-		{102, "needs_plan"},
+		{101, "underway"},
+		{102, "unplanned"},
 		{103, "ready"},
 		{104, "confirmed"},
 		{105, "blocked"},
@@ -192,14 +192,14 @@ func TestGetActiveTasks_ReturnsInProgressNeedsPlanReady(t *testing.T) {
 }
 
 // TestGetActiveTasks_InProgressOrderedFirst pins the ORDER BY: rows
-// with status in_progress sort before the others (CASE 0 vs CASE 1),
+// with status underway sort before the others (CASE 0 vs CASE 1),
 // then secondary ordering by sort_order. This is what FormatTasks
 // downstream uses to build the IN PROGRESS / NEXT UP sections.
 func TestGetActiveTasks_InProgressOrderedFirst(t *testing.T) {
 	db := withTestDB(t)
 	seedProject(t, db, 1, "proj-test-1", "/tmp/proj-test-1")
-	// Insert ready first, then in_progress — the SQL must still surface
-	// in_progress at position 0.
+	// Insert ready first, then underway — the SQL must still surface
+	// underway at position 0.
 	if _, err := db.Exec(
 		"INSERT INTO tasks (id, project_id, title, description, status, sort_order) VALUES (?, ?, ?, ?, ?, ?)",
 		201, 1, "ready a", "ready a desc", "ready", 1,
@@ -208,7 +208,7 @@ func TestGetActiveTasks_InProgressOrderedFirst(t *testing.T) {
 	}
 	if _, err := db.Exec(
 		"INSERT INTO tasks (id, project_id, title, description, status, sort_order) VALUES (?, ?, ?, ?, ?, ?)",
-		202, 1, "in progress", "ip desc", "in_progress", 5,
+		202, 1, "in progress", "ip desc", "underway", 5,
 	); err != nil {
 		t.Fatalf("seed 202: %v", err)
 	}
@@ -227,7 +227,7 @@ func TestGetActiveTasks_InProgressOrderedFirst(t *testing.T) {
 		t.Fatalf("got %d tasks, want 3", len(got))
 	}
 	if got[0].ID != 202 {
-		t.Errorf("first task = %d, want 202 (in_progress should sort first)", got[0].ID)
+		t.Errorf("first task = %d, want 202 (underway should sort first)", got[0].ID)
 	}
 	// Sort order: 201 (sort 1) before 203 (sort 2) among the ready set.
 	if got[1].ID != 201 || got[2].ID != 203 {

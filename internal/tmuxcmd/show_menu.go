@@ -88,8 +88,8 @@ func buildMenuItems(binPath string, info *monitor.ActiveTaskInfo) []menuItem {
 	items := []menuItem{
 		{"Task Details", "d", fmt.Sprintf(
 			`run-shell "tmux display-popup -E 'endless task show %s | less'"`, taskRef)},
-		{"Mark verify", "v", fmt.Sprintf(
-			`run-shell "endless task update %s --status verify"`, taskRef)},
+		{"Mark unverified", "v", fmt.Sprintf(
+			`run-shell "endless task update %s --status unverified"`, taskRef)},
 		{"Task tree", "t",
 			`run-shell "tmux display-popup -E 'endless task list --tree | less'"`},
 		{"Session Activity", "a",
@@ -103,7 +103,7 @@ func buildMenuItems(binPath string, info *monitor.ActiveTaskInfo) []menuItem {
 	if info == nil {
 		for i := range items {
 			switch items[i].Label {
-			case "Task Details", "Mark verify":
+			case "Task Details", "Mark unverified":
 				items[i].Label = "-" + items[i].Label
 			}
 		}

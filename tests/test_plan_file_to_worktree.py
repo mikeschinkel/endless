@@ -23,7 +23,7 @@ from endless.cli import main
 def _add_minimal_task(title: str = "Audit the cache layer") -> int:
     cur = db.execute(
         "INSERT INTO tasks (project_id, title, status, type_id, phase, created_at) "
-        "VALUES (1, ?, 'needs_plan', 1, 'now', datetime('now'))",
+        "VALUES (1, ?, 'unplanned', 1, 'now', datetime('now'))",
         (title,),
     )
     return cur.lastrowid

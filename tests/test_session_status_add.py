@@ -26,9 +26,9 @@ def test_parses_full_schema():
       <tasks>
         <task id="E-1208" status="confirmed">verbs.jsonl write-time</task>
         <task id="E-1206" status="confirmed" filed="true">db-ledger write-time</task>
-        <task id="E-1302" status="needs_plan" filed="true">endless task id CLI</task>
+        <task id="E-1302" status="unplanned" filed="true">endless task id CLI</task>
         <task id="E-9999" status="blocked">waiting on something</task>
-        <task id="E-1312" status="verify">awaiting confirm</task>
+        <task id="E-1312" status="unverified">awaiting confirm</task>
       </tasks>
       <decisions>
         <decision>chose XML over markdown for deterministic parsing</decision>

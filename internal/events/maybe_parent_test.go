@@ -30,7 +30,7 @@ func TestExecute_TaskCreated_RejectsMaybeWithParent(t *testing.T) {
 	payload, err := json.Marshal(events.TaskCreatedPayload{
 		Title:    "maybe-child",
 		Phase:    "maybe",
-		Status:   "needs_plan",
+		Status:   "unplanned",
 		Type:     "task",
 		ParentID: &parentID,
 	})
@@ -71,7 +71,7 @@ func TestExecute_TaskCreated_AllowsMaybeRoot(t *testing.T) {
 	payload, _ := json.Marshal(events.TaskCreatedPayload{
 		Title:  "maybe-root",
 		Phase:  "maybe",
-		Status: "needs_plan",
+		Status: "unplanned",
 		Type:   "task",
 	})
 	evt := &events.Event{
@@ -107,7 +107,7 @@ func TestExecute_TaskCreated_AllowsParentedNonMaybe(t *testing.T) {
 	payload, _ := json.Marshal(events.TaskCreatedPayload{
 		Title:    "now-child",
 		Phase:    "now",
-		Status:   "needs_plan",
+		Status:   "unplanned",
 		Type:     "task",
 		ParentID: &parentID,
 	})
@@ -153,7 +153,7 @@ func TestExecute_FieldsUpdated_RejectsReparentMaybe(t *testing.T) {
 	}
 	// Create a parentless maybe task.
 	maybePayload, _ := json.Marshal(events.TaskCreatedPayload{
-		Title: "maybe-task", Phase: "maybe", Status: "needs_plan", Type: "task",
+		Title: "maybe-task", Phase: "maybe", Status: "unplanned", Type: "task",
 	})
 	maybeEvt := &events.Event{
 		V: events.Version, TS: "5WYM00000711", Kind: events.KindTaskCreated,
@@ -183,7 +183,7 @@ func TestExecute_FieldsUpdated_RejectsPhaseMaybeOnChild(t *testing.T) {
 	}
 	parentID := int64(720)
 	childPayload, _ := json.Marshal(events.TaskCreatedPayload{
-		Title: "child", Phase: "now", Status: "needs_plan", Type: "task",
+		Title: "child", Phase: "now", Status: "unplanned", Type: "task",
 		ParentID: &parentID,
 	})
 	childEvt := &events.Event{
@@ -213,7 +213,7 @@ func TestExecute_FieldsUpdated_AllowsAtomicPromoteAndParent(t *testing.T) {
 		t.Fatalf("seed parent: %v", err)
 	}
 	maybePayload, _ := json.Marshal(events.TaskCreatedPayload{
-		Title: "maybe-task", Phase: "maybe", Status: "needs_plan", Type: "task",
+		Title: "maybe-task", Phase: "maybe", Status: "unplanned", Type: "task",
 	})
 	maybeEvt := &events.Event{
 		V: events.Version, TS: "5WYM00000731", Kind: events.KindTaskCreated,
@@ -255,7 +255,7 @@ func TestExecute_FieldsUpdated_AllowsUnrelatedEditOnViolatingRow(t *testing.T) {
 	// Force a pre-existing violation directly in the DB (bypassing the gate).
 	if _, err := db.Exec(
 		`INSERT INTO tasks (id, project_id, phase, title, status, parent_id, created_at, updated_at)
-		 VALUES (741, 1, 'maybe', 'legacy-violation', 'needs_plan', 740, '2026-05-30T00:00:00', '2026-05-30T00:00:00')`,
+		 VALUES (741, 1, 'maybe', 'legacy-violation', 'unplanned', 740, '2026-05-30T00:00:00', '2026-05-30T00:00:00')`,
 	); err != nil {
 		t.Fatalf("seed violating row: %v", err)
 	}
@@ -275,7 +275,7 @@ func TestExecute_TaskMoved_RejectsMaybeUnderParent(t *testing.T) {
 		t.Fatalf("seed parent: %v", err)
 	}
 	maybePayload, _ := json.Marshal(events.TaskCreatedPayload{
-		Title: "maybe-task", Phase: "maybe", Status: "needs_plan", Type: "task",
+		Title: "maybe-task", Phase: "maybe", Status: "unplanned", Type: "task",
 	})
 	maybeEvt := &events.Event{
 		V: events.Version, TS: "5WYM00000751", Kind: events.KindTaskCreated,
@@ -314,7 +314,7 @@ func TestExecute_TaskMoved_AllowsMaybeToRoot(t *testing.T) {
 	}
 	if _, err := db.Exec(
 		`INSERT INTO tasks (id, project_id, phase, title, status, parent_id, created_at, updated_at)
-		 VALUES (761, 1, 'maybe', 'legacy-violation', 'needs_plan', 760, '2026-05-30T00:00:00', '2026-05-30T00:00:00')`,
+		 VALUES (761, 1, 'maybe', 'legacy-violation', 'unplanned', 760, '2026-05-30T00:00:00', '2026-05-30T00:00:00')`,
 	); err != nil {
 		t.Fatalf("seed violating row: %v", err)
 	}

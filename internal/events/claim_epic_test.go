@@ -101,7 +101,7 @@ func sessionActive(t *testing.T, db *sql.DB, sessionID int64) (taskID, epicID sq
 func TestClaim_ChildOfEpicSetsEpicID(t *testing.T) {
 	db := newClaimTestDB(t)
 	seedClaimSession(t, db, 42)
-	seedTask(t, db, 1, nil, int(tasktype.TaskTypeEpic), "in_progress")
+	seedTask(t, db, 1, nil, int(tasktype.TaskTypeEpic), "underway")
 	seedTask(t, db, 100, ptr(1), int(tasktype.TaskTypeTask), "ready")
 
 	if _, err := execTaskClaimed(db, claimEvent(t, 100, 42)); err != nil {
@@ -122,8 +122,8 @@ func TestClaim_ChildOfEpicSetsEpicID(t *testing.T) {
 func TestClaim_NestedChildResolvesNearestEpic(t *testing.T) {
 	db := newClaimTestDB(t)
 	seedClaimSession(t, db, 42)
-	seedTask(t, db, 1, nil, int(tasktype.TaskTypeEpic), "in_progress")
-	seedTask(t, db, 2, ptr(1), int(tasktype.TaskTypeEpic), "in_progress")
+	seedTask(t, db, 1, nil, int(tasktype.TaskTypeEpic), "underway")
+	seedTask(t, db, 2, ptr(1), int(tasktype.TaskTypeEpic), "underway")
 	seedTask(t, db, 100, ptr(2), int(tasktype.TaskTypeTask), "ready")
 
 	if _, err := execTaskClaimed(db, claimEvent(t, 100, 42)); err != nil {
@@ -161,7 +161,7 @@ func TestClaim_StandaloneTaskNullEpicID(t *testing.T) {
 func TestClaim_EpicDirectlyResolvesToSelf(t *testing.T) {
 	db := newClaimTestDB(t)
 	seedClaimSession(t, db, 42)
-	seedTask(t, db, 1, nil, int(tasktype.TaskTypeEpic), "in_progress")
+	seedTask(t, db, 1, nil, int(tasktype.TaskTypeEpic), "underway")
 
 	if _, err := execTaskClaimed(db, claimEvent(t, 1, 42)); err != nil {
 		t.Fatalf("execTaskClaimed: %v", err)
@@ -181,7 +181,7 @@ func TestClaim_EpicDirectlyResolvesToSelf(t *testing.T) {
 func TestClaim_ClearsStaleEpicFromPriorClaim(t *testing.T) {
 	db := newClaimTestDB(t)
 	seedClaimSession(t, db, 42)
-	seedTask(t, db, 1, nil, int(tasktype.TaskTypeEpic), "in_progress")
+	seedTask(t, db, 1, nil, int(tasktype.TaskTypeEpic), "underway")
 	seedTask(t, db, 100, ptr(1), int(tasktype.TaskTypeTask), "ready")
 	seedTask(t, db, 200, nil, int(tasktype.TaskTypeTask), "ready")
 
@@ -210,7 +210,7 @@ func TestClaim_ClearsStaleEpicFromPriorClaim(t *testing.T) {
 func TestRelease_ClearsBothTaskAndEpic(t *testing.T) {
 	db := newClaimTestDB(t)
 	seedClaimSession(t, db, 42)
-	seedTask(t, db, 1, nil, int(tasktype.TaskTypeEpic), "in_progress")
+	seedTask(t, db, 1, nil, int(tasktype.TaskTypeEpic), "underway")
 	seedTask(t, db, 100, ptr(1), int(tasktype.TaskTypeTask), "ready")
 
 	if _, err := execTaskClaimed(db, claimEvent(t, 100, 42)); err != nil {

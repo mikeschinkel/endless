@@ -31,7 +31,7 @@ def fake_add_item(monkeypatch, isolated_env):
         task_type = task_type or "task"
         task_cmd.validate_title(title, force=force)
         real_validate(description)
-        status = status or ("ready" if tier == 1 else "needs_plan")
+        status = status or ("ready" if tier == 1 else "unplanned")
         cur = db.execute(
             "INSERT INTO tasks (project_id, title, description, status, type_id, phase, created_at) "
             "VALUES (1, ?, ?, ?, (SELECT id FROM task_types WHERE slug = ?), ?, datetime('now'))",
@@ -144,7 +144,7 @@ def test_task_update_rejects_oversized_description(isolated_env, monkeypatch):
     )
     db.execute(
         "INSERT INTO tasks (project_id, title, description, status, type_id, phase, created_at) "
-        "VALUES (1, 'Add a thing', 'short', 'needs_plan', 1, 'now', datetime('now'))"
+        "VALUES (1, 'Add a thing', 'short', 'unplanned', 1, 'now', datetime('now'))"
     )
 
     # Stub emit_event so update_plan doesn't try to spawn the Go event writer
@@ -168,7 +168,7 @@ def test_task_update_rejects_newline_in_description(isolated_env, monkeypatch):
     )
     db.execute(
         "INSERT INTO tasks (project_id, title, description, status, type_id, phase, created_at) "
-        "VALUES (1, 'Add a thing', 'short', 'needs_plan', 1, 'now', datetime('now'))"
+        "VALUES (1, 'Add a thing', 'short', 'unplanned', 1, 'now', datetime('now'))"
     )
 
     def _noop_emit(**_kwargs):

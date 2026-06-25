@@ -42,7 +42,7 @@ func TestProjectToTempDB_TaskCreatedProducesRow(t *testing.T) {
 	createdPayload, err := json.Marshal(events.TaskCreatedPayload{
 		Title:  "Projector target",
 		Phase:  "now",
-		Status: "needs_plan",
+		Status: "unplanned",
 		Type:   "task",
 	})
 	if err != nil {
@@ -100,8 +100,8 @@ func TestProjectToTempDB_TaskCreatedProducesRow(t *testing.T) {
 	if title != "Projector target" {
 		t.Errorf("title = %q, want %q", title, "Projector target")
 	}
-	if status != "needs_plan" {
-		t.Errorf("status = %q, want needs_plan", status)
+	if status != "unplanned" {
+		t.Errorf("status = %q, want unplanned", status)
 	}
 	if phase != "now" {
 		t.Errorf("phase = %q, want now", phase)
@@ -122,7 +122,7 @@ func TestProjectToTempDB_CreateThenUpdateApplied(t *testing.T) {
 	createdPayload, _ := json.Marshal(events.TaskCreatedPayload{
 		Title:  "Original",
 		Phase:  "now",
-		Status: "needs_plan",
+		Status: "unplanned",
 		Type:   "task",
 	})
 	createdEvt := events.Event{

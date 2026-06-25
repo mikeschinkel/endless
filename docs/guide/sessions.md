@@ -10,7 +10,7 @@ Each row in `session_statuses` is a snapshot of one session's reported state at 
 
 - `active_task_id` — populated automatically by the handler from `sessions.active_task_id` at insert time; makes joins to `tasks` trivial.
 - `headline` — one-line summary of what just changed.
-- `tasks` — every task the session is touching (resolved / pending / blocked / verify, all in one column post-E-1318; the renderer derives the disposition bucket from each task's status).
+- `tasks` — every task the session is touching (resolved / pending / blocked / unverified, all in one column post-E-1318; the renderer derives the disposition bucket from each task's status).
 - `decisions` — design choices, framings, insights too lightweight to be `endless task --decision` items but worth capturing.
 - `commits` — commit SHAs of work that didn't land via a task (manual hygiene, ledger splits, etc.).
 - `memory` — entries created or modified in `~/.claude/projects/.../memory/`.
@@ -28,9 +28,9 @@ endless session status add <<'XML'
 
   <tasks>
     <task id="E-1208" status="confirmed">verbs.jsonl write-time commit</task>
-    <task id="E-1314" status="verify" filed="true">consolidate task disposition cols</task>
+    <task id="E-1314" status="unverified" filed="true">consolidate task disposition cols</task>
     <task id="E-NNNN" status="blocked">waiting on Mike's review</task>
-    <task id="E-1302" status="needs_plan">endless task id CLI</task>
+    <task id="E-1302" status="unplanned">endless task id CLI</task>
   </tasks>
 
   <decisions>
@@ -88,7 +88,7 @@ The natural attach points:
 
 - **End-of-turn summaries** — when you'd otherwise write a "Final state" markdown table in chat.
 - **Post-land moments** — right after `just land` succeeds for a task you owned.
-- **Phase shifts** — moving from one task family to another, especially when leaving things in `verify` for the user.
+- **Phase shifts** — moving from one task family to another, especially when leaving things in `unverified` for the user.
 - **Discovering structural change** — a new design framing that should outlive this conversation.
 
 If you're producing a chat table that maps to `tasks` / `decisions` / `commits` / `memory` / `summary` columns: that's the signal — convert it to XML and call the CLI instead. The chat output is duplicated automatically by the CLI's markdown echo.

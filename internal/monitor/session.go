@@ -59,7 +59,7 @@ func BindSessionToTask(sessionID string, projectID int64, taskID int64) error {
 	return nil
 }
 
-// StartWorkSession binds the session AND marks the task as in_progress.
+// StartWorkSession binds the session AND marks the task as underway.
 // Defense-in-depth mirror of Python claim_item's emitted events for the
 // post-bash `endless task claim` detector — runs in the hook so the next
 // hook invocation sees a consistent DB even if the event executor hasn't
@@ -73,7 +73,7 @@ func StartWorkSession(sessionID string, projectID int64, taskID int64) error {
 		return err
 	}
 	_, err = db.Exec(
-		"UPDATE tasks SET status='in_progress' WHERE id=? AND status IN ('needs_plan','ready','blocked')",
+		"UPDATE tasks SET status='underway' WHERE id=? AND status IN ('unplanned','ready','blocked')",
 		taskID,
 	)
 	return err

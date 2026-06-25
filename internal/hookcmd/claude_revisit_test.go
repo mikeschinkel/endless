@@ -134,7 +134,7 @@ func TestRevisitGateDecision_Lifecycle(t *testing.T) {
 	}
 
 	// 4. Epic leaves revisit -> next call auto-clears (revisit_resolved) + allows.
-	exec("UPDATE tasks SET status='in_progress' WHERE id=10")
+	exec("UPDATE tasks SET status='underway' WHERE id=10")
 	if _, block := revisitGateDecision(read); block {
 		t.Errorf("after epic left revisit: block=true, want false (auto-clear)")
 	}

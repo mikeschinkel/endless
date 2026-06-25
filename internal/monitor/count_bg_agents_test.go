@@ -23,7 +23,7 @@ func TestCountActiveBgAgents_ScopesToProjectKindAndState(t *testing.T) {
 	db := withTestDB(t)
 	seedProject(t, db, 1, "p1", "/p1")
 	seedProject(t, db, 2, "p2", "/p2")
-	seedTask(t, db, 10, 1, "t", "in_progress") // count target lives in project 1
+	seedTask(t, db, 10, 1, "t", "underway") // count target lives in project 1
 
 	const bg = int64(2)   // background
 	const tmux = int64(1) // foreground tmux
@@ -50,7 +50,7 @@ func TestCountActiveBgAgents_ScopesToProjectKindAndState(t *testing.T) {
 func TestCountActiveBgAgents_NoneActive(t *testing.T) {
 	db := withTestDB(t)
 	seedProject(t, db, 1, "p1", "/p1")
-	seedTask(t, db, 10, 1, "t", "in_progress")
+	seedTask(t, db, 10, 1, "t", "underway")
 
 	n, err := CountActiveBgAgents(10)
 	if err != nil {

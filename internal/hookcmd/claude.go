@@ -1408,7 +1408,7 @@ func enforceWorktreeGate(projectID int64, payload claudePayload) {
 // claimed by a SessionStart *inside* the worktree (worktree adoption), which
 // does not fire for the common "claim in main, then /cd" flow — so requiring the
 // lock would leave that flow ungated. Instead we gate any non-terminal active
-// task (the status `claim` sets is in_progress), which excludes a display-only
+// task (the status `claim` sets is underway), which excludes a display-only
 // `bind` of a done task and a landed/retained worktree (both terminal). The lock
 // is consulted only to *avoid* redirecting into a worktree another live session
 // owns.

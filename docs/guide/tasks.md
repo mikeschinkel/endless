@@ -34,7 +34,7 @@ endless task list                                    # flat, sorted by ID
 endless task list --tree                             # hierarchical
 endless task list --all                              # include done items
 endless task list --status ready                     # filter
-endless task list --status needs_plan,ready          # comma-separated
+endless task list --status unplanned,ready          # comma-separated
 endless task list --phase now
 endless task list --parent E-799
 endless task list --parent none                      # roots only
@@ -62,7 +62,7 @@ endless task next --llm
 
 # Other reads
 endless task recent                                  # recently updated
-endless task active                                  # in_progress + verify
+endless task active                                  # underway + unverified
 endless task search "query"                          # ID, title, description
 endless task search "query" --text                   # also search text field
 endless task handoff <id>                            # render the spawn handoff
@@ -93,11 +93,11 @@ Use the task ID printed by `task add` **literally**. IDs advance globally across
 
 `--type research` discourages casual use: a research task is justified only when its findings can't be inlined as a do-task. The CLI enforces this:
 
-- **Exempt:** `--parent <id>` where `<id>` is an `--type epic --status in_progress` task. No `--justification` required.
+- **Exempt:** `--parent <id>` where `<id>` is an `--type epic --status underway` task. No `--justification` required.
 - **Otherwise:** `--justification "<reason>"` is required and stored under a `## Justification` heading in the task's notes.
 
 ```bash
-# Exempt: parent is an in-progress epic
+# Exempt: parent is an underway epic
 endless task add "Compare X vs Y" --type research --parent E-100
 
 # Standalone: justification required
@@ -138,16 +138,16 @@ endless task update <id> --decision "<rationale>"    # creates paired decision t
 endless task update <id> <id2> ... --status ready    # bulk update
 ```
 
-Attaching a non-empty plan (`--text`) to a `needs_plan` task auto-promotes the status to `ready`. Applies on both `task add` and `task update`. An explicit `--status` in the same call always wins.
+Attaching a non-empty plan (`--text`) to a `unplanned` task auto-promotes the status to `ready`. Applies on both `task add` and `task update`. An explicit `--status` in the same call always wins.
 
 ---
 
 ## Status transitions
 
 ```bash
-endless task claim <id>                              # ready → in_progress + create worktree
+endless task claim <id>                              # ready → underway + create worktree
 endless task release [<id>]                          # release current session's claim
-endless task update <id> --status verify             # work done, awaiting verification
+endless task update <id> --status unverified             # work done, awaiting verification
 endless task confirm <id> --outcome "..."            # user-only — sessions do not self-confirm
 endless task confirm <id> --cascade --outcome "..."  # confirm a task and descendants
 endless task assume <id> --outcome "..."             # believed complete, can't verify

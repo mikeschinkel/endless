@@ -60,7 +60,7 @@ func TestNearestRevisitEpicAncestor_NoEpicAncestor(t *testing.T) {
 func TestNearestRevisitEpicAncestor_EpicNotInRevisit(t *testing.T) {
 	db := withTestDB(t)
 	seedProject(t, db, 1, "p1", "/p1")
-	insertTaskFull(t, db, 10, 1, 0, typeEpic, "in_progress") // epic, NOT revisit
+	insertTaskFull(t, db, 10, 1, 0, typeEpic, "underway") // epic, NOT revisit
 	insertTaskFull(t, db, 11, 1, 10, typeTask, "ready")
 
 	_, found, err := NearestRevisitEpicAncestor(11)

@@ -30,7 +30,7 @@ from endless.task_cmd import _current_endless_session_id, _resolve_project
 
 
 _VALID_STATUSES = frozenset({
-    "needs_plan", "ready", "in_progress", "verify", "confirmed",
+    "unplanned", "ready", "underway", "unverified", "confirmed",
     "assumed", "completed", "blocked", "revisit", "declined", "obsolete",
 })
 

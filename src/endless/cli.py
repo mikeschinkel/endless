@@ -118,8 +118,8 @@ class TaskOrDecisionIDType(click.ParamType):
 
 TASK_OR_DECISION_ID = TaskOrDecisionIDType()
 
-TASK_STATUSES = ["needs_plan", "ready", "in_progress",
-                 "verify", "confirmed", "assumed", "completed",
+TASK_STATUSES = ["unplanned", "ready", "underway",
+                 "unverified", "confirmed", "assumed", "completed",
                  "blocked", "revisit", "declined", "obsolete"]
 
 
@@ -735,7 +735,7 @@ def session_activity(session_ref, kinds, pane, as_json):
     """Report what this session (or another) did, projected from the event ledger.
 
     Filters events by `actor.session_id` (populated since E-1284) and
-    groups by kind: Filed, Decisions, Claimed, Shipped → verify,
+    groups by kind: Filed, Decisions, Claimed, Shipped → unverified,
     Confirmed, etc. Default session is the current one (resolved via
     the same 3-layer fallback as task claim — env, pane-direct,
     single-sibling Claude pane).
@@ -953,7 +953,7 @@ def session_status_add(input_file, session_id_override):
       <session-status>
         <headline>E-1312 v1 landed.</headline>
         <resolved>
-          <task id="E-1312" status="verify">CLI + Go handler + tests</task>
+          <task id="E-1312" status="unverified">CLI + Go handler + tests</task>
         </resolved>
       </session-status>
       EOF
@@ -1007,7 +1007,7 @@ def task_import(file, from_claude, json_file, project, replace, parent):
               help="Include confirmed items")
 @click.option("--status", default=None,
               type=MultiChoice(TASK_STATUSES),
-              help="Filter by status (comma-separated, e.g. needs_plan,ready)")
+              help="Filter by status (comma-separated, e.g. unplanned,ready)")
 @click.option("--phase", default=None,
               type=click.Choice(["urgent", "now", "next", "later", "maybe"]),
               help="Filter by phase")
@@ -1135,7 +1135,7 @@ def task_next_revise(file_path, project, as_json):
 @click.option("--parent", "parent_id", default=None,
               help="Filter to children of this task (e.g. E-799), or 'none' for root tasks")
 def task_active(project, show_all, llm, as_json, parent_id):
-    """Show in-progress and verify tasks."""
+    """Show underway and unverified tasks."""
     from endless.task_cmd import active_tasks, parse_parent_filter
     parent_val = parse_parent_filter(parent_id) if parent_id else None
     active_tasks(project_name=project, show_all=show_all,
@@ -1198,7 +1198,7 @@ def task_landed(item_id, project, show_all, limit, llm, as_json):
               help="Include confirmed/assumed/declined items")
 @click.option("--status", default=None,
               type=MultiChoice(TASK_STATUSES),
-              help="Filter by status (comma-separated, e.g. needs_plan,ready)")
+              help="Filter by status (comma-separated, e.g. unplanned,ready)")
 @click.option("--phase", default=None,
               type=click.Choice(["urgent", "now", "next", "later", "maybe"]),
               help="Filter by phase")
@@ -1264,14 +1264,14 @@ def _resolve_content_flag(inline, file_path, name):
               help="Task type (default: task)")
 @click.option("--status", default=None,
               type=click.Choice(TASK_STATUSES),
-              help="Initial status (default: needs_plan)")
+              help="Initial status (default: unplanned)")
 @click.option("--tier", default=None,
               help="Tier (1-4 or auto/quick/deep/discuss)")
 @click.option("--force", is_flag=True,
               help="Bypass title validation")
 @click.option("--justification", default=None,
               help="Justification text for --type research (stored under '## Justification' in notes). "
-                   "Required for --type research unless --parent is an in-progress epic.")
+                   "Required for --type research unless --parent is an underway epic.")
 @click.option("--blocks", "blocks_ids", type=TASK_ID, multiple=True,
               help="Task ID(s) this new task blocks (repeatable)")
 @click.option("--blocked-by", "blocked_by_ids", type=TASK_ID, multiple=True,
@@ -1316,7 +1316,7 @@ def task_add(title, description, description_file, text, text_file, phase, proje
 @task_cmd.command("update")
 @click.argument("item_ids", type=TASK_ID, nargs=-1, required=True)
 @click.option("--status", default=None,
-              help="Status: needs_plan, ready, in_progress, verify, confirmed, assumed, blocked, revisit, declined, obsolete")
+              help="Status: unplanned, ready, underway, unverified, confirmed, assumed, blocked, revisit, declined, obsolete")
 @click.option("--title", default=None,
               help="New title")
 @click.option("--description", default=None,
@@ -1349,7 +1349,7 @@ def task_add(title, description, description_file, text, text_file, phase, proje
               help="Load the outcome from a file")
 @click.option("--justification", default=None,
               help="Justification text when setting --type research (stored under '## Justification' in notes). "
-                   "Required unless the effective parent is an in-progress epic.")
+                   "Required unless the effective parent is an underway epic.")
 def task_update(item_ids, status, title, description, description_file, text, text_file, parent, phase, tier,
                 task_type, analysis_text, analysis_file, force, outcome, outcome_file, justification):
     """Update fields on one or more tasks."""
@@ -1464,8 +1464,8 @@ def task_complete_cmd(item_ids, outcome, outcome_file):
 @click.argument("item_id", type=TASK_ID)
 @click.option("--force", is_flag=True,
               help="Re-claim even when the task is in a done-ish status "
-                   "(verify, confirmed, declined, obsolete, assumed) — "
-                   "demotes it back to in_progress.")
+                   "(unverified, confirmed, declined, obsolete, assumed) — "
+                   "demotes it back to underway.")
 def task_claim(item_id, force):
     """Claim ownership of a task for this session."""
     from endless.task_cmd import claim_item
@@ -1505,7 +1505,7 @@ def task_bind(item_id):
     Unlike `claim`, `bind` does not change the task's status or create
     a worktree — it just sets sessions.active_task_id so the second
     tmux status row shows this task. Use when the task is already in
-    `assumed` / `confirmed` / `verify` and you want the bar to keep
+    `assumed` / `confirmed` / `unverified` and you want the bar to keep
     showing it as context. Symmetric counterpart to `release`.
     """
     from endless.task_cmd import bind_item
@@ -1570,11 +1570,11 @@ def task_handoff(item_id):
                    "'just claude-settings-init') applies.")
 @click.option("--force", is_flag=True,
               help="Allow spawn on a task in a done-ish status "
-                   "(verify/confirmed/declined/obsolete/assumed/completed); "
-                   "demotes it back to in_progress. Mirrors `claim --force`.")
+                   "(unverified/confirmed/declined/obsolete/assumed/completed); "
+                   "demotes it back to underway. Mirrors `claim --force`.")
 @click.option("--reopen", is_flag=True,
               help="Reopen an assumed/confirmed/completed target before "
-                   "spawning (status → ready/needs_plan based on text "
+                   "spawning (status → ready/unplanned based on text "
                    "presence). Use for handoff to a fresh session; "
                    "mutually exclusive with --force.")
 @click.option("--bg", is_flag=True,
@@ -1620,7 +1620,7 @@ def task_reopen(item_id):
     """Reopen a terminal-status task back to actionable state.
 
     Flips assumed/confirmed/completed → ready (if a plan is attached)
-    or needs_plan (if not). Metadata-only: no worktree creation, no
+    or unplanned (if not). Metadata-only: no worktree creation, no
     session binding. Caller chooses the next step (spawn, claim, or
     hand-back).
     """
@@ -1890,7 +1890,7 @@ def epic_cmd():
               help="Insert after this task ID")
 @click.option("--status", default=None,
               type=click.Choice(TASK_STATUSES),
-              help="Initial status (default: needs_plan)")
+              help="Initial status (default: unplanned)")
 @click.option("--tier", default=None,
               help="Tier (1-4 or auto/quick/deep/discuss)")
 @click.option("--force", is_flag=True,
@@ -1943,7 +1943,7 @@ def epic_add(title, description, description_file, text, text_file, phase, proje
               help="Include confirmed items")
 @click.option("--status", default=None,
               type=MultiChoice(TASK_STATUSES),
-              help="Filter by status (comma-separated, e.g. needs_plan,ready)")
+              help="Filter by status (comma-separated, e.g. unplanned,ready)")
 @click.option("--phase", default=None,
               type=click.Choice(["urgent", "now", "next", "later", "maybe"]),
               help="Filter by phase")
@@ -2010,7 +2010,7 @@ def epic_show(item_ids, no_description, show_analysis, show_text,
 @epic_cmd.command("update")
 @click.argument("item_ids", type=TASK_ID, nargs=-1, required=True)
 @click.option("--status", default=None,
-              help="Status: needs_plan, ready, in_progress, verify, confirmed, assumed, blocked, revisit, declined, obsolete")
+              help="Status: unplanned, ready, underway, unverified, confirmed, assumed, blocked, revisit, declined, obsolete")
 @click.option("--title", default=None,
               help="New title")
 @click.option("--description", default=None,

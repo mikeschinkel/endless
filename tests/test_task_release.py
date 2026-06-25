@@ -32,7 +32,7 @@ def _insert_session(
     )
 
 
-def _insert_task(*, pk: int, project_id: int, status: str = "in_progress"):
+def _insert_task(*, pk: int, project_id: int, status: str = "underway"):
     db.execute(
         "INSERT INTO tasks (id, project_id, title, status) "
         "VALUES (?, ?, 'test task', ?)",

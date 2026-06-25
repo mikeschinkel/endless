@@ -44,11 +44,11 @@ def project_with_task(seeded_project_at_cwd):
 
 
 def test_claim_refuses_done_status_without_force(project_with_task):
-    """E-1235: claim refuses verify/confirmed/declined/obsolete/assumed without --force."""
+    """E-1235: claim refuses unverified/confirmed/declined/obsolete/assumed without --force."""
     from endless.task_cmd import claim_item
 
     tid = project_with_task["task_id"]
-    for status in ("verify", "confirmed", "declined", "obsolete", "assumed"):
+    for status in ("unverified", "confirmed", "declined", "obsolete", "assumed"):
         db.execute("UPDATE tasks SET status = ? WHERE id = ?", (status, tid))
         with pytest.raises(click.ClickException) as exc:
             claim_item(tid)
@@ -65,12 +65,12 @@ def test_claim_with_force_demotes_done_status(project_with_task, capsys):
     from endless.task_cmd import claim_item
 
     tid = project_with_task["task_id"]
-    db.execute("UPDATE tasks SET status = 'verify' WHERE id = ?", (tid,))
+    db.execute("UPDATE tasks SET status = 'unverified' WHERE id = ?", (tid,))
 
     claim_item(tid, force=True)
 
     row = db.query("SELECT status FROM tasks WHERE id = ?", (tid,))[0]
-    assert row["status"] == "in_progress"
+    assert row["status"] == "underway"
 
 
 def test_claim_refuses_when_no_session_and_no_force(project_with_task):
@@ -108,7 +108,7 @@ def test_claim_binds_sibling_claude_session(project_with_task):
 
     # task status flipped (event-sourced through Go executor)
     row = db.query("SELECT status FROM tasks WHERE id = ?", (tid,))[0]
-    assert row["status"] == "in_progress"
+    assert row["status"] == "underway"
 
 
 def test_claim_creates_worktree_no_plan_file(project_with_task, capsys):

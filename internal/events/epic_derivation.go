@@ -161,8 +161,8 @@ func deriveOneEpic(db dbQuerier, emit DerivedEmitter, epicID int64) error {
 // deriveTargetStatus computes the rule from E-1541 §1 against an epic's direct
 // children. The bool is false (and the string empty) when no derivation applies:
 // the epic has zero children, or children exist but none fall in a derivable
-// bucket (e.g. all in verify/blocked, which is neither in_progress/ready/
-// needs_plan nor fully terminal). In that case the epic is left unchanged.
+// bucket (e.g. all in unverified/blocked, which is neither underway/ready/
+// unplanned nor fully terminal). In that case the epic is left unchanged.
 func deriveTargetStatus(db dbQuerier, epicID int64) (string, bool, error) {
 	rows, err := db.Query("SELECT status FROM tasks WHERE parent_id = ?", epicID)
 	if err != nil {
@@ -184,11 +184,11 @@ func deriveTargetStatus(db dbQuerier, epicID int64) (string, bool, error) {
 		}
 		hasChild = true
 		switch s {
-		case "in_progress":
+		case "underway":
 			anyInProgress = true
 		case "ready":
 			anyReady = true
-		case "needs_plan":
+		case "unplanned":
 			anyNeedsPlan = true
 		}
 		if !terminalChildStatuses[s] {
@@ -203,11 +203,11 @@ func deriveTargetStatus(db dbQuerier, epicID int64) (string, bool, error) {
 	case !hasChild:
 		return "", false, nil
 	case anyInProgress:
-		return "in_progress", true, nil
+		return "underway", true, nil
 	case anyReady:
 		return "ready", true, nil
 	case anyNeedsPlan:
-		return "needs_plan", true, nil
+		return "unplanned", true, nil
 	case allTerminal:
 		return "completed", true, nil
 	default:

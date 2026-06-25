@@ -75,7 +75,7 @@ func taskCreatedUrgentEvent(t *testing.T, taskID int64, sessionID string) *Event
 	payload, err := json.Marshal(TaskCreatedPayload{
 		Title:  "urgent task",
 		Phase:  "urgent",
-		Status: "needs_plan",
+		Status: "unplanned",
 		Type:   "task",
 	})
 	if err != nil {
@@ -97,7 +97,7 @@ func taskCreatedNonUrgentEvent(t *testing.T, taskID int64, sessionID string) *Ev
 	payload, err := json.Marshal(TaskCreatedPayload{
 		Title:  "regular task",
 		Phase:  "now",
-		Status: "needs_plan",
+		Status: "unplanned",
 		Type:   "task",
 	})
 	if err != nil {

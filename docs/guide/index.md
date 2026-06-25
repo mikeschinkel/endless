@@ -29,7 +29,7 @@ When your user gives you a task ID:
    - run `eval "$(endless shell-init)"` once per shell, then `esu` to cd to your session's worktree *and* export `ENDLESS_SESSION_ID` so subsequent endless commands route through the worktree's source (not the global install). `esu`/`eswt` are complementary to `/cd`: they handle session routing, `/cd` handles Claude's working directory. See **Shell helpers** in `endless guide orchestration`.
 4. Do the work in the worktree.
 5. When implementation is complete:
-   - `endless task update <id> --status verify`, **and**
+   - `endless task update <id> --status unverified`, **and**
    - In your reply to the user, include **how to test**: the specific commands, files, or UI actions that verify the change. Don't just say "ready" — say "ready; verify by running X then checking Y." The user shouldn't have to ask.
 6. Report completion to your user with the task ID. Example: "Done — E-752 is ready for verification. To verify: run `endless guide --list` and confirm the 4 expected slugs."
 7. **Do not mark `confirmed` yourself.** Only your user does that, after verifying. If you can't easily verify but believe it works, run `endless task assume <id> --outcome "..."` instead.
@@ -40,10 +40,10 @@ When implementation is verified, land the work with `endless worktree land <id>`
 
 | Status        | Meaning                                                                                                       |
 |---------------|---------------------------------------------------------------------------------------------------------------|
-| `needs_plan`  | Not yet planned — needs design work. Attach a plan with `task update <id> --text-file <path>` and the task auto-promotes to `ready`. |
+| `unplanned`  | Not yet planned — needs design work. Attach a plan with `task update <id> --text-file <path>` and the task auto-promotes to `ready`. |
 | `ready`       | Planned and ready to implement.                                                                                |
-| `in_progress` | A session has claimed the task and is working on it. Set automatically by `task claim`.                        |
-| `verify`      | Implementation done, awaiting verification. **Still blocks dependents.**                                       |
+| `underway` | A session has claimed the task and is working on it. Set automatically by `task claim`.                        |
+| `unverified`      | Implementation done, awaiting verification. **Still blocks dependents.**                                       |
 | `confirmed`   | Verified and done. **Unblocks dependents.** Only the user confirms.                                            |
 | `assumed`     | Believed complete, will verify when used naturally. **Unblocks dependents.**                                   |
 | `blocked`     | Waiting on something else.                                                                                     |
@@ -51,7 +51,7 @@ When implementation is verified, land the work with `endless worktree land <id>`
 | `declined`    | Active decision not to do this. Requires `--reason`.                                                           |
 | `obsolete`    | Made irrelevant by other changes.                                                                              |
 
-Use `assumed` (not `verify`) when the only way to test the work is by using it in a downstream task — set `--outcome` explaining what was done and how confidence was established.
+Use `assumed` (not `unverified`) when the only way to test the work is by using it in a downstream task — set `--outcome` explaining what was done and how confidence was established.
 
 ## Task phases
 
@@ -69,18 +69,18 @@ Don't conflate `blocked` ("will do when X resolves") with `maybe` ("might do at 
 
 When task A is blocked by task B (`endless task block A --by B`):
 
-- B in `verify` → A is **still blocked**. Verify means "not yet trusted."
+- B in `unverified` → A is **still blocked**. Unverified means "not yet trusted."
 - B in `confirmed` or `assumed` → A is **unblocked**.
 - B in `declined` or `obsolete` → A is **unblocked**.
 
-In `task show`, blocking relations appear in the **This task:** section, where each row opens with a directional phrase that names what the current task does: a `Blocked by:` row points to a task that blocks this one, a `Blocks:` row points to a task this one blocks, each tagged with the related task's `[status]` — which tells you whether a blocker is still active (e.g. `verify`) or resolved (`confirmed`/`assumed`).
+In `task show`, blocking relations appear in the **This task:** section, where each row opens with a directional phrase that names what the current task does: a `Blocked by:` row points to a task that blocks this one, a `Blocks:` row points to a task this one blocks, each tagged with the related task's `[status]` — which tells you whether a blocker is still active (e.g. `unverified`) or resolved (`confirmed`/`assumed`).
 
 ## Common patterns
 
 ```bash
 # Find work
 endless task next                                # actionable tasks, ranked
-endless task active                              # in_progress + verify
+endless task active                              # underway + unverified
 endless task recent                              # recently updated
 
 # Record a new task discovered during work — use the literal ID printed
@@ -169,14 +169,14 @@ listed separately. (Generated — do not hand-edit; run `/regenerate-guide`.)
 | the handoff (generated, not authored) | orchestration | Spawned sessions get a rendered handoff; agents never write it. |
 | worktree DB sandbox (--db main vs sandbox) | orchestration | Self-dev DB routing and the --db choice. |
 | shell helpers (esu / eswt) | orchestration | cd into your worktree and export ENDLESS_SESSION_ID. |
-| blocking semantics | tasks | How verify/confirmed/assumed affect whether a blocker is still active. |
+| blocking semantics | tasks | How unverified/confirmed/assumed affect whether a blocker is still active. |
 | verbs | tasks | The registered action words that can begin a task title. |
 | research-task field model | tasks | For a research task, text = the request, outcome = the deliverable. |
 <!-- END generated -->
 
 ## Important notes (always relevant)
 
-- **Don't mark items `confirmed`.** Set them to `verify` and let your user confirm — or `assume` if you can't easily verify.
+- **Don't mark items `confirmed`.** Set them to `unverified` and let your user confirm — or `assume` if you can't easily verify.
 - **Always claim before writing code.** Even when enforcement is off, claiming registers your session and creates the worktree.
 - **Use the worktree.** Don't make project changes in the `main` checkout's working tree.
 - **Use `--llm` for agent-friendly output.** `task list --llm`, `task show --llm`, `task next --llm`, etc.

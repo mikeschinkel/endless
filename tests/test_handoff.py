@@ -33,7 +33,7 @@ def _seed_project_and_parent(parent_id: int, child_count: int = 0) -> None:
     pid = db.query("SELECT id FROM projects WHERE name = 'handoff-test'")[0]["id"]
     db.execute(
         "INSERT INTO tasks (id, project_id, title, status) VALUES (?, ?, ?, ?)",
-        (parent_id, pid, "parent", "in_progress"),
+        (parent_id, pid, "parent", "underway"),
     )
     for i in range(child_count):
         db.execute(
@@ -124,8 +124,8 @@ def test_render_handoff_bug_variant():
     )
     # Bug-specific framing.
     assert "Reproduce the bug first" in out
-    # Bug still goes to verify like a task.
-    assert "--status verify" in out
+    # Bug still goes to unverified like a task.
+    assert "--status unverified" in out
 
 
 def test_render_handoff_research_variant():
@@ -140,8 +140,8 @@ def test_render_handoff_research_variant():
     assert "Findings are the deliverable" in out
     # End state guidance points at completed + outcome (file form, E-1001).
     assert "--status completed --outcome-file" in out
-    # Research must NOT instruct --status verify (its own gate per ED-1502).
-    assert "--status verify" not in out
+    # Research must NOT instruct --status unverified (its own gate per ED-1502).
+    assert "--status unverified" not in out
 
 
 def test_render_handoff_epic_variant():
@@ -159,8 +159,8 @@ def test_render_handoff_epic_variant():
     assert "--children" in out
     # Step 6 points at epic completion.
     assert "--status completed" in out
-    # Epics never go to verify (children do their own verification).
-    assert "--status verify" not in out
+    # Epics never go to unverified (children do their own verification).
+    assert "--status unverified" not in out
 
 
 def test_render_handoff_unknown_type_falls_back_to_task():
@@ -176,7 +176,7 @@ def test_render_handoff_unknown_type_falls_back_to_task():
     assert "Findings are the deliverable" not in out
     assert "coordinator" not in out
     # Task end-state guidance present.
-    assert "--status verify" in out
+    assert "--status unverified" in out
 
 
 def test_render_handoff_bg_variant_omits_tmux_return():
@@ -201,7 +201,7 @@ def test_render_handoff_bg_variant_omits_tmux_return():
     # Core workflow rules still present.
     assert "E-1568" in out
     assert "STOP and ask" in out
-    assert "--status verify" in out
+    assert "--status unverified" in out
     # The "(with the return line above)" parenthetical is gone for bg.
     assert "return line above" not in out
 

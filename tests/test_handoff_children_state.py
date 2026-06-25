@@ -34,7 +34,7 @@ def _seed(parent_id: int, statuses: list[str]) -> None:
     pid = db.query("SELECT id FROM projects WHERE name = 'cs-test'")[0]["id"]
     db.execute(
         "INSERT INTO tasks (id, project_id, title, status) VALUES (?, ?, ?, ?)",
-        (parent_id, pid, "parent", "in_progress"),
+        (parent_id, pid, "parent", "underway"),
     )
     for i, status in enumerate(statuses):
         db.execute(
@@ -62,13 +62,13 @@ def test_children_state_mixed_lifecycle_order():
     _seed(
         3002,
         ["ready", "ready", "ready",
-         "needs_plan", "needs_plan",
-         "in_progress",
+         "unplanned", "unplanned",
+         "underway",
          "confirmed", "assumed", "completed", "obsolete"],
     )
     assert (
         _children_state(3002)
-        == "2 needs_plan, 3 ready, 1 in_progress, 4 terminal (10 total)"
+        == "2 unplanned, 3 ready, 1 underway, 4 terminal (10 total)"
     )
 
 
@@ -92,11 +92,11 @@ def test_children_state_includes_blocked_and_revisit_buckets():
     child is silently dropped, and the total always reconciles."""
     _seed(
         3005,
-        ["needs_plan", "blocked", "revisit", "verify", "confirmed"],
+        ["unplanned", "blocked", "revisit", "unverified", "confirmed"],
     )
     assert (
         _children_state(3005)
-        == "1 needs_plan, 1 blocked, 1 revisit, 1 verify, 1 terminal (5 total)"
+        == "1 unplanned, 1 blocked, 1 revisit, 1 unverified, 1 terminal (5 total)"
     )
 
 
@@ -125,19 +125,19 @@ def test_epic_render_shows_no_children_yet():
 def test_epic_render_shows_mixed_breakdown():
     _seed(
         3101,
-        ["needs_plan", "needs_plan",
+        ["unplanned", "unplanned",
          "ready", "ready", "ready",
-         "in_progress",
+         "underway",
          "confirmed", "assumed", "completed", "obsolete"],
     )
     out = _render_epic(3101)
     assert (
-        "Children: 2 needs_plan, 3 ready, 1 in_progress, 4 terminal (10 total)."
+        "Children: 2 unplanned, 3 ready, 1 underway, 4 terminal (10 total)."
         in out
     )
     # All six operational modes named.
-    for mode in ("Zero children", "All `needs_plan`", "All `ready`",
-                 "All `in_progress`", "All terminal", "Mixed"):
+    for mode in ("Zero children", "All `unplanned`", "All `ready`",
+                 "All `underway`", "All terminal", "Mixed"):
         assert mode in out
 
 
@@ -161,7 +161,7 @@ def test_epic_render_drops_redundant_child_count_block():
 def test_non_epic_render_with_children_omits_state_text(ttype):
     """task/bug/research templates don't reference children_state — they render
     cleanly with children present and never surface the breakdown."""
-    _seed(3200, ["ready", "needs_plan", "confirmed"])
+    _seed(3200, ["ready", "unplanned", "confirmed"])
     out = render_handoff(
         spawned_id=3200,
         title="leaf with legacy children",

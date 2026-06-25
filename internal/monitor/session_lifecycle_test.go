@@ -138,8 +138,8 @@ func TestBindSessionToTask_EmptyPaneDoesNotStompProcess(t *testing.T) {
 	}
 }
 
-// TestStartWorkSession_PromotesEligibleStatus pins the in_progress
-// transition: tasks in needs_plan/ready/blocked flip to in_progress as
+// TestStartWorkSession_PromotesEligibleStatus pins the underway
+// transition: tasks in unplanned/ready/blocked flip to underway as
 // part of the defense-in-depth mirror of claim_item events.
 func TestStartWorkSession_PromotesEligibleStatus(t *testing.T) {
 	db := withTestDB(t)
@@ -148,7 +148,7 @@ func TestStartWorkSession_PromotesEligibleStatus(t *testing.T) {
 		taskID int64
 		status string
 	}{
-		{1, "needs_plan"},
+		{1, "unplanned"},
 		{2, "ready"},
 		{3, "blocked"},
 	}
@@ -162,28 +162,28 @@ func TestStartWorkSession_PromotesEligibleStatus(t *testing.T) {
 		if err := StartWorkSession(sid, 1, c.taskID); err != nil {
 			t.Fatalf("StartWorkSession(%s): %v", c.status, err)
 		}
-		if got := taskStatus(t, db, c.taskID); got != "in_progress" {
-			t.Errorf("from %s: task status = %q, want in_progress", c.status, got)
+		if got := taskStatus(t, db, c.taskID); got != "underway" {
+			t.Errorf("from %s: task status = %q, want underway", c.status, got)
 		}
 	}
 }
 
 // TestStartWorkSession_DoesNotDemoteIneligibleStatus pins the WHERE
-// clause: tasks in statuses outside needs_plan/ready/blocked (e.g.
-// in_progress, confirmed) are left alone — the helper must not stomp a
+// clause: tasks in statuses outside unplanned/ready/blocked (e.g.
+// underway, confirmed) are left alone — the helper must not stomp a
 // task already past the entry gates.
 func TestStartWorkSession_DoesNotDemoteIneligibleStatus(t *testing.T) {
 	db := withTestDB(t)
 	seedProject(t, db, 1, "proj-test-1", "/tmp/proj-test-1")
-	seedTask(t, db, 50, 1, "already in progress", "in_progress")
+	seedTask(t, db, 50, 1, "already in progress", "underway")
 	seedTask(t, db, 60, 1, "already confirmed", "confirmed")
 	t.Setenv("TMUX_PANE", "%5")
 
 	if err := StartWorkSession("sess-A", 1, 50); err != nil {
 		t.Fatalf("StartWorkSession 50: %v", err)
 	}
-	if got := taskStatus(t, db, 50); got != "in_progress" {
-		t.Errorf("in_progress task became %q", got)
+	if got := taskStatus(t, db, 50); got != "underway" {
+		t.Errorf("underway task became %q", got)
 	}
 	if err := StartWorkSession("sess-B", 1, 60); err != nil {
 		t.Fatalf("StartWorkSession 60: %v", err)

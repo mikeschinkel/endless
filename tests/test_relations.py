@@ -174,7 +174,7 @@ def test_task_add_cleans_up_flag(isolated_env, monkeypatch):
         cur = db.execute(
             "INSERT INTO tasks (project_id, title, description, status, type_id, phase, created_at) "
             "VALUES (1, ?, ?, ?, (SELECT id FROM task_types WHERE slug = ?), ?, datetime('now'))",
-            (title, description or "", status or "needs_plan", task_type or "task", phase),
+            (title, description or "", status or "unplanned", task_type or "task", phase),
         )
         return cur.lastrowid
 
@@ -214,7 +214,7 @@ def test_task_add_cleaned_up_by_flag(isolated_env, monkeypatch):
         cur = db.execute(
             "INSERT INTO tasks (project_id, title, description, status, type_id, phase, created_at) "
             "VALUES (1, ?, ?, ?, (SELECT id FROM task_types WHERE slug = ?), ?, datetime('now'))",
-            (title, description or "", status or "needs_plan", task_type or "task", phase),
+            (title, description or "", status or "unplanned", task_type or "task", phase),
         )
         return cur.lastrowid
 
@@ -360,7 +360,7 @@ def test_migration_strips_check_and_swaps(tmp_path, monkeypatch):
         CREATE TABLE projects (id INTEGER PRIMARY KEY, name TEXT, path TEXT, status TEXT, created_at TEXT, updated_at TEXT);
         CREATE TABLE tasks (
             id INTEGER PRIMARY KEY, project_id INTEGER NOT NULL, title TEXT,
-            description TEXT, status TEXT NOT NULL DEFAULT 'needs_plan',
+            description TEXT, status TEXT NOT NULL DEFAULT 'unplanned',
             type TEXT NOT NULL DEFAULT 'task', phase TEXT NOT NULL DEFAULT 'now',
             created_at TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL DEFAULT '',
             completed_at TEXT, sort_order INTEGER NOT NULL DEFAULT 0

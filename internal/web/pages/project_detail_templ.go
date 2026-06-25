@@ -794,12 +794,12 @@ func ProjectDetail(project *data.DashboardProject, taskItems []data.TaskView, ac
 	})
 }
 
-// nextActions returns in-progress items first, then next available items, up to 5 total.
+// nextActions returns underway items first, then next available items, up to 5 total.
 func nextActions(items []data.TaskView) []data.TaskView {
 	var result []data.TaskView
 	// In-progress first
 	for _, item := range items {
-		if item.Status == "in_progress" {
+		if item.Status == "underway" {
 			result = append(result, item)
 		}
 	}
@@ -814,7 +814,7 @@ func nextActions(items []data.TaskView) []data.TaskView {
 		if len(result) >= 5 {
 			break
 		}
-		if item.Status == "needs_plan" || item.Status == "ready" {
+		if item.Status == "unplanned" || item.Status == "ready" {
 			result = append(result, item)
 		}
 	}
@@ -864,7 +864,7 @@ func taskStatusIcon(status string) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-		case "in_progress":
+		case "underway":
 			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 97, "<span class=\"text-amber-400 text-sm\">◐</span>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err

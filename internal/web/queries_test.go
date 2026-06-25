@@ -103,10 +103,10 @@ func TestGetDashboardProjects_FiltersByStatus(t *testing.T) {
 func TestGetDashboardProjects_TaskCounts(t *testing.T) {
 	db := withMonitorDB(t)
 	seedProject(t, db, 1, "p", "/tmp/p", "active")
-	seedTask(t, db, 10, 1, "in-prog", "in_progress")
+	seedTask(t, db, 10, 1, "in-prog", "underway")
 	seedTask(t, db, 11, 1, "done", "completed")
 	seedTask(t, db, 12, 1, "ready", "ready")
-	seedTask(t, db, 13, 1, "plan", "needs_plan")
+	seedTask(t, db, 13, 1, "plan", "unplanned")
 	// A row in the decisions table (E-1378) is in a different table and
 	// must not contribute to any of the four task counts.
 	if _, err := db.Exec(
@@ -130,7 +130,7 @@ func TestGetDashboardProjects_TaskCounts(t *testing.T) {
 	if p.TaskInProgress != 1 {
 		t.Errorf("TaskInProgress = %d, want 1", p.TaskInProgress)
 	}
-	// ActiveTasks counts needs_plan + ready + in_progress.
+	// ActiveTasks counts unplanned + ready + underway.
 	if p.ActiveTasks != 3 {
 		t.Errorf("ActiveTasks = %d, want 3", p.ActiveTasks)
 	}
@@ -173,12 +173,12 @@ func TestGetDashboardProjects_OrderByLastActivity(t *testing.T) {
 // GetCurrentWork
 // ---------------------------------------------------------------------
 
-// TestGetCurrentWork_OnlyInProgress pins WHERE pi.status = 'in_progress':
-// ready/needs_plan/completed tasks must not appear.
+// TestGetCurrentWork_OnlyInProgress pins WHERE pi.status = 'underway':
+// ready/unplanned/completed tasks must not appear.
 func TestGetCurrentWork_OnlyInProgress(t *testing.T) {
 	db := withMonitorDB(t)
 	seedProject(t, db, 1, "p", "/tmp/p", "active")
-	seedTask(t, db, 10, 1, "active work", "in_progress")
+	seedTask(t, db, 10, 1, "active work", "underway")
 	seedTask(t, db, 11, 1, "queued", "ready")
 	seedTask(t, db, 12, 1, "done", "completed")
 
@@ -458,14 +458,14 @@ func TestGetProjectTaskGroups_GroupsByParentTask(t *testing.T) {
 	// Parent task (the "plan").
 	if _, err := db.Exec(
 		"INSERT INTO tasks (id, project_id, title, status) VALUES (?, ?, ?, ?)",
-		100, 1, "Migrate auth", "needs_plan",
+		100, 1, "Migrate auth", "unplanned",
 	); err != nil {
 		t.Fatalf("seed parent: %v", err)
 	}
 	// Children with that parent.
 	if _, err := db.Exec(
 		"INSERT INTO tasks (id, project_id, parent_id, title, status, sort_order) VALUES (?, ?, ?, ?, ?, ?)",
-		101, 1, 100, "step one", "in_progress", 1,
+		101, 1, 100, "step one", "underway", 1,
 	); err != nil {
 		t.Fatalf("seed child 1: %v", err)
 	}
@@ -508,11 +508,11 @@ func TestGetProjectTaskGroups_TotalAndDoneCountChildren(t *testing.T) {
 	seedProject(t, db, 1, "p", "/tmp/p", "active")
 	if _, err := db.Exec(
 		"INSERT INTO tasks (id, project_id, title, status) VALUES (?, ?, ?, ?)",
-		200, 1, "Big plan", "in_progress",
+		200, 1, "Big plan", "underway",
 	); err != nil {
 		t.Fatalf("seed parent: %v", err)
 	}
-	for i, status := range []string{"in_progress", "completed", "completed", "ready"} {
+	for i, status := range []string{"underway", "completed", "completed", "ready"} {
 		if _, err := db.Exec(
 			"INSERT INTO tasks (id, project_id, parent_id, title, status) VALUES (?, ?, ?, ?, ?)",
 			201+i, 1, 200, "child", status,
@@ -741,7 +741,7 @@ func TestUpdateTaskStatus_PersistsNewStatus(t *testing.T) {
 	seedProject(t, db, 1, "p", "/tmp/p", "active")
 	seedTask(t, db, 10, 1, "task", "ready")
 
-	if err := web.UpdateTaskStatus(10, "in_progress"); err != nil {
+	if err := web.UpdateTaskStatus(10, "underway"); err != nil {
 		t.Fatalf("UpdateTaskStatus: %v", err)
 	}
 	var got string
@@ -750,7 +750,7 @@ func TestUpdateTaskStatus_PersistsNewStatus(t *testing.T) {
 	).Scan(&got); err != nil {
 		t.Fatalf("readback: %v", err)
 	}
-	if got != "in_progress" {
-		t.Errorf("status = %q, want %q", got, "in_progress")
+	if got != "underway" {
+		t.Errorf("status = %q, want %q", got, "underway")
 	}
 }

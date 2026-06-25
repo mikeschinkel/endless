@@ -78,9 +78,9 @@ func TestFormat_OmitsEmptyFields(t *testing.T) {
 			name: "all fields present",
 			info: &monitor.ActiveTaskInfo{
 				TaskID: 42, ProjectName: "proj", Type: "task",
-				Phase: "now", Tier: &tier, Status: "in_progress",
+				Phase: "now", Tier: &tier, Status: "underway",
 			},
-			wantParts:      []string{"[E-42]", "proj", "task", "now", "t3", "in_progress"},
+			wantParts:      []string{"[E-42]", "proj", "task", "now", "t3", "underway"},
 			wantSeparators: 5, // all five non-ID fields contribute
 		},
 		{
@@ -188,7 +188,7 @@ func TestBlockersSegment_EmptyWhenNoBlockers(t *testing.T) {
 	if _, err := db.Exec("INSERT INTO projects (id, name, path) VALUES (1, 'p', '/tmp/p')"); err != nil {
 		t.Fatalf("seed project: %v", err)
 	}
-	seedTaskWithStatus(t, db, 100, "in_progress")
+	seedTaskWithStatus(t, db, 100, "underway")
 
 	if got := blockersSegment(100); got != "" {
 		t.Errorf("blockersSegment(100) = %q, want empty", got)
@@ -202,7 +202,7 @@ func TestBlockersSegment_OneBlocker(t *testing.T) {
 	if _, err := db.Exec("INSERT INTO projects (id, name, path) VALUES (1, 'p', '/tmp/p')"); err != nil {
 		t.Fatalf("seed project: %v", err)
 	}
-	seedTaskWithStatus(t, db, 100, "in_progress")
+	seedTaskWithStatus(t, db, 100, "underway")
 	seedTaskWithStatus(t, db, 7, "ready")
 	seedBlocks(t, db, 7, 100)
 
@@ -226,8 +226,8 @@ func TestBlockersSegment_TwoBlockers(t *testing.T) {
 	if _, err := db.Exec("INSERT INTO projects (id, name, path) VALUES (1, 'p', '/tmp/p')"); err != nil {
 		t.Fatalf("seed project: %v", err)
 	}
-	seedTaskWithStatus(t, db, 100, "in_progress")
-	seedTaskWithStatus(t, db, 42, "in_progress")
+	seedTaskWithStatus(t, db, 100, "underway")
+	seedTaskWithStatus(t, db, 42, "underway")
 	seedTaskWithStatus(t, db, 9, "ready")
 	seedBlocks(t, db, 42, 100)
 	seedBlocks(t, db, 9, 100)
@@ -249,7 +249,7 @@ func TestBlockersSegment_ThreePlusBlockers(t *testing.T) {
 	if _, err := db.Exec("INSERT INTO projects (id, name, path) VALUES (1, 'p', '/tmp/p')"); err != nil {
 		t.Fatalf("seed project: %v", err)
 	}
-	seedTaskWithStatus(t, db, 100, "in_progress")
+	seedTaskWithStatus(t, db, 100, "underway")
 	for _, id := range []int64{50, 60, 70, 80} {
 		seedTaskWithStatus(t, db, id, "ready")
 		seedBlocks(t, db, id, 100)
@@ -272,7 +272,7 @@ func TestBlockersSegment_AllTerminalIsEmpty(t *testing.T) {
 	if _, err := db.Exec("INSERT INTO projects (id, name, path) VALUES (1, 'p', '/tmp/p')"); err != nil {
 		t.Fatalf("seed project: %v", err)
 	}
-	seedTaskWithStatus(t, db, 100, "in_progress")
+	seedTaskWithStatus(t, db, 100, "underway")
 	for _, st := range []string{"confirmed", "assumed", "declined", "obsolete"} {
 		var id int64
 		switch st {
@@ -302,11 +302,11 @@ func TestBlockersSegment_MixedTerminalAndActive(t *testing.T) {
 	if _, err := db.Exec("INSERT INTO projects (id, name, path) VALUES (1, 'p', '/tmp/p')"); err != nil {
 		t.Fatalf("seed project: %v", err)
 	}
-	seedTaskWithStatus(t, db, 100, "in_progress")
+	seedTaskWithStatus(t, db, 100, "underway")
 	// id ASC: 20 (active), 21 (confirmed), 22 (active). Active-only → {E-20 E-22}.
 	seedTaskWithStatus(t, db, 20, "ready")
 	seedTaskWithStatus(t, db, 21, "confirmed")
-	seedTaskWithStatus(t, db, 22, "in_progress")
+	seedTaskWithStatus(t, db, 22, "underway")
 	seedBlocks(t, db, 20, 100)
 	seedBlocks(t, db, 21, 100)
 	seedBlocks(t, db, 22, 100)
@@ -329,7 +329,7 @@ func TestBlockersSegment_NoColorEscapeWhenEmpty(t *testing.T) {
 	if _, err := db.Exec("INSERT INTO projects (id, name, path) VALUES (1, 'p', '/tmp/p')"); err != nil {
 		t.Fatalf("seed project: %v", err)
 	}
-	seedTaskWithStatus(t, db, 100, "in_progress")
+	seedTaskWithStatus(t, db, 100, "underway")
 
 	got := blockersSegment(100)
 	if got != "" {
@@ -346,13 +346,13 @@ func TestFormat_AppendsBlockersSegment(t *testing.T) {
 	if _, err := db.Exec("INSERT INTO projects (id, name, path) VALUES (1, 'p', '/tmp/p')"); err != nil {
 		t.Fatalf("seed project: %v", err)
 	}
-	seedTaskWithStatus(t, db, 100, "in_progress")
+	seedTaskWithStatus(t, db, 100, "underway")
 	seedTaskWithStatus(t, db, 7, "ready")
 	seedBlocks(t, db, 7, 100)
 
 	info := &monitor.ActiveTaskInfo{
 		TaskID: 100, ProjectName: "p", Type: "task",
-		Phase: "now", Status: "in_progress",
+		Phase: "now", Status: "underway",
 	}
 	got := format(info)
 	if !strings.Contains(got, "{E-7}") {
@@ -371,11 +371,11 @@ func TestFormat_OmitsBlockersSegmentWhenEmpty(t *testing.T) {
 	if _, err := db.Exec("INSERT INTO projects (id, name, path) VALUES (1, 'p', '/tmp/p')"); err != nil {
 		t.Fatalf("seed project: %v", err)
 	}
-	seedTaskWithStatus(t, db, 100, "in_progress")
+	seedTaskWithStatus(t, db, 100, "underway")
 
 	info := &monitor.ActiveTaskInfo{
 		TaskID: 100, ProjectName: "p", Type: "task",
-		Phase: "now", Status: "in_progress",
+		Phase: "now", Status: "underway",
 	}
 	got := format(info)
 	if strings.Contains(got, "{E-") {
@@ -383,7 +383,7 @@ func TestFormat_OmitsBlockersSegmentWhenEmpty(t *testing.T) {
 	}
 	// The row should end with the status text (no trailing color escape
 	// would mean a phantom segment slipped in).
-	if !strings.HasSuffix(got, "in_progress") {
+	if !strings.HasSuffix(got, "underway") {
 		t.Errorf("format() = %q, want trailing status with no extra segment", got)
 	}
 }

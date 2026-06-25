@@ -29,7 +29,7 @@ def _seed_project(name: str = "test") -> int:
 def _add_task(project_id: int, title: str = "T", task_type: str = "task") -> int:
     cur = db.execute(
         "INSERT INTO tasks (project_id, title, status, type_id, phase, created_at) "
-        "VALUES (?, ?, 'needs_plan', (SELECT id FROM task_types WHERE slug = ?), 'now', datetime('now'))",
+        "VALUES (?, ?, 'unplanned', (SELECT id FROM task_types WHERE slug = ?), 'now', datetime('now'))",
         (project_id, title, task_type),
     )
     return cur.lastrowid

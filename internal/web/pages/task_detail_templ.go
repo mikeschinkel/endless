@@ -84,7 +84,7 @@ func TaskDetail(project *data.DashboardProject, taskItems []data.TaskView) templ
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var5 string
-				templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("%d tasks total — %d completed, %d in progress, %d remaining",
+				templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("%d tasks total — %d completed, %d underway, %d remaining",
 					project.TaskTotal, project.TaskCompleted, project.TaskInProgress,
 					project.TaskTotal-project.TaskCompleted-project.TaskInProgress))
 				if templ_7745c5c3_Err != nil {

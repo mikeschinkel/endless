@@ -22,7 +22,7 @@ endless task claim <id>
 
 This:
 
-1. Sets the task status to `in_progress`.
+1. Sets the task status to `underway`.
 2. Binds the task to your session.
 3. Creates a git worktree at `.endless/worktrees/e-<id>/` rooted on a fresh branch `task/<id>-<slug>`.
 4. Writes companion metadata to `.endless/worktree.json` (task_id, base_branch, branch, timestamp).
@@ -173,7 +173,7 @@ Spawn runs in one of two places:
 - **Foreground** (`endless task spawn <id>`) — a new tmux window, Claude visible and interactive.
 - **Background** (`endless task spawn <id> --bg`) — a headless agent under Anthropic's supervisor process, no terminal attached.
 
-Both **pre-claim** the task (status → `in_progress`, per-task worktree created) and run the same pre-flight refusals before launching, so the spawned session always lands in a fully-claimed state and never needs to run `endless task claim` itself.
+Both **pre-claim** the task (status → `underway`, per-task worktree created) and run the same pre-flight refusals before launching, so the spawned session always lands in a fully-claimed state and never needs to run `endless task claim` itself.
 
 ### Foreground vs background
 
@@ -189,7 +189,7 @@ Both **pre-claim** the task (status → `in_progress`, per-task worktree created
 
 The handoff is rendered from a per-type template, chosen from the task's `type`:
 
-- **`task`** — frames the work around a verify end-state: implement, flip to `verify`, supply how-to-test.
+- **`task`** — frames the work around a verify end-state: implement, flip to `unverified`, supply how-to-test.
 - **`bug`** — leads with "reproduce the bug first, before changing anything."
 - **`research`** — findings *are* the deliverable: end-state is `completed` with the conclusions written to the task's outcome, not a code-verify cycle.
 - **`epic`** — a coordinator role (see [Coordinator pattern for epics](#coordinator-pattern-for-epics)).
@@ -206,7 +206,7 @@ Inspect the exact text spawn will paste:
 endless task handoff <id>
 ```
 
-The handoff is deliberately lean — it delegates the workflow rules to `endless guide` rather than restating them. It carries: the spawned task's id and title, the spawning session's task, the `tmux select-window` line back to your window, the pointers to run `endless guide` and `endless task show <id> --text`, and the drive-to-completion rules (flip to `verify` with how-to-test; don't `worktree land`/`drop` without asking; file drive-by work as separate tasks with `--cleans-up <id>`).
+The handoff is deliberately lean — it delegates the workflow rules to `endless guide` rather than restating them. It carries: the spawned task's id and title, the spawning session's task, the `tmux select-window` line back to your window, the pointers to run `endless guide` and `endless task show <id> --text`, and the drive-to-completion rules (flip to `unverified` with how-to-test; don't `worktree land`/`drop` without asking; file drive-by work as separate tasks with `--cleans-up <id>`).
 
 To change what every spawned session is told, edit the template — see [Customizing handoff templates](#customizing-handoff-templates). There is no per-task prompt to maintain.
 
@@ -225,8 +225,8 @@ endless task spawn <id> --force                   # allow spawn on a done-ish ta
 Foreground flow:
 
 1. Validates tmux is running (fails otherwise).
-2. Refuses if the task is in a done-ish status (`verify`/`confirmed`/`declined`/`obsolete`/`assumed`/`completed`) without `--force` or `--reopen`, or if another live session already owns the task.
-3. **Pre-claims the task**: flips status to `in_progress` (emitting `task.status_changed`) and creates the per-task worktree at `.endless/worktrees/e-<id>/`.
+2. Refuses if the task is in a done-ish status (`unverified`/`confirmed`/`declined`/`obsolete`/`assumed`/`completed`) without `--force` or `--reopen`, or if another live session already owns the task.
+3. **Pre-claims the task**: flips status to `underway` (emitting `task.status_changed`) and creates the per-task worktree at `.endless/worktrees/e-<id>/`.
 4. Creates a new tmux window named `<project>_<slug>[E-NNNN]` and sets the window variables `@endless_spawned_by`, `@endless_task_id`, `@endless_project_id`.
 5. `cd`s into the spawn-created worktree (or `--worktree <path>` if given) and launches Claude.
 6. The spawned Claude's `SessionStart` hook reads `@endless_spawned_by` and records the session→task binding (no status flip — spawn already did it).
@@ -268,16 +268,16 @@ Detaching from an attached agent (`←`, `Ctrl+Z`, or `/exit`) leaves it running
 
 ### Coordinator pattern for epics
 
-Spawning a task whose type is `epic` opens a foreground window for a **coordinator**. The coordinator does **not** implement the epic's work directly — its job is to drive the epic's children through `needs_plan` → `ready` → `in_progress` → `verify`, dispatching child sessions (often with `spawn --bg`) and reviewing them.
+Spawning a task whose type is `epic` opens a foreground window for a **coordinator**. The coordinator does **not** implement the epic's work directly — its job is to drive the epic's children through `unplanned` → `ready` → `underway` → `unverified`, dispatching child sessions (often with `spawn --bg`) and reviewing them.
 
 The epic handoff injects a breakdown of the children's current states and names the operational mode that breakdown implies:
 
 | Children state        | Coordinator's mode                                   |
 |-----------------------|------------------------------------------------------|
 | Zero children         | drive decomposition — break the epic into child tasks |
-| All `needs_plan`      | planning orchestrator — get each child a plan         |
+| All `unplanned`      | planning orchestrator — get each child a plan         |
 | All `ready`           | dispatcher — spawn children to implement              |
-| All `in_progress`     | observe — sessions are working; monitor and unblock   |
+| All `underway`     | observe — sessions are working; monitor and unblock   |
 | All terminal          | ask whether to reopen anything or close the epic      |
 | Mixed                 | surface the breakdown and ask what to do next         |
 

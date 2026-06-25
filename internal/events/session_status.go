@@ -4,7 +4,7 @@
 //
 // E-1314 schema:
 // - One `tasks` column carries all task elements; disposition (resolved/
-//   pending/blocked/verify) is derived at render time from each task's
+//   pending/blocked/unverified) is derived at render time from each task's
 //   status attribute, removing the redundant 4-column shape.
 // - `active_task_id` resolved from sessions at INSERT time; not in
 //   payload (Go-side concern).
@@ -240,14 +240,14 @@ func renderSessionStatusMarkdown(p *SessionStatusRecordedPayload) string {
 }
 
 // renderTasksGrouped walks the flat <task> list and emits 4 sections
-// (Resolved / Pending / Blocked / Verify), with each task placed by a
+// (Resolved / Pending / Blocked / Unverified), with each task placed by a
 // status→disposition mapping. Sections with no tasks render `(empty)`.
 //
 // Status → disposition mapping:
 //   - resolved: confirmed, assumed, completed, obsolete, declined
-//   - pending:  needs_plan, ready, in_progress, revisit
+//   - pending:  unplanned, ready, underway, revisit
 //   - blocked:  blocked
-//   - verify:   verify
+//   - unverified:   unverified
 //
 // An unknown status falls into Pending so it surfaces somewhere rather
 // than silently disappearing.
@@ -257,7 +257,7 @@ func renderTasksGrouped(b *strings.Builder, body string) {
 		"Resolved": nil,
 		"Pending":  nil,
 		"Blocked":  nil,
-		"Verify":   nil,
+		"Unverified":   nil,
 	}
 	if body != "" {
 		for _, elem := range splitElements(body, "task") {
@@ -267,7 +267,7 @@ func renderTasksGrouped(b *strings.Builder, body string) {
 			)
 		}
 	}
-	for _, heading := range []string{"Resolved", "Pending", "Blocked", "Verify"} {
+	for _, heading := range []string{"Resolved", "Pending", "Blocked", "Unverified"} {
 		b.WriteString("## ")
 		b.WriteString(heading)
 		b.WriteString("\n")
@@ -303,9 +303,9 @@ func statusToDisposition(status string) string {
 		return "Resolved"
 	case "blocked":
 		return "Blocked"
-	case "verify":
-		return "Verify"
-	case "needs_plan", "ready", "in_progress", "revisit":
+	case "unverified":
+		return "Unverified"
+	case "unplanned", "ready", "underway", "revisit":
 		return "Pending"
 	default:
 		return "Pending"

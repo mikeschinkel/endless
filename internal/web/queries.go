@@ -30,10 +30,10 @@ func GetDashboardProjects() []data.DashboardProject {
 		 p.status, COALESCE(NULLIF(p.language,''),'') as language,
 		 p.path, COALESCE(p.group_name,'') as group_name,
 		 (SELECT count(*) FROM notes n WHERE n.project_id = p.id AND n.resolved = 0) as pending_notes,
-		 (SELECT count(*) FROM tasks pi WHERE pi.project_id = p.id AND pi.status IN ('needs_plan','ready','in_progress')) as active_plan,
+		 (SELECT count(*) FROM tasks pi WHERE pi.project_id = p.id AND pi.status IN ('unplanned','ready','underway')) as active_plan,
 		 (SELECT count(*) FROM tasks pi WHERE pi.project_id = p.id) as task_total,
 		 (SELECT count(*) FROM tasks pi WHERE pi.project_id = p.id AND pi.status = 'completed') as task_completed,
-		 (SELECT count(*) FROM tasks pi WHERE pi.project_id = p.id AND pi.status = 'in_progress') as task_in_progress,
+		 (SELECT count(*) FROM tasks pi WHERE pi.project_id = p.id AND pi.status = 'underway') as task_underway,
 		 COALESCE((SELECT a.created_at FROM activity a WHERE a.project_id = p.id ORDER BY a.created_at DESC LIMIT 1),'') as last_activity
 		 FROM projects p WHERE p.status IN ('active','paused','idea')
 		 ORDER BY last_activity DESC, p.name`)
@@ -68,7 +68,7 @@ func GetCurrentWork() []data.CurrentWorkItem {
 		 FROM tasks pi
 		 JOIN projects p ON pi.project_id = p.id
 		 LEFT JOIN sessions s ON s.active_task_id = pi.id AND s.state = 'working'
-		 WHERE pi.status = 'in_progress'
+		 WHERE pi.status = 'underway'
 		 ORDER BY p.name, pi.sort_order`)
 	if err != nil {
 		return nil
@@ -125,10 +125,10 @@ func GetProjectDetail(name string) (*data.DashboardProject, error) {
 		 p.status, COALESCE(NULLIF(p.language,''),'') as language,
 		 p.path, COALESCE(p.group_name,'') as group_name,
 		 (SELECT count(*) FROM notes n WHERE n.project_id = p.id AND n.resolved = 0) as pending_notes,
-		 (SELECT count(*) FROM tasks pi WHERE pi.project_id = p.id AND pi.status IN ('needs_plan','ready','in_progress')) as active_plan,
+		 (SELECT count(*) FROM tasks pi WHERE pi.project_id = p.id AND pi.status IN ('unplanned','ready','underway')) as active_plan,
 		 (SELECT count(*) FROM tasks pi WHERE pi.project_id = p.id) as task_total,
 		 (SELECT count(*) FROM tasks pi WHERE pi.project_id = p.id AND pi.status = 'completed') as task_completed,
-		 (SELECT count(*) FROM tasks pi WHERE pi.project_id = p.id AND pi.status = 'in_progress') as task_in_progress,
+		 (SELECT count(*) FROM tasks pi WHERE pi.project_id = p.id AND pi.status = 'underway') as task_underway,
 		 COALESCE((SELECT a.created_at FROM activity a WHERE a.project_id = p.id ORDER BY a.created_at DESC LIMIT 1),'') as last_activity
 		 FROM projects p WHERE p.name = ?`, name,
 	).Scan(&p.ID, &p.Name, &p.Label, &p.Description, &p.Status, &p.Language,
@@ -186,10 +186,10 @@ func GetProjectTasks(projectID int64, excludeStatuses ...string) []data.TaskView
 		   ELSE 5
 		 END,
 		 CASE pi.status
-		   WHEN 'in_progress' THEN 0
-		   WHEN 'verify' THEN 1
+		   WHEN 'underway' THEN 0
+		   WHEN 'unverified' THEN 1
 		   WHEN 'ready' THEN 2
-		   WHEN 'needs_plan' THEN 3
+		   WHEN 'unplanned' THEN 3
 		   WHEN 'revisit' THEN 4
 		   WHEN 'blocked' THEN 5
 		   WHEN 'completed' THEN 6
@@ -249,7 +249,7 @@ func GetProjectTaskGroups(projectID int64) []data.TaskGroup {
 	}
 
 	// Get active tasks grouped by their parent task ("plan"), ordered so
-	// in_progress comes first. The original schema had a self-FK column
+	// underway comes first. The original schema had a self-FK column
 	// `plans.plan_id` referencing a parent plan; the plans→tasks rename
 	// (commit 1b51c61) left the SQL referencing a stale `task_id` column
 	// that does not exist in the tasks table. The correct self-FK is
@@ -261,9 +261,9 @@ func GetProjectTaskGroups(projectID int64) []data.TaskGroup {
 		 pi.id, COALESCE(pi.title, substr(pi.description, 1, 80)) as title,
 		 pi.description, pi.phase, pi.status
 		 FROM tasks pi
-		 WHERE pi.project_id = ? AND pi.status IN ('in_progress', 'needs_plan', 'ready')
+		 WHERE pi.project_id = ? AND pi.status IN ('underway', 'unplanned', 'ready')
 		 ORDER BY COALESCE(pi.parent_id, 0),
-		   CASE pi.status WHEN 'in_progress' THEN 0 ELSE 1 END,
+		   CASE pi.status WHEN 'underway' THEN 0 ELSE 1 END,
 		   pi.sort_order`, projectID)
 	if err != nil {
 		return nil

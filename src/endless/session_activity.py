@@ -8,7 +8,7 @@ groups by event kind, and renders the archetype-2 shape report:
 
       Filed (3): E-1278, E-1279, E-1280
       Claimed (5): E-1284, E-1287, E-1294 ...
-      Shipped → verify (4): ...
+      Shipped → unverified (4): ...
       Confirmed (8): ...
 
 No SQL schema is added — this is a pure projection over the ledger,
@@ -26,13 +26,13 @@ from endless import db
 
 
 # Status values that have their own grouping line in the rendered report.
-# Other statuses (in_progress, ready, etc.) fold into the catch-all.
+# Other statuses (underway, ready, etc.) fold into the catch-all.
 _REPORTED_STATUSES: tuple[str, ...] = (
-    "verify", "confirmed", "assumed", "declined", "obsolete",
+    "unverified", "confirmed", "assumed", "declined", "obsolete",
 )
 
 _REPORTED_STATUS_LABELS: dict[str, str] = {
-    "verify": "Shipped → verify",
+    "unverified": "Shipped → unverified",
     "confirmed": "Confirmed",
     "assumed": "Assumed",
     "declined": "Declined",

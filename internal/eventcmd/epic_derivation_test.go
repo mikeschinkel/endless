@@ -39,7 +39,7 @@ func initGitRepo(t *testing.T, dir string) {
 	}
 }
 
-// seedEpicWithChild inserts a project, an epic (epicID, needs_plan), and one
+// seedEpicWithChild inserts a project, an epic (epicID, unplanned), and one
 // child task (childID, parent=epicID, childStatus) into the DB at dbPath.
 func seedEpicWithChild(t *testing.T, dbPath, projectName string, epicID, childID int64, childStatus string) {
 	t.Helper()
@@ -56,7 +56,7 @@ func seedEpicWithChild(t *testing.T, dbPath, projectName string, epicID, childID
 	}
 	if _, err := db.Exec(
 		`INSERT INTO tasks (id, project_id, title, phase, status, type_id, sort_order)
-		 VALUES (?, 1, 'epic', 'now', 'needs_plan', ?, 10)`,
+		 VALUES (?, 1, 'epic', 'now', 'unplanned', ?, 10)`,
 		epicID, int(tasktype.TaskTypeEpic),
 	); err != nil {
 		t.Fatalf("seed epic: %v", err)
@@ -147,8 +147,8 @@ func TestEpicDerivation_EmitWritesLedgerAndUpdatesEpic(t *testing.T) {
 	if err := json.Unmarshal(got.Payload, &p); err != nil {
 		t.Fatalf("unmarshal derived payload: %v", err)
 	}
-	if p.TaskID != epicID || p.OldStatus != "needs_plan" || p.NewStatus != "completed" {
-		t.Errorf("derived payload = %+v, want {%d needs_plan completed}", p, epicID)
+	if p.TaskID != epicID || p.OldStatus != "unplanned" || p.NewStatus != "completed" {
+		t.Errorf("derived payload = %+v, want {%d unplanned completed}", p, epicID)
 	}
 }
 
@@ -181,7 +181,7 @@ func TestEpicDerivation_RebuildReplaysDerivedEvent(t *testing.T) {
 	clock := kairos.NewClock(0xa7f3)
 	writeLedgerEvent(t, projectRoot, makeEpicCreatedEvent(t, clock, projectName, epicID, nil))
 	writeLedgerEvent(t, projectRoot, makeTaskCreatedChildEvent(t, clock, projectName, childID, epicID))
-	writeLedgerEvent(t, projectRoot, makeEpicStatusDerivedEvent(t, clock, projectName, epicID, "needs_plan", "in_progress"))
+	writeLedgerEvent(t, projectRoot, makeEpicStatusDerivedEvent(t, clock, projectName, epicID, "unplanned", "underway"))
 
 	bin := endlessGoBin(t)
 	cmd := exec.Command(bin, "--config-dir", cfgDir,
@@ -202,8 +202,8 @@ func TestEpicDerivation_RebuildReplaysDerivedEvent(t *testing.T) {
 	if err := db2.QueryRow("SELECT status FROM tasks WHERE id = ?", epicID).Scan(&epicStatus); err != nil {
 		t.Fatalf("read rebuilt epic: %v", err)
 	}
-	if epicStatus != "in_progress" {
-		t.Errorf("rebuilt epic status = %q, want in_progress (from replayed derived event)", epicStatus)
+	if epicStatus != "underway" {
+		t.Errorf("rebuilt epic status = %q, want underway (from replayed derived event)", epicStatus)
 	}
 }
 
@@ -227,7 +227,7 @@ func readDerivedLedgerEvents(t *testing.T, projectRoot string) []events.Event {
 func makeEpicCreatedEvent(t *testing.T, clock *kairos.Clock, projectName string, epicID int64, parentID *int64) events.Event {
 	t.Helper()
 	payload, err := json.Marshal(events.TaskCreatedPayload{
-		Title: "epic", Phase: "now", Status: "needs_plan", Type: "epic",
+		Title: "epic", Phase: "now", Status: "unplanned", Type: "epic",
 		SortOrder: 10, ParentID: parentID,
 	})
 	if err != nil {
@@ -245,7 +245,7 @@ func makeEpicCreatedEvent(t *testing.T, clock *kairos.Clock, projectName string,
 func makeTaskCreatedChildEvent(t *testing.T, clock *kairos.Clock, projectName string, childID, parentID int64) events.Event {
 	t.Helper()
 	payload, err := json.Marshal(events.TaskCreatedPayload{
-		Title: "child", Phase: "now", Status: "needs_plan", Type: "task",
+		Title: "child", Phase: "now", Status: "unplanned", Type: "task",
 		SortOrder: 20, ParentID: &parentID,
 	})
 	if err != nil {

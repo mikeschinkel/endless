@@ -190,7 +190,7 @@ CREATE TABLE IF NOT EXISTS tasks (
     description TEXT,
     text TEXT,
     phase TEXT NOT NULL DEFAULT 'now',
-    status TEXT NOT NULL DEFAULT 'needs_plan',
+    status TEXT NOT NULL DEFAULT 'unplanned',
     source_file TEXT,
     sort_order INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),

@@ -26,7 +26,7 @@ def _type_analysis(task_id: int) -> tuple[str, str | None]:
 
 def test_update_type_changes_task_type(seeded_project_at_cwd):
     # E-1544: promoting to research requires --justification (or an
-    # in-progress epic parent). Supplying justification here.
+    # underway epic parent). Supplying justification here.
     tid = _add_task("Audit the X system", task_type="task")
     task_cmd.update_plan(
         tid, task_type="research",
@@ -52,7 +52,7 @@ def test_update_analysis_sets_text(seeded_project_at_cwd):
 
 def test_update_type_and_analysis_together(seeded_project_at_cwd):
     # E-1544: promoting to research requires --justification (or an
-    # in-progress epic parent).
+    # underway epic parent).
     tid = _add_task("Audit the X system")
     task_cmd.update_plan(
         tid, task_type="research",

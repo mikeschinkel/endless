@@ -45,7 +45,7 @@ func newLandingTestDB(t *testing.T) *sql.DB {
 	}
 	if _, err := db.Exec(
 		`INSERT INTO tasks (id, project_id, title, phase, status, type_id)
-		 VALUES (1337, 1, 'probe', 'now', 'in_progress', 1)`,
+		 VALUES (1337, 1, 'probe', 'now', 'underway', 1)`,
 	); err != nil {
 		t.Fatalf("seed task: %v", err)
 	}

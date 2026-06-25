@@ -10,7 +10,7 @@ Your spawning session's task is: E-{{.spawner_task}} — return to that session 
 
 Your worktree is: {{.worktree_path}} (branch {{.branch}}) — confirm with `pwd`. Don't edit the main checkout; the spawning session owns landing.
 
-Findings are the deliverable. Write them into `tasks.outcome` via `endless task update E-{{.spawned_id}} --outcome-file <path>` (or `--outcome '<inline text>'`). End state is `completed` (research has its own gate, ED-1502), not `verify`.
+Findings are the deliverable. Write them into `tasks.outcome` via `endless task update E-{{.spawned_id}} --outcome-file <path>` (or `--outcome '<inline text>'`). End state is `completed` (research has its own gate, ED-1502), not `unverified`.
 
 1. Run `endless guide` to learn the Endless workflow.
 2. Run `endless task show E-{{.spawned_id}} --text --db main` to read the plan.

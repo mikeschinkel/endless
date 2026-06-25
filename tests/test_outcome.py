@@ -122,10 +122,10 @@ def test_task_update_status_declined_requires_outcome(seeded_project_at_cwd):
 
 
 def test_task_update_outcome_standalone(seeded_project_at_cwd):
-    tid = _add_task("Sample", status="in_progress")
+    tid = _add_task("Sample", status="underway")
     task_cmd.update_plan(tid, outcome="initial note")
     status, outcome = _status_outcome(tid)
-    assert status == "in_progress"  # unchanged
+    assert status == "underway"  # unchanged
     assert outcome == "initial note"
 
 

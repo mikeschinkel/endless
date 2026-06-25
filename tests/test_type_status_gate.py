@@ -3,9 +3,9 @@
 `research` and `epic` tasks never go through user-testable verification — epics
 auto-derive to `completed` (E-1541), research ends in `completed --outcome`
 (ED-1502). The gate (`_require_status_allowed_for_type` +
-`_TYPE_FORBIDDEN_STATUSES` in `task_cmd`) rejects `verify`/`assumed`/`confirmed`
+`_TYPE_FORBIDDEN_STATUSES` in `task_cmd`) rejects `unverified`/`assumed`/`confirmed`
 for those types at every write path that can set a status. This file covers the
-`verify` rejection added by E-1579 and guards the `assumed`/`confirmed`
+`unverified` rejection added by E-1579 and guards the `assumed`/`confirmed`
 rejection inherited from E-1577.
 
 The gate is a hard type-correctness invariant: there is no `--force` bypass.
@@ -23,7 +23,7 @@ _RESEARCH = 3
 _EPIC = 4
 
 
-def _add_task(title: str, status: str = "in_progress", type_id: int = _TASK) -> int:
+def _add_task(title: str, status: str = "underway", type_id: int = _TASK) -> int:
     cur = db.execute(
         "INSERT INTO tasks (project_id, title, status, type_id, phase, created_at) "
         "VALUES (1, ?, ?, ?, 'now', datetime('now'))",
@@ -36,65 +36,65 @@ def _status(task_id: int) -> str:
     return db.query("SELECT status FROM tasks WHERE id = ?", (task_id,))[0]["status"]
 
 
-# ─── verify rejected for research/epic via update_plan (E-1579) ───────────────
+# ─── unverified rejected for research/epic via update_plan (E-1579) ───────────────
 
 
-def test_update_epic_verify_rejected(seeded_project_at_cwd):
+def test_update_epic_unverified_rejected(seeded_project_at_cwd):
     tid = _add_task("Coordinate the foo epic", type_id=_EPIC)
     with pytest.raises(click.ClickException) as exc:
-        task_cmd.update_plan(tid, status="verify")
+        task_cmd.update_plan(tid, status="unverified")
     msg = str(exc.value.message)
-    assert "epic" in msg and "verify" in msg
+    assert "epic" in msg and "unverified" in msg
 
 
-def test_update_research_verify_rejected(seeded_project_at_cwd):
+def test_update_research_unverified_rejected(seeded_project_at_cwd):
     tid = _add_task("Research the cache strategy", type_id=_RESEARCH)
     with pytest.raises(click.ClickException) as exc:
-        task_cmd.update_plan(tid, status="verify")
-    assert "verify" in str(exc.value.message)
+        task_cmd.update_plan(tid, status="unverified")
+    assert "unverified" in str(exc.value.message)
 
 
-# ─── verify rejected for research/epic via add_item (E-1579) ──────────────────
+# ─── unverified rejected for research/epic via add_item (E-1579) ──────────────────
 
 
-def test_add_epic_verify_rejected(seeded_project_at_cwd):
+def test_add_epic_unverified_rejected(seeded_project_at_cwd):
     with pytest.raises(click.ClickException) as exc:
-        task_cmd.add_item("Implement epic", task_type="epic", status="verify")
-    assert "verify" in str(exc.value.message)
+        task_cmd.add_item("Implement epic", task_type="epic", status="unverified")
+    assert "unverified" in str(exc.value.message)
 
 
-def test_add_research_verify_rejected(seeded_project_at_cwd):
+def test_add_research_unverified_rejected(seeded_project_at_cwd):
     with pytest.raises(click.ClickException) as exc:
         task_cmd.add_item(
-            "Research X", task_type="research", status="verify",
+            "Research X", task_type="research", status="unverified",
             justification="standalone investigation",
         )
-    assert "verify" in str(exc.value.message)
+    assert "unverified" in str(exc.value.message)
 
 
-# ─── verify allowed for task/bug (no regression on normal types) ──────────────
+# ─── unverified allowed for task/bug (no regression on normal types) ──────────────
 
 
-def test_update_task_verify_allowed(seeded_project_at_cwd):
+def test_update_task_unverified_allowed(seeded_project_at_cwd):
     tid = _add_task("Implement the widget", type_id=_TASK)
-    task_cmd.update_plan(tid, status="verify")
-    assert _status(tid) == "verify"
+    task_cmd.update_plan(tid, status="unverified")
+    assert _status(tid) == "unverified"
 
 
-def test_update_bug_verify_allowed(seeded_project_at_cwd):
+def test_update_bug_unverified_allowed(seeded_project_at_cwd):
     tid = _add_task("Fix the crash", type_id=_BUG)
-    task_cmd.update_plan(tid, status="verify")
-    assert _status(tid) == "verify"
+    task_cmd.update_plan(tid, status="unverified")
+    assert _status(tid) == "unverified"
 
 
-def test_add_task_verify_allowed(seeded_project_at_cwd):
-    tid = task_cmd.add_item("Implement the widget", task_type="task", status="verify")
-    assert _status(tid) == "verify"
+def test_add_task_unverified_allowed(seeded_project_at_cwd):
+    tid = task_cmd.add_item("Implement the widget", task_type="task", status="unverified")
+    assert _status(tid) == "unverified"
 
 
-def test_add_bug_verify_allowed(seeded_project_at_cwd):
-    tid = task_cmd.add_item("Fix the crash", task_type="bug", status="verify")
-    assert _status(tid) == "verify"
+def test_add_bug_unverified_allowed(seeded_project_at_cwd):
+    tid = task_cmd.add_item("Fix the crash", task_type="bug", status="unverified")
+    assert _status(tid) == "unverified"
 
 
 # ─── E-1577 inheritance: assumed/confirmed still rejected for research/epic ────

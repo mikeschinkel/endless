@@ -15,15 +15,15 @@ import (
 )
 
 func isActive(item data.TaskView) bool {
-	return item.Status != "confirmed" && item.Status != "completed" && item.Status != "verify" && item.Status != "declined" && item.Status != "obsolete"
+	return item.Status != "confirmed" && item.Status != "completed" && item.Status != "unverified" && item.Status != "declined" && item.Status != "obsolete"
 }
 
 // taskTreeSmartOpen returns Alpine.js init for open state.
-// Expands nodes that have in-progress or verify descendants.
+// Expands nodes that have underway or unverified descendants.
 func taskTreeSmartOpen(items []data.TaskView) string {
 	expandFor := make(map[int64]bool)
 	for _, item := range items {
-		if item.Status == "in_progress" || item.Status == "verify" {
+		if item.Status == "underway" || item.Status == "unverified" {
 			expandFor[item.ID] = true
 		}
 	}
@@ -68,12 +68,12 @@ func taskTreeParentMap(items []data.TaskView) string {
 	return joinParts(parts)
 }
 
-// taskTreeIsActive returns JS object literal of IDs that are in-progress
-// or have any in-progress descendant (the whole active branch is marked).
+// taskTreeIsActive returns JS object literal of IDs that are underway
+// or have any underway descendant (the whole active branch is marked).
 func taskTreeIsActive(items []data.TaskView) string {
 	active := make(map[int64]bool)
 	for _, item := range items {
-		if item.Status == "in_progress" {
+		if item.Status == "underway" {
 			active[item.ID] = true
 		}
 	}
@@ -96,20 +96,20 @@ func taskTreeIsActive(items []data.TaskView) string {
 // statusLabel returns a human-readable status label.
 func statusLabel(status string) string {
 	switch status {
-	case "needs_plan":
-		return "Needs plan"
+	case "unplanned":
+		return "Unplanned"
 	case "ready":
 		return "Ready"
-	case "in_progress":
-		return "In progress"
+	case "underway":
+		return "Underway"
 	case "revisit":
 		return "Revisit"
 	case "declined":
 		return "Declined"
 	case "blocked":
 		return "Blocked"
-	case "verify":
-		return "Verify"
+	case "unverified":
+		return "Unverified"
 	case "confirmed":
 		return "Confirmed"
 	case "assumed":
@@ -123,7 +123,7 @@ func statusLabel(status string) string {
 	}
 }
 
-// needsAttention returns verify/blocked items plus their ancestor chain for tree display.
+// needsAttention returns unverified/blocked items plus their ancestor chain for tree display.
 func needsAttention(items []data.TaskView) []data.TaskView {
 	// Index items by ID
 	byID := make(map[int64]data.TaskView)
@@ -131,10 +131,10 @@ func needsAttention(items []data.TaskView) []data.TaskView {
 		byID[item.ID] = item
 	}
 
-	// Find verify/blocked items and collect their ancestor IDs
+	// Find unverified/blocked items and collect their ancestor IDs
 	include := make(map[int64]bool)
 	for _, item := range items {
-		if item.Status == "verify" || item.Status == "blocked" {
+		if item.Status == "unverified" || item.Status == "blocked" {
 			include[item.ID] = true
 			// Walk up ancestor chain
 			cur := item
@@ -184,7 +184,7 @@ func joinParts(parts []string) string {
 func taskTreeChildSummary(items []data.TaskView) string {
 	// Count statuses per parent
 	type counts struct {
-		verify, inProgress, needsPlan, ready, blocked, revisit int
+		unverified, underway, unplanned, ready, blocked, revisit int
 	}
 	parentCounts := make(map[int64]*counts)
 	for _, item := range items {
@@ -199,12 +199,12 @@ func taskTreeChildSummary(items []data.TaskView) string {
 			parentCounts[pid] = c
 		}
 		switch item.Status {
-		case "verify":
-			c.verify++
-		case "in_progress":
-			c.inProgress++
-		case "needs_plan":
-			c.needsPlan++
+		case "unverified":
+			c.unverified++
+		case "underway":
+			c.underway++
+		case "unplanned":
+			c.unplanned++
 		case "ready":
 			c.ready++
 		case "blocked":
@@ -220,11 +220,11 @@ func taskTreeChildSummary(items []data.TaskView) string {
 		seg := func(n int, label string) string {
 			return fmt.Sprintf("<span class=\"text-gray-200\">%d</span> <span class=\"text-gray-400\">%s</span>", n, label)
 		}
-		if c.inProgress > 0 {
-			segs = append(segs, seg(c.inProgress, "active"))
+		if c.underway > 0 {
+			segs = append(segs, seg(c.underway, "active"))
 		}
-		if c.verify > 0 {
-			segs = append(segs, seg(c.verify, "verify"))
+		if c.unverified > 0 {
+			segs = append(segs, seg(c.unverified, "unverified"))
 		}
 		if c.blocked > 0 {
 			segs = append(segs, seg(c.blocked, "blocked"))
@@ -232,8 +232,8 @@ func taskTreeChildSummary(items []data.TaskView) string {
 		if c.ready > 0 {
 			segs = append(segs, seg(c.ready, "ready"))
 		}
-		if c.needsPlan > 0 {
-			segs = append(segs, seg(c.needsPlan, "plan"))
+		if c.unplanned > 0 {
+			segs = append(segs, seg(c.unplanned, "plan"))
 		}
 		if c.revisit > 0 {
 			segs = append(segs, seg(c.revisit, "revisit"))
@@ -326,10 +326,10 @@ func statusChoices() []statusChoice {
 		{"confirmed", "Confirmed", "Verified and done"},
 		{"assumed", "Assumed", "Believed done, verify on use"},
 		{"completed", "Completed", "Findings delivered (audit / research)"},
-		{"verify", "Verify", "Done, awaiting confirmation"},
-		{"in_progress", "In progress", "Actively being worked on"},
+		{"unverified", "Unverified", "Done, awaiting confirmation"},
+		{"underway", "Underway", "Actively being worked on"},
 		{"ready", "Ready", "Planned, ready to implement"},
-		{"needs_plan", "Needs plan", "Design work needed first"},
+		{"unplanned", "Unplanned", "Design work needed first"},
 		{"revisit", "Revisit", "Needs re-evaluation"},
 		{"blocked", "Blocked", "Waiting on something else"},
 		{"declined", "Declined", "Decided not to do"},
@@ -356,11 +356,11 @@ func statusSphereClass(status string) string {
 	switch status {
 	case "ready":
 		return "bg-emerald-400"
-	case "needs_plan":
+	case "unplanned":
 		return "bg-amber-400"
-	case "in_progress":
+	case "underway":
 		return "bg-blue-500"
-	case "verify":
+	case "unverified":
 		return "bg-purple-400"
 	case "blocked":
 		return "bg-rose-500"

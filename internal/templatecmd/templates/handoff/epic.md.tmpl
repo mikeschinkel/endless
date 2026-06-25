@@ -20,9 +20,9 @@ Children: {{.children_state}}.
 
 Pick your operational mode from that breakdown:
 - **Zero children** — drive decomposition: plan-mode + AskUserQuestion + parallel Explore sub-agents.
-- **All `needs_plan`** — planning orchestrator: draft the children's plans inline.
+- **All `unplanned`** — planning orchestrator: draft the children's plans inline.
 - **All `ready`** — dispatcher: fan out via `endless task spawn --bg <child-id>`.
-- **All `in_progress`** — observe; no dispatch.
+- **All `underway`** — observe; no dispatch.
 - **All terminal** — ask whether to reopen.
 - **Mixed** — surface the breakdown and ask the user.
 

@@ -16,7 +16,7 @@ from endless import db, matchers, task_cmd
 from endless.cli import main
 
 
-def _add_task(title: str, status: str = "in_progress", type_id: int = 1) -> int:
+def _add_task(title: str, status: str = "underway", type_id: int = 1) -> int:
     # type_id per task_types seed (internal/schema/schema.sql):
     # 1=task, 2=bug, 3=research, 4=epic.
     cur = db.execute(
@@ -114,7 +114,7 @@ def test_completed_requires_non_whitespace_outcome(seeded_project_at_cwd):
 
 
 def test_completed_idempotent_when_already_completed(seeded_project_at_cwd):
-    tid = _add_task("Audit X", status="in_progress")
+    tid = _add_task("Audit X", status="underway")
     task_cmd.mark_completed_item(tid, outcome="first findings")
     # Second call short-circuits without erroring
     task_cmd.mark_completed_item(tid, outcome="ignored")

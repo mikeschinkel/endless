@@ -2,7 +2,7 @@
 
 Exercises reopen semantics from the E-1555 plan:
   - Reopen flips assumed/confirmed/completed → ready (text present) or
-    needs_plan (text absent).
+    unplanned (text absent).
   - Reopen refuses on declined/obsolete (steers to `task update --status`).
   - Reopen refuses on non-terminal statuses.
   - Reopen releases lingering session bindings to the task.
@@ -80,7 +80,7 @@ def test_reopen_assumed_with_text_promotes_to_ready(project_at_cwd, capsys):
     assert "text: present" in captured.out
 
 
-def test_reopen_confirmed_without_text_falls_to_needs_plan(project_at_cwd, capsys):
+def test_reopen_confirmed_without_text_falls_to_unplanned(project_at_cwd, capsys):
     from endless.task_cmd import reopen_item
 
     _insert_task(
@@ -91,10 +91,10 @@ def test_reopen_confirmed_without_text_falls_to_needs_plan(project_at_cwd, capsy
     reopen_item(1001)
 
     row = db.query("SELECT status FROM tasks WHERE id = ?", (1001,))[0]
-    assert row["status"] == "needs_plan"
+    assert row["status"] == "unplanned"
 
     captured = capsys.readouterr()
-    assert "confirmed -> needs_plan" in captured.out
+    assert "confirmed -> unplanned" in captured.out
     assert "text: absent" in captured.out
 
 
@@ -120,8 +120,8 @@ def test_reopen_completed_epic_promotes_to_ready(project_at_cwd, capsys):
     assert child["status"] == "confirmed"
 
 
-@pytest.mark.parametrize("status", ["ready", "needs_plan", "in_progress",
-                                    "verify", "blocked", "revisit"])
+@pytest.mark.parametrize("status", ["ready", "unplanned", "underway",
+                                    "unverified", "blocked", "revisit"])
 def test_reopen_refuses_non_terminal_status(project_at_cwd, status):
     from endless.task_cmd import reopen_item
 
@@ -219,8 +219,8 @@ def test_spawn_reopen_and_force_mutually_exclusive(project_at_cwd):
     assert "mutually exclusive" in str(exc.value)
 
 
-@pytest.mark.parametrize("status", ["ready", "needs_plan", "in_progress",
-                                    "verify", "blocked", "revisit"])
+@pytest.mark.parametrize("status", ["ready", "unplanned", "underway",
+                                    "unverified", "blocked", "revisit"])
 def test_spawn_reopen_refuses_non_terminal(project_at_cwd, monkeypatch, status):
     """--reopen on non-terminal status errors with 'not terminal'."""
     from endless.task_cmd import spawn_plan
@@ -276,20 +276,20 @@ def test_spawn_no_flag_terminal_target_points_at_reopen(project_at_cwd, monkeypa
     assert "endless task reopen" in msg
 
 
-def test_spawn_no_flag_verify_keeps_force_error(project_at_cwd, monkeypatch):
-    """`task spawn` on verify still points at --force (not --reopen)."""
+def test_spawn_no_flag_unverified_keeps_force_error(project_at_cwd, monkeypatch):
+    """`task spawn` on unverified still points at --force (not --reopen)."""
     from endless.task_cmd import spawn_plan
 
     monkeypatch.setenv("TMUX", "fake")
 
     _insert_task(
         pk=1610, project_id=project_at_cwd["project_id"],
-        status="verify", text="plan",
+        status="unverified", text="plan",
     )
 
     with pytest.raises(click.ClickException) as exc:
         spawn_plan(1610)
     msg = str(exc.value)
-    assert "verify" in msg
+    assert "unverified" in msg
     assert "--force" in msg
     assert "--reopen" not in msg

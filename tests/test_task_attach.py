@@ -45,7 +45,7 @@ def _seed_project_and_task(task_id: int, title: str = "Bg task") -> None:
     )[0]["id"]
     db.execute(
         "INSERT INTO tasks (id, project_id, title, status) VALUES (?, ?, ?, ?)",
-        (task_id, pid, title, "in_progress"),
+        (task_id, pid, title, "underway"),
     )
 
 

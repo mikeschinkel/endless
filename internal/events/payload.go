@@ -258,7 +258,7 @@ type NoteResolvedPayload struct{}
 // "no content for this section."
 //
 // E-1314: collapsed the four task-disposition columns
-// (resolved/pending/blocked/verify) into a single `tasks` column.
+// (resolved/pending/blocked/unverified) into a single `tasks` column.
 // Disposition is derived at render time from each task's `status`
 // attribute, removing redundant information. Added `summary` (structured
 // per-layer implementation breakdown); `active_task_id` is populated by

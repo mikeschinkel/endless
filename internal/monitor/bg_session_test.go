@@ -10,7 +10,7 @@ import (
 func seedTypedTask(t *testing.T, db *sql.DB, id, projectID int64, typeID int64, parentID *int64) {
 	t.Helper()
 	if _, err := db.Exec(
-		"INSERT INTO tasks (id, project_id, parent_id, title, status, type_id) VALUES (?, ?, ?, ?, 'in_progress', ?)",
+		"INSERT INTO tasks (id, project_id, parent_id, title, status, type_id) VALUES (?, ?, ?, ?, 'underway', ?)",
 		id, projectID, parentID, "t", typeID,
 	); err != nil {
 		t.Fatalf("seed typed task id=%d: %v", id, err)
@@ -31,7 +31,7 @@ func bgRow(t *testing.T, db *sql.DB, id int64) (sessionID sql.NullString, shortI
 func TestRecordBgAgentSession_NoEpicAncestor(t *testing.T) {
 	db := withTestDB(t)
 	seedProject(t, db, 1, "p", "/p")
-	seedTask(t, db, 10, 1, "standalone", "in_progress") // default type (task)
+	seedTask(t, db, 10, 1, "standalone", "underway") // default type (task)
 
 	id, err := RecordBgAgentSession(10, "abc123")
 	if err != nil {
@@ -97,7 +97,7 @@ func TestRecordBgAgentSession_DispatchEpicItself(t *testing.T) {
 func TestDecorateBgSession(t *testing.T) {
 	db := withTestDB(t)
 	seedProject(t, db, 1, "p", "/p")
-	seedTask(t, db, 10, 1, "t", "in_progress")
+	seedTask(t, db, 10, 1, "t", "underway")
 	id, err := RecordBgAgentSession(10, "handle1")
 	if err != nil {
 		t.Fatalf("RecordBgAgentSession: %v", err)

@@ -204,7 +204,7 @@ func replayTaskImported(db *sql.DB, evt *Event, result *ProjectResult) error {
 
 	_, err = db.Exec(
 		`INSERT INTO tasks (id, project_id, phase, title, description, status, source_file, sort_order, parent_id, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, 'needs_plan', ?, ?, ?, ?, ?)`,
+		 VALUES (?, ?, ?, ?, ?, 'unplanned', ?, ?, ?, ?, ?)`,
 		taskID, projectID, p.Phase, p.Title, p.Description, p.SourceFile,
 		p.SortOrder, p.ParentID, ts, ts,
 	)
@@ -372,7 +372,7 @@ func replayTaskFieldsUpdated(db *sql.DB, evt *Event, result *ProjectResult) erro
 	if status, ok := p.Fields["status"]; ok {
 		statusStr := fmt.Sprintf("%v", status)
 		terminalStatuses := map[string]bool{
-			"verify": true, "confirmed": true, "assumed": true,
+			"unverified": true, "confirmed": true, "assumed": true,
 			"completed": true, "declined": true, "obsolete": true,
 		}
 		if terminalStatuses[statusStr] {

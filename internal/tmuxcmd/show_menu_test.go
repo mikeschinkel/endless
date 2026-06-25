@@ -23,11 +23,11 @@ func TestBuildMenuTitle_IncludesTaskIDOrFallsBack(t *testing.T) {
 
 // TestBuildMenuItems_NoActiveTaskDimsTaskItems pins the dim-when-no-task
 // rule: items whose actions depend on a current task ("Task Details",
-// "Mark verify") are prefixed with "-" to gray them out, while
+// "Mark unverified") are prefixed with "-" to gray them out, while
 // task-independent items (Refresh, row toggle) are left unchanged.
 func TestBuildMenuItems_NoActiveTaskDimsTaskItems(t *testing.T) {
 	got := buildMenuItems("/usr/local/bin/endless-go", nil)
-	wantDimmed := map[string]bool{"-Task Details": false, "-Mark verify": false}
+	wantDimmed := map[string]bool{"-Task Details": false, "-Mark unverified": false}
 	for _, it := range got {
 		if _, ok := wantDimmed[it.Label]; ok {
 			wantDimmed[it.Label] = true

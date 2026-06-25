@@ -216,7 +216,7 @@ func TestNewWriter_AppendRoundTripsThroughReadAllEvents(t *testing.T) {
 	}
 
 	payload, err := json.Marshal(events.TaskCreatedPayload{
-		Title: "Round-trip", Phase: "now", Status: "needs_plan", Type: "task",
+		Title: "Round-trip", Phase: "now", Status: "unplanned", Type: "task",
 	})
 	if err != nil {
 		t.Fatalf("marshal payload: %v", err)

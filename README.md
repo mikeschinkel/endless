@@ -156,7 +156,7 @@ endless task import --from-claude --project endless
 
 ```bash
 endless task update <id> \
-  [--status needs_plan|ready|in_progress|verify|completed|blocked|revisit] \
+  [--status unplanned|ready|underway|unverified|completed|blocked|revisit] \
   [--title <title>] \
   [--description <text>] \
   [--text <inline> | --text-file <path>] \

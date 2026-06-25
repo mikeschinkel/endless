@@ -263,7 +263,7 @@ func mapLegacyDecisionStatus(legacy string) string {
 	switch legacy {
 	case "confirmed", "completed", "assumed":
 		return "accepted"
-	case "needs_plan", "ready":
+	case "unplanned", "ready":
 		return "proposed"
 	default:
 		return "accepted"

@@ -16,7 +16,7 @@ type Task struct {
 	StableID string
 }
 
-// GetActiveTasks returns in-progress and needs_plan items for a project.
+// GetActiveTasks returns underway and unplanned items for a project.
 func GetActiveTasks(projectID int64) ([]Task, error) {
 	db, err := DB()
 	if err != nil {
@@ -26,8 +26,8 @@ func GetActiveTasks(projectID int64) ([]Task, error) {
 	rows, err := db.Query(
 		"SELECT id, phase, description, status "+
 			"FROM tasks "+
-			"WHERE project_id = ? AND status IN ('in_progress', 'needs_plan', 'ready') "+
-			"ORDER BY CASE status WHEN 'in_progress' THEN 0 ELSE 1 END, sort_order",
+			"WHERE project_id = ? AND status IN ('underway', 'unplanned', 'ready') "+
+			"ORDER BY CASE status WHEN 'underway' THEN 0 ELSE 1 END, sort_order",
 		projectID,
 	)
 	if err != nil {
@@ -63,7 +63,7 @@ func FormatTasks(projectName string, items []Task) string {
 
 	var inProgress, available []Task
 	for _, item := range items {
-		if item.Status == "in_progress" {
+		if item.Status == "underway" {
 			inProgress = append(inProgress, item)
 		} else {
 			available = append(available, item)

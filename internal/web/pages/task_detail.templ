@@ -17,7 +17,7 @@ templ TaskDetail(project *data.DashboardProject, taskItems []data.TaskView) {
 			<h2 class="text-2xl font-bold text-gray-100">All Tasks</h2>
 			if project.TaskTotal > 0 {
 				<p class="text-sm text-gray-500 mt-2">
-					{ fmt.Sprintf("%d tasks total — %d completed, %d in progress, %d remaining",
+					{ fmt.Sprintf("%d tasks total — %d completed, %d underway, %d remaining",
 						project.TaskTotal, project.TaskCompleted, project.TaskInProgress,
 						project.TaskTotal - project.TaskCompleted - project.TaskInProgress) }
 				</p>

@@ -289,10 +289,10 @@ func execTaskCreated(db dbQuerier, evt *Event, emit DerivedEmitter) (*ExecuteRes
 	// Attaching a non-empty plan at creation auto-promotes the task to
 	// `ready`. Mirrors the behavior of task.fields_updated when --text is
 	// supplied. The promotion only fires when status was the default
-	// `needs_plan` — an explicit override (e.g. a tier-1 task created at
+	// `unplanned` — an explicit override (e.g. a tier-1 task created at
 	// `ready` already, or any non-default status) is preserved.
 	status := p.Status
-	if status == "needs_plan" && strings.TrimSpace(p.Text) != "" {
+	if status == "unplanned" && strings.TrimSpace(p.Text) != "" {
 		status = "ready"
 	}
 
@@ -351,7 +351,7 @@ func execTaskImported(db dbQuerier, evt *Event, emit DerivedEmitter) (*ExecuteRe
 
 	_, err = db.Exec(
 		`INSERT INTO tasks (id, project_id, phase, title, description, status, source_file, sort_order, parent_id, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, 'needs_plan', ?, ?, ?, ?, ?)`,
+		 VALUES (?, ?, ?, ?, ?, 'unplanned', ?, ?, ?, ?, ?)`,
 		taskID, projectID, p.Phase, p.Title, p.Description, p.SourceFile,
 		p.SortOrder, p.ParentID, ts, ts,
 	)
@@ -541,7 +541,7 @@ func execTaskFieldsUpdated(db dbQuerier, evt *Event, emit DerivedEmitter) (*Exec
 		}
 	}
 
-	// Attaching a non-empty plan (--text) auto-promotes a `needs_plan`
+	// Attaching a non-empty plan (--text) auto-promotes a `unplanned`
 	// task to `ready`. Only fires when the same update does not already
 	// set status explicitly (caller wins).
 	if textVal, hasText := p.Fields["text"]; hasText {
@@ -551,7 +551,7 @@ func execTaskFieldsUpdated(db dbQuerier, evt *Event, emit DerivedEmitter) (*Exec
 				var currentStatus string
 				if err := db.QueryRow("SELECT status FROM tasks WHERE id = ?",
 					taskID).Scan(&currentStatus); err == nil {
-					if currentStatus == "needs_plan" {
+					if currentStatus == "unplanned" {
 						setClauses = append(setClauses, "status = ?")
 						args = append(args, "ready")
 					}
@@ -563,7 +563,7 @@ func execTaskFieldsUpdated(db dbQuerier, evt *Event, emit DerivedEmitter) (*Exec
 	if status, ok := p.Fields["status"]; ok {
 		statusStr := fmt.Sprintf("%v", status)
 		terminalStatuses := map[string]bool{
-			"verify": true, "confirmed": true, "assumed": true,
+			"unverified": true, "confirmed": true, "assumed": true,
 			"completed": true, "declined": true, "obsolete": true,
 		}
 		if terminalStatuses[statusStr] {

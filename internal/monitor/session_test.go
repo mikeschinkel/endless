@@ -230,8 +230,8 @@ func TestTouchSession_RejectsEmptyPlatform(t *testing.T) {
 func TestGetActiveSession_RoundTripsKindAndEpic(t *testing.T) {
 	db := withTestDB(t)
 	seedProject(t, db, 1, "proj-test-1", "/tmp/proj-test-1")
-	epicID := seedTask(t, db, 100, 1, "epic", "in_progress")
-	childID := seedTask(t, db, 137, 1, "child", "in_progress")
+	epicID := seedTask(t, db, 100, 1, "epic", "underway")
+	childID := seedTask(t, db, 137, 1, "child", "underway")
 
 	// Background agent: process NULL, kind_id=background, epic + child set.
 	if _, err := db.Exec(

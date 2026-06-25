@@ -29,7 +29,7 @@ func TestDecorateBgSession_HookBindsUUID(t *testing.T) {
 	if _, err = db.Exec("INSERT INTO projects (id, name, path) VALUES (1, 'p', '/p')"); err != nil {
 		t.Fatalf("seed project: %v", err)
 	}
-	if _, err = db.Exec("INSERT INTO tasks (id, project_id, title, status) VALUES (10, 1, 't', 'in_progress')"); err != nil {
+	if _, err = db.Exec("INSERT INTO tasks (id, project_id, title, status) VALUES (10, 1, 't', 'underway')"); err != nil {
 		t.Fatalf("seed task: %v", err)
 	}
 

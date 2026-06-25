@@ -13,9 +13,9 @@ import (
 func TestFocusedBgAgent(t *testing.T) {
 	db := withTestDB(t)
 	seedProject(t, db, 1, "proj-test-1", "/tmp/proj-test-1")
-	epicID := seedTask(t, db, 100, 1, "epic", "in_progress")
-	childA := seedTask(t, db, 201, 1, "child-A", "in_progress")
-	childB := seedTask(t, db, 202, 1, "child-B", "in_progress")
+	epicID := seedTask(t, db, 100, 1, "epic", "underway")
+	childA := seedTask(t, db, 201, 1, "child-A", "underway")
+	childB := seedTask(t, db, 202, 1, "child-B", "underway")
 
 	insert := func(sid string, state string, taskID, kindID int64) {
 		t.Helper()
@@ -63,7 +63,7 @@ func TestFocusedBgAgent(t *testing.T) {
 func TestFocusedBgAgent_NoMatch(t *testing.T) {
 	db := withTestDB(t)
 	seedProject(t, db, 1, "proj-test-1", "/tmp/proj-test-1")
-	childA := seedTask(t, db, 201, 1, "child-A", "in_progress")
+	childA := seedTask(t, db, 201, 1, "child-A", "underway")
 
 	if _, err := db.Exec(
 		`INSERT INTO sessions (session_id, project_id, platform, state, active_task_id, kind_id, last_activity)

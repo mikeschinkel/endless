@@ -84,7 +84,7 @@ func taskStatus(t *testing.T, db *sql.DB, id int64) (string, sql.NullString) {
 }
 
 // TestDeriveRule_Table covers the §1 derivation rule. Each case seeds an epic
-// (id 1, starting at needs_plan) with the listed children, recomputes from the
+// (id 1, starting at unplanned) with the listed children, recomputes from the
 // epic, and asserts the resulting epic status.
 func TestDeriveRule_Table(t *testing.T) {
 	epic := int64(1)
@@ -96,20 +96,20 @@ func TestDeriveRule_Table(t *testing.T) {
 		children []string // child statuses
 		want     string
 	}{
-		{"all needs_plan", []string{"needs_plan", "needs_plan"}, "needs_plan"},
-		{"needs_plan + ready", []string{"needs_plan", "ready"}, "ready"},
-		{"any in_progress", []string{"needs_plan", "ready", "in_progress"}, "in_progress"},
+		{"all unplanned", []string{"unplanned", "unplanned"}, "unplanned"},
+		{"unplanned + ready", []string{"unplanned", "ready"}, "ready"},
+		{"any underway", []string{"unplanned", "ready", "underway"}, "underway"},
 		{"all terminal", []string{"confirmed", "completed", "assumed"}, "completed"},
 		{"ready + terminal", []string{"ready", "confirmed"}, "ready"},
-		{"needs_plan + terminal", []string{"needs_plan", "obsolete"}, "needs_plan"},
-		{"in_progress wins over ready", []string{"ready", "in_progress", "confirmed"}, "in_progress"},
+		{"unplanned + terminal", []string{"unplanned", "obsolete"}, "unplanned"},
+		{"underway wins over ready", []string{"ready", "underway", "confirmed"}, "underway"},
 		{"declined+obsolete are terminal", []string{"declined", "obsolete"}, "completed"},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			db := newDerivationDB(t)
-			seedTask(t, db, epic, nil, epicType, "needs_plan")
+			seedTask(t, db, epic, nil, epicType, "unplanned")
 			for i, st := range tc.children {
 				seedTask(t, db, int64(100+i), ptr(epic), taskType, st)
 			}
@@ -134,29 +134,29 @@ func TestDeriveRule_Table(t *testing.T) {
 // TestDerive_ZeroChildrenUnchanged: an epic with no children is left untouched.
 func TestDerive_ZeroChildrenUnchanged(t *testing.T) {
 	db := newDerivationDB(t)
-	seedTask(t, db, 1, nil, int(tasktype.TaskTypeEpic), "in_progress")
+	seedTask(t, db, 1, nil, int(tasktype.TaskTypeEpic), "underway")
 	if err := recomputeEpicStatus(db, nil, 1); err != nil {
 		t.Fatalf("recompute: %v", err)
 	}
-	if got, _ := taskStatus(t, db, 1); got != "in_progress" {
-		t.Fatalf("childless epic status = %q, want unchanged in_progress", got)
+	if got, _ := taskStatus(t, db, 1); got != "underway" {
+		t.Fatalf("childless epic status = %q, want unchanged underway", got)
 	}
 }
 
-// TestDerive_ReopenCase: adding a needs_plan child to a completed epic flips it
-// back to needs_plan (E-1537 §4 reopen consequence falls out of the rule).
+// TestDerive_ReopenCase: adding a unplanned child to a completed epic flips it
+// back to unplanned (E-1537 §4 reopen consequence falls out of the rule).
 func TestDerive_ReopenCase(t *testing.T) {
 	db := newDerivationDB(t)
 	seedTask(t, db, 1, nil, int(tasktype.TaskTypeEpic), "completed")
 	seedTask(t, db, 100, ptr(1), int(tasktype.TaskTypeTask), "confirmed")
-	seedTask(t, db, 101, ptr(1), int(tasktype.TaskTypeTask), "needs_plan")
+	seedTask(t, db, 101, ptr(1), int(tasktype.TaskTypeTask), "unplanned")
 
 	if err := recomputeEpicStatus(db, nil, 1); err != nil {
 		t.Fatalf("recompute: %v", err)
 	}
 	got, completedAt := taskStatus(t, db, 1)
-	if got != "needs_plan" {
-		t.Fatalf("reopened epic status = %q, want needs_plan", got)
+	if got != "unplanned" {
+		t.Fatalf("reopened epic status = %q, want unplanned", got)
 	}
 	if completedAt.Valid {
 		t.Errorf("reopened epic still has completed_at=%q", completedAt.String)
@@ -170,7 +170,7 @@ func TestDerive_StickyOverrideBlocks(t *testing.T) {
 		t.Run(sticky, func(t *testing.T) {
 			db := newDerivationDB(t)
 			seedTask(t, db, 1, nil, int(tasktype.TaskTypeEpic), sticky)
-			seedTask(t, db, 100, ptr(1), int(tasktype.TaskTypeTask), "in_progress")
+			seedTask(t, db, 100, ptr(1), int(tasktype.TaskTypeTask), "underway")
 			if err := recomputeEpicStatus(db, nil, 1); err != nil {
 				t.Fatalf("recompute: %v", err)
 			}
@@ -191,20 +191,20 @@ func TestDerive_NestedPropagation(t *testing.T) {
 	seedTask(t, db, 2, ptr(1), int(tasktype.TaskTypeEpic), "completed")
 	seedTask(t, db, 100, ptr(2), int(tasktype.TaskTypeTask), "confirmed")
 
-	// Child flips to in_progress; recompute from its parent (2), as
+	// Child flips to underway; recompute from its parent (2), as
 	// execTaskStatusChanged does.
-	if _, err := db.Exec("UPDATE tasks SET status = 'in_progress' WHERE id = 100"); err != nil {
+	if _, err := db.Exec("UPDATE tasks SET status = 'underway' WHERE id = 100"); err != nil {
 		t.Fatalf("flip child: %v", err)
 	}
 	if err := recomputeEpicStatus(db, nil, 2); err != nil {
 		t.Fatalf("recompute: %v", err)
 	}
 
-	if got, _ := taskStatus(t, db, 2); got != "in_progress" {
-		t.Fatalf("parent epic status = %q, want in_progress", got)
+	if got, _ := taskStatus(t, db, 2); got != "underway" {
+		t.Fatalf("parent epic status = %q, want underway", got)
 	}
-	if got, _ := taskStatus(t, db, 1); got != "in_progress" {
-		t.Fatalf("grandparent epic status = %q, want in_progress (propagated)", got)
+	if got, _ := taskStatus(t, db, 1); got != "underway" {
+		t.Fatalf("grandparent epic status = %q, want underway (propagated)", got)
 	}
 }
 
@@ -212,8 +212,8 @@ func TestDerive_NestedPropagation(t *testing.T) {
 // two epics must not loop forever — the depth cap + seen set terminate it.
 func TestDerive_CycleHitsDepthCapWithoutPanic(t *testing.T) {
 	db := newDerivationDB(t)
-	seedTask(t, db, 1, nil, int(tasktype.TaskTypeEpic), "needs_plan")
-	seedTask(t, db, 2, ptr(1), int(tasktype.TaskTypeEpic), "needs_plan")
+	seedTask(t, db, 1, nil, int(tasktype.TaskTypeEpic), "unplanned")
+	seedTask(t, db, 2, ptr(1), int(tasktype.TaskTypeEpic), "unplanned")
 	// Close the loop: 1's parent becomes 2.
 	if _, err := db.Exec("UPDATE tasks SET parent_id = 2 WHERE id = 1"); err != nil {
 		t.Fatalf("create cycle: %v", err)
@@ -228,8 +228,8 @@ func TestDerive_CycleHitsDepthCapWithoutPanic(t *testing.T) {
 // further mutation and invokes the emitter zero times.
 func TestDerive_Idempotent(t *testing.T) {
 	db := newDerivationDB(t)
-	seedTask(t, db, 1, nil, int(tasktype.TaskTypeEpic), "needs_plan")
-	seedTask(t, db, 100, ptr(1), int(tasktype.TaskTypeTask), "in_progress")
+	seedTask(t, db, 1, nil, int(tasktype.TaskTypeEpic), "unplanned")
+	seedTask(t, db, 100, ptr(1), int(tasktype.TaskTypeTask), "underway")
 
 	var emits int
 	emit := func(epicID int64, oldStatus, newStatus string) error { emits++; return nil }
@@ -240,8 +240,8 @@ func TestDerive_Idempotent(t *testing.T) {
 	if emits != 1 {
 		t.Fatalf("first recompute emits = %d, want 1", emits)
 	}
-	if got, _ := taskStatus(t, db, 1); got != "in_progress" {
-		t.Fatalf("epic status = %q, want in_progress", got)
+	if got, _ := taskStatus(t, db, 1); got != "underway" {
+		t.Fatalf("epic status = %q, want underway", got)
 	}
 
 	if err := recomputeEpicStatus(db, emit, 1); err != nil {
@@ -256,7 +256,7 @@ func TestDerive_Idempotent(t *testing.T) {
 // with the epic id and the old/new status.
 func TestDerive_EmitterAttribution(t *testing.T) {
 	db := newDerivationDB(t)
-	seedTask(t, db, 1, nil, int(tasktype.TaskTypeEpic), "needs_plan")
+	seedTask(t, db, 1, nil, int(tasktype.TaskTypeEpic), "unplanned")
 	seedTask(t, db, 100, ptr(1), int(tasktype.TaskTypeTask), "confirmed")
 
 	type call struct {
@@ -276,8 +276,8 @@ func TestDerive_EmitterAttribution(t *testing.T) {
 		t.Fatalf("emitter calls = %d, want 1", len(calls))
 	}
 	got := calls[0]
-	if got.epicID != 1 || got.oldS != "needs_plan" || got.newS != "completed" {
-		t.Fatalf("emit call = %+v, want {1 needs_plan completed}", got)
+	if got.epicID != 1 || got.oldS != "unplanned" || got.newS != "completed" {
+		t.Fatalf("emit call = %+v, want {1 unplanned completed}", got)
 	}
 }
 
@@ -286,7 +286,7 @@ func TestDerive_EmitterAttribution(t *testing.T) {
 // derivation logic.
 func TestReplayEpicStatusDerived(t *testing.T) {
 	db := newDerivationDB(t)
-	seedTask(t, db, 1, nil, int(tasktype.TaskTypeEpic), "in_progress")
+	seedTask(t, db, 1, nil, int(tasktype.TaskTypeEpic), "underway")
 
 	evt := &Event{
 		V:       Version,
@@ -295,7 +295,7 @@ func TestReplayEpicStatusDerived(t *testing.T) {
 		Project: "test",
 		Entity:  EntityRef{Type: EntityTask, ID: "1"},
 		Actor:   Actor{Kind: ActorSystem, ID: "epic-derivation"},
-		Payload: mustJSON(t, EpicStatusDerivedPayload{TaskID: 1, OldStatus: "in_progress", NewStatus: "completed"}),
+		Payload: mustJSON(t, EpicStatusDerivedPayload{TaskID: 1, OldStatus: "underway", NewStatus: "completed"}),
 	}
 	res := &ProjectResult{}
 	if err := replayEpicStatusDerived(db, evt, res); err != nil {

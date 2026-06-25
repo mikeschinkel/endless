@@ -30,7 +30,7 @@ def _seed_project(name: str = "test") -> int:
 def _add_task(project_id: int, title: str = "T", task_type: str = "task") -> int:
     cur = db.execute(
         "INSERT INTO tasks (project_id, title, status, type_id, phase, created_at) "
-        "VALUES (?, ?, 'needs_plan', (SELECT id FROM task_types WHERE slug = ?), 'now', datetime('now'))",
+        "VALUES (?, ?, 'unplanned', (SELECT id FROM task_types WHERE slug = ?), 'now', datetime('now'))",
         (project_id, title, task_type),
     )
     return cur.lastrowid
@@ -122,7 +122,7 @@ def test_epic_show_includes_children_by_default(isolated_env):
     eid = _add_task(pid, "Parent epic", task_type="epic")
     db.execute(
         "INSERT INTO tasks (project_id, title, status, type_id, phase, parent_id, created_at) "
-        "VALUES (?, 'Child task', 'needs_plan', (SELECT id FROM task_types WHERE slug='task'), 'now', ?, datetime('now'))",
+        "VALUES (?, 'Child task', 'unplanned', (SELECT id FROM task_types WHERE slug='task'), 'now', ?, datetime('now'))",
         (pid, eid),
     )
     runner = CliRunner()
@@ -136,7 +136,7 @@ def test_epic_show_no_children_hides_them(isolated_env):
     eid = _add_task(pid, "Parent epic", task_type="epic")
     db.execute(
         "INSERT INTO tasks (project_id, title, status, type_id, phase, parent_id, created_at) "
-        "VALUES (?, 'Child task', 'needs_plan', (SELECT id FROM task_types WHERE slug='task'), 'now', ?, datetime('now'))",
+        "VALUES (?, 'Child task', 'unplanned', (SELECT id FROM task_types WHERE slug='task'), 'now', ?, datetime('now'))",
         (pid, eid),
     )
     runner = CliRunner()
