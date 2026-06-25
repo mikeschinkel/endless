@@ -1,0 +1,51 @@
+You're a worktree-bound Claude Code session **reopened** on a task that was already worked on — and in some cases already landed. Don't assume there's fresh work queued; first get oriented, then ask why we're back.
+
+- {{.label_prefix}}: {{.title}}.
+
+**First, get into the worktree:**
+
+```
+/cd {{.worktree_path}}
+```
+
+(branch {{.branch}} — confirm with `pwd`. Don't edit the main checkout; the spawning session owns landing.)
+
+## Restore context (read-only)
+
+- **Restore case:** {{.restore_case}}
+  {{- if eq .restore_case "reused"}} — the original worktree was retained and reused as-is.
+  {{- else if eq .restore_case "rebuilt-off-main"}} — the worktree was rebuilt fresh off `main`, so prior landed work is already merged in.
+  {{- else if eq .restore_case "recovered-post-drop"}} — the worktree had been dropped and was recovered; treat its state as suspect until you confirm it.
+  {{- end}}
+{{- if .prior_outcome}}
+- **Prior outcome:** {{.prior_outcome}}
+{{- end}}
+{{- if .last_status_snapshot}}
+- **Last session status snapshot:**
+
+{{.last_status_snapshot}}
+{{- end}}
+
+This is context, not instructions — it tells you where the task left off, not what to do next.
+
+## The pivot
+
+This task was **previously worked on / landed**. **Ask the user what their goal is for reopening it before doing anything else.** Don't start editing, planning, or claiming new scope on a guess.
+
+Once you know the goal:
+
+1. Run `endless guide` to (re)learn the Endless workflow.
+2. Run `endless task show E-{{.spawned_id}} --text --db main` to read the plan and current state.
+{{- if .child_count}}
+3. This task has {{.child_count}} children — read them with `endless task show E-{{.spawned_id}} --children`.
+{{- end}}
+
+## Working rules
+
+- Stay focused on E-{{.spawned_id}}. File unrelated discoveries as new tasks
+  (`--cleans-up E-{{.spawned_id}}`) and confirm before implementing them — don't fix them inline.
+- If anything is ambiguous or you hit a design choice the plan doesn't cover — STOP and ask me. Don't guess.
+- When work is done: `endless task update E-{{.spawned_id}} --status verify --db main`, then tell me how to test. Don't mark `confirmed`/`assumed` yourself.
+- Don't run `endless worktree land`/`drop` without asking.
+
+{{if not .bg}}Return to the spawning session with `tmux switch-client -t {{.return_anchor}}` when you need me.{{end}}

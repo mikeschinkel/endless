@@ -3763,7 +3763,11 @@ def render_handoff(spawned_id: int, title: str,
                    branch: str | None = None,
                    task_type: str | None = None,
                    parent_id: int | None = None,
-                   bg: bool = False) -> str:
+                   bg: bool = False,
+                   respawn: bool = False,
+                   restore_case: str | None = None,
+                   prior_outcome: str | None = None,
+                   last_status_snapshot: str | None = None) -> str:
     """Render the spawn handoff for a task by invoking `endless-go template render`.
 
     The handoff is mostly boilerplate (orient, read the guide + plan, default
@@ -3784,6 +3788,16 @@ def render_handoff(spawned_id: int, title: str,
     `tmux switch-client`/`tmux move-window` return lines and instead tells the
     agent to do the work, flip the task to `verify`, and stop (the user attaches
     later via `claude attach <short_id>`).
+
+    `respawn=True` (E-1647) renders the flat, type-agnostic `handoff/respawn`
+    template used when a task is *reopened*. The four per-type templates are
+    initial-spawn instructions that drive toward an end-state; a reopened
+    session has no defined end-state yet, so it gets a distinct interrogative
+    handoff. The reopen path (E-1645) supplies three extra vars carried as
+    read-only restore context: `restore_case`
+    (`reused` | `rebuilt-off-main` | `recovered-post-drop`), the task's
+    `prior_outcome`, and `last_status_snapshot` (rendered markdown of the
+    latest `session_statuses` row). Any may be empty.
     """
     import json
     import subprocess
@@ -3808,9 +3822,14 @@ def render_handoff(spawned_id: int, title: str,
         "children_state": _children_state(spawned_id),
         "bg": bg,
     }
+    if respawn:
+        vars_payload["restore_case"] = restore_case or "reused"
+        vars_payload["prior_outcome"] = prior_outcome or ""
+        vars_payload["last_status_snapshot"] = last_status_snapshot or ""
+    template_name = "handoff/respawn" if respawn else f"handoff/{effective_type}"
     binary = _resolve_endless_go()
     result = subprocess.run(
-        [binary, "template", "render", f"handoff/{effective_type}"],
+        [binary, "template", "render", template_name],
         input=json.dumps(vars_payload),
         capture_output=True, text=True, check=False,
     )
