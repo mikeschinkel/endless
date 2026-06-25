@@ -217,7 +217,23 @@ land task_id="":
             done
         fi
     fi
-    endless worktree land "$tid"
+    # E-1660: the land's record-landing step (the task.landed event emitted
+    # inside `endless worktree land`) writes its event with endless-go, which
+    # runs tasktype.VerifyIntegrity on every DB open and fails closed when a
+    # task_types row has no matching enum constant. The apply-change loop above
+    # already advanced main's DB with this branch's new mirrored-enum rows
+    # (e.g. a new task_types value) — but `just build` below has not run yet, so
+    # the GLOBAL endless-go (main's binary, the one `shutil.which` resolves
+    # under --db main) still lacks the new constant and trips the gate. Prepend
+    # the worktree's bin — exactly as apply-change does — so the land's
+    # endless-go shellouts use the freshly-built worktree binary, whose enum
+    # matches the rows just applied. Guarded on the binary existing so a land
+    # after the worktree was reaped still falls back to the global.
+    if [ -x "$wt/bin/endless-go" ]; then
+        PATH="$wt/bin:$PATH" endless worktree land "$tid"
+    else
+        endless worktree land "$tid"
+    fi
     echo "→ Refreshing binaries (just build)"
     cd "$main_root"
     just build
