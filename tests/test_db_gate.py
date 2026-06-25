@@ -101,6 +101,129 @@ def test_apply_db_choice_unknown_value(monkeypatch):
         config.apply_db_choice("worktree")  # the old value is no longer accepted
 
 
+# --- always-main default for land-flow commands (E-1628) -----------------
+
+
+def test_default_db_to_main_pins_main_when_unset(tmp_path, monkeypatch):
+    """From a sandbox-routed worktree with no explicit --db, an always-main
+    operation pins the real DB so reads and downstream endless-go shellouts hit
+    main, not the sandbox."""
+    wt = _make_worktree(tmp_path, sandbox=True, task_id="1628")
+    monkeypatch.chdir(wt)
+    monkeypatch.setattr(config, "RESOLVED_CONFIG_DIR", None)
+    config.default_db_to_main()
+    assert config.RESOLVED_CONFIG_DIR == config.main_config_dir()
+    assert config.go_db_context_args() == [
+        "--config-dir",
+        str(config.main_config_dir()),
+    ]
+
+
+def test_default_db_to_main_honors_explicit_sandbox(tmp_path, monkeypatch):
+    """An explicit --db sandbox (RESOLVED_CONFIG_DIR already set) is NOT
+    overridden by the always-main default."""
+    wt = _make_worktree(tmp_path, sandbox=True, task_id="1628")
+    monkeypatch.chdir(wt)
+    sandbox = config.sandbox_config_dir("e-1628")
+    monkeypatch.setattr(config, "RESOLVED_CONFIG_DIR", sandbox)
+    config.default_db_to_main()
+    assert config.RESOLVED_CONFIG_DIR == sandbox  # unchanged
+
+
+def test_land_worktree_pins_main_from_sandbox(tmp_path, monkeypatch):
+    """`endless worktree land` (no --db) pins main before doing any work, even
+    when cwd routing would otherwise resolve to the sandbox. Reproduces the
+    E-1542 mis-target: without the pin the task.landed emit hits the sandbox."""
+    from endless import worktree_cmd
+
+    wt = _make_worktree(tmp_path, sandbox=True, task_id="1628")
+    monkeypatch.chdir(wt)
+    monkeypatch.setattr(config, "RESOLVED_CONFIG_DIR", None)
+
+    seen = {}
+
+    def _spy_project_root():
+        # Runs immediately after land_worktree's default_db_to_main(); capture
+        # the pinned context, then short-circuit the heavy git work.
+        seen["resolved"] = config.RESOLVED_CONFIG_DIR
+        raise click.ClickException("stop after pin")
+
+    monkeypatch.setattr(worktree_cmd, "_project_root", _spy_project_root)
+    result = CliRunner().invoke(main, ["worktree", "land", "E-1628"])
+    assert result.exit_code != 0  # stopped by the spy
+    assert seen["resolved"] == config.main_config_dir()
+
+
+def test_db_apply_change_pins_main_from_sandbox(tmp_path, monkeypatch):
+    """`endless db apply-change` (no --db) pins main so the _schema_version
+    marker lands in the real DB, not the sandbox."""
+    from endless import event_bridge
+
+    wt = _make_worktree(tmp_path, sandbox=True, task_id="1628")
+    monkeypatch.chdir(wt)
+    monkeypatch.setattr(config, "RESOLVED_CONFIG_DIR", None)
+
+    change_file = tmp_path / "0001-change.sql"
+    change_file.write_text("-- noop\n")
+
+    seen = {}
+
+    def _spy_apply_change(path):
+        seen["resolved"] = config.RESOLVED_CONFIG_DIR
+        return {"name": "0001-change", "status": "applied"}
+
+    monkeypatch.setattr(event_bridge, "apply_change", _spy_apply_change)
+    result = CliRunner().invoke(main, ["db", "apply-change", str(change_file)])
+    assert result.exit_code == 0, result.output
+    assert seen["resolved"] == config.main_config_dir()
+
+
+def test_db_apply_change_honors_explicit_sandbox(tmp_path, monkeypatch):
+    """An explicit --db sandbox is not overridden by the always-main default."""
+    from endless import event_bridge
+
+    wt = _make_worktree(tmp_path, sandbox=True, task_id="1628")
+    monkeypatch.chdir(wt)
+    monkeypatch.setattr(config, "RESOLVED_CONFIG_DIR", None)
+
+    change_file = tmp_path / "0001-change.sql"
+    change_file.write_text("-- noop\n")
+
+    seen = {}
+
+    def _spy_apply_change(path):
+        seen["resolved"] = config.RESOLVED_CONFIG_DIR
+        return {"name": "0001-change", "status": "applied"}
+
+    monkeypatch.setattr(event_bridge, "apply_change", _spy_apply_change)
+    result = CliRunner().invoke(
+        main, ["db", "apply-change", str(change_file), "--db", "sandbox"]
+    )
+    assert result.exit_code == 0, result.output
+    assert seen["resolved"] == config.sandbox_config_dir("e-1628")
+
+
+def test_db_backup_pins_main_from_sandbox(tmp_path, monkeypatch):
+    """`endless db backup` (no --db) pins main so the backup is taken of the
+    real DB, not the sandbox."""
+    from endless import event_bridge
+
+    wt = _make_worktree(tmp_path, sandbox=True, task_id="1628")
+    monkeypatch.chdir(wt)
+    monkeypatch.setattr(config, "RESOLVED_CONFIG_DIR", None)
+
+    seen = {}
+
+    def _spy_backup_db():
+        seen["resolved"] = config.RESOLVED_CONFIG_DIR
+        return {}
+
+    monkeypatch.setattr(event_bridge, "backup_db", _spy_backup_db)
+    result = CliRunner().invoke(main, ["db", "backup"])
+    assert result.exit_code == 0, result.output
+    assert seen["resolved"] == config.main_config_dir()
+
+
 # --- the gate ------------------------------------------------------------
 
 

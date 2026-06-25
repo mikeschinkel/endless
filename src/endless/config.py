@@ -278,6 +278,27 @@ def apply_db_choice(choice: str):
         )
 
 
+def default_db_to_main():
+    """Pin the real/main DB for an always-main operation when the caller gave
+    no explicit --db.
+
+    The Python analogue of the Go-side PinMainDB (E-1450/E-1429) used by
+    hook/channel/tmux: some operations are inherently real/main regardless of
+    caller routing — worktree land, schema apply-change, db backup. When run
+    from a self-dev session whose XDG_CONFIG_HOME points at a per-worktree
+    sandbox, the default config dir resolves to that sandbox, mis-targeting the
+    landing (the landed task lives only in the real DB; the task_landings FK
+    fails). Calling this at such a command's entry pins main_config_dir() so
+    Python reads use the real DB and go_db_context_args() threads
+    --config-dir <real> to every downstream endless-go shellout.
+
+    An explicit --db main|sandbox is honored: it sets RESOLVED_CONFIG_DIR via
+    DBAwareGroup before the command body runs, so this is a no-op then.
+    """
+    if RESOLVED_CONFIG_DIR is None:
+        apply_db_choice("main")
+
+
 def require_db_context():
     """Enforce the self-dev worktree gate at a DB-access choke point.
 

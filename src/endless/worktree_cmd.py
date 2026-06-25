@@ -1321,6 +1321,15 @@ def land_worktree(task_id: str, dry_run: bool) -> None:
     commit is supported: each successful land appends a new row to
     task_landings; the dir and branch are reused.
     """
+    # Landing is an always-main operation: the landed task lives only in the
+    # real DB, schema changes belong to it, and the merge is into main. When run
+    # from a self-dev session whose XDG points at the worktree sandbox and no
+    # explicit --db was given, pin main so the task.landed emit (and every
+    # downstream endless-go shellout) targets the real DB rather than the
+    # sandbox (which lacks the task row, failing the task_landings FK). E-1628.
+    from endless import config
+    config.default_db_to_main()
+
     canonical = _normalize_task_id(task_id)
     main_root = _project_root()
     rows = _enriched_list(main_root)
