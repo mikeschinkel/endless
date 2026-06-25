@@ -1,0 +1,1 @@
+{"v":1,"ts":"5Y0TVVK28TG14VT","kind":"task.created","project":"endless","entity":{"type":"task","id":"1"},"actor":{"kind":"cli","id":"mikeschinkel@m4macmini.local","session_id":"2"},"payload":{"title":"Build status-row verify fixture e1619v-1782429045-5038","description":"","phase":"now","status":"needs_plan","type":"task"}}
