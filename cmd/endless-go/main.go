@@ -11,7 +11,7 @@
 //	endless-go sandbox       run|enter|init|bind|list|prune|destroy
 //	endless-go serve         [port]
 //	endless-go tmux          apply|status-line|active-id|show-menu
-//	endless-go session-query list-live|task-text
+//	endless-go session-query list-live|task-text|reopen-context
 //	endless-go template      render
 //
 // Per-subcommand DB-context contract (must run BEFORE the subcommand
@@ -121,6 +121,6 @@ func usage(w *os.File) {
 	fmt.Fprintln(w, "  sandbox        run|enter|init|bind|list|prune|destroy")
 	fmt.Fprintln(w, "  serve          [port]  (web dashboard)")
 	fmt.Fprintln(w, "  tmux           apply|status-line|active-id|show-menu")
-	fmt.Fprintln(w, "  session-query  list-live|task-text")
+	fmt.Fprintln(w, "  session-query  list-live|task-text|reopen-context")
 	fmt.Fprintln(w, "  template       render")
 }

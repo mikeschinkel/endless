@@ -1587,7 +1587,18 @@ def task_handoff(item_id):
                    "background agent (via `claude attach`). Does NOT dispatch; "
                    "requires an existing --bg agent. Mutually exclusive with "
                    "--bg. Detaching leaves the agent running.")
-def task_spawn(item_id, project, no_plan, worktree, force, reopen, bg, attach):
+@click.option("--new-session", is_flag=True,
+              help="With --reopen: start a fresh session instead of inheriting "
+                   "the most-applicable prior ended session's restore context. "
+                   "The worktree is still reused if present (rebuilt off main "
+                   "only if reaped). Does NOT bypass a live owner.")
+@click.option("--print-decision", is_flag=True,
+              help="With --reopen: print the resolved reopen decision (navigate "
+                   "vs spawn, restore_case, inherit-session vs new-session, "
+                   "worktree path) and exit. Read-only — no status flip, no "
+                   "worktree creation, no launch.")
+def task_spawn(item_id, project, no_plan, worktree, force, reopen, bg, attach,
+               new_session, print_decision):
     """Spawn Claude working on a task — a tmux window, or headless with --bg.
 
     Pastes the handoff generated from the template (no stored prompt — E-1469).
@@ -1595,7 +1606,8 @@ def task_spawn(item_id, project, no_plan, worktree, force, reopen, bg, attach):
     from endless.task_cmd import spawn_plan
     spawn_plan(item_id, project_name=project, no_plan=no_plan,
                worktree=worktree, force=force, reopen=reopen, bg=bg,
-               attach=attach)
+               attach=attach, new_session=new_session,
+               print_decision=print_decision)
 
 
 @task_cmd.command("attach")

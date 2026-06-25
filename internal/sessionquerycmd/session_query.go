@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/mikeschinkel/endless/internal/events"
 	"github.com/mikeschinkel/endless/internal/gatekind"
 	"github.com/mikeschinkel/endless/internal/monitor"
 	_ "modernc.org/sqlite"
@@ -57,6 +58,11 @@ func Run(args []string) {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
+	case "reopen-context":
+		if err := runReopenContext(args[1:]); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
 	case "-h", "--help", "help":
 		usage()
 	default:
@@ -80,6 +86,29 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "                                    JSON {scope, epic_id, agents} of working bg agents (E-1621)")
 	fmt.Fprintln(os.Stderr, "  gate-clear --session-id <id> --kind <slug> --cleared-by <reason>")
 	fmt.Fprintln(os.Stderr, "                                    clear the session's open gate of the kind; prints rows cleared")
+	fmt.Fprintln(os.Stderr, "  reopen-context --task-id <id>     JSON {inherited_session_id, prior_outcome, last_status_snapshot} for a reopen")
+}
+
+// runReopenContext prints the read-only restore context for `task spawn
+// --reopen` as JSON: the most-applicable prior ended session to inherit (0 if
+// none), the task's outcome, and the inherited session's latest status snapshot
+// rendered as markdown. The Python reopen path feeds these into the respawn
+// handoff without a Python DB read (E-894 / E-1486). The ghost-skip pick lives
+// in events.ResolveReopenContext.
+func runReopenContext(args []string) error {
+	fs := flag.NewFlagSet("reopen-context", flag.ContinueOnError)
+	taskID := fs.Int64("task-id", 0, "task id being reopened")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *taskID == 0 {
+		return fmt.Errorf("--task-id is required")
+	}
+	ctx, err := events.ResolveReopenContext(*taskID)
+	if err != nil {
+		return fmt.Errorf("reopen-context for E-%d: %w", *taskID, err)
+	}
+	return json.NewEncoder(os.Stdout).Encode(ctx)
 }
 
 // runGateClear closes the session's open gate of the given kind, recording the
@@ -225,8 +254,10 @@ func runListLive(args []string) error {
 //
 // --session-id is the Claude harness session UUID (required).
 // --project-root is the cwd-resolved project path (required); the
-//   helper passes it through monitor.ProjectIDForPath which auto-registers
-//   unknown paths.
+//
+//	helper passes it through monitor.ProjectIDForPath which auto-registers
+//	unknown paths.
+//
 // --process is the TMUX_PANE value (optional; absent outside tmux).
 //
 // Output is the integer id followed by a newline. Exit 0 on success.
