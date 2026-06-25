@@ -120,6 +120,26 @@ Keep large standalone deliverables — a full research report or decision docume
 
 > This file-alongside convention is interim and expected to evolve toward per-task directories and typed content storage; the field roles above (`text` = request, `outcome` = deliverable) are the stable part.
 
+### Brainstorm tasks (`--type brainstorm`)
+
+A `brainstorm` task is the requester-led sibling of `research`. They produce the same *shape* of artifact — information, not code — but run on opposite information flow:
+
+- **`research`** — information flows *inward*: the agent goes to external sources, gathers evidence, and synthesizes it out to the requester. Agent-led.
+- **`brainstorm`** — information flows *outward from the requester*: their head is the primary source. The agent interviews, challenges, reflects, and captures. Requester-led, interview-mode.
+
+**The behavioral contract — a session working a brainstorm task must:**
+
+> Open by interviewing the requester. Ask questions first. Do **not** research autonomously or jump to a plan. Surface tensions, offer options, challenge the thinking, and capture ideas as they emerge. Conclude with a synthesis in `outcome` and spawn the follow-up tasks/decisions it produced.
+
+Field model (mirrors the research model):
+
+| Field     | On a brainstorm task holds…                                                                                   |
+|-----------|--------------------------------------------------------------------------------------------------------------|
+| `text`    | The **seed / framing** — the spark, written up front: "I want to explore X; here's what's nagging me." A starting point, not a script. |
+| `outcome` | The **synthesis** of what was landed on, plus `cleans_up` / `implements` links to the decision / research / do-tasks it spawned. Set at completion; a brainstorm's only terminal status is `completed` (with `--outcome`). |
+
+**Ungated.** Unlike `research`, `brainstorm` requires no `--justification` — frictionless ideation is the point. A brainstorm is typically a *precursor* that resolves into an `endless decision add` and/or new tasks linked from its outcome. Because the type itself signals an information deliverable, `completed` does not require a `completable`-marked title verb (the same exemption epics get).
+
 ---
 
 ## Updating tasks

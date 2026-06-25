@@ -12,10 +12,11 @@ import (
 
 func TestParse_AcceptsKnownSlugs(t *testing.T) {
 	cases := map[string]tasktype.TaskType{
-		"task":     tasktype.TaskTypeTask,
-		"bug":      tasktype.TaskTypeBug,
-		"research": tasktype.TaskTypeResearch,
-		"epic":     tasktype.TaskTypeEpic,
+		"task":       tasktype.TaskTypeTask,
+		"bug":        tasktype.TaskTypeBug,
+		"research":   tasktype.TaskTypeResearch,
+		"epic":       tasktype.TaskTypeEpic,
+		"brainstorm": tasktype.TaskTypeBrainstorm,
 	}
 	for slug, want := range cases {
 		got, err := tasktype.Parse(slug)
@@ -58,8 +59,8 @@ func TestTaskType_StringRoundTrip(t *testing.T) {
 
 func TestAll_HasExpectedCount(t *testing.T) {
 	all := tasktype.All()
-	if len(all) != 4 {
-		t.Errorf("All() returned %d, want 4", len(all))
+	if len(all) != 5 {
+		t.Errorf("All() returned %d, want 5", len(all))
 	}
 }
 
@@ -80,7 +81,8 @@ func seedAll(t *testing.T, db *sql.DB) {
 	t.Helper()
 	_, err := db.Exec(`INSERT INTO task_types (id, slug, label) VALUES
 		(1, 'task', 'Task'), (2, 'bug', 'Bug'),
-		(3, 'research', 'Research'), (4, 'epic', 'Epic')`)
+		(3, 'research', 'Research'), (4, 'epic', 'Epic'),
+		(5, 'brainstorm', 'Brainstorm')`)
 	if err != nil {
 		t.Fatalf("seed: %v", err)
 	}

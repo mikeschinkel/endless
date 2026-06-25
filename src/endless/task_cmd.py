@@ -1979,6 +1979,12 @@ def _require_completable_verb_for_completed(
         return
     if task_type == "epic":
         return
+    if task_type == "brainstorm":
+        # E-1657/ED-1516: like epics (ED-1511), the brainstorm *type* already
+        # signals an information deliverable (the synthesis), so requiring a
+        # separately `completable`-marked title verb on top is redundant — and
+        # the auto-registered "Brainstorm" verb does not carry the flag.
+        return
     from endless.matchers import is_completable_verb
     verb = _lead_verb(title)
     if not is_completable_verb(verb):
@@ -2016,8 +2022,12 @@ def _require_outcome_for_completed(status: str | None, outcome: str | None):
 # type→status policy gate (ED-1506 keeps the Go executor mechanical); E-1543's
 # epic-only super-gate will later extend the 'epic' entry.
 _TYPE_FORBIDDEN_STATUSES = {
-    "research": ("unverified", "assumed", "confirmed"),
-    "epic":     ("unverified", "assumed", "confirmed"),
+    "research":   ("unverified", "assumed", "confirmed"),
+    "epic":       ("unverified", "assumed", "confirmed"),
+    # E-1657/ED-1516: brainstorm's deliverable is the synthesis (information,
+    # not testable behavior), so like research it terminates via 'completed
+    # --outcome' and never goes through user-testable verification.
+    "brainstorm": ("unverified", "assumed", "confirmed"),
 }
 
 
@@ -3343,7 +3353,7 @@ def update_plan(
         _add("outcome", outcome)
 
     if task_type is not None:
-        valid_types = ("task", "bug", "research", "epic")
+        valid_types = ("task", "bug", "research", "epic", "brainstorm")
         if task_type not in valid_types:
             raise click.ClickException(
                 f"Invalid task type {task_type!r}. "
@@ -3697,7 +3707,7 @@ def _branch_for_worktree(wt_path) -> str | None:
         return None
 
 
-_HANDOFF_TYPES = frozenset({"task", "bug", "research", "epic"})
+_HANDOFF_TYPES = frozenset({"task", "bug", "research", "epic", "brainstorm"})
 
 # Terminal statuses collapse into a single "terminal" bucket in the
 # children-state breakdown (E-1567). Covers every status a finished child

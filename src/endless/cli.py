@@ -1261,7 +1261,7 @@ def _resolve_content_flag(inline, file_path, name):
 @click.option("--after", type=TASK_ID, default=None,
               help="Insert after this task ID")
 @click.option("--type", "task_type", default=None,
-              type=click.Choice(["task", "bug", "research", "epic"]),
+              type=click.Choice(["task", "bug", "research", "epic", "brainstorm"]),
               help="Task type (default: task)")
 @click.option("--status", default=None,
               type=click.Choice(TASK_STATUSES),
@@ -1336,7 +1336,7 @@ def task_add(title, description, description_file, text, text_file, phase, proje
 @click.option("--tier", default=None,
               help="Tier (0=n/a, 1-4 or auto/quick/deep/discuss, none=clear)")
 @click.option("--type", "task_type", default=None,
-              type=click.Choice(["task", "bug", "research", "epic"]),
+              type=click.Choice(["task", "bug", "research", "epic", "brainstorm"]),
               help="Task type — closes the prior gap that forced direct SQL writes (E-1329)")
 @click.option("--analysis", "analysis_text", default=None,
               help="Analysis content (inline)")

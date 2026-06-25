@@ -17,10 +17,11 @@ import (
 type TaskType int
 
 const (
-	TaskTypeTask     TaskType = 1
-	TaskTypeBug      TaskType = 2
-	TaskTypeResearch TaskType = 3
-	TaskTypeEpic     TaskType = 4
+	TaskTypeTask       TaskType = 1
+	TaskTypeBug        TaskType = 2
+	TaskTypeResearch   TaskType = 3
+	TaskTypeEpic       TaskType = 4
+	TaskTypeBrainstorm TaskType = 5
 )
 
 // String returns the lowercase machine slug (matches task_types.slug).
@@ -34,6 +35,8 @@ func (t TaskType) String() string {
 		return "research"
 	case TaskTypeEpic:
 		return "epic"
+	case TaskTypeBrainstorm:
+		return "brainstorm"
 	default:
 		return fmt.Sprintf("TaskType(%d)", int(t))
 	}
@@ -50,6 +53,8 @@ func (t TaskType) Label() string {
 		return "Research"
 	case TaskTypeEpic:
 		return "Epic"
+	case TaskTypeBrainstorm:
+		return "Brainstorm"
 	default:
 		return ""
 	}
@@ -67,8 +72,10 @@ func Parse(s string) (TaskType, error) {
 		return TaskTypeResearch, nil
 	case "epic":
 		return TaskTypeEpic, nil
+	case "brainstorm":
+		return TaskTypeBrainstorm, nil
 	default:
-		return 0, fmt.Errorf("tasktype: invalid task type %q (valid: task, bug, research, epic)", s)
+		return 0, fmt.Errorf("tasktype: invalid task type %q (valid: task, bug, research, epic, brainstorm)", s)
 	}
 }
 
@@ -82,7 +89,7 @@ func Validate(s string) error {
 // All returns the canonical set in id order. Used by VerifyIntegrity and by
 // callers that need to enumerate the enum (e.g., to render a picker).
 func All() []TaskType {
-	return []TaskType{TaskTypeTask, TaskTypeBug, TaskTypeResearch, TaskTypeEpic}
+	return []TaskType{TaskTypeTask, TaskTypeBug, TaskTypeResearch, TaskTypeEpic, TaskTypeBrainstorm}
 }
 
 // VerifyIntegrity asserts that the task_types SQL table matches the Go enum.

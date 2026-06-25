@@ -176,10 +176,11 @@ CREATE TABLE IF NOT EXISTS task_types (
 );
 
 INSERT OR IGNORE INTO task_types (id, slug, label) VALUES
-    (1, 'task',     'Task'),
-    (2, 'bug',      'Bug'),
-    (3, 'research', 'Research'),
-    (4, 'epic',     'Epic');
+    (1, 'task',       'Task'),
+    (2, 'bug',        'Bug'),
+    (3, 'research',   'Research'),
+    (4, 'epic',       'Epic'),
+    (5, 'brainstorm', 'Brainstorm');
 
 -- Task items
 CREATE TABLE IF NOT EXISTS tasks (
