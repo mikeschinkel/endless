@@ -246,3 +246,138 @@ func TestGuardWorktreeDBContext(t *testing.T) {
 		}
 	})
 }
+
+func TestWorktreeDirName(t *testing.T) {
+	cases := []struct {
+		name string
+		dir  string
+		want string
+	}{
+		{
+			name: "plain worktree root",
+			dir:  "/home/x/proj/.endless/worktrees/e-1368",
+			want: "e-1368",
+		},
+		{
+			name: "slugged worktree root (full basename, slug kept)",
+			dir:  "/home/x/proj/.endless/worktrees/e-1368-some-slug",
+			want: "e-1368-some-slug",
+		},
+		{
+			name: "subdir of slugged worktree",
+			dir:  "/home/x/proj/.endless/worktrees/e-1368-slug/internal/monitor",
+			want: "e-1368-slug",
+		},
+		{
+			name: "main checkout (no marker)",
+			dir:  "/home/x/proj",
+			want: "",
+		},
+		{
+			name: "marker present but not an e-NNN worktree",
+			dir:  "/home/x/proj/.endless/worktrees/scratch",
+			want: "",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := worktreeDirName(tc.dir); got != tc.want {
+				t.Errorf("worktreeDirName(%q) = %q, want %q", tc.dir, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestSelfDetectWorktreeSandbox(t *testing.T) {
+	// Build <root>/.endless/{config.json, worktrees/<name>} and, when
+	// makeSandbox, the sandbox config dir under XDG_CACHE_HOME/endless/
+	// sandboxes/<name>/endless. Returns the worktree dir to chdir into and the
+	// sandbox dir self-detect should resolve to. CacheDir() reads the same
+	// XDG_CACHE_HOME string, so the expected and computed paths match exactly
+	// (no symlink-resolution mismatch).
+	setup := func(t *testing.T, name string, selfDev, makeSandbox bool) (string, string) {
+		root := t.TempDir()
+		endless := filepath.Join(root, ".endless")
+		wt := filepath.Join(endless, "worktrees", name)
+		if err := os.MkdirAll(wt, 0755); err != nil {
+			t.Fatal(err)
+		}
+		body := `{"self_dev": false}`
+		if selfDev {
+			body = `{"self_dev": true}`
+		}
+		if err := os.WriteFile(filepath.Join(endless, "config.json"), []byte(body), 0644); err != nil {
+			t.Fatal(err)
+		}
+		cache := t.TempDir()
+		t.Setenv("XDG_CACHE_HOME", cache)
+		sandboxDir := filepath.Join(cache, "endless", "sandboxes", name, "endless")
+		if makeSandbox {
+			if err := os.MkdirAll(sandboxDir, 0755); err != nil {
+				t.Fatal(err)
+			}
+		}
+		return wt, sandboxDir
+	}
+
+	t.Run("self-dev worktree + sandbox exists -> routes", func(t *testing.T) {
+		resetDBContext(t)
+		wt, sandboxDir := setup(t, "e-1368", true, true)
+		t.Chdir(wt)
+		SelfDetectWorktreeSandbox()
+		if dbContextDir != sandboxDir {
+			t.Errorf("dbContextDir = %q, want %q", dbContextDir, sandboxDir)
+		}
+	})
+
+	t.Run("slugged worktree basename captured in full", func(t *testing.T) {
+		resetDBContext(t)
+		wt, sandboxDir := setup(t, "e-1368-my-slug", true, true)
+		t.Chdir(wt)
+		SelfDetectWorktreeSandbox()
+		if dbContextDir != sandboxDir {
+			t.Errorf("dbContextDir = %q, want %q", dbContextDir, sandboxDir)
+		}
+	})
+
+	t.Run("sandbox absent -> no-op (gate still refuses)", func(t *testing.T) {
+		resetDBContext(t)
+		wt, _ := setup(t, "e-1368", true, false)
+		t.Chdir(wt)
+		SelfDetectWorktreeSandbox()
+		if dbContextDir != "" {
+			t.Errorf("dbContextDir = %q, want empty (no sandbox on disk)", dbContextDir)
+		}
+	})
+
+	t.Run("not a self-dev project -> no-op", func(t *testing.T) {
+		resetDBContext(t)
+		wt, _ := setup(t, "e-1368", false, true)
+		t.Chdir(wt)
+		SelfDetectWorktreeSandbox()
+		if dbContextDir != "" {
+			t.Errorf("dbContextDir = %q, want empty (not self_dev)", dbContextDir)
+		}
+	})
+
+	t.Run("explicit context already set -> no-op", func(t *testing.T) {
+		resetDBContext(t)
+		wt, _ := setup(t, "e-1368", true, true)
+		t.Chdir(wt)
+		SetDBContextDir("/explicit/dir")
+		SelfDetectWorktreeSandbox()
+		if dbContextDir != "/explicit/dir" {
+			t.Errorf("dbContextDir = %q, want /explicit/dir (self-detect must not override explicit)", dbContextDir)
+		}
+	})
+
+	t.Run("cwd outside any worktree -> no-op", func(t *testing.T) {
+		resetDBContext(t)
+		t.Setenv("XDG_CACHE_HOME", t.TempDir())
+		t.Chdir(t.TempDir())
+		SelfDetectWorktreeSandbox()
+		if dbContextDir != "" {
+			t.Errorf("dbContextDir = %q, want empty (cwd not in a worktree)", dbContextDir)
+		}
+	})
+}

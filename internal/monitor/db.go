@@ -202,6 +202,73 @@ func selfDevProjectRoot(dir string) string {
 	return dir[:i]
 }
 
+// worktreeDirName returns the worktree directory basename (e-NNN or
+// e-NNN-slug) when dir is inside a task worktree, or "" otherwise. Unlike
+// TaskIDFromWorktreePath (which captures the digits only and drops any slug),
+// this returns the FULL basename — the per-worktree sandbox dir basename
+// equals the worktree dir basename, so the slug must be preserved to find the
+// right sandbox. Mirrors Python config.worktree_dir_name. Pure: no I/O.
+func worktreeDirName(dir string) string {
+	i := strings.Index(dir, worktreePathMarker)
+	if i < 0 {
+		return ""
+	}
+	// Same e-NNN validation as selfDevProjectRoot: reject markers that don't
+	// name a real task worktree (e.g. .endless/worktrees/scratch).
+	if TaskIDFromWorktreePath(dir) == "" {
+		return ""
+	}
+	name := dir[i+len(worktreePathMarker):]
+	if j := strings.IndexByte(name, '/'); j >= 0 {
+		name = name[:j]
+	}
+	return name
+}
+
+// SelfDetectWorktreeSandbox routes this process to the per-worktree sandbox
+// (E-1281) when it runs inside a self-dev worktree that has a sandbox, unless
+// an explicit DB context was already set. It is the E-1368 reversal of
+// IsSandboxActive: instead of detecting that a wrapper routed us into a
+// sandbox via XDG_CONFIG_HOME, the binary routes itself from cwd — replacing
+// the bin-sandbox/ wrapper scripts entirely.
+//
+// The routing is cwd-derived and recomputed every invocation (never an
+// inherited env var), so it satisfies the E-1429 gate the same way the
+// --config-dir flag does: per-invocation and tied to physical location, not a
+// sticky export that silently misroutes later commands. Explicit --config-dir
+// (ConsumeDBContextFlag) is consumed first and wins via the dbContextDir guard
+// below; the hook/channel/tmux PinMainDB override still moves the DB to main
+// afterward, with ConfigDir() (config.json, logs) following the self-detected
+// sandbox per the E-1450 split.
+//
+// No-op unless ALL hold: cwd is inside <root>/.endless/worktrees/e-NNN[-slug],
+// <root> is a self_dev project, and the sandbox config dir already exists on
+// disk. The existence check is essential — routing to a missing sandbox would
+// open a fresh empty DB at a half-built path. Must run before the first
+// DB()/DBPath()/ConfigDir() use.
+func SelfDetectWorktreeSandbox() {
+	if dbContextDir != "" {
+		return
+	}
+	cwd, err := os.Getwd()
+	if err != nil {
+		return
+	}
+	root := selfDevProjectRoot(cwd)
+	if root == "" || !projectIsSelfDev(root) {
+		return
+	}
+	name := worktreeDirName(cwd)
+	if name == "" {
+		return
+	}
+	sandboxDir := filepath.Join(CacheDir(), "sandboxes", name, "endless")
+	if info, err := os.Stat(sandboxDir); err != nil || !info.IsDir() {
+		return
+	}
+	SetDBContextDir(sandboxDir)
+}
+
 // projectIsSelfDev reports whether <root>/.endless/config.json has
 // "self_dev": true. Mirrors the Python config.project_is_self_dev. A missing
 // or unreadable config (or the flag unset) is false, so non-self-dev projects

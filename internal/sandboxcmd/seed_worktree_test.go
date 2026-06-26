@@ -237,7 +237,7 @@ func TestSeedFromWorktree_ErrorsWhenNoMatchingProject(t *testing.T) {
 		t.Fatalf("schema: %v", err)
 	}
 	_, err = db.Exec(
-		"INSERT INTO projects (name, path, status, created_at, updated_at) "+
+		"INSERT INTO projects (name, path, status, created_at, updated_at) " +
 			"VALUES ('other', '/nowhere', 'active', '2026-01-01T00:00:00', '2026-01-01T00:00:00')",
 	)
 	if err != nil {
@@ -275,55 +275,5 @@ func TestSeedFromWorktree_ErrorsWhenNotInWorktree(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "is the main checkout") {
 		t.Errorf("unexpected error: %v", err)
-	}
-}
-
-func TestReadSeededSessionID_MissingDBNoError(t *testing.T) {
-	sandboxDir := t.TempDir()
-	sid, err := readSeededSessionID(sandboxDir)
-	if err != nil {
-		t.Fatalf("expected no error for missing DB, got: %v", err)
-	}
-	if sid != "" {
-		t.Errorf("expected empty session_id, got %q", sid)
-	}
-}
-
-func TestReadSeededSessionID_NoRowsNoError(t *testing.T) {
-	sandboxDir := t.TempDir()
-	endlessDir := filepath.Join(sandboxDir, "endless")
-	os.MkdirAll(endlessDir, 0o755)
-	db, err := sql.Open("sqlite", filepath.Join(endlessDir, "endless.db"))
-	if err != nil {
-		t.Fatalf("open: %v", err)
-	}
-	if _, err := db.Exec(schema.SQL); err != nil {
-		t.Fatalf("schema: %v", err)
-	}
-	db.Close()
-
-	sid, err := readSeededSessionID(sandboxDir)
-	if err != nil {
-		t.Fatalf("expected no error for empty sessions table, got: %v", err)
-	}
-	if sid != "" {
-		t.Errorf("expected empty session_id, got %q", sid)
-	}
-}
-
-func TestGoWrapperBody_IncludesSessionExportWhenSet(t *testing.T) {
-	body := goWrapperBody("/sb/dir", "/bin/endless-go", "sess-xyz")
-	if !strings.Contains(body, "export ENDLESS_SESSION_ID='sess-xyz'") {
-		t.Errorf("expected ENDLESS_SESSION_ID export, got:\n%s", body)
-	}
-	if !strings.Contains(body, "export XDG_CONFIG_HOME='/sb/dir'") {
-		t.Errorf("expected XDG_CONFIG_HOME export, got:\n%s", body)
-	}
-}
-
-func TestGoWrapperBody_OmitsSessionExportWhenEmpty(t *testing.T) {
-	body := goWrapperBody("/sb/dir", "/bin/endless-go", "")
-	if strings.Contains(body, "ENDLESS_SESSION_ID") {
-		t.Errorf("expected no ENDLESS_SESSION_ID export, got:\n%s", body)
 	}
 }

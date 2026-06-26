@@ -24,7 +24,7 @@ func TestRevisitClearVerbRe(t *testing.T) {
 		{"continue plain", "endless task continue", true},
 		{"pause plain", "endless task pause", true},
 		{"wrapper prefix", "uv run endless task continue", true},
-		{"sandbox bin prefix", "./bin-sandbox/endless task pause", true},
+		{"absolute path prefix", "/usr/local/bin/endless task pause", true},
 		{"extra whitespace", "endless   task    continue", true},
 
 		{"unrelated task verb", "endless task claim E-5", false},

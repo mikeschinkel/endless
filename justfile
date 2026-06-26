@@ -141,7 +141,7 @@ install mode="":
     just dev-sandbox-init
     just claude-settings-init
     echo "install: worktree-scoped setup complete for $(pwd)"
-    echo "  Wired: go.work, bin/*, bin-sandbox/, .claude/settings.json. Global /usr/local/bin untouched."
+    echo "  Wired: go.work, bin/*, .claude/settings.json. Global /usr/local/bin untouched."
 
 # Land a task's worktree (calls `endless worktree land`), then rebuild
 # binaries so the symlinked /usr/local/bin/endless-* binaries pick up
@@ -388,10 +388,11 @@ claude-settings-init:
 
 # Provision a per-worktree sandbox DB for self-dev work (E-1281).
 #
-# Generates wrappers in <worktree>/bin-sandbox/ that redirect endless DB writes
-# to ~/.cache/endless/sandboxes/e-NNN[-slug]/. Sessions inside the worktree
-# pick up the wrappers via the PATH-prepend in <worktree>/.claude/settings.json
-# written by 'endless sandbox bind'.
+# Creates the sandbox DB at ~/.cache/endless/sandboxes/e-NNN[-slug]/ and writes
+# XDG_CONFIG_HOME into <worktree>/.claude/settings.json so Claude-spawned
+# subprocesses route there. The endless-go binary also self-detects this
+# sandbox from cwd (E-1368), so bare-shell `./bin/endless-go ...` inside the
+# worktree routes to it without any wrapper or env export.
 #
 # Auto-invoked by 'endless task claim' and 'endless task spawn' when the
 # project's .endless/config.json has "self_dev": true (endless's own

@@ -596,8 +596,8 @@ func blockToolUse(message string) {
 
 // revisitClearVerbRe matches the user's revisit gate-clearing commands so they
 // are never blocked by the gate itself (E-1542): `endless task continue` /
-// `endless task pause`, including wrapper-prefixed forms such as `uv run endless
-// task continue` or `./bin-sandbox/endless task pause`.
+// `endless task pause`, including path- or wrapper-prefixed forms such as
+// `uv run endless task continue` or `/usr/local/bin/endless task pause`.
 var revisitClearVerbRe = regexp.MustCompile(`(?i)\bendless\s+task\s+(?:continue|pause)\b`)
 
 // enforceRevisitGate intercepts a session whose claimed task descends from an

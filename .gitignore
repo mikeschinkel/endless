@@ -12,10 +12,6 @@ __pycache__/
 # Go build output
 /bin/
 
-# Per-worktree sandbox wrappers (E-1281). 'endless sandbox bind' regenerates
-# these in each worktree's bin-sandbox/ so they should never be tracked.
-/bin-sandbox/
-
 # Symlink to go module cache (created by `just _link-templui`)
 internal/web/assets/css/templui
 

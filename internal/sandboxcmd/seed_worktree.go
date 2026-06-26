@@ -209,37 +209,3 @@ func readMainProjectRow(dbPath, mainCheckout string) (*projectRow, error) {
 	}
 	return &p, nil
 }
-
-// readSeededSessionID returns the session_id from the sandbox's sessions table
-// when init --mode worktree seeded one. Returns ("", nil) when the DB exists
-// but holds no session row (--mode empty sandbox). Returns ("", err) on real
-// errors (DB unreadable, schema missing).
-func readSeededSessionID(sandboxDir string) (string, error) {
-	dbPath := filepath.Join(sandboxDir, "endless", "endless.db")
-	if _, err := os.Stat(dbPath); err != nil {
-		if os.IsNotExist(err) {
-			return "", nil
-		}
-		return "", fmt.Errorf("stat %s: %w", dbPath, err)
-	}
-	db, err := sql.Open("sqlite", dbPath)
-	if err != nil {
-		return "", fmt.Errorf("opening sandbox DB %s: %w", dbPath, err)
-	}
-	defer db.Close()
-
-	var sid string
-	err = db.QueryRow("SELECT session_id FROM sessions LIMIT 1").Scan(&sid)
-	if errors.Is(err, sql.ErrNoRows) {
-		return "", nil
-	}
-	if err != nil {
-		// Schema not applied or table missing: treat as "no seeded session"
-		// so --mode empty sandboxes don't break bind.
-		if strings.Contains(err.Error(), "no such table") {
-			return "", nil
-		}
-		return "", fmt.Errorf("querying sessions: %w", err)
-	}
-	return sid, nil
-}

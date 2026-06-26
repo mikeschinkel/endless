@@ -54,6 +54,15 @@ func main() {
 	// the PinMainDB override below still wins via dbPathOverride.
 	monitor.ConsumeDBContextFlag()
 
+	// E-1368: when no explicit --config-dir was given, self-detect the
+	// per-worktree sandbox from cwd and route to it. Replaces the bin-sandbox/
+	// wrapper scripts (which set XDG_CONFIG_HOME and exec'd the worktree
+	// binary). No-op outside a self-dev worktree or when its sandbox doesn't
+	// exist; explicit --config-dir already won above and is left untouched.
+	// Runs before the PinMainDB switch so hook/channel/tmux still move the DB
+	// to main while their config.json/logs follow the self-detected sandbox.
+	monitor.SelfDetectWorktreeSandbox()
+
 	if len(os.Args) < 2 {
 		usage(os.Stderr)
 		os.Exit(2)
