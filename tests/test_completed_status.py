@@ -5,7 +5,11 @@ verified) and `assumed` (behavior believed correct, awaiting promotion).
 Gated by:
 
   1. A `completable: true` flag on the task title's lead verb in verbs.json
-  2. A required `--outcome` (the outcome text IS the deliverable)
+     (epics and brainstorms are exempt — ED-1511 / E-1657)
+  2. A required `--outcome` for `research`/`brainstorm` tasks, whose deliverable
+     IS the outcome text (ED-1520 — keyed on TYPE, not the `completed` status;
+     supersedes E-1240's status coupling). The dedicated `task complete` CLI
+     command still requires `--outcome` for any type at the Click layer.
 """
 
 import click
@@ -18,7 +22,7 @@ from endless.cli import main
 
 def _add_task(title: str, status: str = "underway", type_id: int = 1) -> int:
     # type_id per task_types seed (internal/schema/schema.sql):
-    # 1=task, 2=bug, 3=research, 4=epic.
+    # 1=task, 2=bug, 3=research, 4=epic, 5=brainstorm.
     cur = db.execute(
         "INSERT INTO tasks (project_id, title, status, type_id, phase, created_at) "
         "VALUES (1, ?, ?, ?, 'now', datetime('now'))",
@@ -100,16 +104,38 @@ def test_completed_rejects_fix_verb(seeded_project_at_cwd):
 
 
 def test_completed_requires_non_blank_outcome(seeded_project_at_cwd):
-    tid = _add_task("Audit something")
+    # ED-1520: the outcome requirement is keyed on type — use a research task.
+    tid = _add_task("Audit something", type_id=_RESEARCH)
     with pytest.raises(click.ClickException) as exc:
         task_cmd.mark_completed_item(tid, outcome="")
     assert "outcome is required" in str(exc.value.message).lower()
 
 
 def test_completed_requires_non_whitespace_outcome(seeded_project_at_cwd):
-    tid = _add_task("Audit something")
+    tid = _add_task("Audit something", type_id=_RESEARCH)
     with pytest.raises(click.ClickException) as exc:
         task_cmd.mark_completed_item(tid, outcome="   ")
+    assert "outcome is required" in str(exc.value.message).lower()
+
+
+def test_completed_plain_task_no_longer_requires_outcome(seeded_project_at_cwd):
+    """ED-1520: a plain `task` (not research/brainstorm) completing via the
+    helper is NOT forced to carry an outcome — the requirement moved to type.
+    (The dedicated `task complete` CLI command still demands one; this is the
+    direct/`update --status completed` path.)"""
+    tid = _add_task("Audit something", type_id=1)
+    task_cmd.mark_completed_item(tid, outcome="")
+    status, _ = _status_outcome(tid)
+    assert status == "completed"
+
+
+def test_completed_brainstorm_requires_outcome(seeded_project_at_cwd):
+    """ED-1520: brainstorm is a deliverable type, so completing one without an
+    outcome is refused (verb gate is exempt for brainstorm, so the outcome gate
+    is what fires)."""
+    tid = _add_task("Explore the pricing model", type_id=_BRAINSTORM)
+    with pytest.raises(click.ClickException) as exc:
+        task_cmd.mark_completed_item(tid, outcome="")
     assert "outcome is required" in str(exc.value.message).lower()
 
 
@@ -135,7 +161,8 @@ def test_update_status_completed_with_completable_verb_succeeds(seeded_project_a
 
 
 def test_update_status_completed_requires_outcome(seeded_project_at_cwd):
-    tid = _add_task("Investigate the cache miss rate")
+    # ED-1520: keyed on type — research task requires the outcome.
+    tid = _add_task("Investigate the cache miss rate", type_id=_RESEARCH)
     with pytest.raises(click.ClickException) as exc:
         task_cmd.update_plan(tid, status="completed")
     assert "outcome is required" in str(exc.value.message).lower()
@@ -166,6 +193,8 @@ def test_update_status_completed_uses_new_title_if_provided(seeded_project_at_cw
 # ─── ED-1511 / E-1617: epics are exempt from the verb-completability gate ──────
 
 _EPIC = 4  # task_types seed: 4 = epic
+_RESEARCH = 3  # task_types seed: 3 = research
+_BRAINSTORM = 5  # task_types seed: 5 = brainstorm
 
 
 def test_completed_epic_exempt_from_verb_gate_via_mark(seeded_project_at_cwd):
@@ -186,13 +215,15 @@ def test_completed_epic_exempt_from_verb_gate_via_update(seeded_project_at_cwd):
     assert status == "completed"
 
 
-def test_completed_epic_still_requires_outcome(seeded_project_at_cwd):
-    """The exemption is narrow: it drops only the verb gate. The outcome
-    requirement (E-1240) still applies to epics."""
+def test_completed_epic_no_longer_requires_outcome(seeded_project_at_cwd):
+    """ED-1520 (supersedes E-1240 for this case): epics self-complete via
+    child-status derivation — there is no interactive completion step where an
+    outcome could be required — so completing an epic with an empty outcome is
+    allowed. The outcome requirement now keys on research/brainstorm types."""
     tid = _add_task("Implement the baz subsystem", type_id=_EPIC)
-    with pytest.raises(click.ClickException) as exc:
-        task_cmd.mark_completed_item(tid, outcome="")
-    assert "outcome is required" in str(exc.value.message).lower()
+    task_cmd.mark_completed_item(tid, outcome="")
+    status, _ = _status_outcome(tid)
+    assert status == "completed"
 
 
 def test_completed_non_epic_still_gated_by_verb(seeded_project_at_cwd):
@@ -209,8 +240,9 @@ def test_completed_non_epic_still_gated_by_verb(seeded_project_at_cwd):
 
 def test_update_status_completed_satisfied_by_existing_db_outcome(seeded_project_at_cwd):
     """Bug 2: --outcome should not be required on the same call if
-    tasks.outcome already holds a non-empty value."""
-    tid = _add_task("Audit X")
+    tasks.outcome already holds a non-empty value. Research type so the
+    requirement is actually in play (ED-1520)."""
+    tid = _add_task("Audit X", type_id=_RESEARCH)
     task_cmd.update_plan(tid, outcome="findings drafted")  # standalone
     # Now flip status without re-passing --outcome
     task_cmd.update_plan(tid, status="completed")
@@ -220,7 +252,7 @@ def test_update_status_completed_satisfied_by_existing_db_outcome(seeded_project
 
 
 def test_update_status_completed_new_outcome_overrides_existing(seeded_project_at_cwd):
-    tid = _add_task("Audit X")
+    tid = _add_task("Audit X", type_id=_RESEARCH)
     task_cmd.update_plan(tid, outcome="old draft")
     task_cmd.update_plan(tid, status="completed", outcome="final findings")
     status, outcome = _status_outcome(tid)
@@ -229,8 +261,9 @@ def test_update_status_completed_new_outcome_overrides_existing(seeded_project_a
 
 
 def test_update_status_completed_still_refused_when_both_empty(seeded_project_at_cwd):
-    """If neither existing nor new outcome is non-empty, still refused."""
-    tid = _add_task("Audit X")  # no outcome ever set
+    """If neither existing nor new outcome is non-empty, still refused — for a
+    deliverable type (ED-1520)."""
+    tid = _add_task("Audit X", type_id=_RESEARCH)  # no outcome ever set
     with pytest.raises(click.ClickException) as exc:
         task_cmd.update_plan(tid, status="completed")
     assert "outcome is required" in str(exc.value.message).lower()

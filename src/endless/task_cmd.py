@@ -2000,15 +2000,31 @@ def _require_completable_verb_for_completed(
         )
 
 
-def _require_outcome_for_completed(status: str | None, outcome: str | None):
-    """E-1240: `completed` requires --outcome because the outcome text IS
-    the deliverable for findings-style tasks."""
-    if status == "completed" and not (outcome and outcome.strip()):
+# Types whose deliverable IS the outcome text, so completing one requires
+# --outcome. ED-1520: the requirement is keyed on task TYPE, not the 'completed'
+# status (E-1240 had coupled it to status as a proxy for these types). Epics are
+# excluded — they self-complete via child-status derivation, with no interactive
+# completion step where an outcome could be supplied. Other types reaching
+# 'completed' via a completable verb are not forced to carry an outcome.
+_OUTCOME_REQUIRED_TYPES = ("research", "brainstorm")
+
+
+def _require_outcome_for_completed(
+    status: str | None,
+    task_type: str | None,
+    outcome: str | None,
+):
+    """ED-1520: completing a research/brainstorm task requires --outcome — the
+    outcome IS the deliverable for those types. Keyed on type, not the
+    'completed' status. Decline's own reason requirement is separate
+    (`_require_outcome_for_declined`, ED-1022)."""
+    if (status == "completed"
+            and (task_type or "") in _OUTCOME_REQUIRED_TYPES
+            and not (outcome and outcome.strip())):
         raise click.ClickException(
-            "An outcome is required when completing a task. "
-            "The outcome captures the findings/deliverable — use --outcome "
-            "to provide it. (For implementation tasks where behavior is "
-            "the deliverable, use 'unverified' → 'confirmed' / 'assumed' instead.)"
+            f"An outcome is required when completing a {task_type} task — "
+            "the outcome IS the deliverable. Use --outcome (or --outcome-file) "
+            "to provide it."
         )
 
 
@@ -2223,7 +2239,7 @@ def mark_completed_item(item_id: int, outcome: str):
             f"No task found with id {item_id}"
         )
 
-    _require_outcome_for_completed("completed", outcome)
+    _require_outcome_for_completed("completed", row[0]["type"], outcome)
     _require_completable_verb_for_completed(
         "completed", row[0]["title"], row[0]["type"]
     )
@@ -3265,7 +3281,9 @@ def update_plan(
     # Lets the workflow "author outcome first → flip status later" work
     # without forcing a redundant --outcome re-pass.
     effective_outcome = outcome if (outcome and outcome.strip()) else row[0]["outcome"]
-    _require_outcome_for_completed(status, effective_outcome)
+    # Use the incoming --type if set in this same update, else the existing type.
+    effective_type_for_outcome = task_type if task_type is not None else row[0]["type"]
+    _require_outcome_for_completed(status, effective_type_for_outcome, effective_outcome)
     if title is not None:
         validate_title(title, force=force)
 

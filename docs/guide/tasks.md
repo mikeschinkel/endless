@@ -15,14 +15,14 @@ Every task has multiple body fields. Knowing which to use prevents long descript
 | `text`        | Long-form      | Full implementation plan, including approach, file paths, verification steps. Shown with `task show --text`. **On a research task, `text` instead holds the research *request* — see the Research-task field model below.** | `--text` (inline) / `--text-file <path>` on `task add` / `task update`. |
 | `analysis`    | Long-form      | Supporting research / exploration content that is *not* a proper plan — comparisons, findings, evidence gathered before the plan is written. | `--analysis` (inline) / `--analysis-file <path>` on `task update`. |
 | `notes`       | Freeform       | Catch-all for content that doesn't fit elsewhere. Use sparingly.                                 | DB column; CLI flag may not yet be wired.          |
-| `outcome`     | Short to long  | Result / reason at terminal status. Required for `confirm`/`assume`/`decline`.                   | `--outcome` (inline) / `--outcome-file <path>` on `task confirm` / `task assume` / `task update`; `--reason` on `task decline` (stored as outcome). |
+| `outcome`     | Short to long  | Result / reason at terminal status. **Required** when completing a `research`/`brainstorm` task (the outcome IS the deliverable) and as the reason on `decline`. Optional on `confirm`/`assume`. | `--outcome` (inline) / `--outcome-file <path>` on `task confirm` / `task assume` / `task update`; `--reason` on `task decline` (stored as outcome). |
 
 ### Distinctions in practice
 
 - **Description vs text.** Description is a pitch — max 1024 character — readable in 30 seconds, fits in a list view. Text is the plan you'd hand to an engineer. If you're writing four paragraphs into `--description`, stop — put it in a plan file and load with `--text`.
 - **Text vs handoff.** Text is the plan — for humans and for the spawned session, which `endless task spawn` directs it to read. The session's *opening input* (the handoff) is generated from a template at spawn time, not stored on the task; see `endless guide orchestration`.
 - **Analysis vs text.** Analysis is supporting evidence gathered *before a plan is written on a do-task* — comparisons, findings, raw material. Text is the actionable plan. A deliverable-shaped task (an audit, or a `research`-type task) puts its *result* in `outcome`, not `text` or `analysis`; for research tasks specifically, see the Research-task field model below.
-- **Outcome.** Single field for "how this task ended." Required at terminal statuses so the *why* is captured at the moment of the decision. `task decline` uses `--reason` as the CLI flag (stored as outcome internally).
+- **Outcome.** Single field for "how this task ended." Required where the *why* must be captured at the moment of the decision: completing a `research`/`brainstorm` task (the outcome IS the deliverable) and declining (the reason). Optional on `confirm`/`assume`, where "we tested it and it worked" rarely needs prose. `task decline` uses `--reason` as the CLI flag (stored as outcome internally).
 
 ---
 
