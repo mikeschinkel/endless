@@ -39,7 +39,7 @@ from pathlib import Path
 
 import click
 
-from endless.task_cmd import _resolve_project, recover_task_text
+from endless.task_cmd import _display_path, _resolve_project, recover_task_text
 
 
 COMPANION_FILENAME = ".endless/worktree.json"
@@ -1261,6 +1261,35 @@ def _maybe_auto_sandbox_bind(project_root: Path, worktree_path: Path, task_id: i
     )
 
 
+def _resolve_land_endless_go(worktree_path: Path, project_root: Path) -> str | None:
+    """The endless-go binary a land's task.landed emit must use, or None.
+
+    For a self_dev project (E-1664), a land applies this branch's schema change
+    before recording the landing, so the only binary whose embedded schema/enums
+    match the just-written rows is the worktree's own build — never the
+    not-yet-refreshed global. Binary selection here is therefore an INVARIANT of
+    the land, not a choice: return <worktree>/bin/endless-go. If that build is
+    absent, fail loudly (an unbuilt self_dev worktree is a bug to surface, not
+    mask by sliding to the stale global — E-1662); a missing build silently
+    standing in is the exact skew that produced the original failure.
+
+    Returns None for a non-self_dev project, where the global is correct and no
+    worktree binary exists (downstream users never build endless-go).
+    """
+    from endless import config
+
+    if not config.project_is_self_dev(project_root):
+        return None
+    wt_bin = worktree_path / "bin" / "endless-go"
+    if not wt_bin.is_file() or not os.access(wt_bin, os.X_OK):
+        raise click.ClickException(
+            f"The self-dev worktree's endless-go binary is missing or not "
+            f"executable:\n\n    {_display_path(wt_bin)}\n\n"
+            f"Build it before landing: run `just build` in the worktree."
+        )
+    return str(wt_bin)
+
+
 def _record_landing(
     item_id: int,
     proj_name: str,
@@ -1268,6 +1297,7 @@ def _record_landing(
     base_branch: str,
     canonical: str,
     merge_sha: str,
+    endless_go_bin: str | None = None,
 ) -> None:
     """Emit the task.landed event after a successful ff-merge (E-1337).
 
@@ -1292,6 +1322,7 @@ def _record_landing(
                 "merge_commit_sha": merge_sha,
             },
             prompt_verb="landed for",
+            endless_go_bin=endless_go_bin,
         )
     except Exception as e:
         detail = e.message if isinstance(e, click.ClickException) else str(e)
@@ -1354,6 +1385,11 @@ def land_worktree(task_id: str, dry_run: bool) -> None:
         click.echo(f"  Base:     {base_branch}")
         click.echo(f"  Main:     {main_root}")
         return
+
+    # Resolve the binary the record-landing emit must use BEFORE the ff-merge,
+    # so a self_dev worktree that isn't built fails loudly here rather than
+    # after main has advanced (E-1664). None for non-self_dev (global is used).
+    endless_go_bin = _resolve_land_endless_go(worktree_path, main_root)
 
     last_error = None
     for attempt in range(1, LAND_MAX_RETRIES + 1):
@@ -1476,7 +1512,8 @@ def land_worktree(task_id: str, dry_run: bool) -> None:
         # re-runnable "main advanced, recording failed" error rather than one
         # that implies nothing landed.
         _record_landing(
-            item_id, proj_name, branch, base_branch, canonical, merge_sha
+            item_id, proj_name, branch, base_branch, canonical, merge_sha,
+            endless_go_bin=endless_go_bin,
         )
 
         click.echo(

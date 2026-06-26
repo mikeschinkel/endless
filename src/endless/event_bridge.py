@@ -24,26 +24,48 @@ from endless import config
 _ATTRIBUTION_REQUIRED: frozenset[str] = frozenset({"cli", "hook"})
 
 
-def _resolve_endless_go() -> str:
+def _display_path(p: str) -> str:
+    """Render an absolute path ~-relative for user-facing messages."""
+    home = str(Path.home())
+    if p.startswith(home):
+        return "~" + p[len(home):]
+    return p
+
+
+def _resolve_endless_go(override: str | None = None) -> str:
     """Resolve which endless-go binary to exec for a schema-mutating call.
 
-    Under --db sandbox in a self-dev worktree, prefer <worktree>/bin/endless-go
-    so the embedded schema.sql matches the sandbox DB (E-1510). Otherwise fall
-    back to the PATH-resolved global. Fails loudly if --db sandbox is active
-    but the worktree binary is missing — silently using main's binary would
-    re-introduce the schema-baseline mismatch this routing exists to prevent.
+    When `override` is given, it is an explicit, caller-pinned binary path that
+    wins over every other resolution: validate it exists and is executable, then
+    return it. A self_dev land passes the worktree binary here (E-1664) — during
+    a land that binary is the only one whose embedded schema/enums match the rows
+    the land just applied, so it is an invariant of the operation, not a choice.
+    A set-but-invalid override fails loudly rather than silently sliding to the
+    stale global (which is the exact bug class this exists to prevent).
+
+    With no override: under --db sandbox in a self-dev worktree, prefer
+    <worktree>/bin/endless-go so the embedded schema.sql matches the sandbox DB
+    (E-1510). Otherwise fall back to the PATH-resolved global. Fails loudly if
+    --db sandbox is active but the worktree binary is missing — silently using
+    main's binary would re-introduce the schema-baseline mismatch this routing
+    exists to prevent.
     """
+    if override is not None:
+        ov = Path(override)
+        if not ov.is_file() or not os.access(ov, os.X_OK):
+            click.echo("", err=True)
+            raise click.ClickException(
+                f"The pinned endless-go binary is missing or not "
+                f"executable:\n\n    {_display_path(str(ov))}\n"
+            )
+        return str(ov)
     wt_bin = config.resolved_worktree_endless_go()
     if wt_bin is not None:
         if not wt_bin.is_file() or not os.access(wt_bin, os.X_OK):
-            home = str(Path.home())
-            displayed = str(wt_bin)
-            if displayed.startswith(home):
-                displayed = "~" + displayed[len(home):]
             click.echo("", err=True)
             raise click.ClickException(
                 f"The worktree's endless-go binary is missing or "
-                f"not executable:\n\n    {displayed}\n"
+                f"not executable:\n\n    {_display_path(str(wt_bin))}\n"
             )
         return str(wt_bin)
     found = shutil.which("endless-go")
@@ -64,6 +86,7 @@ def emit_event(
     project_root: str | None = None,
     correlation_id: str | None = None,
     prompt_verb: str | None = None,
+    endless_go_bin: str | None = None,
 ) -> dict | None:
     """Shell out to `endless-go event emit` to write an event and execute the DB mutation.
 
@@ -87,6 +110,11 @@ def emit_event(
     rather than firing an event whose attribution will be silently dropped
     (E-1401). For actor_kind in {"system", "web"}, an empty session_id is
     fine — system has no session, web attributes via user_id.
+
+    `endless_go_bin` pins the exact endless-go binary to exec, bypassing the
+    default PATH/sandbox resolution. A self_dev land passes the worktree binary
+    here so the task.landed emit uses the build whose schema matches the rows it
+    just applied (E-1664). None ⇒ default resolution.
 
     Raises click.ClickException on failure.
     """
@@ -164,7 +192,7 @@ def emit_event(
     # E-1429: refuse early with the friendly message if --db is required but
     # missing, then thread the resolved DB context to endless-event.
     config.require_db_context()
-    event_bin = _resolve_endless_go()
+    event_bin = _resolve_endless_go(override=endless_go_bin)
     cmd = [
         event_bin, *config.go_db_context_args(), "event", "emit",
         "--kind", kind,
