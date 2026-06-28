@@ -2,6 +2,7 @@
 
 import json as json_mod
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -2024,17 +2025,26 @@ def _match_companions(live: list[dict], ref: str) -> list[dict]:
     """Match a session-ref against live companions.
 
     An `ES-`/`es-` prefix is stripped first, then a numeric ref matches
-    endless_session_id exactly. Otherwise the ref is treated as a Claude UUID
-    prefix (case-insensitive).
+    endless_session_id exactly. A `e-NNNN`/`E-NNNN` task-id form matches the
+    live session whose active task is NNNN. Otherwise the ref is treated as a
+    Claude UUID prefix (case-insensitive).
 
-    Stripping the prefix is what makes `session show`/`cd`/`use ES-NNN` work
-    (E-1918): without it the ref skipped the isdigit() branch, fell through to
-    the UUID-prefix branch, and matched nothing — so the one form `task show`
-    prints and the guide tells sessions to prefer was the one form these three
-    commands rejected.
+    Stripping the ES- prefix is what makes `session show`/`cd`/`use ES-NNN`
+    work (E-1918): without it the ref skipped the isdigit() branch, fell
+    through to the UUID-prefix branch, and matched nothing — so the one form
+    `task show` prints and the guide tells sessions to prefer was the one form
+    these three commands rejected.
     """
     if ref[:3].upper() == "ES-":
         ref = ref[3:]
+    # Task-id form `e-NNNN` / `E-NNNN`: match the live session whose active
+    # task is NNNN. The explicit `e-` prefix distinguishes this from a bare
+    # numeric session-id ref below. (An ES- session ref was stripped above,
+    # so it never reaches this branch.)
+    m = re.fullmatch(r"[Ee]-(\d+)", ref.strip())
+    if m is not None:
+        target = int(m.group(1))
+        return [c for c in live if c.get("active_task_id") == target]
     if ref.isdigit():
         target = int(ref)
         return [c for c in live if c.get("endless_session_id") == target]

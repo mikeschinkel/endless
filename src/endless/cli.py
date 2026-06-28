@@ -748,6 +748,7 @@ _endless_run() {
 #       or cwd, plus export ENDLESS_SESSION_ID).
 #   esu          → auto-resolve to sibling Claude pane in tmux
 #   esu <id>     → explicit endless integer id or Claude UUID prefix
+#   esu e-NNNN   → the live session whose active task is NNNN
 esu() {
     local out
     out="$(_endless_run session use "$@")" || return $?
@@ -1101,6 +1102,10 @@ def session_use(session_ref):
     ENDLESS_SESSION_ID. Then runs .endless/extensions/use.sh (if present)
     and appends its stdout. With no arg, in tmux: auto-resolves to the
     sole sibling Claude pane in the current window.
+
+    SESSION_REF accepts an endless integer id, a Claude UUID prefix, or an
+    `e-NNNN` task-id — the last resolves the live session whose active task
+    is NNNN (so `esu e-1655` switches to that task's session).
 
     Standard env vars exported:
       ENDLESS_SESSION_ID    endless integer id
