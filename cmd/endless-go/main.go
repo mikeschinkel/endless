@@ -85,6 +85,17 @@ func main() {
 		return
 	}
 
+	// E-1669: never-silent backstop. When a hook fires inside a self_dev
+	// worktree but from a FOREIGN endless-go build (the global/main one, because
+	// provisioning was skipped/failed and .claude/settings.json never got
+	// repointed), warn loudly to stderr — the session would otherwise dogfood
+	// main's hook code, not the candidate. A warning, NOT a refuse: refusing in
+	// the hook path blocks every tool call. No-op outside a self_dev worktree or
+	// when the worktree's own binary is already running.
+	if sub == "hook" {
+		warnForeignHookBuild()
+	}
+
 	// E-1450/E-1429: PinMainDB for surfaces whose writes are real-world
 	// activity in the real ledger regardless of cwd or XDG_CONFIG_HOME
 	// (hook-fired writes, MCP channel state, tmux pane/task status).
@@ -119,6 +130,34 @@ func main() {
 		usage(os.Stderr)
 		os.Exit(2)
 	}
+}
+
+// warnForeignHookBuild prints a one-line stderr warning when this hook process
+// is a foreign endless-go build serving a self_dev worktree (E-1669). It never
+// blocks: a warning, not a refuse, since refusing the hook would block every
+// tool call. No-op outside a self_dev worktree or when the worktree's own
+// binary is running. Best-effort — any error resolving the executable or cwd
+// silently skips the check rather than risk noise on a healthy session.
+func warnForeignHookBuild() {
+	exe, err := os.Executable()
+	if err != nil {
+		return
+	}
+	cwd, err := os.Getwd()
+	if err != nil {
+		return
+	}
+	expected, foreign := monitor.ForeignHookBuild(cwd, exe)
+	if !foreign {
+		return
+	}
+	fmt.Fprintf(os.Stderr,
+		"endless-go: WARNING: hook is running a foreign build (%s) inside a "+
+			"self_dev worktree; expected %s. The worktree was not fully "+
+			"provisioned — re-run its .endless/hooks/post-worktree-create.sh "+
+			"(or `just build` + `just claude-settings-init`) so the session "+
+			"dogfoods candidate code.\n",
+		exe, expected)
 }
 
 func usage(w *os.File) {

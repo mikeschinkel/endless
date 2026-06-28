@@ -13,11 +13,15 @@
 # Checks:
 #   - PRODUCT guard: no shipped endless Go/Python source shells out to `just`;
 #     `just` lives ONLY in the .endless/hooks/post-worktree-create.sh wrapper.
-#   - Hook content: endless's hook runs go-work-init + build + claude-settings-init.
-#   - Functional E2E against THIS worktree: running the hook builds
-#     bin/endless-go and installs a .claude/settings.json hook override whose
-#     command points at this worktree's binary, preserving the XDG_CONFIG_HOME
-#     env block.
+#   - Hook content (Part 1): endless's hook copies the prebuilt binary (not
+#     `just build`) and runs go-work-init + claude-settings-init.
+#   - Functional E2E (Part 1) against THIS worktree: running the hook leaves
+#     bin/endless-go present and installs a .claude/settings.json hook override
+#     whose command points at this worktree's binary, preserving the
+#     XDG_CONFIG_HOME env block.
+#   - Foreign-build backstop (Part 2): a hook fired from a foreign endless-go
+#     build inside a self_dev worktree warns loudly on stderr without blocking
+#     (exit != 2); the worktree's own binary does not warn.
 #
 # Run from anywhere inside the worktree:
 #   ./tests/tasks/e-1662-verify.sh
@@ -81,6 +85,12 @@ assert_eq() {
 assert_contains() {
     if [[ "$3" == *"$2"* ]]; then report_pass "$1"
     else report_fail "$1" "output contains: $2" "$3"; fi
+}
+
+# assert_not_contains DESC NEEDLE HAYSTACK
+assert_not_contains() {
+    if [[ "$3" != *"$2"* ]]; then report_pass "$1"
+    else report_fail "$1" "output does NOT contain: $2" "$3"; fi
 }
 
 # assert_true DESC -- CMD...  (CMD must exit zero)
@@ -162,6 +172,40 @@ print((s.get("env") or {}).get("XDG_CONFIG_HOME",""))
         "sandboxes/$(basename "${REPO_ROOT}")" "${xdg}"
 }
 
+test_foreign_build_warning() {
+    section "foreign-build backstop — hook warns (never blocks) on a foreign build"
+
+    # Build the CANDIDATE binary (this branch's Part 2 code) into the worktree's
+    # own bin/ and a foreign copy elsewhere. We build rather than reuse bin/ as-is
+    # because test_functional_e2e ran the hook, which COPIES main's binary over
+    # bin/endless-go — that main build predates Part 2, so reusing it would test
+    # the wrong code. (This is correct product behavior: the agent rebuilds the
+    # candidate after the creation-time copy.)
+    local tmp; tmp=$(mktemp -d)
+    mkdir -p "${tmp}/cfg" "${tmp}/cache"
+    if ! ( cd "${REPO_ROOT}" && go build -o bin/endless-go ./cmd/endless-go ) 2>"${tmp}/build.err"; then
+        report_fail "build candidate binary for Part 2 test" "go build ok" "$(cat "${tmp}/build.err")"
+        rm -rf "${tmp}"; return
+    fi
+    cp "${REPO_ROOT}/bin/endless-go" "${tmp}/endless-go"   # foreign path, candidate code
+
+    local err rc
+    err=$(cd "${REPO_ROOT}" && XDG_CONFIG_HOME="${tmp}/cfg" XDG_CACHE_HOME="${tmp}/cache" \
+        "${tmp}/endless-go" hook claude </dev/null 2>&1 >/dev/null); rc=$?
+    assert_contains "foreign build warns on stderr" "foreign build" "${err}"
+    assert_contains "warning names the provision fix" "post-worktree-create.sh" "${err}"
+    if [[ "${rc}" -ne 2 ]]; then report_pass "warning does not block (exit != 2)"
+    else report_fail "warning does not block (exit != 2)" "exit != 2" "exit=2"; fi
+
+    # Control: the worktree's OWN binary fired from the worktree must NOT warn.
+    local err2
+    err2=$(cd "${REPO_ROOT}" && XDG_CONFIG_HOME="${tmp}/cfg" XDG_CACHE_HOME="${tmp}/cache" \
+        "${REPO_ROOT}/bin/endless-go" hook claude </dev/null 2>&1 >/dev/null)
+    assert_not_contains "worktree's own binary does NOT warn" "foreign build" "${err2}"
+
+    rm -rf "${tmp}"
+}
+
 # ─── main ────────────────────────────────────────────────────────────────────
 
 main() {
@@ -181,6 +225,7 @@ main() {
     test_product_guard
     test_hook_content
     test_functional_e2e
+    test_foreign_build_warning
 
     summary
 }

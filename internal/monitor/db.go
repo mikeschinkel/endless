@@ -292,6 +292,58 @@ func projectIsSelfDev(root string) bool {
 // outside the monitor package (e.g. templatecmd).
 func ProjectIsSelfDev(root string) bool { return projectIsSelfDev(root) }
 
+// WorktreeHookBinary returns the endless-go binary a self_dev worktree's hook
+// SHOULD run — <root>/.endless/worktrees/<name>/bin/endless-go — when dir is
+// inside a self_dev worktree, or "" otherwise. The path is what the
+// post-worktree-create provisioning copies and points .claude/settings.json's
+// hooks block at (E-1662/E-998). Pure apart from the self_dev config read.
+func WorktreeHookBinary(dir string) string {
+	root := selfDevProjectRoot(dir)
+	if root == "" || !projectIsSelfDev(root) {
+		return ""
+	}
+	name := worktreeDirName(dir)
+	if name == "" {
+		return ""
+	}
+	return filepath.Join(root, ".endless", "worktrees", name, "bin", "endless-go")
+}
+
+// ForeignHookBuild reports whether an endless-go hook running as exePath from
+// cwd is a FOREIGN build relative to the self_dev worktree containing cwd —
+// i.e. cwd is inside a self_dev worktree but the running binary is not that
+// worktree's own bin/endless-go (typically the global /usr/local/bin symlink →
+// main's build). Returns the expected worktree binary path and true only in
+// that mismatch; ("", false) when cwd is not in a self_dev worktree or the
+// running binary already IS the worktree's. Both sides are resolved through
+// symlinks, so a global symlink that points at the worktree binary is not
+// flagged.
+//
+// The hook path WARNS (never refuses) on a true result: refusing would block
+// every PostToolUse tool call, but a silent run of main's hook code in a
+// self_dev session is exactly the degrade-silently bug this guards (E-1669).
+// The sibling bare-shell DB-opening case refuses instead (E-1668).
+func ForeignHookBuild(cwd, exePath string) (expected string, foreign bool) {
+	expected = WorktreeHookBinary(cwd)
+	if expected == "" {
+		return "", false
+	}
+	if resolvedPath(expected) == resolvedPath(exePath) {
+		return "", false
+	}
+	return expected, true
+}
+
+// resolvedPath returns p with symlinks resolved, or p unchanged if it can't be
+// resolved (e.g. the worktree binary isn't built yet). Lets ForeignHookBuild
+// compare a symlinked global against the real worktree binary fairly.
+func resolvedPath(p string) string {
+	if r, err := filepath.EvalSymlinks(p); err == nil {
+		return r
+	}
+	return p
+}
+
 // worktreeDBContextRefusal is the error returned by the gate. It is the
 // backstop wording for direct Go-binary invocations; the Python CLI emits its
 // own user-facing --db message (the locked text) before ever reaching here.
