@@ -21,14 +21,18 @@
 #      checkout — a worktree sees them at the wrong relative depth and Go builds
 #      break. `just go-work-init` generates a per-worktree go.work with absolute
 #      paths to the local go-pkgs modules, which overrides the relative replaces.
-#      (go.work is gitignored / per-developer.)
-#   2. `just build` produces this worktree's own bin/* (incl. bin/endless-go).
-#      Without it bin/ is absent and the per-worktree sandbox CLI falls back to
-#      the global/main binary instead of the candidate build (E-1662/E-1281).
+#      (go.work is gitignored / per-developer.) This sets the worktree up so the
+#      agent can rebuild candidate Go later, when its branch diverges from main.
+#   2. COPY the main checkout's prebuilt bin/endless-go into this worktree's
+#      bin/. A freshly-created worktree == main (no candidate code yet), so a
+#      build here would only slowly reproduce the binary main already has —
+#      copying is the identical result, instantly. Without bin/endless-go the
+#      per-worktree sandbox CLI falls back to the global/main binary (E-1662/
+#      E-1281). The agent rebuilds with `just build` only once it edits Go.
 #   3. `just claude-settings-init` layers the per-worktree hook override onto
 #      .claude/settings.json so the PostToolUse hook fires THIS worktree's
 #      bin/endless-go (E-998), not the global one. Runs last so it sees the
-#      built binary and preserves the XDG_CONFIG_HOME env block that the
+#      copied binary and preserves the XDG_CONFIG_HOME env block that the
 #      sandbox bind step (run before this hook) wrote.
 
 set -euo pipefail
@@ -44,8 +48,18 @@ fi
 echo "post-worktree-create: generating go.work for ${worktree}"
 just go-work-init
 
-echo "post-worktree-create: building worktree binaries"
-just build
+# Copy main's prebuilt binary rather than building (see header). The main
+# checkout is the parent of the shared git-common-dir.
+main_checkout="$(dirname "$(cd "$(git rev-parse --git-common-dir)" && pwd)")"
+src_bin="${main_checkout}/bin/endless-go"
+if [[ ! -x "${src_bin}" ]]; then
+    echo "post-worktree-create: main checkout binary not found at ${src_bin};" >&2
+    echo "  build it once from the main checkout with 'just build', then re-run this hook." >&2
+    exit 1
+fi
+echo "post-worktree-create: copying ${src_bin} -> ${worktree}/bin/endless-go"
+mkdir -p "${worktree}/bin"
+cp -p "${src_bin}" "${worktree}/bin/endless-go"
 
 echo "post-worktree-create: installing per-worktree Claude hook override"
 just claude-settings-init

@@ -112,24 +112,35 @@ test_product_guard() {
 }
 
 test_hook_content() {
-    section "endless hook — bootstraps go.work + build + hook override"
+    section "endless hook — bootstraps go.work + copies binary + hook override"
 
     local hook_body
     hook_body=$(cat "${HOOK}" 2>/dev/null)
     assert_contains "hook runs go-work-init (E-986)" "just go-work-init" "${hook_body}"
-    assert_contains "hook runs build (E-1662)" "just build" "${hook_body}"
+    assert_contains "hook COPIES main's binary, not build (E-1662)" \
+        "cp -p" "${hook_body}"
+    assert_contains "hook copy targets bin/endless-go (E-1662)" \
+        "bin/endless-go" "${hook_body}"
+    # Guard against a regression back to building at creation time. Match an
+    # actual uncommented `just build` invocation, not the word in a comment.
+    if grep -qE '^[[:space:]]*just[[:space:]]+build([[:space:]]|$)' "${HOOK}"; then
+        report_fail "hook does NOT invoke \`just build\` at creation" \
+            "no uncommented 'just build' line" "found one"
+    else
+        report_pass "hook does NOT invoke \`just build\` at creation"
+    fi
     assert_contains "hook installs hook override (E-1662)" "just claude-settings-init" "${hook_body}"
     assert_true "hook is executable" -- test -x "${HOOK}"
 }
 
 test_functional_e2e() {
-    section "functional E2E — run THIS worktree's hook (builds + hook override)"
+    section "functional E2E — run THIS worktree's hook (copies binary + hook override)"
 
     local out rc
     out=$("${HOOK}" "${REPO_ROOT}" 2>&1); rc=$?
     assert_eq "hook exits 0" "0" "${rc}"
 
-    assert_true "bin/endless-go built and executable" -- test -x "${REPO_ROOT}/bin/endless-go"
+    assert_true "bin/endless-go present and executable" -- test -x "${REPO_ROOT}/bin/endless-go"
 
     local settings="${REPO_ROOT}/.claude/settings.json"
     local hookcmd xdg
