@@ -107,9 +107,9 @@ def test_reexec_target_returns_none_when_cwd_not_in_worktree(tmp_path, monkeypat
     assert config.worktree_python_reexec_target(source_file=external_src) is None
 
 
-def test_reexec_target_handles_slugged_worktree(tmp_path, monkeypatch):
-    """Regression: slugged worktree dirs (e-NNN-slug) must resolve to the
-    full dir, not `f"e-{task_id}"` reconstruction that loses the slug."""
+def test_reexec_target_ignores_named_alternate_worktree(tmp_path, monkeypatch):
+    """ED-1515: a named-alternate dir (e-NNN-slug) is not recognized as a task
+    worktree, so the re-exec gate does not fire from inside one."""
     proj = tmp_path / "proj"
     endless = proj / ".endless"
     wt = endless / "worktrees" / "e-1513-add-foo"
@@ -119,9 +119,7 @@ def test_reexec_target_handles_slugged_worktree(tmp_path, monkeypatch):
     external_src = tmp_path / "other" / "src" / "endless" / "cli.py"
     external_src.parent.mkdir(parents=True)
     external_src.touch()
-    target = config.worktree_python_reexec_target(source_file=external_src)
-    assert target == wt.resolve()
-    assert str(target).endswith("/e-1513-add-foo")
+    assert config.worktree_python_reexec_target(source_file=external_src) is None
 
 
 def test_reexec_target_returns_none_when_project_does_not_opt_in(tmp_path, monkeypatch):

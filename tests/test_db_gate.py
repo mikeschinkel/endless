@@ -8,13 +8,12 @@ from endless import config
 from endless.cli import main
 
 
-def _make_worktree(tmp_path, sandbox: bool, task_id: str = "555", slug: str = ""):
-    """Build <tmp>/proj/.endless/{config.json, worktrees/e-<id>[-<slug>]} and
+def _make_worktree(tmp_path, sandbox: bool, task_id: str = "555"):
+    """Build <tmp>/proj/.endless/{config.json, worktrees/e-<id>} and
     return the worktree dir. config.json sets self_dev to `sandbox`."""
     proj = tmp_path / "proj"
     endless = proj / ".endless"
-    dir_name = f"e-{task_id}" + (f"-{slug}" if slug else "")
-    wt = endless / "worktrees" / dir_name
+    wt = endless / "worktrees" / f"e-{task_id}"
     wt.mkdir(parents=True)
     (endless / "config.json").write_text(
         '{"self_dev": %s}\n' % ("true" if sandbox else "false")
@@ -25,27 +24,18 @@ def _make_worktree(tmp_path, sandbox: bool, task_id: str = "555", slug: str = ""
 # --- resolution helpers --------------------------------------------------
 
 
-def test_worktree_task_id_detects_segment():
-    assert config.worktree_task_id(
-        __import__("pathlib").Path("/x/proj/.endless/worktrees/e-1429/internal")
-    ) == "1429"
-    assert config.worktree_task_id(
-        __import__("pathlib").Path("/x/proj/.endless/worktrees/e-77-some-slug")
-    ) == "77"
-    assert config.worktree_task_id(__import__("pathlib").Path("/x/proj")) is None
-
-
 def test_worktree_dir_name_detects_segment():
     pathlib = __import__("pathlib")
     assert config.worktree_dir_name(
         pathlib.Path("/x/proj/.endless/worktrees/e-1429/internal")
     ) == "e-1429"
     assert config.worktree_dir_name(
-        pathlib.Path("/x/proj/.endless/worktrees/e-77-some-slug")
-    ) == "e-77-some-slug"
+        pathlib.Path("/x/proj/.endless/worktrees/e-77")
+    ) == "e-77"
+    # ED-1515: a named-alternate dir is not recognized as a task worktree.
     assert config.worktree_dir_name(
-        pathlib.Path("/x/proj/.endless/worktrees/e-77-some-slug/sub")
-    ) == "e-77-some-slug"
+        pathlib.Path("/x/proj/.endless/worktrees/e-77-some-slug")
+    ) is None
     assert config.worktree_dir_name(pathlib.Path("/x/proj")) is None
 
 
@@ -74,19 +64,6 @@ def test_apply_db_choice_sandbox(tmp_path, monkeypatch):
     assert config.RESOLVED_CONFIG_DIR == config.sandbox_config_dir("e-909")
     assert config.RESOLVED_CONFIG_DIR.name == "endless"
     assert "sandboxes/e-909/endless" in str(config.RESOLVED_CONFIG_DIR)
-
-
-def test_apply_db_choice_sandbox_with_slug(tmp_path, monkeypatch):
-    """A slug-bearing worktree resolves to its own sandbox, distinct from the
-    un-slugged sandbox for the same task id. This is the core E-1446 behavior."""
-    wt = _make_worktree(tmp_path, sandbox=True, task_id="909", slug="testing")
-    monkeypatch.chdir(wt)
-    monkeypatch.setattr(config, "RESOLVED_CONFIG_DIR", None)
-    config.apply_db_choice("sandbox")
-    assert config.RESOLVED_CONFIG_DIR == config.sandbox_config_dir("e-909-testing")
-    assert "sandboxes/e-909-testing/endless" in str(config.RESOLVED_CONFIG_DIR)
-    # Distinct from the un-slugged sandbox for the same task id.
-    assert config.sandbox_config_dir("e-909") != config.sandbox_config_dir("e-909-testing")
 
 
 def test_apply_db_choice_sandbox_outside_worktree(tmp_path, monkeypatch):

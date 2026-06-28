@@ -168,12 +168,13 @@ def mark_as_group(dir_path: Path):
 # later command to the wrong DB. The flag resolves to a config directory, which
 # pins this process's reads and is threaded to Go subprocesses via --config-dir.
 
-# Matches the canonical task-worktree path segment. Group 1 captures the full
-# worktree dir basename (e-NNN or e-NNN-slug) — the source of the per-worktree
-# sandbox dir name. Group 2 captures the task-id digits. Mirrors
-# monitor.TaskIDFromWorktreePath on the Go side (digits only).
+# Matches the canonical task-worktree path segment. Group 1 captures the
+# worktree dir basename (e-NNN) — the source of the per-worktree sandbox dir
+# name. Only the bare `e-NNN` form is recognized (ED-1515); a trailing `-slug`
+# no longer resolves as the task's worktree. Mirrors monitor.worktreeDirName /
+# monitor.TaskIDFromWorktreePath on the Go side.
 _WORKTREE_PATH_RE = re.compile(
-    r"/\.endless/worktrees/(e-(\d+)(?:-[a-z0-9-]+)?)(?:/|$)"
+    r"/\.endless/worktrees/(e-\d+)(?:/|$)"
 )
 
 # The locked refusal message. Click prepends "Error: " to produce the final
@@ -203,8 +204,8 @@ def main_config_dir() -> Path:
 def sandbox_config_dir(worktree_dir_name: str) -> Path:
     """The endless config dir inside a worktree's per-worktree sandbox.
 
-    Sandbox dir basename is the worktree dir's basename (e-NNN or e-NNN-slug),
-    so each worktree maps 1-to-1 to its own sandbox. Endless appends its own
+    Sandbox dir basename is the worktree dir's basename (e-NNN), so each
+    worktree maps 1-to-1 to its own sandbox. Endless appends its own
     "endless" segment (as ConfigDir does to XDG_CONFIG_HOME), so the DB lives
     at <cache>/endless/sandboxes/<worktree-dir-name>/endless/endless.db.
     """
@@ -212,20 +213,9 @@ def sandbox_config_dir(worktree_dir_name: str) -> Path:
     return sandbox / "endless"
 
 
-def worktree_task_id(cwd: Path | None = None) -> str | None:
-    """Task-id digits if cwd is inside a .endless/worktrees/e-NNN worktree,
-    else None. Pure: no filesystem or config reads.
-
-    NOT suitable for constructing sandbox/worktree paths — slugged worktrees
-    (e-NNN-slug) would drop their suffix. Use `worktree_dir_name` for paths."""
-    s = str(cwd if cwd is not None else Path.cwd())
-    m = _WORKTREE_PATH_RE.search(s)
-    return m.group(2) if m else None
-
-
 def worktree_dir_name(cwd: Path | None = None) -> str | None:
-    """Worktree dir basename (e-NNN or e-NNN-slug) if cwd is inside a
-    .endless/worktrees/e-NNN[-slug] worktree, else None. Pure: no filesystem
+    """Worktree dir basename (e-NNN) if cwd is inside a
+    .endless/worktrees/e-NNN worktree, else None. Pure: no filesystem
     or config reads. Used to derive the per-worktree sandbox dir name."""
     s = str(cwd if cwd is not None else Path.cwd())
     m = _WORKTREE_PATH_RE.search(s)

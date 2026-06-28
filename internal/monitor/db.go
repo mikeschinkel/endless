@@ -184,7 +184,7 @@ func dbContextExplicit() bool {
 }
 
 // worktreePathMarker is the path segment that identifies an endless-managed
-// task worktree: <project-root>/.endless/worktrees/e-NNN[-slug].
+// task worktree: <project-root>/.endless/worktrees/e-NNN.
 const worktreePathMarker = "/.endless/worktrees/"
 
 // selfDevProjectRoot returns the project root (the main checkout) when dir is
@@ -202,12 +202,12 @@ func selfDevProjectRoot(dir string) string {
 	return dir[:i]
 }
 
-// worktreeDirName returns the worktree directory basename (e-NNN or
-// e-NNN-slug) when dir is inside a task worktree, or "" otherwise. Unlike
-// TaskIDFromWorktreePath (which captures the digits only and drops any slug),
-// this returns the FULL basename — the per-worktree sandbox dir basename
-// equals the worktree dir basename, so the slug must be preserved to find the
-// right sandbox. Mirrors Python config.worktree_dir_name. Pure: no I/O.
+// worktreeDirName returns the worktree directory basename (e-NNN) when dir
+// is inside a task worktree, or "" otherwise. The per-worktree sandbox dir
+// basename equals the worktree dir basename, so this is the lowercase
+// `e-NNN` form used to locate the sandbox — distinct from
+// TaskIDFromWorktreePath's canonical `E-NNN` task id. Mirrors Python
+// config.worktree_dir_name. Pure: no I/O.
 func worktreeDirName(dir string) string {
 	i := strings.Index(dir, worktreePathMarker)
 	if i < 0 {
@@ -241,7 +241,7 @@ func worktreeDirName(dir string) string {
 // afterward, with ConfigDir() (config.json, logs) following the self-detected
 // sandbox per the E-1450 split.
 //
-// No-op unless ALL hold: cwd is inside <root>/.endless/worktrees/e-NNN[-slug],
+// No-op unless ALL hold: cwd is inside <root>/.endless/worktrees/e-NNN,
 // <root> is a self_dev project, and the sandbox config dir already exists on
 // disk. The existence check is essential — routing to a missing sandbox would
 // open a fresh empty DB at a half-built path. Must run before the first

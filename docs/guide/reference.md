@@ -91,8 +91,7 @@ A quick map of the files and directories Endless manages.
 | `.endless/config.json`                                       | Project-local Endless config (tracking mode, custom settings).                            |
 | `.endless/db-ledger/db-entries-<node>-<seq>.jsonl`           | Write-ahead log of all DB writes. **Committed to git** — the SQLite DB is rebuilt from these on every clone.  |
 | `<worktree>/.endless/plans/E-NNNN.md`                        | Plan file attached to a task. Lives in the task's worktree (written by `task update --text`); rides into main via `worktree land`. The DB's `tasks.text` column is source of truth — the file is the on-disk mirror. |
-| `.endless/worktrees/e-<id>/`                                 | Primary per-task git worktree. **Gitignored.**                                           |
-| `.endless/worktrees/e-<id>-<slug>/`                          | Ad-hoc additional worktree for a task (testing, alternate experiments). **Gitignored.**  |
+| `.endless/worktrees/e-<id>/`                                 | The per-task git worktree — one canonical name per task; named alternates are not recognized. Need a second checkout? File a child task. **Gitignored.** |
 | `.endless/worktree.json`                                     | Current session's task → worktree mapping (companion file).                              |
 | `verbs.jsonl`                                                | Registered action verbs at the project root, one JSON object per line. Auto-committed to main as a global-config artifact. A legacy `verbs.json` array, if present, is migrated to JSONL on first load. |
 

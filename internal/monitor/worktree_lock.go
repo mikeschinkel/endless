@@ -211,11 +211,12 @@ func FindLockBySessionID(projectID int64, sessionID string) (string, error) {
 }
 
 // taskIDFromWorktreePathRe matches the canonical task-worktree path
-// segment `.endless/worktrees/e-NNN[-slug]` and captures the digits.
-// Anchored on the path component so subdirectories of the worktree
-// also match.
+// segment `.endless/worktrees/e-NNN` and captures the digits. Anchored on
+// the path component so subdirectories of the worktree also match. Only the
+// bare `e-NNN` form is recognized (ED-1515); a trailing `-slug` no longer
+// resolves as the task's worktree.
 var taskIDFromWorktreePathRe = regexp.MustCompile(
-	`/\.endless/worktrees/e-(\d+)(?:-[a-z0-9-]+)?(?:/|$)`,
+	`/\.endless/worktrees/e-(\d+)(?:/|$)`,
 )
 
 // TaskIDFromWorktreePath extracts the canonical "E-NNN" task ID encoded

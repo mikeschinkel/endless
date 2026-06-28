@@ -261,18 +261,14 @@ def test_resolver_helper_returns_path_for_sandbox(tmp_path, monkeypatch):
     assert result == wt_bin
 
 
-def test_resolver_helper_returns_path_for_slugged_sandbox(tmp_path, monkeypatch):
-    """Regression: slugged worktree dirs (e-NNN-slug) must round-trip through
-    the resolver without dropping the slug suffix. Pre-fix, the helper
-    reconstructed `f"e-{task_id}"` from digits-only and lost the slug."""
+def test_resolver_helper_ignores_named_alternate(tmp_path, monkeypatch):
+    """ED-1515: a named-alternate dir (e-NNN-slug) is not recognized as a task
+    worktree, so the resolver finds no per-worktree binary and returns None."""
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / ".cache"))
-    wt, wt_bin = _make_worktree_layout(tmp_path, worktree_dir="e-7777-add-foo")
+    wt, _wt_bin = _make_worktree_layout(tmp_path, worktree_dir="e-7777-add-foo")
     monkeypatch.chdir(wt)
     monkeypatch.setattr(
         config, "RESOLVED_CONFIG_DIR",
         config.sandbox_config_dir("e-7777-add-foo"),
     )
-    result = config.resolved_worktree_endless_go()
-    assert result == wt_bin
-    assert "e-7777-add-foo" in str(result)
-    assert str(result).endswith("/e-7777-add-foo/bin/endless-go")
+    assert config.resolved_worktree_endless_go() is None

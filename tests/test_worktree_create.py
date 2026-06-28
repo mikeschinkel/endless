@@ -171,9 +171,11 @@ def test_task_id_from_worktree_path_basic_match():
     assert _task_id_from_worktree_path(p) == "E-967"
 
 
-def test_task_id_from_worktree_path_with_slug():
+def test_task_id_from_worktree_path_ignores_named_alternate():
+    # ED-1515: only the canonical bare `e-NNN` dir is recognized; a
+    # named-alternate `e-NNN-slug` no longer resolves as the task's worktree.
     p = Path("/Users/x/Projects/foo/.endless/worktrees/e-1208-record-verbs")
-    assert _task_id_from_worktree_path(p) == "E-1208"
+    assert _task_id_from_worktree_path(p) is None
 
 
 def test_task_id_from_worktree_path_subdir():

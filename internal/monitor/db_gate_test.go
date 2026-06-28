@@ -33,8 +33,13 @@ func TestSelfDevProjectRoot(t *testing.T) {
 		},
 		{
 			name: "subdir of worktree",
-			dir:  "/home/x/proj/.endless/worktrees/e-1429-some-slug/internal/monitor",
+			dir:  "/home/x/proj/.endless/worktrees/e-1429/internal/monitor",
 			want: "/home/x/proj",
+		},
+		{
+			name: "named-alternate dir not recognized (ED-1515)",
+			dir:  "/home/x/proj/.endless/worktrees/e-1429-some-slug",
+			want: "",
 		},
 		{
 			name: "main checkout (no worktrees segment)",
@@ -259,14 +264,14 @@ func TestWorktreeDirName(t *testing.T) {
 			want: "e-1368",
 		},
 		{
-			name: "slugged worktree root (full basename, slug kept)",
-			dir:  "/home/x/proj/.endless/worktrees/e-1368-some-slug",
-			want: "e-1368-some-slug",
+			name: "subdir of worktree",
+			dir:  "/home/x/proj/.endless/worktrees/e-1368/internal/monitor",
+			want: "e-1368",
 		},
 		{
-			name: "subdir of slugged worktree",
-			dir:  "/home/x/proj/.endless/worktrees/e-1368-slug/internal/monitor",
-			want: "e-1368-slug",
+			name: "named-alternate dir not recognized (ED-1515)",
+			dir:  "/home/x/proj/.endless/worktrees/e-1368-some-slug",
+			want: "",
 		},
 		{
 			name: "main checkout (no marker)",
@@ -330,13 +335,13 @@ func TestSelfDetectWorktreeSandbox(t *testing.T) {
 		}
 	})
 
-	t.Run("slugged worktree basename captured in full", func(t *testing.T) {
+	t.Run("named-alternate dir not recognized -> no-op (ED-1515)", func(t *testing.T) {
 		resetDBContext(t)
-		wt, sandboxDir := setup(t, "e-1368-my-slug", true, true)
+		wt, _ := setup(t, "e-1368-my-slug", true, true)
 		t.Chdir(wt)
 		SelfDetectWorktreeSandbox()
-		if dbContextDir != sandboxDir {
-			t.Errorf("dbContextDir = %q, want %q", dbContextDir, sandboxDir)
+		if dbContextDir != "" {
+			t.Errorf("dbContextDir = %q, want empty (named alternate is not a task worktree)", dbContextDir)
 		}
 	})
 

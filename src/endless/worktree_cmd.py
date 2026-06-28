@@ -178,10 +178,10 @@ def _read_companion(worktree_path: Path) -> dict | None:
 # trusted (it can outlive the worktree's actual identity — see E-1298's
 # E-1186 stale-companion incident). Match anchored to /.endless/worktrees/
 # under any project root so trailing path components (subdirs of the
-# worktree) match too. Optional `-slug` suffix is allowed per the
-# create_task_worktree convention.
+# worktree) match too. Only the canonical bare `e-NNN` dir is recognized
+# (ED-1515); a trailing `-slug` no longer resolves as the task's worktree.
 _WORKTREE_TASK_ID_RE = re.compile(
-    r"/\.endless/worktrees/e-(\d+)(?:-[a-z0-9-]+)?(?:/|$)"
+    r"/\.endless/worktrees/e-(\d+)(?:/|$)"
 )
 
 
@@ -718,7 +718,7 @@ def _dedup_worktree_verbs_against_main(worktree_path: Path, main_root: Path) -> 
 def _branch_for_task(rows: list[dict], task_id: str) -> dict | None:
     """Find the worktree row whose path encodes the given task id (E-1301).
 
-    Path convention `.endless/worktrees/e-NNN[-slug]` is the canonical
+    Path convention `.endless/worktrees/e-NNN` is the canonical
     source; the companion's task_id field is no longer trusted.
     """
     for r in rows:

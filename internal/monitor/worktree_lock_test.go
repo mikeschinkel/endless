@@ -343,8 +343,9 @@ func TestTaskIDFromWorktreePath_BasicMatch(t *testing.T) {
 		{"/Users/x/Projects/foo/.endless/worktrees/e-967", "E-967"},
 		{"/Users/x/Projects/foo/.endless/worktrees/e-967/", "E-967"},
 		{"/Users/x/Projects/foo/.endless/worktrees/e-967/src/main.go", "E-967"},
-		{"/Users/x/Projects/foo/.endless/worktrees/e-1208-record-verbs", "E-1208"},
-		{"/Users/x/Projects/foo/.endless/worktrees/e-1208-record-verbs/sub", "E-1208"},
+		// ED-1515: a named-alternate dir is not recognized as a task worktree.
+		{"/Users/x/Projects/foo/.endless/worktrees/e-1208-record-verbs", ""},
+		{"/Users/x/Projects/foo/.endless/worktrees/e-1208-record-verbs/sub", ""},
 		{"/Users/x/Projects/foo", ""},
 		{"/Users/x/Projects/foo/.endless/worktrees", ""},
 		{"/Users/x/Projects/foo/.endless/worktrees/", ""},

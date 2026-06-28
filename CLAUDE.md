@@ -51,7 +51,7 @@ Idempotent: re-running produces the same file. Removing the worktree takes the f
 
 ## Self-dev DB sandbox — E-1281
 
-Endless self-dev worktrees route DB writes to a per-worktree sandbox so dev-time CLI usage and tests don't pollute the user's real task ledger at `~/.config/endless/endless.db`. Sandbox lives at `~/.cache/endless/sandboxes/e-NNN[-slug]/` — its basename matches the worktree dir's basename, so each worktree maps 1-to-1 to its own sandbox.
+Endless self-dev worktrees route DB writes to a per-worktree sandbox so dev-time CLI usage and tests don't pollute the user's real task ledger at `~/.config/endless/endless.db`. Sandbox lives at `~/.cache/endless/sandboxes/e-NNN/` — its basename matches the worktree dir's basename, so each worktree maps 1-to-1 to its own sandbox.
 
 Inside a Claude session spawned from the worktree, routing is transparent: `endless task ...` reads/writes the sandbox via the `XDG_CONFIG_HOME` injected into `<worktree>/.claude/settings.json`. From a bare shell inside the worktree, run the worktree-built Go binary directly — `./bin/endless-go ...` self-detects the sandbox from cwd (E-1368), no wrapper or manual export needed; for the Python CLI, pass `endless --db sandbox ...` (or export `XDG_CONFIG_HOME` manually). From the main checkout or any non-endless project, endless reads/writes the real DB.
 
@@ -61,7 +61,7 @@ Opt-in is per project. Endless's own `.endless/config.json` sets `"self_dev": tr
 
 The setup writes an `XDG_CONFIG_HOME` value into `<worktree>/.claude/settings.json`'s `env` block so Claude-spawned subprocesses (including the endless-hook fired on every event) inherit the sandbox routing. There are no longer any wrapper scripts: the `endless-go` binary self-detects the sandbox from cwd (E-1368, mirroring the Python CLI's `--db sandbox` self-routing from E-1513), so candidate code built into `<worktree>/bin/` is exercised by invoking it directly. `XDG_CONFIG_HOME` is retained because the Python CLI resolves its default config dir from it.
 
-Sandbox cleanup on worktree drop/land is not yet automatic; manually `endless-sandbox destroy e-NNN[-slug]` if the cache needs reclaiming.
+Sandbox cleanup on worktree drop/land is not yet automatic; manually `endless-sandbox destroy e-NNN` if the cache needs reclaiming.
 
 ## Tests
 

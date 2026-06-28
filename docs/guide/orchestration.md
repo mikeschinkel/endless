@@ -27,7 +27,7 @@ This:
 3. Creates a git worktree at `.endless/worktrees/e-<id>/` rooted on a fresh branch `task/<id>-<slug>`.
 4. Writes companion metadata to `.endless/worktree.json` (task_id, base_branch, branch, timestamp).
 
-If the same task ever needs an additional worktree (testing, alternate experiment, etc.), it lives at `.endless/worktrees/e-<id>-<slug>/`. The primary worktree is always `e-<id>/`.
+One task gets exactly one worktree: `.endless/worktrees/e-<id>/`. Only that canonical name is recognized — a directory created by hand under any other name simply isn't seen as the task's worktree. When you need a *second* checkout for the same line of work — an A/B comparison, running one copy while editing another, a `git bisect`, or a throwaway snapshot — file a **child task** and claim it. The child gets its own `e-<child-id>/` worktree (and its own sandbox), so the two checkouts are first-class, independently tracked, and land or drop on their own.
 
 ### Project bootstrap hook
 

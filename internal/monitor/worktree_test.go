@@ -28,16 +28,19 @@ func TestWorktreePathForTask_FindsBareDir(t *testing.T) {
 	}
 }
 
-// TestWorktreePathForTask_FindsSluggedDir pins the slugged-name branch:
-// a directory named `e-<task_id>-<slug>` also matches; the function
-// trusts the path prefix rather than requiring a bare name.
-func TestWorktreePathForTask_FindsSluggedDir(t *testing.T) {
+// TestWorktreePathForTask_IgnoresSluggedDir pins the ED-1515 collapse: a
+// named-alternate directory `e-<task_id>-<slug>` is NOT recognized as the
+// task's worktree. Only the canonical bare `e-<task_id>` resolves; a slugged
+// dir alone yields "".
+func TestWorktreePathForTask_IgnoresSluggedDir(t *testing.T) {
 	db := withTestDB(t)
 	projectRoot := t.TempDir()
 	seedProject(t, db, 1, "acme", projectRoot)
 
-	wantWT := filepath.Join(projectRoot, ".endless", "worktrees", "e-808-event-logs")
-	if err := os.MkdirAll(wantWT, 0755); err != nil {
+	if err := os.MkdirAll(
+		filepath.Join(projectRoot, ".endless", "worktrees", "e-808-event-logs"),
+		0755,
+	); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
 
@@ -45,8 +48,8 @@ func TestWorktreePathForTask_FindsSluggedDir(t *testing.T) {
 	if err != nil {
 		t.Fatalf("WorktreePathForTask: %v", err)
 	}
-	if got != wantWT {
-		t.Errorf("got %q, want %q", got, wantWT)
+	if got != "" {
+		t.Errorf("got %q, want \"\" (named-alternate dir must not resolve)", got)
 	}
 }
 
