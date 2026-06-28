@@ -33,7 +33,7 @@ just claude-settings-init   # see "Claude hook override" below
 
 Run `just go-work-init` from any checkout (main or worktree) — it walks up to the main checkout, finds `../go-pkgs/`, and writes the workspace file in cwd.
 
-`endless task claim` and `endless task spawn` run `go-work-init` automatically via endless's own `.endless/hooks/post-worktree-create.sh` (the generic post-worktree-create hook). The manual `just go-work-init` in the block above is only for worktrees created by hand with `git worktree add`, which doesn't fire the hook.
+`endless task claim` and `endless task spawn` run the full worktree bootstrap automatically via endless's own `.endless/hooks/post-worktree-create.sh` (the generic post-worktree-create hook): `go-work-init`, then `build` (so `bin/*` exists), then `claude-settings-init` (the per-worktree hook override). So the entire manual block above is only needed for worktrees created by hand with `git worktree add`, which doesn't fire the hook. Without the build + override step a self-dev worktree silently falls back to the global/main binary instead of its own candidate build (E-1662). The hook is non-fatal + loud per E-986's contract: on failure the worktree is kept and you re-run the hook (it's idempotent) to finish bootstrap.
 
 The broader strategy for handling co-developed third-party deps across worktrees is open as **E-1085**.
 
