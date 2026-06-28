@@ -29,6 +29,15 @@ This:
 
 If the same task ever needs an additional worktree (testing, alternate experiment, etc.), it lives at `.endless/worktrees/e-<id>-<slug>/`. The primary worktree is always `e-<id>/`.
 
+### Project bootstrap hook
+
+A fresh worktree often needs project-specific setup endless can't bake in — Go's `go.mod` replace paths resolve from the main checkout but not a worktree, Node needs `npm install` or a `node_modules` symlink, Python may need a venv, Rust a `target/` clean, and so on. Endless makes this pluggable: if `<project-root>/.endless/hooks/post-worktree-create.sh` exists and is executable, endless runs it right after the worktree is created.
+
+- **Discovery.** The main checkout's `.endless/hooks/post-worktree-create.sh` (tracked and version-controlled in your repo). Endless ships no default — each project writes its own.
+- **Invocation.** The script is exec'd directly (its own shebang) with **cwd = the new worktree** and **`$1` = the worktree path**. No shell-string interpolation.
+- **Failure is non-fatal and loud.** If the hook exits non-zero, endless keeps the worktree and prints a warning naming the script, exit code, worktree path, and the command to re-run it.
+- **The hook must be idempotent / re-runnable.** Because there's no teardown, completing a failed bootstrap is just re-running the hook. Write it so a second run on an already-bootstrapped worktree is a safe no-op (or a clean regenerate).
+
 Plan files for a task live in the task's worktree at `<worktree>/.endless/plans/E-NNNN.md`, not in main, and ride into main when the task lands. The DB's `tasks.text` column is the source of truth; the on-disk file is a mirror that lives with the branch. `endless task update <id> --text-file <path>` writes `tasks.text`; it does **not** create a worktree. The plan file is materialized from `tasks.text` when the worktree is born (at `task claim`/`task spawn`); if a worktree already exists, `--text`/`--text-file` also mirrors into it. So setting plan text on an unclaimed task touches only the DB — no stray worktrees for tasks you aren't working on yet.
 
 ### Getting into the worktree

@@ -33,6 +33,8 @@ just claude-settings-init   # see "Claude hook override" below
 
 Run `just go-work-init` from any checkout (main or worktree) — it walks up to the main checkout, finds `../go-pkgs/`, and writes the workspace file in cwd.
 
+`endless task claim` and `endless task spawn` run `go-work-init` automatically via endless's own `.endless/hooks/post-worktree-create.sh` (the generic post-worktree-create hook). The manual `just go-work-init` in the block above is only for worktrees created by hand with `git worktree add`, which doesn't fire the hook.
+
 The broader strategy for handling co-developed third-party deps across worktrees is open as **E-1085**.
 
 ## Worktree setup (Claude hook override) — E-998

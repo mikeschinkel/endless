@@ -13,6 +13,7 @@ import pytest
 from endless.worktree_cmd import (
     _check_plan_file_committed,
     _default_base_branch,
+    _run_post_worktree_create_hook,
     _slugify_title,
 )
 
@@ -226,3 +227,77 @@ def test_warn_if_companion_disagrees_silent_when_companion_none(capsys):
     _warn_if_companion_disagrees(p, None)
     captured = capsys.readouterr()
     assert captured.err == ""
+
+
+# ---------------------------------------------------------------------------
+# _run_post_worktree_create_hook (E-986)
+# ---------------------------------------------------------------------------
+
+def _write_hook(project_root: Path, body: str, *, executable: bool = True) -> Path:
+    hooks = project_root / ".endless" / "hooks"
+    hooks.mkdir(parents=True, exist_ok=True)
+    hook = hooks / "post-worktree-create.sh"
+    hook.write_text(body)
+    if executable:
+        hook.chmod(0o755)
+    return hook
+
+
+def test_hook_runs_with_worktree_arg_and_cwd(tmp_path, capsys):
+    project = tmp_path / "proj"
+    project.mkdir()
+    worktree = tmp_path / "wt"
+    worktree.mkdir()
+    sentinel = tmp_path / "sentinel"
+    _write_hook(
+        project,
+        "#!/usr/bin/env bash\n"
+        f"printf 'ARG=%s\\n' \"$1\" > '{sentinel}'\n"
+        f"printf 'CWD=%s\\n' \"$(pwd)\" >> '{sentinel}'\n",
+    )
+    _run_post_worktree_create_hook(project, worktree)
+    # cwd may resolve symlinks (macOS /tmp), so compare against the realpath.
+    real_wt = worktree.resolve()
+    assert sentinel.read_text() == f"ARG={worktree}\nCWD={real_wt}\n"
+
+
+def test_hook_failure_is_non_fatal_and_loud(tmp_path, capsys):
+    project = tmp_path / "proj"
+    project.mkdir()
+    worktree = tmp_path / "wt"
+    worktree.mkdir()
+    _write_hook(project, "#!/usr/bin/env bash\nexit 7\n")
+    # Must not raise — worktree is kept.
+    _run_post_worktree_create_hook(project, worktree)
+    err = capsys.readouterr().err
+    assert "post-worktree-create" in err
+    assert "exited 7" in err
+    assert str(worktree) in err
+
+
+def test_no_hook_is_a_silent_noop(tmp_path, capsys):
+    project = tmp_path / "proj"
+    project.mkdir()
+    worktree = tmp_path / "wt"
+    worktree.mkdir()
+    _run_post_worktree_create_hook(project, worktree)
+    out = capsys.readouterr()
+    assert out.out == ""
+    assert out.err == ""
+
+
+def test_non_executable_hook_warns_and_does_not_run(tmp_path, capsys):
+    project = tmp_path / "proj"
+    project.mkdir()
+    worktree = tmp_path / "wt"
+    worktree.mkdir()
+    sentinel = tmp_path / "sentinel"
+    _write_hook(
+        project,
+        f"#!/usr/bin/env bash\ntouch '{sentinel}'\n",
+        executable=False,
+    )
+    _run_post_worktree_create_hook(project, worktree)
+    err = capsys.readouterr().err
+    assert "not executable" in err
+    assert not sentinel.exists()

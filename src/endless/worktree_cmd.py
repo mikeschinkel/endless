@@ -1118,7 +1118,78 @@ def create_task_worktree(
     )
     _materialize_plan_file(task_id, wt_dir)
     _maybe_auto_sandbox_bind(project_root, wt_dir, task_id)
+    _run_post_worktree_create_hook(project_root, wt_dir)
     return wt_dir, True
+
+
+POST_WORKTREE_CREATE_HOOK = ".endless/hooks/post-worktree-create.sh"
+
+
+def _run_post_worktree_create_hook(project_root: Path, worktree_path: Path) -> None:
+    """Run the project's post-worktree-create bootstrap hook, if present (E-986).
+
+    Worktree creation can't bake in every project's bootstrap needs (Go go.mod
+    replace paths, npm install, venv recreation, Rust target/ cleanup, ...).
+    Each project ships its own hook at
+    `<project-root>/.endless/hooks/post-worktree-create.sh`; Endless ships no
+    default. The runner is generic, like a git hook.
+
+    Discovery: the main checkout's tracked, version-controlled script.
+    Invocation: exec'd directly (its own shebang) with cwd = the freshly-created
+    worktree and argv[1] = the worktree path. No shell-string interpolation.
+
+    Failure handling is non-fatal, idempotent, and loud: on non-zero exit the
+    worktree is KEPT and a loud error names the script, exit code, worktree
+    path, and the re-run command. The hook contract REQUIRES idempotency /
+    re-runnability — completing a failed bootstrap is just re-running the hook —
+    so the runner needs no teardown and a partial worktree is never silently
+    usable-but-broken.
+
+    The hook's stdout/stderr stream live so long bootstraps (npm install, go
+    build) show progress.
+    """
+    hook = project_root / POST_WORKTREE_CREATE_HOOK
+    if not hook.exists():
+        return
+    if not os.access(hook, os.X_OK):
+        click.echo(
+            click.style("⚠ post-worktree-create hook is not executable", fg="yellow")
+            + f"\n    {_tilde(hook)}\n"
+            f"    Make it executable and re-run:\n"
+            f"        chmod +x {_tilde(hook)}\n"
+            f"        cd {_tilde(worktree_path)} && {_tilde(hook)} {_tilde(worktree_path)}",
+            err=True,
+        )
+        return
+    click.echo(
+        click.style("•", fg="cyan")
+        + f" running post-worktree-create hook: {_tilde(hook)}"
+    )
+    try:
+        result = subprocess.run(
+            [str(hook), str(worktree_path)], cwd=str(worktree_path),
+        )
+    except OSError as e:
+        click.echo(
+            click.style("⚠ post-worktree-create hook failed to start", fg="yellow")
+            + f"\n    {_tilde(hook)}: {e}\n"
+            f"    Worktree kept. Re-run after fixing:\n"
+            f"        cd {_tilde(worktree_path)} && {_tilde(hook)} {_tilde(worktree_path)}",
+            err=True,
+        )
+        return
+    if result.returncode != 0:
+        click.echo(
+            click.style(
+                f"⚠ post-worktree-create hook exited {result.returncode}", fg="yellow"
+            )
+            + f"\n    script:   {_tilde(hook)}\n"
+            f"    worktree: {_tilde(worktree_path)}\n"
+            f"    The worktree was KEPT. The hook must be idempotent/re-runnable;\n"
+            f"    finish bootstrap by re-running it:\n"
+            f"        cd {_tilde(worktree_path)} && {_tilde(hook)} {_tilde(worktree_path)}",
+            err=True,
+        )
 
 
 def _materialize_plan_file(task_id: int, worktree_path: Path) -> None:
