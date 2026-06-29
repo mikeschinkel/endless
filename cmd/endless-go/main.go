@@ -19,8 +19,11 @@
 // body):
 //
 //   - hook → ENDLESS_NO_HOOKS=true short-circuit (E-1470), then PinMainDB (E-1450/E-1429).
-//   - channel, tmux, session-next → PinMainDB (E-1429). session-next reads
-//     the live sessions table, which hook writes pin to main regardless of cwd.
+//   - channel, tmux → PinMainDB (E-1429).
+//   - session-next → PinMainDB on its normal path (it reads the live sessions
+//     table, which hook writes pin to main regardless of cwd), but with --focal
+//     (headless/tests) it skips the pin and reads the resolved sandbox/
+//     --config-dir context; the decision lives in sessionnextcmd.Run (E-1685).
 //   - event, serve, session-query → ConsumeDBContextFlag (E-1429).
 //   - sandbox → no DB-context init.
 //
@@ -107,9 +110,12 @@ func main() {
 	// whatever --config-dir (or absence of one) ConsumeDBContextFlag
 	// already established above.
 	switch sub {
-	case "hook", "channel", "tmux", "session-next":
+	case "hook", "channel", "tmux":
 		monitor.PinMainDB()
 	}
+	// session-next pins main itself, but only on its normal tmux-resolved path;
+	// with --focal (headless/tests) it deliberately reads the resolved sandbox
+	// context instead, so the decision lives inside sessionnextcmd.Run (E-1685).
 
 	switch sub {
 	case "event":

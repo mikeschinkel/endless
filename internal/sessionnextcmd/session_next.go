@@ -82,20 +82,36 @@ func Run(args []string) {
 	all := fs.Bool("all", false, "include done-work (terminal-status) rows")
 	watch := fs.Bool("watch", false, "redraw every 2s until interrupted (Ctrl-C)")
 	cols := fs.Int("cols", 0, "terminal width override (0 = auto-detect)")
+	focalFlag := fs.Int64("focal", 0, "explicit focal task id (headless: bypasses tmux/session resolution and reads the resolved DB context — the self-detected sandbox or --config-dir — instead of pinning the main DB; intended for tests)")
 	if err := fs.Parse(args); err != nil {
 		os.Exit(2)
 	}
 
-	pane := os.Getenv("TMUX_PANE")
-	// Anchor focal + parent ONCE, before any refresh loop, so the view stays
-	// pinned to THIS window's task as other sessions come and go (matches the
-	// prototype, which resolves the focal task before entering its watch loop).
-	focal, err := monitor.ResolveSessionNextFocal(pane)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "session-next:", err)
-		os.Exit(1)
+	var focal, parentSession int64
+	if *focalFlag > 0 {
+		// Headless mode (E-1685 verify harness): the caller names the focal task
+		// directly, so there is no live tmux pane / session to resolve — and no
+		// reason to force the main DB. Skip PinMainDB so DB() honors whatever
+		// context was already resolved in main.go (the self-detected per-worktree
+		// sandbox, or an explicit --config-dir), which is what lets the verify
+		// script exercise the dependents row-set against a seeded sandbox DB.
+		focal = *focalFlag
+	} else {
+		// Normal path: session/pane state lives in the main DB regardless of cwd
+		// (the hook pins its writes there), so pin main before resolving. Anchor
+		// focal + parent ONCE, before any refresh loop, so the view stays pinned
+		// to THIS window's task as other sessions come and go (matches the
+		// prototype, which resolves the focal task before entering its watch loop).
+		monitor.PinMainDB()
+		pane := os.Getenv("TMUX_PANE")
+		var err error
+		focal, err = monitor.ResolveSessionNextFocal(pane)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "session-next:", err)
+			os.Exit(1)
+		}
+		parentSession = monitor.ResolveSessionNextParentSession(pane)
 	}
-	parentSession := monitor.ResolveSessionNextParentSession(pane)
 
 	color := colorEnabled()
 

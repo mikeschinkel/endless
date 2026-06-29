@@ -161,6 +161,73 @@ func TestSessionNextRows_AllIncludesDoneWork(t *testing.T) {
 	}
 }
 
+// TestSessionNextRows_FocalDependents drives the E-1685 read-time dependents
+// UNION: the focal task's direct dependents (tasks it blocks) appear as rows
+// purely from task_deps, with no session_tasks membership; they carry ⊗
+// (BlockedByN>0) while the focal is open and shed it once the focal lands; and a
+// terminal dependent is omitted by default but surfaced under --all.
+func TestSessionNextRows_FocalDependents(t *testing.T) {
+	db := withTestDB(t)
+	seedProject(t, db, 1, "p1", "/p1")
+
+	const focal, dep, doneDep = 500, 501, 502
+	snTask(t, db, focal, 1, "underway", "now", "")
+	snTask(t, db, dep, 1, "ready", "next", "")
+	snTask(t, db, doneDep, 1, "confirmed", "next", "")
+
+	// The only session is on the focal and has touched ONLY the focal — neither
+	// dependent is in session_tasks, so their presence proves the read-time UNION.
+	snSession(t, db, 1, 1, focal, "working")
+	snSessionTask(t, db, 1, focal)
+
+	snBlocks(t, db, focal, dep)     // focal blocks an open dependent
+	snBlocks(t, db, focal, doneDep) // focal blocks a terminal dependent
+
+	// ── focal open: dependent shown, carrying ⊗ (BlockedByN counts the open focal)
+	rows, err := SessionNextRows(focal, 0, false)
+	if err != nil {
+		t.Fatalf("SessionNextRows: %v", err)
+	}
+	d, ok := snRowByID(rows, dep)
+	if !ok {
+		t.Fatalf("open dependent %d should be a row while focal is open", dep)
+	}
+	if d.IsFocal || d.IsParent {
+		t.Errorf("dependent should not be focal/parent: %+v", d)
+	}
+	if d.BlockedByN != 1 {
+		t.Errorf("dependent BlockedByN = %d, want 1 (blocked by open focal)", d.BlockedByN)
+	}
+	if _, ok := snRowByID(rows, doneDep); ok {
+		t.Errorf("terminal dependent %d should be omitted without --all", doneDep)
+	}
+
+	// ── --all surfaces the terminal dependent
+	rowsAll, err := SessionNextRows(focal, 0, true)
+	if err != nil {
+		t.Fatalf("SessionNextRows --all: %v", err)
+	}
+	if _, ok := snRowByID(rowsAll, doneDep); !ok {
+		t.Errorf("--all should include terminal dependent %d", doneDep)
+	}
+
+	// ── focal lands (terminal): the dependent's ⊗ clears, it still shows
+	if _, err := db.Exec(`UPDATE tasks SET status = 'confirmed' WHERE id = ?`, focal); err != nil {
+		t.Fatalf("land focal: %v", err)
+	}
+	rows2, err := SessionNextRows(focal, 0, false)
+	if err != nil {
+		t.Fatalf("SessionNextRows after land: %v", err)
+	}
+	d2, ok := snRowByID(rows2, dep)
+	if !ok {
+		t.Fatalf("dependent %d should still show after focal lands", dep)
+	}
+	if d2.BlockedByN != 0 {
+		t.Errorf("dependent BlockedByN = %d after focal lands, want 0 (⊗ cleared)", d2.BlockedByN)
+	}
+}
+
 // TestSessionNextRows_ZeroFocal returns nothing when no focal task resolves.
 func TestSessionNextRows_ZeroFocal(t *testing.T) {
 	db := withTestDB(t)

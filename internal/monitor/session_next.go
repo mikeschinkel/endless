@@ -119,12 +119,20 @@ func tmuxWindowOption(pane, name string) string {
 
 // SessionNextRows returns the task rows for the session-next view of focal task
 // `focal`, with `parentSession` the spawning session's id (0 if none). The row
-// set, per the prototype spec (~/.config/endless/session-next.sql):
+// set, per the prototype spec (~/.config/endless/session-next.sql) plus E-1685:
 //
 //   - every task touched (via session_tasks) by ANY live-or-dead session whose
 //     active_task_id = focal (cross-project; robust to duplicate session rows),
 //   - ∪ the focal task itself,
-//   - ∪ the parent session's active task.
+//   - ∪ the parent session's active task,
+//   - ∪ the focal task's DIRECT dependents — tasks T it blocks
+//     (task_deps source=focal, target=T, dep_type='blocks'). These are computed
+//     at read time, NOT written into session_tasks: that table is a projection
+//     of the event ledger, and a dependent has no backing task.* event (E-1685).
+//     A dependent carries ⊗ while the focal is open (its BlockedByN counts the
+//     open focal); when the focal lands and the block clears, BlockedByN drops to
+//     0 and ⊗ disappears with no special highlight. One hop only, not the
+//     transitive closure.
 //
 // Done-work (terminal status) is omitted UNLESS the row is the focal or parent
 // row, or includeAll is true. Returns an empty slice when focal is 0.
@@ -158,6 +166,21 @@ base AS (
   UNION
   SELECT t.id, t.title, t.status, t.phase, t.text, t.type_id
     FROM tasks t, pfoc WHERE t.id = pfoc.ptid
+  UNION
+  -- E-1685: the focal task's direct dependents (tasks it blocks), read-time
+  -- only. Computed here rather than materialized into session_tasks so the
+  -- projection-of-the-event-ledger invariant holds. The terminal-status filter
+  -- in the final SELECT drops done dependents unless --all; the BlockedByN
+  -- column drives their ⊗ while the focal stays open.
+  SELECT t.id, t.title, t.status, t.phase, t.text, t.type_id
+    FROM tasks t
+   WHERE EXISTS (
+     SELECT 1 FROM task_deps d
+      WHERE d.source_type = 'task' AND d.target_type = 'task'
+        AND d.dep_type = 'blocks'
+        AND d.source_id = (SELECT tid FROM ftask)
+        AND d.target_id = t.id
+   )
 ),
 enr AS (
   SELECT b.id, b.title, b.status, b.phase,
