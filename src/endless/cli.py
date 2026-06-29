@@ -785,7 +785,9 @@ def session_history(session_id, show_tools, timestamps, limit, sort_order, as_js
               help="Include done-work (terminal-status) rows")
 @click.option("--watch", is_flag=True,
               help="Redraw every 2s until interrupted (Ctrl-C)")
-def session_next(show_all, watch):
+@click.option("--tree", is_flag=True,
+              help="Render do/plan tasks as an IDs-only implementation-order tree")
+def session_next(show_all, watch, tree):
     """Show what's next for the current session's task, across live sessions.
 
     Resolves the focal task for the current tmux window (live session's active
@@ -794,9 +796,14 @@ def session_next(show_all, watch):
     tasks worked by sessions on the focal task, and any cross-session in-flight
     work, with blocked-by/blocks decorations. Reads the main DB. Use --watch for
     a live view that redraws every 2 seconds.
+
+    With --tree, render the do/plan backlog as an IDs-only tree in implementation
+    order (nesting = order, siblings = parallelizable), derived from the
+    blocked-by DAG and overridden by any per-session order (`endless session
+    order`). No legend, titles, or icons.
     """
     from endless.session_cmd import session_next_resolve
-    session_next_resolve(show_all=show_all, watch=watch)
+    session_next_resolve(show_all=show_all, watch=watch, tree=tree)
 
 
 @session_cmd.command("list")

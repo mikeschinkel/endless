@@ -232,3 +232,104 @@ SELECT id, title, status, phase, type_slug, has_text,
 	}
 	return out, nil
 }
+
+// intPlaceholders renders "?,?,…" with len(ids) slots and the matching []any
+// args, for a dynamic SQL `IN` clause. Returns ("", nil) for an empty set so
+// callers can short-circuit (an empty `IN ()` is a SQL error).
+func intPlaceholders(ids []int64) (string, []any) {
+	if len(ids) == 0 {
+		return "", nil
+	}
+	ph := make([]string, len(ids))
+	args := make([]any, len(ids))
+	for i, id := range ids {
+		ph[i] = "?"
+		args[i] = id
+	}
+	return strings.Join(ph, ","), args
+}
+
+// SessionNextBlockerEdges returns the in-set blocked-by edges among `ids`: for
+// each task that is blocked, the list of its blockers that are ALSO in `ids` and
+// still OPEN (blocker status not terminal). This is the blocks-DAG restricted to
+// the candidate set, which `session next --tree` topologically layers into
+// implementation order. Result maps target (blocked task) → []source (blockers).
+// Tasks with no in-set open blocker are absent from the map (they are roots).
+func SessionNextBlockerEdges(ids []int64) (map[int64][]int64, error) {
+	if len(ids) == 0 {
+		return map[int64][]int64{}, nil
+	}
+	db, err := DB()
+	if err != nil {
+		return nil, err
+	}
+	ph, args := intPlaceholders(ids)
+	// Both endpoints must be in the candidate set; the blocker must be open.
+	q := `
+SELECT d.target_id, d.source_id
+  FROM task_deps d JOIN tasks blk ON blk.id = d.source_id
+ WHERE d.source_type = 'task' AND d.target_type = 'task'
+   AND d.dep_type = 'blocks'
+   AND blk.status NOT IN (` + terminalStatusSet + `)
+   AND d.target_id IN (` + ph + `)
+   AND d.source_id IN (` + ph + `)`
+	rows, err := db.Query(q, append(append([]any{}, args...), args...)...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	edges := make(map[int64][]int64)
+	for rows.Next() {
+		var target, source int64
+		if err := rows.Scan(&target, &source); err != nil {
+			return nil, err
+		}
+		edges[target] = append(edges[target], source)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return edges, nil
+}
+
+// SessionNextDoOrder returns the per-session implementation order (E-1683's
+// session_tasks.do_order) for the candidate `ids`, scoped to sessions whose
+// active_task_id = focal — the same union scope SessionNextRows uses. Only
+// non-null do_order rows are returned; a task absent from the map has no
+// explicit order. When non-empty, this OVERRIDES the DAG-derived order in
+// `session next --tree`.
+func SessionNextDoOrder(focal int64, ids []int64) (map[int64]int64, error) {
+	if focal == 0 || len(ids) == 0 {
+		return map[int64]int64{}, nil
+	}
+	db, err := DB()
+	if err != nil {
+		return nil, err
+	}
+	ph, args := intPlaceholders(ids)
+	q := `
+SELECT st.task_id, st.do_order
+  FROM session_tasks st JOIN sessions s ON s.id = st.session_id
+ WHERE s.active_task_id = ?
+   AND st.do_order IS NOT NULL
+   AND st.task_id IN (` + ph + `)`
+	rows, err := db.Query(q, append([]any{focal}, args...)...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	order := make(map[int64]int64)
+	for rows.Next() {
+		var taskID, doOrder int64
+		if err := rows.Scan(&taskID, &doOrder); err != nil {
+			return nil, err
+		}
+		order[taskID] = doOrder
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return order, nil
+}

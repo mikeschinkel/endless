@@ -211,7 +211,9 @@ def show_history(
         click.echo()
 
 
-def session_next_resolve(show_all: bool = False, watch: bool = False) -> None:
+def session_next_resolve(
+    show_all: bool = False, watch: bool = False, tree: bool = False
+) -> None:
     """Render the per-session what's-next view (E-1465).
 
     Thin pass-through to `endless-go session-next`, which resolves the focal
@@ -239,6 +241,8 @@ def session_next_resolve(show_all: bool = False, watch: bool = False) -> None:
         args.append("--all")
     if watch:
         args.append("--watch")
+    if tree:
+        args.append("--tree")
     try:
         result = subprocess.run(args)
     except KeyboardInterrupt:

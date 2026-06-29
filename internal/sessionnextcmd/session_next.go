@@ -81,6 +81,7 @@ func Run(args []string) {
 	fs := flag.NewFlagSet("session-next", flag.ContinueOnError)
 	all := fs.Bool("all", false, "include done-work (terminal-status) rows")
 	watch := fs.Bool("watch", false, "redraw every 2s until interrupted (Ctrl-C)")
+	tree := fs.Bool("tree", false, "render do/plan tasks as an IDs-only implementation-order tree")
 	cols := fs.Int("cols", 0, "terminal width override (0 = auto-detect)")
 	focalFlag := fs.Int64("focal", 0, "explicit focal task id (headless: bypasses tmux/session resolution and reads the resolved DB context — the self-detected sandbox or --config-dir — instead of pinning the main DB; intended for tests)")
 	if err := fs.Parse(args); err != nil {
@@ -111,6 +112,21 @@ func Run(args []string) {
 			os.Exit(1)
 		}
 		parentSession = monitor.ResolveSessionNextParentSession(pane)
+	}
+
+	// --tree is an IDs-only structural view: a single frame, no legend, no watch
+	// loop. It always considers the full do/plan set, so --all/--cols don't apply.
+	if *tree {
+		rows, err := monitor.SessionNextRows(focal, parentSession, true)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "session-next:", err)
+			os.Exit(1)
+		}
+		if err := renderTree(os.Stdout, rows, focal); err != nil {
+			fmt.Fprintln(os.Stderr, "session-next:", err)
+			os.Exit(1)
+		}
+		return
 	}
 
 	color := colorEnabled()
