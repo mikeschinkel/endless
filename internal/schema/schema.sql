@@ -446,12 +446,18 @@ CREATE INDEX IF NOT EXISTS session_statuses_session_recent_idx
 -- Which sessions touched which tasks (E-1322). Query-speed projection of the
 -- events ledger. No FKs by design: rows must outlive their referenced
 -- session/task so the "session N touched task M" record survives deletion.
+-- do_order (E-1683): per-session implementation order for this task. NULL =
+-- unordered. Equal do_order across rows of the same session = parallelizable.
+-- Session-scoped (not tasks.sort_order, which is global): two sessions may
+-- order the same task differently. Set by `endless session order` via the
+-- session_tasks.ordered event; replace-all (unlisted rows reset to NULL).
 CREATE TABLE IF NOT EXISTS session_tasks (
     id INTEGER PRIMARY KEY,
     session_id INTEGER NOT NULL,
     task_id INTEGER NOT NULL,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
+    do_order INTEGER,
     UNIQUE(session_id, task_id)
 );
 CREATE INDEX IF NOT EXISTS idx_session_tasks_task

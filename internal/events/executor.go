@@ -208,6 +208,8 @@ func dispatch(db dbQuerier, evt *Event, emit DerivedEmitter) (*ExecuteResult, er
 		return execTaskLanded(db, evt)
 	case KindSessionStatusRecorded:
 		return execSessionStatusRecorded(db, evt)
+	case KindSessionTasksOrdered:
+		return execSessionTasksOrdered(db, evt)
 	case KindProjectNextRevised:
 		return execProjectNextRevised(db, evt)
 	case KindDecisionCreated:

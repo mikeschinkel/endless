@@ -1005,6 +1005,35 @@ def session_status_add(input_file, session_id_override):
     impl(input_file, session_id_override)
 
 
+@session_cmd.command("order")
+@click.argument("spec")
+@click.option("--json", "as_json", is_flag=True,
+              help="Parse SPEC as a JSON array-of-groups "
+                   '(e.g. [["E-100"], ["E-101", "E-102"]]) '
+                   "instead of the compact form.")
+@click.option("--session-id", "session_id_override", type=int, default=None,
+              help="Use this Endless session id directly instead of "
+                   "resolving the current session (test fixtures / "
+                   "non-tmux callers).")
+def session_order(spec, as_json, session_id_override):
+    """Set this session's task implementation order (E-1683).
+
+    SPEC is a compact sequence where whitespace advances the order and `|`
+    groups tasks at the same order (parallelizable). Order is stored per
+    session (session_tasks.do_order); equal values = safe to run concurrently.
+    Replace-all: tasks this session has touched but omitted from SPEC are
+    reset to unordered. Every id must already be a task this session touched.
+
+    Example:
+
+      \b
+      endless session order "E-100 E-101|E-102 E-103"
+      # E-100=1, E-101=2, E-102=2 (parallel with E-101), E-103=3
+    """
+    from endless.session_order_cmd import session_order as impl
+    impl(spec, as_json, session_id_override)
+
+
 @main.group("task")
 def task_cmd():
     """Manage project tasks."""

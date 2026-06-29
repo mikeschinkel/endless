@@ -274,3 +274,16 @@ type SessionStatusRecordedPayload struct {
 	Summary   string `json:"summary"`
 	Notes     string `json:"notes"`
 }
+
+// SessionTasksOrderedPayload carries a replace-all per-session implementation
+// order (E-1683). Process is the session identifier (the "__session_id=N"
+// sentinel set by the Python command, or a raw tmux pane id) resolved the same
+// way as session_status.recorded. Groups is the ordered list of parallel
+// groups: group index i (0-based) maps to do_order = i+1, and every task id in
+// the same inner slice shares that do_order (parallelizable). Task ids are the
+// display form ("E-100"); the executor strips the prefix and validates each is
+// already a session_tasks row for this session.
+type SessionTasksOrderedPayload struct {
+	Process string     `json:"process"`
+	Groups  [][]string `json:"groups"`
+}

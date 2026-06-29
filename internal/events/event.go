@@ -62,6 +62,8 @@ const (
 	EntityProjectNext      EntityType = "project_next"
 	EntitySession          EntityType = "session"
 	EntitySessionStatus    EntityType = "session_status"
+	EntitySessionTasks     EntityType = "session_tasks" // E-1683
+
 	EntityConversation     EntityType = "conversation"
 	EntityMessage          EntityType = "message"
 	EntityNote             EntityType = "note"
@@ -152,6 +154,13 @@ const (
 	KindSessionStatusRecorded Kind = "session_status.recorded"
 )
 
+// Session task-ordering event kinds (E-1683). Sets the per-session
+// implementation order (session_tasks.do_order) for the emitting session's
+// touched tasks. Replace-all: the payload's groups are the complete ordering.
+const (
+	KindSessionTasksOrdered Kind = "session_tasks.ordered"
+)
+
 // Curated next-list event kinds (E-1421).
 const (
 	KindProjectNextRevised Kind = "project_next.revised"
@@ -220,6 +229,8 @@ var ValidKinds = map[Kind]bool{
 	KindNoteResolved: true,
 	// Session status (E-1312)
 	KindSessionStatusRecorded: true,
+	// Session task ordering (E-1683)
+	KindSessionTasksOrdered: true,
 	// Curated next list (E-1421)
 	KindProjectNextRevised: true,
 	// Decision (E-1378)
@@ -238,6 +249,7 @@ var validEntityTypes = map[EntityType]bool{
 	EntityTask:             true,
 	EntityTaskDep:          true,
 	EntitySessionStatus:    true,
+	EntitySessionTasks:     true,
 	EntityProject:          true,
 	EntityProjectNext:      true,
 	EntitySession:          true,
