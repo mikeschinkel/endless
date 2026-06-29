@@ -780,6 +780,22 @@ def session_history(session_id, show_tools, timestamps, limit, sort_order, as_js
                  sort_asc=(sort_order == "asc"), as_json=as_json)
 
 
+@session_cmd.command("next")
+@click.option("--all", "show_all", is_flag=True,
+              help="Include done-work (terminal-status) rows")
+def session_next(show_all):
+    """Show what's next for the current session's task, across live sessions.
+
+    Resolves the focal task for the current tmux window (live session's active
+    task, else the window's @endless_task_id, else the most-recent live
+    session), then renders the focal task, its parent (spawning) task, sibling
+    tasks worked by sessions on the focal task, and any cross-session in-flight
+    work, with blocked-by/blocks decorations. Reads the main DB.
+    """
+    from endless.session_cmd import session_next_resolve
+    session_next_resolve(show_all=show_all)
+
+
 @session_cmd.command("list")
 @click.option("--project", default=None, help="Filter by project")
 @click.option("--state", default=None,

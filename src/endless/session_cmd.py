@@ -211,6 +211,33 @@ def show_history(
         click.echo()
 
 
+def session_next_resolve(show_all: bool = False) -> None:
+    """Render the per-session what's-next view (E-1465).
+
+    Thin pass-through to `endless-go session-next`, which resolves the focal
+    task for the current tmux window, gathers the cross-session rows, and
+    renders the width/color-aware table itself. We inherit this process's
+    stdout/stderr so the Go side detects the real terminal width and color
+    profile; TMUX_PANE is inherited via the environment for focal resolution.
+
+    The Go subcommand pins the main DB (sessions live there regardless of cwd),
+    so no --config-dir is threaded.
+    """
+    import shutil
+    import subprocess
+
+    go_bin = shutil.which("endless-go")
+    if not go_bin:
+        raise click.ClickException("endless-go binary not found on PATH.")
+
+    args = [go_bin, "session-next"]
+    if show_all:
+        args.append("--all")
+    result = subprocess.run(args)
+    if result.returncode != 0:
+        raise SystemExit(result.returncode)
+
+
 def list_sessions(
     project_name: str | None = None,
     show_all: bool = False,

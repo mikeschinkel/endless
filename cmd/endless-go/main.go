@@ -12,13 +12,15 @@
 //	endless-go serve         [port]
 //	endless-go tmux          apply|status-line|active-id|show-menu
 //	endless-go session-query list-live|task-text|reopen-context
+//	endless-go session-next  (renders the per-session what's-next view)
 //	endless-go template      render
 //
 // Per-subcommand DB-context contract (must run BEFORE the subcommand
 // body):
 //
 //   - hook → ENDLESS_NO_HOOKS=true short-circuit (E-1470), then PinMainDB (E-1450/E-1429).
-//   - channel, tmux → PinMainDB (E-1429).
+//   - channel, tmux, session-next → PinMainDB (E-1429). session-next reads
+//     the live sessions table, which hook writes pin to main regardless of cwd.
 //   - event, serve, session-query → ConsumeDBContextFlag (E-1429).
 //   - sandbox → no DB-context init.
 //
@@ -38,6 +40,7 @@ import (
 	"github.com/mikeschinkel/endless/internal/monitor"
 	"github.com/mikeschinkel/endless/internal/sandboxcmd"
 	"github.com/mikeschinkel/endless/internal/servecmd"
+	"github.com/mikeschinkel/endless/internal/sessionnextcmd"
 	"github.com/mikeschinkel/endless/internal/sessionquerycmd"
 	"github.com/mikeschinkel/endless/internal/templatecmd"
 	"github.com/mikeschinkel/endless/internal/tmuxcmd"
@@ -104,7 +107,7 @@ func main() {
 	// whatever --config-dir (or absence of one) ConsumeDBContextFlag
 	// already established above.
 	switch sub {
-	case "hook", "channel", "tmux":
+	case "hook", "channel", "tmux", "session-next":
 		monitor.PinMainDB()
 	}
 
@@ -123,6 +126,8 @@ func main() {
 		tmuxcmd.Run(rest)
 	case "session-query":
 		sessionquerycmd.Run(rest)
+	case "session-next":
+		sessionnextcmd.Run(rest)
 	case "template":
 		templatecmd.Run(rest)
 	default:
@@ -170,5 +175,6 @@ func usage(w *os.File) {
 	fmt.Fprintln(w, "  serve          [port]  (web dashboard)")
 	fmt.Fprintln(w, "  tmux           apply|status-line|active-id|show-menu")
 	fmt.Fprintln(w, "  session-query  list-live|task-text|reopen-context")
+	fmt.Fprintln(w, "  session-next   render the per-session what's-next view")
 	fmt.Fprintln(w, "  template       render")
 }
