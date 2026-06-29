@@ -111,7 +111,15 @@ func main() {
 	// already established above.
 	switch sub {
 	case "hook", "channel", "tmux":
-		monitor.PinMainDB()
+		// An explicit --config-dir wins over the main pin (E-1429: a
+		// per-invocation flag is trustworthy; the env-driven pin is the
+		// fallback). Production invokers of these binaries never pass
+		// --config-dir, so the pin still applies for real hook/channel/tmux
+		// traffic; only tests and sandbox tooling (e.g. the E-1682 nav-trail
+		// verify driving `tmux record-nav` against a sandbox DB) flip this.
+		if !monitor.HasExplicitDBContext() {
+			monitor.PinMainDB()
+		}
 	}
 	// session-status pins main itself, but only on its normal tmux-resolved path;
 	// with --task (headless/tests) it deliberately reads the resolved sandbox

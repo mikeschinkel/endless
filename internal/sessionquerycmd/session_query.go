@@ -63,6 +63,11 @@ func Run(args []string) {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
+	case "trail":
+		if err := runTrail(args[1:]); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
 	case "-h", "--help", "help":
 		usage()
 	default:
@@ -87,6 +92,28 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "  gate-clear --session-id <id> --kind <slug> --cleared-by <reason>")
 	fmt.Fprintln(os.Stderr, "                                    clear the session's open gate of the kind; prints rows cleared")
 	fmt.Fprintln(os.Stderr, "  reopen-context --task-id <id>     JSON {inherited_session_id, prior_outcome, last_status_snapshot} for a reopen")
+	fmt.Fprintln(os.Stderr, "  trail [--client <name>] [--limit N]")
+	fmt.Fprintln(os.Stderr, "                                    JSON array of navigation edges newest-first (no --client = all clients)")
+}
+
+// runTrail prints the durable session-navigation trail as a JSON array of
+// edges, newest-first (E-1682). It backs `endless session trail`: the Python
+// viewer resolves the current tmux client_name and passes it as --client
+// (scoping to this navigator), or omits it for --all (every client). The DB
+// read stays Go-side (no Python SQLite read, per E-1486). Endpoint task labels
+// and relative time are rendered Python-side from the returned fields.
+func runTrail(args []string) error {
+	fs := flag.NewFlagSet("trail", flag.ContinueOnError)
+	client := fs.String("client", "", "tmux client_name to scope to (empty = all clients)")
+	limit := fs.Int("limit", 50, "max rows to return")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	edges, err := monitor.ListNavTrail(*client, *limit)
+	if err != nil {
+		return fmt.Errorf("list nav trail: %w", err)
+	}
+	return json.NewEncoder(os.Stdout).Encode(edges)
 }
 
 // runReopenContext prints the read-only restore context for `task spawn

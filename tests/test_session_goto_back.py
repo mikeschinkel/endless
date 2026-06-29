@@ -45,6 +45,9 @@ class FakeTmux:
         if args[:1] == ["show-options"]:
             return 0, self.options.get(args[-1], "") + "\n"
         if args[:1] == ["set-option"]:
+            if args[1] == "-gu":  # unset a global option
+                self.options.pop(args[2], None)
+                return 0, ""
             self.options[args[2]] = args[3]
             return 0, ""
         if args[:1] == ["switch-client"]:
@@ -94,6 +97,19 @@ def test_goto_by_task_id(goto_env, capsys):
     assert ft.stack() == ["%1"]
     err = capsys.readouterr().err
     assert "goto E-1465 → session 10 (pane %10)" in err
+
+
+def test_goto_sets_via_goto_marker(goto_env):
+    """goto tags the focus change for the nav-trail recorder (E-1682): the
+    one-shot @endless_nav_via marker is set to 'goto' before the switch."""
+    stage, make = goto_env
+    stage(endless_session_id=10, pane_id="%10", active_task_id=1465)
+    ft = make({"%10", "%1"}, current_pane="%1")
+
+    session_cmd.session_goto("E-1465")
+
+    assert ft.switched == ["%10"]
+    assert ft.options.get("@endless_nav_via") == "goto"
 
 
 def test_goto_by_session_id(goto_env, capsys):

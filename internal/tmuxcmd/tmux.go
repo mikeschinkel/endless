@@ -43,6 +43,8 @@ func Run(args []string) {
 		runActiveID(args[1:])
 	case "show-menu":
 		runShowMenu(args[1:])
+	case "record-nav":
+		runRecordNav(args[1:])
 	case "-h", "--help", "help":
 		usage(os.Stdout)
 	default:

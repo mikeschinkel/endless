@@ -87,6 +87,16 @@ func buildApplySteps(binPath, hotkey string, statusInterval int) [][]string {
 		`run-shell "%s tmux show-menu --pane=#{pane_id} --position=mouse --mouse-x=#{mouse_x} --mouse-y=#{mouse_y}"`,
 		binPath)
 
+	// Durable nav-trail recorder (E-1682). Both focus-change hooks fire the
+	// same recorder; it dedups a move to the already-focused pane, so wiring
+	// both is safe. DOUBLE-quoted so tmux substitutes #{client_name}/#{pane_id}
+	// at fire time (single quotes would pass the literal format text). `session
+	// goto`'s switch-client trips client-session-changed, so goto needs no
+	// recording logic of its own beyond setting the @endless_nav_via marker.
+	recordNav := fmt.Sprintf(
+		`run-shell "%s tmux record-nav --client=#{client_name} --pane=#{pane_id}"`,
+		binPath)
+
 	return [][]string{
 		// 1. Enable second status line.
 		{"set-option", "-g", "status", "2"},
@@ -104,6 +114,10 @@ func buildApplySteps(binPath, hotkey string, statusInterval int) [][]string {
 		// 5b. Alt+right-click variant, for consistency with the user's
 		// existing M-MouseDown3Status* bindings.
 		{"bind-key", "-n", "M-MouseDown3StatusRight", mouseMenu},
+		// 6a. Record manual focus changes between sessions (switch-client).
+		{"set-hook", "-g", "client-session-changed", recordNav},
+		// 6b. Record moves between windows in the same session (select-window).
+		{"set-hook", "-g", "session-window-changed", recordNav},
 	}
 }
 

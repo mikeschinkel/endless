@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/mikeschinkel/endless/internal/gatekind"
+	"github.com/mikeschinkel/endless/internal/navvia"
 	"github.com/mikeschinkel/endless/internal/schema"
 	"github.com/mikeschinkel/endless/internal/sessionkind"
 	"github.com/mikeschinkel/endless/internal/sessiontaskrelation"
@@ -111,6 +112,17 @@ func ForceRealDB() {
 		return
 	}
 	dbPathOverride = filepath.Join(home, ".config", "endless", "endless.db")
+}
+
+// HasExplicitDBContext reports whether a --config-dir was consumed for this
+// process (dbContextDir set). Callers that would otherwise PinMainDB use this
+// to let an explicit per-invocation DB target win — the E-1429 contract is that
+// an explicit flag is trustworthy and beats the env-driven main pin. Production
+// invokers of the pinned binaries (tmux, the Claude hook, the MCP channel) never
+// pass --config-dir, so this stays false there and the main pin still applies;
+// only tests / sandbox tooling that pass --config-dir flip it true.
+func HasExplicitDBContext() bool {
+	return dbContextDir != ""
 }
 
 // SetDBContextDir records an explicit DB/config directory for this process,
@@ -454,6 +466,16 @@ func DB() (*sql.DB, error) {
 		if hasTable(dbConn, "session_task_relations") {
 			if err := sessiontaskrelation.VerifyIntegrity(dbConn); err != nil {
 				dbErr = fmt.Errorf("session_task_relations integrity check on %s: %w", path, err)
+				dbConn = nil
+				return
+			}
+		}
+		// E-1682: same fail-closed contract for the nav_via_kinds enum mirror.
+		// Skipped on populated DBs that have not yet had the E-1682 migration
+		// applied (the table will not exist; the migration creates it).
+		if hasTable(dbConn, "nav_via_kinds") {
+			if err := navvia.VerifyIntegrity(dbConn); err != nil {
+				dbErr = fmt.Errorf("nav_via_kinds integrity check on %s: %w", path, err)
 				dbConn = nil
 				return
 			}
