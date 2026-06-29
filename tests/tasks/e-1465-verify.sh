@@ -254,6 +254,16 @@ test_sort_order() {
     assert_ordering "verify before orphan" "E-103" "E-107" "${FIXTURE_HOME}"
 }
 
+test_watch_flag() {
+    section "Watch flag — wired through, degrades to one frame off-tty"
+    # gosn captures via $(...), so stdout is a pipe (not a tty): --watch must
+    # render a single frame and EXIT rather than loop forever. The interactive
+    # 2s redraw loop is verified by hand (see header). assert_line_matches would
+    # hang here if --watch looped on a pipe, so this also pins the no-hang guard.
+    assert_line_matches "--watch off-tty renders the focal row once and exits" \
+        '^● T E-100 ' "${FIXTURE_HOME}" --watch
+}
+
 test_empty_state() {
     section "Empty state — no focal task resolves"
     assert_contains "prints the no-active-task hint" \
@@ -308,6 +318,7 @@ main() {
     test_action_icons
     test_done_work_filter
     test_sort_order
+    test_watch_flag
     test_empty_state
 
     summary

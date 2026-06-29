@@ -14,8 +14,12 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
 	"sort"
 	"strconv"
+	"strings"
+	"syscall"
+	"time"
 
 	"github.com/mattn/go-runewidth"
 	"golang.org/x/term"
@@ -70,15 +74,22 @@ func (a action) icon() string {
 	}
 }
 
+// watchInterval is the redraw cadence for --watch, matching the bash prototype.
+const watchInterval = 2 * time.Second
+
 func Run(args []string) {
 	fs := flag.NewFlagSet("session-next", flag.ContinueOnError)
 	all := fs.Bool("all", false, "include done-work (terminal-status) rows")
+	watch := fs.Bool("watch", false, "redraw every 2s until interrupted (Ctrl-C)")
 	cols := fs.Int("cols", 0, "terminal width override (0 = auto-detect)")
 	if err := fs.Parse(args); err != nil {
 		os.Exit(2)
 	}
 
 	pane := os.Getenv("TMUX_PANE")
+	// Anchor focal + parent ONCE, before any refresh loop, so the view stays
+	// pinned to THIS window's task as other sessions come and go (matches the
+	// prototype, which resolves the focal task before entering its watch loop).
 	focal, err := monitor.ResolveSessionNextFocal(pane)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "session-next:", err)
@@ -86,13 +97,71 @@ func Run(args []string) {
 	}
 	parentSession := monitor.ResolveSessionNextParentSession(pane)
 
-	rows, err := monitor.SessionNextRows(focal, parentSession, *all)
-	if err != nil {
+	color := colorEnabled()
+
+	// --watch only makes sense against an interactive terminal (the redraw uses
+	// cursor-positioning escapes). When stdout is piped/captured, degrade to a
+	// single frame so scripts and pipes don't hang on an endless loop.
+	if *watch && term.IsTerminal(int(os.Stdout.Fd())) {
+		watchLoop(focal, parentSession, *all, *cols, color)
+		return
+	}
+
+	if err := renderSnapshot(os.Stdout, focal, parentSession, *all, detectCols(*cols), color); err != nil {
 		fmt.Fprintln(os.Stderr, "session-next:", err)
 		os.Exit(1)
 	}
+}
 
-	renderTo(os.Stdout, rows, focal, detectCols(*cols), colorEnabled())
+// renderSnapshot queries the current rows for the anchored focal/parent and
+// renders one frame to w.
+func renderSnapshot(w io.Writer, focal, parentSession int64, all bool, cols int, color bool) error {
+	rows, err := monitor.SessionNextRows(focal, parentSession, all)
+	if err != nil {
+		return err
+	}
+	renderTo(w, rows, focal, cols, color)
+	return nil
+}
+
+// watchLoop redraws the view every watchInterval until SIGINT/SIGTERM, repainting
+// only when the rendered frame changes (so an idle view doesn't flicker). It
+// hides the cursor for the duration and restores it on every exit path. Width is
+// re-detected each tick so a terminal resize is honored.
+func watchLoop(focal, parentSession int64, all bool, colsOverride int, color bool) {
+	out := os.Stdout
+	fmt.Fprint(out, "\x1b[?25l")                         // hide cursor
+	restore := func() { fmt.Fprint(out, "\x1b[?25h\n") } // show cursor + trailing newline
+
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, os.Interrupt, syscall.SIGTERM)
+	defer signal.Stop(sigs)
+
+	fmt.Fprint(out, "\x1b[2J\x1b[H") // clear screen, cursor home
+	ticker := time.NewTicker(watchInterval)
+	defer ticker.Stop()
+
+	prev := ""
+	for {
+		var b strings.Builder
+		if err := renderSnapshot(&b, focal, parentSession, all, detectCols(colsOverride), color); err != nil {
+			restore()
+			fmt.Fprintln(os.Stderr, "session-next:", err)
+			os.Exit(1)
+		}
+		if frame := b.String(); frame != prev {
+			// Home, repaint, then clear to end-of-display so a now-shorter frame
+			// leaves no stale rows behind.
+			fmt.Fprint(out, "\x1b[H"+frame+"\x1b[J")
+			prev = frame
+		}
+		select {
+		case <-sigs:
+			restore()
+			return
+		case <-ticker.C:
+		}
+	}
 }
 
 // renderTo writes the legend and rows to w. focal==0 (or no rows) prints a short

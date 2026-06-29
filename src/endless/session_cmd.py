@@ -211,7 +211,7 @@ def show_history(
         click.echo()
 
 
-def session_next_resolve(show_all: bool = False) -> None:
+def session_next_resolve(show_all: bool = False, watch: bool = False) -> None:
     """Render the per-session what's-next view (E-1465).
 
     Thin pass-through to `endless-go session-next`, which resolves the focal
@@ -219,6 +219,10 @@ def session_next_resolve(show_all: bool = False) -> None:
     renders the width/color-aware table itself. We inherit this process's
     stdout/stderr so the Go side detects the real terminal width and color
     profile; TMUX_PANE is inherited via the environment for focal resolution.
+
+    With --watch the Go side redraws every 2s until interrupted; Ctrl-C is the
+    intended exit, so we swallow the KeyboardInterrupt (the Go child already
+    restored the cursor on its own SIGINT handler).
 
     The Go subcommand pins the main DB (sessions live there regardless of cwd),
     so no --config-dir is threaded.
@@ -233,7 +237,12 @@ def session_next_resolve(show_all: bool = False) -> None:
     args = [go_bin, "session-next"]
     if show_all:
         args.append("--all")
-    result = subprocess.run(args)
+    if watch:
+        args.append("--watch")
+    try:
+        result = subprocess.run(args)
+    except KeyboardInterrupt:
+        return
     if result.returncode != 0:
         raise SystemExit(result.returncode)
 
