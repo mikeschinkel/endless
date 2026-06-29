@@ -1,35 +1,35 @@
 #!/usr/bin/env bash
 #
-# E-1683 verification script — exercises `session_tasks.do_order` end-to-end
-# through the WORKTREE-BUILT endless-go binary against a self-contained temp DB
-# built from the shipped internal/schema/schema.sql. This proves three things
-# unit tests can't on their own:
-#   1. The shipped schema.sql actually declares session_tasks.do_order.
-#   2. The migration change file applies cleanly to a pre-migration DB.
-#   3. The real binary dispatches the new session_tasks.ordered event kind and
-#      its executor applies sequence/parallel/replace-all/foreign-rejection
-#      through the full emit path (ledger commit included).
+# E-1683 verification suite — the SINGLE entry point for verifying E-1683.
 #
-# Run from anywhere inside the worktree:
+#   esu
 #   ./tests/tasks/e-1683-verify.sh
 #
-# Self-contained: builds its own temp DB + git repo, touches nothing in the
-# sandbox or real ledger. Exit 0 on all-passed, 1 on any failure.
+# Self-contained: it builds the worktree binaries, runs the Go executor unit
+# tests and the Python spec-parser tests, then drives the real worktree-built
+# endless-go binary end-to-end against a throwaway temp DB built from the
+# shipped internal/schema/schema.sql. Nothing in the sandbox or real ledger is
+# touched. Exit 0 on all-passed, 1 on any failure (with detail to diagnose).
+#
+# What it proves:
+#   1. Worktree builds clean.
+#   2. Go executor logic (sequence/parallel, replace-all, foreign/dup
+#      rejection, updated_at preservation) — internal/events unit tests.
+#   3. Python spec parsing + validation — tests/test_session_order.py.
+#   4. The shipped schema.sql declares session_tasks.do_order, the change file
+#      migrates a pre-migration DB, and the REAL binary dispatches the new
+#      session_tasks.ordered event kind through the full emit path.
 
 set -u
 
-# ─── locate worktree + binary ───────────────────────────────────────────────
+# ─── locate worktree ────────────────────────────────────────────────────────
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 WT_ROOT=$(cd "${SCRIPT_DIR}/../.." && pwd)
+cd "${WT_ROOT}" || { printf 'ERROR: cannot cd to %s\n' "${WT_ROOT}" >&2; exit 1; }
 BIN="${WT_ROOT}/bin/endless-go"
 SCHEMA="${WT_ROOT}/internal/schema/schema.sql"
 CHANGE="${WT_ROOT}/internal/schema/changes/e-1683-add-session-tasks-do-order.sql"
-
-if [[ ! -x "${BIN}" ]]; then
-    printf 'ERROR: %s not found; run `just build` first.\n' "${BIN}" >&2
-    exit 1
-fi
 
 # ─── output ─────────────────────────────────────────────────────────────────
 
@@ -71,6 +71,18 @@ assert_emit_fails() {
         report_pass "${desc}"
     else
         report_fail "${desc}" "exit != 0 AND output ~ ${pattern}" "exit=${rc} | ${out}"
+    fi
+}
+# assert_cmd DESC CMD [ARGS...] — pass if CMD exits 0; on failure show the last
+# few lines of its output so a regression is diagnosable from this report alone.
+assert_cmd() {
+    local desc="$1"; shift
+    local out rc
+    out=$("$@" 2>&1); rc=$?
+    if [[ "${rc}" -eq 0 ]]; then
+        report_pass "${desc}"
+    else
+        report_fail "${desc}" "exit 0" "exit=${rc} | $(printf '%s\n' "${out}" | tail -8 | tr '\n' '⏎')"
     fi
 }
 
@@ -134,6 +146,25 @@ seed_db() {
 }
 
 # ─── checks ─────────────────────────────────────────────────────────────────
+
+section "Build — worktree binaries (just build)"
+# The end-to-end checks below exercise the freshly built bin/endless-go, so a
+# clean build is a hard prerequisite. Abort early if it fails (nothing past
+# here can pass against a stale/missing binary).
+if ! build_out=$(just build 2>&1); then
+    report_fail "just build" "exit 0" "$(printf '%s\n' "${build_out}" | tail -8 | tr '\n' '⏎')"
+    summary
+    exit 1
+fi
+report_pass "just build"
+
+section "Go unit tests — executor logic + event-kind registration"
+assert_cmd "go test internal/events (TestSessionTasksOrdered* + TestValidKinds_Count)" \
+    go test ./internal/events/ -count=1 -run 'TestSessionTasksOrdered|TestValidKinds_Count'
+
+section "Python unit tests — spec parsing + validation"
+assert_cmd "pytest tests/test_session_order.py" \
+    uv run pytest tests/test_session_order.py -q
 
 section "Schema — shipped schema.sql declares session_tasks.do_order"
 seed_db
