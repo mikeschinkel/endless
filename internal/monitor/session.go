@@ -42,9 +42,15 @@ func BindSessionToTask(sessionID string, projectID int64, taskID int64) error {
 	}
 
 	now := time.Now().UTC().Format("2006-01-02T15:04:05")
-
 	process := os.Getenv("TMUX_PANE")
-	_, err = db.Exec(
+
+	tx, err := db.Begin()
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback()
+
+	_, err = tx.Exec(
 		`INSERT INTO sessions (session_id, project_id, platform, state, active_task_id, process, started_at, last_activity)
 		 VALUES (?, ?, 'claude', 'working', ?, ?, ?, ?)
 		 ON CONFLICT(session_id) DO UPDATE SET
@@ -56,7 +62,34 @@ func BindSessionToTask(sessionID string, projectID int64, taskID int64) error {
 	if err != nil {
 		return fmt.Errorf("upsert session: %w", err)
 	}
-	return nil
+
+	// Active-task-scoped fallback dedup for the empty-pane case (E-1640).
+	// TouchSession's collision invalidation keys on `process` (the tmux pane)
+	// and is inert when TMUX_PANE is empty, so every fresh-UUID launch (resume,
+	// respawn, aborted spawn, /clear) would otherwise leave the prior non-ended
+	// row for this task lingering as a duplicate. Now that this session is bound
+	// to the task, end any OTHER non-ended foreground row for the same task that
+	// has no pane: Endless permits only one live foreground session per task
+	// (worktree locks), so any such row is stale. Scoped to kind_id = tmux —
+	// background agents (kind_id = background) legitimately carry the task's
+	// active_task_id with no pane and are decorated via their own path, so they
+	// must never be ended here. Paneless is the only fallback case; rows that
+	// hold a real pane are left to TouchSession's pane-collision path.
+	_, err = tx.Exec(
+		`UPDATE sessions
+		 SET state = 'ended', last_activity = ?
+		 WHERE active_task_id = ?
+		   AND session_id != ?
+		   AND (process IS NULL OR process = '')
+		   AND kind_id = ?
+		   AND state != 'ended'`,
+		now, taskID, sessionID, int64(sessionkind.SessionKindTmux),
+	)
+	if err != nil {
+		return fmt.Errorf("dedup stale paneless sessions for task: %w", err)
+	}
+
+	return tx.Commit()
 }
 
 // StartWorkSession binds the session AND marks the task as underway.
