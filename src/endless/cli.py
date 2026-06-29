@@ -878,6 +878,32 @@ def session_cd(session_ref, show_all, target):
     session_cd_resolve(session_ref, show_all=show_all, target=target)
 
 
+@session_cmd.command("goto")
+@click.argument("target_ref")
+def session_goto(target_ref):
+    """Switch tmux focus to a task's or session's pane, with a back-stack.
+
+    <target_ref> is a task id (E-NNNN or NNNN) or a session id (integer or
+    Claude UUID prefix). A task id resolves to the most-recently-active live
+    session working it. The current pane is pushed onto a per-client back-stack
+    so `endless session back` returns here. Requires tmux.
+    """
+    from endless.session_cmd import session_goto as run_goto
+    run_goto(target_ref)
+
+
+@session_cmd.command("back")
+def session_back():
+    """Return to the previous session, browser-style (see `session goto`).
+
+    Pops the per-client back-stack and switches tmux focus there, skipping
+    panes/sessions that have since closed. With an empty stack, returns to the
+    spawning session if this one was spawned. Requires tmux.
+    """
+    from endless.session_cmd import session_back as run_back
+    run_back()
+
+
 @session_cmd.command("id")
 def session_id():
     """Print the current Endless session's integer id to stdout.

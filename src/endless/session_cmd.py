@@ -1646,3 +1646,295 @@ def _match_companions(live: list[dict], ref: str) -> list[dict]:
         c for c in live
         if (c.get("harness_session_id", "") or "").lower().startswith(lo)
     ]
+
+
+# ---------------------------------------------------------------------------
+# session goto / back — tmux session navigation with a back-stack (E-1681)
+#
+# `goto` switches the tmux client's focus to a target session's pane; `back`
+# returns browser-style via a back-stack. The stack is ephemeral navigation
+# state — its tokens resolve to tmux panes, which are only valid for the life of
+# the tmux server — so it lives in a tmux server option keyed by the attached
+# client (the navigator), NOT in the DB. For a single-terminal setup that one
+# client == one global stack.
+#
+# A stack token is an endless session id (resolved to that session's *current*
+# live pane at pop time, so a session that moved to a new pane still works); a
+# source location that isn't a tracked session is stored as a raw "%pane" token.
+# Capture is `goto`-only, so `back` predictably undoes your last `goto`. The
+# durable, captures-everything navigation trail for analysis is a separate
+# follow-up (E-1682).
+# ---------------------------------------------------------------------------
+
+
+def _in_tmux() -> bool:
+    return bool(os.environ.get("TMUX"))
+
+
+def _tmux_run(args: list[str], timeout: float = 2.0):
+    """Run a tmux command; return the CompletedProcess, or None on failure."""
+    import subprocess
+    try:
+        return subprocess.run(
+            ["tmux", *args], capture_output=True, text=True, timeout=timeout,
+        )
+    except (FileNotFoundError, subprocess.SubprocessError):
+        return None
+
+
+def _pane_exists(pane: str) -> bool:
+    """True if `pane` is a currently-existing tmux pane."""
+    if not pane:
+        return False
+    res = _tmux_run(["display-message", "-p", "-t", pane, "#{pane_id}"])
+    return bool(res and res.returncode == 0 and res.stdout.strip())
+
+
+def _tmux_switch_client(pane: str) -> bool:
+    """Switch the tmux client to `pane`'s window/session. True on success."""
+    res = _tmux_run(["switch-client", "-t", pane])
+    return bool(res and res.returncode == 0)
+
+
+def _backstack_key() -> str:
+    """tmux server-option name holding the current client's back-stack.
+
+    Scoped to the navigator = the attached tmux client (a tty path), sanitized
+    to option-safe chars. An unresolvable client falls back to a shared key, so
+    a single-terminal setup uses one stack either way.
+    """
+    res = _tmux_run(["display-message", "-p", "#{client_name}"])
+    client = res.stdout.strip() if res and res.returncode == 0 else ""
+    if not client:
+        return "@endless_backstack"
+    import re
+    return "@endless_backstack_" + re.sub(r"[^A-Za-z0-9]", "_", client)
+
+
+def _backstack_read(key: str) -> list[str]:
+    res = _tmux_run(["show-options", "-gqv", key])
+    if not res or res.returncode != 0:
+        return []
+    return [t for t in res.stdout.strip().split() if t]
+
+
+def _backstack_write(key: str, stack: list[str]) -> None:
+    _tmux_run(["set-option", "-g", key, " ".join(stack)])
+
+
+def _backstack_push(key: str, token: str) -> None:
+    stack = _backstack_read(key)
+    stack.append(token)
+    _backstack_write(key, stack)
+
+
+def _backstack_pop(key: str) -> str | None:
+    stack = _backstack_read(key)
+    if not stack:
+        return None
+    top = stack.pop()
+    _backstack_write(key, stack)
+    return top
+
+
+def _current_pane_token(live: list[dict]) -> str | None:
+    """Token for the current pane to push onto the stack: its endless session id
+    if the pane is a tracked session, else the raw pane id. None if no pane.
+    """
+    pane = os.environ.get("TMUX_PANE", "")
+    if not pane:
+        return None
+    for c in live:
+        if c.get("pane_id") == pane:
+            eid = c.get("endless_session_id")
+            if eid:
+                return str(eid)
+    return pane
+
+
+def _resolve_session_token_to_pane(live: list[dict], token: str) -> str | None:
+    """Resolve a back-stack token to a currently-live tmux pane, or None.
+
+    A "%..." token is a raw pane id, used directly if it still exists. A numeric
+    token is an endless session id, resolved to that session's current pane.
+    """
+    if token.startswith("%"):
+        return token if _pane_exists(token) else None
+    if token.isdigit():
+        sid = int(token)
+        for c in live:
+            if c.get("endless_session_id") == sid:
+                pane = c.get("pane_id") or ""
+                return pane if _pane_exists(pane) else None
+        return None
+    return None
+
+
+def _token_label(token: str, pane: str) -> str:
+    if token.startswith("%"):
+        return f"pane {pane}"
+    return f"session {token} (pane {pane})"
+
+
+def _goto_task(task_id: int, live: list[dict]) -> tuple[str, str]:
+    """Resolve a task id to (pane, label): the most-recently-active live session
+    working it. Raises SystemExit(1) with a stderr error if none is reachable.
+    """
+    from endless.task_cmd import task_id_display
+    disp = task_id_display(task_id)
+    cands = [c for c in live if c.get("active_task_id") == task_id]
+    cands.sort(key=lambda c: c.get("last_activity") or "", reverse=True)
+    for c in cands:
+        pane = c.get("pane_id") or ""
+        if pane and _pane_exists(pane):
+            eid = c.get("endless_session_id", "")
+            return pane, f"{disp} → session {eid} (pane {pane})"
+    if cands:
+        click.echo(
+            f"The live session on {disp} has no reachable tmux pane.", err=True
+        )
+    else:
+        click.echo(f"No live session on {disp}.", err=True)
+    raise SystemExit(1)
+
+
+def _goto_session(matches: list[dict], ref: str) -> tuple[str, str]:
+    """Resolve session matches to (pane, label). Raises SystemExit(1) on
+    no-match / ambiguity / unreachable pane.
+    """
+    if not matches:
+        click.echo(
+            f"No live session matches '{ref}'. "
+            f"Run `endless session list` to see candidates.", err=True,
+        )
+        raise SystemExit(1)
+    if len(matches) > 1:
+        click.echo(f"Ambiguous: '{ref}' matches multiple sessions:", err=True)
+        for c in matches:
+            click.echo("  " + _format_companion_row(c), err=True)
+        raise SystemExit(1)
+    c = matches[0]
+    eid = c.get("endless_session_id", "")
+    pane = c.get("pane_id") or ""
+    if not pane or not _pane_exists(pane):
+        click.echo(f"Session {eid} has no reachable tmux pane.", err=True)
+        raise SystemExit(1)
+    return pane, f"session {eid} (pane {pane})"
+
+
+def _resolve_goto_target(ref: str, live: list[dict]) -> tuple[str, str]:
+    """Resolve a goto ref to (target_pane, label).
+
+    Forms: `E-NNNN` -> task; bare `NNNN` -> a session id or a task id (errors if
+    it matches both); `<uuid-prefix>` -> session. Raises SystemExit(1) with a
+    stderr error on no-match / ambiguity / no-live-session.
+    """
+    from endless.task_cmd import task_id_display
+    raw = ref.strip()
+
+    if raw.upper().startswith("E-") and raw[2:].isdigit():
+        return _goto_task(int(raw[2:]), live)
+
+    if raw.isdigit():
+        n = int(raw)
+        sess_matches = [c for c in live if c.get("endless_session_id") == n]
+        task_matches = [c for c in live if c.get("active_task_id") == n]
+        if sess_matches and task_matches:
+            click.echo(
+                f"'{raw}' is ambiguous: it matches both session {n} and the "
+                f"live session on task {task_id_display(n)}. "
+                f"Write 'E-{n}' for the task.", err=True,
+            )
+            raise SystemExit(1)
+        if sess_matches:
+            return _goto_session(sess_matches, raw)
+        if task_matches:
+            return _goto_task(n, live)
+        click.echo(
+            f"No live session matches '{raw}' (as a session id or a task). "
+            f"Run `endless session list` to see candidates.", err=True,
+        )
+        raise SystemExit(1)
+
+    return _goto_session(_match_companions(live, raw), raw)
+
+
+def _spawner_pane(live: list[dict]) -> tuple[str, str] | None:
+    """Resolve this window's `@endless_spawned_by` to the spawner's current live
+    pane, for `back`'s empty-stack fallback. Returns (pane, label) or None.
+    """
+    pane = os.environ.get("TMUX_PANE", "")
+    target = ["-t", pane] if pane else []
+    res = _tmux_run(["display-message", "-p", *target, "#{@endless_spawned_by}"])
+    if not res or res.returncode != 0:
+        return None
+    val = res.stdout.strip()
+    if not val.isdigit():  # unset, or a "pid-NNN" fallback spawner id
+        return None
+    resolved = _resolve_session_token_to_pane(live, val)
+    if not resolved:
+        return None
+    return resolved, f"spawning session {val} (pane {resolved})"
+
+
+def session_goto(target_ref: str) -> None:
+    """Switch tmux focus to a task's or session's pane, pushing the current pane
+    onto the back-stack. See the module section header (E-1681).
+    """
+    if not _in_tmux():
+        click.echo(
+            "session goto requires tmux (no $TMUX in this environment).",
+            err=True,
+        )
+        raise SystemExit(1)
+    live = _live_sessions(_project_root_for_cwd())
+    target_pane, label = _resolve_goto_target(target_ref, live)
+
+    key = _backstack_key()
+    token = _current_pane_token(live)
+    if token:
+        _backstack_push(key, token)
+    if not _tmux_switch_client(target_pane):
+        if token:  # target closed between resolution and switch — undo the push
+            _backstack_pop(key)
+        click.echo(
+            f"Could not switch to pane {target_pane} (it may have closed).",
+            err=True,
+        )
+        raise SystemExit(1)
+    click.echo(f"• goto {label}", err=True)
+
+
+def session_back() -> None:
+    """Return to the previous session via the back-stack, browser-style. Skips
+    panes/sessions that have since closed; falls back to the spawning session
+    when the stack is empty. See the module section header (E-1681).
+    """
+    if not _in_tmux():
+        click.echo(
+            "session back requires tmux (no $TMUX in this environment).",
+            err=True,
+        )
+        raise SystemExit(1)
+    live = _live_sessions(_project_root_for_cwd())
+    key = _backstack_key()
+
+    while True:
+        token = _backstack_pop(key)
+        if token is None:
+            break
+        pane = _resolve_session_token_to_pane(live, token)
+        if pane and _tmux_switch_client(pane):
+            click.echo(f"• back → {_token_label(token, pane)}", err=True)
+            return
+        # Stale or unswitchable token: it's already popped, so drop and retry.
+
+    spawner = _spawner_pane(live)
+    if spawner:
+        pane, label = spawner
+        if _tmux_switch_client(pane):
+            click.echo(f"• back → {label}", err=True)
+            return
+
+    click.echo("no previous session", err=True)
+    raise SystemExit(1)
