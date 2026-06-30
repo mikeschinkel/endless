@@ -205,6 +205,60 @@ func TestClaim_ClearsStaleEpicFromPriorClaim(t *testing.T) {
 	}
 }
 
+// TestClaim_RevivesEndedSession (E-1686): binding a task to a session whose row
+// is 'ended' must lift it back to a live state, so `task bind` can't silently
+// land on (and report success against) a row that every `state != 'ended'`
+// reader hides. Mirrors the TouchSession revival on the bind path.
+func TestClaim_RevivesEndedSession(t *testing.T) {
+	db := newClaimTestDB(t)
+	seedClaimSession(t, db, 42)
+	if _, err := db.Exec(
+		"UPDATE sessions SET state='ended' WHERE id=?", int64(42),
+	); err != nil {
+		t.Fatalf("force ended: %v", err)
+	}
+	seedTask(t, db, 100, nil, int(tasktype.TaskTypeTask), "ready")
+
+	if _, err := execTaskClaimed(db, claimEvent(t, 100, 42)); err != nil {
+		t.Fatalf("execTaskClaimed: %v", err)
+	}
+
+	var state string
+	if err := db.QueryRow(
+		"SELECT state FROM sessions WHERE id=?", int64(42),
+	).Scan(&state); err != nil {
+		t.Fatalf("read state: %v", err)
+	}
+	if state != "needs_input" {
+		t.Errorf("state = %q, want needs_input (bind didn't revive ended row)", state)
+	}
+	if taskID, _ := sessionActive(t, db, 42); !taskID.Valid || taskID.Int64 != 100 {
+		t.Errorf("active_task_id = %v, want 100", taskID)
+	}
+}
+
+// TestClaim_PreservesLiveSessionState (E-1686 guard): claiming onto a live
+// session must NOT rewrite its state — only an 'ended' row is revived.
+func TestClaim_PreservesLiveSessionState(t *testing.T) {
+	db := newClaimTestDB(t)
+	seedClaimSession(t, db, 42) // seeded 'working'
+	seedTask(t, db, 100, nil, int(tasktype.TaskTypeTask), "ready")
+
+	if _, err := execTaskClaimed(db, claimEvent(t, 100, 42)); err != nil {
+		t.Fatalf("execTaskClaimed: %v", err)
+	}
+
+	var state string
+	if err := db.QueryRow(
+		"SELECT state FROM sessions WHERE id=?", int64(42),
+	).Scan(&state); err != nil {
+		t.Fatalf("read state: %v", err)
+	}
+	if state != "working" {
+		t.Errorf("state = %q, want working (claim clobbered a live state)", state)
+	}
+}
+
 // TestRelease_ClearsBothTaskAndEpic: releasing an epic-descendant claim NULLs
 // both active_task_id and active_epic_id.
 func TestRelease_ClearsBothTaskAndEpic(t *testing.T) {

@@ -120,6 +120,94 @@ func TestTouchSession_StatePreservedAcrossUpdate(t *testing.T) {
 	}
 }
 
+// TestTouchSession_RevivesEndedRow encodes the E-1686 fix: once a row is
+// 'ended' (here forced directly, standing in for EndSession / the pane reaper /
+// collision invalidation), the session's own next hook must lift it back to a
+// live state. Before the fix the UPDATE branch never touched state, so the row
+// stayed 'ended' and every `state != 'ended'` reader hid the still-live session.
+func TestTouchSession_RevivesEndedRow(t *testing.T) {
+	db := withTestDB(t)
+	seedProject(t, db, 1, "proj-test-1", "/tmp/proj-test-1")
+
+	if err := TouchSession("sess-A", "claude", "%5", 1); err != nil {
+		t.Fatalf("touch 1: %v", err)
+	}
+	if _, err := db.Exec(
+		"UPDATE sessions SET state='ended' WHERE session_id=?", "sess-A",
+	); err != nil {
+		t.Fatalf("force ended: %v", err)
+	}
+
+	// The session's continued activity — the proof-of-life that must revive it.
+	if err := TouchSession("sess-A", "claude", "%5", 1); err != nil {
+		t.Fatalf("touch 2: %v", err)
+	}
+	state, _, _ := sessionRow(t, db, "sess-A")
+	if state != "needs_input" {
+		t.Errorf("state = %q, want needs_input (ended row not revived)", state)
+	}
+}
+
+// TestTouchSession_RevivesOnlyEndedNotLiveStates guards the CASE: revival fires
+// ONLY for 'ended'. A live state (working/idle/needs_input) must pass through
+// an UPDATE unchanged so the dedicated lifecycle helpers stay authoritative.
+func TestTouchSession_RevivesOnlyEndedNotLiveStates(t *testing.T) {
+	db := withTestDB(t)
+	seedProject(t, db, 1, "proj-test-1", "/tmp/proj-test-1")
+
+	for _, live := range []string{"working", "idle", "needs_input"} {
+		sid := "sess-" + live
+		if err := TouchSession(sid, "claude", "%5", 1); err != nil {
+			t.Fatalf("touch 1 (%s): %v", live, err)
+		}
+		if _, err := db.Exec(
+			"UPDATE sessions SET state=? WHERE session_id=?", live, sid,
+		); err != nil {
+			t.Fatalf("force %s: %v", live, err)
+		}
+		if err := TouchSession(sid, "claude", "%5", 1); err != nil {
+			t.Fatalf("touch 2 (%s): %v", live, err)
+		}
+		state, _, _ := sessionRow(t, db, sid)
+		if state != live {
+			t.Errorf("live state %q clobbered by touch: got %q", live, state)
+		}
+	}
+}
+
+// TestTouchSession_ReusedPaneDoesNotReviveOther is the E-1530 safety guard:
+// reviving must be gated on the session_id conflict target, NOT a bare pane
+// match. A DIFFERENT session_id arriving on a pane whose prior occupant is
+// 'ended' (e.g. a reused %N after a tmux server restart) must take the INSERT
+// path and leave the prior ended row ended.
+func TestTouchSession_ReusedPaneDoesNotReviveOther(t *testing.T) {
+	db := withTestDB(t)
+	seedProject(t, db, 1, "proj-test-1", "/tmp/proj-test-1")
+
+	if err := TouchSession("sess-A", "claude", "%5", 1); err != nil {
+		t.Fatalf("touch A: %v", err)
+	}
+	if _, err := db.Exec(
+		"UPDATE sessions SET state='ended' WHERE session_id=?", "sess-A",
+	); err != nil {
+		t.Fatalf("force A ended: %v", err)
+	}
+
+	// A different session_id reuses pane %5.
+	if err := TouchSession("sess-B", "claude", "%5", 1); err != nil {
+		t.Fatalf("touch B: %v", err)
+	}
+
+	stateA, _, _ := sessionRow(t, db, "sess-A")
+	if stateA != "ended" {
+		t.Errorf("prior occupant A revived by a different session's touch: A.state=%q, want ended (E-1530)", stateA)
+	}
+	stateB, _, _ := sessionRow(t, db, "sess-B")
+	if stateB == "ended" {
+		t.Errorf("new occupant B.state = ended; should be live")
+	}
+}
+
 // TestTouchSession_PaneReattachOverwritesProcess: same session_id appearing
 // on a different pane (e.g. Claude --resume in a new window) updates
 // process to the new value.

@@ -812,6 +812,11 @@ func execTaskClaimed(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 	if _, err := db.Exec(
 		`UPDATE sessions
 		    SET active_task_id = ?,
+		        -- Revive an 'ended' row on bind (E-1686), mirroring TouchSession's
+		        -- revival: binding a task to a session is proof it's alive, so
+		        -- task bind must not silently land on (and report success against)
+		        -- an invisible dead row. CASE keeps live states authoritative.
+		        state = CASE WHEN state = 'ended' THEN 'needs_input' ELSE state END,
 		        active_epic_id = (
 		          WITH RECURSIVE ancestry(id, parent_id, type_id, depth) AS (
 		            SELECT id, parent_id, type_id, 0 FROM tasks WHERE id = ?

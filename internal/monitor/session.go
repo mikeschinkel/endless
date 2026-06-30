@@ -254,10 +254,21 @@ func LookupChannelPort(process string) (int, int, error) {
 // presence in the sessions table (creating the row if absent), refreshes
 // last_activity, and overwrites `process` when the new value is non-empty
 // (so a pane-reattach is tracked; an empty TMUX_PANE never stomps a
-// previously-known value). Lifecycle transitions (working/idle/ended) are
-// owned by the dedicated helpers (BindSessionToTask, IdleSession,
-// EndSession) — TouchSession deliberately does not change `state` on
-// UPDATE, so it can safely fire on every hook event.
+// previously-known value). Lifecycle transitions among the LIVE states
+// (working/idle/needs_input) are owned by the dedicated helpers
+// (BindSessionToTask, IdleSession, EndSession) — TouchSession never clobbers
+// a live state on UPDATE, so it can safely fire on every hook event.
+//
+// Revival of `ended` (E-1686): the one state transition TouchSession owns.
+// An incoming hook is proof the session is alive, so an `ended` row is lifted
+// back to 'needs_input' (the same neutral state INSERT uses; the next
+// lifecycle hook re-derives working/idle/ended). Without this an `ended` row —
+// reached via EndSession, the pane reaper, or this helper's own collision
+// invalidation — never recovers, and since every reader filters
+// `state != 'ended'` the still-live session goes permanently invisible.
+// Gated on the ON CONFLICT(session_id) target, NOT a bare pane match: a reused
+// pane id (%N after a tmux server restart) carries a DIFFERENT session_id and
+// takes the INSERT path, so the prior occupant's ended row stays ended (E-1530).
 //
 // Collision invalidation: when `process` is non-empty and matches a row
 // other than this session, that other row is marked ended in the same
@@ -289,14 +300,17 @@ func TouchSession(sessionID, platform, process string, projectID int64) error {
 	// UPSERT: process is NULL on INSERT when the new value is empty, and
 	// COALESCEd against the existing value on UPDATE so an empty input
 	// never overwrites a known-good process. state defaults to
-	// 'needs_input' only on INSERT (matches InitSession semantics); UPDATE
-	// never touches state.
+	// 'needs_input' only on INSERT (matches InitSession semantics). On UPDATE
+	// state is preserved for every LIVE state and only an 'ended' row is
+	// revived to 'needs_input' (E-1686, see the doc comment) — the CASE keeps
+	// working↔idle authoritative while giving a stale ending a recovery path.
 	_, err = tx.Exec(
 		`INSERT INTO sessions (session_id, project_id, platform, state, process, started_at, last_activity)
 		 VALUES (?, ?, ?, 'needs_input', NULLIF(?, ''), ?, ?)
 		 ON CONFLICT(session_id) DO UPDATE SET
 		   last_activity = excluded.last_activity,
-		   process       = COALESCE(NULLIF(excluded.process, ''), sessions.process)`,
+		   process       = COALESCE(NULLIF(excluded.process, ''), sessions.process),
+		   state         = CASE WHEN sessions.state = 'ended' THEN 'needs_input' ELSE sessions.state END`,
 		sessionID, projectID, platform, process, now, now,
 	)
 	if err != nil {
