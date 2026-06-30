@@ -59,7 +59,7 @@ func renderTree(w io.Writer, rows []monitor.SessionStatusRow, focal int64) error
 }
 
 // parentID returns the parent (spawning) task's id from the row set, or 0 when
-// there is no parent row (e.g. headless --focal, or a non-spawned session).
+// there is no parent row (e.g. headless --task, or a non-spawned session).
 func parentID(rows []monitor.SessionStatusRow) int64 {
 	for _, r := range rows {
 		if r.IsParent {

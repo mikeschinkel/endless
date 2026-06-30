@@ -13,7 +13,7 @@
 #   ./tests/tasks/e-1688-verify.sh
 #
 # The snapshot VIEW is exercised headlessly through the worktree's candidate Go
-# binary (`./bin/endless-go session-status --focal <id>`), which names the focal
+# binary (`./bin/endless-go session-status --task <id>`), which names the focal
 # task directly, bypasses tmux/session resolution, and reads the self-detected
 # per-worktree sandbox DB instead of pinning main (E-1685's headless entry point).
 # Surface checks (verb present/absent, help text) go through the Python CLI.
@@ -158,7 +158,7 @@ test_status_snapshot_view() {
     d=$(add_task_get_id "Build e1688 status dependent") || return
     endless task block "${d}" --by "${f}" >/dev/null 2>&1
 
-    out=$(go_status --focal "$(num_id "${f}")" 2>&1)
+    out=$(go_status --task "$(num_id "${f}")" 2>&1)
 
     if [[ "${out}" == *"● this"* ]]; then
         report_pass "legend header rendered"
@@ -202,7 +202,7 @@ test_session_monitor() {
     # exit, never loop. Seed a focal task and confirm one frame is produced.
     local f out
     f=$(add_task_get_id "Build e1688 monitor focal") || return
-    out=$(go_status --monitor --focal "$(num_id "${f}")" 2>&1)
+    out=$(go_status --monitor --task "$(num_id "${f}")" 2>&1)
     if printf '%s\n' "${out}" | grep -Eq "E-$(num_id "${f}") "; then
         report_pass "session-status --monitor renders the focal frame once and exits"
     else

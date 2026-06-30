@@ -9,7 +9,7 @@
 #
 # It seeds focal/dependent tasks via the Python CLI (`endless ... --db sandbox`)
 # and reads them back through the worktree's candidate Go binary in its headless
-# mode (`./bin/endless-go session-status --focal <id>`), which bypasses tmux/
+# mode (`./bin/endless-go session-status --task <id>`), which bypasses tmux/
 # session resolution and reads the same self-detected sandbox DB instead of
 # pinning main. Output: pass/fail per check, then a summary. Exit 0 on
 # all-passed, 1 on any failure. Each run creates fresh task IDs; the sandbox is
@@ -110,7 +110,7 @@ add_task_get_id() {
     printf '%s\n' "${output}" | grep -oE 'E-[0-9]+' | head -1
 }
 
-# numeric id from an "E-NNN" token (the --focal flag wants a bare integer).
+# numeric id from an "E-NNN" token (the --task flag wants a bare integer).
 num_id() { printf '%s' "${1#E-}"; }
 
 # The row line for task E-ID within captured session-status OUTPUT, or "" if
@@ -173,7 +173,7 @@ test_open_dependent_shown_blocked() {
     d=$(add_task_get_id "Build e1685 dependent-open")
     endless task block "${d}" --by "${f}" >/dev/null 2>&1
 
-    out=$(go_session_status --focal "$(num_id "${f}")")
+    out=$(go_session_status --task "$(num_id "${f}")")
 
     assert_row_present "dependent ${d} appears as a row in focal ${f}'s view" \
         "$(num_id "${d}")" "${out}"
@@ -194,7 +194,7 @@ test_block_clears_when_focal_lands() {
     # Land the focal — confirmed unblocks dependents.
     endless task confirm "${f}" >/dev/null 2>&1
 
-    out=$(go_session_status --focal "$(num_id "${f}")")
+    out=$(go_session_status --task "$(num_id "${f}")")
 
     assert_row_present "dependent ${d} still shows after focal ${f} lands" \
         "$(num_id "${d}")" "${out}"
@@ -214,8 +214,8 @@ test_terminal_dependent_all_gate() {
     # Make the dependent itself terminal while the focal stays open.
     endless task confirm "${d}" >/dev/null 2>&1
 
-    out_default=$(go_session_status --focal "$(num_id "${f}")")
-    out_all=$(go_session_status --focal "$(num_id "${f}")" --all)
+    out_default=$(go_session_status --task "$(num_id "${f}")")
+    out_all=$(go_session_status --task "$(num_id "${f}")" --all)
 
     assert_row_absent "terminal dependent ${d} omitted by default" \
         "$(num_id "${d}")" "${out_default}"
@@ -234,7 +234,7 @@ test_no_session_tasks_write() {
     endless task block "${d}" --by "${f}" >/dev/null 2>&1
 
     before=$(sqlite3 "${SANDBOX_DB}" "SELECT count(*) FROM session_tasks;" 2>&1)
-    go_session_status --focal "$(num_id "${f}")" >/dev/null 2>&1
+    go_session_status --task "$(num_id "${f}")" >/dev/null 2>&1
     after=$(sqlite3 "${SANDBOX_DB}" "SELECT count(*) FROM session_tasks;" 2>&1)
 
     if [[ "${before}" =~ ^[0-9]+$ ]] && [[ "${after}" == "${before}" ]]; then

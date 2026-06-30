@@ -21,7 +21,7 @@
 //   - hook → ENDLESS_NO_HOOKS=true short-circuit (E-1470), then PinMainDB (E-1450/E-1429).
 //   - channel, tmux → PinMainDB (E-1429).
 //   - session-status → PinMainDB on its normal path (it reads the live sessions
-//     table, which hook writes pin to main regardless of cwd), but with --focal
+//     table, which hook writes pin to main regardless of cwd), but with --task
 //     (headless/tests) it skips the pin and reads the resolved sandbox/
 //     --config-dir context; the decision lives in sessionstatuscmd.Run (E-1685).
 //   - event, serve, session-query → ConsumeDBContextFlag (E-1429).
@@ -114,7 +114,7 @@ func main() {
 		monitor.PinMainDB()
 	}
 	// session-status pins main itself, but only on its normal tmux-resolved path;
-	// with --focal (headless/tests) it deliberately reads the resolved sandbox
+	// with --task (headless/tests) it deliberately reads the resolved sandbox
 	// context instead, so the decision lives inside sessionstatuscmd.Run (E-1685).
 
 	switch sub {
