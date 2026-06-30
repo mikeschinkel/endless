@@ -15,6 +15,8 @@ func TestClassify(t *testing.T) {
 	}{
 		{"focal wins over status", monitor.SessionStatusRow{IsFocal: true, Status: "ready"}, actThis},
 		{"parent wins over in_flight", monitor.SessionStatusRow{IsParent: true, InFlight: true, Status: "underway"}, actParent},
+		{"parent wins over from", monitor.SessionStatusRow{IsParent: true, IsFrom: true, Status: "underway"}, actParent},
+		{"from wins over in_flight", monitor.SessionStatusRow{IsFrom: true, InFlight: true, Status: "underway"}, actFrom},
 		{"in_flight wins over status", monitor.SessionStatusRow{InFlight: true, Status: "ready"}, actDoing},
 		{"ready with no plan still do", monitor.SessionStatusRow{Status: "ready", HasText: false}, actDo},
 		{"unplanned is plan", monitor.SessionStatusRow{Status: "unplanned"}, actPlan},
@@ -38,6 +40,7 @@ func TestSortRows(t *testing.T) {
 	rows := []monitor.SessionStatusRow{
 		{ID: 5, Status: "ready", Phase: "now"},        // do
 		{ID: 1, IsParent: true, Phase: "later"},       // parent
+		{ID: 2, IsFrom: true, Phase: "now"},           // from (spawner)
 		{ID: 9, IsFocal: true, Phase: "maybe"},        // this
 		{ID: 7, Status: "unplanned", Phase: "urgent"}, // plan, urgent
 		{ID: 8, Status: "unplanned", Phase: "now"},    // plan, now
@@ -48,8 +51,8 @@ func TestSortRows(t *testing.T) {
 	for i, r := range rows {
 		gotOrder[i] = r.ID
 	}
-	// this(9) < parent(1) < doing(3) < do(5) < plan/urgent(7) < plan/now(8)
-	want := []int64{9, 1, 3, 5, 7, 8}
+	// this(9) < parent(1) < from(2) < doing(3) < do(5) < plan/urgent(7) < plan/now(8)
+	want := []int64{9, 1, 2, 3, 5, 7, 8}
 	for i := range want {
 		if gotOrder[i] != want[i] {
 			t.Fatalf("sort order = %v, want %v", gotOrder, want)
@@ -121,19 +124,23 @@ func TestRenderColumnsAndTruncation(t *testing.T) {
 	rows := []monitor.SessionStatusRow{
 		{ID: 1465, Title: "Implement endless session next briefing read command", Status: "underway", Phase: "now", TypeSlug: "task", IsFocal: true},
 		{ID: 1461, Title: "Add endless session next prospective remaining-work briefing", Status: "ready", Phase: "now", TypeSlug: "epic", IsParent: true},
+		{ID: 1684, Title: "Add session next --tree showing task IDs in implementation order", Status: "confirmed", Phase: "now", TypeSlug: "task", IsFrom: true},
 	}
 	var b strings.Builder
 	renderTo(&b, rows, 1465, 40, false)
 	lines := strings.Split(strings.TrimRight(b.String(), "\n"), "\n")
-	// legend + 2 rows
-	if len(lines) != 3 {
-		t.Fatalf("want 3 lines (legend + 2 rows), got %d:\n%s", len(lines), b.String())
+	// legend + 3 rows
+	if len(lines) != 4 {
+		t.Fatalf("want 4 lines (legend + 3 rows), got %d:\n%s", len(lines), b.String())
 	}
 	if !strings.HasPrefix(lines[1], "● T E-1465 1 ") {
 		t.Errorf("focal row prefix wrong: %q", lines[1])
 	}
 	if !strings.HasPrefix(lines[2], "↑ E E-1461 1 ") {
 		t.Errorf("parent row prefix wrong: %q", lines[2])
+	}
+	if !strings.HasPrefix(lines[3], "↩ T E-1684 ") {
+		t.Errorf("from row prefix wrong: %q", lines[3])
 	}
 	// Truncated to terminal width (40): no row should exceed it in display width.
 	for _, ln := range lines[1:] {

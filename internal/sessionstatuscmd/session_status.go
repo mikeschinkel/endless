@@ -29,24 +29,27 @@ import (
 	"github.com/mikeschinkel/endless/internal/monitor"
 )
 
-// legend is the fixed header line. Intentionally kept to a single ~80-col line
-// (Mike's constraint, E-1465); revisit folds into "plan" and there is no
-// "other" entry, so every glyph a user acts on is documented here.
-const legend = "● this  ↑ parent  ⟳ doing  ▶ do  ✎ plan  ◷ orphan  ☑ verify | ⊗ blocked  ⏸ blocks"
+// legend is the fixed header line. Kept to a single line; revisit folds into
+// "plan" and there is no "other" entry, so every glyph a user acts on is
+// documented here. ↑ parent is the focal's real task-tree parent; ↩ from is the
+// spawning session's active task (session lineage), split apart in E-1694.
+const legend = "● this  ↑ parent  ↩ from  ⟳ doing  ▶ do  ✎ plan  ◷ orphan  ☑ verify | ⊗ blocked  ⏸ blocks"
 
 // fallbackCols is used when the terminal width can't be detected (output not a
 // tty, no --cols, no $COLUMNS). Matches the bash prototype's default.
 const fallbackCols = 90
 
 // action is the primary classification of a row, in sort-rank order. The icon
-// and rank both derive from it. Parent outranks the in-flight/do/plan/etc.
-// statuses; the bash prototype's icon-glyph sort had a latent bug (it matched
-// '⤴' but rendered '↑'), avoided here by ranking on the enum, not the glyph.
+// and rank both derive from it. Parent and from (spawner) outrank the
+// in-flight/do/plan/etc. statuses; the bash prototype's icon-glyph sort had a
+// latent bug (it matched '⤴' but rendered '↑'), avoided here by ranking on the
+// enum, not the glyph.
 type action int
 
 const (
 	actThis action = iota
 	actParent
+	actFrom
 	actDoing
 	actDo
 	actPlan
@@ -61,6 +64,8 @@ func (a action) icon() string {
 		return "●"
 	case actParent:
 		return "↑"
+	case actFrom:
+		return "↩"
 	case actDoing:
 		return "⟳"
 	case actDo:
@@ -87,6 +92,7 @@ func Run(args []string) {
 	tree := fs.Bool("tree", false, "render do/plan tasks as an IDs-only implementation-order tree")
 	cols := fs.Int("cols", 0, "terminal width override (0 = auto-detect)")
 	taskFlag := fs.Int64("task", 0, "explicit task id (headless: bypasses tmux/session resolution and reads the resolved DB context — the self-detected sandbox or --config-dir — instead of pinning the main DB; intended for tests)")
+	fromSession := fs.Int64("from-session", 0, "explicit spawning session id paired with --task (headless: drives the ↩ from row + --tree spawner annotation without tmux resolution; intended for tests)")
 	if err := fs.Parse(args); err != nil {
 		os.Exit(2)
 	}
@@ -99,7 +105,10 @@ func Run(args []string) {
 		// context was already resolved in main.go (the self-detected per-worktree
 		// sandbox, or an explicit --config-dir), which is what lets the verify
 		// script exercise the dependents row-set against a seeded sandbox DB.
+		// --from-session supplies the spawning session id the live path would read
+		// from @endless_spawned_by, so the ↩ from row stays testable headless.
 		focal = *taskFlag
+		parentSession = *fromSession
 	} else {
 		// Normal path: session/pane state lives in the main DB regardless of cwd
 		// (the hook pins its writes there), so pin main before resolving. Anchor
@@ -253,14 +262,17 @@ func renderTo(w io.Writer, rows []monitor.SessionStatusRow, focal int64, cols in
 // classify maps a row to its action, applying the status canonicalization from
 // the plan: revisit/unplanned/needs_plan → plan; verify/unverified → verify;
 // underway/in_progress → working (→ orphan when not in-flight); ready → do
-// REGARDLESS of plan text (ED-1522, confirmed by Mike). Focal/parent/in-flight
-// decorations take precedence over status.
+// REGARDLESS of plan text (ED-1522, confirmed by Mike). Focal/parent/from/
+// in-flight decorations take precedence over status; parent (real task-tree
+// parent) outranks from (spawner) when a single task is both (E-1694).
 func classify(r monitor.SessionStatusRow) action {
 	switch {
 	case r.IsFocal:
 		return actThis
 	case r.IsParent:
 		return actParent
+	case r.IsFrom:
+		return actFrom
 	case r.InFlight:
 		return actDoing
 	}

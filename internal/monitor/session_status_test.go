@@ -72,27 +72,36 @@ func snRowByID(rows []SessionStatusRow, id int64) (SessionStatusRow, bool) {
 }
 
 // TestSessionStatusRows_RowSetAndDecorations drives the whole query: the row set
-// (sessions on focal ∪ focal ∪ parent's task), the focal/parent/in_flight
-// decorations, the block counts, and the terminal-status filter.
+// (sessions on focal ∪ focal ∪ real parent ∪ spawner's task), the focal/parent/
+// from/in_flight decorations, the block counts, and the terminal-status filter.
+// realParent (focal's tasks.parent_id) and spawnerTask (the spawning session's
+// active task) are DISTINCT tasks here (E-1694) so the ↑ parent / ↩ from split is
+// exercised directly.
 func TestSessionStatusRows_RowSetAndDecorations(t *testing.T) {
 	db := withTestDB(t)
 	seedProject(t, db, 1, "p1", "/p1")
 
-	const focal, sibling, parentTask, blocker, doneSibling = 100, 101, 200, 300, 400
+	const focal, sibling, realParent, spawnerTask, blocker, doneSibling = 100, 101, 150, 200, 300, 400
 
 	snTask(t, db, focal, 1, "underway", "now", "")
 	snTask(t, db, sibling, 1, "ready", "next", "has-plan")
-	snTask(t, db, parentTask, 1, "ready", "later", "")
+	snTask(t, db, realParent, 1, "ready", "later", "") // focal's task-tree parent
+	snTask(t, db, spawnerTask, 1, "ready", "later", "") // the spawning session's active task
 	snTask(t, db, blocker, 1, "underway", "now", "") // open blocker of focal
 	snTask(t, db, doneSibling, 1, "confirmed", "now", "")
+
+	// focal's real task-tree parent is realParent, NOT the spawner.
+	if _, err := db.Exec(`UPDATE tasks SET parent_id = ? WHERE id = ?`, realParent, focal); err != nil {
+		t.Fatalf("set focal parent_id: %v", err)
+	}
 
 	// s1 is on the focal task and has touched focal, sibling, and the done one.
 	snSession(t, db, 1, 1, focal, "working")
 	snSessionTask(t, db, 1, focal)
 	snSessionTask(t, db, 1, sibling)
 	snSessionTask(t, db, 1, doneSibling)
-	// s2 is the parent (spawning) session; its active task is parentTask.
-	snSession(t, db, 2, 1, parentTask, "working")
+	// s2 is the spawning session; its active task is spawnerTask (→ ↩ from).
+	snSession(t, db, 2, 1, spawnerTask, "working")
 	// s3 is a live session on the sibling → sibling is in_flight.
 	snSession(t, db, 3, 1, sibling, "working")
 
@@ -104,18 +113,18 @@ func TestSessionStatusRows_RowSetAndDecorations(t *testing.T) {
 		t.Fatalf("SessionStatusRows: %v", err)
 	}
 
-	// doneSibling is terminal and neither focal nor parent → filtered out.
+	// doneSibling is terminal and not a decorated row → filtered out.
 	if _, ok := snRowByID(rows, doneSibling); ok {
 		t.Errorf("terminal task %d should be excluded without --all", doneSibling)
 	}
-	for _, id := range []int64{focal, sibling, parentTask} {
+	for _, id := range []int64{focal, sibling, realParent, spawnerTask} {
 		if _, ok := snRowByID(rows, id); !ok {
 			t.Errorf("expected task %d in row set, missing", id)
 		}
 	}
 
 	f, _ := snRowByID(rows, focal)
-	if !f.IsFocal || f.IsParent || f.InFlight {
+	if !f.IsFocal || f.IsParent || f.IsFrom || f.InFlight {
 		t.Errorf("focal decorations wrong: %+v", f)
 	}
 	if f.BlockedByN != 1 {
@@ -125,9 +134,14 @@ func TestSessionStatusRows_RowSetAndDecorations(t *testing.T) {
 		t.Errorf("focal BlocksN = %d, want 1", f.BlocksN)
 	}
 
-	p, _ := snRowByID(rows, parentTask)
-	if !p.IsParent || p.IsFocal {
-		t.Errorf("parent decorations wrong: %+v", p)
+	p, _ := snRowByID(rows, realParent)
+	if !p.IsParent || p.IsFrom || p.IsFocal {
+		t.Errorf("real-parent decorations wrong: %+v", p)
+	}
+
+	from, _ := snRowByID(rows, spawnerTask)
+	if !from.IsFrom || from.IsParent || from.IsFocal {
+		t.Errorf("spawner (from) decorations wrong: %+v", from)
 	}
 
 	s, _ := snRowByID(rows, sibling)
@@ -192,8 +206,8 @@ func TestSessionStatusRows_FocalDependents(t *testing.T) {
 	if !ok {
 		t.Fatalf("open dependent %d should be a row while focal is open", dep)
 	}
-	if d.IsFocal || d.IsParent {
-		t.Errorf("dependent should not be focal/parent: %+v", d)
+	if d.IsFocal || d.IsParent || d.IsFrom {
+		t.Errorf("dependent should not be focal/parent/from: %+v", d)
 	}
 	if d.BlockedByN != 1 {
 		t.Errorf("dependent BlockedByN = %d, want 1 (blocked by open focal)", d.BlockedByN)

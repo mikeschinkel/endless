@@ -13,11 +13,15 @@ import (
 // phase-char/sort derivation happens in the caller (internal/sessionstatuscmd)
 // so the rendering rules stay testable without a DB.
 //
-// IsFocal/IsParent/InFlight are mutually-prioritized decorations computed
-// in-query: IsFocal is the window's own active task, IsParent the spawning
-// session's active task, InFlight any OTHER live session's active task.
-// BlockedByN counts open tasks that block this one; BlocksN counts tasks this
-// one blocks (regardless of their status — it drives the ⏸ "blocks" marker).
+// IsFocal/IsParent/IsFrom/InFlight are mutually-prioritized decorations computed
+// in-query: IsFocal is the window's own active task; IsParent the focal's real
+// task-tree parent (tasks.parent_id); IsFrom the SPAWNING session's active task
+// (session lineage — "where this session came from", NOT a tree relation);
+// InFlight any OTHER live session's active task. IsParent and IsFrom are distinct
+// (E-1694): the spawner is rarely the task-tree parent, and conflating them was
+// E-1465's original mislabel. BlockedByN counts open tasks that block this one;
+// BlocksN counts tasks this one blocks (regardless of their status — it drives
+// the ⏸ "blocks" marker).
 type SessionStatusRow struct {
 	ID         int64
 	Title      string
@@ -27,6 +31,7 @@ type SessionStatusRow struct {
 	HasText    bool
 	IsFocal    bool
 	IsParent   bool
+	IsFrom     bool
 	InFlight   bool
 	BlockedByN int
 	BlocksN    int
@@ -124,7 +129,8 @@ func tmuxWindowOption(pane, name string) string {
 //   - every task touched (via session_tasks) by ANY live-or-dead session whose
 //     active_task_id = focal (cross-project; robust to duplicate session rows),
 //   - ∪ the focal task itself,
-//   - ∪ the parent session's active task,
+//   - ∪ the focal's real task-tree parent (tasks.parent_id) — the ↑ parent row,
+//   - ∪ the spawning session's active task — the ↩ from row (session lineage),
 //   - ∪ the focal task's DIRECT dependents — tasks T it blocks
 //     (task_deps source=focal, target=T, dep_type='blocks'). These are computed
 //     at read time, NOT written into session_tasks: that table is a projection
@@ -134,8 +140,9 @@ func tmuxWindowOption(pane, name string) string {
 //     0 and ⊗ disappears with no special highlight. One hop only, not the
 //     transitive closure.
 //
-// Done-work (terminal status) is omitted UNLESS the row is the focal or parent
-// row, or includeAll is true. Returns an empty slice when focal is 0.
+// Done-work (terminal status) is omitted UNLESS the row is the focal, parent, or
+// from (spawner) row, or includeAll is true. Returns an empty slice when focal
+// is 0.
 func SessionStatusRows(focal, parentSession int64, includeAll bool) ([]SessionStatusRow, error) {
 	if focal == 0 {
 		return nil, nil
@@ -153,7 +160,10 @@ func SessionStatusRows(focal, parentSession int64, includeAll bool) ([]SessionSt
 	q := `
 WITH
 ftask(tid) AS (SELECT ?),
-pfoc(ptid) AS (SELECT active_task_id FROM sessions WHERE id = ?),
+-- sfoc.stid = the SPAWNING session's active task (session lineage → ↩ from).
+sfoc(stid) AS (SELECT active_task_id FROM sessions WHERE id = ?),
+-- rpar.rpid = the focal's real task-tree parent (tasks.parent_id → ↑ parent).
+rpar(rpid) AS (SELECT parent_id FROM tasks WHERE id = (SELECT tid FROM ftask)),
 base AS (
   SELECT t.id, t.title, t.status, t.phase, t.text, t.type_id
     FROM session_tasks st JOIN tasks t ON t.id = st.task_id
@@ -165,7 +175,10 @@ base AS (
     FROM tasks t WHERE t.id = (SELECT tid FROM ftask)
   UNION
   SELECT t.id, t.title, t.status, t.phase, t.text, t.type_id
-    FROM tasks t, pfoc WHERE t.id = pfoc.ptid
+    FROM tasks t, rpar WHERE t.id = rpar.rpid
+  UNION
+  SELECT t.id, t.title, t.status, t.phase, t.text, t.type_id
+    FROM tasks t, sfoc WHERE t.id = sfoc.stid
   UNION
   -- E-1685: the focal task's direct dependents (tasks it blocks), read-time
   -- only. Computed here rather than materialized into session_tasks so the
@@ -187,9 +200,12 @@ enr AS (
     COALESCE((SELECT slug FROM task_types WHERE id = b.type_id), '') AS type_slug,
     (b.text IS NOT NULL AND b.text <> '') AS has_text,
     (b.id = (SELECT tid FROM ftask)) AS is_focal,
-    -- pfoc.ptid is NULL when there is no parent session (or it has no active
-    -- task); COALESCE keeps is_parent a real boolean rather than NULL.
-    COALESCE(b.id = (SELECT ptid FROM pfoc), 0) AND b.id <> (SELECT tid FROM ftask) AS is_parent,
+    -- rpar.rpid is NULL when the focal has no parent; COALESCE keeps is_parent a
+    -- real boolean rather than NULL. The focal-self guard avoids self-marking.
+    COALESCE(b.id = (SELECT rpid FROM rpar), 0) AND b.id <> (SELECT tid FROM ftask) AS is_parent,
+    -- sfoc.stid is NULL when there is no spawning session (or it has no active
+    -- task). is_from yields to is_parent in the renderer when both are true.
+    COALESCE(b.id = (SELECT stid FROM sfoc), 0) AND b.id <> (SELECT tid FROM ftask) AS is_from,
     (EXISTS(
        SELECT 1 FROM sessions s
         WHERE s.state != 'ended' AND s.active_task_id = b.id
@@ -204,9 +220,9 @@ enr AS (
   FROM base b
 )
 SELECT id, title, status, phase, type_slug, has_text,
-       is_focal, is_parent, in_flight, blocked_by_n, blocks_n
+       is_focal, is_parent, is_from, in_flight, blocked_by_n, blocks_n
   FROM enr
- WHERE (? = 1) OR is_focal OR is_parent
+ WHERE (? = 1) OR is_focal OR is_parent OR is_from
        OR status NOT IN (` + terminalStatusSet + `)
 `
 
@@ -221,7 +237,7 @@ SELECT id, title, status, phase, type_slug, has_text,
 		var r SessionStatusRow
 		if err := rows.Scan(
 			&r.ID, &r.Title, &r.Status, &r.Phase, &r.TypeSlug, &r.HasText,
-			&r.IsFocal, &r.IsParent, &r.InFlight, &r.BlockedByN, &r.BlocksN,
+			&r.IsFocal, &r.IsParent, &r.IsFrom, &r.InFlight, &r.BlockedByN, &r.BlocksN,
 		); err != nil {
 			return nil, err
 		}

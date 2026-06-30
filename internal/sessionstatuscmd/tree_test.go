@@ -13,12 +13,12 @@ func renderForestString(ids []int64, edges map[int64][]int64, doOrder map[int64]
 	return b.String()
 }
 
-// renderSpineString assembles the full ancestry spine (parent → *focal →
-// backlog) and renders it, so the spine + focal marker can be asserted without
-// a DB.
-func renderSpineString(focal, parent int64, ids []int64, edges map[int64][]int64, doOrder map[int64]int64) string {
+// renderSpineString assembles the full ancestry spine (parent → *focal ← from →
+// backlog) and renders it, so the spine + focal marker + spawner annotation can
+// be asserted without a DB.
+func renderSpineString(focal, parent, from int64, ids []int64, edges map[int64][]int64, doOrder map[int64]int64) string {
 	var b strings.Builder
-	renderForest(&b, buildSpine(focal, parent, buildForest(ids, edges, doOrder)))
+	renderForest(&b, buildSpine(focal, parent, from, buildForest(ids, edges, doOrder)))
 	return b.String()
 }
 
@@ -103,6 +103,7 @@ func TestBuildSpine(t *testing.T) {
 		name    string
 		focal   int64
 		parent  int64
+		from    int64
 		ids     []int64
 		edges   map[int64][]int64
 		doOrder map[int64]int64
@@ -142,6 +143,21 @@ func TestBuildSpine(t *testing.T) {
 			want:  "*E-99\n",
 		},
 		{
+			name:   "spawner annotated inline on focal under real parent",
+			focal:  99,
+			parent: 88,
+			from:   77,
+			want: "" +
+				"E-88\n" +
+				"└── *E-99 ← E-77\n",
+		},
+		{
+			name:  "spawner annotation on lone focal (no parent)",
+			focal: 99,
+			from:  77,
+			want:  "*E-99 ← E-77\n",
+		},
+		{
 			name:  "parallel backlog siblings nest under focal",
 			focal: 99,
 			ids:   []int64{100, 101, 102},
@@ -155,7 +171,7 @@ func TestBuildSpine(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got := renderSpineString(tc.focal, tc.parent, tc.ids, tc.edges, tc.doOrder)
+			got := renderSpineString(tc.focal, tc.parent, tc.from, tc.ids, tc.edges, tc.doOrder)
 			if got != tc.want {
 				t.Errorf("spine mismatch:\n--- got ---\n%s\n--- want ---\n%s", got, tc.want)
 			}

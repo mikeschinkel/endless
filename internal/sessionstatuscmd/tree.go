@@ -21,16 +21,20 @@ const (
 
 // treeNode is one task in the rendered forest. Children are the tasks that nest
 // directly beneath it (its direct dependents in implementation order). focal
-// marks the session's current ("this") task, rendered with a `*` prefix.
+// marks the session's current ("this") task, rendered with a `*` prefix; from is
+// the spawner task id, rendered inline on the focal as ` ← E-<from>` (0 when the
+// window was not spawned).
 type treeNode struct {
 	id       int64
 	focal    bool
+	from     int64
 	children []*treeNode
 }
 
 // renderTree writes the IDs-only implementation-order tree for the session to w
-// as an ancestry spine (E-1684): the parent (spawning) task is the root, the
-// focal ("this") task nests under it marked `*`, and the do/plan backlog nests
+// as an ancestry spine (E-1684, E-1694): the focal's real task-tree parent is the
+// root, the focal ("this") task nests under it marked `*` and annotated with its
+// spawner inline (`*E-<focal> ← E-<spawner>`), and the do/plan backlog nests
 // under the focal in implementation order. The backlog structure is derived from
 // the blocked-by DAG (monitor.SessionStatusBlockerEdges) unless a per-session order
 // (monitor.SessionStatusDoOrder) is present, which overrides it. No legend, titles,
@@ -54,12 +58,12 @@ func renderTree(w io.Writer, rows []monitor.SessionStatusRow, focal int64) error
 		backlogRoots = buildForest(ids, edges, doOrder)
 	}
 
-	renderForest(w, buildSpine(focal, parentID(rows), backlogRoots))
+	renderForest(w, buildSpine(focal, parentID(rows), fromID(rows), backlogRoots))
 	return nil
 }
 
-// parentID returns the parent (spawning) task's id from the row set, or 0 when
-// there is no parent row (e.g. headless --task, or a non-spawned session).
+// parentID returns the focal's real task-tree parent id from the row set, or 0
+// when there is no parent row (e.g. the focal is a root task, or headless --task).
 func parentID(rows []monitor.SessionStatusRow) int64 {
 	for _, r := range rows {
 		if r.IsParent {
@@ -69,11 +73,22 @@ func parentID(rows []monitor.SessionStatusRow) int64 {
 	return 0
 }
 
-// buildSpine assembles the ancestry spine: focal (marked) carrying the backlog
-// roots as its children, nested under the parent task when one exists (else the
-// focal is the root).
-func buildSpine(focal, parent int64, backlogRoots []*treeNode) []*treeNode {
-	thisNode := &treeNode{id: focal, focal: true, children: backlogRoots}
+// fromID returns the spawner task id (the ↩ from row) from the row set, or 0 when
+// the window was not spawned (e.g. headless --task, or a non-spawned session).
+func fromID(rows []monitor.SessionStatusRow) int64 {
+	for _, r := range rows {
+		if r.IsFrom {
+			return r.ID
+		}
+	}
+	return 0
+}
+
+// buildSpine assembles the ancestry spine: focal (marked, annotated with its
+// spawner) carrying the backlog roots as its children, nested under the real
+// task-tree parent when one exists (else the focal is the root).
+func buildSpine(focal, parent, from int64, backlogRoots []*treeNode) []*treeNode {
+	thisNode := &treeNode{id: focal, focal: true, from: from, children: backlogRoots}
 	if parent > 0 {
 		return []*treeNode{{id: parent, children: []*treeNode{thisNode}}}
 	}
@@ -82,7 +97,7 @@ func buildSpine(focal, parent int64, backlogRoots []*treeNode) []*treeNode {
 
 // doPlanIDs extracts the task ids classified as do (ready) or plan
 // (unplanned/needs_plan/revisit) — the actionable backlog the tree visualizes.
-// Focal, parent, in-flight, verify, and terminal rows are excluded.
+// Focal, parent, from, in-flight, verify, and terminal rows are excluded.
 func doPlanIDs(rows []monitor.SessionStatusRow) []int64 {
 	var ids []int64
 	for _, r := range rows {
@@ -253,10 +268,15 @@ func renderChildren(w io.Writer, children []*treeNode, prefix string) {
 	}
 }
 
-// nodeLabel is the rendered id, prefixed with `*` for the focal ("this") task.
+// nodeLabel is the rendered id, prefixed with `*` for the focal ("this") task and
+// suffixed with ` ← E-<from>` when the focal was spawned (session lineage).
 func nodeLabel(n *treeNode) string {
 	if n.focal {
-		return "*" + taskLabel(n.id)
+		label := "*" + taskLabel(n.id)
+		if n.from > 0 {
+			label += " ← " + taskLabel(n.from)
+		}
+		return label
 	}
 	return taskLabel(n.id)
 }
