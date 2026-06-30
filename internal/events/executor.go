@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/mikeschinkel/endless/internal/monitor"
+	"github.com/mikeschinkel/endless/internal/sessiontaskrelation"
 	"github.com/mikeschinkel/endless/internal/tasktype"
 )
 
@@ -313,7 +314,8 @@ func execTaskCreated(db dbQuerier, evt *Event, emit DerivedEmitter) (*ExecuteRes
 	}
 
 	if shouldRecordSessionTouch(evt) {
-		if err := upsertSessionTask(db, evt.Actor.SessionID, taskID); err != nil {
+		// Created in-session → surfaced.
+		if err := upsertSessionTask(db, evt.Actor.SessionID, taskID, sessiontaskrelation.RelationSurfaced); err != nil {
 			return nil, fmt.Errorf("events: %w", err)
 		}
 	}
@@ -362,7 +364,8 @@ func execTaskImported(db dbQuerier, evt *Event, emit DerivedEmitter) (*ExecuteRe
 	}
 
 	if shouldRecordSessionTouch(evt) {
-		if err := upsertSessionTask(db, evt.Actor.SessionID, taskID); err != nil {
+		// Imported into the project in-session → surfaced.
+		if err := upsertSessionTask(db, evt.Actor.SessionID, taskID, sessiontaskrelation.RelationSurfaced); err != nil {
 			return nil, fmt.Errorf("events: %w", err)
 		}
 	}
@@ -425,7 +428,8 @@ func execTaskStatusChanged(db dbQuerier, evt *Event, emit DerivedEmitter) (*Exec
 	}
 
 	if shouldRecordSessionTouch(evt) {
-		if err := upsertSessionTask(db, evt.Actor.SessionID, mustParseInt64(evt.Entity.ID)); err != nil {
+		// Touched a pre-existing task (not claimed) → revisited.
+		if err := upsertSessionTask(db, evt.Actor.SessionID, mustParseInt64(evt.Entity.ID), sessiontaskrelation.RelationRevisited); err != nil {
 			return nil, fmt.Errorf("events: %w", err)
 		}
 	}
@@ -591,7 +595,8 @@ func execTaskFieldsUpdated(db dbQuerier, evt *Event, emit DerivedEmitter) (*Exec
 	}
 
 	if shouldRecordSessionTouch(evt) {
-		if err := upsertSessionTask(db, evt.Actor.SessionID, mustParseInt64(evt.Entity.ID)); err != nil {
+		// Touched a pre-existing task (not claimed) → revisited.
+		if err := upsertSessionTask(db, evt.Actor.SessionID, mustParseInt64(evt.Entity.ID), sessiontaskrelation.RelationRevisited); err != nil {
 			return nil, fmt.Errorf("events: %w", err)
 		}
 	}
@@ -668,7 +673,8 @@ func execTaskMoved(db dbQuerier, evt *Event, emit DerivedEmitter) (*ExecuteResul
 	}
 
 	if shouldRecordSessionTouch(evt) {
-		if err := upsertSessionTask(db, evt.Actor.SessionID, mustParseInt64(evt.Entity.ID)); err != nil {
+		// Touched a pre-existing task (not claimed) → revisited.
+		if err := upsertSessionTask(db, evt.Actor.SessionID, mustParseInt64(evt.Entity.ID), sessiontaskrelation.RelationRevisited); err != nil {
 			return nil, fmt.Errorf("events: %w", err)
 		}
 	}
@@ -727,7 +733,8 @@ func execTaskDeleted(db dbQuerier, evt *Event, emit DerivedEmitter) (*ExecuteRes
 	// deletes are derived effects, not direct touches by the session.
 	// session_tasks has no FK on task_id, so the row survives the delete.
 	if shouldRecordSessionTouch(evt) {
-		if err := upsertSessionTask(db, evt.Actor.SessionID, mustParseInt64(evt.Entity.ID)); err != nil {
+		// Touched a pre-existing task (not claimed) → revisited.
+		if err := upsertSessionTask(db, evt.Actor.SessionID, mustParseInt64(evt.Entity.ID), sessiontaskrelation.RelationRevisited); err != nil {
 			return nil, fmt.Errorf("events: %w", err)
 		}
 	}
@@ -774,7 +781,8 @@ func execTaskBulkCleared(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 		}
 		rows.Close()
 		for _, id := range ids {
-			if err := upsertSessionTask(db, evt.Actor.SessionID, id); err != nil {
+			// Bulk-clear touches pre-existing tasks → revisited.
+			if err := upsertSessionTask(db, evt.Actor.SessionID, id, sessiontaskrelation.RelationRevisited); err != nil {
 				return nil, fmt.Errorf("events: %w", err)
 			}
 		}
@@ -835,7 +843,8 @@ func execTaskClaimed(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 		return nil, fmt.Errorf("events: claim task: %w", err)
 	}
 	if shouldRecordSessionTouch(evt) {
-		if err := upsertSessionTask(db, evt.Actor.SessionID, mustParseInt64(evt.Entity.ID)); err != nil {
+		// Claimed → the session's goal task.
+		if err := upsertSessionTask(db, evt.Actor.SessionID, mustParseInt64(evt.Entity.ID), sessiontaskrelation.RelationGoal); err != nil {
 			return nil, fmt.Errorf("events: %w", err)
 		}
 	}
@@ -860,7 +869,10 @@ func execTaskLanded(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 		return nil, fmt.Errorf("events: insert task_landing: %w", err)
 	}
 	if shouldRecordSessionTouch(evt) {
-		if err := upsertSessionTask(db, evt.Actor.SessionID, taskID); err != nil {
+		// Landing is a touch; goal is set only by the claim event, so a land
+		// that did not claim in-session counts as a revisit (set-once leaves a
+		// prior goal/surfaced classification intact).
+		if err := upsertSessionTask(db, evt.Actor.SessionID, taskID, sessiontaskrelation.RelationRevisited); err != nil {
 			return nil, fmt.Errorf("events: %w", err)
 		}
 	}
@@ -882,7 +894,8 @@ func execTaskReleased(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 		return nil, fmt.Errorf("events: release task: %w", err)
 	}
 	if shouldRecordSessionTouch(evt) {
-		if err := upsertSessionTask(db, evt.Actor.SessionID, mustParseInt64(evt.Entity.ID)); err != nil {
+		// Touched a pre-existing task (not claimed) → revisited.
+		if err := upsertSessionTask(db, evt.Actor.SessionID, mustParseInt64(evt.Entity.ID), sessiontaskrelation.RelationRevisited); err != nil {
 			return nil, fmt.Errorf("events: %w", err)
 		}
 	}

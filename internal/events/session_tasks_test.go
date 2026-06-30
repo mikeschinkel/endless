@@ -132,6 +132,96 @@ func countSessionTasks(t *testing.T, db *sql.DB) int {
 	return n
 }
 
+// sessionTaskRelation returns the relation slug recorded for a (session, task)
+// pair by joining session_tasks.relation_id to its mirror table. A NULL
+// relation_id (no classification) yields the empty string.
+func sessionTaskRelation(t *testing.T, db *sql.DB, sessionID, taskID int64) string {
+	t.Helper()
+	var slug sql.NullString
+	err := db.QueryRow(
+		`SELECT r.slug FROM session_tasks st
+		 LEFT JOIN session_task_relations r ON r.id = st.relation_id
+		 WHERE st.session_id = ? AND st.task_id = ?`,
+		sessionID, taskID,
+	).Scan(&slug)
+	if err == sql.ErrNoRows {
+		t.Fatalf("no session_tasks row for (%d, %d)", sessionID, taskID)
+	}
+	if err != nil {
+		t.Fatalf("query relation: %v", err)
+	}
+	return slug.String
+}
+
+func taskClaimedEvent(t *testing.T, taskID int64, actor Actor) *Event {
+	t.Helper()
+	sessionID, err := strconv.ParseInt(actor.SessionID, 10, 64)
+	if err != nil {
+		t.Fatalf("parse session id %q: %v", actor.SessionID, err)
+	}
+	payload, err := json.Marshal(TaskClaimedPayload{SessionID: sessionID})
+	if err != nil {
+		t.Fatalf("marshal payload: %v", err)
+	}
+	return &Event{
+		V:       1,
+		TS:      "2026-05-16T00:00:03",
+		Kind:    KindTaskClaimed,
+		Project: "test",
+		Entity:  EntityRef{Type: EntityTask, ID: strconv.FormatInt(taskID, 10)},
+		Actor:   actor,
+		Payload: payload,
+	}
+}
+
+// TestSessionTasks_RelationClassification verifies that the relation_id column
+// is set from the triggering event kind at capture time (E-1462): task.created
+// → surfaced, task.claimed → goal, an incidental task.fields_updated → revisited.
+func TestSessionTasks_RelationClassification(t *testing.T) {
+	db := newSessionTasksTestDB(t)
+	actor := Actor{Kind: ActorSession, ID: "s1", SessionID: "42"}
+
+	if _, err := dispatch(db, taskCreatedEvent(t, 100, actor), nil); err != nil {
+		t.Fatalf("dispatch create: %v", err)
+	}
+	if got := sessionTaskRelation(t, db, 42, 100); got != "surfaced" {
+		t.Errorf("created task: relation = %q, want surfaced", got)
+	}
+
+	if _, err := dispatch(db, taskClaimedEvent(t, 101, actor), nil); err != nil {
+		t.Fatalf("dispatch claim: %v", err)
+	}
+	if got := sessionTaskRelation(t, db, 42, 101); got != "goal" {
+		t.Errorf("claimed task: relation = %q, want goal", got)
+	}
+
+	if _, err := dispatch(db, taskFieldsUpdatedEvent(t, 102, actor), nil); err != nil {
+		t.Fatalf("dispatch update: %v", err)
+	}
+	if got := sessionTaskRelation(t, db, 42, 102); got != "revisited" {
+		t.Errorf("incidentally edited task: relation = %q, want revisited", got)
+	}
+}
+
+// TestSessionTasks_RelationSetOnce verifies set-once semantics: once a task's
+// relation is recorded, a later touch only bumps updated_at and must NOT change
+// the relation. A task surfaced (created) in-session that is later edited stays
+// surfaced; it does not downgrade to revisited.
+func TestSessionTasks_RelationSetOnce(t *testing.T) {
+	db := newSessionTasksTestDB(t)
+	actor := Actor{Kind: ActorSession, ID: "s1", SessionID: "42"}
+
+	if _, err := dispatch(db, taskCreatedEvent(t, 100, actor), nil); err != nil {
+		t.Fatalf("dispatch create: %v", err)
+	}
+	if _, err := dispatch(db, taskFieldsUpdatedEvent(t, 100, actor), nil); err != nil {
+		t.Fatalf("dispatch update: %v", err)
+	}
+	if got := sessionTaskRelation(t, db, 42, 100); got != "surfaced" {
+		t.Errorf("set-once violated: relation = %q after later edit, want surfaced", got)
+	}
+}
+
 // TestSessionTasks_CreatedBySession verifies that a task.created event
 // from an ActorSession produces exactly one session_tasks row with
 // created_at == updated_at.

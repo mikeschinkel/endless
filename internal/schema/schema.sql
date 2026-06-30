@@ -443,14 +443,38 @@ CREATE TABLE IF NOT EXISTS session_statuses (
 CREATE INDEX IF NOT EXISTS session_statuses_session_recent_idx
     ON session_statuses (session_id, created_at DESC);
 
+-- Session-task relations (E-1462). SQL mirror of the sessiontaskrelation.Relation
+-- Go enum (ED-1506: const-in-code is the source of truth, the table exists for FK
+-- enforcement and queryability). Classifies HOW a task entered a session's scope:
+-- goal (the claimed task), surfaced (created during the session), revisited
+-- (pre-existing, touched but not claimed). The startup integrity check fails
+-- closed on drift between this table and sessiontaskrelation.All(). Adding a
+-- value = add an enum constant + add a seed row here. Seeds are idempotent.
+CREATE TABLE IF NOT EXISTS session_task_relations (
+    id    INTEGER PRIMARY KEY,
+    slug  TEXT UNIQUE NOT NULL,
+    label TEXT NOT NULL
+);
+
+INSERT OR IGNORE INTO session_task_relations (id, slug, label) VALUES
+    (1, 'goal',      'Goal'),
+    (2, 'surfaced',  'Surfaced'),
+    (3, 'revisited', 'Revisited');
+
 -- Which sessions touched which tasks (E-1322). Query-speed projection of the
--- events ledger. No FKs by design: rows must outlive their referenced
--- session/task so the "session N touched task M" record survives deletion.
+-- events ledger. No FKs on session_id/task_id by design: rows must outlive their
+-- referenced session/task so the "session N touched task M" record survives
+-- deletion.
 -- do_order (E-1683): per-session implementation order for this task. NULL =
 -- unordered. Equal do_order across rows of the same session = parallelizable.
 -- Session-scoped (not tasks.sort_order, which is global): two sessions may
 -- order the same task differently. Set by `endless session order` via the
 -- session_tasks.ordered event; replace-all (unlisted rows reset to NULL).
+-- relation_id (E-1462): how the task entered this session's scope, FK to
+-- session_task_relations. Set once at capture time by the task-mutation executors
+-- (claim→goal, create/import→surfaced, else→revisited) and never changed on a
+-- later touch. NULL = pre-E-1462 historical row (the live side-effect table is
+-- not replayed from the ledger, so there is nothing to backfill).
 CREATE TABLE IF NOT EXISTS session_tasks (
     id INTEGER PRIMARY KEY,
     session_id INTEGER NOT NULL,
@@ -458,6 +482,7 @@ CREATE TABLE IF NOT EXISTS session_tasks (
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     do_order INTEGER,
+    relation_id INTEGER REFERENCES session_task_relations(id),
     UNIQUE(session_id, task_id)
 );
 CREATE INDEX IF NOT EXISTS idx_session_tasks_task

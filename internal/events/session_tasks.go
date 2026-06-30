@@ -6,11 +6,21 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/mikeschinkel/endless/internal/sessiontaskrelation"
 )
 
 // upsertSessionTask records that the given session touched the given task.
 // Called from each task.* executor when the event's actor is a session.
 // Inserts a new row or bumps updated_at on conflict.
+//
+// relation (E-1462) classifies HOW the task entered this session's scope —
+// goal (claimed), surfaced (created/imported in-session), or revisited (a
+// pre-existing task touched but not claimed). It is set ONCE, on insert, and
+// deliberately left unchanged on conflict: the first event to bring a task into
+// the session decides its relation, and a later incidental touch must not
+// downgrade a goal/surfaced task to revisited (set-once semantics). NULL is
+// reserved for pre-E-1462 historical rows; new captures always pass a relation.
 //
 // Runs inside the in-flight tx via the dbQuerier passed by the dispatcher.
 // Per E-1315, executors must NOT acquire fresh connections — SQLite has
@@ -22,17 +32,17 @@ import (
 // non-empty, but defense in depth keeps the upsert from poisoning a
 // task mutation if a non-numeric SessionID ever slips through an
 // upstream emitter.
-func upsertSessionTask(db dbQuerier, sessionIDStr string, taskID int64) error {
+func upsertSessionTask(db dbQuerier, sessionIDStr string, taskID int64, relation sessiontaskrelation.Relation) error {
 	sessionID, parseErr := strconv.ParseInt(sessionIDStr, 10, 64)
 	if parseErr != nil {
 		return nil
 	}
 	n := now()
 	_, err := db.Exec(
-		`INSERT INTO session_tasks (session_id, task_id, created_at, updated_at)
-		 VALUES (?, ?, ?, ?)
+		`INSERT INTO session_tasks (session_id, task_id, relation_id, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?)
 		 ON CONFLICT(session_id, task_id) DO UPDATE SET updated_at = excluded.updated_at`,
-		sessionID, taskID, n, n,
+		sessionID, taskID, int(relation), n, n,
 	)
 	if err != nil {
 		return fmt.Errorf("upsert session_tasks (%d, %d): %w", sessionID, taskID, err)

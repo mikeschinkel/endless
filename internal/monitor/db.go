@@ -15,6 +15,7 @@ import (
 	"github.com/mikeschinkel/endless/internal/gatekind"
 	"github.com/mikeschinkel/endless/internal/schema"
 	"github.com/mikeschinkel/endless/internal/sessionkind"
+	"github.com/mikeschinkel/endless/internal/sessiontaskrelation"
 	"github.com/mikeschinkel/endless/internal/tasktype"
 )
 
@@ -443,6 +444,16 @@ func DB() (*sql.DB, error) {
 		if hasTable(dbConn, "gate_kinds") {
 			if err := gatekind.VerifyIntegrity(dbConn); err != nil {
 				dbErr = fmt.Errorf("gate_kinds integrity check on %s: %w", path, err)
+				dbConn = nil
+				return
+			}
+		}
+		// E-1462: same fail-closed contract for the session_task_relations enum
+		// mirror. Skipped on populated DBs that have not yet had the E-1462
+		// migration applied (the table will not exist; the migration creates it).
+		if hasTable(dbConn, "session_task_relations") {
+			if err := sessiontaskrelation.VerifyIntegrity(dbConn); err != nil {
+				dbErr = fmt.Errorf("session_task_relations integrity check on %s: %w", path, err)
 				dbConn = nil
 				return
 			}
