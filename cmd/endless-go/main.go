@@ -12,7 +12,7 @@
 //	endless-go serve         [port]
 //	endless-go tmux          apply|status-line|active-id|show-menu
 //	endless-go session-query list-live|task-text|reopen-context
-//	endless-go session-next  (renders the per-session what's-next view)
+//	endless-go session-status  (renders the per-session status view; --monitor loops it)
 //	endless-go template      render
 //
 // Per-subcommand DB-context contract (must run BEFORE the subcommand
@@ -20,10 +20,10 @@
 //
 //   - hook → ENDLESS_NO_HOOKS=true short-circuit (E-1470), then PinMainDB (E-1450/E-1429).
 //   - channel, tmux → PinMainDB (E-1429).
-//   - session-next → PinMainDB on its normal path (it reads the live sessions
+//   - session-status → PinMainDB on its normal path (it reads the live sessions
 //     table, which hook writes pin to main regardless of cwd), but with --focal
 //     (headless/tests) it skips the pin and reads the resolved sandbox/
-//     --config-dir context; the decision lives in sessionnextcmd.Run (E-1685).
+//     --config-dir context; the decision lives in sessionstatuscmd.Run (E-1685).
 //   - event, serve, session-query → ConsumeDBContextFlag (E-1429).
 //   - sandbox → no DB-context init.
 //
@@ -43,7 +43,7 @@ import (
 	"github.com/mikeschinkel/endless/internal/monitor"
 	"github.com/mikeschinkel/endless/internal/sandboxcmd"
 	"github.com/mikeschinkel/endless/internal/servecmd"
-	"github.com/mikeschinkel/endless/internal/sessionnextcmd"
+	"github.com/mikeschinkel/endless/internal/sessionstatuscmd"
 	"github.com/mikeschinkel/endless/internal/sessionquerycmd"
 	"github.com/mikeschinkel/endless/internal/templatecmd"
 	"github.com/mikeschinkel/endless/internal/tmuxcmd"
@@ -113,9 +113,9 @@ func main() {
 	case "hook", "channel", "tmux":
 		monitor.PinMainDB()
 	}
-	// session-next pins main itself, but only on its normal tmux-resolved path;
+	// session-status pins main itself, but only on its normal tmux-resolved path;
 	// with --focal (headless/tests) it deliberately reads the resolved sandbox
-	// context instead, so the decision lives inside sessionnextcmd.Run (E-1685).
+	// context instead, so the decision lives inside sessionstatuscmd.Run (E-1685).
 
 	switch sub {
 	case "event":
@@ -132,8 +132,8 @@ func main() {
 		tmuxcmd.Run(rest)
 	case "session-query":
 		sessionquerycmd.Run(rest)
-	case "session-next":
-		sessionnextcmd.Run(rest)
+	case "session-status":
+		sessionstatuscmd.Run(rest)
 	case "template":
 		templatecmd.Run(rest)
 	default:
@@ -181,6 +181,6 @@ func usage(w *os.File) {
 	fmt.Fprintln(w, "  serve          [port]  (web dashboard)")
 	fmt.Fprintln(w, "  tmux           apply|status-line|active-id|show-menu")
 	fmt.Fprintln(w, "  session-query  list-live|task-text|reopen-context")
-	fmt.Fprintln(w, "  session-next   render the per-session what's-next view")
+	fmt.Fprintln(w, "  session-status render the per-session status view (--monitor loops it)")
 	fmt.Fprintln(w, "  template       render")
 }

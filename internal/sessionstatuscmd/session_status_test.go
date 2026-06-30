@@ -1,4 +1,4 @@
-package sessionnextcmd
+package sessionstatuscmd
 
 import (
 	"strings"
@@ -10,20 +10,20 @@ import (
 func TestClassify(t *testing.T) {
 	cases := []struct {
 		name string
-		row  monitor.SessionNextRow
+		row  monitor.SessionStatusRow
 		want action
 	}{
-		{"focal wins over status", monitor.SessionNextRow{IsFocal: true, Status: "ready"}, actThis},
-		{"parent wins over in_flight", monitor.SessionNextRow{IsParent: true, InFlight: true, Status: "underway"}, actParent},
-		{"in_flight wins over status", monitor.SessionNextRow{InFlight: true, Status: "ready"}, actDoing},
-		{"ready with no plan still do", monitor.SessionNextRow{Status: "ready", HasText: false}, actDo},
-		{"unplanned is plan", monitor.SessionNextRow{Status: "unplanned"}, actPlan},
-		{"needs_plan is plan", monitor.SessionNextRow{Status: "needs_plan"}, actPlan},
-		{"revisit folds into plan", monitor.SessionNextRow{Status: "revisit"}, actPlan},
-		{"verify", monitor.SessionNextRow{Status: "verify"}, actVerify},
-		{"unverified is verify", monitor.SessionNextRow{Status: "unverified"}, actVerify},
-		{"underway is orphan", monitor.SessionNextRow{Status: "underway"}, actOrphan},
-		{"unknown is other", monitor.SessionNextRow{Status: "blocked"}, actOther},
+		{"focal wins over status", monitor.SessionStatusRow{IsFocal: true, Status: "ready"}, actThis},
+		{"parent wins over in_flight", monitor.SessionStatusRow{IsParent: true, InFlight: true, Status: "underway"}, actParent},
+		{"in_flight wins over status", monitor.SessionStatusRow{InFlight: true, Status: "ready"}, actDoing},
+		{"ready with no plan still do", monitor.SessionStatusRow{Status: "ready", HasText: false}, actDo},
+		{"unplanned is plan", monitor.SessionStatusRow{Status: "unplanned"}, actPlan},
+		{"needs_plan is plan", monitor.SessionStatusRow{Status: "needs_plan"}, actPlan},
+		{"revisit folds into plan", monitor.SessionStatusRow{Status: "revisit"}, actPlan},
+		{"verify", monitor.SessionStatusRow{Status: "verify"}, actVerify},
+		{"unverified is verify", monitor.SessionStatusRow{Status: "unverified"}, actVerify},
+		{"underway is orphan", monitor.SessionStatusRow{Status: "underway"}, actOrphan},
+		{"unknown is other", monitor.SessionStatusRow{Status: "blocked"}, actOther},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -35,7 +35,7 @@ func TestClassify(t *testing.T) {
 }
 
 func TestSortRows(t *testing.T) {
-	rows := []monitor.SessionNextRow{
+	rows := []monitor.SessionStatusRow{
 		{ID: 5, Status: "ready", Phase: "now"},        // do
 		{ID: 1, IsParent: true, Phase: "later"},       // parent
 		{ID: 9, IsFocal: true, Phase: "maybe"},        // this
@@ -59,16 +59,16 @@ func TestSortRows(t *testing.T) {
 
 func TestPhaseChar(t *testing.T) {
 	cases := map[string]struct {
-		row  monitor.SessionNextRow
+		row  monitor.SessionStatusRow
 		want string
 	}{
-		"terminal":     {monitor.SessionNextRow{Status: "confirmed", Phase: "now"}, "✓"},
-		"urgent":       {monitor.SessionNextRow{Status: "ready", Phase: "urgent"}, "!"},
-		"now":          {monitor.SessionNextRow{Status: "ready", Phase: "now"}, "1"},
-		"next":         {monitor.SessionNextRow{Status: "ready", Phase: "next"}, "2"},
-		"later":        {monitor.SessionNextRow{Status: "ready", Phase: "later"}, "3"},
-		"maybe":        {monitor.SessionNextRow{Status: "ready", Phase: "maybe"}, "?"},
-		"unknownphase": {monitor.SessionNextRow{Status: "ready", Phase: "xyz"}, " "},
+		"terminal":     {monitor.SessionStatusRow{Status: "confirmed", Phase: "now"}, "✓"},
+		"urgent":       {monitor.SessionStatusRow{Status: "ready", Phase: "urgent"}, "!"},
+		"now":          {monitor.SessionStatusRow{Status: "ready", Phase: "now"}, "1"},
+		"next":         {monitor.SessionStatusRow{Status: "ready", Phase: "next"}, "2"},
+		"later":        {monitor.SessionStatusRow{Status: "ready", Phase: "later"}, "3"},
+		"maybe":        {monitor.SessionStatusRow{Status: "ready", Phase: "maybe"}, "?"},
+		"unknownphase": {monitor.SessionStatusRow{Status: "ready", Phase: "xyz"}, " "},
 	}
 	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -80,10 +80,10 @@ func TestPhaseChar(t *testing.T) {
 }
 
 func TestBlockField(t *testing.T) {
-	blockedOnly := monitor.SessionNextRow{BlockedByN: 1}
-	blocksOnly := monitor.SessionNextRow{BlocksN: 1}
-	both := monitor.SessionNextRow{BlockedByN: 1, BlocksN: 1}
-	neither := monitor.SessionNextRow{}
+	blockedOnly := monitor.SessionStatusRow{BlockedByN: 1}
+	blocksOnly := monitor.SessionStatusRow{BlocksN: 1}
+	both := monitor.SessionStatusRow{BlockedByN: 1, BlocksN: 1}
+	neither := monitor.SessionStatusRow{}
 
 	if got := blockField(neither, 0); got != "" {
 		t.Errorf("bw=0 should be empty, got %q", got)
@@ -118,7 +118,7 @@ func TestRenderEmptyFocal(t *testing.T) {
 }
 
 func TestRenderColumnsAndTruncation(t *testing.T) {
-	rows := []monitor.SessionNextRow{
+	rows := []monitor.SessionStatusRow{
 		{ID: 1465, Title: "Implement endless session next briefing read command", Status: "underway", Phase: "now", TypeSlug: "task", IsFocal: true},
 		{ID: 1461, Title: "Add endless session next prospective remaining-work briefing", Status: "ready", Phase: "now", TypeSlug: "epic", IsParent: true},
 	}

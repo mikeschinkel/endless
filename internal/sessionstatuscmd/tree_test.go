@@ -1,4 +1,4 @@
-package sessionnextcmd
+package sessionstatuscmd
 
 import (
 	"strings"

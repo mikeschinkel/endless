@@ -1,4 +1,4 @@
-package sessionnextcmd
+package sessionstatuscmd
 
 import (
 	"fmt"
@@ -32,10 +32,10 @@ type treeNode struct {
 // as an ancestry spine (E-1684): the parent (spawning) task is the root, the
 // focal ("this") task nests under it marked `*`, and the do/plan backlog nests
 // under the focal in implementation order. The backlog structure is derived from
-// the blocked-by DAG (monitor.SessionNextBlockerEdges) unless a per-session order
-// (monitor.SessionNextDoOrder) is present, which overrides it. No legend, titles,
+// the blocked-by DAG (monitor.SessionStatusBlockerEdges) unless a per-session order
+// (monitor.SessionStatusDoOrder) is present, which overrides it. No legend, titles,
 // or icons — IDs only. focal==0 prints a short hint.
-func renderTree(w io.Writer, rows []monitor.SessionNextRow, focal int64) error {
+func renderTree(w io.Writer, rows []monitor.SessionStatusRow, focal int64) error {
 	if focal == 0 {
 		fmt.Fprintln(w, "  (no active task for this window)")
 		return nil
@@ -43,11 +43,11 @@ func renderTree(w io.Writer, rows []monitor.SessionNextRow, focal int64) error {
 
 	var backlogRoots []*treeNode
 	if ids := doPlanIDs(rows); len(ids) > 0 {
-		doOrder, err := monitor.SessionNextDoOrder(focal, ids)
+		doOrder, err := monitor.SessionStatusDoOrder(focal, ids)
 		if err != nil {
 			return err
 		}
-		edges, err := monitor.SessionNextBlockerEdges(ids)
+		edges, err := monitor.SessionStatusBlockerEdges(ids)
 		if err != nil {
 			return err
 		}
@@ -60,7 +60,7 @@ func renderTree(w io.Writer, rows []monitor.SessionNextRow, focal int64) error {
 
 // parentID returns the parent (spawning) task's id from the row set, or 0 when
 // there is no parent row (e.g. headless --focal, or a non-spawned session).
-func parentID(rows []monitor.SessionNextRow) int64 {
+func parentID(rows []monitor.SessionStatusRow) int64 {
 	for _, r := range rows {
 		if r.IsParent {
 			return r.ID
@@ -83,7 +83,7 @@ func buildSpine(focal, parent int64, backlogRoots []*treeNode) []*treeNode {
 // doPlanIDs extracts the task ids classified as do (ready) or plan
 // (unplanned/needs_plan/revisit) — the actionable backlog the tree visualizes.
 // Focal, parent, in-flight, verify, and terminal rows are excluded.
-func doPlanIDs(rows []monitor.SessionNextRow) []int64 {
+func doPlanIDs(rows []monitor.SessionStatusRow) []int64 {
 	var ids []int64
 	for _, r := range rows {
 		switch classify(r) {

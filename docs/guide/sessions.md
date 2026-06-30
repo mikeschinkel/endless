@@ -19,10 +19,12 @@ Each row in `session_statuses` is a snapshot of one session's reported state at 
 
 Latest row by `created_at` is the current status. Older rows are history — useful for "what did this session do over its lifetime" or "what's the activity trace for task E-NNN."
 
-## Recording a status: `endless session status add`
+## Recording a snapshot: `endless session snapshot add`
+
+> The verb is `snapshot` (renamed from `session status`, E-1688) so `session status` can name the live work-state view. The recorded artifact is still a session-status snapshot.
 
 ```bash
-endless session status add <<'XML'
+endless session snapshot add <<'XML'
 <session-status>
   <headline>One-line summary of what just changed.</headline>
 
@@ -59,7 +61,7 @@ XML
 Or with a file:
 
 ```bash
-endless session status add path/to/status.xml
+endless session snapshot add path/to/status.xml
 ```
 
 The CLI:
@@ -97,7 +99,7 @@ If you're producing a chat table that maps to `tasks` / `decisions` / `commits` 
 
 Sessions are bound to tmux panes via the `sessions.process` column (named "process" for harness-agnosticism; today it holds tmux pane IDs like `%124`).
 
-If you need your session's id outside the `session status add` flow, the canonical Go-side helper is `monitor.GetLiveSessionByProcess(process string)`. From the CLI, `endless-tmux active-id` returns the active task ID for the current pane (same DB binding the tmux status row reads).
+If you need your session's id outside the `session snapshot add` flow, the canonical Go-side helper is `monitor.GetLiveSessionByProcess(process string)`. From the CLI, `endless-tmux active-id` returns the active task ID for the current pane (same DB binding the tmux status row reads).
 
 Direct SQL lookup pattern (filter `state != 'ended'` to skip dead sessions in the same pane):
 
@@ -112,9 +114,9 @@ sid=$(endless sql --tsv "SELECT id FROM sessions
 Read commands are tracked under E-1319 (blocked by E-1318). Once shipped:
 
 ```bash
-endless session status latest [--session N]      # latest row for a session (defaults to current pane)
-endless session status show <id>                 # render a specific row's markdown
-endless session status list [--session N] [--task E-NNN] [--limit N]
+endless session snapshot latest [--session N]    # latest row for a session (defaults to current pane)
+endless session snapshot show <id>               # render a specific row's markdown
+endless session snapshot list [--session N] [--task E-NNN] [--limit N]
 ```
 
 Until then, read directly via `endless sql`:

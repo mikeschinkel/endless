@@ -14,8 +14,8 @@
 # What it proves:
 #   1. Worktree builds clean.
 #   2. Tree layering + rendering (DAG depth, parallel siblings, diamond,
-#      do_order override, IDs-only) — internal/sessionnextcmd unit tests.
-#   3. `session-next --tree --focal E-NNN` renders the do/plan backlog as an
+#      do_order override, IDs-only) — internal/sessionstatuscmd unit tests.
+#   3. `session-status --tree --focal E-NNN` renders the do/plan backlog as an
 #      IDs-only implementation-order tree derived from the blocked-by DAG:
 #        - a dependency chain A→B→C renders A before B before C (by nesting),
 #        - tasks at equal depth with no inter-dependency render as siblings,
@@ -109,14 +109,14 @@ CFG="${TMP}/config"
 mkdir -p "${CFG}"
 DB="${CFG}/endless.db"
 
-# tree CMD — run session-next --tree against the temp DB for focal task 99.
+# tree CMD — run session-status --tree against the temp DB for focal task 99.
 # --config-dir pins the DB path. The headless --focal flag (E-1685) names the
-# focal task directly AND skips PinMainDB, so session-next reads the resolved
+# focal task directly AND skips PinMainDB, so session-status reads the resolved
 # --config-dir context (this seeded DB) instead of main. The focal task (99) is
 # deliberately SEPARATE from the do/plan backlog (100..103): the focal task is
 # the session's CURRENT work and is excluded from the tree, exactly as in real
 # usage. --focal takes a bare integer id.
-tree() { "${BIN}" --config-dir "${CFG}" session-next --tree --focal 99; }
+tree() { "${BIN}" --config-dir "${CFG}" session-status --tree --focal 99; }
 
 # seed_base builds a fresh DB with a project, a working session (id 42) whose
 # active_task_id is the focal task E-99, and four do-status (ready) backlog tasks
@@ -162,8 +162,8 @@ fi
 report_pass "just build"
 
 section "Go unit tests — tree layering + rendering"
-assert_cmd "go test internal/sessionnextcmd (TestBuildForest + TestParseFocalID)" \
-    go test ./internal/sessionnextcmd/ -count=1 -run 'TestBuildForest|TestParseFocalID'
+assert_cmd "go test internal/sessionstatuscmd (TestBuildForest + TestParseFocalID)" \
+    go test ./internal/sessionstatuscmd/ -count=1 -run 'TestBuildForest|TestParseFocalID'
 
 # Every tree is an ancestry spine: the focal task (E-99, headless --focal, no
 # parent here) is the root marked `*`, and the do/plan backlog (E-100..103)

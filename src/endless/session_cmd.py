@@ -211,20 +211,22 @@ def show_history(
         click.echo()
 
 
-def session_next_resolve(
-    show_all: bool = False, watch: bool = False, tree: bool = False
+def session_status_resolve(
+    show_all: bool = False, tree: bool = False, monitor: bool = False
 ) -> None:
-    """Render the per-session what's-next view (E-1465).
+    """Render the per-session status view (E-1465, renamed E-1688).
 
-    Thin pass-through to `endless-go session-next`, which resolves the focal
-    task for the current tmux window, gathers the cross-session rows, and
-    renders the width/color-aware table itself. We inherit this process's
-    stdout/stderr so the Go side detects the real terminal width and color
-    profile; TMUX_PANE is inherited via the environment for focal resolution.
+    Backs both `endless session status` (one-shot snapshot) and `endless session
+    monitor` (the live, looping dashboard, monitor=True). Thin pass-through to
+    `endless-go session-status`, which resolves the focal task for the current
+    tmux window, gathers the cross-session rows, and renders the
+    width/color-aware table itself. We inherit this process's stdout/stderr so
+    the Go side detects the real terminal width and color profile; TMUX_PANE is
+    inherited via the environment for focal resolution.
 
-    With --watch the Go side redraws every 2s until interrupted; Ctrl-C is the
-    intended exit, so we swallow the KeyboardInterrupt (the Go child already
-    restored the cursor on its own SIGINT handler).
+    With monitor=True (`--monitor`) the Go side redraws every 2s until
+    interrupted; Ctrl-C is the intended exit, so we swallow the KeyboardInterrupt
+    (the Go child already restored the cursor on its own SIGINT handler).
 
     The Go subcommand pins the main DB (sessions live there regardless of cwd),
     so no --config-dir is threaded.
@@ -236,13 +238,13 @@ def session_next_resolve(
     if not go_bin:
         raise click.ClickException("endless-go binary not found on PATH.")
 
-    args = [go_bin, "session-next"]
+    args = [go_bin, "session-status"]
     if show_all:
         args.append("--all")
-    if watch:
-        args.append("--watch")
     if tree:
         args.append("--tree")
+    if monitor:
+        args.append("--monitor")
     try:
         result = subprocess.run(args)
     except KeyboardInterrupt:

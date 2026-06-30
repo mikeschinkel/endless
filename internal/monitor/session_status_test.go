@@ -6,7 +6,7 @@ import (
 )
 
 // snTask inserts a task with explicit phase/status/text/type so the
-// session-next query's canonicalization and has_text columns can be exercised.
+// session-status query's canonicalization and has_text columns can be exercised.
 func snTask(t *testing.T, db *sql.DB, id, projectID int64, status, phase, text string) {
 	t.Helper()
 	var textVal any
@@ -62,19 +62,19 @@ func snBlocks(t *testing.T, db *sql.DB, blockerID, blockedID int64) {
 	}
 }
 
-func snRowByID(rows []SessionNextRow, id int64) (SessionNextRow, bool) {
+func snRowByID(rows []SessionStatusRow, id int64) (SessionStatusRow, bool) {
 	for _, r := range rows {
 		if r.ID == id {
 			return r, true
 		}
 	}
-	return SessionNextRow{}, false
+	return SessionStatusRow{}, false
 }
 
-// TestSessionNextRows_RowSetAndDecorations drives the whole query: the row set
+// TestSessionStatusRows_RowSetAndDecorations drives the whole query: the row set
 // (sessions on focal ∪ focal ∪ parent's task), the focal/parent/in_flight
 // decorations, the block counts, and the terminal-status filter.
-func TestSessionNextRows_RowSetAndDecorations(t *testing.T) {
+func TestSessionStatusRows_RowSetAndDecorations(t *testing.T) {
 	db := withTestDB(t)
 	seedProject(t, db, 1, "p1", "/p1")
 
@@ -99,9 +99,9 @@ func TestSessionNextRows_RowSetAndDecorations(t *testing.T) {
 	snBlocks(t, db, blocker, focal) // focal is blocked by an open task
 	snBlocks(t, db, focal, sibling) // focal blocks the sibling
 
-	rows, err := SessionNextRows(focal, 2, false)
+	rows, err := SessionStatusRows(focal, 2, false)
 	if err != nil {
-		t.Fatalf("SessionNextRows: %v", err)
+		t.Fatalf("SessionStatusRows: %v", err)
 	}
 
 	// doneSibling is terminal and neither focal nor parent → filtered out.
@@ -139,9 +139,9 @@ func TestSessionNextRows_RowSetAndDecorations(t *testing.T) {
 	}
 }
 
-// TestSessionNextRows_AllIncludesDoneWork confirms --all surfaces terminal rows
+// TestSessionStatusRows_AllIncludesDoneWork confirms --all surfaces terminal rows
 // that are part of the row set.
-func TestSessionNextRows_AllIncludesDoneWork(t *testing.T) {
+func TestSessionStatusRows_AllIncludesDoneWork(t *testing.T) {
 	db := withTestDB(t)
 	seedProject(t, db, 1, "p1", "/p1")
 
@@ -152,21 +152,21 @@ func TestSessionNextRows_AllIncludesDoneWork(t *testing.T) {
 	snSessionTask(t, db, 1, focal)
 	snSessionTask(t, db, 1, done)
 
-	rows, err := SessionNextRows(focal, 0, true)
+	rows, err := SessionStatusRows(focal, 0, true)
 	if err != nil {
-		t.Fatalf("SessionNextRows: %v", err)
+		t.Fatalf("SessionStatusRows: %v", err)
 	}
 	if _, ok := snRowByID(rows, done); !ok {
 		t.Errorf("--all should include terminal task %d", done)
 	}
 }
 
-// TestSessionNextRows_FocalDependents drives the E-1685 read-time dependents
+// TestSessionStatusRows_FocalDependents drives the E-1685 read-time dependents
 // UNION: the focal task's direct dependents (tasks it blocks) appear as rows
 // purely from task_deps, with no session_tasks membership; they carry ⊗
 // (BlockedByN>0) while the focal is open and shed it once the focal lands; and a
 // terminal dependent is omitted by default but surfaced under --all.
-func TestSessionNextRows_FocalDependents(t *testing.T) {
+func TestSessionStatusRows_FocalDependents(t *testing.T) {
 	db := withTestDB(t)
 	seedProject(t, db, 1, "p1", "/p1")
 
@@ -184,9 +184,9 @@ func TestSessionNextRows_FocalDependents(t *testing.T) {
 	snBlocks(t, db, focal, doneDep) // focal blocks a terminal dependent
 
 	// ── focal open: dependent shown, carrying ⊗ (BlockedByN counts the open focal)
-	rows, err := SessionNextRows(focal, 0, false)
+	rows, err := SessionStatusRows(focal, 0, false)
 	if err != nil {
-		t.Fatalf("SessionNextRows: %v", err)
+		t.Fatalf("SessionStatusRows: %v", err)
 	}
 	d, ok := snRowByID(rows, dep)
 	if !ok {
@@ -203,9 +203,9 @@ func TestSessionNextRows_FocalDependents(t *testing.T) {
 	}
 
 	// ── --all surfaces the terminal dependent
-	rowsAll, err := SessionNextRows(focal, 0, true)
+	rowsAll, err := SessionStatusRows(focal, 0, true)
 	if err != nil {
-		t.Fatalf("SessionNextRows --all: %v", err)
+		t.Fatalf("SessionStatusRows --all: %v", err)
 	}
 	if _, ok := snRowByID(rowsAll, doneDep); !ok {
 		t.Errorf("--all should include terminal dependent %d", doneDep)
@@ -215,9 +215,9 @@ func TestSessionNextRows_FocalDependents(t *testing.T) {
 	if _, err := db.Exec(`UPDATE tasks SET status = 'confirmed' WHERE id = ?`, focal); err != nil {
 		t.Fatalf("land focal: %v", err)
 	}
-	rows2, err := SessionNextRows(focal, 0, false)
+	rows2, err := SessionStatusRows(focal, 0, false)
 	if err != nil {
-		t.Fatalf("SessionNextRows after land: %v", err)
+		t.Fatalf("SessionStatusRows after land: %v", err)
 	}
 	d2, ok := snRowByID(rows2, dep)
 	if !ok {
@@ -228,13 +228,13 @@ func TestSessionNextRows_FocalDependents(t *testing.T) {
 	}
 }
 
-// TestSessionNextRows_ZeroFocal returns nothing when no focal task resolves.
-func TestSessionNextRows_ZeroFocal(t *testing.T) {
+// TestSessionStatusRows_ZeroFocal returns nothing when no focal task resolves.
+func TestSessionStatusRows_ZeroFocal(t *testing.T) {
 	db := withTestDB(t)
 	seedProject(t, db, 1, "p1", "/p1")
-	rows, err := SessionNextRows(0, 0, false)
+	rows, err := SessionStatusRows(0, 0, false)
 	if err != nil {
-		t.Fatalf("SessionNextRows: %v", err)
+		t.Fatalf("SessionStatusRows: %v", err)
 	}
 	if len(rows) != 0 {
 		t.Errorf("focal=0 should yield no rows, got %d", len(rows))

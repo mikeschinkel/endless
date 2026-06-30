@@ -780,30 +780,46 @@ def session_history(session_id, show_tools, timestamps, limit, sort_order, as_js
                  sort_asc=(sort_order == "asc"), as_json=as_json)
 
 
-@session_cmd.command("next")
+@session_cmd.command("status")
 @click.option("--all", "show_all", is_flag=True,
               help="Include done-work (terminal-status) rows")
-@click.option("--watch", is_flag=True,
-              help="Redraw every 2s until interrupted (Ctrl-C)")
 @click.option("--tree", is_flag=True,
               help="Render do/plan tasks as an IDs-only implementation-order tree")
-def session_next(show_all, watch, tree):
-    """Show what's next for the current session's task, across live sessions.
+def session_status(show_all, tree):
+    """Show the current session's status — a one-shot snapshot.
 
     Resolves the focal task for the current tmux window (live session's active
     task, else the window's @endless_task_id, else the most-recent live
     session), then renders the focal task, its parent (spawning) task, sibling
     tasks worked by sessions on the focal task, and any cross-session in-flight
-    work, with blocked-by/blocks decorations. Reads the main DB. Use --watch for
-    a live view that redraws every 2 seconds.
+    work, with blocked-by/blocks decorations. Reads the main DB. For a live,
+    self-updating view, use `endless session monitor`.
 
     With --tree, render the do/plan backlog as an IDs-only tree in implementation
     order (nesting = order, siblings = parallelizable), derived from the
     blocked-by DAG and overridden by any per-session order (`endless session
     order`). No legend, titles, or icons.
     """
-    from endless.session_cmd import session_next_resolve
-    session_next_resolve(show_all=show_all, watch=watch, tree=tree)
+    from endless.session_cmd import session_status_resolve
+    session_status_resolve(show_all=show_all, tree=tree)
+
+
+@session_cmd.command("monitor")
+@click.option("--all", "show_all", is_flag=True,
+              help="Include done-work (terminal-status) rows")
+@click.option("--tree", is_flag=True,
+              help="Render do/plan tasks as an IDs-only implementation-order tree")
+def session_monitor(show_all, tree):
+    """Live dashboard: repeatedly render `session status` until interrupted.
+
+    The top-like pane you keep open all day. Loops the same view `session
+    status` prints once, redrawing every 2 seconds and repainting only when the
+    frame changes (no flicker). Ctrl-C exits. Accepts the same --all/--tree
+    options as `session status`; --tree renders a single tree frame (the live
+    loop drives the table view).
+    """
+    from endless.session_cmd import session_status_resolve
+    session_status_resolve(show_all=show_all, tree=tree, monitor=True)
 
 
 @session_cmd.command("list")
@@ -978,20 +994,25 @@ def session_unhide(session_ids):
     unhide_sessions(list(session_ids))
 
 
-@session_cmd.group("status")
-def session_status_cmd():
-    """Record and query session status snapshots (E-1312)."""
+@session_cmd.group("snapshot")
+def session_snapshot_cmd():
+    """Record and query session status snapshots (E-1312).
+
+    The verb is `snapshot` (renamed from `session status`, E-1688) so that
+    `session status` names the live work-state view. The recorded artifact is
+    still a session-status snapshot; only the command word changed.
+    """
     pass
 
 
-@session_status_cmd.command("add")
+@session_snapshot_cmd.command("add")
 @click.argument("input_file", required=False,
                 type=click.Path(exists=True, dir_okay=False))
 @click.option("--session-id", "session_id_override", type=int, default=None,
               help="Use this Endless session id directly instead of "
                    "resolving the current session (test fixtures / "
                    "non-tmux callers).")
-def session_status_add(input_file, session_id_override):
+def session_snapshot_add(input_file, session_id_override):
     """Record a session status snapshot from XML on stdin or a file path.
 
     Reads XML matching the <session-status>/<task>/<decision>/<commit>/
@@ -1002,7 +1023,7 @@ def session_status_add(input_file, session_id_override):
     Example:
 
       \b
-      endless session status add <<'EOF'
+      endless session snapshot add <<'EOF'
       <session-status>
         <headline>E-1312 v1 landed.</headline>
         <resolved>

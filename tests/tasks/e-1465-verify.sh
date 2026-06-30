@@ -9,7 +9,7 @@
 # Output: pass/fail per check, then a summary. Exit 0 on all-passed, 1 on any
 # failure, 2 on setup error.
 #
-# Why a temp HOME instead of --db sandbox: the `session-next` subcommand pins
+# Why a temp HOME instead of --db sandbox: the `session-status` subcommand pins
 # the MAIN database (sessions live in main regardless of cwd), so --db sandbox
 # would be ignored. PinMainDB resolves $HOME/.config/endless/endless.db, so we
 # point HOME at a throwaway dir, seed a deterministic fixture there, and run the
@@ -89,8 +89,8 @@ summary() {
 
 # ─── isolated runner ──────────────────────────────────────────────────────────
 
-# gosn HOME_DIR [session-next args...]
-#   Run the worktree's endless-go session-next against HOME_DIR's DB, with tmux
+# gosn HOME_DIR [session-status args...]
+#   Run the worktree's endless-go session-status against HOME_DIR's DB, with tmux
 #   env stripped (forces the global focal fallback) and cwd outside the worktree
 #   (disables sandbox auto-detect). Width is fixed at 90 for stable truncation.
 gosn() {
@@ -99,7 +99,7 @@ gosn() {
     ( cd "${home_dir}" \
         && env -u TMUX -u TMUX_PANE -u XDG_CONFIG_HOME -u ENDLESS_SESSION_ID \
             HOME="${home_dir}" \
-            "${BIN}" session-next --cols 90 "$@" )
+            "${BIN}" session-status --cols 90 "$@" )
 }
 
 # ─── assertions ─────────────────────────────────────────────────────────────
@@ -254,14 +254,14 @@ test_sort_order() {
     assert_ordering "verify before orphan" "E-103" "E-107" "${FIXTURE_HOME}"
 }
 
-test_watch_flag() {
-    section "Watch flag — wired through, degrades to one frame off-tty"
-    # gosn captures via $(...), so stdout is a pipe (not a tty): --watch must
+test_monitor_flag() {
+    section "Monitor flag — wired through, degrades to one frame off-tty"
+    # gosn captures via $(...), so stdout is a pipe (not a tty): --monitor must
     # render a single frame and EXIT rather than loop forever. The interactive
     # 2s redraw loop is verified by hand (see header). assert_line_matches would
-    # hang here if --watch looped on a pipe, so this also pins the no-hang guard.
-    assert_line_matches "--watch off-tty renders the focal row once and exits" \
-        '^● T E-100 ' "${FIXTURE_HOME}" --watch
+    # hang here if --monitor looped on a pipe, so this also pins the no-hang guard.
+    assert_line_matches "--monitor off-tty renders the focal row once and exits" \
+        '^● T E-100 ' "${FIXTURE_HOME}" --monitor
 }
 
 test_empty_state() {
@@ -318,7 +318,7 @@ main() {
     test_action_icons
     test_done_work_filter
     test_sort_order
-    test_watch_flag
+    test_monitor_flag
     test_empty_state
 
     summary

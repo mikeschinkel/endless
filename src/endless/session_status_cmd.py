@@ -1,4 +1,4 @@
-"""CLI implementation for `endless session status add` (E-1312 / E-1314).
+"""CLI implementation for `endless session snapshot add` (E-1312 / E-1314).
 
 Reads XML from a file path or stdin, validates the schema, packages the
 parsed contents as a payload, and emits a `session_status.recorded` event
@@ -91,7 +91,7 @@ def _read_input(input_file: str | None) -> str:
         text = sys.stdin.read()
     if not text.strip():
         raise click.ClickException(
-            "session status add: empty input (expected XML on stdin or via file arg)"
+            "session snapshot add: empty input (expected XML on stdin or via file arg)"
         )
     return text
 
@@ -138,11 +138,11 @@ def _parse_and_validate(xml_text: str) -> dict:
     try:
         root = ET.fromstring(xml_text)
     except ET.ParseError as e:
-        raise click.ClickException(f"session status: malformed XML: {e}")
+        raise click.ClickException(f"session snapshot: malformed XML: {e}")
 
     if root.tag != "session-status":
         raise click.ClickException(
-            f"session status: root element must be <session-status>, got <{root.tag}>"
+            f"session snapshot: root element must be <session-status>, got <{root.tag}>"
         )
 
     payload = {
@@ -173,7 +173,7 @@ def _parse_and_validate(xml_text: str) -> dict:
             payload["summary"] = _serialize_summary(child)
         else:
             raise click.ClickException(
-                f"session status: unknown element <{tag}> under <session-status>"
+                f"session snapshot: unknown element <{tag}> under <session-status>"
             )
 
     return payload
@@ -190,24 +190,24 @@ def _serialize_tasks(section_el: ET.Element) -> str:
     for el in section_el:
         if el.tag != "task":
             raise click.ClickException(
-                f"session status: unexpected <{el.tag}> inside <tasks>; "
+                f"session snapshot: unexpected <{el.tag}> inside <tasks>; "
                 f"only <task> elements allowed"
             )
         tid = el.attrib.get("id", "")
         if not _TASK_ID_RE.match(tid):
             raise click.ClickException(
-                f"session status: <task id={tid!r}> must match E-NNN"
+                f"session snapshot: <task id={tid!r}> must match E-NNN"
             )
         status = el.attrib.get("status", "")
         if status not in _VALID_STATUSES:
             raise click.ClickException(
-                f"session status: <task id={tid!r}> has invalid status "
+                f"session snapshot: <task id={tid!r}> has invalid status "
                 f"{status!r}; valid: {', '.join(sorted(_VALID_STATUSES))}"
             )
         filed = el.attrib.get("filed")
         if filed is not None and filed not in ("true", "false"):
             raise click.ClickException(
-                f"session status: <task id={tid!r}> filed must be 'true' "
+                f"session snapshot: <task id={tid!r}> filed must be 'true' "
                 f"or 'false', got {filed!r}"
             )
         lines.append(_element_to_line(el))
@@ -220,16 +220,16 @@ def _serialize_summary(section_el: ET.Element) -> str:
     for el in section_el:
         if el.tag != "layer":
             raise click.ClickException(
-                f"session status: unexpected <{el.tag}> inside <summary>; "
+                f"session snapshot: unexpected <{el.tag}> inside <summary>; "
                 f"only <layer> elements allowed"
             )
         if not el.attrib.get("name"):
             raise click.ClickException(
-                "session status: <layer> requires a name attribute"
+                "session snapshot: <layer> requires a name attribute"
             )
         if not el.attrib.get("files"):
             raise click.ClickException(
-                "session status: <layer> requires a files attribute"
+                "session snapshot: <layer> requires a files attribute"
             )
         lines.append(_element_to_line(el))
     return "\n".join(lines)
@@ -240,7 +240,7 @@ def _serialize_decisions(section_el: ET.Element) -> str:
     for el in section_el:
         if el.tag != "decision":
             raise click.ClickException(
-                f"session status: unexpected <{el.tag}> inside <decisions>; "
+                f"session snapshot: unexpected <{el.tag}> inside <decisions>; "
                 f"only <decision> elements allowed"
             )
         lines.append(_element_to_line(el))
@@ -252,13 +252,13 @@ def _serialize_commits(section_el: ET.Element) -> str:
     for el in section_el:
         if el.tag != "commit":
             raise click.ClickException(
-                f"session status: unexpected <{el.tag}> inside <commits>; "
+                f"session snapshot: unexpected <{el.tag}> inside <commits>; "
                 f"only <commit> elements allowed"
             )
         sha = el.attrib.get("sha", "")
         if not _SHA_RE.match(sha):
             raise click.ClickException(
-                f"session status: <commit sha={sha!r}> must match [0-9a-f]{{7,40}}"
+                f"session snapshot: <commit sha={sha!r}> must match [0-9a-f]{{7,40}}"
             )
         lines.append(_element_to_line(el))
     return "\n".join(lines)
@@ -269,12 +269,12 @@ def _serialize_memory(section_el: ET.Element) -> str:
     for el in section_el:
         if el.tag != "entry":
             raise click.ClickException(
-                f"session status: unexpected <{el.tag}> inside <memory>; "
+                f"session snapshot: unexpected <{el.tag}> inside <memory>; "
                 f"only <entry> elements allowed"
             )
         if not el.attrib.get("path"):
             raise click.ClickException(
-                "session status: <entry> requires a path attribute"
+                "session snapshot: <entry> requires a path attribute"
             )
         lines.append(_element_to_line(el))
     return "\n".join(lines)

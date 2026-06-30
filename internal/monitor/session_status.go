@@ -8,9 +8,9 @@ import (
 	"strings"
 )
 
-// SessionNextRow is one task row in the per-session "what's next" view
+// SessionStatusRow is one task row in the per-session "what's next" view
 // (E-1465). It carries the raw fields the renderer needs; all icon/letter/
-// phase-char/sort derivation happens in the caller (internal/sessionnextcmd)
+// phase-char/sort derivation happens in the caller (internal/sessionstatuscmd)
 // so the rendering rules stay testable without a DB.
 //
 // IsFocal/IsParent/InFlight are mutually-prioritized decorations computed
@@ -18,7 +18,7 @@ import (
 // session's active task, InFlight any OTHER live session's active task.
 // BlockedByN counts open tasks that block this one; BlocksN counts tasks this
 // one blocks (regardless of their status — it drives the ⏸ "blocks" marker).
-type SessionNextRow struct {
+type SessionStatusRow struct {
 	ID         int64
 	Title      string
 	Status     string
@@ -33,12 +33,12 @@ type SessionNextRow struct {
 }
 
 // terminalStatusSet is the canonical "done-work" status set: these unblock
-// dependents (see `endless guide tasks`) and are omitted from the session-next
+// dependents (see `endless guide tasks`) and are omitted from the session-status
 // view unless they are the focal/parent row or --all is passed. Kept in sync
-// with the prototype spec (~/.config/endless/session-next.sql).
+// with the prototype spec (~/.config/endless/session-status.sql).
 const terminalStatusSet = "'confirmed','assumed','declined','obsolete','completed'"
 
-// ResolveSessionNextFocal resolves the focal task for the session-next view,
+// ResolveSessionStatusFocal resolves the focal task for the session-status view,
 // matching claude.go's documented priority (session active task >
 // @endless_task_id) with a global most-recent last resort (E-1465 / ED-1523):
 //
@@ -50,7 +50,7 @@ const terminalStatusSet = "'confirmed','assumed','declined','obsolete','complete
 //  3. The most-recently-active live session's active_task_id, machine-wide.
 //
 // Returns 0 (no error) when nothing resolves — the caller renders an empty view.
-func ResolveSessionNextFocal(tmuxPane string) (int64, error) {
+func ResolveSessionStatusFocal(tmuxPane string) (int64, error) {
 	if info, err := GetActiveTaskForPane(tmuxPane); err == nil {
 		return info.TaskID, nil
 	} else if !errors.Is(err, ErrNoActiveTask) {
@@ -82,13 +82,13 @@ func ResolveSessionNextFocal(tmuxPane string) (int64, error) {
 	return id, nil
 }
 
-// ResolveSessionNextParentSession reads the window's @endless_spawned_by marker
+// ResolveSessionStatusParentSession reads the window's @endless_spawned_by marker
 // and returns the spawning session's integer sessions.id, or 0 when the window
 // was not spawned by `endless task spawn` or the marker is a `pid-<n>` fallback
 // (a non-Claude spawner with no session row). The marker holds a session id,
 // NOT a pane id — the bash prototype's pane-based lookup is wrong; the Go
 // command resolves the parent's active task directly from this id in the query.
-func ResolveSessionNextParentSession(tmuxPane string) int64 {
+func ResolveSessionStatusParentSession(tmuxPane string) int64 {
 	v := tmuxWindowOption(tmuxPane, "@endless_spawned_by")
 	if v == "" {
 		return 0
@@ -117,9 +117,9 @@ func tmuxWindowOption(pane, name string) string {
 	return strings.TrimSpace(string(out))
 }
 
-// SessionNextRows returns the task rows for the session-next view of focal task
+// SessionStatusRows returns the task rows for the session-status view of focal task
 // `focal`, with `parentSession` the spawning session's id (0 if none). The row
-// set, per the prototype spec (~/.config/endless/session-next.sql) plus E-1685:
+// set, per the prototype spec (~/.config/endless/session-status.sql) plus E-1685:
 //
 //   - every task touched (via session_tasks) by ANY live-or-dead session whose
 //     active_task_id = focal (cross-project; robust to duplicate session rows),
@@ -136,7 +136,7 @@ func tmuxWindowOption(pane, name string) string {
 //
 // Done-work (terminal status) is omitted UNLESS the row is the focal or parent
 // row, or includeAll is true. Returns an empty slice when focal is 0.
-func SessionNextRows(focal, parentSession int64, includeAll bool) ([]SessionNextRow, error) {
+func SessionStatusRows(focal, parentSession int64, includeAll bool) ([]SessionStatusRow, error) {
 	if focal == 0 {
 		return nil, nil
 	}
@@ -216,9 +216,9 @@ SELECT id, title, status, phase, type_slug, has_text,
 	}
 	defer rows.Close()
 
-	var out []SessionNextRow
+	var out []SessionStatusRow
 	for rows.Next() {
-		var r SessionNextRow
+		var r SessionStatusRow
 		if err := rows.Scan(
 			&r.ID, &r.Title, &r.Status, &r.Phase, &r.TypeSlug, &r.HasText,
 			&r.IsFocal, &r.IsParent, &r.InFlight, &r.BlockedByN, &r.BlocksN,
@@ -249,13 +249,13 @@ func intPlaceholders(ids []int64) (string, []any) {
 	return strings.Join(ph, ","), args
 }
 
-// SessionNextBlockerEdges returns the in-set blocked-by edges among `ids`: for
+// SessionStatusBlockerEdges returns the in-set blocked-by edges among `ids`: for
 // each task that is blocked, the list of its blockers that are ALSO in `ids` and
 // still OPEN (blocker status not terminal). This is the blocks-DAG restricted to
-// the candidate set, which `session next --tree` topologically layers into
+// the candidate set, which `session status --tree` topologically layers into
 // implementation order. Result maps target (blocked task) → []source (blockers).
 // Tasks with no in-set open blocker are absent from the map (they are roots).
-func SessionNextBlockerEdges(ids []int64) (map[int64][]int64, error) {
+func SessionStatusBlockerEdges(ids []int64) (map[int64][]int64, error) {
 	if len(ids) == 0 {
 		return map[int64][]int64{}, nil
 	}
@@ -293,13 +293,13 @@ SELECT d.target_id, d.source_id
 	return edges, nil
 }
 
-// SessionNextDoOrder returns the per-session implementation order (E-1683's
+// SessionStatusDoOrder returns the per-session implementation order (E-1683's
 // session_tasks.do_order) for the candidate `ids`, scoped to sessions whose
-// active_task_id = focal — the same union scope SessionNextRows uses. Only
+// active_task_id = focal — the same union scope SessionStatusRows uses. Only
 // non-null do_order rows are returned; a task absent from the map has no
 // explicit order. When non-empty, this OVERRIDES the DAG-derived order in
-// `session next --tree`.
-func SessionNextDoOrder(focal int64, ids []int64) (map[int64]int64, error) {
+// `session status --tree`.
+func SessionStatusDoOrder(focal int64, ids []int64) (map[int64]int64, error) {
 	if focal == 0 || len(ids) == 0 {
 		return map[int64]int64{}, nil
 	}

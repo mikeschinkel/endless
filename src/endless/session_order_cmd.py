@@ -1,7 +1,7 @@
 """CLI implementation for `endless session order` (E-1683).
 
 Sets a per-session implementation order on the tasks this session has
-touched, so a later `session next` can show the do/plan group in the
+touched, so a later `session status` can show the do/plan group in the
 sequence to work them, with parallel groups. The order is stored as
 `session_tasks.do_order` (session-scoped, distinct from the global
 `tasks.sort_order`); equal values mark tasks parallelizable.
