@@ -124,7 +124,8 @@ func tmuxWindowOption(pane, name string) string {
 
 // SessionStatusRows returns the task rows for the session-status view of focal task
 // `focal`, with `parentSession` the spawning session's id (0 if none). The row
-// set, per the prototype spec (~/.config/endless/session-status.sql) plus E-1685:
+// set, per the prototype spec (~/.config/endless/session-status.sql) plus E-1685
+// and E-1691:
 //
 //   - every task touched (via session_tasks) by ANY live-or-dead session whose
 //     active_task_id = focal (cross-project; robust to duplicate session rows),
@@ -139,6 +140,11 @@ func tmuxWindowOption(pane, name string) string {
 //     open focal); when the focal lands and the block clears, BlockedByN drops to
 //     0 and ⊗ disappears with no special highlight. One hop only, not the
 //     transitive closure.
+//   - ∪ the focal task's DIRECT children — tasks T with parent_id = focal
+//     (E-1691). For an epic the children ARE the work; surfacing them lets the
+//     session's pane carry the subtasks. Read-time only, same invariant reason
+//     as the dependents. One level only — working a child surfaces ITS children
+//     in that child's own session.
 //
 // Done-work (terminal status) is omitted UNLESS the row is the focal, parent, or
 // from (spawner) row, or includeAll is true. Returns an empty slice when focal
@@ -194,6 +200,16 @@ base AS (
         AND d.source_id = (SELECT tid FROM ftask)
         AND d.target_id = t.id
    )
+  UNION
+  -- E-1691: the focal task's DIRECT children. For an epic the children ARE the
+  -- work, yet the row set above omits them. Computed at read time (not written
+  -- into session_tasks) for the same projection-invariant reason as E-1685's
+  -- dependents. Direct (one level) only: working a child surfaces ITS children
+  -- in that child's own session, keeping each view one level deep rather than
+  -- exploding the whole subtree. The terminal-status filter in the final SELECT
+  -- drops done children unless --all, matching the dependent behavior.
+  SELECT t.id, t.title, t.status, t.phase, t.text, t.type_id
+    FROM tasks t WHERE t.parent_id = (SELECT tid FROM ftask)
 ),
 enr AS (
   SELECT b.id, b.title, b.status, b.phase,
