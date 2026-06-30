@@ -5,11 +5,20 @@ import (
 	"testing"
 )
 
-// renderForestString builds and renders the forest for a synthetic candidate
-// set, so the layering + rendering can be asserted without a DB.
+// renderForestString builds and renders the backlog forest for a synthetic
+// candidate set, so the layering + rendering can be asserted without a DB.
 func renderForestString(ids []int64, edges map[int64][]int64, doOrder map[int64]int64) string {
 	var b strings.Builder
 	renderForest(&b, buildForest(ids, edges, doOrder))
+	return b.String()
+}
+
+// renderSpineString assembles the full ancestry spine (parent → *focal →
+// backlog) and renders it, so the spine + focal marker can be asserted without
+// a DB.
+func renderSpineString(focal, parent int64, ids []int64, edges map[int64][]int64, doOrder map[int64]int64) string {
+	var b strings.Builder
+	renderForest(&b, buildSpine(focal, parent, buildForest(ids, edges, doOrder)))
 	return b.String()
 }
 
@@ -84,6 +93,71 @@ func TestBuildForest(t *testing.T) {
 			got := renderForestString(tc.ids, tc.edges, tc.doOrder)
 			if got != tc.want {
 				t.Errorf("forest mismatch:\n--- got ---\n%s\n--- want ---\n%s", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestBuildSpine(t *testing.T) {
+	tests := []struct {
+		name    string
+		focal   int64
+		parent  int64
+		ids     []int64
+		edges   map[int64][]int64
+		doOrder map[int64]int64
+		want    string
+	}{
+		{
+			name:  "no parent: focal is root, marked, backlog nested",
+			focal: 99,
+			ids:   []int64{100, 101},
+			edges: map[int64][]int64{101: {100}},
+			want: "" +
+				"*E-99\n" +
+				"└── E-100\n" +
+				"    └── E-101\n",
+		},
+		{
+			name:   "parent root, focal nested + marked, backlog under focal",
+			focal:  99,
+			parent: 88,
+			ids:    []int64{100},
+			want: "" +
+				"E-88\n" +
+				"└── *E-99\n" +
+				"    └── E-100\n",
+		},
+		{
+			name:   "parent + focal with empty backlog",
+			focal:  99,
+			parent: 88,
+			want: "" +
+				"E-88\n" +
+				"└── *E-99\n",
+		},
+		{
+			name:  "no parent, empty backlog: lone marked focal",
+			focal: 99,
+			want:  "*E-99\n",
+		},
+		{
+			name:  "parallel backlog siblings nest under focal",
+			focal: 99,
+			ids:   []int64{100, 101, 102},
+			edges: map[int64][]int64{101: {100}, 102: {100}},
+			want: "" +
+				"*E-99\n" +
+				"└── E-100\n" +
+				"    ├── E-101\n" +
+				"    └── E-102\n",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := renderSpineString(tc.focal, tc.parent, tc.ids, tc.edges, tc.doOrder)
+			if got != tc.want {
+				t.Errorf("spine mismatch:\n--- got ---\n%s\n--- want ---\n%s", got, tc.want)
 			}
 		})
 	}

@@ -165,17 +165,31 @@ section "Go unit tests — tree layering + rendering"
 assert_cmd "go test internal/sessionnextcmd (TestBuildForest + TestParseFocalID)" \
     go test ./internal/sessionnextcmd/ -count=1 -run 'TestBuildForest|TestParseFocalID'
 
+# Every tree is an ancestry spine: the focal task (E-99, headless --focal, no
+# parent here) is the root marked `*`, and the do/plan backlog (E-100..103)
+# nests under it in implementation order.
+
+section "Ancestry spine — focal marked with *, backlog nested under it"
+# Only E-100 blocks E-101; E-102 and E-103 are independent. Backlog roots
+# (E-100, E-102, E-103) all nest under the focal *E-99.
+seed_base
+add_block 100 101
+SPINE=$'*E-99\n├── E-100\n│   └── E-101\n├── E-102\n└── E-103'
+assert_eq "focal is the spine root with backlog nested under it" "${SPINE}" "$(tree)"
+assert_contains "focal renders as *E-99" "*E-99" tree
+assert_contains "backlog nests under focal (├── E-100)" "├── E-100" tree
+
 section "DAG chain — A→B→C, independent D (nesting = implementation order)"
-# E-100 blocks E-101 blocks E-102; E-103 independent.
+# E-100 blocks E-101 blocks E-102; E-103 independent. Under *E-99: the chain
+# root E-100 and the independent root E-103 are siblings.
 seed_base
 add_block 100 101
 add_block 101 102
-CHAIN=$'E-100\n└── E-101\n    └── E-102\nE-103'
-assert_eq "tree renders the chain + independent root, IDs-only" "${CHAIN}" "$(tree)"
-assert_contains "A (E-100) present" "E-100" tree
-# Order is encoded by nesting: B is indented under A, C under B → A before B before C.
+CHAIN=$'*E-99\n├── E-100\n│   └── E-101\n│       └── E-102\n└── E-103'
+assert_eq "chain + independent root nested under focal, IDs-only" "${CHAIN}" "$(tree)"
+# Order is encoded by nesting: B under A, C under B → A before B before C.
 assert_contains "B nests under A (└── E-101)" "└── E-101" tree
-assert_contains "C nests under B (    └── E-102)" "    └── E-102" tree
+assert_contains "C nests deepest under B (└── E-102)" "└── E-102" tree
 
 section "Parallel group — equal-depth tasks with no inter-dependency are siblings"
 # E-100 blocks E-101 AND E-102 (both depth 1, parallel); E-101 blocks E-103.
@@ -183,7 +197,7 @@ seed_base
 add_block 100 101
 add_block 100 102
 add_block 101 103
-PAR=$'E-100\n├── E-101\n│   └── E-103\n└── E-102'
+PAR=$'*E-99\n└── E-100\n    ├── E-101\n    │   └── E-103\n    └── E-102'
 assert_eq "equal-depth E-101/E-102 render as siblings under E-100" "${PAR}" "$(tree)"
 assert_contains "E-101 is a branch sibling (├── E-101)" "├── E-101" tree
 assert_contains "E-102 is the last sibling (└── E-102)" "└── E-102" tree
@@ -195,13 +209,15 @@ assert_not_contains "no legend 'this' word" "this" tree
 assert_not_contains "no legend 'plan' word" "plan" tree
 assert_not_contains "no block glyph ⊗" "⊗" tree
 assert_not_contains "no task titles leak (alpha-title)" "alpha-title" tree
-assert_not_contains "no task titles leak (bravo-title)" "bravo-title" tree
-# The only non-tree glyphs allowed are the box-drawing connectors.
+assert_not_contains "no task titles leak (focal-title)" "focal-title" tree
+# The only non-tree glyphs allowed are the box-drawing connectors and the
+# focal `*` marker.
 assert_not_contains "no do/ready icon ▶" "▶" tree
 
 section "do_order override — E-1683 per-session order beats the DAG"
-# DAG would put E-100 first (it blocks E-101); a do_order making E-103 the root,
-# then E-101|E-102 parallel, then E-100, must override that.
+# DAG would put E-100 first (it blocks E-101); a do_order making E-103 the
+# backlog root, then E-101|E-102 parallel, then E-100, must override that —
+# all still nested under the focal *E-99.
 seed_base
 add_block 100 101
 sqlite3 "${DB}" "
@@ -210,7 +226,7 @@ sqlite3 "${DB}" "
     UPDATE session_tasks SET do_order=2 WHERE session_id=42 AND task_id=102;
     UPDATE session_tasks SET do_order=3 WHERE session_id=42 AND task_id=100;
 "
-OVR=$'E-103\n├── E-101\n│   └── E-100\n└── E-102'
+OVR=$'*E-99\n└── E-103\n    ├── E-101\n    │   └── E-100\n    └── E-102'
 assert_eq "do_order layers override the blocked-by DAG" "${OVR}" "$(tree)"
 
 summary

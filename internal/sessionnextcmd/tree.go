@@ -20,36 +20,64 @@ const (
 )
 
 // treeNode is one task in the rendered forest. Children are the tasks that nest
-// directly beneath it (its direct dependents in implementation order).
+// directly beneath it (its direct dependents in implementation order). focal
+// marks the session's current ("this") task, rendered with a `*` prefix.
 type treeNode struct {
 	id       int64
+	focal    bool
 	children []*treeNode
 }
 
-// renderTree writes the IDs-only implementation-order tree for the do/plan rows
-// to w. Structure is derived from the blocked-by DAG (monitor.SessionNextBlockerEdges)
-// unless a per-session order (monitor.SessionNextDoOrder) is present, which
-// overrides it. No legend, titles, or icons — IDs only (E-1684). focal==0 or no
-// do/plan rows prints a short hint.
+// renderTree writes the IDs-only implementation-order tree for the session to w
+// as an ancestry spine (E-1684): the parent (spawning) task is the root, the
+// focal ("this") task nests under it marked `*`, and the do/plan backlog nests
+// under the focal in implementation order. The backlog structure is derived from
+// the blocked-by DAG (monitor.SessionNextBlockerEdges) unless a per-session order
+// (monitor.SessionNextDoOrder) is present, which overrides it. No legend, titles,
+// or icons — IDs only. focal==0 prints a short hint.
 func renderTree(w io.Writer, rows []monitor.SessionNextRow, focal int64) error {
-	ids := doPlanIDs(rows)
-	if focal == 0 || len(ids) == 0 {
-		fmt.Fprintln(w, "  (no do/plan tasks for this window)")
+	if focal == 0 {
+		fmt.Fprintln(w, "  (no active task for this window)")
 		return nil
 	}
 
-	doOrder, err := monitor.SessionNextDoOrder(focal, ids)
-	if err != nil {
-		return err
-	}
-	edges, err := monitor.SessionNextBlockerEdges(ids)
-	if err != nil {
-		return err
+	var backlogRoots []*treeNode
+	if ids := doPlanIDs(rows); len(ids) > 0 {
+		doOrder, err := monitor.SessionNextDoOrder(focal, ids)
+		if err != nil {
+			return err
+		}
+		edges, err := monitor.SessionNextBlockerEdges(ids)
+		if err != nil {
+			return err
+		}
+		backlogRoots = buildForest(ids, edges, doOrder)
 	}
 
-	roots := buildForest(ids, edges, doOrder)
-	renderForest(w, roots)
+	renderForest(w, buildSpine(focal, parentID(rows), backlogRoots))
 	return nil
+}
+
+// parentID returns the parent (spawning) task's id from the row set, or 0 when
+// there is no parent row (e.g. headless --focal, or a non-spawned session).
+func parentID(rows []monitor.SessionNextRow) int64 {
+	for _, r := range rows {
+		if r.IsParent {
+			return r.ID
+		}
+	}
+	return 0
+}
+
+// buildSpine assembles the ancestry spine: focal (marked) carrying the backlog
+// roots as its children, nested under the parent task when one exists (else the
+// focal is the root).
+func buildSpine(focal, parent int64, backlogRoots []*treeNode) []*treeNode {
+	thisNode := &treeNode{id: focal, focal: true, children: backlogRoots}
+	if parent > 0 {
+		return []*treeNode{{id: parent, children: []*treeNode{thisNode}}}
+	}
+	return []*treeNode{thisNode}
 }
 
 // doPlanIDs extracts the task ids classified as do (ready) or plan
@@ -208,7 +236,7 @@ func assemble(ids []int64, parent map[int64]int64) []*treeNode {
 // subtree drawn with box-drawing connectors.
 func renderForest(w io.Writer, roots []*treeNode) {
 	for _, r := range roots {
-		fmt.Fprintln(w, taskLabel(r.id))
+		fmt.Fprintln(w, nodeLabel(r))
 		renderChildren(w, r.children, "")
 	}
 }
@@ -220,9 +248,17 @@ func renderChildren(w io.Writer, children []*treeNode, prefix string) {
 		if last {
 			connector, cont = treeLastChild, treeBlank
 		}
-		fmt.Fprintln(w, prefix+connector+taskLabel(c.id))
+		fmt.Fprintln(w, prefix+connector+nodeLabel(c))
 		renderChildren(w, c.children, prefix+cont)
 	}
+}
+
+// nodeLabel is the rendered id, prefixed with `*` for the focal ("this") task.
+func nodeLabel(n *treeNode) string {
+	if n.focal {
+		return "*" + taskLabel(n.id)
+	}
+	return taskLabel(n.id)
 }
 
 func taskLabel(id int64) string { return "E-" + strconv.FormatInt(id, 10) }
