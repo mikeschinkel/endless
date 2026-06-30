@@ -62,6 +62,19 @@ func snBlocks(t *testing.T, db *sql.DB, blockerID, blockedID int64) {
 	}
 }
 
+// snLanding inserts one task_landings row so the query's `landed` column can be
+// exercised. session_id is left NULL; landed_at takes its schema default.
+func snLanding(t *testing.T, db *sql.DB, id, taskID int64, branch, sha string) {
+	t.Helper()
+	if _, err := db.Exec(
+		`INSERT INTO task_landings (id, task_id, session_id, branch, merge_commit_sha)
+		 VALUES (?, ?, NULL, ?, ?)`,
+		id, taskID, branch, sha,
+	); err != nil {
+		t.Fatalf("snLanding id=%d task=%d: %v", id, taskID, err)
+	}
+}
+
 func snRowByID(rows []SessionStatusRow, id int64) (SessionStatusRow, bool) {
 	for _, r := range rows {
 		if r.ID == id {
@@ -239,6 +252,47 @@ func TestSessionStatusRows_FocalDependents(t *testing.T) {
 	}
 	if d2.BlockedByN != 0 {
 		t.Errorf("dependent BlockedByN = %d after focal lands, want 0 (⊗ cleared)", d2.BlockedByN)
+	}
+}
+
+// TestSessionStatusRows_LandedColumn drives the E-1693 `landed` column: a landed
+// non-terminal task is STILL returned (it passes the terminal-status filter) with
+// Landed == true, while an un-landed task in the same row set has Landed == false.
+func TestSessionStatusRows_LandedColumn(t *testing.T) {
+	db := withTestDB(t)
+	seedProject(t, db, 1, "p1", "/p1")
+
+	const focal, landed, plain = 600, 601, 602
+	snTask(t, db, focal, 1, "underway", "now", "")
+	snTask(t, db, landed, 1, "ready", "next", "") // landed but still non-terminal
+	snTask(t, db, plain, 1, "ready", "next", "")  // un-landed sibling
+
+	snSession(t, db, 1, 1, focal, "working")
+	snSessionTask(t, db, 1, focal)
+	snSessionTask(t, db, 1, landed)
+	snSessionTask(t, db, 1, plain)
+
+	snLanding(t, db, 1, landed, "task/601-x", "deadbeef")
+
+	rows, err := SessionStatusRows(focal, 0, false)
+	if err != nil {
+		t.Fatalf("SessionStatusRows: %v", err)
+	}
+
+	l, ok := snRowByID(rows, landed)
+	if !ok {
+		t.Fatalf("landed non-terminal task %d should still be returned (not omitted)", landed)
+	}
+	if !l.Landed {
+		t.Errorf("task %d Landed = false, want true (has a task_landings row)", landed)
+	}
+
+	p, ok := snRowByID(rows, plain)
+	if !ok {
+		t.Fatalf("un-landed task %d should be returned", plain)
+	}
+	if p.Landed {
+		t.Errorf("task %d Landed = true, want false (no task_landings row)", plain)
 	}
 }
 

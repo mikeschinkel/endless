@@ -33,6 +33,11 @@ type SessionStatusRow struct {
 	IsParent   bool
 	IsFrom     bool
 	InFlight   bool
+	// Landed is true when the task has >=1 task_landings row (its work has
+	// merged). classify() routes a landed non-terminal task to the catch-all ⁇
+	// bucket so merged work is never offered as a fresh actionable verb (E-1693);
+	// the focal/parent/from/in-flight decorations still win over it.
+	Landed     bool
 	BlockedByN int
 	BlocksN    int
 }
@@ -226,6 +231,10 @@ enr AS (
        SELECT 1 FROM sessions s
         WHERE s.state != 'ended' AND s.active_task_id = b.id
      ) AND b.id <> (SELECT tid FROM ftask)) AS in_flight,
+    -- E-1693: the task's work has already merged (>=1 task_landings row). A
+    -- landed non-terminal task stays visible (it still passes the terminal-status
+    -- filter) but the renderer routes it to ⁇ other? rather than a fresh ▶/✎/☑.
+    EXISTS(SELECT 1 FROM task_landings tl WHERE tl.task_id = b.id) AS landed,
     (SELECT count(*) FROM task_deps d JOIN tasks blk ON blk.id = d.source_id
        WHERE d.source_type = 'task' AND d.target_type = 'task'
          AND d.dep_type = 'blocks' AND d.target_id = b.id
@@ -236,7 +245,7 @@ enr AS (
   FROM base b
 )
 SELECT id, title, status, phase, type_slug, has_text,
-       is_focal, is_parent, is_from, in_flight, blocked_by_n, blocks_n
+       is_focal, is_parent, is_from, in_flight, landed, blocked_by_n, blocks_n
   FROM enr
  WHERE (? = 1) OR is_focal OR is_parent OR is_from
        OR status NOT IN (` + terminalStatusSet + `)
@@ -253,7 +262,7 @@ SELECT id, title, status, phase, type_slug, has_text,
 		var r SessionStatusRow
 		if err := rows.Scan(
 			&r.ID, &r.Title, &r.Status, &r.Phase, &r.TypeSlug, &r.HasText,
-			&r.IsFocal, &r.IsParent, &r.IsFrom, &r.InFlight, &r.BlockedByN, &r.BlocksN,
+			&r.IsFocal, &r.IsParent, &r.IsFrom, &r.InFlight, &r.Landed, &r.BlockedByN, &r.BlocksN,
 		); err != nil {
 			return nil, err
 		}

@@ -77,7 +77,11 @@ func (a action) icon() string {
 	case actOrphan:
 		return "◷"
 	default:
-		return "·"
+		// actOther catch-all: landed tasks (E-1693) and any unrecognized status.
+		// ⁇ (U+2047) measures and renders single-width (verified with
+		// go-runewidth), so it aligns in the width-aware table the same as the
+		// silent · it replaces. Intentionally undocumented in the legend.
+		return "⁇"
 	}
 }
 
@@ -275,6 +279,14 @@ func classify(r monitor.SessionStatusRow) action {
 		return actFrom
 	case r.InFlight:
 		return actDoing
+	}
+	// E-1693: a landed task's work has merged — no do/plan/verify verb applies. It
+	// stays visible (still a non-terminal status) but routes to the ⁇ other?
+	// catch-all so the monitor never offers it as a fresh actionable spawn. Checked
+	// after the decorations (a landed task a live session is on still reads ⟳) and
+	// before the status switch.
+	if r.Landed {
+		return actOther
 	}
 	switch r.Status {
 	case "ready":

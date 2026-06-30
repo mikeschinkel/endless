@@ -26,6 +26,15 @@ func TestClassify(t *testing.T) {
 		{"unverified is verify", monitor.SessionStatusRow{Status: "unverified"}, actVerify},
 		{"underway is orphan", monitor.SessionStatusRow{Status: "underway"}, actOrphan},
 		{"unknown is other", monitor.SessionStatusRow{Status: "blocked"}, actOther},
+		// E-1693: a landed task routes to actOther regardless of its non-terminal
+		// status, so merged work is never offered as a fresh actionable verb.
+		{"landed ready is other", monitor.SessionStatusRow{Status: "ready", Landed: true}, actOther},
+		{"landed unverified is other", monitor.SessionStatusRow{Status: "unverified", Landed: true}, actOther},
+		{"landed unplanned is other", monitor.SessionStatusRow{Status: "unplanned", Landed: true}, actOther},
+		{"non-landed ready still do", monitor.SessionStatusRow{Status: "ready"}, actDo},
+		{"non-landed underway still orphan", monitor.SessionStatusRow{Status: "underway"}, actOrphan},
+		// Decoration still wins: a landed task a live session is on reads ⟳ doing.
+		{"landed in-flight still doing", monitor.SessionStatusRow{Status: "ready", Landed: true, InFlight: true}, actDoing},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -33,6 +42,21 @@ func TestClassify(t *testing.T) {
 				t.Errorf("classify(%s) = %d, want %d", c.name, got, c.want)
 			}
 		})
+	}
+}
+
+// TestActionIcons pins the glyphs that other surfaces (and the legend) depend on,
+// notably the E-1693 ⁇ catch-all that replaced the silent · and the untouched
+// ◷ orphan it must stay distinct from.
+func TestActionIcons(t *testing.T) {
+	cases := map[action]string{
+		actOrphan: "◷",
+		actOther:  "⁇",
+	}
+	for a, want := range cases {
+		if got := a.icon(); got != want {
+			t.Errorf("action(%d).icon() = %q, want %q", a, got, want)
+		}
 	}
 }
 
