@@ -115,7 +115,7 @@ func TestBuildSpine(t *testing.T) {
 			ids:   []int64{100, 101},
 			edges: map[int64][]int64{101: {100}},
 			want: "" +
-				"*E-99\n" +
+				"●E-99\n" +
 				"└── E-100\n" +
 				"    └── E-101\n",
 		},
@@ -126,7 +126,7 @@ func TestBuildSpine(t *testing.T) {
 			ids:    []int64{100},
 			want: "" +
 				"E-88\n" +
-				"└── *E-99\n" +
+				"└── ●E-99\n" +
 				"    └── E-100\n",
 		},
 		{
@@ -135,12 +135,12 @@ func TestBuildSpine(t *testing.T) {
 			parent: 88,
 			want: "" +
 				"E-88\n" +
-				"└── *E-99\n",
+				"└── ●E-99\n",
 		},
 		{
 			name:  "no parent, empty backlog: lone marked focal",
 			focal: 99,
-			want:  "*E-99\n",
+			want:  "●E-99\n",
 		},
 		{
 			name:   "spawner annotated inline on focal under real parent",
@@ -149,13 +149,13 @@ func TestBuildSpine(t *testing.T) {
 			from:   77,
 			want: "" +
 				"E-88\n" +
-				"└── *E-99 ← E-77\n",
+				"└── ●E-99 ← E-77\n",
 		},
 		{
 			name:  "spawner annotation on lone focal (no parent)",
 			focal: 99,
 			from:  77,
-			want:  "*E-99 ← E-77\n",
+			want:  "●E-99 ← E-77\n",
 		},
 		{
 			name:  "parallel backlog siblings nest under focal",
@@ -163,7 +163,7 @@ func TestBuildSpine(t *testing.T) {
 			ids:   []int64{100, 101, 102},
 			edges: map[int64][]int64{101: {100}, 102: {100}},
 			want: "" +
-				"*E-99\n" +
+				"●E-99\n" +
 				"└── E-100\n" +
 				"    ├── E-101\n" +
 				"    └── E-102\n",

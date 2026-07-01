@@ -184,11 +184,11 @@ test_task_flag_drives_tree() {
     local f
     f=$(add_task_get_id "Build e1689 task-flag tree") || return
 
-    # The tree's spine root is the focal task (the --task value), marked with *.
+    # The tree's spine root is the focal task (the --task value), marked with ●.
     # assert_* run through `guard` (timeout), which can only exec a real binary —
     # so call ${BIN} directly here, not the go_status shell function.
-    assert_has "tree marks the --task focal with * (*E-$(num_id "${f}"))" \
-        "*E-$(num_id "${f}")" "${BIN}" session-status --tree --task "$(num_id "${f}")"
+    assert_has "tree marks the --task focal with ● (●E-$(num_id "${f}"))" \
+        "●E-$(num_id "${f}")" "${BIN}" session-status --tree --task "$(num_id "${f}")"
 }
 
 # ─── 3. --focal is gone — renamed away with no alias ─────────────────────────

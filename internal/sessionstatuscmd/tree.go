@@ -21,7 +21,7 @@ const (
 
 // treeNode is one task in the rendered forest. Children are the tasks that nest
 // directly beneath it (its direct dependents in implementation order). focal
-// marks the session's current ("this") task, rendered with a `*` prefix; from is
+// marks the session's current ("this") task, rendered with a `●` prefix; from is
 // the spawner task id, rendered inline on the focal as ` ← E-<from>` (0 when the
 // window was not spawned).
 type treeNode struct {
@@ -33,8 +33,8 @@ type treeNode struct {
 
 // renderTree writes the IDs-only implementation-order tree for the session to w
 // as an ancestry spine (E-1684, E-1694): the focal's real task-tree parent is the
-// root, the focal ("this") task nests under it marked `*` and annotated with its
-// spawner inline (`*E-<focal> ← E-<spawner>`), and the do/plan backlog nests
+// root, the focal ("this") task nests under it marked `●` and annotated with its
+// spawner inline (`●E-<focal> ← E-<spawner>`), and the do/plan backlog nests
 // under the focal in implementation order. The backlog structure is derived from
 // the blocked-by DAG (monitor.SessionStatusBlockerEdges) unless a per-session order
 // (monitor.SessionStatusDoOrder) is present, which overrides it. No legend, titles,
@@ -268,11 +268,14 @@ func renderChildren(w io.Writer, children []*treeNode, prefix string) {
 	}
 }
 
-// nodeLabel is the rendered id, prefixed with `*` for the focal ("this") task and
-// suffixed with ` ← E-<from>` when the focal was spawned (session lineage).
+// nodeLabel is the rendered id, prefixed with `●` for the focal ("this") task and
+// suffixed with ` ← E-<from>` when the focal was spawned (session lineage). The
+// `●` matches the flat view's `● this` icon so the two views mark "this" task
+// the same way (E-1701); it does not clash with the flat view's ◆ dirty marker,
+// which sits between the type letter and id, not as a leading focal marker.
 func nodeLabel(n *treeNode) string {
 	if n.focal {
-		label := "*" + taskLabel(n.id)
+		label := "●" + taskLabel(n.id)
 		if n.from > 0 {
 			label += " ← " + taskLabel(n.from)
 		}

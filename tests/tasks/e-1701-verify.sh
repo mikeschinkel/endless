@@ -163,4 +163,13 @@ assert_not_contains "clean worktree → no ◆"            "◆"        status 7
 assert_not_contains "no worktree    → no ◆"            "◆"        status 703
 assert_contains     "no worktree    → space before id" "T E-703" status 703
 
+# tree CMD — the IDs-only --tree view for a given focal task. The dirty ◆ is a
+# FLAT-view marker only; --tree must NOT carry it (separate render path).
+tree() { "${BIN}" --config-dir "${CFG}" session-status --tree --task "$1"; }
+
+section "4. Cross-view focal marker: --tree uses ● (matches flat's ● this)"
+assert_contains     "--tree marks focal with ●"        "●E-701" tree 701
+assert_not_contains "--tree no longer uses * for focal" "*E-701" tree 701
+assert_not_contains "--tree carries no flat ◆ dirty marker" "◆"  tree 701
+
 summary

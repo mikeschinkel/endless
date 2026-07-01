@@ -210,15 +210,15 @@ test_tree_roots_parent_annotates_from() {
     local root_line
     root_line=$(printf '%s\n' "${out}" | head -1)
 
-    # Spine: parent is the flush-left root line; focal nests under it marked * and
+    # Spine: parent is the flush-left root line; focal nests under it marked ● and
     # annotated ← spawner; the spawner is NOT the root (pre-E-1694 behavior).
     if [[ "${root_line}" == "${p}" ]]; then
         report_pass "tree root line is the real parent ${p}"
     else
         report_fail "tree root line is the real parent ${p}" "${p}" "${root_line}"
     fi
-    assert_contains "focal annotated '*${f} ← ${s}'" \
-        "*${f} ← ${s}" "${out}"
+    assert_contains "focal annotated '●${f} ← ${s}'" \
+        "●${f} ← ${s}" "${out}"
     if [[ "${root_line}" != "${s}" ]]; then
         report_pass "spawner ${s} is NOT the tree root line"
     else
