@@ -206,12 +206,9 @@ func runClaude(args []string) error {
 		// tmux window (and thus its @endless_spawned_by marker) but
 		// have their own session_id; binding them would create a
 		// phantom co-owner on the spawned task (E-1300).
+		spawnBound := false
 		if payload.AgentID == "" {
-			if spawnedBy := tmuxSpawnedBy(); spawnedBy != "" {
-				if taskID := tmuxTaskID(); taskID > 0 {
-					monitor.BindSessionToTask(payload.SessionID, projectID, taskID)
-				}
-			}
+			spawnBound = trySpawnBind(projectID, payload)
 		}
 		// Worktree adoption (E-971 Layer D). If cwd is inside an
 		// endless-managed worktree, claim the lock or refuse if
@@ -223,20 +220,11 @@ func runClaude(args []string) error {
 				AdditionalContext: refusal,
 			})
 		}
-		// Cwd-based auto-bind (E-1291): if cwd is inside an endless
-		// worktree and the spawn-marker path didn't already bind, set
-		// the session's active_task_id from the worktree companion.
-		// Skipped for Agent-tool subagents — they share the parent's
-		// cwd but represent tool use, not user claim intent; binding
-		// them would create a phantom co-owner. Bind only — does not
-		// flip task status.
-		// Skipped for background agents (E-1568): their dispatch row
-		// already carries active_task_id/active_epic_id, and the tmux-
-		// oriented bind (process=TMUX_PANE, state flips) is meaningless
-		// for a headless agent — decorateBgSession above is their path.
-		if payload.AgentID == "" && tmuxSpawnedBy() == "" && os.Getenv("CLAUDE_JOB_DIR") == "" {
-			autoBindFromCwd(projectID, payload)
-		}
+		// Cwd-based auto-bind fallback (E-1291 / E-1700). Runs after
+		// worktree adoption so a refused session is never bound. See
+		// maybeCwdBind for the gating rationale (spawn-race recovery,
+		// subagent / background-agent exclusions).
+		maybeCwdBind(projectID, payload, spawnBound)
 		return handleTaskContextInjection(projectID, payload)
 
 	case "UserPromptSubmit":
@@ -971,7 +959,9 @@ func isPlanFile(path string) bool {
 
 // tmuxTaskID reads @endless_task_id from the current tmux window.
 // Returns 0 if not in tmux or not set.
-func tmuxTaskID() int64 {
+// tmuxTaskID is a package var (not a plain func) so tests can stub the tmux
+// read to simulate the SessionStart marker-read race (E-1700).
+var tmuxTaskID = func() int64 {
 	pane := os.Getenv("TMUX_PANE")
 	if pane == "" {
 		return 0
@@ -1045,7 +1035,9 @@ func decorateBgSession(payload claudePayload) {
 // Set only by `endless task spawn` (carries the spawning session's id or
 // a `pid-<n>` fallback for non-Claude spawners). Empty string means this
 // window was not created by spawn — callers should skip spawn-flow logic.
-func tmuxSpawnedBy() string {
+// tmuxSpawnedBy is a package var (not a plain func) so tests can stub the tmux
+// read to simulate a spawned window whose @endless_task_id read raced (E-1700).
+var tmuxSpawnedBy = func() string {
 	pane := os.Getenv("TMUX_PANE")
 	if pane == "" {
 		return ""
@@ -1057,6 +1049,47 @@ func tmuxSpawnedBy() string {
 		return ""
 	}
 	return strings.TrimSpace(string(out))
+}
+
+// trySpawnBind attempts the spawn-marker auto-bind and reports whether the
+// session was actually bound. Returns false when there is no spawn marker, the
+// @endless_task_id window option is not readable (a tmux read race, E-1700), or
+// the DB write fails — signaling the caller to fall back to cwd-derived binding.
+// Caller must already have screened out subagents.
+func trySpawnBind(projectID int64, payload claudePayload) bool {
+	if tmuxSpawnedBy() == "" {
+		return false
+	}
+	taskID := tmuxTaskID()
+	if taskID <= 0 {
+		return false
+	}
+	if err := monitor.BindSessionToTask(payload.SessionID, projectID, taskID); err != nil {
+		log.Printf("spawn-bind session %s to task %d: %v", payload.SessionID, taskID, err)
+		return false
+	}
+	return true
+}
+
+// maybeCwdBind runs the cwd-derived SessionStart auto-bind when the spawn-marker
+// path did not bind (spawnBound == false). Gating on !spawnBound rather than "no
+// spawn marker" (E-1700) is the fix: a spawned window can carry
+// @endless_spawned_by while its @endless_task_id read races to empty (or
+// BindSessionToTask errors), leaving trySpawnBind a no-op. payload.CWD is the
+// worktree for a spawned worker, so this fallback binds reliably and closes the
+// gap where active_task_id stayed NULL and the status line showed "claim a task".
+//
+// Skipped for Agent-tool subagents — they share the parent's cwd but represent
+// tool use, not user claim intent; binding them would create a phantom co-owner.
+// Skipped for background agents (E-1568): their dispatch row already carries
+// active_task_id/active_epic_id, and the tmux-oriented bind is meaningless for a
+// headless agent — decorateBgSession is their path. Bind only; task status is
+// unchanged.
+func maybeCwdBind(projectID int64, payload claudePayload, spawnBound bool) {
+	if payload.AgentID != "" || spawnBound || os.Getenv("CLAUDE_JOB_DIR") != "" {
+		return
+	}
+	autoBindFromCwd(projectID, payload)
 }
 
 // autoBindFromCwd implements the E-1291 cwd-based SessionStart auto-bind.
