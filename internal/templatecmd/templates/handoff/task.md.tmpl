@@ -26,9 +26,9 @@ This task has {{.child_count}} children — read them with `endless task show E-
 {{- end}}
 
 {{if .bg -}}
-Final message: a 1–2 sentence summary and the how-to-test. You're a background agent — just stop when done; the user reads this with `claude attach`.
+Final message — report ONLY what `endless session status` can't already show: git/worktree side-effects (uncommitted changes, dangling tags, stray artifacts) and state outside endless (CI, external services). Do NOT recap task status, phase, or relationships — `session status` already shows those. Then the how-to-test. You're a background agent — just stop when done; the user reads this with `claude attach`.
 {{- else -}}
-Final message: a 1–2 sentence summary, the how-to-test, and this return line — make the return line prominent:
+Final message — report ONLY what `endless session status` can't already show: git/worktree side-effects (uncommitted changes, dangling tags, stray artifacts), the landed-vs-worktree delta, and state outside endless (CI, external services). Do NOT recap task status, phase, or relationships — `session status` already shows those. Then the how-to-test and this return line — make the return line prominent:
 
 ```
 tmux move-window -t archive: && tmux switch-client -t {{.return_anchor}}

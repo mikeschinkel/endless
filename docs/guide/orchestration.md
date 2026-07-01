@@ -219,6 +219,8 @@ The handoff is deliberately lean — it delegates the workflow rules to `endless
 
 To change what every spawned session is told, edit the template — see [Customizing handoff templates](#customizing-handoff-templates). There is no per-task prompt to maintain.
 
+Every handoff's closing `Final message` line follows one discipline: **report only what `endless session status` can't already show.** A spawned session's end-of-work message should surface git/worktree side-effects (uncommitted changes, dangling tags, stray artifacts), the landed-vs-worktree delta, and state outside endless (CI, external services) — plus the how-to-test and return line. It must **not** recap the task's status, phase, or relationships: `session status` renders those already, so restating them is duplication that adds to the information overload Endless exists to reduce.
+
 ### `endless task spawn`
 
 ```bash
