@@ -175,3 +175,66 @@ func TestRenderColumnsAndTruncation(t *testing.T) {
 		}
 	}
 }
+
+// TestEraseEachLineToEOL guards the E-1699 fix: the live `session monitor`
+// repaint must erase each line to end-of-line so that when a row's new title is
+// shorter than the prior frame's, no stale tail survives. It asserts the exact
+// byte transform the production repaint applies before the caller's \x1b[H … \x1b[J.
+func TestEraseEachLineToEOL(t *testing.T) {
+	const K = "\x1b[K"
+	cases := []struct {
+		name  string
+		frame string
+		want  string
+	}{
+		{"two trailing-newline rows", "row A\nrow B\n", "row A" + K + "\nrow B" + K + "\n" + K},
+		{"no trailing newline", "row A\nrow B", "row A" + K + "\nrow B" + K},
+		{"single line", "only\n", "only" + K + "\n" + K},
+		{"empty frame", "", K},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := eraseEachLineToEOL(c.frame); got != c.want {
+				t.Errorf("eraseEachLineToEOL(%q)\n  got:  %q\n  want: %q", c.frame, got, c.want)
+			}
+		})
+	}
+
+	// The whole point: repainting a SHORTER frame over a LONGER one must leave
+	// no leftover characters. Simulate a terminal's line buffer cell-by-cell:
+	// start from the long frame's line, overwrite from column 0 with the new
+	// (erased) line, and confirm the erase truncates the old tail.
+	long := "Row A: E-1698 leftover long title here"
+	short := "Row A: E-1461"
+	wrapped := eraseEachLineToEOL(short + "\n")
+	newLine := strings.SplitN(wrapped, "\n", 2)[0] // "Row A: E-1461\x1b[K"
+	if overwriteLine(long, newLine) != short {
+		t.Errorf("stale tail survived: %q over %q -> %q, want %q",
+			newLine, long, overwriteLine(long, newLine), short)
+	}
+}
+
+// overwriteLine models a VT100 line buffer: prev is the existing line content;
+// next is written from column 0. A literal rune overwrites one cell; \x1b[K
+// erases from the cursor to end-of-line (drops the remaining old cells). Returns
+// the resulting visible line — used to prove the erase kills a shorter title's
+// leftover tail.
+func overwriteLine(prev, next string) string {
+	cells := []rune(prev)
+	col := 0
+	for i := 0; i < len(next); i++ {
+		if strings.HasPrefix(next[i:], "\x1b[K") {
+			cells = cells[:min(col, len(cells))]
+			i += len("\x1b[K") - 1
+			continue
+		}
+		r := rune(next[i])
+		if col < len(cells) {
+			cells[col] = r
+		} else {
+			cells = append(cells, r)
+		}
+		col++
+	}
+	return string(cells)
+}

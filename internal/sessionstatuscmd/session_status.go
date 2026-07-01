@@ -233,14 +233,9 @@ func monitorLoop(focal, parentSession int64, noTaskHint string, all bool, colsOv
 			os.Exit(1)
 		}
 		if frame := b.String(); frame != prev {
-			// Home, repaint, then clear to end-of-display so a now-shorter frame
-			// leaves no stale rows behind. Erase each line to end-of-LINE too
-			// (\x1b[K before every newline, plus one after the last line) so a
-			// row whose new title is shorter than the prior frame's doesn't keep
-			// the old tail — \x1b[J alone only clears the rows below the cursor's
-			// final position, not the tails of overwritten lines above it (E-1699).
-			eol := strings.ReplaceAll(frame, "\n", "\x1b[K\n") + "\x1b[K"
-			fmt.Fprint(out, "\x1b[H"+eol+"\x1b[J")
+			// Home, repaint each line (erased to end-of-line), then clear to
+			// end-of-display so a now-shorter frame leaves no stale rows behind.
+			fmt.Fprint(out, "\x1b[H"+eraseEachLineToEOL(frame)+"\x1b[J")
 			prev = frame
 		}
 		select {
@@ -250,6 +245,17 @@ func monitorLoop(focal, parentSession int64, noTaskHint string, all bool, colsOv
 		case <-ticker.C:
 		}
 	}
+}
+
+// eraseEachLineToEOL wraps a rendered frame so that repainting it over a prior
+// frame leaves no stale characters. It appends an erase-to-end-of-line (\x1b[K)
+// before every newline and one after the final line, so a row whose new title
+// is shorter than the prior frame's on that row does not keep the old tail. The
+// caller's trailing \x1b[J still clears whole rows below a now-shorter frame;
+// \x1b[J alone cannot, because it only erases from the cursor's final position
+// to end-of-display, never the tails of the overwritten lines above it (E-1699).
+func eraseEachLineToEOL(frame string) string {
+	return strings.ReplaceAll(frame, "\n", "\x1b[K\n") + "\x1b[K"
 }
 
 // renderTo writes the legend and rows to w. focal==0 (or no rows) prints the
