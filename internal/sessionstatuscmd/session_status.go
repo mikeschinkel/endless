@@ -234,8 +234,13 @@ func monitorLoop(focal, parentSession int64, noTaskHint string, all bool, colsOv
 		}
 		if frame := b.String(); frame != prev {
 			// Home, repaint, then clear to end-of-display so a now-shorter frame
-			// leaves no stale rows behind.
-			fmt.Fprint(out, "\x1b[H"+frame+"\x1b[J")
+			// leaves no stale rows behind. Erase each line to end-of-LINE too
+			// (\x1b[K before every newline, plus one after the last line) so a
+			// row whose new title is shorter than the prior frame's doesn't keep
+			// the old tail — \x1b[J alone only clears the rows below the cursor's
+			// final position, not the tails of overwritten lines above it (E-1699).
+			eol := strings.ReplaceAll(frame, "\n", "\x1b[K\n") + "\x1b[K"
+			fmt.Fprint(out, "\x1b[H"+eol+"\x1b[J")
 			prev = frame
 		}
 		select {
