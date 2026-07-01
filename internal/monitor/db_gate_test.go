@@ -14,9 +14,11 @@ func resetDBContext(t *testing.T) {
 	t.Helper()
 	dbContextDir = ""
 	dbPathOverride = ""
+	dbContextFromFlag = false
 	t.Cleanup(func() {
 		dbContextDir = ""
 		dbPathOverride = ""
+		dbContextFromFlag = false
 	})
 }
 
@@ -333,6 +335,13 @@ func TestSelfDetectWorktreeSandbox(t *testing.T) {
 		if dbContextDir != sandboxDir {
 			t.Errorf("dbContextDir = %q, want %q", dbContextDir, sandboxDir)
 		}
+		// A cwd-detected sandbox must NOT count as an explicit flag context, so
+		// the hook/channel/tmux main pin still applies (E-1700). Otherwise a
+		// self-dev dev session's session/pane-state writes land in the sandbox,
+		// where the spawned task doesn't exist (FK-fails) instead of main.
+		if HasExplicitDBContext() {
+			t.Error("HasExplicitDBContext() = true after cwd self-detect; want false so PinMainDB still runs")
+		}
 	})
 
 	t.Run("named-alternate dir not recognized -> no-op (ED-1515)", func(t *testing.T) {
@@ -383,6 +392,74 @@ func TestSelfDetectWorktreeSandbox(t *testing.T) {
 		SelfDetectWorktreeSandbox()
 		if dbContextDir != "" {
 			t.Errorf("dbContextDir = %q, want empty (cwd not in a worktree)", dbContextDir)
+		}
+	})
+}
+
+// TestSelfDetectVsExplicit_MainPinRouting is the E-1700 routing regression. It
+// exercises both self-dev use cases through the exact main.go guard
+// (`if !HasExplicitDBContext() { PinMainDB() }`):
+//
+//  1. Developing endless (a real dev session): the sandbox is discovered from
+//     cwd, so session/pane-state writes must go to MAIN (where the spawned task
+//     exists) while config/logs follow the sandbox.
+//  2. Testing endless (an explicit --config-dir): the pin is suppressed so
+//     writes go to the chosen sandbox/temp DB.
+func TestSelfDetectVsExplicit_MainPinRouting(t *testing.T) {
+	newSelfDevWorktree := func(t *testing.T) (wt, sandboxDir string) {
+		root := t.TempDir()
+		endless := filepath.Join(root, ".endless")
+		wt = filepath.Join(endless, "worktrees", "e-1700")
+		if err := os.MkdirAll(wt, 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(endless, "config.json"), []byte(`{"self_dev": true}`), 0644); err != nil {
+			t.Fatal(err)
+		}
+		cache := t.TempDir()
+		t.Setenv("XDG_CACHE_HOME", cache)
+		sandboxDir = filepath.Join(cache, "endless", "sandboxes", "e-1700", "endless")
+		if err := os.MkdirAll(sandboxDir, 0755); err != nil {
+			t.Fatal(err)
+		}
+		return wt, sandboxDir
+	}
+
+	// applyGuard mirrors cmd/endless-go/main.go's hook/channel/tmux pin.
+	applyGuard := func() {
+		if !HasExplicitDBContext() {
+			PinMainDB()
+		}
+	}
+
+	t.Run("dev session (cwd self-detect): DB->main, config->sandbox", func(t *testing.T) {
+		resetDBContext(t)
+		wt, sandboxDir := newSelfDevWorktree(t)
+		t.Chdir(wt)
+
+		SelfDetectWorktreeSandbox() // as main.go runs it, before the pin
+		applyGuard()
+
+		if got := DBPath(); !strings.HasSuffix(got, filepath.Join(".config", "endless", "endless.db")) || strings.HasPrefix(got, sandboxDir) {
+			t.Errorf("DBPath() = %q, want the real main DB (not under sandbox %q)", got, sandboxDir)
+		}
+		if got := ConfigDir(); got != sandboxDir {
+			t.Errorf("ConfigDir() = %q, want sandbox %q (config/logs follow the sandbox)", got, sandboxDir)
+		}
+	})
+
+	t.Run("test harness (explicit --config-dir): DB->that dir", func(t *testing.T) {
+		resetDBContext(t)
+		wt, _ := newSelfDevWorktree(t)
+		t.Chdir(wt)
+		explicit := t.TempDir()
+
+		SetDBContextDir(explicit) // stands in for ConsumeDBContextFlag(--config-dir)
+		SelfDetectWorktreeSandbox() // no-ops: explicit already set
+		applyGuard()                // no-ops: HasExplicitDBContext() is true
+
+		if got := DBPath(); got != filepath.Join(explicit, "endless.db") {
+			t.Errorf("DBPath() = %q, want explicit %q (flag beats the main pin)", got, filepath.Join(explicit, "endless.db"))
 		}
 	})
 }

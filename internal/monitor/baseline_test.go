@@ -51,7 +51,7 @@ func withTestDB(t *testing.T) *sql.DB {
 	applySchema(t, db)
 
 	prevOnce, prevConn, prevErr := dbOnce, dbConn, dbErr
-	prevCtxDir, prevPathOverride := dbContextDir, dbPathOverride
+	prevCtxDir, prevPathOverride, prevFromFlag := dbContextDir, dbPathOverride, dbContextFromFlag
 
 	dbOnce = &sync.Once{}
 	dbOnce.Do(func() {}) // mark consumed so DB() returns dbConn directly
@@ -65,6 +65,7 @@ func withTestDB(t *testing.T) *sql.DB {
 		dbErr = prevErr
 		dbContextDir = prevCtxDir
 		dbPathOverride = prevPathOverride
+		dbContextFromFlag = prevFromFlag
 	})
 	return db
 }

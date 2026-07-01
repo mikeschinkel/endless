@@ -42,6 +42,17 @@ var (
 	// the exact failure mode the gate exists to kill. Only a per-invocation
 	// flag (or the hook's ForceRealDB) counts as explicit.
 	dbContextDir string
+
+	// dbContextFromFlag distinguishes an EXPLICIT --config-dir (the trustworthy
+	// per-invocation flag, or a test deliberately targeting a DB) from a
+	// cwd-self-detected sandbox (SelfDetectWorktreeSandbox). Both set
+	// dbContextDir so ConfigDir()/the E-1429 gate follow the same target, but
+	// only the explicit flag should suppress the hook/channel/tmux PinMainDB
+	// override. Without this split a self-dev worktree's own dev session would
+	// have its session/pane-state writes routed to the sandbox (where the
+	// spawned task does not exist -> active_task_id FK-fails -> NULL -> status
+	// line shows "claim a task"), instead of the real ledger per E-1450 (E-1700).
+	dbContextFromFlag bool
 )
 
 // ConfigDir returns the Endless configuration directory. When an explicit DB
@@ -114,21 +125,37 @@ func ForceRealDB() {
 	dbPathOverride = filepath.Join(home, ".config", "endless", "endless.db")
 }
 
-// HasExplicitDBContext reports whether a --config-dir was consumed for this
-// process (dbContextDir set). Callers that would otherwise PinMainDB use this
-// to let an explicit per-invocation DB target win — the E-1429 contract is that
-// an explicit flag is trustworthy and beats the env-driven main pin. Production
-// invokers of the pinned binaries (tmux, the Claude hook, the MCP channel) never
-// pass --config-dir, so this stays false there and the main pin still applies;
-// only tests / sandbox tooling that pass --config-dir flip it true.
+// HasExplicitDBContext reports whether an EXPLICIT --config-dir was consumed for
+// this process (as opposed to a cwd-self-detected sandbox). Callers that would
+// otherwise PinMainDB use this to let an explicit per-invocation DB target win —
+// the E-1429 contract is that an explicit flag is trustworthy and beats the
+// env-driven main pin. Production invokers of the pinned binaries (tmux, the
+// Claude hook, the MCP channel) never pass --config-dir, so this stays false
+// there and the main pin still applies — including for a self-dev worktree's own
+// dev session, whose sandbox is discovered from cwd (SelfDetectWorktreeSandbox),
+// not from a flag, so it must NOT suppress the pin (E-1700). Only tests / sandbox
+// tooling that pass --config-dir flip it true.
 func HasExplicitDBContext() bool {
-	return dbContextDir != ""
+	return dbContextFromFlag
 }
 
-// SetDBContextDir records an explicit DB/config directory for this process,
-// satisfying the E-1429 self-dev-worktree gate. Called by ConsumeDBContextFlag
-// when the Python CLI threads --config-dir to a Go subprocess.
+// SetDBContextDir records an EXPLICIT DB/config directory for this process,
+// satisfying the E-1429 self-dev-worktree gate and marking the context as
+// flag-provided so it beats the hook/channel/tmux main pin. Called by
+// ConsumeDBContextFlag when the Python CLI threads --config-dir to a Go
+// subprocess (and by tests that deliberately target a DB). Self-detection from
+// cwd uses setDetectedContextDir instead, which does NOT set the flag.
 func SetDBContextDir(dir string) {
+	dbContextDir = dir
+	dbContextFromFlag = true
+}
+
+// setDetectedContextDir records a cwd-self-detected sandbox as the config/DB
+// context WITHOUT marking it flag-explicit. It satisfies ConfigDir() and the
+// E-1429 gate the same way SetDBContextDir does, but leaves HasExplicitDBContext
+// false so the hook/channel/tmux PinMainDB override still moves the DB to main
+// (E-1450/E-1700). Only SelfDetectWorktreeSandbox calls this.
+func setDetectedContextDir(dir string) {
 	dbContextDir = dir
 }
 
@@ -279,7 +306,10 @@ func SelfDetectWorktreeSandbox() {
 	if info, err := os.Stat(sandboxDir); err != nil || !info.IsDir() {
 		return
 	}
-	SetDBContextDir(sandboxDir)
+	// setDetectedContextDir (not SetDBContextDir): a cwd-detected sandbox routes
+	// config/logs to the sandbox but must NOT suppress the hook/channel/tmux main
+	// pin — session/pane state belongs in the real ledger (E-1450/E-1700).
+	setDetectedContextDir(sandboxDir)
 }
 
 // projectIsSelfDev reports whether <root>/.endless/config.json has

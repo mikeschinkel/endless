@@ -4,18 +4,28 @@
 # active_task_id no longer ends up NULL (which made its tmux status line show
 # "claim a task").
 #
-# The change lives in internal/hookcmd/claude.go: the SessionStart spawn-marker
-# bind is now a bool-returning trySpawnBind, and the cwd-derived fallback
-# (maybeCwdBind) is gated on !spawnBound rather than "no @endless_spawned_by
-# marker". So when a spawned window carries @endless_spawned_by but its
-# @endless_task_id read races to empty (or BindSessionToTask errors), the cwd
-# fallback still binds the session to the task its worktree path encodes.
+# Two layers were fixed:
 #
-# The behavior is exercised against the REAL code path by the Go tests in
-# internal/hookcmd/spawn_bind_test.go — this script compiles the affected
-# packages and runs each behavior as a named check, so a single command tells
-# Mike pass/fail per case. It also re-runs the pinned chat-takeover test to show
-# the intended active_task_id-clearing semantics were preserved.
+#   1. internal/hookcmd/claude.go — the SessionStart spawn-marker bind is now a
+#      bool-returning trySpawnBind, and the cwd-derived fallback (maybeCwdBind)
+#      is gated on !spawnBound rather than "no @endless_spawned_by marker". So a
+#      spawn-marker read race still binds the session via its worktree cwd.
+#
+#   2. internal/monitor/db.go — the ROOT cause for self-dev spawns: a
+#      cwd-self-detected sandbox (SelfDetectWorktreeSandbox) no longer
+#      masquerades as an explicit --config-dir, so the hook/channel/tmux
+#      PinMainDB override still routes session/pane-state writes to MAIN (where
+#      the spawned task exists) while config/logs follow the sandbox. Without
+#      this the bind hit the sandbox, where the task is absent, and FK-failed to
+#      NULL. An explicit --config-dir (tests exercising endless) still wins and
+#      routes to the sandbox.
+#
+# The behavior is exercised against the REAL code paths by the Go tests in
+# internal/hookcmd/spawn_bind_test.go and internal/monitor/db_gate_test.go — this
+# script compiles the affected packages and runs each behavior as a named check,
+# so a single command tells Mike pass/fail per case. It also re-runs the pinned
+# chat-takeover test to show the intended active_task_id-clearing semantics were
+# preserved.
 #
 # Run from anywhere inside the worktree (esu cd's here and exports the session):
 #   ./tests/tasks/e-1700-verify.sh
@@ -131,6 +141,17 @@ test_fix_behavior() {
         "${HOOKCMD_PKG}" "TestSessionStartBind_CwdFallbackOnSpawnMarkerRace"
 }
 
+test_routing() {
+    section "Root cause — self-dev session state routes to main, not sandbox"
+
+    assert_go_test "cwd self-detect does NOT suppress the main pin; explicit --config-dir does" \
+        "${MONITOR_PKG}" "TestSelfDetectVsExplicit_MainPinRouting"
+    assert_go_test "PinMainDB still moves the DB to main while config/logs stay on the sandbox" \
+        "${MONITOR_PKG}" "TestPinMainDB"
+    assert_go_test "the self-dev worktree gate stays satisfied by both flag and pin contexts" \
+        "${MONITOR_PKG}" "TestGuardWorktreeDBContext"
+}
+
 test_preserved_semantics() {
     section "Regression — intended chat-takeover clearing is preserved"
 
@@ -183,6 +204,7 @@ main() {
 
     test_compiles
     test_fix_behavior
+    test_routing
     test_preserved_semantics
     test_no_regression
 
