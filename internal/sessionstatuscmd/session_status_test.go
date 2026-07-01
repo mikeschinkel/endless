@@ -134,13 +134,15 @@ func TestBlockField(t *testing.T) {
 
 func TestRenderEmptyFocal(t *testing.T) {
 	var b strings.Builder
-	renderTo(&b, nil, 0, 90, false)
+	renderTo(&b, nil, 0, hintClaimBind, 90, false)
 	out := b.String()
 	if !strings.Contains(out, legend) {
 		t.Errorf("legend missing from empty render:\n%s", out)
 	}
-	if !strings.Contains(out, "no active task") {
-		t.Errorf("empty hint missing:\n%s", out)
+	// The no-focal render shows the claim/bind hint, never an unrelated task list
+	// (E-1698): the caller passes the pane's resolved hint verbatim.
+	if !strings.Contains(out, "claim or bind") {
+		t.Errorf("claim/bind hint missing:\n%s", out)
 	}
 }
 
@@ -151,7 +153,7 @@ func TestRenderColumnsAndTruncation(t *testing.T) {
 		{ID: 1684, Title: "Add session next --tree showing task IDs in implementation order", Status: "confirmed", Phase: "now", TypeSlug: "task", IsFrom: true},
 	}
 	var b strings.Builder
-	renderTo(&b, rows, 1465, 40, false)
+	renderTo(&b, rows, 1465, hintClaimBind, 40, false)
 	lines := strings.Split(strings.TrimRight(b.String(), "\n"), "\n")
 	// legend + 3 rows
 	if len(lines) != 4 {

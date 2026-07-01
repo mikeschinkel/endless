@@ -39,9 +39,9 @@ type treeNode struct {
 // the blocked-by DAG (monitor.SessionStatusBlockerEdges) unless a per-session order
 // (monitor.SessionStatusDoOrder) is present, which overrides it. No legend, titles,
 // or icons — IDs only. focal==0 prints a short hint.
-func renderTree(w io.Writer, rows []monitor.SessionStatusRow, focal int64) error {
+func renderTree(w io.Writer, rows []monitor.SessionStatusRow, focal int64, noTaskHint string) error {
 	if focal == 0 {
-		fmt.Fprintln(w, "  (no active task for this window)")
+		fmt.Fprintln(w, noTaskHint)
 		return nil
 	}
 

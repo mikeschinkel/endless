@@ -1,8 +1,6 @@
 package monitor
 
 import (
-	"database/sql"
-	"errors"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -48,48 +46,36 @@ type SessionStatusRow struct {
 // with the prototype spec (~/.config/endless/session-status.sql).
 const terminalStatusSet = "'confirmed','assumed','declined','obsolete','completed'"
 
-// ResolveSessionStatusFocal resolves the focal task for the session-status view,
-// matching claude.go's documented priority (session active task >
-// @endless_task_id) with a global most-recent last resort (E-1465 / ED-1523):
+// ResolveSessionStatusFocal resolves the focal task for the session-status/monitor
+// view through the SAME pane-scoped path the tmux status line uses (GetPaneStatus),
+// so the two surfaces never disagree (E-1698). It returns the resolved focal task
+// id (0 when none) and the PaneStatusKind so the caller can render the matching
+// hint — the identical classification the status bar shows.
 //
-//  1. GetActiveTaskForPane(tmuxPane) — the live session's active_task via
-//     process match (state != 'ended'), pane then window-scoped.
-//  2. The window's @endless_task_id tmux option — the COMMON fallback when (1)
-//     is empty (active windows are often needs_input with NULL active_task, and
-//     bound sessions can be ended with NULL process).
-//  3. The most-recently-active live session's active_task_id, machine-wide.
+// Only PaneStatusActive yields a focal task (the live session's active_task via
+// pane→window process match). Every other kind returns focal 0:
 //
-// Returns 0 (no error) when nothing resolves — the caller renders an empty view.
-func ResolveSessionStatusFocal(tmuxPane string) (int64, error) {
-	if info, err := GetActiveTaskForPane(tmuxPane); err == nil {
-		return info.TaskID, nil
-	} else if !errors.Is(err, ErrNoActiveTask) {
-		return 0, err
-	}
-
-	if v := tmuxWindowOption(tmuxPane, "@endless_task_id"); v != "" {
-		if id, err := strconv.ParseInt(v, 10, 64); err == nil && id > 0 {
-			return id, nil
-		}
-	}
-
-	db, err := DB()
+//   - PaneStatusNoTask          — a session exists in this window but no active
+//     task; the bar shows "claim a task".
+//   - PaneStatusClaudeNoSession — Claude is in the pane but no session row exists.
+//   - PaneStatusNone            — no Endless context (also the non-tmux case,
+//     tmuxPane == "").
+//
+// This deliberately DROPS the old window-@endless_task_id and machine-wide
+// most-recent fallbacks (E-1465 / ED-1523): the machine-wide one returned an
+// UNRELATED task for a pane with nothing of its own, and the status line — which
+// has no such fallback — already proves the hint-based behavior is correct
+// (E-1698). Both claim and bind write the session's active_task_id, so bound
+// windows still resolve via the pane-scoped path with no window-option fallback.
+func ResolveSessionStatusFocal(tmuxPane string) (int64, PaneStatusKind, error) {
+	ps, err := GetPaneStatus(tmuxPane)
 	if err != nil {
-		return 0, err
+		return 0, PaneStatusNone, err
 	}
-	var id int64
-	err = db.QueryRow(
-		`SELECT active_task_id FROM sessions
-		  WHERE state != 'ended' AND active_task_id IS NOT NULL
-		  ORDER BY last_activity DESC LIMIT 1`,
-	).Scan(&id)
-	if errors.Is(err, sql.ErrNoRows) {
-		return 0, nil
+	if ps.Kind == PaneStatusActive {
+		return ps.Task.TaskID, ps.Kind, nil
 	}
-	if err != nil {
-		return 0, err
-	}
-	return id, nil
+	return 0, ps.Kind, nil
 }
 
 // ResolveSessionStatusParentSession reads the window's @endless_spawned_by marker

@@ -296,6 +296,87 @@ func TestSessionStatusRows_LandedColumn(t *testing.T) {
 	}
 }
 
+// TestRepro_E1698_UnrelatedFocalFallback reproduces E-1698: when the pane has
+// NO session/active task of its own, the old step-3 machine-wide last resort
+// returned an UNRELATED live session's task. The fix drops that fallback, so the
+// resolver must return 0 (→ claim/bind hint), not the stray task.
+func TestRepro_E1698_UnrelatedFocalFallback(t *testing.T) {
+	db := withTestDB(t)
+	seedProject(t, db, 1, "p1", "/p1")
+	// An unrelated live session on task 700, bound to a DIFFERENT pane.
+	snTask(t, db, 700, 1, "underway", "now", "")
+	if _, err := db.Exec(
+		`INSERT INTO sessions (session_id, project_id, platform, state, process, active_task_id, last_activity)
+		 VALUES (NULL, 1, 'claude', 'working', '%888', 700, '2026-06-20T00:00:00')`,
+	); err != nil {
+		t.Fatalf("seed unrelated session: %v", err)
+	}
+
+	// fakePane has no session of its own; the resolver must NOT invent task 700.
+	focal, kind, err := ResolveSessionStatusFocal(fakePane)
+	if err != nil {
+		t.Fatalf("ResolveSessionStatusFocal: %v", err)
+	}
+	if focal != 0 {
+		t.Errorf("focal = %d, want 0 (no unrelated machine-wide fallback)", focal)
+	}
+	if kind != PaneStatusNone {
+		t.Errorf("kind = %d, want PaneStatusNone (%d)", kind, PaneStatusNone)
+	}
+}
+
+// TestResolveSessionStatusFocal_ActivePaneResolves pins the happy path: a live
+// session bound to THIS pane resolves its own active task with PaneStatusActive.
+func TestResolveSessionStatusFocal_ActivePaneResolves(t *testing.T) {
+	db := withTestDB(t)
+	seedProject(t, db, 1, "p1", "/p1")
+	snTask(t, db, 810, 1, "underway", "now", "")
+	if _, err := db.Exec(
+		`INSERT INTO sessions (session_id, project_id, platform, state, process, active_task_id, last_activity)
+		 VALUES (NULL, 1, 'claude', 'working', ?, 810, '2026-06-20T00:00:00')`,
+		fakePane,
+	); err != nil {
+		t.Fatalf("seed session: %v", err)
+	}
+
+	focal, kind, err := ResolveSessionStatusFocal(fakePane)
+	if err != nil {
+		t.Fatalf("ResolveSessionStatusFocal: %v", err)
+	}
+	if focal != 810 {
+		t.Errorf("focal = %d, want 810 (this pane's own active task)", focal)
+	}
+	if kind != PaneStatusActive {
+		t.Errorf("kind = %d, want PaneStatusActive (%d)", kind, PaneStatusActive)
+	}
+}
+
+// TestResolveSessionStatusFocal_SessionNoTaskResolvesNoTaskKind pins that a
+// session present in the pane but with NULL active_task_id yields no focal and
+// the PaneStatusNoTask kind — the "claim a task" case, mirroring the status bar.
+func TestResolveSessionStatusFocal_SessionNoTaskResolvesNoTaskKind(t *testing.T) {
+	db := withTestDB(t)
+	seedProject(t, db, 1, "p1", "/p1")
+	if _, err := db.Exec(
+		`INSERT INTO sessions (session_id, project_id, platform, state, process, last_activity)
+		 VALUES (NULL, 1, 'claude', 'working', ?, '2026-06-20T00:00:00')`,
+		fakePane,
+	); err != nil {
+		t.Fatalf("seed session: %v", err)
+	}
+
+	focal, kind, err := ResolveSessionStatusFocal(fakePane)
+	if err != nil {
+		t.Fatalf("ResolveSessionStatusFocal: %v", err)
+	}
+	if focal != 0 {
+		t.Errorf("focal = %d, want 0 (session has no active task)", focal)
+	}
+	if kind != PaneStatusNoTask {
+		t.Errorf("kind = %d, want PaneStatusNoTask (%d)", kind, PaneStatusNoTask)
+	}
+}
+
 // TestSessionStatusRows_ZeroFocal returns nothing when no focal task resolves.
 func TestSessionStatusRows_ZeroFocal(t *testing.T) {
 	db := withTestDB(t)

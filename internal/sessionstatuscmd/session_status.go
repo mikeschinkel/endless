@@ -89,6 +89,29 @@ func (a action) icon() string {
 // prototype's watch loop.
 const monitorInterval = 2 * time.Second
 
+// no-task hints are shown when no focal task resolves. They mirror the tmux
+// status line's PaneStatusKind hints (internal/tmuxcmd/status_line.go) so the bar
+// and this view agree about "nothing here" instead of the list inventing an
+// unrelated task (E-1698). Leading spaces align with the (formerly placeholder)
+// list body; unlike the bar's versions these are plain text, not tmux #[...]
+// format strings.
+const (
+	hintClaimBind = "  no active task — claim or bind one:  endless task claim <id>  /  endless task bind <id>"
+	hintNoSession = "  no Endless session — register it:  endless setup claude-hook"
+)
+
+// noTaskHintFor maps the resolved PaneStatusKind to the message the list prints
+// when no focal task resolves. PaneStatusClaudeNoSession → register-session (the
+// pane runs Claude but has no session row); every other no-task kind — session
+// present but unclaimed, or no Endless context at all (including the non-tmux
+// case) — → claim/bind.
+func noTaskHintFor(kind monitor.PaneStatusKind) string {
+	if kind == monitor.PaneStatusClaudeNoSession {
+		return hintNoSession
+	}
+	return hintClaimBind
+}
+
 func Run(args []string) {
 	fs := flag.NewFlagSet("session-status", flag.ContinueOnError)
 	all := fs.Bool("all", false, "include done-work (terminal-status) rows")
@@ -102,6 +125,12 @@ func Run(args []string) {
 	}
 
 	var focal, parentSession int64
+	// noTaskHint is the message shown when no focal task resolves (focal == 0, or
+	// the rare focal-with-no-rows case). It mirrors the tmux status line's
+	// PaneStatusKind so the two surfaces agree (E-1698). Defaults to the claim/bind
+	// message; the live path overrides it with the register-session variant when
+	// the pane runs Claude with no session row.
+	noTaskHint := hintClaimBind
 	if *taskFlag > 0 {
 		// Headless mode (E-1685 verify harness): the caller names the focal task
 		// directly, so there is no live tmux pane / session to resolve — and no
@@ -122,11 +151,13 @@ func Run(args []string) {
 		monitor.PinMainDB()
 		pane := os.Getenv("TMUX_PANE")
 		var err error
-		focal, err = monitor.ResolveSessionStatusFocal(pane)
+		var kind monitor.PaneStatusKind
+		focal, kind, err = monitor.ResolveSessionStatusFocal(pane)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "session-status:", err)
 			os.Exit(1)
 		}
+		noTaskHint = noTaskHintFor(kind)
 		parentSession = monitor.ResolveSessionStatusParentSession(pane)
 	}
 
@@ -140,7 +171,7 @@ func Run(args []string) {
 			fmt.Fprintln(os.Stderr, "session-status:", err)
 			os.Exit(1)
 		}
-		if err := renderTree(os.Stdout, rows, focal); err != nil {
+		if err := renderTree(os.Stdout, rows, focal, noTaskHint); err != nil {
 			fmt.Fprintln(os.Stderr, "session-status:", err)
 			os.Exit(1)
 		}
@@ -153,11 +184,11 @@ func Run(args []string) {
 	// cursor-positioning escapes). When stdout is piped/captured, degrade to a
 	// single frame so scripts and pipes don't hang on an endless loop.
 	if *monitorMode && term.IsTerminal(int(os.Stdout.Fd())) {
-		monitorLoop(focal, parentSession, *all, *cols, color)
+		monitorLoop(focal, parentSession, noTaskHint, *all, *cols, color)
 		return
 	}
 
-	if err := renderSnapshot(os.Stdout, focal, parentSession, *all, detectCols(*cols), color); err != nil {
+	if err := renderSnapshot(os.Stdout, focal, parentSession, noTaskHint, *all, detectCols(*cols), color); err != nil {
 		fmt.Fprintln(os.Stderr, "session-status:", err)
 		os.Exit(1)
 	}
@@ -165,12 +196,12 @@ func Run(args []string) {
 
 // renderSnapshot queries the current rows for the anchored focal/parent and
 // renders one frame to w.
-func renderSnapshot(w io.Writer, focal, parentSession int64, all bool, cols int, color bool) error {
+func renderSnapshot(w io.Writer, focal, parentSession int64, noTaskHint string, all bool, cols int, color bool) error {
 	rows, err := monitor.SessionStatusRows(focal, parentSession, all)
 	if err != nil {
 		return err
 	}
-	renderTo(w, rows, focal, cols, color)
+	renderTo(w, rows, focal, noTaskHint, cols, color)
 	return nil
 }
 
@@ -180,7 +211,7 @@ func renderSnapshot(w io.Writer, focal, parentSession int64, all bool, cols int,
 // path. Width is re-detected each tick so a terminal resize is honored. This is
 // the live `session monitor` dashboard; it loops the same snapshot renderer
 // `session status` prints once.
-func monitorLoop(focal, parentSession int64, all bool, colsOverride int, color bool) {
+func monitorLoop(focal, parentSession int64, noTaskHint string, all bool, colsOverride int, color bool) {
 	out := os.Stdout
 	fmt.Fprint(out, "\x1b[?25l")                         // hide cursor
 	restore := func() { fmt.Fprint(out, "\x1b[?25h\n") } // show cursor + trailing newline
@@ -196,7 +227,7 @@ func monitorLoop(focal, parentSession int64, all bool, colsOverride int, color b
 	prev := ""
 	for {
 		var b strings.Builder
-		if err := renderSnapshot(&b, focal, parentSession, all, detectCols(colsOverride), color); err != nil {
+		if err := renderSnapshot(&b, focal, parentSession, noTaskHint, all, detectCols(colsOverride), color); err != nil {
 			restore()
 			fmt.Fprintln(os.Stderr, "session-status:", err)
 			os.Exit(1)
@@ -216,12 +247,14 @@ func monitorLoop(focal, parentSession int64, all bool, colsOverride int, color b
 	}
 }
 
-// renderTo writes the legend and rows to w. focal==0 (or no rows) prints a short
-// hint instead of an empty table.
-func renderTo(w io.Writer, rows []monitor.SessionStatusRow, focal int64, cols int, color bool) {
+// renderTo writes the legend and rows to w. focal==0 (or no rows) prints the
+// no-task hint instead of an empty table — a claim/bind message (or a
+// register-session message) mirroring the tmux status line, NEVER an unrelated
+// task's rows (E-1698).
+func renderTo(w io.Writer, rows []monitor.SessionStatusRow, focal int64, noTaskHint string, cols int, color bool) {
 	fmt.Fprintln(w, dim(legend, color))
 	if focal == 0 || len(rows) == 0 {
-		fmt.Fprintln(w, dim("  (no active task for this window)", color))
+		fmt.Fprintln(w, dim(noTaskHint, color))
 		return
 	}
 
