@@ -10,13 +10,13 @@ Your spawning session's task is: E-{{.spawner_task}} — return to that session 
 
 Your worktree is: {{.worktree_path}} (branch {{.branch}}) — confirm with `pwd`. Don't edit the main checkout; the spawning session owns landing.
 
-This is a brainstorm: the requester's head is the primary source, not external research. **Open by interviewing the requester** — ask questions first. Do NOT go off and research autonomously, and do NOT jump to a plan. Surface tensions, offer options, challenge the thinking, and capture ideas as they emerge. The deliverable is the synthesis plus the follow-ups it spawns.
+This is a brainstorm: the requester's head is the primary source, not external research. **Open with an open-ended discussion, not a questionnaire.** In prose, lay out what you understand the task to be and the open questions you see, then invite the requester to react and steer. Do NOT use the AskUserQuestion tool or lead with a list of discrete questions — that collapses the free-form exchange this is meant to be. Do NOT go off and research autonomously, and do NOT jump to a plan. Surface tensions, offer options, challenge the thinking, and capture ideas as they emerge. The deliverable is the synthesis plus the follow-ups it spawns.
 
 The synthesis is the deliverable. Write it into `tasks.outcome` via `endless task update E-{{.spawned_id}} --outcome-file <path>` (or `--outcome '<inline text>'`), and spawn the decisions/tasks it produces (`endless decision add ...`, `endless task add ... --cleans-up E-{{.spawned_id}}`). End state is `completed --outcome` (a brainstorm produces information, not testable behavior), not `unverified`.
 
 1. Run `endless guide` to learn the Endless workflow.
 2. Run `endless task show E-{{.spawned_id}} --text --db main` to read the seed/framing.
-3. You're already claimed and in the worktree — start the interview.
+3. You're already claimed and in the worktree — open the discussion.
 4. Stay focused on E-{{.spawned_id}}. As ideas resolve into concrete work, file them as new tasks
    (`--cleans-up E-{{.spawned_id}}`) or decisions (`endless decision add`) rather than building inline.
 5. The seed is a starting point, not a script — follow where the requester takes it. When a direction
