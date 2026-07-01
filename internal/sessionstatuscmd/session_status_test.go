@@ -132,6 +132,49 @@ func TestBlockField(t *testing.T) {
 	}
 }
 
+func TestDirtyMark(t *testing.T) {
+	if got := dirtyMark(monitor.SessionStatusRow{Dirty: true}); got != "◆" {
+		t.Errorf("dirty row = %q, want ◆", got)
+	}
+	if got := dirtyMark(monitor.SessionStatusRow{Dirty: false}); got != " " {
+		t.Errorf("clean row = %q, want a single space", got)
+	}
+	// ◆ and the space it replaces must both be display-width 1 so the fixed 13-col
+	// prefix and its alignment hold regardless of the dirty state (E-1701).
+	if w := displayWidth("◆"); w != 1 {
+		t.Errorf("◆ display width = %d, want 1", w)
+	}
+}
+
+// TestRenderDirtyIndicator proves the flat view renders ◆ between the type
+// letter and id for a dirty row and a plain space for a clean one, and that the
+// substitution does not shift the id column (both glyphs are width 1) — E-1701.
+func TestRenderDirtyIndicator(t *testing.T) {
+	rows := []monitor.SessionStatusRow{
+		{ID: 1701, Title: "dirty one", Status: "underway", Phase: "now", TypeSlug: "task", IsFocal: true, Dirty: true},
+		{ID: 1702, Title: "clean one", Status: "ready", Phase: "now", TypeSlug: "task", Dirty: false},
+	}
+	var b strings.Builder
+	renderTo(&b, rows, 1701, hintClaimBind, 90, false)
+	lines := strings.Split(strings.TrimRight(b.String(), "\n"), "\n")
+	if len(lines) != 3 {
+		t.Fatalf("want 3 lines (legend + 2 rows), got %d:\n%s", len(lines), b.String())
+	}
+	if !strings.HasPrefix(lines[1], "● T◆E-1701 1 ") {
+		t.Errorf("dirty row prefix wrong: %q", lines[1])
+	}
+	if !strings.HasPrefix(lines[2], "▶ T E-1702 1 ") {
+		t.Errorf("clean row prefix wrong: %q", lines[2])
+	}
+	// The id column must start at the same DISPLAY offset in both rows — the ◆/space
+	// swap is width-neutral (byte offsets differ: ◆ is 3 bytes, space is 1).
+	dw := displayWidth(lines[1][:strings.Index(lines[1], "E-1701")])
+	cw := displayWidth(lines[2][:strings.Index(lines[2], "E-1702")])
+	if dw != cw {
+		t.Errorf("id column shifted by dirty marker: dirty width=%d clean width=%d", dw, cw)
+	}
+}
+
 func TestRenderEmptyFocal(t *testing.T) {
 	var b strings.Builder
 	renderTo(&b, nil, 0, hintClaimBind, 90, false)

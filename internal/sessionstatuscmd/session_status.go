@@ -201,6 +201,10 @@ func renderSnapshot(w io.Writer, focal, parentSession int64, noTaskHint string, 
 	if err != nil {
 		return err
 	}
+	// Flat view only: fill each row's Dirty flag from its worktree's git state so
+	// the renderer can mark the landed-vs-worktree delta with ◆ (E-1701). --tree
+	// takes a separate path and skips this git cost.
+	monitor.AnnotateSessionStatusDirty(rows)
 	renderTo(w, rows, focal, noTaskHint, cols, color)
 	return nil
 }
@@ -298,8 +302,8 @@ func renderTo(w io.Writer, rows []monitor.SessionStatusRow, focal int64, noTaskH
 
 	for _, r := range rows {
 		act := classify(r)
-		line := fmt.Sprintf("%s %s %-6s %s ",
-			act.icon(), typeLetter(r.TypeSlug), "E-"+strconv.FormatInt(r.ID, 10), phaseChar(r),
+		line := fmt.Sprintf("%s %s%s%-6s %s ",
+			act.icon(), typeLetter(r.TypeSlug), dirtyMark(r), "E-"+strconv.FormatInt(r.ID, 10), phaseChar(r),
 		)
 		line += blockField(r, bw)
 		line += runewidth.Truncate(collapse(r.Title), titleBudget, "…")
@@ -375,6 +379,19 @@ func phaseRank(phase string) int {
 	default:
 		return 5
 	}
+}
+
+// dirtyMark is the single-column separator between the task-type letter and the
+// id: ◆ (U+25C6 BLACK DIAMOND) when the row's worktree diverges from main
+// (unlanded work / changes since a land — E-1701), else a plain space. Both are
+// width 1, so the fixed 13-col prefix and its alignment hold either way. There
+// is no legend entry for ◆ (Mike, 2026-07-01). Distinct from --tree's leading
+// focal marker — different view, different glyph, no clash.
+func dirtyMark(r monitor.SessionStatusRow) string {
+	if r.Dirty {
+		return "◆"
+	}
+	return " "
 }
 
 func typeLetter(slug string) string {

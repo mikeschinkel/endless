@@ -21,21 +21,29 @@ import (
 // BlocksN counts tasks this one blocks (regardless of their status — it drives
 // the ⏸ "blocks" marker).
 type SessionStatusRow struct {
-	ID         int64
-	Title      string
-	Status     string
-	Phase      string
-	TypeSlug   string
-	HasText    bool
-	IsFocal    bool
-	IsParent   bool
-	IsFrom     bool
-	InFlight   bool
+	ID        int64
+	ProjectID int64
+	Title     string
+	Status    string
+	Phase     string
+	TypeSlug  string
+	HasText   bool
+	IsFocal   bool
+	IsParent  bool
+	IsFrom    bool
+	InFlight  bool
 	// Landed is true when the task has >=1 task_landings row (its work has
 	// merged). classify() routes a landed non-terminal task to the catch-all ⁇
 	// bucket so merged work is never offered as a fresh actionable verb (E-1693);
 	// the focal/parent/from/in-flight decorations still win over it.
-	Landed     bool
+	Landed bool
+	// Dirty is the landed-vs-worktree delta the flat view marks with ◆ (E-1701):
+	// the task's worktree exists AND diverges from main — uncommitted changes or
+	// commits not yet landed. It is NOT read from the DB (task_landings only
+	// records that a land happened, not whether the tree moved since); it is
+	// filled in by AnnotateSessionStatusDirty, which shells out to git, and only
+	// on the flat render path. --tree leaves it false.
+	Dirty      bool
 	BlockedByN int
 	BlocksN    int
 }
@@ -162,19 +170,19 @@ sfoc(stid) AS (SELECT active_task_id FROM sessions WHERE id = ?),
 -- rpar.rpid = the focal's real task-tree parent (tasks.parent_id → ↑ parent).
 rpar(rpid) AS (SELECT parent_id FROM tasks WHERE id = (SELECT tid FROM ftask)),
 base AS (
-  SELECT t.id, t.title, t.status, t.phase, t.text, t.type_id
+  SELECT t.id, t.project_id, t.title, t.status, t.phase, t.text, t.type_id
     FROM session_tasks st JOIN tasks t ON t.id = st.task_id
    WHERE st.session_id IN (
      SELECT id FROM sessions WHERE active_task_id = (SELECT tid FROM ftask)
    )
   UNION
-  SELECT t.id, t.title, t.status, t.phase, t.text, t.type_id
+  SELECT t.id, t.project_id, t.title, t.status, t.phase, t.text, t.type_id
     FROM tasks t WHERE t.id = (SELECT tid FROM ftask)
   UNION
-  SELECT t.id, t.title, t.status, t.phase, t.text, t.type_id
+  SELECT t.id, t.project_id, t.title, t.status, t.phase, t.text, t.type_id
     FROM tasks t, rpar WHERE t.id = rpar.rpid
   UNION
-  SELECT t.id, t.title, t.status, t.phase, t.text, t.type_id
+  SELECT t.id, t.project_id, t.title, t.status, t.phase, t.text, t.type_id
     FROM tasks t, sfoc WHERE t.id = sfoc.stid
   UNION
   -- E-1685: the focal task's direct dependents (tasks it blocks), read-time
@@ -182,7 +190,7 @@ base AS (
   -- projection-of-the-event-ledger invariant holds. The terminal-status filter
   -- in the final SELECT drops done dependents unless --all; the BlockedByN
   -- column drives their ⊗ while the focal stays open.
-  SELECT t.id, t.title, t.status, t.phase, t.text, t.type_id
+  SELECT t.id, t.project_id, t.title, t.status, t.phase, t.text, t.type_id
     FROM tasks t
    WHERE EXISTS (
      SELECT 1 FROM task_deps d
@@ -199,11 +207,11 @@ base AS (
   -- in that child's own session, keeping each view one level deep rather than
   -- exploding the whole subtree. The terminal-status filter in the final SELECT
   -- drops done children unless --all, matching the dependent behavior.
-  SELECT t.id, t.title, t.status, t.phase, t.text, t.type_id
+  SELECT t.id, t.project_id, t.title, t.status, t.phase, t.text, t.type_id
     FROM tasks t WHERE t.parent_id = (SELECT tid FROM ftask)
 ),
 enr AS (
-  SELECT b.id, b.title, b.status, b.phase,
+  SELECT b.id, b.project_id, b.title, b.status, b.phase,
     COALESCE((SELECT slug FROM task_types WHERE id = b.type_id), '') AS type_slug,
     (b.text IS NOT NULL AND b.text <> '') AS has_text,
     (b.id = (SELECT tid FROM ftask)) AS is_focal,
@@ -230,7 +238,7 @@ enr AS (
          AND d.dep_type = 'blocks') AS blocks_n
   FROM base b
 )
-SELECT id, title, status, phase, type_slug, has_text,
+SELECT id, project_id, title, status, phase, type_slug, has_text,
        is_focal, is_parent, is_from, in_flight, landed, blocked_by_n, blocks_n
   FROM enr
  WHERE (? = 1) OR is_focal OR is_parent OR is_from
@@ -247,7 +255,7 @@ SELECT id, title, status, phase, type_slug, has_text,
 	for rows.Next() {
 		var r SessionStatusRow
 		if err := rows.Scan(
-			&r.ID, &r.Title, &r.Status, &r.Phase, &r.TypeSlug, &r.HasText,
+			&r.ID, &r.ProjectID, &r.Title, &r.Status, &r.Phase, &r.TypeSlug, &r.HasText,
 			&r.IsFocal, &r.IsParent, &r.IsFrom, &r.InFlight, &r.Landed, &r.BlockedByN, &r.BlocksN,
 		); err != nil {
 			return nil, err

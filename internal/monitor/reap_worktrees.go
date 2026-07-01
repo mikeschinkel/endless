@@ -267,6 +267,52 @@ func realHasLiveProcessInDir(dir string) (bool, error) {
 	return false, err
 }
 
+// AnnotateSessionStatusDirty fills each row's Dirty flag from the git state of
+// its worktree, in place. Called only on the FLAT render path (E-1701) — the
+// IDs-only --tree view does not surface the marker, so it skips the git cost.
+// Best-effort: a row whose worktree is absent or whose git inspection errors is
+// left Dirty=false rather than failing the whole view.
+func AnnotateSessionStatusDirty(rows []SessionStatusRow) {
+	for i := range rows {
+		rows[i].Dirty = taskWorktreeDirty(rows[i].ProjectID, rows[i].ID)
+	}
+}
+
+// taskWorktreeDirty reports the landed-vs-worktree delta for one task: true when
+// its worktree exists AND diverges from main — either an unclean working tree
+// (uncommitted changes) or commits on the branch not yet on main (unlanded, or
+// changes made since a land). This collapses "not landed" and "dirty since land"
+// into the single ◆ the flat view renders (Mike, 2026-07-01): a clean worktree
+// whose commits are all on main — the fully-landed steady state — is not dirty,
+// and a task with no worktree has nothing to land.
+//
+// It reuses the exact git signals the reaper inverts to decide a worktree is
+// safe to remove (reap_worktrees.go conditions 4 & 5), so the two surfaces agree
+// on what "done and landed" means. Any git error is treated as not-dirty: the
+// view must never block or lie because a git call hiccuped.
+func taskWorktreeDirty(projectID, taskID int64) bool {
+	wt, err := WorktreePathForTask(projectID, taskID)
+	if err != nil || wt == "" {
+		return false
+	}
+	// Uncommitted changes → dirty. A git error here means we can't reason about
+	// the tree, so fall through to not-dirty rather than guess.
+	out, gerr := runGit(wt, "status", "--porcelain")
+	if gerr != nil {
+		return false
+	}
+	if strings.TrimSpace(out) != "" {
+		return true
+	}
+	// Commits on the branch not yet on main → unlanded work.
+	out, gerr = runGit(wt, "rev-list", "main..HEAD", "--count")
+	if gerr != nil {
+		return false
+	}
+	n, perr := strconv.Atoi(strings.TrimSpace(out))
+	return perr == nil && n > 0
+}
+
 // runGit executes `git -C <dir> <args...>` and returns the combined
 // stdout+stderr along with the error. dir is the directory passed to
 // `git -C`; callers pass projectRoot for repo-level operations
