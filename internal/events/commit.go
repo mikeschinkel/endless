@@ -5,9 +5,10 @@
 //     Writer.Append (E-1206).
 //
 // It flows through commitPaths, which decides amend-vs-new-commit based on
-// HEAD's subject (must match the subject we're about to commit), pushed
-// status (never amend a commit reachable from origin/*), and index hygiene
-// (never bundle unrelated user-staged work into our amend).
+// HEAD's subject (must match the subject we're about to commit), shared-ref
+// status (never amend a commit reachable from any ref besides the current
+// branch — a landed worktree branch, a remote-tracking ref, or a tag), and
+// index hygiene (never bundle unrelated user-staged work into our amend).
 
 package events
 
@@ -53,7 +54,7 @@ func CommitLedgerSegment(projectRoot, segmentRelPath string) error {
 // Decision:
 //
 //	HEAD subject == subject
-//	AND HEAD not reachable from any origin/* ref
+//	AND HEAD not reachable from any ref besides the current branch
 //	AND index has no staged paths outside excludeGlob
 //	→ git add -- <paths>...
 //	  git commit -o <paths>... --amend --no-edit
@@ -159,7 +160,8 @@ func ensureMainCheckout(projectRoot string, paths []string) error {
 
 // canAmend returns true iff all three preconditions hold:
 //  1. HEAD's subject equals the subject we're about to commit.
-//  2. HEAD is not reachable from any origin/* remote-tracking ref.
+//  2. HEAD is not reachable from any ref besides the current branch (a landed
+//     worktree branch, a remote-tracking ref, or a tag all disqualify it).
 //  3. Index has no staged paths outside excludeGlob.
 //
 // Errors only on subprocess failure; a "no" answer to any precondition
@@ -174,13 +176,33 @@ func canAmend(projectRoot, subject, excludeGlob string) (bool, error) {
 		return false, nil
 	}
 
-	pushed, err := runGitOutput(projectRoot,
-		"for-each-ref", "--contains", "HEAD", "refs/remotes/origin/",
+	// Resolve the current branch's full refname (e.g. "refs/heads/main"). On a
+	// detached HEAD, `symbolic-ref` exits non-zero and runGitOutput errors — we
+	// treat that as "no current branch" so every containing ref counts as an
+	// "other" ref (conservative: never amend a tip we can't prove is unshared).
+	curRef, err := runGitOutput(projectRoot, "symbolic-ref", "--quiet", "HEAD")
+	if err != nil {
+		curRef = ""
+	}
+	curRef = strings.TrimSpace(curRef)
+
+	// HEAD must not be reachable from any ref BESIDES the current branch. A
+	// worktree branch left sitting on main's ledger tip (post-`land` rebase), a
+	// remote-tracking ref (already pushed), or a tag all count: amending would
+	// rewrite a commit another ref points at — the classic "never amend
+	// published history" rule, applied to every shared ref, not just origin/*.
+	refs, err := runGitOutput(projectRoot,
+		"for-each-ref", "--contains", "HEAD", "--format=%(refname)",
 	)
 	if err != nil {
-		return false, fmt.Errorf("check origin reachability: %w", err)
+		return false, fmt.Errorf("check ref reachability: %w", err)
 	}
-	if strings.TrimSpace(pushed) != "" {
+	for _, r := range strings.Split(strings.TrimSpace(refs), "\n") {
+		r = strings.TrimSpace(r)
+		if r == "" || r == curRef {
+			continue
+		}
+		// Some other ref contains HEAD → the tip is shared; append instead.
 		return false, nil
 	}
 

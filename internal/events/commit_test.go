@@ -230,6 +230,118 @@ func TestCommitLedgerSegment_PushedHeadStartsNewCommit(t *testing.T) {
 	}
 }
 
+// --- E-1713: don't amend a ledger tip reachable from another ref ---------
+
+// TestCommitLedgerSegment_SiblingBranchStartsNewCommit covers case (a): a
+// *non-current* local branch is based on main's ledger tip (the landed-worktree
+// topology). Amending main's tip would orphan that branch, so the next ledger
+// event must append rather than amend.
+func TestCommitLedgerSegment_SiblingBranchStartsNewCommit(t *testing.T) {
+	root, segRel := initRepo(t)
+
+	// First ledger commit on main — this becomes the shared tip.
+	if err := CommitLedgerSegment(root, segRel); err != nil {
+		t.Fatalf("first commit: %v", err)
+	}
+	sharedTip := mustGit(t, root, "rev-parse", "HEAD")
+
+	// A sibling branch is created at the shared tip (as `land` leaves a
+	// worktree branch rebased onto main's ledger tip). We stay on main.
+	mustGit(t, root, "branch", "task/sibling", sharedTip)
+
+	// Next ledger write on main must NOT amend (sibling contains HEAD).
+	appendLine(t, root, segRel, `{"v":"1","kind":"task.updated"}`)
+	if err := CommitLedgerSegment(root, segRel); err != nil {
+		t.Fatalf("post-sibling commit: %v", err)
+	}
+
+	parent := mustGit(t, root, "rev-parse", "HEAD^")
+	if parent != sharedTip {
+		t.Fatalf("post-sibling commit should be a child of the shared tip "+
+			"(new commit, not amend); parent=%q expected=%q", parent, sharedTip)
+	}
+	// The sibling branch must remain an ancestor of main (not orphaned).
+	if err := gitAncestor(t, root, "task/sibling", "main"); err != nil {
+		t.Fatalf("sibling branch should still be an ancestor of main: %v", err)
+	}
+}
+
+// TestCommitLedgerSegment_SoleRefAmends covers cases (b) and (d): when the ledger
+// tip is reachable from ONLY the current branch (main), the amend optimization
+// still applies. Guards against an over-broad ref check (or a broken
+// current-branch exclusion) that would refuse to amend the common case.
+func TestCommitLedgerSegment_SoleRefAmends(t *testing.T) {
+	root, segRel := initRepo(t)
+
+	if err := CommitLedgerSegment(root, segRel); err != nil {
+		t.Fatalf("first commit: %v", err)
+	}
+	parentAfterFirst := mustGit(t, root, "rev-parse", "HEAD^")
+
+	// Sanity: only main should contain HEAD at this point.
+	refs := mustGit(t, root, "for-each-ref", "--contains", "HEAD", "--format=%(refname)")
+	if refs != "refs/heads/main" {
+		t.Fatalf("setup: expected only refs/heads/main to contain HEAD, got: %q", refs)
+	}
+
+	appendLine(t, root, segRel, `{"v":"1","kind":"task.updated"}`)
+	if err := CommitLedgerSegment(root, segRel); err != nil {
+		t.Fatalf("second commit: %v", err)
+	}
+
+	parentAfterSecond := mustGit(t, root, "rev-parse", "HEAD^")
+	if parentAfterFirst != parentAfterSecond {
+		t.Fatalf("sole-ref case should amend (same parent), got %q vs %q",
+			parentAfterFirst, parentAfterSecond)
+	}
+}
+
+// TestCommitLedgerSegment_LandedWorktreeTipStaysAncestor is the reproduction /
+// behavioral E2E for E-1713 against the real production commit path. It mirrors
+// the exact orphaning topology: main holds a ledger tip; a "landed" worktree
+// branch is rebased onto that tip; a subsequent ledger event lands on main. The
+// invariant `taskWorktreeDirty` inverts (main..HEAD == 0 for the worktree
+// branch) must hold — i.e. the worktree tip stays an ancestor of main.
+//
+// Fails on baseline (main amends its tip, orphaning the worktree branch);
+// passes once canAmend refuses to amend a tip shared with another ref.
+func TestCommitLedgerSegment_LandedWorktreeTipStaysAncestor(t *testing.T) {
+	root, segRel := initRepo(t)
+
+	// main's ledger tip.
+	if err := CommitLedgerSegment(root, segRel); err != nil {
+		t.Fatalf("first ledger commit: %v", err)
+	}
+	ledgerTip := mustGit(t, root, "rev-parse", "HEAD")
+
+	// A landed worktree branch sits exactly on main's ledger tip (post-rebase).
+	mustGit(t, root, "branch", "task/landed", ledgerTip)
+	landedTip := mustGit(t, root, "rev-parse", "task/landed")
+
+	// A subsequent ledger event fires on main.
+	appendLine(t, root, segRel, `{"v":"1","kind":"task.updated"}`)
+	if err := CommitLedgerSegment(root, segRel); err != nil {
+		t.Fatalf("second ledger commit: %v", err)
+	}
+
+	// The worktree branch tip must remain reachable from main (main..HEAD == 0
+	// when checked from the worktree). If main amended its tip, task/landed
+	// points at an orphan and this fails.
+	if err := gitAncestor(t, root, landedTip, "main"); err != nil {
+		t.Fatalf("landed worktree tip must stay an ancestor of main "+
+			"(else taskWorktreeDirty falsely reports dirty): %v", err)
+	}
+}
+
+// gitAncestor returns nil iff `maybeAncestor` is an ancestor of `descendant`
+// (or equal). Wraps `git merge-base --is-ancestor`, whose exit code is the
+// answer; runGitOutput folds a non-zero exit into an error.
+func gitAncestor(t *testing.T, root, maybeAncestor, descendant string) error {
+	t.Helper()
+	_, err := runGitOutput(root, "merge-base", "--is-ancestor", maybeAncestor, descendant)
+	return err
+}
+
 func TestCommitLedgerSegment_NonGitProjectFailsLoudly(t *testing.T) {
 	root := t.TempDir()
 	segRel := filepath.Join(".endless", LedgerDirName, "db-entries-a7f3-000001.jsonl")
