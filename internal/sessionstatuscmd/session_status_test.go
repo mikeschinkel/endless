@@ -281,3 +281,27 @@ func overwriteLine(prev, next string) string {
 	}
 	return string(cells)
 }
+
+func TestTypeLetter(t *testing.T) {
+	cases := []struct {
+		slug string
+		want string
+	}{
+		{"epic", "E"},
+		{"bug", "F"},
+		{"research", "R"},
+		{"brainstorm", "B"},
+		{"task", "T"},
+		{"todo", "T"},
+		{"", "T"},
+		{"anything-else", "T"},
+	}
+	for _, c := range cases {
+		if got := typeLetter(c.slug); got != c.want {
+			t.Errorf("typeLetter(%q) = %q, want %q", c.slug, got, c.want)
+		}
+		if typeLetter(c.slug) == "Z" {
+			t.Errorf("typeLetter(%q) still returns freed letter %q", c.slug, "Z")
+		}
+	}
+}

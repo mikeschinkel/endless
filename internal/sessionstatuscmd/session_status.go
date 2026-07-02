@@ -399,11 +399,11 @@ func typeLetter(slug string) string {
 	case "epic":
 		return "E"
 	case "bug":
-		return "B"
+		return "F"
 	case "research":
 		return "R"
 	case "brainstorm":
-		return "Z"
+		return "B"
 	default:
 		return "T"
 	}
