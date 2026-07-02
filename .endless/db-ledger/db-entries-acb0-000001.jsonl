@@ -1,0 +1,2 @@
+{"v":1,"ts":"5Y4RZNQSV5R1B5G","kind":"task.created","project":"endless","entity":{"type":"task","id":"1"},"actor":{"kind":"cli","id":"mikeschinkel@m4macmini.local","session_id":"2"},"payload":{"title":"Probe unapproved status acceptance","description":"","phase":"now","status":"unplanned","type":"task"}}
+{"v":1,"ts":"5Y4RZNSJK9G1B5G","kind":"task.fields_updated","project":"endless","entity":{"type":"task","id":"1"},"actor":{"kind":"cli","id":"mikeschinkel@m4macmini.local","session_id":"2"},"payload":{"fields":{"status":"unapproved"}}}
