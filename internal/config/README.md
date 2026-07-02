@@ -96,7 +96,6 @@ apply:
 | Key                   | Default |
 | --------------------- | ------- |
 | `task_required`       | `true`  |
-| `drift_detection`     | `false` |
 | `decision_checkpoint` | `false` |
 | `session_audit`       | `false` |
 | (any other name)      | `true`  |

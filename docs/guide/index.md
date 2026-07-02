@@ -147,7 +147,6 @@ listed separately. (Generated — do not hand-edit; run `/regenerate-guide`.)
 | `shell-init` | orchestration | Shell helpers (esu/eswt) to enter your task's worktree. |
 | `sql` | reference | Read-only SQL against the Endless DB. |
 | `status` | reference | Detailed status of a project. |
-| `suggestions` | _(none yet)_ | the enforcement-relaxation suggestions workflow isn't covered by the guide yet. |
 | `task` | tasks | Task CRUD, field semantics (title/description/text/analysis/notes/outcome), status transitions, relations. |
 | `task attach` | orchestration | Attaching to a running background agent (replaces the current process; refuses inside a Claude session without --force). |
 | `task claim` | orchestration | Claiming a task: creates the per-task worktree and binds your session. |

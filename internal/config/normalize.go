@@ -24,7 +24,7 @@ func DefaultCheckEnabled(name string) bool {
 	switch name {
 	case "task_required":
 		return true
-	case "drift_detection", "decision_checkpoint", "session_audit":
+	case "decision_checkpoint", "session_audit":
 		return false
 	default:
 		return true

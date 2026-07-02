@@ -230,10 +230,6 @@ func runClaude(args []string) error {
 	case "UserPromptSubmit":
 		// Parse transcript to capture new messages
 		monitor.ParseTranscript(payload.SessionID, payload.TranscriptPath)
-		// Scan the freshly-parsed assistant turn(s) for SUGGESTION banners (E-918)
-		if err := monitor.ScanRecentSuggestions(payload.SessionID, projectID); err != nil {
-			log.Printf("scanning suggestions: %v", err)
-		}
 		return handleUserPromptSubmit(projectID, payload)
 
 	case "PreToolUse":
@@ -359,12 +355,6 @@ func buildTaskContextInjection(projectID int64, payload claudePayload) (string, 
 		return "", fmt.Errorf("getting active tasks: %w", err)
 	}
 	context := monitor.FormatTasks(projectName, items)
-	if n, err := monitor.CountOpenSuggestions(projectID); err == nil && n > 0 {
-		context += fmt.Sprintf(
-			"\n\n%d unreviewed AI-agent suggestion(s) for project %q. Run `endless suggestions list` to review.",
-			n, projectName,
-		)
-	}
 	monitor.MarkContextInjected(projectID, payload.SessionID, payload.CWD)
 	return context, nil
 }
@@ -373,18 +363,6 @@ func handlePostToolUse(projectID int64, payload claudePayload) error {
 	// Detect endless task claim/complete/chat commands and update session state
 	if err := handlePostToolUseSession(projectID, payload); err != nil {
 		return fmt.Errorf("post tool use session: %w", err)
-	}
-
-	// Register edited file with the active task (E-917 edit-set).
-	// Runs for any write tool, regardless of whether drift_detection is enforcing.
-	if writeTools[payload.ToolName] {
-		if path := extractFilePath(payload.ToolName, payload.ToolInput); path != "" {
-			if session, err := monitor.GetActiveSession(payload.SessionID); err == nil && session != nil && session.ActiveTaskID != nil {
-				if err := monitor.RegisterTaskFile(*session.ActiveTaskID, payload.SessionID, path); err != nil {
-					log.Printf("registering task file: %v", err)
-				}
-			}
-		}
 	}
 
 	// Check if a plan file was written
@@ -526,18 +504,6 @@ func handlePreToolUse(projectID int64, isRegistered bool, payload claudePayload)
 			}
 			// Active and valid — allow through (per-event TouchSession in
 			// runClaude already refreshed last_activity).
-			// Drift detection (E-917): if enabled, ensure target file is in scope.
-			if monitor.IsCheckEnabled(projectID, "drift_detection") && session.ActiveTaskID != nil {
-				path := extractFilePath(payload.ToolName, payload.ToolInput)
-				if path != "" {
-					inScope, err := monitor.IsFileInTaskScope(*session.ActiveTaskID, path)
-					if err != nil {
-						log.Printf("drift scope check: %v", err)
-					} else if !inScope {
-						blockDriftViolation(*session.ActiveTaskID, path)
-					}
-				}
-			}
 			return nil
 		}
 	}
@@ -679,25 +645,6 @@ func blockToolUseWithRevisitPrompt(instruction string) {
 		return
 	}
 	os.Exit(0)
-}
-
-// blockDriftViolation blocks an edit that targets a file outside the active
-// task's scope. The message offers three remedies (switch, sub-task, extend)
-// and invites Claude to suggest a rule relaxation via a SUGGESTION banner.
-func blockDriftViolation(activeTaskID int64, filePath string) {
-	taskTitle, _ := monitor.GetTaskTitle(activeTaskID)
-	var msg strings.Builder
-	fmt.Fprintf(&msg, "BLOCKED (drift_detection): editing `%s` but it is not in scope of active task E-%d", filePath, activeTaskID)
-	if taskTitle != "" {
-		fmt.Fprintf(&msg, " %q", taskTitle)
-	}
-	msg.WriteString(".\n\nChoose one:\n")
-	fmt.Fprintf(&msg, "  endless task claim <id>                                  switch focus (active task is preserved)\n")
-	fmt.Fprintf(&msg, "  endless task add \"<title>\" --parent E-%d                 add a sub-task for this work\n", activeTaskID)
-	fmt.Fprintf(&msg, "  endless task touch E-%d --add-file %s    register this file as in-scope of the current task\n", activeTaskID, filePath)
-	msg.WriteString("\nIf this prompt is needless here, also include in your next response:\n")
-	msg.WriteString("  **SUGGESTION (drift_detection):** <one-line explanation of why this should not have blocked>\n")
-	blockToolUse(msg.String())
 }
 
 func handlePostToolUseSession(projectID int64, payload claudePayload) error {

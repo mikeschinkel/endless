@@ -4,31 +4,31 @@ import (
 	"testing"
 )
 
-func TestMerge_DriftDetectionGlobalOnly(t *testing.T) {
-	// Reproduces the E-917 bug fix: drift_detection set only in CLI layer
-	// must propagate through merge so the project sees it enabled.
+func TestMerge_ChecksGlobalOnly(t *testing.T) {
+	// An opt-in check set only in the CLI layer must propagate through merge
+	// so the project sees it enabled.
 	project := &EndlessConfig{
 		Name: "endless",
 	}
 	cli := &EndlessConfig{
-		Checks: map[string]bool{"drift_detection": true},
+		Checks: map[string]bool{"session_audit": true},
 	}
 	merged := project.Merge(cli).(*EndlessConfig)
-	if !merged.IsCheckEnabled("drift_detection") {
-		t.Errorf("expected drift_detection enabled from CLI layer, got disabled")
+	if !merged.IsCheckEnabled("session_audit") {
+		t.Errorf("expected session_audit enabled from CLI layer, got disabled")
 	}
 }
 
 func TestMerge_ChecksProjectOverridesCLI(t *testing.T) {
 	project := &EndlessConfig{
 		Name:   "endless",
-		Checks: map[string]bool{"drift_detection": false},
+		Checks: map[string]bool{"session_audit": false},
 	}
 	cli := &EndlessConfig{
-		Checks: map[string]bool{"drift_detection": true},
+		Checks: map[string]bool{"session_audit": true},
 	}
 	merged := project.Merge(cli).(*EndlessConfig)
-	if merged.IsCheckEnabled("drift_detection") {
+	if merged.IsCheckEnabled("session_audit") {
 		t.Errorf("expected project value (false) to win, got enabled")
 	}
 }
@@ -38,14 +38,14 @@ func TestMerge_ChecksKeysFromBothLayers(t *testing.T) {
 		Checks: map[string]bool{"task_required": false},
 	}
 	cli := &EndlessConfig{
-		Checks: map[string]bool{"drift_detection": true},
+		Checks: map[string]bool{"session_audit": true},
 	}
 	merged := project.Merge(cli).(*EndlessConfig)
 	if merged.IsCheckEnabled("task_required") {
 		t.Errorf("expected task_required disabled from project layer")
 	}
-	if !merged.IsCheckEnabled("drift_detection") {
-		t.Errorf("expected drift_detection enabled from CLI layer")
+	if !merged.IsCheckEnabled("session_audit") {
+		t.Errorf("expected session_audit enabled from CLI layer")
 	}
 }
 
@@ -122,8 +122,8 @@ func TestIsCheckEnabled_FallsBackToDefault(t *testing.T) {
 	if !cfg.IsCheckEnabled("task_required") {
 		t.Errorf("task_required default should be true")
 	}
-	if cfg.IsCheckEnabled("drift_detection") {
-		t.Errorf("drift_detection default should be false")
+	if cfg.IsCheckEnabled("session_audit") {
+		t.Errorf("session_audit default should be false")
 	}
 	if !cfg.IsCheckEnabled("totally_unknown_check") {
 		t.Errorf("unknown checks default to true (current policy)")

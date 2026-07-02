@@ -2614,45 +2614,6 @@ def tmux_reset():
     run_reset()
 
 
-# Suggestions command group (E-918) — AI-agent rule-relaxation suggestions
-@main.group("suggestions")
-def suggestions_cmd():
-    """Review AI-agent suggestions for relaxing enforcement rules."""
-    pass
-
-
-@suggestions_cmd.command("list")
-@click.option("--project", default=None, help="Project name (default: detect from cwd)")
-@click.option("--all", "show_all", is_flag=True, help="Include accepted suggestions")
-@click.option("--source", default=None, help="Filter by source (e.g. drift_detection)")
-def suggestions_list(project, show_all, source):
-    """List open suggestions (default) or all suggestions with --all."""
-    from endless.suggestions_cmd import list_suggestions
-    list_suggestions(project, show_all, source)
-
-
-@suggestions_cmd.command("show")
-@click.argument("suggestion_id", type=int)
-def suggestions_show(suggestion_id):
-    """Show details of a single suggestion."""
-    from endless.suggestions_cmd import show_suggestion
-    show_suggestion(suggestion_id)
-
-
-@suggestions_cmd.command("accept")
-@click.argument("suggestion_id", type=int)
-@click.option("--type", "task_type",
-              type=click.Choice(["task", "chore", "bug", "spike", "research"]),
-              default="chore",
-              help="Type of task to create (default: chore)")
-@click.option("--parent", type=TASK_ID, default=None, help="Parent task ID")
-@click.option("--project", default=None, help="Project name (default: from suggestion or cwd)")
-def suggestions_accept(suggestion_id, task_type, parent, project):
-    """Create a task from a suggestion and link them."""
-    from endless.suggestions_cmd import accept_suggestion
-    accept_suggestion(suggestion_id, task_type, parent, project)
-
-
 @main.group("db")
 def db_cmd():
     """Database administration."""
