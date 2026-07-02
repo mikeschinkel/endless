@@ -197,6 +197,24 @@ land task_id="":
     # fails, the land aborts before main advances (clean recovery).
     wt="$main_root/.endless/worktrees/e-${tid#[Ee]-}"
     if [ -d "$wt" ]; then
+        # E-1709: rebuild the worktree's endless-go up-front, BEFORE the
+        # apply-change and record-landing steps below consume it. Both steps
+        # run the worktree binary against the REAL DB, and endless-go asserts
+        # tasktype.VerifyIntegrity on connect. A worktree rebased onto a newer
+        # main (new schema/enum, e.g. the brainstorm task_type) but not rebuilt
+        # would land with a STALE binary whose embedded enums no longer match
+        # the real DB's task_types rows, failing the integrity check and
+        # blocking the land (the E-1664 guard only checks the binary is
+        # PRESENT, not CURRENT). `just go` (go build only) suffices here:
+        # cmd/endless-go does not import internal/web and the generated
+        # *_templ.go / output.css are git-tracked. Unconditional (not gated on
+        # $changes) because the skew fires even when THIS branch adds no schema
+        # change, as long as main's DB moved ahead of the worktree binary. If
+        # the build breaks, set -euo pipefail aborts here — loud, before main
+        # advances. The trailing `just build` in main_root still runs after the
+        # merge to refresh the GLOBAL symlinked binaries.
+        echo "→ Rebuilding worktree endless-go before land (just go)"
+        ( cd "$wt" && just go )
         changes=$(git -C "$wt" diff main...HEAD --diff-filter=A --name-only \
             -- internal/schema/changes/ ':(exclude)internal/schema/changes/runner/')
         if [ -n "$changes" ]; then
@@ -222,7 +240,10 @@ land task_id="":
     # the worktree's endless-go (whose embedded schema/enums match the rows the
     # apply-change loop above just inserted), and fails loudly if that build is
     # missing. No PATH-prepend needed here (this supersedes E-1660's per-call
-    # PATH hack, which silently fell back to the stale global when unbuilt).
+    # PATH hack, which silently fell back to the stale global when unbuilt). The
+    # up-front `just go` above guarantees that build is not just present but
+    # CURRENT, so the guard's present-check is satisfied by a fresh binary
+    # (E-1709).
     endless worktree land "$tid"
     echo "→ Refreshing binaries (just build)"
     cd "$main_root"
