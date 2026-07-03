@@ -87,6 +87,7 @@ def emit_event(
     correlation_id: str | None = None,
     prompt_verb: str | None = None,
     endless_go_bin: str | None = None,
+    ts: str | None = None,
 ) -> dict | None:
     """Shell out to `endless-go event emit` to write an event and execute the DB mutation.
 
@@ -116,6 +117,10 @@ def emit_event(
     here so the task.landed emit uses the build whose schema matches the rows it
     just applied (E-1664). None ⇒ default resolution.
 
+    `ts` sets the event timestamp to a historical RFC3339 instant instead of
+    now(). A record-only landing backfill (E-1719) passes the merge commit's
+    date so `landed_at` records when the work actually landed. None ⇒ now().
+
     Raises click.ClickException on failure.
     """
     node_id = _get_or_create_node_id()
@@ -130,7 +135,10 @@ def emit_event(
     if config.NO_SESSION and actor_kind in _ATTRIBUTION_REQUIRED:
         actor_kind = "system"
         session_id = None
-    elif session_id is None:
+    elif session_id is None and actor_kind in _ATTRIBUTION_REQUIRED:
+        # Only cli/hook auto-resolve a session. A system actor (e.g. the E-1719
+        # record-only backfill) deliberately records no session, so it must not
+        # pick up whatever live pane happens to be running.
         # Track whether session_id was provided by the caller. An explicit None
         # is still "resolver-derived" — the gate only fires when both the caller
         # AND the resolver couldn't produce one.
@@ -211,6 +219,11 @@ def emit_event(
 
     if correlation_id:
         cmd.extend(["--cid", correlation_id])
+
+    # E-1719: a record-only/historical backfill passes the real commit date so
+    # landed_at reflects when the work landed, not now().
+    if ts:
+        cmd.extend(["--ts", ts])
 
     result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode != 0:

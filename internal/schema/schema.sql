@@ -427,11 +427,14 @@ END;
 -- MAX(landed_at) per task_id to decide when a worktree dir is eligible
 -- for removal. Re-landing (post-land bug fix) appends a second row;
 -- the first row is preserved.
+-- branch is nullable: a historical/record-only landing (E-1719) has no
+-- surviving branch to name (the worktree is long gone), so it records NULL
+-- rather than a fabricated name. A normal live land still records its branch.
 CREATE TABLE IF NOT EXISTS task_landings (
     id               INTEGER PRIMARY KEY,
     task_id          INTEGER NOT NULL,
     session_id       INTEGER,
-    branch           TEXT    NOT NULL,
+    branch           TEXT,
     merge_commit_sha TEXT    NOT NULL,
     landed_at        TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
     FOREIGN KEY (task_id)    REFERENCES tasks(id)    ON DELETE CASCADE,

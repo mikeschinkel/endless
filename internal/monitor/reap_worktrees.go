@@ -130,7 +130,11 @@ func ReapStaleWorktrees(projectRoot string, ttl time.Duration) error {
 // reaper would rather skip a candidate it can't reason about than
 // destroy in-flight work.
 func maybeReapWorktree(db *sql.DB, projectRoot, dir string, taskID int64, cutoff time.Time) (bool, error) {
-	var landedAt, branch string
+	var landedAt string
+	// branch is nullable (E-1719): a historical/record-only landing records no
+	// branch. Scan into NullString so a NULL row doesn't error, and skip the
+	// branch -D step below when it's absent.
+	var branch sql.NullString
 	err := db.QueryRow(
 		`SELECT landed_at, branch
 		 FROM task_landings
@@ -225,10 +229,14 @@ func maybeReapWorktree(db *sql.DB, projectRoot, dir string, taskID int64, cutoff
 		}
 		return false, fmt.Errorf("git worktree remove: %v: %s", err, out)
 	}
-	if out, err := runGit(projectRoot, "branch", "-D", branch); err != nil {
-		// Branch deletion failure shouldn't unwind the dir removal —
-		// log it but treat the reap as successful.
-		log.Printf("reap worktrees: %s: git branch -D %s: %v: %s", displayPath(dir), branch, err, out)
+	// A record-only landing (E-1719) records no branch, so there is nothing to
+	// delete — the dir removal above is the whole reap in that case.
+	if branch.Valid && branch.String != "" {
+		if out, err := runGit(projectRoot, "branch", "-D", branch.String); err != nil {
+			// Branch deletion failure shouldn't unwind the dir removal —
+			// log it but treat the reap as successful.
+			log.Printf("reap worktrees: %s: git branch -D %s: %v: %s", displayPath(dir), branch.String, err, out)
+		}
 	}
 	return true, nil
 }

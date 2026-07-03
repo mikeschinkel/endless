@@ -491,11 +491,17 @@ func replayTaskLanded(db *sql.DB, evt *Event, result *ProjectResult) error {
 	if evt.Actor.SessionID != "" {
 		sessionID = mustParseInt64(evt.Actor.SessionID)
 	}
+	// A record-only/historical landing (E-1719) carries an empty branch — the
+	// original branch is gone — so record NULL rather than an empty string.
+	var branch any
+	if p.Branch != "" {
+		branch = p.Branch
+	}
 	ts := kairosToISO(evt.TS)
 	_, err := db.Exec(
 		`INSERT INTO task_landings (task_id, session_id, branch, merge_commit_sha, landed_at)
 		 VALUES (?, ?, ?, ?, ?)`,
-		taskID, sessionID, p.Branch, p.MergeCommitSHA, ts,
+		taskID, sessionID, branch, p.MergeCommitSHA, ts,
 	)
 	if err != nil {
 		return fmt.Errorf("insert task_landing for task %d: %w", taskID, err)

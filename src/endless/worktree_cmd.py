@@ -1361,6 +1361,76 @@ def _resolve_land_endless_go(worktree_path: Path, project_root: Path) -> str | N
     return str(wt_bin)
 
 
+def _record_only_landing(
+    canonical: str,
+    sha: str | None,
+    branch: str | None,
+    at: str | None,
+    dry_run: bool,
+) -> None:
+    """Record a landing that already happened, without touching git (E-1719).
+
+    This is the record-only slice of `worktree land`: it skips the whole
+    rebase/ff-merge/discovery/session-resolution machinery and just emits a
+    `task.landed` for a known (task, merge_commit_sha) pair. It exists to
+    backfill historical landings that predate reliable landing-recording, whose
+    worktree and branch are long gone.
+
+    The emitted event is attributed to the system actor with no session
+    (`session_id` NULL), records `branch` NULL when none is given (the original
+    branch is unrecoverable), and stamps `landed_at` at the merge commit's date
+    — derived here from `git show -s --format=%cI <sha>` unless `at` is passed —
+    so the row reflects when the work actually landed, not now().
+    """
+    if not sha:
+        raise click.ClickException("--record-only requires --sha <merge-commit-sha>.")
+
+    main_root = _project_root()
+    _, proj_name = _resolve_project(None)
+    item_id = int(canonical[2:])
+
+    landed_at = at
+    if not landed_at:
+        try:
+            landed_at = _git(["show", "-s", "--format=%cI", sha], cwd=main_root)
+        except subprocess.CalledProcessError as e:
+            raise click.ClickException(
+                f"Cannot read the commit date for {sha} in "
+                f"{_project_root()}: {(e.stderr or e).strip() if hasattr(e, 'stderr') else e}\n\n"
+                f"Confirm the SHA exists on this checkout, or pass --at <RFC3339>."
+            )
+    if not landed_at:
+        raise click.ClickException(
+            f"commit {sha} produced no date; pass --at <RFC3339> explicitly."
+        )
+
+    if dry_run:
+        click.echo(f"Would record-only land: {canonical}")
+        click.echo(f"  Project:   {proj_name}")
+        click.echo(f"  SHA:       {sha}")
+        click.echo(f"  Branch:    {branch or '(none — records NULL)'}")
+        click.echo(f"  Landed at: {landed_at}")
+        return
+
+    from endless.event_bridge import emit_event
+
+    emit_event(
+        kind="task.landed",
+        project=proj_name,
+        entity_type="task",
+        entity_id=str(item_id),
+        payload={"branch": branch or "", "merge_commit_sha": sha},
+        actor_kind="system",
+        actor_id="backfill",
+        session_id=None,
+        ts=landed_at,
+    )
+    click.echo(
+        click.style("•", fg="green")
+        + f" Recorded landing for {canonical} at {sha[:8]} ({landed_at})"
+    )
+
+
 def _record_landing(
     item_id: int,
     proj_name: str,
@@ -1405,8 +1475,19 @@ def _record_landing(
         )
 
 
-def land_worktree(task_id: str, dry_run: bool) -> None:
+def land_worktree(
+    task_id: str,
+    dry_run: bool,
+    record_only: bool = False,
+    sha: str | None = None,
+    branch: str | None = None,
+    at: str | None = None,
+) -> None:
     """Land the worktree for <task-id> into main per E-987 + E-1337.
+
+    With record_only (E-1719), skips all git work and just emits `task.landed`
+    for the given (task, --sha) pair — used to backfill historical landings
+    whose worktree is gone. See _record_only_landing.
 
     Loop:
       1. Partition git status into auto-commit vs user-work.
@@ -1433,6 +1514,14 @@ def land_worktree(task_id: str, dry_run: bool) -> None:
     config.default_db_to_main()
 
     canonical = _normalize_task_id(task_id)
+
+    # E-1719: the record-only path records a historical landing that already
+    # happened; there is no live worktree/branch to rebase or ff-merge, so it
+    # dispatches before all of that.
+    if record_only:
+        _record_only_landing(canonical, sha, branch, at, dry_run)
+        return
+
     main_root = _project_root()
     rows = _enriched_list(main_root)
     target = _branch_for_task(rows, canonical)

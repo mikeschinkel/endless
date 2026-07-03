@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	_ "modernc.org/sqlite"
 
@@ -61,18 +62,19 @@ func runEmit(args []string) {
 	projectRoot := fs.String("project-root", "", "Project root directory (for .endless/db-ledger/)")
 	payload := fs.String("payload", "{}", "Event payload as JSON")
 	correlationID := fs.String("cid", "", "Correlation ID (optional)")
+	tsOverride := fs.String("ts", "", "Historical event timestamp as RFC3339 (default: now). Used by record-only backfills to stamp the real commit date.")
 
 	fs.Parse(args)
 
 	if err := run(*kind, *project, *entityType, *entityID, *actorKind, *actorID,
-		*sessionID, *nodeID, *projectRoot, *payload, *correlationID); err != nil {
+		*sessionID, *nodeID, *projectRoot, *payload, *correlationID, *tsOverride); err != nil {
 		fmt.Fprintf(os.Stderr, "endless-go event: error: %v\n", err)
 		os.Exit(1)
 	}
 }
 
 func run(kindStr, project, entityTypeStr, entityID, actorKindStr, actorID,
-	sessionID, nodeIDStr, projectRoot, payloadStr, correlationID string) error {
+	sessionID, nodeIDStr, projectRoot, payloadStr, correlationID, tsOverride string) error {
 
 	// Validate required flags
 	if kindStr == "" {
@@ -110,6 +112,16 @@ func run(kindStr, project, entityTypeStr, entityID, actorKindStr, actorID,
 	}
 	clock := kairos.NewClock(nid)
 	ts := clock.Now()
+	// E-1719: a record-only/historical backfill passes --ts to stamp the real
+	// landing (commit) date rather than now(). logical=0 is fine: these are
+	// one-shot backfill events with no causal ordering against live traffic.
+	if tsOverride != "" {
+		parsed, perr := time.Parse(time.RFC3339, tsOverride)
+		if perr != nil {
+			return fmt.Errorf("invalid --ts %q (want RFC3339, e.g. 2026-05-09T12:34:56Z): %w", tsOverride, perr)
+		}
+		ts = kairos.New(parsed, 0, nid)
+	}
 
 	// E-1436: project_next.revised is a lock-first, multi-row rewrite. It takes
 	// the write lock BEFORE appending the ledger line (mirroring the create

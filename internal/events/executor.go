@@ -861,10 +861,22 @@ func execTaskLanded(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 	if evt.Actor.SessionID != "" {
 		sessionID = mustParseInt64(evt.Actor.SessionID)
 	}
+	// A record-only/historical landing (E-1719) carries an empty branch — the
+	// original branch is gone — so record NULL rather than an empty string.
+	var branch any
+	if p.Branch != "" {
+		branch = p.Branch
+	}
+	// landed_at is the event timestamp, not now(): a historical record-only
+	// landing (E-1719) sets evt.TS to the commit date via `emit --ts`, so the
+	// row records when the work actually landed. For a normal live land evt.TS
+	// is the emit instant, so this is unchanged in practice — and it makes the
+	// live insert agree with replayTaskLanded, which already uses evt.TS.
+	landedAt := kairosToISO(evt.TS)
 	if _, err := db.Exec(
 		`INSERT INTO task_landings (task_id, session_id, branch, merge_commit_sha, landed_at)
 		 VALUES (?, ?, ?, ?, ?)`,
-		taskID, sessionID, p.Branch, p.MergeCommitSHA, now(),
+		taskID, sessionID, branch, p.MergeCommitSHA, landedAt,
 	); err != nil {
 		return nil, fmt.Errorf("events: insert task_landing: %w", err)
 	}

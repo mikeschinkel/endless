@@ -2293,10 +2293,18 @@ def worktree_for_task(task_id, as_json):
 @click.argument("task_id")
 @click.option("--dry-run", is_flag=True,
               help="Show what would happen without making changes")
-def worktree_land(task_id, dry_run):
+@click.option("--record-only", is_flag=True,
+              help="Record a landing that already happened (no git). Requires --sha. (E-1719)")
+@click.option("--sha", default=None,
+              help="Merge commit SHA for --record-only.")
+@click.option("--branch", default=None,
+              help="Branch for --record-only; omit to record NULL (branch gone).")
+@click.option("--at", default=None,
+              help="Landing timestamp (RFC3339) for --record-only; default: the --sha commit date.")
+def worktree_land(task_id, dry_run, record_only, sha, branch, at):
     """Auto-commit endless-managed dirt, rebase, ff-merge, remove worktree (E-987)."""
     from endless.worktree_cmd import land_worktree
-    land_worktree(task_id, dry_run)
+    land_worktree(task_id, dry_run, record_only=record_only, sha=sha, branch=branch, at=at)
 
 
 @worktree_cmd.command("drop")

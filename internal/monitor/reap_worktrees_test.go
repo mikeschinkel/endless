@@ -285,6 +285,30 @@ func TestMaybeReapWorktree_ReapsCleanAbandoned(t *testing.T) {
 	}
 }
 
+// TestMaybeReapWorktree_NullBranchSkipsBranchDelete covers E-1719: a
+// record-only/historical landing records a NULL branch. The reaper must read
+// that row without erroring (it scans branch as sql.NullString) and skip the
+// `git branch -D` step, since there is no branch to delete.
+func TestMaybeReapWorktree_NullBranchSkipsBranchDelete(t *testing.T) {
+	f := newReaperFixture(t, time.Now().Add(-30*24*time.Hour))
+	if _, err := f.db.Exec("UPDATE task_landings SET branch = NULL WHERE task_id = 42"); err != nil {
+		t.Fatalf("null out branch: %v", err)
+	}
+	cutoff := time.Now().UTC().Add(-14 * 24 * time.Hour)
+	reaped, err := maybeReapWorktree(f.db, f.projRoot, f.dir, 42, cutoff)
+	if err != nil {
+		t.Fatalf("unexpected error reading NULL-branch landing: %v", err)
+	}
+	if !reaped {
+		t.Errorf("expected reap=true for clean abandoned worktree with NULL branch, got false")
+	}
+	for _, c := range f.calls {
+		if c == "branch" {
+			t.Errorf("expected NO `git branch -D` for a NULL-branch landing, got calls=%v", f.calls)
+		}
+	}
+}
+
 // TestMaybeReapWorktree_SessionTaskActivityProtects covers the E-1549
 // bug: landed >TTL ago, but session_tasks.updated_at is within TTL
 // (reopened-after-landing). Reaper must leave the worktree alone.
