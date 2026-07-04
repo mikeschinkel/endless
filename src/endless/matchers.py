@@ -323,6 +323,7 @@ DEFAULT_VERBS: list[dict] = [
     {"value": "sync", "definition": "to bring into alignment"},
     {"value": "test", "definition": "to check behavior or correctness"},
     {"value": "track", "definition": "to follow or monitor"},
+    {"value": "triage", "definition": "to sort and prioritize by urgency", "completable": True},
     {"value": "update", "definition": "to revise"},
     {"value": "validate", "definition": "to confirm correctness"},
     {"value": "verify", "definition": "to check truth or accuracy"},
