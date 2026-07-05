@@ -72,6 +72,62 @@ def test_apply_db_choice_sandbox_outside_worktree(tmp_path, monkeypatch):
         config.apply_db_choice("sandbox")
 
 
+def test_apply_db_choice_main_rejected_in_non_self_dev_worktree(tmp_path, monkeypatch):
+    """A downstream (non-self_dev) project has one DB, so --db main is invalid
+    even though it would otherwise be a harmless no-op."""
+    wt = _make_worktree(tmp_path, sandbox=False, task_id="800")
+    monkeypatch.chdir(wt)
+    monkeypatch.setattr(config, "RESOLVED_CONFIG_DIR", None)
+    with pytest.raises(ValueError, match="self-dev"):
+        config.apply_db_choice("main")
+
+
+def test_apply_db_choice_sandbox_rejected_in_non_self_dev_worktree(tmp_path, monkeypatch):
+    """The core bug: --db sandbox in a non-self_dev worktree used to silently
+    mkdir a stray sandbox endless.db. It must be rejected loudly instead."""
+    wt = _make_worktree(tmp_path, sandbox=False, task_id="801")
+    monkeypatch.chdir(wt)
+    monkeypatch.setattr(config, "RESOLVED_CONFIG_DIR", None)
+    with pytest.raises(ValueError, match="self-dev"):
+        config.apply_db_choice("sandbox")
+    # And nothing was pinned.
+    assert config.RESOLVED_CONFIG_DIR is None
+
+
+def test_apply_db_choice_main_rejected_in_non_self_dev_main_checkout(tmp_path, monkeypatch):
+    """--db is invalid from a non-self_dev project's main checkout too (not just
+    its worktrees)."""
+    proj = tmp_path / "proj"
+    (proj / ".endless").mkdir(parents=True)
+    (proj / ".endless" / "config.json").write_text('{"self_dev": false}\n')
+    monkeypatch.chdir(proj)
+    monkeypatch.setattr(config, "RESOLVED_CONFIG_DIR", None)
+    with pytest.raises(ValueError, match="self-dev"):
+        config.apply_db_choice("main")
+
+
+def test_default_db_to_main_pins_main_in_non_self_dev_worktree(tmp_path, monkeypatch):
+    """Forced-main operations (land/backup/apply-change) pin main directly and
+    must NOT be blocked by the --db self-dev gate — they run in downstream
+    non-self_dev projects too."""
+    wt = _make_worktree(tmp_path, sandbox=False, task_id="802")
+    monkeypatch.chdir(wt)
+    monkeypatch.setattr(config, "RESOLVED_CONFIG_DIR", None)
+    config.default_db_to_main()  # must not raise
+    assert config.RESOLVED_CONFIG_DIR == config.main_config_dir()
+
+
+def test_db_flag_rejected_via_cli_in_non_self_dev_worktree(tmp_path, monkeypatch):
+    """End-to-end through DBAwareGroup: --db sandbox in a non-self_dev worktree
+    exits non-zero with the plain refusal (no stray DB created)."""
+    wt = _make_worktree(tmp_path, sandbox=False, task_id="803")
+    monkeypatch.chdir(wt)
+    monkeypatch.setattr(config, "RESOLVED_CONFIG_DIR", None)
+    result = CliRunner().invoke(main, ["db", "path", "--db=sandbox"])
+    assert result.exit_code != 0
+    assert "self-dev" in result.output
+
+
 def test_apply_db_choice_unknown_value(monkeypatch):
     monkeypatch.setattr(config, "RESOLVED_CONFIG_DIR", None)
     with pytest.raises(ValueError, match="unknown --db value"):

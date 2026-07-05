@@ -177,6 +177,15 @@ _WORKTREE_PATH_RE = re.compile(
     r"/\.endless/worktrees/(e-\d+)(?:/|$)"
 )
 
+# Rejection message when --db is used in a project that is not self-dev. Such a
+# project has exactly one database, so the flag has nothing to select — accepting
+# it (main included) would silently mask confusion, and --db sandbox would mkdir a
+# stray sandbox endless.db in the cache. Plain wording, no ticket refs (user-facing).
+DB_NOT_SELF_DEV_REFUSAL = (
+    "--db only applies to projects with self-dev enabled; this project has a "
+    "single database, so --db has nothing to select. Remove the flag."
+)
+
 # The locked refusal message. Click prepends "Error: " to produce the final
 # wording. Intentionally has no E-NNN ticket refs (user-facing).
 WORKTREE_DB_REFUSAL = (
@@ -233,6 +242,30 @@ def gated_worktree_root(cwd: Path | None = None) -> Path | None:
     return root if project_is_self_dev(root) else None
 
 
+def enclosing_project_root(cwd: Path | None = None) -> Path | None:
+    """The project root that encloses cwd, or None if cwd is in no project.
+
+    Inside a .endless/worktrees/e-NNN worktree, that's the main checkout above
+    the worktree segment (mirroring gated_worktree_root). Otherwise it's the
+    nearest ancestor holding a .endless/config.json. Used to decide whether a
+    --db choice is valid: --db only applies to self-dev projects."""
+    start = cwd if cwd is not None else Path.cwd()
+    m = _WORKTREE_PATH_RE.search(str(start))
+    if m:
+        return Path(str(start)[: m.start()])
+    for parent in [start] + list(start.parents):
+        if (parent / ".endless" / "config.json").exists():
+            return parent
+    return None
+
+
+def enclosing_project_is_self_dev(cwd: Path | None = None) -> bool:
+    """True if the project enclosing cwd has self-dev enabled — the gate for
+    accepting a --db choice at all."""
+    root = enclosing_project_root(cwd)
+    return root is not None and project_is_self_dev(root)
+
+
 def set_db_context(config_dir: Path):
     """Pin this process's config dir (and DB) to config_dir, overriding the
     XDG-derived defaults. Re-assigns the module paths so db.py (which reads
@@ -248,11 +281,15 @@ def set_db_context(config_dir: Path):
 def apply_db_choice(choice: str):
     """Resolve a --db main|sandbox choice to a config dir and pin it.
 
-    Raises ValueError for an unknown value, or for --db sandbox outside a
-    worktree. This is the single validator for the flag (DBAwareGroup consumes
-    --db from argv and calls here; there is no Click Choice to pre-validate).
+    Raises ValueError for an unknown value, for --db in a project that is not
+    self-dev (both values — such a project has one DB, so the flag is invalid),
+    or for --db sandbox outside a worktree. This is the single validator for the
+    flag (DBAwareGroup consumes --db from argv and calls here; there is no Click
+    Choice to pre-validate).
     """
     if choice == "main":
+        if not enclosing_project_is_self_dev():
+            raise ValueError(DB_NOT_SELF_DEV_REFUSAL)
         set_db_context(main_config_dir())
     elif choice == "sandbox":
         dir_name = worktree_dir_name()
@@ -261,6 +298,8 @@ def apply_db_choice(choice: str):
                 "--db sandbox only applies inside a self-dev worktree "
                 "(.endless/worktrees/e-NNN); cwd is not in one"
             )
+        if not enclosing_project_is_self_dev():
+            raise ValueError(DB_NOT_SELF_DEV_REFUSAL)
         set_db_context(sandbox_config_dir(dir_name))
     else:
         raise ValueError(
@@ -284,9 +323,14 @@ def default_db_to_main():
 
     An explicit --db main|sandbox is honored: it sets RESOLVED_CONFIG_DIR via
     DBAwareGroup before the command body runs, so this is a no-op then.
+
+    Pins main_config_dir() directly rather than through apply_db_choice: this is
+    a forced-main operation valid in ANY project (worktree land, db backup, and
+    apply-change run in downstream non-self-dev projects too), so it must bypass
+    apply_db_choice's self-dev gate on the --db flag.
     """
     if RESOLVED_CONFIG_DIR is None:
-        apply_db_choice("main")
+        set_db_context(main_config_dir())
 
 
 def require_db_context():
