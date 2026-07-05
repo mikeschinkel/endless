@@ -199,3 +199,4 @@
 {"value": "leverage", "definition": "To use something strategically to gain maximum advantage or effect."}
 {"value": "triage", "definition": "To sort or categorize items according to urgency or importance in order to prioritize handling.", "completable": true}
 {"value": "task", "definition": "To assign work or responsibility to someone."}
+{"value": "deny", "definition": "To refuse to accept, acknowledge, or grant something requested."}
