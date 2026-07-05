@@ -132,10 +132,11 @@ func ensureGitRepo(projectRoot string) error {
 // conflicts on rebase. Refuse loudly with the resolved values and the
 // paths we were about to stage, so future occurrences are self-diagnosing.
 //
-// Note (E-1281 sandbox): when the per-worktree sandbox is active for an
-// endless self-dev worktree, ledger writes are routed to the sandbox
-// DB at ~/.cache/endless/sandboxes/... and don't reach this function
-// at all. This guard only fires for the real-DB path.
+// Note (E-1281 sandbox): when the per-worktree sandbox is active, sandbox
+// emits route their ledger to the sandbox's own db-ledger dir and skip the
+// auto-commit entirely (E-1729: the sandbox dir is disposable and not a git
+// repo), so CommitLedgerSegment — and therefore this guard — is never reached
+// in sandbox mode. It only fires for the real-DB path.
 func ensureMainCheckout(projectRoot string, paths []string) error {
 	gitDir, err := runGitOutput(projectRoot, "rev-parse", "--git-dir")
 	if err != nil {

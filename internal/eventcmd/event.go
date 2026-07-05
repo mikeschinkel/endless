@@ -189,7 +189,7 @@ func run(kindStr, project, entityTypeStr, entityID, actorKindStr, actorID,
 			return fmt.Errorf("marshal event: %w", err)
 		}
 
-		writer, err := events.NewWriter(projectRoot, nodeIDStr)
+		writer, err := events.NewWriter(ledgerRoot(projectRoot), nodeIDStr)
 		if err != nil {
 			rollback()
 			return fmt.Errorf("create writer: %w", err)
@@ -202,10 +202,13 @@ func run(kindStr, project, entityTypeStr, entityID, actorKindStr, actorID,
 		// E-1206: commit the just-written ledger segment immediately. Fail
 		// loudly on git error; the JSONL line has already been written, so a
 		// commit failure surfaces a problem (e.g., not a git repo) without
-		// rolling back the WAL.
-		segRel := filepath.Join(".endless", events.LedgerDirName, writer.CurrentSegment())
-		if err := events.CommitLedgerSegment(projectRoot, segRel); err != nil {
-			return fmt.Errorf("commit ledger segment: %w", err)
+		// rolling back the WAL. E-1729: the sandbox ledger lives under the
+		// disposable, non-git sandbox dir, so skip the commit there.
+		if !monitor.IsSandboxActive() {
+			segRel := filepath.Join(".endless", events.LedgerDirName, writer.CurrentSegment())
+			if err := events.CommitLedgerSegment(projectRoot, segRel); err != nil {
+				return fmt.Errorf("commit ledger segment: %w", err)
+			}
 		}
 
 		// E-1541: only task creates can add a child to a parent epic and so
@@ -265,7 +268,7 @@ func run(kindStr, project, entityTypeStr, entityID, actorKindStr, actorID,
 			return fmt.Errorf("marshal event: %w", err)
 		}
 
-		writer, err := events.NewWriter(projectRoot, nodeIDStr)
+		writer, err := events.NewWriter(ledgerRoot(projectRoot), nodeIDStr)
 		if err != nil {
 			return fmt.Errorf("create writer: %w", err)
 		}
@@ -274,9 +277,12 @@ func run(kindStr, project, entityTypeStr, entityID, actorKindStr, actorID,
 		}
 
 		// E-1206: commit the just-written ledger segment immediately.
-		segRel := filepath.Join(".endless", events.LedgerDirName, writer.CurrentSegment())
-		if err := events.CommitLedgerSegment(projectRoot, segRel); err != nil {
-			return fmt.Errorf("commit ledger segment: %w", err)
+		// E-1729: skip the commit in a sandbox (disposable, non-git dir).
+		if !monitor.IsSandboxActive() {
+			segRel := filepath.Join(".endless", events.LedgerDirName, writer.CurrentSegment())
+			if err := events.CommitLedgerSegment(projectRoot, segRel); err != nil {
+				return fmt.Errorf("commit ledger segment: %w", err)
+			}
 		}
 
 		// Execute SQL mutation (side effect of the event). The derived emitter
@@ -311,6 +317,22 @@ func run(kindStr, project, entityTypeStr, entityID, actorKindStr, actorID,
 	}
 
 	return nil
+}
+
+// ledgerRoot returns the root directory whose .endless/db-ledger/ holds the
+// event ledger for the active DB context (ED-1525: the ledger follows the DB).
+// In an E-1281 sandbox (ConfigDir() resolves under CacheDir()/sandboxes/, the
+// sole sandbox switch per ED-1528) the ledger lives beside the sandbox
+// endless.db — at ConfigDir()/.endless/db-ledger — so sandbox emits and reads
+// never touch the real project ledger. Otherwise it is projectRoot, the real
+// checkout. NewWriter/ReadAllEvents append .endless/db-ledger to whatever root
+// they receive, and NewWriter MkdirAll's it, so the sandbox ledger dir is
+// created on first write.
+func ledgerRoot(projectRoot string) string {
+	if monitor.IsSandboxActive() {
+		return monitor.ConfigDir()
+	}
+	return projectRoot
 }
 
 // makeDerivedEmitter builds the epic-derivation ledger emitter (E-1541) threaded
@@ -356,6 +378,11 @@ func makeDerivedEmitter(clock *kairos.Clock, project, nodeIDStr, projectRoot str
 		}
 		if err := writer.Append(line); err != nil {
 			return err
+		}
+		// E-1729: skip the commit in a sandbox (disposable, non-git dir). The
+		// derived event is already appended to the sandbox ledger via `writer`.
+		if monitor.IsSandboxActive() {
+			return nil
 		}
 		segRel := filepath.Join(".endless", events.LedgerDirName, writer.CurrentSegment())
 		return events.CommitLedgerSegment(projectRoot, segRel)
@@ -421,7 +448,7 @@ func runProjectNextRevise(evtKind events.Kind, project, entityType, entityID,
 		rollback()
 		return fmt.Errorf("marshal event: %w", err)
 	}
-	writer, err := events.NewWriter(projectRoot, nodeIDStr)
+	writer, err := events.NewWriter(ledgerRoot(projectRoot), nodeIDStr)
 	if err != nil {
 		rollback()
 		return fmt.Errorf("create writer: %w", err)
@@ -431,10 +458,13 @@ func runProjectNextRevise(evtKind events.Kind, project, entityType, entityID,
 		return err
 	}
 	// E-1206: commit the just-written ledger segment immediately; a commit
-	// failure surfaces a problem without rolling back the WAL line.
-	segRel := filepath.Join(".endless", events.LedgerDirName, writer.CurrentSegment())
-	if err := events.CommitLedgerSegment(projectRoot, segRel); err != nil {
-		return fmt.Errorf("commit ledger segment: %w", err)
+	// failure surfaces a problem without rolling back the WAL line. E-1729:
+	// skip the commit in a sandbox (disposable, non-git dir).
+	if !monitor.IsSandboxActive() {
+		segRel := filepath.Join(".endless", events.LedgerDirName, writer.CurrentSegment())
+		if err := events.CommitLedgerSegment(projectRoot, segRel); err != nil {
+			return fmt.Errorf("commit ledger segment: %w", err)
+		}
 	}
 
 	// project_next.revised never touches the task tree, so no epic derivation.
@@ -468,8 +498,9 @@ func runValidateDB(args []string) {
 	}
 
 	// Get schema from current DB
-	// Project events into temp DB
-	tempPath, projResult, err := events.ProjectToTempDB(*projectRoot)
+	// Project events into temp DB. E-1729: read the ledger for the active DB
+	// context so validate-db in a sandbox replays the sandbox ledger.
+	tempPath, projResult, err := events.ProjectToTempDB(ledgerRoot(*projectRoot))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "endless-go event: error: %v\n", err)
 		os.Exit(1)
@@ -528,7 +559,7 @@ func runRebuildDB(args []string) {
 		os.Exit(1)
 	}
 
-	tempPath, projResult, err := events.ProjectToTempDB(*projectRoot)
+	tempPath, projResult, err := events.ProjectToTempDB(ledgerRoot(*projectRoot))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "endless-go event: error: %v\n", err)
 		os.Exit(1)
