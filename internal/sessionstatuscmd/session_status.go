@@ -29,12 +29,6 @@ import (
 	"github.com/mikeschinkel/endless/internal/monitor"
 )
 
-// legend is the fixed header line. Kept to a single line; revisit folds into
-// "plan" and there is no "other" entry, so every glyph a user acts on is
-// documented here. ↑ parent is the focal's real task-tree parent; ↩ from is the
-// spawning session's active task (session lineage), split apart in E-1694.
-const legend = "● this  ↑ parent  ↩ from  ⟳ doing  ▶ do  ✎ plan  ◷ orphan  ☑ verify | ⊗ blocked  ⏸ blocks"
-
 // fallbackCols is used when the terminal width can't be detected (output not a
 // tty, no --cols, no $COLUMNS). Matches the bash prototype's default.
 const fallbackCols = 90
@@ -55,35 +49,36 @@ const (
 	actPlan
 	actVerify
 	actOrphan
-	actOther
+	// actLanded: the task's work has merged (E-1693). ⏚ (U+23DA EARTH GROUND,
+	// "landed/grounded") measures single-width (verified with go-runewidth), so
+	// it aligns in the width-aware table like every other icon.
+	actLanded
+	// actUnknown: a status classify() doesn't recognize — a should-never-happen
+	// safety net (every real status is handled above), so its ⁇ appearing in the
+	// legend flags an unhandled status slipping through. ⁇ (U+2047) also measures
+	// single-width. Appended after the pre-existing members so sortRows' enum
+	// ranking is unchanged.
+	actUnknown
 )
 
-func (a action) icon() string {
-	switch a {
-	case actThis:
-		return "●"
-	case actParent:
-		return "↑"
-	case actFrom:
-		return "↩"
-	case actDoing:
-		return "⟳"
-	case actDo:
-		return "▶"
-	case actPlan:
-		return "✎"
-	case actVerify:
-		return "☑"
-	case actOrphan:
-		return "◷"
-	default:
-		// actOther catch-all: landed tasks (E-1693) and any unrecognized status.
-		// ⁇ (U+2047) measures and renders single-width (verified with
-		// go-runewidth), so it aligns in the width-aware table the same as the
-		// silent · it replaces. Intentionally undocumented in the legend.
-		return "⁇"
-	}
+// actionMeta maps each action to its legend glyph and label, indexed by the
+// action enum so enum order is legend order for free. buildLegend derives the
+// dynamic header from this table; icon()/label() read it.
+var actionMeta = [...]struct{ icon, label string }{
+	actThis:    {"●", "this"},
+	actParent:  {"↑", "parent"},
+	actFrom:    {"↩", "from"},
+	actDoing:   {"⟳", "doing"},
+	actDo:      {"▶", "do"},
+	actPlan:    {"✎", "plan"},
+	actVerify:  {"☑", "verify"},
+	actOrphan:  {"◷", "orphan"},
+	actLanded:  {"⏚", "landed"},
+	actUnknown: {"⁇", "unknown"},
 }
+
+func (a action) icon() string  { return actionMeta[a].icon }
+func (a action) label() string { return actionMeta[a].label }
 
 // monitorInterval is the redraw cadence for the live monitor, matching the bash
 // prototype's watch loop.
@@ -267,13 +262,15 @@ func eraseEachLineToEOL(frame string) string {
 // register-session message) mirroring the tmux status line, NEVER an unrelated
 // task's rows (E-1698).
 func renderTo(w io.Writer, rows []monitor.SessionStatusRow, focal int64, noTaskHint string, cols int, color bool) {
-	fmt.Fprintln(w, dim(legend, color))
 	if focal == 0 || len(rows) == 0 {
+		// No rows to document, so no legend — just the claim/bind (or register-
+		// session) hint, NEVER an unrelated task's rows (E-1698).
 		fmt.Fprintln(w, dim(noTaskHint, color))
 		return
 	}
 
 	sortRows(rows)
+	fmt.Fprintln(w, dim(buildLegend(rows), color))
 
 	// Block-column width: 0 if nothing is blocked anywhere, 1 if no single row
 	// is both blocked and blocking, 2 only when some row needs both glyphs.
@@ -311,6 +308,49 @@ func renderTo(w io.Writer, rows []monitor.SessionStatusRow, focal int64, noTaskH
 	}
 }
 
+// buildLegend returns the dynamic header line: only the glyphs actually present
+// in rows, in enum order (actions) then a fixed order (decorations), joined by
+// the same two-space separator with NO group divider. Rebuilt from the current
+// rows each frame by renderTo, so `session status` (one-shot) and `session
+// monitor` (looped) stay byte-identical by construction. Because only present
+// glyphs are included there is never any absent-glyph padding; the set fits one
+// line in >99% of cases and the terminal soft-wraps in the rare overflow (no
+// truncation, which would hide a real glyph).
+func buildLegend(rows []monitor.SessionStatusRow) string {
+	var present [len(actionMeta)]bool
+	var blocked, blocks, dirty bool
+	for _, r := range rows {
+		present[classify(r)] = true
+		if r.BlockedByN > 0 {
+			blocked = true
+		}
+		if r.BlocksN > 0 {
+			blocks = true
+		}
+		if r.Dirty {
+			dirty = true
+		}
+	}
+	var parts []string
+	for a := action(0); int(a) < len(actionMeta); a++ {
+		if present[a] {
+			parts = append(parts, a.icon()+" "+a.label())
+		}
+	}
+	// Decorations after the actions, each shown only when a row bears it: ⊗/⏸
+	// match blockField, ◆ matches dirtyMark (E-1701).
+	if blocked {
+		parts = append(parts, "⊗ blocked")
+	}
+	if blocks {
+		parts = append(parts, "⏸ blocks")
+	}
+	if dirty {
+		parts = append(parts, "◆ dirty")
+	}
+	return strings.Join(parts, "  ")
+}
+
 // classify maps a row to its action, applying the status canonicalization from
 // the plan: revisit/unplanned/needs_plan → plan; verify/unverified → verify;
 // underway/in_progress → working (→ orphan when not in-flight); ready → do
@@ -329,12 +369,12 @@ func classify(r monitor.SessionStatusRow) action {
 		return actDoing
 	}
 	// E-1693: a landed task's work has merged — no do/plan/verify verb applies. It
-	// stays visible (still a non-terminal status) but routes to the ⁇ other?
-	// catch-all so the monitor never offers it as a fresh actionable spawn. Checked
-	// after the decorations (a landed task a live session is on still reads ⟳) and
-	// before the status switch.
+	// stays visible (still a non-terminal status) but routes to actLanded (⏚) so
+	// the monitor never offers it as a fresh actionable spawn. Checked after the
+	// decorations (a landed task a live session is on still reads ⟳) and before the
+	// status switch.
 	if r.Landed {
-		return actOther
+		return actLanded
 	}
 	switch r.Status {
 	case "ready", "submitted":
@@ -350,7 +390,7 @@ func classify(r monitor.SessionStatusRow) action {
 	case "underway", "in_progress":
 		return actOrphan
 	default:
-		return actOther
+		return actUnknown
 	}
 }
 
@@ -388,9 +428,10 @@ func phaseRank(phase string) int {
 // dirtyMark is the single-column separator between the task-type letter and the
 // id: ◆ (U+25C6 BLACK DIAMOND) when the row's worktree diverges from main
 // (unlanded work / changes since a land — E-1701), else a plain space. Both are
-// width 1, so the fixed 13-col prefix and its alignment hold either way. There
-// is no legend entry for ◆ (Mike, 2026-07-01). Distinct from --tree's leading
-// focal marker — different view, different glyph, no clash.
+// width 1, so the fixed 13-col prefix and its alignment hold either way.
+// buildLegend documents ◆ as "dirty" whenever a dirty row is present (E-1750,
+// reversing the 2026-07-01 "◆ stays out of the legend" call). Distinct from
+// --tree's leading focal marker — different view, different glyph, no clash.
 func dirtyMark(r monitor.SessionStatusRow) string {
 	if r.Dirty {
 		return "◆"

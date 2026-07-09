@@ -26,12 +26,12 @@ func TestClassify(t *testing.T) {
 		{"verify", monitor.SessionStatusRow{Status: "verify"}, actVerify},
 		{"unverified is verify", monitor.SessionStatusRow{Status: "unverified"}, actVerify},
 		{"underway is orphan", monitor.SessionStatusRow{Status: "underway"}, actOrphan},
-		{"unknown is other", monitor.SessionStatusRow{Status: "blocked"}, actOther},
-		// E-1693: a landed task routes to actOther regardless of its non-terminal
-		// status, so merged work is never offered as a fresh actionable verb.
-		{"landed ready is other", monitor.SessionStatusRow{Status: "ready", Landed: true}, actOther},
-		{"landed unverified is other", monitor.SessionStatusRow{Status: "unverified", Landed: true}, actOther},
-		{"landed unplanned is other", monitor.SessionStatusRow{Status: "unplanned", Landed: true}, actOther},
+		{"unrecognized status is unknown", monitor.SessionStatusRow{Status: "blocked"}, actUnknown},
+		// E-1693/E-1750: a landed task routes to actLanded regardless of its
+		// non-terminal status, so merged work is never offered as a fresh verb.
+		{"landed ready is landed", monitor.SessionStatusRow{Status: "ready", Landed: true}, actLanded},
+		{"landed unverified is landed", monitor.SessionStatusRow{Status: "unverified", Landed: true}, actLanded},
+		{"landed unplanned is landed", monitor.SessionStatusRow{Status: "unplanned", Landed: true}, actLanded},
 		{"non-landed ready still do", monitor.SessionStatusRow{Status: "ready"}, actDo},
 		{"non-landed underway still orphan", monitor.SessionStatusRow{Status: "underway"}, actOrphan},
 		// Decoration still wins: a landed task a live session is on reads ⟳ doing.
@@ -47,12 +47,13 @@ func TestClassify(t *testing.T) {
 }
 
 // TestActionIcons pins the glyphs that other surfaces (and the legend) depend on,
-// notably the E-1693 ⁇ catch-all that replaced the silent · and the untouched
-// ◷ orphan it must stay distinct from.
+// notably the E-1750 split of the old ⁇ catch-all into ⏚ landed and ⁇ unknown,
+// and the untouched ◷ orphan they must stay distinct from.
 func TestActionIcons(t *testing.T) {
 	cases := map[action]string{
-		actOrphan: "◷",
-		actOther:  "⁇",
+		actOrphan:  "◷",
+		actLanded:  "⏚",
+		actUnknown: "⁇",
 	}
 	for a, want := range cases {
 		if got := a.icon(); got != want {
@@ -180,13 +181,103 @@ func TestRenderEmptyFocal(t *testing.T) {
 	var b strings.Builder
 	renderTo(&b, nil, 0, hintClaimBind, 90, false)
 	out := b.String()
-	if !strings.Contains(out, legend) {
-		t.Errorf("legend missing from empty render:\n%s", out)
-	}
-	// The no-focal render shows the claim/bind hint, never an unrelated task list
-	// (E-1698): the caller passes the pane's resolved hint verbatim.
+	// The no-focal render shows ONLY the claim/bind hint (E-1698) — with no rows
+	// to document there is no legend line (E-1750), so its glyphs must be absent.
 	if !strings.Contains(out, "claim or bind") {
 		t.Errorf("claim/bind hint missing:\n%s", out)
+	}
+	if strings.ContainsAny(out, "●▶✎") {
+		t.Errorf("empty render should carry no legend glyphs:\n%s", out)
+	}
+	if len(strings.Split(strings.TrimRight(out, "\n"), "\n")) != 1 {
+		t.Errorf("empty render should be a single hint line:\n%s", out)
+	}
+}
+
+// TestBuildLegend covers the E-1750 dynamic legend: only glyphs for actions and
+// decorations actually present in the row set, enum order then decorations, no
+// `|` divider. This is the sole coverage of ◆ dirty (a real divergent worktree
+// can't be seeded hermetically) and of ⁇ unknown (driven by a synthetic status).
+func TestBuildLegend(t *testing.T) {
+	cases := []struct {
+		name        string
+		rows        []monitor.SessionStatusRow
+		want        string // exact when non-empty
+		mustHave    []string
+		mustNotHave []string
+	}{
+		{
+			name: "do and plan only",
+			rows: []monitor.SessionStatusRow{
+				{Status: "ready"},     // do
+				{Status: "unplanned"}, // plan
+			},
+			want:        "▶ do  ✎ plan",
+			mustNotHave: []string{"orphan", "verify", "landed", "unknown", "blocked", "blocks", "dirty", "|"},
+		},
+		{
+			name:     "landed row surfaces ⏚ landed",
+			rows:     []monitor.SessionStatusRow{{Status: "ready", Landed: true}},
+			mustHave: []string{"⏚ landed"},
+		},
+		{
+			name:     "unrecognized status surfaces ⁇ unknown",
+			rows:     []monitor.SessionStatusRow{{Status: "blocked"}},
+			mustHave: []string{"⁇ unknown"},
+		},
+		{
+			name:     "blocked decoration",
+			rows:     []monitor.SessionStatusRow{{Status: "ready", BlockedByN: 1}},
+			mustHave: []string{"⊗ blocked"},
+		},
+		{
+			name:     "blocks decoration",
+			rows:     []monitor.SessionStatusRow{{Status: "ready", BlocksN: 1}},
+			mustHave: []string{"⏸ blocks"},
+		},
+		{
+			name:     "dirty decoration",
+			rows:     []monitor.SessionStatusRow{{Status: "ready", Dirty: true}},
+			mustHave: []string{"◆ dirty"},
+		},
+		{
+			name: "actions in enum order then decorations",
+			rows: []monitor.SessionStatusRow{
+				{Status: "unplanned"},             // plan (later in enum)
+				{IsFocal: true, Status: "ready"},  // this (first in enum)
+				{Status: "ready", BlockedByN: 1},  // do + ⊗
+				{Status: "underway", Dirty: true}, // orphan + ◆
+			},
+			want: "● this  ▶ do  ✎ plan  ◷ orphan  ⊗ blocked  ◆ dirty",
+		},
+		{
+			name: "no rows yields empty legend",
+			rows: nil,
+			want: "",
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := buildLegend(c.rows)
+			if c.want != "" || c.name == "no rows yields empty legend" {
+				if got != c.want {
+					t.Errorf("buildLegend = %q, want %q", got, c.want)
+				}
+			}
+			for _, s := range c.mustHave {
+				if !strings.Contains(got, s) {
+					t.Errorf("buildLegend = %q, must contain %q", got, s)
+				}
+			}
+			for _, s := range c.mustNotHave {
+				if strings.Contains(got, s) {
+					t.Errorf("buildLegend = %q, must NOT contain %q", got, s)
+				}
+			}
+			if strings.Contains(got, "|") {
+				t.Errorf("buildLegend = %q, must contain no `|` divider", got)
+			}
+		})
 	}
 }
 
