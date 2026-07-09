@@ -203,3 +203,4 @@
 {"value": "submit", "definition": "To present work as spec-complete for approval; sets a task to `submitted` (awaiting a human approve)."}
 {"value": "approve", "definition": "To grant human approval; promotes a `submitted` task to `ready`."}
 {"value": "version-control", "definition": "To track and maintain a history of changes to files or code using a dedicated system like Git."}
+{"value": "lint", "definition": "To analyze source code using an automated tool to identify style violations, potential bugs, and deviations from coding standards."}
