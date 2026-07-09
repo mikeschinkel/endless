@@ -23,6 +23,13 @@ internal/web/assets/css/templui
 # Local git worktree checkouts created for parallel sessions
 .endless/worktrees/
 
+# Project-local scratch dir for agent-authored throwaway content (plans,
+# outcomes) before it's loaded into the ledger. Sanctioned replacement for
+# system /tmp: co-located with the work, survives reboot, and recoverable if a
+# worktree is dropped before the content is loaded. `endless register` scaffolds
+# this entry into every project's .gitignore.
+.endless/tmp/
+
 # Per-worktree companion + ownership lock files (E-1218). Each worktree
 # writes its own; main has no business carrying either, but if the
 # SessionStart hook ever walks up from a cwd inside main and writes

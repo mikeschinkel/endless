@@ -881,8 +881,9 @@ func blockPlanFileWriteIfApplicable(payload claudePayload) {
 			"humans can see plans when reviewing the repo on GitHub or other Git " +
 			"hosts. Editing it directly leaves the DB stale, and if the worktree is " +
 			"later dropped the edit is silently lost.\n\n" +
-			"Author the plan at a temp path, then run:\n" +
-			"  endless task update <id> --text-file <path>\n\n" +
+			"Author the plan under .endless/tmp/ (the project-local scratch " +
+			"dir), then run:\n" +
+			"  endless task update <id> --text-file .endless/tmp/<file>.md\n\n" +
 			"(--text-file loads the file's content; --text would store the path " +
 			"string itself. Use --text only for inline content.)\n\n" +
 			"Never hand-edit or git-commit the plan file yourself.")

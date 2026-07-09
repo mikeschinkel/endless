@@ -1446,9 +1446,10 @@ def _guard_inline_content(inline, name, allow_paths):
         raise click.ClickException(
             f"--{name} content contains an absolute path ({tok!r}). Absolute paths "
             f"don't belong in durable ledger content — they're non-portable and a "
-            f"/tmp path is lost when a worktree drops. Put real content inline, use "
-            f"--{name}-file to load a file, or reference a cross-project file by a "
-            f"Git URL. To keep this path, add --allow-path with a regex matching it."
+            f"/tmp path is lost when a worktree drops. Put real content inline, or "
+            f"author scratch under .endless/tmp/ and load it with --{name}-file; a "
+            f"cross-project file can be referenced by a Git URL. To keep this path, "
+            f"add --allow-path with a regex matching it."
         )
 
 

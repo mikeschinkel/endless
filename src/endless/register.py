@@ -24,6 +24,41 @@ LANGUAGE_EXTENSIONS = {
 }
 
 
+# Canonical endless entries every registered project's .gitignore should carry.
+# Deliberately minimal: only paths endless writes that must never be committed
+# and whose currency is settled. `.endless/tmp/` is the sanctioned project-local
+# scratch dir — agents author throwaway content there (co-located with the work,
+# survives reboot, recoverable before a worktree drops) instead of system /tmp.
+# The uncertain entries (`.endless/worktree.json`, `.endless/worktree.lock`,
+# `.endless/sessions/`) are intentionally omitted until their obsolescence is
+# confirmed; existing repos that already ignore them keep those lines untouched.
+GITIGNORE_ENTRIES = [
+    ".endless/worktrees/",
+    ".endless/tmp/",
+]
+GITIGNORE_BLOCK_HEADER = "# endless (managed by `endless register`)"
+
+
+def scaffold_gitignore(project_path: Path) -> list[str]:
+    """Idempotently ensure the project's .gitignore ignores the canonical
+    endless paths. Appends only the missing entries under a marked block and
+    creates .gitignore if absent; entries already present anywhere in the file
+    (in any form) are left as-is. Returns the entries newly added — empty when
+    the file already covered them all, so re-running never duplicates a line."""
+    gitignore = project_path / ".gitignore"
+    existing = gitignore.read_text() if gitignore.exists() else ""
+    present = {line.strip() for line in existing.splitlines()}
+    missing = [entry for entry in GITIGNORE_ENTRIES if entry not in present]
+    if not missing:
+        return []
+    block = GITIGNORE_BLOCK_HEADER + "\n" + "\n".join(missing) + "\n"
+    if existing and not existing.endswith("\n"):
+        existing += "\n"
+    separator = "\n" if existing else ""
+    gitignore.write_text(existing + separator + block)
+    return missing
+
+
 def validate_name(name: str) -> bool:
     return bool(NAME_PATTERN.match(name))
 
@@ -149,6 +184,12 @@ def register_project(
         "documents": {"rules": []},
     })
 
+    # Scaffold .gitignore + the project-local scratch dir so agents author
+    # throwaway content under .endless/tmp/ instead of system /tmp, and never
+    # hit a missing-directory trap when they do.
+    added = scaffold_gitignore(project_path)
+    (project_path / ".endless" / "tmp").mkdir(parents=True, exist_ok=True)
+
     # Detect group from parent directory
     group_name = None
     parent = project_path.parent
@@ -193,4 +234,10 @@ def register_project(
             dim=True,
         )
     )
+    if added:
+        click.echo(
+            click.style("•", fg="cyan")
+            + " .gitignore updated with "
+            + click.style(", ".join(added), dim=True)
+        )
     return name

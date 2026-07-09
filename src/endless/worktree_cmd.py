@@ -1171,8 +1171,8 @@ def _orphan_plan_mismatch_msg(
         f"Keep the DB version, discard the branch:\n"
         f"  git -C {root} branch -D {branch}          # then retry\n"
         f"Adopt the branch's version into the DB:\n"
-        f"  git -C {root} show {branch}:{plan_rel} > /tmp/E-{task_id}.md\n"
-        f"  endless task update E-{task_id} --text-file /tmp/E-{task_id}.md   # then retry"
+        f"  git -C {root} show {branch}:{plan_rel} > .endless/tmp/E-{task_id}.md\n"
+        f"  endless task update E-{task_id} --text-file .endless/tmp/E-{task_id}.md   # then retry"
     )
 
 
@@ -1312,6 +1312,9 @@ def create_task_worktree(
 
     companion_dir = wt_dir / ".endless"
     companion_dir.mkdir(parents=True, exist_ok=True)
+    # Project-local scratch dir: agents author throwaway content here (gitignored,
+    # co-located, recoverable before this worktree drops) instead of system /tmp.
+    (companion_dir / "tmp").mkdir(parents=True, exist_ok=True)
     # E-1301: `task_id` is no longer written. The path convention
     # (`.endless/worktrees/e-NNN`) is the canonical source. The companion
     # file's other fields document the worktree's provenance; its mere
