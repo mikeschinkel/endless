@@ -218,13 +218,15 @@ func maybeReapWorktree(db *sql.DB, projectRoot, dir string, taskID int64, cutoff
 		// A stranded leftover: git's worktree admin no longer knows the
 		// path (e.g. a prior reap removed the record but didn't rmdir),
 		// so `git worktree remove` aborts with "is not a working tree".
-		// Treat as benign: best-effort rmdir of the leftover dir, skip
-		// branch -D (we can't reason about the branch from a dir git
-		// doesn't track), report as reaped so the outer sweep's calm
-		// "removed <dir>" line fires. os.Remove (not RemoveAll) refuses
-		// non-empty dirs so we never destroy user files.
+		// Remove the whole dir, strictly path-scoped so RemoveAll can
+		// never over-reach. Skip branch -D (we can't reason about the
+		// branch from a dir git doesn't track). A genuine failure
+		// (permissions, etc.) propagates and is surfaced by the outer
+		// sweep's existing log line — no more false "removed".
 		if strings.Contains(out, "is not a working tree") {
-			_ = os.Remove(dir)
+			if rerr := removeStrandedWorktreeDir(projectRoot, dir); rerr != nil {
+				return false, fmt.Errorf("remove stranded worktree dir: %w", rerr)
+			}
 			return true, nil
 		}
 		return false, fmt.Errorf("git worktree remove: %v: %s", err, out)
@@ -239,6 +241,37 @@ func maybeReapWorktree(db *sql.DB, projectRoot, dir string, taskID int64, cutoff
 		}
 	}
 	return true, nil
+}
+
+// removeStrandedWorktreeDir deletes a stranded orphan worktree directory
+// (one git no longer tracks) with os.RemoveAll, but ONLY after asserting the
+// path is exactly a <projectRoot>/.endless/worktrees/e-NNN directory that is
+// not a symlink. Any assertion failing returns an error and deletes nothing,
+// so RemoveAll can never over-reach to a path we can't vouch for or follow a
+// symlink pointing elsewhere.
+func removeStrandedWorktreeDir(projectRoot, dir string) error {
+	worktreeRoot := filepath.Join(projectRoot, ".endless", "worktrees")
+	rel, err := filepath.Rel(worktreeRoot, dir)
+	if err != nil {
+		return fmt.Errorf("resolve %s under worktrees root: %w", dir, err)
+	}
+	if rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return fmt.Errorf("refuse to remove %s: outside worktrees root %s", dir, worktreeRoot)
+	}
+	if !worktreeDirRe.MatchString(filepath.Base(dir)) {
+		return fmt.Errorf("refuse to remove %s: basename is not an e-NNN worktree dir", dir)
+	}
+	fi, err := os.Lstat(dir)
+	if err != nil {
+		return fmt.Errorf("lstat %s: %w", dir, err)
+	}
+	if fi.Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("refuse to remove %s: is a symlink", dir)
+	}
+	if err := os.RemoveAll(dir); err != nil {
+		return fmt.Errorf("remove all %s: %w", dir, err)
+	}
+	return nil
 }
 
 // hasLiveProcessInDir reports whether any process has cwd inside dir.

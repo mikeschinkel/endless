@@ -217,10 +217,19 @@ type reaperFixture struct {
 
 func newReaperFixture(t *testing.T, landedAt time.Time) *reaperFixture {
 	t.Helper()
+	projRoot := t.TempDir()
+	// Place the worktree dir at a real <projRoot>/.endless/worktrees/e-42
+	// (task ID 42 is seeded below) so the stranded-orphan path exercises
+	// removeStrandedWorktreeDir's real path guard. Tests that never reach
+	// that path are unaffected by where dir lives.
+	dir := filepath.Join(projRoot, ".endless", "worktrees", "e-42")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("mkdir worktree dir: %v", err)
+	}
 	f := &reaperFixture{
 		db:         newReaperTestDB(t),
-		dir:        t.TempDir(),
-		projRoot:   t.TempDir(),
+		dir:        dir,
+		projRoot:   projRoot,
 		revListOut: "0",
 		statusOut:  "",
 	}
@@ -470,11 +479,11 @@ func TestMaybeReapWorktree_GitRevListErrorProtects(t *testing.T) {
 	}
 }
 
-// TestMaybeReapWorktree_StrandedLeftover_Reaped covers E-1575: when
-// `git worktree remove` aborts with "is not a working tree" (the dir
-// exists on disk but git's worktree admin doesn't know it — leftover
-// from a prior reap), the reaper treats it as benign, rmdir's the
-// empty dir, skips branch -D, and reports the dir as reaped.
+// TestMaybeReapWorktree_StrandedLeftover_Reaped covers E-1575/E-1745: when
+// `git worktree remove` aborts with "is not a working tree" (the dir exists on
+// disk but git's worktree admin doesn't know it — leftover from a prior reap),
+// the reaper removes the (here empty) dir via the path-scoped RemoveAll, skips
+// branch -D, and reports the dir as reaped.
 func TestMaybeReapWorktree_StrandedLeftover_Reaped(t *testing.T) {
 	f := newReaperFixture(t, time.Now().Add(-30*24*time.Hour))
 	f.worktreeRmErr = fmt.Errorf("exit status 128")
@@ -497,18 +506,18 @@ func TestMaybeReapWorktree_StrandedLeftover_Reaped(t *testing.T) {
 	}
 }
 
-// TestMaybeReapWorktree_StrandedLeftover_NonEmptyDirSurvives confirms
-// the rmdir step uses os.Remove (not RemoveAll): if the stranded dir
-// somehow has contents (user's leftover files), the rmdir fails
-// harmlessly and the dir stays put. The reap is still treated as
-// successful (no loud error on subsequent sweeps).
-func TestMaybeReapWorktree_StrandedLeftover_NonEmptyDirSurvives(t *testing.T) {
+// TestMaybeReapWorktree_StrandedLeftover_NonEmptyDirReaped covers E-1745: a
+// NON-EMPTY stranded orphan (the real-world case — the persistent e-1281 etc.
+// dirs the old os.Remove could never delete) is now fully removed via the
+// path-scoped RemoveAll, and reaped=true means the dir is actually gone.
+func TestMaybeReapWorktree_StrandedLeftover_NonEmptyDirReaped(t *testing.T) {
 	f := newReaperFixture(t, time.Now().Add(-30*24*time.Hour))
 	f.worktreeRmErr = fmt.Errorf("exit status 128")
 	f.worktreeRmOut = "fatal: '" + f.dir + "' is not a working tree\n"
-	// Plant a file so os.Remove on the dir fails (non-empty).
+	// Plant a file so the dir is non-empty (os.Remove would refuse it; the
+	// fix's RemoveAll must still delete it).
 	planted := filepath.Join(f.dir, "user-leftover.txt")
-	if err := os.WriteFile(planted, []byte("important"), 0o644); err != nil {
+	if err := os.WriteFile(planted, []byte("stale"), 0o644); err != nil {
 		t.Fatalf("plant file: %v", err)
 	}
 	cutoff := time.Now().UTC().Add(-14 * 24 * time.Hour)
@@ -517,10 +526,73 @@ func TestMaybeReapWorktree_StrandedLeftover_NonEmptyDirSurvives(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if !reaped {
-		t.Errorf("expected reap=true for stranded leftover, got false")
+		t.Errorf("expected reap=true for non-empty stranded leftover, got false")
+	}
+	if _, statErr := os.Stat(f.dir); !os.IsNotExist(statErr) {
+		t.Errorf("expected non-empty stranded dir to be removed, stat err=%v", statErr)
+	}
+}
+
+// TestRemoveStrandedWorktreeDir_RefusesOutsideRoot: a dir that is not under
+// <projRoot>/.endless/worktrees must be refused (error, nothing deleted).
+func TestRemoveStrandedWorktreeDir_RefusesOutsideRoot(t *testing.T) {
+	projRoot := t.TempDir()
+	// e-NNN basename, but a sibling of the worktrees root, not inside it.
+	sentinel := filepath.Join(projRoot, ".endless", "e-42")
+	if err := os.MkdirAll(sentinel, 0o755); err != nil {
+		t.Fatalf("mkdir sentinel: %v", err)
+	}
+	if err := removeStrandedWorktreeDir(projRoot, sentinel); err == nil {
+		t.Errorf("expected error removing dir outside worktrees root, got nil")
+	}
+	if _, statErr := os.Stat(sentinel); statErr != nil {
+		t.Errorf("expected sentinel to survive refusal, stat err=%v", statErr)
+	}
+}
+
+// TestRemoveStrandedWorktreeDir_RefusesNonMatchingBasename: a dir inside the
+// worktrees root whose basename is not e-NNN must be refused.
+func TestRemoveStrandedWorktreeDir_RefusesNonMatchingBasename(t *testing.T) {
+	projRoot := t.TempDir()
+	sentinel := filepath.Join(projRoot, ".endless", "worktrees", "not-a-task")
+	if err := os.MkdirAll(sentinel, 0o755); err != nil {
+		t.Fatalf("mkdir sentinel: %v", err)
+	}
+	if err := removeStrandedWorktreeDir(projRoot, sentinel); err == nil {
+		t.Errorf("expected error removing non-e-NNN basename, got nil")
+	}
+	if _, statErr := os.Stat(sentinel); statErr != nil {
+		t.Errorf("expected sentinel to survive refusal, stat err=%v", statErr)
+	}
+}
+
+// TestRemoveStrandedWorktreeDir_RefusesSymlink: an e-NNN entry under the
+// worktrees root that is itself a symlink must be refused, and its target must
+// be left untouched (never follow a symlink to somewhere else).
+func TestRemoveStrandedWorktreeDir_RefusesSymlink(t *testing.T) {
+	projRoot := t.TempDir()
+	wtRoot := filepath.Join(projRoot, ".endless", "worktrees")
+	if err := os.MkdirAll(wtRoot, 0o755); err != nil {
+		t.Fatalf("mkdir worktrees root: %v", err)
+	}
+	// Target dir with a file, living outside the worktrees root.
+	target := filepath.Join(t.TempDir(), "real-data")
+	if err := os.MkdirAll(target, 0o755); err != nil {
+		t.Fatalf("mkdir target: %v", err)
+	}
+	planted := filepath.Join(target, "keep.txt")
+	if err := os.WriteFile(planted, []byte("precious"), 0o644); err != nil {
+		t.Fatalf("plant file: %v", err)
+	}
+	link := filepath.Join(wtRoot, "e-42")
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatalf("symlink: %v", err)
+	}
+	if err := removeStrandedWorktreeDir(projRoot, link); err == nil {
+		t.Errorf("expected error removing symlinked e-NNN entry, got nil")
 	}
 	if _, statErr := os.Stat(planted); statErr != nil {
-		t.Errorf("expected planted file to survive (non-empty dir not removed), stat err=%v", statErr)
+		t.Errorf("expected symlink target contents to survive, stat err=%v", statErr)
 	}
 }
 
