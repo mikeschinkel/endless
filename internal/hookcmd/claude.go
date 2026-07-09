@@ -481,6 +481,13 @@ func handlePreToolUse(projectID int64, isRegistered bool, payload claudePayload)
 		return nil
 	}
 
+	// E-1202: refuse a direct Write/Edit of a task plan-file mirror
+	// (.endless/plans/E-NNN.md) in main OR a worktree. Placed before the
+	// worktree gate so a plan-file write in main gets the plan-specific
+	// redirect to `endless task update --text` rather than the generic
+	// "edits in main" refusal. Independent of tracking_mode.
+	blockPlanFileWriteIfApplicable(payload)
+
 	// Worktree gate (E-971 Layer D). Independent of tracking_mode, like
 	// E-1012: even with per-task tracking off, edits in main and edits
 	// to a worktree owned by another session are refused.
@@ -768,6 +775,14 @@ func handleExitPlanMode(projectID int64, payload claudePayload) error {
 // (the trailing boundary requires whitespace or end-of-string).
 var gitCommitRe = regexp.MustCompile(`^\s*git\s+commit($|\s)`)
 
+// planFileRe matches a task plan-file mirror path .endless/plans/E-NNN.md,
+// absolute or repo-relative. Anchored $ plus the E-<digits>.md immediately after
+// plans/ excludes any subdir (e.g. a future plans/snapshots/…) and any non-plan
+// file in the dir. Plan files are the DB-owned mirror endless writes and commits
+// on land; hand-editing them via Write/Edit desyncs tasks.text (the source of
+// truth). See blockPlanFileWriteIfApplicable.
+var planFileRe = regexp.MustCompile(`(^|/)\.endless/plans/E-\d+\.md$`)
+
 // sqliteEndlessRe matches sqlite3 invocations targeting any path inside
 // a .endless/ directory. The character class [^|;&] stops the match at
 // command-pipeline boundaries; [ /] before \.endless/ ensures the
@@ -843,6 +858,34 @@ Or by hand:
 
 Bypass (NOT recommended):
   git commit --no-verify`)
+}
+
+// blockPlanFileWriteIfApplicable refuses any Write/Edit/NotebookEdit whose
+// target is a task plan-file mirror .endless/plans/E-NNN.md — in main's working
+// tree OR a worktree's materialized mirror. Plan content lives in tasks.text (the
+// source of truth); the .md file is a mirror endless writes and commits during
+// worktree-land so humans can read plans on GitHub. A direct tool-write desyncs
+// the DB, and if the worktree is later dropped the edit is silently lost. The CLI
+// materializer (`endless task update --text`) is a subprocess the hook never sees,
+// so the land-produces-plan-markdown flow is unaffected. Independent of
+// tracking_mode, like the worktree and commit-on-main gates.
+func blockPlanFileWriteIfApplicable(payload claudePayload) {
+	path := extractFilePath(payload.ToolName, payload.ToolInput)
+	if path == "" || !planFileRe.MatchString(path) {
+		return
+	}
+	blockToolUse(
+		"BLOCKED: refusing a direct Write/Edit of a task plan file " +
+			"(.endless/plans/E-NNN.md). Plan content lives in tasks.text (the source " +
+			"of truth); the file is a mirror endless writes and commits for you so " +
+			"humans can see plans when reviewing the repo on GitHub or other Git " +
+			"hosts. Editing it directly leaves the DB stale, and if the worktree is " +
+			"later dropped the edit is silently lost.\n\n" +
+			"Author the plan at a temp path, then run:\n" +
+			"  endless task update <id> --text-file <path>\n\n" +
+			"(--text-file loads the file's content; --text would store the path " +
+			"string itself. Use --text only for inline content.)\n\n" +
+			"Never hand-edit or git-commit the plan file yourself.")
 }
 
 // isInMainCheckout returns true if cwd is inside the main checkout of a git
