@@ -318,9 +318,12 @@ func renderTo(w io.Writer, rows []monitor.SessionStatusRow, focal int64, noTaskH
 // truncation, which would hide a real glyph).
 func buildLegend(rows []monitor.SessionStatusRow) string {
 	var present [len(actionMeta)]bool
-	var blocked, blocks, dirty bool
+	var done, blocked, blocks, dirty bool
 	for _, r := range rows {
 		present[classify(r)] = true
+		if isTerminal(r.Status) {
+			done = true
+		}
 		if r.BlockedByN > 0 {
 			blocked = true
 		}
@@ -337,8 +340,14 @@ func buildLegend(rows []monitor.SessionStatusRow) string {
 			parts = append(parts, a.icon()+" "+a.label())
 		}
 	}
-	// Decorations after the actions, each shown only when a row bears it: ⊗/⏸
-	// match blockField, ◆ matches dirtyMark (E-1701).
+	// Decorations after the actions, each shown only when a row bears it. ✓ is the
+	// phase-column done marker (phaseChar); ⊗/⏸ match blockField; ◆ matches
+	// dirtyMark (E-1701). ✓ leads the decorations as it marks the task's own state
+	// (a focal/parent/from row can be terminal) before the relational/worktree
+	// markers.
+	if done {
+		parts = append(parts, "✓ done")
+	}
 	if blocked {
 		parts = append(parts, "⊗ blocked")
 	}

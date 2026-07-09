@@ -213,7 +213,17 @@ func TestBuildLegend(t *testing.T) {
 				{Status: "unplanned"}, // plan
 			},
 			want:        "▶ do  ✎ plan",
-			mustNotHave: []string{"orphan", "verify", "landed", "unknown", "blocked", "blocks", "dirty", "|"},
+			mustNotHave: []string{"orphan", "verify", "landed", "unknown", "done", "blocked", "blocks", "dirty", "|"},
+		},
+		{
+			name:     "terminal row surfaces ✓ done",
+			rows:     []monitor.SessionStatusRow{{IsFocal: true, Status: "confirmed"}},
+			mustHave: []string{"✓ done"},
+		},
+		{
+			name:        "no ✓ done when no terminal row",
+			rows:        []monitor.SessionStatusRow{{Status: "ready"}},
+			mustNotHave: []string{"done"},
 		},
 		{
 			name:     "landed row surfaces ⏚ landed",

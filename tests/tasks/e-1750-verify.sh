@@ -209,6 +209,20 @@ test_do_plan_only() {
     assert_no_pipe      "legend has no | divider"  "${f}"
 }
 
+test_done() {
+    section "terminal row → ✓ done"
+    # A confirmed focal still renders (is_focal), carrying the phase-column ✓.
+    local f
+    f=$(add_task_get_id "Implement e1750 done focal") || return
+    if ! endless task confirm "${f}" >/dev/null 2>&1; then
+        report_fail "confirm focal for done marker" "task confirm exits 0" "see: endless task confirm ${f} --db sandbox"
+        return
+    fi
+    assert_legend_has "legend lists ✓ done"    "${f}" "✓ done"
+    assert_row_glyph  "done row renders ✓"      "${f}" "${f}" "✓"
+    assert_no_pipe    "legend has no | divider" "${f}"
+}
+
 test_landed() {
     section "landed row → ⏚ landed"
     local f c sha
@@ -306,6 +320,7 @@ main() {
 
     test_go_unit
     test_do_plan_only
+    test_done
     test_landed
     test_unknown
     test_blocked
