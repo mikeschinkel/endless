@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path"
 	"strings"
 )
 
@@ -47,6 +48,20 @@ func CommitLedgerSegment(projectRoot, segmentRelPath string) error {
 		LedgerCommitSubject,
 		".endless/db-ledger/*.jsonl",
 	)
+}
+
+// CommitDoc commits a single version-controlled document mirror file
+// (E-1747: `.endless/<kind>/<ID>.md`) directly on the project's main checkout.
+// Used for content that has no worktree of its own — a decision body authored
+// from outside any task worktree. Thin wrapper around commitPaths; inherits
+// its main-checkout enforcement (ensureMainCheckout) and GIT_DIR-family env
+// stripping, so callers don't re-implement that safety. The amend-scope glob
+// is the doc file's own directory, so a re-commit of the same subject folds in
+// rather than piling up (canAmend also requires the subject to match, and each
+// doc's subject is ID-specific, so distinct docs never amend over each other).
+func CommitDoc(projectRoot, relPath, subject string) error {
+	excludeGlob := path.Dir(relPath) + "/*.md"
+	return commitPaths(projectRoot, []string{relPath}, subject, excludeGlob)
 }
 
 // commitPaths makes one commit containing exactly the named paths.

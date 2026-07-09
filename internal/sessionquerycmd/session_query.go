@@ -33,6 +33,11 @@ func Run(args []string) {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
+	case "task-field":
+		if err := runTaskField(args[1:]); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
 	case "ensure-claude-id":
 		if err := runEnsureClaudeID(args[1:]); err != nil {
 			fmt.Fprintln(os.Stderr, err)
@@ -82,6 +87,8 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "subcommands:")
 	fmt.Fprintln(os.Stderr, "  list-live --project-root <path>   JSON array of live sessions for the project")
 	fmt.Fprintln(os.Stderr, "  task-text --id <task-id>          raw tasks.text for the task (empty if none)")
+	fmt.Fprintln(os.Stderr, "  task-field --id <task-id> --name <text|outcome|analysis>")
+	fmt.Fprintln(os.Stderr, "                                    raw value of one multiline doc column (empty if none)")
 	fmt.Fprintln(os.Stderr, "  ensure-claude-id --session-id <uuid> --project-root <path> [--process <pane>]")
 	fmt.Fprintln(os.Stderr, "                                    look up (or lazy-create) sessions.id; prints integer id")
 	fmt.Fprintln(os.Stderr, "  record-bg-agent --task-id <id> --short-id <handle>")
@@ -243,6 +250,31 @@ func runTaskText(args []string) error {
 		return fmt.Errorf("read task text for E-%d: %w", *id, err)
 	}
 	_, err = os.Stdout.WriteString(text)
+	return err
+}
+
+// runTaskField prints the raw value of one whitelisted multiline document
+// column (text/outcome/analysis) for a task. Backs E-1747's birth-time mirror
+// seeding: the Python worktree-create path reads each field this way instead
+// of doing a forbidden Python DB read (E-894/E-1486).
+func runTaskField(args []string) error {
+	fs := flag.NewFlagSet("task-field", flag.ContinueOnError)
+	id := fs.Int64("id", 0, "task id")
+	name := fs.String("name", "", "column name: text|outcome|analysis")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *id == 0 {
+		return fmt.Errorf("--id is required")
+	}
+	if *name == "" {
+		return fmt.Errorf("--name is required")
+	}
+	value, err := monitor.TaskField(*id, *name)
+	if err != nil {
+		return fmt.Errorf("read task field %q for E-%d: %w", *name, *id, err)
+	}
+	_, err = os.Stdout.WriteString(value)
 	return err
 }
 

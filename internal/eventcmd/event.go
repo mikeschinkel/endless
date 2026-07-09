@@ -25,13 +25,15 @@ import (
 func Run(args []string) {
 	if len(args) < 1 {
 		fmt.Fprintf(os.Stderr, "Usage: endless-go event <command> [flags]\n")
-		fmt.Fprintf(os.Stderr, "Commands: emit, validate-db, rebuild-db, apply-change, backup, reap-worktrees\n")
+		fmt.Fprintf(os.Stderr, "Commands: emit, validate-db, rebuild-db, apply-change, backup, reap-worktrees, commit-doc\n")
 		os.Exit(1)
 	}
 
 	switch args[0] {
 	case "emit":
 		runEmit(args[1:])
+	case "commit-doc":
+		runCommitDoc(args[1:])
 	case "validate-db":
 		runValidateDB(args[1:])
 	case "rebuild-db":
@@ -44,6 +46,28 @@ func Run(args []string) {
 		runReapWorktrees(args[1:])
 	default:
 		fmt.Fprintf(os.Stderr, "Unknown command: %s\n", args[0])
+		os.Exit(1)
+	}
+}
+
+// runCommitDoc commits a single version-controlled document mirror file
+// (E-1747: `.endless/<kind>/<ID>.md`) on the project's main checkout. Backs
+// the Python decision-body mirror when `decision add` runs outside any task
+// worktree: the decision has no worktree of its own, so its `.md` lands on
+// main via the same main-checkout-enforcing commit path the ledger uses.
+func runCommitDoc(args []string) {
+	fs := flag.NewFlagSet("commit-doc", flag.ExitOnError)
+	projectRoot := fs.String("project-root", "", "Project root directory (main checkout)")
+	relPath := fs.String("path", "", "Repo-relative path of the doc file to commit")
+	subject := fs.String("subject", "", "Commit subject line")
+	fs.Parse(args)
+
+	if *projectRoot == "" || *relPath == "" || *subject == "" {
+		fmt.Fprintf(os.Stderr, "endless-go event commit-doc: --project-root, --path, and --subject are required\n")
+		os.Exit(1)
+	}
+	if err := events.CommitDoc(*projectRoot, *relPath, *subject); err != nil {
+		fmt.Fprintf(os.Stderr, "endless-go event commit-doc: error: %v\n", err)
 		os.Exit(1)
 	}
 }

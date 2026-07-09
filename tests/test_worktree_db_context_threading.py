@@ -4,7 +4,7 @@ worktree gate when run from inside a worktree.
 
 Two sites were missed in the original E-1429 wiring:
   - _reap_stale_worktrees  -> `endless-go event reap-worktrees` (land's reap sweep)
-  - _materialize_plan_file -> `endless-go session-query task-text` (claim)
+  - _materialize_plan_file -> `endless-go session-query task-field` (claim)
 
 Both open the DB and neither self-pins to main, so each needs --config-dir
 threaded when a --db context is resolved, and nothing when it isn't.
@@ -63,7 +63,7 @@ def test_materialize_threads_config_dir_when_resolved(
     worktree_cmd._materialize_plan_file(1429, tmp_path)
     cmd = capture_spawn["cmd"]
     assert "--config-dir" in cmd
-    assert cmd.index("--config-dir") < cmd.index("task-text")
+    assert cmd.index("--config-dir") < cmd.index("task-field")
 
 
 def test_materialize_omits_flag_when_unresolved(

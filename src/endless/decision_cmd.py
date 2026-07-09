@@ -8,12 +8,16 @@ dispatchers refuse illegal types with a message that lists the legal set.
 """
 
 import os
+import shutil
+import subprocess
 from datetime import datetime
+from pathlib import Path
 
 import click
 
 from endless import db
 from endless.task_cmd import (
+    _display_path,
     _format_timestamp,
     _resolve_project,
     task_id_display,
@@ -371,6 +375,88 @@ def detail_decision(item_id: int, llm: bool = False, as_json: bool = False):
 
 # Add ---------------------------------------------------------------------
 
+def _main_root_for_project(project_id: int) -> Path | None:
+    """Registered main-checkout root of a project, or None."""
+    row = db.query(
+        "SELECT path FROM projects WHERE id = ? LIMIT 1", (project_id,),
+    )
+    if not row:
+        return None
+    return Path(row[0]["path"]).expanduser().resolve()
+
+
+def _mirror_decision_body(decision_id: int, project_id: int, body: str) -> None:
+    """Write+commit `.endless/decisions/ED-NNN.md` from a decision body (E-1747).
+
+    Decisions have no worktree of their own, so the mirror lands in the
+    current task worktree when `decision add` runs inside one (riding that
+    worktree's land), else on the project's main checkout — the same place the
+    decision's ledger entry is already committed. The DB row stays the source
+    of truth; this is the durability belt. Best-effort: a missing endless-go
+    binary or a git failure warns and skips rather than aborting the decision.
+    """
+    from endless.worktree_cmd import worktree_root_for_cwd, _commit_doc_in_worktree
+
+    rel_path = f".endless/decisions/ED-{decision_id}.md"
+    subject = f"Endless: add decision ED-{decision_id}"
+
+    wt = worktree_root_for_cwd()
+    if wt is not None:
+        target = wt / rel_path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(body)
+        click.echo(
+            click.style("✓", fg="green")
+            + f" Wrote decision to {_display_path(target)}"
+        )
+        _commit_doc_in_worktree(wt, rel_path, subject)
+        return
+
+    root = _main_root_for_project(project_id)
+    if root is None:
+        return
+    target = root / rel_path
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(body)
+    click.echo(
+        click.style("✓", fg="green")
+        + f" Wrote decision to {_display_path(target)}"
+    )
+    _commit_doc_on_main(root, rel_path, subject)
+
+
+def _commit_doc_on_main(project_root: Path, rel_path: str, subject: str) -> None:
+    """Commit one doc mirror on the project's main checkout via endless-go.
+
+    Reuses the Go `event commit-doc` path (→ events.CommitDoc → commitPaths),
+    inheriting its main-checkout enforcement and GIT_DIR-family env stripping
+    instead of re-implementing them in Python. Warns and skips on any failure.
+    """
+    binary = shutil.which("endless-go")
+    if not binary:
+        click.echo(
+            "  warning: endless-go not found on PATH; decision file "
+            "not committed to main.",
+            err=True,
+        )
+        return
+    try:
+        result = subprocess.run(
+            [binary, "event", "commit-doc", "--project-root", str(project_root),
+             "--path", rel_path, "--subject", subject],
+            capture_output=True, text=True,
+        )
+    except OSError as e:
+        click.echo(f"  warning: endless-go event commit-doc: {e}", err=True)
+        return
+    if result.returncode != 0:
+        click.echo(
+            f"  warning: could not commit {rel_path} to main: "
+            f"{(result.stderr or '').strip()}",
+            err=True,
+        )
+
+
 def add_decision(
     title: str,
     description: str | None = None,
@@ -397,7 +483,7 @@ def add_decision(
         )
     validate_description(description)
 
-    _, proj_name = _resolve_project(project_name)
+    proj_id, proj_name = _resolve_project(project_name)
 
     payload: dict = {
         "title": title,
@@ -419,6 +505,9 @@ def add_decision(
         click.style("•", fg="cyan")
         + f" Added {decision_id_display(new_id)}: {title}"
     )
+
+    if description and description.strip():
+        _mirror_decision_body(new_id, proj_id, description)
 
     for tid in about_task_ids:
         _emit_decision_relation_created(

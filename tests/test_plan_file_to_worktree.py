@@ -137,6 +137,64 @@ def test_mirror_plan_to_worktree_noop_without_worktree(
     assert task_cmd._mirror_plan_to_worktree(123, "# x\n") is None
 
 
+def test_update_outcome_mirrors_into_worktree(
+    tmp_path, seeded_project_at_cwd, monkeypatch,
+):
+    """E-1747: --outcome writes+commits `.endless/outcomes/E-NNN.md`."""
+    tid = _add_minimal_task()
+    fake_wt = tmp_path / "wt"
+    fake_wt.mkdir()
+    _git_init_wt(fake_wt)
+    monkeypatch.setattr(task_cmd, "_worktree_for_task", lambda _tid: fake_wt)
+
+    task_cmd.update_plan(tid, outcome="Shipped the cache layer.\n")
+
+    mirrored = fake_wt / ".endless" / "outcomes" / f"E-{tid}.md"
+    assert mirrored.read_text() == "Shipped the cache layer.\n"
+    log = subprocess.run(
+        ["git", "-C", str(fake_wt), "log", "--format=%s", "-n", "1"],
+        capture_output=True, text=True, check=True,
+    ).stdout.strip()
+    assert log == f"Endless: update outcome for E-{tid}"
+
+
+def test_update_analysis_mirrors_into_worktree(
+    tmp_path, seeded_project_at_cwd, monkeypatch,
+):
+    """E-1747: --analysis writes+commits `.endless/analyses/E-NNN.md`."""
+    tid = _add_minimal_task()
+    fake_wt = tmp_path / "wt"
+    fake_wt.mkdir()
+    _git_init_wt(fake_wt)
+    monkeypatch.setattr(task_cmd, "_worktree_for_task", lambda _tid: fake_wt)
+
+    task_cmd.update_plan(tid, analysis="# Analysis\nTradeoffs...\n")
+
+    mirrored = fake_wt / ".endless" / "analyses" / f"E-{tid}.md"
+    assert mirrored.read_text() == "# Analysis\nTradeoffs...\n"
+    log = subprocess.run(
+        ["git", "-C", str(fake_wt), "log", "--format=%s", "-n", "1"],
+        capture_output=True, text=True, check=True,
+    ).stdout.strip()
+    assert log == f"Endless: update analysis for E-{tid}"
+
+
+def test_confirm_outcome_mirrors_into_worktree(
+    tmp_path, seeded_project_at_cwd, monkeypatch,
+):
+    """E-1747: an outcome supplied to a status verb (confirm) also mirrors."""
+    tid = _add_minimal_task()
+    fake_wt = tmp_path / "wt"
+    fake_wt.mkdir()
+    _git_init_wt(fake_wt)
+    monkeypatch.setattr(task_cmd, "_worktree_for_task", lambda _tid: fake_wt)
+
+    task_cmd.complete_item(tid, outcome="Verified end to end.\n")
+
+    mirrored = fake_wt / ".endless" / "outcomes" / f"E-{tid}.md"
+    assert mirrored.read_text() == "Verified end to end.\n"
+
+
 # ─── materialize-at-claim from DB (create_task_worktree) ──────────────────────
 
 
@@ -149,9 +207,10 @@ def _fake_run_factory(stdout: str, returncode: int = 0):
     def _run(argv, **kwargs):
         if argv and argv[0] == "git":
             return real_run(argv, **kwargs)
-        # "task-text" is the subcommand; it may be preceded by the E-1429
-        # --config-dir context pair, so assert membership, not position.
-        assert "task-text" in argv
+        # "task-field" is the subcommand (E-1747 generalized task-text); it
+        # may be preceded by the E-1429 --config-dir context pair, so assert
+        # membership, not position.
+        assert "task-field" in argv
         return types.SimpleNamespace(
             returncode=returncode, stdout=stdout, stderr="",
         )
@@ -201,6 +260,54 @@ def test_materialize_plan_file_warns_when_binary_missing(tmp_path, monkeypatch, 
 
     assert not (wt / ".endless" / "plans" / "E-779.md").exists()
     assert "endless-go not found" in capsys.readouterr().err
+
+
+def _fake_field_run_factory(by_field: dict[str, str]):
+    """subprocess.run stub that returns per-field content keyed on --name.
+
+    Passes `git` through to a real repo (for the commit step) and answers each
+    `session-query task-field --name <f>` with by_field[f] (empty if absent).
+    """
+    real_run = subprocess.run
+
+    def _run(argv, **kwargs):
+        if argv and argv[0] == "git":
+            return real_run(argv, **kwargs)
+        assert "task-field" in argv
+        name = argv[argv.index("--name") + 1]
+        return types.SimpleNamespace(
+            returncode=0, stdout=by_field.get(name, ""), stderr="",
+        )
+    return _run
+
+
+def test_materialize_task_docs_seeds_all_fields(tmp_path, monkeypatch):
+    """E-1747: worktree birth seeds plan/outcome/analysis mirrors, skipping
+    fields with no content, and commits each present one."""
+    wt = tmp_path / "wt"
+    wt.mkdir()
+    _git_init_wt(wt)
+    monkeypatch.setattr(worktree_cmd.shutil, "which", lambda _b: "/fake/esq")
+    monkeypatch.setattr(
+        worktree_cmd.subprocess, "run",
+        _fake_field_run_factory({
+            "text": "# plan\n",
+            "outcome": "done\n",
+            # analysis intentionally absent → no file
+        }),
+    )
+
+    worktree_cmd._materialize_task_docs(800, wt)
+
+    assert (wt / ".endless" / "plans" / "E-800.md").read_text() == "# plan\n"
+    assert (wt / ".endless" / "outcomes" / "E-800.md").read_text() == "done\n"
+    assert not (wt / ".endless" / "analyses" / "E-800.md").exists()
+    subjects = subprocess.run(
+        ["git", "-C", str(wt), "log", "--format=%s"],
+        capture_output=True, text=True, check=True,
+    ).stdout.split("\n")
+    assert "Endless: add plan for E-800" in subjects
+    assert "Endless: add outcome for E-800" in subjects
 
 
 # ─── --no-create-worktree is gone ─────────────────────────────────────────────

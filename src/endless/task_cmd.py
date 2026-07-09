@@ -459,20 +459,23 @@ def _display_path(p: Path) -> str:
     return s.replace(home, "~", 1) if s.startswith(home) else s
 
 
-def _mirror_plan_to_worktree(task_id: int, content: str) -> Path | None:
-    """Mirror plan text into the task's worktree IF one exists (E-1445).
+def _mirror_doc_to_worktree(
+    task_id: int, subdir: str, label: str, content: str,
+) -> Path | None:
+    """Mirror one multiline document field into the task's worktree IF one exists.
 
-    The DB's `tasks.text` column is the source of truth and is written
-    separately via the task event payload. This only mirrors that content to
-    `<worktree>/.endless/plans/E-NNN.md` as a convenience when a worktree
-    already exists.
+    Generalizes the E-1445 plan mirror to every version-controlled doc field
+    (E-1747): plan/outcome/analysis each land in their own
+    `<worktree>/.endless/<subdir>/E-NNN.md`. The DB column is the source of
+    truth and is written separately via the task event payload; this mirrors
+    that content to a committed file as the durability belt.
 
     It NEVER creates a worktree (rescinds the E-1216 auto-create default,
     which surprised callers by provisioning worktrees + sandboxes for tasks
     they had no intention of working on yet). When no worktree exists, the DB
-    is updated and nothing is written to disk; the plan file materializes
-    later when the worktree is born at claim/spawn
-    (`worktree_cmd.create_task_worktree` → `_materialize_plan_file`).
+    is updated and nothing is written to disk; the mirror materializes later
+    when the worktree is born at claim/spawn
+    (`worktree_cmd.create_task_worktree` → `_materialize_task_docs`).
 
     Returns the written path, or None when no worktree exists.
     """
@@ -480,19 +483,26 @@ def _mirror_plan_to_worktree(task_id: int, content: str) -> Path | None:
     if wt_path is None:
         return None
 
-    plans_dir = wt_path / ".endless" / "plans"
-    plans_dir.mkdir(parents=True, exist_ok=True)
-    target = plans_dir / f"E-{task_id}.md"
+    docs_dir = wt_path / ".endless" / subdir
+    docs_dir.mkdir(parents=True, exist_ok=True)
+    target = docs_dir / f"E-{task_id}.md"
     target.write_text(content)
     click.echo(
         click.style("✓", fg="green")
-        + f" Wrote plan to {_display_path(target)}"
+        + f" Wrote {label} to {_display_path(target)}"
     )
-    from endless.worktree_cmd import _commit_plan_file_in_worktree
-    _commit_plan_file_in_worktree(
-        wt_path, task_id, f"Endless: update plan for E-{task_id}",
+    from endless.worktree_cmd import _commit_doc_in_worktree
+    _commit_doc_in_worktree(
+        wt_path, f".endless/{subdir}/E-{task_id}.md",
+        f"Endless: update {label} for E-{task_id}",
     )
     return target
+
+
+def _mirror_plan_to_worktree(task_id: int, content: str) -> Path | None:
+    """Back-compat alias: mirror the plan (text) field. Prefer
+    `_mirror_doc_to_worktree` for arbitrary doc fields (E-1747)."""
+    return _mirror_doc_to_worktree(task_id, "plans", "plan", content)
 
 
 def _resolve_project(name: str | None) -> tuple[int, str]:
@@ -2144,6 +2154,9 @@ def complete_item(item_id: int, cascade: bool = False, outcome: str | None = Non
         payload=payload,
     )
 
+    if outcome and outcome.strip():
+        _mirror_doc_to_worktree(item_id, "outcomes", "outcome", outcome)
+
     changes = [("status", row[0]["status"], "confirmed")]
     if outcome:
         changes.append(("outcome", None, outcome))
@@ -2204,6 +2217,9 @@ def assume_item(item_id: int, cascade: bool = False, outcome: str | None = None)
         entity_id=str(item_id),
         payload=payload,
     )
+
+    if outcome and outcome.strip():
+        _mirror_doc_to_worktree(item_id, "outcomes", "outcome", outcome)
 
     changes = [("status", row[0]["status"], "assumed")]
     if outcome:
@@ -2269,6 +2285,9 @@ def mark_completed_item(item_id: int, outcome: str):
         payload=payload,
     )
 
+    if outcome and outcome.strip():
+        _mirror_doc_to_worktree(item_id, "outcomes", "outcome", outcome)
+
     changes = [
         ("status", row[0]["status"], "completed"),
         ("outcome", None, outcome),
@@ -2312,6 +2331,9 @@ def decline_item(item_id: int, reason: str):
             "outcome": reason,
         },
     )
+
+    if reason and reason.strip():
+        _mirror_doc_to_worktree(item_id, "outcomes", "outcome", reason)
 
     changes = [
         ("status", row[0]["status"], "declined"),
@@ -3526,6 +3548,8 @@ def update_plan(
 
     if outcome is not None:
         _add("outcome", outcome)
+        if outcome.strip():
+            _mirror_doc_to_worktree(item_id, "outcomes", "outcome", outcome)
 
     if task_type is not None:
         valid_types = ("task", "bug", "research", "epic", "brainstorm")
@@ -3559,6 +3583,8 @@ def update_plan(
 
     if analysis is not None:
         _add("analysis", analysis)
+        if analysis.strip():
+            _mirror_doc_to_worktree(item_id, "analyses", "analysis", analysis)
 
     if not fields:
         raise click.ClickException(
@@ -5409,6 +5435,9 @@ def replace_task(old_id: int, new_id: int, status: str = "obsolete", outcome: st
         entity_id=str(old_id),
         payload=payload,
     )
+
+    if outcome and outcome.strip():
+        _mirror_doc_to_worktree(old_id, "outcomes", "outcome", outcome)
 
     changes = [("status", old_status_row[0]["status"], status)]
     if outcome:

@@ -134,21 +134,43 @@ func MarkContextInjected(projectID int64, sessionID, workingDir string) {
 // that lets create_task_worktree materialize a plan file without a Python DB
 // read (E-894).
 func TaskText(taskID int64) (string, error) {
+	return TaskField(taskID, "text")
+}
+
+// taskDocColumns whitelists the multiline document columns TaskField may
+// read. Keyed here (not interpolated freely) because the column name is
+// substituted into SQL — the whitelist is the injection guard. These are the
+// fields E-1747 mirrors to committed `.endless/<subdir>/E-NNN.md` files.
+var taskDocColumns = map[string]bool{
+	"text":     true,
+	"outcome":  true,
+	"analysis": true,
+}
+
+// TaskField returns the raw value of one whitelisted multiline document
+// column for a task (empty string when the row or the value is absent).
+// column MUST be in taskDocColumns; anything else is rejected so the caller
+// can never smuggle arbitrary SQL through the substituted identifier.
+func TaskField(taskID int64, column string) (string, error) {
+	if !taskDocColumns[column] {
+		return "", fmt.Errorf("unsupported task field %q", column)
+	}
 	db, err := DB()
 	if err != nil {
 		return "", err
 	}
-	var text string
+	var value string
 	err = db.QueryRow(
-		"SELECT COALESCE(text, '') FROM tasks WHERE id = ?", taskID,
-	).Scan(&text)
+		fmt.Sprintf("SELECT COALESCE(%s, '') FROM tasks WHERE id = ?", column),
+		taskID,
+	).Scan(&value)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", nil
 	}
 	if err != nil {
 		return "", err
 	}
-	return text, nil
+	return value, nil
 }
 
 // GetProjectName returns the project name for a project ID.

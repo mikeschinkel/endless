@@ -427,6 +427,27 @@ def list_worktrees(state_filter: str | None, as_json: bool) -> None:
         click.echo(f"{r['state']:<8}  {branch:<40}  {task:<8}  {path}")
 
 
+def worktree_root_for_cwd() -> Path | None:
+    """Return the endless-managed worktree root containing cwd, or None.
+
+    E-1747: a decision authored from inside a task worktree lands its
+    `.endless/decisions/ED-NNN.md` mirror there (riding that worktree's land);
+    outside any endless worktree the caller falls back to committing on main.
+    Best-effort — any git-resolution failure or a non-worktree toplevel
+    returns None.
+    """
+    try:
+        toplevel_str = _git(["rev-parse", "--show-toplevel"], cwd=Path.cwd())
+    except (subprocess.CalledProcessError, OSError):
+        return None
+    toplevel = Path(toplevel_str).resolve()
+    if not (toplevel / ".endless" / "worktree.json").exists():
+        return None
+    if _task_id_from_worktree_path(toplevel) is None:
+        return None
+    return toplevel
+
+
 def current_worktree(as_json: bool) -> None:
     """Show the worktree for the current cwd."""
     cwd = Path.cwd().resolve()
@@ -1147,7 +1168,7 @@ def create_task_worktree(
     (companion_dir / "worktree.json").write_text(
         json.dumps(companion, indent=2) + "\n"
     )
-    _materialize_plan_file(task_id, wt_dir)
+    _materialize_task_docs(task_id, wt_dir)
     _maybe_auto_sandbox_bind(project_root, wt_dir, task_id)
     _run_post_worktree_create_hook(project_root, wt_dir)
     return wt_dir, True
@@ -1223,17 +1244,44 @@ def _run_post_worktree_create_hook(project_root: Path, worktree_path: Path) -> N
         )
 
 
-def _materialize_plan_file(task_id: int, worktree_path: Path) -> None:
-    """Write <worktree>/.endless/plans/E-NNN.md from tasks.text (E-1445).
+# E-1747: the multiline document fields that mirror to committed
+# .endless/<subdir>/E-NNN.md files. Each tuple is (tasks column, subdir,
+# human label used in the commit subject and progress line). `text` is the
+# original plan mirror (E-1445); `outcome`/`analysis` are added here. Short
+# metadata (description, title) is deliberately excluded — not documents.
+_TASK_DOC_FIELDS: tuple[tuple[str, str, str], ...] = (
+    ("text", "plans", "plan"),
+    ("outcome", "outcomes", "outcome"),
+    ("analysis", "analyses", "analysis"),
+)
 
-    This is the single point where a plan file is created on disk. `task
-    update --text` no longer provisions a worktree; instead the plan
+
+def _materialize_task_docs(task_id: int, worktree_path: Path) -> None:
+    """Seed every version-controlled task-doc mirror at worktree birth (E-1747).
+
+    Extends the original plan-only materialization (E-1445) to the full set of
+    multiline document fields (`_TASK_DOC_FIELDS`), so a freshly born worktree
+    carries git-backed copies of the task's plan, outcome, and analysis — not
+    just the plan. Each field is independent: a missing one warns and skips
+    without aborting worktree creation.
+    """
+    for field, subdir, label in _TASK_DOC_FIELDS:
+        _materialize_task_doc(task_id, worktree_path, field, subdir, label)
+
+
+def _materialize_task_doc(
+    task_id: int, worktree_path: Path, field: str, subdir: str, label: str,
+) -> None:
+    """Write <worktree>/.endless/<subdir>/E-NNN.md from tasks.<field> and commit.
+
+    The single point where a task-doc mirror is created on disk at worktree
+    birth. `task update` no longer provisions a worktree; the mirror
     materializes here when the worktree is born (at claim/spawn).
 
-    Reads tasks.text via the `endless-go session-query` Go helper — Python DB
-    reads are forbidden (E-894). Empty/absent text writes nothing. Failures
-    warn and skip rather than abort worktree creation; a missing plan file is
-    recoverable by re-running `endless task update --text` once the worktree
+    Reads the field via the `endless-go session-query task-field` Go helper —
+    Python DB reads are forbidden (E-894). Empty/absent content writes
+    nothing. Failures warn and skip rather than abort worktree creation; a
+    missing mirror is recoverable by re-running the write once the worktree
     exists (which mirrors into it).
     """
     from endless import config
@@ -1241,7 +1289,7 @@ def _materialize_plan_file(task_id: int, worktree_path: Path) -> None:
     binary = shutil.which("endless-go")
     if not binary:
         click.echo(
-            "  warning: endless-go not found on PATH; plan file "
+            f"  warning: endless-go not found on PATH; {label} file "
             "not materialized.",
             err=True,
         )
@@ -1251,66 +1299,89 @@ def _materialize_plan_file(task_id: int, worktree_path: Path) -> None:
         # worktree) so this DB read isn't refused when claim runs from a
         # worktree cwd.
         result = subprocess.run(
-            [binary, *config.go_db_context_args(), "session-query", "task-text", "--id", str(task_id)],
+            [binary, *config.go_db_context_args(), "session-query",
+             "task-field", "--id", str(task_id), "--name", field],
             capture_output=True, text=True,
         )
     except OSError as e:
-        click.echo(f"  warning: endless-go session-query task-text: {e}", err=True)
+        click.echo(
+            f"  warning: endless-go session-query task-field {field}: {e}",
+            err=True,
+        )
         return
     if result.returncode != 0:
         click.echo(
-            f"  warning: could not read plan text for E-{task_id}: "
+            f"  warning: could not read {label} for E-{task_id}: "
             f"{(result.stderr or '').strip()}",
             err=True,
         )
         return
     if not result.stdout.strip():
         return
-    plans_dir = worktree_path / ".endless" / "plans"
-    plans_dir.mkdir(parents=True, exist_ok=True)
-    target = plans_dir / f"E-{task_id}.md"
+    docs_dir = worktree_path / ".endless" / subdir
+    docs_dir.mkdir(parents=True, exist_ok=True)
+    target = docs_dir / f"E-{task_id}.md"
     target.write_text(result.stdout)
     click.echo(
         click.style("✓", fg="green")
-        + f" Materialized plan to {_tilde(target)}"
+        + f" Materialized {label} to {_tilde(target)}"
     )
-    _commit_plan_file_in_worktree(
-        worktree_path, task_id, f"Endless: add plan for E-{task_id}",
+    _commit_doc_in_worktree(
+        worktree_path, f".endless/{subdir}/E-{task_id}.md",
+        f"Endless: add {label} for E-{task_id}",
     )
 
 
-def _commit_plan_file_in_worktree(
-    worktree_path: Path, task_id: int, subject: str,
+def _materialize_plan_file(task_id: int, worktree_path: Path) -> None:
+    """Back-compat alias: materialize just the plan (text) mirror.
+
+    Prefer `_materialize_task_docs`, which seeds every mirrored field (E-1747).
+    Retained because existing callers/tests reference this name.
+    """
+    _materialize_task_doc(task_id, worktree_path, "text", "plans", "plan")
+
+
+def _commit_doc_in_worktree(
+    worktree_path: Path, rel_path: str, subject: str,
 ) -> None:
-    """Stage and commit <worktree>/.endless/plans/E-NNN.md on the worktree branch (E-1525).
+    """Stage and commit one .endless/<subdir>/E-NNN.md mirror on the worktree branch (E-1525/E-1747).
 
-    Called at both plan-file write sites — claim/spawn materialization and
-    `task update --text` mirror — so the file rides to main on `worktree
+    Called at both mirror write sites — claim/spawn materialization and the
+    `task update` write-time mirror — so the file rides to main on `worktree
     land` instead of sitting untracked and getting rejected by the dirty-
     worktree guard.
 
-    `commit -o <plan_rel>` scopes the commit to just the plan file even if
-    the worktree has unrelated dirt (user mid-edit, other auto-managed
-    files). Returns silently when the file already matches HEAD — re-running
-    a write with identical content is a no-op.
+    `commit -o <rel_path>` scopes the commit to just this file even if the
+    worktree has unrelated dirt (user mid-edit, other auto-managed files).
+    Returns silently when the file already matches HEAD — re-running a write
+    with identical content is a no-op.
     """
-    plan_rel = f".endless/plans/E-{task_id}.md"
     status = _git_run(
-        ["status", "--porcelain", "--", plan_rel],
+        ["status", "--porcelain", "--", rel_path],
         cwd=worktree_path,
     ).stdout
     if not status.strip():
         return
     try:
-        _git_run(["add", "--", plan_rel], cwd=worktree_path)
+        _git_run(["add", "--", rel_path], cwd=worktree_path)
         _git_run(
-            ["commit", "-o", plan_rel, "-m", subject], cwd=worktree_path,
+            ["commit", "-o", rel_path, "-m", subject], cwd=worktree_path,
         )
     except subprocess.CalledProcessError as e:
         detail = (e.stderr or e.stdout or str(e)).strip()
         raise click.ClickException(
-            f"Failed to commit {plan_rel} in worktree: {detail}"
+            f"Failed to commit {rel_path} in worktree: {detail}"
         )
+
+
+def _commit_plan_file_in_worktree(
+    worktree_path: Path, task_id: int, subject: str,
+) -> None:
+    """Back-compat alias for committing the plan mirror. Prefer
+    `_commit_doc_in_worktree` for arbitrary doc mirrors (E-1747)."""
+    _commit_doc_in_worktree(
+        worktree_path, f".endless/plans/E-{task_id}.md", subject,
+    )
 
 
 def _maybe_auto_sandbox_bind(project_root: Path, worktree_path: Path, task_id: int) -> None:
