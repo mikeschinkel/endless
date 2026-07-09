@@ -1,7 +1,11 @@
 """Task command logic — import, show, and manage task items."""
 
+import contextlib
+import io
 import os
 import re
+import subprocess
+import sys
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -3650,16 +3654,82 @@ def _echo_field_placeholder(label, val, name, content, show, flag):
     )
 
 
-def _echo_large_section(title: str, content: str | None, show: bool):
+class _ColorProxy(io.TextIOBase):
+    """A stdout stand-in whose `isatty()` returns a fixed value, so click.echo's
+    ANSI auto-strip follows an explicit color decision instead of whether the
+    real destination is a terminal (E-1746).
+
+    Under `--paged` the real destination is a pipe to `less` (isatty() false),
+    yet a terminal sits on the far side of the pager, so color must be forced
+    ON — the git-pager model. Wrapping the pager pipe in a proxy that reports
+    `isatty()==True` makes every downstream `click.echo` preserve its color
+    without threading a `color=` argument through ~30 call sites. Conversely,
+    `--no-color` on a real TTY sets the proxy's tty to False so header/label
+    colors are stripped too, not just the markdown fields."""
+
+    def __init__(self, dest, tty: bool):
+        self._dest = dest
+        self._tty = tty
+
+    def write(self, s):
+        return self._dest.write(s)
+
+    def flush(self):
+        try:
+            self._dest.flush()
+        except Exception:
+            pass
+
+    def isatty(self):
+        return self._tty
+
+
+def _render_markdown_field(content: str) -> str | None:
+    """Colorize markdown `content` to ANSI via `endless-go markdown render`
+    (E-1746). Returns the rendered ANSI, or None if the binary can't be resolved
+    or the render fails — the caller then falls back to the plain text so
+    `task show` never breaks on a rendering hiccup."""
+    from endless.event_bridge import _resolve_endless_go
+    try:
+        binary = _resolve_endless_go()
+    except click.ClickException:
+        return None
+    try:
+        result = subprocess.run(
+            [binary, "markdown", "render"],
+            input=content, capture_output=True, text=True, timeout=10,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if result.returncode != 0:
+        return None
+    return result.stdout
+
+
+def _echo_field_body(content: str, color: bool):
+    """Emit a large field's body — colorized markdown when `color`, else the raw
+    plain text (E-1746). Rendering failures degrade to plain text."""
+    if color:
+        rendered = _render_markdown_field(content)
+        if rendered is not None:
+            # rstrip: the renderer's trailing newline plus the caller's own
+            # blank-line framing would otherwise double up.
+            click.echo(rendered.rstrip("\n"))
+            return
+    click.echo(content)
+
+
+def _echo_large_section(title: str, content: str | None, show: bool, color: bool = False):
     """Multi-line `— Title —` section carrying the full body, shown only when
     its flag is set; the hidden form is the single-line placeholder grouped with
     the header fields (see `_echo_field_placeholder`). Nothing when empty or
-    gated off (E-1601)."""
+    gated off (E-1601). When `color`, the body is rendered as colorized markdown
+    (E-1746)."""
     if not content or not show:
         return
     click.echo()
     click.echo(click.style(f"— {title} —", fg="cyan"))
-    click.echo(content)
+    _echo_field_body(content, color)
 
 
 def detail_item(
@@ -3671,6 +3741,8 @@ def detail_item(
     show_outcome: bool = False,
     llm: bool = False,
     as_json: bool = False,
+    paged: bool = False,
+    no_color: bool = False,
 ):
     """Show full detail for a task."""
     row = db.query(
@@ -3791,7 +3863,60 @@ def detail_item(
                     click.echo(f"E-{c['id']} {c['phase']} {c['status']} {c['title']}")
         return
 
-    # Human-readable output
+    # Human-readable output. Color decision (E-1746): honor --no-color; else
+    # color when stdout is a TTY, OR when we spawn the pager ourselves — a real
+    # terminal sits on the far side of `less`, so the pipe's isatty()==false
+    # must not disable color (the git-pager model; the trap glow falls into).
+    color = (not no_color) and (sys.stdout.isatty() or paged)
+
+    pager = None
+    if paged:
+        pager = subprocess.Popen(
+            # -R preserve color, --mouse wheel scroll, -F quit if it fits one
+            # screen. No -X (can suppress mouse-init; less 668 doesn't need it).
+            ["less", "-R", "--mouse", "-F"],
+            stdin=subprocess.PIPE, text=True,
+        )
+        dest = pager.stdin
+    else:
+        dest = sys.stdout
+
+    try:
+        # Route the whole render through a proxy whose isatty()==color so every
+        # click.echo strips/keeps ANSI per the decision above, with no color=
+        # argument threaded through the ~30 header/section call sites.
+        with contextlib.redirect_stdout(_ColorProxy(dest, color)):
+            _render_detail_human(
+                item, landings, item_id,
+                show_description=show_description,
+                show_analysis=show_analysis,
+                show_text=show_text,
+                show_children=show_children,
+                show_outcome=show_outcome,
+                color=color,
+            )
+    finally:
+        if pager is not None:
+            try:
+                pager.stdin.close()
+            except BrokenPipeError:
+                pass
+            pager.wait()
+
+
+def _render_detail_human(
+    item, landings, item_id,
+    show_description: bool,
+    show_analysis: bool,
+    show_text: bool,
+    show_children: bool,
+    show_outcome: bool,
+    color: bool,
+):
+    """Emit the human-readable `task show` detail to the current stdout. Split
+    from detail_item so the whole render can run under a color/pager proxy
+    (E-1746). Multiline markdown fields (description/analysis/text/outcome) are
+    colorized when `color`."""
     col_w = 11  # width of label column (longest: "Confirmed:" = 10 + 1 space)
     label = lambda s: click.style(f"{s:<{col_w}}", fg="cyan")
     val = lambda s: click.style(str(s), fg="white", bold=True)
@@ -3835,11 +3960,11 @@ def detail_item(
     if show_description and item["description"] and item["description"] != item["title"]:
         click.echo()
         click.echo(click.style("— Description —", fg="cyan"))
-        click.echo(item["description"])
+        _echo_field_body(item["description"], color)
 
-    _echo_large_section("Analysis", item["analysis"], show_analysis)
-    _echo_large_section("Text", item["text"], show_text)
-    _echo_large_section("Outcome", item["outcome"], show_outcome)
+    _echo_large_section("Analysis", item["analysis"], show_analysis, color)
+    _echo_large_section("Text", item["text"], show_text, color)
+    _echo_large_section("Outcome", item["outcome"], show_outcome, color)
 
     if show_children:
         children = db.query(

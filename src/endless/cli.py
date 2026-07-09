@@ -1181,8 +1181,13 @@ def task_list(project, show_all, status, phase, tier, parent_id, related_to_id, 
               help="Token-efficient output for LLMs")
 @click.option("--json", "as_json", is_flag=True,
               help="JSON output")
+@click.option("-p", "--paged", is_flag=True,
+              help="Page colorized output through less (wheel-scrollable)")
+@click.option("--no-color", is_flag=True,
+              help="Disable ANSI color even on a TTY")
 def task_show(item_ids, no_description, show_analysis, show_text,
-              show_children, show_outcome, all_fields, llm, as_json):
+              show_children, show_outcome, all_fields, llm, as_json,
+              paged, no_color):
     """Show detail for one or more tasks."""
     from endless.task_cmd import detail_item
     if all_fields:
@@ -1191,7 +1196,7 @@ def task_show(item_ids, no_description, show_analysis, show_text,
         detail_item(item_id, show_description=not no_description,
                     show_analysis=show_analysis, show_text=show_text,
                     show_children=show_children, show_outcome=show_outcome,
-                    llm=llm, as_json=as_json)
+                    llm=llm, as_json=as_json, paged=paged, no_color=no_color)
 
 
 task_cmd.add_command(task_show, name="detail")

@@ -14,6 +14,7 @@
 //	endless-go session-query list-live|task-text|reopen-context
 //	endless-go session-status  (renders the per-session status view; --monitor loops it)
 //	endless-go template      render
+//	endless-go markdown      render
 //
 // Per-subcommand DB-context contract (must run BEFORE the subcommand
 // body):
@@ -40,11 +41,12 @@ import (
 	"github.com/mikeschinkel/endless/internal/channelcmd"
 	"github.com/mikeschinkel/endless/internal/eventcmd"
 	"github.com/mikeschinkel/endless/internal/hookcmd"
+	"github.com/mikeschinkel/endless/internal/markdowncmd"
 	"github.com/mikeschinkel/endless/internal/monitor"
 	"github.com/mikeschinkel/endless/internal/sandboxcmd"
 	"github.com/mikeschinkel/endless/internal/servecmd"
-	"github.com/mikeschinkel/endless/internal/sessionstatuscmd"
 	"github.com/mikeschinkel/endless/internal/sessionquerycmd"
+	"github.com/mikeschinkel/endless/internal/sessionstatuscmd"
 	"github.com/mikeschinkel/endless/internal/templatecmd"
 	"github.com/mikeschinkel/endless/internal/tmuxcmd"
 )
@@ -144,6 +146,8 @@ func main() {
 		sessionstatuscmd.Run(rest)
 	case "template":
 		templatecmd.Run(rest)
+	case "markdown":
+		markdowncmd.Run(rest)
 	default:
 		fmt.Fprintf(os.Stderr, "endless-go: unknown subcommand %q\n", sub)
 		usage(os.Stderr)
@@ -191,4 +195,5 @@ func usage(w *os.File) {
 	fmt.Fprintln(w, "  session-query  list-live|task-text|reopen-context")
 	fmt.Fprintln(w, "  session-status render the per-session status view (--monitor loops it)")
 	fmt.Fprintln(w, "  template       render")
+	fmt.Fprintln(w, "  markdown       render (markdown → colorized ANSI)")
 }
