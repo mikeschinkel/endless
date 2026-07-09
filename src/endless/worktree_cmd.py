@@ -57,6 +57,11 @@ AUTO_COMMIT_GLOBS = (
     ".endless/verbs.json",  # legacy — still seen during E-1268 migration
 )
 
+# E-1736: the DB ledger directory, as a git pathspec. A commit under here
+# on a task branch violates the ledger routing policy (ledger entries are
+# recorded on the main checkout only) and must never ride a land into main.
+DB_LEDGER_DIR = ".endless/db-ledger"
+
 # Mirrors internal/events/commit.go (E-1342). Subjects whose auto-commits
 # can amend in place via canAmend, producing orphans at the base of task
 # branches when main amends past a branch's fork-point SHA. The orphan-drop
@@ -314,6 +319,32 @@ def _drop_orphan_amendable_commits(
         cwd=worktree_path,
     )
     return (n, first_subject)
+
+
+def _ledger_touching_commits(
+    worktree_path: Path, base_branch: str
+) -> list[tuple[str, str]]:
+    """Return (sha, subject) for every commit in base..HEAD that modifies a
+    file under the DB ledger dir. Empty list when none.
+
+    Backstop to the ledger routing policy: ledger entries are auto-committed
+    on the main checkout only, so a branch-side commit under DB_LEDGER_DIR is
+    always wrong and would be rebased into main by land. Intended to run AFTER
+    Step 3.7's orphan-drop, so legitimately-orphaned base ledger commits are
+    already gone and only genuine offenders remain.
+    """
+    out = _git_run(
+        ["log", "--reverse", "--format=%H %s",
+         f"{base_branch}..HEAD", "--", DB_LEDGER_DIR],
+        cwd=worktree_path,
+    )
+    commits: list[tuple[str, str]] = []
+    for ln in out.stdout.splitlines():
+        if not ln.strip():
+            continue
+        sha, _, subject = ln.partition(" ")
+        commits.append((sha, subject))
+    return commits
 
 
 def _short_branch(ref: str | None) -> str:
@@ -1611,6 +1642,28 @@ def land_worktree(
             click.echo(
                 click.style("•", fg="yellow")
                 + f" Dropped {n_orphans} orphan auto-amend {noun} ({first_subj})"
+            )
+
+        # Step 3.75 (backstop to the ledger routing policy): refuse if any
+        # commit surviving Step 3.7 still touches the DB ledger. Step 3.7
+        # already dropped the legitimately-orphaned base ledger commits;
+        # anything still under DB_LEDGER_DIR is a genuine branch-side ledger
+        # commit that would be rebased into main and corrupt shared history.
+        offenders = _ledger_touching_commits(worktree_path, base_branch)
+        if offenders:
+            noun = "commit" if len(offenders) == 1 else "commits"
+            listing = "\n".join(
+                f"  {sha[:12]}  {subject}" for sha, subject in offenders
+            )
+            raise click.ClickException(
+                f"cannot land {canonical}: the branch has {len(offenders)} "
+                f"{noun} modifying the database ledger ({DB_LEDGER_DIR}/):\n\n"
+                f"{listing}\n\n"
+                f"Ledger entries are recorded on the main checkout, never on a "
+                f"task branch — landing these would rebase a branch-authored "
+                f"ledger segment into main and corrupt the shared database "
+                f"history. Remove these commits from the branch before retrying "
+                f"(inspect each with `git show <sha>`)."
             )
 
         # Step 3.8 (E-1416): guard against dirty worktree tree before rebase.
