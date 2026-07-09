@@ -83,9 +83,11 @@ def test_update_analysis_file_loads_content(seeded_project_at_cwd, tmp_path):
     assert a == "Loaded from file.\nMulti-line."
 
 
-def test_update_analysis_at_path_no_longer_file_loads(seeded_project_at_cwd, tmp_path):
-    """E-1001: the removed @file magic — `--analysis @path` is now stored
-    literally as inline content, not loaded from the file."""
+def test_update_analysis_at_path_refused_by_gate(seeded_project_at_cwd, tmp_path):
+    """E-1001 removed the @file magic (the file is never loaded); E-1744 goes
+    further and refuses `--analysis @path` outright — an @-prefixed path is the
+    mis-passed-file case the path gate exists to catch, pointing the caller at
+    --analysis-file. The analysis field is left unchanged."""
     from click.testing import CliRunner
     from endless.cli import main
 
@@ -98,9 +100,10 @@ def test_update_analysis_at_path_no_longer_file_loads(seeded_project_at_cwd, tmp
         "task", "update", f"E-{tid}",
         "--analysis", f"@{p}",
     ])
-    assert result.exit_code == 0, result.output
+    assert result.exit_code != 0, result.output
+    assert "--analysis-file" in result.output
     _, a = _type_analysis(tid)
-    assert a == f"@{p}"
+    assert a is None
 
 
 def test_update_text_inline_and_file_forms(seeded_project_at_cwd, tmp_path):

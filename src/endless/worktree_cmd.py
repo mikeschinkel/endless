@@ -994,7 +994,7 @@ def _orphan_plan_mismatch_msg(
         f"  git -C {root} branch -D {branch}          # then retry\n"
         f"Adopt the branch's version into the DB:\n"
         f"  git -C {root} show {branch}:{plan_rel} > /tmp/E-{task_id}.md\n"
-        f"  endless task update E-{task_id} --text /tmp/E-{task_id}.md   # then retry"
+        f"  endless task update E-{task_id} --text-file /tmp/E-{task_id}.md   # then retry"
     )
 
 

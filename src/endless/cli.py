@@ -1,6 +1,7 @@
 """Endless CLI — Click entry point."""
 
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -1349,10 +1350,92 @@ def task_search(query, project, show_all, status, phase, parent_id,
                  limit=limit, llm=llm, as_json=as_json)
 
 
-def _resolve_content_flag(inline, file_path, name):
+# ─── inline-content path gate (E-1744) ───────────────────────────────────────
+# Inline flags (--text, --outcome, --description, --analysis) store their argument
+# verbatim. Passing a file *path* silently stores the path and discards the intended
+# content — the corruption that lost E-1626/E-1564. Every inline/file flag pair
+# funnels through _resolve_content_flag, so the gate lives here and covers all
+# fields and all tables (task/decision/epic add + update + confirm/assume/complete/
+# replace). To load a file's content, use the paired --<name>-file flag.
+
+# A single whitespace-free token ending in one of these is treated as a file path.
+_PATH_EXT_RE = re.compile(r"\.[A-Za-z][A-Za-z0-9]{0,5}$")
+# Surrounding punctuation trimmed off a candidate before the path test. Leading '.'
+# and '~' are intentionally NOT stripped (they start real relative/home paths).
+_LEAD_STRIP = "\"'`([{"
+_TRAIL_STRIP = "\"'`.,;:!?)]}"
+
+
+def _is_path_shaped(token):
+    """True if a single whitespace-free token looks like a filesystem path
+    (absolute or relative). Purely lexical — the file need not exist. A URL
+    (contains '://') is never a mis-passed file path — and a Git file URL is the
+    recommended way to reference another project — so it is not path-shaped."""
+    if "://" in token:
+        return False
+    return (
+        token.startswith(("/", "./", "../", "~/"))
+        or "/" in token
+        or bool(_PATH_EXT_RE.search(token))
+    )
+
+
+def _absolute_path_tokens(content):
+    """Yield tokens in *content* that are absolute filesystem paths (after
+    ~-expansion). Detection is lexical, so a gone path still counts. Relative
+    tokens mid-content are intentionally not yielded."""
+    for raw in content.split():
+        tok = raw.lstrip(_LEAD_STRIP).rstrip(_TRAIL_STRIP)
+        if not tok:
+            continue
+        if tok.startswith("/"):
+            yield tok
+        elif tok.startswith("~/") and os.path.isabs(os.path.expanduser(tok)):
+            yield tok
+
+
+def _guard_inline_content(inline, name, allow_paths):
+    """Block a mis-passed file path (Rule 1: the whole value IS a path token,
+    absolute or relative) or an absolute path embedded anywhere in otherwise-inline
+    content (Rule 2). An absolute path matching any --allow-path regex is exempt
+    from both rules; relative tokens mid-content are always allowed."""
+    patterns = [re.compile(p) for p in allow_paths]
+
+    def _exempt(path):
+        expanded = os.path.expanduser(path)
+        return any(rx.search(path) or rx.search(expanded) for rx in patterns)
+
+    stripped = inline.strip()
+    # Rule 1 — the whole value is a single path token (absolute OR relative).
+    if stripped and len(stripped.split()) == 1 and _is_path_shaped(stripped):
+        is_abs = os.path.isabs(os.path.expanduser(stripped))
+        if not (is_abs and _exempt(stripped)):
+            raise click.ClickException(
+                f"--{name} received a file path ({stripped!r}). --{name} stores its "
+                f"argument verbatim as inline content; to load a file's content use "
+                f"--{name}-file."
+            )
+        return
+
+    # Rule 2 — any absolute path token appearing anywhere in the content.
+    for tok in _absolute_path_tokens(inline):
+        if _exempt(tok):
+            continue
+        raise click.ClickException(
+            f"--{name} content contains an absolute path ({tok!r}). Absolute paths "
+            f"don't belong in durable ledger content — they're non-portable and a "
+            f"/tmp path is lost when a worktree drops. Put real content inline, use "
+            f"--{name}-file to load a file, or reference a cross-project file by a "
+            f"Git URL. To keep this path, add --allow-path with a regex matching it."
+        )
+
+
+def _resolve_content_flag(inline, file_path, name, allow_paths=()):
     """Resolve a paired `--<name>` (inline) / `--<name>-file` (path) option pair
     into content. Returns the content string, or None if neither was given.
-    Raises if both were given or the file does not exist."""
+    Raises if both were given, the file does not exist, or an inline value fails
+    the path gate (see _guard_inline_content). `--<name>-file` content is trusted
+    and never gated — it is the sanctioned way to load a file."""
     if inline is not None and file_path is not None:
         raise click.ClickException(
             f"Pass either --{name} or --{name}-file, not both."
@@ -1362,6 +1445,8 @@ def _resolve_content_flag(inline, file_path, name):
         if not p.exists():
             raise click.ClickException(f"File not found: {p}")
         return p.read_text()
+    if inline is not None:
+        _guard_inline_content(inline, name, allow_paths)
     return inline
 
 
@@ -1409,14 +1494,17 @@ def _resolve_content_flag(inline, file_path, name):
               help="Task ID(s) that this new task cleans up after (repeatable)")
 @click.option("--cleaned-up-by", "cleaned_up_by_ids", type=TASK_ID, multiple=True,
               help="Task ID(s) that clean up after this new task (repeatable)")
+@click.option("--allow-path", "allow_paths", multiple=True,
+              help="Regex matching an absolute path to permit in inline content "
+                   "(repeatable; escape hatch for the path gate).")
 def task_add(title, description, description_file, text, text_file, phase, project, parent, after, task_type, status, tier, force,
              justification,
              blocks_ids, blocked_by_ids, relates_to_ids, implements_ids,
-             cleans_up_ids, cleaned_up_by_ids):
+             cleans_up_ids, cleaned_up_by_ids, allow_paths):
     """Add a task."""
     from endless.task_cmd import add_item, parse_tier, link_tasks
-    description = _resolve_content_flag(description, description_file, "description")
-    text = _resolve_content_flag(text, text_file, "text")
+    description = _resolve_content_flag(description, description_file, "description", allow_paths)
+    text = _resolve_content_flag(text, text_file, "text", allow_paths)
     tier_val = parse_tier(tier) if tier else None
     new_id = add_item(title, description=description, text=text,
                       phase=phase, project_name=project, after=after, parent_id=parent,
@@ -1475,14 +1563,17 @@ def task_add(title, description, description_file, text, text_file, phase, proje
 @click.option("--justification", default=None,
               help="Justification text when setting --type research (stored under '## Justification' in notes). "
                    "Required unless the effective parent is an underway epic.")
+@click.option("--allow-path", "allow_paths", multiple=True,
+              help="Regex matching an absolute path to permit in inline content "
+                   "(repeatable; escape hatch for the path gate).")
 def task_update(item_ids, status, title, description, description_file, text, text_file, parent, phase, tier,
-                task_type, analysis_text, analysis_file, force, outcome, outcome_file, justification):
+                task_type, analysis_text, analysis_file, force, outcome, outcome_file, justification, allow_paths):
     """Update fields on one or more tasks."""
     from endless.task_cmd import update_plan, parse_tier
-    description = _resolve_content_flag(description, description_file, "description")
-    text = _resolve_content_flag(text, text_file, "text")
-    analysis_text = _resolve_content_flag(analysis_text, analysis_file, "analysis")
-    outcome = _resolve_content_flag(outcome, outcome_file, "outcome")
+    description = _resolve_content_flag(description, description_file, "description", allow_paths)
+    text = _resolve_content_flag(text, text_file, "text", allow_paths)
+    analysis_text = _resolve_content_flag(analysis_text, analysis_file, "analysis", allow_paths)
+    outcome = _resolve_content_flag(outcome, outcome_file, "outcome", allow_paths)
     tier_val = parse_tier(tier) if tier else None
     for item_id in item_ids:
         update_plan(item_id, status=status, title=title,
@@ -1528,10 +1619,13 @@ def task_clear_tier(item_ids):
               help="Outcome — what was confirmed (inline; applies to root only on cascade)")
 @click.option("--outcome-file", default=None,
               help="Load the outcome from a file")
-def task_complete(item_ids, cascade, outcome, outcome_file):
+@click.option("--allow-path", "allow_paths", multiple=True,
+              help="Regex matching an absolute path to permit in inline content "
+                   "(repeatable; escape hatch for the path gate).")
+def task_complete(item_ids, cascade, outcome, outcome_file, allow_paths):
     """Confirm one or more tasks."""
     from endless.task_cmd import complete_item
-    outcome = _resolve_content_flag(outcome, outcome_file, "outcome")
+    outcome = _resolve_content_flag(outcome, outcome_file, "outcome", allow_paths)
     for item_id in item_ids:
         complete_item(item_id, cascade=cascade, outcome=outcome)
 
@@ -1544,10 +1638,13 @@ def task_complete(item_ids, cascade, outcome, outcome_file):
               help="Outcome — what was assumed (inline; applies to root only on cascade)")
 @click.option("--outcome-file", default=None,
               help="Load the outcome from a file")
-def task_assume(item_ids, cascade, outcome, outcome_file):
+@click.option("--allow-path", "allow_paths", multiple=True,
+              help="Regex matching an absolute path to permit in inline content "
+                   "(repeatable; escape hatch for the path gate).")
+def task_assume(item_ids, cascade, outcome, outcome_file, allow_paths):
     """Assume one or more tasks (believed complete, not yet verified)."""
     from endless.task_cmd import assume_item
-    outcome = _resolve_content_flag(outcome, outcome_file, "outcome")
+    outcome = _resolve_content_flag(outcome, outcome_file, "outcome", allow_paths)
     for item_id in item_ids:
         assume_item(item_id, cascade=cascade, outcome=outcome)
 
@@ -1596,7 +1693,10 @@ def task_approve(item_ids):
               help="Findings / deliverable text, inline (required unless --outcome-file — IS the deliverable)")
 @click.option("--outcome-file", default=None,
               help="Load the findings / deliverable from a file")
-def task_complete_cmd(item_ids, outcome, outcome_file):
+@click.option("--allow-path", "allow_paths", multiple=True,
+              help="Regex matching an absolute path to permit in inline content "
+                   "(repeatable; escape hatch for the path gate).")
+def task_complete_cmd(item_ids, outcome, outcome_file, allow_paths):
     """Mark one or more tasks as `completed` (E-1240).
 
     For findings-as-deliverable tasks (audits, research, reviews, etc.)
@@ -1605,7 +1705,7 @@ def task_complete_cmd(item_ids, outcome, outcome_file):
     verbs.json. For implementation tasks, use `task confirm` / `task assume`.
     """
     from endless.task_cmd import mark_completed_item
-    outcome = _resolve_content_flag(outcome, outcome_file, "outcome")
+    outcome = _resolve_content_flag(outcome, outcome_file, "outcome", allow_paths)
     if outcome is None:
         raise click.ClickException("Provide --outcome or --outcome-file.")
     for item_id in item_ids:
@@ -1858,10 +1958,13 @@ def task_block(item_id, blocker_id):
               help="Outcome — why this was replaced (inline; required if --status=declined)")
 @click.option("--outcome-file", default=None,
               help="Load the outcome from a file")
-def task_replace(item_id, replacement_id, new_status, outcome, outcome_file):
+@click.option("--allow-path", "allow_paths", multiple=True,
+              help="Regex matching an absolute path to permit in inline content "
+                   "(repeatable; escape hatch for the path gate).")
+def task_replace(item_id, replacement_id, new_status, outcome, outcome_file, allow_paths):
     """Mark a task as replaced by another task (sets status, default 'obsolete')."""
     from endless.task_cmd import replace_task
-    outcome = _resolve_content_flag(outcome, outcome_file, "outcome")
+    outcome = _resolve_content_flag(outcome, outcome_file, "outcome", allow_paths)
     replace_task(item_id, replacement_id, status=new_status, outcome=outcome)
 
 
@@ -1950,10 +2053,13 @@ def decision_list(project, show_all, sort, llm, as_json):
               help="Task ID(s) this decision documents (repeatable; soft link)")
 @click.option("--decides", "decides_ids", type=TASK_ID, multiple=True,
               help="Task ID(s) that implement this decision (repeatable; hard link)")
-def decision_add(title, description, description_file, project, about_ids, decides_ids):
+@click.option("--allow-path", "allow_paths", multiple=True,
+              help="Regex matching an absolute path to permit in inline content "
+                   "(repeatable; escape hatch for the path gate).")
+def decision_add(title, description, description_file, project, about_ids, decides_ids, allow_paths):
     """Record a decision (starts as `proposed`)."""
     from endless.decision_cmd import add_decision
-    description = _resolve_content_flag(description, description_file, "description")
+    description = _resolve_content_flag(description, description_file, "description", allow_paths)
     add_decision(
         title,
         description=description,
@@ -2071,15 +2177,18 @@ def epic_cmd():
               help="Task ID(s) that this new epic cleans up after (repeatable)")
 @click.option("--cleaned-up-by", "cleaned_up_by_ids", type=TASK_ID, multiple=True,
               help="Task ID(s) that clean up after this new epic (repeatable)")
+@click.option("--allow-path", "allow_paths", multiple=True,
+              help="Regex matching an absolute path to permit in inline content "
+                   "(repeatable; escape hatch for the path gate).")
 def epic_add(title, description, description_file, text, text_file, phase, project,
              parent, after, status, tier, force,
              blocks_ids, blocked_by_ids, relates_to_ids, implements_ids,
-             cleans_up_ids, cleaned_up_by_ids):
+             cleans_up_ids, cleaned_up_by_ids, allow_paths):
     """Add an epic (a task with type=epic)."""
     from endless.epic_cmd import add_epic
     from endless.task_cmd import parse_tier, link_tasks
-    description = _resolve_content_flag(description, description_file, "description")
-    text = _resolve_content_flag(text, text_file, "text")
+    description = _resolve_content_flag(description, description_file, "description", allow_paths)
+    text = _resolve_content_flag(text, text_file, "text", allow_paths)
     tier_val = parse_tier(tier) if tier else None
     new_id = add_epic(title, description=description, text=text,
                       phase=phase, project_name=project, after=after,
@@ -2202,9 +2311,12 @@ def epic_show(item_ids, no_description, show_analysis, show_text,
               help="Outcome / reason for status (inline; required if status=declined)")
 @click.option("--outcome-file", default=None,
               help="Load the outcome from a file")
+@click.option("--allow-path", "allow_paths", multiple=True,
+              help="Regex matching an absolute path to permit in inline content "
+                   "(repeatable; escape hatch for the path gate).")
 def epic_update(item_ids, status, title, description, description_file, text,
                 text_file, parent, phase, tier, analysis_text, analysis_file,
-                force, outcome, outcome_file):
+                force, outcome, outcome_file, allow_paths):
     """Update one or more epics (promotes type to epic).
 
     Updating an existing task-typed row through this verb also promotes it to
@@ -2212,10 +2324,10 @@ def epic_update(item_ids, status, title, description, description_file, text,
     """
     from endless.epic_cmd import update_epic
     from endless.task_cmd import parse_tier
-    description = _resolve_content_flag(description, description_file, "description")
-    text = _resolve_content_flag(text, text_file, "text")
-    analysis_text = _resolve_content_flag(analysis_text, analysis_file, "analysis")
-    outcome = _resolve_content_flag(outcome, outcome_file, "outcome")
+    description = _resolve_content_flag(description, description_file, "description", allow_paths)
+    text = _resolve_content_flag(text, text_file, "text", allow_paths)
+    analysis_text = _resolve_content_flag(analysis_text, analysis_file, "analysis", allow_paths)
+    outcome = _resolve_content_flag(outcome, outcome_file, "outcome", allow_paths)
     tier_val = parse_tier(tier) if tier else None
     for item_id in item_ids:
         update_epic(item_id, status=status, title=title,
