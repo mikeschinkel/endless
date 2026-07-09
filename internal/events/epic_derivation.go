@@ -174,6 +174,7 @@ func deriveTargetStatus(db dbQuerier, epicID int64) (string, bool, error) {
 		hasChild      bool
 		anyInProgress bool
 		anyReady      bool
+		anySubmitted  bool
 		anyNeedsPlan  bool
 		allTerminal   = true
 	)
@@ -188,6 +189,8 @@ func deriveTargetStatus(db dbQuerier, epicID int64) (string, bool, error) {
 			anyInProgress = true
 		case "ready":
 			anyReady = true
+		case "submitted":
+			anySubmitted = true
 		case "unplanned":
 			anyNeedsPlan = true
 		}
@@ -206,6 +209,11 @@ func deriveTargetStatus(db dbQuerier, epicID int64) (string, bool, error) {
 		return "underway", true, nil
 	case anyReady:
 		return "ready", true, nil
+	case anySubmitted:
+		// A child is spec-complete pending human approval (and none is ready/
+		// underway). The epic itself reads as awaiting approval — more advanced
+		// than unplanned, not yet approved-to-work.
+		return "submitted", true, nil
 	case anyNeedsPlan:
 		return "unplanned", true, nil
 	case allTerminal:

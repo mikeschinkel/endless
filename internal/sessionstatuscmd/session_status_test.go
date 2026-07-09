@@ -20,6 +20,7 @@ func TestClassify(t *testing.T) {
 		{"in_flight wins over status", monitor.SessionStatusRow{InFlight: true, Status: "ready"}, actDoing},
 		{"ready with no plan still do", monitor.SessionStatusRow{Status: "ready", HasText: false}, actDo},
 		{"unplanned is plan", monitor.SessionStatusRow{Status: "unplanned"}, actPlan},
+		{"submitted is do not plan", monitor.SessionStatusRow{Status: "submitted"}, actDo},
 		{"needs_plan is plan", monitor.SessionStatusRow{Status: "needs_plan"}, actPlan},
 		{"revisit folds into plan", monitor.SessionStatusRow{Status: "revisit"}, actPlan},
 		{"verify", monitor.SessionStatusRow{Status: "verify"}, actVerify},

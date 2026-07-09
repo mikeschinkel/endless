@@ -66,3 +66,41 @@ Sandbox cleanup on worktree drop/land is not yet automatic; manually `endless-sa
 ## Tests
 
 Use `just test` to run Python tests.
+
+## Task status lifecycle
+
+An agent sets `submitted` (by attaching a plan, or `endless task submit <id>` when the description alone is a sufficient spec); a human runs `endless task approve <id>` to reach `ready`. `ready` therefore provably means *approved-to-implement*, not merely *planned*, so background sessions may pick up (claim) only `ready` work and may not run `approve`.
+
+<!-- BEGIN canonical:docs/status-lifecycle.mmd — edit the canonical file, then re-sync; do not hand-edit here -->
+```mermaid
+%% Canonical task status lifecycle — single source of truth.
+%% Embedded (byte-identical) in README.md, CLAUDE.md, and docs/guide/index.md
+%% between <!-- BEGIN canonical:docs/status-lifecycle.mmd --> / <!-- END ... -->
+%% markers. Edit HERE, then re-sync the copies (tests/tasks/e-1648-verify.sh
+%% asserts they match). Blocking is a relation (blocked_by), not a state, so it
+%% is intentionally absent.
+stateDiagram-v2
+    [*] --> unplanned
+
+    unplanned --> submitted: agent submits (plan attached OR description sufficient)
+    submitted --> ready: Mike approves
+    ready --> underway: session claims
+    underway --> unverified: implementation done
+    unverified --> confirmed: Mike verifies
+    unverified --> assumed: believed done, verify on use
+
+    confirmed --> [*]
+    assumed --> [*]
+
+    unplanned --> revisit: needs re-evaluation
+    underway --> revisit
+    revisit --> submitted: re-submit
+
+    submitted --> declined
+    ready --> declined
+    unplanned --> obsolete
+    declined --> [*]
+    obsolete --> [*]
+    completed --> [*]
+```
+<!-- END canonical:docs/status-lifecycle.mmd -->

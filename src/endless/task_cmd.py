@@ -1118,7 +1118,7 @@ def next_tasks(
 ):
     """Show top actionable leaf tasks, ranked by priority."""
     where = (
-        "WHERE t.status NOT IN ('confirmed', 'assumed', 'completed', 'blocked', 'declined', 'obsolete', 'underway', 'unverified') "
+        "WHERE t.status NOT IN ('confirmed', 'assumed', 'completed', 'blocked', 'declined', 'obsolete', 'underway', 'unverified', 'submitted') "
         "AND (SELECT count(*) FROM tasks c WHERE c.parent_id = t.id) = 0 "
         "AND t.id NOT IN ("
         "  SELECT td.target_id FROM task_deps td"
@@ -2316,6 +2316,146 @@ def decline_item(item_id: int, reason: str):
     _emit_field_changes(item_id, row[0]["title"], changes)
 
 
+def _session_is_background(session_id: int | None) -> bool:
+    """True when the given session is of kind `background`.
+
+    Used to gate the human approval verb and non-`ready` pickup: a
+    background loop must not approve its own work or claim work that a
+    human has not approved. Returns False when session_id is None (no
+    resolvable session → not provably background).
+    """
+    if session_id is None:
+        return False
+    rows = db.query(
+        "SELECT 1 FROM sessions "
+        "WHERE id = ? "
+        "AND kind_id = (SELECT id FROM session_kinds WHERE slug = 'background')",
+        (session_id,),
+    )
+    return bool(rows)
+
+
+def _current_session_is_background() -> bool:
+    """True when the session running this command is of kind `background`."""
+    return _session_is_background(_current_endless_session_id())
+
+
+# Statuses a task may be `submit`ted from: pre-approval design states.
+_SUBMITTABLE_FROM = ("unplanned", "revisit")
+
+
+def submit_item(item_id: int):
+    """Mark a task as `submitted` — spec-complete, awaiting human approval.
+
+    Agent-set. Reachable two ways, both landing here: the agent attached a
+    plan (`tasks.text` populated — the plan-attach auto-move handles that in
+    the executor) OR the agent judges the description a sufficient spec (no
+    plan text, this verb). Plan-vs-no-plan is carried by `tasks.text`, not by
+    status. A human then runs `endless task approve` to reach `ready`.
+    """
+    from endless.event_bridge import emit_event
+
+    row = db.query(
+        "SELECT id, COALESCE(title, description) as title, status FROM tasks "
+        "WHERE id = ?",
+        (item_id,),
+    )
+    if not row:
+        raise click.ClickException(
+            f"No task found with id {item_id}"
+        )
+
+    current = row[0]["status"]
+    if current == "submitted":
+        click.echo(
+            click.style("•", fg="cyan")
+            + f" Item {task_id_display(item_id)} is already submitted"
+        )
+        return
+    if current not in _SUBMITTABLE_FROM:
+        raise click.ClickException(
+            f"Cannot submit a task in status '{current}'; submit applies to "
+            f"{' or '.join(_SUBMITTABLE_FROM)} tasks (spec-complete, awaiting "
+            "approval)."
+        )
+
+    _, proj_name = _resolve_project(None)
+    emit_event(
+        kind="task.status_changed",
+        project=proj_name,
+        entity_type="task",
+        entity_id=str(item_id),
+        payload={
+            "old_status": current,
+            "new_status": "submitted",
+            "cascade": False,
+        },
+    )
+
+    _emit_field_changes(
+        item_id, row[0]["title"], [("status", current, "submitted")]
+    )
+
+
+def approve_item(item_id: int):
+    """Approve a `submitted` task → `ready` (the human approval gate).
+
+    `ready` now provably means human-approved, so background loops may pick
+    up only `ready` work. A `kind=background` session is refused here: it
+    cannot approve its own work. (A tmux-driven agent running approve stays a
+    convention — the system can't distinguish human from agent in a pane.)
+    """
+    from endless.event_bridge import emit_event
+
+    if _current_session_is_background():
+        raise click.ClickException(
+            "A background session cannot approve a task. Approval is the "
+            "human gate that promotes a task to 'ready'; run it from an "
+            "interactive session."
+        )
+
+    row = db.query(
+        "SELECT id, COALESCE(title, description) as title, status FROM tasks "
+        "WHERE id = ?",
+        (item_id,),
+    )
+    if not row:
+        raise click.ClickException(
+            f"No task found with id {item_id}"
+        )
+
+    current = row[0]["status"]
+    if current == "ready":
+        click.echo(
+            click.style("•", fg="cyan")
+            + f" Item {task_id_display(item_id)} is already ready"
+        )
+        return
+    if current != "submitted":
+        raise click.ClickException(
+            f"Cannot approve a task in status '{current}'; approve applies to "
+            "'submitted' tasks (spec-complete, awaiting approval). Have the "
+            "agent submit it first."
+        )
+
+    _, proj_name = _resolve_project(None)
+    emit_event(
+        kind="task.status_changed",
+        project=proj_name,
+        entity_type="task",
+        entity_id=str(item_id),
+        payload={
+            "old_status": current,
+            "new_status": "ready",
+            "cascade": False,
+        },
+    )
+
+    _emit_field_changes(
+        item_id, row[0]["title"], [("status", current, "ready")]
+    )
+
+
 def _eswt_defined_in_user_shell() -> bool:
     """Probe the user's interactive shell for the 'eswt' function.
 
@@ -2861,6 +3001,19 @@ def claim_item(item_id: int, force: bool = False):
                 "(manual work, no Claude assistance)."
             )
         # --force with no resolvable session: claim without a binding.
+
+    # A background session may only pick up human-approved (`ready`) work.
+    # `ready` provably means approved (unplanned → submitted → approve → ready),
+    # so a background loop must not claim tasks still pending approval.
+    if (
+        current_status != "ready"
+        and _session_is_background(target_session)
+    ):
+        raise click.ClickException(
+            f"A background session may only claim 'ready' work; this task is "
+            f"'{current_status}'. It must be approved (reach 'ready') before a "
+            "background session can pick it up."
+        )
 
     if _check_task_ownership(item_id, target_session):
         from endless.worktree_cmd import create_task_worktree, _project_root

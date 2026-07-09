@@ -156,7 +156,7 @@ endless task import --from-claude --project endless
 
 ```bash
 endless task update <id> \
-  [--status unplanned|ready|underway|unverified|completed|blocked|revisit] \
+  [--status unplanned|submitted|ready|underway|unverified|completed|blocked|revisit] \
   [--title <title>] \
   [--description <text>] \
   [--text <inline> | --text-file <path>] \
@@ -176,6 +176,44 @@ endless task update 449 --text plan-markdown-component.md
 # Move a task under a different parent (0 = make root)
 endless task update 506 --parent 443
 ```
+
+#### Task status lifecycle
+
+An agent sets `submitted` (by attaching a plan, or `task submit` when the description is a sufficient spec); a human runs `task approve` to reach `ready`. `ready` therefore means *approved*, not merely *planned* — background sessions may pick up only `ready` work.
+
+<!-- BEGIN canonical:docs/status-lifecycle.mmd — edit the canonical file, then re-sync; do not hand-edit here -->
+```mermaid
+%% Canonical task status lifecycle — single source of truth.
+%% Embedded (byte-identical) in README.md, CLAUDE.md, and docs/guide/index.md
+%% between <!-- BEGIN canonical:docs/status-lifecycle.mmd --> / <!-- END ... -->
+%% markers. Edit HERE, then re-sync the copies (tests/tasks/e-1648-verify.sh
+%% asserts they match). Blocking is a relation (blocked_by), not a state, so it
+%% is intentionally absent.
+stateDiagram-v2
+    [*] --> unplanned
+
+    unplanned --> submitted: agent submits (plan attached OR description sufficient)
+    submitted --> ready: Mike approves
+    ready --> underway: session claims
+    underway --> unverified: implementation done
+    unverified --> confirmed: Mike verifies
+    unverified --> assumed: believed done, verify on use
+
+    confirmed --> [*]
+    assumed --> [*]
+
+    unplanned --> revisit: needs re-evaluation
+    underway --> revisit
+    revisit --> submitted: re-submit
+
+    submitted --> declined
+    ready --> declined
+    unplanned --> obsolete
+    declined --> [*]
+    obsolete --> [*]
+    completed --> [*]
+```
+<!-- END canonical:docs/status-lifecycle.mmd -->
 
 #### Track progress
 

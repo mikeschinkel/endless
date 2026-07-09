@@ -200,3 +200,5 @@
 {"value": "triage", "definition": "To sort or categorize items according to urgency or importance in order to prioritize handling.", "completable": true}
 {"value": "task", "definition": "To assign work or responsibility to someone."}
 {"value": "deny", "definition": "To refuse to accept, acknowledge, or grant something requested."}
+{"value": "submit", "definition": "To present work as spec-complete for approval; sets a task to `submitted` (awaiting a human approve)."}
+{"value": "approve", "definition": "To grant human approval; promotes a `submitted` task to `ready`."}

@@ -38,10 +38,45 @@ When implementation is verified, land the work with `endless worktree land <id>`
 
 ## Task statuses
 
+<!-- BEGIN canonical:docs/status-lifecycle.mmd — edit the canonical file, then re-sync; do not hand-edit here -->
+```mermaid
+%% Canonical task status lifecycle — single source of truth.
+%% Embedded (byte-identical) in README.md, CLAUDE.md, and docs/guide/index.md
+%% between <!-- BEGIN canonical:docs/status-lifecycle.mmd --> / <!-- END ... -->
+%% markers. Edit HERE, then re-sync the copies (tests/tasks/e-1648-verify.sh
+%% asserts they match). Blocking is a relation (blocked_by), not a state, so it
+%% is intentionally absent.
+stateDiagram-v2
+    [*] --> unplanned
+
+    unplanned --> submitted: agent submits (plan attached OR description sufficient)
+    submitted --> ready: Mike approves
+    ready --> underway: session claims
+    underway --> unverified: implementation done
+    unverified --> confirmed: Mike verifies
+    unverified --> assumed: believed done, verify on use
+
+    confirmed --> [*]
+    assumed --> [*]
+
+    unplanned --> revisit: needs re-evaluation
+    underway --> revisit
+    revisit --> submitted: re-submit
+
+    submitted --> declined
+    ready --> declined
+    unplanned --> obsolete
+    declined --> [*]
+    obsolete --> [*]
+    completed --> [*]
+```
+<!-- END canonical:docs/status-lifecycle.mmd -->
+
 | Status        | Meaning                                                                                                       |
 |---------------|---------------------------------------------------------------------------------------------------------------|
-| `unplanned`  | Not yet planned — needs design work. Attach a plan with `task update <id> --text-file <path>` and the task auto-promotes to `ready`. |
-| `ready`       | Planned and ready to implement.                                                                                |
+| `unplanned`  | Not yet planned — needs design work. Attach a plan with `task update <id> --text-file <path>` (moves the task to `submitted`), or run `task submit <id>` when the description alone is a sufficient spec. |
+| `submitted`   | Spec-complete, awaiting approval — the agent has attached a plan or judged the description sufficient. A human runs `task approve <id>` to reach `ready`. |
+| `ready`       | Approved to implement. `ready` provably means human-approved, so background sessions may pick up only `ready` work. |
 | `underway` | A session has claimed the task and is working on it. Set automatically by `task claim`.                        |
 | `unverified`      | Implementation done, awaiting verification. **Still blocks dependents.**                                       |
 | `confirmed`   | Verified and done. **Unblocks dependents.** Only the user confirms.                                            |
@@ -50,6 +85,8 @@ When implementation is verified, land the work with `endless worktree land <id>`
 | `revisit`     | Was partially planned but needs re-evaluation.                                                                 |
 | `declined`    | Active decision not to do this. Requires `--reason`.                                                           |
 | `obsolete`    | Made irrelevant by other changes.                                                                              |
+
+The agent sets `submitted` (via `task submit`, or by attaching a plan); a human sets `ready` (via `task approve`) — the two-step gate that makes `ready` mean "approved," not merely "planned."
 
 Use `assumed` (not `unverified`) when the only way to test the work is by using it in a downstream task — set `--outcome` explaining what was done and how confidence was established.
 

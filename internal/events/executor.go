@@ -289,14 +289,15 @@ func execTaskCreated(db dbQuerier, evt *Event, emit DerivedEmitter) (*ExecuteRes
 	taskID := mustParseInt64(evt.Entity.ID)
 	ts := now()
 
-	// Attaching a non-empty plan at creation auto-promotes the task to
-	// `ready`. Mirrors the behavior of task.fields_updated when --text is
-	// supplied. The promotion only fires when status was the default
-	// `unplanned` — an explicit override (e.g. a tier-1 task created at
-	// `ready` already, or any non-default status) is preserved.
+	// Attaching a non-empty plan at creation moves the task to `submitted`
+	// (spec-complete, awaiting human approval — NOT `ready`, which now means
+	// human-approved). Mirrors task.fields_updated when --text is supplied.
+	// Only fires when status was the default `unplanned` — an explicit
+	// override (e.g. a tier-1 task created at `ready`, or any non-default
+	// status) is preserved.
 	status := p.Status
 	if status == "unplanned" && strings.TrimSpace(p.Text) != "" {
-		status = "ready"
+		status = "submitted"
 	}
 
 	var notes any
@@ -547,9 +548,10 @@ func execTaskFieldsUpdated(db dbQuerier, evt *Event, emit DerivedEmitter) (*Exec
 		}
 	}
 
-	// Attaching a non-empty plan (--text) auto-promotes a `unplanned`
-	// task to `ready`. Only fires when the same update does not already
-	// set status explicitly (caller wins).
+	// Attaching a non-empty plan (--text) to a `unplanned` task moves it to
+	// `submitted` (spec-complete, awaiting human approval — NOT `ready`,
+	// which now means human-approved). Only fires when the same update does
+	// not already set status explicitly (caller wins).
 	if textVal, hasText := p.Fields["text"]; hasText {
 		if _, statusSet := p.Fields["status"]; !statusSet {
 			textStr, _ := textVal.(string)
@@ -559,7 +561,7 @@ func execTaskFieldsUpdated(db dbQuerier, evt *Event, emit DerivedEmitter) (*Exec
 					taskID).Scan(&currentStatus); err == nil {
 					if currentStatus == "unplanned" {
 						setClauses = append(setClauses, "status = ?")
-						args = append(args, "ready")
+						args = append(args, "submitted")
 					}
 				}
 			}

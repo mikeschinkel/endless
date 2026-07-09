@@ -118,7 +118,7 @@ class TaskOrDecisionIDType(click.ParamType):
 
 TASK_OR_DECISION_ID = TaskOrDecisionIDType()
 
-TASK_STATUSES = ["unplanned", "ready", "underway",
+TASK_STATUSES = ["unplanned", "submitted", "ready", "underway",
                  "unverified", "confirmed", "assumed", "completed",
                  "blocked", "revisit", "declined", "obsolete"]
 
@@ -1556,6 +1556,33 @@ def task_decline(item_ids, reason):
     from endless.task_cmd import decline_item
     for item_id in item_ids:
         decline_item(item_id, reason=reason)
+
+
+@task_cmd.command("submit")
+@click.argument("item_ids", type=TASK_ID, nargs=-1, required=True)
+def task_submit(item_ids):
+    """Submit one or more tasks (unplanned/revisit → submitted).
+
+    Agent-set signal that a task is spec-complete and awaiting human
+    approval — either a plan was attached or the description is a sufficient
+    spec. A human then runs `endless task approve` to reach `ready`.
+    """
+    from endless.task_cmd import submit_item
+    for item_id in item_ids:
+        submit_item(item_id)
+
+
+@task_cmd.command("approve")
+@click.argument("item_ids", type=TASK_ID, nargs=-1, required=True)
+def task_approve(item_ids):
+    """Approve one or more submitted tasks (submitted → ready).
+
+    The human approval gate: `ready` provably means human-approved. Refused
+    for background sessions.
+    """
+    from endless.task_cmd import approve_item
+    for item_id in item_ids:
+        approve_item(item_id)
 
 
 @task_cmd.command("complete")

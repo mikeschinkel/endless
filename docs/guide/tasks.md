@@ -158,13 +158,15 @@ endless task update <id> --decision "<rationale>"    # creates paired decision t
 endless task update <id> <id2> ... --status ready    # bulk update
 ```
 
-Attaching a non-empty plan (`--text`) to a `unplanned` task auto-promotes the status to `ready`. Applies on both `task add` and `task update`. An explicit `--status` in the same call always wins.
+Attaching a non-empty plan (`--text`) to a `unplanned` task moves it to `submitted` (spec-complete, awaiting approval — **not** `ready`, which now means human-approved). Applies on both `task add` and `task update`. An explicit `--status` in the same call always wins. When the description alone is a sufficient spec (no plan text), run `task submit <id>` to reach `submitted` directly. A human then runs `task approve <id>` to promote `submitted → ready`.
 
 ---
 
 ## Status transitions
 
 ```bash
+endless task submit <id>                             # agent: unplanned/revisit → submitted (spec-complete, awaiting approval)
+endless task approve <id>                            # human: submitted → ready (background sessions refused)
 endless task claim <id>                              # ready → underway + create worktree
 endless task release [<id>]                          # release current session's claim
 endless task update <id> --status unverified             # work done, awaiting verification

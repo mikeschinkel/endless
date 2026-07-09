@@ -90,6 +90,8 @@ func statusLabel(status string) string {
 	switch status {
 	case "unplanned":
 		return "Unplanned"
+	case "submitted":
+		return "Submitted"
 	case "ready":
 		return "Ready"
 	case "underway":
@@ -176,7 +178,7 @@ func joinParts(parts []string) string {
 func taskTreeChildSummary(items []data.TaskView) string {
 	// Count statuses per parent
 	type counts struct {
-		unverified, underway, unplanned, ready, blocked, revisit int
+		unverified, underway, unplanned, submitted, ready, blocked, revisit int
 	}
 	parentCounts := make(map[int64]*counts)
 	for _, item := range items {
@@ -197,6 +199,8 @@ func taskTreeChildSummary(items []data.TaskView) string {
 			c.underway++
 		case "unplanned":
 			c.unplanned++
+		case "submitted":
+			c.submitted++
 		case "ready":
 			c.ready++
 		case "blocked":
@@ -223,6 +227,9 @@ func taskTreeChildSummary(items []data.TaskView) string {
 		}
 		if c.ready > 0 {
 			segs = append(segs, seg(c.ready, "ready"))
+		}
+		if c.submitted > 0 {
+			segs = append(segs, seg(c.submitted, "submitted"))
 		}
 		if c.unplanned > 0 {
 			segs = append(segs, seg(c.unplanned, "plan"))
@@ -320,7 +327,8 @@ func statusChoices() []statusChoice {
 		{"completed", "Completed", "Findings delivered (audit / research)"},
 		{"unverified", "Unverified", "Done, awaiting confirmation"},
 		{"underway", "Underway", "Actively being worked on"},
-		{"ready", "Ready", "Planned, ready to implement"},
+		{"ready", "Ready", "Approved, ready to implement"},
+		{"submitted", "Submitted", "Spec-complete, awaiting approval"},
 		{"unplanned", "Unplanned", "Design work needed first"},
 		{"revisit", "Revisit", "Needs re-evaluation"},
 		{"blocked", "Blocked", "Waiting on something else"},
@@ -348,6 +356,8 @@ func statusSphereClass(status string) string {
 	switch status {
 	case "ready":
 		return "bg-emerald-400"
+	case "submitted":
+		return "bg-lime-400"
 	case "unplanned":
 		return "bg-amber-400"
 	case "underway":

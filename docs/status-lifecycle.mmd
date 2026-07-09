@@ -1,0 +1,29 @@
+%% Canonical task status lifecycle — single source of truth.
+%% Embedded (byte-identical) in README.md, CLAUDE.md, and docs/guide/index.md
+%% between <!-- BEGIN canonical:docs/status-lifecycle.mmd --> / <!-- END ... -->
+%% markers. Edit HERE, then re-sync the copies (tests/tasks/e-1648-verify.sh
+%% asserts they match). Blocking is a relation (blocked_by), not a state, so it
+%% is intentionally absent.
+stateDiagram-v2
+    [*] --> unplanned
+
+    unplanned --> submitted: agent submits (plan attached OR description sufficient)
+    submitted --> ready: Mike approves
+    ready --> underway: session claims
+    underway --> unverified: implementation done
+    unverified --> confirmed: Mike verifies
+    unverified --> assumed: believed done, verify on use
+
+    confirmed --> [*]
+    assumed --> [*]
+
+    unplanned --> revisit: needs re-evaluation
+    underway --> revisit
+    revisit --> submitted: re-submit
+
+    submitted --> declined
+    ready --> declined
+    unplanned --> obsolete
+    declined --> [*]
+    obsolete --> [*]
+    completed --> [*]

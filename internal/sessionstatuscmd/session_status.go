@@ -337,7 +337,11 @@ func classify(r monitor.SessionStatusRow) action {
 		return actOther
 	}
 	switch r.Status {
-	case "ready":
+	case "ready", "submitted":
+		// `submitted` = planned/spec-complete, awaiting human approval. It has
+		// a spec already, so it is NOT `actPlan` (✎ plan) — mapping it there
+		// would mis-show a planned-but-unapproved task as "needs a plan". It
+		// routes to actDo (▶) alongside ready as actionable backlog.
 		return actDo
 	case "unplanned", "needs_plan", "revisit":
 		return actPlan

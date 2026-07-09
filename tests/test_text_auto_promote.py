@@ -1,6 +1,7 @@
-"""Tests for E-1266: attaching a non-empty --text auto-promotes a
-`unplanned` task to `ready`. Applies on both `task add` and
-`task update`. An explicit --status in the same call always wins.
+"""Tests for E-1266 / E-1648: attaching a non-empty --text moves a
+`unplanned` task to `submitted` (spec-complete, awaiting human approval —
+NOT `ready`, which now means human-approved). Applies on both `task add`
+and `task update`. An explicit --status in the same call always wins.
 """
 
 import pytest
@@ -16,7 +17,7 @@ def _status_of(item_id: int) -> str:
 
 # --- task add ---------------------------------------------------------------
 
-def test_add_with_text_promotes_to_ready(tmp_path, seeded_project_at_cwd):
+def test_add_with_text_promotes_to_submitted(tmp_path, seeded_project_at_cwd):
     plan = tmp_path / "plan.md"
     plan.write_text("# plan\nsome body\n")
 
@@ -26,7 +27,7 @@ def test_add_with_text_promotes_to_ready(tmp_path, seeded_project_at_cwd):
         text=plan.read_text(),
     )
 
-    assert _status_of(item_id) == "ready"
+    assert _status_of(item_id) == "submitted"
 
 
 def test_add_without_text_stays_unplanned(seeded_project_at_cwd):
@@ -80,7 +81,7 @@ def test_add_tier_1_with_text_stays_ready(tmp_path, seeded_project_at_cwd):
 
 # --- task update ------------------------------------------------------------
 
-def test_update_with_text_on_unplanned_promotes_to_ready(tmp_path, seeded_project_at_cwd):
+def test_update_with_text_on_unplanned_promotes_to_submitted(tmp_path, seeded_project_at_cwd):
     item_id = task_cmd.add_item(
         title="Add a thing",
         description="short",
@@ -91,7 +92,7 @@ def test_update_with_text_on_unplanned_promotes_to_ready(tmp_path, seeded_projec
     plan.write_text("# plan\nbody\n")
     task_cmd.update_plan(item_id=item_id, text=plan.read_text())
 
-    assert _status_of(item_id) == "ready"
+    assert _status_of(item_id) == "submitted"
 
 
 def test_update_with_text_on_ready_task_no_change(tmp_path, seeded_project_at_cwd):

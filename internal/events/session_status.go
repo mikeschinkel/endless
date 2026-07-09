@@ -305,7 +305,7 @@ func statusToDisposition(status string) string {
 		return "Blocked"
 	case "unverified":
 		return "Unverified"
-	case "unplanned", "ready", "underway", "revisit":
+	case "unplanned", "submitted", "ready", "underway", "revisit":
 		return "Pending"
 	default:
 		return "Pending"

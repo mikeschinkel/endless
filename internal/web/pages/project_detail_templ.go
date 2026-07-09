@@ -814,7 +814,7 @@ func nextActions(items []data.TaskView) []data.TaskView {
 		if len(result) >= 5 {
 			break
 		}
-		if item.Status == "unplanned" || item.Status == "ready" {
+		if item.Status == "unplanned" || item.Status == "submitted" || item.Status == "ready" {
 			result = append(result, item)
 		}
 	}
