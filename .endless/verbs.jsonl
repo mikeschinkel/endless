@@ -205,3 +205,4 @@
 {"value": "version-control", "definition": "To track and maintain a history of changes to files or code using a dedicated system like Git."}
 {"value": "lint", "definition": "To analyze source code using an automated tool to identify style violations, potential bugs, and deviations from coding standards."}
 {"value": "let", "definition": "To permit or authorize someone to do something."}
+{"value": "reopen", "definition": "To open something again after it has been closed."}
