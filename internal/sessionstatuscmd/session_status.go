@@ -270,6 +270,12 @@ func eraseEachLineToEOL(frame string) string {
 // no-task hint instead of an empty table — a claim/bind message (or a
 // register-session message) mirroring the tmux status line, NEVER an unrelated
 // task's rows (E-1698).
+// worktreeAnomalies is the focal-row anomaly source, seamed as a package var so
+// tests can drive the focal expansion with a stubbed anomaly set (a genuinely
+// divergent worktree can't be seeded hermetically). Production points at the
+// real DB/git-backed monitor.WorktreeAnomalies.
+var worktreeAnomalies = monitor.WorktreeAnomalies
+
 func renderTo(w io.Writer, rows []monitor.SessionStatusRow, focal int64, noTaskHint string, cols int, color bool) {
 	if focal == 0 || len(rows) == 0 {
 		// No rows to document, so no legend — just the claim/bind (or register-
@@ -319,8 +325,20 @@ func renderTo(w io.Writer, rows []monitor.SessionStatusRow, focal int64, noTaskH
 		// git/worktree anomalies for the focal worktree (E-1758), the same set
 		// `endless worktree check` reports. Silent when there are none — a clean
 		// (or merely unlanded) focal worktree adds no lines here.
+		//
+		// One kind is suppressed HERE (not in the shared core): AnomalyUncommitted.
+		// `worktree check` runs at HANDOFF, where a dirty tree is a genuine anomaly,
+		// so that surface keeps it. `session status` renders CONTINUOUSLY, including
+		// on the focal task you are mid-implementation on, where uncommitted user
+		// files are the EXPECTED work-in-progress state — a false positive (E-1768).
+		// The other kinds (detached HEAD, branch mismatch, prunable) are genuine
+		// even mid-work and still surface. The ◆ glyph on the row itself stays
+		// (it correctly means dirty-or-unlanded, E-1701); only this detail line goes.
 		if r.IsFocal {
-			for _, a := range monitor.WorktreeAnomalies(r.ProjectID, r.ID) {
+			for _, a := range worktreeAnomalies(r.ProjectID, r.ID) {
+				if a.Kind == monitor.AnomalyUncommitted {
+					continue
+				}
 				fmt.Fprintln(w, dim("      ◆ "+a.Line(), color))
 			}
 		}

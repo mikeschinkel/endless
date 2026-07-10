@@ -427,3 +427,67 @@ func TestTypeLetter(t *testing.T) {
 		}
 	}
 }
+
+// TestFocalExpansionSuppressesUncommitted pins E-1768: the focal-row anomaly
+// expansion drops AnomalyUncommitted (uncommitted user files are the expected
+// work-in-progress state of the task you are actively on, not an anomaly) while
+// still surfacing the genuine kinds — detached HEAD, branch mismatch, prunable.
+// The handoff-time `worktree check` surface is unaffected (it uses the shared
+// monitor core directly, not this render path).
+func TestFocalExpansionSuppressesUncommitted(t *testing.T) {
+	prev := worktreeAnomalies
+	t.Cleanup(func() { worktreeAnomalies = prev })
+	worktreeAnomalies = func(projectID, taskID int64) []monitor.WorktreeAnomaly {
+		return []monitor.WorktreeAnomaly{
+			{Kind: monitor.AnomalyUncommitted, Detail: "3 uncommitted/untracked user files"},
+			{Kind: monitor.AnomalyDetachedHead, Detail: "HEAD is detached"},
+			{Kind: monitor.AnomalyBranchMismatch, Detail: "HEAD on foo, companion on bar"},
+			{Kind: monitor.AnomalyPrunable, Detail: "git marks the worktree prunable"},
+		}
+	}
+
+	rows := []monitor.SessionStatusRow{
+		{ID: 1768, Title: "focal", Status: "underway", Phase: "now", TypeSlug: "task", IsFocal: true, Dirty: true},
+	}
+	var b strings.Builder
+	renderTo(&b, rows, 1768, hintClaimBind, 90, false)
+	out := b.String()
+
+	// The suppressed kind must not appear in the focal detail lines...
+	if strings.Contains(out, "uncommitted") {
+		t.Errorf("focal expansion must suppress the uncommitted anomaly line:\n%s", out)
+	}
+	// ...while every genuine kind still surfaces, each as a ◆ detail line.
+	for _, want := range []string{"detached-head", "branch-mismatch", "prunable"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("focal expansion dropped genuine anomaly %q:\n%s", want, out)
+		}
+	}
+	// Exactly the three genuine kinds render as expanded ◆ detail lines (the row's
+	// own ◆ dirty marker is inline in the row prefix, not a "      ◆ " detail line).
+	if n := strings.Count(out, "      ◆ "); n != 3 {
+		t.Errorf("want 3 expanded anomaly detail lines, got %d:\n%s", n, out)
+	}
+}
+
+// TestFocalExpansionUncommittedOnlyIsSilent pins the pure false-positive case:
+// when the ONLY anomaly is uncommitted user files, the focal row emits no
+// expansion detail lines at all (E-1768).
+func TestFocalExpansionUncommittedOnlyIsSilent(t *testing.T) {
+	prev := worktreeAnomalies
+	t.Cleanup(func() { worktreeAnomalies = prev })
+	worktreeAnomalies = func(projectID, taskID int64) []monitor.WorktreeAnomaly {
+		return []monitor.WorktreeAnomaly{
+			{Kind: monitor.AnomalyUncommitted, Detail: "3 uncommitted/untracked user files"},
+		}
+	}
+
+	rows := []monitor.SessionStatusRow{
+		{ID: 1768, Title: "focal", Status: "underway", Phase: "now", TypeSlug: "task", IsFocal: true, Dirty: true},
+	}
+	var b strings.Builder
+	renderTo(&b, rows, 1768, hintClaimBind, 90, false)
+	if n := strings.Count(b.String(), "      ◆ "); n != 0 {
+		t.Errorf("uncommitted-only focal worktree must add no detail lines, got %d:\n%s", n, b.String())
+	}
+}
