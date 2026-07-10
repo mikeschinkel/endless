@@ -1,0 +1,1 @@
+Superseded by E-1318. The XML entity escaping issue is an artifact of XML serialization; once session_statuses storage moves to JSON (E-1318), strings round-trip without entity encoding and the cosmetic issue evaporates. No code change needed under E-1316; close.

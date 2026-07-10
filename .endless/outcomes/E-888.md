@@ -1,0 +1,1 @@
+Superseded by E-1378. 'Surface decision history as queryable' is already delivered by 'endless decision list' (E-927). Remaining structural work (separate storage) lives in E-1378.

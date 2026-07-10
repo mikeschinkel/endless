@@ -1,0 +1,1 @@
+Moot: verifies E-1209, which landed on main (commit 6671bca9, ancestor of main HEAD) ~8 weeks ago and has run without incident. Surfaced by the E-1710 ledger audit, which also found these two rows never emitted a task.created event (the only genuine post-rollout WAL gap). Obsoleting rather than verifying a shipped fix.

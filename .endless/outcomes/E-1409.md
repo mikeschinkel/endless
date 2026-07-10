@@ -1,0 +1,1 @@
+Duplicate of E-1307 (filed 2026-05-13). Use E-1307 as the canonical task for shipping 'endless session id'.

@@ -1,0 +1,1 @@
+Superseded by E-1378. This task gated 'task confirm'/'task assume' against type=decision as a band-aid for the shared-tasks-table problem. With decisions in their own table and their own 2-state lifecycle (proposed -> accepted), there's no 'task confirm' verb to misapply to decisions in the first place.

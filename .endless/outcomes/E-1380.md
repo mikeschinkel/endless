@@ -1,0 +1,1 @@
+Obsoleted by E-1459. The migrateV* functions and the entire migrate.go framework were deleted, so there are no error-swallowing migrateV* calls left to surface errors from.

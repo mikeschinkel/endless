@@ -1,0 +1,1 @@
+Obsoleted by E-1582 (remove pivot-gate infrastructure entirely). The session_gates table is being dropped as part of E-1582; fixing its FK is unnecessary work.

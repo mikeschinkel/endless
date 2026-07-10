@@ -1,0 +1,1 @@
+Superseded by E-1446 (Mike, 2026-05-26): Option B chosen — E-1446 produces the final 'e-{id}[-{slug}]' name in a single change, dropping the 'worktree-' prefix as part of its slug-inclusion work. Nothing left for this task to do.

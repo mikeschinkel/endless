@@ -1,0 +1,1 @@
+Consolidated into E-1552 on 2026-06-10. Originally filed as Model 1 (planning orchestrator) separately from E-1552 (Model 2 implementation dispatcher). Recognized in chat that the integration point is one verb (endless task spawn) and the decision is one design spanning all child-status cases.

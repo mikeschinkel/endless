@@ -1,0 +1,1 @@
+Already fixed by commit 0072b81 (2026-05-26, attributed to E-1429 follow-up wiring). The commit adds *config.go_db_context_args() to _materialize_plan_file's endless-session-query subprocess and ships tests/test_worktree_db_context_threading.py to lock it in. Ticket was filed ~14h before the fix landed and never closed.

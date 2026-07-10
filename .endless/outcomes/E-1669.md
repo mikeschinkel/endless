@@ -1,0 +1,1 @@
+Duplicate of E-1662; its full two-part design (copy-binary + repoint hook, and the foreign-build stderr warning backstop) was implemented under E-1662. cleans_up E-1368 moved to E-1662.
