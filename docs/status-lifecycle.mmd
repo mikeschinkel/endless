@@ -8,10 +8,10 @@ stateDiagram-v2
     [*] --> unplanned
 
     unplanned --> submitted: agent submits (plan attached OR description sufficient)
-    submitted --> ready: Mike approves
+    submitted --> ready: user approves
     ready --> underway: session claims
     underway --> unverified: implementation done
-    unverified --> confirmed: Mike verifies
+    unverified --> confirmed: user verifies
     unverified --> assumed: believed done, verify on use
 
     confirmed --> [*]
