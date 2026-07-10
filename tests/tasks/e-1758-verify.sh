@@ -16,7 +16,11 @@
 # touches the real endless repo, ledger, or this worktree's branch — teardown is
 # `rm -rf`.
 #
-# What it checks (each against a task WITH a real worktree):
+# What it checks:
+#   0. E-1758's own Go unit tests for the WorktreeAnomalies core (self-contained
+#      verification; project-wide `just test` / `go test ./...` regression is a
+#      separate pre-land concern, deliberately NOT run here).
+#   (1-6 below run against a task WITH a real worktree.)
 #   1. clean worktree            -> `worktree check` prints nothing, exit 0
 #   2. untracked USER file       -> printed, exit 1
 #   3. endless auto-managed file alone (.endless/verbs.jsonl) -> still clean, exit 0
@@ -206,6 +210,20 @@ reset_clean() {
 
 # ─── checks ─────────────────────────────────────────────────────────────────
 
+# check_go_unit — run E-1758's own Go unit tests for the WorktreeAnomalies core
+# so this script is the single self-contained verification of the task. (The
+# project-wide `just test` / `go test ./...` regression suites are a separate,
+# pre-land concern, not part of per-task verification.)
+check_go_unit() {
+    section "0 — Go unit tests for the WorktreeAnomalies core"
+    local out rc
+    out=$(cd "${REPO_ROOT}" && go test ./internal/monitor/ \
+        -run 'WorktreeAnomaliesAt|UserStatusPaths|IsAutoManagedPath|WorktreeAnomalyLine' 2>&1); rc=$?
+    if [[ "${rc}" -eq 0 ]]; then report_pass "monitor anomaly unit tests pass"
+    else report_fail "monitor anomaly unit tests pass" "go test exit 0" "exit ${rc}
+${out}"; fi
+}
+
 check_clean() {
     section "1 — clean worktree prints nothing, exit 0"
     reset_clean
@@ -282,6 +300,7 @@ main() {
     printf '  env:     isolated (%s)\n' "${WORK}"
     printf '  task:    %s (worktree %s)\n' "${TID}" "${WT}"
 
+    check_go_unit
     check_clean
     check_user_file
     check_auto_managed
