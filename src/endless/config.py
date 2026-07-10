@@ -210,6 +210,13 @@ def main_config_dir() -> Path:
     return Path.home() / ".config" / "endless"
 
 
+def main_cache_dir() -> Path:
+    """The real ledger's cache dir: ~/.cache/endless, ignoring any injected
+    XDG_CACHE_HOME (mirror of main_config_dir for the cache root; sandboxes live
+    under here at ~/.cache/endless/sandboxes/<worktree>/)."""
+    return Path.home() / ".cache" / "endless"
+
+
 def sandbox_config_dir(worktree_dir_name: str) -> Path:
     """The endless config dir inside a worktree's per-worktree sandbox.
 

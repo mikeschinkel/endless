@@ -202,9 +202,11 @@ test_rule2_absolute_in_content() {
         "contains an absolute path" \
         endless task update "${tid}" --text $'first line is fine\nsecond line points at /tmp/buried.md\nthird line fine'
 
-    assert_refused "absolute ~/ path in content refused" \
+    # A non-endless ~/ path (home-relative but outside endless's own dirs) still
+    # resolves to an absolute path and blocks.
+    assert_refused "non-endless absolute ~/ path in content refused" \
         "contains an absolute path" \
-        endless task update "${tid}" --text 'the db lives at ~/.config/endless/endless.db normally'
+        endless task update "${tid}" --text 'the notes live at ~/Documents/secret-plan.md normally'
 }
 
 # ─── Allowed: must stay green ───────────────────────────────────────────────
@@ -267,6 +269,60 @@ test_escape_hatch() {
 
 # ─── Docs sweep: no path-teaching guidance remains ──────────────────────────
 
+# ─── Built-in allowed paths: endless config + cache dirs (no --allow-path) ───
+
+test_builtin_allowed_paths() {
+    section "Built-in allowed paths — endless config + cache dirs"
+
+    local tid
+    tid=$(add_task_get_id "Verify built-in allowed dirs")
+
+    # endless's own config/cache dirs are exempt from BOTH rules with NO
+    # --allow-path needed. These are the stable endless-owned locations docs and
+    # plans legitimately reference (the ledger DB, sandbox caches).
+    assert_succeeds "config-dir path in prose accepted (no --allow-path)" \
+        endless task update "${tid}" \
+        --text "the ledger DB is at ~/.config/endless/endless.db normally"
+    assert_succeeds "config-dir path as whole value accepted" \
+        endless task update "${tid}" --text "~/.config/endless/endless.db"
+    assert_succeeds "cache-dir sandbox path accepted (no --allow-path)" \
+        endless task update "${tid}" \
+        --text "sandbox lives at ~/.cache/endless/sandboxes/e-1/endless here"
+
+    # Resolution honors XDG_CONFIG_HOME — the exempt dir is resolved, not
+    # hardcoded to ~/.config/endless. Redirect XDG to a temp root and confirm a
+    # path under <XDG>/endless is exempt while a non-endless path still blocks.
+    local tmpxdg saved_xcfg xcfg_was_set
+    tmpxdg=$(mktemp -d)
+    saved_xcfg="${XDG_CONFIG_HOME-}"
+    xcfg_was_set="${XDG_CONFIG_HOME+set}"
+    export XDG_CONFIG_HOME="${tmpxdg}"
+    assert_succeeds "path under \$XDG_CONFIG_HOME/endless accepted (resolved, not hardcoded)" \
+        endless task update "${tid}" \
+        --text "cfg lives at ${tmpxdg}/endless/config.json here"
+    assert_succeeds "HOME ~/.config/endless still exempt under XDG redirect" \
+        endless task update "${tid}" \
+        --text "db at ~/.config/endless/endless.db here"
+    assert_refused "non-endless absolute path still blocks under XDG redirect" \
+        "contains an absolute path" \
+        endless task update "${tid}" --text "plan at /tmp/nope-e1744.md here"
+    if [[ -n "${xcfg_was_set}" ]]; then
+        export XDG_CONFIG_HOME="${saved_xcfg}"
+    else
+        unset XDG_CONFIG_HOME
+    fi
+    rm -rf "${tmpxdg}"
+
+    # The exemption is scoped to endless dirs only — a sibling or unrelated
+    # absolute path is NOT exempt.
+    assert_refused "non-endless absolute path blocks (no built-in exemption)" \
+        "contains an absolute path" \
+        endless task update "${tid}" --text "the plan is at /Users/x/plan.md here"
+    assert_refused "sibling ~/.config/other is not endless-owned → blocks" \
+        "contains an absolute path" \
+        endless task update "${tid}" --text "cfg at ~/.config/other/thing.db here"
+}
+
 test_docs_sweep() {
     section "Docs sweep — no '--<inline-flag> <path>' guidance remains"
 
@@ -310,6 +366,7 @@ main() {
     test_rule2_absolute_in_content
     test_allowed
     test_escape_hatch
+    test_builtin_allowed_paths
     test_docs_sweep
 
     summary

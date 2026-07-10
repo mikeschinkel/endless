@@ -1411,14 +1411,51 @@ def _absolute_path_tokens(content):
             yield tok
 
 
+def _builtin_allowed_dirs():
+    """endless's own config + cache dirs — ALWAYS exempt from the path gate (both
+    rules), no --allow-path needed. Docs and plans legitimately reference stable
+    endless-owned locations outside the project root (the ledger DB, sandbox
+    caches — e.g. ~/.config/endless/endless.db, ~/.cache/endless/sandboxes/…).
+
+    Resolved through endless's own config/cache-dir resolution so XDG_CONFIG_HOME /
+    XDG_CACHE_HOME are honored (a sandbox session's redirected endless dir is
+    exempt too), UNIONed with the HOME-anchored main dirs so a literal
+    ~/.config/endless reference stays exempt even inside an XDG-redirected sandbox
+    session. Returned as a data-driven table (a list of resolved dirs), NOT an
+    if/switch: it is the single built-in allow-set that project-config
+    allowed_paths (a later task) will extend at the same composition point."""
+    from endless import config
+    dirs = {
+        config._config_root() / "endless",   # honors XDG_CONFIG_HOME
+        config.main_config_dir(),            # ~/.config/endless (real ledger)
+        config._cache_root() / "endless",    # honors XDG_CACHE_HOME
+        config.main_cache_dir(),             # ~/.cache/endless (real ledger)
+    }
+    return [d.expanduser() for d in dirs]
+
+
+def _under_allowed_dir(path, dirs):
+    """True if *path* (after ~-expansion) equals or lives under any dir in the
+    table. Purely lexical — the path need not exist."""
+    p = Path(os.path.expanduser(path))
+    return any(p == d or d in p.parents for d in dirs)
+
+
 def _guard_inline_content(inline, name, allow_paths):
     """Block a mis-passed file path (Rule 1: the whole value IS a path token,
     absolute or relative) or an absolute path embedded anywhere in otherwise-inline
-    content (Rule 2). An absolute path matching any --allow-path regex is exempt
-    from both rules; relative tokens mid-content are always allowed."""
+    content (Rule 2). Single composition point for the effective allowed set:
+    built-in endless config/cache dirs (always-on) + per-invocation --allow-path
+    regexes. An exempt absolute path escapes both rules; relative tokens
+    mid-content are always allowed."""
     patterns = [re.compile(p) for p in allow_paths]
+    allowed_dirs = _builtin_allowed_dirs()
 
     def _exempt(path):
+        # Built-in: under one of endless's own config/cache dirs (always-on).
+        if _under_allowed_dir(path, allowed_dirs):
+            return True
+        # Per-invocation: matches a --allow-path regex.
         expanded = os.path.expanduser(path)
         return any(rx.search(path) or rx.search(expanded) for rx in patterns)
 

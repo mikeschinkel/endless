@@ -53,7 +53,6 @@ def test_rule1_message_names_the_paired_file_flag():
     "See /tmp/x.md for detail",
     "the plan lives at /Users/x/plan.md inside an otherwise long paragraph here",
     "first line ok\nsecond line points at /tmp/buried.md\nthird ok",
-    "the db is at ~/.config/endless/endless.db normally",
     "wrapped (/tmp/x.md) in parens",       # surrounding punctuation trimmed
     "trailing /tmp/x.md.",                  # trailing sentence period trimmed
 ])
@@ -100,6 +99,53 @@ def test_allow_path_repeatable_covers_multiple():
 def test_allow_path_exempts_rule1_whole_value_when_absolute():
     # A whole-value absolute path matching an allow regex is exempt from Rule 1.
     _guard_inline_content("/opt/corp/spec.md", "text", (r"^/opt/corp/",))
+
+
+# ─── Built-in allowed paths — endless's own config + cache dirs ──────────────
+
+@pytest.mark.parametrize("value", [
+    "~/.config/endless/endless.db",                          # Rule 1 whole value
+    "the ledger DB is at ~/.config/endless/endless.db here",  # Rule 2 in prose
+    "sandbox lives at ~/.cache/endless/sandboxes/e-1/endless",
+])
+def test_builtin_config_cache_dirs_allowed_without_allow_path(value):
+    # endless's own config/cache dirs are always exempt — no --allow-path needed.
+    _guard_inline_content(value, "text", ())
+
+
+def test_builtin_absolute_home_expanded_form_allowed(tmp_path, monkeypatch):
+    # The /Users/... (already-absolute) spelling of ~/.config/endless is exempt.
+    from pathlib import Path
+    cfg = Path.home() / ".config" / "endless" / "endless.db"
+    _guard_inline_content(f"see {cfg} for the ledger", "text", ())
+
+
+def test_builtin_honors_xdg_config_home(monkeypatch):
+    # A path under $XDG_CONFIG_HOME/endless is exempt (resolution honors XDG).
+    monkeypatch.setenv("XDG_CONFIG_HOME", "/tmp/fake-xdg-cfg")
+    _guard_inline_content("cfg at /tmp/fake-xdg-cfg/endless/config.json here",
+                          "text", ())
+    # HOME-anchored ~/.config/endless stays exempt even under XDG redirection.
+    _guard_inline_content("db at ~/.config/endless/endless.db here", "text", ())
+    # A sibling under the XDG root but NOT under /endless still blocks.
+    assert "contains an absolute path" in _blocked(
+        "x at /tmp/fake-xdg-cfg/other/y here")
+
+
+def test_builtin_honors_xdg_cache_home(monkeypatch):
+    # A path under $XDG_CACHE_HOME/endless is exempt.
+    monkeypatch.setenv("XDG_CACHE_HOME", "/tmp/fake-xdg-cache")
+    _guard_inline_content("sandbox at /tmp/fake-xdg-cache/endless/sandboxes/e-1 here",
+                          "text", ())
+
+
+def test_builtin_non_endless_absolute_still_blocks():
+    # The built-in exemption is scoped to endless's dirs only.
+    assert "contains an absolute path" in _blocked(
+        "the plan is at /Users/x/plan.md here")
+    # A sibling of the config dir is not endless-owned.
+    assert "contains an absolute path" in _blocked(
+        "cfg at ~/.config/other/thing.db here")
 
 
 def test_allow_path_does_not_rescue_relative_whole_value():
