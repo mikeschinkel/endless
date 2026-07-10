@@ -113,6 +113,69 @@ func TestRender_FullVars_ContainsExpectedSubstitutions(t *testing.T) {
 	}
 }
 
+// TestRender_HandoffClose_ExceptionRule verifies the shared handoff_close
+// partial (E-1759): every handoff type invokes `endless worktree check`
+// instead of enumerating report categories, forbids confirming the negative,
+// drops the retired "dangling tags"/"landed-vs-worktree delta" phrasing, and
+// keeps the tmux return line for non-bg while omitting it for bg. The
+// type-specific deliverable prefix must survive the refactor.
+func TestRender_HandoffClose_ExceptionRule(t *testing.T) {
+	returnLine := "tmux move-window -t archive:"
+	cases := []struct {
+		typ    string
+		prefix string // deliverable pointer that must remain inline
+	}{
+		{"task", "lead with the how-to-test"},
+		{"bug", "lead with the how-to-test"},
+		{"epic", "lead with the state of the children"},
+		{"research", "say where the findings live"},
+		{"brainstorm", "say where the synthesis lives"},
+	}
+	for _, c := range cases {
+		for _, bg := range []bool{false, true} {
+			name := fmt.Sprintf("%s/bg=%v", c.typ, bg)
+			t.Run(name, func(t *testing.T) {
+				root := projectFixture(t)
+				vars := fmt.Sprintf(
+					`{"spawned_id":1,"label_prefix":"E-1","title":"T",`+
+						`"spawner_task":2,"return_anchor":"%%9","worktree_path":"/w",`+
+						`"branch":"b","child_count":0,"children_state":"none","bg":%v}`, bg)
+				out, errOut, err := runRenderInProject(t, root, "handoff/"+c.typ, vars)
+				if err != nil {
+					t.Fatalf("render: %v\nstderr: %s", err, errOut)
+				}
+				mustContain := []string{
+					"endless worktree check",
+					`do NOT confirm the negative`,
+					c.prefix,
+				}
+				for _, w := range mustContain {
+					if !strings.Contains(out, w) {
+						t.Errorf("output missing %q\n--- output ---\n%s", w, out)
+					}
+				}
+				mustNotContain := []string{"dangling tags", "landed-vs-worktree delta"}
+				for _, w := range mustNotContain {
+					if strings.Contains(out, w) {
+						t.Errorf("output still contains retired phrase %q\n--- output ---\n%s", w, out)
+					}
+				}
+				hasReturn := strings.Contains(out, returnLine)
+				if bg && hasReturn {
+					t.Errorf("bg output should omit the tmux return line:\n%s", out)
+				}
+				if !bg && !hasReturn {
+					t.Errorf("non-bg output should include the tmux return line:\n%s", out)
+				}
+				// bg output ends the message with the background-agent note.
+				if bg && !strings.Contains(out, "You're a background agent") {
+					t.Errorf("bg output missing background-agent note:\n%s", out)
+				}
+			})
+		}
+	}
+}
+
 // TestRender_MissingVar_PrintsNoValuePlaceholder confirms graceful
 // degradation matching Python's string.Template.safe_substitute.
 func TestRender_MissingVar_PrintsNoValuePlaceholder(t *testing.T) {

@@ -31,8 +31,18 @@ import (
 	"github.com/mikeschinkel/endless/internal/monitor"
 )
 
-//go:embed templates
+// The `all:` prefix is required so leading-underscore partials (e.g.
+// handoff/_close.tmpl) are embedded — a bare `//go:embed templates` excludes
+// files whose names begin with `_` or `.`.
+//
+//go:embed all:templates
 var embedded embed.FS
+
+// closePartialName is the shared handoff tail parsed into every handoff
+// template's set so `{{template "handoff_close" .}}` resolves. Its embedded
+// path is templates/handoff/_close.tmpl; it is loaded via loadTemplate (no
+// name normalization) so the leading-underscore basename stays intact.
+const closePartialName = "handoff/_close"
 
 // Run dispatches `endless-go template <verb> [args]`.
 func Run(args []string) {
@@ -98,12 +108,24 @@ func runRender(args []string, stdin io.Reader, stdout io.Writer) error {
 		return err
 	}
 
+	// Handoff templates share a `{{template "handoff_close" .}}` tail defined
+	// in handoff/_close.tmpl. Parse that partial into the set so the reference
+	// resolves. It honors the same .local→.tmpl→embedded precedence and is
+	// never materialized on its own (only the requested top-level name is).
+	var partial string
+	if strings.HasPrefix(name, "handoff/") {
+		partial, err = loadTemplate(projectRoot, closePartialName)
+		if err != nil {
+			return err
+		}
+	}
+
 	vars, err := decodeVars(stdin)
 	if err != nil {
 		return err
 	}
 
-	out, err := render(name, content, vars)
+	out, err := render(name, content, partial, vars)
 	if err != nil {
 		return err
 	}
@@ -340,10 +362,19 @@ func decodeVars(r io.Reader) (map[string]any, error) {
 
 // render parses content as a Go text/template and applies vars. Missing
 // keys produce `<no value>` (Go's default), matching the graceful
-// degradation of Python's string.Template.safe_substitute.
-func render(name, content string, vars map[string]any) (string, error) {
-	tmpl, err := template.New(name).Parse(content)
-	if err != nil {
+// degradation of Python's string.Template.safe_substitute. When partial is
+// non-empty it is parsed into the same set first, so any `{{define}}` it
+// carries (e.g. "handoff_close") resolves from content's `{{template}}`
+// references. The partial holds only defines, leaving the named template
+// empty until content is parsed into it.
+func render(name, content, partial string, vars map[string]any) (string, error) {
+	tmpl := template.New(name)
+	if partial != "" {
+		if _, err := tmpl.Parse(partial); err != nil {
+			return "", fmt.Errorf("parse partial for %s: %w", name, err)
+		}
+	}
+	if _, err := tmpl.Parse(content); err != nil {
 		return "", fmt.Errorf("parse template %s: %w", name, err)
 	}
 	var buf strings.Builder

@@ -34,14 +34,6 @@ Pick your operational mode from that breakdown:
    me. Don't mark the epic complete while children are still open.
 7. Don't run `endless worktree land`/`drop` without asking.
 
-{{if .bg -}}
-Final message — report ONLY what `endless session status` can't already show: the state of the children, git/worktree side-effects (uncommitted changes, dangling tags, stray artifacts), and state outside endless (CI, external services). Do NOT recap task status, phase, or relationships — `session status` already shows those. You're a background agent — just stop when done; the user reads this with `claude attach`.
-{{- else -}}
-Final message — report ONLY what `endless session status` can't already show: the state of the children, git/worktree side-effects (uncommitted changes, dangling tags, stray artifacts), the landed-vs-worktree delta, and state outside endless (CI, external services). Do NOT recap task status, phase, or relationships — `session status` already shows those. Then this return line — make the return line prominent:
-
-```
-tmux move-window -t archive: && tmux switch-client -t {{.return_anchor}}
-```
-{{- end}}
+Final message — lead with the state of the children. {{template "handoff_close" .}}
 
 Goal: drive this epic to a state I can confirm and land cleanly. Don't leave loose ends.

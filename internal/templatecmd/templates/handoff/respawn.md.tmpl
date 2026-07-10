@@ -45,7 +45,7 @@ Once you know the goal:
 - Stay focused on E-{{.spawned_id}}. File unrelated discoveries as new tasks
   (`--cleans-up E-{{.spawned_id}}`) and confirm before implementing them — don't fix them inline.
 - If anything is ambiguous or you hit a design choice the plan doesn't cover — STOP and ask me. Don't guess.
-- When work is done: `endless task update E-{{.spawned_id}} --status verify --db main`, then tell me how to test. In that final message, report ONLY what `endless session status` can't already show: git/worktree side-effects (uncommitted changes, dangling tags, stray artifacts), the landed-vs-worktree delta, and state outside endless (CI, external services). Do NOT recap task status, phase, or relationships — `session status` already shows those. Don't mark `confirmed`/`assumed` yourself.
+- When work is done: `endless task update E-{{.spawned_id}} --status verify --db main`, then tell me how to test. In that final message, run `endless worktree check` and relay anything it prints — it stays silent when the worktree is clean, so a clean handoff says nothing about git; flag external state (CI, services) only if it's actually in play. Do NOT recap task status, phase, or relationships, and do NOT confirm the negative ("no stray files", "nothing to report"). Don't mark `confirmed`/`assumed` yourself.
 - Don't run `endless worktree land`/`drop` without asking.
 
 {{if not .bg}}Return to the spawning session with `tmux switch-client -t {{.return_anchor}}` when you need me.{{end}}

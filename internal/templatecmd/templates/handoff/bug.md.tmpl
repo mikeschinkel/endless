@@ -27,14 +27,6 @@ Reproduce the bug first before changing anything. Link the failing test or the e
 This task has {{.child_count}} children — read them with `endless task show E-{{.spawned_id}} --children`.
 {{- end}}
 
-{{if .bg -}}
-Final message — report ONLY what `endless session status` can't already show: git/worktree side-effects (uncommitted changes, dangling tags, stray artifacts) and state outside endless (CI, external services). Do NOT recap task status, phase, or relationships — `session status` already shows those. Then the how-to-test. You're a background agent — just stop when done; the user reads this with `claude attach`.
-{{- else -}}
-Final message — report ONLY what `endless session status` can't already show: git/worktree side-effects (uncommitted changes, dangling tags, stray artifacts), the landed-vs-worktree delta, and state outside endless (CI, external services). Do NOT recap task status, phase, or relationships — `session status` already shows those. Then the how-to-test and this return line — make the return line prominent:
-
-```
-tmux move-window -t archive: && tmux switch-client -t {{.return_anchor}}
-```
-{{- end}}
+Final message — lead with the how-to-test. {{template "handoff_close" .}}
 
 Goal: drive this task to a state I can confirm and land cleanly. Don't leave loose ends.

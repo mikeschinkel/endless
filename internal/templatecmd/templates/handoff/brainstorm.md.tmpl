@@ -29,14 +29,6 @@ The synthesis is the deliverable. Write it into `tasks.outcome` via `endless tas
 This task has {{.child_count}} children — read them with `endless task show E-{{.spawned_id}} --children`.
 {{- end}}
 
-{{if .bg -}}
-Final message — report ONLY what `endless session status` can't already show: where the synthesis lives and the follow-ups spawned, plus any git/worktree side-effects or state outside endless. Do NOT recap task status, phase, or relationships — `session status` already shows those. You're a background agent — just stop when done; the user reads this with `claude attach`.
-{{- else -}}
-Final message — report ONLY what `endless session status` can't already show: where the synthesis lives, the follow-ups spawned, plus any git/worktree side-effects or state outside endless. Do NOT recap task status, phase, or relationships — `session status` already shows those. Then this return line — make the return line prominent:
-
-```
-tmux move-window -t archive: && tmux switch-client -t {{.return_anchor}}
-```
-{{- end}}
+Final message — say where the synthesis lives and which follow-ups it spawned. {{template "handoff_close" .}}
 
 Goal: draw out the requester's thinking, synthesize it, and spawn the follow-ups cleanly. Don't leave loose ends.
