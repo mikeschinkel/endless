@@ -5,7 +5,7 @@
 Claude Code sessions working on Endless repeatedly fail to:
 
 1. **Create tasks before doing work** -- code changes get made without a corresponding Endless task, violating the "Record all actions" rule
-2. **Record decisions when they're made** -- architecture and design decisions emerge from discussion but don't get captured as `--type decision` tasks until Mike notices and asks
+2. **Record decisions when they're made** -- architecture and design decisions emerge from discussion but don't get captured as `--type decision` tasks until the user notices and asks
 3. **Remember the rule even after being corrected** -- the same failure repeats across sessions and even within the same session after explicit correction
 
 This is not a one-time oversight. It's a persistent pattern across multiple sessions spanning days. Examples from the current session alone:
@@ -23,7 +23,7 @@ Every session should automatically:
 - Create an Endless task before making any code change (or immediately after if the change was reactive)
 - Update the Endless task after making any code changes when any requirements changed during the process (when applicable)
 - Record any decision that emerges from discussion as a `--type decision` task
-- Do this without Mike having to remind, prompt, or catch omissions
+- Do this without the user having to remind, prompt, or catch omissions
 
 ## Approaches to explore
 

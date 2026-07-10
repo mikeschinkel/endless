@@ -31,7 +31,7 @@ endless session snapshot add <<'XML'
   <tasks>
     <task id="E-1208" status="confirmed">verbs.jsonl write-time commit</task>
     <task id="E-1314" status="unverified" filed="true">consolidate task disposition cols</task>
-    <task id="E-NNNN" status="blocked">waiting on Mike's review</task>
+    <task id="E-NNNN" status="blocked">waiting on the user's review</task>
     <task id="E-1302" status="unplanned">endless task id CLI</task>
   </tasks>
 
