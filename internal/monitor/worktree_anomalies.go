@@ -80,23 +80,17 @@ func (a WorktreeAnomaly) Line() string {
 	return fmt.Sprintf("%s: %s", a.Kind, a.Detail)
 }
 
-// WorktreeAnomaliesForTask resolves the task's project Go-side (so the Python
-// caller needs no DB read, per E-1486) and returns its worktree anomalies. It
-// backs the `session-query worktree-anomalies` subcommand, whose only input is
-// a task id.
-func WorktreeAnomaliesForTask(taskID int64) ([]WorktreeAnomaly, error) {
-	db, err := DB()
-	if err != nil {
-		return nil, err
-	}
-	// tasks.project_id is NOT NULL (schema), so a plain scan is safe.
-	var projectID int64
-	if err = db.QueryRow(
-		"SELECT project_id FROM tasks WHERE id=?", taskID,
-	).Scan(&projectID); err != nil {
-		return nil, fmt.Errorf("resolve project for E-%d: %w", taskID, err)
-	}
-	return WorktreeAnomalies(projectID, taskID), nil
+// WorktreeAnomaliesAt returns the genuine handoff anomalies for a worktree,
+// given its path and the repo main checkout — with NO DB read (E-1766). It backs
+// the `session-query worktree-anomalies` subcommand, whose Python caller
+// (`endless worktree check`) already resolves both paths from cwd; handing them
+// straight to the DB-free inspection core removes the round-trip that formerly
+// resolved the task's project and worktree from the DB. In a self-dev worktree
+// that lookup routed to the per-worktree sandbox (which lacks the task row) and
+// errored; path-based resolution behaves identically in self-dev and consumer
+// projects. An empty projectRoot disables only the repo-level prunable probe.
+func WorktreeAnomaliesAt(projectRoot, worktreePath string) []WorktreeAnomaly {
+	return worktreeAnomaliesAt(projectRoot, worktreePath)
 }
 
 // WorktreeAnomalies returns the genuine handoff anomalies for the task's

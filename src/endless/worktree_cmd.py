@@ -507,28 +507,35 @@ def check_worktree() -> None:
     commits ahead of main (expected before land) and git tags (endless makes
     none).
 
-    Resolves the worktree from cwd, then defers the judgment to the Go core via
-    `session-query worktree-anomalies` so this surface and `session status`
-    share one definition. Exit code: 0 clean, 1 anomalies present, 2 on error.
+    Resolves the worktree from cwd and hands the Go core the worktree path plus
+    the repo main checkout, so the shared anomaly probe (`session-query
+    worktree-anomalies`) runs without any DB read (E-1766). The inspection is
+    DB-free — git state from the worktree, expected branch from the companion
+    file — so this surface and `session status` still share one definition.
+    Exit code: 0 clean, 1 anomalies present, 2 on error.
     """
-    from endless import config
-
     root = worktree_root_for_cwd()
     if root is None:
         raise click.ClickException(
             "not inside an endless-managed worktree — run this from within a "
             "task worktree (.endless/worktrees/e-NNN)"
         )
-    canonical = _task_id_from_worktree_path(root)  # "E-NNN"; guaranteed by root check
-    task_num = canonical.removeprefix("E-")
 
     binary = shutil.which("endless-go")
     if not binary:
         raise click.ClickException("endless-go not found on PATH")
 
+    # E-971 path convention: a worktree root is <main>/.endless/worktrees/e-NNN,
+    # so its 3rd-level parent is the repo main checkout (which enables the
+    # repo-level prunable/locked probe). Both paths are already in hand from the
+    # cwd resolution above; passing them means the Go core never round-trips the
+    # DB to rediscover them. That lookup was the ONLY DB touch — and in a
+    # self-dev worktree it routed to the per-worktree sandbox (which lacks the
+    # task row) and errored (E-1766). No --db context is threaded: no DB opens.
+    main_root = str(root.parents[2])
     result = subprocess.run(
-        [binary, *config.go_db_context_args(), "session-query",
-         "worktree-anomalies", "--task-id", task_num],
+        [binary, "session-query", "worktree-anomalies",
+         "--worktree-path", str(root), "--project-root", main_root],
         capture_output=True, text=True,
     )
     if result.stdout:
