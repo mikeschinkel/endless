@@ -68,6 +68,8 @@ func Run(args []string) {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
+	case "worktree-anomalies":
+		os.Exit(runWorktreeAnomalies(args[1:]))
 	case "trail":
 		if err := runTrail(args[1:]); err != nil {
 			fmt.Fprintln(os.Stderr, err)
@@ -99,6 +101,8 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "  gate-clear --session-id <id> --kind <slug> --cleared-by <reason>")
 	fmt.Fprintln(os.Stderr, "                                    clear the session's open gate of the kind; prints rows cleared")
 	fmt.Fprintln(os.Stderr, "  reopen-context --task-id <id>     JSON {inherited_session_id, prior_outcome, last_status_snapshot} for a reopen")
+	fmt.Fprintln(os.Stderr, "  worktree-anomalies --task-id <id> terse line per genuine handoff anomaly; nothing when clean")
+	fmt.Fprintln(os.Stderr, "                                    exit 0 clean, 1 anomalies present, 2 on error")
 	fmt.Fprintln(os.Stderr, "  trail [--client <name>] [--limit N]")
 	fmt.Fprintln(os.Stderr, "                                    JSON array of navigation edges newest-first (no --client = all clients)")
 }
@@ -276,6 +280,36 @@ func runTaskField(args []string) error {
 	}
 	_, err = os.Stdout.WriteString(value)
 	return err
+}
+
+// runWorktreeAnomalies prints one terse line per genuine handoff anomaly in the
+// task's worktree and returns the process exit code: 0 clean, 1 anomalies
+// present, 2 on error. It backs Python's `endless worktree check`, which relays
+// stdout verbatim and propagates this exit code so the agent can script on it.
+// Empty output IS the representation of "clean" (E-1758). The DB read (project
+// resolution) stays Go-side, per E-1486.
+func runWorktreeAnomalies(args []string) int {
+	fs := flag.NewFlagSet("worktree-anomalies", flag.ContinueOnError)
+	taskID := fs.Int64("task-id", 0, "task id whose worktree to inspect")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	if *taskID == 0 {
+		fmt.Fprintln(os.Stderr, "--task-id is required")
+		return 2
+	}
+	anomalies, err := monitor.WorktreeAnomaliesForTask(*taskID)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 2
+	}
+	for _, a := range anomalies {
+		fmt.Println(a.Line())
+	}
+	if len(anomalies) > 0 {
+		return 1
+	}
+	return 0
 }
 
 func runListLive(args []string) error {

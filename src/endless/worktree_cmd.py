@@ -51,6 +51,11 @@ LOCK_FILENAME = ".endless/worktree.lock"
 # Land treats these as endless-managed: dirty state in any of these does
 # not block land; instead, land auto-commits them as a separate commit
 # before the worktree's commits.
+#
+# Mirrors internal/monitor.AutoManagedStatusGlobs (E-1758) — keep the two in
+# sync. That Go definition is the one `endless worktree check` / `session
+# status` partition against so a worktree dirty only in these paths still reads
+# as a clean handoff.
 AUTO_COMMIT_GLOBS = (
     ".endless/db-ledger/*.jsonl",
     ".endless/verbs.jsonl",
@@ -490,6 +495,47 @@ def current_worktree(as_json: bool) -> None:
         click.echo(f"Locked:  {match.get('lock_reason') or 'yes'}")
     if match["prunable"]:
         click.echo(f"Prunable: {match.get('prunable_reason') or 'yes'}")
+
+
+def check_worktree() -> None:
+    """Report genuine git/worktree handoff anomalies for the current worktree.
+
+    E-1758: the durable fix for handoff "nothing to report" noise. Prints one
+    terse line per real anomaly (uncommitted user files, detached/wrong branch,
+    a prunable/locked checkout) and NOTHING when clean — empty output IS the
+    representation of a clean handoff. Deliberately silent on non-anomalies:
+    commits ahead of main (expected before land) and git tags (endless makes
+    none).
+
+    Resolves the worktree from cwd, then defers the judgment to the Go core via
+    `session-query worktree-anomalies` so this surface and `session status`
+    share one definition. Exit code: 0 clean, 1 anomalies present, 2 on error.
+    """
+    from endless import config
+
+    root = worktree_root_for_cwd()
+    if root is None:
+        raise click.ClickException(
+            "not inside an endless-managed worktree — run this from within a "
+            "task worktree (.endless/worktrees/e-NNN)"
+        )
+    canonical = _task_id_from_worktree_path(root)  # "E-NNN"; guaranteed by root check
+    task_num = canonical.removeprefix("E-")
+
+    binary = shutil.which("endless-go")
+    if not binary:
+        raise click.ClickException("endless-go not found on PATH")
+
+    result = subprocess.run(
+        [binary, *config.go_db_context_args(), "session-query",
+         "worktree-anomalies", "--task-id", task_num],
+        capture_output=True, text=True,
+    )
+    if result.stdout:
+        click.echo(result.stdout, nl=False)
+    if result.stderr:
+        click.echo(result.stderr, nl=False, err=True)
+    raise SystemExit(result.returncode)
 
 
 def show_worktree(name_or_path: str, as_json: bool) -> None:

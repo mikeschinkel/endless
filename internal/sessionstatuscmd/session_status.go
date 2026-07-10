@@ -305,6 +305,16 @@ func renderTo(w io.Writer, rows []monitor.SessionStatusRow, focal int64, noTaskH
 		line += blockField(r, bw)
 		line += runewidth.Truncate(collapse(r.Title), titleBudget, "…")
 		fmt.Fprintln(w, colorize(line, r.Phase, isTerminal(r.Status), color))
+
+		// Focal-row detail: expand the coarse ◆ marker into the specific
+		// git/worktree anomalies for the focal worktree (E-1758), the same set
+		// `endless worktree check` reports. Silent when there are none — a clean
+		// (or merely unlanded) focal worktree adds no lines here.
+		if r.IsFocal {
+			for _, a := range monitor.WorktreeAnomalies(r.ProjectID, r.ID) {
+				fmt.Fprintln(w, dim("      ◆ "+a.Line(), color))
+			}
+		}
 	}
 }
 

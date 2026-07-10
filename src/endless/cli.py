@@ -2474,6 +2474,19 @@ def worktree_reap():
     _reap_stale_worktrees(_project_root())
 
 
+@worktree_cmd.command("check")
+def worktree_check():
+    """Report genuine git/worktree handoff anomalies for the current worktree.
+
+    Prints one terse line per real anomaly (uncommitted user files,
+    detached/wrong branch, a prunable/locked checkout) and nothing when clean.
+    Exit 0 clean, 1 anomalies present, 2 on error. Run it at session handoff:
+    empty output means there is genuinely nothing git-side to narrate (E-1758).
+    """
+    from endless.worktree_cmd import check_worktree
+    check_worktree()
+
+
 @main.group("verb")
 def verb_cmd():
     """Manage verbs — the registered actions that can start task titles."""
