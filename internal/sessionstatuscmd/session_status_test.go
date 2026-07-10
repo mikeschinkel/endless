@@ -20,7 +20,7 @@ func TestClassify(t *testing.T) {
 		{"in_flight wins over status", monitor.SessionStatusRow{InFlight: true, Status: "ready"}, actDoing},
 		{"ready with no plan still do", monitor.SessionStatusRow{Status: "ready", HasText: false}, actDo},
 		{"unplanned is plan", monitor.SessionStatusRow{Status: "unplanned"}, actPlan},
-		{"submitted is do not plan", monitor.SessionStatusRow{Status: "submitted"}, actDo},
+		{"submitted is review not do", monitor.SessionStatusRow{Status: "submitted"}, actReview},
 		{"needs_plan is plan", monitor.SessionStatusRow{Status: "needs_plan"}, actPlan},
 		{"revisit folds into plan", monitor.SessionStatusRow{Status: "revisit"}, actPlan},
 		{"verify", monitor.SessionStatusRow{Status: "verify"}, actVerify},
@@ -48,9 +48,11 @@ func TestClassify(t *testing.T) {
 
 // TestActionIcons pins the glyphs that other surfaces (and the legend) depend on,
 // notably the E-1750 split of the old ⁇ catch-all into ⏚ landed and ⁇ unknown,
-// and the untouched ◷ orphan they must stay distinct from.
+// the untouched ◷ orphan they must stay distinct from, and the E-1765 ⚑ review
+// (submitted, awaiting approval — not spawnable).
 func TestActionIcons(t *testing.T) {
 	cases := map[action]string{
+		actReview:  "⚑",
 		actOrphan:  "◷",
 		actLanded:  "⏚",
 		actUnknown: "⁇",
@@ -59,6 +61,11 @@ func TestActionIcons(t *testing.T) {
 		if got := a.icon(); got != want {
 			t.Errorf("action(%d).icon() = %q, want %q", a, got, want)
 		}
+	}
+	// ⚑ must measure display-width 1 so the fixed 13-col prefix and the width-aware
+	// table stay aligned, the same guarantee ⏚/⁇/◆ carry (E-1765).
+	if w := displayWidth("⚑"); w != 1 {
+		t.Errorf("⚑ review glyph display width = %d, want 1", w)
 	}
 }
 
@@ -224,6 +231,19 @@ func TestBuildLegend(t *testing.T) {
 			name:        "no ✓ done when no terminal row",
 			rows:        []monitor.SessionStatusRow{{Status: "ready"}},
 			mustNotHave: []string{"done"},
+		},
+		{
+			name:     "submitted row surfaces ⚑ review",
+			rows:     []monitor.SessionStatusRow{{Status: "submitted"}},
+			mustHave: []string{"⚑ review"},
+		},
+		{
+			name: "do and review render in enum order",
+			rows: []monitor.SessionStatusRow{
+				{Status: "submitted"}, // review (later in enum)
+				{Status: "ready"},     // do (earlier in enum)
+			},
+			want: "▶ do  ⚑ review",
 		},
 		{
 			name:     "landed row surfaces ⏚ landed",

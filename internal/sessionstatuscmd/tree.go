@@ -97,7 +97,9 @@ func buildSpine(focal, parent, from int64, backlogRoots []*treeNode) []*treeNode
 
 // doPlanIDs extracts the task ids classified as do (ready) or plan
 // (unplanned/needs_plan/revisit) — the actionable backlog the tree visualizes.
-// Focal, parent, from, in-flight, verify, and terminal rows are excluded.
+// Focal, parent, from, in-flight, verify, and terminal rows are excluded. So is
+// actReview (submitted): a not-yet-approved task is not spawnable, so it has no
+// place in the implementation-order backlog until the user approves it to ready.
 func doPlanIDs(rows []monitor.SessionStatusRow) []int64 {
 	var ids []int64
 	for _, r := range rows {

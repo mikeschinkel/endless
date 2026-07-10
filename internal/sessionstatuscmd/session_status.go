@@ -46,6 +46,14 @@ const (
 	actFrom
 	actDoing
 	actDo
+	// actReview: a `submitted` task — planned/spec-complete but awaiting the
+	// user's approval, so NOT spawnable (the claim gate refuses it). It gets its
+	// own ⚑ glyph and `review` label rather than folding into actDo (▶), whose
+	// glyph reads as "ready to spawn". Ranked right after actDo so it reads
+	// "here's what's spawnable, then here's what's one approval away". ⚑ (U+2691
+	// BLACK FLAG) measures single-width (asserted in TestActionIcons) so it aligns
+	// in the width-aware table like every other icon.
+	actReview
 	actPlan
 	actVerify
 	actOrphan
@@ -70,6 +78,7 @@ var actionMeta = [...]struct{ icon, label string }{
 	actFrom:    {"↩", "from"},
 	actDoing:   {"⟳", "doing"},
 	actDo:      {"▶", "do"},
+	actReview:  {"⚑", "review"},
 	actPlan:    {"✎", "plan"},
 	actVerify:  {"☑", "verify"},
 	actOrphan:  {"◷", "orphan"},
@@ -396,12 +405,16 @@ func classify(r monitor.SessionStatusRow) action {
 		return actLanded
 	}
 	switch r.Status {
-	case "ready", "submitted":
-		// `submitted` = planned/spec-complete, awaiting human approval. It has
-		// a spec already, so it is NOT `actPlan` (✎ plan) — mapping it there
-		// would mis-show a planned-but-unapproved task as "needs a plan". It
-		// routes to actDo (▶) alongside ready as actionable backlog.
+	case "ready":
 		return actDo
+	case "submitted":
+		// `submitted` = planned/spec-complete, awaiting human approval. It has a
+		// spec already, so it is NOT `actPlan` (✎ plan) — that would mis-show a
+		// planned-but-unapproved task as "needs a plan". But it is also NOT
+		// `actDo` (▶): the claim gate refuses a submitted task, so rendering it as
+		// spawnable contradicts the gate. It routes to its own actReview (⚑),
+		// prompting the user to review/approve before it becomes actionable.
+		return actReview
 	case "unplanned", "needs_plan", "revisit":
 		return actPlan
 	case "verify", "unverified":
