@@ -28,22 +28,39 @@ type Check struct {
 	Format  Format   `toml:"format"`
 }
 
+// StreamSource identifies where a check emits its native result stream when
+// Endless runs it, so the runner knows how to capture the bytes to normalize:
+// StreamStdout means the stream is the command's standard output (gotest -json,
+// a TAP-emitting shell command); StreamFile means the command writes it to the
+// file path Endless supplied (pytest's json-report plugin emits a file, not
+// stdout).
+type StreamSource int
+
+const (
+	StreamStdout StreamSource = iota
+	StreamFile
+)
+
 // firstClassRunner describes a runner Endless can translate to and infer a
 // result format for. Adding a runner later is one entry in firstClassRunners:
 // its native filter translation and its inferred format. translate receives the
 // check's Tests (runner-native identifiers) and Paths (where to look) and
-// returns the literal command a bare clone runs.
+// returns the literal command a bare clone runs. capture returns the instrumented
+// variant Endless runs to obtain the machine-readable result stream, plus where
+// that stream lands; reportPath is the file Endless offers a file-emitting runner
+// (ignored by stdout-emitting ones).
 type firstClassRunner struct {
 	name      string
 	format    Format
 	translate func(tests, paths []string) string
+	capture   func(tests, paths []string, reportPath string) (cmd string, src StreamSource)
 }
 
 // firstClassRunners is the canonical registry of first-class runners. It is a
 // slice (not a map) so iteration order is deterministic for error metadata.
 var firstClassRunners = []firstClassRunner{
-	{name: "gotest", format: FormatGotestJSON, translate: translateGotest},
-	{name: "pytest", format: FormatPytestJSON, translate: translatePytest},
+	{name: "gotest", format: FormatGotestJSON, translate: translateGotest, capture: captureGotest},
+	{name: "pytest", format: FormatPytestJSON, translate: translatePytest, capture: capturePytest},
 }
 
 // lookupFirstClass returns the registry entry for a runner name, and whether the
@@ -73,14 +90,18 @@ func firstClassNames() (list string) {
 	return list
 }
 
-// translateGotest builds a `go test` invocation from a structured selection.
-// Test names are anchored exactly (^(A|B)$) so a name never matches a longer
-// one (a bare TestFoo would otherwise also select TestFooBar). Paths scope the
-// packages searched and default to the whole module (./...).
-func translateGotest(tests, paths []string) (cmd string) {
+// goTestCmd builds a `go test` invocation from a structured selection, with -json
+// added when jsonStream is set (Endless-mode capture) and omitted for the
+// bare-clone form. Test names are anchored exactly (^(A|B)$) so a name never
+// matches a longer one (a bare TestFoo would otherwise also select TestFooBar).
+// Paths scope the packages searched and default to the whole module (./...).
+func goTestCmd(jsonStream bool, tests, paths []string) (cmd string) {
 	var b strings.Builder
 
 	b.WriteString("go test")
+	if jsonStream {
+		b.WriteString(" -json")
+	}
 	if len(tests) > 0 {
 		b.WriteString(" -run '^(")
 		b.WriteString(strings.Join(tests, "|"))
@@ -94,6 +115,21 @@ func translateGotest(tests, paths []string) (cmd string) {
 	}
 	cmd = b.String()
 	return cmd
+}
+
+// translateGotest builds the bare-clone `go test` command (exit-code only, no
+// -json) a bare clone runs with no Endless present.
+func translateGotest(tests, paths []string) (cmd string) {
+	return goTestCmd(false, tests, paths)
+}
+
+// captureGotest builds the Endless-mode `go test -json` command whose stdout is
+// the test2json stream the normalizer consumes. reportPath is unused: go test
+// streams to stdout.
+func captureGotest(tests, paths []string, _ string) (cmd string, src StreamSource) {
+	cmd = goTestCmd(true, tests, paths)
+	src = StreamStdout
+	return cmd, src
 }
 
 // translatePytest builds a `pytest` invocation. Pytest accepts both file/dir
@@ -112,6 +148,15 @@ func translatePytest(tests, paths []string) (cmd string) {
 		cmd += " " + strings.Join(args, " ")
 	}
 	return cmd
+}
+
+// capturePytest builds the Endless-mode pytest command. pytest core emits no
+// JSON; the pytest-json-report plugin writes its .report.json to the file named
+// by --json-report-file, so the stream source is the reportPath file, not stdout.
+func capturePytest(tests, paths []string, reportPath string) (cmd string, src StreamSource) {
+	cmd = translatePytest(tests, paths) + " --json-report --json-report-file=" + reportPath
+	src = StreamFile
+	return cmd, src
 }
 
 // IsFirstClass reports whether this check's runner is a registered first-class
@@ -151,6 +196,27 @@ func (c Check) ResolvedCommand() (cmd string) {
 		cmd = c.Command
 	}
 	return cmd
+}
+
+// CaptureCommand returns the command Endless runs to obtain this check's native
+// result stream, and where that stream is emitted. It differs from
+// ResolvedCommand (the bare-clone form, which is exit-code-only): a first-class
+// structured check is instrumented to emit its machine-readable stream (gotest
+// gains -json on stdout; pytest writes the json-report plugin's file at
+// reportPath), while a first-class command-mode check or a raw check runs its
+// literal command and is expected to emit its declared format on stdout.
+// reportPath is offered to file-emitting runners and ignored otherwise. It
+// assumes the check has passed validation.
+func (c Check) CaptureCommand(reportPath string) (cmd string, src StreamSource) {
+	fc, ok := lookupFirstClass(c.Runner)
+	switch {
+	case ok && c.Command == "":
+		cmd, src = fc.capture(c.Tests, c.Paths, reportPath)
+	default:
+		cmd = c.Command
+		src = StreamStdout
+	}
+	return cmd, src
 }
 
 // validateCheck enforces the two-form rules for a single check. Errors wrap

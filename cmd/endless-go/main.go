@@ -49,6 +49,7 @@ import (
 	"github.com/mikeschinkel/endless/internal/sessionstatuscmd"
 	"github.com/mikeschinkel/endless/internal/templatecmd"
 	"github.com/mikeschinkel/endless/internal/tmuxcmd"
+	"github.com/mikeschinkel/endless/internal/verifycmd"
 )
 
 func main() {
@@ -148,6 +149,8 @@ func main() {
 		templatecmd.Run(rest)
 	case "markdown":
 		markdowncmd.Run(rest)
+	case "verify":
+		verifycmd.Run(rest)
 	default:
 		fmt.Fprintf(os.Stderr, "endless-go: unknown subcommand %q\n", sub)
 		usage(os.Stderr)
@@ -196,4 +199,5 @@ func usage(w *os.File) {
 	fmt.Fprintln(w, "  session-status render the per-session status view (--monitor loops it)")
 	fmt.Fprintln(w, "  template       render")
 	fmt.Fprintln(w, "  markdown       render (markdown → colorized ANSI)")
+	fmt.Fprintln(w, "  verify         [--keep] <task-id>  (run a task's Tier-0 verification suite)")
 }
