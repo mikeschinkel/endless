@@ -207,6 +207,10 @@ func dispatch(db dbQuerier, evt *Event, emit DerivedEmitter) (*ExecuteResult, er
 		return execTaskClaimed(db, evt)
 	case KindTaskLanded:
 		return execTaskLanded(db, evt)
+	case KindTaskDepCreated:
+		return execTaskDepCreated(db, evt)
+	case KindTaskDepDeleted:
+		return execTaskDepDeleted(db, evt)
 	case KindSessionStatusRecorded:
 		return execSessionStatusRecorded(db, evt)
 	case KindSessionTasksOrdered:
@@ -914,6 +918,79 @@ func execTaskReleased(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 		}
 	}
 	return &ExecuteResult{}, nil
+}
+
+// execTaskDepCreated inserts a task→task relation row and records a session
+// touch for BOTH endpoints: linking or blocking a task is an interaction with
+// both the subject and the referenced task, so both enroll in session_tasks as
+// 'revisited'. Python resolves the stored dep_type and applies any inverse-view
+// swap before emitting, so the payload's source_id/target_id are already in
+// storage (active-voice) order — this executor writes them verbatim.
+func execTaskDepCreated(db dbQuerier, evt *Event) (*ExecuteResult, error) {
+	var p TaskDepCreatedPayload
+	if err := json.Unmarshal(evt.Payload, &p); err != nil {
+		return nil, fmt.Errorf("events: unmarshal task_dep.created payload: %w", err)
+	}
+	if p.DepType == "" {
+		return nil, fmt.Errorf("events: task_dep.created requires dep_type")
+	}
+	if _, err := db.Exec(
+		`INSERT INTO task_deps (source_type, source_id, target_type, target_id, dep_type)
+		 VALUES ('task', ?, 'task', ?, ?)`,
+		p.SourceID, p.TargetID, p.DepType,
+	); err != nil {
+		return nil, fmt.Errorf("events: insert task_dep: %w", err)
+	}
+	if err := recordDepTouch(db, evt, p.SourceID, p.TargetID); err != nil {
+		return nil, err
+	}
+	return &ExecuteResult{}, nil
+}
+
+// execTaskDepDeleted removes a task→task relation row (keyed on dep_type, since
+// a task pair may hold several relation types) and records the same 'revisited'
+// touch for both endpoints — unlinking/unblocking is an interaction too.
+func execTaskDepDeleted(db dbQuerier, evt *Event) (*ExecuteResult, error) {
+	var p TaskDepDeletedPayload
+	if err := json.Unmarshal(evt.Payload, &p); err != nil {
+		return nil, fmt.Errorf("events: unmarshal task_dep.deleted payload: %w", err)
+	}
+	if p.DepType == "" {
+		return nil, fmt.Errorf("events: task_dep.deleted requires dep_type")
+	}
+	result, err := db.Exec(
+		`DELETE FROM task_deps
+		  WHERE source_type = 'task' AND source_id = ?
+		    AND target_type = 'task' AND target_id = ? AND dep_type = ?`,
+		p.SourceID, p.TargetID, p.DepType,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("events: delete task_dep: %w", err)
+	}
+	n, _ := result.RowsAffected()
+	if n == 0 {
+		return nil, fmt.Errorf("events: delete task_dep: no matching row")
+	}
+	if err := recordDepTouch(db, evt, p.SourceID, p.TargetID); err != nil {
+		return nil, err
+	}
+	return &ExecuteResult{}, nil
+}
+
+// recordDepTouch enrolls both relation endpoints in session_tasks as
+// 'revisited' when the actor carries a session. session_tasks is set-once per
+// relation strength, so a task already enrolled as goal/surfaced keeps its
+// stronger classification (upsertSessionTask handles that).
+func recordDepTouch(db dbQuerier, evt *Event, sourceID, targetID int64) error {
+	if !shouldRecordSessionTouch(evt) {
+		return nil
+	}
+	for _, id := range []int64{sourceID, targetID} {
+		if err := upsertSessionTask(db, evt.Actor.SessionID, id, sessiontaskrelation.RelationRevisited); err != nil {
+			return fmt.Errorf("events: %w", err)
+		}
+	}
+	return nil
 }
 
 func joinStrings(ss []string, sep string) string {

@@ -88,6 +88,10 @@ func replayEvent(db *sql.DB, evt *Event, result *ProjectResult) error {
 		return replayTaskBulkCleared(db, evt, result)
 	case KindTaskLanded:
 		return replayTaskLanded(db, evt, result)
+	case KindTaskDepCreated:
+		return replayTaskDepCreated(db, evt, result)
+	case KindTaskDepDeleted:
+		return replayTaskDepDeleted(db, evt, result)
 	case KindEpicStatusDerived:
 		return replayEpicStatusDerived(db, evt, result)
 	case KindDecisionCreated:
@@ -505,6 +509,41 @@ func replayTaskLanded(db *sql.DB, evt *Event, result *ProjectResult) error {
 	)
 	if err != nil {
 		return fmt.Errorf("insert task_landing for task %d: %w", taskID, err)
+	}
+	return nil
+}
+
+// replayTaskDepCreated / replayTaskDepDeleted reproduce the task_deps row
+// insert/delete during a full-ledger rebuild. Like the live executors they
+// write only the domain row — session_tasks is live-only session state and is
+// not rebuilt from the ledger, matching every other task replay handler.
+func replayTaskDepCreated(db *sql.DB, evt *Event, result *ProjectResult) error {
+	var p TaskDepCreatedPayload
+	if err := json.Unmarshal(evt.Payload, &p); err != nil {
+		return fmt.Errorf("unmarshal task_dep.created: %w", err)
+	}
+	if _, err := db.Exec(
+		`INSERT INTO task_deps (source_type, source_id, target_type, target_id, dep_type)
+		 VALUES ('task', ?, 'task', ?, ?)`,
+		p.SourceID, p.TargetID, p.DepType,
+	); err != nil {
+		return fmt.Errorf("insert task_dep: %w", err)
+	}
+	return nil
+}
+
+func replayTaskDepDeleted(db *sql.DB, evt *Event, result *ProjectResult) error {
+	var p TaskDepDeletedPayload
+	if err := json.Unmarshal(evt.Payload, &p); err != nil {
+		return fmt.Errorf("unmarshal task_dep.deleted: %w", err)
+	}
+	if _, err := db.Exec(
+		`DELETE FROM task_deps
+		  WHERE source_type = 'task' AND source_id = ?
+		    AND target_type = 'task' AND target_id = ? AND dep_type = ?`,
+		p.SourceID, p.TargetID, p.DepType,
+	); err != nil {
+		return fmt.Errorf("delete task_dep: %w", err)
 	}
 	return nil
 }

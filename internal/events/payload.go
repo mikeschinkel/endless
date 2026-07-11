@@ -89,8 +89,9 @@ type TaskDepCreatedPayload struct {
 }
 
 type TaskDepDeletedPayload struct {
-	SourceID int64 `json:"source_id"`
-	TargetID int64 `json:"target_id"`
+	SourceID int64  `json:"source_id"`
+	TargetID int64  `json:"target_id"`
+	DepType  string `json:"dep_type"`
 }
 
 // Decision payloads (E-1378). status defaults to 'proposed' when omitted.

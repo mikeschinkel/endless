@@ -19,6 +19,23 @@ def _add_task(title: str, status: str = "ready") -> int:
     return cur.lastrowid
 
 
+def _add_dep(source_id: int, target_id: int, dep_type: str):
+    """Insert a task_deps row directly (STORED direction — no swap resolution).
+
+    Fixture helper for tests whose subject is NOT the link/unlink write path
+    (rendering, get_all_relations, _related_task_ids). Those now go through the
+    Go event executor via emit_event; making every such test drive that stack
+    would couple unrelated tests to the binary, session resolution, and git.
+    This keeps them fast and isolated. Behavior tests that DO verify the write
+    exercise the real emit path via link_tasks + _seed_project_at_cwd.
+    """
+    db.execute(
+        "INSERT INTO task_deps (source_type, source_id, target_type, target_id, dep_type) "
+        "VALUES ('task', ?, 'task', ?, ?)",
+        (source_id, target_id, dep_type),
+    )
+
+
 def _seed_project():
     db.execute(
         "INSERT INTO projects (name, path, status, created_at, updated_at) "
@@ -57,8 +74,8 @@ def _seed_project_at_cwd(monkeypatch, isolated_env):
     )
 
 
-def test_link_unlink_roundtrip_blocks(isolated_env):
-    _seed_project()
+def test_link_unlink_roundtrip_blocks(isolated_env, monkeypatch):
+    _seed_project_at_cwd(monkeypatch, isolated_env)
     a = _add_task("A")
     b = _add_task("B")
 
@@ -75,8 +92,8 @@ def test_link_unlink_roundtrip_blocks(isolated_env):
     assert rows == []
 
 
-def test_link_blocked_by_swaps(isolated_env):
-    _seed_project()
+def test_link_blocked_by_swaps(isolated_env, monkeypatch):
+    _seed_project_at_cwd(monkeypatch, isolated_env)
     a = _add_task("A")
     b = _add_task("B")
 
@@ -88,8 +105,8 @@ def test_link_blocked_by_swaps(isolated_env):
     assert rows[0]["dep_type"] == "blocks"
 
 
-def test_link_implements_no_swap(isolated_env):
-    _seed_project()
+def test_link_implements_no_swap(isolated_env, monkeypatch):
+    _seed_project_at_cwd(monkeypatch, isolated_env)
     a = _add_task("Impl")
     d = _add_task("Decision")
     task_cmd.link_tasks(a, d, "implements")
@@ -99,8 +116,8 @@ def test_link_implements_no_swap(isolated_env):
     assert rows[0]["dep_type"] == "implements"
 
 
-def test_link_relates_to_symmetric(isolated_env):
-    _seed_project()
+def test_link_relates_to_symmetric(isolated_env, monkeypatch):
+    _seed_project_at_cwd(monkeypatch, isolated_env)
     a = _add_task("A")
     b = _add_task("B")
     task_cmd.link_tasks(a, b, "relates_to")
@@ -108,9 +125,9 @@ def test_link_relates_to_symmetric(isolated_env):
     assert rows[0]["dep_type"] == "relates_to"
 
 
-def test_link_cleans_up_no_swap(isolated_env):
+def test_link_cleans_up_no_swap(isolated_env, monkeypatch):
     """E-1145: 'cleans_up' stores active-voice; source is the cleanup task."""
-    _seed_project()
+    _seed_project_at_cwd(monkeypatch, isolated_env)
     cleanup = _add_task("Retype prose links")
     parent = _add_task("Parent that shipped")
     task_cmd.link_tasks(cleanup, parent, "cleans_up")
@@ -120,9 +137,9 @@ def test_link_cleans_up_no_swap(isolated_env):
     assert rows[0]["dep_type"] == "cleans_up"
 
 
-def test_link_cleaned_up_by_swaps(isolated_env):
+def test_link_cleaned_up_by_swaps(isolated_env, monkeypatch):
     """E-1145: 'cleaned_up_by' is the inverse view, swaps source and target."""
-    _seed_project()
+    _seed_project_at_cwd(monkeypatch, isolated_env)
     parent = _add_task("Parent that shipped")
     cleanup = _add_task("Retype prose links")
     # "parent cleaned_up_by cleanup" → stored as "cleanup cleans_up parent"
@@ -133,8 +150,8 @@ def test_link_cleaned_up_by_swaps(isolated_env):
     assert rows[0]["dep_type"] == "cleans_up"
 
 
-def test_unlink_cleans_up(isolated_env):
-    _seed_project()
+def test_unlink_cleans_up(isolated_env, monkeypatch):
+    _seed_project_at_cwd(monkeypatch, isolated_env)
     cleanup = _add_task("Retype prose links")
     parent = _add_task("Parent that shipped")
     task_cmd.link_tasks(cleanup, parent, "cleans_up")
@@ -162,10 +179,7 @@ def test_task_add_cleans_up_flag(isolated_env, monkeypatch):
 
     from endless.cli import main
 
-    db.execute(
-        "INSERT INTO projects (name, path, status, created_at, updated_at) "
-        "VALUES ('sample', '/tmp/sample', 'active', datetime('now'), datetime('now'))"
-    )
+    _seed_project_at_cwd(monkeypatch, isolated_env)
     parent = _add_task("Add feature flag")
 
     def _stub(title, description=None, text=None, phase="now", project_name=None,
@@ -202,10 +216,7 @@ def test_task_add_cleaned_up_by_flag(isolated_env, monkeypatch):
 
     from endless.cli import main
 
-    db.execute(
-        "INSERT INTO projects (name, path, status, created_at, updated_at) "
-        "VALUES ('sample', '/tmp/sample', 'active', datetime('now'), datetime('now'))"
-    )
+    _seed_project_at_cwd(monkeypatch, isolated_env)
     cleanup_task = _add_task("Existing cleanup task")
 
     def _stub(title, description=None, text=None, phase="now", project_name=None,
@@ -252,18 +263,20 @@ def test_invalid_dep_type_rejected(isolated_env):
         task_cmd.link_tasks(a, b, "fnord")
 
 
-def test_unique_collision_friendly_error(isolated_env):
-    _seed_project()
+def test_unique_collision_friendly_error(isolated_env, monkeypatch):
+    _seed_project_at_cwd(monkeypatch, isolated_env)
     a = _add_task("A")
     b = _add_task("B")
     task_cmd.link_tasks(a, b, "blocks")
+    # The friendly duplicate message is raised by the Python pre-check (the Go
+    # UNIQUE constraint is only the low-level integrity backstop).
     with pytest.raises(click.ClickException) as exc_info:
         task_cmd.link_tasks(a, b, "blocks")
     assert "already linked" in str(exc_info.value)
 
 
-def test_unlink_ambiguous_requires_as(isolated_env):
-    _seed_project()
+def test_unlink_ambiguous_requires_as(isolated_env, monkeypatch):
+    _seed_project_at_cwd(monkeypatch, isolated_env)
     a = _add_task("A")
     b = _add_task("B")
     task_cmd.link_tasks(a, b, "blocks")
@@ -273,8 +286,8 @@ def test_unlink_ambiguous_requires_as(isolated_env):
     assert "Multiple relations" in str(exc_info.value) or "ambiguous" in str(exc_info.value).lower()
 
 
-def test_unlink_unambiguous_no_as_works(isolated_env):
-    _seed_project()
+def test_unlink_unambiguous_no_as_works(isolated_env, monkeypatch):
+    _seed_project_at_cwd(monkeypatch, isolated_env)
     a = _add_task("A")
     b = _add_task("B")
     task_cmd.link_tasks(a, b, "relates_to")
@@ -297,9 +310,9 @@ def test_get_all_relations_groups_correctly(isolated_env):
     b = _add_task("B")
     c = _add_task("C")
 
-    task_cmd.link_tasks(a, b, "blocks")        # A blocks B
-    task_cmd.link_tasks(c, a, "blocks")        # C blocks A → A blocked_by C
-    task_cmd.link_tasks(a, b, "relates_to")    # symmetric
+    _add_dep(a, b, "blocks")        # A blocks B
+    _add_dep(c, a, "blocks")        # C blocks A → A blocked_by C
+    _add_dep(a, b, "relates_to")    # symmetric
 
     rels = task_cmd.get_all_relations(a)
     assert "blocks" in rels
@@ -331,8 +344,8 @@ def test_related_task_ids_helper(isolated_env):
     a = _add_task("A")
     b = _add_task("B")
     c = _add_task("C")
-    task_cmd.link_tasks(a, b, "blocks")
-    task_cmd.link_tasks(c, a, "implements")
+    _add_dep(a, b, "blocks")
+    _add_dep(c, a, "implements")
 
     # All relations
     ids = task_cmd._related_task_ids(a)
@@ -420,9 +433,9 @@ def test_flatten_relations_id_ascending_directional(isolated_env):
     b = _add_task("B")
     c = _add_task("C")
 
-    task_cmd.link_tasks(a, b, "blocks")        # A blocks B
-    task_cmd.link_tasks(c, a, "blocks")        # C blocks A → A blocked_by C
-    task_cmd.link_tasks(a, b, "relates_to")    # symmetric
+    _add_dep(a, b, "blocks")        # A blocks B
+    _add_dep(c, a, "blocks")        # C blocks A → A blocked_by C
+    _add_dep(a, b, "relates_to")    # symmetric
 
     flat = task_cmd._flatten_relations(a)
     ids = [r["id"] for r in flat]
@@ -443,8 +456,8 @@ def test_task_show_renders_links_section(isolated_env):
     a = _add_task("A", status="ready")
     b = _add_task("Distinctive beta title", status="ready")
     c = _add_task("Distinctive gamma title", status="confirmed")
-    task_cmd.link_tasks(a, b, "blocks")        # A blocks B
-    task_cmd.link_tasks(c, a, "blocks")        # A blocked_by C
+    _add_dep(a, b, "blocks")        # A blocks B
+    _add_dep(c, a, "blocks")        # A blocked_by C
 
     out = _invoke("task", "show", str(a))
     assert "This task:" in out                      # E-1576: subject heading
@@ -462,7 +475,7 @@ def test_task_show_llm_links_line(isolated_env):
     _seed_project()
     a = _add_task("A")
     b = _add_task("B")
-    task_cmd.link_tasks(a, b, "blocks")
+    _add_dep(a, b, "blocks")
 
     out = _invoke("task", "show", str(a), "--llm")
     assert f"links=E-{b} (blocks)" in out
@@ -475,8 +488,8 @@ def test_task_relations_renders_links_section(isolated_env):
     _seed_project()
     a = _add_task("A", status="ready")
     b = _add_task("Distinctive beta title", status="ready")
-    task_cmd.link_tasks(a, b, "blocks")
-    task_cmd.link_tasks(a, b, "relates_to")
+    _add_dep(a, b, "blocks")
+    _add_dep(a, b, "relates_to")
 
     out = _invoke("task", "relations", str(a))
     assert "This task:" in out                  # E-1576: subject heading
@@ -493,7 +506,7 @@ def test_task_relations_llm_links_line(isolated_env):
     _seed_project()
     a = _add_task("A")
     b = _add_task("B")
-    task_cmd.link_tasks(a, b, "relates_to")
+    _add_dep(a, b, "relates_to")
 
     out = _invoke("task", "relations", str(a), "--llm")
     assert f"Links: E-{b} (relates to)" in out

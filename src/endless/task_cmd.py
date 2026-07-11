@@ -5296,18 +5296,35 @@ def link_tasks(source_id: int, target_id: int, dep_type: str):
     stored, swap = CANONICAL_DEP_TYPES[dep_type]
     src, tgt = (target_id, source_id) if swap else (source_id, target_id)
 
-    try:
-        db.execute(
-            "INSERT INTO task_deps (source_type, source_id, target_type, target_id, dep_type) "
-            "VALUES ('task', ?, 'task', ?, ?)",
-            (src, tgt, stored),
+    # Friendly-duplicate pre-check: the Go UNIQUE constraint is the integrity
+    # backstop, but its error is a low-level SQLite string. Detect the common
+    # case here where we still hold the user's display dep_type and E-NNN
+    # formatting, and raise the readable message. (The constraint still guards
+    # the rare TOCTOU race.)
+    if db.exists(
+        "SELECT 1 FROM task_deps WHERE source_type = 'task' AND source_id = ? "
+        "AND target_type = 'task' AND target_id = ? AND dep_type = ?",
+        (src, tgt, stored),
+    ):
+        raise click.ClickException(
+            f"{task_id_display(source_id)} is already linked to {task_id_display(target_id)} as '{dep_type}'."
         )
-    except Exception as e:
-        if "UNIQUE" in str(e):
-            raise click.ClickException(
-                f"{task_id_display(source_id)} is already linked to {task_id_display(target_id)} as '{dep_type}'."
-            )
-        raise
+
+    # Emit rather than writing task_deps directly: the Go executor owns the
+    # write, so the relation reaches the event pipeline and enrolls both tasks
+    # in session_tasks as 'revisited'. src/tgt are already storage (active-voice)
+    # order after the swap above; the executor inserts them verbatim.
+    from endless.event_bridge import emit_event
+
+    _, proj_name = _resolve_project(None)
+    emit_event(
+        kind="task_dep.created",
+        project=proj_name,
+        entity_type="task_dep",
+        entity_id=str(src),
+        payload={"source_id": src, "target_id": tgt, "dep_type": stored},
+        prompt_verb="linked for",
+    )
 
     click.echo(
         click.style("•", fg="cyan")
@@ -5331,15 +5348,30 @@ def unlink_tasks(source_id: int, target_id: int, dep_type: str | None = None):
             )
         stored, swap = CANONICAL_DEP_TYPES[dep_type]
         src, tgt = (target_id, source_id) if swap else (source_id, target_id)
-        result = db.execute(
-            "DELETE FROM task_deps WHERE source_type = 'task' AND source_id = ? "
+        # Friendly no-match pre-check: the Go executor errors loudly if no row
+        # matches, but with a low-level message. Raise the readable one here
+        # while we still hold the user's E-NNN formatting.
+        if not db.exists(
+            "SELECT 1 FROM task_deps WHERE source_type = 'task' AND source_id = ? "
             "AND target_type = 'task' AND target_id = ? AND dep_type = ?",
             (src, tgt, stored),
-        )
-        if result.rowcount == 0:
+        ):
             raise click.ClickException(
                 f"No '{dep_type}' relation: {task_id_display(source_id)} → {task_id_display(target_id)}"
             )
+        # The Go executor owns the delete and records the 'revisited' touch for
+        # both endpoints.
+        from endless.event_bridge import emit_event
+
+        _, proj_name = _resolve_project(None)
+        emit_event(
+            kind="task_dep.deleted",
+            project=proj_name,
+            entity_type="task_dep",
+            entity_id=str(src),
+            payload={"source_id": src, "target_id": tgt, "dep_type": stored},
+            prompt_verb="unlinked for",
+        )
         click.echo(
             click.style("•", fg="cyan")
             + f" Unlinked: {task_id_display(source_id)} no longer {dep_type} {task_id_display(target_id)}"
@@ -5366,10 +5398,20 @@ def unlink_tasks(source_id: int, target_id: int, dep_type: str | None = None):
         )
 
     row = rows[0]
-    db.execute(
-        "DELETE FROM task_deps WHERE source_type = 'task' AND source_id = ? "
-        "AND target_type = 'task' AND target_id = ? AND dep_type = ?",
-        (row["source_id"], row["target_id"], row["dep_type"]),
+    from endless.event_bridge import emit_event
+
+    _, proj_name = _resolve_project(None)
+    emit_event(
+        kind="task_dep.deleted",
+        project=proj_name,
+        entity_type="task_dep",
+        entity_id=str(row["source_id"]),
+        payload={
+            "source_id": row["source_id"],
+            "target_id": row["target_id"],
+            "dep_type": row["dep_type"],
+        },
+        prompt_verb="unlinked for",
     )
     name = _relation_display_name_from(row, source_id)
     click.echo(
