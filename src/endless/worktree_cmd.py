@@ -627,6 +627,14 @@ def _is_auto_commit_path(rel_path: str) -> bool:
     return False
 
 
+def _is_auto_file(rel_path: str) -> bool:
+    """True if rel_path is an endless-managed auto-file: it matches
+    AUTO_COMMIT_GLOBS or lives under the DB ledger dir. A conflict confined to
+    such paths has a mechanical recovery (restore from base); a conflict that
+    touches anything else is real source work the user must reconcile."""
+    return _is_auto_commit_path(rel_path) or rel_path.startswith(DB_LEDGER_DIR + "/")
+
+
 def _git_status_partition(repo_root: Path) -> tuple[list[str], list[str]]:
     """Run `git status --porcelain -z` from repo_root and partition file paths.
 
@@ -674,6 +682,102 @@ def _git_run(args: list[str], cwd: Path, check: bool = True) -> subprocess.Compl
     return subprocess.run(
         ["git", *args],
         capture_output=True, text=True, check=check, cwd=str(cwd),
+    )
+
+
+def _display_path(p: Path) -> str:
+    """Display a Path with $HOME collapsed to ~ (never a raw absolute path)."""
+    s = str(p)
+    home = str(Path.home())
+    return s.replace(home, "~", 1) if s.startswith(home) else s
+
+
+def _rebase_conflict_message(
+    worktree_path: Path, base_branch: str, *, phase: str
+) -> str:
+    """Build the user-facing message for a rebase conflict encountered by land.
+
+    Called from BOTH conflict handlers (Step 3.7 orphan-replay and Step 4 main
+    rebase) WHILE the rebase is still in progress — before `git rebase --abort`
+    — so it can read the conflict state (unmerged paths + REBASE_HEAD).
+
+    Reports the FACTS confidently: which step (via `phase`), which of the user's
+    commits failed to replay, and which files conflict. It offers recoveries as
+    CANDIDATES to judge between, never one confident prescription — the confident
+    misattribution is exactly the failure mode this task removes. Only when every
+    conflicting path is an endless-managed auto-file is a single mechanical
+    recovery presented with confidence; any source file makes the cause genuinely
+    ambiguous, so the candidates are flagged as possibly-wrong.
+    """
+    unmerged = _git_run(
+        ["diff", "--name-only", "--diff-filter=U"],
+        cwd=worktree_path, check=False,
+    ).stdout
+    files = [ln for ln in unmerged.splitlines() if ln.strip()]
+
+    # Name the commit that failed to replay, if git exposes REBASE_HEAD, so the
+    # user knows which of their commits hit the conflict.
+    head = _git_run(
+        ["rev-parse", "--short", "REBASE_HEAD"],
+        cwd=worktree_path, check=False,
+    )
+    commit_line = ""
+    if head.returncode == 0 and head.stdout.strip():
+        short = head.stdout.strip()
+        subj = _git_run(
+            ["log", "-1", "--format=%s", "REBASE_HEAD"],
+            cwd=worktree_path, check=False,
+        ).stdout.strip()
+        commit_line = (
+            f"Your commit that failed to replay: {short} {subj}\n\n"
+            if subj else f"Your commit that failed to replay: {short}\n\n"
+        )
+
+    wt = _display_path(worktree_path)
+    file_block = (
+        "\n".join(f"  {f}" for f in files) if files else "  (none reported)"
+    )
+    header = (
+        f"rebase conflict while {phase}.\n\n"
+        f"{commit_line}"
+        f"Conflicting files:\n{file_block}\n\n"
+    )
+
+    only_auto = bool(files) and all(_is_auto_file(f) for f in files)
+    if only_auto:
+        globs = " ".join(AUTO_COMMIT_GLOBS)
+        return header + (
+            f"Every conflicting file is an endless-managed auto-file; restoring "
+            f"them from {base_branch} is safe. Recover, then retry land:\n"
+            f"  git -C {wt} checkout {base_branch} -- {globs}\n"
+            f"  endless worktree land <id>\n"
+        )
+
+    # A source file conflicts — the cause is genuinely ambiguous. Present the
+    # plausible recoveries as candidates the user must judge between.
+    return header + (
+        f"Likely causes (inspect and choose; the wrong recovery can duplicate "
+        f"or lose work):\n\n"
+        f"  1. {base_branch} advanced with edits that overlap yours. Resolve "
+        f"the conflict in place:\n"
+        f"       cd {wt}\n"
+        f"       git rebase {base_branch}\n"
+        f"       # edit the conflicting files to resolve, then mark resolved:\n"
+        f"       git add <files>\n"
+        f"       git rebase --continue\n"
+        f"     then re-run: endless worktree land <id>\n\n"
+        f"  2. the branch re-introduces content already landed for this task "
+        f"(e.g. an amended, already-landed commit). Do NOT rebase-continue "
+        f"(it duplicates the commit); capture only your delta, reset to "
+        f"{base_branch}, re-apply it:\n"
+        f"       git -C {wt} diff {base_branch}...HEAD > /tmp/land-delta.patch\n"
+        f"       git -C {wt} reset --hard {base_branch}\n"
+        f"       git -C {wt} apply /tmp/land-delta.patch\n"
+        f"       git -C {wt} commit -am \"<describe your change>\"\n"
+        f"     then re-run: endless worktree land <id>\n\n"
+        f"Inspect first:\n"
+        f"  git -C {wt} log {base_branch}..HEAD\n"
+        f"  git -C {wt} diff {base_branch}...HEAD\n"
     )
 
 
@@ -1755,12 +1859,16 @@ def land_worktree(
             n_orphans, first_subj = _drop_orphan_amendable_commits(
                 worktree_path, base_branch
             )
-        except subprocess.CalledProcessError as e:
-            _git_run(["rebase", "--abort"], cwd=worktree_path, check=False)
-            raise click.ClickException(
-                f"orphan auto-amend cleanup failed: "
-                f"{(e.stderr or '') + (e.stdout or '')}"
+        except subprocess.CalledProcessError:
+            # The orphan drop and the replay of the user's commits share one
+            # rebase; a conflict here is the replay conflicting, not the drop.
+            # Read the conflict state BEFORE aborting, then abort.
+            msg = _rebase_conflict_message(
+                worktree_path, base_branch,
+                phase="replaying your commits after dropping base auto-amend commits",
             )
+            _git_run(["rebase", "--abort"], cwd=worktree_path, check=False)
+            raise click.ClickException(msg)
         if n_orphans:
             noun = "commit" if n_orphans == 1 else "commits"
             click.echo(
@@ -1796,22 +1904,17 @@ def land_worktree(
         # Step 4: rebase the worktree branch onto main.
         try:
             _git_run(["rebase", base_branch], cwd=worktree_path)
-        except subprocess.CalledProcessError as e:
-            err_text = (e.stderr or "") + (e.stdout or "")
-            # Try to recover and report
-            _git_run(["rebase", "--abort"], cwd=worktree_path, check=False)
-            raise click.ClickException(
-                f"rebase of {branch} onto {base_branch} failed.\n\n"
-                f"Likely cause: a worktree branch commit modifies an "
-                f"endless-managed auto-file (db-ledger entry or "
-                f"config.json). This violates the E-972 routing rule and "
-                f"shouldn't normally happen.\n\n"
-                f"Recover: from the worktree, run\n"
-                f"  git checkout {base_branch} -- "
-                f"{' '.join(AUTO_COMMIT_GLOBS)}\n"
-                f"then retry land. (E-1019 will eventually automate this.)\n\n"
-                f"Git output:\n{err_text}"
+        except subprocess.CalledProcessError:
+            # Read the conflict state (files + failing commit) BEFORE aborting,
+            # then abort. The message reports facts confidently and offers
+            # recoveries as candidates rather than misattributing every conflict
+            # to an auto-file.
+            msg = _rebase_conflict_message(
+                worktree_path, base_branch,
+                phase=f"rebasing your branch onto {base_branch}",
             )
+            _git_run(["rebase", "--abort"], cwd=worktree_path, check=False)
+            raise click.ClickException(msg)
 
         # Step 5: ff-merge.
         try:
