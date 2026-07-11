@@ -4,10 +4,12 @@
 # (`endless task verify` / `endless-go verify`) end-to-end.
 #
 # Run from anywhere inside the worktree:
+#   esu
 #   ./tests/tasks/e-1603-verify.sh
 #
 # Output: pass/fail per check, then a summary. Exit 0 on all-passed, 1 on any
-# failure. It builds the worktree's endless-go, runs the Go unit tests for the
+# failure, 2 on setup error. It builds the worktree's endless-go, runs the Go
+# unit tests for the
 # runner and its manifest/normalizer deps, then drives the built binary against
 # throwaway fixture suites for: a passing suite (exit 0 + CTRF written + summary),
 # a failing suite (non-zero + failure detail), HOME/XDG isolation, two concurrent
