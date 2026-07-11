@@ -483,25 +483,6 @@ def serve(port, watch):
                 proc.wait()
 
 
-@main.command("verify")
-@click.argument("item_id", type=TASK_ID, required=False)
-@click.option("--keep", is_flag=True,
-              help="Keep the per-run temp dir (isolated HOME/XDG + "
-                   "intermediates) for debugging instead of removing it.")
-def verify(item_id, keep):
-    """Run a task's Tier-0 verification suite.
-
-    Discovers the task's .endless/tasks/<id>/verify.toml, runs its checks
-    under a fresh temp working dir and isolated env (temp HOME and
-    XDG_CONFIG_HOME, so the suite cannot touch your real home/config),
-    normalizes the results to a CTRF report, prints a pass/fail summary, and
-    exits 0 on all-pass / non-zero otherwise. With no id, verifies the current
-    session's active task.
-    """
-    from endless.verify_cmd import run_verify
-    run_verify(item_id, keep)
-
-
 @main.command("guide")
 @click.argument("section", required=False)
 @click.option("--list", "list_sections", is_flag=True,
@@ -1628,6 +1609,26 @@ def task_clear_tier(item_ids):
     from endless.task_cmd import update_plan, TIER_CLEAR
     for item_id in item_ids:
         update_plan(item_id, tier=TIER_CLEAR)
+
+
+@task_cmd.command("verify")
+@click.argument("item_id", type=TASK_ID, required=False)
+@click.option("--keep", is_flag=True,
+              help="Keep the per-run temp dir (isolated HOME/XDG + "
+                   "intermediates) for debugging instead of removing it.")
+def task_verify(item_id, keep):
+    """Run a task's Tier-0 verification suite.
+
+    Discovers the task's .endless/tasks/<id>/verify.toml, runs its checks
+    under a fresh temp working dir and isolated env (temp HOME and
+    XDG_CONFIG_HOME, so the suite cannot touch your real home/config),
+    normalizes the results to a CTRF report, prints a pass/fail summary, and
+    exits 0 on all-pass / non-zero otherwise. With no id, verifies the current
+    session's active task. Run it before `task confirm`/`task assume` to prove
+    the task's acceptance criteria.
+    """
+    from endless.verify_cmd import run_verify
+    run_verify(item_id, keep)
 
 
 @task_cmd.command("confirm")

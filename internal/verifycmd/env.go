@@ -45,7 +45,7 @@ end:
 
 // makeRunDir creates a fresh per-run temp directory (the Tier-0 isolation
 // substrate: it holds the temp HOME/XDG and per-check intermediates). The OS
-// temp root gives each run — and so each concurrent `endless verify` — its own
+// temp root gives each run — and so each concurrent `endless task verify` — its own
 // unique directory, which is what keeps concurrent runs from colliding.
 func makeRunDir() (dir dt.DirPath, err error) {
 	var s string

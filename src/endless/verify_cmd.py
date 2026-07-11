@@ -1,4 +1,4 @@
-"""CLI implementation for `endless verify` (E-1603).
+"""CLI implementation for `endless task verify` (E-1603).
 
 Thin wrapper around the `endless-go verify` subcommand — the Tier-0
 verification runner. This module holds no orchestration logic: discovery,
@@ -34,7 +34,7 @@ def run_verify(item_id: int | None, keep: bool) -> None:
     if resolved is None:
         raise click.ClickException(
             "no task id given and no active task for this session; "
-            "pass an explicit task id, e.g. `endless verify E-1234`."
+            "pass an explicit task id, e.g. `endless task verify E-1234`."
         )
 
     task_id = f"E-{resolved}"

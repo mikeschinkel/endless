@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # E-1603 verification script — exercises the Tier-0 verification runner
-# (`endless verify` / `endless-go verify`) end-to-end.
+# (`endless task verify` / `endless-go verify`) end-to-end.
 #
 # Run from anywhere inside the worktree:
 #   ./tests/tasks/e-1603-verify.sh
