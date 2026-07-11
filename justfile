@@ -7,6 +7,7 @@ help:
     @echo "  just install      Build + symlink binaries + install Python CLI"
     @echo "  just dev          Run templ + tailwind watchers for development"
     @echo "  just test         Run Python tests"
+    @echo "  just verify [E-NNNN]  Run a task's Tier-0 verify suite (self_dev; derives ID from cwd if omitted)"
     @echo "  just kill         Kill any running endless-go serve process"
     @echo ""
     @echo "Build (individual):"
@@ -441,6 +442,23 @@ dev-sandbox-init:
 # Run Python tests
 test:
     uv run pytest tests/ -v
+
+# Run a task's Tier-0 verification suite while developing Endless — the self_dev
+# counterpart to `just test`. With no id, defaults to the current session's /
+# worktree's bound task (`endless task verify`'s own resolution).
+#
+# Thin wrapper over the PRODUCT verb `endless task verify` (E-1603). Per
+# just-is-dev-only, this recipe holds NO verification logic: discovery of the
+# task's .endless/tasks/<id>/verify.toml, per-run temp HOME/XDG isolation,
+# running the suite, CTRF normalization, and the pass/fail exit code all live in
+# `endless task verify` and the endless-go runner it shells to.
+#
+# `--db sandbox` is what makes this self_dev: it routes `endless task verify` to
+# the sandbox config context, which selects <worktree>/bin/endless-go (E-1510)
+# so the CANDIDATE runner is exercised, not the global install. Exit code passes
+# straight through, so `just verify E-NNNN && ...` gates on the result.
+verify id="":
+    endless --db sandbox task verify {{id}}
 
 # Guide cross-reference / agent --help map (E-1502).
 #
