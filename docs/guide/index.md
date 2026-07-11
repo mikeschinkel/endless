@@ -208,6 +208,7 @@ listed separately. (Generated — do not hand-edit; run `/regenerate-guide`.)
 | blocking semantics | tasks | How unverified/confirmed/assumed affect whether a blocker is still active. |
 | verbs | tasks | The registered action words that can begin a task title. |
 | research-task field model | tasks | For a research task, text = the request, outcome = the deliverable. |
+| per-task verification suite | orchestration | One suite per task and the one-command verify handoff (tests/tasks/e-*-verify.sh, verify.toml). |
 <!-- END generated -->
 
 ## Important notes (always relevant)

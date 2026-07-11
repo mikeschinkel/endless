@@ -33,3 +33,7 @@ covers: The registered action words that can begin a task title.
 topic: research-task field model
 section: tasks
 covers: For a research task, text = the request, outcome = the deliverable.
+
+topic: per-task verification suite
+section: orchestration
+covers: One suite per task and the one-command verify handoff (tests/tasks/e-*-verify.sh, verify.toml).

@@ -17,14 +17,14 @@ Your worktree is: {{.worktree_path}} (branch {{.branch}}) — confirm with `pwd`
    (`--cleans-up E-{{.spawned_id}}`) and confirm before implementing them — don't fix them inline.
 5. If anything is ambiguous, the plan is insufficient, or you hit a design choice the plan
    doesn't cover — STOP and ask me{{if not .bg}} (with the return line above){{end}}. Don't guess.
-6. When implementation is done: `endless task update E-{{.spawned_id}} --status unverified --db main`, then tell
-   me how to test. Don't mark `confirmed`/`assumed` yourself.
+6. When implementation is done: `endless task update E-{{.spawned_id}} --status unverified --db main`, then hand
+   me the one verify command. Don't mark `confirmed`/`assumed` yourself.
 7. Don't run `endless worktree land`/`drop` without asking.
 {{- if .child_count}}
 
 This task has {{.child_count}} children — read them with `endless task show E-{{.spawned_id}} --children`.
 {{- end}}
 
-Final message — lead with the how-to-test. {{template "handoff_close" .}}
+Final message — {{template "handoff_verify" .}} {{template "handoff_close" .}}
 
 Goal: drive this task to a state I can confirm and land cleanly. Don't leave loose ends.

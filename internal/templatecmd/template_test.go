@@ -118,18 +118,22 @@ func TestRender_FullVars_ContainsExpectedSubstitutions(t *testing.T) {
 // instead of enumerating report categories, forbids confirming the negative,
 // drops the retired "dangling tags"/"landed-vs-worktree delta" phrasing, and
 // keeps the tmux return line for non-bg while omitting it for bg. The
-// type-specific deliverable prefix must survive the refactor.
+// type-specific deliverable prefix must survive the refactor. It also asserts
+// the final-message verification discipline: the verify handoffs (task, bug)
+// carry the one-command contract, while the information-deliverable handoffs
+// (epic, research, brainstorm) carry the anti-checklist prohibition.
 func TestRender_HandoffClose_ExceptionRule(t *testing.T) {
 	returnLine := "tmux move-window -t archive:"
 	cases := []struct {
-		typ    string
-		prefix string // deliverable pointer that must remain inline
+		typ      string
+		prefix   string // deliverable pointer that must remain inline
+		contract string // the final-message verification discipline for this type
 	}{
-		{"task", "lead with the how-to-test"},
-		{"bug", "lead with the how-to-test"},
-		{"epic", "lead with the state of the children"},
-		{"research", "say where the findings live"},
-		{"brainstorm", "say where the synthesis lives"},
+		{"task", "Hand me exactly ONE command to verify", "Do NOT enumerate a manual checklist"},
+		{"bug", "Hand me exactly ONE command to verify", "Do NOT enumerate a manual checklist"},
+		{"epic", "lead with the state of the children", "there is nothing to verify"},
+		{"research", "say where the findings live", "there is nothing to verify"},
+		{"brainstorm", "say where the synthesis lives", "there is nothing to verify"},
 	}
 	for _, c := range cases {
 		for _, bg := range []bool{false, true} {
@@ -148,6 +152,7 @@ func TestRender_HandoffClose_ExceptionRule(t *testing.T) {
 					"endless worktree check",
 					`do NOT confirm the negative`,
 					c.prefix,
+					c.contract,
 				}
 				for _, w := range mustContain {
 					if !strings.Contains(out, w) {

@@ -6,3 +6,11 @@ tmux move-window -t archive: && tmux switch-client -t {{.return_anchor}}
 ```
 {{- end}}
 {{- end}}
+
+{{define "handoff_verify" -}}
+Hand me exactly ONE command to verify this — `esu && ./tests/tasks/e-{{.spawned_id}}-verify.sh` — folding this task's own tests into that one suite as a fail-fast check. Do NOT enumerate a manual checklist. Run the project-wide regression (tests, lint, build) yourself and state the result in one line — never as commands for me to run. See `endless guide orchestration`.
+{{- end}}
+
+{{define "handoff_nonverify" -}}
+This task delivers information, not testable behavior — there is nothing to verify. Do NOT invent a how-to-test, verification steps, or a checklist; point me to the deliverable and stop.
+{{- end}}

@@ -27,6 +27,6 @@ Findings are the deliverable. Write them into `tasks.outcome` via `endless task 
 This task has {{.child_count}} children — read them with `endless task show E-{{.spawned_id}} --children`.
 {{- end}}
 
-Final message — say where the findings live. {{template "handoff_close" .}}
+Final message — say where the findings live. {{template "handoff_nonverify" .}} {{template "handoff_close" .}}
 
 Goal: drive this task to a state I can confirm and land cleanly. Don't leave loose ends.

@@ -333,6 +333,69 @@ endless internal template render handoff/epic --project <name> < vars.json
 
 ---
 
+## Verification suites & the one-command handoff
+
+How a task proves itself before it lands, and how a session hands that proof back without burying you in instructions.
+
+### One suite per task
+
+Every task carries **one verification suite** — a single, self-contained proof that the change does what it claims. Today that suite is realized as a bash script at `tests/tasks/e-<id>-verify.sh`. A good suite:
+
+- Builds its own isolated environment (temp `HOME`/`XDG`, a throwaway fixture dir) so it never touches your real config or the ledger.
+- Prints pass/fail per check, then a summary that ends in `ALL PASSED`.
+- Exits `0` when everything passes and non-zero on any failure.
+
+Copy the shape from any existing `tests/tasks/e-*-verify.sh` — the section/report/summary helpers are the same across them. The suite folds in the task's own unit tests as a first, fail-fast check, so the one script is a complete regression proof for that task.
+
+### The `verify.toml` manifest
+
+The settled form a suite takes as the runner matures is a per-task manifest — a **pointer to native test runners**, never a re-description of the tests. It lives at `.endless/tasks/<id>/verify.toml`:
+
+```toml
+schema = 1
+task   = "E-1607"
+
+# preconditions, all optional; run provision(needs) -> setup -> seed -> checks -> teardown
+needs    = ["postgres"]            # substrate the checks require
+setup    = ["go build ./..."]      # prepare the project (build/install/migrate/codegen)
+seed     = ["fixtures/base.json"]  # load state
+teardown = ["scripts/cleanup.sh"]
+tiers    = ["sandbox"]
+
+[[check]]
+runner = "gotest"                  # first-class runner: gotest | pytest
+tests  = ["TestDiscover"]          # structured selection Endless translates to the native filter
+paths  = ["./internal/verify/..."]
+
+[[check]]
+runner  = "bats"                   # any other runner is "raw"
+command = "bats tests/cli.bats"    # the literal command a bare clone runs
+format  = "tap"                    # native result stream: gotest-json | pytest-json | tap
+```
+
+A first-class `runner` (`gotest`, `pytest`) takes a structured `tests`/`paths` selection and Endless infers its `format`; any other runner is raw — you give it a literal `command` and declare its `format` (default `tap`). A project-level `.endless/verify.toml` (same directory, one level above the per-task suites) carries shared `setup`/`teardown`/`seed`/`needs` that compose beneath every per-task manifest, so a project states its common substrate once. Discovery is purely by convention: `.endless/tasks/<id>/verify.toml` per task, plus the project-root `.endless/verify.toml`.
+
+### The runner
+
+`endless task verify <id>` runs a task's suite under an isolated temp working dir and env, normalizes the native result streams to a single report, prints a pass/fail summary, and exits `0` on all-pass. (With no id it verifies the current session's task.) Endless's own suites are still bash scripts pending migration to a manifest, so for those, run the script directly.
+
+### The one-command handoff contract
+
+This is the load-bearing policy. When a session hands a finished task back for verification, it must:
+
+1. **Run the project-wide regression itself** — the full test suite, lint, build — and **report the outcome in prose.** Never hand the user a list of commands to run to check the work; the session runs them and states the result.
+2. **Hand the user exactly ONE verification command** — `esu && ./tests/tasks/e-<id>-verify.sh` — and nothing more.
+3. **Fold the task's own tests into that one suite** as a fail-fast check, so the single command is a complete proof.
+4. **Never enumerate a manual checklist.** No "to test: run A, then B, then check C." One command, or nothing.
+
+The point is that verification is *dense*: one line the user runs, one prose sentence on regression, done. A handoff that lists five things to try by hand has failed the contract even if every item is correct.
+
+### Forthcoming
+
+The `just verify` wrapper for Endless's own suites, the runnability modes (how a suite declares what substrate it can run against), and the sandbox/mise tier ladder are in progress. Until they ship, realize the convention with the per-task script.
+
+---
+
 ## Inter-session channels
 
 ### Why channels exist

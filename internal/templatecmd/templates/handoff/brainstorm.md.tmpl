@@ -29,6 +29,6 @@ The synthesis is the deliverable. Write it into `tasks.outcome` via `endless tas
 This task has {{.child_count}} children — read them with `endless task show E-{{.spawned_id}} --children`.
 {{- end}}
 
-Final message — say where the synthesis lives and which follow-ups it spawned. {{template "handoff_close" .}}
+Final message — say where the synthesis lives and which follow-ups it spawned. {{template "handoff_nonverify" .}} {{template "handoff_close" .}}
 
 Goal: draw out the requester's thinking, synthesize it, and spawn the follow-ups cleanly. Don't leave loose ends.
