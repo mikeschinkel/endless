@@ -1,0 +1,2 @@
+{"v":1,"ts":"5YBSHKXCG1R19ZK","kind":"task_dep.created","project":"endless","entity":{"type":"task_dep","id":"1777"},"actor":{"kind":"cli","id":"mikeschinkel@m4macmini.local","session_id":"923"},"payload":{"source_id":1777,"target_id":1771,"dep_type":"relates_to"}}
+{"v":1,"ts":"5YBSHKY4X7R19ZK","kind":"task_dep.created","project":"endless","entity":{"type":"task_dep","id":"1777"},"actor":{"kind":"cli","id":"mikeschinkel@m4macmini.local","session_id":"923"},"payload":{"source_id":1777,"target_id":1774,"dep_type":"relates_to"}}
