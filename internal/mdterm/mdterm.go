@@ -25,6 +25,8 @@ import (
 
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/ast"
+	"github.com/yuin/goldmark/extension"
+	xast "github.com/yuin/goldmark/extension/ast"
 	"github.com/yuin/goldmark/text"
 )
 
@@ -55,14 +57,31 @@ func headingStyle(level int) string {
 	}
 }
 
-// RenderString parses markdown and returns colorized ANSI. Always colorized;
-// the caller decides whether to use it.
+// DefaultWidth is the terminal width assumed when the caller supplies none.
+// Only table layout consults it; prose and code never reflow, so they render
+// identically at any width.
+const DefaultWidth = 80
+
+// RenderString parses markdown and returns colorized ANSI at the default
+// terminal width. Always colorized; the caller decides whether to use it.
 func RenderString(src string) string {
+	return RenderStringWidth(src, DefaultWidth)
+}
+
+// RenderStringWidth is RenderString with an explicit terminal width. The width
+// governs table column layout (see internal/mdterm/table.go); every other block
+// is width-independent.
+func RenderStringWidth(src string, width int) string {
+	if width < 1 {
+		width = DefaultWidth
+	}
 	s := []byte(src)
-	p := goldmark.DefaultParser()
+	// The GFM table extension is required so tables parse into table nodes;
+	// without it a table collapses into a mangled paragraph (E-1775).
+	p := goldmark.New(goldmark.WithExtensions(extension.Table)).Parser()
 	doc := p.Parse(text.NewReader(s))
 
-	r := &renderer{src: s}
+	r := &renderer{src: s, width: width}
 	for c := doc.FirstChild(); c != nil; c = c.NextSibling() {
 		if r.b.Len() > 0 {
 			r.b.WriteString("\n") // blank line between top-level blocks
@@ -74,8 +93,9 @@ func RenderString(src string) string {
 }
 
 type renderer struct {
-	src []byte
-	b   strings.Builder
+	src   []byte
+	width int
+	b     strings.Builder
 }
 
 // line emits one logical line: indent + styled content + SGR reset + newline.
@@ -105,6 +125,9 @@ func (r *renderer) renderBlock(n ast.Node, indent string) {
 
 	case ast.KindList:
 		r.renderList(n.(*ast.List), indent)
+
+	case xast.KindTable:
+		r.renderTable(n.(*xast.Table), indent)
 
 	case ast.KindThematicBreak:
 		r.line(indent, dimStyle+strings.Repeat("─", 60))

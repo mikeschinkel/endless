@@ -4,6 +4,7 @@ import contextlib
 import io
 import os
 import re
+import shutil
 import subprocess
 import sys
 import uuid
@@ -3720,9 +3721,12 @@ def _render_markdown_field(content: str) -> str | None:
         binary = _resolve_endless_go()
     except click.ClickException:
         return None
+    # Width for table layout. get_terminal_size honors COLUMNS and the
+    # controlling tty even when our stdout is a pipe to `less` (E-1775).
+    width = shutil.get_terminal_size().columns
     try:
         result = subprocess.run(
-            [binary, "markdown", "render"],
+            [binary, "markdown", "render", "--width", str(width)],
             input=content, capture_output=True, text=True, timeout=10,
         )
     except (OSError, subprocess.SubprocessError):
