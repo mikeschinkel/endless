@@ -75,6 +75,11 @@ func Run(args []string) {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
+	case "resume-target":
+		if err := runResumeTarget(args[1:]); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
 	case "-h", "--help", "help":
 		usage()
 	default:
@@ -106,6 +111,29 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "                                    exit 0 clean, 1 anomalies present, 2 on error")
 	fmt.Fprintln(os.Stderr, "  trail [--client <name>] [--limit N]")
 	fmt.Fprintln(os.Stderr, "                                    JSON array of navigation edges newest-first (no --client = all clients)")
+	fmt.Fprintln(os.Stderr, "  resume-target --ref <task-id|session-id|uuid>")
+	fmt.Fprintln(os.Stderr, "                                    JSON {endless_id, session_id, active_task_id, worktree_path, state} to relaunch a lost session")
+}
+
+// runResumeTarget prints the JSON a `session resume` needs to relaunch a lost
+// Claude session: the harness UUID and the task worktree to cd into. The ref
+// is resolved task-first (the tmux-tab task id is the primary handle) but also
+// accepts a session id or UUID prefix. The DB read stays Go-side (E-1486); the
+// Python caller cd's to worktree_path and execs `claude --resume <session_id>`.
+func runResumeTarget(args []string) error {
+	fs := flag.NewFlagSet("resume-target", flag.ContinueOnError)
+	ref := fs.String("ref", "", "task id (E-NNNN/NNNN), session id, or Claude UUID prefix")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *ref == "" {
+		return fmt.Errorf("--ref is required")
+	}
+	target, err := monitor.ResolveResumeTarget(*ref)
+	if err != nil {
+		return err
+	}
+	return json.NewEncoder(os.Stdout).Encode(target)
 }
 
 // runTrail prints the durable session-navigation trail as a JSON array of

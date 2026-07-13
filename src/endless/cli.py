@@ -935,6 +935,23 @@ def session_goto(target_ref):
     run_goto(target_ref)
 
 
+@session_cmd.command("resume")
+@click.argument("ref")
+def session_resume(ref):
+    """Relaunch a lost Claude session in the CURRENT tmux pane.
+
+    REF is a task id (E-NNNN, as shown on the tmux tab) or a session id /
+    Claude UUID prefix. A task id resolves to that task's most-recent
+    resumable session. cd's to the task's worktree, then execs
+    `claude --resume <uuid>` so the resumed session takes over this pane.
+
+    Unlike `session goto`, this includes ended sessions — recovering the
+    sessions orphaned when tmux crashes is exactly what it is for.
+    """
+    from endless.session_cmd import resume_session
+    resume_session(ref)
+
+
 @session_cmd.command("back")
 def session_back():
     """Return to the previous session, browser-style (see `session goto`).

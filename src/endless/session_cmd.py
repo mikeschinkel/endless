@@ -2,6 +2,7 @@
 
 import json as json_mod
 import os
+import sys
 from pathlib import Path
 
 import click
@@ -100,6 +101,82 @@ def _resolve_session(value: str) -> dict:
             "Use more characters."
         )
     return dict(row[0])
+
+
+def _resume_target(ref: str) -> dict:
+    """Resolve a task/session ref to its resume target via Go (per E-1486).
+
+    Returns the JSON dict from `endless-go session-query resume-target`:
+    endless_id, session_id (Claude UUID), active_task_id, worktree_path, state.
+    """
+    import shutil
+    import subprocess
+
+    from endless import config
+
+    go_bin = shutil.which("endless-go")
+    if not go_bin:
+        raise click.ClickException("endless-go binary not found on PATH.")
+    config.require_db_context()
+    try:
+        result = subprocess.run(
+            [go_bin, *config.go_db_context_args(),
+             "session-query", "resume-target", "--ref", ref],
+            capture_output=True, text=True, timeout=5,
+        )
+    except (FileNotFoundError, subprocess.SubprocessError) as e:
+        raise click.ClickException(f"endless-go failed: {e}")
+    if result.returncode != 0:
+        raise click.ClickException(result.stderr.strip() or "endless-go failed")
+    try:
+        return json_mod.loads(result.stdout)
+    except ValueError:
+        raise click.ClickException("endless-go returned malformed output")
+
+
+def resume_session(ref: str) -> None:
+    """Relaunch a lost Claude session in the current tmux pane.
+
+    Resolves `ref` (a task id off the tmux tab, or a session id / Claude UUID)
+    to its session UUID and task worktree, cd's into the worktree, and execs
+    `claude --resume <uuid>` — replacing this process so the resumed session
+    takes over the current pane. This recovers sessions whose panes died in a
+    tmux crash: their transcripts and ledger rows survive the crash intact.
+    """
+    target = _resume_target(ref)
+    uuid = target.get("session_id") or ""
+    worktree = target.get("worktree_path") or ""
+    eid = target.get("endless_id")
+    task = target.get("active_task_id")
+    label = f"E-{task}" if task else f"session {eid}"
+
+    if not uuid:
+        raise click.ClickException(
+            f"session {eid} has no Claude UUID to resume "
+            "(a background agent that never started?)."
+        )
+    if not worktree:
+        raise click.ClickException(
+            f"no worktree on disk for {label}; cannot cd there to resume. "
+            "Recreate it first with `endless task claim`."
+        )
+    if not os.path.isdir(worktree):
+        raise click.ClickException(f"worktree path does not exist: {worktree}")
+
+    import shutil
+    claude = shutil.which("claude")
+    if not claude:
+        raise click.ClickException("`claude` not found on PATH.")
+
+    click.echo(
+        f"• Resuming session {eid} ({label}) in {_short_path(worktree)} "
+        f"→ claude --resume {uuid[:8]}…",
+        err=True,
+    )
+    os.chdir(worktree)
+    sys.stdout.flush()
+    sys.stderr.flush()
+    os.execvp(claude, ["claude", "--resume", uuid])
 
 
 def show_history(
