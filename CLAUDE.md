@@ -1,5 +1,9 @@
 # Endless Project Rules
 
+First: run `endless guide`.
+
+This project _"dogfoods"_ itself, so every session needs to understand what Endless is and how to use it.
+
 ## Build
 
 Use `just build` to build everything (templ generate, tailwind CSS, Go binaries). All Go binaries are output to `./bin/`. Use `just install` to build and symlink to `/usr/local/bin/`.
