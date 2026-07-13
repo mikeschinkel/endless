@@ -119,6 +119,23 @@ align="$(render 40 '| L | R |
 row="$(printf '%s' "${align}" | grep '^a')"
 assert_contains "right-aligned cell ends flush-right" "${row}" " 7"
 
+# Fit-to-width: a table with a huge column and a single-outlier column must NOT
+# exceed the requested width (a wider line wraps unusably in less -R), and the
+# outlier column must be reclaimed toward its median rather than starving the
+# content column.
+WIDE='| ID | Status | Detail |
+|----|--------|--------|
+| 1 | ok | '"$(printf 'word %.0s' {1..60})"' |
+| 2 | a really long outlier status value here | short |
+| 3 | ok | '"$(printf 'more %.0s' {1..60})"' |
+'
+maxw="$(render 90 "${WIDE}" | strip_sgr | LC_ALL=en_US.UTF-8 python3 -c "import sys;print(max((len(l.rstrip(chr(10))) for l in sys.stdin if '│' in l), default=0))")"
+if [[ "${maxw}" -le 90 ]]; then
+    report_pass "wide table fits requested width (${maxw} <= 90)"
+else
+    report_fail "wide table fits requested width" "table row width <= 90" "widest row = ${maxw}"
+fi
+
 # ─── ANSI safety ────────────────────────────────────────────────────────────
 
 section "ANSI safety"

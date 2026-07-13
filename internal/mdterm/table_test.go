@@ -55,10 +55,18 @@ func TestWrapStyledHardBreaksOverlongToken(t *testing.T) {
 	}
 }
 
+// tableWidth is the total rendered width of a column layout (content + chrome).
+func tableWidth(col []int) int {
+	total := 0
+	for _, w := range col {
+		total += w
+	}
+	return total + colSepWidth*(len(col)-1)
+}
+
 func TestAllocateTrivialFit(t *testing.T) {
 	natural := []int{3, 5, 4}
-	cells := dummyCells(natural)
-	col := allocateColumns(natural, cells, 100, 0)
+	col := allocateColumns(natural, natural, 100, 0)
 	for j := range natural {
 		if col[j] != natural[j] {
 			t.Fatalf("col %d: expected natural %d, got %d (should not expand to fill)", j, natural[j], col[j])
@@ -69,8 +77,9 @@ func TestAllocateTrivialFit(t *testing.T) {
 func TestAllocateShrinksNoColumnBelowMinCol(t *testing.T) {
 	width, n := 100, 4
 	natural := []int{80, 70, 60, 90} // all far wider than fits
+	median := []int{80, 70, 60, 90}  // no outliers → medians == naturals
 	minCol := int(float64(width) / (float64(n) * minColDivisor))
-	col := allocateColumns(natural, dummyCells(natural), width, 0)
+	col := allocateColumns(natural, median, width, 0)
 	for j := range col {
 		if col[j] < minCol {
 			t.Fatalf("col %d shrank below minCol %d: %d", j, minCol, col[j])
@@ -81,21 +90,35 @@ func TestAllocateShrinksNoColumnBelowMinCol(t *testing.T) {
 func TestAllocatePinsNaturallyNarrowColumn(t *testing.T) {
 	// A 2-wide "ID" column must never be padded up to minCol nor shrunk.
 	natural := []int{2, 200}
-	col := allocateColumns(natural, dummyCells(natural), 80, 0)
+	col := allocateColumns(natural, natural, 80, 0)
 	if col[0] != 2 {
 		t.Fatalf("narrow column not pinned at natural width 2: %d", col[0])
 	}
 }
 
-func TestAllocateKeepsTwoColumnsVisible(t *testing.T) {
+func TestAllocateNeverExceedsWidth(t *testing.T) {
+	// A table must always fit the screen; less -R wraps a wider line unusably.
 	width := 100
 	natural := []int{400, 400, 400}
-	col := allocateColumns(natural, dummyCells(natural), width, 0)
-	minCol := int(float64(width) / (float64(len(natural)) * minColDivisor))
-	for j, w := range col {
-		if w > width-minCol {
-			t.Fatalf("col %d width %d exceeds hard cap (width-minCol=%d); a single column could fill the viewport", j, w, width-minCol)
-		}
+	col := allocateColumns(natural, natural, width, 0)
+	if tableWidth(col) > width {
+		t.Fatalf("table width %d exceeds screen width %d", tableWidth(col), width)
+	}
+}
+
+func TestAllocateReclaimsOutlierColumnTowardMedian(t *testing.T) {
+	// One long value inflates col 1's natural width, but its median is small; the
+	// content column (col 2) is what needs the room. The median pass must shrink
+	// col 1 well below its natural so col 2 gets more than col 1.
+	width := 100
+	natural := []int{17, 28, 250} // col1 natural 28 driven by a single outlier
+	median := []int{15, 9, 90}    // col1 typically ~9 wide
+	col := allocateColumns(natural, median, width, 0)
+	if tableWidth(col) > width {
+		t.Fatalf("table width %d exceeds screen width %d", tableWidth(col), width)
+	}
+	if col[1] >= col[2] {
+		t.Fatalf("outlier column %d not reclaimed: col1=%d should be << col2=%d", 1, col[1], col[2])
 	}
 }
 
@@ -182,14 +205,4 @@ func TestEveryTableLineEndsWithReset(t *testing.T) {
 			t.Fatalf("line does not end with SGR reset (less -R needs this): %q", line)
 		}
 	}
-}
-
-// dummyCells builds column-major cells whose only content is a single token of
-// each column's natural width, so allocator tests exercise widths without prose.
-func dummyCells(natural []int) [][][]styledRune {
-	cells := make([][][]styledRune, len(natural))
-	for j, w := range natural {
-		cells[j] = [][]styledRune{parseStyled(strings.Repeat("x", w))}
-	}
-	return cells
 }

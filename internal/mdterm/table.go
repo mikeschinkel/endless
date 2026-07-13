@@ -15,6 +15,7 @@ package mdterm
 // `less`), capped so at least two columns stay visible.
 
 import (
+	"slices"
 	"strings"
 	"unicode/utf8"
 
@@ -26,11 +27,9 @@ import (
 // Tunable layout constants. There is no closed-form optimum; these are balanced
 // empirically against real tables (the E-1775 eyeball harness).
 const (
-	minColDivisor  = 2.5  // minCol = floor(W / (N * minColDivisor))
-	maxHeaderRows  = 3    // a header wraps to at most this many rows, then truncates
-	targetMaxRows  = 6    // a cell taller than this triggers aspect-relaxation growth
-	maxColFraction = 0.65 // soft per-column width cap, as a fraction of the screen width
-	colSepWidth    = 3    // visible width of the " │ " column separator
+	minColDivisor = 2.5 // minCol = floor(W / (N * minColDivisor))
+	maxHeaderRows = 3   // a header wraps to at most this many rows, then truncates
+	colSepWidth   = 3   // visible width of the " │ " column separator
 )
 
 // styledRune is one visible rune paired with the SGR sequence active at its
@@ -69,21 +68,22 @@ func (r *renderer) renderTable(t *xast.Table, indent string) {
 func (r *renderer) layoutTable(header [][]styledRune, rows [][][]styledRune, aligns []xast.Alignment, indent string) {
 	n := len(header)
 
-	// Column-major cell lists (header first) for measurement and growth.
-	colCells := make([][][]styledRune, n)
+	// Per column: natural = widest cell (incl. header); median = median cell
+	// width, which the allocator uses to reclaim a column bloated by one outlier.
 	natural := make([]int, n)
+	median := make([]int, n)
 	for j := range n {
-		colCells[j] = append(colCells[j], header[j])
-		natural[j] = visWidth(header[j])
+		widths := []int{visWidth(header[j])}
 		for _, row := range rows {
 			if j < len(row) {
-				colCells[j] = append(colCells[j], row[j])
-				natural[j] = max(natural[j], visWidth(row[j]))
+				widths = append(widths, visWidth(row[j]))
 			}
 		}
+		natural[j] = maxInt(widths)
+		median[j] = medianInt(widths)
 	}
 
-	col := allocateColumns(natural, colCells, r.width, runewidth.StringWidth(indent))
+	col := allocateColumns(natural, median, r.width, runewidth.StringWidth(indent))
 
 	var legend []legendEntry
 	r.emitRow(header, col, aligns, indent, true, &legend)
@@ -107,12 +107,17 @@ func (r *renderer) gatherCells(row ast.Node) [][]styledRune {
 	return cells
 }
 
-// allocateColumns returns the content width of each column.
+// allocateColumns returns each column's content width. The table is always laid
+// out to fit within the screen width: a wider-than-screen table would only wrap
+// unusably in the pager (less -R wraps; it does not pan by default), so a column
+// is never grown past the width — a too-tall table scrolls vertically instead.
 //
-//	Phase 1  everything fits          → natural widths (compact; never expanded)
-//	Phase 2  too wide                 → shave the widest column to the minCol floor
-//	Phase 3  a column still too tall  → grow it back out (pan territory), capped
-func allocateColumns(natural []int, colCells [][][]styledRune, width, indentW int) []int {
+// When the natural widths don't fit, columns are shrunk in three passes:
+//  1. toward each column's median cell width — reclaims a column bloated by a
+//     single outlier value before touching columns that genuinely need the room;
+//  2. the widest column down to the minCol floor;
+//  3. (pathological: many columns) below the floor, so the table still fits.
+func allocateColumns(natural, median []int, width, indentW int) []int {
 	n := len(natural)
 	minCol := max(int(float64(width)/(float64(n)*minColDivisor)), 1)
 	avail := max(width-indentW-colSepWidth*(n-1), n)
@@ -124,47 +129,46 @@ func allocateColumns(natural []int, colCells [][][]styledRune, width, indentW in
 		sum += col[j]
 	}
 
-	// Phase 2: shrink the currently-widest shrinkable column until we fit.
-	for sum > avail {
-		bj, bw := -1, -1
-		for j := range col {
-			// A naturally-narrow column is pinned at its width, never wrapped.
-			floor := min(minCol, natural[j])
-			if col[j] <= floor {
-				continue
-			}
-			if col[j] > bw {
-				bw = col[j]
-				bj = j
-			}
+	// When natural widths overflow, shrink to fit. (If they fit, the loops below
+	// are no-ops and the compact natural layout stands — never expanded to fill.)
+	if sum > avail {
+		// minFloor pins a naturally-narrow column at its width and floors the
+		// rest at minCol so no column wraps to an unreadably thin sliver.
+		minFloor := make([]int, n)
+		medFloor := make([]int, n)
+		forceFloor := make([]int, n)
+		for j := range n {
+			minFloor[j] = min(minCol, natural[j])
+			medFloor[j] = max(median[j], minFloor[j])
+			forceFloor[j] = 1
 		}
-		if bj < 0 {
-			break // every column is at its floor; the table will overflow (pannable)
-		}
-		col[bj]--
-		sum--
-	}
-
-	// Phase 3: grow columns that still wrap taller than targetMaxRows, allowing
-	// the table to exceed the screen width. Capped so >=2 columns stay visible.
-	hardCap := width - minCol
-	softCap := int(maxColFraction * float64(width))
-	for j := range col {
-		colCap := min(natural[j], softCap, hardCap)
-		for col[j] < colCap && tallestRows(colCells[j], col[j]) > targetMaxRows {
-			col[j]++
-		}
+		sum = shrinkColumns(col, medFloor, sum, avail)
+		sum = shrinkColumns(col, minFloor, sum, avail)
+		shrinkColumns(col, forceFloor, sum, avail)
 	}
 	return col
 }
 
-// tallestRows is the largest wrapped-line count among a column's cells at width w.
-func tallestRows(cells [][]styledRune, w int) (tallest int) {
-	tallest = 1
-	for _, c := range cells {
-		tallest = max(tallest, len(wrapStyled(c, w)))
+// shrinkColumns repeatedly shaves one column — the one with the most width above
+// its floor — by 1 until the total fits `avail` or no column exceeds its floor.
+func shrinkColumns(col, floor []int, sum, avail int) int {
+	for sum > avail {
+		bj, bexcess := -1, 0
+		for j := range col {
+			excess := col[j] - floor[j]
+			if excess > bexcess {
+				bexcess = excess
+				bj = j
+			}
+		}
+		if bj < 0 {
+			goto end // nothing left above its floor
+		}
+		col[bj]--
+		sum--
 	}
-	return tallest
+end:
+	return sum
 }
 
 // emitRow wraps every cell to its column width and emits the (possibly
@@ -413,6 +417,29 @@ func restyle(rs []styledRune, prefix string) []styledRune {
 		out[i] = styledRune{r: sr.r, style: prefix + sr.style}
 	}
 	return out
+}
+
+// maxInt is the largest of a non-empty slice of ints.
+func maxInt(xs []int) (m int) {
+	for _, x := range xs {
+		m = max(m, x)
+	}
+	return m
+}
+
+// medianInt is the median of a slice of ints (upper of the two middles for an
+// even count). Zero for an empty slice.
+func medianInt(xs []int) (m int) {
+	if len(xs) == 0 {
+		goto end
+	}
+	{
+		sorted := append([]int(nil), xs...)
+		slices.Sort(sorted)
+		m = sorted[len(sorted)/2]
+	}
+end:
+	return m
 }
 
 // visWidth is the total visible column width of styled runes.
