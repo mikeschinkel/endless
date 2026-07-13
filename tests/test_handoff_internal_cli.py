@@ -25,8 +25,6 @@ def test_internal_template_render_handoff_outputs_substituted_text():
     vars_payload = {
         "spawned_id": 2026,
         "title": "CLI smoke",
-        "spawner_task": 1565,
-        "return_anchor": "%3",
         "worktree_path": "/tmp/wt",
         "branch": "task/2026-cli-smoke",
     }

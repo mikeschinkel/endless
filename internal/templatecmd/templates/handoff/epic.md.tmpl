@@ -1,13 +1,9 @@
 You're a worktree-bound Claude Code session spawned to coordinate this epic end to end:
 
 - {{.label_prefix}}: {{.title}}.
-
-{{if .bg -}}
-Your spawning session's task is: E-{{.spawner_task}}. You're a headless background agent — there's no pane to switch back to; coordinate the epic and stop when done. The user follows your progress with `claude attach`.
-{{- else -}}
-Your spawning session's task is: E-{{.spawner_task}} — return to that session with `tmux switch-client -t {{.return_anchor}}`.
-{{- end}}
-
+{{if .bg}}
+You're a headless background agent — coordinate the epic and stop when done. The user follows your progress with `claude attach`.
+{{end}}
 Your worktree is: {{.worktree_path}} (branch {{.branch}}) — confirm with `pwd`. Don't edit the main checkout; the spawning session owns landing.
 
 You're the coordinator on this epic. Don't implement directly — draft plans, tell the user which children to spawn, verify their work.
@@ -29,7 +25,7 @@ Pick your operational mode from that breakdown:
 4. Stay focused on E-{{.spawned_id}}. File unrelated discoveries as new tasks
    (`--cleans-up E-{{.spawned_id}}`) and confirm before implementing them — don't fix them inline.
 5. If anything is ambiguous, the plan is insufficient, or you hit a design choice the plan
-   doesn't cover — STOP and ask me{{if not .bg}} (with the return line above){{end}}. Don't guess.
+   doesn't cover — STOP and ask me. Don't guess.
 6. When all children are `confirmed`/`assumed`: `endless task update E-{{.spawned_id}} --status completed --db main`, then tell
    me. Don't mark the epic complete while children are still open.
 7. Don't run `endless worktree land`/`drop` without asking.

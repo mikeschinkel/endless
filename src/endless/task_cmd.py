@@ -4093,8 +4093,6 @@ def _children_state(parent_id: int) -> str:
 
 
 def render_handoff(spawned_id: int, title: str,
-                   return_anchor: str | None,
-                   spawner_task_id: int | None,
                    worktree_path: str | None = None,
                    branch: str | None = None,
                    task_type: str | None = None,
@@ -4107,8 +4105,8 @@ def render_handoff(spawned_id: int, title: str,
     """Render the spawn handoff for a task by invoking `endless-go template render`.
 
     The handoff is mostly boilerplate (orient, read the guide + plan, default
-    interaction rules, return path, closing); only the task id, title, the
-    spawning pane, and the task's worktree/branch vary. Generating it means
+    interaction rules, closing); only the task id, title, and the task's
+    worktree/branch vary. Generating it means
     agents no longer author prompts, so prompt-vs-plan drift cannot occur.
     See E-1469. E-1565 moved the rendering surface from Python's
     string.Template to Go's text/template — Python builds the var map and
@@ -4119,11 +4117,9 @@ def render_handoff(spawned_id: int, title: str,
     line naming the count when nonzero.
 
     `bg=True` (E-1568) renders the background-agent variant of each template:
-    a headless `claude --bg` agent has no spawning pane to return to and no
-    tmux window to move, so the `{{if .bg}}` branch in each template drops the
-    `tmux switch-client`/`tmux move-window` return lines and instead tells the
-    agent to do the work, flip the task to `unverified`, and stop (the user attaches
-    later via `claude attach <short_id>`).
+    a headless `claude --bg` agent tells the agent to do the work, flip the
+    task to `unverified`, and stop (the user attaches later via
+    `claude attach <short_id>`).
 
     `respawn=True` (E-1647) renders the flat, type-agnostic `handoff/respawn`
     template used when a task is *reopened*. The four per-type templates are
@@ -4150,8 +4146,6 @@ def render_handoff(spawned_id: int, title: str,
         "spawned_id": spawned_id,
         "label_prefix": _hierarchical_label_prefix(spawned_id, parent_id),
         "title": title,
-        "spawner_task": spawner_task_id if spawner_task_id is not None else "?",
-        "return_anchor": return_anchor or "%<spawning-pane>",
         "worktree_path": worktree_path or "<task worktree>",
         "branch": branch or "<task branch>",
         "child_count": child_count,
@@ -4192,8 +4186,6 @@ def show_handoff(item_id: int):
     click.echo(render_handoff(
         item_id,
         row[0]["title"],
-        os.environ.get("TMUX_PANE"),
-        _current_session_active_task_id(),
         worktree_path=str(wt) if wt else None,
         branch=_branch_for_worktree(wt) if wt else None,
         task_type=row[0]["type_slug"] or None,
@@ -4717,12 +4709,10 @@ def spawn_plan(item_id: int, project_name: str | None = None, no_plan: bool = Fa
     )
 
     # Render the handoff from the template (no stored prompt — E-1469) and
-    # write it to a temp file for tmux load-buffer. The spawning pane is the
-    # return anchor; the spawning session's active task is the origin line;
-    # cd_target is the worktree the spawned session lands in.
+    # write it to a temp file for tmux load-buffer. cd_target is the worktree
+    # the spawned session lands in.
     handoff_text = render_handoff(
-        item_id, title, os.environ.get("TMUX_PANE"),
-        _current_session_active_task_id(),
+        item_id, title,
         worktree_path=cd_target,
         branch=_branch_for_worktree(cd_target),
         task_type=item["type_slug"] or None,
@@ -4912,11 +4902,8 @@ def _spawn_bg_dispatch(item_id: int, title: str, cd_target: str,
 
     label = f"{_hierarchical_label_prefix(item_id, parent_id)}: {title}"
 
-    # No spawning pane / origin return for a headless agent — the bg template
-    # branch omits the tmux return lines, so return_anchor is unused.
     handoff_text = render_handoff(
-        item_id, title, None,
-        _current_session_active_task_id(),
+        item_id, title,
         worktree_path=cd_target,
         branch=_branch_for_worktree(cd_target),
         task_type=task_type,

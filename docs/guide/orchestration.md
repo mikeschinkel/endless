@@ -207,7 +207,7 @@ Any other or unset type falls back to the `task` variant.
 
 ### The handoff is generated, not authored
 
-There is nothing to write. The handoff is rendered from the per-type template (`handoff/<type>.md.tmpl`) merged with the task's id and title plus runtime context (the spawning pane, the spawning session's task). The substantive design lives in the task's `--text` plan, which the handoff tells the spawned session to read — so a prompt can no longer drift from the plan.
+There is nothing to write. The handoff is rendered from the per-type template (`handoff/<type>.md.tmpl`) merged with the task's id and title plus runtime context (its worktree and branch). The substantive design lives in the task's `--text` plan, which the handoff tells the spawned session to read — so a prompt can no longer drift from the plan.
 
 Inspect the exact text spawn will paste:
 
@@ -215,11 +215,11 @@ Inspect the exact text spawn will paste:
 endless task handoff <id>
 ```
 
-The handoff is deliberately lean — it delegates the workflow rules to `endless guide` rather than restating them. It carries: the spawned task's id and title, the spawning session's task, the `tmux select-window` line back to your window, the pointers to run `endless guide` and `endless task show <id> --text`, and the drive-to-completion rules (flip to `unverified` with how-to-test; don't `worktree land`/`drop` without asking; file drive-by work as separate tasks with `--cleans-up <id>`).
+The handoff is deliberately lean — it delegates the workflow rules to `endless guide` rather than restating them. It carries: the spawned task's id and title, the pointers to run `endless guide` and `endless task show <id> --text`, and the drive-to-completion rules (flip to `unverified` with how-to-test; don't `worktree land`/`drop` without asking; file drive-by work as separate tasks with `--cleans-up <id>`).
 
 To change what every spawned session is told, edit the template — see [Customizing handoff templates](#customizing-handoff-templates). There is no per-task prompt to maintain.
 
-Every handoff's closing `Final message` line follows one discipline: **report only what `endless session status` can't already show.** For git state it defers to `endless worktree check`, which prints one line per genuine anomaly and stays silent when the worktree is clean — so a spawned session relays whatever that command prints and otherwise says nothing about git (a branch ahead of main and the absence of stray files are not anomalies). Beyond git it surfaces state outside endless (CI, services) only when actually in play, plus the how-to-test and return line. It must **not** recap the task's status, phase, or relationships (`session status` renders those already), and must **not** confirm the negative ("no stray files", "nothing to report") — both are duplication that adds to the information overload Endless exists to reduce.
+Every handoff's closing `Final message` line follows one discipline: **report only what `endless session status` can't already show.** For git state it defers to `endless worktree check`, which prints one line per genuine anomaly and stays silent when the worktree is clean — so a spawned session relays whatever that command prints and otherwise says nothing about git (a branch ahead of main and the absence of stray files are not anomalies). Beyond git it surfaces state outside endless (CI, services) only when actually in play, plus the how-to-test. It must **not** recap the task's status, phase, or relationships (`session status` renders those already), and must **not** confirm the negative ("no stray files", "nothing to report") — both are duplication that adds to the information overload Endless exists to reduce.
 
 ### `endless task spawn`
 

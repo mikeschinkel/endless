@@ -52,8 +52,6 @@ func fullHandoffVars() string {
 		"spawned_id": 9999,
 		"label_prefix": "E-8888/E-9999",
 		"title": "Test task",
-		"spawner_task": 7777,
-		"return_anchor": "%1",
 		"worktree_path": "/tmp/wt/e-9999",
 		"branch": "task/9999-test",
 		"child_count": 0
@@ -101,7 +99,7 @@ func TestRender_FullVars_ContainsExpectedSubstitutions(t *testing.T) {
 		t.Fatalf("render: %v\nstderr: %s", err, errOut)
 	}
 	wants := []string{
-		"E-9999", "Test task", "E-7777", "%1",
+		"E-9999", "Test task",
 		"/tmp/wt/e-9999", "task/9999-test",
 		// E-1620: the hierarchical identity prefix renders on the opening line.
 		"- E-8888/E-9999: Test task.",
@@ -117,7 +115,7 @@ func TestRender_FullVars_ContainsExpectedSubstitutions(t *testing.T) {
 // partial (E-1759): every handoff type invokes `endless worktree check`
 // instead of enumerating report categories, forbids confirming the negative,
 // drops the retired "dangling tags"/"landed-vs-worktree delta" phrasing, and
-// keeps the tmux return line for non-bg while omitting it for bg. The
+// (E-1770) never emits the tmux return line for either bg or non-bg. The
 // type-specific deliverable prefix must survive the refactor. It also asserts
 // the final-message verification discipline: the verify handoffs (task, bug)
 // carry the one-command contract, while the information-deliverable handoffs
@@ -142,7 +140,7 @@ func TestRender_HandoffClose_ExceptionRule(t *testing.T) {
 				root := projectFixture(t)
 				vars := fmt.Sprintf(
 					`{"spawned_id":1,"label_prefix":"E-1","title":"T",`+
-						`"spawner_task":2,"return_anchor":"%%9","worktree_path":"/w",`+
+						`"worktree_path":"/w",`+
 						`"branch":"b","child_count":0,"children_state":"none","bg":%v}`, bg)
 				out, errOut, err := runRenderInProject(t, root, "handoff/"+c.typ, vars)
 				if err != nil {
@@ -165,12 +163,9 @@ func TestRender_HandoffClose_ExceptionRule(t *testing.T) {
 						t.Errorf("output still contains retired phrase %q\n--- output ---\n%s", w, out)
 					}
 				}
-				hasReturn := strings.Contains(out, returnLine)
-				if bg && hasReturn {
-					t.Errorf("bg output should omit the tmux return line:\n%s", out)
-				}
-				if !bg && !hasReturn {
-					t.Errorf("non-bg output should include the tmux return line:\n%s", out)
+				// E-1770: the tmux return line is gone from every variant.
+				if strings.Contains(out, returnLine) {
+					t.Errorf("output should omit the tmux return line (E-1770):\n%s", out)
 				}
 				// bg output ends the message with the background-agent note.
 				if bg && !strings.Contains(out, "You're a background agent") {

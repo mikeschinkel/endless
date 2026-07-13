@@ -27,8 +27,6 @@ def _run_render(cwd: Path, name: str = "handoff/task", vars_payload: dict | None
     payload = vars_payload if vars_payload is not None else {
         "spawned_id": 4242,
         "title": "Materialize test",
-        "spawner_task": 1565,
-        "return_anchor": "%9",
         "worktree_path": "/tmp/wt/e-4242",
         "branch": "task/4242-materialize",
         "child_count": 0,

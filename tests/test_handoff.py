@@ -2,8 +2,8 @@
 
 The handoff is rendered from per-type embedded templates under
 `templates/handoff/{task,bug,research,epic}.md.tmpl` (E-1566), merged
-with the task's id/title and runtime context (spawning pane, spawning
-session's task). E-1565 moved rendering from Python string.Template to a
+with the task's id/title and runtime context (worktree, branch).
+E-1565 moved rendering from Python string.Template to a
 shell-out to `endless-go template render`, so the test chdirs into a tmp
 project (one with a `.endless/` subdir) so the renderer can resolve a
 project context.
@@ -43,22 +43,19 @@ def _seed_project_and_parent(parent_id: int, child_count: int = 0) -> None:
         )
 
 
-def test_render_handoff_includes_task_and_return_path():
+def test_render_handoff_includes_task_and_no_return_line():
     out = render_handoff(
         spawned_id=1469,
         title="Render handoff from template",
-        return_anchor="%7",
-        spawner_task_id=1400,
         worktree_path="/repo/.endless/worktrees/e-1469",
         branch="task/1469-render-handoff",
         task_type="task",
     )
     assert "E-1469" in out
     assert "Render handoff from template" in out
-    # Return path names the spawning pane verbatim.
-    assert "tmux switch-client -t %7" in out
-    # Origin line names the spawning session's task.
-    assert "E-1400" in out
+    # E-1770: the tmux return line and the spawning-session identity are gone.
+    assert "switch-client" not in out
+    assert "spawning session's task" not in out
     # Worktree + branch substituted.
     assert "/repo/.endless/worktrees/e-1469" in out
     assert "task/1469-render-handoff" in out
@@ -75,8 +72,6 @@ def test_render_handoff_root_label_has_no_parent_prefix():
     out = render_handoff(
         spawned_id=1620,
         title="Render hierarchical labels",
-        return_anchor="%7",
-        spawner_task_id=1400,
         task_type="task",
     )
     assert "- E-1620: Render hierarchical labels." in out
@@ -87,8 +82,6 @@ def test_render_handoff_child_label_includes_parent_prefix():
     out = render_handoff(
         spawned_id=1620,
         title="Render hierarchical labels",
-        return_anchor="%7",
-        spawner_task_id=1400,
         task_type="bug",
         parent_id=1564,
     )
@@ -101,15 +94,11 @@ def test_render_handoff_degrades_without_runtime_context():
     out = render_handoff(
         spawned_id=1469,
         title="t",
-        return_anchor=None,
-        spawner_task_id=None,
         task_type=None,
     )
     # Still renders; missing context becomes visible placeholders rather
     # than crashing or leaving a blank.
     assert "E-1469" in out
-    assert "E-?" in out
-    assert "%<spawning-pane>" in out
     assert "<task worktree>" in out
     assert "<task branch>" in out
 
@@ -118,8 +107,6 @@ def test_render_handoff_bug_variant():
     out = render_handoff(
         spawned_id=2000,
         title="Crash on empty input",
-        return_anchor="%1",
-        spawner_task_id=1000,
         task_type="bug",
     )
     # Bug-specific framing.
@@ -132,8 +119,6 @@ def test_render_handoff_research_variant():
     out = render_handoff(
         spawned_id=2001,
         title="Survey caching strategies",
-        return_anchor="%1",
-        spawner_task_id=1000,
         task_type="research",
     )
     # Research-specific framing.
@@ -148,8 +133,6 @@ def test_render_handoff_epic_variant():
     out = render_handoff(
         spawned_id=2002,
         title="Migrate ingestion pipeline",
-        return_anchor="%1",
-        spawner_task_id=1000,
         task_type="epic",
     )
     # Epic-specific framing.
@@ -167,8 +150,6 @@ def test_render_handoff_unknown_type_falls_back_to_task():
     out = render_handoff(
         spawned_id=2003,
         title="x",
-        return_anchor="%1",
-        spawner_task_id=1000,
         task_type="bogus",
     )
     # Falls back to task variant: no per-type framing surfaces.
@@ -185,16 +166,12 @@ def test_render_handoff_bg_variant_omits_tmux_return():
     out = render_handoff(
         spawned_id=1568,
         title="Add --bg to spawn",
-        return_anchor="%216",
-        spawner_task_id=1564,
         task_type="task",
         bg=True,
     )
     # No tmux return lines.
     assert "tmux switch-client" not in out
     assert "tmux move-window" not in out
-    # The return-anchor pane id never leaks into bg output.
-    assert "%216" not in out
     # bg-specific framing.
     assert "headless background agent" in out
     assert "claude attach" in out
@@ -206,17 +183,17 @@ def test_render_handoff_bg_variant_omits_tmux_return():
     assert "return line above" not in out
 
 
-def test_render_handoff_fg_keeps_tmux_return():
-    """Foreground default still carries the tmux return path."""
+def test_render_handoff_fg_omits_tmux_return():
+    """E-1770: the foreground handoff no longer carries any tmux return line."""
     out = render_handoff(
         spawned_id=1568,
         title="t",
-        return_anchor="%216",
-        spawner_task_id=1564,
         task_type="task",
         bg=False,
     )
-    assert "tmux switch-client -t %216" in out
+    assert "tmux switch-client" not in out
+    assert "tmux move-window" not in out
+    assert "spawning session's task" not in out
     assert "headless background agent" not in out
 
 
@@ -226,8 +203,6 @@ def test_render_handoff_bg_variant_all_types(ttype):
     out = render_handoff(
         spawned_id=2500,
         title="x",
-        return_anchor="%9",
-        spawner_task_id=1000,
         task_type=ttype,
         bg=True,
     )
@@ -242,8 +217,6 @@ def test_render_handoff_includes_child_count_when_nonzero(count):
     out = render_handoff(
         spawned_id=2100,
         title="parent task",
-        return_anchor="%1",
-        spawner_task_id=1000,
         task_type="task",
     )
     if count == 0:

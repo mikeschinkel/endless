@@ -107,8 +107,6 @@ def _render_epic(parent_id: int) -> str:
     return render_handoff(
         spawned_id=parent_id,
         title="some epic",
-        return_anchor="%1",
-        spawner_task_id=1000,
         task_type="epic",
     )
 
@@ -165,8 +163,6 @@ def test_non_epic_render_with_children_omits_state_text(ttype):
     out = render_handoff(
         spawned_id=3200,
         title="leaf with legacy children",
-        return_anchor="%1",
-        spawner_task_id=1000,
         task_type=ttype,
     )
     # Renders successfully and names the task.
