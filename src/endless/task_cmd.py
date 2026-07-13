@@ -2111,6 +2111,53 @@ def _refuse_cascade_across_typed_descendants(item_id: int, status: str):
         )
 
 
+# E-1772: the agent-driven wind-down transitions on which we nudge the agent to
+# stop composing freeform handoffs and route all further reporting through the
+# structured `endless task report <id> --xml` command (E-1771). Deliberately
+# narrow: fires on underway->unverified, ->assumed, and ->completed (with an
+# outcome); NOT on submitted/ready/confirmed, the claim's ->underway, or the
+# revisit/declined/obsolete management transitions.
+def _is_report_wind_down(old_status: str, new_status: str, outcome_present: bool) -> bool:
+    """True when a status change is an agent's terminal wind-down (E-1772)."""
+    if old_status == new_status:
+        return False
+    if new_status == "unverified":
+        return old_status == "underway"
+    if new_status == "assumed":
+        return True
+    if new_status == "completed":
+        return outcome_present
+    return False
+
+
+def _maybe_emit_report_reminder(
+    item_id: int, old_status: str, new_status: str, outcome_present: bool
+) -> None:
+    """Print the route-reporting-through-`task report` reminder on wind-down (E-1772).
+
+    A no-op on every non-wind-down transition, so callers can invoke it
+    unconditionally after any status change."""
+    if not _is_report_wind_down(old_status, new_status, outcome_present):
+        return
+    bullet = click.style("▸", fg="yellow")
+    click.echo("")
+    click.echo(
+        bullet
+        + " Report through the command, not prose. Route this handoff — and all"
+    )
+    click.echo(
+        "  further status reporting for the rest of this session — through:"
+    )
+    click.echo(
+        "      "
+        + click.style(f"endless task report {task_id_display(item_id)} --xml", bold=True)
+    )
+    click.echo(
+        "  Feed it a validated payload and print its output verbatim; do not"
+    )
+    click.echo("  compose a freeform status message.")
+
+
 def complete_item(item_id: int, cascade: bool = False, outcome: str | None = None):
     """Mark a task as confirmed."""
     from endless.event_bridge import emit_event
@@ -2237,6 +2284,9 @@ def assume_item(item_id: int, cascade: bool = False, outcome: str | None = None)
         ) or 1
         suffix = f"(cascaded to {count - 1} descendant(s))"
     _emit_field_changes(item_id, row[0]["title"], changes, suffix=suffix)
+    _maybe_emit_report_reminder(
+        item_id, row[0]["status"], "assumed", bool(outcome and outcome.strip())
+    )
 
 
 def mark_completed_item(item_id: int, outcome: str):
@@ -2294,6 +2344,9 @@ def mark_completed_item(item_id: int, outcome: str):
         ("outcome", None, outcome),
     ]
     _emit_field_changes(item_id, row[0]["title"], changes)
+    _maybe_emit_report_reminder(
+        item_id, row[0]["status"], "completed", bool(outcome and outcome.strip())
+    )
 
 
 def decline_item(item_id: int, reason: str):
@@ -3604,6 +3657,15 @@ def update_plan(
     # Header title reflects the new title if it was changed in this update.
     header_title = fields.get("title", row[0]["title"]) or row[0]["description"]
     _emit_field_changes(item_id, header_title, changes)
+
+    # E-1772: nudge toward `endless task report` on an agent's wind-down. Only
+    # when this update actually set a status; effective_outcome covers the
+    # "outcome authored earlier, status flipped now" workflow the same way the
+    # completed-gate above does.
+    if status is not None:
+        _maybe_emit_report_reminder(
+            item_id, row[0]["status"], status, bool(effective_outcome and effective_outcome.strip())
+        )
 
 
 def recover_task_text(item_id: int, text: str) -> None:
