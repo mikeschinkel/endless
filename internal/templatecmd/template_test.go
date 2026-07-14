@@ -119,7 +119,9 @@ func TestRender_FullVars_ContainsExpectedSubstitutions(t *testing.T) {
 // type-specific deliverable prefix must survive the refactor. It also asserts
 // the final-message verification discipline: the verify handoffs (task, bug)
 // carry the one-command contract, while the information-deliverable handoffs
-// (epic, research, brainstorm) carry the anti-checklist prohibition.
+// (epic, research, brainstorm) carry the anti-checklist prohibition. E-1773
+// adds two more lines every partial-using type must carry: reporting routed
+// through `endless task report` and the `FULL STATUS` per-response bypass.
 func TestRender_HandoffClose_ExceptionRule(t *testing.T) {
 	returnLine := "tmux move-window -t archive:"
 	cases := []struct {
@@ -151,6 +153,11 @@ func TestRender_HandoffClose_ExceptionRule(t *testing.T) {
 					`do NOT confirm the negative`,
 					c.prefix,
 					c.contract,
+					// E-1773: the shared close now routes reporting through the
+					// `endless task report` command and carries the FULL STATUS
+					// per-response bypass keyword.
+					"endless task report",
+					"FULL STATUS",
 				}
 				for _, w := range mustContain {
 					if !strings.Contains(out, w) {
