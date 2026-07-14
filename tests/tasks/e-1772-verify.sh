@@ -142,6 +142,23 @@ assert_str_not_contains() {
     report_fail "${desc}" "output does NOT contain: ${pattern}" "${output}"
 }
 
+# assert_runs_and_contains DESC PATTERN CMD [ARGS...]
+#   Pass if CMD exits 0 AND its combined output contains PATTERN. Used to prove
+#   the command the reminder names is actually live end-to-end.
+assert_runs_and_contains() {
+    local desc="$1"
+    local pattern="$2"
+    shift 2
+    local output rc
+    output=$("$@" 2>&1)
+    rc=$?
+    if [[ "${rc}" -eq 0 ]] && [[ "${output}" == *"${pattern}"* ]]; then
+        report_pass "${desc}"
+        return
+    fi
+    report_fail "${desc}" "exit 0 AND contains: ${pattern}" "exit=${rc} | ${output}"
+}
+
 # ─── the reminder fires on wind-down transitions ──────────────────────────────
 
 test_fires_on_wind_down() {
@@ -200,6 +217,36 @@ test_silent_on_excluded() {
         "${MARKER}" "${out}"
 }
 
+# ─── the command the reminder names is actually live ──────────────────────────
+#
+# The checks above only prove the reminder TEXT fires. This section runs the
+# command the reminder points agents at, so a rename/removal of `task report`
+# (which would leave the reminder pointing at a dead command) fails loudly here
+# instead of shipping a broken nudge. The `--json` semantics themselves live
+# with E-1771 (tests/test_task_report.py); this only confirms the advertised
+# surface resolves and runs.
+
+test_reminded_command_is_live() {
+    section "The reminded command is live (endless task report)"
+
+    local tid
+    tid=$(underway_task "Fix the e1772 live-command check")
+    endless task update "${tid}" --status unverified >/dev/null 2>&1
+
+    # The reminder's primary path: bare, no payload.
+    assert_runs_and_contains "bare 'task report' runs and emits the steer prompt" \
+        "Report the following to the user" \
+        endless task report "${tid}"
+
+    # The escape hatch the reminder advertises: a genuine out-of-band note. The
+    # per-entry ceremony check fail-opens without the classifier binary, so a
+    # real note renders deterministically here.
+    assert_runs_and_contains "'task report --json' renders a genuine out-of-band note" \
+        "staging Redis instance is running 6.2" \
+        endless task report "${tid}" \
+        --json '{"notes":[{"kind":"discovery","text":"The staging Redis instance is running 6.2, not 7.0 as the deploy doc claims"}]}'
+}
+
 # ─── main ───────────────────────────────────────────────────────────────────
 
 main() {
@@ -234,6 +281,7 @@ main() {
 
     test_fires_on_wind_down
     test_silent_on_excluded
+    test_reminded_command_is_live
 
     summary
 }
