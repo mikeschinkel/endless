@@ -2113,7 +2113,7 @@ def _refuse_cascade_across_typed_descendants(item_id: int, status: str):
 
 # E-1772: the agent-driven wind-down transitions on which we nudge the agent to
 # stop composing freeform handoffs and route all further reporting through the
-# structured `endless task report <id> --xml` command (E-1771). Deliberately
+# `endless task report <id>` steering-prompt command (E-1771). Deliberately
 # narrow: fires on underway->unverified, ->assumed, and ->completed (with an
 # outcome); NOT on submitted/ready/confirmed, the claim's ->underway, or the
 # revisit/declined/obsolete management transitions.
@@ -2150,12 +2150,12 @@ def _maybe_emit_report_reminder(
     )
     click.echo(
         "      "
-        + click.style(f"endless task report {task_id_display(item_id)} --xml", bold=True)
+        + click.style(f"endless task report {task_id_display(item_id)}", bold=True)
     )
     click.echo(
-        "  Feed it a validated payload and print its output verbatim; do not"
+        "  Relay its output verbatim; add nothing. Add --json only for"
     )
-    click.echo("  compose a freeform status message.")
+    click.echo("  genuinely out-of-band notes or open questions.")
 
 
 def complete_item(item_id: int, cascade: bool = False, outcome: str | None = None):

@@ -2,8 +2,8 @@
 
 When an agent sets a task to a terminal wind-down status, the status-update
 command prints a reminder nudging it to route this handoff — and all further
-reporting for the rest of the session — through `endless task report <id>
---xml` (the structured command built in E-1771), instead of composing a
+reporting for the rest of the session — through `endless task report <id>`
+(the steering-prompt command built in E-1771), instead of composing a
 freeform status message.
 
 The reminder fires ONLY on the agent-driven wind-down transitions:
@@ -19,9 +19,9 @@ import pytest
 
 from endless import db, task_cmd
 
-# Stable substring of the reminder — the pointer at the structured command.
-# The reminder renders `endless task report E-<id> --xml`; this fragment is
-# what proves the nudge fired regardless of the surrounding prose.
+# Stable substring of the reminder — the pointer at the report command.
+# The reminder renders `endless task report E-<id>`; this fragment is what
+# proves the nudge fired regardless of the surrounding prose.
 _MARKER = "endless task report"
 
 
@@ -78,7 +78,7 @@ def test_update_underway_to_unverified_fires(seeded_project_at_cwd, capsys):
     task_cmd.update_plan(tid, status="unverified")
     out = capsys.readouterr().out
     assert _MARKER in out
-    assert f"endless task report E-{tid} --xml" in out
+    assert f"endless task report E-{tid}" in out
 
 
 def test_assume_item_fires(seeded_project_at_cwd, capsys):

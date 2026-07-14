@@ -4,7 +4,7 @@
 #
 # When an agent sets a task to a terminal wind-down status, the status-update
 # command prints a reminder to route this handoff (and all further reporting
-# for the rest of the session) through `endless task report <id> --xml`. It
+# for the rest of the session) through `endless task report <id>`. It
 # fires ONLY on underway->unverified, ->assumed, and ->completed (with an
 # outcome); NOT on submitted/ready/confirmed, the claim's ->underway, or the
 # revisit/declined/obsolete management transitions.
@@ -152,8 +152,8 @@ test_fires_on_wind_down() {
     out=$(endless task update "${tid}" --status unverified 2>&1)
     assert_str_contains "underway->unverified emits the report pointer" \
         "${MARKER}" "${out}"
-    assert_str_contains "pointer carries the task id and --xml" \
-        "endless task report ${tid} --xml" "${out}"
+    assert_str_contains "pointer carries the task id" \
+        "endless task report ${tid}" "${out}"
 
     tid=$(underway_task "Fix the e1772 assume path")
     out=$(endless task assume "${tid}" --outcome "believed correct" 2>&1)
