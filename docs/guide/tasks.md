@@ -179,6 +179,31 @@ endless task replace <id> --by <new_id>              # supersede with another ta
 
 ---
 
+## Reporting to your user
+
+When you reach a terminal status — or your user asks where the work stands —
+generate the end-of-session / status report rather than composing one by hand:
+
+```bash
+endless task report <id>
+```
+
+It computes the facts it can (status, follow-ups, children, worktree state) and
+prints a steering prompt telling you to relay **only those facts, verbatim —
+plainly, no ceremony**. It is status-agnostic (run it at whatever status you
+reached) and **does not change the task's status**.
+
+**Report by default.** End-of-session and status reports route through this
+command and are relayed as-is; don't write them as freeform prose. The normal
+path takes **no payload**.
+
+For a genuinely out-of-band note (an anomaly or discovery the command can't
+compute) or an open question for the user, pass `--json` / `--json-file`. The
+exact payload shape lives in `endless task report --help` — the single canonical
+home; read it there rather than duplicating it here.
+
+---
+
 ## Removing and moving
 
 ```bash
