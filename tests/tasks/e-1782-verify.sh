@@ -22,8 +22,9 @@
 #      posture, and points at `endless task report --help` for the payload shape.
 #   2. tasks.md does NOT inline the --json payload schema (deferred to --help).
 #   3. docs/guide/index.md happy path names `endless task report`.
-#   4. Cross-reference resolves: `endless task report --help` prints the
-#      `endless guide tasks` agent directive, and `just guide-check` exits 0.
+#   4. Cross-reference resolves: guide_map.load_map('task report') → the tasks
+#      section (deterministic, render-independent), and `just guide-check`
+#      exits 0 (map + generated index in sync).
 #
 # Output: pass/fail per check, then a summary. Exit 0 all-passed, 1 any failure,
 # 2 setup error.
@@ -148,13 +149,17 @@ check_index_pointer() {
 
 check_cross_reference() {
     section "4 — cross-reference resolves 'task report' → tasks section"
-    local help_out rc
-    # Render the real --help directive from the WORKTREE source (editable global
-    # install points at main, so route explicitly through this checkout).
-    help_out=$(cd "${REPO_ROOT}" && uv run --directory "${REPO_ROOT}" \
-        endless task report --help 2>/dev/null)
-    assert_contains "'endless task report --help' steers to the tasks guide" \
-        "${help_out}" "endless guide tasks"
+    local sections rc
+    # Ask the guide map's own resolver (walks up to task.md; no task-report.md
+    # override exists, so it inherits the group's section). Deterministic and
+    # render-independent — unlike the --help agent directive, which is only
+    # prepended in an agent context. Route through the WORKTREE source (the
+    # editable global install points at the main checkout).
+    sections=$(uv run --directory "${REPO_ROOT}" python -c \
+        "from endless.guide_map import load_map; e = load_map('task report'); print(','.join(e.sections) if e else '')" \
+        2>/dev/null)
+    assert_contains "load_map('task report') resolves to the tasks section" \
+        "${sections}" "tasks"
 
     section "4b — guide map + generated index are in sync"
     local check_out
