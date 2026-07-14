@@ -17,12 +17,22 @@ the revisit/declined/obsolete management transitions.
 
 import pytest
 
-from endless import db, task_cmd
+from endless import agent_help, db, task_cmd
 
 # Stable substring of the reminder — the pointer at the report command.
 # The reminder renders `endless task report E-<id>`; this fragment is what
 # proves the nudge fired regardless of the surrounding prose.
 _MARKER = "endless task report"
+
+
+@pytest.fixture(autouse=True)
+def _agent_gate_open(monkeypatch):
+    """Default the reminder's agent gate OPEN so the behavior tests exercise the
+    transition logic, not the gate. The gate itself (agent vs. human vs.
+    --agent-view) is tested explicitly below, each overriding this. Also pins
+    --agent-view OFF so it never leaks in from the ambient CLI state."""
+    monkeypatch.setattr(task_cmd, "_running_under_agent", lambda: True)
+    monkeypatch.setattr(agent_help, "_AGENT_VIEW", False)
 
 
 def _add_task(title: str, status: str = "underway", type_id: int = 1) -> int:
@@ -136,3 +146,35 @@ def test_non_status_update_does_not_fire(seeded_project_at_cwd, capsys):
     tid = _add_task("Fix the icon", status="underway")
     task_cmd.update_plan(tid, description="new description")
     assert not _fired(capsys)
+
+
+# ─── the agent gate: agent vs. human vs. --agent-view ─────────────────────────
+#
+# The reminder steers an agent. A human running the same wind-down command
+# interactively must not see it; a human can opt in with the global
+# --agent-view flag to preview what an agent sees.
+
+
+def test_agent_session_fires(seeded_project_at_cwd, capsys, monkeypatch):
+    monkeypatch.setattr(task_cmd, "_running_under_agent", lambda: True)
+    monkeypatch.setattr(agent_help, "_AGENT_VIEW", False)
+    tid = _add_task("Fix the agent-session path", status="underway")
+    task_cmd.update_plan(tid, status="unverified")
+    assert _fired(capsys)
+
+
+def test_human_invocation_stays_silent(seeded_project_at_cwd, capsys, monkeypatch):
+    monkeypatch.setattr(task_cmd, "_running_under_agent", lambda: False)
+    monkeypatch.setattr(agent_help, "_AGENT_VIEW", False)
+    tid = _add_task("Fix the human path", status="underway")
+    task_cmd.update_plan(tid, status="unverified")
+    assert not _fired(capsys)
+
+
+def test_agent_view_flag_lets_human_preview(seeded_project_at_cwd, capsys, monkeypatch):
+    # Not an agent session, but the human passed --agent-view (sets _AGENT_VIEW).
+    monkeypatch.setattr(task_cmd, "_running_under_agent", lambda: False)
+    monkeypatch.setattr(agent_help, "_AGENT_VIEW", True)
+    tid = _add_task("Fix the agent-view path", status="underway")
+    task_cmd.update_plan(tid, status="unverified")
+    assert _fired(capsys)

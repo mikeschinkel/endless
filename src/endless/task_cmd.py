@@ -2136,7 +2136,17 @@ def _maybe_emit_report_reminder(
     """Print the route-reporting-through-`task report` reminder on wind-down (E-1772).
 
     A no-op on every non-wind-down transition, so callers can invoke it
-    unconditionally after any status change."""
+    unconditionally after any status change.
+
+    The reminder steers an *agent*; a human running `task assume`/`complete`
+    interactively should not see it. So it fires only when the invoker is an
+    agent (CLAUDECODE=1) or a human explicitly asked to preview the agent's
+    view with the global `--agent-view` flag — the same gate the agent `--help`
+    augmentation uses."""
+    from endless.agent_help import agent_view_requested
+
+    if not (_running_under_agent() or agent_view_requested()):
+        return
     if not _is_report_wind_down(old_status, new_status, outcome_present):
         return
     bullet = click.style("▸", fg="yellow")

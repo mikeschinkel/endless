@@ -9,6 +9,10 @@
 # outcome); NOT on submitted/ready/confirmed, the claim's ->underway, or the
 # revisit/declined/obsolete management transitions.
 #
+# It is also agent-gated: the nudge steers an agent, so it shows only when the
+# invoker is an agent (CLAUDECODE=1) or a human previews with --agent-view. A
+# bare human shell sees nothing.
+#
 # Run from anywhere inside the worktree:
 #   ./tests/tasks/e-1772-verify.sh
 #
@@ -164,26 +168,29 @@ assert_runs_and_contains() {
 test_fires_on_wind_down() {
     section "Fires on agent wind-down transitions"
 
+    # --agent-view forces the agent gate open regardless of the ambient
+    # CLAUDECODE, so these assert the *transition* logic deterministically
+    # (agent-vs-human gating is its own section below).
     local tid out
     tid=$(underway_task "Fix the e1772 unverified path")
-    out=$(endless task update "${tid}" --status unverified 2>&1)
+    out=$(endless task update "${tid}" --status unverified --agent-view 2>&1)
     assert_str_contains "underway->unverified emits the report pointer" \
         "${MARKER}" "${out}"
     assert_str_contains "pointer carries the task id" \
         "endless task report ${tid}" "${out}"
 
     tid=$(underway_task "Fix the e1772 assume path")
-    out=$(endless task assume "${tid}" --outcome "believed correct" 2>&1)
+    out=$(endless task assume "${tid}" --outcome "believed correct" --agent-view 2>&1)
     assert_str_contains "'task assume' emits the report pointer" \
         "${MARKER}" "${out}"
 
     tid=$(underway_task "Fix the e1772 update-assumed path")
-    out=$(endless task update "${tid}" --status assumed --outcome "believed correct" 2>&1)
+    out=$(endless task update "${tid}" --status assumed --outcome "believed correct" --agent-view 2>&1)
     assert_str_contains "update --status assumed emits the report pointer" \
         "${MARKER}" "${out}"
 
     tid=$(underway_task "Audit the e1772 complete path")
-    out=$(endless task complete "${tid}" --outcome "findings: none material" 2>&1)
+    out=$(endless task complete "${tid}" --outcome "findings: none material" --agent-view 2>&1)
     assert_str_contains "'task complete' emits the report pointer" \
         "${MARKER}" "${out}"
 }
@@ -193,27 +200,50 @@ test_fires_on_wind_down() {
 test_silent_on_excluded() {
     section "Silent on excluded transitions"
 
+    # --agent-view here too: silence must come from the TRANSITION being
+    # excluded, not from the agent gate happening to be closed.
     local tid out
     tid=$(add_task_get_id "Fix the e1772 claim path")
     endless task update "${tid}" --status ready >/dev/null 2>&1
-    out=$(endless task update "${tid}" --status underway 2>&1)
+    out=$(endless task update "${tid}" --status underway --agent-view 2>&1)
     assert_str_not_contains "ready->underway (claim) stays silent" \
         "${MARKER}" "${out}"
 
     tid=$(underway_task "Fix the e1772 confirm path")
     endless task update "${tid}" --status unverified >/dev/null 2>&1
-    out=$(endless task confirm "${tid}" 2>&1)
+    out=$(endless task confirm "${tid}" --agent-view 2>&1)
     assert_str_not_contains "unverified->confirmed (user verify) stays silent" \
         "${MARKER}" "${out}"
 
     tid=$(add_task_get_id "Fix the e1772 submit path")
-    out=$(endless task submit "${tid}" 2>&1)
+    out=$(endless task submit "${tid}" --agent-view 2>&1)
     assert_str_not_contains "unplanned->submitted stays silent" \
         "${MARKER}" "${out}"
 
     tid=$(underway_task "Fix the e1772 decline path")
-    out=$(endless task decline "${tid}" --reason "not doing it" 2>&1)
+    out=$(endless task decline "${tid}" --reason "not doing it" --agent-view 2>&1)
     assert_str_not_contains "underway->declined stays silent" \
+        "${MARKER}" "${out}"
+}
+
+# ─── the agent gate: agent / --agent-view show it, a bare human does not ───────
+
+test_agent_gated() {
+    section "Agent-gated: humans don't see the agent nudge"
+
+    local tid out
+    # A bare human shell has no CLAUDECODE and passes no flag: silent even on a
+    # genuine wind-down transition.
+    tid=$(underway_task "Fix the e1772 human-silent path")
+    out=$(env -u CLAUDECODE uv run endless task update "${tid}" --status unverified --db sandbox 2>&1)
+    assert_str_not_contains "bare human invocation stays silent on underway->unverified" \
+        "${MARKER}" "${out}"
+
+    # Same transition, same non-agent env, but the human opts in with
+    # --agent-view to preview what an agent sees: fires.
+    tid=$(underway_task "Fix the e1772 agent-view-preview path")
+    out=$(env -u CLAUDECODE uv run endless task update "${tid}" --status unverified --agent-view --db sandbox 2>&1)
+    assert_str_contains "--agent-view lets a human preview the nudge" \
         "${MARKER}" "${out}"
 }
 
@@ -281,6 +311,7 @@ main() {
 
     test_fires_on_wind_down
     test_silent_on_excluded
+    test_agent_gated
     test_reminded_command_is_live
 
     summary
