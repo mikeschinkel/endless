@@ -1723,6 +1723,38 @@ def task_assume(item_ids, cascade, outcome, outcome_file, allow_paths):
         assume_item(item_id, cascade=cascade, outcome=outcome)
 
 
+@task_cmd.command("report")
+@click.argument("item_id", type=TASK_ID)
+@click.option("--json", "payload", default=None,
+              help='Structured report payload, inline JSON: '
+                   '{"notes":[{"kind":"anomaly|discovery","text":"…"}],'
+                   '"questions":[{"text":"…","type":"text|integer|real|boolean|choice","style":"…"}]}')
+@click.option("--json-file", "payload_file", default=None,
+              help="Load the report payload from a JSON file")
+def task_report(item_id, payload, payload_file):
+    """Produce an end-of-session (or status) report for a task.
+
+    The command computes the facts it can (status, follow-ups, children,
+    worktree state) and prints a steering prompt telling you to relay only
+    those facts to the user — plainly, no ceremony. The normal path is no
+    payload at all. Supply --json only for genuinely non-computable notes
+    (out-of-band anomalies/discoveries) or open questions for the user; each
+    free-text entry is checked and a ceremonial one is bounced.
+
+    Status-agnostic: run it at whatever terminal status you reached. It does
+    not change the task's status.
+    """
+    from endless.report_cmd import report_item
+    if payload is not None and payload_file is not None:
+        raise click.ClickException("Pass either --json or --json-file, not both.")
+    if payload_file is not None:
+        p = Path(payload_file).expanduser()
+        if not p.exists():
+            raise click.ClickException(f"File not found: {p}")
+        payload = p.read_text()
+    report_item(item_id, payload)
+
+
 @task_cmd.command("decline")
 @click.argument("item_ids", type=TASK_ID, nargs=-1, required=True)
 @click.option("--reason", required=True,

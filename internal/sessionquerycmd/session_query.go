@@ -70,6 +70,11 @@ func Run(args []string) {
 		}
 	case "worktree-anomalies":
 		os.Exit(runWorktreeAnomalies(args[1:]))
+	case "task-report":
+		if err := runTaskReport(args[1:]); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
 	case "trail":
 		if err := runTrail(args[1:]); err != nil {
 			fmt.Fprintln(os.Stderr, err)
@@ -113,6 +118,29 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "                                    JSON array of navigation edges newest-first (no --client = all clients)")
 	fmt.Fprintln(os.Stderr, "  resume-target --ref <task-id|session-id|uuid>")
 	fmt.Fprintln(os.Stderr, "                                    JSON {endless_id, session_id, active_task_id, worktree_path, state} to relaunch a lost session")
+	fmt.Fprintln(os.Stderr, "  task-report --id <task-id>        JSON {task_id, status, landed, successors[], children[]} of a task's computed report facts (E-1771)")
+}
+
+// runTaskReport prints the computed, non-agent-supplied facts for a `task
+// report` (E-1771) as JSON: the focal task's status, whether it has landed, its
+// downstream successors, and its children — each related task carrying its
+// current status. The Python reporting command renders these into a steering
+// prompt so the agent never types a fact the tool can compute. Read-only; no
+// persistence (that is E-1777).
+func runTaskReport(args []string) error {
+	fs := flag.NewFlagSet("task-report", flag.ContinueOnError)
+	id := fs.Int64("id", 0, "task id")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *id == 0 {
+		return fmt.Errorf("--id is required")
+	}
+	facts, err := monitor.BuildTaskReportFacts(*id)
+	if err != nil {
+		return fmt.Errorf("build report facts for E-%d: %w", *id, err)
+	}
+	return json.NewEncoder(os.Stdout).Encode(facts)
 }
 
 // runResumeTarget prints the JSON a `session resume` needs to relaunch a lost
