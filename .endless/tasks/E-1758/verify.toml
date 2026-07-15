@@ -1,0 +1,28 @@
+# Verification suite for E-1758 — the worktree-anomaly check.
+#
+# Reference exemplar for a "txtar + gotest" suite (E-1596/E-1605). Both checks are
+# first-class `gotest` runners: Endless translates each `tests` selection into
+# `go test -run` and captures the `-json` stream, then normalizes to CTRF. The
+# manifest is a POINTER — it names tests that live where Go tests normally live
+# (internal/monitor), it does not re-describe them. There is no separate testscript
+# runner or format: a .txtar suite is just a Go test (TestWorktreeCheckScripts)
+# calling testscript.Run, so it is captured like any other gotest check.
+
+schema = 1
+task   = "E-1758"
+
+# Unit tests for the anomaly core — monitor.WorktreeAnomaliesAt and its helpers,
+# the single definition of a genuine handoff anomaly that both `worktree check`
+# and `session status` consume.
+[[check]]
+runner = "gotest"
+tests  = ["TestWorktreeAnomaliesAt", "TestUserStatusPaths", "TestIsAutoManagedPath", "TestWorktreeAnomalyLine"]
+paths  = ["./internal/monitor/..."]
+
+# End-to-end CLI check (the txtar showcase): the testscript harness builds the real
+# endless-go binary and drives `session-query worktree-anomalies` against throwaway
+# git repos in the .txtar scripts, asserting the terse anomaly lines and exit code.
+[[check]]
+runner = "gotest"
+tests  = ["TestWorktreeCheckScripts"]
+paths  = ["./internal/monitor/..."]

@@ -11,6 +11,7 @@ require (
 	github.com/mikeschinkel/go-doterr v0.2.0
 	github.com/mikeschinkel/go-dt v0.6.0
 	github.com/modelcontextprotocol/go-sdk v0.3.0
+	github.com/rogpeppe/go-internal v1.14.1
 	github.com/templui/templui v1.9.5
 	github.com/yuin/goldmark v1.8.2
 	modernc.org/sqlite v1.48.2
@@ -49,6 +50,7 @@ require (
 	golang.org/x/oauth2 v0.35.0 // indirect
 	golang.org/x/sys v0.42.0 // indirect
 	golang.org/x/term v0.40.0 // indirect
+	golang.org/x/tools v0.42.0 // indirect
 	modernc.org/libc v1.70.0 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect

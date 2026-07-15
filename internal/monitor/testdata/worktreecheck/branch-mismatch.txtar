@@ -1,0 +1,18 @@
+# HEAD on a branch other than the companion's declared branch is an anomaly.
+# The .endless/ companion dir is gitignored so it does not ALSO trip the
+# untracked-user-files check — isolating the branch-mismatch signal.
+
+exec git init -b main
+exec git add .gitignore tracked.txt
+exec git commit -m initial
+
+! exec endless-go session-query worktree-anomalies --worktree-path $WORK --project-root $WORK
+stdout 'branch-mismatch: on main, expected task/other'
+! stdout uncommitted
+
+-- .gitignore --
+.endless/
+-- tracked.txt --
+committed content
+-- .endless/worktree.json --
+{"kind":"task","task_id":"E-1","branch":"task/other"}

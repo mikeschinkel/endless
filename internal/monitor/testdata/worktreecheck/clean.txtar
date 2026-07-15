@@ -1,0 +1,12 @@
+# A committed, on-branch worktree with no user dirt is CLEAN: the anomaly command
+# prints nothing and exits 0. Empty output IS the representation of clean (E-1758).
+
+exec git init -b main
+exec git add file.txt
+exec git commit -m initial
+
+exec endless-go session-query worktree-anomalies --worktree-path $WORK --project-root $WORK
+! stdout .
+
+-- file.txt --
+committed content

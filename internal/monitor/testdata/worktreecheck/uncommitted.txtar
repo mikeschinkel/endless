@@ -1,0 +1,15 @@
+# An untracked USER file (not one of endless's auto-managed paths) is a genuine
+# handoff anomaly: the command reports it and exits non-zero (1 = anomalies).
+
+exec git init -b main
+exec git add tracked.txt
+exec git commit -m initial
+
+# stray.txt is left on disk but never committed -> untracked user work.
+! exec endless-go session-query worktree-anomalies --worktree-path $WORK --project-root $WORK
+stdout 'uncommitted: 1 uncommitted/untracked user file \(stray\.txt\)'
+
+-- tracked.txt --
+committed content
+-- stray.txt --
+uncommitted content

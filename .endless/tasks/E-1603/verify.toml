@@ -1,0 +1,27 @@
+# Verification suite for E-1603 — the `endless verify` Tier-0 runner.
+#
+# Reference exemplar for a multi-runner suite (E-1596/E-1605): a first-class
+# `gotest` check over the runner's own Go packages, plus a raw `sh` check whose
+# TAP output drives the runner end to end against throwaway fixtures. Both
+# normalize and MERGE into one CTRF report — the first real proof of
+# discover -> isolate -> capture -> normalize -> merge with more than one runner.
+#
+# NOTE: a first-class `pytest` check over the Python `task verify` wrapper is
+# planned for this same manifest but is deferred until the runner/adapter
+# architecture is decided (it is gated on a blocking brainstorm); it slots in
+# here as a third [[check]] once the pytest form lands.
+
+schema = 1
+task   = "E-1603"
+
+# Unit tests for the runner and its manifest/normalizer dependencies.
+[[check]]
+runner = "gotest"
+paths  = ["./internal/verify/...", "./internal/verifycmd/..."]
+
+# End-to-end TAP check: drives endless-go verify against passing/failing/unknown
+# fixture suites and asserts the pass/fail summary and exit-code contract.
+[[check]]
+runner  = "sh"
+command = "sh .endless/tasks/E-1603/e2e.sh"
+format  = "tap"
