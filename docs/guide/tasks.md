@@ -84,8 +84,9 @@ endless task add "Title here" --tier 1               # 1-4 or auto|quick|deep|di
 endless task add "Title here" --blocked-by E-100     # also: --blocks, --relates-to,
                                                      # --implements, --cleans-up,
                                                      # --cleaned-up-by (all repeatable)
-endless task add "Title here" --decision "<rationale>"  # creates paired decision-type task
 ```
+
+To record a decision prompted by a task, use `endless decision add "..." --about <id>` — see `endless guide decisions`. (There is no `--decision` flag on `task add` or `task update`.)
 
 Use the task ID printed by `task add` **literally**. IDs advance globally across parallel sessions — never guess.
 
@@ -154,7 +155,6 @@ endless task update <id> --tier 2
 endless task update <id> --parent 444                # move under different parent
 endless task update <id> --parent 0                  # make it a root
 endless task update <id> --outcome "What was done"
-endless task update <id> --decision "<rationale>"    # creates paired decision task
 endless task update <id> <id2> ... --status ready    # bulk update
 ```
 
@@ -236,7 +236,7 @@ endless task unlink <a> --to <b> --type implements
 | `relates_to`    | A and B share context but neither blocks the other. The weakest typed link. Reach for it when nothing more specific fits. |
 | `implements`    | A is the implementation of a plan, idea, or decision recorded in B. Common pattern: B is type=`plan` or type=`decision`, A is the work. |
 | `cleans_up` / `cleaned_up_by` | A handles a loose end discovered while working on B. **This is the canonical "follow-up" link** — use it for follow-up tasks filed mid-stream. (We considered `follows_up` and rejected it in favor of `cleans_up` to keep the vocabulary tight.) |
-| `documents`    | A is a decision that explains B. Auto-created when you use `--decision "..."` on `task add` / `task update`.              |
+| `documents`    | A is a decision that explains B. Auto-created when you pass `--about <task>` to `endless decision add`.              |
 | `replaces`     | A supersedes B (B is now obsolete). Typically paired with `task replace`.                                                 |
 
 **Quick decision tree:**

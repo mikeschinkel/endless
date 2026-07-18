@@ -30,20 +30,19 @@ When you're not sure which you heard, **ask before writing**. A wrongly-recorded
 
 **Don't self-cite.** If you wrote a decision yesterday and you're now treating it as established convention, verify with `git blame` or with your user first. Your own prior plans are not authority (see also the user's session-memory notes if any).
 
-## Inline `--decision` is the preferred form
+## Pairing a decision to its task is the preferred form
 
-The cheapest way to record a decision is inline, on the task that prompted it:
+The cheapest way to record a decision is to tie it to the task that prompted it, with `--about`:
 
 ```bash
-endless task add "Verb-first title" --decision "Why we chose this approach over the alternatives."
-endless task update <id> --decision "Why we changed the approach."
+endless decision add "Statement of the decision" --about <id>
 ```
 
-This creates a paired decision-type task and links it to the originating task via a `documents` relation. The decision is searchable, reviewable, and tied to context.
+`--about` links the new decision to the originating task via a `documents` relation, so the decision is searchable, reviewable, and tied to context. It's repeatable, and can be combined with `--decides` (see below).
 
-## Explicit creation
+## The full form
 
-For decisions without a single triggering task, or for cross-cutting choices:
+The same command takes a longer description and additional links — use `--decides` for a decision that settles a task, and omit `--about` for a cross-cutting choice with no single triggering task:
 
 ```bash
 endless decision add "Statement of the decision" \
@@ -98,5 +97,5 @@ What doesn't:
 
 ## See also
 
-- `endless guide tasks` — `--decision` flag on task add/update
+- `endless guide tasks` — the `documents` relation between a decision and its task
 - `endless guide` (index) — status semantics, when transitions warrant a decision

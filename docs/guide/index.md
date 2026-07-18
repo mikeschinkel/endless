@@ -123,8 +123,8 @@ endless task recent                              # recently updated
 # Record a new task discovered during work — use the literal ID printed
 endless task add "Verb-first title" --parent <current_id> --description "..."
 
-# Record a decision discovered during work (creates a paired decision task)
-endless task update <current_id> --decision "Why we picked X over Y."
+# Record a decision discovered during work (links to the current task via `documents`)
+endless decision add "Statement of the decision" --about <current_id>
 
 # Mark for replanning
 endless task update <id> --status revisit
