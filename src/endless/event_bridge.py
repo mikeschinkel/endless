@@ -94,8 +94,8 @@ def emit_event(
     Returns the parsed JSON output (contains ts, kind, and
     optionally id for created tasks), or None if stdout was empty.
 
-    `session_id` populates `actor.session_id` on the emitted event so per-
-    session activity queries can later filter events by session. When None,
+    `session_id` populates `actor.session_id` on the emitted event so
+    events can be attributed to the session that caused them. When None,
     the resolver `_resolve_session_id_with_prompt()` (from task_cmd) is
     called automatically — so most callers don't need to pass it. That
     resolver prompts on a tty when n>1 sibling Claude panes are alive
