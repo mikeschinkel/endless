@@ -425,3 +425,107 @@ def test_task_unlink_to_decision_removes_task_deps_row(isolated_env):
     assert result.exit_code == 0, result.output
     rows = list(db.query("SELECT * FROM task_deps"))
     assert rows == []
+
+
+# ────────────────────────────────────────────────────────────────────────
+# decision update (E-1533) — edit title/description in place
+#
+# The emit_event path (Go binary) and the .md-mirror rewrite are exercised
+# end-to-end by tests/tasks/e-1533-verify.sh against an isolated sandbox.
+# These unit tests cover the Python-side validation guards and the payload
+# shape (with emit_event / mirror stubbed) so no Go binary is required.
+# ────────────────────────────────────────────────────────────────────────
+
+
+def _stub_update_emit(monkeypatch):
+    """Patch emit_event + the .md mirror; return the captured-calls lists."""
+    from endless import decision_cmd, event_bridge
+
+    emitted: list = []
+    mirrored: list = []
+    monkeypatch.setattr(
+        event_bridge, "emit_event",
+        lambda **kw: emitted.append(kw) or {"id": "ED-1"},
+    )
+    monkeypatch.setattr(
+        decision_cmd, "_mirror_decision_body",
+        lambda *a, **kw: mirrored.append((a, kw)),
+    )
+    return emitted, mirrored
+
+
+def test_decision_update_unknown_id_errors(isolated_env):
+    import click
+    _seed_project()
+    with pytest.raises(click.ClickException) as exc:
+        decision_cmd.update_decision(9999, title="X")
+    assert "9999" in str(exc.value.message)
+
+
+def test_decision_update_no_flags_errors(isolated_env):
+    import click
+    pid = _seed_project()
+    did = _add_decision(pid, "D")
+    with pytest.raises(click.ClickException) as exc:
+        decision_cmd.update_decision(did)
+    assert "Nothing to update" in str(exc.value.message)
+
+
+def test_decision_update_empty_title_errors(isolated_env):
+    import click
+    pid = _seed_project()
+    did = _add_decision(pid, "D")
+    with pytest.raises(click.ClickException) as exc:
+        decision_cmd.update_decision(did, title="   ")
+    assert "may not be empty" in str(exc.value.message)
+
+
+def test_decision_update_record_that_title_errors(isolated_env):
+    import click
+    pid = _seed_project()
+    did = _add_decision(pid, "D")
+    with pytest.raises(click.ClickException) as exc:
+        decision_cmd.update_decision(did, title="record that we chose X")
+    assert "state the decision" in str(exc.value.message)
+
+
+def test_decision_update_emits_fields_and_mirrors(isolated_env, monkeypatch):
+    pid = _seed_project()
+    did = _add_decision(pid, "Old title")
+    emitted, mirrored = _stub_update_emit(monkeypatch)
+
+    decision_cmd.update_decision(did, title="New title", description="new body")
+
+    assert len(emitted) == 1
+    ev = emitted[0]
+    assert ev["kind"] == "decision.fields_updated"
+    assert ev["entity_type"] == "decision"
+    assert ev["entity_id"] == str(did)
+    assert ev["payload"] == {"fields": {"title": "New title", "description": "new body"}}
+    # description changed → mirror rewritten as an "update".
+    assert len(mirrored) == 1
+    assert mirrored[0][1].get("action") == "update"
+
+
+def test_decision_update_title_only_skips_mirror(isolated_env, monkeypatch):
+    pid = _seed_project()
+    did = _add_decision(pid, "Old title")
+    emitted, mirrored = _stub_update_emit(monkeypatch)
+
+    decision_cmd.update_decision(did, title="Just the title")
+
+    assert emitted[0]["payload"] == {"fields": {"title": "Just the title"}}
+    # No description change → no mirror rewrite (nothing to re-emit).
+    assert mirrored == []
+
+
+def test_decision_update_editable_in_any_status(isolated_env, monkeypatch):
+    """Title/description are metadata — correcting them is allowed in any
+    status, no proposed-only guard (the whole point of the command)."""
+    pid = _seed_project()
+    did = _add_decision(pid, "Rejected decision", status="rejected")
+    emitted, _ = _stub_update_emit(monkeypatch)
+
+    decision_cmd.update_decision(did, title="Corrected wording")
+
+    assert emitted[0]["payload"] == {"fields": {"title": "Corrected wording"}}

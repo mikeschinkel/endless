@@ -385,20 +385,24 @@ def _main_root_for_project(project_id: int) -> Path | None:
     return Path(row[0]["path"]).expanduser().resolve()
 
 
-def _mirror_decision_body(decision_id: int, project_id: int, body: str) -> None:
+def _mirror_decision_body(
+    decision_id: int, project_id: int, body: str, action: str = "add"
+) -> None:
     """Write+commit `.endless/decisions/ED-NNN.md` from a decision body (E-1747).
 
     Decisions have no worktree of their own, so the mirror lands in the
-    current task worktree when `decision add` runs inside one (riding that
-    worktree's land), else on the project's main checkout — the same place the
-    decision's ledger entry is already committed. The DB row stays the source
-    of truth; this is the durability belt. Best-effort: a missing endless-go
-    binary or a git failure warns and skips rather than aborting the decision.
+    current task worktree when `decision add`/`update` runs inside one (riding
+    that worktree's land), else on the project's main checkout — the same place
+    the decision's ledger entry is already committed. The DB row stays the
+    source of truth; this is the durability belt. `update` (E-1533) re-emits
+    the mirror so it doesn't desync when a decision's body is edited in place.
+    Best-effort: a missing endless-go binary or a git failure warns and skips
+    rather than aborting the decision.
     """
     from endless.worktree_cmd import worktree_root_for_cwd, _commit_doc_in_worktree
 
     rel_path = f".endless/decisions/ED-{decision_id}.md"
-    subject = f"Endless: add decision ED-{decision_id}"
+    subject = f"Endless: {action} decision ED-{decision_id}"
 
     wt = worktree_root_for_cwd()
     if wt is not None:
@@ -529,6 +533,75 @@ def add_decision(
         )
 
     return new_id
+
+
+# Update ------------------------------------------------------------------
+
+def update_decision(
+    decision_id: int,
+    title: str | None = None,
+    description: str | None = None,
+) -> None:
+    """Edit a decision's title and/or description in place (E-1533).
+
+    Emits decision.fields_updated (no new ID, no status change) — this
+    replaces the reject+re-add workaround that left a misleading rejected row.
+    Editable in any status: title/description are metadata, so correcting
+    wording shouldn't require a status dance.
+
+    When the description changes, the `.endless/decisions/ED-NNN.md` mirror is
+    re-emitted from the new body. That mirror is a one-way durability copy;
+    the DB row is the source of truth, so editing the file alone would silently
+    desync (confirmed empirically) — the rewrite keeps them aligned.
+    """
+    from endless.event_bridge import emit_event
+
+    row = db.query(
+        "SELECT d.id, d.project_id, p.name as project_name "
+        "FROM decisions d JOIN projects p ON d.project_id = p.id WHERE d.id = ?",
+        (decision_id,),
+    )
+    if not row:
+        raise click.ClickException(
+            f"No decision found with id {decision_id_display(decision_id)}"
+        )
+
+    fields: dict = {}
+    if title is not None:
+        if not title.strip():
+            raise click.ClickException("--title may not be empty.")
+        if title.lower().startswith("record that "):
+            raise click.ClickException(
+                "Decision titles should state the decision, not narrate recording it.\n"
+                f"  Try: {title[len('record that '):]}"
+            )
+        fields["title"] = title
+    if description is not None:
+        validate_description(description)
+        fields["description"] = description
+
+    if not fields:
+        raise click.ClickException(
+            "Nothing to update. Specify --title and/or --description."
+        )
+
+    emit_event(
+        kind="decision.fields_updated",
+        project=row[0]["project_name"],
+        entity_type="decision",
+        entity_id=str(decision_id),
+        payload={"fields": fields},
+    )
+    click.echo(
+        click.style("•", fg="cyan")
+        + f" Updated {decision_id_display(decision_id)}: "
+        + ", ".join(sorted(fields))
+    )
+
+    if "description" in fields:
+        _mirror_decision_body(
+            decision_id, row[0]["project_id"], description, action="update"
+        )
 
 
 # Accept / Reject ---------------------------------------------------------

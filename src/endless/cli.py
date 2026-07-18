@@ -2143,6 +2143,24 @@ def decision_add(title, description, description_file, project, about_ids, decid
     )
 
 
+@decision_cmd.command("update")
+@click.argument("item_id", type=DECISION_ID)
+@click.option("--title", default=None,
+              help="New title for the decision")
+@click.option("--description", default=None,
+              help="New description (inline; replaces the existing description)")
+@click.option("--description-file", default=None,
+              help="Load the new description from a file")
+@click.option("--allow-path", "allow_paths", multiple=True,
+              help="Regex matching an absolute path to permit in inline content "
+                   "(repeatable; escape hatch for the path gate).")
+def decision_update(item_id, title, description, description_file, allow_paths):
+    """Edit a decision's title and/or description in place (no new ID)."""
+    from endless.decision_cmd import update_decision
+    description = _resolve_content_flag(description, description_file, "description", allow_paths)
+    update_decision(item_id, title=title, description=description)
+
+
 @decision_cmd.command("show")
 @click.argument("item_ids", type=DECISION_ID, nargs=-1, required=True)
 @click.option("--llm", is_flag=True,

@@ -75,6 +75,17 @@ endless decision link <a> --to <b> --type ...    # decision-to-decision typed li
 endless decision unlink <a> --to <b> --type ...
 ```
 
+## Editing a decision
+
+To fix a decision's wording after the fact, edit it in place — there's no need to reject and re-add (which leaves a misleading rejected row behind):
+
+```bash
+endless decision update <id> --title "Corrected statement"
+endless decision update <id> --description "Corrected explanation"
+```
+
+Either flag is optional; pass one or both. A decision's title/description is metadata, so it's editable in any status (proposed, accepted, or rejected).
+
 ## Distinguishing decision from task
 
 - A **task** is something to do.
