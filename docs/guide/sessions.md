@@ -109,7 +109,19 @@ sid=$(endless sql --tsv "SELECT id FROM sessions
                          ORDER BY last_activity DESC LIMIT 1" | tail -1)
 ```
 
-## Reading status (forward-looking — E-1319)
+## Orienting and inspecting sessions: `status`, `show`, `list`
+
+Three read-only commands for self-orientation and for coordinating with sibling / child sessions — no snapshot required:
+
+- **`endless session status`** — a one-shot view of your current focus: the focal task, its spawning (parent) task, sibling tasks worked by other sessions on the focal task, and any cross-session in-flight work, with blocked-by / blocks decorations. The cheap "where am I, who else is live" check. Add `--tree` for the do/plan backlog as an IDs-only tree in implementation order (nesting = order, siblings = parallelizable).
+- **`endless session show [ref]`** — details for one session (yours by default; pass an endless integer id or Claude UUID prefix for another). Reach for it when you're coordinating and need to inspect a specific sibling or child session.
+- **`endless session list`** — recent sessions across the project. The roster view for finding a sibling / child session's id to `show`.
+
+## Interactive, user-run session commands
+
+The `session` group also carries commands a human runs interactively — session navigation, the live-watch dashboard, history / search / recap, and hide / unhide. These aren't part of an agent's working flow; they're documented in `endless guide appendix-a`, which you read only to point a user at one.
+
+## Reading snapshots
 
 Read commands are tracked under E-1319 (blocked by E-1318). Once shipped:
 

@@ -146,6 +146,7 @@ For details, run `endless guide <section>`:
 - **decisions** — documenting decisions as first-class items, **including STRONG guidance about preference vs prohibition — read this**.
 - **sessions** — recording session status snapshots (`endless session snapshot add`), the `session_statuses` row shape, when to call it, and discovery patterns for "who am I."
 - **reference** — projects, SQL, snapshots, tmux integration, file layout.
+- **appendix-a** — _(user-facing appendix, deprioritize)_ commands a human runs interactively; an agent reads it only to point a user at one.
 
 Run `endless guide --list` to print just the section slugs.
 
