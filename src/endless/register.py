@@ -25,18 +25,21 @@ LANGUAGE_EXTENSIONS = {
 
 
 # Canonical endless entries every registered project's .gitignore should carry.
-# Deliberately minimal: only paths endless writes that must never be committed
-# and whose currency is settled. `.endless/tmp/` is the sanctioned project-local
-# scratch dir — agents author throwaway content there (co-located with the work,
-# survives reboot, recoverable before a worktree drops) instead of system /tmp.
-# The uncertain entries (`.endless/worktree.json`, `.endless/worktree.lock`) are
-# intentionally omitted until their obsolescence is confirmed; existing repos that
-# already ignore them keep those lines untouched.
+# Only paths endless writes that must never be committed and whose currency is
+# settled. `.endless/tmp/` is the sanctioned project-local scratch dir — agents
+# author throwaway content there (co-located with the work, survives reboot,
+# recoverable before a worktree drops) instead of system /tmp. `worktree.json`
+# (write-once identity) and `worktree.lock` (per-session ownership) are per-
+# worktree state that must never be committed — kept per ED-1530. NOT
+# `.endless/sessions/`: that companion-file path was pruned, so new projects must
+# never scaffold it.
 GITIGNORE_ENTRIES = [
     ".endless/worktrees/",
     ".endless/tmp/",
+    ".endless/worktree.json",
+    ".endless/worktree.lock",
 ]
-GITIGNORE_BLOCK_HEADER = "# endless (managed by `endless project register`)"
+GITIGNORE_BLOCK_HEADER = "# endless (managed by `endless project init`)"
 
 
 def scaffold_gitignore(project_path: Path) -> list[str]:
@@ -173,16 +176,20 @@ def register_project(
     if status not in ("active", "paused", "archived", "idea"):
         raise click.ClickException(f"Invalid status: {status}")
 
-    # Write .endless/config.json
-    config.project_config_write(project_path, {
+    # Write .endless/config.json — merge over any existing config so re-running
+    # never clobbers keys endless doesn't manage here (e.g. self_dev, matchers)
+    # and preserves an existing project's dependencies/documents.
+    cfg = config.project_config_read(project_path) or {}
+    cfg.update({
         "name": name,
         "label": label,
         "description": description,
         "language": language,
         "status": status,
-        "dependencies": [],
-        "documents": {"rules": []},
     })
+    cfg.setdefault("dependencies", [])
+    cfg.setdefault("documents", {"rules": []})
+    config.project_config_write(project_path, cfg)
 
     # Scaffold .gitignore + the project-local scratch dir so agents author
     # throwaway content under .endless/tmp/ instead of system /tmp, and never

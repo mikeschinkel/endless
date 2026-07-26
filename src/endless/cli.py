@@ -317,7 +317,7 @@ def project_cmd():
     pass
 
 
-@project_cmd.command("register")
+@project_cmd.command("init")
 @click.argument("path", default=".", type=click.Path(exists=True))
 @click.option("--infer", is_flag=True, help="Auto-detect metadata, skip prompts")
 @click.option("--name", default=None, help="Project identifier")
@@ -326,14 +326,19 @@ def project_cmd():
 @click.option("--lang", default=None, help="Primary language")
 @click.option("--status", default=None,
               type=click.Choice(["active", "paused", "archived", "idea"]))
-def register(path, infer, name, label, desc, lang, status):
-    """Register a directory as a project."""
+def init(path, infer, name, label, desc, lang, status):
+    """Initialize a directory as a project — registers the DB row and scaffolds
+    .endless/config.json + .gitignore. Idempotent; safe to re-run."""
     from endless.register import register_project
     register_project(
         Path(path).resolve(),
         name=name, label=label, description=desc,
         language=lang, status=status, infer=infer,
     )
+
+
+# `register` is an alias for `init` — same callback, provably identical behavior.
+project_cmd.add_command(init, name="register")
 
 
 @project_cmd.command("unregister")
@@ -429,7 +434,7 @@ def _make_moved_stub(old_name):
     return _stub
 
 
-for _old_name in ("register", "unregister", "purge", "set", "rename",
+for _old_name in ("init", "register", "unregister", "purge", "set", "rename",
                   "list", "status", "scan", "discover"):
     main.command(_old_name, hidden=True, add_help_option=False,
                  context_settings=dict(ignore_unknown_options=True))(
