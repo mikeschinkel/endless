@@ -38,9 +38,6 @@ internal/web/assets/css/templui
 .endless/worktree.json
 .endless/worktree.lock
 
-# Per-session companion files (E-989)
-.endless/sessions/
-
 # Per-worktree isolated test environments (XDG_CONFIG_HOME target for manual sanity)
 .test-isolated/
 

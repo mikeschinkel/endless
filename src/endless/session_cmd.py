@@ -1540,9 +1540,10 @@ def session_id_resolve() -> None:
 def session_show_resolve(session_ref: str | None, as_json: bool = False) -> None:
     """Show details for a Claude session — current by default, or specified by ref.
 
-    Sources the companion record from .endless/sessions/ (E-989) and joins DB
-    fields (state, started_at, last_activity, message count, active task) for
-    a focused per-session view.
+    Sources the live session record from `_live_sessions` (the DB `sessions`
+    table joined with the tmux pane map; E-1426 retired the old per-session
+    JSON companion files) and joins per-session DB fields (state, started_at,
+    last_activity, message count, active task) for a focused per-session view.
     """
     project_root = _project_root_for_cwd()
     live = _live_sessions(project_root)

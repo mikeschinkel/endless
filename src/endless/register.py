@@ -29,9 +29,9 @@ LANGUAGE_EXTENSIONS = {
 # and whose currency is settled. `.endless/tmp/` is the sanctioned project-local
 # scratch dir — agents author throwaway content there (co-located with the work,
 # survives reboot, recoverable before a worktree drops) instead of system /tmp.
-# The uncertain entries (`.endless/worktree.json`, `.endless/worktree.lock`,
-# `.endless/sessions/`) are intentionally omitted until their obsolescence is
-# confirmed; existing repos that already ignore them keep those lines untouched.
+# The uncertain entries (`.endless/worktree.json`, `.endless/worktree.lock`) are
+# intentionally omitted until their obsolescence is confirmed; existing repos that
+# already ignore them keep those lines untouched.
 GITIGNORE_ENTRIES = [
     ".endless/worktrees/",
     ".endless/tmp/",
