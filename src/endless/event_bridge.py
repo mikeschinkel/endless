@@ -285,7 +285,7 @@ def _get_or_create_node_id() -> str:
     config_path = config.CONFIG_FILE
     if not config_path.exists():
         raise click.ClickException(
-            f"Config not found at {config_path}. Run 'endless scan' first."
+            f"Config not found at {config_path}. Run 'endless project scan' first."
         )
 
     data = json.loads(config_path.read_text())

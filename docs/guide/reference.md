@@ -9,9 +9,9 @@ Lookup material — not part of the day-to-day session loop, but useful when you
 Endless tracks multiple projects from a single global DB. Every project is a registered directory.
 
 ```bash
-endless list                                   # all registered projects
-endless status                                 # detailed status of current project
-endless status --project <name>                # of a named project
+endless project list                           # all registered projects
+endless project status                         # detailed status of current project
+endless project status --project <name>        # of a named project
 ```
 
 ### Registering a project
@@ -19,11 +19,11 @@ endless status --project <name>                # of a named project
 Most repos are already registered. If you `cd` into one and Endless errors with "no project for this cwd", register it:
 
 ```bash
-endless register                               # register current directory
-endless register --name <custom-name>          # with an explicit name
+endless project register                       # register current directory
+endless project register --name <custom-name>  # with an explicit name
 ```
 
-After registering, `endless list` should show the project and `endless status` should work from inside the repo.
+After registering, `endless project list` should show the project and `endless project status` should work from inside the repo.
 
 ---
 

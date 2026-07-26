@@ -10,7 +10,7 @@ endless task spawn  E-776 \
 ## Setup 
 ``` shell
 # 1. Register project
-endless register ~/Projects/happy-face \
+endless project register ~/Projects/happy-face \
   --name happy-face \
   --infer
 ``` 

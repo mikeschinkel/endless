@@ -21,7 +21,7 @@ def test_version():
 
 def test_list_empty(isolated_env):
     runner = CliRunner()
-    result = runner.invoke(main, ["list"])
+    result = runner.invoke(main, ["project", "list"])
     assert result.exit_code == 0
     assert "No projects registered" in result.output
 
@@ -97,13 +97,13 @@ def test_register_and_list(isolated_env):
 
     # Register
     result = runner.invoke(
-        main, ["register", str(project_dir), "--infer"]
+        main, ["project", "register", str(project_dir), "--infer"]
     )
     assert result.exit_code == 0
     assert "Registered" in result.output or "Updated" in result.output
 
     # List
-    result = runner.invoke(main, ["list"])
+    result = runner.invoke(main, ["project", "list"])
     assert result.exit_code == 0
     assert "cli-test" in result.output
 
@@ -114,10 +114,10 @@ def test_status_by_name(isolated_env):
 
     runner = CliRunner()
     runner.invoke(
-        main, ["register", str(project_dir), "--infer"]
+        main, ["project", "register", str(project_dir), "--infer"]
     )
 
-    result = runner.invoke(main, ["status", "status-test"])
+    result = runner.invoke(main, ["project", "status", "status-test"])
     assert result.exit_code == 0
     assert "status-test" in result.output
     assert "Status:" in result.output
@@ -129,17 +129,17 @@ def test_set_field(isolated_env):
 
     runner = CliRunner()
     runner.invoke(
-        main, ["register", str(project_dir), "--infer"]
+        main, ["project", "register", str(project_dir), "--infer"]
     )
 
     result = runner.invoke(
-        main, ["set", "set-test.label=New Label"]
+        main, ["project", "set", "set-test.label=New Label"]
     )
     assert result.exit_code == 0
     assert "New Label" in result.output
 
     # Verify it stuck
-    result = runner.invoke(main, ["status", "set-test"])
+    result = runner.invoke(main, ["project", "status", "set-test"])
     assert "New Label" in result.output
 
 
@@ -149,21 +149,21 @@ def test_rename(isolated_env):
 
     runner = CliRunner()
     runner.invoke(
-        main, ["register", str(project_dir), "--infer"]
+        main, ["project", "register", str(project_dir), "--infer"]
     )
 
     result = runner.invoke(
-        main, ["rename", "old-name", "new-name"]
+        main, ["project", "rename", "old-name", "new-name"]
     )
     assert result.exit_code == 0
     assert "new-name" in result.output
 
     # Old name should be gone
-    result = runner.invoke(main, ["status", "old-name"])
+    result = runner.invoke(main, ["project", "status", "old-name"])
     assert result.exit_code != 0
 
     # New name should work
-    result = runner.invoke(main, ["status", "new-name"])
+    result = runner.invoke(main, ["project", "status", "new-name"])
     assert result.exit_code == 0
 
 
@@ -173,15 +173,15 @@ def test_unregister(isolated_env):
 
     runner = CliRunner()
     runner.invoke(
-        main, ["register", str(project_dir), "--infer"]
+        main, ["project", "register", str(project_dir), "--infer"]
     )
 
-    result = runner.invoke(main, ["unregister", "doomed"])
+    result = runner.invoke(main, ["project", "unregister", "doomed"])
     assert result.exit_code == 0
     assert "Unregistered" in result.output
 
     # Should be gone from list
-    result = runner.invoke(main, ["list"])
+    result = runner.invoke(main, ["project", "list"])
     assert "doomed" not in result.output
 
     # Config should still exist with status=unregistered
@@ -193,7 +193,7 @@ def test_unregister(isolated_env):
     assert cfg["status"] == "unregistered"
 
     # Reconcile should NOT re-register it
-    result = runner.invoke(main, ["list"])
+    result = runner.invoke(main, ["project", "list"])
     assert "doomed" not in result.output
 
 
@@ -204,10 +204,10 @@ def test_scan(isolated_env):
 
     runner = CliRunner()
     runner.invoke(
-        main, ["register", str(project_dir), "--infer"]
+        main, ["project", "register", str(project_dir), "--infer"]
     )
 
-    result = runner.invoke(main, ["scan"])
+    result = runner.invoke(main, ["project", "scan"])
     assert result.exit_code == 0
     assert "1 project(s)" in result.output
 

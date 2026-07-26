@@ -311,7 +311,13 @@ def main(ctx):
         ctx.exit(1)
 
 
-@main.command()
+@main.group("project")
+def project_cmd():
+    """Manage registered projects."""
+    pass
+
+
+@project_cmd.command("register")
 @click.argument("path", default=".", type=click.Path(exists=True))
 @click.option("--infer", is_flag=True, help="Auto-detect metadata, skip prompts")
 @click.option("--name", default=None, help="Project identifier")
@@ -330,7 +336,7 @@ def register(path, infer, name, label, desc, lang, status):
     )
 
 
-@main.command()
+@project_cmd.command("unregister")
 @click.argument("name")
 def unregister(name):
     """Unregister a project (preserves .endless config on disk)."""
@@ -338,7 +344,7 @@ def unregister(name):
     unregister_project(name)
 
 
-@main.command()
+@project_cmd.command("purge")
 @click.argument("name")
 def purge(name):
     """Delete .endless/ directory and add to ignore list."""
@@ -346,17 +352,17 @@ def purge(name):
     purge_project(name)
 
 
-@main.command("set")
+@project_cmd.command("set")
 @click.argument("expression")
 @click.option("--path", default=None,
               help="Path segment to disambiguate duplicate names")
 def set_cmd(expression, path):
-    """Set a project field. Usage: endless set <name>.<field>=<value>"""
+    """Set a project field. Usage: endless project set <name>.<field>=<value>"""
     from endless.set_cmd import set_field
     set_field(expression, path_hint=path)
 
 
-@main.command()
+@project_cmd.command("rename")
 @click.argument("old_name")
 @click.argument("new_name")
 @click.option("--path", default=None,
@@ -367,7 +373,7 @@ def rename(old_name, new_name, path):
     rename_project(old_name, new_name, path_hint=path)
 
 
-@main.command("list")
+@project_cmd.command("list")
 @click.option("--status", default=None,
               type=click.Choice(["active", "paused", "archived", "idea"]),
               help="Filter by status")
@@ -378,7 +384,7 @@ def list_cmd(status, group):
     list_projects(status_filter=status, group=group)
 
 
-@main.command()
+@project_cmd.command("status")
 @click.argument("name", default=None, required=False)
 def status(name):
     """Show detailed status of a project."""
@@ -386,12 +392,48 @@ def status(name):
     show_status(name)
 
 
-@main.command()
+@project_cmd.command("scan")
 @click.option("--project", default=None, help="Scan a single project")
 def scan(project):
     """Scan and reconcile projects."""
     from endless.scan import run_scan
     run_scan(project_name=project)
+
+
+@project_cmd.command("discover")
+@click.argument("path", default=None, required=False)
+@click.option("--all", "show_all", is_flag=True,
+              help="Include dormant projects in review")
+@click.option("--reset", is_flag=True,
+              help="Forget prior decisions, re-evaluate all directories")
+def discover(path, show_all, reset):
+    """Find and register unregistered projects."""
+    from endless.discover import run_discover
+    run_discover(discover_path=path, show_all=show_all, reset=reset)
+
+
+# E-1756: the project-management verbs moved under `endless project <name>`.
+# Leave a hidden hard-error stub at each old top-level name so invoking the bare
+# old name exits non-zero with a redirect instead of a confusing "no such
+# command". `hidden=True` keeps them out of `endless --help` and out of the
+# guide-map tree walk (which skips hidden commands); `add_help_option=False` +
+# `ignore_unknown_options` route every invocation — including old flags and
+# `--help` — into the callback so it always errors with the redirect.
+def _make_moved_stub(old_name):
+    @click.argument("args", nargs=-1, type=click.UNPROCESSED)
+    def _stub(args):
+        raise click.ClickException(
+            f"`endless {old_name}` moved to `endless project {old_name}`.\n"
+            f"Run: endless project {old_name}"
+        )
+    return _stub
+
+
+for _old_name in ("register", "unregister", "purge", "set", "rename",
+                  "list", "status", "scan", "discover"):
+    main.command(_old_name, hidden=True, add_help_option=False,
+                 context_settings=dict(ignore_unknown_options=True))(
+        _make_moved_stub(_old_name))
 
 
 @main.command("agents")
@@ -2734,18 +2776,6 @@ def note_resolve(note_id):
     from endless.notes_cmd import resolve_note
     resolve_note(note_id=note_id)
 
-
-
-@main.command()
-@click.argument("path", default=None, required=False)
-@click.option("--all", "show_all", is_flag=True,
-              help="Include dormant projects in review")
-@click.option("--reset", is_flag=True,
-              help="Forget prior decisions, re-evaluate all directories")
-def discover(path, show_all, reset):
-    """Find and register unregistered projects."""
-    from endless.discover import run_discover
-    run_discover(discover_path=path, show_all=show_all, reset=reset)
 
 
 @main.group()

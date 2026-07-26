@@ -165,26 +165,19 @@ listed separately. (Generated — do not hand-edit; run `/regenerate-guide`.)
 | `channel` | orchestration | Inter-session channels: messaging between concurrent sessions. |
 | `db` | orchestration | Choosing the database (--db main/sandbox) in self-dev worktrees. |
 | `decision` | decisions | Decisions as first-class items; preference vs prohibition (read this). |
-| `discover` | reference | Finding and registering unregistered projects. |
 | `docs` | _(none yet)_ | the `docs` command is temporarily disabled and not covered by the guide. |
 | `epic` | _(none yet)_ | the `endless epic` convenience surface (add/show/list/update over type=epic tasks) isn't covered by the guide yet. |
 | `guide` | reference | The session guide; run `endless guide` for the index, `--list` for sections. |
-| `list` | reference | Listing registered projects. |
 | `note` | _(none yet)_ | project notes aren't covered by the guide yet. |
 | `notes` | _(none yet)_ | project notes aren't covered by the guide yet. |
 | `phrase` | _(none yet)_ | matchers (action regexes) config isn't covered by the guide yet. |
 | `plan` | tasks | 'plan' is the former name for 'task' (renamed); use 'task'. |
-| `purge` | reference | Removing the .endless/ directory from a project. |
-| `register` | reference | Registering a directory as a project. |
-| `rename` | reference | Renaming a project. |
-| `scan` | reference | Scanning and reconciling registered projects. |
+| `project` | reference | Managing registered projects (register, list, status, set, rename, scan, discover, purge, unregister). |
 | `serve` | reference | The web dashboard at http://localhost:8484. |
 | `session` | sessions | Recording session status; discovery (who am I); reading status. |
-| `set` | reference | Setting a project field. |
 | `setup` | _(none yet)_ | hook/integration setup (claude-hook, prompt-hook, channel-plugin) isn't covered by the guide yet. |
 | `shell-init` | orchestration | Shell helpers (esu/eswt) to enter your task's worktree. |
 | `sql` | reference | Read-only SQL against the Endless DB. |
-| `status` | reference | Detailed status of a project. |
 | `task` | tasks | Task CRUD, field semantics (title/description/text/analysis/notes/outcome), status transitions, relations. |
 | `task attach` | orchestration | Attaching to a running background agent (replaces the current process; refuses inside a Claude session without --force). |
 | `task claim` | orchestration | Claiming a task: creates the per-task worktree and binds your session. |
@@ -192,7 +185,6 @@ listed separately. (Generated — do not hand-edit; run `/regenerate-guide`.)
 | `task release` | orchestration | Releasing a task so another session can claim it. |
 | `task spawn` | orchestration | Spawning a session on a task: foreground/background, attach verbs, coordinator pattern. |
 | `tmux` | reference | Tmux status-line and popup integration. |
-| `unregister` | reference | Unregistering a project (config preserved on disk). |
 | `verb` | tasks | Verbs: the registered actions that can begin a task title. |
 | `worktree` | orchestration | Per-task git worktrees: getting in, landing, abandoning, inspecting. |
 

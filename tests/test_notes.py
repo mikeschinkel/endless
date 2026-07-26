@@ -11,7 +11,7 @@ def test_add_and_list_note(isolated_env):
     project_dir.mkdir()
 
     runner = CliRunner()
-    runner.invoke(main, ["register", str(project_dir), "--infer"])
+    runner.invoke(main, ["project", "register", str(project_dir), "--infer"])
 
     # Add a note
     result = runner.invoke(
@@ -32,7 +32,7 @@ def test_resolve_note(isolated_env):
     project_dir.mkdir()
 
     runner = CliRunner()
-    runner.invoke(main, ["register", str(project_dir), "--infer"])
+    runner.invoke(main, ["project", "register", str(project_dir), "--infer"])
     runner.invoke(
         main, ["note", "add", "--project", "resolve-test", "Fix this thing"]
     )
@@ -63,7 +63,7 @@ def test_notes_empty(isolated_env):
     project_dir.mkdir()
 
     runner = CliRunner()
-    runner.invoke(main, ["register", str(project_dir), "--infer"])
+    runner.invoke(main, ["project", "register", str(project_dir), "--infer"])
 
     result = runner.invoke(main, ["notes", "empty-notes"])
     assert result.exit_code == 0

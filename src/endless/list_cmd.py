@@ -47,7 +47,7 @@ def list_projects(status_filter: str | None = None, group: bool = False):
             click.echo(
                 click.style("•", fg="cyan")
                 + " No projects registered yet. Run "
-                + click.style("endless register", bold=True)
+                + click.style("endless project register", bold=True)
                 + " to add one."
             )
         return

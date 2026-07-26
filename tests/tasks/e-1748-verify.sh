@@ -117,10 +117,10 @@ test_gitignore_active() {
     rm -f "${probe}"
 }
 
-# ─── 2. `endless register` scaffolds .gitignore + the scratch dir ───────────
+# ─── 2. `endless project register` scaffolds .gitignore + the scratch dir ───────────
 
 test_register_scaffolds() {
-    section "2 — endless register scaffolds .gitignore + .endless/tmp/"
+    section "2 — endless project register scaffolds .gitignore + .endless/tmp/"
 
     local base repo name
     base=$(mktemp -d)
@@ -130,7 +130,7 @@ test_register_scaffolds() {
     git -C "${repo}" init -q
     touch "${repo}/main.py"
 
-    endless register "${repo}" --infer --name "${name}" >/dev/null 2>&1
+    endless project register "${repo}" --infer --name "${name}" >/dev/null 2>&1
 
     local gi="${repo}/.gitignore"
     local entry
@@ -151,7 +151,7 @@ test_register_scaffolds() {
     fi
 
     # Idempotent: a second register must not duplicate any canonical line.
-    endless register "${repo}" --infer --name "${name}" >/dev/null 2>&1
+    endless project register "${repo}" --infer --name "${name}" >/dev/null 2>&1
     local dupes=0
     for entry in ".endless/worktrees/" ".endless/tmp/"; do
         local n
@@ -167,7 +167,7 @@ test_register_scaffolds() {
     fi
 
     # Cleanup: remove the sandbox row and the throwaway repo.
-    endless unregister "${name}" >/dev/null 2>&1
+    endless project unregister "${name}" >/dev/null 2>&1
     rm -rf "${base}"
 }
 

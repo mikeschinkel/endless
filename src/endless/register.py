@@ -36,7 +36,7 @@ GITIGNORE_ENTRIES = [
     ".endless/worktrees/",
     ".endless/tmp/",
 ]
-GITIGNORE_BLOCK_HEADER = "# endless (managed by `endless register`)"
+GITIGNORE_BLOCK_HEADER = "# endless (managed by `endless project register`)"
 
 
 def scaffold_gitignore(project_path: Path) -> list[str]:

@@ -32,9 +32,9 @@ def set_field(expression: str, path_hint: str | None = None):
         if not m:
             raise click.ClickException(
                 "Invalid format. Use:\n"
-                "  endless set <field>=<value>        "
+                "  endless project set <field>=<value>        "
                 "(in a project directory)\n"
-                "  endless set <name>.<field>=<value>  "
+                "  endless project set <name>.<field>=<value>  "
                 "(from anywhere)\n"
                 f"Settable fields: "
                 f"{', '.join(sorted(SETTABLE_FIELDS))}"
@@ -56,7 +56,7 @@ def set_field(expression: str, path_hint: str | None = None):
         if not name:
             raise click.ClickException(
                 "Not in a registered project directory. "
-                "Use: endless set <name>.<field>=<value>"
+                "Use: endless project set <name>.<field>=<value>"
             )
         project = resolve_project(name, path_hint)
 

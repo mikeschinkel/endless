@@ -73,7 +73,7 @@ def test_diagnostic_when_xdg_unset(tmp_path, monkeypatch):
 
     msg = exc.value.message
     assert "XDG_CONFIG_HOME unset" in msg
-    assert "endless register" in msg
+    assert "endless project register" in msg
 
 
 def test_non_schema_operational_error_passes_through(isolated_env):

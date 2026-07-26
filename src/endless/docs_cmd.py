@@ -79,7 +79,7 @@ def list_docs(
             click.style("•", fg="cyan")
             + f" No documents tracked for "
             + click.style(project_name, bold=True)
-            + ". Run " + click.style("endless scan", bold=True)
+            + ". Run " + click.style("endless project scan", bold=True)
             + " first."
         )
         return

@@ -508,7 +508,7 @@ def _missing_schema_hint() -> click.ClickException:
                       "(or 'exit' if you're in an `endless-go sandbox` subshell).")
     else:
         mechanism = "resolved via default ~/.config (XDG_CONFIG_HOME unset)"
-        suggestion = ("    Initialize with 'endless register <project-path>' "
+        suggestion = ("    Initialize with 'endless project register <project-path>' "
                       "or check that you're invoking the expected endless install.")
     if config.DB_PATH.exists():
         try:

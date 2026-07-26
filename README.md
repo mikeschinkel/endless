@@ -30,7 +30,7 @@ go env -w GOPRIVATE=github.com/mikeschinkel/*
 #### Register a project
 
 ```bash
-endless register \
+endless project register \
   [<path>] \
   [--infer] \
   [--name <name>] \
@@ -42,61 +42,61 @@ endless register \
 
 ```bash
 # Register current directory, auto-detect metadata
-endless register --infer
+endless project register --infer
 
 # Register a specific path with explicit fields
-endless register ~/Projects/myapp --name myapp --label "My App" --lang Go --status active
+endless project register ~/Projects/myapp --name myapp --label "My App" --lang Go --status active
 ```
 
 #### List and inspect projects
 
 ```bash
-endless  list [--status active|paused|archived|idea] [--group]
-endless  status [<name>]
+endless project list [--status active|paused|archived|idea] [--group]
+endless project status [<name>]
 ```
 
 ```bash
-endless list
-endless list --status active
-endless list --group
-endless status myapp
+endless project list
+endless project list --status active
+endless project list --group
+endless project status myapp
 ```
 
 #### Modify project fields
 
 ```bash
-endless set <field>=<value> [--path <partial_path>]
-endless set <project>.<field>=<value> [--path <partial_path>]
+endless project set <field>=<value> [--path <partial_path>]
+endless project set <project>.<field>=<value> [--path <partial_path>]
 ````
 Fields: `name`, `label`, `description`, `status`, `language`, `group_name`
 
 ```bash
 # From within the project directory
-endless set label="My Application"
-endless set status=paused
+endless project set label="My Application"
+endless project set status=paused
 
 # From anywhere, prefix with project name
-endless set myapp.label="My Application"
-endless set myapp.lang=Go
+endless project set myapp.label="My Application"
+endless project set myapp.lang=Go
 
 # Disambiguate if multiple projects share a name
-endless set myapp.lang=Go --path Projects/work
+endless project set myapp.lang=Go --path Projects/work
 ```
 
 #### Other project commands
 
 ```bash
-endless rename <old_name> <new_name> [--path <partial_path>]
-endless discover [<path>] [--all] [--reset]
-endless unregister <name>
-endless purge <name>
+endless project rename <old_name> <new_name> [--path <partial_path>]
+endless project discover [<path>] [--all] [--reset]
+endless project unregister <name>
+endless project purge <name>
 ```
 
 ```bash
-endless rename oldname newname
-endless discover ~/Projects
-endless unregister myapp
-endless purge myapp
+endless project rename oldname newname
+endless project discover ~/Projects
+endless project unregister myapp
+endless project purge myapp
 ```
 
 ### Task Management
@@ -251,13 +251,13 @@ endless task chat
 ### Documents & Notes
 
 ```bash
-endless scan [--project <name>] [--docs-only]
+endless project scan [--project <name>] [--docs-only]
 endless docs [<name>] [--type <type>]
 ```
 
 ```bash
-endless scan
-endless scan --project myapp --docs-only
+endless project scan
+endless project scan --project myapp --docs-only
 endless docs myapp
 endless docs --type readme
 ```

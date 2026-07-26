@@ -174,7 +174,7 @@ main() {
     git -C "${PROJ}" config commit.gpgsign false
     printf 'x\n' > "${PROJ}/README"; git -C "${PROJ}" add -A; git -C "${PROJ}" commit -q -m init
     cd "${PROJ}" || exit 2
-    endless register "${PROJ}" --infer --name e986-verify --status active >/dev/null 2>&1 || true
+    endless project register "${PROJ}" --infer --name e986-verify --status active >/dev/null 2>&1 || true
 
     printf '%sE-986 land-readiness gate%s  (verifies the candidate build on this branch)\n%s\n' "${BOLD}" "${RESET}" "${UNDERLINE}"
     printf '  candidate:    %s\n  temp project: %s\n' "${CANDIDATE_ENDLESS}" "${PROJ}"
