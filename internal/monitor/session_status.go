@@ -163,7 +163,7 @@ func SessionStatusRows(focal, parentSession int64, includeAll bool) ([]SessionSt
 	}
 
 	q := `
-WITH
+WITH RECURSIVE
 ftask(tid) AS (SELECT ?),
 -- sfoc.stid = the SPAWNING session's active task (session lineage → ↩ from).
 sfoc(stid) AS (SELECT active_task_id FROM sessions WHERE id = ?),
@@ -210,6 +210,36 @@ base AS (
   SELECT t.id, t.project_id, t.title, t.status, t.phase, t.text, t.type_id
     FROM tasks t WHERE t.parent_id = (SELECT tid FROM ftask)
 ),
+-- E-1795: the UPSTREAM blocker chain of every task already in base, walked
+-- TRANSITIVELY. Seeded from base's ids, each step adds the OPEN tasks that block
+-- a task already reached (task_deps source=blocker, target=reached,
+-- dep_type='blocks'). So a chain head several hops up (e.g. an unplanned epic)
+-- surfaces wherever its downstream chain is already displayed. The walk is
+-- restricted to non-terminal blockers to match the E-876 status-based release
+-- (a done blocker no longer blocks, so its own prerequisites are irrelevant); it
+-- also stops the walk from leaking past a resolved gate. UNION (not UNION ALL)
+-- dedupes and terminates on cycles. Direction asymmetry is deliberate: children
+-- stay one-hop (fan-out risk), blockers walk the full chain (narrow in practice).
+upchain(id) AS (
+  SELECT id FROM base
+  UNION
+  SELECT d.source_id
+    FROM task_deps d
+    JOIN upchain u ON d.target_id = u.id
+    JOIN tasks blk ON blk.id = d.source_id
+   WHERE d.source_type = 'task' AND d.target_type = 'task'
+     AND d.dep_type = 'blocks'
+     AND blk.status NOT IN (` + terminalStatusSet + `)
+),
+-- base ∪ the transitive upstream blockers resolved to full task rows. upchain's
+-- seed rows are already in base, so the join below only adds the newly-reached
+-- prerequisites; UNION dedupes the overlap.
+allbase AS (
+  SELECT id, project_id, title, status, phase, text, type_id FROM base
+  UNION
+  SELECT t.id, t.project_id, t.title, t.status, t.phase, t.text, t.type_id
+    FROM tasks t JOIN upchain u ON u.id = t.id
+),
 enr AS (
   SELECT b.id, b.project_id, b.title, b.status, b.phase,
     COALESCE((SELECT slug FROM task_types WHERE id = b.type_id), '') AS type_slug,
@@ -236,7 +266,7 @@ enr AS (
     (SELECT count(*) FROM task_deps d
        WHERE d.source_type = 'task' AND d.source_id = b.id
          AND d.dep_type = 'blocks') AS blocks_n
-  FROM base b
+  FROM allbase b
 )
 SELECT id, project_id, title, status, phase, type_slug, has_text,
        is_focal, is_parent, is_from, in_flight, landed, blocked_by_n, blocks_n

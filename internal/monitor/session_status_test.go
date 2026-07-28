@@ -255,6 +255,68 @@ func TestSessionStatusRows_FocalDependents(t *testing.T) {
 	}
 }
 
+// TestSessionStatusRows_UpstreamBlockerChain drives the E-1795 transitive
+// upstream walk: for every task already shown, its blocked_by chain is walked to
+// the head. Here the focal's direct dependent `dep` is blocked by a chain
+// mid → head (head blocks mid blocks dep). None of mid/head has any session_tasks
+// membership or task-tree relation to the focal, so their presence proves the
+// transitive upstream UNION. A TERMINAL blocker higher up stops the walk (E-876
+// status-based release): its own prerequisites are NOT surfaced.
+func TestSessionStatusRows_UpstreamBlockerChain(t *testing.T) {
+	db := withTestDB(t)
+	seedProject(t, db, 1, "p1", "/p1")
+
+	// focal ← dep (dependent) ← mid ← head ← (doneGate ← ghost).
+	// dep is a direct dependent of the focal (focal blocks dep). The chain above
+	// dep is pure blocked_by. doneGate is terminal, so head's walk stops there and
+	// ghost (blocked by the done gate) is NOT surfaced.
+	const focal, dep, mid, head, doneGate, ghost = 900, 901, 902, 903, 904, 905
+	snTask(t, db, focal, 1, "underway", "now", "")
+	snTask(t, db, dep, 1, "ready", "next", "")
+	snTask(t, db, mid, 1, "ready", "next", "")
+	snTask(t, db, head, 1, "unplanned", "now", "") // chain head — an unplanned epic
+	snTask(t, db, doneGate, 1, "confirmed", "now", "")
+	snTask(t, db, ghost, 1, "ready", "next", "")
+
+	// Only session is on the focal, touching only the focal.
+	snSession(t, db, 1, 1, focal, "working")
+	snSessionTask(t, db, 1, focal)
+
+	snBlocks(t, db, focal, dep) // focal blocks its direct dependent (one hop down)
+	snBlocks(t, db, mid, dep)   // dep blocked by mid
+	snBlocks(t, db, head, mid)  // mid blocked by head  → transitive
+	// A terminal gate blocks head; the walk must NOT climb past it to ghost.
+	snBlocks(t, db, doneGate, head)
+	snBlocks(t, db, ghost, doneGate)
+
+	rows, err := SessionStatusRows(focal, 0, false)
+	if err != nil {
+		t.Fatalf("SessionStatusRows: %v", err)
+	}
+
+	// The whole open chain above the dependent is surfaced.
+	for _, id := range []int64{dep, mid, head} {
+		if _, ok := snRowByID(rows, id); !ok {
+			t.Errorf("upstream blocker %d should be surfaced transitively, missing", id)
+		}
+	}
+	// head is the chain head; its own blocker is terminal (released), so the walk
+	// stops and the beyond-the-gate task never appears.
+	if _, ok := snRowByID(rows, ghost); ok {
+		t.Errorf("task %d beyond a terminal gate should NOT be surfaced", ghost)
+	}
+	// The terminal gate itself is dropped by the final terminal-status filter.
+	if _, ok := snRowByID(rows, doneGate); ok {
+		t.Errorf("terminal gate %d should be omitted without --all", doneGate)
+	}
+
+	// mid carries ⊗ (it is blocked by the open head).
+	m, _ := snRowByID(rows, mid)
+	if m.BlockedByN != 1 {
+		t.Errorf("mid BlockedByN = %d, want 1 (blocked by open head)", m.BlockedByN)
+	}
+}
+
 // TestSessionStatusRows_LandedColumn drives the E-1693 `landed` column: a landed
 // non-terminal task is STILL returned (it passes the terminal-status filter) with
 // Landed == true, while an un-landed task in the same row set has Landed == false.
