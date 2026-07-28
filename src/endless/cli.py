@@ -1636,8 +1636,12 @@ def task_add(title, description, description_file, text, text_file, phase, proje
 @click.option("--allow-path", "allow_paths", multiple=True,
               help="Regex matching an absolute path to permit in inline content "
                    "(repeatable; escape hatch for the path gate).")
+@click.option("--keep-status", is_flag=True,
+              help="Keep the current status when editing plan text on a done task "
+                   "(suppresses the auto-revisit for a typo/formatting-only edit).")
 def task_update(item_ids, status, title, description, description_file, text, text_file, parent, phase, tier,
-                task_type, analysis_text, analysis_file, force, outcome, outcome_file, justification, allow_paths):
+                task_type, analysis_text, analysis_file, force, outcome, outcome_file, justification, allow_paths,
+                keep_status):
     """Update fields on one or more tasks."""
     from endless.task_cmd import update_plan, parse_tier
     description = _resolve_content_flag(description, description_file, "description", allow_paths)
@@ -1652,7 +1656,7 @@ def task_update(item_ids, status, title, description, description_file, text, te
                     phase=phase, tier=tier_val, task_type=task_type,
                     analysis=analysis_text,
                     outcome=outcome, force=force,
-                    justification=justification)
+                    justification=justification, keep_status=keep_status)
 
 
 @task_cmd.command("remove")

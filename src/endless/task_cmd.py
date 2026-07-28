@@ -3501,6 +3501,7 @@ def update_plan(
     outcome: str | None = None,
     force: bool = False,
     justification: str | None = None,
+    keep_status: bool = False,
 ):
     """Update fields on a task."""
     from endless.event_bridge import emit_event
@@ -3573,6 +3574,28 @@ def update_plan(
             effective_parent = row[0]["parent_id"]
         _reject_maybe_with_parent(effective_phase, effective_parent)
 
+    # E-1762: auto-reopen a done task whose plan text is actually edited.
+    # Editing tasks.text on a done task adds unshipped scope, so the done-status
+    # becomes a lie and the task stays hidden from session monitor. Flip it to
+    # `revisit` so the reopened work is honestly signaled and re-surfaces. Guards:
+    #   - only a REAL text change (identical re-write is a no-op),
+    #   - only from a completed-successfully status (reuse the reopen set;
+    #     obsolete/declined are deliberate decisions, not revivals),
+    #   - an explicit --status in the same update wins (intent), as does
+    #     --keep-status (typo/formatting-only edit),
+    #   - epics are excluded: their only done-state is `completed`, and flipping
+    #     an epic to revisit would trip the E-1542 pause gate for every in-flight
+    #     descendant session — too blunt for a plan tweak (flip by hand instead).
+    auto_revisit_type = task_type if task_type is not None else row[0]["type"]
+    text_changed = text is not None and text != (row[0]["text"] or "")
+    auto_revisit = (
+        not keep_status
+        and status is None
+        and text_changed
+        and auto_revisit_type != "epic"
+        and row[0]["status"] in _REOPENABLE_TERMINAL_STATUSES
+    )
+
     # Build the fields map for the event payload, plus an ordered list of
     # (name, old, new) tuples for change-output rendering.
     fields = {}
@@ -3584,6 +3607,8 @@ def update_plan(
 
     if status is not None:
         _add("status", status)
+    elif auto_revisit:
+        _add("status", "revisit")
 
     if phase is not None:
         _add("phase", phase)
@@ -3667,6 +3692,15 @@ def update_plan(
     # Header title reflects the new title if it was changed in this update.
     header_title = fields.get("title", row[0]["title"]) or row[0]["description"]
     _emit_field_changes(item_id, header_title, changes)
+
+    # E-1762: explain the auto-flip. The field render above already shows
+    # `Status: <old> -> revisit`; this line names WHY and the escape hatch.
+    if auto_revisit:
+        click.echo(
+            f"{task_id_display(item_id)} was '{row[0]['status']}'; plan text "
+            f"changed → status set to revisit "
+            f"(pass --keep-status to suppress for a typo/formatting-only edit)."
+        )
 
     # E-1772: nudge toward `endless task report` on an agent's wind-down. Only
     # when this update actually set a status; effective_outcome covers the
