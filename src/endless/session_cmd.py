@@ -134,14 +134,35 @@ def _resume_target(ref: str) -> dict:
         raise click.ClickException("endless-go returned malformed output")
 
 
-def resume_session(ref: str) -> None:
-    """Relaunch a lost Claude session in the current tmux pane.
+def _try_resume_target(ref: str) -> dict | None:
+    """Best-effort variant of `_resume_target`: return the target dict, or None
+    if `ref` doesn't resolve to a resumable session (unknown ref) or the resume
+    tooling is unavailable. Lets `session goto`'s not-live error decide whether
+    to point the user at `--resume` (E-1797) without raising on an unknown ref.
+    """
+    try:
+        return _resume_target(ref)
+    except Exception:
+        return None
 
-    Resolves `ref` (a task id off the tmux tab, or a session id / Claude UUID)
-    to its session UUID and task worktree, cd's into the worktree, and execs
-    `claude --resume <uuid>` — replacing this process so the resumed session
-    takes over the current pane. This recovers sessions whose panes died in a
-    tmux crash: their transcripts and ledger rows survive the crash intact.
+
+def _require_claude() -> str:
+    """Absolute path to the `claude` binary, or a ClickException if it's absent."""
+    import shutil
+    claude = shutil.which("claude")
+    if not claude:
+        raise click.ClickException("`claude` not found on PATH.")
+    return claude
+
+
+def _resolve_resume(ref: str) -> tuple[str, str, str, int]:
+    """Resolve + validate a resume target for `ref`.
+
+    Returns (uuid, worktree, label, endless_id). Raises click.ClickException
+    when the ref resolves to a session that can't actually be resumed (no
+    harness UUID, or no worktree on disk). Shared by `session resume` (current
+    pane) and `session goto --resume` (new window) so both agree on what
+    "resumable" means and emit identical diagnostics (E-1797).
     """
     target = _resume_target(ref)
     uuid = target.get("session_id") or ""
@@ -162,11 +183,23 @@ def resume_session(ref: str) -> None:
         )
     if not os.path.isdir(worktree):
         raise click.ClickException(f"worktree path does not exist: {worktree}")
+    return uuid, worktree, label, eid
 
-    import shutil
-    claude = shutil.which("claude")
-    if not claude:
-        raise click.ClickException("`claude` not found on PATH.")
+
+def resume_session(ref: str) -> None:
+    """Relaunch a lost Claude session in the current tmux pane.
+
+    Resolves `ref` (a task id off the tmux tab, or a session id / Claude UUID)
+    to its session UUID and task worktree, cd's into the worktree, and execs
+    `claude --resume <uuid>` — replacing this process so the resumed session
+    takes over the current pane. This recovers sessions whose panes died in a
+    tmux crash: their transcripts and ledger rows survive the crash intact.
+
+    To resume a non-live target in a NEW window instead of clobbering the
+    current pane, use `session goto <ref> --resume` (E-1797).
+    """
+    uuid, worktree, label, eid = _resolve_resume(ref)
+    claude = _require_claude()
 
     click.echo(
         f"• Resuming session {eid} ({label}) in {_short_path(worktree)} "
@@ -1912,9 +1945,25 @@ def _token_label(token: str, pane: str) -> str:
     return f"session {token} (pane {pane})"
 
 
+class _GotoNotLive(Exception):
+    """Raised by the goto resolvers when `ref` names a single target that has no
+    LIVE, reachable pane (as opposed to being ambiguous or malformed). This is
+    exactly the case `session goto --resume` can recover by relaunching in a new
+    window, and the case whose error should point the user at `--resume` when the
+    target is resumable (E-1797). Carries the ref (for the --resume hint and the
+    resumable check) and the base error line (sans the trailing next-step hint,
+    which `session_goto` appends based on whether the ref is resumable).
+    """
+
+    def __init__(self, ref: str, base: str):
+        super().__init__(base)
+        self.ref = ref
+        self.base = base
+
+
 def _goto_task(task_id: int, live: list[dict]) -> tuple[str, str]:
     """Resolve a task id to (pane, label): the most-recently-active live session
-    working it. Raises SystemExit(1) with a stderr error if none is reachable.
+    working it. Raises _GotoNotLive if none is reachable.
     """
     from endless.task_cmd import task_id_display
     disp = task_id_display(task_id)
@@ -1926,24 +1975,18 @@ def _goto_task(task_id: int, live: list[dict]) -> tuple[str, str]:
             eid = c.get("endless_session_id", "")
             return pane, f"{disp} → session {eid} (pane {pane})"
     if cands:
-        click.echo(
-            f"The live session on {disp} has no reachable tmux pane.", err=True
+        raise _GotoNotLive(
+            disp, f"The live session on {disp} has no reachable tmux pane."
         )
-    else:
-        click.echo(f"No live session on {disp}.", err=True)
-    raise SystemExit(1)
+    raise _GotoNotLive(disp, f"No live session on {disp}.")
 
 
 def _goto_session(matches: list[dict], ref: str) -> tuple[str, str]:
-    """Resolve session matches to (pane, label). Raises SystemExit(1) on
-    no-match / ambiguity / unreachable pane.
+    """Resolve session matches to (pane, label). Raises _GotoNotLive on
+    no-match / unreachable pane; SystemExit(1) on ambiguity.
     """
     if not matches:
-        click.echo(
-            f"No live session matches '{ref}'. "
-            f"Run `endless session list` to see candidates.", err=True,
-        )
-        raise SystemExit(1)
+        raise _GotoNotLive(ref, f"No live session matches '{ref}'.")
     if len(matches) > 1:
         click.echo(f"Ambiguous: '{ref}' matches multiple sessions:", err=True)
         for c in matches:
@@ -1953,8 +1996,7 @@ def _goto_session(matches: list[dict], ref: str) -> tuple[str, str]:
     eid = c.get("endless_session_id", "")
     pane = c.get("pane_id") or ""
     if not pane or not _pane_exists(pane):
-        click.echo(f"Session {eid} has no reachable tmux pane.", err=True)
-        raise SystemExit(1)
+        raise _GotoNotLive(ref, f"Session {eid} has no reachable tmux pane.")
     return pane, f"session {eid} (pane {pane})"
 
 
@@ -1962,8 +2004,9 @@ def _resolve_goto_target(ref: str, live: list[dict]) -> tuple[str, str]:
     """Resolve a goto ref to (target_pane, label).
 
     Forms: `E-NNNN` -> task; bare `NNNN` -> a session id or a task id (errors if
-    it matches both); `<uuid-prefix>` -> session. Raises SystemExit(1) with a
-    stderr error on no-match / ambiguity / no-live-session.
+    it matches both); `<uuid-prefix>` -> session. Raises _GotoNotLive when a
+    single target resolves but has no live pane (recoverable by `--resume`), or
+    SystemExit(1) with a stderr error on ambiguity.
     """
     from endless.task_cmd import task_id_display
     raw = ref.strip()
@@ -1986,11 +2029,9 @@ def _resolve_goto_target(ref: str, live: list[dict]) -> tuple[str, str]:
             return _goto_session(sess_matches, raw)
         if task_matches:
             return _goto_task(n, live)
-        click.echo(
-            f"No live session matches '{raw}' (as a session id or a task). "
-            f"Run `endless session list` to see candidates.", err=True,
+        raise _GotoNotLive(
+            raw, f"No live session matches '{raw}' (as a session id or a task)."
         )
-        raise SystemExit(1)
 
     return _goto_session(_match_companions(live, raw), raw)
 
@@ -2013,9 +2054,53 @@ def _spawner_pane(live: list[dict]) -> tuple[str, str] | None:
     return resolved, f"spawning session {val} (pane {resolved})"
 
 
-def session_goto(target_ref: str) -> None:
+def _resume_new_window_pane(ref: str) -> tuple[str, str]:
+    """Open a NEW tmux window running `claude --resume <uuid>` in the target's
+    worktree (detached, so the caller's own push+switch does the focusing and the
+    nav-trail records a single via=goto move) and return (pane, label). Backs
+    `session goto --resume` for a non-live target (E-1797). Raises
+    click.ClickException if the ref isn't resumable, SystemExit(1) on tmux failure.
+    """
+    import shlex
+    uuid, worktree, rlabel, _eid = _resolve_resume(ref)
+    claude = _require_claude()
+    cmd = f"{shlex.quote(claude)} --resume {shlex.quote(uuid)}"
+    res = _tmux_run(
+        ["new-window", "-d", "-c", worktree, "-P", "-F", "#{pane_id}", cmd]
+    )
+    if not res or res.returncode != 0 or not res.stdout.strip():
+        click.echo("Could not open a new tmux window to resume.", err=True)
+        raise SystemExit(1)
+    pane = res.stdout.strip()
+    return pane, f"--resume {rlabel} (new window)"
+
+
+def _fail_not_live(nl: _GotoNotLive) -> None:
+    """Print `nl`'s not-live error and exit. When the ref is resumable, point the
+    user at `--resume`; otherwise fall back to the `session list` hint (E-1797)."""
+    if _try_resume_target(nl.ref) is not None:
+        click.echo(
+            f"{nl.base} It isn't live — run "
+            f"`endless session goto {nl.ref} --resume` "
+            f"to resume it in a new window.",
+            err=True,
+        )
+    else:
+        click.echo(
+            f"{nl.base} Run `endless session list` to see candidates.",
+            err=True,
+        )
+    raise SystemExit(1)
+
+
+def session_goto(target_ref: str, resume: bool = False) -> None:
     """Switch tmux focus to a task's or session's pane, pushing the current pane
     onto the back-stack. See the module section header (E-1681).
+
+    With `resume=True` (`--resume`), a target that resolves but has no live pane
+    is relaunched in a new tmux window and focused instead of erroring — the
+    manual find-in-DB/open-window/resume dance, automated (E-1797). When the
+    target IS live, `--resume` is a no-op and this behaves like plain goto.
     """
     if not _in_tmux():
         click.echo(
@@ -2024,7 +2109,12 @@ def session_goto(target_ref: str) -> None:
         )
         raise SystemExit(1)
     live = _live_sessions(_project_root_for_cwd())
-    target_pane, label = _resolve_goto_target(target_ref, live)
+    try:
+        target_pane, label = _resolve_goto_target(target_ref, live)
+    except _GotoNotLive as nl:
+        if not resume:
+            _fail_not_live(nl)
+        target_pane, label = _resume_new_window_pane(nl.ref)
 
     key = _backstack_key()
     token = _current_pane_token(live)

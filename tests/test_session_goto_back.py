@@ -25,11 +25,21 @@ class FakeTmux:
         self.spawned_by = spawned_by
         self.client = client
         self.switched: list[str] = []
+        self.new_windows: list[list[str]] = []
+        self._next_new_pane = 1
 
     def run(self, args, timeout=2.0):
         return _Result(*self._dispatch(args))
 
     def _dispatch(self, args):
+        if args[:1] == ["new-window"]:
+            # Record the full argv and mint a fresh pane id, mirroring
+            # `new-window -P -F '#{pane_id}'`. The new pane is now reachable.
+            self.new_windows.append(args)
+            pane = f"%new{self._next_new_pane}"
+            self._next_new_pane += 1
+            self.panes.add(pane)
+            return 0, pane + "\n"
         if args[:2] == ["display-message", "-p"]:
             rest = args[2:]
             fmt = rest[-1]
@@ -194,6 +204,108 @@ def test_goto_outside_tmux(goto_env, monkeypatch, capsys):
         session_cmd.session_goto("E-1465")
     assert exc.value.code == 1
     assert "requires tmux" in capsys.readouterr().err
+
+
+# ─── --resume (E-1797) ────────────────────────────────────────────────────────
+
+
+def _stage_resumable(monkeypatch, worktree, uuid="uuid-abc123",
+                     eid=1748, task=1748):
+    """Patch _resume_target + _require_claude so a resume resolves cleanly to a
+    real on-disk worktree, without needing endless-go or a live `claude`."""
+    monkeypatch.setattr(session_cmd, "_resume_target", lambda ref: {
+        "endless_id": eid, "session_id": uuid, "active_task_id": task,
+        "worktree_path": str(worktree), "state": "ended",
+    })
+    monkeypatch.setattr(session_cmd, "_require_claude", lambda: "/usr/bin/claude")
+
+
+def test_goto_resume_opens_new_window_when_not_live(
+    goto_env, registered_project, monkeypatch, capsys
+):
+    stage, make = goto_env
+    # A live session on a DIFFERENT task, so E-1748 has no live pane.
+    stage(endless_session_id=10, pane_id="%10", active_task_id=1465)
+    ft = make({"%10", "%cur"}, current_pane="%cur")
+    _stage_resumable(monkeypatch, registered_project)
+
+    session_cmd.session_goto("E-1748", resume=True)
+
+    # One detached new window, in the worktree, running `claude --resume <uuid>`.
+    assert len(ft.new_windows) == 1
+    argv = ft.new_windows[0]
+    assert "-d" in argv
+    assert str(registered_project) in argv
+    assert argv[-1] == "/usr/bin/claude --resume uuid-abc123"
+    # …and focus switched to the freshly minted pane.
+    assert ft.switched == ["%new1"]
+    assert "goto --resume" in capsys.readouterr().err
+
+
+def test_goto_resume_noop_when_live(goto_env, monkeypatch):
+    stage, make = goto_env
+    stage(endless_session_id=10, pane_id="%10", active_task_id=1465)
+    ft = make({"%10", "%cur"}, current_pane="%cur")
+
+    def _no_resume(ref):
+        pytest.fail("resume attempted on a live target")
+
+    monkeypatch.setattr(session_cmd, "_resume_target", _no_resume)
+
+    session_cmd.session_goto("E-1465", resume=True)
+
+    assert ft.new_windows == []          # live → plain goto, no window spawned
+    assert ft.switched == ["%10"]
+
+
+def test_goto_not_live_error_names_resume_when_resumable(
+    goto_env, registered_project, monkeypatch, capsys
+):
+    stage, make = goto_env
+    stage(endless_session_id=10, pane_id="%10", active_task_id=1465)
+    make({"%10", "%cur"}, current_pane="%cur")
+    _stage_resumable(monkeypatch, registered_project)
+
+    with pytest.raises(SystemExit) as exc:
+        session_cmd.session_goto("E-1748")   # no --resume
+    assert exc.value.code == 1
+    err = capsys.readouterr().err
+    assert "No live session on E-1748" in err
+    assert "--resume" in err
+
+
+def test_goto_not_live_error_keeps_list_hint_when_unknown(
+    goto_env, monkeypatch, capsys
+):
+    stage, make = goto_env
+    stage(endless_session_id=10, pane_id="%10", active_task_id=1465)
+    make({"%10", "%cur"}, current_pane="%cur")
+
+    def _unknown(ref):
+        raise RuntimeError("no such session/task")
+
+    monkeypatch.setattr(session_cmd, "_resume_target", _unknown)
+
+    with pytest.raises(SystemExit) as exc:
+        session_cmd.session_goto("E-9999")
+    assert exc.value.code == 1
+    err = capsys.readouterr().err
+    assert "No live session on E-9999" in err
+    assert "session list" in err
+    assert "--resume" not in err
+
+
+def test_try_resume_target_reports_known_vs_unknown(monkeypatch):
+    """The resumable-vs-unknown classifier `_fail_not_live` relies on: a resolved
+    target → dict; any resolution failure → None (never raises)."""
+    monkeypatch.setattr(session_cmd, "_resume_target", lambda ref: {"endless_id": 1})
+    assert session_cmd._try_resume_target("E-1") == {"endless_id": 1}
+
+    def _boom(ref):
+        raise RuntimeError("unknown")
+
+    monkeypatch.setattr(session_cmd, "_resume_target", _boom)
+    assert session_cmd._try_resume_target("E-2") is None
 
 
 def test_back_pops_pushed_raw_pane(goto_env):

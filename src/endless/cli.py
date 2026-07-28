@@ -938,16 +938,25 @@ def session_cd(session_ref, show_all, target):
 
 @session_cmd.command("goto")
 @click.argument("target_ref")
-def session_goto(target_ref):
+@click.option(
+    "--resume", is_flag=True,
+    help="If the target isn't live, resume it in a NEW tmux window and focus "
+         "it, instead of erroring. No-op when the target is already live.",
+)
+def session_goto(target_ref, resume):
     """Switch tmux focus to a task's or session's pane, with a back-stack.
 
     <target_ref> is a task id (E-NNNN or NNNN) or a session id (integer or
     Claude UUID prefix). A task id resolves to the most-recently-active live
     session working it. The current pane is pushed onto a per-client back-stack
     so `endless session back` returns here. Requires tmux.
+
+    With --resume, a target that has no live pane is relaunched in a new tmux
+    window and focused (instead of erroring) — unlike `session resume`, which
+    clobbers the current pane.
     """
     from endless.session_cmd import session_goto as run_goto
-    run_goto(target_ref)
+    run_goto(target_ref, resume=resume)
 
 
 @session_cmd.command("resume")
