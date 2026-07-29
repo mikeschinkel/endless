@@ -19,12 +19,19 @@ var (
 	// Check-level validation.
 	ErrNoChecks                  = errors.New("manifest declares no [[check]] entries")
 	ErrCheckMissingRunner        = errors.New("check is missing required field: runner")
-	ErrTestsRequireFirstClass    = errors.New("tests is only valid on a first-class runner")
-	ErrPathsRequireFirstClass    = errors.New("paths is only valid on a first-class runner")
-	ErrRawCheckNeedsCommand      = errors.New("non-first-class runner requires command")
-	ErrFirstClassNeedsSelection  = errors.New("first-class runner requires tests, paths, or command")
-	ErrFirstClassCommandConflict = errors.New("command and tests/paths are mutually exclusive on a first-class runner")
+	ErrTestsRequireFirstClass    = errors.New("tests is only valid on a runner with a structured selection")
+	ErrPathsRequireFirstClass    = errors.New("paths is only valid on a runner with a structured selection")
+	ErrRawCheckNeedsCommand      = errors.New("command-only runner requires command")
+	ErrFirstClassNeedsSelection  = errors.New("structured runner requires tests, paths, or command")
+	ErrFirstClassCommandConflict = errors.New("command and tests/paths are mutually exclusive on a structured runner")
 	ErrFormatMismatch            = errors.New("declared format does not match the runner's inferred format")
+	ErrMalformedRunner           = errors.New("malformed runner type: expected family or family/variant")
+	ErrUnknownVariant            = errors.New("runner family does not implement the declared variant")
+
+	// Driver execution (a driver executes and normalizes its own run).
+	ErrCheckStart     = errors.New("check command failed to start")
+	ErrNoResultStream = errors.New("check produced no result stream")
+	ErrPytestLauncher = errors.New("could not resolve a pytest launcher under the isolated env")
 
 	// Result normalization (the CTRF-subset writer and native parsers).
 	ErrNormalizingResults = errors.New("normalizing native result stream")

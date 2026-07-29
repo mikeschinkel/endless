@@ -17,10 +17,10 @@ var (
 	ErrTierNotSupported = errors.New("suite declares needs; only Tier 0 (temp dir + isolated env) is supported")
 	ErrSeedNotSupported = errors.New("suite declares seed; seeding is not yet supported")
 
-	// Precondition and check execution.
+	// Precondition and check execution. A driver owns its own start /
+	// no-stream / normalize errors (see internal/verify); this guard is the
+	// runner's exit-semantics interpretation across a driver's result.
 	ErrSetupStep            = errors.New("setup step failed")
-	ErrCheckStart           = errors.New("check command failed to start")
-	ErrNoResultStream       = errors.New("check produced no result stream")
 	ErrCheckFailedNoResults = errors.New("check exited non-zero but reported no test failures")
 
 	// Reporting.

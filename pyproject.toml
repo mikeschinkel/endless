@@ -22,6 +22,10 @@ packages = ["src/endless"]
 [dependency-groups]
 dev = [
     "pytest>=9.0.3",
+    # The de-facto standard producer of pytest's machine-readable result stream
+    # (`--json-report` / `--json-report-file`); the pytest driver's pytest-json
+    # normalizer (internal/verify/pytest.go) pins to this plugin's .report.json.
+    "pytest-json-report>=1.5.0",
 ]
 
 [tool.pytest.ini_options]

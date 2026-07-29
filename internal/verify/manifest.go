@@ -4,17 +4,19 @@
 // to native test runners, never a re-description of the tests.
 //
 // A verification is a list of [[check]] entries (see Check): one ticket
-// composes multiple runner invocations into one proof. A first-class runner
-// (gotest, pytest) uses a structured selection Endless translates to the native
-// filter and a format Endless infers; any other runner uses a literal command
-// plus a declared format. A verification suite lives in the product-controlled
-// directory .endless/tasks/<id>/, beside its runner files and an optional
-// fixtures/.
+// composes multiple runner invocations into one proof. A check's runner resolves
+// to a RunnerDriver (see driver.go): a structured driver (gotest, pytest)
+// translates a structured selection to the native filter and infers its format;
+// the generic driver runs a literal command with a declared format. A
+// verification suite lives in the product-controlled directory
+// .endless/tasks/<id>/, beside its runner files and an optional fixtures/.
 //
-// This package owns the schema, discovery, and the first-class translation /
-// bare-clone command emission only. Running a suite (creating the isolated temp
-// environment, invoking the checks, normalizing the native result streams)
-// belongs to the consumers of these manifests.
+// This package owns the schema, discovery, and the RunnerDriver seam — each
+// driver EXECUTES its check (selects, invokes via os/exec, captures, normalizes)
+// rather than emitting a command string for an outer shell. Orchestrating a whole
+// suite around the drivers (the isolated temp environment, setup/teardown,
+// merging the per-check reports) belongs to the consumers of these manifests
+// (internal/verifycmd).
 package verify
 
 import (

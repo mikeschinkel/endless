@@ -122,11 +122,13 @@ end:
 	return err
 }
 
-// runChecks runs each check instrumented to emit its native result stream,
-// captures the stream (stdout or a per-check report file), and normalizes it to
-// a CTRF report. A check that fails to start, emits no parseable stream, or
-// exits non-zero without reporting any test failure (a build/runner error, not a
-// test failure) aborts loudly. Genuine test failures are collected and reported.
+// runChecks resolves each check's driver and lets it execute the run — select,
+// invoke via os/exec, capture the native stream (stdout or a per-check report
+// file), and normalize to a CTRF report. runChecks owns the per-check report-file
+// allocation and the exit-semantics guard: a check that exits non-zero without
+// reporting any test failure (a build/runner error, not a test failure) aborts
+// loudly. A driver that could not start, emit, or parse its stream returns an
+// error that aborts the run. Genuine test failures are collected and reported.
 func runChecks(checks []verify.Check, root dt.DirPath, env []string, runDir dt.DirPath) (results []checkResult, err error) {
 	var reportsDir dt.DirPath
 
@@ -139,41 +141,28 @@ func runChecks(checks []verify.Check, root dt.DirPath, env []string, runDir dt.D
 
 	for i, chk := range checks {
 		reportFile := dt.FilepathJoin(reportsDir, fmtCheckReport(i))
-		cmdStr, src := chk.CaptureCommand(string(reportFile))
 
-		stdout, stderr, exit, rerr := runShell(cmdStr, root, env)
-		if rerr != nil {
-			err = doterr.NewErr(ErrCheckStart, rerr, "check", i, "runner", chk.Runner, "command", cmdStr)
+		driver, derr := verify.LookupDriver(chk.Runner)
+		if derr != nil {
+			err = doterr.NewErr(derr, "check", i, "runner", chk.Runner)
 			goto end
 		}
 
-		var raw []byte
-		switch src {
-		case verify.StreamStdout:
-			raw = stdout
-		case verify.StreamFile:
-			raw, rerr = os.ReadFile(string(reportFile))
-			if rerr != nil {
-				err = doterr.NewErr(ErrNoResultStream, rerr,
-					"check", i, "runner", chk.Runner, "exit", exit, "stderr", tail(stderr))
-				goto end
-			}
-		}
-
-		report, rerr := verify.Normalize(chk.ResolvedFormat(), raw)
+		res, rerr := driver.Run(chk, root, env, reportFile)
 		if rerr != nil {
-			err = doterr.NewErr(rerr, "check", i, "runner", chk.Runner, "exit", exit, "stderr", tail(stderr))
+			err = doterr.NewErr(rerr, "check", i, "runner", chk.Runner)
 			goto end
 		}
+
 		// A non-zero exit not explained by any parsed failure is a build or
 		// runner error (e.g. a package that failed to compile emits no test
 		// events), which must not pass as a clean run.
-		if exit != 0 && report.Results.Summary.Failed == 0 {
+		if res.Exit != 0 && res.Report.Results.Summary.Failed == 0 {
 			err = doterr.NewErr(ErrCheckFailedNoResults,
-				"check", i, "runner", chk.Runner, "exit", exit, "stderr", tail(stderr))
+				"check", i, "runner", chk.Runner, "exit", res.Exit, "stderr", tail(res.Stderr))
 			goto end
 		}
-		results = append(results, checkResult{index: i, runner: chk.Runner, report: report})
+		results = append(results, checkResult{index: i, runner: chk.Runner, report: res.Report})
 	}
 end:
 	return results, err
