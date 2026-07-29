@@ -10,9 +10,9 @@
 # failure, 2 on a setup/environment error. This is the single fail-fast suite for
 # the task; it folds the task's own tests in as checks.
 #
-# Scope note: E-1605 also carries a first-class pytest check for the E-1603 suite,
-# which is deferred behind a blocking design task (the runner/adapter architecture)
-# and is therefore NOT asserted here yet.
+# This exercises all four runner forms the system now supports: gotest, the
+# testscript/.txtar CLI/e2e form, a raw TAP command, and the first-class pytest
+# runner (pytest/uv, per E-1789's driver architecture).
 
 set -u
 
@@ -99,17 +99,24 @@ cache_dir() {
 # assert_suite_passes ID — run the candidate runner over a real .endless/tasks/ID
 # suite, asserting exit 0, the PASSED summary, and a written CTRF report.
 assert_suite_passes() {
-    local id="$1"
+    local id="$1"; local expect="${2:-}"
     local out; out=$("${BIN}" verify "${id}" 2>&1); local rc=$?
     if [[ "${rc}" -eq 0 ]]; then
         report_pass "verify ${id}: exit 0"
     else
-        report_fail "verify ${id}: exit 0" "exit == 0" "exit=${rc} | $(printf '%s' "${out}" | tail -4 | tr '\n' ' ')"
+        report_fail "verify ${id}: exit 0" "exit == 0" "exit=${rc} | $(printf '%s' "${out}" | tail -6 | tr '\n' ' ')"
     fi
     if [[ "${out}" == *"PASSED"* ]]; then
         report_pass "verify ${id}: PASSED summary"
     else
-        report_fail "verify ${id}: PASSED summary" "output contains PASSED" "$(printf '%s' "${out}" | tail -4 | tr '\n' ' ')"
+        report_fail "verify ${id}: PASSED summary" "output contains PASSED" "$(printf '%s' "${out}" | tail -6 | tr '\n' ' ')"
+    fi
+    if [[ -n "${expect}" ]]; then
+        if [[ "${out}" == *"${expect}"* ]]; then
+            report_pass "verify ${id}: ran ${expect} check"
+        else
+            report_fail "verify ${id}: ran ${expect} check" "output contains ${expect}" "$(printf '%s' "${out}" | tail -6 | tr '\n' ' ')"
+        fi
     fi
     assert_path_exists "verify ${id}: CTRF report written" "$(cache_dir)/endless/verify/${id}/ctrf.json"
 }
@@ -134,6 +141,11 @@ main() {
         printf 'ERROR: endless-go did not build; aborting\n' >&2; exit 2
     fi
 
+    section "Python env — materialize .venv (pytest + pytest-json-report)"
+    assert_succeeds "uv sync (installs the pytest/uv launcher target + json-report plugin)" \
+        uv sync
+    assert_path_exists "project venv pytest executable present" "${REPO_ROOT}/.venv/bin/pytest"
+
     section "testscript/txtar dependency (rogpeppe/go-internal, module mode)"
     assert_contains "go.mod declares github.com/rogpeppe/go-internal" \
         "github.com/rogpeppe/go-internal" cat "${REPO_ROOT}/go.mod"
@@ -147,8 +159,8 @@ main() {
     section "Reference suite — E-1758 (txtar + gotest)"
     assert_suite_passes "E-1758"
 
-    section "Reference suite — E-1603 (gotest + raw TAP)"
-    assert_suite_passes "E-1603"
+    section "Reference suite — E-1603 (gotest + raw TAP + pytest/uv)"
+    assert_suite_passes "E-1603" "pytest/uv"
 
     summary
 }

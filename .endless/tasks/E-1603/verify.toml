@@ -6,11 +6,6 @@
 # normalize and MERGE into one CTRF report — the first real proof of
 # discover -> isolate -> capture -> normalize -> merge with more than one runner.
 #
-# NOTE: a first-class `pytest` check over the Python `task verify` wrapper is
-# planned for this same manifest but is deferred until the runner/adapter
-# architecture is decided (it is gated on a blocking brainstorm); it slots in
-# here as a third [[check]] once the pytest form lands.
-
 schema = 1
 task   = "E-1603"
 
@@ -25,3 +20,11 @@ paths  = ["./internal/verify/...", "./internal/verifycmd/..."]
 runner  = "sh"
 command = "sh .endless/tasks/E-1603/e2e.sh"
 format  = "tap"
+
+# pytest first-class check (the pytest/uv showcase): the Python `task verify`
+# wrapper's unit tests. The pytest/uv driver (ED-1536) resolves the project venv's
+# pytest, runs with --json-report, and normalizes the plugin's document to CTRF —
+# merging into this suite's one report alongside the gotest and TAP checks.
+[[check]]
+runner = "pytest/uv"
+paths  = ["tests/test_verify_cmd.py"]
