@@ -1832,12 +1832,12 @@ def task_approve(item_ids):
               help="Regex matching an absolute path to permit in inline content "
                    "(repeatable; escape hatch for the path gate).")
 def task_complete_cmd(item_ids, outcome, outcome_file, allow_paths):
-    """Mark one or more tasks as `completed` (E-1240).
+    """Mark one or more tasks as `completed`.
 
     For findings-as-deliverable tasks (audits, research, reviews, etc.)
-    whose deliverable is the outcome text itself, not behavior. Gated:
-    the task's title's lead verb must be marked `completable: true` in
-    verbs.json. For implementation tasks, use `task confirm` / `task assume`.
+    whose deliverable is the outcome text itself, not behavior.
+    Implementation tasks finish as `confirmed` or `assumed` instead
+    (see `task confirm` / `task assume`).
     """
     from endless.task_cmd import mark_completed_item
     outcome = _resolve_content_flag(outcome, outcome_file, "outcome", allow_paths)

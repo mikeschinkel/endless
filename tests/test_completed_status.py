@@ -92,15 +92,15 @@ def test_completed_rejects_implementation_verb(seeded_project_at_cwd):
     with pytest.raises(click.ClickException) as exc:
         task_cmd.mark_completed_item(tid, outcome="done")
     msg = str(exc.value.message).lower()
-    assert "completable" in msg
-    assert "'add'" in msg
+    assert "valid final status" in msg
+    assert "'confirmed' or 'assumed'" in msg
 
 
 def test_completed_rejects_fix_verb(seeded_project_at_cwd):
     tid = _add_task("Fix bug in parser")
     with pytest.raises(click.ClickException) as exc:
         task_cmd.mark_completed_item(tid, outcome="fixed")
-    assert "completable" in str(exc.value.message).lower()
+    assert "valid final status" in str(exc.value.message).lower()
 
 
 def test_completed_requires_non_blank_outcome(seeded_project_at_cwd):
@@ -172,7 +172,7 @@ def test_update_status_completed_rejects_non_completable_verb(seeded_project_at_
     tid = _add_task("Implement caching layer")
     with pytest.raises(click.ClickException) as exc:
         task_cmd.update_plan(tid, status="completed", outcome="done")
-    assert "completable" in str(exc.value.message).lower()
+    assert "valid final status" in str(exc.value.message).lower()
 
 
 def test_update_status_completed_uses_new_title_if_provided(seeded_project_at_cwd):
@@ -232,7 +232,7 @@ def test_completed_non_epic_still_gated_by_verb(seeded_project_at_cwd):
     tid = _add_task("Implement the foo subsystem", type_id=1)
     with pytest.raises(click.ClickException) as exc:
         task_cmd.mark_completed_item(tid, outcome="done")
-    assert "completable" in str(exc.value.message).lower()
+    assert "valid final status" in str(exc.value.message).lower()
 
 
 # ─── E-1577: completed accepts existing DB outcome (merge) ────────────────────
@@ -301,7 +301,7 @@ def test_cli_task_complete_rejects_implementation_verb(seeded_project_at_cwd):
         "--outcome", "trying to sneak through",
     ])
     assert result.exit_code != 0
-    assert "completable" in result.output.lower()
+    assert "valid final status" in result.output.lower()
 
 
 # ─── lead-verb extraction edge cases ──────────────────────────────────────────

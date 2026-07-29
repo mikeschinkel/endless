@@ -2003,15 +2003,9 @@ def _require_completable_verb_for_completed(
     from endless.matchers import is_completable_verb
     verb = _lead_verb(title)
     if not is_completable_verb(verb):
-        shown = verb or "(none)"
         raise click.ClickException(
-            f"Status 'completed' requires a completable lead verb in the "
-            f"task title. Title's lead verb is {shown!r}, which is not "
-            f"marked `completable: true` in verbs.json.\n"
-            f"Completable verbs (e.g. audit, research, investigate, review, "
-            f"analyze) signal that the deliverable is text/findings, not "
-            f"behavior. For implementation tasks, use 'unverified' → 'confirmed' "
-            f"or 'assumed' instead."
+            "'completed' isn't a valid final status for this task. "
+            "Implementation tasks finish as 'confirmed' or 'assumed'."
         )
 
 
