@@ -2889,6 +2889,18 @@ def _check_task_ownership(item_id: int, current_eid: int | None) -> bool:
     is free (or only stale sessions hold it). Raises click.ClickException
     if a *different* live session owns the task.
     """
+    # E-1807: self-heal a ghost owner first. A session that died without firing
+    # SessionEnd leaves a non-ended row pointing at a now-dead tmux pane, which
+    # the query below would read as a live owner. Reaping it (flip to `ended`,
+    # NULL `process`) before the read lets a dead-pane owner fall out naturally,
+    # so the spawn/claim proceeds with no user step. Best-effort: a reaper
+    # failure is silent and falls through to the pre-E-1807 behavior.
+    from endless.session_cmd import (
+        _live_sessions, _project_root_for_cwd, _reap_dead_panes,
+    )
+    project_root = _project_root_for_cwd()
+    _reap_dead_panes(project_root)
+
     rows = db.query(
         "SELECT id AS eid FROM sessions "
         "WHERE active_task_id = ? AND state != 'ended'",
@@ -2904,8 +2916,6 @@ def _check_task_ownership(item_id: int, current_eid: int | None) -> bool:
     if not candidate_eids:
         return owned_by_current
 
-    from endless.session_cmd import _live_sessions, _project_root_for_cwd
-    project_root = _project_root_for_cwd()
     live = _live_sessions(project_root)
     live_by_eid = {
         c["endless_session_id"]: c
@@ -2921,7 +2931,9 @@ def _check_task_ownership(item_id: int, current_eid: int | None) -> bool:
         raise click.ClickException(
             f"E-{item_id} is already active in session {eid} "
             f"(tmux pane {pane}).\n"
-            "Switch to that session or have it release the task first."
+            "Switch to that session or have it release the task first.\n"
+            f"If pane {pane} is actually gone, run `endless-go tmux reset` to "
+            "clear the stale session and retry."
         )
 
     return owned_by_current

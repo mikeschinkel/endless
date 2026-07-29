@@ -1252,6 +1252,35 @@ def _live_sessions(project_root: Path, harness: str = "claude") -> list[dict]:
     return live
 
 
+def _reap_dead_panes(project_root: Path) -> None:
+    """Best-effort: end sessions whose owning tmux pane is gone (E-1807).
+
+    Shells to `endless-go session-query reap-dead-panes` — mirroring how
+    `_live_sessions` shells to `list-live` — so a ghost owner (a non-ended
+    session row whose tmux pane no longer exists, left behind when a session
+    died without firing SessionEnd) is flipped to `ended` before the
+    spawn/claim ownership guard reads it. The guard's
+    `state != 'ended'` query then excludes the just-reaped ghost and the task
+    reads as free.
+
+    Silent on every failure: a reaper error must never block a spawn/claim, so
+    a missing binary, timeout, or nonzero exit simply falls through to the
+    existing ownership behavior.
+    """
+    import subprocess
+
+    from endless import config
+    try:
+        subprocess.run(
+            ["endless-go", *config.go_db_context_args(),
+             "session-query", "reap-dead-panes",
+             "--project-root", str(project_root)],
+            capture_output=True, text=True, timeout=5,
+        )
+    except (FileNotFoundError, subprocess.SubprocessError):
+        return
+
+
 def _project_root_for_cwd() -> Path:
     """Resolve the project root for the current working directory.
 
