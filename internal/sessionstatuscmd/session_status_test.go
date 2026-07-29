@@ -201,6 +201,33 @@ func TestRenderEmptyFocal(t *testing.T) {
 	}
 }
 
+// TestRenderNoGoalSurfacesRows pins the E-1802 no-goal render: with focal == 0
+// but a non-empty row set (the emitting session's surfaced/revisited tasks), the
+// table renders normally — legend + rows — instead of short-circuiting to the
+// claim/bind hint. The old gate was `focal == 0 || len(rows) == 0`; the new gate
+// is `len(rows) == 0`, so focal == 0 with work no longer hides it.
+func TestRenderNoGoalSurfacesRows(t *testing.T) {
+	rows := []monitor.SessionStatusRow{
+		{ID: 1801, Title: "filed this session", Status: "ready", Phase: "now", TypeSlug: "task"},
+		{ID: 1776, Title: "touched this session", Status: "unplanned", Phase: "next", TypeSlug: "task"},
+	}
+	var b strings.Builder
+	renderTo(&b, rows, 0, hintClaimBind, 90, false)
+	out := b.String()
+	if strings.Contains(out, "claim or bind") {
+		t.Errorf("no-goal view with rows must NOT show the claim/bind hint:\n%s", out)
+	}
+	for _, id := range []string{"E-1801", "E-1776"} {
+		if !strings.Contains(out, id) {
+			t.Errorf("row %s missing from no-goal render:\n%s", id, out)
+		}
+	}
+	// legend + 2 rows.
+	if n := len(strings.Split(strings.TrimRight(out, "\n"), "\n")); n != 3 {
+		t.Errorf("want 3 lines (legend + 2 rows), got %d:\n%s", n, out)
+	}
+}
+
 // TestBuildLegend covers the E-1750 dynamic legend: only glyphs for actions and
 // decorations actually present in the row set, enum order then decorations, no
 // `|` divider. This is the sole coverage of ◆ dirty (a real divergent worktree

@@ -273,6 +273,61 @@ func paneIsRunningClaude(tmuxPane string) bool {
 	return cmd == "claude" || cmd == "claude-code"
 }
 
+// ResolveSessionStatusSession returns the emitting session's integer id for the
+// given tmux pane, used by `session status` when NO goal is claimed so it can
+// list the session's own surfaced/revisited rows (E-1802). Resolution mirrors
+// the focal path (GetActiveTaskForPane): the pane's own live session first, then
+// any live session in the same tmux WINDOW (most-recent last_activity). Unlike
+// the focal path it does NOT require active_task_id — an unclaimed session still
+// has surfaced/revisited work to show. Returns 0 (no error) when not in tmux
+// (pane == "") or no live session is found.
+func ResolveSessionStatusSession(pane string) (int64, error) {
+	if pane == "" {
+		return 0, nil
+	}
+	if id, err := sessionForPanes([]string{pane}); err != nil {
+		return 0, err
+	} else if id != 0 {
+		return id, nil
+	}
+	panes, err := listPanesInSameWindow(pane)
+	if err != nil || len(panes) == 0 {
+		return 0, nil
+	}
+	return sessionForPanes(panes)
+}
+
+// sessionForPanes returns the most-recently-active live session id whose process
+// matches any of the given panes, or 0 when none. Companion to anySessionForPanes
+// (which only tests existence); this returns the id the no-goal view anchors on.
+func sessionForPanes(panes []string) (int64, error) {
+	if len(panes) == 0 {
+		return 0, nil
+	}
+	db, err := DB()
+	if err != nil {
+		return 0, err
+	}
+	placeholders := strings.Repeat("?,", len(panes))
+	placeholders = placeholders[:len(placeholders)-1]
+	args := make([]any, len(panes))
+	for i, p := range panes {
+		args[i] = p
+	}
+	var id int64
+	err = db.QueryRow(
+		"SELECT id FROM sessions WHERE process IN ("+placeholders+") AND state != 'ended' ORDER BY last_activity DESC LIMIT 1",
+		args...,
+	).Scan(&id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, err
+	}
+	return id, nil
+}
+
 // GetActiveBlockers returns up to 3 task IDs that currently block taskID,
 // ordered by id ASC. "Active" means the blocker's status is NOT in the
 // terminal set {confirmed, assumed, declined, obsolete} — those statuses

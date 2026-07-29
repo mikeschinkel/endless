@@ -124,11 +124,15 @@ func Run(args []string) {
 	cols := fs.Int("cols", 0, "terminal width override (0 = auto-detect)")
 	taskFlag := fs.Int64("task", 0, "explicit task id (headless: bypasses tmux/session resolution and reads the resolved DB context — the self-detected sandbox or --config-dir — instead of pinning the main DB; intended for tests)")
 	fromSession := fs.Int64("from-session", 0, "explicit spawning session id paired with --task (headless: drives the ↩ from row + --tree spawner annotation without tmux resolution; intended for tests)")
+	sessionFlag := fs.Int64("session", 0, "explicit emitting session id (headless: bypasses tmux resolution and lists that session's surfaced/revisited rows — the no-goal view — against the resolved DB context; intended for tests)")
 	if err := fs.Parse(args); err != nil {
 		os.Exit(2)
 	}
 
-	var focal, parentSession int64
+	// emittingSession anchors the no-goal view (E-1802): when no task is claimed
+	// (focal == 0), `session status` lists this session's own surfaced/revisited
+	// session_tasks rows instead of hiding its work behind the claim/bind hint.
+	var focal, parentSession, emittingSession int64
 	// noTaskHint is the message shown when no focal task resolves (focal == 0, or
 	// the rare focal-with-no-rows case). It mirrors the tmux status line's
 	// PaneStatusKind so the two surfaces agree (E-1698). Defaults to the claim/bind
@@ -146,6 +150,12 @@ func Run(args []string) {
 		// from @endless_spawned_by, so the ↩ from row stays testable headless.
 		focal = *taskFlag
 		parentSession = *fromSession
+	} else if *sessionFlag > 0 {
+		// Headless no-goal mode (E-1802 verify harness): the caller names the
+		// emitting session directly (no live pane to resolve it from), so the
+		// no-goal surfaced/revisited view is exercised against the seeded sandbox
+		// DB. Same PinMainDB skip rationale as the --task branch.
+		emittingSession = *sessionFlag
 	} else {
 		// Normal path: session/pane state lives in the main DB regardless of cwd
 		// (the hook pins its writes there), so pin main before resolving. Anchor
@@ -163,6 +173,15 @@ func Run(args []string) {
 		}
 		noTaskHint = noTaskHintFor(kind)
 		parentSession = monitor.ResolveSessionStatusParentSession(pane)
+		// No claimed goal: anchor the no-goal view on this pane's own session so
+		// its surfaced/revisited work is still listed instead of hidden (E-1802).
+		if focal == 0 {
+			emittingSession, err = monitor.ResolveSessionStatusSession(pane)
+			if err != nil {
+				fmt.Fprintln(os.Stderr, "session-status:", err)
+				os.Exit(1)
+			}
+		}
 	}
 
 	// --tree is an IDs-only structural view: a single frame, no legend, no monitor
@@ -188,20 +207,34 @@ func Run(args []string) {
 	// cursor-positioning escapes). When stdout is piped/captured, degrade to a
 	// single frame so scripts and pipes don't hang on an endless loop.
 	if *monitorMode && term.IsTerminal(int(os.Stdout.Fd())) {
-		monitorLoop(focal, parentSession, noTaskHint, *all, *cols, color)
+		monitorLoop(focal, parentSession, emittingSession, noTaskHint, *all, *cols, color)
 		return
 	}
 
-	if err := renderSnapshot(os.Stdout, focal, parentSession, noTaskHint, *all, detectCols(*cols), color); err != nil {
+	if err := renderSnapshot(os.Stdout, focal, parentSession, emittingSession, noTaskHint, *all, detectCols(*cols), color); err != nil {
 		fmt.Fprintln(os.Stderr, "session-status:", err)
 		os.Exit(1)
 	}
 }
 
-// renderSnapshot queries the current rows for the anchored focal/parent and
-// renders one frame to w.
-func renderSnapshot(w io.Writer, focal, parentSession int64, noTaskHint string, all bool, cols int, color bool) error {
-	rows, err := monitor.SessionStatusRows(focal, parentSession, all)
+// gatherRows returns the rows to render: the focal-anchored what's-next set when
+// a goal is claimed (focal != 0), else the emitting session's own surfaced/
+// revisited rows (E-1802) when a session is present but unclaimed. Empty when
+// neither resolves — renderTo then prints the claim/bind hint.
+func gatherRows(focal, parentSession, emittingSession int64, all bool) ([]monitor.SessionStatusRow, error) {
+	if focal != 0 {
+		return monitor.SessionStatusRows(focal, parentSession, all)
+	}
+	if emittingSession != 0 {
+		return monitor.SessionStatusRowsForSession(emittingSession, all)
+	}
+	return nil, nil
+}
+
+// renderSnapshot queries the current rows for the anchored focal/parent (or the
+// emitting session when no goal is claimed) and renders one frame to w.
+func renderSnapshot(w io.Writer, focal, parentSession, emittingSession int64, noTaskHint string, all bool, cols int, color bool) error {
+	rows, err := gatherRows(focal, parentSession, emittingSession, all)
 	if err != nil {
 		return err
 	}
@@ -219,7 +252,7 @@ func renderSnapshot(w io.Writer, focal, parentSession int64, noTaskHint string, 
 // path. Width is re-detected each tick so a terminal resize is honored. This is
 // the live `session monitor` dashboard; it loops the same snapshot renderer
 // `session status` prints once.
-func monitorLoop(focal, parentSession int64, noTaskHint string, all bool, colsOverride int, color bool) {
+func monitorLoop(focal, parentSession, emittingSession int64, noTaskHint string, all bool, colsOverride int, color bool) {
 	out := os.Stdout
 	fmt.Fprint(out, "\x1b[?25l")                         // hide cursor
 	restore := func() { fmt.Fprint(out, "\x1b[?25h\n") } // show cursor + trailing newline
@@ -235,7 +268,7 @@ func monitorLoop(focal, parentSession int64, noTaskHint string, all bool, colsOv
 	prev := ""
 	for {
 		var b strings.Builder
-		if err := renderSnapshot(&b, focal, parentSession, noTaskHint, all, detectCols(colsOverride), color); err != nil {
+		if err := renderSnapshot(&b, focal, parentSession, emittingSession, noTaskHint, all, detectCols(colsOverride), color); err != nil {
 			restore()
 			fmt.Fprintln(os.Stderr, "session-status:", err)
 			os.Exit(1)
@@ -277,9 +310,11 @@ func eraseEachLineToEOL(frame string) string {
 var worktreeAnomalies = monitor.WorktreeAnomalies
 
 func renderTo(w io.Writer, rows []monitor.SessionStatusRow, focal int64, noTaskHint string, cols int, color bool) {
-	if focal == 0 || len(rows) == 0 {
-		// No rows to document, so no legend — just the claim/bind (or register-
-		// session) hint, NEVER an unrelated task's rows (E-1698).
+	// Gate on rows, not focal: a session with no claimed goal (focal == 0) still
+	// has surfaced/revisited rows to render (E-1802). Only the truly-empty case —
+	// no goal AND no session work — falls through to the claim/bind (or register-
+	// session) hint, NEVER an unrelated task's rows (E-1698).
+	if len(rows) == 0 {
 		fmt.Fprintln(w, dim(noTaskHint, color))
 		return
 	}

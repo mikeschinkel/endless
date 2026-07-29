@@ -51,6 +51,20 @@ func snSessionTask(t *testing.T, db *sql.DB, sessionID, taskID int64) {
 	}
 }
 
+// snSessionTaskRel inserts a session_tasks row with an explicit relation_id so
+// the surfaced(2)/revisited(3)/goal(1) classification the no-goal view filters
+// on can be driven directly (E-1802).
+func snSessionTaskRel(t *testing.T, db *sql.DB, sessionID, taskID, relationID int64) {
+	t.Helper()
+	if _, err := db.Exec(
+		`INSERT INTO session_tasks (session_id, task_id, relation_id, created_at, updated_at)
+		 VALUES (?, ?, ?, '2026-06-20T00:00:00', '2026-06-20T00:00:00')`,
+		sessionID, taskID, relationID,
+	); err != nil {
+		t.Fatalf("snSessionTaskRel s=%d t=%d rel=%d: %v", sessionID, taskID, relationID, err)
+	}
+}
+
 func snBlocks(t *testing.T, db *sql.DB, blockerID, blockedID int64) {
 	t.Helper()
 	if _, err := db.Exec(
@@ -355,6 +369,85 @@ func TestSessionStatusRows_LandedColumn(t *testing.T) {
 	}
 	if p.Landed {
 		t.Errorf("task %d Landed = true, want false (no task_landings row)", plain)
+	}
+}
+
+// TestSessionStatusRowsForSession_NoGoalSurfacesWork drives the E-1802 no-goal
+// view: a session with a NULL active_task_id still lists the tasks it filed
+// (surfaced=2) and touched (revisited=3), while the goal-relation row (1) is
+// excluded (that path is the focal view's) and a terminal row is omitted unless
+// includeAll. Decorations that need a focal (is_focal/is_parent/is_from) are all
+// false; in_flight/blocked/blocks counts still compute.
+func TestSessionStatusRowsForSession_NoGoalSurfacesWork(t *testing.T) {
+	db := withTestDB(t)
+	seedProject(t, db, 1, "p1", "/p1")
+
+	const surfaced, revisited, goalTask, doneTouched, blocker = 1801, 1776, 1797, 1400, 1500
+	snTask(t, db, surfaced, 1, "ready", "now", "")
+	snTask(t, db, revisited, 1, "unplanned", "next", "")
+	snTask(t, db, goalTask, 1, "underway", "now", "")
+	snTask(t, db, doneTouched, 1, "confirmed", "now", "")
+	snTask(t, db, blocker, 1, "underway", "now", "") // open blocker of `revisited`
+
+	// The emitting session (id=963) has NO claimed goal (active_task_id NULL).
+	snSession(t, db, 963, 1, 0, "working")
+	snSessionTaskRel(t, db, 963, surfaced, 2)    // filed this session
+	snSessionTaskRel(t, db, 963, revisited, 3)   // touched this session
+	snSessionTaskRel(t, db, 963, goalTask, 1)    // goal — belongs to the focal view
+	snSessionTaskRel(t, db, 963, doneTouched, 3) // touched but terminal
+
+	// A live session on `revisited` makes it in_flight; an open blocker gives it ⊗.
+	snSession(t, db, 964, 1, revisited, "working")
+	snBlocks(t, db, blocker, revisited)
+
+	rows, err := SessionStatusRowsForSession(963, false)
+	if err != nil {
+		t.Fatalf("SessionStatusRowsForSession: %v", err)
+	}
+
+	if _, ok := snRowByID(rows, surfaced); !ok {
+		t.Errorf("surfaced task %d should be listed in the no-goal view", surfaced)
+	}
+	r, ok := snRowByID(rows, revisited)
+	if !ok {
+		t.Fatalf("revisited task %d should be listed in the no-goal view", revisited)
+	}
+	if r.IsFocal || r.IsParent || r.IsFrom {
+		t.Errorf("no-goal rows carry no focal/parent/from decoration: %+v", r)
+	}
+	if !r.InFlight {
+		t.Errorf("revisited %d has a live session on it, InFlight should be true: %+v", revisited, r)
+	}
+	if r.BlockedByN != 1 {
+		t.Errorf("revisited %d BlockedByN = %d, want 1 (open blocker)", revisited, r.BlockedByN)
+	}
+	if _, ok := snRowByID(rows, goalTask); ok {
+		t.Errorf("goal-relation task %d must NOT appear in the no-goal (surfaced/revisited) view", goalTask)
+	}
+	if _, ok := snRowByID(rows, doneTouched); ok {
+		t.Errorf("terminal touched task %d should be omitted without includeAll", doneTouched)
+	}
+
+	// includeAll surfaces the terminal touched row.
+	rowsAll, err := SessionStatusRowsForSession(963, true)
+	if err != nil {
+		t.Fatalf("SessionStatusRowsForSession includeAll: %v", err)
+	}
+	if _, ok := snRowByID(rowsAll, doneTouched); !ok {
+		t.Errorf("includeAll should surface terminal touched task %d", doneTouched)
+	}
+}
+
+// TestSessionStatusRowsForSession_ZeroSession returns nothing for session id 0.
+func TestSessionStatusRowsForSession_ZeroSession(t *testing.T) {
+	db := withTestDB(t)
+	seedProject(t, db, 1, "p1", "/p1")
+	rows, err := SessionStatusRowsForSession(0, false)
+	if err != nil {
+		t.Fatalf("SessionStatusRowsForSession: %v", err)
+	}
+	if len(rows) != 0 {
+		t.Errorf("session=0 should yield no rows, got %d", len(rows))
 	}
 }
 

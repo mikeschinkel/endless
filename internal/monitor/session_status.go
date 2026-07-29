@@ -298,6 +298,97 @@ SELECT id, project_id, title, status, phase, type_slug, has_text,
 	return out, nil
 }
 
+// SessionStatusRowsForSession returns the surfaced/revisited task rows recorded
+// in session_tasks for session `sessionID` — the tasks this session filed
+// (relation surfaced=2) or touched-but-did-not-claim (revisited=3). It is the
+// no-goal companion to SessionStatusRows: when a session has no claimed task
+// (active_task_id NULL) the focal-anchored projection surfaces nothing, so
+// `session status` would hide the session's own work entirely (E-1802). This
+// reads the already-recorded rows directly off the session and enriches them
+// with the same decoration/count columns the focal view uses.
+//
+// The classification is authoritative and set-once by the capture executors
+// (E-1462); this only READS relation_id, never reclassifies. The goal relation
+// (1) is intentionally excluded here: a session with a goal takes the
+// focal-anchored path, so the goal row is surfaced there, not here.
+//
+// is_focal/is_parent/is_from are always 0 in this view — there is no focal task
+// to anchor those decorations to. in_flight, landed, blocked_by_n, and blocks_n
+// are computed identically to the focal view. Done-work (terminal status) is
+// omitted unless includeAll is true. Returns an empty slice when sessionID is 0.
+func SessionStatusRowsForSession(sessionID int64, includeAll bool) ([]SessionStatusRow, error) {
+	if sessionID == 0 {
+		return nil, nil
+	}
+	db, err := DB()
+	if err != nil {
+		return nil, err
+	}
+
+	allFlag := 0
+	if includeAll {
+		allFlag = 1
+	}
+
+	// relation_id 2=surfaced, 3=revisited (sessiontaskrelation.Relation). Goal (1)
+	// is excluded — a goal-bearing session resolves via SessionStatusRows.
+	q := `
+WITH base AS (
+  SELECT t.id, t.project_id, t.title, t.status, t.phase, t.text, t.type_id
+    FROM session_tasks st JOIN tasks t ON t.id = st.task_id
+   WHERE st.session_id = ?
+     AND st.relation_id IN (2, 3)
+),
+enr AS (
+  SELECT b.id, b.project_id, b.title, b.status, b.phase,
+    COALESCE((SELECT slug FROM task_types WHERE id = b.type_id), '') AS type_slug,
+    (b.text IS NOT NULL AND b.text <> '') AS has_text,
+    0 AS is_focal,
+    0 AS is_parent,
+    0 AS is_from,
+    EXISTS(
+       SELECT 1 FROM sessions s
+        WHERE s.state != 'ended' AND s.active_task_id = b.id
+     ) AS in_flight,
+    EXISTS(SELECT 1 FROM task_landings tl WHERE tl.task_id = b.id) AS landed,
+    (SELECT count(*) FROM task_deps d JOIN tasks blk ON blk.id = d.source_id
+       WHERE d.source_type = 'task' AND d.target_type = 'task'
+         AND d.dep_type = 'blocks' AND d.target_id = b.id
+         AND blk.status NOT IN (` + terminalStatusSet + `)) AS blocked_by_n,
+    (SELECT count(*) FROM task_deps d
+       WHERE d.source_type = 'task' AND d.source_id = b.id
+         AND d.dep_type = 'blocks') AS blocks_n
+  FROM base b
+)
+SELECT id, project_id, title, status, phase, type_slug, has_text,
+       is_focal, is_parent, is_from, in_flight, landed, blocked_by_n, blocks_n
+  FROM enr
+ WHERE (? = 1) OR status NOT IN (` + terminalStatusSet + `)
+`
+
+	rows, err := db.Query(q, sessionID, allFlag)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []SessionStatusRow
+	for rows.Next() {
+		var r SessionStatusRow
+		if err := rows.Scan(
+			&r.ID, &r.ProjectID, &r.Title, &r.Status, &r.Phase, &r.TypeSlug, &r.HasText,
+			&r.IsFocal, &r.IsParent, &r.IsFrom, &r.InFlight, &r.Landed, &r.BlockedByN, &r.BlocksN,
+		); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // intPlaceholders renders "?,?,…" with len(ids) slots and the matching []any
 // args, for a dynamic SQL `IN` clause. Returns ("", nil) for an empty set so
 // callers can short-circuit (an empty `IN ()` is a SQL error).
