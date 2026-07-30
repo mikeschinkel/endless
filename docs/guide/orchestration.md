@@ -102,6 +102,14 @@ endless worktree land <id> --dry-run        # preview without making changes
 
 **Do not merge to main any other way.** `worktree land` is the single sanctioned path. The exception is global-config artifacts (verbs.jsonl, db-ledger entries) which auto-commit to main directly.
 
+#### Post-land script
+
+If a task's change needs a one-time action on **main** *after* it lands — most often removing the untracked files a newly-un-ignored path leaves behind (a commit only moves tracked content, so no merge can delete them), or a fixup git won't perform on merge — commit an **idempotent** `.endless/hooks/post-land/e-<id>.sh` (`chmod +x`) on your branch. It rides into main with the task, and `worktree land` runs it once right after the merge:
+
+- **Invocation.** Exec'd directly (its own shebang) with **cwd = the main checkout** and **`$1` = the main checkout root**. `ENDLESS_TASK_ID`, `ENDLESS_MERGE_SHA`, `ENDLESS_WORKTREE_PATH`, and `ENDLESS_BASE_BRANCH` are exported into its environment.
+- **Failure is non-fatal and loud.** The merge already advanced main, so a non-zero exit never unwinds the land — endless prints a warning naming the script, exit code, cwd, and the command to re-run it, then reports the land as done. Write the script so re-running it is safe; that is how a failed run is finished.
+- Absent script → nothing happens. Present but not executable → a warning, and the step is skipped (the land still succeeds).
+
 ### Abandoning a worktree
 
 ```bash

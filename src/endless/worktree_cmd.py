@@ -1336,6 +1336,12 @@ def create_task_worktree(
 
 POST_WORKTREE_CREATE_HOOK = ".endless/hooks/post-worktree-create.sh"
 
+# E-1799: directory (under the existing hooks root) holding per-task post-land
+# scripts. Each is `<task>.sh` with the lowercase id, matching the
+# `.endless/worktrees/e-NNN` convention. Nested in a subdir so the hooks root
+# stays free for project-wide lifecycle hooks.
+POST_LAND_HOOK_DIR = ".endless/hooks/post-land"
+
 
 def _run_post_worktree_create_hook(project_root: Path, worktree_path: Path) -> None:
     """Run the project's post-worktree-create bootstrap hook, if present (E-986).
@@ -1400,6 +1406,93 @@ def _run_post_worktree_create_hook(project_root: Path, worktree_path: Path) -> N
             f"    The worktree was KEPT. The hook must be idempotent/re-runnable;\n"
             f"    finish bootstrap by re-running it:\n"
             f"        cd {_tilde(worktree_path)} && {_tilde(hook)} {_tilde(worktree_path)}",
+            err=True,
+        )
+
+
+def _run_post_land_script(
+    worktree_path: Path,
+    main_root: Path,
+    canonical: str,
+    merge_sha: str,
+    base_branch: str,
+) -> None:
+    """Run the task's committed post-land script after the merge (E-1799).
+
+    The *solution* half of self-completing land: a task whose change needs a
+    one-time action on main after it lands — most often removing the untracked
+    files a newly-un-ignored path leaves behind (a commit only moves tracked
+    content, so no merge can delete them), or a fixup git won't perform on merge
+    — commits an idempotent `.endless/hooks/post-land/e-<task>.sh` on its branch.
+    It lands into main with the task; this runner execs it once, right after the
+    ff-merge advanced main, and nothing ever re-execs it.
+
+    Discovery: after the ff-merge the script is in main's tree at
+    `<main_root>/.endless/hooks/post-land/<task>.sh` (lowercase id). Absent →
+    silent no-op. Present but not executable → loud warning (path + chmod + the
+    re-run command), then skip.
+
+    Invocation mirrors the create hook: exec'd directly via its own shebang (no
+    shell-string interpolation), with cwd = the main checkout (the working tree
+    it reconciles) and argv[1] = the main root. It inherits the land process's
+    env plus ENDLESS_TASK_ID / ENDLESS_MERGE_SHA / ENDLESS_WORKTREE_PATH /
+    ENDLESS_BASE_BRANCH. Output streams live.
+
+    Failure is non-fatal and loud (forced: Step-5's ff-merge already advanced
+    main, so the land HAS happened and cannot be unwound). On non-zero exit a
+    loud error names the script, exit code, cwd, and the exact re-run command;
+    the land still succeeds. The contract REQUIRES the script be idempotent /
+    re-runnable, so recovery is just re-running it.
+    """
+    script = main_root / POST_LAND_HOOK_DIR / f"{canonical.lower()}.sh"
+    if not script.exists():
+        return
+    rerun = f"cd {_tilde(main_root)} && {_tilde(script)} {_tilde(main_root)}"
+    if not os.access(script, os.X_OK):
+        click.echo(
+            click.style("⚠ post-land script is not executable", fg="yellow")
+            + f"\n    {_tilde(script)}\n"
+            f"    The land succeeded, but this step was skipped.\n"
+            f"    Make it executable and re-run:\n"
+            f"        chmod +x {_tilde(script)}\n"
+            f"        {rerun}",
+            err=True,
+        )
+        return
+    click.echo(
+        click.style("•", fg="cyan")
+        + f" running post-land script: {_tilde(script)}"
+    )
+    env = {
+        **os.environ,
+        "ENDLESS_TASK_ID": canonical,
+        "ENDLESS_MERGE_SHA": merge_sha,
+        "ENDLESS_WORKTREE_PATH": str(worktree_path),
+        "ENDLESS_BASE_BRANCH": base_branch,
+    }
+    try:
+        result = subprocess.run(
+            [str(script), str(main_root)], cwd=str(main_root), env=env,
+        )
+    except OSError as e:
+        click.echo(
+            click.style("⚠ post-land script failed to start", fg="yellow")
+            + f"\n    {_tilde(script)}: {e}\n"
+            f"    Main already advanced; the land succeeded. Re-run after fixing:\n"
+            f"        {rerun}",
+            err=True,
+        )
+        return
+    if result.returncode != 0:
+        click.echo(
+            click.style(
+                f"⚠ post-land script exited {result.returncode}", fg="yellow"
+            )
+            + f"\n    script: {_tilde(script)}\n"
+            f"    cwd:    {_tilde(main_root)}\n"
+            f"    The land SUCCEEDED (main was already advanced); this step did not.\n"
+            f"    The script must be idempotent/re-runnable; finish by re-running it:\n"
+            f"        {rerun}",
             err=True,
         )
 
@@ -1962,6 +2055,14 @@ def land_worktree(
         click.echo(
             click.style("•", fg="green")
             + f" Landed {canonical} ({branch}) into {base_branch}"
+        )
+
+        # E-1799: run the task's committed post-land script, if any, now that
+        # the ff-merge has advanced main. Non-fatal + loud; never unwinds the
+        # land. After _record_landing and the Landed echo, before the
+        # best-effort reap sweep; not reached by the record_only early return.
+        _run_post_land_script(
+            worktree_path, main_root, canonical, merge_sha, base_branch,
         )
 
         # Best-effort sweep: clean up older landed worktrees that have
