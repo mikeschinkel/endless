@@ -223,6 +223,29 @@ func dbContextExplicit() bool {
 	return dbContextDir != "" || dbPathOverride != ""
 }
 
+// pinnedToForeignRealDB reports whether this process has been pinned onto the
+// real database at ~/.config/endless via ForceRealDB() (the Claude hook) or
+// PinMainDB() (endless-channel, endless-tmux) — the automatic entry points that
+// redirect a sandbox/worktree-context binary's DATA writes onto the real ledger
+// (E-1450/E-1700). The pin is signalled by dbPathOverride != "".
+//
+// Invariant (E-1818): only a database's OWNING binary applies schema.SQL (DDL +
+// seed) and the enum integrity gates to it. A candidate (self-dev worktree)
+// binary pinned here for session-state writes opens the real DB schema-passive:
+// it uses the deployed schema as-is and never mutates structure or seed rows,
+// and never runs the fail-close enum integrity checks against a schema it does
+// not own. Otherwise an unlanded binary could migrate — or, via a destructive
+// schema.SQL, corrupt — a real DB it does not own the instant a hook fires,
+// before any land, review, or explicit action (the E-1659 incident).
+//
+// The gate is DB-path only: it does not fire for the deployed global binary or
+// a self-detected sandbox open of a DB the binary owns (dbPathOverride == ""),
+// nor for an explicit --config-dir open (which sets dbContextDir, not
+// dbPathOverride) — so land-time `endless db apply-change` still migrates.
+func pinnedToForeignRealDB() bool {
+	return dbPathOverride != ""
+}
+
 // worktreePathMarker is the path segment that identifies an endless-managed
 // task worktree: <project-root>/.endless/worktrees/e-NNN.
 const worktreePathMarker = "/.endless/worktrees/"
@@ -448,66 +471,76 @@ func DB() (*sql.DB, error) {
 		if _, err := dbConn.Exec("PRAGMA foreign_keys=ON"); err != nil {
 			log.Printf("endless-monitor: PRAGMA foreign_keys=ON: %v", err)
 		}
-		// schema.SQL is the authoritative schema, all CREATE ... IF NOT EXISTS:
-		// it creates every table on a fresh DB and is a no-op on a populated
-		// one. Destructive, one-off changes are applied separately at land
-		// time via `endless db apply-change`, not here.
-		if _, err := dbConn.Exec(schema.SQL); err != nil {
-			dbErr = fmt.Errorf("applying schema to %s: %w", path, err)
-			dbConn = nil
-			return
-		}
-		// E-1538: enum/table integrity check. task_types is seeded by
-		// schema.SQL on every connection; if a row is missing or drifted from
-		// the Go TaskType enum we fail closed, since downstream INSERTs would
-		// either violate the FK or write an id that has no enum constant.
-		// Skipped on populated DBs that have not yet had the E-1538 migration
-		// applied (the table will not exist; the migration creates it).
-		if hasTable(dbConn, "task_types") {
-			if err := tasktype.VerifyIntegrity(dbConn); err != nil {
-				dbErr = fmt.Errorf("task_types integrity check on %s: %w", path, err)
+		// E-1818: when pinned onto a real DB this binary does not own
+		// (ForceRealDB / PinMainDB), open schema-passive — skip the schema.SQL
+		// exec and every enum integrity gate below. An unlanded worktree binary
+		// must not migrate, reseed, or fail-close a real DB the deployed binary
+		// owns; only DATA writes (session/pane state) reach it. See
+		// pinnedToForeignRealDB() for the full invariant. The per-connection
+		// PRAGMAs above stay on both paths — they configure the connection, they
+		// do not mutate schema.
+		if !pinnedToForeignRealDB() {
+			// schema.SQL is the authoritative schema, all CREATE ... IF NOT EXISTS:
+			// it creates every table on a fresh DB and is a no-op on a populated
+			// one. Destructive, one-off changes are applied separately at land
+			// time via `endless db apply-change`, not here.
+			if _, err := dbConn.Exec(schema.SQL); err != nil {
+				dbErr = fmt.Errorf("applying schema to %s: %w", path, err)
 				dbConn = nil
 				return
 			}
-		}
-		// E-1571: same fail-closed contract for the session_kinds enum mirror.
-		// Skipped on populated DBs that have not yet had the E-1571 migration
-		// applied (the table will not exist; the migration creates it).
-		if hasTable(dbConn, "session_kinds") {
-			if err := sessionkind.VerifyIntegrity(dbConn); err != nil {
-				dbErr = fmt.Errorf("session_kinds integrity check on %s: %w", path, err)
-				dbConn = nil
-				return
+			// E-1538: enum/table integrity check. task_types is seeded by
+			// schema.SQL on every connection; if a row is missing or drifted from
+			// the Go TaskType enum we fail closed, since downstream INSERTs would
+			// either violate the FK or write an id that has no enum constant.
+			// Skipped on populated DBs that have not yet had the E-1538 migration
+			// applied (the table will not exist; the migration creates it).
+			if hasTable(dbConn, "task_types") {
+				if err := tasktype.VerifyIntegrity(dbConn); err != nil {
+					dbErr = fmt.Errorf("task_types integrity check on %s: %w", path, err)
+					dbConn = nil
+					return
+				}
 			}
-		}
-		// E-1542: same fail-closed contract for the gate_kinds enum mirror.
-		// Skipped on populated DBs that have not yet had the E-1542 migration
-		// applied (the table will not exist; the migration creates it).
-		if hasTable(dbConn, "gate_kinds") {
-			if err := gatekind.VerifyIntegrity(dbConn); err != nil {
-				dbErr = fmt.Errorf("gate_kinds integrity check on %s: %w", path, err)
-				dbConn = nil
-				return
+			// E-1571: same fail-closed contract for the session_kinds enum mirror.
+			// Skipped on populated DBs that have not yet had the E-1571 migration
+			// applied (the table will not exist; the migration creates it).
+			if hasTable(dbConn, "session_kinds") {
+				if err := sessionkind.VerifyIntegrity(dbConn); err != nil {
+					dbErr = fmt.Errorf("session_kinds integrity check on %s: %w", path, err)
+					dbConn = nil
+					return
+				}
 			}
-		}
-		// E-1462: same fail-closed contract for the session_task_relations enum
-		// mirror. Skipped on populated DBs that have not yet had the E-1462
-		// migration applied (the table will not exist; the migration creates it).
-		if hasTable(dbConn, "session_task_relations") {
-			if err := sessiontaskrelation.VerifyIntegrity(dbConn); err != nil {
-				dbErr = fmt.Errorf("session_task_relations integrity check on %s: %w", path, err)
-				dbConn = nil
-				return
+			// E-1542: same fail-closed contract for the gate_kinds enum mirror.
+			// Skipped on populated DBs that have not yet had the E-1542 migration
+			// applied (the table will not exist; the migration creates it).
+			if hasTable(dbConn, "gate_kinds") {
+				if err := gatekind.VerifyIntegrity(dbConn); err != nil {
+					dbErr = fmt.Errorf("gate_kinds integrity check on %s: %w", path, err)
+					dbConn = nil
+					return
+				}
 			}
-		}
-		// E-1682: same fail-closed contract for the nav_via_kinds enum mirror.
-		// Skipped on populated DBs that have not yet had the E-1682 migration
-		// applied (the table will not exist; the migration creates it).
-		if hasTable(dbConn, "nav_via_kinds") {
-			if err := navvia.VerifyIntegrity(dbConn); err != nil {
-				dbErr = fmt.Errorf("nav_via_kinds integrity check on %s: %w", path, err)
-				dbConn = nil
-				return
+			// E-1462: same fail-closed contract for the session_task_relations enum
+			// mirror. Skipped on populated DBs that have not yet had the E-1462
+			// migration applied (the table will not exist; the migration creates it).
+			if hasTable(dbConn, "session_task_relations") {
+				if err := sessiontaskrelation.VerifyIntegrity(dbConn); err != nil {
+					dbErr = fmt.Errorf("session_task_relations integrity check on %s: %w", path, err)
+					dbConn = nil
+					return
+				}
+			}
+			// E-1682: same fail-closed contract for the nav_via_kinds enum mirror.
+			// Skipped on populated DBs that have not yet had the E-1682 migration
+			// applied (the table will not exist; the migration creates it).
+			if hasTable(dbConn, "nav_via_kinds") {
+				if err := navvia.VerifyIntegrity(dbConn); err != nil {
+					dbErr = fmt.Errorf("nav_via_kinds integrity check on %s: %w", path, err)
+					dbConn = nil
+					return
+				}
 			}
 		}
 	})
