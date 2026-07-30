@@ -149,13 +149,15 @@ def test_spawn_attach_happy_path_opens_window(isolated_env, tmux_env):
 
     spawn_plan(1570, attach=True)
 
-    # First tmux call creates the window; a later send-keys runs claude attach.
-    assert tmux_env[0][:2] == ["tmux", "new-window"]
-    send_keys = [c for c in tmux_env
-                 if c[:2] == ["tmux", "send-keys"]
-                 and any("attach abcd1234" in str(p) for p in c)]
-    assert send_keys, f"no send-keys with claude attach found in {tmux_env}"
-    assert "claude attach abcd1234" in send_keys[0]
+    # E-1705: attach opens the window via the endless-go launcher, not send-keys.
+    launch = [c for c in tmux_env if "spawn-window" in c and "--attach" in c]
+    assert len(launch) == 1, f"want one spawn-window --attach call, got {tmux_env}"
+    cmd = launch[0]
+    assert "--short-id" in cmd and "abcd1234" in cmd
+    # No send-keys / paste anywhere in the attach path.
+    for c in tmux_env:
+        assert c[:2] != ["tmux", "send-keys"], f"unexpected send-keys: {c}"
+        assert not any(str(p) in ("paste-buffer", "load-buffer") for p in c), c
 
 
 def test_spawn_bg_and_attach_mutually_exclusive(isolated_env):

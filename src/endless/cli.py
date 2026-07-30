@@ -1947,8 +1947,15 @@ def task_handoff(item_id):
 @click.argument("item_id", type=TASK_ID)
 @click.option("--project", default=None,
               help="Project name (default: detect from cwd)")
-@click.option("--no-plan", is_flag=True,
-              help="Skip plan mode, send the handoff directly")
+@click.option("--permission-mode", "permission_mode", default="auto",
+              help="claude --permission-mode for the spawned session "
+                   "(default: auto). Foreground spawns only.")
+@click.option("--model", default=None,
+              help="claude --model for the spawned session (optional). "
+                   "Foreground spawns only.")
+@click.option("--name", "session_name", default=None,
+              help="claude --name for the spawned session (optional). "
+                   "Foreground spawns only.")
 @click.option("--worktree", default=None,
               help="cd to this path (e.g. a git worktree) before launching "
                    "claude, instead of the spawn-created task worktree. The "
@@ -1968,7 +1975,7 @@ def task_handoff(item_id):
               help="Dispatch the agent headless via `claude --bg --name "
                    "E-<id>` instead of a tmux window. No tmux required; the "
                    "agent runs in the background and is reachable with "
-                   "`claude attach <short-id>`. Ignores --no-plan.")
+                   "`claude attach <short-id>`.")
 @click.option("--attach", is_flag=True,
               help="Open a NEW tmux window onto the task's already-live "
                    "background agent (via `claude attach`). Does NOT dispatch; "
@@ -1984,17 +1991,23 @@ def task_handoff(item_id):
                    "vs spawn, restore_case, inherit-session vs new-session, "
                    "worktree path) and exit. Read-only — no status flip, no "
                    "worktree creation, no launch.")
-def task_spawn(item_id, project, no_plan, worktree, force, reopen, bg, attach,
-               new_session, print_decision):
+def task_spawn(item_id, project, permission_mode, model, session_name,
+               worktree, force, reopen, bg, attach, new_session,
+               print_decision):
     """Spawn Claude working on a task — a tmux window, or headless with --bg.
 
-    Pastes the handoff generated from the template (no stored prompt — E-1469).
+    Foreground spawns launch Claude as the tmux window's command and deliver the
+    handoff (generated from the template — no stored prompt) as claude's
+    positional prompt argument. Spawned sessions default to --permission-mode
+    auto.
     """
     from endless.task_cmd import spawn_plan
-    spawn_plan(item_id, project_name=project, no_plan=no_plan,
+    spawn_plan(item_id, project_name=project,
                worktree=worktree, force=force, reopen=reopen, bg=bg,
                attach=attach, new_session=new_session,
-               print_decision=print_decision)
+               print_decision=print_decision,
+               permission_mode=permission_mode, model=model,
+               name=session_name)
 
 
 @task_cmd.command("attach")

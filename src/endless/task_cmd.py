@@ -4546,10 +4546,12 @@ def _navigate_to_live_owner(nav: dict) -> None:
     subprocess.run(["tmux", "switch-client", "-t", pane], check=False)
 
 
-def spawn_plan(item_id: int, project_name: str | None = None, no_plan: bool = False,
+def spawn_plan(item_id: int, project_name: str | None = None,
                worktree: str | None = None, force: bool = False,
                reopen: bool = False, bg: bool = False, attach: bool = False,
-               new_session: bool = False, print_decision: bool = False):
+               new_session: bool = False, print_decision: bool = False,
+               permission_mode: str = "auto", model: str | None = None,
+               name: str | None = None):
     """Spawn a new tmux window with Claude working on a task's prompt.
 
     Pre-claims the task (status flip + worktree creation) BEFORE launching
@@ -4564,12 +4566,18 @@ def spawn_plan(item_id: int, project_name: str | None = None, no_plan: bool = Fa
     presence) before proceeding with spawn. Errors on non-terminal or
     decision-bearing (`declined`/`obsolete`) statuses.
 
+    The foreground path launches Claude as the tmux window's *command* via the
+    `endless-go spawn-window` launcher (E-1705): the handoff is delivered as
+    claude's positional prompt argument, not typed in with send-keys. Spawned
+    sessions default to `--permission-mode auto` (override with `permission_mode`;
+    `model`/`name` are optional claude pass-throughs). There is no plan-mode step
+    — a positional prompt leaves no interactive turn to type a slash-command into.
+
     `bg=True` (E-1568) dispatches the agent headless via `claude --bg --name
     E-<id>` instead of a tmux window. No tmux is required; the same done-ish
     gate, pre-claim, and worktree creation run first. The dispatch row is
     written with session_id NULL + the short id parsed from `claude --bg`
-    stdout; the agent's SessionStart hook fills in the real UUID later. `--bg`
-    ignores `--no-plan` (headless agents have no `/plan` slash concept).
+    stdout; the agent's SessionStart hook fills in the real UUID later.
 
     `attach=True` (E-1570) is a view modifier, not a dispatcher: it opens a NEW
     tmux window running `claude attach <short-id>` against the task's already
@@ -4655,19 +4663,17 @@ def spawn_plan(item_id: int, project_name: str | None = None, no_plan: bool = Fa
         window_name = _spawn_window_name(
             item["project_name"], title, item_id,
         )
+        # Open the attach window via the endless-go launcher (E-1705): it runs
+        # `claude attach <short-id>` as the window command and records the
+        # diagnostic @endless_attached_short_id option — no send-keys.
+        from endless.event_bridge import _resolve_endless_go
+        binary = _resolve_endless_go()
         subprocess.run(
-            ["tmux", "new-window", "-n", window_name],
-            check=True,
-        )
-        # Diagnostic only; not load-bearing for the attach itself.
-        subprocess.run(
-            ["tmux", "set", "-w", "-t", window_name,
-             "@endless_attached_short_id", short_id],
-            check=True,
-        )
-        subprocess.run(
-            ["tmux", "send-keys", "-t", window_name,
-             f"{_claude_binary()} attach {short_id}", "Enter"],
+            [binary, "spawn-window", "--attach",
+             "--short-id", short_id,
+             "--claude-bin", _claude_binary(),
+             "--window-name", window_name,
+             "--cwd", os.getcwd()],
             check=True,
         )
         click.echo(
@@ -4841,74 +4847,31 @@ def spawn_plan(item_id: int, project_name: str | None = None, no_plan: bool = Fa
     handoff_file.write(handoff_text)
     handoff_file.close()
 
-    # Create tmux window and set plan metadata
-    subprocess.run(
-        ["tmux", "new-window", "-n", window_name],
-        check=True,
-    )
-    subprocess.run(
-        ["tmux", "set", "-w", "-t", window_name,
-         "@endless_spawned_by", str(spawner_id)],
-        check=True,
-    )
-    subprocess.run(
-        ["tmux", "set", "-w", "-t", window_name,
-         "@endless_task_id", str(item_id)],
-        check=True,
-    )
-    subprocess.run(
-        ["tmux", "set", "-w", "-t", window_name,
-         "@endless_project_id", str(item["project_id"])],
-        check=True,
-    )
-
-    # cd to target directory (spawn-created worktree, or --worktree path)
-    subprocess.run(
-        ["tmux", "send-keys", "-t", window_name,
-         f"cd {cd_target}", "Enter"],
-        check=True,
-    )
-
-    # Launch claude (use binary directly to avoid shell function wrappers)
-    claude_bin = _claude_binary()
-    subprocess.run(
-        ["tmux", "send-keys", "-t", window_name,
-         claude_bin, "Enter"],
-        check=True,
-    )
-
-    # Wait for Claude to start
-    import time
-    time.sleep(5)
-
-    # Enter plan mode unless --no-plan
-    if not no_plan:
-        subprocess.run(
-            ["tmux", "send-keys", "-t", window_name,
-             "/plan", "Enter"],
-            check=True,
-        )
-        time.sleep(1)
-
-    # Load the prompt into tmux buffer and paste it
-    subprocess.run(
-        ["tmux", "load-buffer", handoff_file.name],
-        check=True,
-    )
-    subprocess.run(
-        ["tmux", "paste-buffer", "-t", window_name],
-        check=True,
-    )
-
-    # Send Enter to submit the prompt
-    subprocess.run(
-        ["tmux", "send-keys", "-t", window_name,
-         "Enter"],
-        check=True,
-    )
-
-    # Clean up temp file
-    os.unlink(handoff_file.name)
+    # Launch Claude as the tmux window's command via the endless-go launcher
+    # (E-1705). The launcher creates the window, sets the @endless_* options
+    # in-process BEFORE exec (so SessionStart's option reads never race the way
+    # the old send-keys/sleep timing did), reads the handoff from the temp file
+    # and passes it as claude's positional prompt, then deletes the temp file.
+    # No send-keys, no plan-mode paste, no readiness sleep, and the handoff text
+    # never touches a command line or the session environment.
+    from endless.event_bridge import _resolve_endless_go
+    binary = _resolve_endless_go()
+    spawn_cmd = [
+        binary, "spawn-window",
+        "--claude-bin", _claude_binary(),
+        "--handoff-file", handoff_file.name,
+        "--permission-mode", permission_mode,
+        "--task-id", str(item_id),
+        "--project-id", str(item["project_id"]),
+        "--spawned-by", str(spawner_id),
+        "--window-name", window_name,
+        "--cwd", cd_target,
+    ]
+    if model:
+        spawn_cmd += ["--model", model]
+    if name:
+        spawn_cmd += ["--name", name]
+    subprocess.run(spawn_cmd, check=True)
 
     click.echo(
         click.style("•", fg="cyan")

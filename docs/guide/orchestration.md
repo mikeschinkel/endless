@@ -227,7 +227,8 @@ Every handoff's closing `Final message` line follows one discipline: **report on
 endless task spawn <id>                           # foreground: new tmux window
 endless task spawn <id> --bg                      # background: headless supervised agent
 endless task spawn <id> --attach <id>             # open a tmux window onto an already-running bg agent
-endless task spawn <id> --no-plan                 # skip /plan mode; send the handoff directly (foreground only)
+endless task spawn <id> --permission-mode plan    # override the spawned session's permission mode (default: auto)
+endless task spawn <id> --model <model>           # pass a --model through to the spawned claude (optional)
 endless task spawn <id> --worktree <path>         # cd to <path> instead of the spawn-created worktree
 endless task spawn <id> --reopen                  # reopen a terminal-status task before spawning
 endless task spawn <id> --force                   # allow spawn on a done-ish task (demotes status)
@@ -238,10 +239,9 @@ Foreground flow:
 1. Validates tmux is running (fails otherwise).
 2. Refuses if the task is in a done-ish status (`unverified`/`confirmed`/`declined`/`obsolete`/`assumed`/`completed`) without `--force` or `--reopen`, or if another live session already owns the task.
 3. **Pre-claims the task**: flips status to `underway` (emitting `task.status_changed`) and creates the per-task worktree at `.endless/worktrees/e-<id>/`.
-4. Creates a new tmux window named `<project>_<slug>[E-NNNN]` and sets the window variables `@endless_spawned_by`, `@endless_task_id`, `@endless_project_id`.
-5. `cd`s into the spawn-created worktree (or `--worktree <path>` if given) and launches Claude.
-6. The spawned Claude's `SessionStart` hook reads `@endless_spawned_by` and records the session→task binding (no status flip — spawn already did it).
-7. Waits for Claude to start, enters `/plan` mode (unless `--no-plan`), then renders the handoff, pastes it, and presses Enter.
+4. Renders the handoff from the template and writes it to a temp file.
+5. Launches Claude as the tmux window's *command* through the `endless-go spawn-window` launcher: the launcher creates a window named `<project>_<slug>[E-NNNN]` at the spawn-created worktree (or `--worktree <path>`), sets the window variables `@endless_spawned_by`, `@endless_task_id`, `@endless_project_id` in-process **before** exec, then execs `claude --permission-mode auto` with the handoff as its positional prompt argument. The handoff text never touches a command line or the session environment, and there is no send-keys, no readiness sleep, and no plan-mode step.
+6. The spawned Claude's `SessionStart` hook reads `@endless_spawned_by` and records the session→task binding (no status flip — spawn already did it). Because the launcher sets the window options before exec, this read no longer races the launch.
 
 The spawned session can discover its task ID from the tmux window variable:
 
@@ -259,7 +259,7 @@ tmux show-window-options -v @endless_task_id    # prints the task ID
 4. Captures the short dispatch id the CLI prints.
 5. Writes a `sessions` row marked as a background kind (an FK to the `session_kinds` table), recording the short id and the task's nearest epic ancestor for coordinator visibility. The session UUID is filled in later when the agent's `SessionStart` hook fires.
 
-`spawn --bg` returns immediately; the agent runs on its own. `--no-plan` does not apply (a bg agent has no interactive `/plan` step). To watch or steer it afterward, use an attach verb below.
+`spawn --bg` returns immediately; the agent runs on its own. To watch or steer it afterward, use an attach verb below.
 
 ### Attach verbs
 

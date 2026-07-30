@@ -13,6 +13,8 @@
 //	endless-go tmux          apply|status-line|active-id|show-menu
 //	endless-go session-query list-live|task-text|reopen-context
 //	endless-go session-status  (renders the per-session status view; --monitor loops it)
+//	endless-go spawn-window  (the multiplexer seam: creates the tmux window that launches Claude on a task)
+//	endless-go spawn-launch  (internal: sets @endless_* window options, then execs claude inside the window)
 //	endless-go template      render
 //	endless-go markdown      render
 //
@@ -47,6 +49,7 @@ import (
 	"github.com/mikeschinkel/endless/internal/servecmd"
 	"github.com/mikeschinkel/endless/internal/sessionquerycmd"
 	"github.com/mikeschinkel/endless/internal/sessionstatuscmd"
+	"github.com/mikeschinkel/endless/internal/spawnlaunchcmd"
 	"github.com/mikeschinkel/endless/internal/templatecmd"
 	"github.com/mikeschinkel/endless/internal/tmuxcmd"
 	"github.com/mikeschinkel/endless/internal/verifycmd"
@@ -145,6 +148,8 @@ func main() {
 		sessionquerycmd.Run(rest)
 	case "session-status":
 		sessionstatuscmd.Run(rest)
+	case "spawn-window", "spawn-launch":
+		spawnlaunchcmd.Run(sub, rest)
 	case "template":
 		templatecmd.Run(rest)
 	case "markdown":
@@ -197,6 +202,8 @@ func usage(w *os.File) {
 	fmt.Fprintln(w, "  tmux           apply|status-line|active-id|show-menu")
 	fmt.Fprintln(w, "  session-query  list-live|task-text|reopen-context")
 	fmt.Fprintln(w, "  session-status render the per-session status view (--monitor loops it)")
+	fmt.Fprintln(w, "  spawn-window   create the tmux window that launches Claude on a task")
+	fmt.Fprintln(w, "  spawn-launch   (internal) set window options and exec claude inside the window")
 	fmt.Fprintln(w, "  template       render")
 	fmt.Fprintln(w, "  markdown       render (markdown → colorized ANSI)")
 	fmt.Fprintln(w, "  verify         [--keep] <task-id>  (run a task's Tier-0 verification suite)")
