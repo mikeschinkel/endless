@@ -220,14 +220,26 @@ test_new_present() {
         src/endless/task_cmd.py 'task_type = task_type or "todo"'
     assert_present "task update valid_types is new names" \
         src/endless/task_cmd.py '("todo", "bugfix", "research", "epic", "brainstorm")'
-    assert_file "rename migration change-file exists" \
+}
+
+test_self_heal() {
+    section "Migration — the seed self-heals a rename (Option 1), no change-file"
+    # The mirror seeds must UPSERT so re-applying schema.SQL reconciles a
+    # populated DB's stale rows to the enum (INSERT OR IGNORE could not).
+    assert_present "task_types seed upserts (ON CONFLICT DO UPDATE)" \
+        internal/schema/schema.sql \
+        "ON CONFLICT(id) DO UPDATE SET slug = excluded.slug, label = excluded.label"
+    assert_absent_in "task_types seed is no longer INSERT OR IGNORE" \
+        internal/schema/schema.sql "INSERT OR IGNORE INTO task_types"
+    assert_absent_in "session_kinds seed is no longer INSERT OR IGNORE" \
+        internal/schema/schema.sql "INSERT OR IGNORE INTO session_kinds"
+    # No per-rename change-file: Option 1 removed the need for one.
+    assert_no_file "no E-1659 migration change-file" \
         internal/schema/changes/e-1659-rename-task-todo-bug-bugfix.sql
-    assert_present "migration renames row 1 -> todo/Todo" \
-        internal/schema/changes/e-1659-rename-task-todo-bug-bugfix.sql \
-        "slug = 'todo',   label = 'Todo'"
-    assert_present "migration renames row 2 -> bugfix/Bugfix" \
-        internal/schema/changes/e-1659-rename-task-todo-bug-bugfix.sql \
-        "slug = 'bugfix', label = 'Bugfix'"
+    # Hermetic proof: re-applying schema.SQL reconciles stale task_types /
+    # session_kinds rows to the current enum values, in place, no duplicates.
+    assert_cmd "schema self-heal test passes (reconcile renamed rows)" \
+        go test -count=1 ./internal/schema/...
 }
 
 test_old_gone() {
@@ -333,6 +345,7 @@ main() {
     test_build
     test_new_present
     test_old_gone
+    test_self_heal
     test_legacy_alias
     test_handoff_render
     test_suites

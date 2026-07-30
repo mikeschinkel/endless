@@ -54,10 +54,12 @@ func openDBAtPath(t *testing.T, path string, pinned bool) (*sql.DB, error) {
 
 // seedTaskTypesOnly creates a standalone task_types table (and nothing else) at
 // path with a single row whose slug DIFFERS from the running tasktype enum
-// (id=1 'todo' vs. the enum's 'task'). This models the E-1659 incident: a real
-// DB whose enum mirror diverges from a candidate worktree binary. The absence
-// of the `tasks` table is the schema-passive probe — schema.SQL would create
-// it, so its continued absence after an open proves schema.SQL never ran.
+// (id=1 'task' vs. the enum's 'todo' — 'task' is the pre-E-1659 name, now only a
+// legacy Parse alias, never what String() emits). This models the E-1659
+// incident: a real DB still on the old slug vs. a candidate worktree binary
+// whose enum has moved on. The absence of the `tasks` table is the
+// schema-passive probe — schema.SQL would create it, so its continued absence
+// after an open proves schema.SQL never ran.
 func seedTaskTypesOnly(t *testing.T, path string) {
 	t.Helper()
 	db, err := sql.Open("sqlite", path)
@@ -67,7 +69,29 @@ func seedTaskTypesOnly(t *testing.T, path string) {
 	defer db.Close()
 	stmts := []string{
 		`CREATE TABLE task_types (id INTEGER PRIMARY KEY, slug TEXT UNIQUE NOT NULL, label TEXT NOT NULL)`,
-		`INSERT INTO task_types (id, slug, label) VALUES (1, 'todo', 'Todo')`,
+		`INSERT INTO task_types (id, slug, label) VALUES (1, 'task', 'Task')`,
+	}
+	for _, s := range stmts {
+		if _, err := db.Exec(s); err != nil {
+			t.Fatalf("seed exec %q: %v", s, err)
+		}
+	}
+}
+
+// seedRogueTaskType creates a standalone task_types table at path holding one
+// row whose id is not in the tasktype enum. The E-1659 seed upsert cannot
+// reconcile it (it only touches the enum's own ids), so the owner path's
+// integrity gate must still fail-close on it.
+func seedRogueTaskType(t *testing.T, path string) {
+	t.Helper()
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatalf("open seed db: %v", err)
+	}
+	defer db.Close()
+	stmts := []string{
+		`CREATE TABLE task_types (id INTEGER PRIMARY KEY, slug TEXT UNIQUE NOT NULL, label TEXT NOT NULL)`,
+		`INSERT INTO task_types (id, slug, label) VALUES (99, 'rogue', 'Rogue')`,
 	}
 	for _, s := range stmts {
 		if _, err := db.Exec(s); err != nil {
@@ -119,8 +143,8 @@ func TestDBSchemaPassiveOnRealDBPin(t *testing.T) {
 		t.Error("pinned open created the `tasks` table; schema.SQL must be skipped on a foreign real DB")
 	}
 	// The pre-existing drifted seed row must be byte-for-byte untouched.
-	if got := taskTypeSlug(t, db, 1); got != "todo" {
-		t.Errorf("task_types id=1 slug = %q, want %q (pinned open must not reconcile seed rows)", got, "todo")
+	if got := taskTypeSlug(t, db, 1); got != "task" {
+		t.Errorf("task_types id=1 slug = %q, want %q (pinned open must not reconcile seed rows)", got, "task")
 	}
 }
 
@@ -138,17 +162,34 @@ func TestDBOwnerPathMigratesAndVerifies(t *testing.T) {
 		if !tableExists(t, db, "tasks") {
 			t.Error("owner open of a fresh DB did not create `tasks`; schema.SQL must run")
 		}
-		if got := taskTypeSlug(t, db, 1); got != "task" {
-			t.Errorf("seeded task_types id=1 slug = %q, want %q", got, "task")
+		if got := taskTypeSlug(t, db, 1); got != "todo" {
+			t.Errorf("seeded task_types id=1 slug = %q, want %q", got, "todo")
 		}
 	})
 
-	t.Run("drifted enum still fail-closes", func(t *testing.T) {
+	t.Run("reconcilable drift self-heals on the owner path", func(t *testing.T) {
 		path := filepath.Join(t.TempDir(), "endless.db")
-		seedTaskTypesOnly(t, path) // id=1 'todo', diverges from the enum's 'task'
-		_, err := openDBAtPath(t, path, false /* owner path */)
-		if err == nil {
-			t.Fatal("owner open must fail-close when task_types drifts from the enum")
+		seedTaskTypesOnly(t, path) // id=1 'task', diverges from the enum's 'todo'
+		db, err := openDBAtPath(t, path, false /* owner path */)
+		// E-1659 Option 1: the seed is an upsert, so the owner path reconciles a
+		// renamed row (id=1 'task' -> 'todo') and the integrity gate then passes,
+		// rather than fail-closing. This is how the real DB migrates at land.
+		if err != nil {
+			t.Fatalf("owner open must reconcile a renamed row (E-1659 self-heal), got: %v", err)
+		}
+		if got := taskTypeSlug(t, db, 1); got != "todo" {
+			t.Errorf("owner open left task_types id=1 slug = %q, want %q (seed upsert must reconcile)", got, "todo")
+		}
+	})
+
+	t.Run("unreconcilable drift (rogue row) still fail-closes", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "endless.db")
+		// A row whose id is not in the enum is NOT reconcilable by the seed upsert;
+		// the owner path must still fail-close on it, proving E-1818 did not skip
+		// the integrity gate on the owner path.
+		seedRogueTaskType(t, path)
+		if _, err := openDBAtPath(t, path, false /* owner path */); err == nil {
+			t.Fatal("owner open must fail-close when task_types has a row with no enum constant")
 		}
 	})
 }
@@ -170,8 +211,8 @@ func TestDBSchemaPassiveViaPinMainDB(t *testing.T) {
 	path := filepath.Join(dbDir, "endless.db")
 
 	// Seed the full deployed schema, then diverge the task_types enum mirror so
-	// the running binary's enum ('task') no longer matches the on-disk row
-	// ('todo') — a real DB the candidate binary does not own.
+	// the running binary's enum ('todo') no longer matches the on-disk row
+	// ('task', the pre-E-1659 slug) — a real DB the candidate binary does not own.
 	seed, err := sql.Open("sqlite", path)
 	if err != nil {
 		t.Fatalf("open seed db: %v", err)
@@ -180,7 +221,7 @@ func TestDBSchemaPassiveViaPinMainDB(t *testing.T) {
 		seed.Close()
 		t.Fatalf("apply schema: %v", err)
 	}
-	if _, err := seed.Exec("UPDATE task_types SET slug='todo', label='Todo' WHERE id=1"); err != nil {
+	if _, err := seed.Exec("UPDATE task_types SET slug='task', label='Task' WHERE id=1"); err != nil {
 		seed.Close()
 		t.Fatalf("diverge task_types: %v", err)
 	}
@@ -217,7 +258,7 @@ func TestDBSchemaPassiveViaPinMainDB(t *testing.T) {
 	if err != nil {
 		t.Fatalf("pinned open of a divergent real DB must succeed, got: %v", err)
 	}
-	if got := taskTypeSlug(t, db, 1); got != "todo" {
-		t.Errorf("task_types id=1 slug = %q, want %q (pin must not reconcile the real DB)", got, "todo")
+	if got := taskTypeSlug(t, db, 1); got != "task" {
+		t.Errorf("task_types id=1 slug = %q, want %q (pin must not reconcile the real DB)", got, "task")
 	}
 }

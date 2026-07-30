@@ -68,16 +68,22 @@ CREATE TABLE IF NOT EXISTS notes (
 -- const-in-code is the source of truth, table exists for FK enforcement and
 -- queryability). The startup integrity check fails closed on drift between
 -- this table and the sessionkind.All() enum. Adding a value = add an enum
--- constant + add a seed row here. Seed inserts below are idempotent.
+-- constant + add a seed row here. RENAMING a value = edit slug/label here; the
+-- upsert below reconciles existing rows to the enum on connect (E-1659 pattern,
+-- mirroring task_types): INSERT OR IGNORE could only add new ids, never correct
+-- a renamed row. Runs before the integrity check in monitor.DB(), so a rename
+-- self-heals with no change-file; safe because E-1818 opens a non-owned real DB
+-- schema-passive.
 CREATE TABLE IF NOT EXISTS session_kinds (
     id    INTEGER PRIMARY KEY,
     slug  TEXT UNIQUE NOT NULL,
     label TEXT NOT NULL
 );
 
-INSERT OR IGNORE INTO session_kinds (id, slug, label) VALUES
+INSERT INTO session_kinds (id, slug, label) VALUES
     (1, 'tmux',       'Tmux'),
-    (2, 'background', 'Background');
+    (2, 'background', 'Background')
+ON CONFLICT(id) DO UPDATE SET slug = excluded.slug, label = excluded.label;
 
 -- AI coding sessions
 --
@@ -168,19 +174,28 @@ END;
 -- is the source of truth, table exists for FK enforcement and queryability).
 -- The startup integrity check fails closed on drift between this table and the
 -- AllTaskTypes() enum. Adding a value = add an enum constant + add a seed row
--- here. Seed inserts below are idempotent on a populated DB.
+-- here. RENAMING a value = edit the slug/label here; the upsert below reconciles
+-- it (E-1659): the enum is the source of truth, so the seed reconciles every
+-- existing row's slug/label to it on connect (INSERT OR IGNORE could only insert
+-- new ids, never correct a renamed row — a populated DB seeded under an old name
+-- would keep it and trip VerifyIntegrity). Because schema.SQL runs before the
+-- integrity check in monitor.DB(), the reconcile self-heals a rename with no
+-- change-file. This is safe only because E-1818 opens the real DB schema-passive
+-- when a candidate (worktree) binary is pinned to it, so an unlanded binary can
+-- never apply this reconcile to a DB it does not own.
 CREATE TABLE IF NOT EXISTS task_types (
     id    INTEGER PRIMARY KEY,
     slug  TEXT UNIQUE NOT NULL,
     label TEXT NOT NULL
 );
 
-INSERT OR IGNORE INTO task_types (id, slug, label) VALUES
+INSERT INTO task_types (id, slug, label) VALUES
     (1, 'todo',       'Todo'),
     (2, 'bugfix',     'Bugfix'),
     (3, 'research',   'Research'),
     (4, 'epic',       'Epic'),
-    (5, 'brainstorm', 'Brainstorm');
+    (5, 'brainstorm', 'Brainstorm')
+ON CONFLICT(id) DO UPDATE SET slug = excluded.slug, label = excluded.label;
 
 -- Task items
 CREATE TABLE IF NOT EXISTS tasks (
