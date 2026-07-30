@@ -265,7 +265,7 @@ test_completed_exemption() {
     local tid
     tid=$(add_task_get_id "Add a control widget" --type task) || return
     assert_refused "plain task with non-completable verb STILL blocked from 'completed'" \
-        "valid final status" \
+        "completable lead verb" \
         endless task update "${tid}" --status completed --outcome "x"
 }
 

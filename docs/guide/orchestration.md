@@ -345,7 +345,15 @@ Every task carries **one verification suite** — a single, self-contained proof
 - Prints pass/fail per check, then a summary that ends in `ALL PASSED`.
 - Exits `0` when everything passes and non-zero on any failure.
 
-Copy the shape from any existing `tests/tasks/e-*-verify.sh` — the section/report/summary helpers are the same across them. The suite folds in the task's own unit tests as a first, fail-fast check, so the one script is a complete regression proof for that task.
+Copy the shape from any existing `tests/tasks/e-*-verify.sh` — the section/report/summary helpers are the same across them. The suite folds in the task's own unit tests as a first, fail-fast check, so the one script is a complete proof for that task **at land time**.
+
+### A verify suite is a land-time gate, not a standing regression suite
+
+A verify suite proves *one* task before it lands. Running it is a **one-shot, land-time gate**: whether it still runs — or passes — after that task lands is undefined, and nothing re-runs it for you. It is not the project's regression suite. So:
+
+- **Don't run another task's already-landed verify suite** to check your work. A failure in it after land is meaningless — its fixtures and assertions were pinned to that task's moment, and the code around it has since moved on.
+- **Don't edit a landed task's verify suite.** It records what was true when that task landed; retrofitting it to a later change rewrites that history. If your change alters a string or behavior a landed suite asserted, leave the suite alone.
+- **Coverage that must survive belongs in the project's own test suite** (what `just test` / `go test` exercises), not only in a verify suite. If a verify suite is the *only* place a behavior is checked, that behavior is unprotected the moment the task lands — mirror it into the durable suite.
 
 ### The `verify.toml` manifest
 

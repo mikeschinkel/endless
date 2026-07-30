@@ -183,6 +183,30 @@ func TestRender_HandoffClose_ExceptionRule(t *testing.T) {
 	}
 }
 
+// TestRender_Brainstorm_InterviewModeFraming pins the durable contract that a
+// brainstorm handoff frames the work as interview-mode / requester-led (E-1657):
+// the requester's own thinking is the primary source, not autonomous research.
+// It asserts the stable framing tokens, not an exact sentence — the precise
+// wording has drifted before (an earlier "interviewing the requester" phrasing
+// was reworded) while the interview-mode framing itself is the contract worth
+// protecting. This lives in the project suite because a per-task verify script
+// is a one-shot land-time gate, not a standing regression guard (E-1806).
+func TestRender_Brainstorm_InterviewModeFraming(t *testing.T) {
+	root := projectFixture(t)
+	vars := `{"spawned_id":1,"label_prefix":"E-1","title":"T",` +
+		`"worktree_path":"/w","branch":"b","child_count":0,` +
+		`"children_state":"none","bg":false}`
+	out, errOut, err := runRenderInProject(t, root, "handoff/brainstorm", vars)
+	if err != nil {
+		t.Fatalf("render: %v\nstderr: %s", err, errOut)
+	}
+	for _, w := range []string{"interview-mode", "requester-led"} {
+		if !strings.Contains(out, w) {
+			t.Errorf("brainstorm handoff missing interview-mode framing token %q\n--- output ---\n%s", w, out)
+		}
+	}
+}
+
 // TestRender_MissingVar_PrintsNoValuePlaceholder confirms graceful
 // degradation matching Python's string.Template.safe_substitute.
 func TestRender_MissingVar_PrintsNoValuePlaceholder(t *testing.T) {
