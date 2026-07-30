@@ -13,12 +13,14 @@ def test_shell_init_prints_helpers():
     # Both helper functions are present (E-1050: esp replaces escd).
     assert "esu()" in out
     assert "esp()" in out
+    assert "esm()" in out  # esm wraps the live `session monitor` dashboard.
     assert "escd()" not in out
     # They invoke the right endless subcommands. E-1164 wraps each call in
     # _endless_run for worktree routing, so the substring is "session use"
     # / "session cd --target project" rather than the bare "endless ..." form.
     assert "session use" in out
     assert "session cd --target project" in out
+    assert "session monitor" in out
     # Marker block is present so users can find/replace it later.
     assert ">>> endless shell helpers" in out
     assert "<<< endless shell helpers" in out
@@ -82,7 +84,7 @@ def test_shell_init_helpers_route_via_endless_run():
     runner = CliRunner()
     out = runner.invoke(main, ["shell-init"]).output
 
-    for helper in ("esu", "esp", "esf"):
+    for helper in ("esu", "esp", "esf", "esm"):
         start = out.index(f"{helper}()")
         # Each helper ends at the next blank line followed by '#' comment
         # or the closing '<<< endless shell helpers' marker.

@@ -648,6 +648,19 @@ esf() {
     eval "$out"
 }
 
+# esm — live session dashboard (repeatedly render `session status`
+#       every 2s until Ctrl-C). Passes through --all/--tree.
+#   esm            → monitor the focal task's session context
+#   esm --all      → include done-work rows
+#   esm --tree     → one IDs-only implementation-order tree frame
+# No session guard: `session monitor` self-resolves the focal task from
+# the tmux window / most-recent live session (like esp), so it works
+# without ENDLESS_SESSION_ID set. Runs in the foreground (interactive
+# dashboard) — no `eval`, since it prints frames, not shell code.
+esm() {
+    _endless_run session monitor "$@"
+}
+
 # <<< endless shell helpers <<<
 """
 
