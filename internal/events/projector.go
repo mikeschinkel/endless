@@ -177,9 +177,9 @@ func replayTaskCreated(db *sql.DB, evt *Event, result *ProjectResult) error {
 	typeID := projectorTypeID(p.Type)
 
 	_, err = db.Exec(
-		`INSERT INTO tasks (id, project_id, phase, title, description, text, status, type_id, sort_order, parent_id, tier, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		taskID, projectID, p.Phase, p.Title, p.Description, p.Text, p.Status, typeID,
+		`INSERT INTO tasks (id, project_id, phase, title, description, text, analysis, status, type_id, sort_order, parent_id, tier, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		taskID, projectID, p.Phase, p.Title, p.Description, p.Text, p.Analysis, p.Status, typeID,
 		sortOrder, p.ParentID, p.Tier, ts, ts,
 	)
 	if err != nil {

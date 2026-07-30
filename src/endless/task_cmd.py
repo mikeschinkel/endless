@@ -1776,6 +1776,7 @@ def add_item(
     title: str,
     description: str | None = None,
     text: str | None = None,
+    analysis: str | None = None,
     phase: str = "now",
     project_name: str | None = None,
     after: int | None = None,
@@ -1817,6 +1818,8 @@ def add_item(
     }
     if text_content is not None:
         payload["text"] = text_content
+    if analysis is not None:
+        payload["analysis"] = analysis
     if notes_value is not None:
         payload["notes"] = notes_value
     if tier is not None:
@@ -1840,6 +1843,8 @@ def add_item(
     )
     if text_content is not None:
         _mirror_plan_to_worktree(item_id, text_content)
+    if analysis is not None and analysis.strip():
+        _mirror_doc_to_worktree(item_id, "analyses", "analysis", analysis)
     return item_id
 
 

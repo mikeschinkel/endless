@@ -309,9 +309,9 @@ func execTaskCreated(db dbQuerier, evt *Event, emit DerivedEmitter) (*ExecuteRes
 		notes = p.Notes
 	}
 	_, err = db.Exec(
-		`INSERT INTO tasks (id, project_id, phase, title, description, text, notes, status, type_id, sort_order, parent_id, tier, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		taskID, projectID, p.Phase, p.Title, p.Description, p.Text, notes, status, int(typeID),
+		`INSERT INTO tasks (id, project_id, phase, title, description, text, analysis, notes, status, type_id, sort_order, parent_id, tier, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		taskID, projectID, p.Phase, p.Title, p.Description, p.Text, p.Analysis, notes, status, int(typeID),
 		sortOrder, p.ParentID, p.Tier, ts, ts,
 	)
 	if err != nil {

@@ -1552,6 +1552,10 @@ def _resolve_content_flag(inline, file_path, name, allow_paths=()):
               help="Full task text / plan content (inline)")
 @click.option("--text-file", default=None,
               help="Load the full task text / plan from a file")
+@click.option("--analysis", "analysis_text", default=None,
+              help="Analysis content (inline)")
+@click.option("--analysis-file", default=None,
+              help="Load the analysis content from a file")
 @click.option("--phase", default="now",
               type=click.Choice(["urgent", "now", "next", "later", "maybe"]),
               help="Phase: urgent, now, next, later, maybe (default: now)")
@@ -1589,7 +1593,7 @@ def _resolve_content_flag(inline, file_path, name, allow_paths=()):
 @click.option("--allow-path", "allow_paths", multiple=True,
               help="Regex matching an absolute path to permit in inline content "
                    "(repeatable; escape hatch for the path gate).")
-def task_add(title, description, description_file, text, text_file, phase, project, parent, after, task_type, status, tier, force,
+def task_add(title, description, description_file, text, text_file, analysis_text, analysis_file, phase, project, parent, after, task_type, status, tier, force,
              justification,
              blocks_ids, blocked_by_ids, relates_to_ids, implements_ids,
              cleans_up_ids, cleaned_up_by_ids, allow_paths):
@@ -1597,8 +1601,9 @@ def task_add(title, description, description_file, text, text_file, phase, proje
     from endless.task_cmd import add_item, parse_tier, link_tasks
     description = _resolve_content_flag(description, description_file, "description", allow_paths)
     text = _resolve_content_flag(text, text_file, "text", allow_paths)
+    analysis_text = _resolve_content_flag(analysis_text, analysis_file, "analysis", allow_paths)
     tier_val = parse_tier(tier) if tier else None
-    new_id = add_item(title, description=description, text=text,
+    new_id = add_item(title, description=description, text=text, analysis=analysis_text,
                       phase=phase, project_name=project, after=after, parent_id=parent,
                       task_type=task_type, status=status, tier=tier_val, force=force,
                       justification=justification)
