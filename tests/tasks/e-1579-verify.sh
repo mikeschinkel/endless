@@ -171,7 +171,7 @@ test_status_gate() {
     assert_succeeds "plain task accepts 'task update --status verify'" \
         endless task update "${tid}" --status verify
 
-    bid=$(add_task_get_id "Fix bug gate-verify" --type bug)
+    bid=$(add_task_get_id "Fix bug gate-verify" --type bugfix)
     assert_succeeds "bug accepts 'task update --status verify'" \
         endless task update "${bid}" --status verify
 
@@ -179,7 +179,7 @@ test_status_gate() {
         endless task add "Implement plain gate-add" --status verify
 
     assert_succeeds "bug accepts 'task add --status verify'" \
-        endless task add "Fix bug gate-add" --type bug --status verify
+        endless task add "Fix bug gate-add" --type bugfix --status verify
 
     # ── E-1577 inheritance: assumed/confirmed still rejected ────────────────
     eid=$(add_task_get_id "Implement epic gate-c" --type epic)

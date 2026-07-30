@@ -30,7 +30,7 @@ def test_internal_template_render_handoff_outputs_substituted_text():
     }
     result = runner.invoke(
         cli_main,
-        ["internal", "template", "render", "handoff/task"],
+        ["internal", "template", "render", "handoff/todo"],
         input=json.dumps(vars_payload),
     )
     assert result.exit_code == 0, result.output

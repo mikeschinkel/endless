@@ -76,7 +76,7 @@ func taskCreatedUrgentEvent(t *testing.T, taskID int64, sessionID string) *Event
 		Title:  "urgent task",
 		Phase:  "urgent",
 		Status: "unplanned",
-		Type:   "task",
+		Type:   "todo",
 	})
 	if err != nil {
 		t.Fatalf("marshal payload: %v", err)
@@ -98,7 +98,7 @@ func taskCreatedNonUrgentEvent(t *testing.T, taskID int64, sessionID string) *Ev
 		Title:  "regular task",
 		Phase:  "now",
 		Status: "unplanned",
-		Type:   "task",
+		Type:   "todo",
 	})
 	if err != nil {
 		t.Fatalf("marshal payload: %v", err)

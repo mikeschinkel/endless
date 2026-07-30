@@ -12,8 +12,8 @@ import (
 
 func TestParse_AcceptsKnownSlugs(t *testing.T) {
 	cases := map[string]tasktype.TaskType{
-		"task":       tasktype.TaskTypeTask,
-		"bug":        tasktype.TaskTypeBug,
+		"todo":       tasktype.TaskTypeTask,
+		"bugfix":     tasktype.TaskTypeBug,
 		"research":   tasktype.TaskTypeResearch,
 		"epic":       tasktype.TaskTypeEpic,
 		"brainstorm": tasktype.TaskTypeBrainstorm,
@@ -30,8 +30,29 @@ func TestParse_AcceptsKnownSlugs(t *testing.T) {
 	}
 }
 
+// E-1659: 'task'->'todo' and 'bug'->'bugfix' renamed the slugs, but the legacy
+// slugs must still Parse to the same ids so historical task.created /
+// task.fields_updated events replay correctly (the type_id is stable; only the
+// label moved). String() emits only the current slugs — see StringRoundTrip.
+func TestParse_AcceptsLegacyAliases(t *testing.T) {
+	cases := map[string]tasktype.TaskType{
+		"task": tasktype.TaskTypeTask,
+		"bug":  tasktype.TaskTypeBug,
+	}
+	for slug, want := range cases {
+		got, err := tasktype.Parse(slug)
+		if err != nil {
+			t.Errorf("Parse(%q) legacy alias returned error: %v", slug, err)
+			continue
+		}
+		if got != want {
+			t.Errorf("Parse(%q) = %d, want %d", slug, got, want)
+		}
+	}
+}
+
 func TestParse_RejectsUnknown(t *testing.T) {
-	for _, slug := range []string{"", "plan", "chore", "spike", "decision", "TASK", "Task"} {
+	for _, slug := range []string{"", "plan", "chore", "spike", "decision", "TODO", "Todo"} {
 		_, err := tasktype.Parse(slug)
 		if err == nil {
 			t.Errorf("Parse(%q) accepted invalid value", slug)
@@ -80,7 +101,7 @@ func newSeededDB(t *testing.T) *sql.DB {
 func seedAll(t *testing.T, db *sql.DB) {
 	t.Helper()
 	_, err := db.Exec(`INSERT INTO task_types (id, slug, label) VALUES
-		(1, 'task', 'Task'), (2, 'bug', 'Bug'),
+		(1, 'todo', 'Todo'), (2, 'bugfix', 'Bugfix'),
 		(3, 'research', 'Research'), (4, 'epic', 'Epic'),
 		(5, 'brainstorm', 'Brainstorm')`)
 	if err != nil {
@@ -98,7 +119,7 @@ func TestVerifyIntegrity_OK(t *testing.T) {
 
 func TestVerifyIntegrity_MissingEnumRow(t *testing.T) {
 	db := newSeededDB(t)
-	if _, err := db.Exec(`INSERT INTO task_types VALUES (1, 'task', 'Task'), (2, 'bug', 'Bug'), (3, 'research', 'Research')`); err != nil {
+	if _, err := db.Exec(`INSERT INTO task_types VALUES (1, 'todo', 'Todo'), (2, 'bugfix', 'Bugfix'), (3, 'research', 'Research')`); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 	err := tasktype.VerifyIntegrity(db)
@@ -109,7 +130,7 @@ func TestVerifyIntegrity_MissingEnumRow(t *testing.T) {
 
 func TestVerifyIntegrity_SlugMismatch(t *testing.T) {
 	db := newSeededDB(t)
-	if _, err := db.Exec(`INSERT INTO task_types VALUES (1, 'tsk', 'Task'), (2, 'bug', 'Bug'), (3, 'research', 'Research'), (4, 'epic', 'Epic')`); err != nil {
+	if _, err := db.Exec(`INSERT INTO task_types VALUES (1, 'tsk', 'Todo'), (2, 'bugfix', 'Bugfix'), (3, 'research', 'Research'), (4, 'epic', 'Epic')`); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 	err := tasktype.VerifyIntegrity(db)
@@ -120,7 +141,7 @@ func TestVerifyIntegrity_SlugMismatch(t *testing.T) {
 
 func TestVerifyIntegrity_LabelMismatch(t *testing.T) {
 	db := newSeededDB(t)
-	if _, err := db.Exec(`INSERT INTO task_types VALUES (1, 'task', 'Wrong'), (2, 'bug', 'Bug'), (3, 'research', 'Research'), (4, 'epic', 'Epic')`); err != nil {
+	if _, err := db.Exec(`INSERT INTO task_types VALUES (1, 'todo', 'Wrong'), (2, 'bugfix', 'Bugfix'), (3, 'research', 'Research'), (4, 'epic', 'Epic')`); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 	err := tasktype.VerifyIntegrity(db)

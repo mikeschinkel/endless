@@ -17,7 +17,7 @@ def _project_id(name: str = "test") -> int:
     return db.query("SELECT id FROM projects WHERE name = ?", (name,))[0]["id"]
 
 
-def _add_task(project_id: int, title: str, task_type: str = "task") -> int:
+def _add_task(project_id: int, title: str, task_type: str = "todo") -> int:
     cur = db.execute(
         "INSERT INTO tasks (project_id, title, status, type_id, phase, created_at) "
         "VALUES (?, ?, 'ready', (SELECT id FROM task_types WHERE slug = ?), 'now', datetime('now'))",

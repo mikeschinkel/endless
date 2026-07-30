@@ -245,7 +245,7 @@ func makeEpicCreatedEvent(t *testing.T, clock *kairos.Clock, projectName string,
 func makeTaskCreatedChildEvent(t *testing.T, clock *kairos.Clock, projectName string, childID, parentID int64) events.Event {
 	t.Helper()
 	payload, err := json.Marshal(events.TaskCreatedPayload{
-		Title: "child", Phase: "now", Status: "unplanned", Type: "task",
+		Title: "child", Phase: "now", Status: "unplanned", Type: "todo",
 		SortOrder: 20, ParentID: &parentID,
 	})
 	if err != nil {

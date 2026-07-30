@@ -56,7 +56,7 @@ func taskCreatedEvent(t *testing.T, taskID int64, actor Actor) *Event {
 		Title:  "probe",
 		Phase:  "now",
 		Status: "unplanned",
-		Type:   "task",
+		Type:   "todo",
 	})
 	if err != nil {
 		t.Fatalf("marshal payload: %v", err)

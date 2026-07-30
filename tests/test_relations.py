@@ -188,7 +188,7 @@ def test_task_add_cleans_up_flag(isolated_env, monkeypatch):
         cur = db.execute(
             "INSERT INTO tasks (project_id, title, description, status, type_id, phase, created_at) "
             "VALUES (1, ?, ?, ?, (SELECT id FROM task_types WHERE slug = ?), ?, datetime('now'))",
-            (title, description or "", status or "unplanned", task_type or "task", phase),
+            (title, description or "", status or "unplanned", task_type or "todo", phase),
         )
         return cur.lastrowid
 
@@ -225,7 +225,7 @@ def test_task_add_cleaned_up_by_flag(isolated_env, monkeypatch):
         cur = db.execute(
             "INSERT INTO tasks (project_id, title, description, status, type_id, phase, created_at) "
             "VALUES (1, ?, ?, ?, (SELECT id FROM task_types WHERE slug = ?), ?, datetime('now'))",
-            (title, description or "", status or "unplanned", task_type or "task", phase),
+            (title, description or "", status or "unplanned", task_type or "todo", phase),
         )
         return cur.lastrowid
 

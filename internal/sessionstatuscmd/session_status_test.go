@@ -160,8 +160,8 @@ func TestDirtyMark(t *testing.T) {
 // substitution does not shift the id column (both glyphs are width 1) — E-1701.
 func TestRenderDirtyIndicator(t *testing.T) {
 	rows := []monitor.SessionStatusRow{
-		{ID: 1701, Title: "dirty one", Status: "underway", Phase: "now", TypeSlug: "task", IsFocal: true, Dirty: true},
-		{ID: 1702, Title: "clean one", Status: "ready", Phase: "now", TypeSlug: "task", Dirty: false},
+		{ID: 1701, Title: "dirty one", Status: "underway", Phase: "now", TypeSlug: "todo", IsFocal: true, Dirty: true},
+		{ID: 1702, Title: "clean one", Status: "ready", Phase: "now", TypeSlug: "todo", Dirty: false},
 	}
 	var b strings.Builder
 	renderTo(&b, rows, 1701, hintClaimBind, 90, false)
@@ -208,8 +208,8 @@ func TestRenderEmptyFocal(t *testing.T) {
 // is `len(rows) == 0`, so focal == 0 with work no longer hides it.
 func TestRenderNoGoalSurfacesRows(t *testing.T) {
 	rows := []monitor.SessionStatusRow{
-		{ID: 1801, Title: "filed this session", Status: "ready", Phase: "now", TypeSlug: "task"},
-		{ID: 1776, Title: "touched this session", Status: "unplanned", Phase: "next", TypeSlug: "task"},
+		{ID: 1801, Title: "filed this session", Status: "ready", Phase: "now", TypeSlug: "todo"},
+		{ID: 1776, Title: "touched this session", Status: "unplanned", Phase: "next", TypeSlug: "todo"},
 	}
 	var b strings.Builder
 	renderTo(&b, rows, 0, hintClaimBind, 90, false)
@@ -340,9 +340,9 @@ func TestBuildLegend(t *testing.T) {
 
 func TestRenderColumnsAndTruncation(t *testing.T) {
 	rows := []monitor.SessionStatusRow{
-		{ID: 1465, Title: "Implement endless session next briefing read command", Status: "underway", Phase: "now", TypeSlug: "task", IsFocal: true},
+		{ID: 1465, Title: "Implement endless session next briefing read command", Status: "underway", Phase: "now", TypeSlug: "todo", IsFocal: true},
 		{ID: 1461, Title: "Add endless session next prospective remaining-work briefing", Status: "ready", Phase: "now", TypeSlug: "epic", IsParent: true},
-		{ID: 1684, Title: "Add session next --tree showing task IDs in implementation order", Status: "confirmed", Phase: "now", TypeSlug: "task", IsFrom: true},
+		{ID: 1684, Title: "Add session next --tree showing task IDs in implementation order", Status: "confirmed", Phase: "now", TypeSlug: "todo", IsFrom: true},
 	}
 	var b strings.Builder
 	renderTo(&b, rows, 1465, hintClaimBind, 40, false)
@@ -437,7 +437,7 @@ func TestTypeLetter(t *testing.T) {
 		want string
 	}{
 		{"epic", "E"},
-		{"bug", "F"},
+		{"bugfix", "F"},
 		{"research", "R"},
 		{"brainstorm", "B"},
 		{"task", "T"},
@@ -474,7 +474,7 @@ func TestFocalExpansionSuppressesUncommitted(t *testing.T) {
 	}
 
 	rows := []monitor.SessionStatusRow{
-		{ID: 1768, Title: "focal", Status: "underway", Phase: "now", TypeSlug: "task", IsFocal: true, Dirty: true},
+		{ID: 1768, Title: "focal", Status: "underway", Phase: "now", TypeSlug: "todo", IsFocal: true, Dirty: true},
 	}
 	var b strings.Builder
 	renderTo(&b, rows, 1768, hintClaimBind, 90, false)
@@ -510,7 +510,7 @@ func TestFocalExpansionUncommittedOnlyIsSilent(t *testing.T) {
 	}
 
 	rows := []monitor.SessionStatusRow{
-		{ID: 1768, Title: "focal", Status: "underway", Phase: "now", TypeSlug: "task", IsFocal: true, Dirty: true},
+		{ID: 1768, Title: "focal", Status: "underway", Phase: "now", TypeSlug: "todo", IsFocal: true, Dirty: true},
 	}
 	var b strings.Builder
 	renderTo(&b, rows, 1768, hintClaimBind, 90, false)

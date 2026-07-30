@@ -528,7 +528,7 @@ func typeLetter(slug string) string {
 	switch slug {
 	case "epic":
 		return "E"
-	case "bug":
+	case "bugfix":
 		return "F"
 	case "research":
 		return "R"

@@ -21,7 +21,7 @@ func TestEventJSONRoundTrip(t *testing.T) {
 		Title:  "Implement kairos",
 		Phase:  "now",
 		Status: "unplanned",
-		Type:   "task",
+		Type:   "todo",
 	})
 
 	evt := events.Event{
@@ -145,7 +145,7 @@ func TestValidate_Valid(t *testing.T) {
 		Title:  "Test task",
 		Phase:  "now",
 		Status: "unplanned",
-		Type:   "task",
+		Type:   "todo",
 	})
 
 	evt := events.Event{
@@ -165,7 +165,7 @@ func TestValidate_Valid(t *testing.T) {
 
 func TestValidate_Errors(t *testing.T) {
 	ts := testTimestamp()
-	payload, _ := json.Marshal(events.TaskCreatedPayload{Title: "x", Phase: "now", Status: "unplanned", Type: "task"})
+	payload, _ := json.Marshal(events.TaskCreatedPayload{Title: "x", Phase: "now", Status: "unplanned", Type: "todo"})
 
 	base := events.Event{
 		V:       events.Version,
@@ -224,7 +224,7 @@ func TestPayloadRoundTrips(t *testing.T) {
 		payload any
 	}{
 		{"TaskCreated", events.TaskCreatedPayload{
-			Title: "Test", Phase: "now", Status: "unplanned", Type: "task", Tier: &tier, ParentID: &parentID, SortOrder: 5,
+			Title: "Test", Phase: "now", Status: "unplanned", Type: "todo", Tier: &tier, ParentID: &parentID, SortOrder: 5,
 		}},
 		{"TaskStatusChanged", events.TaskStatusChangedPayload{
 			OldStatus: "underway", NewStatus: "confirmed", CompletedAt: "2026-04-25T14:00:00",

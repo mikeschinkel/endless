@@ -243,7 +243,7 @@ func newTaskCreatedEvent(t *testing.T, id int64, title string) *events.Event {
 		Title:  title,
 		Phase:  "now",
 		Status: "unplanned",
-		Type:   "task",
+		Type:   "todo",
 	})
 	if err != nil {
 		t.Fatalf("marshal payload: %v", err)

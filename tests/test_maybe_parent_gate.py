@@ -17,7 +17,7 @@ def _add_task(
     title: str,
     phase: str = "now",
     status: str = "ready",
-    task_type: str = "task",
+    task_type: str = "todo",
     parent_id: int | None = None,
 ) -> int:
     cur = db.execute(

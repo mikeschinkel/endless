@@ -28,9 +28,9 @@ const (
 func (t TaskType) String() string {
 	switch t {
 	case TaskTypeTask:
-		return "task"
+		return "todo"
 	case TaskTypeBug:
-		return "bug"
+		return "bugfix"
 	case TaskTypeResearch:
 		return "research"
 	case TaskTypeEpic:
@@ -46,9 +46,9 @@ func (t TaskType) String() string {
 func (t TaskType) Label() string {
 	switch t {
 	case TaskTypeTask:
-		return "Task"
+		return "Todo"
 	case TaskTypeBug:
-		return "Bug"
+		return "Bugfix"
 	case TaskTypeResearch:
 		return "Research"
 	case TaskTypeEpic:
@@ -62,11 +62,19 @@ func (t TaskType) Label() string {
 
 // Parse converts a slug from CLI / external input to a TaskType. Returns an
 // error for unknown slugs.
+//
+// The legacy slugs 'task' and 'bug' are accepted as aliases for their
+// current names 'todo' and 'bugfix'. type_id is a stable integer
+// (TaskTypeTask=1, TaskTypeBug=2) and historical `task.created` /
+// `task.fields_updated` events carry the OLD slug string; every replay path
+// resolves the type through this one chokepoint (executor + projectorTypeID),
+// so accepting the aliases lets those events replay to the correct type_id
+// with no DB rewrite. String() still emits only the current 'todo'/'bugfix'.
 func Parse(s string) (TaskType, error) {
 	switch s {
-	case "task":
+	case "todo", "task":
 		return TaskTypeTask, nil
-	case "bug":
+	case "bugfix", "bug":
 		return TaskTypeBug, nil
 	case "research":
 		return TaskTypeResearch, nil
@@ -75,7 +83,7 @@ func Parse(s string) (TaskType, error) {
 	case "brainstorm":
 		return TaskTypeBrainstorm, nil
 	default:
-		return 0, fmt.Errorf("tasktype: invalid task type %q (valid: task, bug, research, epic, brainstorm)", s)
+		return 0, fmt.Errorf("tasktype: invalid task type %q (valid: todo, bugfix, research, epic, brainstorm)", s)
 	}
 }
 

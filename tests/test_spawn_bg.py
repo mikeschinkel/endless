@@ -86,7 +86,7 @@ def patched_dispatch(monkeypatch):
 
 def test_dispatch_invokes_claude_then_records(patched_dispatch):
     _spawn_bg_dispatch(item_id=1568, title="Add --bg", cd_target="/wt",
-                       task_type="task", parent_id=None, worktree_override=False)
+                       task_type="todo", parent_id=None, worktree_override=False)
 
     claude_cmd = patched_dispatch[0][0]
     claude_kw = patched_dispatch[0][1]
@@ -108,7 +108,7 @@ def test_dispatch_invokes_claude_then_records(patched_dispatch):
 def test_dispatch_label_includes_parent_for_child(patched_dispatch):
     """E-1620: a task with a parent labels itself `E-<parent>/E-<id>: <title>`."""
     _spawn_bg_dispatch(item_id=1620, title="Render labels", cd_target="/wt",
-                       task_type="bug", parent_id=1564, worktree_override=False)
+                       task_type="bugfix", parent_id=1564, worktree_override=False)
 
     claude_cmd = patched_dispatch[0][0]
     name_idx = claude_cmd.index("--name")
@@ -117,7 +117,7 @@ def test_dispatch_label_includes_parent_for_child(patched_dispatch):
 
 def test_dispatch_worktree_override_sets_cwd(patched_dispatch):
     _spawn_bg_dispatch(item_id=1568, title="t", cd_target="/tmp",
-                       task_type="task", parent_id=None, worktree_override=True)
+                       task_type="todo", parent_id=None, worktree_override=True)
     assert patched_dispatch[0][1].get("cwd") == "/tmp"
 
 
@@ -137,7 +137,7 @@ def test_dispatch_parse_failure_raises_and_skips_record(monkeypatch):
 
     with pytest.raises(click.ClickException):
         _spawn_bg_dispatch(item_id=1568, title="t", cd_target="/wt",
-                           task_type="task", parent_id=None,
+                           task_type="todo", parent_id=None,
                            worktree_override=False)
     # Only the claude call happened; no row write.
     assert len(calls) == 1
@@ -157,5 +157,5 @@ def test_dispatch_claude_nonzero_exit_raises(monkeypatch):
 
     with pytest.raises(click.ClickException):
         _spawn_bg_dispatch(item_id=1568, title="t", cd_target="/wt",
-                           task_type="task", parent_id=None,
+                           task_type="todo", parent_id=None,
                            worktree_override=False)

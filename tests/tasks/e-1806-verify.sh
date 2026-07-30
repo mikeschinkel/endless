@@ -185,7 +185,7 @@ test_refusal_wording() {
     # implementation task cannot reach 'completed'. The gate still fires; only
     # the wording changed.
     local tid
-    tid=$(add_task_get_id "Add a status-gate wording widget" --type task) || return
+    tid=$(add_task_get_id "Add a status-gate wording widget" --type todo) || return
 
     assert_refused "refusal states 'completed' isn't a valid final status" \
         "valid final status" \
@@ -201,7 +201,7 @@ test_refusal_no_jargon() {
     section "Refusal — no internal mechanism leaked"
 
     local tid
-    tid=$(add_task_get_id "Add a jargon-check widget" --type task) || return
+    tid=$(add_task_get_id "Add a jargon-check widget" --type todo) || return
 
     assert_refused_lacks "refusal does not mention verbs.json" \
         "verbs.json" \

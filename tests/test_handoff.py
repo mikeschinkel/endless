@@ -49,7 +49,7 @@ def test_render_handoff_includes_task_and_no_return_line():
         title="Render handoff from template",
         worktree_path="/repo/.endless/worktrees/e-1469",
         branch="task/1469-render-handoff",
-        task_type="task",
+        task_type="todo",
     )
     assert "E-1469" in out
     assert "Render handoff from template" in out
@@ -72,7 +72,7 @@ def test_render_handoff_root_label_has_no_parent_prefix():
     out = render_handoff(
         spawned_id=1620,
         title="Render hierarchical labels",
-        task_type="task",
+        task_type="todo",
     )
     assert "- E-1620: Render hierarchical labels." in out
 
@@ -82,7 +82,7 @@ def test_render_handoff_child_label_includes_parent_prefix():
     out = render_handoff(
         spawned_id=1620,
         title="Render hierarchical labels",
-        task_type="bug",
+        task_type="bugfix",
         parent_id=1564,
     )
     assert "- E-1564/E-1620: Render hierarchical labels." in out
@@ -107,7 +107,7 @@ def test_render_handoff_bug_variant():
     out = render_handoff(
         spawned_id=2000,
         title="Crash on empty input",
-        task_type="bug",
+        task_type="bugfix",
     )
     # Bug-specific framing.
     assert "Reproduce the bug first" in out
@@ -166,7 +166,7 @@ def test_render_handoff_bg_variant_omits_tmux_return():
     out = render_handoff(
         spawned_id=1568,
         title="Add --bg to spawn",
-        task_type="task",
+        task_type="todo",
         bg=True,
     )
     # No tmux return lines.
@@ -188,7 +188,7 @@ def test_render_handoff_fg_omits_tmux_return():
     out = render_handoff(
         spawned_id=1568,
         title="t",
-        task_type="task",
+        task_type="todo",
         bg=False,
     )
     assert "tmux switch-client" not in out
@@ -217,7 +217,7 @@ def test_render_handoff_includes_child_count_when_nonzero(count):
     out = render_handoff(
         spawned_id=2100,
         title="parent task",
-        task_type="task",
+        task_type="todo",
     )
     if count == 0:
         # Zero children → child-count line absent.

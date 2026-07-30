@@ -263,7 +263,7 @@ test_completed_exemption() {
     # No-regression control: the exemption is scoped to brainstorm. A plain task
     # with the same non-completable verb is STILL blocked.
     local tid
-    tid=$(add_task_get_id "Add a control widget" --type task) || return
+    tid=$(add_task_get_id "Add a control widget" --type todo) || return
     assert_refused "plain task with non-completable verb STILL blocked from 'completed'" \
         "completable lead verb" \
         endless task update "${tid}" --status completed --outcome "x"

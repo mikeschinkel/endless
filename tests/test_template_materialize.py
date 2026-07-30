@@ -23,7 +23,7 @@ def _bin() -> str:
     return str(Path(__file__).resolve().parent.parent / "bin" / "endless-go")
 
 
-def _run_render(cwd: Path, name: str = "handoff/task", vars_payload: dict | None = None) -> subprocess.CompletedProcess:
+def _run_render(cwd: Path, name: str = "handoff/todo", vars_payload: dict | None = None) -> subprocess.CompletedProcess:
     payload = vars_payload if vars_payload is not None else {
         "spawned_id": 4242,
         "title": "Materialize test",
@@ -40,7 +40,7 @@ def _run_render(cwd: Path, name: str = "handoff/task", vars_payload: dict | None
 
 
 def test_first_render_materializes_template_file(project_root):
-    dst = project_root / ".endless" / "templates" / "handoff" / "task.md.tmpl"
+    dst = project_root / ".endless" / "templates" / "handoff" / "todo.md.tmpl"
     assert not dst.exists()
 
     result = _run_render(project_root)
@@ -62,20 +62,20 @@ def test_user_edits_persist_across_renders(project_root):
     tmpl_dir = project_root / ".endless" / "templates" / "handoff"
     tmpl_dir.mkdir(parents=True)
     custom = "USER OVERRIDE {{.spawned_id}}\n"
-    (tmpl_dir / "task.md.tmpl").write_text(custom)
+    (tmpl_dir / "todo.md.tmpl").write_text(custom)
 
     result = _run_render(project_root)
     assert result.returncode == 0, result.stderr
     assert "USER OVERRIDE 4242" in result.stdout
     # File untouched.
-    assert (tmpl_dir / "task.md.tmpl").read_text() == custom
+    assert (tmpl_dir / "todo.md.tmpl").read_text() == custom
 
 
 def test_delete_to_restore(project_root):
     # First render to materialize.
     r1 = _run_render(project_root)
     assert r1.returncode == 0, r1.stderr
-    dst = project_root / ".endless" / "templates" / "handoff" / "task.md.tmpl"
+    dst = project_root / ".endless" / "templates" / "handoff" / "todo.md.tmpl"
     embedded = dst.read_text()
 
     # Modify, delete, re-render → embedded restored.
@@ -90,8 +90,8 @@ def test_delete_to_restore(project_root):
 def test_local_tmpl_overrides_committed(project_root):
     tmpl_dir = project_root / ".endless" / "templates" / "handoff"
     tmpl_dir.mkdir(parents=True)
-    (tmpl_dir / "task.md.tmpl").write_text("COMMITTED\n")
-    (tmpl_dir / "task.md.local.tmpl").write_text("LOCAL_WINS\n")
+    (tmpl_dir / "todo.md.tmpl").write_text("COMMITTED\n")
+    (tmpl_dir / "todo.md.local.tmpl").write_text("LOCAL_WINS\n")
 
     result = _run_render(project_root)
     assert result.returncode == 0, result.stderr

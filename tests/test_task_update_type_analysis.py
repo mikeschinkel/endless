@@ -6,7 +6,7 @@ import pytest
 from endless import db, task_cmd
 
 
-def _add_task(title: str, status: str = "ready", task_type: str = "task") -> int:
+def _add_task(title: str, status: str = "ready", task_type: str = "todo") -> int:
     cur = db.execute(
         "INSERT INTO tasks (project_id, title, status, type_id, phase, created_at) "
         "VALUES (1, ?, ?, (SELECT id FROM task_types WHERE slug = ?), 'now', datetime('now'))",
@@ -27,7 +27,7 @@ def _type_analysis(task_id: int) -> tuple[str, str | None]:
 def test_update_type_changes_task_type(seeded_project_at_cwd):
     # E-1544: promoting to research requires --justification (or an
     # underway epic parent). Supplying justification here.
-    tid = _add_task("Audit the X system", task_type="task")
+    tid = _add_task("Audit the X system", task_type="todo")
     task_cmd.update_plan(
         tid, task_type="research",
         justification="Needs deeper analysis.",

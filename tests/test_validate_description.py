@@ -28,7 +28,7 @@ def fake_add_item(monkeypatch, isolated_env):
     def _stub(title, description=None, text=None, phase="now", project_name=None,
               after=None, parent_id=None, task_type=None, status=None,
               tier=None, force=False, **kwargs):
-        task_type = task_type or "task"
+        task_type = task_type or "todo"
         task_cmd.validate_title(title, force=force)
         real_validate(description)
         status = status or ("ready" if tier == 1 else "unplanned")

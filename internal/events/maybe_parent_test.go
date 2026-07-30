@@ -31,7 +31,7 @@ func TestExecute_TaskCreated_RejectsMaybeWithParent(t *testing.T) {
 		Title:    "maybe-child",
 		Phase:    "maybe",
 		Status:   "unplanned",
-		Type:     "task",
+		Type:     "todo",
 		ParentID: &parentID,
 	})
 	if err != nil {
@@ -72,7 +72,7 @@ func TestExecute_TaskCreated_AllowsMaybeRoot(t *testing.T) {
 		Title:  "maybe-root",
 		Phase:  "maybe",
 		Status: "unplanned",
-		Type:   "task",
+		Type:   "todo",
 	})
 	evt := &events.Event{
 		V:       events.Version,
@@ -108,7 +108,7 @@ func TestExecute_TaskCreated_AllowsParentedNonMaybe(t *testing.T) {
 		Title:    "now-child",
 		Phase:    "now",
 		Status:   "unplanned",
-		Type:     "task",
+		Type:     "todo",
 		ParentID: &parentID,
 	})
 	evt := &events.Event{
@@ -153,7 +153,7 @@ func TestExecute_FieldsUpdated_RejectsReparentMaybe(t *testing.T) {
 	}
 	// Create a parentless maybe task.
 	maybePayload, _ := json.Marshal(events.TaskCreatedPayload{
-		Title: "maybe-task", Phase: "maybe", Status: "unplanned", Type: "task",
+		Title: "maybe-task", Phase: "maybe", Status: "unplanned", Type: "todo",
 	})
 	maybeEvt := &events.Event{
 		V: events.Version, TS: "5WYM00000711", Kind: events.KindTaskCreated,
@@ -183,7 +183,7 @@ func TestExecute_FieldsUpdated_RejectsPhaseMaybeOnChild(t *testing.T) {
 	}
 	parentID := int64(720)
 	childPayload, _ := json.Marshal(events.TaskCreatedPayload{
-		Title: "child", Phase: "now", Status: "unplanned", Type: "task",
+		Title: "child", Phase: "now", Status: "unplanned", Type: "todo",
 		ParentID: &parentID,
 	})
 	childEvt := &events.Event{
@@ -213,7 +213,7 @@ func TestExecute_FieldsUpdated_AllowsAtomicPromoteAndParent(t *testing.T) {
 		t.Fatalf("seed parent: %v", err)
 	}
 	maybePayload, _ := json.Marshal(events.TaskCreatedPayload{
-		Title: "maybe-task", Phase: "maybe", Status: "unplanned", Type: "task",
+		Title: "maybe-task", Phase: "maybe", Status: "unplanned", Type: "todo",
 	})
 	maybeEvt := &events.Event{
 		V: events.Version, TS: "5WYM00000731", Kind: events.KindTaskCreated,
@@ -275,7 +275,7 @@ func TestExecute_TaskMoved_RejectsMaybeUnderParent(t *testing.T) {
 		t.Fatalf("seed parent: %v", err)
 	}
 	maybePayload, _ := json.Marshal(events.TaskCreatedPayload{
-		Title: "maybe-task", Phase: "maybe", Status: "unplanned", Type: "task",
+		Title: "maybe-task", Phase: "maybe", Status: "unplanned", Type: "todo",
 	})
 	maybeEvt := &events.Event{
 		V: events.Version, TS: "5WYM00000751", Kind: events.KindTaskCreated,

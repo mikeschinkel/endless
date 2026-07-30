@@ -43,7 +43,7 @@ func TestProjectToTempDB_TaskCreatedProducesRow(t *testing.T) {
 		Title:  "Projector target",
 		Phase:  "now",
 		Status: "unplanned",
-		Type:   "task",
+		Type:   "todo",
 	})
 	if err != nil {
 		t.Fatalf("marshal created payload: %v", err)
@@ -123,7 +123,7 @@ func TestProjectToTempDB_CreateThenUpdateApplied(t *testing.T) {
 		Title:  "Original",
 		Phase:  "now",
 		Status: "unplanned",
-		Type:   "task",
+		Type:   "todo",
 	})
 	createdEvt := events.Event{
 		V:       events.Version,

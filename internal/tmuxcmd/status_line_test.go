@@ -77,20 +77,20 @@ func TestFormat_OmitsEmptyFields(t *testing.T) {
 		{
 			name: "all fields present",
 			info: &monitor.ActiveTaskInfo{
-				TaskID: 42, ProjectName: "proj", Type: "task",
+				TaskID: 42, ProjectName: "proj", Type: "todo",
 				Phase: "now", Tier: &tier, Status: "underway",
 			},
-			wantParts:      []string{"[E-42]", "proj", "task", "now", "t3", "underway"},
+			wantParts:      []string{"[E-42]", "proj", "todo", "now", "t3", "underway"},
 			wantSeparators: 5, // all five non-ID fields contribute
 		},
 		{
 			name: "tier nil drops the t-segment",
 			info: &monitor.ActiveTaskInfo{
-				TaskID: 7, ProjectName: "proj", Type: "task",
+				TaskID: 7, ProjectName: "proj", Type: "todo",
 				Phase: "now", Tier: nil, Status: "ready",
 			},
-			wantParts:    []string{"[E-7]", "proj", "task", "now", "ready"},
-			wantSeparators: 4, // proj, task, now, ready → 4 " · " separators (no tier)
+			wantParts:    []string{"[E-7]", "proj", "todo", "now", "ready"},
+			wantSeparators: 4, // proj, todo, now, ready → 4 " · " separators (no tier)
 		},
 		{
 			name: "blank project + type + phase omitted",
@@ -351,7 +351,7 @@ func TestFormat_AppendsBlockersSegment(t *testing.T) {
 	seedBlocks(t, db, 7, 100)
 
 	info := &monitor.ActiveTaskInfo{
-		TaskID: 100, ProjectName: "p", Type: "task",
+		TaskID: 100, ProjectName: "p", Type: "todo",
 		Phase: "now", Status: "underway",
 	}
 	got := format(info)
@@ -374,7 +374,7 @@ func TestFormat_OmitsBlockersSegmentWhenEmpty(t *testing.T) {
 	seedTaskWithStatus(t, db, 100, "underway")
 
 	info := &monitor.ActiveTaskInfo{
-		TaskID: 100, ProjectName: "p", Type: "task",
+		TaskID: 100, ProjectName: "p", Type: "todo",
 		Phase: "now", Status: "underway",
 	}
 	got := format(info)

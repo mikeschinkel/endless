@@ -196,7 +196,7 @@ func templatesSubdir(projectRoot string) string {
 // normalizeName applies the default-extension rule: when the basename of
 // the user-supplied name has no `.`, append `.md`. Otherwise use as-is.
 // So `handoff` → `handoff.md`, `handoff.md` → `handoff.md` (idempotent),
-// `handoff.txt` → `handoff.txt`, `handoff/task` → `handoff/task.md`.
+// `handoff.txt` → `handoff.txt`, `handoff/todo` → `handoff/todo.md`.
 func normalizeName(raw string) string {
 	base := filepath.Base(raw)
 	if strings.Contains(base, ".") {

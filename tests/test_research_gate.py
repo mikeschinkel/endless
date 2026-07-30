@@ -16,7 +16,7 @@ from endless import db, task_cmd
 def _add_task(
     title: str,
     status: str = "ready",
-    task_type: str = "task",
+    task_type: str = "todo",
     parent_id: int | None = None,
     notes: str | None = None,
 ) -> int:
@@ -65,7 +65,7 @@ def test_gate_refuses_when_parent_epic_but_not_underway(seeded_project_at_cwd):
 
 
 def test_gate_refuses_when_parent_non_epic(seeded_project_at_cwd):
-    parent = _add_task("Plain task", status="underway", task_type="task")
+    parent = _add_task("Plain task", status="underway", task_type="todo")
     with pytest.raises(click.ClickException) as exc:
         task_cmd._research_gate_check(parent, None)
     assert "--type research requires --justification" in exc.value.message
@@ -132,7 +132,7 @@ def test_add_research_with_epic_underway_parent_and_justification(seeded_project
 
 
 def test_add_research_with_non_epic_parent_refused(seeded_project_at_cwd):
-    parent = _add_task("Plain task", status="underway", task_type="task")
+    parent = _add_task("Plain task", status="underway", task_type="todo")
     with pytest.raises(click.ClickException) as exc:
         task_cmd.add_item(
             "Research", task_type="research", parent_id=parent,
@@ -167,9 +167,9 @@ def test_add_research_with_no_parent_and_justification(seeded_project_at_cwd):
 
 def test_add_non_research_no_justification_works(seeded_project_at_cwd):
     """Gate is inert for non-research adds."""
-    new_id = task_cmd.add_item("Add a sample task", task_type="task")
+    new_id = task_cmd.add_item("Add a sample task", task_type="todo")
     notes, t = _notes_and_type(new_id)
-    assert t == "task"
+    assert t == "todo"
     assert notes in (None, "")
 
 
@@ -184,7 +184,7 @@ def test_update_set_research_with_epic_underway_parent(seeded_project_at_cwd):
 
 
 def test_update_set_research_with_non_epic_parent_refused(seeded_project_at_cwd):
-    parent = _add_task("Non-epic", status="underway", task_type="task")
+    parent = _add_task("Non-epic", status="underway", task_type="todo")
     tid = _add_task("Existing task", parent_id=parent)
     with pytest.raises(click.ClickException) as exc:
         task_cmd.update_plan(tid, task_type="research")
@@ -221,7 +221,7 @@ def test_update_refuses_when_justification_section_already_present(seeded_projec
 def test_update_gate_does_not_fire_when_type_not_in_update(seeded_project_at_cwd):
     """If --type is not in the update, gate is inert even on a research task
     being re-parented to a non-epic. (Q1-followup: only fires when --type is set.)"""
-    parent = _add_task("Non-epic", status="underway", task_type="task")
+    parent = _add_task("Non-epic", status="underway", task_type="todo")
     epic = _add_task("Epic", status="underway", task_type="epic")
     tid = _add_task("Research item", task_type="research", parent_id=epic)
     task_cmd.update_plan(tid, parent_id=parent)  # no --type, no raise
@@ -357,7 +357,7 @@ def test_plain_task_still_accepts_confirmed_and_assumed(seeded_project_at_cwd):
 def test_cascade_confirm_refused_when_research_descendant(seeded_project_at_cwd):
     """`task confirm --cascade` on a parent with a research descendant
     refuses loudly and names the offender."""
-    parent = _add_task("Implement X", task_type="task")
+    parent = _add_task("Implement X", task_type="todo")
     epic = _add_task("Anchor", task_type="epic", status="underway")
     research = _add_task(
         "Research subtree", task_type="research", parent_id=parent,
@@ -373,7 +373,7 @@ def test_cascade_confirm_refused_when_research_descendant(seeded_project_at_cwd)
 
 
 def test_cascade_assume_refused_when_epic_descendant(seeded_project_at_cwd):
-    parent = _add_task("Implement Y", task_type="task")
+    parent = _add_task("Implement Y", task_type="todo")
     nested_epic = _add_task("Sub-epic", task_type="epic", parent_id=parent)
     with pytest.raises(click.ClickException) as exc:
         task_cmd.assume_item(parent, cascade=True)
@@ -384,8 +384,8 @@ def test_cascade_assume_refused_when_epic_descendant(seeded_project_at_cwd):
 
 
 def test_cascade_confirm_passes_when_no_typed_descendants(seeded_project_at_cwd):
-    parent = _add_task("Implement Z", task_type="task")
-    _add_task("Sub-task", task_type="task", parent_id=parent)
+    parent = _add_task("Implement Z", task_type="todo")
+    _add_task("Sub-task", task_type="todo", parent_id=parent)
     task_cmd.complete_item(parent, cascade=True)
     row = db.query("SELECT status FROM tasks WHERE id = ?", (parent,))
     assert row[0]["status"] == "confirmed"

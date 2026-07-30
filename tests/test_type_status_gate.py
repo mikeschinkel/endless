@@ -88,12 +88,12 @@ def test_update_bug_unverified_allowed(seeded_project_at_cwd):
 
 
 def test_add_task_unverified_allowed(seeded_project_at_cwd):
-    tid = task_cmd.add_item("Implement the widget", task_type="task", status="unverified")
+    tid = task_cmd.add_item("Implement the widget", task_type="todo", status="unverified")
     assert _status(tid) == "unverified"
 
 
 def test_add_bug_unverified_allowed(seeded_project_at_cwd):
-    tid = task_cmd.add_item("Fix the crash", task_type="bug", status="unverified")
+    tid = task_cmd.add_item("Fix the crash", task_type="bugfix", status="unverified")
     assert _status(tid) == "unverified"
 
 

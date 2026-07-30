@@ -27,7 +27,7 @@ def _seed_project(name: str = "test") -> int:
     return cur.lastrowid
 
 
-def _add_task(project_id: int, title: str = "T", task_type: str = "task") -> int:
+def _add_task(project_id: int, title: str = "T", task_type: str = "todo") -> int:
     cur = db.execute(
         "INSERT INTO tasks (project_id, title, status, type_id, phase, created_at) "
         "VALUES (?, ?, 'unplanned', (SELECT id FROM task_types WHERE slug = ?), 'now', datetime('now'))",
@@ -89,7 +89,7 @@ def test_epic_list_empty(isolated_env):
 def test_epic_list_filters_to_epics_only(isolated_env):
     pid = _seed_project()
     eid = _add_task(pid, "An epic", task_type="epic")
-    _add_task(pid, "A plain task", task_type="task")
+    _add_task(pid, "A plain task", task_type="todo")
     runner = CliRunner()
     result = runner.invoke(main, ["epic", "list", "--project", "test"])
     assert result.exit_code == 0, result.output
@@ -101,7 +101,7 @@ def test_epic_list_filters_to_epics_only(isolated_env):
 def test_epic_list_json_roundtrips(isolated_env):
     pid = _seed_project()
     eid = _add_task(pid, "JSON epic", task_type="epic")
-    _add_task(pid, "Non-epic", task_type="task")
+    _add_task(pid, "Non-epic", task_type="todo")
     runner = CliRunner()
     result = runner.invoke(
         main, ["epic", "list", "--project", "test", "--json"]
@@ -152,8 +152,8 @@ def test_epic_show_no_children_hides_them(isolated_env):
 
 def test_epic_update_promotes_task_to_epic(seeded_project_at_cwd):
     pid = _project_id()
-    tid = _add_task(pid, "Was a plain task", task_type="task")
-    assert _type_slug(tid) == "task"
+    tid = _add_task(pid, "Was a plain task", task_type="todo")
+    assert _type_slug(tid) == "todo"
     runner = CliRunner()
     result = runner.invoke(
         main, ["epic", "update", f"E-{tid}", "--status", "ready"]

@@ -123,7 +123,7 @@ endless task add <title> \
   [--description <text>] \
   [--parent <task_id>] \
   [--phase urgent|now|next|later|maybe] \
-  [--type task|plan|bug|research|spike|chore] \
+  [--type todo|bugfix|research|epic|brainstorm] \
   [--project <name>]
 ```
 

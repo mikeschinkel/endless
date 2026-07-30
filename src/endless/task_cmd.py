@@ -1790,7 +1790,7 @@ def add_item(
     """Add a single task."""
     from endless.event_bridge import emit_event
 
-    task_type = task_type or "task"
+    task_type = task_type or "todo"
     validate_title(title, force=force)
     validate_description(description)
     _reject_maybe_with_parent(phase, parent_id)
@@ -3652,7 +3652,7 @@ def update_plan(
             _mirror_doc_to_worktree(item_id, "outcomes", "outcome", outcome)
 
     if task_type is not None:
-        valid_types = ("task", "bug", "research", "epic", "brainstorm")
+        valid_types = ("todo", "bugfix", "research", "epic", "brainstorm")
         if task_type not in valid_types:
             raise click.ClickException(
                 f"Invalid task type {task_type!r}. "
@@ -4150,11 +4150,11 @@ def _branch_for_worktree(wt_path) -> str | None:
         return None
 
 
-_HANDOFF_TYPES = frozenset({"task", "bug", "research", "epic", "brainstorm"})
+_HANDOFF_TYPES = frozenset({"todo", "bugfix", "research", "epic", "brainstorm"})
 
 # Terminal statuses collapse into a single "terminal" bucket in the
 # children-state breakdown (E-1567). Covers every status a finished child
-# can hold: task/bug land on confirmed/assumed, research/epic land on
+# can hold: todo/bugfix land on confirmed/assumed, research/epic land on
 # completed (E-1577/E-1537 §3), and obsolete/declined are universal
 # terminals.
 _TERMINAL_STATUSES = frozenset(
@@ -4228,8 +4228,8 @@ def render_handoff(spawned_id: int, title: str,
     See E-1469. E-1565 moved the rendering surface from Python's
     string.Template to Go's text/template — Python builds the var map and
     shells out per render. E-1566 split the single template into
-    per-type variants under `handoff/{task,bug,research,epic}.md.tmpl`;
-    unknown or null `task_type` falls back to the task variant. The child
+    per-type variants under `handoff/{todo,bugfix,research,epic}.md.tmpl`;
+    unknown or null `task_type` falls back to the todo variant. The child
     count is universal — per E-1552, every variant includes a conditional
     line naming the count when nonzero.
 
@@ -4252,7 +4252,7 @@ def render_handoff(spawned_id: int, title: str,
     import subprocess
     from endless.event_bridge import _resolve_endless_go
 
-    effective_type = task_type if task_type in _HANDOFF_TYPES else "task"
+    effective_type = task_type if task_type in _HANDOFF_TYPES else "todo"
     child_rows = db.query(
         "SELECT count(*) AS n FROM tasks WHERE parent_id = ?",
         (spawned_id,),

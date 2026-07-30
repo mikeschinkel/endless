@@ -198,12 +198,12 @@ Both **pre-claim** the task (status → `underway`, per-task worktree created) a
 
 The handoff is rendered from a per-type template, chosen from the task's `type`:
 
-- **`task`** — frames the work around a verify end-state: implement, flip to `unverified`, supply how-to-test.
-- **`bug`** — leads with "reproduce the bug first, before changing anything."
+- **`todo`** — frames the work around a verify end-state: implement, flip to `unverified`, supply how-to-test.
+- **`bugfix`** — leads with "reproduce the bug first, before changing anything."
 - **`research`** — findings *are* the deliverable: end-state is `completed` with the conclusions written to the task's outcome, not a code-verify cycle.
 - **`epic`** — a coordinator role (see [Coordinator pattern for epics](#coordinator-pattern-for-epics)).
 
-Any other or unset type falls back to the `task` variant.
+Any other or unset type falls back to the `todo` variant.
 
 ### The handoff is generated, not authored
 

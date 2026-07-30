@@ -79,7 +79,7 @@ endless task add "Title here"
 endless task add "Title here" --parent <parent_id>
 endless task add "Title here" --description "Brief pitch" --phase now
 endless task add "Title here" --text-file /path/to/plan.md --status ready
-endless task add "Title here" --type bug             # task|plan|bug|research|spike|chore|decision
+endless task add "Title here" --type bugfix          # todo|bugfix|research|epic|brainstorm
 endless task add "Title here" --tier 1               # 1-4 or auto|quick|deep|discuss
 endless task add "Title here" --blocked-by E-100     # also: --blocks, --relates-to,
                                                      # --implements, --cleans-up,

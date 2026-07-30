@@ -150,7 +150,7 @@ func makeTaskCreatedEvent(t *testing.T, projectName string, taskID int64, title 
 		Title:     title,
 		Phase:     "now",
 		Status:    "ready",
-		Type:      "task",
+		Type:      "todo",
 		SortOrder: 10,
 	})
 	if err != nil {

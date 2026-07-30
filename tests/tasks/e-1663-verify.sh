@@ -116,7 +116,7 @@ test_other_types_not_required() {
 
     # Plain task with a completable verb (passes the verb gate); the headline change.
     local tid
-    tid=$(add_task_get_id "Audit the cache layer" --type task) || return
+    tid=$(add_task_get_id "Audit the cache layer" --type todo) || return
     assert_succeeds "plain task 'completed' without outcome now succeeds" \
         endless task update "${tid}" --status completed
 
@@ -130,12 +130,12 @@ test_independent_rules_unchanged() {
     section "Decline still needs a reason; confirm/assume never require outcome"
 
     local did
-    did=$(add_task_get_id "Add a throwaway widget" --type task) || return
+    did=$(add_task_get_id "Add a throwaway widget" --type todo) || return
     assert_refused "decline without a reason is refused (ED-1022)" \
         "outcome is required" endless task update "${did}" --status declined
 
     local cid
-    cid=$(add_task_get_id "Add a confirmable widget" --type task) || return
+    cid=$(add_task_get_id "Add a confirmable widget" --type todo) || return
     assert_succeeds "confirm without outcome succeeds" \
         endless task confirm "${cid}"
 }

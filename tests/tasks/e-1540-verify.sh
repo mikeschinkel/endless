@@ -213,7 +213,7 @@ test_epic_add() {
 
     assert_refused "epic add has no --type flag" \
         "No such option: --type" \
-        endless epic add "Build an override epic" --type task
+        endless epic add "Build an override epic" --type todo
 }
 
 # ─── §2: epic list filters to epic-typed rows ───────────────────────────────
@@ -264,7 +264,7 @@ test_epic_update() {
 
     local tid eid
     tid=$(add_task_get_id "Implement the export pipeline") || exit 2
-    assert_eq "fixture starts as a plain task" "task" "$(task_type "${tid}")"
+    assert_eq "fixture starts as a plain task" "todo" "$(task_type "${tid}")"
 
     assert_succeeds "epic update on a plain task succeeds" \
         endless epic update "${tid}" --status ready
@@ -283,7 +283,7 @@ test_epic_update() {
 
     assert_refused "epic update has no --type flag" \
         "No such option: --type" \
-        endless epic update "${eid}" --type task
+        endless epic update "${eid}" --type todo
 }
 
 # ─── main ───────────────────────────────────────────────────────────────────
