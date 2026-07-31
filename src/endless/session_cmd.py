@@ -155,14 +155,40 @@ def _require_claude() -> str:
     return claude
 
 
-def _resolve_resume(ref: str) -> tuple[str, str, str, int]:
+# E-1801: `session resume --reopen` transitions the task's status as a function
+# of its current status. Done tasks (verified/assumed/completed) and rejected
+# tasks (declined/obsolete) flip to `revisit` — reopening resumes re-evaluation.
+# Still-active (underway/unverified) and still-open (unplanned/submitted/ready/
+# revisit) tasks keep their status; the worktree is just restored under them.
+_REOPEN_TO_REVISIT: frozenset[str] = frozenset({
+    "confirmed", "assumed", "completed", "declined", "obsolete",
+})
+
+
+def _resolve_resume(
+    ref: str,
+    *,
+    intent: str | None = None,
+    override: str | None = None,
+    decision_out: dict | None = None,
+) -> tuple[str, str, str, int]:
     """Resolve + validate a resume target for `ref`.
 
     Returns (uuid, worktree, label, endless_id). Raises click.ClickException
     when the ref resolves to a session that can't actually be resumed (no
-    harness UUID, or no worktree on disk). Shared by `session resume` (current
-    pane) and `session goto --resume` (new window) so both agree on what
-    "resumable" means and emit identical diagnostics (E-1797).
+    harness UUID). Shared by `session resume` (current pane) and `session goto
+    --resume` (new window) so both agree on what "resumable" means and emit
+    identical diagnostics (E-1797).
+
+    When the worktree is gone (dropped after landing) but the transcript
+    survives, behavior depends on `intent` (E-1801):
+      - intent is None → raise an error naming `--review`/`--reopen` (the shared
+        diagnostic both surfaces get).
+      - intent in {"review", "reopen"} → recreate the worktree from the task's
+        landing/branch history and return its path. `override` is the explicit
+        base ref from `--review=<ref>`/`--reopen=<ref>` (or ".landed"/None for
+        the default base chain). `decision_out`, if given, is filled with the
+        resolved decision for `--print-decision`.
     """
     target = _resume_target(ref)
     uuid = target.get("session_id") or ""
@@ -176,17 +202,174 @@ def _resolve_resume(ref: str) -> tuple[str, str, str, int]:
             f"session {eid} has no Claude UUID to resume "
             "(a background agent that never started?)."
         )
-    if not worktree:
+
+    if worktree and os.path.isdir(worktree):
+        if decision_out is not None:
+            decision_out.update(
+                {"recovered": False, "worktree": worktree, "label": label}
+            )
+        return uuid, worktree, label, eid
+
+    # Worktree is gone (or never mapped to a task).
+    if task is None:
         raise click.ClickException(
-            f"no worktree on disk for {label}; cannot cd there to resume. "
-            "Recreate it first with `endless task claim`."
+            f"session {eid} has no task worktree to resume into "
+            "(a background agent that never started?)."
         )
-    if not os.path.isdir(worktree):
-        raise click.ClickException(f"worktree path does not exist: {worktree}")
+
+    if intent is None:
+        raise click.ClickException(
+            f"{label}'s worktree is gone (dropped after landing). Recover it "
+            f"from the surviving transcript:\n"
+            f"  endless session resume {ref} --review   "
+            f"inspect the landed result (read-mostly, detached)\n"
+            f"  endless session resume {ref} --reopen   "
+            f"continue work on it (working branch)"
+        )
+
+    worktree = _recover_dropped_worktree(target, intent, override, decision_out)
     return uuid, worktree, label, eid
 
 
-def resume_session(ref: str) -> None:
+def _resolve_recovery_base(
+    intent: str,
+    override: str | None,
+    landed_sha: str,
+    task_id: int,
+    title: str,
+    project_root,
+) -> str:
+    """Resolve the git base a dropped worktree is rebuilt from (E-1801).
+
+    An explicit `override` (`--review=<ref>`/`--reopen=<ref>`, anything but the
+    ".landed" sentinel) wins, validated against the repo. Otherwise the default
+    chain: the latest landing's `merge_commit_sha` (the `.landed` pseudo-ref),
+    else the task's original branch tip if it survives, else a loud error naming
+    the explicit-ref escape hatch.
+    """
+    from endless.worktree_cmd import _branch_exists, _slugify_title, _git_run
+
+    if override and override != ".landed":
+        res = _git_run(
+            ["rev-parse", "--verify", "--quiet", f"{override}^{{commit}}"],
+            cwd=project_root, check=False,
+        )
+        if res.returncode != 0:
+            raise click.ClickException(
+                f"base ref {override!r} does not resolve to a commit in this repo."
+            )
+        return override
+
+    if landed_sha:
+        return landed_sha
+
+    branch = f"task/{task_id}-{_slugify_title(title)}"
+    if _branch_exists(branch, project_root):
+        return branch
+
+    raise click.ClickException(
+        f"E-{task_id} never landed and its branch {branch} is gone, so there is "
+        f"no base commit to rebuild from. Pass one explicitly: "
+        f"`endless session resume E-{task_id} --{intent}=<sha-or-branch>`."
+    )
+
+
+def _emit_recovery_status_change(
+    task_id: int,
+    title: str,
+    old_status: str,
+    new_status: str,
+    session_id,
+) -> None:
+    """Emit the `--reopen` status transition, attributed to the reopened
+    session (E-1801). Attributing to the resumed session (not the current pane)
+    keeps the transition correct even when `session resume` runs from a plain
+    recovery shell that has no Claude session of its own.
+    """
+    from endless.event_bridge import emit_event
+    from endless.task_cmd import _resolve_project, _emit_field_changes
+
+    _, proj_name = _resolve_project(None)
+    emit_event(
+        kind="task.status_changed",
+        project=proj_name,
+        entity_type="task",
+        entity_id=str(task_id),
+        payload={
+            "old_status": old_status,
+            "new_status": new_status,
+            "cascade": False,
+        },
+        session_id=str(session_id) if session_id is not None else None,
+    )
+    _emit_field_changes(task_id, title, [("status", old_status, new_status)])
+
+
+def _recover_dropped_worktree(
+    target: dict,
+    intent: str,
+    override: str | None,
+    decision_out: dict | None = None,
+) -> str:
+    """Rebuild a dropped worktree for `session resume --review`/`--reopen`.
+
+    Type-gates epics (refused — a container has no worktree of its own),
+    resolves the base commit, recreates the worktree (detached for `--review`,
+    a working branch for `--reopen`), and applies `--reopen`'s per-status
+    transition. Returns the worktree path.
+    """
+    from endless.worktree_cmd import recreate_dropped_worktree, _project_root
+
+    task_id = int(target["active_task_id"])
+    task_type = target.get("task_type") or ""
+    task_status = target.get("task_status") or ""
+    title = target.get("task_title") or "task"
+    landed_sha = target.get("landed_sha") or ""
+    project_root = _project_root()
+
+    if task_type == "epic":
+        raise click.ClickException(
+            f"E-{task_id} is an epic — a container with no worktree or session "
+            f"of its own, so there is nothing to reopen. Pick a child task "
+            f"(`endless task show E-{task_id}`) and resume that instead."
+        )
+
+    base = _resolve_recovery_base(
+        intent, override, landed_sha, task_id, title, project_root
+    )
+
+    detached = intent == "review"
+    worktree = recreate_dropped_worktree(
+        task_id, title, project_root, base, detached=detached
+    )
+
+    status_to = None
+    if intent == "reopen" and task_status in _REOPEN_TO_REVISIT:
+        status_to = "revisit"
+        _emit_recovery_status_change(
+            task_id, title, task_status, status_to,
+            session_id=target.get("endless_id"),
+        )
+
+    if decision_out is not None:
+        decision_out.update({
+            "recovered": True,
+            "intent": intent,
+            "mode": "detached" if detached else "branch",
+            "base": base,
+            "worktree": str(worktree),
+            "status_from": task_status,
+            "status_to": status_to,
+        })
+    return str(worktree)
+
+
+def resume_session(
+    ref: str,
+    review: str | None = None,
+    reopen: str | None = None,
+    print_decision: bool = False,
+) -> None:
     """Relaunch a lost Claude session in the current tmux pane.
 
     Resolves `ref` (a task id off the tmux tab, or a session id / Claude UUID)
@@ -195,10 +378,38 @@ def resume_session(ref: str) -> None:
     takes over the current pane. This recovers sessions whose panes died in a
     tmux crash: their transcripts and ledger rows survive the crash intact.
 
+    `--review`/`--reopen` (E-1801) recover a session whose worktree was dropped
+    after landing: `--review` rebuilds a detached, read-mostly inspection tree
+    (no status change); `--reopen` rebuilds a working branch and, for a
+    done/rejected task, flips it to `revisit`. Each accepts an optional base ref
+    (`--review=<ref>`); bare, they use `.landed` (the latest landing). With
+    `--print-decision` the recovery is performed but the `claude --resume` launch
+    is skipped and the resolved decision is printed as JSON — the seam the verify
+    script asserts against.
+
     To resume a non-live target in a NEW window instead of clobbering the
     current pane, use `session goto <ref> --resume` (E-1797).
     """
-    uuid, worktree, label, eid = _resolve_resume(ref)
+    if review is not None and reopen is not None:
+        raise click.ClickException(
+            "--review and --reopen are mutually exclusive."
+        )
+    intent = "review" if review is not None else "reopen" if reopen is not None else None
+    override = review if review is not None else reopen
+    if print_decision and intent is None:
+        raise click.ClickException(
+            "--print-decision applies only with --review or --reopen."
+        )
+
+    decision: dict = {}
+    uuid, worktree, label, eid = _resolve_resume(
+        ref, intent=intent, override=override, decision_out=decision
+    )
+
+    if print_decision:
+        click.echo(json_mod.dumps(decision, indent=2))
+        return
+
     claude = _require_claude()
 
     click.echo(

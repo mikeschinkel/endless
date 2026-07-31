@@ -974,7 +974,26 @@ def session_goto(target_ref, resume):
 
 @session_cmd.command("resume")
 @click.argument("ref")
-def session_resume(ref):
+@click.option(
+    "--review", is_flag=False, flag_value=".landed", default=None,
+    metavar="[REF]",
+    help="Recover a worktree dropped after landing as a DETACHED, read-mostly "
+         "inspection tree (no status change). Bare, rebuilds at the latest "
+         "landing (`.landed`); pass =<sha-or-branch> to override the base.",
+)
+@click.option(
+    "--reopen", is_flag=False, flag_value=".landed", default=None,
+    metavar="[REF]",
+    help="Recover a dropped worktree on a WORKING BRANCH to continue work "
+         "(reuses the task branch, else forks off the base). A done/rejected "
+         "task flips to `revisit`. Bare uses `.landed`; =<ref> overrides.",
+)
+@click.option(
+    "--print-decision", is_flag=True,
+    help="With --review/--reopen: perform the recovery but skip the "
+         "`claude --resume` launch, printing the resolved decision as JSON.",
+)
+def session_resume(ref, review, reopen, print_decision):
     """Relaunch a lost Claude session in the CURRENT tmux pane.
 
     REF is a task id (E-NNNN, as shown on the tmux tab) or a session id /
@@ -984,9 +1003,12 @@ def session_resume(ref):
 
     Unlike `session goto`, this includes ended sessions — recovering the
     sessions orphaned when tmux crashes is exactly what it is for.
+
+    When the worktree was dropped after landing, `--review`/`--reopen` rebuild
+    it from the surviving transcript so no git ref need be typed.
     """
     from endless.session_cmd import resume_session
-    resume_session(ref)
+    resume_session(ref, review=review, reopen=reopen, print_decision=print_decision)
 
 
 @session_cmd.command("back")

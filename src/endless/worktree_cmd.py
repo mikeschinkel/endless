@@ -1310,6 +1310,29 @@ def create_task_worktree(
             f"git worktree add failed for {canonical}:\n{e.stderr or e}"
         )
 
+    _bootstrap_task_worktree(task_id, wt_dir, base, branch, project_root)
+    return wt_dir, True
+
+
+def _bootstrap_task_worktree(
+    task_id: int,
+    wt_dir: Path,
+    base: str,
+    branch: str | None,
+    project_root: Path,
+) -> None:
+    """Post-`git worktree add` bootstrap shared by claim and session recovery.
+
+    Writes the companion marker (`.endless/worktree.json` + scratch dir),
+    materializes the task's doc mirrors, binds the self-dev DB sandbox, then runs
+    the project's post-worktree-create hook (go-work-init, bin copy,
+    claude-settings-init, ...). It performs NO status transition: `task claim`
+    flips the task to `underway`, while `session resume --review`/`--reopen`
+    (E-1801) each own their own status side effect (none / per-status), so the
+    physical worktree setup had to be decoupled from the status change.
+
+    `branch` is None for a detached `--review` worktree (no working branch).
+    """
     companion_dir = wt_dir / ".endless"
     companion_dir.mkdir(parents=True, exist_ok=True)
     # Project-local scratch dir: agents author throwaway content here (gitignored,
@@ -1331,7 +1354,71 @@ def create_task_worktree(
     _materialize_task_docs(task_id, wt_dir)
     _maybe_auto_sandbox_bind(project_root, wt_dir, task_id)
     _run_post_worktree_create_hook(project_root, wt_dir)
-    return wt_dir, True
+
+
+def recreate_dropped_worktree(
+    task_id: int,
+    title: str,
+    project_root: Path,
+    base: str,
+    *,
+    detached: bool,
+) -> Path:
+    """Recreate a task worktree that was dropped after landing (E-1801).
+
+    Backs `session resume --review`/`--reopen`: a landed task's worktree is
+    gone but its transcript survives, so we rebuild the directory at `base` (a
+    git ref/sha) to cd into before `claude --resume`.
+
+    detached=True (`--review`): `git worktree add --detach <path> <base>` — a
+    read-mostly inspection tree with no working branch. detached=False
+    (`--reopen`): a working branch — the original `task/<id>-<slug>` branch is
+    reused if it still exists, else a fresh branch is cut off `base`.
+
+    Runs the shared bootstrap but performs NO status transition (the caller
+    owns that). Returns the worktree path.
+    """
+    canonical = f"E-{task_id}"
+    slug = _slugify_title(title)
+    branch = f"task/{task_id}-{slug}"
+    wt_dir = project_root / ".endless" / "worktrees" / f"e-{task_id}"
+
+    if wt_dir.exists():
+        # Recovery is only for a dropped worktree. A live dir means the caller
+        # mis-detected the drop; treat an already-ours dir as an idempotent
+        # no-op, and refuse a foreign collision (mirrors create_task_worktree).
+        if _task_id_from_worktree_path(wt_dir) == canonical and _read_companion(wt_dir):
+            return wt_dir
+        raise click.ClickException(
+            f"Path {_tilde(wt_dir)} exists but does not belong to {canonical}. "
+            f"Resolve manually before retrying."
+        )
+
+    wt_dir.parent.mkdir(parents=True, exist_ok=True)
+    # Clear any stale worktree registration whose directory is already gone, so
+    # a reused branch isn't reported as "already used by worktree". Touches only
+    # bookkeeping for absent dirs, never live work.
+    _git_run(["worktree", "prune"], cwd=project_root, check=False)
+
+    if detached:
+        add_args = ["worktree", "add", "--detach", str(wt_dir), base]
+        companion_branch: str | None = None
+    elif _branch_exists(branch, project_root):
+        add_args = ["worktree", "add", str(wt_dir), branch]
+        companion_branch = branch
+    else:
+        add_args = ["worktree", "add", "-b", branch, str(wt_dir), base]
+        companion_branch = branch
+
+    try:
+        _git_run(add_args, cwd=project_root)
+    except subprocess.CalledProcessError as e:
+        raise click.ClickException(
+            f"git worktree add failed for {canonical}:\n{e.stderr or e}"
+        )
+
+    _bootstrap_task_worktree(task_id, wt_dir, base, companion_branch, project_root)
+    return wt_dir
 
 
 POST_WORKTREE_CREATE_HOOK = ".endless/hooks/post-worktree-create.sh"

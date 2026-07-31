@@ -2,6 +2,7 @@ package monitor
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -13,12 +14,23 @@ import (
 // worktree to cd into first. SessionID is "" for a background-agent dispatch
 // row that never started (no UUID yet); WorktreePath is "" when the task's
 // worktree is not on disk. The Python caller turns either into a clear error.
+//
+// The TaskType/TaskStatus/TaskTitle/LandedSHA fields are the recovery inputs
+// for `session resume --review`/`--reopen` (E-1801): when the worktree is gone
+// but the transcript survives, the Python resolver reconstructs the worktree
+// from the task's type (epic is refused), current status (drives the --reopen
+// transition), title (derives the branch name), and latest landing sha (the
+// `.landed` base). All four are empty for a session with no active task.
 type ResumeTarget struct {
 	EndlessID    int64  `json:"endless_id"`
 	SessionID    string `json:"session_id"`
 	ActiveTaskID *int64 `json:"active_task_id"`
 	WorktreePath string `json:"worktree_path"`
 	State        string `json:"state"`
+	TaskType     string `json:"task_type,omitempty"`
+	TaskStatus   string `json:"task_status,omitempty"`
+	TaskTitle    string `json:"task_title,omitempty"`
+	LandedSHA    string `json:"landed_sha,omitempty"`
 }
 
 const resumeSelect = `SELECT id, session_id, COALESCE(project_id, 0), active_task_id, COALESCE(state, '')
@@ -166,6 +178,47 @@ func buildResumeTarget(r resumeRow) (ResumeTarget, error) {
 			return ResumeTarget{}, err
 		}
 		t.WorktreePath = wt
+		if err := fillRecoveryInfo(&t, v); err != nil {
+			return ResumeTarget{}, err
+		}
 	}
 	return t, nil
+}
+
+// fillRecoveryInfo populates the E-1801 recovery fields (type/status/title and
+// the latest landing sha) for the target's active task. Missing rows are not an
+// error: a session may reference a task since deleted, in which case the fields
+// stay empty and the Python resolver falls back to its normal "no worktree"
+// error rather than crashing here.
+func fillRecoveryInfo(t *ResumeTarget, taskID int64) error {
+	db, err := DB()
+	if err != nil {
+		return err
+	}
+	err = db.QueryRow(
+		`SELECT COALESCE(tt.slug, ''), t.status, COALESCE(t.title, '')
+		   FROM tasks t
+		   LEFT JOIN task_types tt ON tt.id = t.type_id
+		  WHERE t.id = ?`, taskID,
+	).Scan(&t.TaskType, &t.TaskStatus, &t.TaskTitle)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("read recovery info for E-%d: %w", taskID, err)
+	}
+	err = db.QueryRow(
+		`SELECT COALESCE(merge_commit_sha, '')
+		   FROM task_landings
+		  WHERE task_id = ?
+		  ORDER BY landed_at DESC, id DESC
+		  LIMIT 1`, taskID,
+	).Scan(&t.LandedSHA)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("read latest landing for E-%d: %w", taskID, err)
+	}
+	return nil
 }

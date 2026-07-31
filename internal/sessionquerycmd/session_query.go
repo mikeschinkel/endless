@@ -124,7 +124,8 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "  trail [--client <name>] [--limit N]")
 	fmt.Fprintln(os.Stderr, "                                    JSON array of navigation edges newest-first (no --client = all clients)")
 	fmt.Fprintln(os.Stderr, "  resume-target --ref <task-id|session-id|uuid>")
-	fmt.Fprintln(os.Stderr, "                                    JSON {endless_id, session_id, active_task_id, worktree_path, state} to relaunch a lost session")
+	fmt.Fprintln(os.Stderr, "                                    JSON {endless_id, session_id, active_task_id, worktree_path, state,")
+	fmt.Fprintln(os.Stderr, "                                    task_type, task_status, task_title, landed_sha} to relaunch (or recover) a lost session")
 	fmt.Fprintln(os.Stderr, "  task-report --id <task-id>        JSON {task_id, status, landed, successors[], children[]} of a task's computed report facts (E-1771)")
 }
 
