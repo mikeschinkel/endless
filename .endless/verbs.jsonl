@@ -222,3 +222,4 @@
 {"value": "auto-initiate", "definition": "To start or begin something automatically without explicit manual intervention."}
 {"value": "choose", "definition": "To select one option from a group of alternatives."}
 {"value": "draft", "definition": "To prepare a preliminary version of a written work or document.", "completable": true}
+{"value": "create,", "definition": "To bring something new into existence."}
