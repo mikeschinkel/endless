@@ -288,15 +288,41 @@ func runClaude(args []string) error {
 	return nil
 }
 
+// reportChannelRule is the coverage rule (E-1803 Arm 2), delivered on every
+// SessionStart so the functional reporting rule is always in context rather than
+// depending on the agent re-reading the guide. Defined FUNCTIONALLY on purpose:
+// it does NOT enumerate checkpoint types (an enumerated list drifts the moment a
+// new user-facing surface appears).
+const reportChannelRule = "Report channel: at any in-session point where you " +
+	"would give the user a user-facing status update or checkpoint, do NOT " +
+	"hand-write it — run `endless task report <id>` and relay its output. " +
+	"Acceptable content is defined by function, not by a list of situations: a " +
+	"computed fact the user cannot derive on their own, XOR a genuine open " +
+	"decision they must make before the work can proceed — otherwise say " +
+	"nothing. Judge every checkpoint by that function."
+
 func handleTaskContextInjection(projectID int64, payload claudePayload) error {
 	ctx, err := buildTaskContextInjection(projectID, payload)
 	if err != nil {
 		return err
 	}
-	if ctx == "" {
+	combined := composeSessionStartContext(ctx)
+	if combined == "" {
 		return nil
 	}
-	return json.NewEncoder(os.Stdout).Encode(hookResponse{AdditionalContext: ctx})
+	return json.NewEncoder(os.Stdout).Encode(hookResponse{AdditionalContext: combined})
+}
+
+// composeSessionStartContext prepends the report-channel coverage rule to the
+// (possibly empty) one-shot task-list context. The rule ships on every
+// SessionStart — even when the task list was already injected on an earlier
+// start (resume/compact) — so coverage never depends on the one-shot gate. Pure
+// so the composition is unit-testable.
+func composeSessionStartContext(taskListCtx string) string {
+	if taskListCtx == "" {
+		return reportChannelRule
+	}
+	return reportChannelRule + "\n\n" + taskListCtx
 }
 
 // handleUserPromptSubmit composes the per-prompt response. Two pieces,
@@ -383,10 +409,70 @@ func buildTaskContextInjection(projectID int64, payload claudePayload) (string, 
 	return context, nil
 }
 
+// taskReportRe matches a Bash command that RUNS `endless task report` (E-1803
+// Arm 1). It anchors to a command position — string start, line start, or right
+// after a `;` / `&` / `|` separator — with an optional path prefix
+// (`/usr/local/bin/endless task report`). Anchoring is deliberate: the phrase
+// appears constantly as an ARGUMENT in this repo — git commit messages, `echo`,
+// `grep` patterns — and matching those would fire the reinforcement on commands
+// that never produce a report. A quoted argument is not at a command position,
+// so those no longer match; standalone, `&&`-chained, and path-prefixed real
+// runs still do. It stays in the hook binary (not a settings.json `if:` matcher)
+// so it can't drift per machine. The residual (the phrase following a literal
+// `;`/`&`/`|` inside a quoted string) is harmless — this is a nudge, not a gate.
+var taskReportRe = regexp.MustCompile(`(?m)(?:^|[;&|])\s*(?:\S*/)?endless\s+task\s+report\b`)
+
+// reportRelayInstruction is the compose-time reinforcement injected right after
+// a `task report` run (E-1803 Arm 1). It reinforces the command's own stdout:
+// relay that output verbatim as the whole reply, add nothing. This is the
+// strongest in-harness lever short of a regenerate loop — a strong nudge, NOT a
+// hard gate (Claude Code always lets the model author its final message; no hook
+// replaces it).
+const reportRelayInstruction = "You just ran `endless task report`. Emit that " +
+	"command's output verbatim as your entire reply to the user, and add " +
+	"nothing else — no preamble, no sign-off, no success confirmation, and no " +
+	"remark about categories absent from the output. The report IS the message; " +
+	"if a fact is not in it, say nothing about that fact."
+
+// postToolUseResponse carries a PostToolUse additionalContext injection. Unlike
+// the top-level hookResponse.AdditionalContext used on SessionStart /
+// UserPromptSubmit, PostToolUse additionalContext must be nested under
+// hookSpecificOutput with the event name (Claude Code hooks contract).
+type postToolUseResponse struct {
+	HookSpecificOutput postToolUseHookOutput `json:"hookSpecificOutput"`
+}
+
+type postToolUseHookOutput struct {
+	HookEventName     string `json:"hookEventName"`
+	AdditionalContext string `json:"additionalContext"`
+}
+
+// reportRelayResponse builds the PostToolUse reinforcement emitted after a
+// `task report` run. Pure (no I/O) so the response shape is unit-testable.
+func reportRelayResponse() postToolUseResponse {
+	return postToolUseResponse{
+		HookSpecificOutput: postToolUseHookOutput{
+			HookEventName:     "PostToolUse",
+			AdditionalContext: reportRelayInstruction,
+		},
+	}
+}
+
 func handlePostToolUse(projectID int64, payload claudePayload) error {
 	// Detect endless task claim/complete/chat commands and update session state
 	if err := handlePostToolUseSession(projectID, payload); err != nil {
 		return fmt.Errorf("post tool use session: %w", err)
+	}
+
+	// E-1803 Arm 1: reinforce the report channel. When this Bash call ran
+	// `endless task report`, inject a compose-time nudge to relay the report's
+	// stdout verbatim and add nothing.
+	if payload.ToolName == "Bash" {
+		var input toolInputBash
+		if err := json.Unmarshal(payload.ToolInput, &input); err == nil &&
+			taskReportRe.MatchString(input.Command) {
+			return json.NewEncoder(os.Stdout).Encode(reportRelayResponse())
+		}
 	}
 
 	// Check if a plan file was written

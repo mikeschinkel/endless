@@ -222,8 +222,9 @@ endless task replace <id> --by <new_id>              # supersede with another ta
 
 ## Reporting to your user
 
-When you reach a terminal status — or your user asks where the work stands —
-generate the end-of-session / status report rather than composing one by hand:
+At **any in-session user-facing checkpoint** — a terminal status, a status
+request, "here's where the work stands", a blocker, a decision you need — route
+the update through this command rather than composing one by hand:
 
 ```bash
 endless task report <id>
@@ -233,7 +234,8 @@ It reports **only what your user could not already compute** — the follow-ups
 you filed, an epic's children, your gated notes/questions, and unexpected
 worktree state — and prints a steering prompt telling you to relay that
 **verbatim, plainly, no ceremony**. It is status-agnostic (run it at whatever
-status you reached) and **does not change the task's status**.
+status you reached, mid-session or at the end) and **does not change the task's
+status**.
 
 Status, landing, and parentage are deliberately **not** in the output: `task
 show` and `session status` already render them, and the handoff tells you not to
@@ -241,9 +243,13 @@ recap them — the command holds itself to the same bar it enforces on your note
 (E-1880). So a clean session's report is **empty**, and steers you to say
 nothing rather than manufacture a summary. Say what you delivered; stop.
 
-**Report by default.** End-of-session and status reports route through this
-command and are relayed as-is; don't write them as freeform prose. The normal
-path takes **no payload**.
+**Report by default, at every checkpoint.** The rule is functional, not a list
+of situations: acceptable content is a computed fact the user cannot derive on
+their own, XOR a genuine open decision they must make — otherwise say nothing.
+Don't enumerate the moments this applies to (any such list drifts the moment a
+new surface appears); judge each checkpoint by that function. Route the update
+through this command and relay its output as-is; don't write it as freeform
+prose. The normal path takes **no payload**.
 
 For a genuinely out-of-band note (an anomaly or discovery the command can't
 compute) or an open question for the user, pass `--json` / `--json-file`. The
