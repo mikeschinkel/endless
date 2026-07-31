@@ -300,7 +300,7 @@ func TestCommitLedgerSegment_SoleRefAmends(t *testing.T) {
 // behavioral E2E for E-1713 against the real production commit path. It mirrors
 // the exact orphaning topology: main holds a ledger tip; a "landed" worktree
 // branch is rebased onto that tip; a subsequent ledger event lands on main. The
-// invariant `taskWorktreeDirty` inverts (main..HEAD == 0 for the worktree
+// invariant `taskWorktreeUnsettled` inverts (main..HEAD == 0 for the worktree
 // branch) must hold — i.e. the worktree tip stays an ancestor of main.
 //
 // Fails on baseline (main amends its tip, orphaning the worktree branch);
@@ -329,7 +329,7 @@ func TestCommitLedgerSegment_LandedWorktreeTipStaysAncestor(t *testing.T) {
 	// points at an orphan and this fails.
 	if err := gitAncestor(t, root, landedTip, "main"); err != nil {
 		t.Fatalf("landed worktree tip must stay an ancestor of main "+
-			"(else taskWorktreeDirty falsely reports dirty): %v", err)
+			"(else taskWorktreeUnsettled falsely reports unsettled): %v", err)
 	}
 }
 

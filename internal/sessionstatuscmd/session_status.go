@@ -238,10 +238,10 @@ func renderSnapshot(w io.Writer, focal, parentSession, emittingSession int64, no
 	if err != nil {
 		return err
 	}
-	// Flat view only: fill each row's Dirty flag from its worktree's git state so
-	// the renderer can mark the landed-vs-worktree delta with ◆ (E-1701). --tree
+	// Flat view only: fill each row's Unsettled flag from its worktree's git state
+	// so the renderer can mark the landed-vs-worktree delta with ◆ (E-1701). --tree
 	// takes a separate path and skips this git cost.
-	monitor.AnnotateSessionStatusDirty(rows)
+	monitor.AnnotateSessionStatusUnsettled(rows)
 	renderTo(w, rows, focal, noTaskHint, cols, color)
 	return nil
 }
@@ -350,7 +350,7 @@ func renderTo(w io.Writer, rows []monitor.SessionStatusRow, focal int64, noTaskH
 	for _, r := range rows {
 		act := classify(r)
 		line := fmt.Sprintf("%s %s%s%-6s %s ",
-			act.icon(), typeLetter(r.TypeSlug), dirtyMark(r), "E-"+strconv.FormatInt(r.ID, 10), phaseChar(r),
+			act.icon(), typeLetter(r.TypeSlug), unsettledMark(r), "E-"+strconv.FormatInt(r.ID, 10), phaseChar(r),
 		)
 		line += blockField(r, bw)
 		line += runewidth.Truncate(collapse(r.Title), titleBudget, "…")
@@ -362,13 +362,14 @@ func renderTo(w io.Writer, rows []monitor.SessionStatusRow, focal int64, noTaskH
 		// (or merely unlanded) focal worktree adds no lines here.
 		//
 		// One kind is suppressed HERE (not in the shared core): AnomalyUncommitted.
-		// `worktree check` runs at HANDOFF, where a dirty tree is a genuine anomaly,
+		// `worktree check` runs at HANDOFF, where a modified tree is a genuine anomaly,
 		// so that surface keeps it. `session status` renders CONTINUOUSLY, including
 		// on the focal task you are mid-implementation on, where uncommitted user
 		// files are the EXPECTED work-in-progress state — a false positive (E-1768).
 		// The other kinds (detached HEAD, branch mismatch, prunable) are genuine
 		// even mid-work and still surface. The ◆ glyph on the row itself stays
-		// (it correctly means dirty-or-unlanded, E-1701); only this detail line goes.
+		// (it correctly means unsettled — modified-or-unlanded, E-1701); only this
+		// detail line goes.
 		if r.IsFocal {
 			for _, a := range worktreeAnomalies(r.ProjectID, r.ID) {
 				if a.Kind == monitor.AnomalyUncommitted {
@@ -390,7 +391,7 @@ func renderTo(w io.Writer, rows []monitor.SessionStatusRow, focal int64, noTaskH
 // truncation, which would hide a real glyph).
 func buildLegend(rows []monitor.SessionStatusRow) string {
 	var present [len(actionMeta)]bool
-	var done, blocked, blocks, dirty bool
+	var done, blocked, blocks, unsettled bool
 	for _, r := range rows {
 		present[classify(r)] = true
 		if isTerminal(r.Status) {
@@ -402,8 +403,8 @@ func buildLegend(rows []monitor.SessionStatusRow) string {
 		if r.BlocksN > 0 {
 			blocks = true
 		}
-		if r.Dirty {
-			dirty = true
+		if r.Unsettled {
+			unsettled = true
 		}
 	}
 	var parts []string
@@ -414,7 +415,7 @@ func buildLegend(rows []monitor.SessionStatusRow) string {
 	}
 	// Decorations after the actions, each shown only when a row bears it. ✓ is the
 	// phase-column done marker (phaseChar); ⊗/⏸ match blockField; ◆ matches
-	// dirtyMark (E-1701). ✓ leads the decorations as it marks the task's own state
+	// unsettledMark (E-1701). ✓ leads the decorations as it marks the task's own state
 	// (a focal/parent/from row can be terminal) before the relational/worktree
 	// markers.
 	if done {
@@ -426,8 +427,8 @@ func buildLegend(rows []monitor.SessionStatusRow) string {
 	if blocks {
 		parts = append(parts, "⏸ blocks")
 	}
-	if dirty {
-		parts = append(parts, "◆ dirty")
+	if unsettled {
+		parts = append(parts, "◆ unsettled")
 	}
 	return strings.Join(parts, "  ")
 }
@@ -510,15 +511,15 @@ func phaseRank(phase string) int {
 	}
 }
 
-// dirtyMark is the single-column separator between the task-type letter and the
-// id: ◆ (U+25C6 BLACK DIAMOND) when the row's worktree diverges from main
+// unsettledMark is the single-column separator between the task-type letter and
+// the id: ◆ (U+25C6 BLACK DIAMOND) when the row's worktree diverges from main
 // (unlanded work / changes since a land — E-1701), else a plain space. Both are
 // width 1, so the fixed 13-col prefix and its alignment hold either way.
-// buildLegend documents ◆ as "dirty" whenever a dirty row is present (E-1750,
-// reversing the 2026-07-01 "◆ stays out of the legend" call). Distinct from
-// --tree's leading focal marker — different view, different glyph, no clash.
-func dirtyMark(r monitor.SessionStatusRow) string {
-	if r.Dirty {
+// buildLegend documents ◆ as "unsettled" whenever an unsettled row is present
+// (E-1750, reversing the 2026-07-01 "◆ stays out of the legend" call). Distinct
+// from --tree's leading focal marker — different view, different glyph, no clash.
+func unsettledMark(r monitor.SessionStatusRow) string {
+	if r.Unsettled {
 		return "◆"
 	}
 	return " "

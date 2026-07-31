@@ -917,7 +917,7 @@ def _commit_project_verbs(verb_value: str) -> None:
     isn't yet known to git; `commit -o` alone would fail with a pathspec
     error. The `-o` flag then ensures only that one path is committed,
     leaving the rest of main's index/working tree exactly as it was. Other
-    dirt on main (staged or unstaged for other paths) is preserved.
+    modifications on main (staged or unstaged for other paths) are preserved.
 
     The subprocess env is sanitized of GIT_DIR and siblings (E-1309) so
     `git -C <main_root>` cannot be overridden by an inherited env var

@@ -20,14 +20,14 @@ import (
 //   - commits ahead of main (the expected pre-land state, not a divergence to fix)
 //   - git tags (endless never creates them)
 //
-// This is a deliberate sibling of taskWorktreeDirty, not a replacement: the ◆
-// marker keeps its coarser dirty-or-unlanded meaning for the navigation view
-// (E-1701). A ◆ with no anomaly breakdown is a clean-but-unlanded worktree —
-// the normal, expected state before land.
+// This is a deliberate sibling of taskWorktreeUnsettled, not a replacement: the ◆
+// marker keeps its coarser unsettled (modified-or-unlanded) meaning for the
+// navigation view (E-1701). A ◆ with no anomaly breakdown is a clean-but-unlanded
+// worktree — the normal, expected state before land.
 
 // AutoManagedStatusGlobs are the endless-owned paths that `git status` may show
-// as dirty inside a worktree but which are NOT user work, so they never count as
-// an anomaly. These are the files `endless worktree land` auto-commits on the
+// as modified inside a worktree but which are NOT user work, so they never count
+// as an anomaly. These are the files `endless worktree land` auto-commits on the
 // user's behalf; ambient churn in them alone still means "clean" for handoff.
 //
 // Mirrors src/endless/worktree_cmd.py AUTO_COMMIT_GLOBS — keep the two in sync.

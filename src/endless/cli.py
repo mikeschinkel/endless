@@ -2652,7 +2652,7 @@ def worktree_for_task(task_id, as_json):
 @click.option("--at", default=None,
               help="Landing timestamp (RFC3339) for --record-only; default: the --sha commit date.")
 def worktree_land(task_id, dry_run, record_only, sha, branch, at):
-    """Auto-commit endless-managed dirt, rebase, ff-merge, remove worktree (E-987)."""
+    """Auto-commit endless-managed modifications, rebase, ff-merge, remove worktree (E-987)."""
     from endless.worktree_cmd import land_worktree
     land_worktree(task_id, dry_run, record_only=record_only, sha=sha, branch=branch, at=at)
 
@@ -2660,9 +2660,9 @@ def worktree_land(task_id, dry_run, record_only, sha, branch, at):
 @worktree_cmd.command("drop")
 @click.argument("name_or_path")
 @click.option("--force", is_flag=True,
-              help="Drop even if dirty/unmerged/foreign")
+              help="Drop even if modified/unlanded/foreign")
 def worktree_drop(name_or_path, force):
-    """Remove a worktree (refuses dirty/unmerged/foreign without --force)."""
+    """Remove a worktree (refuses modified/unlanded/foreign without --force)."""
     from endless.worktree_cmd import drop_worktree
     drop_worktree(name_or_path, force)
 

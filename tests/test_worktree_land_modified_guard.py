@@ -1,6 +1,6 @@
-"""Tests for E-1416 step 3.8: _guard_dirty_worktree refuses land when the
+"""Tests for E-1416 step 3.8: _guard_modified_worktree refuses land when the
 worktree's tree has uncommitted files, with separate messages for
-auto-managed dirt (upstream writer bug) vs unmanaged user dirt.
+auto-managed modifications (upstream writer bug) vs unmanaged user modifications.
 """
 
 import subprocess
@@ -9,7 +9,7 @@ from pathlib import Path
 import click
 import pytest
 
-from endless.worktree_cmd import _guard_dirty_worktree
+from endless.worktree_cmd import _guard_modified_worktree
 
 
 def _run(cmd, cwd):
@@ -45,17 +45,17 @@ def worktree_repo(tmp_path):
 
 def test_clean_worktree_passes(worktree_repo):
     # No exception means the guard let land continue.
-    _guard_dirty_worktree(worktree_repo, branch="feat", canonical="E-1416")
+    _guard_modified_worktree(worktree_repo, branch="feat", canonical="E-1416")
 
 
-def test_auto_managed_dirt_refuses_with_writer_message(worktree_repo):
+def test_auto_managed_modification_refuses_with_writer_message(worktree_repo):
     # Two db-ledger segments (match .endless/db-ledger/*.jsonl glob).
     ledger = worktree_repo / ".endless" / "db-ledger"
     (ledger / "db-entries-abcd-000001.jsonl").write_text('{"e": 1}\n')
     (ledger / "db-entries-abcd-000002.jsonl").write_text('{"e": 2}\n')
 
     with pytest.raises(click.ClickException) as exc:
-        _guard_dirty_worktree(worktree_repo, branch="feat", canonical="E-1416")
+        _guard_modified_worktree(worktree_repo, branch="feat", canonical="E-1416")
     msg = exc.value.message
     assert "uncommitted auto-managed files" in msg
     assert "E-1416" in msg
@@ -64,12 +64,12 @@ def test_auto_managed_dirt_refuses_with_writer_message(worktree_repo):
     assert "Report the writer" in msg
 
 
-def test_unmanaged_dirt_refuses_with_recovery_hints(worktree_repo):
-    # A non-auto-managed dirty file (e.g., a source file).
+def test_unmanaged_modification_refuses_with_recovery_hints(worktree_repo):
+    # A non-auto-managed modified file (e.g., a source file).
     (worktree_repo / "main.go").write_text("package main\n")
 
     with pytest.raises(click.ClickException) as exc:
-        _guard_dirty_worktree(worktree_repo, branch="feat", canonical="E-1416")
+        _guard_modified_worktree(worktree_repo, branch="feat", canonical="E-1416")
     msg = exc.value.message
     assert "uncommitted user changes" in msg
     assert "E-1416" in msg
@@ -79,14 +79,14 @@ def test_unmanaged_dirt_refuses_with_recovery_hints(worktree_repo):
     assert "git checkout --" in msg
 
 
-def test_auto_managed_dirt_wins_when_both_kinds_present(worktree_repo):
-    # Auto-managed (db-ledger) AND unmanaged (source) dirt both present.
+def test_auto_managed_modification_wins_when_both_kinds_present(worktree_repo):
+    # Auto-managed (db-ledger) AND unmanaged (source) modifications both present.
     ledger = worktree_repo / ".endless" / "db-ledger"
     (ledger / "db-entries-abcd-000001.jsonl").write_text('{"e": 1}\n')
     (worktree_repo / "main.go").write_text("package main\n")
 
     with pytest.raises(click.ClickException) as exc:
-        _guard_dirty_worktree(worktree_repo, branch="feat", canonical="E-1416")
+        _guard_modified_worktree(worktree_repo, branch="feat", canonical="E-1416")
     msg = exc.value.message
     # Auto-managed message wins because it's checked first.
     assert "uncommitted auto-managed files" in msg
@@ -96,35 +96,35 @@ def test_auto_managed_dirt_wins_when_both_kinds_present(worktree_repo):
     assert "main.go" not in msg
 
 
-def test_db_ledger_dirt_is_auto_managed(worktree_repo):
+def test_db_ledger_modification_is_auto_managed(worktree_repo):
     # .endless/db-ledger/*.jsonl is in AUTO_COMMIT_GLOBS.
     ledger = worktree_repo / ".endless" / "db-ledger"
     (ledger / "db-entries-abcdef-000001.jsonl").write_text('{"e": 1}\n')
 
     with pytest.raises(click.ClickException) as exc:
-        _guard_dirty_worktree(worktree_repo, branch="feat", canonical="E-1416")
+        _guard_modified_worktree(worktree_repo, branch="feat", canonical="E-1416")
     msg = exc.value.message
     assert "uncommitted auto-managed files" in msg
     assert "db-entries-abcdef-000001.jsonl" in msg
 
 
-def test_verbs_jsonl_dirt_is_auto_managed(worktree_repo):
+def test_verbs_jsonl_modification_is_auto_managed(worktree_repo):
     # .endless/verbs.jsonl is in AUTO_COMMIT_GLOBS. The fixture commits
-    # an empty file; modifying it is auto-managed dirt.
+    # an empty file; modifying it is auto-managed modifications.
     (worktree_repo / ".endless" / "verbs.jsonl").write_text('{"value": "x"}\n')
 
     with pytest.raises(click.ClickException) as exc:
-        _guard_dirty_worktree(worktree_repo, branch="feat", canonical="E-1416")
+        _guard_modified_worktree(worktree_repo, branch="feat", canonical="E-1416")
     assert "uncommitted auto-managed files" in exc.value.message
     assert "verbs.jsonl" in exc.value.message
 
 
 def test_modified_tracked_file_refuses(worktree_repo):
-    # Modify the already-tracked README; should refuse as unmanaged dirt.
+    # Modify the already-tracked README; should refuse as unmanaged modifications.
     (worktree_repo / "README.md").write_text("modified\n")
 
     with pytest.raises(click.ClickException) as exc:
-        _guard_dirty_worktree(worktree_repo, branch="feat", canonical="E-1416")
+        _guard_modified_worktree(worktree_repo, branch="feat", canonical="E-1416")
     msg = exc.value.message
     assert "uncommitted user changes" in msg
     assert "README.md" in msg
@@ -136,7 +136,7 @@ def test_many_files_get_truncated_in_message(worktree_repo):
         (worktree_repo / f"file_{i:02d}.go").write_text("x\n")
 
     with pytest.raises(click.ClickException) as exc:
-        _guard_dirty_worktree(worktree_repo, branch="feat", canonical="E-1416")
+        _guard_modified_worktree(worktree_repo, branch="feat", canonical="E-1416")
     msg = exc.value.message
     assert "uncommitted user changes" in msg
     assert "... and 5 more" in msg

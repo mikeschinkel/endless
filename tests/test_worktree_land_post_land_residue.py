@@ -236,7 +236,7 @@ def _patch_land(monkeypatch, main, worktree, recorded):
     )
     monkeypatch.setattr(worktree_cmd, "_ledger_touching_commits", lambda wt, base: [])
     monkeypatch.setattr(
-        worktree_cmd, "_guard_dirty_worktree", lambda wt, branch, canon: None
+        worktree_cmd, "_guard_modified_worktree", lambda wt, branch, canon: None
     )
     monkeypatch.setattr(worktree_cmd, "_resolve_project", lambda arg: (None, "p"))
     monkeypatch.setattr(worktree_cmd, "_reap_stale_worktrees", lambda root: None)

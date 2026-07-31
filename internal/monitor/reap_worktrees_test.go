@@ -433,9 +433,9 @@ func TestMaybeReapWorktree_EndedSessionDoesNotProtect(t *testing.T) {
 	}
 }
 
-// TestMaybeReapWorktree_DirtyTreeProtects: uncommitted edits in the
+// TestMaybeReapWorktree_ModifiedTreeProtects: uncommitted edits in the
 // worktree block reap.
-func TestMaybeReapWorktree_DirtyTreeProtects(t *testing.T) {
+func TestMaybeReapWorktree_ModifiedTreeProtects(t *testing.T) {
 	f := newReaperFixture(t, time.Now().Add(-30*24*time.Hour))
 	f.statusOut = " M internal/monitor/reap_worktrees.go\n"
 	cutoff := time.Now().UTC().Add(-14 * 24 * time.Hour)
@@ -444,7 +444,7 @@ func TestMaybeReapWorktree_DirtyTreeProtects(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if reaped {
-		t.Errorf("expected reap=false for dirty working tree, got true")
+		t.Errorf("expected reap=false for modified working tree, got true")
 	}
 }
 

@@ -95,7 +95,7 @@ endless worktree land <id> --dry-run        # preview without making changes
 
 `land` performs:
 
-1. Auto-commits endless-managed dirt (verbs.jsonl, ledger entries) — these auto-commit to main as global-config artifacts.
+1. Auto-commits endless-managed modifications (verbs.jsonl, ledger entries) — these auto-commit to main as global-config artifacts.
 2. Rebases the task branch onto current `main`.
 3. Fast-forwards `main` to the rebased tip.
 4. Removes the worktree.
@@ -118,7 +118,7 @@ After the post-land script runs (or if none was shipped), `worktree land` verifi
 
 ```bash
 endless worktree drop <id>
-endless worktree drop <id> --force          # refuses dirty/unmerged/foreign without this
+endless worktree drop <id> --force          # refuses modified/unlanded/foreign without this
 ```
 
 Use `drop` when the work is being abandoned (task declined/obsolete). Don't `drop` over `land` to skip review.

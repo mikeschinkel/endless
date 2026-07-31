@@ -9,7 +9,7 @@ Inspection (foundation, E-971):
 Mutation (this slice, E-971 + E-987 + E-1056):
 - land: auto-commit endless-managed files, rebase worktree onto main,
   ff-merge, remove worktree
-- drop: explicit cleanup (refuses dirty/unmerged without --force)
+- drop: explicit cleanup (refuses modified/unlanded without --force)
 
 Auto-creation triggers (next slice): SessionStart hook, plan-bearing
 task claim.
@@ -48,14 +48,14 @@ LOCK_FILENAME = ".endless/worktree.lock"
 # Auto-committed file globs per E-987 (locked), modified by E-1141:
 # verbs.jsonl is in (ambient agent-driven churn); config.json is out
 # (deliberate human/agent edits whose attribution the user controls).
-# Land treats these as endless-managed: dirty state in any of these does
+# Land treats these as endless-managed: modified state in any of these does
 # not block land; instead, land auto-commits them as a separate commit
 # before the worktree's commits.
 #
 # Mirrors internal/monitor.AutoManagedStatusGlobs (E-1758) — keep the two in
 # sync. That Go definition is the one `endless worktree check` / `session
-# status` partition against so a worktree dirty only in these paths still reads
-# as a clean handoff.
+# status` partition against so a worktree modified only in these paths still
+# reads as a clean handoff.
 AUTO_COMMIT_GLOBS = (
     ".endless/db-ledger/*.jsonl",
     ".endless/verbs.jsonl",
@@ -780,7 +780,7 @@ def _rebase_conflict_message(
     )
 
 
-def _guard_dirty_worktree(worktree_path: Path, branch: str, canonical: str) -> None:
+def _guard_modified_worktree(worktree_path: Path, branch: str, canonical: str) -> None:
     """Refuse land if the worktree's working tree has uncommitted files (E-1416).
 
     Step 1's partition runs on main; Step 4's rebase runs in the worktree.
@@ -788,9 +788,9 @@ def _guard_dirty_worktree(worktree_path: Path, branch: str, canonical: str) -> N
     with git's generic "You have unstaged changes" error — no file list,
     wrong recovery hint.
 
-    Refuses separately for auto-managed dirt (an upstream writer bug worth
-    surfacing rather than papering over) and unmanaged user dirt (offers
-    worktree-specific recovery options).
+    Refuses separately for auto-managed modifications (an upstream writer bug
+    worth surfacing rather than papering over) and unmanaged user modifications
+    (offers worktree-specific recovery options).
     """
     try:
         wt_auto, wt_user = _git_status_partition(worktree_path)
@@ -869,8 +869,8 @@ def _dedup_worktree_verbs_against_main(worktree_path: Path, main_root: Path) -> 
     """Bundle the worktree's verbs.jsonl additions into a single commit on
     the worktree's branch, deduped against main's verbs.jsonl (E-1141 / E-1138).
 
-    Per E-1141: agents adding verbs in worktree sessions accumulate dirt in
-    the worktree's verbs file. At land time, two worktrees that independently
+    Per E-1141: agents adding verbs in worktree sessions accumulate modifications
+    in the worktree's verbs file. At land time, two worktrees that independently
     added the same verb would otherwise produce a textual rebase conflict.
     This step computes a set-union by `value` key — main's entries first
     (preserving order), then worktree's new ones — and writes the deduped
@@ -883,7 +883,7 @@ def _dedup_worktree_verbs_against_main(worktree_path: Path, main_root: Path) -> 
     sides edits where union would produce duplicates.
 
     Returns True if a commit was created on the worktree's branch, False
-    otherwise (no dirt, or dedup result equals current committed state).
+    otherwise (no modifications, or dedup result equals current committed state).
     """
     wt_verbs = worktree_path / ".endless" / "verbs.jsonl"
     main_verbs = main_root / ".endless" / "verbs.jsonl"
@@ -1010,7 +1010,7 @@ def _default_base_branch(project_root: Path) -> str:
 
 
 def _check_plan_file_committed(task_id: int, project_root: Path) -> str | None:
-    """If .endless/plans/E-<id>.md exists but is dirty/untracked in main,
+    """If .endless/plans/E-<id>.md exists but is modified/untracked in main,
     return an error message with recommended commands. Otherwise None.
 
     The plan file lives in main's working tree but won't propagate to a
@@ -1778,11 +1778,12 @@ def _commit_doc_in_worktree(
 
     Called at both mirror write sites — claim/spawn materialization and the
     `task update` write-time mirror — so the file rides to main on `worktree
-    land` instead of sitting untracked and getting rejected by the dirty-
+    land` instead of sitting untracked and getting rejected by the modified-
     worktree guard.
 
     `commit -o <rel_path>` scopes the commit to just this file even if the
-    worktree has unrelated dirt (user mid-edit, other auto-managed files).
+    worktree has unrelated modifications (user mid-edit, other auto-managed
+    files).
     Returns silently when the file already matches HEAD — re-running a write
     with identical content is a no-op.
     """
@@ -2098,13 +2099,13 @@ def land_worktree(
 
     last_error = None
     for attempt in range(1, LAND_MAX_RETRIES + 1):
-        # Step 1: partition main's working-tree dirt.
+        # Step 1: partition main's working-tree modifications.
         try:
             auto_files, user_files = _git_status_partition(main_root)
         except subprocess.CalledProcessError as e:
             raise click.ClickException(f"git status failed: {e.stderr or e}")
 
-        # Step 2: refuse if user-work dirty.
+        # Step 2: refuse if user-work modified.
         if user_files:
             file_list = "\n  ".join(user_files[:20])
             more = "" if len(user_files) <= 20 else f"\n  ... and {len(user_files) - 20} more"
@@ -2114,7 +2115,7 @@ def land_worktree(
                 f"Resolve them: commit (in a worktree), move to a worktree, or set them aside, then retry."
             )
 
-        # Step 3: auto-commit endless-managed dirt, if any.
+        # Step 3: auto-commit endless-managed modifications, if any.
         if auto_files:
             try:
                 _git_run(["add", "--", *auto_files], cwd=main_root)
@@ -2184,8 +2185,8 @@ def land_worktree(
                 f"(inspect each with `git show <sha>`)."
             )
 
-        # Step 3.8 (E-1416): guard against dirty worktree tree before rebase.
-        _guard_dirty_worktree(worktree_path, branch, canonical)
+        # Step 3.8 (E-1416): guard against modified worktree tree before rebase.
+        _guard_modified_worktree(worktree_path, branch, canonical)
 
         # Step 4: rebase the worktree branch onto main.
         try:
@@ -2281,7 +2282,7 @@ def land_worktree(
 
 
 def drop_worktree(name_or_path: str, force: bool) -> None:
-    """Remove a worktree explicitly. Refuses dirty/unmerged/foreign without --force."""
+    """Remove a worktree explicitly. Refuses modified/unlanded/foreign without --force."""
     main_root = _project_root()
     rows = _enriched_list(main_root)
 

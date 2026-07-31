@@ -37,13 +37,13 @@ type SessionStatusRow struct {
 	// bucket so merged work is never offered as a fresh actionable verb (E-1693);
 	// the focal/parent/from/in-flight decorations still win over it.
 	Landed bool
-	// Dirty is the landed-vs-worktree delta the flat view marks with ◆ (E-1701):
-	// the task's worktree exists AND diverges from main — uncommitted changes or
-	// commits not yet landed. It is NOT read from the DB (task_landings only
-	// records that a land happened, not whether the tree moved since); it is
-	// filled in by AnnotateSessionStatusDirty, which shells out to git, and only
-	// on the flat render path. --tree leaves it false.
-	Dirty      bool
+	// Unsettled is the landed-vs-worktree delta the flat view marks with ◆
+	// (E-1701): the task's worktree exists AND diverges from main — modified
+	// (uncommitted changes) or unlanded (commits not yet on main). It is NOT read
+	// from the DB (task_landings only records that a land happened, not whether the
+	// tree moved since); it is filled in by AnnotateSessionStatusUnsettled, which
+	// shells out to git, and only on the flat render path. --tree leaves it false.
+	Unsettled  bool
 	BlockedByN int
 	BlocksN    int
 }

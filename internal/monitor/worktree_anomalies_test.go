@@ -76,7 +76,7 @@ func TestWorktreeAnomaliesAt(t *testing.T) {
 			want: nil,
 		},
 		{
-			name: "auto-managed dirt alone → still clean",
+			name: "auto-managed modifications alone → still clean",
 			stub: func(wt string) gitStub {
 				return gitStub{
 					status:       " M .endless/verbs.jsonl\n?? .endless/db-ledger/2026.jsonl",

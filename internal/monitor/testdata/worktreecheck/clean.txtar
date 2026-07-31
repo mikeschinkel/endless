@@ -1,4 +1,4 @@
-# A committed, on-branch worktree with no user dirt is CLEAN: the anomaly command
+# A committed, on-branch worktree with no user modifications is CLEAN: the anomaly command
 # prints nothing and exits 0. Empty output IS the representation of clean (E-1758).
 
 exec git init -b main

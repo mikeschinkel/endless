@@ -141,27 +141,28 @@ func TestBlockField(t *testing.T) {
 	}
 }
 
-func TestDirtyMark(t *testing.T) {
-	if got := dirtyMark(monitor.SessionStatusRow{Dirty: true}); got != "◆" {
-		t.Errorf("dirty row = %q, want ◆", got)
+func TestUnsettledMark(t *testing.T) {
+	if got := unsettledMark(monitor.SessionStatusRow{Unsettled: true}); got != "◆" {
+		t.Errorf("unsettled row = %q, want ◆", got)
 	}
-	if got := dirtyMark(monitor.SessionStatusRow{Dirty: false}); got != " " {
-		t.Errorf("clean row = %q, want a single space", got)
+	if got := unsettledMark(monitor.SessionStatusRow{Unsettled: false}); got != " " {
+		t.Errorf("settled row = %q, want a single space", got)
 	}
 	// ◆ and the space it replaces must both be display-width 1 so the fixed 13-col
-	// prefix and its alignment hold regardless of the dirty state (E-1701).
+	// prefix and its alignment hold regardless of the unsettled state (E-1701).
 	if w := displayWidth("◆"); w != 1 {
 		t.Errorf("◆ display width = %d, want 1", w)
 	}
 }
 
-// TestRenderDirtyIndicator proves the flat view renders ◆ between the type
-// letter and id for a dirty row and a plain space for a clean one, and that the
-// substitution does not shift the id column (both glyphs are width 1) — E-1701.
-func TestRenderDirtyIndicator(t *testing.T) {
+// TestRenderUnsettledIndicator proves the flat view renders ◆ between the type
+// letter and id for an unsettled row and a plain space for a settled one, and
+// that the substitution does not shift the id column (both glyphs are width 1) —
+// E-1701.
+func TestRenderUnsettledIndicator(t *testing.T) {
 	rows := []monitor.SessionStatusRow{
-		{ID: 1701, Title: "dirty one", Status: "underway", Phase: "now", TypeSlug: "todo", IsFocal: true, Dirty: true},
-		{ID: 1702, Title: "clean one", Status: "ready", Phase: "now", TypeSlug: "todo", Dirty: false},
+		{ID: 1701, Title: "unsettled one", Status: "underway", Phase: "now", TypeSlug: "todo", IsFocal: true, Unsettled: true},
+		{ID: 1702, Title: "settled one", Status: "ready", Phase: "now", TypeSlug: "todo", Unsettled: false},
 	}
 	var b strings.Builder
 	renderTo(&b, rows, 1701, hintClaimBind, 90, false)
@@ -170,7 +171,7 @@ func TestRenderDirtyIndicator(t *testing.T) {
 		t.Fatalf("want 3 lines (legend + 2 rows), got %d:\n%s", len(lines), b.String())
 	}
 	if !strings.HasPrefix(lines[1], "● T◆E-1701 1 ") {
-		t.Errorf("dirty row prefix wrong: %q", lines[1])
+		t.Errorf("unsettled row prefix wrong: %q", lines[1])
 	}
 	if !strings.HasPrefix(lines[2], "▶ T E-1702 1 ") {
 		t.Errorf("clean row prefix wrong: %q", lines[2])
@@ -180,7 +181,7 @@ func TestRenderDirtyIndicator(t *testing.T) {
 	dw := displayWidth(lines[1][:strings.Index(lines[1], "E-1701")])
 	cw := displayWidth(lines[2][:strings.Index(lines[2], "E-1702")])
 	if dw != cw {
-		t.Errorf("id column shifted by dirty marker: dirty width=%d clean width=%d", dw, cw)
+		t.Errorf("id column shifted by unsettled marker: unsettled width=%d settled width=%d", dw, cw)
 	}
 }
 
@@ -230,7 +231,7 @@ func TestRenderNoGoalSurfacesRows(t *testing.T) {
 
 // TestBuildLegend covers the E-1750 dynamic legend: only glyphs for actions and
 // decorations actually present in the row set, enum order then decorations, no
-// `|` divider. This is the sole coverage of ◆ dirty (a real divergent worktree
+// `|` divider. This is the sole coverage of ◆ unsettled (a real divergent worktree
 // can't be seeded hermetically) and of ⁇ unknown (driven by a synthetic status).
 func TestBuildLegend(t *testing.T) {
 	cases := []struct {
@@ -247,7 +248,7 @@ func TestBuildLegend(t *testing.T) {
 				{Status: "unplanned"}, // plan
 			},
 			want:        "▶ do  ✎ plan",
-			mustNotHave: []string{"orphan", "verify", "landed", "unknown", "done", "blocked", "blocks", "dirty", "|"},
+			mustNotHave: []string{"orphan", "verify", "landed", "unknown", "done", "blocked", "blocks", "unsettled", "|"},
 		},
 		{
 			name:     "terminal row surfaces ✓ done",
@@ -293,9 +294,9 @@ func TestBuildLegend(t *testing.T) {
 			mustHave: []string{"⏸ blocks"},
 		},
 		{
-			name:     "dirty decoration",
-			rows:     []monitor.SessionStatusRow{{Status: "ready", Dirty: true}},
-			mustHave: []string{"◆ dirty"},
+			name:     "unsettled decoration",
+			rows:     []monitor.SessionStatusRow{{Status: "ready", Unsettled: true}},
+			mustHave: []string{"◆ unsettled"},
 		},
 		{
 			name: "actions in enum order then decorations",
@@ -303,9 +304,9 @@ func TestBuildLegend(t *testing.T) {
 				{Status: "unplanned"},             // plan (later in enum)
 				{IsFocal: true, Status: "ready"},  // this (first in enum)
 				{Status: "ready", BlockedByN: 1},  // do + ⊗
-				{Status: "underway", Dirty: true}, // orphan + ◆
+				{Status: "underway", Unsettled: true}, // orphan + ◆
 			},
-			want: "● this  ▶ do  ✎ plan  ◷ orphan  ⊗ blocked  ◆ dirty",
+			want: "● this  ▶ do  ✎ plan  ◷ orphan  ⊗ blocked  ◆ unsettled",
 		},
 		{
 			name: "no rows yields empty legend",
@@ -474,7 +475,7 @@ func TestFocalExpansionSuppressesUncommitted(t *testing.T) {
 	}
 
 	rows := []monitor.SessionStatusRow{
-		{ID: 1768, Title: "focal", Status: "underway", Phase: "now", TypeSlug: "todo", IsFocal: true, Dirty: true},
+		{ID: 1768, Title: "focal", Status: "underway", Phase: "now", TypeSlug: "todo", IsFocal: true, Unsettled: true},
 	}
 	var b strings.Builder
 	renderTo(&b, rows, 1768, hintClaimBind, 90, false)
@@ -491,7 +492,7 @@ func TestFocalExpansionSuppressesUncommitted(t *testing.T) {
 		}
 	}
 	// Exactly the three genuine kinds render as expanded ◆ detail lines (the row's
-	// own ◆ dirty marker is inline in the row prefix, not a "      ◆ " detail line).
+	// own ◆ unsettled marker is inline in the row prefix, not a "      ◆ " detail line).
 	if n := strings.Count(out, "      ◆ "); n != 3 {
 		t.Errorf("want 3 expanded anomaly detail lines, got %d:\n%s", n, out)
 	}
@@ -510,7 +511,7 @@ func TestFocalExpansionUncommittedOnlyIsSilent(t *testing.T) {
 	}
 
 	rows := []monitor.SessionStatusRow{
-		{ID: 1768, Title: "focal", Status: "underway", Phase: "now", TypeSlug: "todo", IsFocal: true, Dirty: true},
+		{ID: 1768, Title: "focal", Status: "underway", Phase: "now", TypeSlug: "todo", IsFocal: true, Unsettled: true},
 	}
 	var b strings.Builder
 	renderTo(&b, rows, 1768, hintClaimBind, 90, false)

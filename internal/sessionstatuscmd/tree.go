@@ -273,7 +273,7 @@ func renderChildren(w io.Writer, children []*treeNode, prefix string) {
 // nodeLabel is the rendered id, prefixed with `●` for the focal ("this") task and
 // suffixed with ` ← E-<from>` when the focal was spawned (session lineage). The
 // `●` matches the flat view's `● this` icon so the two views mark "this" task
-// the same way (E-1701); it does not clash with the flat view's ◆ dirty marker,
+// the same way (E-1701); it does not clash with the flat view's ◆ unsettled marker,
 // which sits between the type letter and id, not as a leading focal marker.
 func nodeLabel(n *treeNode) string {
 	if n.focal {
