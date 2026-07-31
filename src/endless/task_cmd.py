@@ -2264,6 +2264,10 @@ def add_item(
     # 'unverified'/'assumed'/'confirmed'.
     _require_status_allowed_for_type(status, task_type)
 
+    # E-1658: gate the title's lead-verb category against the type's accepts
+    # (epic exempt). Runs after validate_title so the verb is registered/known.
+    _require_verb_category_for_type(title, task_type)
+
     # E-1544: research-gate. Justification (when present) accepted-and-stored
     # even if parent is epic+underway (gate only governs *requiring* it).
     if task_type == "research":
@@ -2824,33 +2828,73 @@ def _lead_verb(title: str | None) -> str:
     return first.strip(".,:;!?\"'()[]{}").lower()
 
 
-def _require_completable_verb_for_completed(
+# E-1658: per-task-type accepted verb categories. Validity(verb, type) holds
+# when the type's accepted set intersects the lead verb's category set. Types
+# ABSENT from this map are exempt from the creation gate — `epic` is a container
+# whose title is never verb-gated (preserves the ED-1511 exemption). Decouples
+# verbs from types: a new verb touches only its own `category`, a new type only
+# this map — O(verbs)+O(types), not the O(verbs×types) a per-pair table would be.
+_TYPE_ACCEPTS: dict[str, frozenset[str]] = {
+    "todo":       frozenset({"action"}),
+    "bugfix":     frozenset({"action"}),
+    "research":   frozenset({"investigation"}),
+    "brainstorm": frozenset({"investigation"}),
+}
+
+
+def _require_verb_category_for_type(title: str | None, task_type: str | None):
+    """E-1658 creation gate: a task's title lead verb must carry a category the
+    task's `--type` accepts. `epic` (and any type absent from `_TYPE_ACCEPTS`) is
+    exempt. Unregistered or `--force`-passed verbs default to the 'action'
+    category (see `matchers.verb_categories`).
+
+    On mismatch the error names the verb, its category, and the type's accepted
+    categories. There is deliberately no bypass flag: the fix is a different
+    `--type` or a title led by a verb the type accepts, and a genuinely dual verb
+    should carry both categories rather than an escape hatch (bypasses get
+    taken)."""
+    accepts = _TYPE_ACCEPTS.get(task_type or "")
+    if accepts is None:
+        return
+    from endless.matchers import verb_categories
+    verb = _lead_verb(title)
+    cats = verb_categories(verb)
+    if cats & accepts:
+        return
+    accepts_str = "/".join(sorted(accepts))
+    cats_str = "/".join(sorted(cats))
+    raise click.ClickException(
+        f"Title verb '{verb}' is an {cats_str} verb, but a {task_type!r} task "
+        f"accepts only {accepts_str} verbs.\n"
+        f"  Lead the title with an {accepts_str} verb, or set --type to one that "
+        f"accepts {cats_str} work "
+        f"(investigation → research/brainstorm; action → todo/bugfix)."
+    )
+
+
+def _require_investigation_verb_for_completed(
     status: str | None,
     title: str | None,
     task_type: str | None = None,
 ):
-    """E-1240: `completed` is gated to tasks whose title's lead verb is
-    marked `completable: true` in verbs.jsonl. Reserves the status for
-    findings-as-deliverable work (audits, research, reviews, …) and keeps
-    implementation tasks on the `unverified`/`confirmed`/`assumed` track.
+    """`completed` is the terminal for investigation deliverables, so it is gated
+    (E-1240, recast onto E-1658's category model) to tasks whose title lead verb
+    carries the 'investigation' category — audits, research, reviews, decisions.
+    Implementation (action-verb) tasks stay on the
+    `unverified`/`confirmed`/`assumed` track.
 
-    ED-1511: epics are exempt. An epic's deliverable IS its outcome text (a
-    coordination summary of what shipped in its children), and the type gate
-    already forces epics to terminate via `completed` — so applying the verb
-    gate to an implementation-verb-titled epic only deadlocks it."""
+    ED-1511 / E-1657: epics and brainstorms are exempt. Their TYPE already
+    signals an information deliverable (an epic's coordination summary of what
+    shipped in its children; a brainstorm's synthesis) and the type gate forces
+    them to terminate via `completed`, so applying the verb gate would only
+    deadlock an implementation-verb-titled one."""
     if status != "completed":
         return
-    if task_type == "epic":
+    if task_type in ("epic", "brainstorm"):
         return
-    if task_type == "brainstorm":
-        # E-1657/ED-1516: like epics (ED-1511), the brainstorm *type* already
-        # signals an information deliverable (the synthesis), so requiring a
-        # separately `completable`-marked title verb on top is redundant — and
-        # the auto-registered "Brainstorm" verb does not carry the flag.
-        return
-    from endless.matchers import is_completable_verb
+    from endless.matchers import verb_categories
     verb = _lead_verb(title)
-    if not is_completable_verb(verb):
+    if "investigation" not in verb_categories(verb):
         raise click.ClickException(
             "'completed' isn't a valid final status for this task. "
             "Implementation tasks finish as 'confirmed' or 'assumed'."
@@ -2862,7 +2906,7 @@ def _require_completable_verb_for_completed(
 # status (E-1240 had coupled it to status as a proxy for these types). Epics are
 # excluded — they self-complete via child-status derivation, with no interactive
 # completion step where an outcome could be supplied. Other types reaching
-# 'completed' via a completable verb are not forced to carry an outcome.
+# 'completed' via an investigation verb are not forced to carry an outcome.
 _OUTCOME_REQUIRED_TYPES = ("research", "brainstorm")
 
 
@@ -3253,8 +3297,8 @@ def assume_item(item_id: int, cascade: bool = False, outcome: str | None = None)
 def mark_completed_item(item_id: int, outcome: str):
     """E-1240: Mark a findings-as-deliverable task as `completed`.
 
-    Gated by `--outcome` (required) and by `completable: true` on the
-    task title's lead verb in verbs.jsonl. Distinct from `confirmed`
+    Gated by `--outcome` (required) and by the 'investigation' category on the
+    task title's lead verb (E-1658). Distinct from `confirmed`
     (behavior verified) and `assumed` (behavior believed correct,
     awaiting promotion). Use for Audit/Research/Investigate/Review-style
     tasks whose deliverable is the outcome text itself."""
@@ -3272,7 +3316,7 @@ def mark_completed_item(item_id: int, outcome: str):
         )
 
     _require_outcome_for_completed("completed", row[0]["type"], outcome)
-    _require_completable_verb_for_completed(
+    _require_investigation_verb_for_completed(
         "completed", row[0]["title"], row[0]["type"]
     )
 
@@ -4586,6 +4630,19 @@ def update_plan(
     if description is not None:
         validate_description(description)
 
+    # E-1658: when the title or type is being changed, re-gate the effective
+    # (title, type) against the verb-category accepts map. Closes the
+    # create-as-todo-then-flip-to-research bypass, which would otherwise strand a
+    # task in an un-terminable state (an action-verb title under an investigation
+    # type: research forbids 'confirmed'/'assumed'/'unverified' and the
+    # completed-gate rejects the action verb). Fires only on an explicit
+    # title/type edit, so an unrelated update to a pre-existing invalid row is
+    # not retroactively blocked (mirrors the maybe-phase rule below).
+    if title is not None or task_type is not None:
+        effective_title = title if title is not None else row[0]["title"]
+        effective_type = task_type if task_type is not None else row[0]["type"]
+        _require_verb_category_for_type(effective_title, effective_type)
+
     # Validate status if provided. E-1956: read from the shared vocabulary
     # rather than a local copy — this tuple had drifted to omit `submitted`,
     # which every other surface accepts (`task submit` sets it), so
@@ -4596,14 +4653,14 @@ def update_plan(
                 f"Invalid status '{status}'. "
                 f"Valid: {', '.join(TASK_STATUSES)}"
             )
-        # E-1240: gate `completed` on a completable lead verb. Use the
+        # E-1240/E-1658: gate `completed` on an investigation lead verb. Use the
         # incoming title if provided (the title is being changed in the
         # same call), else the existing title on the row.
         effective_title = title if title is not None else row[0]["title"]
         # Use the incoming task_type if --type is also being set in this
         # update, else the existing type on the row.
         effective_type = task_type if task_type is not None else row[0]["type"]
-        _require_completable_verb_for_completed(
+        _require_investigation_verb_for_completed(
             status, effective_title, effective_type
         )
         # E-1577/E-1579: research/epic tasks reject 'unverified'/'assumed'/

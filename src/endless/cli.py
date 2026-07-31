@@ -3716,12 +3716,18 @@ def verb_cmd():
 @click.argument("value")
 @click.option("--definition", default=None,
               help="Short 'to ___' definition (required, e.g., 'to deliberate over')")
+@click.option("--category", "category", multiple=True,
+              type=click.Choice(["action", "investigation"]),
+              help="Verb category, repeatable (E-1658). 'action' verbs lead "
+                   "changed-behavior/artifact work (todo/bugfix); 'investigation' "
+                   "verbs lead findings/decision work (research/brainstorm). Pass "
+                   "both for a genuine dual. Omit ⇒ 'action'.")
 @click.option("--machine-only", is_flag=True,
               help="Skip the project config write (machine layer only)")
-def verb_add(value, definition, machine_only):
+def verb_add(value, definition, category, machine_only):
     """Register a new verb."""
     from endless.verb_cmd import add_verb
-    add_verb(value, definition, machine_only)
+    add_verb(value, definition, category, machine_only)
 
 
 @verb_cmd.command("list")

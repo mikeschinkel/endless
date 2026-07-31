@@ -13,7 +13,12 @@ from endless import matchers
 from endless import rowcap
 
 
-def add_verb(value: str, definition: str | None, machine_only: bool) -> None:
+def add_verb(
+    value: str,
+    definition: str | None,
+    category: tuple[str, ...] = (),
+    machine_only: bool = False,
+) -> None:
     if not definition or not definition.strip():
         raise click.ClickException(
             f"Adding a verb requires --definition. Define what action '{value}' names.\n"
@@ -25,7 +30,8 @@ def add_verb(value: str, definition: str | None, machine_only: bool) -> None:
 
     try:
         wrote_project, wrote_machine = matchers.add_verb(
-            value=value, definition=definition, machine_only=machine_only,
+            value=value, definition=definition,
+            category=list(category), machine_only=machine_only,
         )
     except ValueError as e:
         raise click.ClickException(str(e))
@@ -61,12 +67,24 @@ def list_verbs(as_json: bool, limit: int | None = None,
         return
     verbs, hidden = rowcap.cap_rows(verbs, cap)
     width = max((len(v.get("value", "")) for v in verbs), default=10)
-    click.echo(f"{'Verb':<{width}}  Definition")
-    click.echo("-" * width + "  " + "-" * 50)
+
+    def _cat(v: dict) -> str:
+        raw = v.get("category")
+        if isinstance(raw, str):
+            raw = [raw]
+        if not isinstance(raw, (list, tuple)):
+            raw = ["action"]  # absent ⇒ action (E-1658 read-time default)
+        cats = [str(c).strip().lower() for c in raw if isinstance(c, str)] or ["action"]
+        return "+".join(sorted(set(cats)))
+
+    catw = max((len(_cat(v)) for v in verbs), default=len("Category"))
+    catw = max(catw, len("Category"))
+    click.echo(f"{'Verb':<{width}}  {'Category':<{catw}}  Definition")
+    click.echo("-" * width + "  " + "-" * catw + "  " + "-" * 40)
     for v in verbs:
         value = v.get("value", "")
         defn = v.get("definition", "")
-        click.echo(f"{value:<{width}}  {defn}")
+        click.echo(f"{value:<{width}}  {_cat(v):<{catw}}  {defn}")
 
     rowcap.echo_footer(hidden)
 

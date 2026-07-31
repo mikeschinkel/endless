@@ -213,59 +213,83 @@ def _resolved_verbs() -> list[dict]:
     return DEFAULT_VERBS
 
 
-def is_completable_verb(verb: str) -> bool:
-    """Return True if `verb` is defined with `completable: true` in the
-    resolved verbs list (project > machine > defaults).
+# The two verb categories (E-1658). A verb's `category` field is a subset of
+# these. "investigation" verbs lead findings/decision/knowledge deliverables —
+# their tasks terminate via 'completed'; "action" verbs lead changed-behavior or
+# artifact work. Genuine duals (e.g. design, document) carry both. Absence of the
+# field defaults to {"action"}, mirroring the old completable convention where an
+# absent flag meant "not completable" (i.e. an action verb). This replaces
+# E-1240's boolean `completable` (completable:true ⇔ category contains
+# 'investigation').
+VERB_CATEGORIES: frozenset[str] = frozenset({"action", "investigation"})
+DEFAULT_VERB_CATEGORY: frozenset[str] = frozenset({"action"})
 
-    Lookup is case-insensitive. Verbs without the `completable` field
-    default to False.
+
+def verb_categories(verb: str) -> frozenset[str]:
+    """Return the category set for `verb` from the resolved verbs list
+    (project > machine > defaults), matched case-insensitively.
+
+    A verb with no `category` field — or an unknown/empty verb — defaults to
+    {"action"}. A bare string category is accepted as a one-element set.
+    Unrecognized tokens are dropped; if that leaves the set empty it falls back
+    to the default so a malformed entry never yields an un-typed verb.
     """
     if not verb:
-        return False
+        return DEFAULT_VERB_CATEGORY
     target = verb.strip().lower()
     for entry in _resolved_verbs():
         if not isinstance(entry, dict):
             continue
         if str(entry.get("value", "")).lower() == target:
-            return bool(entry.get("completable", False))
-    return False
+            raw = entry.get("category")
+            if raw is None:
+                return DEFAULT_VERB_CATEGORY
+            if isinstance(raw, str):
+                raw = [raw]
+            if not isinstance(raw, (list, tuple, set)):
+                return DEFAULT_VERB_CATEGORY
+            cats = frozenset(
+                str(c).strip().lower() for c in raw if isinstance(c, str)
+            ) & VERB_CATEGORIES
+            return cats or DEFAULT_VERB_CATEGORY
+    return DEFAULT_VERB_CATEGORY
 
 
 DEFAULT_VERBS: list[dict] = [
     {"value": "accept", "definition": "to receive or agree to"},
     {"value": "add", "definition": "to introduce or include something new"},
-    {"value": "analyze", "definition": "to break down systematically into components", "completable": True},
+    {"value": "analyze", "definition": "to break down systematically into components", "category": ["investigation"]},
     {"value": "apply", "definition": "to put into effect"},
-    {"value": "assess", "definition": "to form a judgment about", "completable": True},
+    {"value": "assess", "definition": "to form a judgment about", "category": ["investigation"]},
     {"value": "assume", "definition": "to take to be complete pending verification"},
-    {"value": "audit", "definition": "to examine systematically", "completable": True},
+    {"value": "audit", "definition": "to examine systematically", "category": ["investigation"]},
     {"value": "backfill", "definition": "to fill in missing data after the fact"},
     {"value": "build", "definition": "to construct or compile"},
     {"value": "capture", "definition": "to record or take in"},
     {"value": "change", "definition": "to alter"},
     {"value": "clean", "definition": "to remove unwanted state"},
     {"value": "clear", "definition": "to remove or empty"},
-    {"value": "compare", "definition": "to identify similarities and differences", "completable": True},
+    {"value": "compare", "definition": "to identify similarities and differences", "category": ["investigation"]},
     {"value": "confirm", "definition": "to verify and finalize"},
     {"value": "configure", "definition": "to set options or parameters"},
     {"value": "consolidate", "definition": "to combine multiple things into one"},
     {"value": "convert", "definition": "to change form or representation"},
     {"value": "create", "definition": "to bring into existence"},
-    {"value": "decide", "definition": "to make a determination", "completable": True},
+    {"value": "decide", "definition": "to make a determination", "category": ["investigation"]},
     {"value": "define", "definition": "to specify meaning or scope"},
     {"value": "defer", "definition": "to postpone"},
     {"value": "deploy", "definition": "to release for use"},
-    {"value": "design", "definition": "to plan structure or behavior", "completable": True},
-    {"value": "diagnose", "definition": "to identify the cause of a problem", "completable": True},
+    {"value": "design", "definition": "to plan structure or behavior", "category": ["action", "investigation"]},
+    {"value": "diagnose", "definition": "to identify the cause of a problem", "category": ["investigation"]},
     {"value": "disable", "definition": "to turn off or block"},
     {"value": "distinguish", "definition": "to make a difference between"},
-    {"value": "document", "definition": "to record in writing", "completable": True},
+    {"value": "document", "definition": "to record in writing", "category": ["action", "investigation"]},
     {"value": "enable", "definition": "to turn on or allow"},
     {"value": "enforce", "definition": "to compel observance of"},
-    {"value": "evaluate", "definition": "to assess", "completable": True},
-    {"value": "examine", "definition": "to inspect closely", "completable": True},
+    {"value": "evaluate", "definition": "to assess", "category": ["investigation"]},
+    {"value": "examine", "definition": "to inspect closely", "category": ["investigation"]},
     {"value": "expand", "definition": "to make larger or more inclusive"},
-    {"value": "explore", "definition": "to investigate possibilities in a space", "completable": True},
+    {"value": "explore", "definition": "to investigate possibilities in a space", "category": ["investigation"]},
     {"value": "extract", "definition": "to take out or pull from"},
     {"value": "fix", "definition": "to repair or correct"},
     {"value": "generate", "definition": "to produce"},
@@ -274,7 +298,7 @@ DEFAULT_VERBS: list[dict] = [
     {"value": "improve", "definition": "to make better"},
     {"value": "increase", "definition": "to raise in number or magnitude"},
     {"value": "integrate", "definition": "to combine into a working whole"},
-    {"value": "investigate", "definition": "to examine in depth", "completable": True},
+    {"value": "investigate", "definition": "to examine in depth", "category": ["investigation"]},
     {"value": "merge", "definition": "to combine branches or items"},
     {"value": "migrate", "definition": "to move from one system to another"},
     {"value": "move", "definition": "to change location"},
@@ -285,16 +309,16 @@ DEFAULT_VERBS: list[dict] = [
     {"value": "raise", "definition": "to lift or signal (as in raise an error)"},
     {"value": "read", "definition": "to examine and interpret"},
     {"value": "reconcile", "definition": "to bring into agreement"},
-    {"value": "redesign", "definition": "to design again", "completable": True},
+    {"value": "redesign", "definition": "to design again", "category": ["action", "investigation"]},
     {"value": "refactor", "definition": "to restructure code without changing behavior"},
     {"value": "remove", "definition": "to take away"},
     {"value": "rename", "definition": "to give a new name"},
     {"value": "render", "definition": "to produce visual or textual output"},
     {"value": "replace", "definition": "to substitute"},
     {"value": "require", "definition": "to demand as necessary"},
-    {"value": "research", "definition": "to investigate systematically", "completable": True},
+    {"value": "research", "definition": "to investigate systematically", "category": ["investigation"]},
     {"value": "resolve", "definition": "to settle or fix"},
-    {"value": "review", "definition": "to examine critically and form a judgment", "completable": True},
+    {"value": "review", "definition": "to examine critically and form a judgment", "category": ["investigation"]},
     {"value": "search", "definition": "to look for"},
     {"value": "show", "definition": "to display"},
     {"value": "simplify", "definition": "to make simpler"},
@@ -302,11 +326,11 @@ DEFAULT_VERBS: list[dict] = [
     {"value": "split", "definition": "to divide into parts"},
     {"value": "support", "definition": "to provide for or assist with"},
     {"value": "surface", "definition": "to bring to attention"},
-    {"value": "survey", "definition": "to take stock of a landscape", "completable": True},
+    {"value": "survey", "definition": "to take stock of a landscape", "category": ["investigation"]},
     {"value": "sync", "definition": "to bring into alignment"},
     {"value": "test", "definition": "to check behavior or correctness"},
     {"value": "track", "definition": "to follow or monitor"},
-    {"value": "triage", "definition": "to sort and prioritize by urgency", "completable": True},
+    {"value": "triage", "definition": "to sort and prioritize by urgency", "category": ["investigation"]},
     {"value": "update", "definition": "to revise"},
     {"value": "validate", "definition": "to confirm correctness"},
     {"value": "verify", "definition": "to check truth or accuracy"},
@@ -827,6 +851,7 @@ def add_verb(
     *,
     value: str,
     definition: str,
+    category: list[str] | None = None,
     machine_only: bool = False,
 ) -> tuple[bool, bool]:
     """Add a verb to the appropriate verbs.jsonl files.
@@ -834,6 +859,11 @@ def add_verb(
     Returns (wrote_project, wrote_machine). Either may be False if the
     value was already present (no-op) or writing was skipped (e.g.,
     no registered project and machine_only=False).
+
+    `category` (E-1658) is the verb's category set — a subset of
+    {"action", "investigation"}. When None or empty the field is omitted, which
+    reads back as {"action"} (see `verb_categories`). Unrecognized tokens are
+    dropped; duplicates are de-duped in a stable order.
 
     E-1208: when wrote_project is True, the project verbs.jsonl is also
     committed to main as `Endless: register verb '<value>'`. Raises
@@ -844,6 +874,16 @@ def add_verb(
     if not definition or not definition.strip():
         raise ValueError("verb definition is required")
     entry = {"value": value.strip(), "definition": definition.strip()}
+    if category:
+        seen: set[str] = set()
+        cats: list[str] = []
+        for c in category:
+            token = str(c).strip().lower()
+            if token in VERB_CATEGORIES and token not in seen:
+                seen.add(token)
+                cats.append(token)
+        if cats:
+            entry["category"] = cats
 
     wrote_project = False
     wrote_machine = False

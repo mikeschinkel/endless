@@ -29,7 +29,7 @@ def _added_id(output: str) -> int:
 def test_add_analysis_inline_persists(seeded_project_at_cwd):
     runner = CliRunner()
     result = runner.invoke(main, [
-        "task", "add", "Audit the X system",
+        "task", "add", "Refactor the X system",
         "--analysis", "multi\nline\nanalysis content",
     ])
     assert result.exit_code == 0, result.output
@@ -43,7 +43,7 @@ def test_add_analysis_file_loads_content(seeded_project_at_cwd, tmp_path):
 
     runner = CliRunner()
     result = runner.invoke(main, [
-        "task", "add", "Audit the X system",
+        "task", "add", "Refactor the X system",
         "--analysis-file", str(p),
     ])
     assert result.exit_code == 0, result.output
@@ -57,7 +57,7 @@ def test_add_analysis_and_analysis_file_together_errors(seeded_project_at_cwd, t
 
     runner = CliRunner()
     result = runner.invoke(main, [
-        "task", "add", "Audit the X system",
+        "task", "add", "Refactor the X system",
         "--analysis", "inline",
         "--analysis-file", str(p),
     ])

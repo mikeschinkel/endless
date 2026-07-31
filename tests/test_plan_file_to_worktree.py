@@ -20,7 +20,7 @@ from endless import db, task_cmd, worktree_cmd
 from endless.cli import main
 
 
-def _add_minimal_task(title: str = "Audit the cache layer") -> int:
+def _add_minimal_task(title: str = "Refactor the cache layer") -> int:
     cur = db.execute(
         "INSERT INTO tasks (project_id, title, status, type_id, phase, created_at) "
         "VALUES (1, ?, 'unplanned', 1, 'now', datetime('now'))",
@@ -71,7 +71,7 @@ def test_add_text_does_not_create_worktree(tmp_path, seeded_project_at_cwd):
     plan_src = tmp_path / "plan.md"
     plan_src.write_text("# from add\nbody\n")
 
-    item_id = task_cmd.add_item(title="Audit the buffer", text=plan_src.read_text())
+    item_id = task_cmd.add_item(title="Refactor the buffer", text=plan_src.read_text())
 
     assert task_cmd._worktree_for_task(item_id) is None
     assert not (
@@ -332,7 +332,7 @@ def test_cli_add_no_create_worktree_flag_removed(tmp_path, seeded_project_at_cwd
     plan_src = tmp_path / "plan.md"
     plan_src.write_text("# plan\n")
     result = CliRunner().invoke(main, [
-        "task", "add", "Audit something new",
+        "task", "add", "Refactor something new",
         "--text-file", str(plan_src),
         "--no-create-worktree",
     ])

@@ -4,8 +4,9 @@
 verified) and `assumed` (behavior believed correct, awaiting promotion).
 Gated by:
 
-  1. A `completable: true` flag on the task title's lead verb in verbs.json
-     (epics and brainstorms are exempt — ED-1511 / E-1657)
+  1. The 'investigation' category on the task title's lead verb (E-1658, which
+     recast E-1240's boolean `completable` flag as a verb `category`; epics and
+     brainstorms are exempt — ED-1511 / E-1657)
   2. A required `--outcome` for `research`/`brainstorm` tasks, whose deliverable
      IS the outcome text (ED-1520 — keyed on TYPE, not the `completed` status;
      supersedes E-1240's status coupling). The dedicated `task complete` CLI
@@ -22,7 +23,7 @@ from endless.cli import main
 
 def _add_task(title: str, status: str = "underway", type_id: int = 1) -> int:
     # type_id per task_types seed (internal/schema/schema.sql):
-    # 1=task, 2=bug, 3=research, 4=epic, 5=brainstorm.
+    # 1=todo, 2=bugfix, 3=research, 4=epic, 5=brainstorm.
     cur = db.execute(
         "INSERT INTO tasks (project_id, title, status, type_id, phase, created_at) "
         "VALUES (1, ?, ?, ?, 'now', datetime('now'))",
@@ -36,37 +37,44 @@ def _status_outcome(task_id: int) -> tuple[str, str | None]:
     return row[0]["status"], row[0]["outcome"]
 
 
-# ─── is_completable_verb ──────────────────────────────────────────────────────
+# ─── verb_categories (E-1658, replaces is_completable_verb) ────────────────────
 
 
-def test_is_completable_verb_audit_yes(seeded_project_at_cwd):
-    assert matchers.is_completable_verb("audit") is True
+def test_verb_categories_audit_investigation(seeded_project_at_cwd):
+    assert matchers.verb_categories("audit") == frozenset({"investigation"})
 
 
-def test_is_completable_verb_audit_case_insensitive(seeded_project_at_cwd):
-    assert matchers.is_completable_verb("Audit") is True
-    assert matchers.is_completable_verb("AUDIT") is True
+def test_verb_categories_case_insensitive(seeded_project_at_cwd):
+    assert matchers.verb_categories("Audit") == frozenset({"investigation"})
+    assert matchers.verb_categories("AUDIT") == frozenset({"investigation"})
 
 
-def test_is_completable_verb_research_yes(seeded_project_at_cwd):
-    assert matchers.is_completable_verb("research") is True
+def test_verb_categories_research_investigation(seeded_project_at_cwd):
+    assert matchers.verb_categories("research") == frozenset({"investigation"})
 
 
-def test_is_completable_verb_implement_no(seeded_project_at_cwd):
-    assert matchers.is_completable_verb("implement") is False
+def test_verb_categories_implement_action(seeded_project_at_cwd):
+    assert matchers.verb_categories("implement") == frozenset({"action"})
 
 
-def test_is_completable_verb_fix_no(seeded_project_at_cwd):
-    assert matchers.is_completable_verb("fix") is False
+def test_verb_categories_fix_action(seeded_project_at_cwd):
+    assert matchers.verb_categories("fix") == frozenset({"action"})
 
 
-def test_is_completable_verb_empty_returns_false(seeded_project_at_cwd):
-    assert matchers.is_completable_verb("") is False
-    assert matchers.is_completable_verb("   ") is False
+def test_verb_categories_dual_verb_carries_both(seeded_project_at_cwd):
+    """A genuine dual (design) carries both categories, so it is valid under an
+    action type AND an investigation type."""
+    assert matchers.verb_categories("design") == frozenset({"action", "investigation"})
+    assert matchers.verb_categories("document") == frozenset({"action", "investigation"})
 
 
-def test_is_completable_verb_unknown_returns_false(seeded_project_at_cwd):
-    assert matchers.is_completable_verb("frobnicate") is False
+def test_verb_categories_empty_defaults_to_action(seeded_project_at_cwd):
+    assert matchers.verb_categories("") == frozenset({"action"})
+    assert matchers.verb_categories("   ") == frozenset({"action"})
+
+
+def test_verb_categories_unknown_defaults_to_action(seeded_project_at_cwd):
+    assert matchers.verb_categories("frobnicate") == frozenset({"action"})
 
 
 # ─── mark_completed_item direct ───────────────────────────────────────────────
@@ -152,7 +160,7 @@ def test_completed_idempotent_when_already_completed(seeded_project_at_cwd):
 # ─── update_plan with status=completed ────────────────────────────────────────
 
 
-def test_update_status_completed_with_completable_verb_succeeds(seeded_project_at_cwd):
+def test_update_status_completed_with_investigation_verb_succeeds(seeded_project_at_cwd):
     tid = _add_task("Review the auth middleware")
     task_cmd.update_plan(tid, status="completed", outcome="middleware is sound; no changes needed")
     status, outcome = _status_outcome(tid)
@@ -168,7 +176,7 @@ def test_update_status_completed_requires_outcome(seeded_project_at_cwd):
     assert "outcome is required" in str(exc.value.message).lower()
 
 
-def test_update_status_completed_rejects_non_completable_verb(seeded_project_at_cwd):
+def test_update_status_completed_rejects_action_verb(seeded_project_at_cwd):
     tid = _add_task("Implement caching layer")
     with pytest.raises(click.ClickException) as exc:
         task_cmd.update_plan(tid, status="completed", outcome="done")
@@ -176,13 +184,16 @@ def test_update_status_completed_rejects_non_completable_verb(seeded_project_at_
 
 
 def test_update_status_completed_uses_new_title_if_provided(seeded_project_at_cwd):
-    """If --title is also being set in the same update, the gate should
-    check the *new* title's lead verb, not the existing one."""
-    tid = _add_task("Implement X")  # non-completable
-    # Rename and complete in one shot — the new title is what matters
+    """If --title is also being set in the same update, the completed-gate should
+    check the *new* title's lead verb, not the existing one. Uses a research task
+    (which accepts investigation verbs) so both the old and new titles clear the
+    E-1658 category gate; the point under test is which title the *completed*-gate
+    reads. The grandfathered action-verb title is seeded via direct INSERT."""
+    tid = _add_task("Implement X", type_id=_RESEARCH)  # action verb, fails completed-gate as-is
+    # Rename to an investigation verb and complete in one shot — the new title wins.
     task_cmd.update_plan(
         tid,
-        title="Audit X",  # now completable
+        title="Audit X",  # investigation verb; also valid under research's accepts
         status="completed",
         outcome="findings here",
     )

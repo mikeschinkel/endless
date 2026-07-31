@@ -177,7 +177,8 @@ def test_add_non_research_no_justification_works(seeded_project_at_cwd):
 
 def test_update_set_research_with_epic_underway_parent(seeded_project_at_cwd):
     epic = _add_task("Epic", status="underway", task_type="epic")
-    tid = _add_task("Existing task", parent_id=epic)
+    # E-1658: flipping to research also requires an investigation-led title.
+    tid = _add_task("Investigate the thing", parent_id=epic)
     task_cmd.update_plan(tid, task_type="research")
     _, t = _notes_and_type(tid)
     assert t == "research"
@@ -185,14 +186,14 @@ def test_update_set_research_with_epic_underway_parent(seeded_project_at_cwd):
 
 def test_update_set_research_with_non_epic_parent_refused(seeded_project_at_cwd):
     parent = _add_task("Non-epic", status="underway", task_type="todo")
-    tid = _add_task("Existing task", parent_id=parent)
+    tid = _add_task("Investigate the thing", parent_id=parent)
     with pytest.raises(click.ClickException) as exc:
         task_cmd.update_plan(tid, task_type="research")
     assert "--type research requires --justification" in exc.value.message
 
 
 def test_update_set_research_with_justification_writes_notes(seeded_project_at_cwd):
-    tid = _add_task("Existing task")
+    tid = _add_task("Investigate the thing")
     task_cmd.update_plan(
         tid, task_type="research",
         justification="Cross-system comparison required.",
@@ -207,7 +208,7 @@ def test_update_set_research_with_justification_writes_notes(seeded_project_at_c
 def test_update_refuses_when_justification_section_already_present(seeded_project_at_cwd):
     epic = _add_task("Epic", status="underway", task_type="epic")
     tid = _add_task(
-        "Existing research", task_type="research", parent_id=epic,
+        "Research the existing thing", task_type="research", parent_id=epic,
         notes="## Justification\n\nOlder reason.\n",
     )
     with pytest.raises(click.ClickException) as exc:
@@ -302,7 +303,7 @@ def test_update_task_type_change_to_research_blocks_assumed_status_in_same_call(
     """If --type research AND --status assumed are set in the same call,
     the gate uses the incoming type and refuses."""
     epic = _add_task("Anchor epic", status="underway", task_type="epic")
-    tid = _add_task("Plain task", parent_id=epic)
+    tid = _add_task("Investigate the thing", parent_id=epic)
     with pytest.raises(click.ClickException) as exc:
         task_cmd.update_plan(tid, task_type="research", status="assumed")
     assert "'assumed'" in exc.value.message.lower()
