@@ -1497,6 +1497,97 @@ def _run_post_land_script(
         )
 
 
+def _ignored_present_files(repo_root: Path) -> set[str]:
+    """Files ignored-and-present in repo_root under the CURRENT ignore rules.
+
+    `git ls-files --others --ignored --exclude-standard` lists untracked files
+    that git's own ignore machinery (.gitignore, .git/info/exclude,
+    core.excludesFile) currently ignores AND that exist on disk. Captured on
+    main *before* a land, this snapshots exactly the set a land might un-ignore
+    (E-1800). Compares git's own classification — never parses `.gitignore`.
+    """
+    out = subprocess.run(
+        ["git", "ls-files", "--others", "--ignored", "--exclude-standard", "-z"],
+        capture_output=True, text=True, check=True, cwd=str(repo_root),
+    ).stdout
+    return {p for p in out.split("\0") if p}
+
+
+def _untracked_present_files(repo_root: Path) -> set[str]:
+    """Untracked, not-ignored, present files in repo_root under CURRENT rules.
+
+    `git ls-files --others --exclude-standard` lists untracked files git does
+    NOT ignore. Captured on main *after* a land (post-merge, post-script), this
+    is the set from which residue under a newly-un-ignored path is drawn
+    (E-1800).
+    """
+    out = subprocess.run(
+        ["git", "ls-files", "--others", "--exclude-standard", "-z"],
+        capture_output=True, text=True, check=True, cwd=str(repo_root),
+    ).stdout
+    return {p for p in out.split("\0") if p}
+
+
+def _check_post_land_residue(
+    main_root: Path,
+    canonical: str,
+    ignored_before: set[str],
+) -> None:
+    """Verify the land left no untracked residue under paths it un-ignored (E-1800).
+
+    Removing a `.gitignore` entry leaves the formerly-ignored files on disk as
+    *untracked* — a commit only moves tracked content, so no land deletes them.
+    E-1799's post-land script is meant to clean them, but a script can be absent
+    or miss some. This step tests the *outcome* instead of trusting a script
+    exists: residue that remains is what a *future* land could silently sweep
+    into a commit.
+
+    Residue = `ignored_before` ∩ `_untracked_present_files(main_root)`, comparing
+    git's own classifications (never reading `.gitignore`):
+      - in both  → ignored-and-present before, untracked-and-present after → this
+        land un-ignored it and nothing removed it.
+      - tracked content drops out (not untracked); script-removed files drop out
+        (not present); paths this land did not un-ignore drop out (still ignored
+        → absent from the post-land untracked set).
+
+    Empty residue → silent success (also the common no-op: a land that
+    un-ignored nothing yields an empty intersection). Non-empty → a loud,
+    actionable error, **non-fatal to the merge** (Step 5 already advanced main
+    and cannot be unwound) but raised so land **exits non-zero**, mirroring
+    _record_landing's "main advanced, follow-up step failed" surfacing so
+    automation notices.
+    """
+    untracked_after = _untracked_present_files(main_root)
+    residue = sorted(ignored_before & untracked_after)
+    if not residue:
+        return
+
+    script = main_root / POST_LAND_HOOK_DIR / f"{canonical.lower()}.sh"
+    listing = "\n  ".join(residue)
+    if script.exists():
+        script_note = (
+            f"    The post-land script ran but left these behind:\n"
+            f"        {_tilde(script)}\n"
+            f"    Extend it to remove them (or remove the files) so the next land is clean."
+        )
+    else:
+        script_note = (
+            f"    No post-land script was shipped for {canonical}. Add one to remove them:\n"
+            f"        {_tilde(script)}\n"
+            f"    (or remove the files manually)."
+        )
+    noun = "path" if len(residue) == 1 else "paths"
+    raise click.ClickException(
+        f"Landed {canonical}: main was advanced, but the land un-ignored "
+        f"{len(residue)} {noun} left as untracked residue on main:\n\n"
+        f"  {listing}\n\n"
+        f"{script_note}\n\n"
+        f"    A later land could sweep this residue into a commit. The land "
+        f"itself SUCCEEDED and cannot be unwound; this check is non-fatal but "
+        f"exits non-zero so automation notices."
+    )
+
+
 # E-1747: the multiline document fields that mirror to committed
 # .endless/<subdir>/E-NNN.md files. Each tuple is (tasks column, subdir,
 # human label used in the commit subject and progress line). `text` is the
@@ -1906,6 +1997,19 @@ def land_worktree(
     # after main has advanced (E-1664). None for non-self_dev (global is used).
     endless_go_bin = _resolve_land_endless_go(worktree_path, main_root)
 
+    # E-1800: snapshot the ignored-and-present files on main under the CURRENT
+    # (pre-land) ignore rules — pure data, captured once before any merge, not a
+    # gate. After the land + post-land script, any of these still present as
+    # untracked (now un-ignored) is residue. Stable across the retry loop (the
+    # retries only re-attempt the ff-merge; they don't change main's ignore
+    # rules), so it's captured here rather than per attempt.
+    try:
+        ignored_before = _ignored_present_files(main_root)
+    except subprocess.CalledProcessError as e:
+        raise click.ClickException(
+            f"git ls-files (pre-land ignored snapshot) failed: {e.stderr or e}"
+        )
+
     last_error = None
     for attempt in range(1, LAND_MAX_RETRIES + 1):
         # Step 1: partition main's working-tree dirt.
@@ -2064,6 +2168,13 @@ def land_worktree(
         _run_post_land_script(
             worktree_path, main_root, canonical, merge_sha, base_branch,
         )
+
+        # E-1800: verify the land left no untracked residue under paths it
+        # newly un-ignored — tests the outcome rather than trusting a post-land
+        # script exists. Runs after the script (so a script's cleanup is
+        # credited) and before the best-effort reap. Non-fatal to the merge
+        # (already advanced) but raises to exit non-zero if residue remains.
+        _check_post_land_residue(main_root, canonical, ignored_before)
 
         # Best-effort sweep: clean up older landed worktrees that have
         # passed their TTL. Failure here doesn't unwind the land.

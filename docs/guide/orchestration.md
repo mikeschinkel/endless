@@ -110,6 +110,10 @@ If a task's change needs a one-time action on **main** *after* it lands — most
 - **Failure is non-fatal and loud.** The merge already advanced main, so a non-zero exit never unwinds the land — endless prints a warning naming the script, exit code, cwd, and the command to re-run it, then reports the land as done. Write the script so re-running it is safe; that is how a failed run is finished.
 - Absent script → nothing happens. Present but not executable → a warning, and the step is skipped (the land still succeeds).
 
+#### Post-land residue check
+
+After the post-land script runs (or if none was shipped), `worktree land` verifies the *outcome*: it compares the files that were ignored-and-present on main **before** the land against the files that are untracked-and-present **after** it, and the intersection is **residue** — files a path this land un-ignored left behind that neither the merge nor any script removed. Empty intersection → silent (the common case, and every land that un-ignores nothing). Non-empty → a loud, actionable error listing the residual paths and pointing at the script that should have removed them (or noting none was shipped). It is **non-fatal** — the merge already advanced main — but the land **exits non-zero** so automation notices, because a *later* land could otherwise sweep the residue into a commit. Intentionally-tracked content under an un-ignored path is tracked, never untracked, so it passes silently.
+
 ### Abandoning a worktree
 
 ```bash
