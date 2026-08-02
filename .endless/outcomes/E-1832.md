@@ -21,13 +21,14 @@ feedback on friction is welcome: when something is wrong or surprising, say so.
 Endless drives a toolchain rather than replacing it. Install these and have them on
 your `PATH` before building:
 
-- **git** and **tmux** — tmux is required at runtime, not just for the layout below:
-  `spawn`, session navigation, and inter-session messaging all refuse to run without it.
+- **[git](https://git-scm.com/)** and **[tmux](https://github.com/tmux/tmux)** — tmux is
+  required at runtime, not just for the layout below: `spawn`, session navigation, and
+  inter-session messaging all refuse to run without it.
 - **[just](https://github.com/casey/just)** — the command runner used for build/install.
-- **Go 1.26+** — builds the Go binaries.
-- **[uv](https://github.com/astral-sh/uv)** with **Python 3.12+** — runs and installs the Python CLI.
+- **[Go](https://go.dev/) 1.26+** — builds the Go binaries.
+- **[uv](https://github.com/astral-sh/uv)** with **[Python](https://www.python.org/) 3.12+** — runs and installs the Python CLI.
 - **[templ](https://templ.guide/)** and **[tailwindcss](https://tailwindcss.com/)** — invoked by the build.
-- **sqlite3** and **jq** — used by tooling and the verification scripts.
+- **[sqlite3](https://www.sqlite.org/)** and **[jq](https://jqlang.org/)** — used by tooling and the verification scripts.
 
 Endless does not yet install these for you; wiring up prerequisite setup that
 respects your existing package manager (Homebrew, asdf/mise, system packages, …) is
@@ -67,12 +68,23 @@ endless project register --infer
 # 2. Add a task.
 endless task add "Build the login flow" --description "Email + password auth"
 
-# 3. See what's on your plate, across every registered project.
-endless task show --all
+# 3. See your tasks — the full list, or just the most recently touched.
+endless task list
+endless task recent
 
-# 4. Spawn a task into its own Claude session — its own tmux window,
-#    git worktree, and sandbox, with a generated handoff as the opening prompt.
+# 4. Read one task in detail.
+endless task show E-123
+
+# 5. Spawn a task into its own Claude session — its own tmux window, git
+#    worktree, and sandbox, with a generated handoff as the opening prompt.
 endless task spawn E-123
+```
+
+### Watching your sessions
+
+```bash
+endless session status     # one-shot snapshot of the current session's focal task
+endless session monitor    # the same view kept live, like `top`; Ctrl-C to exit
 ```
 
 ### Working layout
@@ -81,13 +93,23 @@ Endless is meant to be driven from tmux. The layout we use is a single window sp
 into three panes:
 
 - **Left** — your Claude Code session, doing the work.
-- **Top right** — `endless session monitor`, a live top-like view that redraws as
-  your sessions change state, so you can watch every session at a glance.
+- **Top right** — `endless session monitor`, redrawing as your sessions change state
+  so you can watch every session at a glance.
 - **Bottom right** — a free shell for ad-hoc `endless` commands.
 
 `endless task spawn` opens each task's session in its own tmux window. Automating
 this three-pane layout, and shipping the tmux configuration Endless needs alongside
 the repo, are both in progress — until then you arrange the panes yourself.
+
+### Exploring the CLI
+
+Every command and subcommand self-documents with `--help`:
+
+```bash
+endless --help
+endless task --help
+endless task spawn --help
+```
 
 ## Task lifecycle
 
@@ -133,21 +155,6 @@ stateDiagram-v2
     completed --> [*]
 ```
 <!-- END canonical:docs/status-lifecycle.mmd -->
-
-## Digging deeper
-
-The full reference — project and task management, sessions and spawning, the data
-model underneath — lives in the guide: [`docs/guide/index.md`](docs/guide/index.md).
-
-The guide is written for a Claude Code session driving Endless, but it's the most
-complete and up-to-date reference for humans too. Once Endless is installed you can
-also read it from the terminal:
-
-```bash
-endless guide              # the main guide
-endless guide --list       # list every topic
-endless guide tasks        # a specific topic
-```
 
 ## Roadmap & vision
 
