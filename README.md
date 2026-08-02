@@ -1,6 +1,24 @@
 # Endless — Manage 50+ Claude Code tasks without going insane
 
-Endless is a project awareness system for solo developers managing multiple projects with AI assistants. It allows managing a myriad of software projects using AI without losing track of the details.
+Endless is a project awareness system for solo developers running many software
+projects with AI assistants. It keeps track of **what you're working on**,
+**why**, and **whether you declared your intent** before making changes — so you
+can juggle a myriad of projects with AI without losing the thread on any of them.
+
+It provides:
+
+- A **task tree** — hierarchical items representing what needs to be done, across
+  every registered project.
+- **Decisions** as first-class artifacts — the rationale that lives alongside tasks,
+  not lost in chat scrollback.
+- **Per-task git worktrees** — each task's work happens on its own isolated branch,
+  so `main` stays clean and sessions run in parallel without stepping on each other.
+- **Session tracking** — records which AI session is working on which task.
+- **Enforcement** (optional) — a hook that can block Write/Edit until you claim a task.
+- A **web dashboard** at `http://localhost:8484` (start with `endless serve`).
+
+Endless is in active development — expect rough edges, expect change. Honest
+feedback on friction is welcome: when something is wrong or surprising, say so.
 
 ## Install
 
@@ -8,9 +26,10 @@ Endless is a project awareness system for solo developers managing multiple proj
 just install
 ```
 
-This builds Go binaries to `./bin/`, symlinks them to `/usr/local/bin/`, and installs the Python CLI via `uv tool`.
+This builds the Go binaries to `./bin/`, symlinks them to `/usr/local/bin/`, and
+installs the Python CLI via `uv tool`.
 
-## Build
+To build without installing, or to run the tests:
 
 ```bash
 just build    # templ generate, tailwind CSS, Go binaries
@@ -23,163 +42,36 @@ Endless depends on a [fork of `modelcontextprotocol/go-sdk`](https://github.com/
 go env -w GOPRIVATE=github.com/mikeschinkel/*
 ```
 
-## CLI Reference
+## Getting started
 
-### Project Management
-
-#### Register a project
+Point Endless at a project, give it something to do, and watch it in the dashboard.
 
 ```bash
-endless project register \
-  [<path>] \
-  [--infer] \
-  [--name <name>] \
-  [--label <label>] \
-  [--desc <text>] \
-  [--lang <lang>] \
-  [--status active|paused|archived|idea]
-```
-
-```bash
-# Register current directory, auto-detect metadata
+# 1. Register the current directory as a project (auto-detect metadata).
+cd ~/Projects/myapp
 endless project register --infer
 
-# Register a specific path with explicit fields
-endless project register ~/Projects/myapp --name myapp --label "My App" --lang Go --status active
-```
+# 2. Add a task.
+endless task add "Build the login flow" --description "Email + password auth"
 
-#### List and inspect projects
-
-```bash
-endless project list [--status active|paused|archived|idea] [--group]
-endless project status [<name>]
-```
-
-```bash
-endless project list
-endless project list --status active
-endless project list --group
-endless project status myapp
-```
-
-#### Modify project fields
-
-```bash
-endless project set <field>=<value> [--path <partial_path>]
-endless project set <project>.<field>=<value> [--path <partial_path>]
-````
-Fields: `name`, `label`, `description`, `status`, `language`, `group_name`
-
-```bash
-# From within the project directory
-endless project set label="My Application"
-endless project set status=paused
-
-# From anywhere, prefix with project name
-endless project set myapp.label="My Application"
-endless project set myapp.lang=Go
-
-# Disambiguate if multiple projects share a name
-endless project set myapp.lang=Go --path Projects/work
-```
-
-#### Other project commands
-
-```bash
-endless project rename <old_name> <new_name> [--path <partial_path>]
-endless project discover [<path>] [--all] [--reset]
-endless project unregister <name>
-endless project purge <name>
-```
-
-```bash
-endless project rename oldname newname
-endless project discover ~/Projects
-endless project unregister myapp
-endless project purge myapp
-```
-
-### Task Management
-
-Tasks form a tree. Each task can have child tasks. The `tasks` table stores title, description, full text, prompt, and type.
-
-#### View tasks
-
-```bash
-endless task show [--project <name>] [--all]
-endless task detail <task_id>
-```
-
-```bash
-endless task show
+# 3. See what's on your plate, across all projects.
 endless task show --all
-endless task detail 445
+
+# 4. Open the dashboard.
+endless serve            # then visit http://localhost:8484
 ```
 
-#### Add tasks
+From here, day-to-day work flows through claiming a task (which creates its
+worktree), doing the work on that branch, marking it for verification, and landing
+it. The full loop — and the way Endless is designed to be driven by an AI coding
+session — is covered in the guide below.
 
-```bash
-endless task add <title> \
-  [--description <text>] \
-  [--parent <task_id>] \
-  [--phase urgent|now|next|later|maybe] \
-  [--type todo|bugfix|research|epic|brainstorm] \
-  [--project <name>]
-```
+## Task lifecycle
 
-```bash
-endless task add "Build dashboard" --description "Web dashboard for project status"
-endless task add "Fix login bug" --parent 444 --description "Auth token expires too early"
-endless task add "Refactor DB layer" --phase next
-endless task add "Design auth system" --type plan
-```
-
-#### Import tasks from files
-
-```bash
-endless task import \
-  [<file>] \ 
-  [--project <name>] \
-  [--replace] \
-  [--parent <task_id>] \
-  [--from-claude]
-```
-
-```bash
-endless task import PLAN.md --project endless
-endless task import PLAN.md --project endless --replace
-endless task import subplan.md --project endless --parent 445
-endless task import --from-claude --project endless
-```
-
-#### Update a task
-
-```bash
-endless task update <id> \
-  [--status unplanned|submitted|ready|underway|unverified|completed|blocked|revisit] \
-  [--title <title>] \
-  [--description <text>] \
-  [--text <inline> | --text-file <path>] \
-  [--parent <task_id>]
-```
-
-```bash
-# Change status
-endless task update 445 --status ready
-
-# Update title and description
-endless task update 441 --title "Dependency Graph" --description "Track cross-project deps"
-
-# Load full task text from a file
-endless task update 449 --text plan-markdown-component.md
-
-# Move a task under a different parent (0 = make root)
-endless task update 506 --parent 443
-```
-
-#### Task status lifecycle
-
-An agent sets `submitted` (by attaching a plan, or `task submit` when the description is a sufficient spec); a human runs `task approve` to reach `ready`. `ready` therefore means *approved*, not merely *planned* — background sessions may pick up only `ready` work.
+Every task moves through a small set of statuses. An agent moves a task to
+`submitted` (by attaching a plan, or via `endless task submit` when the description
+is a sufficient spec); a human runs `endless task approve` to reach `ready`. So
+`ready` provably means *approved to implement*, not merely *planned*.
 
 <!-- BEGIN canonical:docs/status-lifecycle.mmd — edit the canonical file, then re-sync; do not hand-edit here -->
 ```mermaid
@@ -215,105 +107,25 @@ stateDiagram-v2
 ```
 <!-- END canonical:docs/status-lifecycle.mmd -->
 
-#### Track progress
+## Digging deeper
+
+The full reference — project and task management, documents and notes, the web
+dashboard, hooks, session orchestration, and the underlying data model — lives in
+the guide:
 
 ```bash
-endless task claim <task_id>
-endless task complete <task_id>
-endless task remove <task_id>
+endless guide              # the main guide
+endless guide --list       # list every topic
+endless guide tasks        # a specific topic
 ```
 
-```bash
-endless task claim 445
-endless task complete 445
-endless task remove 445
-```
+The guide is written for an AI coding session driving Endless, but it's the most
+complete and up-to-date reference for humans too. Start there when you want more
+than the getting-started path above.
 
-#### Spawn a session for a task
+## Roadmap & vision
 
-```bash
-endless task prompt <task_id>
-endless task spawn <task_id> [--project <name>]
-endless task chat
-```
-
-```bash
-# Review the prompt that will be sent
-endless task prompt 445
-
-# Spawn a new tmux window with Claude working on the task's prompt
-endless task spawn 445
-
-# Start a chat session without task tracking
-endless task chat
-```
-
-### Documents & Notes
-
-```bash
-endless project scan [--project <name>] [--docs-only]
-endless docs [<name>] [--type <type>]
-```
-
-```bash
-endless project scan
-endless project scan --project myapp --docs-only
-endless docs myapp
-endless docs --type readme
-```
-
-```bash
-endless  notes [<name>] [--all]
-endless  note add <message> [--project <name>]
-endless  note resolve <note_id>
-```
-
-```bash
-endless notes myapp
-endless notes --all
-endless note add "Review auth token expiry" --project myapp
-endless note resolve 42
-```
-
-### Web Dashboard
-
-```
-endless serve                     Start the web dashboard
-  --port INTEGER                  Port (default: 8484)
-```
-
-Routes:
-- `/` — Dashboard homepage
-- `/status` — Project status (master-detail with task tree)
-- `/status/<name>` — Project-specific status
-- `/project/<name>` — Project detail (tasks, activity, notes, deps)
-- `/project/<name>/tasks` — Full task list
-
-### Hooks & Setup
-
-```bash
-endless setup prompt-hook         Install ZSH prompt hook
-endless setup remove-prompt-hook  Remove ZSH prompt hook
-endless setup claude-hook         Install Claude Code hook
-endless setup remove-claude-hook  Remove Claude Code hook
-```
-
-The Claude Code hook handles:
-- **SessionStart**: Injects task context
-- **PreToolUse**: Blocks Write/Edit without active task session
-- **PostToolUse**: Detects file changes, tracks plan file path on session
-- **ExitPlanMode**: Syncs the accepted plan, using the tracked file path
-- **Stop/SessionEnd**: Ends the session, records file changes
-
-## Database
-
-SQLite at `~/.config/endless/endless.db`. Key tables:
-
-- `projects` — registered projects
-- `tasks` — hierarchical task tree (title, description, text, prompt, type, parent_id)
-- `ai_sessions` — Claude/Codex session tracking with active_goal_id and plan_file_path
-- `activity` — hook-captured activity events
-- `file_changes` — detected file modifications
-- `notes` — project notes and alerts
-- `documents` — tracked document metadata
-- `task_deps` — cross-item and cross-project dependencies
+- [`ROADMAP.md`](ROADMAP.md) — what exists today versus what's planned, for anyone
+  who wants to use, suggest improvements for, or contribute to Endless.
+- [`VISION.md`](VISION.md) — the envisioned end state: what we imagine Endless
+  becoming.
