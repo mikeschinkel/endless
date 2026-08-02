@@ -47,8 +47,10 @@ When implementation is verified, land the work with `endless worktree land <id>`
 %% asserts they match). Blocking is a relation (blocked_by), not a state, so it
 %% is intentionally absent.
 stateDiagram-v2
-    [*] --> unplanned
+    [*] --> unevaluated
 
+    unevaluated --> unplanned: evaluator routes (needs a plan)
+    unevaluated --> submitted: evaluator routes (description sufficient)
     unplanned --> submitted: agent submits (plan attached OR description sufficient)
     submitted --> ready: user approves
     ready --> underway: session claims

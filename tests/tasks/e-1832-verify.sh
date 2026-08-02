@@ -140,39 +140,59 @@ check_readme_content() {
     local body
     body=$(cat "${README}")
 
-    section "B1 — README leads with what Endless is"
-    assert_contains "keeps the project tagline" "Many projects, all at once." "${body}"
-    assert_contains "elevator: task tree" "task tree" "${body}"
-    assert_contains "elevator: decisions as first-class artifacts" "first-class artifacts" "${body}"
-    assert_contains "elevator: per-task worktrees" "Per-task git worktrees" "${body}"
-    assert_contains "elevator: session tracking" "Session tracking" "${body}"
-    assert_contains "elevator: web dashboard" "web dashboard" "${body}"
+    section "B1 — README leads with the current tagline + elevator"
+    assert_contains "uses the new tagline" "Manage 50+ AI tasks without becoming overwhelmed" "${body}"
+    assert_not_contains "drops the old tagline" "Many projects, all at once." "${body}"
+    assert_contains "elevator: many Claude Code sessions at once" "many Claude Code sessions at once" "${body}"
+    assert_contains "elevator: per-task worktree + sandbox" "config/DB sandbox" "${body}"
+    assert_contains "elevator: verification-script handoff" "verification script" "${body}"
+    assert_contains "elevator: session monitor at a glance" "at a glance" "${body}"
+    assert_contains "elevator: built on git + append-only ledger" "append-only ledger" "${body}"
 
-    section "B2 — Install + Getting started sections present"
+    section "B2 — deprecated/de-emphasized features are gone"
+    assert_not_contains "no 'task tree' framing" "task tree" "${body}"
+    assert_not_contains "no 'first-class artifacts' decisions pitch" "first-class artifacts" "${body}"
+    assert_not_contains "no deprecated 'endless serve'" "endless serve" "${body}"
+    assert_not_contains "no web-dashboard pitch" "web dashboard" "${body}"
+
+    section "B3 — Prerequisites + Install + Getting started present"
+    assert_contains "Prerequisites section" "## Prerequisites" "${body}"
+    assert_contains "prereq: just" "just" "${body}"
+    assert_contains "prereq: Go" "Go 1.26+" "${body}"
+    assert_contains "prereq: uv/Python" "Python 3.12+" "${body}"
+    assert_contains "prereq: tmux" "tmux" "${body}"
+    assert_contains "prereq: jq" "jq" "${body}"
     assert_contains "Install section" "## Install" "${body}"
     assert_contains "install command" "just install" "${body}"
     assert_contains "Getting started section" "## Getting started" "${body}"
     assert_contains "first-use: register a project" "project register" "${body}"
     assert_contains "first-use: add a task" "task add" "${body}"
+    assert_contains "first-use: spawn a task" "task spawn" "${body}"
 
-    section "B3 — CLI-reference bulk moved out"
+    section "B4 — CLI-reference bulk moved out"
     assert_not_contains "no '## CLI Reference' heading" "## CLI Reference" "${body}"
     assert_not_contains "no '### Project Management' heading" "### Project Management" "${body}"
     assert_not_contains "no '### Task Management' heading" "### Task Management" "${body}"
     assert_not_contains "no '### Documents & Notes' heading" "### Documents & Notes" "${body}"
-    assert_not_contains "no '### Web Dashboard' heading" "### Web Dashboard" "${body}"
-    assert_not_contains "no '### Hooks & Setup' heading" "### Hooks & Setup" "${body}"
     assert_not_contains "no '## Database' schema dump" "## Database" "${body}"
 
-    section "B4 — links out to guide, roadmap, vision"
-    assert_contains "points to the guide" "endless guide" "${body}"
-    assert_contains "notes the guide targets an AI/Claude session" "AI coding session" "${body}"
+    section "B5 — session monitor + tmux working layout documented"
+    assert_contains "documents the working layout" "Working layout" "${body}"
+    assert_contains "documents session monitor" "session monitor" "${body}"
+
+    section "B6 — links to the guide FILE (usable on GitHub, pre-install)"
+    assert_contains "links to docs/guide/index.md" "docs/guide/index.md" "${body}"
+    assert_contains "notes the guide targets a Claude Code session" "Claude Code session driving Endless" "${body}"
     assert_contains "links to ROADMAP.md" "ROADMAP.md" "${body}"
     assert_contains "links to VISION.md" "VISION.md" "${body}"
 
-    section "B5 — task lifecycle stays discoverable in README"
+    section "B7 — task lifecycle documents the new 'unevaluated' entry status"
     assert_contains "keeps a task-lifecycle section" "## Task lifecycle" "${body}"
-    assert_contains "lifecycle prose explains the approve gate" "approved to implement" "${body}"
+    assert_contains "prose introduces 'unevaluated'" "unevaluated" "${body}"
+    assert_contains "prose explains the approve gate" "approved to implement" "${body}"
+    # The canonical mermaid must carry the new upstream status (layer A already
+    # asserts byte-identity; this pins the actual content the invariant guards).
+    assert_contains "canonical block: [*] enters at unevaluated" "[*] --> unevaluated" "${body}"
 }
 
 # ─── main ───────────────────────────────────────────────────────────────────

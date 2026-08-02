@@ -1,24 +1,37 @@
 # Endless — Manage 50+ Claude Code tasks without going insane
 
-Endless is a project awareness system for solo developers running many software
-projects with AI assistants. It keeps track of **what you're working on**,
-**why**, and **whether you declared your intent** before making changes — so you
-can juggle a myriad of projects with AI without losing the thread on any of them.
+Endless lets one developer run many Claude Code sessions at once — each tracked by
+an Endless "task" and with its own Git worktree and its own config/DB sandbox, so
+nothing collides. You have Claude file a task, collaborate on a plan, then spawn the
+plan into a new Claude session.
 
-It provides:
+Then, when Claude has finished implementation it hands back a runnable verification
+script for you to check and then merge the branch back into the main Git branch. A
+live session monitor view shows every session at a glance.
 
-- A **task tree** — hierarchical items representing what needs to be done, across
-  every registered project.
-- **Decisions** as first-class artifacts — the rationale that lives alongside tasks,
-  not lost in chat scrollback.
-- **Per-task git worktrees** — each task's work happens on its own isolated branch,
-  so `main` stays clean and sessions run in parallel without stepping on each other.
-- **Session tracking** — records which AI session is working on which task.
-- **Enforcement** (optional) — a hook that can block Write/Edit until you claim a task.
-- A **web dashboard** at `http://localhost:8484` (start with `endless serve`).
+This is all built on plain Git and an append-only ledger. You collaborate with
+others on any project simply by pushing and pulling commits and allowing Endless to
+orchestrate the rest.
 
 Endless is in active development — expect rough edges, expect change. Honest
 feedback on friction is welcome: when something is wrong or surprising, say so.
+
+## Prerequisites
+
+Endless drives a toolchain rather than replacing it. Install these and have them on
+your `PATH` before building:
+
+- **git** and **tmux** — tmux is required at runtime, not just for the layout below:
+  `spawn`, session navigation, and inter-session messaging all refuse to run without it.
+- **[just](https://github.com/casey/just)** — the command runner used for build/install.
+- **Go 1.26+** — builds the Go binaries.
+- **[uv](https://github.com/astral-sh/uv)** with **Python 3.12+** — runs and installs the Python CLI.
+- **[templ](https://templ.guide/)** and **[tailwindcss](https://tailwindcss.com/)** — invoked by the build.
+- **sqlite3** and **jq** — used by tooling and the verification scripts.
+
+Endless does not yet install these for you; wiring up prerequisite setup that
+respects your existing package manager (Homebrew, asdf/mise, system packages, …) is
+planned.
 
 ## Install
 
@@ -44,7 +57,7 @@ go env -w GOPRIVATE=github.com/mikeschinkel/*
 
 ## Getting started
 
-Point Endless at a project, give it something to do, and watch it in the dashboard.
+Point Endless at a project, give it a task, and work that task in its own session.
 
 ```bash
 # 1. Register the current directory as a project (auto-detect metadata).
@@ -54,24 +67,36 @@ endless project register --infer
 # 2. Add a task.
 endless task add "Build the login flow" --description "Email + password auth"
 
-# 3. See what's on your plate, across all projects.
+# 3. See what's on your plate, across every registered project.
 endless task show --all
 
-# 4. Open the dashboard.
-endless serve            # then visit http://localhost:8484
+# 4. Spawn a task into its own Claude session — its own tmux window,
+#    git worktree, and sandbox, with a generated handoff as the opening prompt.
+endless task spawn E-123
 ```
 
-From here, day-to-day work flows through claiming a task (which creates its
-worktree), doing the work on that branch, marking it for verification, and landing
-it. The full loop — and the way Endless is designed to be driven by an AI coding
-session — is covered in the guide below.
+### Working layout
+
+Endless is meant to be driven from tmux. The layout we use is a single window split
+into three panes:
+
+- **Left** — your Claude Code session, doing the work.
+- **Top right** — `endless session monitor`, a live top-like view that redraws as
+  your sessions change state, so you can watch every session at a glance.
+- **Bottom right** — a free shell for ad-hoc `endless` commands.
+
+`endless task spawn` opens each task's session in its own tmux window. Automating
+this three-pane layout, and shipping the tmux configuration Endless needs alongside
+the repo, are both in progress — until then you arrange the panes yourself.
 
 ## Task lifecycle
 
-Every task moves through a small set of statuses. An agent moves a task to
-`submitted` (by attaching a plan, or via `endless task submit` when the description
-is a sufficient spec); a human runs `endless task approve` to reach `ready`. So
-`ready` provably means *approved to implement*, not merely *planned*.
+Every task moves through a small set of statuses. New tasks start `unevaluated`; an
+evaluator routes each one to `unplanned` (it still needs a plan) or straight to
+`submitted` (its description is already a sufficient spec). An agent also reaches
+`submitted` by attaching a plan. From there a human runs `endless task approve` to
+reach `ready` — so `ready` provably means *approved to implement*, not merely
+*planned*.
 
 <!-- BEGIN canonical:docs/status-lifecycle.mmd — edit the canonical file, then re-sync; do not hand-edit here -->
 ```mermaid
@@ -82,8 +107,10 @@ is a sufficient spec); a human runs `endless task approve` to reach `ready`. So
 %% asserts they match). Blocking is a relation (blocked_by), not a state, so it
 %% is intentionally absent.
 stateDiagram-v2
-    [*] --> unplanned
+    [*] --> unevaluated
 
+    unevaluated --> unplanned: evaluator routes (needs a plan)
+    unevaluated --> submitted: evaluator routes (description sufficient)
     unplanned --> submitted: agent submits (plan attached OR description sufficient)
     submitted --> ready: user approves
     ready --> underway: session claims
@@ -109,19 +136,18 @@ stateDiagram-v2
 
 ## Digging deeper
 
-The full reference — project and task management, documents and notes, the web
-dashboard, hooks, session orchestration, and the underlying data model — lives in
-the guide:
+The full reference — project and task management, sessions and spawning, the data
+model underneath — lives in the guide: [`docs/guide/index.md`](docs/guide/index.md).
+
+The guide is written for a Claude Code session driving Endless, but it's the most
+complete and up-to-date reference for humans too. Once Endless is installed you can
+also read it from the terminal:
 
 ```bash
 endless guide              # the main guide
 endless guide --list       # list every topic
 endless guide tasks        # a specific topic
 ```
-
-The guide is written for an AI coding session driving Endless, but it's the most
-complete and up-to-date reference for humans too. Start there when you want more
-than the getting-started path above.
 
 ## Roadmap & vision
 
