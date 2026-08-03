@@ -2,6 +2,7 @@ package monitor
 
 import (
 	"database/sql"
+	"os"
 	"sync"
 )
 
@@ -30,10 +31,17 @@ func SetTestDB(db *sql.DB) (restore func()) {
 	dbOnce.Do(func() {}) // mark consumed so DB() returns dbConn directly
 	dbConn = db
 	dbErr = nil
-	// Non-empty dbContextDir satisfies the E-1429 self-dev-worktree gate
-	// for tests running from inside the worktree. The value is opaque to
-	// the gate; only its non-empty-ness matters.
-	dbContextDir = "test-injected"
+	// dbContextDir must be non-empty to satisfy the E-1429 self-dev-worktree
+	// gate, and ABSOLUTE so ConfigDir()-derived writes (config.json, the
+	// machine-local diagnostic log at log/user-machine.jsonl) land in a throwaway
+	// temp dir instead of a relative "test-injected/" under the package's working
+	// tree. An absolute temp dir keeps such writes out of the repo; RemoveAll in
+	// restore cleans it up.
+	tmpCfg, err := os.MkdirTemp("", "endless-testcfg-")
+	if err != nil {
+		tmpCfg = "test-injected" // last resort: keep the gate satisfied
+	}
+	dbContextDir = tmpCfg
 
 	return func() {
 		dbOnce = prevOnce
@@ -42,5 +50,8 @@ func SetTestDB(db *sql.DB) (restore func()) {
 		dbContextDir = prevCtxDir
 		dbPathOverride = prevPathOverride
 		dbContextFromFlag = prevFromFlag
+		if tmpCfg != "test-injected" {
+			os.RemoveAll(tmpCfg)
+		}
 	}
 }

@@ -5,14 +5,17 @@
 package events
 
 import (
+	"bufio"
 	"database/sql"
 	"encoding/json"
+	"os"
 	"path/filepath"
 	"strconv"
 	"testing"
 
 	_ "modernc.org/sqlite"
 
+	"github.com/mikeschinkel/endless/internal/monitor"
 	"github.com/mikeschinkel/endless/internal/schema"
 	"github.com/mikeschinkel/endless/internal/tasktype"
 )
@@ -27,6 +30,10 @@ func newClaimTestDB(t *testing.T) *sql.DB {
 	}
 	t.Cleanup(func() { db.Close() })
 	db.SetMaxOpenConns(1)
+	// Route ConfigDir() (and thus the machine-local diagnostic log written by
+	// the claim/release executors) to an isolated temp dir so tests never append
+	// to the developer's real ~/.config/endless log.
+	t.Cleanup(monitor.SetTestDB(db))
 	if _, err := db.Exec(schema.SQL); err != nil {
 		t.Fatalf("apply schema: %v", err)
 	}
@@ -280,5 +287,97 @@ func TestRelease_ClearsBothTaskAndEpic(t *testing.T) {
 	}
 	if epicID.Valid {
 		t.Errorf("active_epic_id = %v, want NULL after release", epicID)
+	}
+}
+
+// readDiagLog decodes every line of the machine-local diagnostic log at the
+// current (test-isolated) ConfigDir(). Absent file → nil.
+func readDiagLog(t *testing.T) []map[string]any {
+	t.Helper()
+	f, err := os.Open(filepath.Join(monitor.ConfigDir(), "log", "user-machine.jsonl"))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		t.Fatalf("open diag log: %v", err)
+	}
+	defer f.Close()
+	var out []map[string]any
+	sc := bufio.NewScanner(f)
+	for sc.Scan() {
+		var m map[string]any
+		if err := json.Unmarshal(sc.Bytes(), &m); err != nil {
+			t.Fatalf("decode diag line %q: %v", sc.Text(), err)
+		}
+		out = append(out, m)
+	}
+	return out
+}
+
+// TestClaim_LogsActiveTaskRebind (E-1857): the claim executor records the
+// active_task_id transition in the diagnostic log — the trail a silent rebind
+// would otherwise leave nowhere.
+func TestClaim_LogsActiveTaskRebind(t *testing.T) {
+	db := newClaimTestDB(t)
+	seedClaimSession(t, db, 42)
+	seedTask(t, db, 100, nil, int(tasktype.TaskTypeTask), "ready")
+	seedTask(t, db, 200, nil, int(tasktype.TaskTypeTask), "ready")
+
+	if _, err := execTaskClaimed(db, claimEvent(t, 100, 42)); err != nil {
+		t.Fatalf("claim 100: %v", err)
+	}
+	if _, err := execTaskClaimed(db, claimEvent(t, 200, 42)); err != nil {
+		t.Fatalf("claim 200: %v", err)
+	}
+
+	entries := readDiagLog(t)
+	if len(entries) != 2 {
+		t.Fatalf("diag entries = %d, want 2", len(entries))
+	}
+	// The rebind (100 -> 200) is the diagnostically critical line.
+	rebind := entries[1]
+	if rebind["reason"] != "claim-event" {
+		t.Errorf("reason = %v, want claim-event", rebind["reason"])
+	}
+	if rebind["old_active_task_id"] != float64(100) {
+		t.Errorf("old_active_task_id = %v, want 100", rebind["old_active_task_id"])
+	}
+	if rebind["new_active_task_id"] != float64(200) {
+		t.Errorf("new_active_task_id = %v, want 200", rebind["new_active_task_id"])
+	}
+	if rebind["session_id"] != "sess-42" {
+		t.Errorf("session_id = %v, want sess-42", rebind["session_id"])
+	}
+}
+
+// TestRelease_LogsClear (E-1857): the release executor records the active_task_id
+// being NULLed.
+func TestRelease_LogsClear(t *testing.T) {
+	db := newClaimTestDB(t)
+	seedClaimSession(t, db, 42)
+	seedTask(t, db, 100, nil, int(tasktype.TaskTypeTask), "ready")
+
+	if _, err := execTaskClaimed(db, claimEvent(t, 100, 42)); err != nil {
+		t.Fatalf("claim: %v", err)
+	}
+	if _, err := execTaskReleased(db, releaseEvent(t, 100, 42)); err != nil {
+		t.Fatalf("release: %v", err)
+	}
+
+	entries := readDiagLog(t)
+	var rel map[string]any
+	for _, e := range entries {
+		if e["reason"] == "release" {
+			rel = e
+		}
+	}
+	if rel == nil {
+		t.Fatalf("no release line; entries=%v", entries)
+	}
+	if rel["old_active_task_id"] != float64(100) {
+		t.Errorf("old_active_task_id = %v, want 100", rel["old_active_task_id"])
+	}
+	if _, present := rel["new_active_task_id"]; present {
+		t.Errorf("new_active_task_id present = %v, want omitted (NULL)", rel["new_active_task_id"])
 	}
 }

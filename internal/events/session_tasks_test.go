@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/mikeschinkel/endless/internal/monitor"
 	"github.com/mikeschinkel/endless/internal/schema"
 	_ "modernc.org/sqlite"
 )
@@ -24,6 +25,10 @@ func newSessionTasksTestDB(t *testing.T) *sql.DB {
 	}
 	t.Cleanup(func() { db.Close() })
 	db.SetMaxOpenConns(1)
+	// Route ConfigDir() (and thus the machine-local diagnostic log written by
+	// the claim/release executors) to an isolated temp dir so tests never append
+	// to the developer's real ~/.config/endless log.
+	t.Cleanup(monitor.SetTestDB(db))
 	if _, err := db.Exec(schema.SQL); err != nil {
 		t.Fatalf("apply schema: %v", err)
 	}

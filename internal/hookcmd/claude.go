@@ -1055,11 +1055,30 @@ func trySpawnBind(projectID int64, payload claudePayload) bool {
 	if taskID <= 0 {
 		return false
 	}
+	snap := monitor.SnapshotSession(payload.SessionID)
 	if err := monitor.BindSessionToTask(payload.SessionID, projectID, taskID); err != nil {
 		log.Printf("spawn-bind session %s to task %d: %v", payload.SessionID, taskID, err)
 		return false
 	}
+	logSessionBind(payload.SessionID, snap, taskID, monitor.SessionLogSpawnBind, "hookcmd.trySpawnBind")
 	return true
+}
+
+// logSessionBind records one BindSessionToTask transition in the machine-local
+// diagnostic log. new_state is always 'working' — that is what BindSessionToTask
+// sets on a successful bind. Best-effort; never returns an error.
+func logSessionBind(sessionID string, snap monitor.SessionSnapshot, taskID int64, reason monitor.SessionLogReason, caller string) {
+	newTaskID := taskID
+	monitor.LogSessionTxn(monitor.SessionTxn{
+		SessionGUID:     sessionID,
+		ShortID:         snap.ShortID,
+		OldState:        snap.State,
+		NewState:        "working",
+		OldActiveTaskID: snap.ActiveTaskID,
+		NewActiveTaskID: &newTaskID,
+		Reason:          reason,
+		Caller:          caller,
+	})
 }
 
 // maybeCwdBind runs the cwd-derived SessionStart auto-bind when the spawn-marker
@@ -1121,7 +1140,11 @@ func autoBindFromCwd(projectID int64, payload claudePayload) {
 	if worktreeOwnedByLiveOther(projectRoot, payload.CWD, payload.SessionID) {
 		return
 	}
-	_ = monitor.BindSessionToTask(payload.SessionID, projectID, taskID)
+	snap := monitor.SnapshotSession(payload.SessionID)
+	if err := monitor.BindSessionToTask(payload.SessionID, projectID, taskID); err != nil {
+		return
+	}
+	logSessionBind(payload.SessionID, snap, taskID, monitor.SessionLogCwdBind, "hookcmd.autoBindFromCwd")
 }
 
 // worktreeOwnedByLiveOther reports whether the worktree containing cwd holds a

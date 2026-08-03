@@ -823,7 +823,11 @@ func execTaskClaimed(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 	// subquery mirrors monitor.nearestEpicAncestor's recursive CTE, keeping the
 	// write a single atomic statement rather than exporting the helper. A NULL
 	// result also clears any stale epic id left from a prior claim.
-	if _, err := db.Exec(
+	// Snapshot the session's pre-write state (within this tx) so the
+	// machine-local diagnostic log can record the active_task_id transition —
+	// the single-pointer rebind that otherwise leaves no trail.
+	snap := monitor.SnapshotSessionByID(db, p.SessionID)
+	res, err := db.Exec(
 		`UPDATE sessions
 		    SET active_task_id = ?,
 		        -- Revive an 'ended' row on bind (E-1686), mirroring TouchSession's
@@ -845,9 +849,11 @@ func execTaskClaimed(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 		        )
 		  WHERE id = ?`,
 		taskID, taskID, p.SessionID,
-	); err != nil {
+	)
+	if err != nil {
 		return nil, fmt.Errorf("events: claim task: %w", err)
 	}
+	logSessionClaim(res, snap, taskID)
 	if shouldRecordSessionTouch(evt) {
 		// Claimed → the session's goal task.
 		if err := upsertSessionTask(db, evt.Actor.SessionID, mustParseInt64(evt.Entity.ID), sessiontaskrelation.RelationGoal); err != nil {
@@ -905,12 +911,15 @@ func execTaskReleased(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 	taskID := evt.Entity.ID
 	// Clear active_epic_id alongside active_task_id so a released coordinator
 	// session does not keep a stale epic prefix / auto-resolve target.
-	if _, err := db.Exec(
+	snap := monitor.SnapshotSessionByID(db, p.SessionID)
+	res, err := db.Exec(
 		"UPDATE sessions SET active_task_id = NULL, active_epic_id = NULL WHERE id = ? AND active_task_id = ?",
 		p.SessionID, taskID,
-	); err != nil {
+	)
+	if err != nil {
 		return nil, fmt.Errorf("events: release task: %w", err)
 	}
+	logSessionRelease(res, snap)
 	if shouldRecordSessionTouch(evt) {
 		// Touched a pre-existing task (not claimed) → revisited.
 		if err := upsertSessionTask(db, evt.Actor.SessionID, mustParseInt64(evt.Entity.ID), sessiontaskrelation.RelationRevisited); err != nil {
@@ -918,6 +927,50 @@ func execTaskReleased(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 		}
 	}
 	return &ExecuteResult{}, nil
+}
+
+// logSessionClaim records the claim UPDATE in the machine-local diagnostic log
+// (E-1857). Skipped when the UPDATE matched no session row. new_state mirrors the
+// SQL's revive CASE: an 'ended' row becomes 'needs_input', any other state is
+// left as-is.
+func logSessionClaim(res sql.Result, snap monitor.SessionSnapshot, taskID string) {
+	if n, err := res.RowsAffected(); err != nil || n == 0 {
+		return
+	}
+	newState := snap.State
+	if newState == "ended" {
+		newState = "needs_input"
+	}
+	newTaskID := mustParseInt64(taskID)
+	monitor.LogSessionTxn(monitor.SessionTxn{
+		SessionGUID:     snap.SessionGUID,
+		ShortID:         snap.ShortID,
+		OldState:        snap.State,
+		NewState:        newState,
+		OldActiveTaskID: snap.ActiveTaskID,
+		NewActiveTaskID: &newTaskID,
+		Reason:          monitor.SessionLogClaimEvent,
+		Caller:          "events.execTaskClaimed",
+	})
+}
+
+// logSessionRelease records the release UPDATE in the machine-local diagnostic
+// log (E-1857). Skipped when the UPDATE matched no row (the session was not
+// bound to this task). new_active_task_id is nil: release NULLs active_task_id.
+func logSessionRelease(res sql.Result, snap monitor.SessionSnapshot) {
+	if n, err := res.RowsAffected(); err != nil || n == 0 {
+		return
+	}
+	monitor.LogSessionTxn(monitor.SessionTxn{
+		SessionGUID:     snap.SessionGUID,
+		ShortID:         snap.ShortID,
+		OldState:        snap.State,
+		NewState:        snap.State, // release does not change state
+		OldActiveTaskID: snap.ActiveTaskID,
+		NewActiveTaskID: nil,
+		Reason:          monitor.SessionLogRelease,
+		Caller:          "events.execTaskReleased",
+	})
 }
 
 // execTaskDepCreated inserts a task→task relation row and records a session
