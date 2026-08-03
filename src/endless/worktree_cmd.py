@@ -46,7 +46,7 @@ COMPANION_FILENAME = ".endless/worktree.json"
 LOCK_FILENAME = ".endless/worktree.lock"
 
 # Auto-committed file globs per E-987 (locked), modified by E-1141:
-# verbs.json is in (ambient agent-driven churn); config.json is out
+# verbs.jsonl is in (ambient agent-driven churn); config.json is out
 # (deliberate human/agent edits whose attribution the user controls).
 # Land treats these as endless-managed: dirty state in any of these does
 # not block land; instead, land auto-commits them as a separate commit
@@ -59,7 +59,6 @@ LOCK_FILENAME = ".endless/worktree.lock"
 AUTO_COMMIT_GLOBS = (
     ".endless/db-ledger/*.jsonl",
     ".endless/verbs.jsonl",
-    ".endless/verbs.json",  # legacy — still seen during E-1268 migration
 )
 
 # E-1736: the DB ledger directory, as a git pathspec. A commit under here

@@ -33,11 +33,10 @@ import (
 // Mirrors src/endless/worktree_cmd.py AUTO_COMMIT_GLOBS — keep the two in sync.
 // (The companion .endless/worktree.json/.lock are gitignored and
 // .claude/settings.json is skip-worktree'd, so none of those ever surface in
-// `git status`; only these three globs can.)
+// `git status`; only these globs can.)
 var AutoManagedStatusGlobs = []string{
 	".endless/db-ledger/*.jsonl",
 	".endless/verbs.jsonl",
-	".endless/verbs.json",
 }
 
 // AnomalyKind is the closed set of worktree anomaly categories. Not DB-backed

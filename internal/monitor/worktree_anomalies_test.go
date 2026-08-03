@@ -172,14 +172,21 @@ func TestIsAutoManagedPath(t *testing.T) {
 	managed := []string{
 		".endless/db-ledger/2026-07.jsonl",
 		".endless/verbs.jsonl",
-		".endless/verbs.json",
 	}
 	for _, p := range managed {
 		if !isAutoManagedPath(p) {
 			t.Errorf("isAutoManagedPath(%q) = false, want true", p)
 		}
 	}
-	unmanaged := []string{"src/foo.go", ".endless/plans/E-1.md", ".claude/settings.json"}
+	// .endless/verbs.json is deprecated and dropped from the glob list (E-1858):
+	// the E-1268 migration is complete, so it is never produced and is no longer
+	// auto-managed.
+	unmanaged := []string{
+		"src/foo.go",
+		".endless/plans/E-1.md",
+		".claude/settings.json",
+		".endless/verbs.json",
+	}
 	for _, p := range unmanaged {
 		if isAutoManagedPath(p) {
 			t.Errorf("isAutoManagedPath(%q) = true, want false", p)

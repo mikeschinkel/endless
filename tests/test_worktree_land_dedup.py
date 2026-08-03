@@ -82,10 +82,11 @@ def test_auto_commit_globs_includes_verbs_jsonl():
     assert any(fnmatch.fnmatch(".endless/verbs.jsonl", p) for p in AUTO_COMMIT_GLOBS)
 
 
-def test_auto_commit_globs_still_includes_legacy_verbs_json():
-    """Legacy verbs.json stays in the glob list during the migration window
-    so any stragglers get auto-committed instead of blocking land."""
-    assert any(fnmatch.fnmatch(".endless/verbs.json", p) for p in AUTO_COMMIT_GLOBS)
+def test_auto_commit_globs_excludes_legacy_verbs_json():
+    """Legacy verbs.json is dropped from the glob list (E-1858): the E-1268
+    migration is complete, so the deprecated path is never produced and no
+    longer needs an auto-commit slot. The live verbs.jsonl entry stays."""
+    assert not any(fnmatch.fnmatch(".endless/verbs.json", p) for p in AUTO_COMMIT_GLOBS)
 
 
 def test_auto_commit_globs_excludes_config():
