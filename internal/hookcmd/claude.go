@@ -1099,7 +1099,49 @@ func autoBindFromCwd(projectID int64, payload claudePayload) {
 	if taskID <= 0 {
 		return
 	}
+	// E-1856: the auto-bind is a fallback to fill an UNBOUND session's
+	// active_task_id from its cwd worktree — never a re-pointer. A resume
+	// (`claude --resume`), /clear, or /compact fires SessionStart with the
+	// session's existing binding intact; when the resumed process's cwd is a
+	// DIFFERENT task's worktree, overwriting active_task_id would silently steal
+	// the session away from the task it belongs to, leaving that task
+	// unreachable via `session goto`/`session resume`. Only bind when the
+	// session has no active task yet (the E-1291/E-1700 fallback case) or
+	// already points at this worktree's task (idempotent).
+	if session, err := monitor.GetActiveSession(payload.SessionID); err == nil &&
+		session != nil && session.ActiveTaskID != nil && *session.ActiveTaskID != taskID {
+		return
+	}
+	// E-1856: never bind into a worktree a LIVE sibling session already owns.
+	// handleWorktreeAdoption refuses this case upstream and short-circuits
+	// SessionStart, but the auto-bind must be correct in isolation rather than
+	// trusting that call order — otherwise any path that reaches it (or a future
+	// re-order) would silently make the incoming session a phantom co-owner of
+	// the task, stealing its active_task_id pointer.
+	if worktreeOwnedByLiveOther(projectRoot, payload.CWD, payload.SessionID) {
+		return
+	}
 	_ = monitor.BindSessionToTask(payload.SessionID, projectID, taskID)
+}
+
+// worktreeOwnedByLiveOther reports whether the worktree containing cwd holds a
+// worktree lock owned by a DIFFERENT, still-alive session. It gates the cwd
+// auto-bind (E-1856). Returns false when cwd is not inside a worktree, the lock
+// is absent or stale, or the lock is held by selfSession — none of which
+// represent a live sibling owner to defer to.
+func worktreeOwnedByLiveOther(projectRoot, cwd, selfSession string) bool {
+	worktreeRoot, err := monitor.FindWorktreeRoot(cwd, projectRoot)
+	if err != nil || worktreeRoot == "" {
+		return false
+	}
+	lock, err := monitor.ReadWorktreeLock(worktreeRoot)
+	if err != nil || lock == nil {
+		return false
+	}
+	if lock.SessionID == selfSession {
+		return false
+	}
+	return !monitor.IsWorktreeLockStale(lock)
 }
 
 // resolveCwdTaskID walks up from cwd looking for an endless worktree
