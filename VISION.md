@@ -1,106 +1,124 @@
-# Vision
+# Vision for Endless
 
-*What we envision Endless will be.*
+*Manage 50+ AI tasks without becoming overwhelmed.*
 
-Endless started small. One developer, a growing pile of software projects, and a
-new kind of collaborator, Claude Code, that could actually do the work if you kept
-it pointed in the right direction. The hard part was never getting a single
-session to write code. The hard part was keeping track of a dozen of them at once:
-which one was researching, which was mid-refactor, which had finished and was
-waiting on you, and what each was even supposed to be doing. Endless began as the
-answer to that, a way to manage many concurrent AI sessions, first across terminal
-tabs, then across tmux windows, without losing the thread.
+Endless started small. One person, a growing pile of software projects, and a new
+kind of collaborator, Claude Code, that could actually do the work for you if you
+managed to keep it focused on what you think is important while also reining in its
+worst impulses.
 
-That origin still describes what Endless does today. But it is not what we envision
-Endless will be.
+But the hard part was never getting a single session to write code. The hard part
+was keeping track of all of them, all at once: which one was researching, which was
+mid-refactor, which had finished and was waiting on you, and what each was even
+supposed to be doing.
 
-## The arc
+Endless began as the answer to that: a way to manage many concurrent AI sessions,
+first across terminal tabs, then across tmux windows, without losing the thread.
 
-We think the interesting future is not one developer steering many sessions on
-their own projects. It is *many* developers, each steering many AI-agent sessions,
-collaborating on the same shared projects, with Endless as the substrate
-underneath that makes it hold together.
+That origin still describes what Endless does today. But we envision Endless becoming
+much more, and that vision is expansive, so before laying it out, one reassurance:
 
-The shift is one of role. A developer's job stops being *doing the work* and
-becomes *steering the work*: directing research, coding, bug-fixing, and
-brainstorming across a fleet of sessions rather than typing every change by hand.
-We think that shift lets a person hold something like two orders of magnitude more
-concurrent work in flight than they could before. That is only livable if the
-tooling absorbs the coordination cost instead of handing it back to the human.
-Everything below is in service of that.
+## Start Where You Are
 
-## Steering, not typing
+**None** of this has to be adopted all at once.
 
-The unit of work is a task, and the loop runs through it. A developer has Claude
-Code file the task or tasks, works with it to shape a plan, and then spawns each
-task into its own session: a fresh window, a task-specific git worktree, and an
-isolated config-and-database sandbox so nothing collides with anything else. The
-session works the plan on its own. When it is done, it hands back a verification
-script, a concrete and runnable way to confirm the change does what it claimed.
-The developer runs it, gains confidence, and lands the work, merging the worktree
-back into `main`.
+Install Endless and keep using Claude Code exactly as you do today; nothing about
+your workflow has to change on the first day.
+Then, as you grow comfortable, lean on more of what Endless offers: let it file and
+track your tasks, spawn them into isolated worktrees, sandbox their state, and hand
+back verification you can check with a single command. The on-ramp is a single step,
+and the value compounds as you take the next ones.
 
-The point of that loop is that the human stays at the altitude of intent. They
-decide *what* should happen and *whether it happened*, and delegate the rest. We
-envision that loop getting richer over time: tasks that start unattended in the
-background and get promoted to the foreground when they need attention, plans that
-carry more of their own context, verification that a second agent can
-adversarially challenge. But the shape stays the same. The person steers, the
-agents drive.
+## For Each Person, a Myriad of Concurrent Tasks
 
-## Lowering the human's review burden
+Endless' goal is for a single person to be able to direct tens, and maybe even
+hundreds, of concurrent Claude Code sessions, each working on its own bespoke task.
 
-If there is one thing we want Endless to be known for, it is this: **it should
-cost a human as little attention as possible to stay in control.**
+Spinning up many agents is, by itself, table stakes now; so is having more than one
+person on a project. Instead, Endless aspires to make a single person >10x more
+productive, measured by how many independent tasks they can carry forward at the same
+time without becoming so overwhelmed they are no longer able to manage them all.
+
+Users should be able to scale their in-progress work smoothly from one Claude Code
+session to a fleet of them, without the workflow needing to change except for how
+many tasks are in flight.
+
+The shift is one of role. A person's job stops being *development* and instead
+becomes *product management* and *project management*. They steer the work:
+directing research, coding, bug-fixing, and brainstorming across a fleet of
+sessions. This is only possible if the tooling absorbs the coordination cost instead
+of handing it back to the human. Endless' reason for being is to provide that
+coordination.
+
+## The Fundamental Unit: the Task
+
+The unit of work is a task. An Endless user has Claude Code file a task or tasks,
+works with Claude to shape a plan, and then spawns each task into its own Claude
+session: a fresh tmux window, a task-specific Git worktree, and an isolated
+config-and-DB sandbox so nothing collides with anything else. The session works the
+plan concurrently with all the others.
+
+Then, when Claude is done working, it hands back a verification script: a concrete
+and runnable way to confirm the change does what it claimed. The user runs it, gains
+confidence, and lands the work, merging the worktree back into `main`.
+
+The human stays focused on the intent. They decide *what* should be implemented, in what order, and then verify that it was in fact implemented, while delegating the rest.
+
+Every task, even one that starts unattended, runs as a first-class session a person can watch, interrupt, and redirect, rather than a lightweight background agent running without the user being able to chat with it. A task might begin in the background and move to the foreground when it needs attention, but it always stays a real, steerable session.
+
+## Lowering the Human's Review Burden
+
+If there is one thing Endless aspires to provide, it is to minimize the attention required of a human to produce results.
 
 Steering a hundred sessions is worthless if each one demands the same scrutiny a
-single session would. The bottleneck stops being the work and starts being the
-review. So we treat the human's attention as the scarcest resource in the system
-and design against spending it.
+single session would. The bottleneck becomes the human attention required for
+direction and then review. So Endless treats the human's attention as a scarce
+resource and designs around the expenditure of that resource.
 
-That has consequences everywhere. Agents report back in structured, skimmable
-form, the shape of what changed, what was verified, what is still open, rather than
-in walls of prose a person has to reconstruct meaning from. The tool computes what
-it can compute and does not make the human re-derive it. A session hands over a way
-to *check* its work instead of asking to be *trusted*. When nothing needs a
-decision, it says nothing; when something does, it surfaces exactly that. The
-ambition is a system where a developer can hold an enormous amount of work in
-flight and still, at a glance, know what is true, because the tooling did the
-tedious part of knowing for them.
+Agents report back in structured, skimmable form, the shape of what changed, what was verified, what is still open, rather than in walls of prose a person has to reconstruct meaning from. The CLI computes what it can compute and does not make the human re-derive it. Sessions encapsulate verification of a task into a single deliverable unit that can be evaluated by the user with one command or click.
 
-This is not a feature. It is the philosophy the features answer to.
+When the user needs to make a decision or take an action, the agent asks or directs;
+otherwise Endless urges Claude to stay quiet. Endless seeks to rein in Claude's
+penchant for demanding the user spend attention reviewing the summaries it
+regurgitates only to demonstrate that it completed its task.
 
-## Collaboration through git, not a server
+The aim is to let a person juggle an enormous amount of work in flight and still, at
+a glance, know the status of every task, because the tooling does the tedious part
+for them rather than delegating it to the agent.
 
-For many developers to share a project, most tools reach for a central server, a
-service that owns the truth and that everyone has to be online to talk to. We do
-not want that. We envision developers collaborating the way they already
-collaborate on code: through ordinary git. You push, you pull, and your local view
-of every task, plan, and decision rebuilds itself from the same committed history
-everyone else has. There is no central authority to run, to trust, or to be down.
-Two people can work the same project at the same time and never collide.
+This philosophy is a key feature of Endless.
 
-## The ledger underneath
+## Sharing a Project
 
-None of the above works without a foundation you can trust, so at the bottom of
-Endless is an append-only ledger: a JSONL write-ahead log that is the actual source
-of record. The database everyone queries is a projection of that log, rebuildable
-at any time, never the authority itself. History is written once and never
-rewritten; when the shape of the data needs to change, we replay the log into the
-new shape rather than editing the past. That is deliberately invisible plumbing.
-But it is what lets many developers share one project over plain git, lets each
-task run isolated from the rest, and lets the whole system be rebuilt from first
-principles whenever it needs to be. The reliability of everything above rests on
-it.
+Because the work is organized this way, more than one person can share a project
+without much ceremony. Rather than a central server that owns the truth and that
+everyone has to be online to reach, Endless leans on the tool already used for code
+collaboration: Git. You push, you pull, and your local view of every task, plan, and
+decision rebuilds itself from the same committed history everyone else has. There is
+no central authority needed to run, and two people can work the same project at once
+without colliding.
 
-## Where this goes
+## The Ledger Underneath
 
-We are honest that much of this is still ahead of us. Endless today does the
-single-developer part well and is reaching toward the rest. We would rather state
-the direction plainly and be measured against it than pretend the destination is
-already here.
+Under all of this is a version-controlled log of activity: an append-only JSONL ledger, a write-ahead log that is the actual source of record. The database everyone queries is a projection of that log, rebuildable at any time, never the authority
+itself.
 
-The direction is steady: give a person the ability to direct a great deal of
-software work through AI agents, keep the cost of staying in control low enough
-that the ability is real, and make the whole thing shareable through the tools
-developers already use. That is what we envision Endless will be.
+History is written once and never rewritten; when the shape of the data needs to
+change, the log is replayed into the new shape rather than the past being edited. It
+is deliberately invisible plumbing, but it is what lets each task run isolated from
+the rest, lets a project be shared over plain Git, and lets the whole system be
+rebuilt whenever it needs to be.
+
+## Where do we go from here?
+
+Much of this is still ahead. Endless today handles single-session and small-fleet
+well. What Endless strives for is the rest.
+
+Our direction is immutable though: let a person direct a copious amount of work
+through AI agents, minimize the human attention required, and build it using tools
+many people already use.
+
+And once all this functionality is in place, Endless believes that it will become
+the empowering technology that you will not be able to envision living without.
+
+That is what Endless is meant to become.

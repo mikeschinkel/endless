@@ -8,10 +8,11 @@
 # What it proves (VISION.md is a documentation deliverable, so the checks are
 # on the published file's content):
 #   1. VISION.md exists at the repo root.
-#   2. It carries the agreed tagline "What we envision Endless will be".
+#   2. It carries the agreed tagline "Manage 50+ AI tasks without becoming overwhelmed".
 #   3. It is prose, NOT a table or exists/planned split (that job belongs to
 #      ROADMAP.md) — no markdown table rows, no "Exists today"/"Planned" columns.
-#   4. It tells the arc: single-developer origin -> multi-developer substrate.
+#   4. It tells the arc: single-developer origin -> one person steering tens to
+#      hundreds of concurrent bespoke-task sessions (the 10x-100x throughput leap).
 #   5. It develops the core tenets (steering fleet of sessions, the task loop
 #      with worktree/sandbox/verification, collaboration over git, the ledger).
 #   6. "Lowering the review burden" gets headline billing (its own section).
@@ -73,10 +74,10 @@ else
     report_fail "H1 heading" "'# Vision' present" "not found"
 fi
 
-if has "What we envision Endless will be"; then
-    report_pass "tagline 'What we envision Endless will be' present"
+if has "Manage 50+ AI tasks without becoming overwhelmed"; then
+    report_pass "tagline 'Manage 50+ AI tasks without becoming overwhelmed' present"
 else
-    report_fail "tagline" "'What we envision Endless will be'" "not found"
+    report_fail "tagline" "'Manage 50+ AI tasks without becoming overwhelmed'" "not found"
 fi
 
 # ─── prose, not a table (that is ROADMAP.md's job) ──────────────────────────
@@ -105,7 +106,7 @@ fi
 
 # ─── the arc: single-developer origin -> multi-developer future ─────────────
 
-section "Substance — the single-dev to multi-dev arc"
+section "Substance — one developer, many concurrent tasks"
 
 if has "tmux" || has "concurrent"; then
     report_pass "names the single-developer / many-concurrent-sessions origin"
@@ -113,10 +114,12 @@ else
     report_fail "origin" "mentions tmux or concurrent sessions" "not found"
 fi
 
-if has "many developers" || has "multi-developer"; then
-    report_pass "names the many-developers future"
+# The reframed headline: one person's throughput, not multi-developer as the
+# killer feature. Look for the concurrency multiplier + bespoke-per-task claim.
+if has "bespoke" && { has "10x" || has "100x" || has "tens" || has "hundreds"; }; then
+    report_pass "names the single-person concurrency multiplier (bespoke tasks, 10x-100x)"
 else
-    report_fail "future" "mentions many/multi developers" "not found"
+    report_fail "throughput leap" "bespoke tasks + 10x/100x/tens/hundreds" "not found"
 fi
 
 # ─── the tenets ─────────────────────────────────────────────────────────────
