@@ -1987,7 +1987,7 @@ def _require_completable_verb_for_completed(
     task_type: str | None = None,
 ):
     """E-1240: `completed` is gated to tasks whose title's lead verb is
-    marked `completable: true` in verbs.json. Reserves the status for
+    marked `completable: true` in verbs.jsonl. Reserves the status for
     findings-as-deliverable work (audits, research, reviews, …) and keeps
     implementation tasks on the `unverified`/`confirmed`/`assumed` track.
 
@@ -2302,7 +2302,7 @@ def mark_completed_item(item_id: int, outcome: str):
     """E-1240: Mark a findings-as-deliverable task as `completed`.
 
     Gated by `--outcome` (required) and by `completable: true` on the
-    task title's lead verb in verbs.json. Distinct from `confirmed`
+    task title's lead verb in verbs.jsonl. Distinct from `confirmed`
     (behavior verified) and `assumed` (behavior believed correct,
     awaiting promotion). Use for Audit/Research/Investigate/Review-style
     tasks whose deliverable is the outcome text itself."""

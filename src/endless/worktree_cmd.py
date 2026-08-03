@@ -2127,13 +2127,13 @@ def land_worktree(
                     f"auto-commit failed: {e.stderr or e}"
                 )
 
-        # Step 3.5: dedup the worktree's verbs.json against main's, committing
+        # Step 3.5: dedup the worktree's verbs.jsonl against main's, committing
         # the bundled result on the worktree's branch (E-1141 / E-1138).
         try:
             _dedup_worktree_verbs_against_main(worktree_path, main_root)
         except subprocess.CalledProcessError as e:
             raise click.ClickException(
-                f"verbs.json dedup on worktree failed: {e.stderr or e}"
+                f"verbs.jsonl dedup on worktree failed: {e.stderr or e}"
             )
 
         # Step 3.7: drop orphan auto-amend commits at branch base (E-1342).

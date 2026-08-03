@@ -334,8 +334,8 @@ def _ensure_default_seeds() -> None:
     """Seed defaults into the machine layer when missing.
 
     Idempotent. Matchers seed into ~/.config/endless/config.json; verbs seed
-    into the separate ~/.config/endless/verbs.json file (E-1124). Project
-    layer is never auto-seeded.
+    into the separate ~/.config/endless/verbs.jsonl file (E-1124, JSONL per
+    E-1268). Project layer is never auto-seeded.
     """
     cfg_path = machine_config_path()
     cfg_data = _load_json(cfg_path)
@@ -349,7 +349,7 @@ def _ensure_default_seeds() -> None:
 
 
 def _migrate_verbs_to_separate_file(config_path: Path, verbs_path: Path) -> None:
-    """One-time: extract verbs from a config.json file into a sibling verbs.json.
+    """One-time: extract verbs from a config.json file into a sibling verbs.jsonl.
 
     Handles two pre-E-1124 shapes that may exist in `config_path`:
 
@@ -358,10 +358,10 @@ def _migrate_verbs_to_separate_file(config_path: Path, verbs_path: Path) -> None
       2. Post-E-1117 / pre-E-1124: a top-level `verbs: [{value, definition}]`
          array key on the config object.
 
-    Both are extracted into the `verbs.json` file at `verbs_path` (top-level
-    JSON array), deduplicated by value (existing verbs.json entries take
-    precedence on conflict). The corresponding fields are removed from
-    `config_path` afterwards.
+    Both are extracted into the `verbs.jsonl` file at `verbs_path` (one JSON
+    object per line, JSONL per E-1268), deduplicated by value (existing
+    verbs.jsonl entries take precedence on conflict). The corresponding fields
+    are removed from `config_path` afterwards.
 
     Idempotent. No-op when `config_path` doesn't exist, has no migration-
     eligible content, or the config layer is empty.
@@ -570,8 +570,8 @@ def load_all_verbs() -> list[dict]:
 
     Project entries take precedence on conflict (same value, different
     definition). Triggers migration + default seeding via load_all_matchers.
-    Reads from .endless/verbs.json (project) and ~/.config/endless/verbs.json
-    (machine) per E-1124.
+    Reads from .endless/verbs.jsonl (project) and ~/.config/endless/verbs.jsonl
+    (machine) per E-1124 (JSONL per E-1268).
     """
     load_all_matchers()
     project = _load_verbs_list(project_verbs_path()) if project_verbs_path() else []
@@ -956,7 +956,7 @@ def _commit_project_verbs(verb_value: str) -> None:
 
 
 def remove_verb(*, value: str, machine_only: bool = False) -> tuple[int, int]:
-    """Remove a verb from the appropriate verbs.json files.
+    """Remove a verb from the appropriate verbs.jsonl files.
 
     Returns (project_removals, machine_removals).
     """
@@ -970,7 +970,7 @@ def remove_verb(*, value: str, machine_only: bool = False) -> tuple[int, int]:
 
 
 def _remove_verb_from_file(path: Path, value: str) -> int:
-    """Remove all entries with matching `value` from verbs.json at `path`."""
+    """Remove all entries with matching `value` from verbs.jsonl at `path`."""
     if not path.exists():
         return 0
     verbs = _load_verbs_list(path)
