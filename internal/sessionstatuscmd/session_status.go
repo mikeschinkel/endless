@@ -67,6 +67,24 @@ const (
 	// single-width. Appended after the pre-existing members so sortRows' enum
 	// ranking is unchanged.
 	actUnknown
+	// actDone: a terminal-status task (confirmed/assumed/declined/obsolete/
+	// completed) whose work never landed — E-1871. Before this it fell through
+	// classify()'s switch to actUnknown, so the most ordinary rows in the ledger
+	// wore ⁇, the should-never-happen glyph, and drowned out its diagnostic value
+	// (declined/obsolete never land, so they hit it ALWAYS). ⇥ (U+21E5 RIGHTWARDS
+	// ARROW TO BAR) reads as a terminus and measures single-width (asserted in
+	// TestActionIcons), so the fixed 13-col prefix stays aligned.
+	//
+	// ⏚ landed WINS over ⇥: classify() checks r.Landed before the status switch,
+	// so a landed terminal task reads ⏚ and ⇥ marks only closed work that never
+	// merged — the informative case. TestClassify pins that precedence.
+	//
+	// APPENDED, not inserted: enum order is both legend order and sortRows' rank,
+	// so appending leaves every existing rank untouched (the rule E-1750 followed
+	// for actUnknown). Closed rows therefore sort last under --all, below the ⁇
+	// anomaly rows — an unhandled status deserves more prominence than a finished
+	// task.
+	actDone
 )
 
 // actionMeta maps each action to its legend glyph and label, indexed by the
@@ -84,6 +102,7 @@ var actionMeta = [...]struct{ icon, label string }{
 	actOrphan:  {"◷", "orphan"},
 	actLanded:  {"⏚", "landed"},
 	actUnknown: {"⁇", "unknown"},
+	actDone:    {"⇥", "closed"},
 }
 
 func (a action) icon() string  { return actionMeta[a].icon }
@@ -457,6 +476,16 @@ func classify(r monitor.SessionStatusRow) action {
 	// status switch.
 	if r.Landed {
 		return actLanded
+	}
+	// E-1871: a terminal status is a terminus, not a verb — route it to actDone
+	// (⇥ closed) rather than letting it fall through the switch's default to
+	// actUnknown (⁇), which is reserved for a status classify() does not know
+	// about. Delegated to isTerminal rather than re-listed as switch cases so the
+	// two cannot drift; a switch case cannot call a function, hence the if. It sits
+	// AFTER the r.Landed check on purpose — ⏚ landed outranks ⇥ closed, so ⇥ marks
+	// only closed work that never merged.
+	if isTerminal(r.Status) {
+		return actDone
 	}
 	switch r.Status {
 	case "ready":

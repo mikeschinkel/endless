@@ -3,7 +3,35 @@ package sessionstatuscmd
 import (
 	"strings"
 	"testing"
+
+	"github.com/mikeschinkel/endless/internal/monitor"
 )
+
+// TestDoPlanIDsExcludesClosed pins --tree's one dependency on classify(): the
+// backlog admits actDo and actPlan and nothing else. E-1871 moved terminal rows
+// from actUnknown to actDone — neither is admitted, so the tree is unchanged, but
+// nothing pinned that before, and a future action added to the switch would slip
+// closed work into the implementation-order backlog silently.
+func TestDoPlanIDsExcludesClosed(t *testing.T) {
+	rows := []monitor.SessionStatusRow{
+		{ID: 1, Status: "ready"},     // do — admitted
+		{ID: 2, Status: "unplanned"}, // plan — admitted
+		{ID: 3, Status: "confirmed"}, // closed (⇥)
+		{ID: 4, Status: "declined"},  // closed (⇥)
+		{ID: 5, Status: "obsolete"},  // closed (⇥)
+		{ID: 6, Status: "blocked"},   // unknown (⁇)
+	}
+	got := doPlanIDs(rows)
+	want := []int64{1, 2}
+	if len(got) != len(want) {
+		t.Fatalf("doPlanIDs = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("doPlanIDs = %v, want %v", got, want)
+		}
+	}
+}
 
 // renderForestString builds and renders the backlog forest for a synthetic
 // candidate set, so the layering + rendering can be asserted without a DB.

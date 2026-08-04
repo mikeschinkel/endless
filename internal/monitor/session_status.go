@@ -33,9 +33,11 @@ type SessionStatusRow struct {
 	IsFrom    bool
 	InFlight  bool
 	// Landed is true when the task has >=1 task_landings row (its work has
-	// merged). classify() routes a landed non-terminal task to the catch-all ⁇
-	// bucket so merged work is never offered as a fresh actionable verb (E-1693);
-	// the focal/parent/from/in-flight decorations still win over it.
+	// merged). classify() routes a landed task to actLanded (⏚) so merged work is
+	// never offered as a fresh actionable verb (E-1693; the ⁇ catch-all this
+	// comment used to name was split into ⏚ landed + ⁇ unknown by E-1750). The
+	// focal/parent/from/in-flight decorations still win over it, and ⏚ in turn
+	// wins over ⇥ closed for a landed terminal task (E-1871).
 	Landed bool
 	// Unsettled is the landed-vs-worktree delta the flat view marks with ◆
 	// (E-1701): the task's worktree exists AND diverges from main — modified
@@ -257,7 +259,8 @@ enr AS (
      ) AND b.id <> (SELECT tid FROM ftask)) AS in_flight,
     -- E-1693: the task's work has already merged (>=1 task_landings row). A
     -- landed non-terminal task stays visible (it still passes the terminal-status
-    -- filter) but the renderer routes it to ⁇ other? rather than a fresh ▶/✎/☑.
+    -- filter) but the renderer routes it to ⏚ landed rather than a fresh ▶/✎/☑
+    -- (E-1750 split the old ⁇ catch-all this line used to name into ⏚ + ⁇).
     EXISTS(SELECT 1 FROM task_landings tl WHERE tl.task_id = b.id) AS landed,
     (SELECT count(*) FROM task_deps d JOIN tasks blk ON blk.id = d.source_id
        WHERE d.source_type = 'task' AND d.target_type = 'task'

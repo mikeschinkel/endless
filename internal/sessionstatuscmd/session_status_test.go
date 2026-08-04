@@ -36,11 +36,48 @@ func TestClassify(t *testing.T) {
 		{"non-landed underway still orphan", monitor.SessionStatusRow{Status: "underway"}, actOrphan},
 		// Decoration still wins: a landed task a live session is on reads ⟳ doing.
 		{"landed in-flight still doing", monitor.SessionStatusRow{Status: "ready", Landed: true, InFlight: true}, actDoing},
+		// E-1871: every terminal status is a terminus (⇥ closed), NOT the ⁇
+		// should-never-happen glyph it used to fall through to.
+		{"confirmed is closed", monitor.SessionStatusRow{Status: "confirmed"}, actDone},
+		{"assumed is closed", monitor.SessionStatusRow{Status: "assumed"}, actDone},
+		{"declined is closed", monitor.SessionStatusRow{Status: "declined"}, actDone},
+		{"obsolete is closed", monitor.SessionStatusRow{Status: "obsolete"}, actDone},
+		{"completed is closed", monitor.SessionStatusRow{Status: "completed"}, actDone},
+		// Precedence pin: ⏚ landed outranks ⇥ closed, so ⇥ marks only closed work
+		// that never merged. A refactor that moves the isTerminal check above the
+		// r.Landed check breaks these.
+		{"landed confirmed is landed not closed", monitor.SessionStatusRow{Status: "confirmed", Landed: true}, actLanded},
+		{"landed completed is landed not closed", monitor.SessionStatusRow{Status: "completed", Landed: true}, actLanded},
+		// Decorations still outrank both.
+		{"focal confirmed is this", monitor.SessionStatusRow{Status: "confirmed", IsFocal: true}, actThis},
+		{"parent obsolete is parent", monitor.SessionStatusRow{Status: "obsolete", IsParent: true}, actParent},
+		{"from declined is from", monitor.SessionStatusRow{Status: "declined", IsFrom: true}, actFrom},
+		{"in-flight completed is doing", monitor.SessionStatusRow{Status: "completed", InFlight: true}, actDoing},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			if got := classify(c.row); got != c.want {
 				t.Errorf("classify(%s) = %d, want %d", c.name, got, c.want)
+			}
+		})
+	}
+}
+
+// TestTerminalStatusNeverUnknown is the E-1871 regression gate stated as the bug
+// rather than as the fix: NO terminal status may classify as actUnknown, in any
+// undecorated/unlanded combination. ⁇ is load-bearing as a diagnostic ("classify()
+// met a status it does not know about"), so firing it on ordinary closed rows —
+// which is what `endless session status --all` did — destroys that signal. The
+// status list is the one isTerminal recognizes; if a sixth terminal status is ever
+// added there, add it here too.
+func TestTerminalStatusNeverUnknown(t *testing.T) {
+	for _, status := range []string{"confirmed", "assumed", "declined", "obsolete", "completed"} {
+		t.Run(status, func(t *testing.T) {
+			if !isTerminal(status) {
+				t.Fatalf("isTerminal(%q) = false — this test's status list has drifted from isTerminal", status)
+			}
+			if got := classify(monitor.SessionStatusRow{Status: status}); got == actUnknown {
+				t.Errorf("classify(%q) = actUnknown (⁇) — a terminal status must never read as an unhandled one", status)
 			}
 		})
 	}
@@ -56,6 +93,7 @@ func TestActionIcons(t *testing.T) {
 		actOrphan:  "◷",
 		actLanded:  "⏚",
 		actUnknown: "⁇",
+		actDone:    "⇥",
 	}
 	for a, want := range cases {
 		if got := a.icon(); got != want {
@@ -66,6 +104,17 @@ func TestActionIcons(t *testing.T) {
 	// table stay aligned, the same guarantee ⏚/⁇/◆ carry (E-1765).
 	if w := displayWidth("⚑"); w != 1 {
 		t.Errorf("⚑ review glyph display width = %d, want 1", w)
+	}
+	// Same guarantee for ⇥ closed (E-1871) — it replaces ⁇ in column 1, so a
+	// width-2 glyph there would shift the id column on every closed row.
+	if w := displayWidth("⇥"); w != 1 {
+		t.Errorf("⇥ closed glyph display width = %d, want 1", w)
+	}
+	// actDone is APPENDED after actUnknown, never inserted: enum order is both
+	// legend order and sortRows' rank, so an insert would silently re-rank every
+	// action below it.
+	if actDone <= actUnknown {
+		t.Errorf("actDone (%d) must rank after actUnknown (%d) — append, do not insert", actDone, actUnknown)
 	}
 }
 
@@ -78,6 +127,12 @@ func TestSortRows(t *testing.T) {
 		{ID: 7, Status: "unplanned", Phase: "urgent"}, // plan, urgent
 		{ID: 8, Status: "unplanned", Phase: "now"},    // plan, now
 		{ID: 3, InFlight: true, Status: "ready"},      // doing
+		// E-1871: a closed row sorts LAST — after every open row and after the ⁇
+		// anomaly row, because an unhandled status deserves more prominence in the
+		// list than a finished task. Its `urgent` phase is deliberate: rank is
+		// decided by the action enum first, so phase must not pull it up.
+		{ID: 4, Status: "blocked", Phase: "now"},      // unknown (⁇)
+		{ID: 6, Status: "confirmed", Phase: "urgent"}, // closed (⇥)
 	}
 	sortRows(rows)
 	gotOrder := make([]int64, len(rows))
@@ -85,7 +140,8 @@ func TestSortRows(t *testing.T) {
 		gotOrder[i] = r.ID
 	}
 	// this(9) < parent(1) < from(2) < doing(3) < do(5) < plan/urgent(7) < plan/now(8)
-	want := []int64{9, 1, 2, 3, 5, 7, 8}
+	//   < unknown(4) < closed(6)
+	want := []int64{9, 1, 2, 3, 5, 7, 8, 4, 6}
 	for i := range want {
 		if gotOrder[i] != want[i] {
 			t.Fatalf("sort order = %v, want %v", gotOrder, want)
@@ -248,7 +304,32 @@ func TestBuildLegend(t *testing.T) {
 				{Status: "unplanned"}, // plan
 			},
 			want:        "▶ do  ✎ plan",
-			mustNotHave: []string{"orphan", "verify", "landed", "unknown", "done", "blocked", "blocks", "unsettled", "|"},
+			mustNotHave: []string{"orphan", "verify", "landed", "unknown", "closed", "done", "blocked", "blocks", "unsettled", "|"},
+		},
+		// E-1871: an undecorated, unlanded terminal row is the case that used to
+		// advertise "⁇ unknown" for perfectly ordinary done work. It now carries BOTH
+		// ⇥ closed (the column-1 action) and ✓ done (the phase-column marker) — not
+		// redundant: ✓ is what a DECORATED terminal row shows instead, where column 1
+		// is ●/↑/⏚.
+		{
+			name:        "undecorated unlanded terminal row surfaces ⇥ closed and ✓ done, never ⁇",
+			rows:        []monitor.SessionStatusRow{{Status: "confirmed"}},
+			want:        "⇥ closed  ✓ done",
+			mustNotHave: []string{"⁇ unknown"},
+		},
+		{
+			name:        "declined and obsolete — which never land — also read ⇥ closed",
+			rows:        []monitor.SessionStatusRow{{Status: "declined"}, {Status: "obsolete"}},
+			want:        "⇥ closed  ✓ done",
+			mustNotHave: []string{"⁇ unknown"},
+		},
+		// ⏚ wins over ⇥: a terminal task whose work merged is landed, so ⇥ is the
+		// glyph for closed work that never merged — the informative case.
+		{
+			name:        "landed terminal row surfaces ⏚ landed and ✓ done, not ⇥ closed",
+			rows:        []monitor.SessionStatusRow{{Status: "confirmed", Landed: true}},
+			want:        "⏚ landed  ✓ done",
+			mustNotHave: []string{"⇥ closed", "⁇ unknown"},
 		},
 		{
 			name:     "terminal row surfaces ✓ done",
@@ -282,6 +363,15 @@ func TestBuildLegend(t *testing.T) {
 			name:     "unrecognized status surfaces ⁇ unknown",
 			rows:     []monitor.SessionStatusRow{{Status: "blocked"}},
 			mustHave: []string{"⁇ unknown"},
+		},
+		{
+			name: "⇥ closed follows ⁇ unknown in legend order",
+			rows: []monitor.SessionStatusRow{
+				{Status: "confirmed"}, // closed (last in enum)
+				{Status: "blocked"},   // unknown
+				{Status: "ready"},     // do
+			},
+			want: "▶ do  ⁇ unknown  ⇥ closed  ✓ done",
 		},
 		{
 			name:     "blocked decoration",
