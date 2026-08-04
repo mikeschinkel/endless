@@ -1,0 +1,72 @@
+# Add the missing commit-your-work step to the guide's worktree walkthrough
+
+## Problem
+
+`docs/guide/orchestration.md` takes a session from `task claim` (§ Auto-creation
+on claim) through `§ Landing the work` without ever saying **commit your work**.
+
+`worktree land` auto-commits only endless-managed files:
+
+> 1. Auto-commits endless-managed modifications (verbs.jsonl, ledger entries)
+
+A session's own code, tests, and docs are not in that set. So a session that
+follows the guide literally arrives at `worktree land` with its changes
+uncommitted, and the land moves nothing — the rebase and fast-forward carry only
+the ledger churn.
+
+The step has been happening anyway because sessions carried it as a habit. When
+that habit is absent, nothing in the product supplies it.
+
+## Change
+
+### 1. The commit step
+
+Add a subsection to `docs/guide/orchestration.md` between `§ Inspecting` /
+`§ Why a worktree is unsettled` and `§ Landing the work` — it must land *before*
+the land instructions, since that is the order the reader executes.
+
+Content requirements:
+
+- **Commit on the task branch as you work.** Not a single commit at the end;
+  the branch is the reviewable unit and lands as a group of commits.
+- **`worktree land` does not commit your work for you** — state the asymmetry
+  explicitly and point at the auto-commit list so the exception is legible.
+- **Uncommitted work at land time is a no-op land**, which is the failure this
+  section exists to prevent. Point at `endless task unsettled <id>` (E-1865),
+  which reports `modified` precisely when this is about to happen.
+- Do **not** restate the commit-to-main policy (`§ Commit-to-main policy`
+  already owns it) — link to it instead.
+
+### 2. The audit
+
+Sweep the guide for other conventions that currently live only in agent memory.
+Method: for each step a session performs between `claim` and `land`, ask "does
+`endless guide` state this, or has it merely been habitual?" Known candidates to
+check (not a closed list):
+
+- committing (this task)
+- when to run the project-wide regression vs the per-task verify suite
+- whether to update the plan file as the work diverges from it
+- what to do with drive-by findings mid-task (`--cleans-up`)
+
+File a task per genuine gap found rather than expanding this one — the audit's
+output is a list, and each entry is its own change.
+
+## Verification
+
+`tests/tasks/e-1870-verify.sh`:
+
+1. The commit subsection exists in `orchestration.md` and appears **before** the
+   `### Landing the work` heading (assert on line-number ordering, not just
+   presence — placement is the point).
+2. It names `worktree land`'s non-committing of user work.
+3. `just guide-check` exits 0 (the map still resolves; add a `help/` entry only
+   if a new section slug was introduced).
+4. The audit's findings are filed as tasks, or the section records that none
+   were found.
+
+## Notes
+
+- Guide-only change; no code, no schema.
+- The related agent-output-discipline work (E-1785 and children) is about what a
+  session *says*; this is about what the guide *tells it to do*. Distinct.
