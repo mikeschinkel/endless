@@ -28,13 +28,14 @@ When your user gives you a task ID:
    - `cd "$(endless worktree for-task <id>)"` moves only the Bash shell's cwd, not Claude's — file tools still default to main. Prefer `/cd`.
    - run `eval "$(endless shell-init)"` once per shell, then `esu` to cd to your session's worktree *and* export `ENDLESS_SESSION_ID` so subsequent endless commands route through the worktree's source (not the global install). `esu`/`eswt` are complementary to `/cd`: they handle session routing, `/cd` handles Claude's working directory. See **Shell helpers** in `endless guide orchestration`.
 4. Do the work in the worktree.
-5. When implementation is complete:
+5. **Commit your work on the task branch** — `git commit -m "E-<id>: what changed"` from inside the worktree. Endless does not do this for you: it auto-commits only its own files (`verbs.jsonl`, ledger entries, the plan mirror), so uncommitted source makes `worktree land` refuse and leaves your changes stranded. For the exact `git add` (which paths to *exclude*), see **Committing your work** in `endless guide orchestration`.
+6. When implementation is complete:
    - `endless task update <id> --status unverified`, **and**
    - In your reply to the user, include **how to test**: the specific commands, files, or UI actions that verify the change. Don't just say "ready" — say "ready; verify by running X then checking Y." The user shouldn't have to ask.
-6. Report completion to your user with the task ID. Generate the report with `endless task report <id>` and relay its output verbatim — it computes the facts and prints a steering prompt; see **Reporting to your user** in `endless guide tasks`. Example: "Done — E-752 is ready for verification. To verify: run `endless guide --list` and confirm the 4 expected slugs."
-7. **Do not mark `confirmed` yourself.** Only your user does that, after verifying. If you can't easily verify but believe it works, run `endless task assume <id> --outcome "..."` instead.
+7. Report completion to your user with the task ID. Generate the report with `endless task report <id>` and relay its output verbatim — it computes the facts and prints a steering prompt; see **Reporting to your user** in `endless guide tasks`. Example: "Done — E-752 is ready for verification. To verify: run `endless guide --list` and confirm the 4 expected slugs."
+8. **Do not mark `confirmed` yourself.** Only your user does that, after verifying. If you can't easily verify but believe it works, run `endless task assume <id> --outcome "..."` instead.
 
-When implementation is verified, land the work with `endless worktree land <id>` (auto-commits endless-managed files, rebases onto main, fast-forwards, then retains the worktree and its branch; they're cleaned up automatically after a grace period rather than removed immediately).
+When implementation is verified, land the work with `endless worktree land <id>` (auto-commits endless-managed files — **not yours; see step 5** — rebases onto main, fast-forwards, then retains the worktree and its branch; they're cleaned up automatically after a grace period rather than removed immediately).
 
 ## Task statuses
 
@@ -196,6 +197,7 @@ listed separately. (Generated — do not hand-edit; run `/regenerate-guide`.)
 | Topic | Section | Covers |
 |---|---|---|
 | commit-to-main policy | orchestration | When to commit to main vs work only in a worktree. |
+| committing your work | orchestration | You commit your own changes on the task branch; endless commits only its own files. |
 | who am I / current session | sessions | Discovering your session id and the task it's bound to. |
 | preference vs prohibition | decisions | Soft signals ('ideally','usually') are not rules - verify before recording. |
 | the handoff (generated, not authored) | orchestration | Spawned sessions get a rendered handoff; agents never write it. |

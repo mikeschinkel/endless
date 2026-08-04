@@ -2,6 +2,10 @@ topic: commit-to-main policy
 section: orchestration
 covers: When to commit to main vs work only in a worktree.
 
+topic: committing your work
+section: orchestration
+covers: You commit your own changes on the task branch; endless commits only its own files.
+
 topic: who am I / current session
 section: sessions
 covers: Discovering your session id and the task it's bound to.

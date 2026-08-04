@@ -111,6 +111,37 @@ It is the inverse of `task landed`, and it reads the *same* probe that raises th
 
 Distinct from `worktree check`, which reports *handoff anomalies* and is deliberately silent about commits ahead of main (the normal pre-land state). Use `worktree check` at handoff; use `task unsettled` when you want to know why something hasn't landed.
 
+### Committing your work
+
+**Endless never commits your work for you. You commit it, on the task branch, before you hand off and before you land.** Nothing downstream does it on your behalf.
+
+From inside the worktree:
+
+```bash
+git status --short                                   # see what's yours
+git add -A -- ':!.endless/db-ledger' ':!.endless/verbs.jsonl'
+git commit -m "E-<id>: what changed"
+```
+
+Endless auto-commits a fixed, narrow set of its own files — and none of them is your work:
+
+| Path                                                 | Committed by                                       |
+|------------------------------------------------------|----------------------------------------------------|
+| `.endless/verbs.jsonl`                               | endless, on `worktree land`                        |
+| `.endless/db-ledger/*.jsonl`                         | endless, on the main checkout, via the event hook  |
+| `.endless/plans/E-<id>.md`                           | endless, when it writes the plan into the worktree |
+| **everything else — source, docs, tests, config**    | **you, with `git commit`**                          |
+
+The two exclusions in the `git add` above are not cosmetic. Ledger entries are recorded **on the main checkout only**; a ledger commit that rides a task branch into `main` would rebase a branch-authored segment into shared database history, so `land` refuses outright (`the branch has N commits modifying the database ledger`). A blanket `git add -A` in a worktree the event hook has written to is the usual way that happens. Leave both paths alone and let endless commit them.
+
+That same partition is why "auto-commits endless-managed modifications" in step 1 of `land` below is not a safety net for *your* files. If your changes are still uncommitted, `land` refuses:
+
+```
+worktree for E-<id> has uncommitted user changes; cannot land.
+```
+
+The omission surfaces under three different names, all meaning "you never committed": `worktree check` reports the files as a handoff anomaly, `task unsettled` reports the worktree `modified`, and `land` refuses. Commit **before** you flip the task to `unverified` — work that exists only in a dirty working tree isn't reviewable, and the user can't land it without writing your commit for you.
+
 ### Landing the work
 
 When the task is verified (or you're using `assume`):
