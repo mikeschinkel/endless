@@ -239,12 +239,12 @@ def test_list_hides_settled_rows_by_default(registered_project, stub_rows, capsy
     assert "E-2" not in out
 
 
-def test_list_all_includes_settled_rows(registered_project, stub_rows, capsys):
+def test_list_include_settled_shows_settled_rows(registered_project, stub_rows, capsys):
     stub_rows([
         _row(1, unsettled=True, unlanded=True, reason="unlanded (1 commit)"),
         _row(2),
     ])
-    task_cmd.unsettled_list(project_name="my-project", show_all=True)
+    task_cmd.unsettled_list(project_name="my-project", include_settled=True)
     out = capsys.readouterr().out
     assert "E-1" in out and "E-2" in out
 
@@ -287,6 +287,29 @@ def test_list_json_is_a_flat_array(registered_project, stub_rows, capsys):
     assert len(out) == 1
     assert out[0]["id"] == "E-1"
     assert out[0]["unlanded_count"] == 1
+
+
+# ---- the CLI requires an explicit target ------------------------------------
+#
+# The survey walks every worktree on disk and probes each with git, so it must be
+# asked for rather than being what you get by accident.
+
+def _invoke(args):
+    from click.testing import CliRunner
+    from endless.cli import main
+    return CliRunner().invoke(main, ["task", "unsettled", *args])
+
+
+def test_cli_bare_demands_a_target():
+    result = _invoke([])
+    assert result.exit_code != 0
+    assert "--all" in result.output
+
+
+def test_cli_rejects_id_and_all_together():
+    result = _invoke(["1537", "--all"])
+    assert result.exit_code != 0
+    assert "not both" in result.output
 
 
 # ---- truncation notice ------------------------------------------------------

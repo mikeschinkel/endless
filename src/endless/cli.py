@@ -1400,32 +1400,44 @@ def task_landed(item_id, project, show_all, limit, llm, as_json):
 @click.option("--project", default=None,
               help="Project name (default: detect from cwd)")
 @click.option("--all", "show_all", is_flag=True,
-              help="Also list settled worktrees (default: unsettled only)")
+              help="Survey every task worktree in the project")
+@click.option("--include-settled", is_flag=True,
+              help="With --all, also list settled worktrees")
 @click.option("--limit", default=20, type=int,
               help="Max items to show in the list (default: 20)")
 @click.option("--llm", is_flag=True,
               help="Token-efficient output for LLMs")
 @click.option("--json", "as_json", is_flag=True,
               help="JSON output")
-def task_unsettled(item_id, project, show_all, limit, llm, as_json):
+def task_unsettled(item_id, project, show_all, include_settled, limit, llm, as_json):
     """Explain why a task's worktree is unsettled (modified vs unlanded).
 
-    The inverse of `task landed`. Bare `task unsettled` lists every task whose
-    worktree is unsettled with a one-line reason each; `task unsettled <id>`
-    shows the full breakdown — which files are uncommitted (and which of those
-    are endless's own auto-managed files) and which commits are not yet on main.
+    `task unsettled <id>` shows the full breakdown for one task — which files
+    are uncommitted (and which of those are endless's own auto-managed files)
+    and which commits are not yet on main. `task unsettled --all` surveys every
+    task worktree in the project, one line each.
+
+    A target is required: the survey walks every worktree on disk and is slow
+    enough that it should be asked for, not stumbled into.
 
     This is the explanation behind the ◆ marker in `session status`: it reads the
     same probe, so the two can never disagree. Per ED-1540, unsettled means
     modified (uncommitted changes) OR unlanded (commits not in main) — the fix
     differs, which is why the marker alone is not enough.
     """
+    if item_id is not None and show_all:
+        raise click.UsageError("pass a task id or --all, not both.")
+    if item_id is None and not show_all:
+        raise click.UsageError(
+            "specify a task id (endless task unsettled <id>) or --all to survey "
+            "every worktree in the project.")
+
     from endless.task_cmd import unsettled_list, unsettled_item
     if item_id is not None:
         unsettled_item(item_id, llm=llm, as_json=as_json)
     else:
-        unsettled_list(project_name=project, limit=limit, show_all=show_all,
-                       llm=llm, as_json=as_json)
+        unsettled_list(project_name=project, limit=limit,
+                       include_settled=include_settled, llm=llm, as_json=as_json)
 
 
 @task_cmd.command("search")

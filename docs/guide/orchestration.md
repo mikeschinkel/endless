@@ -98,10 +98,12 @@ Because ◆ means *there is still something to do here*, an unsettled row is nev
 `task unsettled` expands the marker:
 
 ```bash
-endless task unsettled                      # every unsettled worktree + why, one line each
 endless task unsettled <id>                 # full breakdown for one task
-endless task unsettled --all                # include settled worktrees too
+endless task unsettled --all                # survey every worktree, one line each
+endless task unsettled --all --include-settled   # include the settled ones too
 ```
+
+A target is required — bare `task unsettled` is an error. The survey walks every worktree on disk and probes each with git, so it is asked for explicitly rather than stumbled into.
 
 The per-task form lists exactly which files are uncommitted — separating **your** work from endless's own auto-managed files (`verbs.jsonl`, ledger entries), which `worktree land` commits for you — and which commits are not yet on main, with the land command to run.
 

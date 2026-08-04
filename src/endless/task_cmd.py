@@ -1809,21 +1809,24 @@ def _unsettled_rows(project_id: int, root: Path) -> list[dict]:
 def unsettled_list(
     project_name: str | None = None,
     limit: int = 20,
-    show_all: bool = False,
+    include_settled: bool = False,
     llm: bool = False,
     as_json: bool = False,
 ):
-    """List tasks whose worktree is unsettled, with the reason for each (E-1865).
+    """Survey every task worktree in the project, with the reason for each (E-1865).
 
-    `--all` additionally lists the settled worktrees, so the command can answer
-    "is anything outstanding?" with a complete picture instead of silence.
+    Reached via `task unsettled --all`; the CLI requires an explicit target
+    because this walks every worktree on disk and probes each with git.
+
+    `include_settled` additionally lists the settled worktrees, so the command
+    can answer "is anything outstanding?" with a complete picture, not silence.
     """
     project_id, proj_name = _resolve_project(project_name)
     from endless.worktree_cmd import _project_root
     root = _project_root()
 
     rows = _unsettled_rows(project_id, root)
-    if not show_all:
+    if not include_settled:
         rows = [r for r in rows if r["probe"]["unsettled"]]
     # Modified-and-unlanded first, then modified, then unlanded: the rows needing
     # the most work sort to the top, and ties fall back to task id.
