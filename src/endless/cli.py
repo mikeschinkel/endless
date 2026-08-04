@@ -959,10 +959,13 @@ def session_cd(session_ref, show_all, target):
 def session_goto(target_ref, resume):
     """Switch tmux focus to a task's or session's pane, with a back-stack.
 
-    <target_ref> is a task id (E-NNNN or NNNN) or a session id (integer or
-    Claude UUID prefix). A task id resolves to the most-recently-active live
-    session working it. The current pane is pushed onto a per-client back-stack
-    so `endless session back` returns here. Requires tmux.
+    <target_ref> is a task id (E-NNNN or NNNN) or a session id (ES-NNNN, a bare
+    integer, or a Claude UUID prefix). A task id resolves to the
+    most-recently-active live session working it. Prefer ES-NNNN — the form
+    `task show` prints under Created:/Touched by: — since a bare integer that
+    matches both a session and a task is rejected as ambiguous. The current pane
+    is pushed onto a per-client back-stack so `endless session back` returns
+    here. Requires tmux.
 
     With --resume, a target that has no live pane is relaunched in a new tmux
     window and focused (instead of erroring) — unlike `session resume`, which

@@ -392,6 +392,18 @@ def task_id_display(item_id: int) -> str:
     return f"E-{item_id}"
 
 
+def session_id_display(session_id: int) -> str:
+    """Format an endless session ID for display: ES-123 (E-1261).
+
+    Sessions and tasks are separate id spaces that both used to render as
+    `E-NNN`, so a session id sitting next to a task id in the same block was
+    indistinguishable. The two-letter `ES-` prefix disambiguates. Introduced
+    here for `task show`'s Created:/Touched by: (E-1866); sweeping the rest of
+    the session surfaces is E-1261's job.
+    """
+    return f"ES-{session_id}"
+
+
 def _hierarchical_label_prefix(item_id: int, parent_id: int | None) -> str:
     """Hierarchical id prefix for bg-agent labels (E-1620).
 
@@ -4242,6 +4254,10 @@ def detail_item(
 
     item = row[0]
     landings = _task_landings(item_id)
+    # Session provenance (E-1866): who created the task and who else touched it.
+    # Resolved once here so all three output modes report the same facts.
+    touches = _session_touches(item_id)
+    creator = _creating_session(touches)
 
     if as_json:
         import json
@@ -4254,6 +4270,11 @@ def detail_item(
             "status": item["status"],
             "parent": f"E-{item['parent_id']}" if item["parent_id"] else None,
             "created": item["created_at"],
+            # Session provenance (E-1866). `created_by` is null for a task filed
+            # outside any session; `touched_by` is ordered most-recent-touch-first,
+            # matching the human block.
+            "created_by": _session_json(creator) if creator else None,
+            "touched_by": [_session_json(t) for t in touches],
             "updated": item["updated_at"],
             "confirmed": item["completed_at"] or None,
             "landed": (
@@ -4306,6 +4327,17 @@ def detail_item(
             link_str = ",".join(f"E-{r['id']} ({r['rel']})" for r in links)
             click.echo(f"links={link_str}")
         click.echo(f"created={item['created_at']}")
+        # Session provenance (E-1866). Each entry mirrors the human block's row
+        # order — relation, session, its active task, state — so the two read the
+        # same: 'revisited ES-996 (E-1833) [idle]'. Most recent touch first.
+        if creator:
+            click.echo(f"created_by={_session_ref(creator)}")
+        if touches:
+            touch_str = ",".join(
+                f"{t['rel_slug'] or 'touched'} {_session_ref(t)} [{t['state']}]"
+                for t in touches
+            )
+            click.echo(f"touched_by={touch_str}")
         click.echo(f"updated={item['updated_at']}")
         if item["completed_at"]:
             click.echo(f"confirmed={item['completed_at']}")
@@ -4373,6 +4405,8 @@ def detail_item(
                 show_children=show_children,
                 show_outcome=show_outcome,
                 color=color,
+                touches=touches,
+                creator=creator,
             )
     finally:
         if pager is not None:
@@ -4391,14 +4425,25 @@ def _render_detail_human(
     show_children: bool,
     show_outcome: bool,
     color: bool,
+    touches: list[dict],
+    creator: dict | None,
 ):
     """Emit the human-readable `task show` detail to the current stdout. Split
     from detail_item so the whole render can run under a color/pager proxy
     (E-1746). Multiline markdown fields (description/analysis/text/outcome) are
-    colorized when `color`."""
+    colorized when `color`. `touches`/`creator` are the session provenance
+    detail_item already resolved for every output mode (E-1866)."""
     col_w = 11  # width of label column (longest: "Confirmed:" = 10 + 1 space)
     label = lambda s: click.style(f"{s:<{col_w}}", fg="cyan")
     val = lambda s: click.style(str(s), fg="white", bold=True)
+
+    # Both multi-line bullet blocks are measured up front so they can share one
+    # label column and read as siblings rather than two ragged lists (E-1866).
+    links = _flatten_relations(item_id)
+    bullet_w = max(
+        _bullet_label_width(r["rel_label"] for r in links),
+        _bullet_label_width(t["rel_label"] for t in touches),
+    )
 
     click.echo()
     click.echo(click.style("Task Detail", fg="green", bold=True))
@@ -4414,7 +4459,10 @@ def _render_detail_human(
         click.echo(f"{label('Tier:')} {val(tier_display(item['tier']))}")
     if item["parent_id"]:
         click.echo(f"{label('Parent:')} {val(task_id_display(item['parent_id']))}")
-    click.echo(f"{label('Created:')} {val(_format_timestamp(item['created_at']))}")
+    created_line = f"{label('Created:')} {val(_format_timestamp(item['created_at']))}"
+    if creator:
+        created_line += click.style(" by ", dim=True) + val(_session_ref(creator))
+    click.echo(created_line)
     if item["updated_at"] and item["updated_at"] != item["created_at"]:
         click.echo(f"{label('Updated:')} {val(_format_timestamp(item['updated_at']))}")
     if item["completed_at"]:
@@ -4430,8 +4478,10 @@ def _render_detail_human(
     _echo_field_placeholder(label, val, "Analysis:", item["analysis"], show_analysis, "--analysis")
     _echo_field_placeholder(label, val, "Text:", item["text"], show_text, "--text")
     _echo_field_placeholder(label, val, "Outcome:", item["outcome"], show_outcome, "--outcome")
-    # Links last: multi-line block sits below the single-line fields (E-1477).
-    _echo_links_section(item_id)
+    # Links last: multi-line blocks sit below the single-line fields (E-1477).
+    # 'Touched by:' follows 'This task:' as its session-side peer (E-1866).
+    _echo_links_section(item_id, min_width=bullet_w, links=links)
+    _echo_touched_by_section(touches, min_width=bullet_w)
 
     # Multi-line sections after Description: Description first, then the full
     # bodies of any large field whose flag is set (otherwise its placeholder
@@ -5967,7 +6017,19 @@ def _flatten_relations(item_id: int) -> list[dict]:
     return flat
 
 
-def _echo_links_section(item_id: int) -> bool:
+def _bullet_label_width(labels) -> int:
+    """Column width for a '- <Label>:' row in the 'This task:' / 'Touched by:'
+    blocks: the longest label plus ':' plus two trailing spaces. 0 for no labels.
+    Shared so the two adjacent blocks can align to one column (E-1866)."""
+    widths = [len(label) for label in labels]
+    if not widths:
+        return 0
+    return max(widths) + 1 + 2  # ':' + two trailing spaces
+
+
+def _echo_links_section(
+    item_id: int, min_width: int = 0, links: list[dict] | None = None,
+) -> bool:
     """Emit the unified multi-line links section (E-1576): a cyan 'This task:' heading,
     then one '- '-bulleted, colored row per relation (id-ascending) — '- <Relation
     phrase>:  E-NNN [status]'. The heading supplies the subject and the leading
@@ -5978,11 +6040,16 @@ def _echo_links_section(item_id: int) -> bool:
     still render them as a list bound to the heading. Titles are intentionally omitted to
     keep every row on one line. Emits nothing and returns False when the task has no
     relations; returns True otherwise. Shared by task show/detail and relations/deps so
-    both render identically."""
-    links = _flatten_relations(item_id)
+    both render identically.
+
+    `min_width` floors the label column so `task show` can align this block with the
+    'Touched by:' block that follows it; `links` accepts a pre-computed row set so the
+    caller can measure both blocks without querying relations twice (E-1866)."""
+    if links is None:
+        links = _flatten_relations(item_id)
     if not links:
         return False
-    width = max(len(r["rel_label"]) for r in links) + 1 + 2  # ':' + two trailing spaces
+    width = max(_bullet_label_width(r["rel_label"] for r in links), min_width)
     click.echo(click.style("This task:", fg="cyan"))
     for r in links:
         color = "green" if r["status"] in _RELATION_TERMINAL_STATUSES else "yellow"
@@ -5990,6 +6057,126 @@ def _echo_links_section(item_id: int) -> bool:
         click.echo(
             f"- {label}{task_id_display(r['id'])} "
             f"[{click.style(r['status'], fg=color)}]")
+    return True
+
+
+# Label for a session_tasks row whose relation_id is NULL — a pre-E-1462
+# historical touch, recorded before the relation vocabulary existed. The row
+# still proves the session touched the task; only the *how* is unknown.
+_UNCLASSIFIED_TOUCH_LABEL = "Touched"
+
+# State shown for a touch whose session row is gone. session_tasks deliberately
+# carries no FK to sessions so a "session N touched task M" record outlives the
+# session (see internal/schema/schema.sql); the touch is still real history.
+_MISSING_SESSION_STATE = "gone"
+
+# States that mean the session is no longer in flight, colored green like a
+# terminal task status in the relations block. `gone` belongs here too: a touch
+# whose session record is absent can't be live. Everything else is in flight.
+_FINISHED_SESSION_STATES = ("ended", _MISSING_SESSION_STATE)
+
+
+def _session_touches(item_id: int) -> list[dict]:
+    """Every session that touched this task, most-recent touch first (E-1866).
+
+    One row per session_tasks entry, carrying the session id, how the task
+    entered that session's scope (goal / surfaced / revisited, per ED-1497), the
+    session's current active task, and its state. Ordered by touch recency
+    because the block exists for navigation — the session worth jumping to is
+    almost always the one that touched the task last — which is deliberately
+    *not* the id-ascending order of the 'This task:' relations block.
+
+    LEFT JOINs throughout: relation_id is NULL for pre-E-1462 rows, and the
+    sessions row may be gone entirely (session_tasks has no FK by design).
+    """
+    rows = db.query(
+        "SELECT st.session_id AS session_id, "
+        "       st.created_at AS first_touch, "
+        "       st.updated_at AS last_touch, "
+        "       r.slug        AS rel_slug, "
+        "       r.label       AS rel_label, "
+        "       s.state       AS state, "
+        "       s.active_task_id AS active_task_id "
+        "FROM session_tasks st "
+        "LEFT JOIN session_task_relations r ON r.id = st.relation_id "
+        "LEFT JOIN sessions s ON s.id = st.session_id "
+        "WHERE st.task_id = ? "
+        "ORDER BY st.updated_at DESC, st.session_id DESC",
+        (item_id,),
+    )
+    return [
+        {
+            "session_id": row["session_id"],
+            "first_touch": row["first_touch"],
+            "last_touch": row["last_touch"],
+            "rel_slug": row["rel_slug"],
+            "rel_label": row["rel_label"] or _UNCLASSIFIED_TOUCH_LABEL,
+            "state": row["state"] or _MISSING_SESSION_STATE,
+            "active_task_id": row["active_task_id"],
+        }
+        for row in rows
+    ]
+
+
+def _creating_session(touches: list[dict]) -> dict | None:
+    """The touch that created the task, or None (E-1866).
+
+    A task created inside a session gets a `surfaced` session_tasks row (per
+    ED-1497 the relation is set once, at capture time, so a later claim or edit
+    never overwrites it). Absent for a task filed outside any session and for
+    pre-E-1462 rows, whose relation is NULL — in both cases the Created: line
+    stays as it was. The earliest touch wins if more than one session ever
+    surfaced the task (an import replayed in a second session).
+    """
+    surfaced = [t for t in touches if t["rel_slug"] == "surfaced"]
+    if not surfaced:
+        return None
+    return min(surfaced, key=lambda t: t["first_touch"] or "")
+
+
+def _session_ref(touch: dict) -> str:
+    """A touch's identity as one token pair: 'ES-1020 (E-1865)' — the session and
+    the task it is currently active on, or bare 'ES-1020' when it has none."""
+    ref = session_id_display(touch["session_id"])
+    if touch["active_task_id"]:
+        ref += f" ({task_id_display(touch['active_task_id'])})"
+    return ref
+
+
+def _session_json(touch: dict) -> dict:
+    """A touch as a JSON object for `task show --json` (E-1866). Ids render in
+    their display form (ES-NNN / E-NNN) like every other id in that payload.
+    `relation` is null for a pre-E-1462 row whose relation was never recorded."""
+    return {
+        "session": session_id_display(touch["session_id"]),
+        "relation": touch["rel_slug"],
+        "active_task": (
+            task_id_display(touch["active_task_id"])
+            if touch["active_task_id"] else None
+        ),
+        "state": touch["state"],
+        "touched_at": touch["last_touch"],
+    }
+
+
+def _echo_touched_by_section(touches: list[dict], min_width: int = 0) -> bool:
+    """Emit the 'Touched by:' session block (E-1866) — the session-side peer of
+    'This task:', laid out identically so the two read as siblings: a cyan
+    heading, then one '- '-bulleted row per session, '- <Relation>:  ES-NNN
+    (E-NNN) [state]'. The relation carries how the task entered that session's
+    scope, the ES-NNN id feeds `session goto` directly, and the parenthesized
+    task is what the session is active on now. Emits nothing and returns False
+    when no session ever touched the task."""
+    if not touches:
+        return False
+    width = max(_bullet_label_width(t["rel_label"] for t in touches), min_width)
+    click.echo(click.style("Touched by:", fg="cyan"))
+    for t in touches:
+        color = "green" if t["state"] in _FINISHED_SESSION_STATES else "yellow"
+        label = (t["rel_label"] + ":").ljust(width)
+        click.echo(
+            f"- {label}{_session_ref(t)} "
+            f"[{click.style(t['state'], fg=color)}]")
     return True
 
 

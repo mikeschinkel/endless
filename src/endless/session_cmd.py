@@ -2243,13 +2243,23 @@ def _goto_session(matches: list[dict], ref: str) -> tuple[str, str]:
 def _resolve_goto_target(ref: str, live: list[dict]) -> tuple[str, str]:
     """Resolve a goto ref to (target_pane, label).
 
-    Forms: `E-NNNN` -> task; bare `NNNN` -> a session id or a task id (errors if
-    it matches both); `<uuid-prefix>` -> session. Raises _GotoNotLive when a
-    single target resolves but has no live pane (recoverable by `--resume`), or
-    SystemExit(1) with a stderr error on ambiguity.
+    Forms: `ES-NNNN` -> session; `E-NNNN` -> task; bare `NNNN` -> a session id or
+    a task id (errors if it matches both); `<uuid-prefix>` -> session. Raises
+    _GotoNotLive when a single target resolves but has no live pane (recoverable
+    by `--resume`), or SystemExit(1) with a stderr error on ambiguity.
     """
     from endless.task_cmd import task_id_display
     raw = ref.strip()
+
+    # `ES-NNNN` (E-1261) names a session unambiguously, so it goes straight to
+    # the session resolver and never hits the bare-integer ambiguity check below
+    # — stating the id space is the whole point of the prefix. It is what
+    # `task show`'s Created:/Touched by: block prints (E-1866). Resolution
+    # continues on the bare digits so the not-live/--resume path downstream sees
+    # the same ref shape a bare-integer goto produces.
+    if raw.upper().startswith("ES-") and raw[3:].isdigit():
+        digits = raw[3:]
+        return _goto_session(_match_companions(live, digits), digits)
 
     if raw.upper().startswith("E-") and raw[2:].isdigit():
         return _goto_task(int(raw[2:]), live)

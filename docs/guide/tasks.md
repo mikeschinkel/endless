@@ -70,6 +70,23 @@ endless task handoff <id>                            # render the spawn handoff
 
 Reach for `--llm` whenever you're parsing output yourself — it's token-efficient.
 
+### Session provenance: who filed this, and who else worked it
+
+`task show` traces a task back to the sessions that shaped it, so a task doubles as a navigational hub for jumping between them:
+
+- The **`Created:`** line names the session that filed the task and the task that session was active on — `Created:  2026-08-04 4:38 am by ES-1020 (E-1865)`. Absent when the task was filed outside any session.
+- The **`Touched by:`** block is the session-side peer of `This task:`, one row per session that ever touched the task, **most recent touch first**:
+
+  ```
+  Touched by:
+  - Revisited:   ES-996 (E-1833) [idle]
+  - Surfaced:    ES-994 (E-1829) [idle]
+  ```
+
+  The leading relation says how the task entered that session's scope — **Goal** (the session claimed it), **Surfaced** (created it), **Revisited** (touched it without claiming), or **Touched** for a historical row recorded before the vocabulary existed. The parenthesized id is the task that session is active on *now*; `[state]` is the session's state, or `gone` when the session row itself no longer exists.
+
+Sessions render as **`ES-NNNN`** and tasks as `E-NNNN` — separate id spaces that would otherwise be indistinguishable side by side. Feed an `ES-NNNN` straight to `endless session goto ES-1020` to jump there. `--json` reports the same facts as `created_by` / `touched_by`; `--llm` as `created_by=` / `touched_by=` lines.
+
 ---
 
 ## Adding tasks
