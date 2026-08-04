@@ -2308,6 +2308,37 @@ def decision_reject(item_ids, reason):
         reject_decision(item_id, reason)
 
 
+@decision_cmd.command("unaccept")
+@click.argument("item_ids", type=DECISION_ID, nargs=-1, required=True)
+def decision_unaccept(item_ids):
+    """Undo an accept (accepted → proposed)."""
+    from endless.decision_cmd import unaccept_decision
+    for item_id in item_ids:
+        unaccept_decision(item_id)
+
+
+@decision_cmd.command("unreject")
+@click.argument("item_ids", type=DECISION_ID, nargs=-1, required=True)
+def decision_unreject(item_ids):
+    """Undo a reject (rejected → proposed); clears the stored reason."""
+    from endless.decision_cmd import unreject_decision
+    for item_id in item_ids:
+        unreject_decision(item_id)
+
+
+@decision_cmd.command("reconsider")
+@click.argument("item_ids", type=DECISION_ID, nargs=-1, required=True)
+def decision_reconsider(item_ids):
+    """Undo whichever terminal status applies (accepted|rejected → proposed).
+
+    Convenience over `unaccept` / `unreject`. Those name the status they undo
+    and refuse if it doesn't match; this one doesn't check.
+    """
+    from endless.decision_cmd import reconsider_decision
+    for item_id in item_ids:
+        reconsider_decision(item_id)
+
+
 @decision_cmd.command("link")
 @click.argument("source_id", type=DECISION_ID)
 @click.option("--to", "target", type=TASK_OR_DECISION_ID, required=True,

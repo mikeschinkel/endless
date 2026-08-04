@@ -102,6 +102,10 @@ func replayEvent(db *sql.DB, evt *Event, result *ProjectResult) error {
 		return replayDecisionAccepted(db, evt, result)
 	case KindDecisionRejected:
 		return replayDecisionRejected(db, evt, result)
+	case KindDecisionUnaccepted:
+		return replayDecisionUnaccepted(db, evt, result)
+	case KindDecisionUnrejected:
+		return replayDecisionUnrejected(db, evt, result)
 	case KindDecisionDeleted:
 		return replayDecisionDeleted(db, evt, result)
 	case KindDecisionRelationCreated:

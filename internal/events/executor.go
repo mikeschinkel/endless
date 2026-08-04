@@ -225,6 +225,10 @@ func dispatch(db dbQuerier, evt *Event, emit DerivedEmitter) (*ExecuteResult, er
 		return execDecisionAccepted(db, evt)
 	case KindDecisionRejected:
 		return execDecisionRejected(db, evt)
+	case KindDecisionUnaccepted:
+		return execDecisionUnaccepted(db, evt)
+	case KindDecisionUnrejected:
+		return execDecisionUnrejected(db, evt)
 	case KindDecisionDeleted:
 		return execDecisionDeleted(db, evt)
 	case KindDecisionRelationCreated:

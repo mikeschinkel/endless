@@ -119,6 +119,15 @@ type DecisionRejectedPayload struct {
 	Reason string `json:"reason"`
 }
 
+// Reversal payloads (E-1864) are empty: the target status is always
+// 'proposed' and the status being undone is implied by the kind. The reason
+// that decision.rejected stored is preserved in the ledger entry that set it,
+// so decision.unrejected does not need to carry it forward.
+
+type DecisionUnacceptedPayload struct{}
+
+type DecisionUnrejectedPayload struct{}
+
 type DecisionDeletedPayload struct {
 	Title string `json:"title"`
 }

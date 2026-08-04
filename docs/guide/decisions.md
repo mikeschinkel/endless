@@ -75,6 +75,34 @@ endless decision link <a> --to <b> --type ...    # decision-to-decision typed li
 endless decision unlink <a> --to <b> --type ...
 ```
 
+## Decision status
+
+A decision starts `proposed` and moves to one of two settled statuses. Status changes use dedicated verbs, not `decision update` (which only edits title/description):
+
+```bash
+endless decision accept <id>                     # proposed → accepted
+endless decision reject <id> --reason "..."      # proposed → rejected (reason is stored)
+```
+
+Both settled statuses are reversible. A decision is never "open", so there is no `reopen` — each reversal names the status it undoes:
+
+```bash
+endless decision unaccept <id>                   # accepted → proposed
+endless decision unreject <id>                   # rejected → proposed (clears the stored reason)
+endless decision reconsider <id>                 # whichever of the two applies
+```
+
+`unaccept` and `unreject` refuse if the decision isn't in the status they undo — so if you believe ED-42 was accepted and it was actually rejected, `unaccept ED-42` tells you rather than quietly performing the other reversal. Reach for `reconsider` when you don't care which way it went and just want the decision back on the table.
+
+Reversing is for correcting the record — an accidental accept, a reject you want to re-argue. A decision that was *rightly* settled and is now being overturned is better captured as a new decision that `reverses` the old one, which keeps both the original reasoning and the change of mind:
+
+```bash
+endless decision add "Statement of the new decision" --about <task_id>
+endless decision link <new_id> --to <old_id> --type reverses
+```
+
+Unrejecting clears `rejection_reason` from the row, since a decision back in `proposed` has not been rejected. The reason isn't lost — it stays in the `decision.rejected` entry in the event ledger.
+
 ## Editing a decision
 
 To fix a decision's wording after the fact, edit it in place — there's no need to reject and re-add (which leaves a misleading rejected row behind):

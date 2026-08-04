@@ -675,6 +675,116 @@ def reject_decision(decision_id: int, reason: str):
     )
 
 
+# Unaccept / Unreject / Reconsider ----------------------------------------
+#
+# E-1864. `unaccept` and `unreject` are the exact inverses of `accept` and
+# `reject`: each refuses unless the decision is in the status it undoes, so
+# aiming one at the wrong terminal status errors instead of silently
+# performing the other reversal. `reconsider` is the status-agnostic
+# convenience that dispatches to whichever applies.
+#
+# Deliberately not named `reopen` (the task-tree verb): a decision is proposed
+# and then accepted or rejected — it is never "open", so there is nothing to
+# re-open.
+
+def _fetch_decision_for_status_change(decision_id: int) -> dict:
+    """Row (id, status, project_name) for a status verb, or ClickException."""
+    row = db.query(
+        "SELECT d.id, d.status, p.name as project_name "
+        "FROM decisions d JOIN projects p ON d.project_id = p.id WHERE d.id = ?",
+        (decision_id,),
+    )
+    if not row:
+        raise click.ClickException(
+            f"No decision found with id {decision_id_display(decision_id)}"
+        )
+    return row[0]
+
+
+def unaccept_decision(decision_id: int):
+    """Revert an accepted decision to proposed (accepted → proposed)."""
+    from endless.event_bridge import emit_event
+
+    row = _fetch_decision_for_status_change(decision_id)
+    cur_status = row["status"]
+    if cur_status != "accepted":
+        hint = (
+            " Use `endless decision unreject` instead."
+            if cur_status == "rejected" else ""
+        )
+        raise click.ClickException(
+            f"{decision_id_display(decision_id)} status is {cur_status!r}; "
+            f"only 'accepted' decisions can be unaccepted.{hint}"
+        )
+
+    emit_event(
+        kind="decision.unaccepted",
+        project=row["project_name"],
+        entity_type="decision",
+        entity_id=str(decision_id),
+        payload={},
+    )
+    click.echo(
+        click.style("•", fg="cyan")
+        + f" Unaccepted {decision_id_display(decision_id)} (accepted → proposed)"
+    )
+
+
+def unreject_decision(decision_id: int):
+    """Revert a rejected decision to proposed (rejected → proposed).
+
+    Clears the stored rejection_reason — it explains why the decision was
+    rejected, and a decision back in `proposed` has not been rejected. The
+    reason stays recoverable from the `decision.rejected` ledger entry.
+    """
+    from endless.event_bridge import emit_event
+
+    row = _fetch_decision_for_status_change(decision_id)
+    cur_status = row["status"]
+    if cur_status != "rejected":
+        hint = (
+            " Use `endless decision unaccept` instead."
+            if cur_status == "accepted" else ""
+        )
+        raise click.ClickException(
+            f"{decision_id_display(decision_id)} status is {cur_status!r}; "
+            f"only 'rejected' decisions can be unrejected.{hint}"
+        )
+
+    emit_event(
+        kind="decision.unrejected",
+        project=row["project_name"],
+        entity_type="decision",
+        entity_id=str(decision_id),
+        payload={},
+    )
+    click.echo(
+        click.style("•", fg="cyan")
+        + f" Unrejected {decision_id_display(decision_id)} (rejected → proposed); "
+        f"reason cleared"
+    )
+
+
+def reconsider_decision(decision_id: int):
+    """Revert a decision from either terminal status back to proposed.
+
+    Convenience dispatcher over unaccept / unreject for when you don't care
+    (or don't recall) which way the decision went. Use the precise verb when
+    you want the wrong-status guard.
+    """
+    row = _fetch_decision_for_status_change(decision_id)
+    cur_status = row["status"]
+    if cur_status == "accepted":
+        unaccept_decision(decision_id)
+    elif cur_status == "rejected":
+        unreject_decision(decision_id)
+    else:
+        raise click.ClickException(
+            f"{decision_id_display(decision_id)} status is {cur_status!r}; "
+            f"only 'accepted' or 'rejected' decisions can be reconsidered."
+        )
+
+
 # Link / Unlink (decision-sourced dispatcher) -----------------------------
 
 def link_decision(

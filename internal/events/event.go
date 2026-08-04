@@ -167,13 +167,22 @@ const (
 )
 
 // Decision event kinds (E-1378). Decisions are first-class items extracted
-// from the tasks table; their lifecycle (proposed -> accepted | rejected) has
-// no analog in the task event vocabulary.
+// from the tasks table; their lifecycle (proposed -> accepted | rejected, and
+// back to proposed via unaccept / unreject) has no analog in the task event
+// vocabulary.
+//
+// E-1864 added the two reversals. They are deliberately NOT a single
+// "reopened" kind: a decision is never "open", and keeping the inverse of
+// each forward transition distinct lets the executor guard on the status it
+// undoes (so undoing the wrong one errors instead of silently succeeding) and
+// keeps rejection_reason clearing on the unreject path where it belongs.
 const (
 	KindDecisionCreated       Kind = "decision.created"
 	KindDecisionFieldsUpdated Kind = "decision.fields_updated"
 	KindDecisionAccepted      Kind = "decision.accepted"
 	KindDecisionRejected      Kind = "decision.rejected"
+	KindDecisionUnaccepted    Kind = "decision.unaccepted" // E-1864
+	KindDecisionUnrejected    Kind = "decision.unrejected" // E-1864
 	KindDecisionDeleted       Kind = "decision.deleted"
 )
 
@@ -238,6 +247,8 @@ var ValidKinds = map[Kind]bool{
 	KindDecisionFieldsUpdated: true,
 	KindDecisionAccepted:      true,
 	KindDecisionRejected:      true,
+	KindDecisionUnaccepted:    true,
+	KindDecisionUnrejected:    true,
 	KindDecisionDeleted:       true,
 	// Decision relation (E-1378)
 	KindDecisionRelationCreated: true,

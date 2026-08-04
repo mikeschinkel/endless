@@ -182,6 +182,77 @@ func execDecisionRejected(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 	return &ExecuteResult{}, nil
 }
 
+// execDecisionUnaccepted reverses an accept: accepted -> proposed (E-1864).
+//
+// The guard is `status = 'accepted'`, not "any terminal status", so pointing
+// unaccept at a *rejected* decision fails loudly instead of quietly performing
+// the other reversal.
+func execDecisionUnaccepted(db dbQuerier, evt *Event) (*ExecuteResult, error) {
+	var p DecisionUnacceptedPayload
+	if err := json.Unmarshal(evt.Payload, &p); err != nil {
+		return nil, fmt.Errorf("events: unmarshal decision.unaccepted payload: %w", err)
+	}
+
+	result, err := db.Exec(
+		`UPDATE decisions SET status = 'proposed' WHERE id = ? AND status = 'accepted'`,
+		evt.Entity.ID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("events: unaccept decision: %w", err)
+	}
+	if err := requireDecisionRowAffected(db, result, evt.Entity.ID, "unaccept", "accepted"); err != nil {
+		return nil, err
+	}
+	return &ExecuteResult{}, nil
+}
+
+// execDecisionUnrejected reverses a reject: rejected -> proposed (E-1864).
+//
+// rejection_reason is cleared in the same statement: it describes why the
+// decision was rejected, and a decision back in 'proposed' has not been
+// rejected. Leaving it would render a stale "Reason:" line on a proposed
+// decision. The reason itself survives in the decision.rejected ledger entry.
+func execDecisionUnrejected(db dbQuerier, evt *Event) (*ExecuteResult, error) {
+	var p DecisionUnrejectedPayload
+	if err := json.Unmarshal(evt.Payload, &p); err != nil {
+		return nil, fmt.Errorf("events: unmarshal decision.unrejected payload: %w", err)
+	}
+
+	result, err := db.Exec(
+		`UPDATE decisions
+		    SET status = 'proposed', rejection_reason = NULL
+		  WHERE id = ? AND status = 'rejected'`,
+		evt.Entity.ID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("events: unreject decision: %w", err)
+	}
+	if err := requireDecisionRowAffected(db, result, evt.Entity.ID, "unreject", "rejected"); err != nil {
+		return nil, err
+	}
+	return &ExecuteResult{}, nil
+}
+
+// requireDecisionRowAffected turns a zero-row status transition into an error
+// that names the status actually found, so the CLI can render something more
+// useful than "nothing happened". Shared by the E-1864 reversals; accept and
+// reject predate it and keep their inlined equivalents.
+func requireDecisionRowAffected(
+	db dbQuerier, result sql.Result, id string, verb string, want string,
+) error {
+	n, _ := result.RowsAffected()
+	if n > 0 {
+		return nil
+	}
+	var status string
+	row := db.QueryRow("SELECT status FROM decisions WHERE id = ?", id)
+	if err := row.Scan(&status); err != nil {
+		return fmt.Errorf("events: %s decision %s: not found", verb, id)
+	}
+	return fmt.Errorf("events: %s decision %s: status is %q, expected %s",
+		verb, id, status, want)
+}
+
 func execDecisionDeleted(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 	// Payload is informational (title for log-trail); the DELETE keys off
 	// entity ID. decision_relations rows cascade via the FK.
@@ -366,6 +437,30 @@ func replayDecisionRejected(db *sql.DB, evt *Event, result *ProjectResult) error
 	)
 	if err != nil {
 		return fmt.Errorf("reject decision %s: %w", evt.Entity.ID, err)
+	}
+	return nil
+}
+
+func replayDecisionUnaccepted(db *sql.DB, evt *Event, result *ProjectResult) error {
+	_, err := db.Exec(
+		`UPDATE decisions SET status = 'proposed' WHERE id = ? AND status = 'accepted'`,
+		evt.Entity.ID,
+	)
+	if err != nil {
+		return fmt.Errorf("unaccept decision %s: %w", evt.Entity.ID, err)
+	}
+	return nil
+}
+
+func replayDecisionUnrejected(db *sql.DB, evt *Event, result *ProjectResult) error {
+	_, err := db.Exec(
+		`UPDATE decisions
+		    SET status = 'proposed', rejection_reason = NULL
+		  WHERE id = ? AND status = 'rejected'`,
+		evt.Entity.ID,
+	)
+	if err != nil {
+		return fmt.Errorf("unreject decision %s: %w", evt.Entity.ID, err)
 	}
 	return nil
 }

@@ -529,3 +529,142 @@ def test_decision_update_editable_in_any_status(isolated_env, monkeypatch):
     decision_cmd.update_decision(did, title="Corrected wording")
 
     assert emitted[0]["payload"] == {"fields": {"title": "Corrected wording"}}
+
+
+# ────────────────────────────────────────────────────────────────────────
+# Status reversals: unaccept / unreject / reconsider (E-1864)
+#
+# These assert the CLI-side guards and the emitted event kind. The DB
+# effect of each kind (including that unreject clears rejection_reason)
+# is covered in Go by internal/events/decision_reversal_test.go.
+# ────────────────────────────────────────────────────────────────────────
+
+
+def _stub_status_emit(monkeypatch):
+    """Patch emit_event; return the list that captures each call's kwargs."""
+    from endless import event_bridge
+
+    emitted: list = []
+    monkeypatch.setattr(
+        event_bridge, "emit_event",
+        lambda **kw: emitted.append(kw) or {"id": "ED-1"},
+    )
+    return emitted
+
+
+def test_decision_unaccept_emits_unaccepted(isolated_env, monkeypatch):
+    pid = _seed_project()
+    did = _add_decision(pid, "D", status="accepted")
+    emitted = _stub_status_emit(monkeypatch)
+
+    decision_cmd.unaccept_decision(did)
+
+    assert len(emitted) == 1
+    assert emitted[0]["kind"] == "decision.unaccepted"
+    assert emitted[0]["entity_type"] == "decision"
+    assert emitted[0]["entity_id"] == str(did)
+    assert emitted[0]["payload"] == {}
+
+
+def test_decision_unreject_emits_unrejected(isolated_env, monkeypatch):
+    pid = _seed_project()
+    did = _add_decision(pid, "D", status="rejected")
+    emitted = _stub_status_emit(monkeypatch)
+
+    decision_cmd.unreject_decision(did)
+
+    assert len(emitted) == 1
+    assert emitted[0]["kind"] == "decision.unrejected"
+    assert emitted[0]["entity_id"] == str(did)
+
+
+def test_decision_unaccept_refuses_rejected_and_points_at_unreject(
+    isolated_env, monkeypatch
+):
+    """The wrong-status guard is the reason these are two verbs rather than
+    one: aiming unaccept at a rejected decision must error, not silently
+    perform the other reversal."""
+    import click
+    pid = _seed_project()
+    did = _add_decision(pid, "D", status="rejected")
+    emitted = _stub_status_emit(monkeypatch)
+
+    with pytest.raises(click.ClickException) as exc:
+        decision_cmd.unaccept_decision(did)
+
+    msg = str(exc.value.message)
+    assert "'rejected'" in msg
+    assert "unreject" in msg
+    assert emitted == []
+
+
+def test_decision_unreject_refuses_accepted_and_points_at_unaccept(
+    isolated_env, monkeypatch
+):
+    import click
+    pid = _seed_project()
+    did = _add_decision(pid, "D", status="accepted")
+    emitted = _stub_status_emit(monkeypatch)
+
+    with pytest.raises(click.ClickException) as exc:
+        decision_cmd.unreject_decision(did)
+
+    msg = str(exc.value.message)
+    assert "'accepted'" in msg
+    assert "unaccept" in msg
+    assert emitted == []
+
+
+@pytest.mark.parametrize("verb", ["unaccept_decision", "unreject_decision",
+                                  "reconsider_decision"])
+def test_decision_reversals_refuse_proposed(isolated_env, monkeypatch, verb):
+    """Nothing to undo on a decision that was never settled."""
+    import click
+    pid = _seed_project()
+    did = _add_decision(pid, "D", status="proposed")
+    emitted = _stub_status_emit(monkeypatch)
+
+    with pytest.raises(click.ClickException) as exc:
+        getattr(decision_cmd, verb)(did)
+
+    assert "'proposed'" in str(exc.value.message)
+    assert emitted == []
+
+
+@pytest.mark.parametrize("verb", ["unaccept_decision", "unreject_decision",
+                                  "reconsider_decision"])
+def test_decision_reversals_reject_unknown_id(isolated_env, verb):
+    import click
+    _seed_project()
+    with pytest.raises(click.ClickException) as exc:
+        getattr(decision_cmd, verb)(9999)
+    assert "ED-9999" in str(exc.value.message)
+
+
+@pytest.mark.parametrize("status,expected_kind", [
+    ("accepted", "decision.unaccepted"),
+    ("rejected", "decision.unrejected"),
+])
+def test_decision_reconsider_dispatches_on_status(
+    isolated_env, monkeypatch, status, expected_kind
+):
+    """reconsider is the status-agnostic convenience: it routes to whichever
+    reversal applies rather than guarding on one."""
+    pid = _seed_project()
+    did = _add_decision(pid, "D", status=status)
+    emitted = _stub_status_emit(monkeypatch)
+
+    decision_cmd.reconsider_decision(did)
+
+    assert len(emitted) == 1
+    assert emitted[0]["kind"] == expected_kind
+
+
+@pytest.mark.parametrize("subcommand", ["unaccept", "unreject", "reconsider"])
+def test_decision_reversal_commands_registered(subcommand):
+    """The verbs are reachable from the CLI, accept an ED- prefixed id, and
+    take more than one (nargs=-1), matching accept/reject."""
+    runner = CliRunner()
+    result = runner.invoke(main, ["decision", subcommand, "--help"])
+    assert result.exit_code == 0
+    assert "ITEM_IDS..." in result.output
