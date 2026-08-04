@@ -1392,6 +1392,39 @@ def task_landed(item_id, project, show_all, limit, llm, as_json):
                     limit=limit, llm=llm, as_json=as_json)
 
 
+@task_cmd.command("unsettled")
+@click.argument("item_id", type=TASK_ID, required=False)
+@click.option("--project", default=None,
+              help="Project name (default: detect from cwd)")
+@click.option("--all", "show_all", is_flag=True,
+              help="Also list settled worktrees (default: unsettled only)")
+@click.option("--limit", default=20, type=int,
+              help="Max items to show in the list (default: 20)")
+@click.option("--llm", is_flag=True,
+              help="Token-efficient output for LLMs")
+@click.option("--json", "as_json", is_flag=True,
+              help="JSON output")
+def task_unsettled(item_id, project, show_all, limit, llm, as_json):
+    """Explain why a task's worktree is unsettled (modified vs unlanded).
+
+    The inverse of `task landed`. Bare `task unsettled` lists every task whose
+    worktree is unsettled with a one-line reason each; `task unsettled <id>`
+    shows the full breakdown — which files are uncommitted (and which of those
+    are endless's own auto-managed files) and which commits are not yet on main.
+
+    This is the explanation behind the ◆ marker in `session status`: it reads the
+    same probe, so the two can never disagree. Per ED-1540, unsettled means
+    modified (uncommitted changes) OR unlanded (commits not in main) — the fix
+    differs, which is why the marker alone is not enough.
+    """
+    from endless.task_cmd import unsettled_list, unsettled_item
+    if item_id is not None:
+        unsettled_item(item_id, llm=llm, as_json=as_json)
+    else:
+        unsettled_list(project_name=project, limit=limit, show_all=show_all,
+                       llm=llm, as_json=as_json)
+
+
 @task_cmd.command("search")
 @click.argument("query")
 @click.option("--project", default=None,

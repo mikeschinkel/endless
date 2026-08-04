@@ -186,6 +186,7 @@ listed separately. (Generated — do not hand-edit; run `/regenerate-guide`.)
 | `task handoff` | orchestration | The generated handoff text for a spawned session. |
 | `task release` | orchestration | Releasing a task so another session can claim it. |
 | `task spawn` | orchestration | Spawning a session on a task: foreground/background, attach verbs, coordinator pattern. |
+| `task unsettled` | orchestration | Why a worktree hasn't settled — modified (commit or discard) vs unlanded (land). |
 | `tmux` | reference | Tmux status-line and popup integration. |
 | `verb` | tasks | Verbs: the registered actions that can begin a task title. |
 | `worktree` | orchestration | Per-task git worktrees: getting in, landing, abandoning, inspecting. |

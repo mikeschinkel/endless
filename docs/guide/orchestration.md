@@ -84,6 +84,29 @@ endless worktree current                    # what worktree is cwd in (or "none"
 endless worktree for-task <id>              # resolve a task ID to its path
 ```
 
+### Why a worktree is unsettled (`task unsettled`)
+
+`session status` marks a row with **◆** when its worktree is *unsettled*. Per ED-1540 that is a union of two sub-states which need **opposite fixes**, so the marker alone doesn't tell you what to do:
+
+| Sub-state    | Meaning                                | Fix                        |
+|--------------|----------------------------------------|----------------------------|
+| `modified`   | Uncommitted working-tree changes       | Commit or discard          |
+| `unlanded`   | Commits on the branch not yet on `main`| `endless worktree land <id>` |
+
+`task unsettled` expands the marker:
+
+```bash
+endless task unsettled                      # every unsettled worktree + why, one line each
+endless task unsettled <id>                 # full breakdown for one task
+endless task unsettled --all                # include settled worktrees too
+```
+
+The per-task form lists exactly which files are uncommitted — separating **your** work from endless's own auto-managed files (`verbs.jsonl`, ledger entries), which `worktree land` commits for you — and which commits are not yet on main, with the land command to run.
+
+It is the inverse of `task landed`, and it reads the *same* probe that raises the ◆, so the marker and its explanation cannot disagree. Note both are fail-open: if a git call fails the verdict reads "settled", and the command says so rather than claiming the tree is clean.
+
+Distinct from `worktree check`, which reports *handoff anomalies* and is deliberately silent about commits ahead of main (the normal pre-land state). Use `worktree check` at handoff; use `task unsettled` when you want to know why something hasn't landed.
+
 ### Landing the work
 
 When the task is verified (or you're using `assume`):

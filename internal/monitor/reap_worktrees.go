@@ -331,27 +331,13 @@ func AnnotateSessionStatusUnsettled(rows []SessionStatusRow) {
 // safe to remove (reap_worktrees.go conditions 4 & 5), so the two surfaces agree
 // on what "done and landed" means. Any git error is treated as settled: the
 // view must never block or lie because a git call hiccuped.
+//
+// E-1865 collapsed this into a wrapper over TaskWorktreeUnsettledDetail so the
+// ◆ marker and `task unsettled`'s explanation of it read the SAME probes; the
+// git logic now lives in worktree_unsettled.go, and UnsettledDetail.Unsettled
+// preserves this function's original short-circuit order exactly.
 func taskWorktreeUnsettled(projectID, taskID int64) bool {
-	wt, err := WorktreePathForTask(projectID, taskID)
-	if err != nil || wt == "" {
-		return false
-	}
-	// Uncommitted changes → modified. A git error here means we can't reason about
-	// the tree, so fall through to settled rather than guess.
-	out, gerr := runGit(wt, "status", "--porcelain")
-	if gerr != nil {
-		return false
-	}
-	if strings.TrimSpace(out) != "" {
-		return true
-	}
-	// Commits on the branch not yet on main → unlanded work.
-	out, gerr = runGit(wt, "rev-list", "main..HEAD", "--count")
-	if gerr != nil {
-		return false
-	}
-	n, perr := strconv.Atoi(strings.TrimSpace(out))
-	return perr == nil && n > 0
+	return TaskWorktreeUnsettledDetail(projectID, taskID).Unsettled()
 }
 
 // runGit executes `git -C <dir> <args...>` and returns the combined

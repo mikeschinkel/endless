@@ -1690,6 +1690,338 @@ def landed_item(item_id: int, llm: bool = False, as_json: bool = False):
     click.echo()
 
 
+# --- task unsettled (E-1865) -----------------------------------------------
+#
+# The inverse of `task landed`: `task landed` answers "what has reached main?",
+# `task unsettled` answers "what hasn't, and why?".
+#
+# ED-1540 vocabulary: a worktree is SETTLED when its working tree is clean AND
+# its branch is fully in main. It is UNSETTLED when it is MODIFIED (uncommitted
+# changes) or UNLANDED (commits not in main). `session status` collapses both
+# into one ◆; these commands expand it, because the two need opposite fixes —
+# commit-or-discard vs land.
+#
+# The verdict is NOT computed here. It comes from the same Go probe that drives
+# the ◆ (monitor.WorktreeUnsettledAt via `session-query worktree-unsettled`), so
+# the marker and its explanation cannot drift apart. Python resolves tasks to
+# worktree paths and renders; Go decides.
+
+
+def _unsettled_probe(paths: list[Path]) -> list[dict]:
+    """Return the Go unsettled breakdown for each path, in the same order.
+
+    One subprocess for the whole batch: the list view inspects every active
+    worktree, and a per-worktree invocation would make it visibly slow.
+
+    Path-based (never --task-id) for E-1766's reason: inside a self-dev worktree
+    a DB lookup routes to the per-worktree sandbox, which has no task row.
+    """
+    if not paths:
+        return []
+    binary = shutil.which("endless-go")
+    if not binary:
+        raise click.ClickException("endless-go not found on PATH")
+    result = subprocess.run(
+        [binary, "session-query", "worktree-unsettled", *(str(p) for p in paths)],
+        capture_output=True, text=True,
+    )
+    if result.returncode != 0:
+        raise click.ClickException(
+            f"worktree-unsettled probe failed: {result.stderr.strip() or result.returncode}"
+        )
+    import json
+    try:
+        return json.loads(result.stdout)
+    except ValueError as exc:
+        raise click.ClickException(f"unreadable probe output: {exc}") from exc
+
+
+def _worktree_path_for_task(root: Path, item_id: int) -> Path | None:
+    """Return the task's canonical worktree dir if it exists on disk, else None.
+
+    E-971/ED-1515 convention: `<root>/.endless/worktrees/e-<id>`, bare form only.
+    """
+    path = root / ".endless" / "worktrees" / f"e-{item_id}"
+    return path if path.is_dir() else None
+
+
+def _unsettled_rows(project_id: int, root: Path) -> list[dict]:
+    """Probe every task worktree in the project; return rows joined with task data.
+
+    Enumerates worktrees from DISK rather than from the tasks table so a worktree
+    whose task row is missing or stale still gets reported — the point of the
+    command is to explain state the user can see, not state the DB believes.
+    """
+    from endless.worktree_cmd import _enriched_list, _task_id_from_worktree_path
+
+    candidates: list[tuple[int, Path]] = []
+    for wt in _enriched_list(root):
+        if wt["state"] != "active":
+            continue
+        display = _task_id_from_worktree_path(Path(wt["path"]))
+        if display is None:
+            continue
+        candidates.append((int(display.removeprefix("E-")), Path(wt["path"])))
+
+    if not candidates:
+        return []
+
+    probes = _unsettled_probe([p for _, p in candidates])
+    ids = [i for i, _ in candidates]
+    # db.query yields sqlite3.Row, which has no .get() — materialize plain dicts
+    # so a task id with no row falls back cleanly below.
+    titles = {
+        r["id"]: {"title": r["title"], "status": r["status"], "phase": r["phase"]}
+        for r in db.query(
+            "SELECT t.id, COALESCE(t.title, t.description) AS title, t.status, t.phase "
+            "FROM tasks t WHERE t.project_id = ? AND t.id IN "
+            f"({','.join('?' * len(ids))})",
+            (project_id, *ids),
+        )
+    }
+
+    rows = []
+    for (item_id, path), probe in zip(candidates, probes):
+        meta = titles.get(item_id) or {}
+        rows.append({
+            "id": item_id,
+            "title": meta.get("title") or "(no task row)",
+            "status": meta.get("status") or "?",
+            "phase": meta.get("phase") or "?",
+            "path": str(path),
+            "probe": probe,
+        })
+    return rows
+
+
+def unsettled_list(
+    project_name: str | None = None,
+    limit: int = 20,
+    show_all: bool = False,
+    llm: bool = False,
+    as_json: bool = False,
+):
+    """List tasks whose worktree is unsettled, with the reason for each (E-1865).
+
+    `--all` additionally lists the settled worktrees, so the command can answer
+    "is anything outstanding?" with a complete picture instead of silence.
+    """
+    project_id, proj_name = _resolve_project(project_name)
+    from endless.worktree_cmd import _project_root
+    root = _project_root()
+
+    rows = _unsettled_rows(project_id, root)
+    if not show_all:
+        rows = [r for r in rows if r["probe"]["unsettled"]]
+    # Modified-and-unlanded first, then modified, then unlanded: the rows needing
+    # the most work sort to the top, and ties fall back to task id.
+    rows.sort(key=lambda r: (
+        -(r["probe"]["modified"] + r["probe"]["unlanded"]), r["id"]))
+    shown = rows[:limit]
+
+    if as_json:
+        import json
+        click.echo(json.dumps([
+            {
+                "id": task_id_display(r["id"]),
+                "title": r["title"],
+                "status": r["status"],
+                "project": proj_name,
+                "worktree": r["path"],
+                **r["probe"],
+            }
+            for r in shown
+        ], indent=2))
+        return
+
+    if not shown:
+        if llm:
+            click.echo("# no unsettled worktrees")
+        else:
+            click.echo(click.style("•", fg="cyan") +
+                       " No unsettled worktrees — everything is committed and landed")
+        return
+
+    if llm:
+        click.echo(f"# {proj_name}")
+        for r in shown:
+            click.echo(f"{task_id_display(r['id'])} {r['probe']['reason']} "
+                       f"{r['status']} {r['title']}")
+        _echo_unsettled_truncation(len(rows), len(shown), llm=True)
+        return
+
+    click.echo()
+    click.echo(click.style(f"Unsettled ({proj_name}):", bold=True))
+    id_w = max(len(task_id_display(r["id"])) for r in shown)
+    reason_w = max(len(r["probe"]["reason"]) for r in shown)
+    for r in shown:
+        title = r["title"]
+        if len(title) > 44:
+            title = title[:43] + "…"
+        # Pad BEFORE styling: click.style wraps the text in ANSI escapes, which
+        # would otherwise be counted by the width spec and eat the padding.
+        reason = f"{r['probe']['reason']:<{reason_w}}"
+        click.echo(
+            f"  {task_id_display(r['id']):<{id_w}}  "
+            f"{click.style(reason, fg=_unsettled_color(r['probe']))}  "
+            f"{title}"
+        )
+    _echo_unsettled_truncation(len(rows), len(shown), llm=False)
+    click.echo()
+    click.echo(click.style("  ", fg="cyan") +
+               f"Detail for one: endless task unsettled <id>")
+    click.echo()
+
+
+def _unsettled_color(probe: dict) -> str:
+    """Colour a reason by which fix it demands: yellow to commit, cyan to land."""
+    if not probe["unsettled"]:
+        return "green"
+    return "yellow" if probe["modified"] else "cyan"
+
+
+_PROBE_ERROR_LABELS = (("status_error", "git status"), ("rev_list_error", "git rev-list"))
+
+
+def _probe_errors(probe: dict) -> list[tuple[str, str]]:
+    """Return [(label, message)] for each git probe that failed."""
+    return [(label, probe[key]) for key, label in _PROBE_ERROR_LABELS if probe.get(key)]
+
+
+def _echo_probe_errors(probe: dict) -> None:
+    """Surface failed git probes.
+
+    Both the predicate and the ◆ marker are fail-open — any git error is read as
+    settled — so a silent failure would present as "nothing to do". Saying the
+    verdict may under-report is the only honest rendering.
+    """
+    for label, msg in _probe_errors(probe):
+        click.echo()
+        click.echo(click.style(
+            f"  Note: {label} failed ({msg}); the ◆ marker treats a git error "
+            f"as settled, so this verdict may under-report.", fg="red"))
+
+
+def _echo_unsettled_truncation(total: int, shown: int, llm: bool) -> None:
+    """Say what --limit hid, so a truncated list is never mistaken for the whole."""
+    if total <= shown:
+        return
+    hidden = total - shown
+    if llm:
+        click.echo(f"# {hidden} more (raise --limit)")
+    else:
+        click.echo(f"  … {hidden} more (raise --limit to see {total})")
+
+
+def unsettled_item(item_id: int, llm: bool = False, as_json: bool = False):
+    """Explain exactly why one task's worktree is unsettled (E-1865)."""
+    row = db.query(
+        "SELECT t.id, COALESCE(t.title, t.description) AS title, t.status, "
+        "p.name AS project_name "
+        "FROM tasks t JOIN projects p ON t.project_id = p.id WHERE t.id = ?",
+        (item_id,),
+    )
+    from endless.worktree_cmd import _project_root
+    root = _project_root()
+    path = _worktree_path_for_task(root, item_id)
+
+    if row:
+        item = {"id": row[0]["id"], "title": row[0]["title"],
+                "status": row[0]["status"], "project_name": row[0]["project_name"]}
+    elif path is not None:
+        # A worktree on disk with no task row is exactly the confusing state this
+        # command exists to explain, so describe the worktree rather than
+        # refusing. Only a missing task AND no worktree is a genuine bad id.
+        item = {"id": item_id, "title": "(no task row)",
+                "status": "?", "project_name": "?"}
+    else:
+        raise click.ClickException(f"No task found with id {item_id}")
+    probe = _unsettled_probe([path])[0] if path else {
+        "has_worktree": False, "unsettled": False, "modified": False,
+        "unlanded": False, "reason": "no worktree", "branch": "",
+        "modified_files": [], "auto_managed_files": [],
+        "unlanded_count": 0, "unlanded_log": [],
+    }
+
+    if as_json:
+        import json
+        click.echo(json.dumps({
+            "id": task_id_display(item["id"]),
+            "title": item["title"],
+            "status": item["status"],
+            "project": item["project_name"],
+            **probe,
+        }, indent=2))
+        return
+
+    if llm:
+        click.echo(f"# {task_id_display(item['id'])} {item['title']}")
+        click.echo(f"# {probe['reason']}")
+        for f in probe["modified_files"]:
+            click.echo(f"modified {f}")
+        for f in probe["auto_managed_files"]:
+            click.echo(f"auto-managed {f}")
+        for c in probe["unlanded_log"]:
+            click.echo(f"unlanded {c}")
+        return
+
+    click.echo()
+    click.echo(click.style(
+        f"{task_id_display(item['id'])} ({item['title']})", bold=True))
+    if probe["branch"]:
+        click.echo(f"  Branch:    {probe['branch']}")
+    if path:
+        click.echo(f"  Worktree:  {path}")
+    click.echo(f"  Verdict:   " +
+               click.style(probe["reason"], fg=_unsettled_color(probe)))
+
+    if not probe["unsettled"]:
+        click.echo()
+        if not probe["has_worktree"]:
+            click.echo(click.style("•", fg="cyan") +
+                       " No worktree for this task — nothing to land.")
+        elif _probe_errors(probe):
+            # Fail-open: a failed probe reads as settled. Claiming the tree is
+            # clean here would assert something git never actually told us.
+            click.echo(click.style("•", fg="red") +
+                       " Cannot confirm settled — a git probe failed (see below).")
+        else:
+            click.echo(click.style("•", fg="green") +
+                       " Settled: working tree clean and every commit is on main.")
+        _echo_probe_errors(probe)
+        click.echo()
+        return
+
+    if probe["modified_files"]:
+        click.echo()
+        click.echo(click.style(
+            f"  Modified — {len(probe['modified_files'])} uncommitted/untracked "
+            f"file(s). Fix: commit or discard.", bold=True))
+        for f in probe["modified_files"]:
+            click.echo(f"    {f}")
+
+    if probe["auto_managed_files"]:
+        click.echo()
+        click.echo(click.style(
+            f"  Auto-managed — {len(probe['auto_managed_files'])} endless-owned "
+            f"file(s). `worktree land` commits these for you.", bold=True))
+        for f in probe["auto_managed_files"]:
+            click.echo(f"    {f}")
+
+    if probe["unlanded"]:
+        click.echo()
+        click.echo(click.style(
+            f"  Unlanded — {probe['unlanded_count']} commit(s) not on main. "
+            f"Fix: endless worktree land {task_id_display(item['id'])}", bold=True))
+        for c in probe["unlanded_log"]:
+            click.echo(f"    {c}")
+        if len(probe["unlanded_log"]) < probe["unlanded_count"]:
+            click.echo(f"    … {probe['unlanded_count'] - len(probe['unlanded_log'])} more")
+
+    _echo_probe_errors(probe)
+    click.echo()
+
+
 # E-1544: research-gate helpers. ED-1504 requires `--type research` to be
 # justified unless `--parent` is a type=epic, status=underway task.
 

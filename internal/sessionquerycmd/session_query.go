@@ -75,6 +75,11 @@ func Run(args []string) {
 		}
 	case "worktree-anomalies":
 		os.Exit(runWorktreeAnomalies(args[1:]))
+	case "worktree-unsettled":
+		if err := runWorktreeUnsettled(args[1:]); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
 	case "task-report":
 		if err := runTaskReport(args[1:]); err != nil {
 			fmt.Fprintln(os.Stderr, err)
@@ -121,6 +126,9 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "  worktree-anomalies --worktree-path <path> [--project-root <path>]")
 	fmt.Fprintln(os.Stderr, "                                    terse line per genuine handoff anomaly; nothing when clean")
 	fmt.Fprintln(os.Stderr, "                                    exit 0 clean, 1 anomalies present, 2 on error")
+	fmt.Fprintln(os.Stderr, "  worktree-unsettled <worktree-path>...")
+	fmt.Fprintln(os.Stderr, "                                    JSON array of per-worktree unsettled breakdowns (E-1865):")
+	fmt.Fprintln(os.Stderr, "                                    {unsettled, modified, unlanded, reason, modified_files, unlanded_log, …}")
 	fmt.Fprintln(os.Stderr, "  trail [--client <name>] [--limit N]")
 	fmt.Fprintln(os.Stderr, "                                    JSON array of navigation edges newest-first (no --client = all clients)")
 	fmt.Fprintln(os.Stderr, "  resume-target --ref <task-id|session-id|uuid>")
@@ -378,6 +386,86 @@ func runWorktreeAnomalies(args []string) int {
 		return 1
 	}
 	return 0
+}
+
+// runWorktreeUnsettled emits the unsettled breakdown for each worktree path
+// given as a positional argument, as a JSON array in the same order (E-1865).
+//
+// Path-based and DB-free for the same reason worktree-anomalies is (E-1766): in
+// a self-dev worktree a DB lookup routes to the per-worktree sandbox, which
+// lacks the task row. The Python caller already resolves task → worktree path,
+// and passes every path in ONE invocation so the list view costs a single
+// subprocess rather than one per worktree.
+//
+// Always exits 0 when it ran: "settled" is a legitimate answer, not a failure,
+// and the caller reads the verdict from the JSON rather than the exit code.
+func runWorktreeUnsettled(args []string) error {
+	fs := flag.NewFlagSet("worktree-unsettled", flag.ContinueOnError)
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	paths := fs.Args()
+	if len(paths) == 0 {
+		return fmt.Errorf("at least one worktree path argument is required")
+	}
+	out := make([]worktreeUnsettledJSON, 0, len(paths))
+	for _, p := range paths {
+		out = append(out, newWorktreeUnsettledJSON(monitor.WorktreeUnsettledDetailAt(p)))
+	}
+	enc := json.NewEncoder(os.Stdout)
+	enc.SetIndent("", "  ")
+	return enc.Encode(out)
+}
+
+// worktreeUnsettledJSON is the wire shape of one worktree's breakdown. Declared
+// explicitly (rather than tagging monitor.UnsettledDetail) to keep the Go/Python
+// contract in one readable place, and because the derived verdict fields —
+// unsettled/modified/unlanded/reason — are computed by the Go methods so the
+// Python renderer never re-derives the predicate.
+type worktreeUnsettledJSON struct {
+	WorktreePath  string   `json:"worktree_path"`
+	HasWorktree   bool     `json:"has_worktree"`
+	Unsettled     bool     `json:"unsettled"`
+	Modified      bool     `json:"modified"`
+	Unlanded      bool     `json:"unlanded"`
+	Reason        string   `json:"reason"`
+	Branch        string   `json:"branch"`
+	ModifiedFiles []string `json:"modified_files"`
+	AutoManaged   []string `json:"auto_managed_files"`
+	UnlandedCount int      `json:"unlanded_count"`
+	UnlandedLog   []string `json:"unlanded_log"`
+	StatusErr     string   `json:"status_error,omitempty"`
+	RevListErr    string   `json:"rev_list_error,omitempty"`
+}
+
+func newWorktreeUnsettledJSON(d monitor.UnsettledDetail) worktreeUnsettledJSON {
+	// Nil slices marshal as null; the Python side wants lists it can iterate
+	// unconditionally, so normalize to empty.
+	mod, auto, log := d.Modified, d.AutoManaged, d.UnlandedLog
+	if mod == nil {
+		mod = []string{}
+	}
+	if auto == nil {
+		auto = []string{}
+	}
+	if log == nil {
+		log = []string{}
+	}
+	return worktreeUnsettledJSON{
+		WorktreePath:  d.WorktreePath,
+		HasWorktree:   d.HasWorktree,
+		Unsettled:     d.Unsettled(),
+		Modified:      d.IsModified(),
+		Unlanded:      d.IsUnlanded(),
+		Reason:        d.Reason(),
+		Branch:        d.Branch,
+		ModifiedFiles: mod,
+		AutoManaged:   auto,
+		UnlandedCount: d.UnlandedCount,
+		UnlandedLog:   log,
+		StatusErr:     d.StatusErr,
+		RevListErr:    d.RevListErr,
+	}
 }
 
 func runListLive(args []string) error {
