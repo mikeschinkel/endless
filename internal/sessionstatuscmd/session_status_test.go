@@ -301,9 +301,9 @@ func TestBuildLegend(t *testing.T) {
 		{
 			name: "actions in enum order then decorations",
 			rows: []monitor.SessionStatusRow{
-				{Status: "unplanned"},             // plan (later in enum)
-				{IsFocal: true, Status: "ready"},  // this (first in enum)
-				{Status: "ready", BlockedByN: 1},  // do + ⊗
+				{Status: "unplanned"},                 // plan (later in enum)
+				{IsFocal: true, Status: "ready"},      // this (first in enum)
+				{Status: "ready", BlockedByN: 1},      // do + ⊗
 				{Status: "underway", Unsettled: true}, // orphan + ◆
 			},
 			want: "● this  ▶ do  ✎ plan  ◷ orphan  ⊗ blocked  ◆ unsettled",
@@ -430,6 +430,84 @@ func overwriteLine(prev, next string) string {
 		col++
 	}
 	return string(cells)
+}
+
+// TestColorize pins the E-1707 rule on top of the pre-existing intensity matrix:
+// the unsettled flag (◆) VETOES every dim case — terminal, later and maybe — so a
+// diverged worktree never renders grey and reads as done. Vetoing dim yields
+// NORMAL weight (bold stays reserved for urgent), and terminal still outranks
+// urgent when the row is settled.
+func TestColorize(t *testing.T) {
+	const line = "⁇ T◆E-1687 ✓ completed but unlanded"
+	cases := []struct {
+		name                string
+		phase               string
+		terminal, unsettled bool
+		want                string
+	}{
+		// Pre-E-1707 behavior, unchanged for settled rows.
+		{"terminal settled dims", "now", true, false, ansiDim + line + ansiReset},
+		{"later settled dims", "later", false, false, ansiDim + line + ansiReset},
+		{"maybe settled dims", "maybe", false, false, ansiDim + line + ansiReset},
+		{"urgent settled bolds", "urgent", false, false, ansiBold + line + ansiReset},
+		{"terminal outranks urgent", "urgent", true, false, ansiDim + line + ansiReset},
+		{"now settled is normal", "now", false, false, line},
+		// E-1707: ◆ vetoes dim, at normal weight — never bold.
+		{"terminal unsettled is NOT dim", "now", true, true, line},
+		{"later unsettled is NOT dim", "later", false, true, line},
+		{"maybe unsettled is NOT dim", "maybe", false, true, line},
+		{"now unsettled stays normal", "now", false, true, line},
+		// urgent keeps its bold: ◆ only removes dim, it does not add emphasis.
+		{"urgent unsettled stays bold", "urgent", false, true, ansiBold + line + ansiReset},
+		// The veto is a COLOR decision only — with color off nothing is ever wrapped.
+		{"color disabled is untouched", "now", true, true, line},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			enabled := c.name != "color disabled is untouched"
+			got := colorize(line, c.phase, c.terminal, c.unsettled, enabled)
+			if got != c.want {
+				t.Errorf("colorize(phase=%q, terminal=%v, unsettled=%v) = %q, want %q",
+					c.phase, c.terminal, c.unsettled, got, c.want)
+			}
+		})
+	}
+}
+
+// TestRenderUnsettledRowNotDimmed is the end-to-end form of E-1707 through the
+// real render path: a terminal-status row whose worktree still diverges (◆) must
+// carry NO dim escape, so the marker and the land it calls for stay visible; the
+// same row once landed (◆ cleared) dims exactly as before. This is the regression
+// that reproduced the bug (a `completed` + ◆ row rendered `\x1b[2m…◆…\x1b[0m`).
+func TestRenderUnsettledRowNotDimmed(t *testing.T) {
+	render := func(unsettled bool) string {
+		rows := []monitor.SessionStatusRow{
+			{ID: 1687, Title: "completed but unlanded", Status: "completed", Phase: "now",
+				TypeSlug: "todo", IsFrom: true, Unsettled: unsettled},
+		}
+		var b strings.Builder
+		renderTo(&b, rows, 1687, hintClaimBind, 90, true)
+		return strings.Split(strings.TrimRight(b.String(), "\n"), "\n")[1]
+	}
+
+	unlanded := render(true)
+	if strings.Contains(unlanded, ansiDim) {
+		t.Errorf("unsettled terminal row must not be dimmed (◆ would read as done): %q", unlanded)
+	}
+	if !strings.Contains(unlanded, "◆") {
+		t.Errorf("unsettled row lost its ◆ marker: %q", unlanded)
+	}
+	if strings.Contains(unlanded, ansiBold) {
+		t.Errorf("unsettled row must render at NORMAL weight, not bold: %q", unlanded)
+	}
+
+	landed := render(false)
+	if !strings.HasPrefix(landed, ansiDim) || !strings.HasSuffix(landed, ansiReset) {
+		t.Errorf("settled terminal row must still dim as before: %q", landed)
+	}
+	if strings.Contains(landed, "◆") {
+		t.Errorf("settled row must carry no ◆: %q", landed)
+	}
 }
 
 func TestTypeLetter(t *testing.T) {

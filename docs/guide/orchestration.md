@@ -93,6 +93,8 @@ endless worktree for-task <id>              # resolve a task ID to its path
 | `modified`   | Uncommitted working-tree changes       | Commit or discard          |
 | `unlanded`   | Commits on the branch not yet on `main`| `endless worktree land <id>` |
 
+Because ◆ means *there is still something to do here*, an unsettled row is never rendered dim — not when its status is terminal (`confirmed`/`assumed`/`completed`), not when its phase is `later`/`maybe`. Dim reads as "done, ignore me", which is precisely the wrong signal for a worktree still awaiting a land (E-1707).
+
 `task unsettled` expands the marker:
 
 ```bash

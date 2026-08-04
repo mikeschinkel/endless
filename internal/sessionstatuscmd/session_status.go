@@ -354,7 +354,7 @@ func renderTo(w io.Writer, rows []monitor.SessionStatusRow, focal int64, noTaskH
 		)
 		line += blockField(r, bw)
 		line += runewidth.Truncate(collapse(r.Title), titleBudget, "…")
-		fmt.Fprintln(w, colorize(line, r.Phase, isTerminal(r.Status), color))
+		fmt.Fprintln(w, colorize(line, r.Phase, isTerminal(r.Status), r.Unsettled, color))
 
 		// Focal-row detail: expand the coarse ◆ marker into the specific
 		// git/worktree anomalies for the focal worktree (E-1758), the same set
@@ -658,26 +658,40 @@ func collapse(s string) string {
 }
 
 // ANSI helpers. Phase-by-intensity: urgent bold, later/maybe dim, terminal rows
-// dim, everything else normal. Kept to bold/dim (SGR 1/2) so it reads on any
-// theme without color-profile guessing — lipgloss is reserved for the future
-// TUI (E-859/E-1622), out of scope here.
+// dim, everything else normal — except that an unsettled (◆) row is never dimmed
+// (E-1707; see colorize). Kept to bold/dim (SGR 1/2) so it reads on any theme
+// without color-profile guessing — lipgloss is reserved for the future TUI
+// (E-859/E-1622), out of scope here.
 const (
 	ansiReset = "\x1b[0m"
 	ansiBold  = "\x1b[1m"
 	ansiDim   = "\x1b[2m"
 )
 
-func colorize(line, phase string, terminal, enabled bool) string {
+// colorize applies the row's intensity. unsettled (◆, E-1701) VETOES every dim
+// case: dim reads as "done, nothing to do here", which directly contradicts what
+// ◆ means — this worktree still diverges from main and needs a land (E-1707, hit
+// live on E-1687, where a `completed` + ◆ row rendered grey and the needed land
+// was nearly missed). The veto covers the later/maybe phases as well as the
+// terminal case: the failure mode is identical (grey swallows the marker), and a
+// uniform "◆ is never dimmed" rule is easier to trust than a per-case carve-out.
+// Vetoing dim yields NORMAL weight, not bold — bold stays reserved for `urgent`,
+// so ◆ makes a row stop reading as done without also making it shout.
+//
+// terminal still outranks urgent (unchanged): a done urgent row reads dim, not
+// bold, unless it is unsettled.
+func colorize(line, phase string, terminal, unsettled, enabled bool) string {
 	if !enabled {
 		return line
 	}
 	switch {
-	case terminal:
+	case terminal, phase == "later", phase == "maybe":
+		if unsettled {
+			return line
+		}
 		return ansiDim + line + ansiReset
 	case phase == "urgent":
 		return ansiBold + line + ansiReset
-	case phase == "later", phase == "maybe":
-		return ansiDim + line + ansiReset
 	default:
 		return line
 	}
