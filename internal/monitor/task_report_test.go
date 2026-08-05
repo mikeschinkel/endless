@@ -38,6 +38,19 @@ func seedReportTask(t *testing.T, db *sql.DB, id int64, status string, parent *i
 	}
 }
 
+// seedReportTaskType sets a seeded task's type slug by resolving it through
+// task_types, so the tests bind to the slug the renderer gates on rather than to
+// a hardcoded id.
+func seedReportTaskType(t *testing.T, db *sql.DB, id int64, slug string) {
+	t.Helper()
+	if _, err := db.Exec(
+		"UPDATE tasks SET type_id = (SELECT id FROM task_types WHERE slug = ?) WHERE id = ?",
+		slug, id,
+	); err != nil {
+		t.Fatalf("set type %q on E-%d: %v", slug, id, err)
+	}
+}
+
 func seedDep(t *testing.T, db *sql.DB, sourceID, targetID int64, depType string) {
 	t.Helper()
 	if _, err := db.Exec(
@@ -108,8 +121,34 @@ func TestTaskReportFacts_Successors(t *testing.T) {
 	}
 }
 
-// TestTaskReportFacts_Children returns direct children with status; a non-epic
-// task has none.
+// TestTaskReportFacts_Type reports the focal task's type slug, and "" when the
+// row is untyped. The renderer gates the Children list on this (E-1880), so an
+// untyped row must read as "not an epic" rather than error.
+func TestTaskReportFacts_Type(t *testing.T) {
+	db := reportTestDB(t)
+	seedReportTask(t, db, 100, "unverified", nil)
+	seedReportTaskType(t, db, 100, "epic")
+	seedReportTask(t, db, 200, "unverified", nil) // left untyped
+
+	facts, err := taskReportFacts(db, 100)
+	if err != nil {
+		t.Fatalf("taskReportFacts: %v", err)
+	}
+	if facts.Type != "epic" {
+		t.Errorf("type = %q, want epic", facts.Type)
+	}
+
+	facts, err = taskReportFacts(db, 200)
+	if err != nil {
+		t.Fatalf("taskReportFacts (untyped): %v", err)
+	}
+	if facts.Type != "" {
+		t.Errorf("untyped task type = %q, want empty", facts.Type)
+	}
+}
+
+// TestTaskReportFacts_Children returns direct children with status. Any type can
+// have them — the epic-only gate is the renderer's, not this query's.
 func TestTaskReportFacts_Children(t *testing.T) {
 	db := reportTestDB(t)
 	epic := int64(500)

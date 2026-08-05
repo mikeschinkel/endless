@@ -229,10 +229,17 @@ generate the end-of-session / status report rather than composing one by hand:
 endless task report <id>
 ```
 
-It computes the facts it can (status, follow-ups, children, worktree state) and
-prints a steering prompt telling you to relay **only those facts, verbatim —
-plainly, no ceremony**. It is status-agnostic (run it at whatever status you
-reached) and **does not change the task's status**.
+It reports **only what your user could not already compute** — the follow-ups
+you filed, an epic's children, your gated notes/questions, and unexpected
+worktree state — and prints a steering prompt telling you to relay that
+**verbatim, plainly, no ceremony**. It is status-agnostic (run it at whatever
+status you reached) and **does not change the task's status**.
+
+Status, landing, and parentage are deliberately **not** in the output: `task
+show` and `session status` already render them, and the handoff tells you not to
+recap them — the command holds itself to the same bar it enforces on your notes
+(E-1880). So a clean session's report is **empty**, and steers you to say
+nothing rather than manufacture a summary. Say what you delivered; stop.
 
 **Report by default.** End-of-session and status reports route through this
 command and are relayed as-is; don't write them as freeform prose. The normal

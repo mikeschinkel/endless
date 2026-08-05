@@ -1,12 +1,19 @@
 """`endless task report <id>` — the steering-prompt reporting command (E-1771).
 
 End-of-session reports stop being freeform prose the agent composes. Instead the
-agent runs this command; the command computes the facts it can (status,
+agent runs this command; the command computes the facts it can (status, type,
 successors, children, worktree state), gates the one free-text escape hatch
 (notes/questions) with a per-entry Haiku check, and prints a *steering prompt*
 that tells the agent to relay only those facts to the user — plainly, no
 ceremony. This revises ED-1531 (the output steers the agent rather than being
 relayed verbatim); persisting the facts as queryable rows is E-1777.
+
+It computes more than it prints. E-1880 held the command to the bar it already
+enforces on the agent: a line is emitted only if the user could not already know
+it, so status/landed/parentage stay out of the output even though the query
+still returns them (fetching status also proves the task exists). That is what
+makes "relay this verbatim" and the handoff's "do NOT recap task status, phase,
+or relationships" satisfiable at the same time.
 
 The normal path is `endless task report <id>` with NO payload: zero free-text
 entries means zero Haiku calls, and the command steers on computed facts alone.
@@ -189,7 +196,8 @@ def _gate(notes: list[dict], questions: list[dict], prompts: dict[str, str]) -> 
 # --- computed facts ---------------------------------------------------------
 
 def _compute_facts(item_id: int) -> dict:
-    """Fetch the computed report facts from Go (status, landed, successors, children)."""
+    """Fetch the computed report facts from Go (status, type, landed, successors,
+    children). Not all of them are rendered — see `_render_facts`."""
     from endless.event_bridge import _resolve_endless_go
     go_bin = _resolve_endless_go()
     config.require_db_context()
@@ -243,23 +251,38 @@ def _ref_line(refs: list[dict]) -> str:
     return ", ".join(f"E-{r['id']} [{r['status']}]" for r in refs)
 
 
-def _render_facts(item_id: int, facts: dict, anomalies: list[str],
+def _render_facts(facts: dict, anomalies: list[str],
                   notes: list[dict], questions: list[dict]) -> str:
-    """Assemble the fact block. Empty categories are omitted (terse for the
-    human); only non-empty sections appear."""
+    """Assemble the fact block — only what the user could not already know.
+
+    The command holds itself to the bar it already enforces on the agent
+    (E-1880): `note-check` DROPs any agent note that "restates something already
+    visible in git/task state", so the command must not emit such a line either.
+    That rules out `Task:` (the user typed the id), `Status:` (`session status`
+    renders it — the flip *is* the contract) and `Landed:` (computable from
+    `task show`), all of which the handoff simultaneously tells the session NOT
+    to recap. What survives is what a query would not have told them: the
+    follow-ups this session filed, an epic's children, and the gated free text.
+
+    Empty categories are omitted; an all-empty block is legitimate and
+    `report_item` steers on it differently.
+    """
     lines: list[str] = []
-    lines.append(f"Task: E-{item_id}")
-    lines.append(f"Status: {facts.get('status', '')}")
-    if facts.get("landed"):
-        lines.append("Landed: yes")
 
     successors = facts.get("successors") or []
     if successors:
         lines.append(f"Follow-ups you filed: {_ref_line(successors)}")
 
-    children = facts.get("children") or []
-    if children:
-        lines.append(f"Children: {_ref_line(children)}")
+    # Children are a recap for every type but an epic, whose handoff explicitly
+    # asks the session to lead with the state of its children. The dedupe is
+    # unconditional: `--parent E-N --cleans-up E-N` — the filing pattern every
+    # handoff prescribes — lands one task in BOTH lists, and printing the same
+    # id twice under two labels is what made E-1870's report unreadable.
+    if facts.get("type") == "epic":
+        filed = {s.get("id") for s in successors}
+        children = [c for c in (facts.get("children") or []) if c.get("id") not in filed]
+        if children:
+            lines.append(f"Children: {_ref_line(children)}")
 
     if notes:
         lines.append("Notes to relay:")
@@ -284,11 +307,22 @@ def _render_facts(item_id: int, facts: dict, anomalies: list[str],
 
 
 def report_item(item_id: int, payload: str | None) -> None:
-    """Compute facts, gate the free-text payload, and print the steering prompt."""
+    """Compute facts, gate the free-text payload, and print the steering prompt.
+
+    A clean handoff now renders an EMPTY fact block (E-1880) — nothing was filed,
+    noted, asked, or left dirty. "Report the following… add nothing else" would
+    then introduce nothing, so the empty case gets its own steer telling the
+    agent to say nothing rather than manufacture a summary out of the vacuum.
+    """
     notes, questions = _parse_payload(payload)
     prompts = report_prompts.load_prompts()
     _gate(notes, questions, prompts)  # raises on a bounced entry
     facts = _compute_facts(item_id)
     anomalies = _compute_anomalies()
-    fact_block = _render_facts(item_id, facts, anomalies, notes, questions)
+    fact_block = _render_facts(facts, anomalies, notes, questions)
+    if not fact_block.strip():
+        # steer-empty takes no {facts} placeholder — there are none — so it is
+        # echoed verbatim, braces and all.
+        click.echo(prompts[report_prompts.STEER_EMPTY])
+        return
     click.echo(prompts[report_prompts.STEER].format(facts=fact_block))

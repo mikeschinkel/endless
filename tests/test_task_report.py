@@ -147,44 +147,140 @@ def test_gate_no_entries_never_calls_haiku(monkeypatch):
 
 # --- render -----------------------------------------------------------------
 
-def test_render_omits_empty_categories():
-    facts = {"status": "unverified", "landed": False, "successors": [], "children": None}
-    block = report_cmd._render_facts(1771, facts, [], [], [])
-    assert "Status: unverified" in block
-    assert "Follow-ups" not in block
-    assert "Children" not in block
-    assert "Notes" not in block
-    assert "Questions" not in block
+def test_render_clean_task_is_empty():
+    """A clean handoff has nothing the user could not already compute (E-1880):
+    no Task/Status/Landed recap, no empty-category ceremony — an empty block."""
+    facts = {"status": "unverified", "type": "todo", "landed": False,
+             "successors": [], "children": None}
+    block = report_cmd._render_facts(facts, [], [], [])
+    assert block.strip() == ""
+
+
+def test_render_omits_computable_lines():
+    """Status/Landed/Task are computable from `task show` + `session status`, and
+    the handoff forbids recapping them — so the command must not emit them even
+    when it has the values."""
+    facts = {"status": "unverified", "type": "todo", "landed": True,
+             "successors": [{"id": 1772, "status": "unverified", "relation": "blocks"}],
+             "children": []}
+    block = report_cmd._render_facts(facts, [], [], [])
+    assert "Status:" not in block
     assert "Landed" not in block
+    assert "Task: E-" not in block
+    assert "Follow-ups you filed: E-1772 [unverified]" in block
 
 
 def test_render_includes_nonempty_sections():
     facts = {
-        "status": "unverified", "landed": True,
+        "status": "unverified", "type": "epic", "landed": True,
         "successors": [{"id": 1772, "status": "unverified", "relation": "blocks"}],
         "children": [{"id": 1800, "status": "assumed"}],
     }
     notes = [{"kind": "anomaly", "text": "base is behind main"}]
     questions = [{"text": "worktree or repo?", "type": "choice", "style": "single"}]
-    block = report_cmd._render_facts(1771, facts, ["uncommitted: scratch.go"], notes, questions)
+    block = report_cmd._render_facts(facts, ["uncommitted: scratch.go"], notes, questions)
     assert "Follow-ups you filed: E-1772 [unverified]" in block
     assert "Children: E-1800 [assumed]" in block
-    assert "Landed: yes" in block
     assert "[anomaly] base is behind main" in block
     assert "worktree or repo?  (choice/single)" in block
     assert "uncommitted: scratch.go" in block
     assert "unexpected" in block  # anomaly guidance to the agent
 
 
+# --- E-1880: children are epic-only, and never duplicate a follow-up ---------
+
+def test_render_hides_children_for_non_epic():
+    """`--parent E-N --cleans-up E-N` — the pattern every handoff prescribes —
+    lands a follow-up in BOTH lists. For a non-epic the Children line is a pure
+    recap, so it is not rendered and the ids appear exactly once."""
+    refs = [{"id": 1872, "status": "submitted", "relation": "cleaned_up_by"},
+            {"id": 1873, "status": "submitted", "relation": "cleaned_up_by"}]
+    facts = {"status": "unverified", "type": "todo", "landed": False,
+             "successors": refs,
+             "children": [{"id": r["id"], "status": r["status"]} for r in refs]}
+    block = report_cmd._render_facts(facts, [], [], [])
+    assert "Children" not in block
+    assert block.count("E-1872") == 1
+    assert block.count("E-1873") == 1
+
+
+def test_render_epic_keeps_children_but_dedupes():
+    """An epic handoff is explicitly asked to lead with the state of its
+    children — so the line stays — but an id already listed as a follow-up is
+    never repeated under it."""
+    facts = {
+        "status": "unverified", "type": "epic", "landed": False,
+        "successors": [{"id": 1872, "status": "submitted", "relation": "cleaned_up_by"}],
+        "children": [{"id": 1872, "status": "submitted"},
+                     {"id": 1899, "status": "ready"}],
+    }
+    block = report_cmd._render_facts(facts, [], [], [])
+    assert "Children: E-1899 [ready]" in block
+    assert block.count("E-1872") == 1
+
+
+def test_render_epic_all_children_filed_omits_the_line():
+    """Dedupe leaving nothing behind must omit the label, not print an empty one."""
+    facts = {
+        "status": "unverified", "type": "epic", "landed": False,
+        "successors": [{"id": 1872, "status": "submitted", "relation": "cleaned_up_by"}],
+        "children": [{"id": 1872, "status": "submitted"}],
+    }
+    block = report_cmd._render_facts(facts, [], [], [])
+    assert "Children" not in block
+
+
+def test_render_missing_type_is_not_an_epic():
+    """A task with no type_id reports type "" — treat it as a non-epic rather
+    than crashing or leaking a Children recap."""
+    facts = {"status": "unverified", "type": "", "landed": False,
+             "successors": [], "children": [{"id": 1899, "status": "ready"}]}
+    assert report_cmd._render_facts(facts, [], [], []).strip() == ""
+
+
+# --- steer selection --------------------------------------------------------
+
 def test_report_item_wraps_facts_in_steer(monkeypatch, capsys):
     monkeypatch.setattr(report_cmd, "_compute_facts",
-                        lambda i: {"status": "unverified", "landed": False,
-                                   "successors": [], "children": []})
+                        lambda i: {"status": "unverified", "type": "todo", "landed": False,
+                                   "successors": [{"id": 1772, "status": "ready",
+                                                   "relation": "cleaned_up_by"}],
+                                   "children": []})
     monkeypatch.setattr(report_cmd, "_compute_anomalies", lambda: [])
     report_cmd.report_item(1771, None)
     out = capsys.readouterr().out
     assert "Report the following to the user" in out  # steer header
-    assert "Status: unverified" in out
+    assert "Follow-ups you filed: E-1772 [ready]" in out
+    assert "Status:" not in out
+
+
+def test_report_item_empty_block_uses_steer_empty(monkeypatch, capsys):
+    """Nothing to report → the steer-empty prompt, and never the `steer` header
+    (which would introduce a fact block that isn't there)."""
+    monkeypatch.setattr(report_cmd, "_compute_facts",
+                        lambda i: {"status": "unverified", "type": "todo", "landed": False,
+                                   "successors": [], "children": []})
+    monkeypatch.setattr(report_cmd, "_compute_anomalies", lambda: [])
+    report_cmd.report_item(1771, None)
+    out = capsys.readouterr().out
+    assert "Report the following to the user" not in out
+    assert out.strip() == report_prompts.DEFAULTS[report_prompts.STEER_EMPTY]
+
+
+def test_steer_empty_is_overridable(isolated_env, monkeypatch, capsys):
+    """steer-empty is a registered prompt name, so it stays user-editable like
+    the other three (ED-1531 Req 5)."""
+    import json
+    from endless import config
+    (config.CONFIG_DIR / "report-prompts.jsonl").write_text(
+        json.dumps({"name": "steer-empty", "text": "EMPTY-MARKER"}) + "\n"
+    )
+    monkeypatch.setattr(report_cmd, "_compute_facts",
+                        lambda i: {"status": "unverified", "type": "todo", "landed": False,
+                                   "successors": [], "children": []})
+    monkeypatch.setattr(report_cmd, "_compute_anomalies", lambda: [])
+    report_cmd.report_item(1771, None)
+    assert capsys.readouterr().out.strip() == "EMPTY-MARKER"
 
 
 # --- tunable config surface -------------------------------------------------

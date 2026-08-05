@@ -1851,12 +1851,18 @@ def task_assume(item_ids, cascade, outcome, outcome_file, allow_paths):
 def task_report(item_id, payload, payload_file):
     """Produce an end-of-session (or status) report for a task.
 
-    The command computes the facts it can (status, follow-ups, children,
-    worktree state) and prints a steering prompt telling you to relay only
-    those facts to the user — plainly, no ceremony. The normal path is no
-    payload at all. Supply --json only for genuinely non-computable notes
-    (out-of-band anomalies/discoveries) or open questions for the user; each
-    free-text entry is checked and a ceremonial one is bounced.
+    It reports only what the user could NOT already compute: the follow-ups you
+    filed, an epic's children, your gated notes/questions, and unexpected
+    worktree state — then prints a steering prompt telling you to relay just
+    that, plainly, no ceremony. Status, landing, and parentage are deliberately
+    absent (`task show` / `session status` already render them, and the handoff
+    forbids recapping them). A clean session therefore has an empty report, and
+    is steered to say nothing rather than invent a summary.
+
+    The normal path is no payload at all. Supply --json only for genuinely
+    non-computable notes (out-of-band anomalies/discoveries) or open questions
+    for the user; each free-text entry is checked and a ceremonial one is
+    bounced.
 
     Status-agnostic: run it at whatever terminal status you reached. It does
     not change the task's status.

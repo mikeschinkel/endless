@@ -16,6 +16,12 @@ type TaskReportFacts struct {
 	TaskID int64 `json:"task_id"`
 	// Status is the focal task's current status.
 	Status string `json:"status"`
+	// Type is the focal task's type slug (todo/bugfix/research/epic/…), or ""
+	// when the row has no type_id. The renderer gates the Children list on it:
+	// only an epic handoff is asked to lead with the state of its children
+	// (E-1880); for every other type the list is a recap of what `task show`
+	// already prints.
+	Type string `json:"type"`
 	// Landed is true when the task already has >=1 task_landings row. Almost
 	// always false at report time (landing follows verification), so the prompt
 	// mentions it only when true.
@@ -25,8 +31,10 @@ type TaskReportFacts struct {
 	// follow-ups filed against it). Each carries its current status so the agent
 	// can tersely tell the user what was spawned and where it stands.
 	Successors []TaskRef `json:"successors"`
-	// Children are this task's direct child tasks (non-empty only when it is an
-	// epic), with current status.
+	// Children are this task's direct child tasks, with current status. Any task
+	// type can have them — the `--parent E-N --cleans-up E-N` filing pattern
+	// gives an ordinary task children too — so the epic-only gate lives in the
+	// renderer, not here.
 	Children []TaskRef `json:"children"`
 }
 
@@ -55,9 +63,15 @@ func BuildTaskReportFacts(taskID int64) (TaskReportFacts, error) {
 func taskReportFacts(db *sql.DB, taskID int64) (TaskReportFacts, error) {
 	facts := TaskReportFacts{TaskID: taskID}
 
-	// Focal status — the row must exist; a missing task is a caller error, not
-	// an empty report.
-	err := db.QueryRow("SELECT status FROM tasks WHERE id = ?", taskID).Scan(&facts.Status)
+	// Focal status and type — the row must exist; a missing task is a caller
+	// error, not an empty report. type_id is nullable, so LEFT JOIN + COALESCE
+	// (an untyped task reports "", which is simply "not an epic").
+	err := db.QueryRow(
+		`SELECT t.status, COALESCE(tt.slug, '')
+		   FROM tasks t
+		   LEFT JOIN task_types tt ON tt.id = t.type_id
+		  WHERE t.id = ?`, taskID,
+	).Scan(&facts.Status, &facts.Type)
 	if errors.Is(err, sql.ErrNoRows) {
 		return facts, fmt.Errorf("no such task E-%d", taskID)
 	}

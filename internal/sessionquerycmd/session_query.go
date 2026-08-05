@@ -134,15 +134,17 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "  resume-target --ref <task-id|session-id|uuid>")
 	fmt.Fprintln(os.Stderr, "                                    JSON {endless_id, session_id, active_task_id, worktree_path, state,")
 	fmt.Fprintln(os.Stderr, "                                    task_type, task_status, task_title, landed_sha} to relaunch (or recover) a lost session")
-	fmt.Fprintln(os.Stderr, "  task-report --id <task-id>        JSON {task_id, status, landed, successors[], children[]} of a task's computed report facts (E-1771)")
+	fmt.Fprintln(os.Stderr, "  task-report --id <task-id>        JSON {task_id, status, type, landed, successors[], children[]} of a task's computed report facts (E-1771)")
 }
 
 // runTaskReport prints the computed, non-agent-supplied facts for a `task
-// report` (E-1771) as JSON: the focal task's status, whether it has landed, its
-// downstream successors, and its children — each related task carrying its
-// current status. The Python reporting command renders these into a steering
-// prompt so the agent never types a fact the tool can compute. Read-only; no
-// persistence (that is E-1777).
+// report` (E-1771) as JSON: the focal task's status and type, whether it has
+// landed, its downstream successors, and its children — each related task
+// carrying its current status. The Python reporting command renders these into a
+// steering prompt so the agent never types a fact the tool can compute; it emits
+// only the subset the user could not already know, which is why `type` is on the
+// wire (the Children list is epic-only — E-1880). Read-only; no persistence
+// (that is E-1777).
 func runTaskReport(args []string) error {
 	fs := flag.NewFlagSet("task-report", flag.ContinueOnError)
 	id := fs.Int64("id", 0, "task id")

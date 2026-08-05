@@ -11,10 +11,11 @@ Precedence mirrors the verbs.jsonl surface (E-1268): a registered project's
 defaults. The file is JSONL, one record per line:
 
     {"name": "steer", "text": "…"}
+    {"name": "steer-empty", "text": "…"}
     {"name": "note-check", "text": "…"}
     {"name": "question-check", "text": "…"}
 
-Only the three known names are honored; unknown names are ignored. A record with
+Only the four known names are honored; unknown names are ignored. A record with
 a known name replaces the lower-precedence text for that name.
 
 The Haiku *model* is fixed (not tunable) — only the wording is a lever (Req 4).
@@ -25,18 +26,22 @@ from pathlib import Path
 
 from endless import config
 
-# The three tunable prompts. `steer` frames the final message the agent prints;
+# The four tunable prompts. `steer` frames the final message the agent prints;
+# `steer-empty` replaces it when there is no fact block at all (E-1880);
 # `note-check` / `question-check` each classify one free-text entry, and MUST
 # instruct the model to answer with a leading KEEP / DROP token (see
 # report_cmd parsing).
 STEER = "steer"
+STEER_EMPTY = "steer-empty"
 NOTE_CHECK = "note-check"
 QUESTION_CHECK = "question-check"
 
-_KNOWN = (STEER, NOTE_CHECK, QUESTION_CHECK)
+_KNOWN = (STEER, STEER_EMPTY, NOTE_CHECK, QUESTION_CHECK)
 
 # `{facts}` in the steer text is replaced with the computed fact block. The
 # check texts take `{text}` — the single entry under classification.
+# `steer-empty` takes NO placeholder: it is echoed verbatim, so braces in an
+# override are literal.
 DEFAULTS: dict[str, str] = {
     STEER: (
         "Report the following to the user as your final message, and add "
@@ -45,6 +50,16 @@ DEFAULTS: dict[str, str] = {
         "are absent below — if something is not listed, say nothing about it.\n"
         "\n"
         "{facts}"
+    ),
+    STEER_EMPTY: (
+        "There is nothing to report beyond the work itself: you filed no "
+        "follow-ups, raised no notes or questions, and the worktree is as "
+        "expected. Do NOT manufacture a summary to fill the gap — no recap of "
+        "status, phase, or relationships (the user can already see those), no "
+        "sign-off, no confirmation that nothing went wrong.\n"
+        "\n"
+        "Say only what the user asked you for: point at the deliverable, in one "
+        "line, and stop. If there is no deliverable to point at, say nothing."
     ),
     NOTE_CHECK: (
         "An agent is filing a handoff NOTE for a human reviewer. A GOOD note "
