@@ -193,13 +193,13 @@ check_readme_content() {
     assert_contains "links to ROADMAP.md" "ROADMAP.md" "${body}"
     assert_contains "links to VISION.md" "VISION.md" "${body}"
 
-    section "B7 — task lifecycle documents the new 'unevaluated' entry status"
+    section "B7 — task lifecycle documents the new 'untriaged' entry status"
     assert_contains "keeps a task-lifecycle section" "## Task lifecycle" "${body}"
-    assert_contains "prose introduces 'unevaluated'" "unevaluated" "${body}"
+    assert_contains "prose introduces 'untriaged'" "untriaged" "${body}"
     assert_contains "prose explains the approve gate" "approved to implement" "${body}"
     # The canonical mermaid must carry the new upstream status (layer A already
     # asserts byte-identity; this pins the actual content the invariant guards).
-    assert_contains "canonical block: [*] enters at unevaluated" "[*] --> unevaluated" "${body}"
+    assert_contains "canonical block: [*] enters at untriaged" "[*] --> untriaged" "${body}"
 }
 
 # ─── main ───────────────────────────────────────────────────────────────────

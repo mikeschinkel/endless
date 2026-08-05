@@ -1,7 +1,10 @@
-"""Tests for E-1266 / E-1648: attaching a non-empty --text moves a
-`unplanned` task to `submitted` (spec-complete, awaiting human approval —
-NOT `ready`, which now means human-approved). Applies on both `task add`
-and `task update`. An explicit --status in the same call always wins.
+"""Tests for E-1266 / E-1648: attaching a non-empty --text moves a pre-judgment
+task to `submitted` (spec-complete, awaiting human approval — NOT `ready`, which
+now means human-approved). Applies on both `task add` and `task update`. An
+explicit --status in the same call always wins.
+
+E-1845 made `untriaged` the default `task add` status and added it alongside
+`unplanned` as a promotion source, so the auto-move is exercised from both.
 """
 
 import pytest
@@ -30,12 +33,12 @@ def test_add_with_text_promotes_to_submitted(tmp_path, seeded_project_at_cwd):
     assert _status_of(item_id) == "submitted"
 
 
-def test_add_without_text_stays_unplanned(seeded_project_at_cwd):
+def test_add_without_text_stays_untriaged(seeded_project_at_cwd):
     item_id = task_cmd.add_item(
         title="Add a thing",
         description="short",
     )
-    assert _status_of(item_id) == "unplanned"
+    assert _status_of(item_id) == "untriaged"
 
 
 def test_add_with_empty_text_file_does_not_promote(tmp_path, seeded_project_at_cwd):
@@ -48,7 +51,7 @@ def test_add_with_empty_text_file_does_not_promote(tmp_path, seeded_project_at_c
         description="short",
         text=plan.read_text(),
     )
-    assert _status_of(item_id) == "unplanned"
+    assert _status_of(item_id) == "untriaged"
 
 
 def test_add_with_text_and_explicit_status_preserves_caller_status(tmp_path, seeded_project_at_cwd):
@@ -81,12 +84,17 @@ def test_add_tier_1_with_text_stays_ready(tmp_path, seeded_project_at_cwd):
 
 # --- task update ------------------------------------------------------------
 
-def test_update_with_text_on_unplanned_promotes_to_submitted(tmp_path, seeded_project_at_cwd):
+@pytest.mark.parametrize("start", ["untriaged", "unplanned"])
+def test_update_with_text_on_pre_judgment_promotes_to_submitted(
+    start, tmp_path, seeded_project_at_cwd
+):
+    """Both pre-judgment statuses promote — E-1845 added `untriaged`."""
     item_id = task_cmd.add_item(
         title="Add a thing",
         description="short",
+        status=start,
     )
-    assert _status_of(item_id) == "unplanned"
+    assert _status_of(item_id) == start
 
     plan = tmp_path / "plan.md"
     plan.write_text("# plan\nbody\n")
@@ -115,7 +123,7 @@ def test_update_with_text_plus_explicit_status_caller_wins(tmp_path, seeded_proj
         title="Add a thing",
         description="short",
     )
-    assert _status_of(item_id) == "unplanned"
+    assert _status_of(item_id) == "untriaged"
 
     plan = tmp_path / "plan.md"
     plan.write_text("# plan")
@@ -129,10 +137,10 @@ def test_update_with_empty_text_does_not_promote(tmp_path, seeded_project_at_cwd
         title="Add a thing",
         description="short",
     )
-    assert _status_of(item_id) == "unplanned"
+    assert _status_of(item_id) == "untriaged"
 
     plan = tmp_path / "empty.md"
     plan.write_text("   \n")
     task_cmd.update_plan(item_id=item_id, text=plan.read_text())
 
-    assert _status_of(item_id) == "unplanned"
+    assert _status_of(item_id) == "untriaged"

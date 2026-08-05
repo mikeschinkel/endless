@@ -218,7 +218,11 @@ func nextActions(items []data.TaskView) []data.TaskView {
 			result = append(result, item)
 		}
 	}
-	// Then next available (up to 5 total)
+	// Then next available (up to 5 total). `untriaged` is deliberately absent
+	// (E-1845): this widget answers "what should I pick up", and a task nobody
+	// has looked at yet is not an available action — the same reason `task next`
+	// omits it. Since `untriaged` is the default status, admitting it here would
+	// fill all 5 slots with unrouted rows.
 	for _, item := range items {
 		if len(result) >= 5 {
 			break

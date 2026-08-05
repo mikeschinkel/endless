@@ -245,7 +245,7 @@ func renderSessionStatusMarkdown(p *SessionStatusRecordedPayload) string {
 //
 // Status → disposition mapping:
 //   - resolved: confirmed, assumed, completed, obsolete, declined
-//   - pending:  unplanned, ready, underway, revisit
+//   - pending:  untriaged, unplanned, submitted, ready, underway, revisit
 //   - blocked:  blocked
 //   - unverified:   unverified
 //
@@ -305,7 +305,7 @@ func statusToDisposition(status string) string {
 		return "Blocked"
 	case "unverified":
 		return "Unverified"
-	case "unplanned", "submitted", "ready", "underway", "revisit":
+	case "untriaged", "unplanned", "submitted", "ready", "underway", "revisit":
 		return "Pending"
 	default:
 		return "Pending"

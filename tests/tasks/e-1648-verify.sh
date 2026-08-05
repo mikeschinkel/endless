@@ -108,7 +108,7 @@ setup_fixture() {
     git -C "$REPO" config user.name verify
     git -C "$REPO" commit -q --allow-empty -m "initial commit"
 
-    E register "$REPO" --name probe --label Probe --desc d --lang Go --status active >/dev/null 2>&1
+    E project register "$REPO" --name probe --label Probe --desc d --lang Go --status active >/dev/null 2>&1
 
     # Seed a background-kind session (session_kinds seeds slug 'background' = id 2).
     E sql "INSERT INTO sessions (id, session_id, project_id, kind_id, state) VALUES (9001,'bg-probe',1,2,'working')" --write >/dev/null 2>&1
@@ -134,10 +134,11 @@ test_retarget_auto_promote() {
 # ─── section B: submit verb (description-sufficient path) ─────────────────────
 
 test_submit_verb() {
-    section "B. 'task submit' moves a no-plan unplanned task → submitted"
+    section "B. 'task submit' moves a no-plan task → submitted"
     local t
     t="$(add_task "Add a no-plan thing")"
-    assert_eq "no-text task starts 'unplanned'" "unplanned" "$(ST "$t")"
+    # E-1845 moved the default one rung upstream; `submit` accepts both.
+    assert_eq "no-text task starts 'untriaged'" "untriaged" "$(ST "$t")"
     E task submit "E-$t" >/dev/null 2>&1
     assert_eq "'task submit' → 'submitted'" "submitted" "$(ST "$t")"
 }
@@ -154,7 +155,7 @@ test_approve_verb() {
 
     # approve refuses a non-submitted source.
     local u
-    u="$(add_task "Add an unplanned thing")"
+    u="$(add_task "Add an unplanned thing" --status unplanned)"
     out="$(E task approve "E-$u" 2>&1)"
     assert_eq "approve on 'unplanned' leaves it unchanged" "unplanned" "$(ST "$u")"
     assert_contains "approve on 'unplanned' refuses" "Cannot approve" "$out"
@@ -194,14 +195,15 @@ test_classifier() {
     if [[ $rc -eq 0 ]]; then report_pass "go test ./internal/sessionstatuscmd/ passes"
     else report_fail "go test ./internal/sessionstatuscmd/" "exit 0" "exit=$rc"$'\n'"$out"; fi
 
-    # The actPlan bucket must not list submitted; the actDo bucket must.
-    local plan_line do_line
-    plan_line=$(grep -n 'return actPlan' "$WT/internal/sessionstatuscmd/session_status.go" | head -1)
-    do_line=$(grep -n '"ready", "submitted"' "$WT/internal/sessionstatuscmd/session_status.go" | head -1)
+    # The actPlan bucket must not list submitted. E-1765 later gave submitted its
+    # OWN action (actReview ⚑) rather than sharing actDo with ready — a submitted
+    # task is not spawnable, so rendering it as ▶ do contradicted the claim gate.
+    # This assertion tracked that move; the E-1648 invariant it guards ("submitted
+    # never reads as 'needs a plan'") is unchanged.
     assert_not_contains "classify: submitted is not in the actPlan case" "submitted" \
         "$(grep -B3 'return actPlan' "$WT/internal/sessionstatuscmd/session_status.go" | grep 'case ')"
-    assert_contains "classify: submitted shares the actDo case with ready" '"ready", "submitted"' \
-        "$do_line"
+    assert_contains "classify: submitted has its own actReview case" 'case "submitted":' \
+        "$(cat "$WT/internal/sessionstatuscmd/session_status.go")"
 }
 
 # ─── section G: docs mermaid is single-sourced + in sync ─────────────────────

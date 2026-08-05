@@ -253,6 +253,20 @@ func now() string {
 	return time.Now().UTC().Format("2006-01-02T15:04:05")
 }
 
+// isPreJudgmentStatus reports whether a status means "nobody has decided this
+// task is spec-complete yet" — the two states from which attaching a plan is
+// what makes it spec-complete, so the plan-attach auto-move to `submitted`
+// applies.
+//
+// `untriaged` (E-1845) is the status `task add` now defaults to; `unplanned` is
+// where triage sends a task that needs design work. Attaching a plan answers the
+// open question in both cases, so both promote. Every other status either
+// already carries a judgment (submitted/ready and beyond) or is a deliberate
+// decision (declined/obsolete) that a plan attachment must not silently undo.
+func isPreJudgmentStatus(status string) bool {
+	return status == "untriaged" || status == "unplanned"
+}
+
 func execTaskCreated(db dbQuerier, evt *Event, emit DerivedEmitter) (*ExecuteResult, error) {
 	var p TaskCreatedPayload
 	if err := json.Unmarshal(evt.Payload, &p); err != nil {
@@ -300,11 +314,13 @@ func execTaskCreated(db dbQuerier, evt *Event, emit DerivedEmitter) (*ExecuteRes
 	// Attaching a non-empty plan at creation moves the task to `submitted`
 	// (spec-complete, awaiting human approval — NOT `ready`, which now means
 	// human-approved). Mirrors task.fields_updated when --text is supplied.
-	// Only fires when status was the default `unplanned` — an explicit
-	// override (e.g. a tier-1 task created at `ready`, or any non-default
-	// status) is preserved.
+	// Only fires from a pre-judgment status — an explicit override (e.g. a
+	// tier-1 task created at `ready`, or any other non-default status) is
+	// preserved. E-1845 added `untriaged`, which is now the default `task add`
+	// lands on; without it, `task add --text plan.md` would file a fully planned
+	// task as untriaged and strand it there.
 	status := p.Status
-	if status == "unplanned" && strings.TrimSpace(p.Text) != "" {
+	if isPreJudgmentStatus(status) && strings.TrimSpace(p.Text) != "" {
 		status = "submitted"
 	}
 
@@ -556,7 +572,7 @@ func execTaskFieldsUpdated(db dbQuerier, evt *Event, emit DerivedEmitter) (*Exec
 		}
 	}
 
-	// Attaching a non-empty plan (--text) to a `unplanned` task moves it to
+	// Attaching a non-empty plan (--text) to a pre-judgment task moves it to
 	// `submitted` (spec-complete, awaiting human approval — NOT `ready`,
 	// which now means human-approved). Only fires when the same update does
 	// not already set status explicitly (caller wins).
@@ -567,7 +583,7 @@ func execTaskFieldsUpdated(db dbQuerier, evt *Event, emit DerivedEmitter) (*Exec
 				var currentStatus string
 				if err := db.QueryRow("SELECT status FROM tasks WHERE id = ?",
 					taskID).Scan(&currentStatus); err == nil {
-					if currentStatus == "unplanned" {
+					if isPreJudgmentStatus(currentStatus) {
 						setClauses = append(setClauses, "status = ?")
 						args = append(args, "submitted")
 					}

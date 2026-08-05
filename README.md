@@ -115,12 +115,11 @@ endless task spawn --help
 
 ## Task lifecycle
 
-Every task moves through a small set of statuses. New tasks start `unevaluated`; an
-evaluator routes each one to `unplanned` (it still needs a plan) or straight to
-`submitted` (its description is already a sufficient spec). An agent also reaches
-`submitted` by attaching a plan. From there a human runs `endless task approve` to
-reach `ready` — so `ready` provably means *approved to implement*, not merely
-*planned*.
+Every task moves through a small set of statuses. New tasks start `untriaged`; triage
+routes each one to `unplanned` (it still needs a plan) or straight to `submitted` (its
+description is already a sufficient spec). An agent also reaches `submitted` by
+attaching a plan. From there a human runs `endless task approve` to reach `ready` — so
+`ready` provably means *approved to implement*, not merely *planned*.
 
 <!-- BEGIN canonical:docs/status-lifecycle.mmd — edit the canonical file, then re-sync; do not hand-edit here -->
 ```mermaid
@@ -131,10 +130,10 @@ reach `ready` — so `ready` provably means *approved to implement*, not merely
 %% asserts they match). Blocking is a relation (blocked_by), not a state, so it
 %% is intentionally absent.
 stateDiagram-v2
-    [*] --> unevaluated
+    [*] --> untriaged
 
-    unevaluated --> unplanned: evaluator routes (needs a plan)
-    unevaluated --> submitted: evaluator routes (description sufficient)
+    untriaged --> unplanned: triage routes (needs a plan)
+    untriaged --> submitted: triage routes (description sufficient)
     unplanned --> submitted: agent submits (plan attached OR description sufficient)
     submitted --> ready: user approves
     ready --> underway: session claims

@@ -1098,6 +1098,8 @@ def show_plan(
             children_of.setdefault(pid, []).append(row)
 
         status_indicators = {
+            # ◌ reads as "not yet a ○" — filed, but not yet looked at.
+            "untriaged": click.style("◌", fg="yellow"),
             "unplanned": click.style("○", fg="yellow"),
             "ready": click.style("●", fg="green"),
             "revisit": click.style("?", fg="cyan"),
@@ -1144,8 +1146,12 @@ def next_tasks(
     parent_id: int | None = None,
 ):
     """Show top actionable leaf tasks, ranked by priority."""
+    # E-1845: `untriaged` is excluded — a task nobody has looked at yet is not
+    # actionable work, and offering it here would present it as a ready-to-pick-
+    # up item. It surfaces in `session status` (as ◌ triage) instead, which is
+    # where the routing decision belongs.
     where = (
-        "WHERE t.status NOT IN ('confirmed', 'assumed', 'completed', 'blocked', 'declined', 'obsolete', 'underway', 'unverified', 'submitted') "
+        "WHERE t.status NOT IN ('confirmed', 'assumed', 'completed', 'blocked', 'declined', 'obsolete', 'underway', 'unverified', 'submitted', 'untriaged') "
         "AND (SELECT count(*) FROM tasks c WHERE c.parent_id = t.id) = 0 "
         "AND t.id NOT IN ("
         "  SELECT td.target_id FROM task_deps td"
@@ -2142,7 +2148,12 @@ def add_item(
     validate_description(description)
     _reject_maybe_with_parent(phase, parent_id)
     _, proj_name = _resolve_project(project_name)
-    status = status or ("ready" if tier == 1 else "unplanned")
+    # E-1845: a new task is `untriaged` — filed, not yet looked at. Triage
+    # decides whether the description is already a sufficient spec (→ submitted)
+    # or design work is needed first (→ unplanned). Tier-1's auto-`ready` is
+    # unchanged: a tier-1 task is explicitly exempt from planning, so it is
+    # exempt from triage too.
+    status = status or ("ready" if tier == 1 else "untriaged")
 
     # E-1577/E-1579: research/epic tasks cannot be created in
     # 'unverified'/'assumed'/'confirmed'.
@@ -2777,7 +2788,13 @@ def _current_session_is_background() -> bool:
 
 
 # Statuses a task may be `submit`ted from: pre-approval design states.
-_SUBMITTABLE_FROM = ("unplanned", "revisit")
+#
+# E-1845: `untriaged` is included so the new default status is not a dead end.
+# Until the automatic triager (E-1859) exists, `task submit` IS the routing
+# mechanism for a task whose description is already a sufficient spec — and it
+# stays useful afterward as the human override for a triage call you disagree
+# with. It is not scaffolding to remove when E-1859 lands.
+_SUBMITTABLE_FROM = ("untriaged", "unplanned", "revisit")
 
 
 def submit_item(item_id: int):
@@ -3304,6 +3321,20 @@ _CLAIM_REQUIRES_FORCE: frozenset[str] = frozenset({
 # than reactivate completed work.
 _REOPENABLE_TERMINAL_STATUSES: frozenset[str] = frozenset({
     "assumed", "confirmed", "completed",
+})
+
+
+# E-1845: statuses from which a material description edit resets a task to
+# `untriaged`. These are exactly the pre-work states — no implementation has
+# started, so re-deciding what the task IS costs nothing but a second look.
+#
+# `ready` is deliberately included: approval was granted against the OLD
+# description, so a rewrite should require re-approval rather than silently
+# inherit it. `underway` is deliberately EXCLUDED: a live session is mid-flight
+# and a description tweak must not yank the task out from under it. So are
+# `unverified` and every terminal status, where re-triage means nothing.
+_DESCRIPTION_RESET_FROM: frozenset[str] = frozenset({
+    "untriaged", "unplanned", "submitted", "ready", "revisit",
 })
 
 
@@ -3894,7 +3925,7 @@ def update_plan(
 
     # Validate status if provided
     if status is not None:
-        valid = ("unplanned", "ready", "underway",
+        valid = ("untriaged", "unplanned", "ready", "underway",
                  "unverified", "confirmed", "assumed", "completed",
                  "blocked", "revisit", "declined", "obsolete")
         if status not in valid:
@@ -3954,6 +3985,44 @@ def update_plan(
         and row[0]["status"] in _REOPENABLE_TERMINAL_STATUSES
     )
 
+    # E-1845: a material description edit resets a pre-work task to `untriaged`.
+    # The description IS the spec that triage (untriaged → unplanned/submitted)
+    # and approval (submitted → ready) were judged against, so rewriting it
+    # invalidates those judgments — the task has to be looked at again. Guards
+    # mirror E-1762's auto-revisit above:
+    #   - only a REAL change (an identical re-write is a no-op),
+    #   - an explicit --status in the same update wins (intent), as does
+    #     --keep-status (typo/formatting-only edit),
+    #   - only from the pre-work statuses in _DESCRIPTION_RESET_FROM. `ready` IS
+    #     included: approval was granted against the old description. `underway`
+    #     is deliberately excluded so a description tweak cannot yank work out
+    #     from under a live session; so are unverified and every terminal status,
+    #     where re-triage would be meaningless.
+    description_changed = (
+        description is not None
+        and description != (row[0]["description"] or "")
+    )
+    auto_untriage = (
+        not keep_status
+        and status is None
+        and not auto_revisit
+        and description_changed
+        and row[0]["status"] in _DESCRIPTION_RESET_FROM
+    )
+    # Composing the reset with the plan-attach promotion. Attaching a non-empty
+    # plan in the SAME call answers the triage question the reset would have
+    # asked, so the pair lands on `submitted` rather than bouncing to
+    # `untriaged` with a full plan attached — which would read as "nobody has
+    # looked at this" about a task that was just re-spec'd and planned.
+    #
+    # This has to be resolved here, not left to the executor's plan-attach
+    # auto-move: that move only fires when the update does not set status
+    # explicitly, and the reset does set it. Note the reset still costs a `ready`
+    # task its approval — correct, since approval was granted against the OLD
+    # description; it lands `submitted`, awaiting re-approval.
+    plan_attached = text is not None and text.strip() != ""
+    untriage_target = "submitted" if plan_attached else "untriaged"
+
     # Build the fields map for the event payload, plus an ordered list of
     # (name, old, new) tuples for change-output rendering.
     fields = {}
@@ -3967,6 +4036,8 @@ def update_plan(
         _add("status", status)
     elif auto_revisit:
         _add("status", "revisit")
+    elif auto_untriage:
+        _add("status", untriage_target)
 
     if phase is not None:
         _add("phase", phase)
@@ -3989,8 +4060,13 @@ def update_plan(
             _add("tier", None)
         else:
             _add("tier", tier)
-            # Tier 1 tasks can't be unplanned; auto-advance to ready
-            if tier == 1 and status is None and row[0]["status"] == "unplanned":
+            # Tier 1 tasks are exempt from planning — and (E-1845) from triage
+            # too — so auto-advance either pre-work status to ready.
+            if (
+                tier == 1
+                and status is None
+                and row[0]["status"] in ("untriaged", "unplanned")
+            ):
                 _add("status", "ready")
 
     if outcome is not None:
@@ -4058,6 +4134,22 @@ def update_plan(
             f"{task_id_display(item_id)} was '{row[0]['status']}'; plan text "
             f"changed → status set to revisit "
             f"(pass --keep-status to suppress for a typo/formatting-only edit)."
+        )
+
+    # E-1845: same shape as the auto-revisit note above — the field render
+    # already shows `Status: <old> -> untriaged`; this names WHY and the hatch.
+    if auto_untriage:
+        because = (
+            "re-spec'd and re-planned in one call"
+            if plan_attached
+            else "the description is the spec that triage and approval were "
+                 "judged against"
+        )
+        click.echo(
+            f"{task_id_display(item_id)} was '{row[0]['status']}'; description "
+            f"changed → status set to {untriage_target} "
+            f"({because}; pass --keep-status to suppress for a "
+            f"typo/formatting-only edit)."
         )
 
     # E-1772: nudge toward `endless task report` on an agent's wind-down. Only
@@ -4551,6 +4643,7 @@ _TERMINAL_STATUSES = frozenset(
 # valid task status maps to one of these buckets so no child is silently
 # dropped and the "(N total)" suffix always reconciles with the child count.
 _CHILDREN_STATE_ORDER = (
+    "untriaged",
     "unplanned",
     "ready",
     "underway",

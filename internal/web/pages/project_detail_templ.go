@@ -809,7 +809,11 @@ func nextActions(items []data.TaskView) []data.TaskView {
 			result = append(result, item)
 		}
 	}
-	// Then next available (up to 5 total)
+	// Then next available (up to 5 total). `untriaged` is deliberately absent
+	// (E-1845): this widget answers "what should I pick up", and a task nobody
+	// has looked at yet is not an available action — the same reason `task next`
+	// omits it. Since `untriaged` is the default status, admitting it here would
+	// fill all 5 slots with unrouted rows.
 	for _, item := range items {
 		if len(result) >= 5 {
 			break
@@ -887,7 +891,7 @@ func taskStatusIcon(status string) templ.Component {
 		var templ_7745c5c3_Var35 string
 		templ_7745c5c3_Var35, templ_7745c5c3_Err = templ.JoinStringErrs(statusLabel(status))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/pages/project_detail.templ`, Line: 258, Col: 24}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/pages/project_detail.templ`, Line: 262, Col: 24}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var35))
 		if templ_7745c5c3_Err != nil {

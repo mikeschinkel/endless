@@ -20,6 +20,15 @@ func TestClassify(t *testing.T) {
 		{"in_flight wins over status", monitor.SessionStatusRow{InFlight: true, Status: "ready"}, actDoing},
 		{"ready with no plan still do", monitor.SessionStatusRow{Status: "ready", HasText: false}, actDo},
 		{"unplanned is plan", monitor.SessionStatusRow{Status: "unplanned"}, actPlan},
+		// E-1845: `untriaged` is its own action. NOT actPlan (it carries no
+		// plan judgment yet) and — load-bearing — NOT actUnknown, which is the
+		// should-never-happen glyph and would otherwise land on the most common
+		// row in the ledger, since every new task starts untriaged.
+		{"untriaged is triage not plan", monitor.SessionStatusRow{Status: "untriaged"}, actTriage},
+		{"untriaged with plan text is still triage", monitor.SessionStatusRow{Status: "untriaged", HasText: true}, actTriage},
+		{"landed untriaged is landed", monitor.SessionStatusRow{Status: "untriaged", Landed: true}, actLanded},
+		{"focal untriaged is this", monitor.SessionStatusRow{Status: "untriaged", IsFocal: true}, actThis},
+		{"in-flight untriaged is doing", monitor.SessionStatusRow{Status: "untriaged", InFlight: true}, actDoing},
 		{"submitted is review not do", monitor.SessionStatusRow{Status: "submitted"}, actReview},
 		{"needs_plan is plan", monitor.SessionStatusRow{Status: "needs_plan"}, actPlan},
 		{"revisit folds into plan", monitor.SessionStatusRow{Status: "revisit"}, actPlan},
@@ -94,6 +103,7 @@ func TestActionIcons(t *testing.T) {
 		actLanded:  "⏚",
 		actUnknown: "⁇",
 		actDone:    "⇥",
+		actTriage:  "◌",
 	}
 	for a, want := range cases {
 		if got := a.icon(); got != want {
@@ -115,6 +125,21 @@ func TestActionIcons(t *testing.T) {
 	// action below it.
 	if actDone <= actUnknown {
 		t.Errorf("actDone (%d) must rank after actUnknown (%d) — append, do not insert", actDone, actUnknown)
+	}
+	// Same guarantee for ◌ triage (E-1845): it shares column 1 with every other
+	// glyph, and `untriaged` is the default status, so a width-2 glyph here would
+	// shift the id column on the majority of rows.
+	if w := displayWidth("◌"); w != 1 {
+		t.Errorf("◌ triage glyph display width = %d, want 1", w)
+	}
+	// actTriage is likewise APPENDED, after actDone.
+	if actTriage <= actDone {
+		t.Errorf("actTriage (%d) must rank after actDone (%d) — append, do not insert", actTriage, actDone)
+	}
+	// Its label must not read as "needs a plan" — that distinction is the entire
+	// reason the status exists.
+	if got := actTriage.label(); got == actPlan.label() {
+		t.Errorf("actTriage.label() = %q, must differ from actPlan's", got)
 	}
 }
 

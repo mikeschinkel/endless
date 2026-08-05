@@ -88,6 +88,21 @@ const (
 	// anomaly rows — an unhandled status deserves more prominence than a finished
 	// task.
 	actDone
+	// actTriage: an `untriaged` task — filed, but nobody has looked at it yet
+	// (E-1845). Deliberately NOT actPlan: "needs a plan" is a judgment already
+	// made about the task, and the whole point of `untriaged` is that no such
+	// judgment exists yet. Collapsing the two would erase the distinction the
+	// status was added to draw. ◌ (U+25CC DOTTED CIRCLE) reads as "not yet a ○",
+	// the unplanned glyph, and measures single-width (asserted in TestActionIcons)
+	// so the fixed 13-col prefix stays aligned.
+	//
+	// APPENDED, not inserted, per the rule actUnknown and actDone followed: enum
+	// order is both legend order and sortRows' rank, so appending leaves every
+	// existing rank untouched. Sorting last is right on its merits too — an
+	// untriaged task is the least actionable row on the board, and `untriaged` is
+	// now the DEFAULT status, so these rows would otherwise crowd real work off
+	// the top of every listing.
+	actTriage
 )
 
 // actionMeta maps each action to its legend glyph and label, indexed by the
@@ -106,6 +121,7 @@ var actionMeta = [...]struct{ icon, label string }{
 	actLanded:  {"⏚", "landed"},
 	actUnknown: {"⁇", "unknown"},
 	actDone:    {"⇥", "closed"},
+	actTriage:  {"◌", "triage"},
 }
 
 func (a action) icon() string  { return actionMeta[a].icon }
@@ -585,7 +601,8 @@ func buildLegend(rows []monitor.SessionStatusRow) string {
 }
 
 // classify maps a row to its action, applying the status canonicalization from
-// the plan: revisit/unplanned/needs_plan → plan; verify/unverified → verify;
+// the plan: untriaged → triage; revisit/unplanned/needs_plan → plan;
+// verify/unverified → verify;
 // underway/in_progress → working (→ orphan when not in-flight); ready → do
 // REGARDLESS of plan text (ED-1522, confirmed by Mike). Focal/parent/from/
 // in-flight decorations take precedence over status; parent (real task-tree
@@ -630,6 +647,14 @@ func classify(r monitor.SessionStatusRow) action {
 		// spawnable contradicts the gate. It routes to its own actReview (⚑),
 		// prompting the user to review/approve before it becomes actionable.
 		return actReview
+	case "untriaged":
+		// E-1845. Load-bearing case: without it `untriaged` would fall through
+		// to actUnknown, painting ⁇ — the should-never-happen marker — on the
+		// most common row in the ledger, since every new task starts here. That
+		// is the bug E-1871 fixed for terminal statuses, and it would be worse
+		// this time. It is also NOT actPlan: an untriaged task has no judgment
+		// about it yet, so "needs a plan" would be a claim nobody has made.
+		return actTriage
 	case "unplanned", "needs_plan", "revisit":
 		return actPlan
 	case "verify", "unverified":

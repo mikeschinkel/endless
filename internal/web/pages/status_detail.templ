@@ -88,6 +88,8 @@ func taskTreeIsActive(items []data.TaskView) string {
 // statusLabel returns a human-readable status label.
 func statusLabel(status string) string {
 	switch status {
+	case "untriaged":
+		return "Untriaged"
 	case "unplanned":
 		return "Unplanned"
 	case "submitted":
@@ -178,7 +180,7 @@ func joinParts(parts []string) string {
 func taskTreeChildSummary(items []data.TaskView) string {
 	// Count statuses per parent
 	type counts struct {
-		unverified, underway, unplanned, submitted, ready, blocked, revisit int
+		unverified, underway, untriaged, unplanned, submitted, ready, blocked, revisit int
 	}
 	parentCounts := make(map[int64]*counts)
 	for _, item := range items {
@@ -197,6 +199,8 @@ func taskTreeChildSummary(items []data.TaskView) string {
 			c.unverified++
 		case "underway":
 			c.underway++
+		case "untriaged":
+			c.untriaged++
 		case "unplanned":
 			c.unplanned++
 		case "submitted":
@@ -233,6 +237,11 @@ func taskTreeChildSummary(items []data.TaskView) string {
 		}
 		if c.unplanned > 0 {
 			segs = append(segs, seg(c.unplanned, "plan"))
+		}
+		if c.untriaged > 0 {
+			// "triage", never "plan" — an untriaged task has no plan judgment
+			// against it yet, which is the whole point of the status (E-1845).
+			segs = append(segs, seg(c.untriaged, "triage"))
 		}
 		if c.revisit > 0 {
 			segs = append(segs, seg(c.revisit, "revisit"))
@@ -330,6 +339,7 @@ func statusChoices() []statusChoice {
 		{"ready", "Ready", "Approved, ready to implement"},
 		{"submitted", "Submitted", "Spec-complete, awaiting approval"},
 		{"unplanned", "Unplanned", "Design work needed first"},
+		{"untriaged", "Untriaged", "Filed, not yet looked at"},
 		{"revisit", "Revisit", "Needs re-evaluation"},
 		{"blocked", "Blocked", "Waiting on something else"},
 		{"declined", "Declined", "Decided not to do"},
@@ -360,6 +370,8 @@ func statusSphereClass(status string) string {
 		return "bg-lime-400"
 	case "unplanned":
 		return "bg-amber-400"
+	case "untriaged":
+		return "bg-slate-400"
 	case "underway":
 		return "bg-blue-500"
 	case "unverified":

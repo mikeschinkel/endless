@@ -73,6 +73,8 @@ Use `just test` to run Python tests.
 
 ## Task status lifecycle
 
+New tasks are filed `untriaged` — not yet looked at. Triage routes each one to `submitted` (the description is already a sufficient spec) or `unplanned` (design work needed first); until an automatic triager exists, do it by hand with `endless task submit <id>` or `endless task update <id> --status unplanned`. A material description edit resets a pre-work task back to `untriaged`, since the description is the spec every later judgment was made against — pass `--keep-status` for a typo- or formatting-only edit.
+
 An agent sets `submitted` (by attaching a plan, or `endless task submit <id>` when the description alone is a sufficient spec); a human runs `endless task approve <id>` to reach `ready`. `ready` therefore provably means *approved-to-implement*, not merely *planned*, so background sessions may pick up (claim) only `ready` work and may not run `approve`.
 
 <!-- BEGIN canonical:docs/status-lifecycle.mmd — edit the canonical file, then re-sync; do not hand-edit here -->
@@ -84,10 +86,10 @@ An agent sets `submitted` (by attaching a plan, or `endless task submit <id>` wh
 %% asserts they match). Blocking is a relation (blocked_by), not a state, so it
 %% is intentionally absent.
 stateDiagram-v2
-    [*] --> unevaluated
+    [*] --> untriaged
 
-    unevaluated --> unplanned: evaluator routes (needs a plan)
-    unevaluated --> submitted: evaluator routes (description sufficient)
+    untriaged --> unplanned: triage routes (needs a plan)
+    untriaged --> submitted: triage routes (description sufficient)
     unplanned --> submitted: agent submits (plan attached OR description sufficient)
     submitted --> ready: user approves
     ready --> underway: session claims

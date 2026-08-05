@@ -16,7 +16,10 @@ type Task struct {
 	StableID string
 }
 
-// GetActiveTasks returns underway and unplanned items for a project.
+// GetActiveTasks returns the open (non-terminal, non-blocked) items for a
+// project — everything from freshly filed through in-flight. E-1845 added
+// `untriaged`, which is where every new task now lands; omitting it would have
+// made newly filed work invisible to every caller of this function.
 func GetActiveTasks(projectID int64) ([]Task, error) {
 	db, err := DB()
 	if err != nil {
@@ -26,7 +29,7 @@ func GetActiveTasks(projectID int64) ([]Task, error) {
 	rows, err := db.Query(
 		"SELECT id, phase, description, status "+
 			"FROM tasks "+
-			"WHERE project_id = ? AND status IN ('underway', 'unplanned', 'submitted', 'ready') "+
+			"WHERE project_id = ? AND status IN ('underway', 'untriaged', 'unplanned', 'submitted', 'ready') "+
 			"ORDER BY CASE status WHEN 'underway' THEN 0 ELSE 1 END, sort_order",
 		projectID,
 	)

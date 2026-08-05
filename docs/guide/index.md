@@ -48,10 +48,10 @@ When implementation is verified **and your user has told you to land it** — ne
 %% asserts they match). Blocking is a relation (blocked_by), not a state, so it
 %% is intentionally absent.
 stateDiagram-v2
-    [*] --> unevaluated
+    [*] --> untriaged
 
-    unevaluated --> unplanned: evaluator routes (needs a plan)
-    unevaluated --> submitted: evaluator routes (description sufficient)
+    untriaged --> unplanned: triage routes (needs a plan)
+    untriaged --> submitted: triage routes (description sufficient)
     unplanned --> submitted: agent submits (plan attached OR description sufficient)
     submitted --> ready: user approves
     ready --> underway: session claims
@@ -77,6 +77,7 @@ stateDiagram-v2
 
 | Status        | Meaning                                                                                                       |
 |---------------|---------------------------------------------------------------------------------------------------------------|
+| `untriaged`   | Filed but not yet looked at — the state every new task starts in. Triage decides whether the description is already a sufficient spec (→ `submitted`) or design work is needed first (→ `unplanned`). Not actionable: `task next` omits it, and `session status` renders it `◌ triage`, never "needs a plan". |
 | `unplanned`  | Not yet planned — needs design work. Attach a plan with `task update <id> --text-file <path>` (moves the task to `submitted`), or run `task submit <id>` when the description alone is a sufficient spec. |
 | `submitted`   | Spec-complete, awaiting approval — the agent has attached a plan or judged the description sufficient. A human runs `task approve <id>` to reach `ready`. |
 | `ready`       | Approved to implement. `ready` provably means human-approved, so background sessions may pick up only `ready` work. |
@@ -90,6 +91,10 @@ stateDiagram-v2
 | `obsolete`    | Made irrelevant by other changes.                                                                              |
 
 The agent sets `submitted` (via `task submit`, or by attaching a plan); a human sets `ready` (via `task approve`) — the two-step gate that makes `ready` mean "approved," not merely "planned."
+
+`task add` files new tasks as `untriaged` unless you pass an explicit `--status` (a `--tier 1` task still goes straight to `ready` — it is exempt from planning, so it is exempt from triage too). Until an automatic triager exists, route by hand: `task submit <id>` when the description is already a sufficient spec, or `task update <id> --status unplanned` when it needs design work first. Attaching a plan with `--text` moves an `untriaged` task to `submitted` in one step, exactly as it does from `unplanned`.
+
+**A material description edit sends a task back to `untriaged`.** The description IS the spec that triage and approval were judged against, so rewriting it invalidates that judgment. The reset fires only from the pre-work statuses — `untriaged`, `unplanned`, `submitted`, `ready`, `revisit` — and never from `underway` (so an edit cannot yank work out from under a live session), `unverified`, or any terminal status. Two escape hatches: an identical rewrite is a no-op, and `--keep-status` suppresses the reset for a typo- or formatting-only edit.
 
 Use `assumed` (not `unverified`) when the only way to test the work is by using it in a downstream task — set `--outcome` explaining what was done and how confidence was established.
 

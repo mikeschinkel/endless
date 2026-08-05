@@ -30,7 +30,7 @@ func GetDashboardProjects() []data.DashboardProject {
 		 p.status, COALESCE(NULLIF(p.language,''),'') as language,
 		 p.path, COALESCE(p.group_name,'') as group_name,
 		 (SELECT count(*) FROM notes n WHERE n.project_id = p.id AND n.resolved = 0) as pending_notes,
-		 (SELECT count(*) FROM tasks pi WHERE pi.project_id = p.id AND pi.status IN ('unplanned','ready','underway')) as active_plan,
+		 (SELECT count(*) FROM tasks pi WHERE pi.project_id = p.id AND pi.status IN ('untriaged','unplanned','ready','underway')) as active_plan,
 		 (SELECT count(*) FROM tasks pi WHERE pi.project_id = p.id) as task_total,
 		 (SELECT count(*) FROM tasks pi WHERE pi.project_id = p.id AND pi.status = 'completed') as task_completed,
 		 (SELECT count(*) FROM tasks pi WHERE pi.project_id = p.id AND pi.status = 'underway') as task_underway,
@@ -125,7 +125,7 @@ func GetProjectDetail(name string) (*data.DashboardProject, error) {
 		 p.status, COALESCE(NULLIF(p.language,''),'') as language,
 		 p.path, COALESCE(p.group_name,'') as group_name,
 		 (SELECT count(*) FROM notes n WHERE n.project_id = p.id AND n.resolved = 0) as pending_notes,
-		 (SELECT count(*) FROM tasks pi WHERE pi.project_id = p.id AND pi.status IN ('unplanned','ready','underway')) as active_plan,
+		 (SELECT count(*) FROM tasks pi WHERE pi.project_id = p.id AND pi.status IN ('untriaged','unplanned','ready','underway')) as active_plan,
 		 (SELECT count(*) FROM tasks pi WHERE pi.project_id = p.id) as task_total,
 		 (SELECT count(*) FROM tasks pi WHERE pi.project_id = p.id AND pi.status = 'completed') as task_completed,
 		 (SELECT count(*) FROM tasks pi WHERE pi.project_id = p.id AND pi.status = 'underway') as task_underway,
@@ -191,9 +191,10 @@ func GetProjectTasks(projectID int64, excludeStatuses ...string) []data.TaskView
 		   WHEN 'ready' THEN 2
 		   WHEN 'unplanned' THEN 3
 		   WHEN 'revisit' THEN 4
-		   WHEN 'blocked' THEN 5
-		   WHEN 'completed' THEN 6
-		   ELSE 7
+		   WHEN 'untriaged' THEN 5
+		   WHEN 'blocked' THEN 6
+		   WHEN 'completed' THEN 7
+		   ELSE 8
 		 END,
 		 CASE WHEN pi.tier IS NULL THEN 99 ELSE pi.tier END,
 		 pi.updated_at DESC`, childExclude), projectID)
@@ -261,7 +262,7 @@ func GetProjectTaskGroups(projectID int64) []data.TaskGroup {
 		 pi.id, COALESCE(pi.title, substr(pi.description, 1, 80)) as title,
 		 pi.description, pi.phase, pi.status
 		 FROM tasks pi
-		 WHERE pi.project_id = ? AND pi.status IN ('underway', 'unplanned', 'ready')
+		 WHERE pi.project_id = ? AND pi.status IN ('underway', 'untriaged', 'unplanned', 'ready')
 		 ORDER BY COALESCE(pi.parent_id, 0),
 		   CASE pi.status WHEN 'underway' THEN 0 ELSE 1 END,
 		   pi.sort_order`, projectID)

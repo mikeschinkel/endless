@@ -100,6 +100,10 @@ func buildSpine(focal, parent, from int64, backlogRoots []*treeNode) []*treeNode
 // Focal, parent, from, in-flight, verify, and terminal rows are excluded. So is
 // actReview (submitted): a not-yet-approved task is not spawnable, so it has no
 // place in the implementation-order backlog until the user approves it to ready.
+// So is actTriage (untriaged, E-1845), for the same reason one step earlier: a
+// task nobody has looked at yet has no place in an implementation-order tree,
+// and since `untriaged` is the default status, admitting it would swamp the
+// backlog with unrouted rows.
 func doPlanIDs(rows []monitor.SessionStatusRow) []int64 {
 	var ids []int64
 	for _, r := range rows {

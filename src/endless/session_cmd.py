@@ -158,8 +158,9 @@ def _require_claude() -> str:
 # E-1801: `session resume --reopen` transitions the task's status as a function
 # of its current status. Done tasks (verified/assumed/completed) and rejected
 # tasks (declined/obsolete) flip to `revisit` — reopening resumes re-evaluation.
-# Still-active (underway/unverified) and still-open (unplanned/submitted/ready/
-# revisit) tasks keep their status; the worktree is just restored under them.
+# Still-active (underway/unverified) and still-open (untriaged/unplanned/
+# submitted/ready/revisit) tasks keep their status; the worktree is just
+# restored under them.
 _REOPEN_TO_REVISIT: frozenset[str] = frozenset({
     "confirmed", "assumed", "completed", "declined", "obsolete",
 })

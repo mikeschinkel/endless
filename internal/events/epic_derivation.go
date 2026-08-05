@@ -162,7 +162,8 @@ func deriveOneEpic(db dbQuerier, emit DerivedEmitter, epicID int64) error {
 // children. The bool is false (and the string empty) when no derivation applies:
 // the epic has zero children, or children exist but none fall in a derivable
 // bucket (e.g. all in unverified/blocked, which is neither underway/ready/
-// unplanned nor fully terminal). In that case the epic is left unchanged.
+// unplanned/untriaged nor fully terminal). In that case the epic is left
+// unchanged.
 func deriveTargetStatus(db dbQuerier, epicID int64) (string, bool, error) {
 	rows, err := db.Query("SELECT status FROM tasks WHERE parent_id = ?", epicID)
 	if err != nil {
@@ -176,6 +177,7 @@ func deriveTargetStatus(db dbQuerier, epicID int64) (string, bool, error) {
 		anyReady      bool
 		anySubmitted  bool
 		anyNeedsPlan  bool
+		anyUntriaged  bool
 		allTerminal   = true
 	)
 	for rows.Next() {
@@ -193,6 +195,8 @@ func deriveTargetStatus(db dbQuerier, epicID int64) (string, bool, error) {
 			anySubmitted = true
 		case "unplanned":
 			anyNeedsPlan = true
+		case "untriaged":
+			anyUntriaged = true
 		}
 		if !terminalChildStatuses[s] {
 			allTerminal = false
@@ -216,6 +220,13 @@ func deriveTargetStatus(db dbQuerier, epicID int64) (string, bool, error) {
 		return "submitted", true, nil
 	case anyNeedsPlan:
 		return "unplanned", true, nil
+	case anyUntriaged:
+		// E-1845: the lowest rung. A child nobody has looked at yet keeps the
+		// epic honest about having unrouted work under it. Without this case an
+		// epic whose only children are freshly filed would match no bucket and
+		// be left unchanged — and since `untriaged` is now the default status,
+		// that would be the common path, not an edge case.
+		return "untriaged", true, nil
 	case allTerminal:
 		return "completed", true, nil
 	default:

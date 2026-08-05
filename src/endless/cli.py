@@ -119,7 +119,7 @@ class TaskOrDecisionIDType(click.ParamType):
 
 TASK_OR_DECISION_ID = TaskOrDecisionIDType()
 
-TASK_STATUSES = ["unplanned", "submitted", "ready", "underway",
+TASK_STATUSES = ["untriaged", "unplanned", "submitted", "ready", "underway",
                  "unverified", "confirmed", "assumed", "completed",
                  "blocked", "revisit", "declined", "obsolete"]
 
@@ -1640,7 +1640,7 @@ def _resolve_content_flag(inline, file_path, name, allow_paths=()):
               help="Task type (default: todo)")
 @click.option("--status", default=None,
               type=click.Choice(TASK_STATUSES),
-              help="Initial status (default: unplanned)")
+              help="Initial status (default: untriaged; --tier 1 defaults to ready)")
 @click.option("--tier", default=None,
               help="Tier (1-4 or auto/quick/deep/discuss)")
 @click.option("--force", is_flag=True,
@@ -1696,7 +1696,7 @@ def task_add(title, description, description_file, text, text_file, analysis_tex
 @task_cmd.command("update")
 @click.argument("item_ids", type=TASK_ID, nargs=-1, required=True)
 @click.option("--status", default=None,
-              help="Status: unplanned, ready, underway, unverified, confirmed, assumed, blocked, revisit, declined, obsolete")
+              help="Status: untriaged, unplanned, ready, underway, unverified, confirmed, assumed, blocked, revisit, declined, obsolete")
 @click.option("--title", default=None,
               help="New title")
 @click.option("--description", default=None,
@@ -1886,7 +1886,7 @@ def task_decline(item_ids, reason):
 @task_cmd.command("submit")
 @click.argument("item_ids", type=TASK_ID, nargs=-1, required=True)
 def task_submit(item_ids):
-    """Submit one or more tasks (unplanned/revisit → submitted).
+    """Submit one or more tasks (untriaged/unplanned/revisit → submitted).
 
     Agent-set signal that a task is spec-complete and awaiting human
     approval — either a plan was attached or the description is a sufficient
@@ -2445,7 +2445,7 @@ def epic_cmd():
               help="Insert after this task ID")
 @click.option("--status", default=None,
               type=click.Choice(TASK_STATUSES),
-              help="Initial status (default: unplanned)")
+              help="Initial status (default: untriaged; --tier 1 defaults to ready)")
 @click.option("--tier", default=None,
               help="Tier (1-4 or auto/quick/deep/discuss)")
 @click.option("--force", is_flag=True,
@@ -2568,7 +2568,7 @@ def epic_show(item_ids, no_description, show_analysis, show_text,
 @epic_cmd.command("update")
 @click.argument("item_ids", type=TASK_ID, nargs=-1, required=True)
 @click.option("--status", default=None,
-              help="Status: unplanned, ready, underway, unverified, confirmed, assumed, blocked, revisit, declined, obsolete")
+              help="Status: untriaged, unplanned, ready, underway, unverified, confirmed, assumed, blocked, revisit, declined, obsolete")
 @click.option("--title", default=None,
               help="New title")
 @click.option("--description", default=None,

@@ -159,7 +159,12 @@ func StartWorkSession(sessionID string, projectID int64, taskID int64) error {
 		return err
 	}
 	_, err = db.Exec(
-		"UPDATE tasks SET status='underway' WHERE id=? AND status IN ('unplanned','ready','blocked')",
+		// E-1845: `untriaged` joins the promotable set. Claiming a task IS a
+		// person deciding to work on it, which moots the triage question — and
+		// without this the claim would bind the session while silently leaving
+		// the status at `untriaged`, so the task would read as untouched while
+		// someone was actively on it.
+		"UPDATE tasks SET status='underway' WHERE id=? AND status IN ('untriaged','unplanned','ready','blocked')",
 		taskID,
 	)
 	return err
