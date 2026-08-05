@@ -338,10 +338,34 @@ func handleUserPromptSubmit(projectID int64, payload claudePayload) error {
 	})
 }
 
-// buildTaskContextInjection returns the one-shot full task list to inject
-// on the first SessionStart/UserPromptSubmit. Returns ("", nil) when the
-// session has already received the injection. Marks the session as
-// injected when it produces a non-empty result.
+// guidePointer is the lead line of the first-injection context (E-1854).
+// Endless tells THIS repo's agent to run `endless guide` only because the
+// dogfooding repo's committed CLAUDE.md says so; a downstream project that
+// uses Endless as a product gets no such pointer, and `setup.py` writes
+// nothing into its CLAUDE.md. Shipping the pointer in the injection makes
+// the guide reachable by every agent on every project that has the hook
+// installed, regardless of that project's CLAUDE.md. Wording is pinned by
+// the task — change it there, not here.
+const guidePointer = "New to this project? Run `endless guide` to learn the Endless workflow."
+
+// withGuidePointer puts guidePointer at the head of the one-shot context,
+// ahead of the task list, separated by a blank line. It leads because it is
+// the instruction that makes the rest of the injection actionable: an agent
+// that doesn't know the workflow can't do anything useful with a task list.
+// A project with no tasks yet still gets the pointer — that is precisely the
+// freshly-set-up downstream project this exists for.
+func withGuidePointer(taskContext string) string {
+	if taskContext == "" {
+		return guidePointer
+	}
+	return guidePointer + "\n\n" + taskContext
+}
+
+// buildTaskContextInjection returns the one-shot guide pointer + full task
+// list to inject on the first SessionStart/UserPromptSubmit. Returns
+// ("", nil) when the session has already received the injection — which is
+// what keeps the pointer one-shot rather than a per-prompt nag. Marks the
+// session as injected when it produces a non-empty result.
 func buildTaskContextInjection(projectID int64, payload claudePayload) (string, error) {
 	if monitor.HasInjectedContext(payload.SessionID) {
 		return "", nil
@@ -354,7 +378,7 @@ func buildTaskContextInjection(projectID int64, payload claudePayload) (string, 
 	if err != nil {
 		return "", fmt.Errorf("getting active tasks: %w", err)
 	}
-	context := monitor.FormatTasks(projectName, items)
+	context := withGuidePointer(monitor.FormatTasks(projectName, items))
 	monitor.MarkContextInjected(projectID, payload.SessionID, payload.CWD)
 	return context, nil
 }
