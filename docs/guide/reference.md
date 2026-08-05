@@ -80,6 +80,47 @@ After `apply`, your tmux session shows a second status row like `[E-NNNN] · <pr
 
 ---
 
+## Background jobs
+
+Endless runs background work through a **fire-once runner**: when invoked it executes any *due* jobs and exits. There is no daemon and no timer inside the runner — repetition lives in whatever triggers it. Today the session monitor fires it on each refresh; a long-running daemon will fire it on events later.
+
+```bash
+endless jobs list             # registered jobs: cadence, next due, runs, failures
+endless jobs run              # fire the runner once, now
+endless jobs retry <name>     # clear a job's backoff and make it due immediately
+```
+
+Many session monitors may fire the runner at the same moment. Exactly one of them runs any given due job, arbitrated by a compare-and-set lease in the database. That lease is time-boxed rather than held as a lock, so a process that dies mid-run needs no cleanup — its claim simply lapses. The trade-off is that a job which *outruns* its lease can be re-entered, so **every job must be idempotent**.
+
+A job that fails is rescheduled rather than abandoned. Jobs that declare a backoff cap push their next attempt exponentially further out as failures accumulate, so a persistently broken job decays toward that cap instead of retrying at full rate forever. Fixing the cause does not mean waiting the backoff out — `endless jobs retry <name>` makes it due again immediately.
+
+`endless jobs list` printing `no jobs registered` is the expected state today: the runner deliberately ships knowing nothing job-specific.
+
+---
+
+## Errors
+
+Anything that goes wrong in the background is recorded as a classified, clearable **error** with a stable `ERR-NNNN` code. `session status` and `session monitor` show a trailing badge whenever uncleared errors exist — the most severe wins, and `error` outranks `warning`.
+
+```bash
+endless errors show                    # open errors
+endless errors show --all              # include cleared ones (history)
+endless errors show --id N --detail    # one error, with every occurrence's full capture
+endless errors clear                   # mark every open error cleared
+endless errors codes                   # the documented catalog
+```
+
+Two behaviors are worth knowing before you rely on this:
+
+- **Clearing never deletes, and nothing clears itself.** An error stays on the badge until a human dismisses it, even if the job has since been succeeding — an intermittent fault that healed itself out of view would never get fixed. A recurrence after clearing opens a *new* error beside the cleared one, so a problem that came back is visibly distinct from one that never left.
+- **Clearing is not retrying.** `errors clear` means "I have seen this"; making a backed-off job due again is `jobs retry`. They are separate verbs so that tidying your error list cannot silently re-arm a job that is still broken.
+
+The database stores only the index — code, source, summary, counts. Each occurrence's full capture goes to `<config-dir>/log/errors.jsonl` and comes back through `--detail`, so the table stays bounded by how many *distinct* things are wrong rather than how often they happen. That file is machine-local: it is not the db-ledger, it is never replayed into the database, and errors emit no ledger events.
+
+Every code's cause and remedy is documented in `docs/errors.md`.
+
+---
+
 ## File layout
 
 A quick map of the files and directories Endless manages.

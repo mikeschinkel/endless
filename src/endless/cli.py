@@ -2772,6 +2772,85 @@ def worktree_check():
     check_worktree()
 
 
+@main.group("jobs")
+def jobs_cmd():
+    """Inspect and drive the fire-once background job runner (E-698)."""
+    pass
+
+
+@jobs_cmd.command("list")
+def jobs_list():
+    """Show registered jobs and their schedule, last run, and failure count."""
+    from endless.jobs_cmd import jobs_list as impl
+    impl()
+
+
+@jobs_cmd.command("run")
+@click.option("--job", default=None,
+              help="Run only this job, bypassing the due check (the lease still applies)")
+def jobs_run(job):
+    """Run every due job once, then exit.
+
+    Repetition lives in the trigger, not the runner: the session monitor fires
+    this on each refresh. Running it by hand fires the same single pass.
+    """
+    from endless.jobs_cmd import jobs_run as impl
+    impl(job)
+
+
+@jobs_cmd.command("retry")
+@click.argument("name")
+def jobs_retry(name):
+    """Clear a job's backoff and make it due immediately.
+
+    The "I fixed the underlying problem" verb. Deliberately separate from
+    `endless errors clear`, which only means "I have seen this" — so tidying
+    your error list cannot silently re-arm a job that is still broken.
+    """
+    from endless.jobs_cmd import jobs_retry as impl
+    impl(name)
+
+
+@main.group("errors")
+def errors_cmd():
+    """Inspect and clear recorded errors (E-698)."""
+    pass
+
+
+@errors_cmd.command("show")
+@click.option("--all", "show_all", is_flag=True, help="Include cleared errors")
+@click.option("--detail", is_flag=True, help="Print every occurrence's full capture")
+@click.option("--id", "error_id", type=int, default=None, help="Show only this error id")
+def errors_show(show_all, detail, error_id):
+    """List recorded errors, most recently seen first.
+
+    Only uncleared errors are shown by default — the same set the badge on
+    `session status` / `session monitor` counts.
+    """
+    from endless.jobs_cmd import errors_show as impl
+    impl(show_all, detail, error_id)
+
+
+@errors_cmd.command("clear")
+@click.argument("ids", nargs=-1, type=int)
+def errors_clear(ids):
+    """Mark errors cleared. Clears every open error when given no ids.
+
+    Clearing NEVER deletes: the row stays as history, and a recurrence opens a
+    NEW error beside it, so a problem that came back is visibly distinct from
+    one that never left.
+    """
+    from endless.jobs_cmd import errors_clear as impl
+    impl(ids)
+
+
+@errors_cmd.command("codes")
+def errors_codes():
+    """Print the documented error catalog (see docs/errors.md)."""
+    from endless.jobs_cmd import errors_codes as impl
+    impl()
+
+
 @main.group("verb")
 def verb_cmd():
     """Manage verbs — the registered actions that can start task titles."""

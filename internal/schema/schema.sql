@@ -587,3 +587,81 @@ CREATE INDEX IF NOT EXISTS idx_project_next_pending_added
     ON project_next_pending(project_next_id, added_at);
 CREATE INDEX IF NOT EXISTS idx_project_next_tasks_task
     ON project_next_tasks(task_id);
+
+-- Background jobs (E-698). One row per registered job, holding ONLY its
+-- scheduling state — the job's identity and behavior live in Go code
+-- (internal/jobs), never here. Rows are upserted by the runner on first sight
+-- of a registered job; a row whose job is no longer registered is inert.
+--
+-- next_due_at is the "DB ticker": every comparison against it uses SQLite's
+-- datetime('now'), never a Go clock, so the many session monitors that may fire
+-- the runner simultaneously share one clock and cannot disagree about whether a
+-- job is due.
+--
+-- lease_owner / lease_expires_at are the compare-and-set lease. Claiming is a
+-- single conditional UPDATE whose WHERE clause IS the mutual exclusion (see
+-- internal/jobs/claim.go); RowsAffected == 1 means this invocation owns the job.
+-- The lease is time-boxed rather than an OS lock so a process that dies mid-run
+-- needs no cleanup: its claim simply lapses and the next invocation re-claims.
+-- The corollary is that a merely SLOW job can be re-claimed once its lease
+-- expires, which is why jobs must be idempotent and LeaseTTL must generously
+-- exceed expected runtime.
+CREATE TABLE IF NOT EXISTS jobs (
+    name             TEXT PRIMARY KEY,
+    next_due_at      TEXT NOT NULL,
+    lease_owner      TEXT,
+    lease_expires_at TEXT,
+    last_run_at      TEXT,
+    last_ok_at       TEXT,
+    last_error       TEXT,
+    run_count        INTEGER NOT NULL DEFAULT 0,
+    fail_count       INTEGER NOT NULL DEFAULT 0,
+    created_at       TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
+    updated_at       TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_jobs_due ON jobs(next_due_at);
+
+-- Errors (E-698). The machine-local fault record: a short, classified,
+-- clearable index of things that went wrong. Written by internal/faults, whose
+-- Go package is named `faults` ONLY because `errors` collides with the stdlib
+-- package name — every user-facing surface (this table, the CLI verb, the docs)
+-- says "errors".
+--
+-- This table is the INDEX ONLY. Each occurrence's full detail is appended to
+-- <ConfigDir>/log/errors.jsonl, carrying this row's id and the occurrence
+-- number, so diagnosis loses nothing while the table stays bounded by distinct
+-- fingerprint count rather than by failure count. Modeled on
+-- internal/monitor/usermachinelog.go: append-only, best-effort, never replayed
+-- into the DB, and NOT the shareable ledger — faults emit no db-ledger events,
+-- because they are machine-local observation, not shareable project history.
+--
+-- Incident model: at most ONE open row per (source, code, fingerprint), enforced
+-- by the partial unique index below. Repeats of an open incident bump
+-- occurrences in place. Clearing closes the row, which then becomes immutable
+-- history; a recurrence AFTER clearing opens a NEW row rather than resurrecting
+-- the old one, so "failed 40x last week, cleared, came back Tuesday" reads as
+-- two incidents with distinct windows — the signal that pinpoints a regression.
+--
+-- severity is denormalized from the code catalog (internal/faults/codes.go) at
+-- write time. Severity is a property of the CODE, never of the call site, so two
+-- sites raising the same condition cannot disagree about whether it is a warning
+-- or an error.
+CREATE TABLE IF NOT EXISTS errors (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    code          TEXT NOT NULL,
+    severity      TEXT NOT NULL,
+    source        TEXT NOT NULL,
+    fingerprint   TEXT NOT NULL,
+    summary       TEXT NOT NULL,
+    occurrences   INTEGER NOT NULL DEFAULT 1,
+    first_seen_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
+    last_seen_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
+    cleared_at    TEXT,
+    cleared_by    TEXT
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_errors_open_uniq
+    ON errors(source, code, fingerprint) WHERE cleared_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_errors_open
+    ON errors(cleared_at, severity);

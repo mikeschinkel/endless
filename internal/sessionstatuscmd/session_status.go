@@ -12,6 +12,7 @@
 package sessionstatuscmd
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"io"
@@ -20,12 +21,14 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"time"
 
 	"github.com/mattn/go-runewidth"
 	"golang.org/x/term"
 
+	"github.com/mikeschinkel/endless/internal/jobs"
 	"github.com/mikeschinkel/endless/internal/monitor"
 )
 
@@ -181,7 +184,23 @@ func Run(args []string) {
 		// focal + parent ONCE, before any refresh loop, so the view stays pinned
 		// to THIS window's task as other sessions come and go (matches the
 		// prototype, which resolves the focal task before entering its watch loop).
-		monitor.PinMainDB()
+		//
+		// EXCEPT inside a self_dev worktree (E-698). There, the pin would override
+		// the per-worktree sandbox and point candidate code at the developer's REAL
+		// ledger — the precise pollution E-1281 exists to prevent — and, because
+		// E-1818 opens a pinned foreign real DB schema-passive, at a DB missing any
+		// table the candidate build added. Every other command already resolves the
+		// sandbox in a worktree; skipping the pin here keeps ONE self_dev rule
+		// instead of a per-command exception.
+		//
+		// Known cost, accepted: the sandbox's seeded session row carries no
+		// `process` (only the hook sets one, and the hook pins main), so the
+		// worktree view will not pane-resolve a focal task and shows the no-session
+		// hint. That is strictly better than silently reading the real DB. The
+		// underlying machine-scoped vs project-scoped split is E-1883.
+		if !monitor.InSelfDevWorktree() {
+			monitor.PinMainDB()
+		}
 		pane := os.Getenv("TMUX_PANE")
 		var err error
 		var kind monitor.PaneStatusKind
@@ -284,9 +303,30 @@ func monitorLoop(focal, parentSession, emittingSession int64, noTaskHint string,
 	ticker := time.NewTicker(monitorInterval)
 	defer ticker.Stop()
 
+	// The job-runner trigger (E-698). Each refresh fires the fire-once runner,
+	// which executes any DUE jobs and returns; repetition lives here, in the
+	// trigger, never in the runner.
+	//
+	// On a goroutine behind a single-in-flight guard: a job slower than the 2s
+	// cadence must never stack up invocations or stall the redraw. Concurrency
+	// with OTHER monitors is not this guard's job — the runner's DB lease
+	// arbitrates that, so at most one process runs any given due job.
+	var jobsInFlight atomic.Bool
+	fireJobs := func() {
+		if jobsInFlight.Swap(true) {
+			return
+		}
+		go func() {
+			defer jobsInFlight.Store(false)
+			jobs.RunDue(context.Background())
+		}()
+	}
+
 	prev := ""
 	for {
 		var b strings.Builder
+
+		fireJobs()
 		if err := renderSnapshot(&b, focal, parentSession, emittingSession, noTaskHint, all, detectCols(colsOverride), color); err != nil {
 			restore()
 			fmt.Fprintln(os.Stderr, "session-status:", err)
@@ -335,6 +375,7 @@ func renderTo(w io.Writer, rows []monitor.SessionStatusRow, focal int64, noTaskH
 	// session) hint, NEVER an unrelated task's rows (E-1698).
 	if len(rows) == 0 {
 		fmt.Fprintln(w, dim(noTaskHint, color))
+		renderFaultBadge(w, cols, color)
 		return
 	}
 
@@ -398,6 +439,10 @@ func renderTo(w io.Writer, rows []monitor.SessionStatusRow, focal int64, noTaskH
 			}
 		}
 	}
+
+	// Uncleared faults are appended last so they read as an annotation on the
+	// view rather than competing with the task rows for attention (E-698).
+	renderFaultBadge(w, cols, color)
 }
 
 // buildLegend returns the dynamic header line: only the glyphs actually present

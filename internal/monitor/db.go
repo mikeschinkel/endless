@@ -358,6 +358,27 @@ func projectIsSelfDev(root string) bool {
 // outside the monitor package (e.g. templatecmd).
 func ProjectIsSelfDev(root string) bool { return projectIsSelfDev(root) }
 
+// InSelfDevWorktree reports whether the current working directory sits inside a
+// task worktree of a self_dev project — the exact condition under which this
+// process's DB context should resolve to the per-worktree sandbox rather than
+// the real machine DB (E-1281).
+//
+// It exists so a surface that would otherwise pin the main DB unconditionally
+// can honor the sandbox instead, keeping ONE self_dev rule for users to learn
+// rather than a per-command exception (E-698). Best-effort: an unreadable cwd
+// reports false, preserving the caller's prior behavior.
+func InSelfDevWorktree() bool {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return false
+	}
+	root := selfDevProjectRoot(cwd)
+	if root == "" {
+		return false
+	}
+	return projectIsSelfDev(root)
+}
+
 // WorktreeHookBinary returns the endless-go binary a self_dev worktree's hook
 // SHOULD run — <root>/.endless/worktrees/<name>/bin/endless-go — when dir is
 // inside a self_dev worktree, or "" otherwise. The path is what the

@@ -170,7 +170,9 @@ listed separately. (Generated — do not hand-edit; run `/regenerate-guide`.)
 | `decision` | decisions | Decisions as first-class items; preference vs prohibition (read this). |
 | `docs` | _(none yet)_ | the `docs` command is temporarily disabled and not covered by the guide. |
 | `epic` | _(none yet)_ | the `endless epic` convenience surface (add/show/list/update over type=epic tasks) isn't covered by the guide yet. |
+| `errors` | reference | Recorded errors: the session-status badge, showing and clearing them, and the ERR-NNNN catalog. |
 | `guide` | reference | The session guide; run `endless guide` for the index, `--list` for sections. |
+| `jobs` | reference | The fire-once background job runner: firing it, reading its schedule, clearing a job's backoff. |
 | `note` | _(none yet)_ | project notes aren't covered by the guide yet. |
 | `notes` | _(none yet)_ | project notes aren't covered by the guide yet. |
 | `phrase` | _(none yet)_ | matchers (action regexes) config isn't covered by the guide yet. |

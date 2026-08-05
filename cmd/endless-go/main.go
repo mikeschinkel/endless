@@ -17,6 +17,8 @@
 //	endless-go spawn-launch  (internal: sets @endless_* window options, then execs claude inside the window)
 //	endless-go template      render
 //	endless-go markdown      render
+//	endless-go jobs          list|run|retry   (E-698 fire-once background job runner)
+//	endless-go errors        show|clear|codes (E-698 machine-local fault record)
 //
 // Per-subcommand DB-context contract (must run BEFORE the subcommand
 // body):
@@ -37,12 +39,16 @@ package main
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 
 	_ "modernc.org/sqlite"
 
 	"github.com/mikeschinkel/endless/internal/channelcmd"
+	"github.com/mikeschinkel/endless/internal/errorscmd"
 	"github.com/mikeschinkel/endless/internal/eventcmd"
+	"github.com/mikeschinkel/endless/internal/faults"
 	"github.com/mikeschinkel/endless/internal/hookcmd"
+	"github.com/mikeschinkel/endless/internal/jobscmd"
 	"github.com/mikeschinkel/endless/internal/markdowncmd"
 	"github.com/mikeschinkel/endless/internal/monitor"
 	"github.com/mikeschinkel/endless/internal/sandboxcmd"
@@ -127,6 +133,18 @@ func main() {
 			monitor.PinMainDB()
 		}
 	}
+	// E-698: wire the fault recorder. faults imports nothing from the rest of
+	// Endless — a dependency on monitor there would become an import cycle the
+	// moment monitor itself reports a fault (E-1884) — so the DB accessor and the
+	// detail-log directory are injected here, once, for every subcommand. It must
+	// run AFTER the DB-context resolution above so a fault raised in a self-dev
+	// worktree lands in that worktree's sandbox rather than the real ledger.
+	// Both funcs are stored, not called, so this costs nothing in a process that
+	// never records a fault.
+	faults.Bind(monitor.DB, func() string {
+		return filepath.Join(monitor.ConfigDir(), "log")
+	})
+
 	// session-status pins main itself, but only on its normal tmux-resolved path;
 	// with --task (headless/tests) it deliberately reads the resolved sandbox
 	// context instead, so the decision lives inside sessionstatuscmd.Run (E-1685).
@@ -156,6 +174,10 @@ func main() {
 		markdowncmd.Run(rest)
 	case "verify":
 		verifycmd.Run(rest)
+	case "jobs":
+		jobscmd.Run(rest)
+	case "errors":
+		errorscmd.Run(rest)
 	default:
 		fmt.Fprintf(os.Stderr, "endless-go: unknown subcommand %q\n", sub)
 		usage(os.Stderr)
@@ -207,4 +229,6 @@ func usage(w *os.File) {
 	fmt.Fprintln(w, "  template       render")
 	fmt.Fprintln(w, "  markdown       render (markdown → colorized ANSI)")
 	fmt.Fprintln(w, "  verify         [--keep] <task-id>  (run a task's Tier-0 verification suite)")
+	fmt.Fprintln(w, "  jobs           list|run|retry  (the fire-once background job runner)")
+	fmt.Fprintln(w, "  errors         show|clear|codes  (machine-local fault record)")
 }
