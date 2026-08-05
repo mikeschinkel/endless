@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"strings"
 )
 
 // runSpawnWindow is the outer orchestrator — the only spawn verb Python calls.
@@ -103,10 +105,77 @@ func monitorCommand() []string {
 	return []string{bin, "session", "monitor"}
 }
 
+// projectDirFor resolves the directory the monitor and shell panes start in: the
+// project's MAIN checkout, even when the spawned session works in a per-task
+// worktree.
+//
+// The Python CLI routes its DB from cwd, and those two panes are observation
+// surfaces onto the real ledger rather than part of the branch's checkout. Run
+// from inside a self_dev worktree, every ad-hoc `endless` command typed in the
+// shell pane needs an explicit `--db main` to reach that ledger. Claude's own
+// pane keeps the worktree — that one IS the branch's work.
+//
+// The monitor pane follows the same rule for consistency, NOT because its view
+// depends on it: `session-status` pins the main DB regardless of cwd, because
+// session/pane state is machine-scoped rather than project-scoped (E-698,
+// c186df7d). Do not restate that as a correctness requirement — an earlier
+// draft of this comment did, from a revision where the pin was briefly skipped
+// inside a worktree.
+//
+// Falls back to cwd whenever the main checkout can't be resolved — not a git
+// repo, git missing, or cwd already IS the main checkout. A cwd question must
+// never stop the layout from being built.
+//
+// Uses the git-dir vs git-common-dir discriminator (equal in a main checkout,
+// different in a linked worktree) that sandboxcmd.mainCheckoutFromWorktree and
+// hookcmd.isInMainCheckout also key off.
+func projectDirFor(cwd string) string {
+	if cwd == "" {
+		return cwd
+	}
+	gitDir, err := gitRevParse(cwd, "--git-dir")
+	if err != nil {
+		return cwd
+	}
+	commonDir, err := gitRevParse(cwd, "--git-common-dir")
+	if err != nil {
+		return cwd
+	}
+	if !filepath.IsAbs(gitDir) {
+		gitDir = filepath.Join(cwd, gitDir)
+	}
+	if !filepath.IsAbs(commonDir) {
+		commonDir = filepath.Join(cwd, commonDir)
+	}
+	if filepath.Clean(gitDir) == filepath.Clean(commonDir) {
+		return cwd // already the main checkout
+	}
+	main := filepath.Dir(filepath.Clean(commonDir))
+	if _, err = os.Stat(main); err != nil {
+		return cwd
+	}
+	return main
+}
+
+// gitRevParse runs one `git rev-parse <arg>` in dir and returns its trimmed
+// output.
+func gitRevParse(dir, arg string) (string, error) {
+	cmd := exec.Command("git", "rev-parse", arg)
+	cmd.Dir = dir
+	out, err := cmd.Output()
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
 // buildSpawnLayout turns the freshly created single-pane window into the
 // canonical Endless working layout (E-1851): claude on the left at half width
 // and full height, `endless session monitor` top-right, and a bare interactive
 // shell bottom-right for ad-hoc endless commands. Focus ends on claude.
+//
+// The two right panes start in the PROJECT dir, not the window's worktree cwd —
+// see projectDirFor for why the DB routing makes that the correct home for both.
 //
 // It runs AFTER new-window returns, from this process, because pane 0 is claude:
 // runSpawnLaunch replaces that pane via syscall.Exec and so cannot orchestrate
@@ -132,13 +201,15 @@ func buildSpawnLayout(windowName, cwd string) {
 		return
 	}
 
-	shellPane, err := runTmuxOut(splitWindowArgs(claudePane, true, false, cwd, 0, nil)...)
+	paneDir := projectDirFor(cwd)
+
+	shellPane, err := runTmuxOut(splitWindowArgs(claudePane, true, false, paneDir, 0, nil)...)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "spawn-window: layout: shell pane: %v\n", err)
 		return
 	}
 
-	if _, err = runTmuxOut(splitWindowArgs(shellPane, false, true, cwd, 0, monitorCommand())...); err != nil {
+	if _, err = runTmuxOut(splitWindowArgs(shellPane, false, true, paneDir, 0, monitorCommand())...); err != nil {
 		fmt.Fprintf(os.Stderr, "spawn-window: layout: monitor pane: %v\n", err)
 		// Fall through: a 2-pane window still wants focus back on claude.
 	}

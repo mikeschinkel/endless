@@ -11,9 +11,15 @@
 # WHAT LANDED
 #   spawn-window, after `tmux new-window` returns, splits the window into:
 #     left        50% width, full height — the spawned Claude session (pane 0,
-#                 exec-replaced by spawn-launch; it ends FOCUSED)
+#                 exec-replaced by spawn-launch; it ends FOCUSED). cwd = the
+#                 WORKTREE: this pane is the branch's work.
 #     top-right   `endless session monitor`
 #     bottom-right a bare interactive $SHELL for ad-hoc endless commands
+#   Both right panes start in the PROJECT dir, not the worktree. The Python CLI
+#   routes its DB from cwd, so from inside a self_dev worktree every ad-hoc
+#   `endless` command in the shell pane would need an explicit --db main. The
+#   monitor pane follows the same rule for consistency only — session-status
+#   pins the main DB regardless of cwd (E-698, c186df7d).
 #   The monitor pane is created with -b (ABOVE the shell pane) rather than the
 #   shell being split off the monitor, because `session monitor` shrinks its own
 #   pane on first paint — splitting a pane that is concurrently resizing itself
@@ -161,6 +167,8 @@ run_unit_layer() {
     assert_succeeds "spawnlaunchcmd: split/select/pane-id argv + monitor command" \
         go test ./internal/spawnlaunchcmd/ -count=1 \
             -run 'TestSplitWindowArgs|TestSelectPaneArgs|TestPanePaneIDArgs|TestMonitorCommand'
+    assert_succeeds "spawnlaunchcmd: observation panes resolve to the project dir" \
+        go test ./internal/spawnlaunchcmd/ -count=1 -run 'TestProjectDirFor'
     assert_succeeds "spawnlaunchcmd: pre-existing new-window/option argv unchanged" \
         go test ./internal/spawnlaunchcmd/ -count=1 \
             -run 'TestNewWindowArgs|TestWindowOptionCommands'
@@ -186,7 +194,7 @@ run_unit_layer() {
 # indexes depend on the user's pane-base-index and shift as panes are added.
 b_panes() {
     tmux -L "${SOCK_B}" list-panes -t "${WIN_NAME}" \
-        -F '#{pane_left}|#{pane_top}|#{pane_width}|#{pane_height}|#{?pane_active,active,}|#{pane_start_command}' \
+        -F '#{pane_left}|#{pane_top}|#{pane_width}|#{pane_height}|#{?pane_active,active,}|#{pane_start_command}|#{pane_current_path}' \
         2>/dev/null
 }
 
@@ -274,6 +282,20 @@ EOF
         "$(printf '%s' "${top_right}" | cut -d'|' -f1)" \
         "$(printf '%s' "${bottom_right}" | cut -d'|' -f1)"
 
+    # ── pane cwd: claude gets the worktree, the observation panes get the
+    # project dir. The Python CLI routes its DB from cwd, so from inside a
+    # self_dev worktree every ad-hoc command in the shell pane would otherwise
+    # need an explicit --db main. The monitor pane follows for consistency only;
+    # session-status pins main regardless of cwd (E-698, c186df7d).
+    local project_dir
+    project_dir=$(cd "$(dirname "$(git rev-parse --git-common-dir)")" && pwd)
+    assert_eq "claude pane keeps the WORKTREE cwd (it is the branch's work)" \
+        "${WT}" "$(printf '%s' "${left}" | cut -d'|' -f7)"
+    assert_eq "monitor pane starts in the PROJECT dir (consistent with the shell)" \
+        "${project_dir}" "$(printf '%s' "${top_right}" | cut -d'|' -f7)"
+    assert_eq "shell pane starts in the PROJECT dir (no --db main needed)" \
+        "${project_dir}" "$(printf '%s' "${bottom_right}" | cut -d'|' -f7)"
+
     # The right column's two panes plus their separator row fill the window.
     local th bh
     th=$(printf '%s' "${top_right}" | cut -d'|' -f4)
@@ -359,10 +381,12 @@ SQL
     assert_eq "the sibling pane absorbs the rest of the window" \
         "${WIN_ROWS}" "$(( mh + sh + 1 ))"
 
-    # Empty frame (unknown focal → the 1-line no-task hint): floors at 2, not 1.
+    # Empty frame (unknown focal → the no-task hint). NOT an exact fit: a 2-row
+    # sliver reads as a broken pane rather than an empty monitor, and leaves no
+    # room to grow into the moment a task resolves.
     out=$(c_monitor_height 999999); mh=${out%% *}; sh=${out##* }
-    assert_eq "hint-only frame floors the pane at 2 rows" "2" "${mh}"
-    assert_eq "the sibling pane absorbs the rest for the floored fit" \
+    assert_eq "hint-only frame holds the empty height, not a 2-row sliver" "8" "${mh}"
+    assert_eq "the sibling pane absorbs the rest for the empty fit" \
         "${WIN_ROWS}" "$(( mh + sh + 1 ))"
 }
 

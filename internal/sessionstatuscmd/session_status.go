@@ -141,9 +141,14 @@ const (
 	// monitorPaneSlack is the spare row kept below the frame so the last row
 	// isn't flush against the pane border.
 	monitorPaneSlack = 1
-	// monitorPaneMinHeight floors the fit: an empty (hint-only) frame is one
-	// line, and a pane thinner than legend+slack is not worth having.
+	// monitorPaneMinHeight is the absolute floor for a real frame — a pane
+	// thinner than legend+slack is not worth having.
 	monitorPaneMinHeight = 2
+	// monitorPaneEmptyHeight is the height held while there are no task rows
+	// (the no-task hint). Exact-fitting the hint gives a 2-row sliver that reads
+	// as a broken pane; holding a modest block reads as an empty monitor with
+	// room to grow. Costs the shell pane a few rows in the empty case only.
+	monitorPaneEmptyHeight = 8
 	// monitorPanePctOfWindow caps the fit as a percentage of the window height,
 	// so an unusually long row set can't swallow the shell pane below it. A
 	// frame taller than the cap simply scrolls inside its pane.
@@ -293,7 +298,7 @@ func Run(args []string) {
 		return
 	}
 
-	if err := renderSnapshot(os.Stdout, focal, parentSession, emittingSession, noTaskHint, *all, detectCols(*cols), color); err != nil {
+	if _, err := renderSnapshot(os.Stdout, focal, parentSession, emittingSession, noTaskHint, *all, detectCols(*cols), color); err != nil {
 		fmt.Fprintln(os.Stderr, "session-status:", err)
 		os.Exit(1)
 	}
@@ -315,17 +320,20 @@ func gatherRows(focal, parentSession, emittingSession int64, all bool) ([]monito
 
 // renderSnapshot queries the current rows for the anchored focal/parent (or the
 // emitting session when no goal is claimed) and renders one frame to w.
-func renderSnapshot(w io.Writer, focal, parentSession, emittingSession int64, noTaskHint string, all bool, cols int, color bool) error {
+// It returns the number of TASK rows rendered — 0 means the frame is the
+// no-task hint, which the monitor's pane fit treats differently from a short
+// real frame (see paneHeightForFrame).
+func renderSnapshot(w io.Writer, focal, parentSession, emittingSession int64, noTaskHint string, all bool, cols int, color bool) (int, error) {
 	rows, err := gatherRows(focal, parentSession, emittingSession, all)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	// Flat view only: fill each row's Unsettled flag from its worktree's git state
 	// so the renderer can mark the landed-vs-worktree delta with ◆ (E-1701). --tree
 	// takes a separate path and skips this git cost.
 	monitor.AnnotateSessionStatusUnsettled(rows)
 	renderTo(w, rows, focal, noTaskHint, cols, color)
-	return nil
+	return len(rows), nil
 }
 
 // monitorLoop redraws the view every monitorInterval until SIGINT/SIGTERM,
@@ -377,7 +385,8 @@ func monitorLoop(focal, parentSession, emittingSession int64, noTaskHint string,
 		var b strings.Builder
 
 		fireJobs()
-		if err := renderSnapshot(&b, focal, parentSession, emittingSession, noTaskHint, all, detectCols(colsOverride), color); err != nil {
+		rows, err := renderSnapshot(&b, focal, parentSession, emittingSession, noTaskHint, all, detectCols(colsOverride), color)
+		if err != nil {
 			restore()
 			fmt.Fprintln(os.Stderr, "session-status:", err)
 			os.Exit(1)
@@ -385,7 +394,7 @@ func monitorLoop(focal, parentSession, emittingSession int64, noTaskHint string,
 		if frame := b.String(); frame != prev {
 			// Resize BEFORE painting so the frame lands in a pane already the
 			// right size (a shrink after the paint would scroll rows away).
-			fitted = fitPaneToFrame(pane, frame, fitted)
+			fitted = fitPaneToFrame(pane, frame, rows, fitted)
 			// Home, repaint each line (erased to end-of-line), then clear to
 			// end-of-display so a now-shorter frame leaves no stale rows behind.
 			fmt.Fprint(out, "\x1b[H"+eraseEachLineToEOL(frame)+"\x1b[J")
@@ -412,11 +421,20 @@ func frameLines(frame string) int {
 	return strings.Count(frame, "\n")
 }
 
-// paneHeightForFrame is the pure sizing rule: the frame's rows plus a slack row,
-// floored at monitorPaneMinHeight and capped at monitorPanePctOfWindow percent
-// of windowHeight. A windowHeight of 0 means "unknown" and applies no cap.
-func paneHeightForFrame(lines, windowHeight int) int {
+// paneHeightForFrame is the pure sizing rule: the frame's lines plus a slack
+// row, floored at monitorPaneMinHeight and capped at monitorPanePctOfWindow
+// percent of windowHeight. A windowHeight of 0 means "unknown": no cap.
+//
+// rows == 0 is the no-task hint, NOT a short real frame, and gets
+// monitorPaneEmptyHeight instead of an exact fit. Sizing the hint exactly
+// collapses the pane to a 2-row sliver that reads as broken rather than as
+// empty, and leaves no room to grow into the moment a task resolves. The cap
+// still applies, so a tiny window never gets an oversized monitor.
+func paneHeightForFrame(lines, rows, windowHeight int) int {
 	height := lines + monitorPaneSlack
+	if rows == 0 {
+		height = monitorPaneEmptyHeight
+	}
 	if height < monitorPaneMinHeight {
 		height = monitorPaneMinHeight
 	}
@@ -436,11 +454,11 @@ func paneHeightForFrame(lines, windowHeight int) int {
 // effect. `fitted` is the height the last successful resize applied, so an
 // unchanged fit costs no tmux subprocess; a failed resize leaves it untouched so
 // the next repaint retries. Returns fitted unchanged when not running in tmux.
-func fitPaneToFrame(pane, frame string, fitted int) int {
+func fitPaneToFrame(pane, frame string, rows, fitted int) int {
 	if pane == "" {
 		return fitted
 	}
-	height := paneHeightForFrame(frameLines(frame), monitor.PaneWindowHeight(pane))
+	height := paneHeightForFrame(frameLines(frame), rows, monitor.PaneWindowHeight(pane))
 	if height == fitted {
 		return fitted
 	}
