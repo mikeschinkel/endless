@@ -191,16 +191,12 @@ func Run(args []string) {
 		os.Exit(2)
 	}
 
-	// emittingSession anchors the no-goal view (E-1802): when no task is claimed
-	// (focal == 0), `session status` lists this session's own surfaced/revisited
-	// session_tasks rows instead of hiding its work behind the claim/bind hint.
-	var focal, parentSession, emittingSession int64
-	// noTaskHint is the message shown when no focal task resolves (focal == 0, or
-	// the rare focal-with-no-rows case). It mirrors the tmux status line's
-	// PaneStatusKind so the two surfaces agree (E-1698). Defaults to the claim/bind
-	// message; the live path overrides it with the register-session variant when
-	// the pane runs Claude with no session row.
-	noTaskHint := hintClaimBind
+	// nextAnchor produces the ids this view is pinned to (see anchor). The two
+	// headless branches name their focal directly, so their anchor is a constant
+	// — there is nothing to wait for. The normal path resolves it from the
+	// session's process handle, and the live monitor keeps calling this until a
+	// focal task appears (E-1892).
+	var nextAnchor func() (anchor, error)
 	if *taskFlag > 0 {
 		// Headless mode (E-1685 verify harness): the caller names the focal task
 		// directly, so there is no live tmux pane / session to resolve — and no
@@ -210,20 +206,18 @@ func Run(args []string) {
 		// script exercise the dependents row-set against a seeded sandbox DB.
 		// --from-session supplies the spawning session id the live path would read
 		// from @endless_spawned_by, so the ↩ from row stays testable headless.
-		focal = *taskFlag
-		parentSession = *fromSession
+		fixed := anchor{focal: *taskFlag, parentSession: *fromSession, hint: hintClaimBind}
+		nextAnchor = func() (anchor, error) { return fixed, nil }
 	} else if *sessionFlag > 0 {
 		// Headless no-goal mode (E-1802 verify harness): the caller names the
 		// emitting session directly (no live pane to resolve it from), so the
 		// no-goal surfaced/revisited view is exercised against the seeded sandbox
 		// DB. Same PinMainDB skip rationale as the --task branch.
-		emittingSession = *sessionFlag
+		fixed := anchor{emittingSession: *sessionFlag, hint: hintClaimBind}
+		nextAnchor = func() (anchor, error) { return fixed, nil }
 	} else {
 		// Normal path: session/pane state lives in the main DB regardless of cwd
-		// (the hook pins its writes there), so pin main before resolving. Anchor
-		// focal + parent ONCE, before any refresh loop, so the view stays pinned
-		// to THIS window's task as other sessions come and go (matches the
-		// prototype, which resolves the focal task before entering its watch loop).
+		// (the hook pins its writes there), so pin main before resolving.
 		//
 		// This view is the ONE surface whose data is machine-scoped rather than
 		// project-scoped, so it pins main even inside a self_dev worktree.
@@ -250,25 +244,11 @@ func Run(args []string) {
 		if !monitor.HasExplicitDBContext() {
 			monitor.PinMainDB()
 		}
-		pane := os.Getenv("TMUX_PANE")
-		var err error
-		var kind monitor.PaneStatusKind
-		focal, kind, err = monitor.ResolveSessionStatusFocal(pane)
-		if err != nil {
-			fmt.Fprintln(os.Stderr, "session-status:", err)
-			os.Exit(1)
-		}
-		noTaskHint = noTaskHintFor(kind)
-		parentSession = monitor.ResolveSessionStatusParentSession(pane)
-		// No claimed goal: anchor the no-goal view on this pane's own session so
-		// its surfaced/revisited work is still listed instead of hidden (E-1802).
-		if focal == 0 {
-			emittingSession, err = monitor.ResolveSessionStatusSession(pane)
-			if err != nil {
-				fmt.Fprintln(os.Stderr, "session-status:", err)
-				os.Exit(1)
-			}
-		}
+		// process is the session's process handle (sessions.process), which today
+		// holds a tmux pane id. The tmux-shaped name stays confined to the helpers
+		// that genuinely take a pane (fitPaneToFrame and the monitor.* lookups).
+		process := os.Getenv("TMUX_PANE")
+		nextAnchor = func() (anchor, error) { return resolveAnchor(process) }
 	}
 
 	// --tree is an IDs-only structural view: a single frame, no legend, no monitor
@@ -276,12 +256,17 @@ func Run(args []string) {
 	// --tree wins over --monitor (the live loop only drives the table view), the
 	// same way it short-circuited the prototype's watch loop.
 	if *tree {
-		rows, err := monitor.SessionStatusRows(focal, parentSession, true)
+		a, err := nextAnchor()
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "session-status:", err)
 			os.Exit(1)
 		}
-		if err := renderTree(os.Stdout, rows, focal, noTaskHint); err != nil {
+		rows, err := monitor.SessionStatusRows(a.focal, a.parentSession, true)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "session-status:", err)
+			os.Exit(1)
+		}
+		if err := renderTree(os.Stdout, rows, a.focal, a.hint); err != nil {
 			fmt.Fprintln(os.Stderr, "session-status:", err)
 			os.Exit(1)
 		}
@@ -293,22 +278,117 @@ func Run(args []string) {
 	// --monitor only makes sense against an interactive terminal (the redraw uses
 	// cursor-positioning escapes). When stdout is piped/captured, degrade to a
 	// single frame so scripts and pipes don't hang on an endless loop.
+	//
+	// The loop resolves its own anchor on the first tick rather than being handed
+	// one here (E-1892): a monitor launched by `task spawn` starts milliseconds
+	// before its session registers, so a resolution failure — or an empty result —
+	// at this point must not be final.
 	if *monitorMode && term.IsTerminal(int(os.Stdout.Fd())) {
-		monitorLoop(focal, parentSession, emittingSession, noTaskHint, *all, *cols, color)
+		monitorLoop(newAnchorTracker(nextAnchor), *all, *cols, color)
 		return
 	}
 
-	if _, err := renderSnapshot(os.Stdout, focal, parentSession, emittingSession, noTaskHint, *all, detectCols(*cols), color); err != nil {
+	// One-shot render: a single frame has no later tick to recover in, so a
+	// resolution error is fatal here exactly as it always has been.
+	a, err := nextAnchor()
+	if err != nil {
 		fmt.Fprintln(os.Stderr, "session-status:", err)
 		os.Exit(1)
 	}
+	// The row count is the live monitor's pane-fit input (E-1851); a one-shot
+	// render has no pane to fit, so it is discarded here.
+	if _, err := renderSnapshot(os.Stdout, a.focal, a.parentSession, a.emittingSession, a.hint, *all, detectCols(*cols), color); err != nil {
+		fmt.Fprintln(os.Stderr, "session-status:", err)
+		os.Exit(1)
+	}
+}
+
+// anchor is the set of ids the view pins itself to, resolved as ONE unit. The
+// three ids are read from the same not-yet-settled state and share a single
+// race, which is why they move together (E-1892):
+//
+//   - focal — the window's claimed task, from the session row the hook writes.
+//   - parentSession — from the @endless_spawned_by window option, which
+//     spawn-launch writes immediately before its syscall.Exec, i.e. the same
+//     instant the session row does not yet exist.
+//   - emittingSession — consulted only while focal == 0, so freezing it at a
+//     stale 0 would leave the no-goal view (E-1802) permanently empty for
+//     exactly the sessions it exists to serve.
+//
+// hint is the message rendered when no focal task resolves, mirroring the tmux
+// status line's PaneStatusKind so the two surfaces agree (E-1698).
+type anchor struct {
+	focal           int64
+	parentSession   int64
+	emittingSession int64
+	hint            string
+}
+
+// resolveAnchor reads the whole anchor for one process handle through the same
+// pane-scoped path the tmux status line uses. Seamed as a package var so tests
+// can drive a scripted sequence of results, mirroring the worktreeAnomalies seam
+// in this same file.
+//
+// The zero anchor returned alongside an error is never rendered: the one-shot
+// callers exit, and anchorTracker keeps its previous anchor and retries.
+var resolveAnchor = func(process string) (anchor, error) {
+	focal, kind, err := monitor.ResolveSessionStatusFocal(process)
+	if err != nil {
+		return anchor{}, err
+	}
+	a := anchor{
+		focal:         focal,
+		parentSession: monitor.ResolveSessionStatusParentSession(process),
+		hint:          noTaskHintFor(kind),
+	}
+	// No claimed goal: anchor the no-goal view on this pane's own session so its
+	// surfaced/revisited work is still listed instead of hidden (E-1802).
+	if a.focal == 0 {
+		if a.emittingSession, err = monitor.ResolveSessionStatusSession(process); err != nil {
+			return anchor{}, err
+		}
+	}
+	return a, nil
+}
+
+// anchorTracker owns the anchor's lifecycle for the live monitor: re-resolve
+// while no focal task has appeared, then freeze forever on the first hit.
+//
+// Freezing preserves E-1698's anchor-once contract unchanged — once a task is
+// anchored the view stays pinned to THIS window's task as other sessions come
+// and go. A session that never claims keeps re-resolving every tick, which is
+// correct: that is how the view recovers when the user finally claims.
+type anchorTracker struct {
+	cur     anchor
+	resolve func() (anchor, error)
+}
+
+func newAnchorTracker(resolve func() (anchor, error)) *anchorTracker {
+	return &anchorTracker{cur: anchor{hint: hintClaimBind}, resolve: resolve}
+}
+
+// refresh returns the anchor to render this tick. A resolver error while still
+// unanchored is NON-FATAL — unlike a render error, which exits — because the
+// whole point is to outlast a transient nothing-here-yet: the previous anchor is
+// kept and the next tick retries.
+func (t *anchorTracker) refresh() anchor {
+	if t.cur.focal != 0 {
+		return t.cur
+	}
+	if next, err := t.resolve(); err == nil {
+		t.cur = next
+	}
+	return t.cur
 }
 
 // gatherRows returns the rows to render: the focal-anchored what's-next set when
 // a goal is claimed (focal != 0), else the emitting session's own surfaced/
 // revisited rows (E-1802) when a session is present but unclaimed. Empty when
 // neither resolves — renderTo then prints the claim/bind hint.
-func gatherRows(focal, parentSession, emittingSession int64, all bool) ([]monitor.SessionStatusRow, error) {
+//
+// Seamed as a package var (like worktreeAnomalies below) so tests can drive
+// monitorFrame's resolve→render composition without a DB.
+var gatherRows = func(focal, parentSession, emittingSession int64, all bool) ([]monitor.SessionStatusRow, error) {
 	if focal != 0 {
 		return monitor.SessionStatusRows(focal, parentSession, all)
 	}
@@ -336,6 +416,21 @@ func renderSnapshot(w io.Writer, focal, parentSession, emittingSession int64, no
 	return len(rows), nil
 }
 
+// monitorFrame produces one live-monitor frame: refresh the anchor, then render
+// against it. Split out of monitorLoop so tests can drive the resolve→render
+// composition — the whole of what E-1892 changed — without a terminal, a ticker,
+// or a signal. monitorLoop keeps only the paint/fit/tick machinery.
+//
+// It forwards renderSnapshot's task-row count, which is the pane fit's input:
+// 0 rows means the no-task hint, held at monitorPaneEmptyHeight rather than
+// exact-fitted (E-1851). That count is exactly what changes on the tick a focal
+// task finally resolves, so the pane regrows in the same repaint the rows
+// appear in.
+func monitorFrame(tracker *anchorTracker, w io.Writer, all bool, cols int, color bool) (int, error) {
+	a := tracker.refresh()
+	return renderSnapshot(w, a.focal, a.parentSession, a.emittingSession, a.hint, all, cols, color)
+}
+
 // monitorLoop redraws the view every monitorInterval until SIGINT/SIGTERM,
 // repainting only when the rendered frame changes (so an idle view doesn't
 // flicker). It hides the cursor for the duration and restores it on every exit
@@ -347,7 +442,12 @@ func renderSnapshot(w io.Writer, focal, parentSession, emittingSession int64, no
 // monitor knows its row count, `task spawn` cannot, so the pane sizes itself
 // instead of being guessed at creation. Best-effort and silent: outside tmux, or
 // when tmux refuses (a single-pane window), the view is unchanged.
-func monitorLoop(focal, parentSession, emittingSession int64, noTaskHint string, all bool, colsOverride int, color bool) {
+//
+// The anchor is re-resolved by the tracker each tick until a focal task appears
+// (E-1892), so a monitor started before its session registers — which is the
+// common case under `task spawn`'s layout — recovers instead of showing the
+// claim/bind hint forever.
+func monitorLoop(tracker *anchorTracker, all bool, colsOverride int, color bool) {
 	out := os.Stdout
 	fmt.Fprint(out, "\x1b[?25l")                         // hide cursor
 	restore := func() { fmt.Fprint(out, "\x1b[?25h\n") } // show cursor + trailing newline
@@ -385,7 +485,7 @@ func monitorLoop(focal, parentSession, emittingSession int64, noTaskHint string,
 		var b strings.Builder
 
 		fireJobs()
-		rows, err := renderSnapshot(&b, focal, parentSession, emittingSession, noTaskHint, all, detectCols(colsOverride), color)
+		rows, err := monitorFrame(tracker, &b, all, detectCols(colsOverride), color)
 		if err != nil {
 			restore()
 			fmt.Fprintln(os.Stderr, "session-status:", err)
