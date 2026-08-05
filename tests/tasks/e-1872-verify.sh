@@ -17,6 +17,8 @@
 #   3. Rule 2 — don't land/drop without asking, stated as a RULE inside
 #      "Landing the work" (not merely described in the handoff-template
 #      section), and positioned before the `worktree land` command block.
+#      Plus E-1885, folded into this branch: that section's step 4 no longer
+#      claims land removes the worktree (it doesn't; a reaper does, later).
 #   4. Rule 3 — file-don't-fix for drive-by discoveries, with `--cleans-up`.
 #   5. Rule 4 — `FULL STATUS` licenses one response, not a sticky mode.
 #   6. Rule 5 — lean toward FEWER tasks, with the cost rationale attached.
@@ -113,6 +115,20 @@ assert_in "explains it is the user's verification" "${LAND_SECTION}" \
 assert_in "keeps --dry-run usable"                 "${LAND_SECTION}" \
     '`--dry-run` is the exception'
 
+# E-1885, folded into this branch: the same section's step 4 claimed land
+# "Removes the worktree." It never has — a reaper does, later — and index.md
+# said the opposite. A session reading a false claim about what land does to
+# its worktree is the same failure mode as the missing rules above.
+assert_in "step 4 says the worktree is retained" "${LAND_SECTION}" \
+    "worktree directory and its branch stay put"
+assert_in "names the reaper and its TTL"         "${LAND_SECTION}" \
+    'worktree_ttl'
+if grep -qF "Removes the worktree." <<<"${LAND_SECTION}"; then
+    fail "step 4 still claims land removes the worktree" \
+         "land_worktree() leaves the dir and branch; the reaper removes them after worktree_ttl"
+fi
+pass "no stale 'Removes the worktree' claim"
+
 # Position: the rule must precede the command it governs, or a session that
 # stops reading at the first code block has already run it.
 rule_ln=$(grep -n 'without asking your user first' "${ORCH}" | head -1 | cut -d: -f1)
@@ -175,6 +191,11 @@ assert_in "gives the rule of thumb"    "${FEWER_SECTION}" "same reviewer = **one
 # Each rule is a claim about something outside the guide. If that something
 # changes, the guide goes stale silently — so assert they still agree.
 section "7. Doc matches the sources it documents"
+
+assert_file "land still retains the worktree (source of the E-1885 fix)" \
+    "Worktree dir and branch stay" src/endless/worktree_cmd.py
+assert_file "the reaper's TTL default is still what the guide prints" \
+    "default 14d" src/endless/cli.py
 
 assert_file "FULL STATUS is still emitted by the handoff template" \
     "FULL STATUS" "${CLOSE_TMPL}"
