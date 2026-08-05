@@ -77,6 +77,10 @@ func RunDue(ctx context.Context) (result Result) {
 	var err error
 	var job Job
 
+	if Suppressed() {
+		goto end
+	}
+
 	db, err = monitor.DB()
 	if err != nil {
 		faults.Record(faults.Fault{

@@ -246,6 +246,16 @@ func pinnedToForeignRealDB() bool {
 	return dbPathOverride != ""
 }
 
+// PinnedToRealDB reports whether this process has been pinned onto a fixed real
+// database (PinMainDB / ForceRealDB), overriding any sandbox routing.
+//
+// Exported for the E-698 job runner, which must not execute jobs when a
+// self_dev worktree's candidate build is pointed at the developer's real
+// ledger. Combined with InSelfDevWorktree it names exactly that state; on its
+// own it is true for ordinary pinned surfaces (hook, channel, tmux) in the main
+// checkout too, where running jobs is correct.
+func PinnedToRealDB() bool { return pinnedToForeignRealDB() }
+
 // worktreePathMarker is the path segment that identifies an endless-managed
 // task worktree: <project-root>/.endless/worktrees/e-NNN.
 const worktreePathMarker = "/.endless/worktrees/"

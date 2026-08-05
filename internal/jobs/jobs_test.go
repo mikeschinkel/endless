@@ -437,6 +437,42 @@ func TestSchedule_LeaseTTLDefaultsToTwiceTheIntervalWithAFloor(t *testing.T) {
 	}
 }
 
+func TestRunDue_DoesNothingWhenSuppressed(t *testing.T) {
+	newTestDB(t)
+	job := &fakeJob{name: "should-not-run", schedule: Schedule{Interval: time.Hour}}
+	register(t, job)
+
+	t.Setenv(noJobsEnv, "1")
+
+	result := RunDue(context.Background())
+
+	if got := job.runs.Load(); got != 0 {
+		t.Errorf("job ran %d times while suppressed, want 0", got)
+	}
+	if len(result.Outcomes) != 0 {
+		t.Errorf("suppressed run produced %d outcomes, want 0", len(result.Outcomes))
+	}
+	if !Suppressed() {
+		t.Error("Suppressed() = false with the env var set")
+	}
+	if SuppressionReason() == "" {
+		t.Error("SuppressionReason() is empty while suppressed; jobs list would say nothing")
+	}
+}
+
+func TestSuppressed_FalseByDefault(t *testing.T) {
+	// The guard must be narrow. If this fails in an ordinary checkout, the runner
+	// has been suppressed everywhere and the trigger is silently dead — the exact
+	// failure mode that is invisible because a suppressed runner and an empty
+	// registry look identical.
+	if monitor.InSelfDevWorktree() && monitor.PinnedToRealDB() {
+		t.Skip("running inside a self-dev worktree pinned to a real DB; suppression is correct here")
+	}
+	if Suppressed() {
+		t.Errorf("Suppressed() = true unexpectedly: %s", SuppressionReason())
+	}
+}
+
 func TestRegistered_IsEmptyByDefault(t *testing.T) {
 	t.Cleanup(resetRegistryForTest())
 

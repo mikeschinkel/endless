@@ -59,6 +59,12 @@ func runList() {
 		fmt.Fprintln(os.Stderr, "endless-go jobs: list:", err)
 		os.Exit(1)
 	}
+	// Say so loudly when the runner cannot execute anything here: an operator
+	// staring at "0 claimed" deserves to know the difference between "nothing was
+	// due" and "this process will never run a job".
+	if reason := jobs.SuppressionReason(); reason != "" {
+		fmt.Printf("jobs suppressed: %s\n\n", reason)
+	}
 	if len(statuses) == 0 {
 		// The expected state as of E-698: the runner ships with an EMPTY
 		// registry. Say so explicitly rather than printing a bare header, so an

@@ -306,10 +306,30 @@ if go list -deps ./internal/faults | grep -q "endless/internal/monitor"; then
 fi
 pass "internal/faults is free of an internal/monitor dependency (keeps E-1884 open)"
 
-grep -q "monitor.InSelfDevWorktree()" internal/sessionstatuscmd/session_status.go \
-    || fail "session-status no longer guards PinMainDB with InSelfDevWorktree" \
-            "a worktree monitor would fire jobs against the real ledger"
-pass "session-status skips the main pin inside a self_dev worktree"
+# session-status MUST pin main even in a worktree. Session/pane state is
+# machine-scoped and is read by a single-DB join against tasks, so a sandbox
+# read renders "no active task" for every pane — the regression E-698 shipped
+# and this suite now guards against.
+grep -q "if !monitor.HasExplicitDBContext() {" internal/sessionstatuscmd/session_status.go \
+    || fail "session-status no longer pins main on its tmux path" \
+            "the worktree monitor would render 'no active task' for every pane"
+if grep -q "if !monitor.InSelfDevWorktree() {" internal/sessionstatuscmd/session_status.go; then
+    fail "session-status skips the main pin inside a self_dev worktree" \
+         "that is the regression; the job guard belongs on the trigger instead"
+fi
+pass "session-status pins main unless an explicit --config-dir was given"
+
+# ...and the protection that skip was providing now lives on the trigger.
+grep -q "if Suppressed() {" internal/jobs/run.go \
+    || fail "RunDue no longer consults the suppression guard" \
+            "candidate job code could write the developer's real ledger"
+pass "RunDue suppresses itself instead (guard moved to the trigger)"
+
+out=$(ENDLESS_NO_JOBS=1 "${GO_BIN}" jobs list 2>&1) || fail "jobs list under ENDLESS_NO_JOBS" "${out}"
+grep -q "jobs suppressed" <<<"${out}" \
+    || fail "jobs list stays silent when the runner is suppressed" \
+            "an operator cannot tell 'nothing due' from 'will never run'"
+pass "jobs list reports suppression rather than looking idle"
 
 grep -q "jobs.RunDue" internal/sessionstatuscmd/session_status.go \
     || fail "the session monitor no longer fires the job runner"

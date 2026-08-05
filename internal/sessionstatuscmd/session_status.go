@@ -204,20 +204,29 @@ func Run(args []string) {
 		// to THIS window's task as other sessions come and go (matches the
 		// prototype, which resolves the focal task before entering its watch loop).
 		//
-		// EXCEPT inside a self_dev worktree (E-698). There, the pin would override
-		// the per-worktree sandbox and point candidate code at the developer's REAL
-		// ledger — the precise pollution E-1281 exists to prevent — and, because
-		// E-1818 opens a pinned foreign real DB schema-passive, at a DB missing any
-		// table the candidate build added. Every other command already resolves the
-		// sandbox in a worktree; skipping the pin here keeps ONE self_dev rule
-		// instead of a per-command exception.
+		// This view is the ONE surface whose data is machine-scoped rather than
+		// project-scoped, so it pins main even inside a self_dev worktree.
 		//
-		// Known cost, accepted: the sandbox's seeded session row carries no
-		// `process` (only the hook sets one, and the hook pins main), so the
-		// worktree view will not pane-resolve a focal task and shows the no-session
-		// hint. That is strictly better than silently reading the real DB. The
-		// underlying machine-scoped vs project-scoped split is E-1883.
-		if !monitor.InSelfDevWorktree() {
+		// E-698 briefly skipped the pin in a worktree, reasoning that every other
+		// command resolves the sandbox there and one rule beats a per-command
+		// exception. That broke the view outright: sessions and tasks are read by a
+		// single-database JOIN (monitor.queryActiveTaskForPanes:
+		// `FROM sessions s JOIN tasks t ON t.id = s.active_task_id`), so pane
+		// resolution IS a task read and cannot be split across two databases. Worse,
+		// sandbox task ids are a separate universe — sandboxcmd.seedFromWorktree
+		// copies one project row and one session row and NO tasks — so a task id
+		// resolved from main means nothing there. The worktree monitor rendered
+		// "no active task" for every pane.
+		//
+		// The guard that skip was protecting (candidate job code writing to the real
+		// ledger) belongs on the trigger, not on the DB context: jobs.RunDue
+		// suppresses itself when it detects a self_dev worktree pinned to a real DB.
+		// That keeps the protection without costing a working dashboard.
+		//
+		// An explicit --config-dir still wins, matching main.go's hook/channel/tmux
+		// pattern (E-1429: a per-invocation flag is trustworthy; the env-driven pin
+		// is the fallback). That preserves the seam the verify harnesses drive.
+		if !monitor.HasExplicitDBContext() {
 			monitor.PinMainDB()
 		}
 		pane := os.Getenv("TMUX_PANE")
