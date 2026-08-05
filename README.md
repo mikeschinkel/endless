@@ -97,9 +97,11 @@ into three panes:
   so you can watch every session at a glance.
 - **Bottom right** — a free shell for ad-hoc `endless` commands.
 
-`endless task spawn` opens each task's session in its own tmux window. Automating
-this three-pane layout, and shipping the tmux configuration Endless needs alongside
-the repo, are both in progress — until then you arrange the panes yourself.
+`endless task spawn` opens each task's session in its own tmux window and builds
+this three-pane layout for you — you land in the Claude pane with the monitor
+already running beside it. The monitor keeps its pane exactly as tall as the rows
+it has to show, so the shell below it gets everything left over. Shipping the tmux
+configuration Endless needs alongside the repo is still in progress.
 
 ### Exploring the CLI
 

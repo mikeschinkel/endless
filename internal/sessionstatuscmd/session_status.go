@@ -115,6 +115,25 @@ func (a action) label() string { return actionMeta[a].label }
 // prototype's watch loop.
 const monitorInterval = 2 * time.Second
 
+// Self-sizing constants for the live monitor's own tmux pane (E-1851). The
+// monitor is the top-right pane of the canonical 3-pane spawn layout, above a
+// bare shell; it owns exactly as many rows as its frame needs so the shell keeps
+// the rest of the column. Because the frame grows and shrinks with the row set,
+// the fit is re-applied on every repaint rather than fixed at spawn time — which
+// also means `task spawn` never has to guess a height it cannot know.
+const (
+	// monitorPaneSlack is the spare row kept below the frame so the last row
+	// isn't flush against the pane border.
+	monitorPaneSlack = 1
+	// monitorPaneMinHeight floors the fit: an empty (hint-only) frame is one
+	// line, and a pane thinner than legend+slack is not worth having.
+	monitorPaneMinHeight = 2
+	// monitorPanePctOfWindow caps the fit as a percentage of the window height,
+	// so an unusually long row set can't swallow the shell pane below it. A
+	// frame taller than the cap simply scrolls inside its pane.
+	monitorPanePctOfWindow = 80
+)
+
 // no-task hints are shown when no focal task resolves. They mirror the tmux
 // status line's PaneStatusKind hints (internal/tmuxcmd/status_line.go) so the bar
 // and this view agree about "nothing here" instead of the list inventing an
@@ -290,6 +309,11 @@ func renderSnapshot(w io.Writer, focal, parentSession, emittingSession int64, no
 // path. Width is re-detected each tick so a terminal resize is honored. This is
 // the live `session monitor` dashboard; it loops the same snapshot renderer
 // `session status` prints once.
+//
+// On every repaint it also fits its own tmux pane to the frame (E-1851) — the
+// monitor knows its row count, `task spawn` cannot, so the pane sizes itself
+// instead of being guessed at creation. Best-effort and silent: outside tmux, or
+// when tmux refuses (a single-pane window), the view is unchanged.
 func monitorLoop(focal, parentSession, emittingSession int64, noTaskHint string, all bool, colsOverride int, color bool) {
 	out := os.Stdout
 	fmt.Fprint(out, "\x1b[?25l")                         // hide cursor
@@ -322,7 +346,8 @@ func monitorLoop(focal, parentSession, emittingSession int64, noTaskHint string,
 		}()
 	}
 
-	prev := ""
+	pane := os.Getenv("TMUX_PANE")
+	prev, fitted := "", 0
 	for {
 		var b strings.Builder
 
@@ -333,6 +358,9 @@ func monitorLoop(focal, parentSession, emittingSession int64, noTaskHint string,
 			os.Exit(1)
 		}
 		if frame := b.String(); frame != prev {
+			// Resize BEFORE painting so the frame lands in a pane already the
+			// right size (a shrink after the paint would scroll rows away).
+			fitted = fitPaneToFrame(pane, frame, fitted)
 			// Home, repaint each line (erased to end-of-line), then clear to
 			// end-of-display so a now-shorter frame leaves no stale rows behind.
 			fmt.Fprint(out, "\x1b[H"+eraseEachLineToEOL(frame)+"\x1b[J")
@@ -345,6 +373,56 @@ func monitorLoop(focal, parentSession, emittingSession int64, noTaskHint string,
 		case <-ticker.C:
 		}
 	}
+}
+
+// frameLines counts the terminal rows one rendered frame occupies. Every line
+// renderTo emits ends in a newline (it uses Fprintln throughout), so the newline
+// count IS the line count — no off-by-one for a trailing empty segment.
+//
+// Measuring the RENDERED frame, rather than deriving a height from the row
+// count, is what keeps the fit correct as the view grows new parts: E-698's
+// fault badge adds two lines when an incident is open and none when it isn't,
+// and the fit tracks that for free.
+func frameLines(frame string) int {
+	return strings.Count(frame, "\n")
+}
+
+// paneHeightForFrame is the pure sizing rule: the frame's rows plus a slack row,
+// floored at monitorPaneMinHeight and capped at monitorPanePctOfWindow percent
+// of windowHeight. A windowHeight of 0 means "unknown" and applies no cap.
+func paneHeightForFrame(lines, windowHeight int) int {
+	height := lines + monitorPaneSlack
+	if height < monitorPaneMinHeight {
+		height = monitorPaneMinHeight
+	}
+	if windowHeight > 0 {
+		maxHeight := windowHeight * monitorPanePctOfWindow / 100
+		if maxHeight < monitorPaneMinHeight {
+			maxHeight = monitorPaneMinHeight
+		}
+		if height > maxHeight {
+			height = maxHeight
+		}
+	}
+	return height
+}
+
+// fitPaneToFrame resizes pane to hold frame and returns the height now in
+// effect. `fitted` is the height the last successful resize applied, so an
+// unchanged fit costs no tmux subprocess; a failed resize leaves it untouched so
+// the next repaint retries. Returns fitted unchanged when not running in tmux.
+func fitPaneToFrame(pane, frame string, fitted int) int {
+	if pane == "" {
+		return fitted
+	}
+	height := paneHeightForFrame(frameLines(frame), monitor.PaneWindowHeight(pane))
+	if height == fitted {
+		return fitted
+	}
+	if err := monitor.ResizePaneHeight(pane, height); err != nil {
+		return fitted
+	}
+	return height
 }
 
 // eraseEachLineToEOL wraps a rendered frame so that repainting it over a prior

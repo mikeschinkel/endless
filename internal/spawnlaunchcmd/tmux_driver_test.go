@@ -1,6 +1,7 @@
 package spawnlaunchcmd
 
 import (
+	"path/filepath"
 	"reflect"
 	"testing"
 )
@@ -26,6 +27,87 @@ func TestNewWindowArgs_NoCwdOmitsFlag(t *testing.T) {
 	want := []string{"new-window", "-n", "win", "--", "/bin/claude", "attach", "abcd1234"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("args = %q, want %q", got, want)
+	}
+}
+
+// TestSplitWindowArgs_ShellPane pins the first split of the 3-pane layout
+// (E-1851): a 50/50 left/right split off the claude pane, no -l (tmux's even
+// split), no `--` (the pane runs the user's default shell), and -P -F so the
+// caller reads back the new pane's id.
+func TestSplitWindowArgs_ShellPane(t *testing.T) {
+	got := splitWindowArgs("%7", true, false, "/wt/e-1851", 0, nil)
+	want := []string{
+		"split-window", "-h", "-t", "%7", "-c", "/wt/e-1851",
+		"-P", "-F", "#{pane_id}",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("args = %q, want %q", got, want)
+	}
+}
+
+// TestSplitWindowArgs_MonitorPane pins the second split: -b inserts the monitor
+// ABOVE the shell pane (the order that can't race the monitor's self-shrink),
+// and the command is passed through literally after `--`.
+func TestSplitWindowArgs_MonitorPane(t *testing.T) {
+	got := splitWindowArgs("%8", false, true, "/wt/e-1851", 0,
+		[]string{"/usr/local/bin/endless", "session", "monitor"})
+	want := []string{
+		"split-window", "-v", "-b", "-t", "%8", "-c", "/wt/e-1851",
+		"-P", "-F", "#{pane_id}", "--",
+		"/usr/local/bin/endless", "session", "monitor",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("args = %q, want %q", got, want)
+	}
+}
+
+// TestSplitWindowArgs_LengthAndNoCwd pins the two conditional flags from the
+// other side: a positive length emits -l, and an empty cwd drops -c.
+func TestSplitWindowArgs_LengthAndNoCwd(t *testing.T) {
+	got := splitWindowArgs("%9", false, false, "", 12, []string{"top"})
+	want := []string{
+		"split-window", "-v", "-t", "%9", "-l", "12",
+		"-P", "-F", "#{pane_id}", "--", "top",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("args = %q, want %q", got, want)
+	}
+}
+
+// TestSelectPaneArgs pins the focus-return command.
+func TestSelectPaneArgs(t *testing.T) {
+	got := selectPaneArgs("%7")
+	want := []string{"select-pane", "-t", "%7"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("args = %q, want %q", got, want)
+	}
+}
+
+// TestPanePaneIDArgs pins the window→active-pane-id lookup that anchors the
+// layout on a stable pane ID rather than a base-index-dependent pane index.
+func TestPanePaneIDArgs(t *testing.T) {
+	got := panePaneIDArgs("endless_deliver[E-1851]")
+	want := []string{
+		"display-message", "-p", "-t", "endless_deliver[E-1851]", "#{pane_id}",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("args = %q, want %q", got, want)
+	}
+}
+
+// TestMonitorCommand pins that the monitor pane runs `endless session monitor`,
+// whether or not the CLI resolves on PATH (the binary element varies; the verb
+// pair does not).
+func TestMonitorCommand(t *testing.T) {
+	got := monitorCommand()
+	if len(got) != 3 {
+		t.Fatalf("monitorCommand() = %q, want 3 elements", got)
+	}
+	if got[1] != "session" || got[2] != "monitor" {
+		t.Fatalf("monitorCommand() verbs = %q, want [session monitor]", got[1:])
+	}
+	if got[0] != "endless" && filepath.Base(got[0]) != "endless" {
+		t.Fatalf("monitorCommand() binary = %q, want endless (bare or resolved)", got[0])
 	}
 }
 

@@ -280,6 +280,8 @@ Spawn runs in one of two places:
 - **Foreground** (`endless task spawn <id>`) — a new tmux window, Claude visible and interactive.
 - **Background** (`endless task spawn <id> --bg`) — a headless agent under Anthropic's supervisor process, no terminal attached.
 
+The foreground window is built as three panes (E-1851): Claude on the **left** at half width and full height (focused when the window opens), `endless session monitor` **top-right**, and a bare `$SHELL` **bottom-right** for ad-hoc `endless` commands. The monitor resizes its own pane to the frame it is rendering on every repaint, capped at 80% of the window height, so the shell keeps the rest of the column. `--bg` (no window) and `--attach` are unaffected — neither builds a layout.
+
 Both **pre-claim** the task (status → `underway`, per-task worktree created) and run the same pre-flight refusals before launching, so the spawned session always lands in a fully-claimed state and never needs to run `endless task claim` itself.
 
 ### Foreground vs background

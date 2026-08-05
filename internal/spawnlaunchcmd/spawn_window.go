@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/exec"
 )
 
 // runSpawnWindow is the outer orchestrator — the only spawn verb Python calls.
@@ -84,6 +85,66 @@ func runSpawnWindow(args []string) {
 		// the spec file; remove it here.
 		_ = os.Remove(specPath)
 		fail("spawn-window: %v", err)
+	}
+
+	buildSpawnLayout(*windowName, *cwd)
+}
+
+// monitorCommand is the argv run in the layout's monitor pane. `endless session
+// monitor` is the verb a user would type; it is resolved to an absolute path
+// when possible so the pane doesn't depend on tmux's PATH matching the
+// spawner's, and left bare (letting tmux's execvp report the failure in-pane)
+// when the CLI isn't on PATH at all.
+func monitorCommand() []string {
+	bin, err := exec.LookPath("endless")
+	if err != nil {
+		bin = "endless"
+	}
+	return []string{bin, "session", "monitor"}
+}
+
+// buildSpawnLayout turns the freshly created single-pane window into the
+// canonical Endless working layout (E-1851): claude on the left at half width
+// and full height, `endless session monitor` top-right, and a bare interactive
+// shell bottom-right for ad-hoc endless commands. Focus ends on claude.
+//
+// It runs AFTER new-window returns, from this process, because pane 0 is claude:
+// runSpawnLaunch replaces that pane via syscall.Exec and so cannot orchestrate
+// anything afterward.
+//
+// Split order matters. The SHELL pane is created first and the monitor is
+// inserted ABOVE it (-b), rather than the reverse: `session monitor` shrinks its
+// own pane to its frame on first paint (see sessionstatuscmd.fitPaneToFrame), so
+// creating the monitor first and then splitting it would race that shrink and
+// leave the shell with whatever few rows survived. Splitting the shell can't
+// race anything. The monitor is therefore left at tmux's even split and sizes
+// itself a moment later — which is also why nothing here has to guess a height
+// it has no way to know.
+//
+// Best-effort throughout, matching the option-setting path: claude in pane 0 is
+// the load-bearing part of a spawn, so a tmux failure here surfaces on stderr
+// and returns, never fails the spawn.
+func buildSpawnLayout(windowName, cwd string) {
+	// The window's active pane is claude — nothing else exists in it yet.
+	claudePane, err := runTmuxOut(panePaneIDArgs(windowName)...)
+	if err != nil || claudePane == "" {
+		fmt.Fprintf(os.Stderr, "spawn-window: layout skipped (no pane id): %v\n", err)
+		return
+	}
+
+	shellPane, err := runTmuxOut(splitWindowArgs(claudePane, true, false, cwd, 0, nil)...)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "spawn-window: layout: shell pane: %v\n", err)
+		return
+	}
+
+	if _, err = runTmuxOut(splitWindowArgs(shellPane, false, true, cwd, 0, monitorCommand())...); err != nil {
+		fmt.Fprintf(os.Stderr, "spawn-window: layout: monitor pane: %v\n", err)
+		// Fall through: a 2-pane window still wants focus back on claude.
+	}
+
+	if err = runTmux(selectPaneArgs(claudePane)...); err != nil {
+		fmt.Fprintf(os.Stderr, "spawn-window: layout: focus claude: %v\n", err)
 	}
 }
 
