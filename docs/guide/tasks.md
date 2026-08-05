@@ -107,6 +107,30 @@ To record a decision prompted by a task, use `endless decision add "..." --about
 
 Use the task ID printed by `task add` **literally**. IDs advance globally across parallel sessions — never guess.
 
+### Filing work you discover mid-task (`--cleans-up`)
+
+**File it; don't fix it.** When you spot a bug, a rough edge, or an obvious cleanup while working a task, the default is a new task linked back to the one you're on — *not* an inline fix:
+
+```bash
+endless task add "Verb-first title" --cleans-up <current_id> --description "What you saw and why it matters"
+```
+
+`cleans_up` is the canonical follow-up link (see [When to use each relation type](#when-to-use-each-relation-type)), so the discovery stays attached to the work that surfaced it and shows up as a follow-up on the parent task's `task show`.
+
+Fixing a drive-by inline looks helpful and isn't: it inflates the diff your user reviews, couples two unrelated changes into one land, hides the change the task was actually about, and expands the blast radius of a revert. Stay on the task you claimed.
+
+The exception is a drive-by you genuinely cannot complete the task without — a broken build, a test that fails for an unrelated reason. Fix the minimum that unblocks you, and say so explicitly in your report so the user isn't surprised by it in the diff.
+
+### Lean toward FEWER tasks
+
+When you file discovered work, prefer **one** task over several whenever one is reasonable.
+
+Every task you file spends your user's attention — review, prioritization, scheduling — which is the scarce resource Endless exists to protect. Several near-identical tasks cost several times the attention of one task covering the same ground, while delivering the same result. A backlog inflated with split hairs makes Endless *cost* time instead of saving it.
+
+Split into separate tasks only when the items genuinely need **different reviewers, different decisions, or different land timing**. The rule of thumb: same file + same kind of edit + same reviewer = **one** task.
+
+Four near-identical "document X in the guide" tasks are the anti-pattern; folding them into one task with four sub-points is the pattern. The same logic applies to any set of edits a single reviewer would approve in a single pass.
+
 ### Research-type gate
 
 `--type research` discourages casual use: a research task is justified only when its findings can't be inlined as a do-task. The CLI enforces this:
@@ -218,6 +242,19 @@ For a genuinely out-of-band note (an anomaly or discovery the command can't
 compute) or an open question for the user, pass `--json` / `--json-file`. The
 exact payload shape lives in `endless task report --help` — the single canonical
 home; read it there rather than duplicating it here.
+
+### The `FULL STATUS` escape hatch
+
+Reports are deliberately terse, and spawned sessions are told not to recap
+status, phase, or relationships. When the user wants the full picture anyway,
+they type **`FULL STATUS`**.
+
+That keyword licenses **one** response, answered fully and unconstrained: recap
+whatever is useful, at whatever length the answer needs, ignoring the
+report-only-what-it-can't-compute discipline for that reply.
+
+It is **not a mode switch**. The response after it returns to the default
+terseness. If the user wants another full answer, they type it again.
 
 ---
 

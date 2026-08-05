@@ -41,3 +41,23 @@ covers: For a research task, text = the request, outcome = the deliverable.
 topic: per-task verification suite
 section: orchestration
 covers: One suite per task and the one-command verify handoff (tests/tasks/e-*-verify.sh, verify.toml).
+
+topic: commit message convention
+section: orchestration
+covers: Commit subjects on a task branch take the form E-<id>: verb-first summary.
+
+topic: landing is the user's call (ask first)
+section: orchestration
+covers: Never run worktree land or drop on your own initiative - ask every time.
+
+topic: filing discovered work (file it, don't fix it)
+section: tasks
+covers: File a drive-by discovery as a task with --cleans-up instead of fixing it inline.
+
+topic: lean toward fewer tasks
+section: tasks
+covers: Prefer one task over several - every filed task spends the user's review attention.
+
+topic: FULL STATUS
+section: tasks
+covers: The keyword licenses one unconstrained response, not a sticky mode.

@@ -123,6 +123,20 @@ git add -A -- ':!.endless/db-ledger' ':!.endless/verbs.jsonl'
 git commit -m "E-<id>: what changed"
 ```
 
+#### The commit message
+
+**Form: `E-<id>: <verb-first summary>`.** The task id that owns the change, a colon, then what the commit does — imperative mood, lower-case after the colon, no trailing period, one line:
+
+```
+E-1871: route closed tasks to ⇥ instead of ⁇ in session status
+E-1866: show session provenance on `task show`
+E-1870: add the missing commit-your-work step to the guide
+```
+
+Your commits ride into `main` on `worktree land`, so the subject line is what `main`'s history says about the task forever. The id prefix is the load-bearing part: it makes every landed change traceable back to the task that justified it (`git log --grep 'E-1871'`), which is the whole point of tracking intent. Endless's own auto-commits use an `Endless: ` prefix instead (`Endless: record ledger entry`), so yours and its are distinguishable at a glance in `git log --oneline`.
+
+One task's work is normally one commit; split into several only when the steps are independently reviewable, and prefix each with the same id.
+
 Endless auto-commits a fixed, narrow set of its own files — and none of them is your work:
 
 | Path                                                 | Committed by                                       |
@@ -144,12 +158,24 @@ The omission surfaces under three different names, all meaning "you never commit
 
 ### Landing the work
 
-When the task is verified (or you're using `assume`):
+**Do not run `worktree land` (or `worktree drop`) without asking your user first — every time, including when you are certain the work is done.** This is a standing rule, not a per-task instruction: a session that has lost its original prompt to a context compaction still may not land on its own initiative.
+
+Why it is the user's call and not yours:
+
+- Landing publishes your branch into shared `main` history and advances it. Undoing that means rewriting `main`.
+- `unverified` means *awaiting the user's verification*. Landing your own work asserts the verification you were told not to perform — and `assume` is for "I can't test this," not for "I've decided it's approved."
+- The user is the only one who knows what else is in flight: other worktrees mid-rebase, a release in progress, work that should land in a particular order.
+
+So: reach `unverified`, hand over the one command that verifies it, and stop. Landing is what happens after your user says so.
+
+When your user has said to land, and the task is verified (or you're using `assume`):
 
 ```bash
 endless worktree land <id>
 endless worktree land <id> --dry-run        # preview without making changes
 ```
+
+`--dry-run` is the exception to the rule above: it changes nothing, so use it freely to preview what a land would do.
 
 `land` performs:
 
@@ -180,6 +206,8 @@ endless worktree drop <id> --force          # refuses modified/unlanded/foreign 
 ```
 
 Use `drop` when the work is being abandoned (task declined/obsolete). Don't `drop` over `land` to skip review.
+
+`drop` is under the same **ask-first** rule as `land` (see [Landing the work](#landing-the-work)) — more so, since it discards work rather than publishing it. Deciding that a task is abandoned is the user's decision to make, not yours to act on.
 
 ### Commit-to-main policy
 

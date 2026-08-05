@@ -35,7 +35,7 @@ When your user gives you a task ID:
 7. Report completion to your user with the task ID. Generate the report with `endless task report <id>` and relay its output verbatim — it computes the facts and prints a steering prompt; see **Reporting to your user** in `endless guide tasks`. Example: "Done — E-752 is ready for verification. To verify: run `endless guide --list` and confirm the 4 expected slugs."
 8. **Do not mark `confirmed` yourself.** Only your user does that, after verifying. If you can't easily verify but believe it works, run `endless task assume <id> --outcome "..."` instead.
 
-When implementation is verified, land the work with `endless worktree land <id>` (auto-commits endless-managed files — **not yours; see step 5** — rebases onto main, fast-forwards, then retains the worktree and its branch; they're cleaned up automatically after a grace period rather than removed immediately).
+When implementation is verified **and your user has told you to land it** — never on your own initiative; see **Landing the work** in `endless guide orchestration` — land the work with `endless worktree land <id>` (auto-commits endless-managed files — **not yours; see step 5** — rebases onto main, fast-forwards, then retains the worktree and its branch; they're cleaned up automatically after a grace period rather than removed immediately).
 
 ## Task statuses
 
@@ -207,6 +207,11 @@ listed separately. (Generated — do not hand-edit; run `/regenerate-guide`.)
 | verbs | tasks | The registered action words that can begin a task title. |
 | research-task field model | tasks | For a research task, text = the request, outcome = the deliverable. |
 | per-task verification suite | orchestration | One suite per task and the one-command verify handoff (tests/tasks/e-*-verify.sh, verify.toml). |
+| commit message convention | orchestration | Commit subjects on a task branch take the form E-<id>: verb-first summary. |
+| landing is the user's call (ask first) | orchestration | Never run worktree land or drop on your own initiative - ask every time. |
+| filing discovered work (file it, don't fix it) | tasks | File a drive-by discovery as a task with --cleans-up instead of fixing it inline. |
+| lean toward fewer tasks | tasks | Prefer one task over several - every filed task spends the user's review attention. |
+| FULL STATUS | tasks | The keyword licenses one unconstrained response, not a sticky mode. |
 <!-- END generated -->
 
 ## Important notes (always relevant)
