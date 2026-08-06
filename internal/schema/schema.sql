@@ -236,17 +236,23 @@ CREATE TABLE IF NOT EXISTS gate_kinds (
 );
 
 INSERT OR IGNORE INTO gate_kinds (id, slug, label) VALUES
-    (1, 'revisit', 'Revisit');
+    (1, 'revisit', 'Revisit'),
+    (2, 'relay', 'Relay');
 
--- Session gates (E-1542). A pending interception for a session: while an open
--- row (cleared_at IS NULL) exists for a (session_id, kind_id) pair, the
--- PreToolUse hook blocks the session's next tool call. kind_id discriminates the
--- gate kind; named per-kind subject columns carry the kind's context (the
--- 'revisit' kind sets epic_id). A polymorphic subject_id was rejected because it
--- loses FK ON DELETE CASCADE. cleared_by records how an open row was resolved:
+-- Session gates (E-1542, E-1901). A pending interception for a session: while an
+-- open row (cleared_at IS NULL) exists for a (session_id, kind_id) pair, a hook
+-- intercepts the session. WHICH hook depends on the kind — 'revisit' blocks the
+-- next tool call at PreToolUse; 'relay' blocks turn end at Stop — so the table is
+-- "a pending interception", not specifically a tool-call gate.
+--
+-- kind_id discriminates the gate kind; named per-kind subject columns carry the
+-- kind's context ('revisit' sets epic_id; 'relay' sets sanctioned_text and
+-- counts bounces). A polymorphic subject_id was rejected because it loses FK
+-- ON DELETE CASCADE. cleared_by records how an open row was resolved:
 -- revisit_continue, revisit_pause, revisit_resolved (epic left revisit before the
--- user answered), or superseded (a newer gate replaced it). The partial index
--- plus application-level supersede-on-insert keep at most one open row per pair.
+-- user answered), relay_complied, relay_exhausted, relay_superseded, or
+-- superseded (a newer gate replaced it). The partial index plus
+-- application-level supersede-on-insert keep at most one open row per pair.
 CREATE TABLE IF NOT EXISTS session_gates (
     id INTEGER PRIMARY KEY,
     session_id INTEGER NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
@@ -254,7 +260,13 @@ CREATE TABLE IF NOT EXISTS session_gates (
     epic_id INTEGER REFERENCES tasks(id) ON DELETE CASCADE,
     triggered_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
     cleared_at TEXT,
-    cleared_by TEXT
+    cleared_by TEXT,
+    -- 'relay' kind (E-1901): the exact text the session owes the user as its
+    -- final message, and how many times the Stop gate has bounced it. The
+    -- bounce counter is the loop guard — Claude Code's stop_hook_active flag is
+    -- undocumented, so blocking is capped on a value we control.
+    sanctioned_text TEXT,
+    bounces INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE INDEX IF NOT EXISTS session_gates_open

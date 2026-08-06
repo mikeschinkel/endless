@@ -18,6 +18,11 @@ type GateKind int
 
 const (
 	GateKindRevisit GateKind = 1
+	// GateKindRelay is the verbatim-report-relay checkpoint (E-1901). Unlike
+	// revisit, it is consumed at Stop rather than PreToolUse — an open row means
+	// the session ran `task report` and owes the user that report's sanctioned
+	// text as its final message, verbatim.
+	GateKindRelay GateKind = 2
 )
 
 // String returns the lowercase machine slug (matches gate_kinds.slug).
@@ -25,6 +30,8 @@ func (k GateKind) String() string {
 	switch k {
 	case GateKindRevisit:
 		return "revisit"
+	case GateKindRelay:
+		return "relay"
 	default:
 		return fmt.Sprintf("GateKind(%d)", int(k))
 	}
@@ -35,6 +42,8 @@ func (k GateKind) Label() string {
 	switch k {
 	case GateKindRevisit:
 		return "Revisit"
+	case GateKindRelay:
+		return "Relay"
 	default:
 		return ""
 	}
@@ -46,8 +55,10 @@ func Parse(s string) (GateKind, error) {
 	switch s {
 	case "revisit":
 		return GateKindRevisit, nil
+	case "relay":
+		return GateKindRelay, nil
 	default:
-		return 0, fmt.Errorf("gatekind: invalid gate kind %q (valid: revisit)", s)
+		return 0, fmt.Errorf("gatekind: invalid gate kind %q (valid: revisit, relay)", s)
 	}
 }
 
@@ -60,7 +71,7 @@ func Validate(s string) error {
 // All returns the canonical set in id order. Used by VerifyIntegrity and by
 // callers that need to enumerate the enum.
 func All() []GateKind {
-	return []GateKind{GateKindRevisit}
+	return []GateKind{GateKindRevisit, GateKindRelay}
 }
 
 // VerifyIntegrity asserts that the gate_kinds SQL table matches the Go enum.

@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/mikeschinkel/endless/internal/events"
@@ -80,6 +81,11 @@ func Run(args []string) {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
+	case "relay-checkpoint":
+		if err := runRelayCheckpoint(args[1:]); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
 	case "task-report":
 		if err := runTaskReport(args[1:]); err != nil {
 			fmt.Fprintln(os.Stderr, err)
@@ -135,6 +141,35 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "                                    JSON {endless_id, session_id, active_task_id, worktree_path, state,")
 	fmt.Fprintln(os.Stderr, "                                    task_type, task_status, task_title, landed_sha} to relaunch (or recover) a lost session")
 	fmt.Fprintln(os.Stderr, "  task-report --id <task-id>        JSON {task_id, status, type, landed, successors[], children[]} of a task's computed report facts (E-1771)")
+	fmt.Fprintln(os.Stderr, "  relay-checkpoint --session-id <id>")
+	fmt.Fprintln(os.Stderr, "                                    record the sanctioned report text (read from STDIN) the session")
+	fmt.Fprintln(os.Stderr, "                                    owes as its final message; the Stop gate enforces it (E-1901)")
+}
+
+// runRelayCheckpoint records the verbatim-relay checkpoint written by `endless
+// task report` (E-1901): the exact text the session now owes the user as its
+// final message. The Stop hook reads it back and blocks the turn if the agent
+// appended to it.
+//
+// The sanctioned text arrives on STDIN, not as a flag. A report block is
+// unbounded (follow-ups, notes, questions, a verify command) and contains
+// newlines and quotes, so passing it through argv would invite both quoting bugs
+// and ARG_MAX truncation — and a truncated sanctioned text would silently gate
+// against the wrong string, bouncing a compliant agent forever.
+func runRelayCheckpoint(args []string) error {
+	fs := flag.NewFlagSet("relay-checkpoint", flag.ContinueOnError)
+	sessionID := fs.Int64("session-id", 0, "sessions.id (integer PK) recording the checkpoint")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *sessionID == 0 {
+		return fmt.Errorf("--session-id is required")
+	}
+	sanctioned, err := io.ReadAll(os.Stdin)
+	if err != nil {
+		return fmt.Errorf("reading sanctioned text from stdin: %w", err)
+	}
+	return monitor.SetRelayCheckpoint(*sessionID, string(sanctioned))
 }
 
 // runTaskReport prints the computed, non-agent-supplied facts for a `task

@@ -9,11 +9,14 @@ import (
 	"github.com/mikeschinkel/endless/internal/gatekind"
 )
 
-// session_gate.go holds the direct-db.Exec helpers backing the pause-on-revisit
-// hook (E-1542). session_gates is ephemeral session-scoped state — like
-// sessions, activity, and channels it is written directly here, not through the
-// event ledger (its audit lives in the table's own triggered_at/cleared_* cols).
-// The 'revisit' kind is the only kind at v1; other kinds add their own helpers.
+// session_gate.go holds the direct-db.Exec helpers backing the session gates:
+// the pause-on-revisit hook (E-1542) and the verbatim-report-relay checkpoint
+// (E-1901). session_gates is ephemeral session-scoped state — like sessions,
+// activity, and channels it is written directly here, not through the event
+// ledger (its audit lives in the table's own triggered_at/cleared_* cols).
+// Each kind owns its own helper set; they share only the table and the
+// supersede-on-insert discipline that keeps at most one open row per
+// (session_id, kind_id).
 
 // NearestRevisitEpicAncestor walks up tasks.parent_id from taskID and returns
 // the id of the nearest ancestor that is an epic currently in status='revisit'.
@@ -120,4 +123,113 @@ func ClearRevisitGate(sessionID int64, clearedBy string) (cleared int, err error
 		return 0, fmt.Errorf("revisit gate rows affected: %w", err)
 	}
 	return int(n), nil
+}
+
+// --- 'relay' kind: the verbatim-report-relay checkpoint (E-1901) -------------
+
+// RelayBounceLimit caps how many times the Stop gate may block one checkpoint
+// before it gives up and lets the turn end. It exists because Claude Code's
+// stop_hook_active flag is undocumented: relying on it alone to break the
+// re-prompt loop would stake a livelock on unspecified behavior, so the loop
+// guard is a counter we own. Two bounces is the whole budget — the first names
+// the violation, the second catches a careless re-send; a third would be a model
+// that is not going to comply, and holding the turn hostage past that point
+// costs the user more than the appended prose did.
+const RelayBounceLimit = 2
+
+// SetRelayCheckpoint opens a relay checkpoint for the session, recording the
+// exact text the session owes the user as its final message. Any prior open
+// relay gate is first cleared with cleared_by='relay_superseded' so at most one
+// open row exists per (session_id, kind=relay) — re-running `task report` in the
+// same turn legitimately replaces the sanctioned text (that is the prescribed
+// way to add a note or question), and only the newest text can be owed.
+func SetRelayCheckpoint(sessionID int64, sanctioned string) error {
+	db, err := DB()
+	if err != nil {
+		return err
+	}
+	now := time.Now().UTC().Format("2006-01-02T15:04:05")
+	if _, err = db.Exec(
+		`UPDATE session_gates SET cleared_at=?, cleared_by='relay_superseded'
+		 WHERE session_id=? AND kind_id=? AND cleared_at IS NULL`,
+		now, sessionID, int(gatekind.GateKindRelay),
+	); err != nil {
+		return fmt.Errorf("supersede open relay checkpoint for session %d: %w", sessionID, err)
+	}
+	if _, err = db.Exec(
+		`INSERT INTO session_gates (session_id, kind_id, sanctioned_text, bounces, triggered_at)
+		 VALUES (?, ?, ?, 0, ?)`,
+		sessionID, int(gatekind.GateKindRelay), sanctioned, now,
+	); err != nil {
+		return fmt.Errorf("insert relay checkpoint for session %d: %w", sessionID, err)
+	}
+	return nil
+}
+
+// PendingRelayCheckpoint returns the sanctioned text and bounce count of the
+// session's open relay checkpoint. found is false when the session owes no
+// report — the overwhelmingly common case, since a session only owes one
+// between running `task report` and ending that turn.
+func PendingRelayCheckpoint(sessionID int64) (sanctioned string, bounces int, found bool, err error) {
+	db, err := DB()
+	if err != nil {
+		return "", 0, false, err
+	}
+	var text sql.NullString
+	err = db.QueryRow(
+		`SELECT sanctioned_text, bounces FROM session_gates
+		 WHERE session_id=? AND kind_id=? AND cleared_at IS NULL
+		 ORDER BY id DESC LIMIT 1`,
+		sessionID, int(gatekind.GateKindRelay),
+	).Scan(&text, &bounces)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", 0, false, nil
+	}
+	if err != nil {
+		return "", 0, false, fmt.Errorf("query pending relay checkpoint for session %d: %w", sessionID, err)
+	}
+	return text.String, bounces, true, nil
+}
+
+// ClearRelayCheckpoint closes the session's open relay checkpoint(s) with the
+// given cleared_by reason (relay_complied, relay_exhausted, or relay_superseded)
+// and returns the number of rows cleared — 0 means nothing was owed.
+func ClearRelayCheckpoint(sessionID int64, clearedBy string) (cleared int, err error) {
+	db, err := DB()
+	if err != nil {
+		return 0, err
+	}
+	now := time.Now().UTC().Format("2006-01-02T15:04:05")
+	res, err := db.Exec(
+		`UPDATE session_gates SET cleared_at=?, cleared_by=?
+		 WHERE session_id=? AND kind_id=? AND cleared_at IS NULL`,
+		now, clearedBy, sessionID, int(gatekind.GateKindRelay),
+	)
+	if err != nil {
+		return 0, fmt.Errorf("clear relay checkpoint for session %d: %w", sessionID, err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("relay checkpoint rows affected: %w", err)
+	}
+	return int(n), nil
+}
+
+// BumpRelayBounce increments the open relay checkpoint's bounce counter and
+// returns the new value. Called each time the Stop gate blocks, so the next Stop
+// can tell a first offense from an exhausted budget.
+func BumpRelayBounce(sessionID int64) (bounces int, err error) {
+	db, err := DB()
+	if err != nil {
+		return 0, err
+	}
+	if _, err = db.Exec(
+		`UPDATE session_gates SET bounces = bounces + 1
+		 WHERE session_id=? AND kind_id=? AND cleared_at IS NULL`,
+		sessionID, int(gatekind.GateKindRelay),
+	); err != nil {
+		return 0, fmt.Errorf("bump relay bounce for session %d: %w", sessionID, err)
+	}
+	_, bounces, _, err = PendingRelayCheckpoint(sessionID)
+	return bounces, err
 }

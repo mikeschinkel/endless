@@ -3081,6 +3081,7 @@ def _ensure_claude_session_id(
     """
     import subprocess
     from endless import config
+    from endless.event_bridge import _resolve_endless_go
     from endless.session_cmd import _project_root_for_cwd
 
     try:
@@ -3089,8 +3090,21 @@ def _ensure_claude_session_id(
         return None
     pane = process if process is not None else os.environ.get("TMUX_PANE", "")
 
+    # Resolve the binary the same way every other DB-opening shellout does
+    # (E-1510), rather than taking whatever `endless-go` PATH happens to offer.
+    # Under --db sandbox the global binary's embedded enums are a DIFFERENT
+    # baseline from the sandbox DB's, and the fail-closed integrity check turns
+    # that mismatch into a hard error — which this function then swallows as
+    # "no session", silently disabling everything downstream of session
+    # resolution. E-1901 hit exactly that: the relay checkpoint could never arm
+    # in a self-dev worktree because the stale global refused the sandbox DB.
+    try:
+        go_bin = _resolve_endless_go()
+    except Exception:
+        return None
+
     args = [
-        "endless-go", *config.go_db_context_args(),
+        go_bin, *config.go_db_context_args(),
         "session-query", "ensure-claude-id",
         "--session-id", claude_session_id,
         "--project-root", str(project_root),

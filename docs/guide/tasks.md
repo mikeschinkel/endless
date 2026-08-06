@@ -230,31 +230,47 @@ the update through this command rather than composing one by hand:
 endless task report <id>
 ```
 
-It reports **only what your user could not already compute** — the follow-ups
-you filed, an epic's children, your gated notes/questions, and unexpected
-worktree state — and prints a steering prompt telling you to relay that
-**verbatim, plainly, no ceremony**. It is status-agnostic (run it at whatever
-status you reached, mid-session or at the end) and **does not change the task's
-status**.
+It reports **only what your user could not already compute** — the verify
+command, the follow-ups you filed, an epic's children, and your gated
+notes/questions — wrapped in `----- BEGIN REPORT -----` / `----- END REPORT -----`
+markers. **Relay the block between those markers as your entire final message,
+byte for byte.** It is status-agnostic (run it at whatever status you reached,
+mid-session or at the end) and **does not change the task's status**.
 
 Status, landing, and parentage are deliberately **not** in the output: `task
 show` and `session status` already render them, and the handoff tells you not to
 recap them — the command holds itself to the same bar it enforces on your notes
-(E-1880). So a clean session's report is **empty**, and steers you to say
-nothing rather than manufacture a summary. Say what you delivered; stop.
+(E-1880). A session with nothing else to say reports exactly `Nothing to
+report.` rather than manufacturing a summary.
+
+**This is enforced, not advisory.** Running the command arms a Stop hook that
+compares your final message to the block and **blocks the turn** if you appended
+to it, naming the violation to you *and* to your user (E-1901). Two things
+follow:
+
+- Everything you might legitimately need to say has a **field**. Pass `--json`
+  with `verify` for the one command your user runs to verify the task, `notes`
+  for genuinely out-of-band facts the command can't compute, and `questions` for
+  open decisions. That is what makes a hard equality check fair: there is no
+  legitimate reason left to write prose beside the report.
+- If you get bounced, do **not** re-send with the extra content reworded.
+  Re-run the command with the right `--json` entry so the content lands *inside*
+  the block, then relay the new block.
+
+The exact payload shape lives in `endless task report --help` — the single
+canonical home; read it there rather than duplicating it here.
 
 **Report by default, at every checkpoint.** The rule is functional, not a list
 of situations: acceptable content is a computed fact the user cannot derive on
 their own, XOR a genuine open decision they must make — otherwise say nothing.
 Don't enumerate the moments this applies to (any such list drifts the moment a
-new surface appears); judge each checkpoint by that function. Route the update
-through this command and relay its output as-is; don't write it as freeform
-prose. The normal path takes **no payload**.
+new surface appears); judge each checkpoint by that function. The normal path
+takes **no payload** beyond `verify`.
 
-For a genuinely out-of-band note (an anomaly or discovery the command can't
-compute) or an open question for the user, pass `--json` / `--json-file`. The
-exact payload shape lives in `endless task report --help` — the single canonical
-home; read it there rather than duplicating it here.
+Anything the command prints *outside* the markers — currently the
+uncommitted/worktree-state advisory — is **for you, not your user**. Surface it
+only if it is unexpected, and if it is, re-run the report with a `--json` anomaly
+note so it lands inside the block.
 
 ### The `FULL STATUS` escape hatch
 

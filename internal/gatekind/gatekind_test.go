@@ -53,9 +53,13 @@ func TestGateKind_StringRoundTrip(t *testing.T) {
 	}
 }
 
+// A deliberate canary: adding an enum constant without also adding its
+// schema.sql seed row and its per-ticket migration row would fail closed at
+// startup on every existing DB. Bumping this number is the prompt to check that
+// both landed. (2 = revisit, relay.)
 func TestAll_HasExpectedCount(t *testing.T) {
-	if all := gatekind.All(); len(all) != 1 {
-		t.Errorf("All() returned %d, want 1", len(all))
+	if all := gatekind.All(); len(all) != 2 {
+		t.Errorf("All() returned %d, want 2", len(all))
 	}
 }
 
@@ -72,10 +76,18 @@ func newSeededDB(t *testing.T) *sql.DB {
 	return db
 }
 
+// seedAll derives the rows from the enum itself rather than listing them, so
+// adding a kind cannot silently leave the "aligned table" fixture misaligned —
+// which is what turned every VerifyIntegrity test red when E-1901 added 'relay'.
 func seedAll(t *testing.T, db *sql.DB) {
 	t.Helper()
-	if _, err := db.Exec(`INSERT INTO gate_kinds (id, slug, label) VALUES (1, 'revisit', 'Revisit')`); err != nil {
-		t.Fatalf("seed: %v", err)
+	for _, gk := range gatekind.All() {
+		if _, err := db.Exec(
+			`INSERT INTO gate_kinds (id, slug, label) VALUES (?, ?, ?)`,
+			int(gk), gk.String(), gk.Label(),
+		); err != nil {
+			t.Fatalf("seed %s: %v", gk, err)
+		}
 	}
 }
 

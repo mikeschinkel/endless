@@ -48,6 +48,18 @@ type claudePayload struct {
 	Source         string          `json:"source,omitempty"` // SessionStart: "startup" | "resume" | "clear" | "compact"
 	AgentID        string          `json:"agent_id,omitempty"`
 	AgentType      string          `json:"agent_type,omitempty"`
+
+	// Stop only. The final assistant text of the turn that is ending. The hooks
+	// reference is explicit that a hook needing this must read it here rather
+	// than from the transcript file, which lags behind the live turn — so the
+	// relay gate (E-1901) compares against this and never parses the transcript.
+	LastAssistantMessage string `json:"last_assistant_message,omitempty"`
+
+	// Stop only, and UNDOCUMENTED: set when this Stop follows a hook-induced
+	// continuation. Used only as a corroborating signal — the relay gate's loop
+	// guard is its own bounce counter, because staking a livelock on an
+	// unspecified field would be a bug waiting for a Claude Code release.
+	StopHookActive bool `json:"stop_hook_active,omitempty"`
 }
 
 type toolInputWrite struct {
@@ -226,6 +238,8 @@ func runClaude(args []string) error {
 	case "UserPromptSubmit":
 		// Parse transcript to capture new messages
 		monitor.ParseTranscript(payload.SessionID, payload.TranscriptPath)
+		// E-1901: a new user turn retires any unconsumed relay checkpoint.
+		clearRelayCheckpointForNewTurn(payload)
 		return handleUserPromptSubmit(projectID, payload)
 
 	case "PreToolUse":
@@ -246,6 +260,16 @@ func runClaude(args []string) error {
 	case "Stop":
 		// Parse transcript before idling — captures the assistant's last response
 		monitor.ParseTranscript(payload.SessionID, payload.TranscriptPath)
+		// E-1901: the verbatim-relay gate. Runs BEFORE IdleSession — a blocked
+		// turn is not ending, so marking the session idle would be a lie that
+		// `session list` and the status line would both render. Returns handled
+		// when it has emitted a block response; nothing further may write to
+		// stdout after that (the hook's stdout is one JSON document).
+		if handled, err := enforceRelayGate(payload); err != nil {
+			log.Printf("relay gate: %v", err)
+		} else if handled {
+			return nil
+		}
 		if err := monitor.IdleSession(payload.SessionID); err != nil {
 			return fmt.Errorf("idling session: %w", err)
 		}
@@ -293,7 +317,9 @@ const reportChannelRule = "Report channel: at any in-session point where you " +
 	"Acceptable content is defined by function, not by a list of situations: a " +
 	"computed fact the user cannot derive on their own, XOR a genuine open " +
 	"decision they must make before the work can proceed — otherwise say " +
-	"nothing. Judge every checkpoint by that function."
+	"nothing. Judge every checkpoint by that function. Relaying the report is " +
+	"enforced at turn end, so pass what you need to say as a --json " +
+	"verify/note/question entry rather than as prose beside the report."
 
 func handleTaskContextInjection(projectID int64, payload claudePayload) error {
 	ctx, err := buildTaskContextInjection(projectID, payload)
@@ -422,11 +448,18 @@ var taskReportRe = regexp.MustCompile(`(?m)(?:^|[;&|])\s*(?:\S*/)?endless\s+task
 // strongest in-harness lever short of a regenerate loop — a strong nudge, NOT a
 // hard gate (Claude Code always lets the model author its final message; no hook
 // replaces it).
-const reportRelayInstruction = "You just ran `endless task report`. Emit that " +
-	"command's output verbatim as your entire reply to the user, and add " +
-	"nothing else — no preamble, no sign-off, no success confirmation, and no " +
-	"remark about categories absent from the output. The report IS the message; " +
-	"if a fact is not in it, say nothing about that fact."
+const reportRelayInstruction = "You just ran `endless task report`. Emit the " +
+	"block between that command's BEGIN/END REPORT markers verbatim as your " +
+	"entire reply to the user, and add nothing else — no preamble, no sign-off, " +
+	"no success confirmation, and no remark about categories absent from it. " +
+	"The report IS the message; if a fact is not in it, say nothing about that " +
+	"fact.\n\n" +
+	"This is now ENFORCED (E-1901): a Stop hook compares your final message to " +
+	"that block and blocks the turn if you appended to it, naming the violation " +
+	"to you AND to the user. If something needs saying that is not in the " +
+	"block, do not put it in your reply — re-run `endless task report` with a " +
+	"--json verify/note/question entry so it lands inside the block, then relay " +
+	"the new block."
 
 // postToolUseResponse carries a PostToolUse additionalContext injection. Unlike
 // the top-level hookResponse.AdditionalContext used on SessionStart /

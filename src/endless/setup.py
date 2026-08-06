@@ -352,8 +352,14 @@ def _make_hook_entry(hook_bin: str, is_async: bool = True) -> dict:
         ]
     }
 
-# Events that must be synchronous (Claude reads the response)
-SYNC_EVENTS = {"PreToolUse", "SessionStart", "UserPromptSubmit", "PostToolUse"}
+# Events that must be synchronous (Claude reads the response).
+#
+# Stop joined this set in E-1901: an async hook runs in the background and the
+# stop proceeds immediately, so it cannot return decision:"block". The
+# verbatim-relay gate blocks at Stop, and would silently do nothing if the hook
+# were installed async — the worst kind of failure, since every other symptom
+# (hook fires, DB row written, no error anywhere) says it is working.
+SYNC_EVENTS = {"PreToolUse", "SessionStart", "UserPromptSubmit", "PostToolUse", "Stop"}
 
 
 def _has_endless_hook(settings: dict) -> bool:
@@ -365,6 +371,32 @@ def _has_endless_hook(settings: dict) -> bool:
                 if "endless-go" in h.get("command", ""):
                     return True
     return False
+
+
+def _repair_hook_async_flags(settings: dict) -> list[str]:
+    """Correct endless-go hook entries whose `async` flag disagrees with SYNC_EVENTS.
+
+    Needed because `setup_claude_hook` returns early once a hook is installed, so
+    an existing install would never pick up a sync/async change — E-1901 flipped
+    Stop to sync, and without this every machine already running Endless would
+    keep a non-blocking Stop hook forever while reporting itself correctly set up.
+
+    Mutates `settings` in place and returns the event names it changed (empty
+    when already correct, which makes it idempotent and safe to call on every
+    setup run).
+    """
+    repaired: list[str] = []
+    hooks = settings.get("hooks", {})
+    for event in CLAUDE_HOOK_EVENTS:
+        want_async = event not in SYNC_EVENTS
+        for entry in hooks.get(event, []):
+            for h in entry.get("hooks", []):
+                if "endless-go" not in h.get("command", ""):
+                    continue
+                if h.get("async") != want_async:
+                    h["async"] = want_async
+                    repaired.append(event)
+    return repaired
 
 
 def setup_claude_hook():
@@ -387,6 +419,17 @@ def setup_claude_hook():
             + " Claude hook is already installed in "
             + click.style(str(CLAUDE_SETTINGS_PATH), bold=True)
         )
+        repaired = _repair_hook_async_flags(settings)
+        if repaired:
+            _save_claude_settings(settings)
+            click.echo(
+                click.style("•", fg="yellow")
+                + " Repaired sync/async flag for: "
+                + click.style(", ".join(sorted(set(repaired))), bold=True)
+            )
+            click.echo(
+                "  Restart any running Claude sessions for this to take effect."
+            )
         return
 
     # Show what we'll add
@@ -414,10 +457,13 @@ def setup_claude_hook():
         )
         click.echo()
         for event in CLAUDE_HOOK_EVENTS:
+            # Per-event, not a blanket true: a hand-installed async Stop hook
+            # cannot block, silently disabling the E-1901 relay gate.
+            flag = "false" if event in SYNC_EVENTS else "true"
             click.echo(f'  "{event}": '
                         f'[{{"hooks": [{{"type": "command", '
                         f'"command": "{hook_bin} hook claude", '
-                        f'"async": true}}]}}]')
+                        f'"async": {flag}}}]}}]')
         click.echo()
         return
 

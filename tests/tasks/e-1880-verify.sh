@@ -36,8 +36,9 @@
 #      follow-ups prints each id exactly once and renders no `Children:` line.
 #   3. Epic carve-out: the same shape under `--type epic` DOES render
 #      `Children:`, and still prints no id twice.
-#   4. Empty block: a task with nothing to report renders the `steer-empty`
-#      prompt and never the `steer` header.
+#   4. Empty block: a task with nothing to report renders the fixed
+#      `nothing-to-report` line inside the relay markers (E-1901 replaced the
+#      old separate steer-empty prompt; the no-invented-summary point stands).
 #   5. Contract consistency: `_close.tmpl` still forbids recapping status and
 #      relationships, and no line the renderer can emit violates that — the
 #      regression guard that stops the two surfaces drifting apart again.
@@ -247,23 +248,31 @@ check_epic_carveout() {
 }
 
 check_empty_block() {
-    section "4 — nothing to report → steer-empty, never the steer header"
+    # E-1901 superseded the old shape here. E-1880's point stands unchanged — a
+    # clean session must not manufacture a summary — but the mechanism moved: the
+    # empty case no longer gets a separate steer telling the agent to compose its
+    # own one-liner (freehand prose the Stop gate cannot match), it gets a fixed
+    # sanctioned string inside the same markers as any other report.
+    section "4 — nothing to report → the fixed 'Nothing to report.' block"
     local focal out rc
     focal=$(add_task "Do the quiet thing") || {
         report_fail "create quiet task" "task id" "${focal}"; return; }
     out=$(en task report "${focal}" 2>&1); rc=$?
     if [[ "${rc}" -eq 0 ]]; then report_pass "exit 0 with an empty fact block"
     else report_fail "exit 0 with an empty fact block" "exit 0" "exit ${rc} | ${out}"; fi
-    assert_contains "emits the steer-empty prompt" "${out}" "nothing to report beyond the work itself"
-    assert_contains "steer-empty tells the agent not to invent a summary" "${out}" "manufacture a summary"
-    assert_not_contains "never the fact-block steer header" "${out}" "Report the following to the user"
+    assert_contains "emits the fixed nothing-to-report line" "${out}" "Nothing to report."
+    assert_contains "still delimited for verbatim relay" "${out}" "----- BEGIN REPORT -----"
+    # The original prohibition, restated against the current wording: no invented
+    # summary, and none of the computable recap lines.
+    assert_not_contains "no status recap in the empty case" "${out}" "Status:"
+    assert_not_contains "no landing recap in the empty case" "${out}" "Landed"
 
-    # steer-empty is a REGISTERED prompt name, so it stays user-editable like the
+    # It stays a REGISTERED prompt name, so the wording is user-editable like the
     # other three (ED-1531 Req 5) rather than being hardcoded product wording.
-    printf '{"name":"steer-empty","text":"EMPTY-MARKER"}\n' \
+    printf '{"name":"nothing-to-report","text":"EMPTY-MARKER"}\n' \
         > "${PROJ}/.endless/report-prompts.jsonl"
     out=$(en task report "${focal}" 2>&1)
-    assert_contains "project steer-empty override wins" "${out}" "EMPTY-MARKER"
+    assert_contains "project nothing-to-report override wins" "${out}" "EMPTY-MARKER"
     rm -f "${PROJ}/.endless/report-prompts.jsonl"
 }
 
@@ -292,27 +301,32 @@ check_contract_consistency() {
     # the runtime checks above can only prove it for the states they exercise.
     render="${REPO_ROOT}/src/endless/report_cmd.py"
     local body
-    body=$(awk '/^def _render_facts\(/,/^def report_item\(/' "${render}" | grep -E '^\s+lines\.append')
+    # E-1901 renamed the renderer to _render_sanctioned (and split the
+    # agent-facing anomaly addendum out into _render_agent_notes). The static
+    # check follows the rename: the sanctioned block is now the exact text the
+    # user receives, so a forbidden line appearing in it is MORE serious than
+    # before, not less.
+    body=$(awk '/^def _render_sanctioned\(/,/^def _render_agent_notes\(/' "${render}" | grep -E '^\s+lines\.append')
     if [[ -z "${body}" ]]; then
-        report_fail "_render_facts still appends lines" "at least one lines.append" "none found"
+        report_fail "_render_sanctioned still appends lines" "at least one lines.append" "none found"
         return
     fi
     local forbidden ok=1
     for forbidden in 'Task: E-' 'Status:' 'Landed' 'Phase:'; do
         if grep -qF -- "${forbidden}" <<<"${body}"; then
-            report_fail "_render_facts emits no forbidden line (${forbidden})" \
+            report_fail "_render_sanctioned emits no forbidden line (${forbidden})" \
                 "no lines.append with ${forbidden}" "${body}"
             ok=0
         fi
     done
-    [[ "${ok}" -eq 1 ]] && report_pass "_render_facts appends no status/phase/id recap line"
+    [[ "${ok}" -eq 1 ]] && report_pass "_render_sanctioned appends no status/phase/id recap line"
 
     # The epic gate is what keeps `Children:` from being a relationship recap.
     if grep -q 'facts.get("type") == "epic"' "${render}"; then
         report_pass "Children is gated on the epic type"
     else
         report_fail "Children is gated on the epic type" \
-            'facts.get("type") == "epic" in _render_facts' "not found in ${render}"
+            'facts.get("type") == "epic" in _render_sanctioned' "not found in ${render}"
     fi
 }
 

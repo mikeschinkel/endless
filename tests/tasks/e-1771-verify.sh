@@ -176,8 +176,9 @@ check_no_payload() {
     out=$(en task report "${TID}" 2>&1); rc=$?
     if [[ "${rc}" -eq 0 ]]; then report_pass "exit 0 on the normal (no-payload) path"
     else report_fail "exit 0 on the normal (no-payload) path" "exit 0" "exit ${rc} | ${out}"; fi
-    assert_contains "emits the steer header" "${out}" "Report the following to the user"
-    assert_contains "renders computed status" "${out}" "Status: unplanned"
+    # E-1901 reworded the steer and wrapped the relayable text in BEGIN/END
+    # markers; the marker is the stable anchor for "a report was produced".
+    assert_contains "emits the steer header" "${out}" "----- BEGIN REPORT -----"
     # Clean, unrelated task → no empty-category ceremony.
     assert_not_contains "no empty 'Follow-ups' line when none" "${out}" "Follow-ups"
     assert_not_contains "no empty 'Children' line when none" "${out}" "Children"

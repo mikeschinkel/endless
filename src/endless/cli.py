@@ -1826,25 +1826,29 @@ def task_assume(item_ids, cascade, outcome, outcome_file, allow_paths):
 @click.argument("item_id", type=TASK_ID)
 @click.option("--json", "payload", default=None,
               help='Structured report payload, inline JSON: '
-                   '{"notes":[{"kind":"anomaly|discovery","text":"…"}],'
+                   '{"verify":"<one command>",'
+                   '"notes":[{"kind":"anomaly|discovery","text":"…"}],'
                    '"questions":[{"text":"…","type":"text|integer|real|boolean|choice","style":"…"}]}')
 @click.option("--json-file", "payload_file", default=None,
               help="Load the report payload from a JSON file")
 def task_report(item_id, payload, payload_file):
     """Produce an end-of-session (or status) report for a task.
 
-    It reports only what the user could NOT already compute: the follow-ups you
-    filed, an epic's children, your gated notes/questions, and unexpected
-    worktree state — then prints a steering prompt telling you to relay just
-    that, plainly, no ceremony. Status, landing, and parentage are deliberately
+    It reports only what the user could NOT already compute: the verify command,
+    the follow-ups you filed, an epic's children, and your gated
+    notes/questions — wrapped in BEGIN/END REPORT markers you relay verbatim as
+    your entire final message. Status, landing, and parentage are deliberately
     absent (`task show` / `session status` already render them, and the handoff
-    forbids recapping them). A clean session therefore has an empty report, and
-    is steered to say nothing rather than invent a summary.
+    forbids recapping them). A session with none of the above reports
+    "Nothing to report." rather than inventing a summary.
 
-    The normal path is no payload at all. Supply --json only for genuinely
-    non-computable notes (out-of-band anomalies/discoveries) or open questions
-    for the user; each free-text entry is checked and a ceremonial one is
-    bounced.
+    ENFORCED, not advisory (E-1901): running this arms a Stop hook that compares
+    your final message to the block and blocks the turn if you appended to it,
+    naming the violation to you and to the user. So everything you might need to
+    say has a field — pass --json with `verify` for the one command that verifies
+    the task, `notes` for genuinely non-computable out-of-band facts, and
+    `questions` for open decisions. Free-text entries are checked and ceremonial
+    ones bounced; `verify` is not checked (a command is not prose).
 
     Status-agnostic: run it at whatever terminal status you reached. It does
     not change the task's status.

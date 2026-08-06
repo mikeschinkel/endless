@@ -26,9 +26,9 @@ def _mock_haiku(monkeypatch, reply: str, code: int = 0):
 # --- payload parsing --------------------------------------------------------
 
 def test_empty_payload_is_normal_path():
-    assert report_cmd._parse_payload(None) == ([], [])
-    assert report_cmd._parse_payload("") == ([], [])
-    assert report_cmd._parse_payload("   ") == ([], [])
+    assert report_cmd._parse_payload(None) == ([], [], None)
+    assert report_cmd._parse_payload("") == ([], [], None)
+    assert report_cmd._parse_payload("   ") == ([], [], None)
 
 
 def test_parse_valid_notes_and_questions():
@@ -36,14 +36,57 @@ def test_parse_valid_notes_and_questions():
         '{"notes":[{"kind":"anomaly","text":"base is behind main"}],'
         '"questions":[{"text":"go-pkgs worktree or repo?","type":"choice","style":"single"}]}'
     )
-    notes, questions = report_cmd._parse_payload(payload)
+    notes, questions, verify = report_cmd._parse_payload(payload)
     assert notes == [{"kind": "anomaly", "text": "base is behind main"}]
     assert questions == [{"text": "go-pkgs worktree or repo?", "type": "choice", "style": "single"}]
+    assert verify is None
 
 
 def test_question_type_defaults_to_text():
-    notes, questions = report_cmd._parse_payload('{"questions":[{"text":"proceed?"}]}')
+    _, questions, _ = report_cmd._parse_payload('{"questions":[{"text":"proceed?"}]}')
     assert questions == [{"text": "proceed?", "type": "text"}]
+
+
+# --- E-1901: the verify field -----------------------------------------------
+
+def test_parse_verify_command():
+    payload = '{"verify":"esu && ./tests/tasks/e-1901-verify.sh"}'
+    notes, questions, verify = report_cmd._parse_payload(payload)
+    assert (notes, questions) == ([], [])
+    assert verify == "esu && ./tests/tasks/e-1901-verify.sh"
+
+
+def test_verify_is_stripped():
+    _, _, verify = report_cmd._parse_payload('{"verify":"  just test  "}')
+    assert verify == "just test"
+
+
+def test_empty_verify_rejected():
+    with pytest.raises(click.ClickException, match="non-empty string"):
+        report_cmd._parse_payload('{"verify":"   "}')
+
+
+def test_non_string_verify_rejected():
+    with pytest.raises(click.ClickException, match="non-empty string"):
+        report_cmd._parse_payload('{"verify":["a","b"]}')
+
+
+def test_multiline_verify_rejected():
+    """The handoff contract is ONE command. A multi-line value is a checklist
+    wearing a field's clothes — exactly the ceremony this replaces."""
+    with pytest.raises(click.ClickException, match="ONE command"):
+        report_cmd._parse_payload('{"verify":"just build\\njust test"}')
+
+
+def test_verify_is_never_haiku_gated(monkeypatch):
+    """A command is not prose. Sending it to the ceremony classifier would
+    invent a failure mode rather than catch one."""
+    def boom(prompt, **kw):
+        raise AssertionError("verify must not be classified")
+    monkeypatch.setattr(report_cmd.internal_claude, "run_internal_claude", boom)
+    notes, questions, verify = report_cmd._parse_payload('{"verify":"just test"}')
+    report_cmd._gate(notes, questions, report_prompts.DEFAULTS)
+    assert verify == "just test"
 
 
 def test_malformed_json_rejected():
@@ -152,8 +195,44 @@ def test_render_clean_task_is_empty():
     no Task/Status/Landed recap, no empty-category ceremony — an empty block."""
     facts = {"status": "unverified", "type": "todo", "landed": False,
              "successors": [], "children": None}
-    block = report_cmd._render_facts(facts, [], [], [])
+    block = report_cmd._render_sanctioned(facts, [], [], None)
     assert block.strip() == ""
+
+
+def test_verify_leads_the_sanctioned_block():
+    """It is the one line the user acts on, so it comes first."""
+    facts = {"status": "unverified", "type": "todo", "landed": False,
+             "successors": [{"id": 1906, "status": "untriaged", "relation": "relates_to"}],
+             "children": []}
+    block = report_cmd._render_sanctioned(facts, [], [], "esu && ./x.sh")
+    assert block.splitlines()[0] == "Verify: `esu && ./x.sh`"
+
+
+def test_verify_alone_makes_the_block_non_empty():
+    """The keystone: an otherwise-clean session still has a sanctioned block,
+    because the deliverable pointer is a field now instead of freehand prose."""
+    facts = {"status": "unverified", "type": "todo", "landed": False,
+             "successors": [], "children": []}
+    block = report_cmd._render_sanctioned(facts, [], [], "just test")
+    assert block.strip() == "Verify: `just test`"
+
+
+def test_anomalies_are_not_in_the_sanctioned_block():
+    """Anomalies are conditional ('surface only if unexpected') and the
+    sanctioned block is unconditional — including them would force the relay of
+    noise the agent was told to judge."""
+    facts = {"status": "unverified", "type": "todo", "landed": False,
+             "successors": [], "children": []}
+    block = report_cmd._render_sanctioned(facts, [], [], None)
+    assert "uncommitted" not in block
+    addendum = report_cmd._render_agent_notes(["uncommitted: scratch.go"])
+    assert "uncommitted: scratch.go" in addendum
+    assert "NOT part of the report" in addendum
+    assert "--json anomaly note" in addendum  # names the way back in
+
+
+def test_no_anomalies_renders_no_addendum():
+    assert report_cmd._render_agent_notes([]) == ""
 
 
 def test_render_omits_computable_lines():
@@ -163,7 +242,7 @@ def test_render_omits_computable_lines():
     facts = {"status": "unverified", "type": "todo", "landed": True,
              "successors": [{"id": 1772, "status": "unverified", "relation": "blocks"}],
              "children": []}
-    block = report_cmd._render_facts(facts, [], [], [])
+    block = report_cmd._render_sanctioned(facts, [], [], None)
     assert "Status:" not in block
     assert "Landed" not in block
     assert "Task: E-" not in block
@@ -178,13 +257,12 @@ def test_render_includes_nonempty_sections():
     }
     notes = [{"kind": "anomaly", "text": "base is behind main"}]
     questions = [{"text": "worktree or repo?", "type": "choice", "style": "single"}]
-    block = report_cmd._render_facts(facts, ["uncommitted: scratch.go"], notes, questions)
+    block = report_cmd._render_sanctioned(facts, notes, questions, "just test")
+    assert "Verify: `just test`" in block
     assert "Follow-ups you filed: E-1772 [unverified]" in block
     assert "Children: E-1800 [assumed]" in block
     assert "[anomaly] base is behind main" in block
     assert "worktree or repo?  (choice/single)" in block
-    assert "uncommitted: scratch.go" in block
-    assert "unexpected" in block  # anomaly guidance to the agent
 
 
 # --- E-1880: children are epic-only, and never duplicate a follow-up ---------
@@ -198,7 +276,7 @@ def test_render_hides_children_for_non_epic():
     facts = {"status": "unverified", "type": "todo", "landed": False,
              "successors": refs,
              "children": [{"id": r["id"], "status": r["status"]} for r in refs]}
-    block = report_cmd._render_facts(facts, [], [], [])
+    block = report_cmd._render_sanctioned(facts, [], [], None)
     assert "Children" not in block
     assert block.count("E-1872") == 1
     assert block.count("E-1873") == 1
@@ -214,7 +292,7 @@ def test_render_epic_keeps_children_but_dedupes():
         "children": [{"id": 1872, "status": "submitted"},
                      {"id": 1899, "status": "ready"}],
     }
-    block = report_cmd._render_facts(facts, [], [], [])
+    block = report_cmd._render_sanctioned(facts, [], [], None)
     assert "Children: E-1899 [ready]" in block
     assert block.count("E-1872") == 1
 
@@ -226,7 +304,7 @@ def test_render_epic_all_children_filed_omits_the_line():
         "successors": [{"id": 1872, "status": "submitted", "relation": "cleaned_up_by"}],
         "children": [{"id": 1872, "status": "submitted"}],
     }
-    block = report_cmd._render_facts(facts, [], [], [])
+    block = report_cmd._render_sanctioned(facts, [], [], None)
     assert "Children" not in block
 
 
@@ -235,52 +313,88 @@ def test_render_missing_type_is_not_an_epic():
     than crashing or leaking a Children recap."""
     facts = {"status": "unverified", "type": "", "landed": False,
              "successors": [], "children": [{"id": 1899, "status": "ready"}]}
-    assert report_cmd._render_facts(facts, [], [], []).strip() == ""
+    assert report_cmd._render_sanctioned(facts, [], [], None).strip() == ""
 
 
 # --- steer selection --------------------------------------------------------
 
-def test_report_item_wraps_facts_in_steer(monkeypatch, capsys):
+@pytest.fixture(autouse=True)
+def _no_checkpoint(monkeypatch):
+    """Arming the Stop gate needs a live session + endless-go; these tests cover
+    rendering, so the recording side-effect is stubbed out. `test_report_item_*`
+    below asserts it is called with the right text."""
+    monkeypatch.setattr(report_cmd, "_record_checkpoint", lambda text: None)
+
+
+def _stub_facts(monkeypatch, successors=None, children=None, type_="todo"):
     monkeypatch.setattr(report_cmd, "_compute_facts",
-                        lambda i: {"status": "unverified", "type": "todo", "landed": False,
-                                   "successors": [{"id": 1772, "status": "ready",
-                                                   "relation": "cleaned_up_by"}],
-                                   "children": []})
+                        lambda i: {"status": "unverified", "type": type_, "landed": False,
+                                   "successors": successors or [], "children": children or []})
     monkeypatch.setattr(report_cmd, "_compute_anomalies", lambda: [])
+
+
+def test_report_item_wraps_facts_in_steer(monkeypatch, capsys):
+    _stub_facts(monkeypatch, successors=[{"id": 1772, "status": "ready",
+                                          "relation": "cleaned_up_by"}])
     report_cmd.report_item(1771, None)
     out = capsys.readouterr().out
-    assert "Report the following to the user" in out  # steer header
+    assert "Relay the block between the markers" in out  # steer header
+    assert report_prompts.BEGIN_MARKER in out
+    assert report_prompts.END_MARKER in out
     assert "Follow-ups you filed: E-1772 [ready]" in out
     assert "Status:" not in out
 
 
-def test_report_item_empty_block_uses_steer_empty(monkeypatch, capsys):
-    """Nothing to report → the steer-empty prompt, and never the `steer` header
-    (which would introduce a fact block that isn't there)."""
-    monkeypatch.setattr(report_cmd, "_compute_facts",
-                        lambda i: {"status": "unverified", "type": "todo", "landed": False,
-                                   "successors": [], "children": []})
-    monkeypatch.setattr(report_cmd, "_compute_anomalies", lambda: [])
+def test_report_item_empty_block_uses_nothing_to_report(monkeypatch, capsys):
+    """The empty case is no longer a separate steer telling the agent to compose
+    a one-liner — it is a sanctioned string like any other, so the same markers
+    and the same gate apply (E-1901)."""
+    _stub_facts(monkeypatch)
     report_cmd.report_item(1771, None)
     out = capsys.readouterr().out
-    assert "Report the following to the user" not in out
-    assert out.strip() == report_prompts.DEFAULTS[report_prompts.STEER_EMPTY]
+    assert "Relay the block between the markers" in out
+    assert "Nothing to report." in out
+    # And it is inside the block, so the equality gate has something to match.
+    body = out.split(report_prompts.BEGIN_MARKER)[1].split(report_prompts.END_MARKER)[0]
+    assert body.strip() == "Nothing to report."
 
 
-def test_steer_empty_is_overridable(isolated_env, monkeypatch, capsys):
-    """steer-empty is a registered prompt name, so it stays user-editable like
+def test_nothing_to_report_is_overridable(isolated_env, monkeypatch, capsys):
+    """It stays a registered prompt name, so the wording is user-editable like
     the other three (ED-1531 Req 5)."""
     import json
     from endless import config
     (config.CONFIG_DIR / "report-prompts.jsonl").write_text(
-        json.dumps({"name": "steer-empty", "text": "EMPTY-MARKER"}) + "\n"
+        json.dumps({"name": "nothing-to-report", "text": "EMPTY-MARKER"}) + "\n"
     )
-    monkeypatch.setattr(report_cmd, "_compute_facts",
-                        lambda i: {"status": "unverified", "type": "todo", "landed": False,
-                                   "successors": [], "children": []})
-    monkeypatch.setattr(report_cmd, "_compute_anomalies", lambda: [])
+    _stub_facts(monkeypatch)
     report_cmd.report_item(1771, None)
-    assert capsys.readouterr().out.strip() == "EMPTY-MARKER"
+    out = capsys.readouterr().out
+    body = out.split(report_prompts.BEGIN_MARKER)[1].split(report_prompts.END_MARKER)[0]
+    assert body.strip() == "EMPTY-MARKER"
+
+
+def test_report_item_arms_the_gate_with_the_block_only(monkeypatch, capsys):
+    """The recorded text must be the sanctioned block ALONE — not the steer that
+    frames it, and not the agent-facing anomaly addendum. Recording either would
+    gate against a string the user was never meant to receive, and every relay
+    would bounce."""
+    recorded = []
+    monkeypatch.setattr(report_cmd, "_record_checkpoint", recorded.append)
+    _stub_facts(monkeypatch, successors=[{"id": 1906, "status": "untriaged",
+                                          "relation": "relates_to"}])
+    monkeypatch.setattr(report_cmd, "_compute_anomalies", lambda: ["uncommitted: scratch.go"])
+    report_cmd.report_item(1901, '{"verify":"esu && ./tests/tasks/e-1901-verify.sh"}')
+
+    assert len(recorded) == 1
+    assert recorded[0] == (
+        "Verify: `esu && ./tests/tasks/e-1901-verify.sh`\n"
+        "Follow-ups you filed: E-1906 [untriaged]"
+    )
+    out = capsys.readouterr().out
+    assert "uncommitted: scratch.go" in out          # printed for the agent…
+    assert "uncommitted" not in recorded[0]          # …but never sanctioned
+    assert "Relay the block" not in recorded[0]      # steer is not the message
 
 
 # --- tunable config surface -------------------------------------------------

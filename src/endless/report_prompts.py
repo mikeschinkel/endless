@@ -11,9 +11,16 @@ Precedence mirrors the verbs.jsonl surface (E-1268): a registered project's
 defaults. The file is JSONL, one record per line:
 
     {"name": "steer", "text": "…"}
-    {"name": "steer-empty", "text": "…"}
+    {"name": "nothing-to-report", "text": "…"}
     {"name": "note-check", "text": "…"}
     {"name": "question-check", "text": "…"}
+
+E-1901 renamed `steer-empty` to `nothing-to-report`. The rename is the honest
+description of a changed role: the text used to *steer* the agent toward
+composing its own one-line sign-off when there were no facts, and now it IS the
+sanctioned message for that case — the thing the agent relays, and the string the
+Stop gate compares against. No alias is kept for the old name because nothing
+could depend on it: the override is opt-in and neither layer's file existed.
 
 Only the four known names are honored; unknown names are ignored. A record with
 a known name replaces the lower-precedence text for that name.
@@ -26,41 +33,51 @@ from pathlib import Path
 
 from endless import config
 
-# The four tunable prompts. `steer` frames the final message the agent prints;
-# `steer-empty` replaces it when there is no fact block at all (E-1880);
-# `note-check` / `question-check` each classify one free-text entry, and MUST
-# instruct the model to answer with a leading KEEP / DROP token (see
+# The four tunable prompts. `steer` frames the sanctioned block the agent must
+# relay; `nothing-to-report` IS the sanctioned block when nothing was computed
+# (E-1901); `note-check` / `question-check` each classify one free-text entry,
+# and MUST instruct the model to answer with a leading KEEP / DROP token (see
 # report_cmd parsing).
 STEER = "steer"
-STEER_EMPTY = "steer-empty"
+NOTHING_TO_REPORT = "nothing-to-report"
 NOTE_CHECK = "note-check"
 QUESTION_CHECK = "question-check"
 
-_KNOWN = (STEER, STEER_EMPTY, NOTE_CHECK, QUESTION_CHECK)
+_KNOWN = (STEER, NOTHING_TO_REPORT, NOTE_CHECK, QUESTION_CHECK)
 
-# `{facts}` in the steer text is replaced with the computed fact block. The
-# check texts take `{text}` — the single entry under classification.
-# `steer-empty` takes NO placeholder: it is echoed verbatim, so braces in an
-# override are literal.
+# The delimiters the steer wraps around the sanctioned block. They give
+# "verbatim" an unambiguous extent — without them "add nothing else" has to be
+# judged against a boundary the agent infers, which is exactly the judgment call
+# the E-1901 gate removes. The Stop gate strips these from both sides before
+# comparing, so relaying them is tolerated rather than bounced.
+BEGIN_MARKER = "----- BEGIN REPORT -----"
+END_MARKER = "----- END REPORT -----"
+
+# `{facts}` in the steer text is replaced with the sanctioned block. The check
+# texts take `{text}` — the single entry under classification.
+# `nothing-to-report` takes NO placeholder: it is used verbatim as the sanctioned
+# text, so braces in an override are literal.
 DEFAULTS: dict[str, str] = {
     STEER: (
-        "Report the following to the user as your final message, and add "
-        "nothing else. State only these facts, plainly. Do NOT add a preamble, "
-        "a sign-off, success confirmations, or any remark about categories that "
-        "are absent below — if something is not listed, say nothing about it.\n"
+        "Relay the block between the markers below as your ENTIRE final "
+        "message — byte for byte, nothing before it, nothing after it. No "
+        "preamble, no sign-off, no success confirmation, no remark about "
+        "anything absent from it.\n"
         "\n"
-        "{facts}"
-    ),
-    STEER_EMPTY: (
-        "There is nothing to report beyond the work itself: you filed no "
-        "follow-ups, raised no notes or questions, and the worktree is as "
-        "expected. Do NOT manufacture a summary to fill the gap — no recap of "
-        "status, phase, or relationships (the user can already see those), no "
-        "sign-off, no confirmation that nothing went wrong.\n"
+        "This is enforced, not advisory: a Stop hook compares your final "
+        "message against this block and blocks the turn if you appended to it, "
+        "naming the violation to you AND to the user.\n"
         "\n"
-        "Say only what the user asked you for: point at the deliverable, in one "
-        "line, and stop. If there is no deliverable to point at, say nothing."
+        "If something needs saying that is not in the block, it does not go in "
+        "your reply — re-run `endless task report` with a --json note, "
+        "question, or verify entry so it lands INSIDE the block, then relay the "
+        "new block.\n"
+        "\n"
+        f"{BEGIN_MARKER}\n"
+        "{facts}\n"
+        f"{END_MARKER}"
     ),
+    NOTHING_TO_REPORT: "Nothing to report.",
     NOTE_CHECK: (
         "An agent is filing a handoff NOTE for a human reviewer. A GOOD note "
         "states a real thing the reviewer could NOT compute from git or the "
