@@ -151,9 +151,30 @@ assert_between() {
 
 # ─── setup / teardown ───────────────────────────────────────────────────────
 
+# kill_server NAME — kill a private tmux server AND remove its socket file.
+#
+# `tmux kill-server` leaves the socket behind, so a suite that runs often
+# accumulates dead sockets in the SHARED per-uid tmux socket directory
+# (`/tmp/tmux-<uid>/`). That directory is the one anything enumerating tmux
+# servers has to walk, so the litter is not merely untidy — it is noise in the
+# exact place a future guard will look.
+#
+# Resolve the path from tmux while the server is still up; fall back to the
+# documented location if the query fails (server already gone, or never
+# started).
+kill_server() {
+    local name="$1" path
+    [[ -z "${name}" ]] && return 0
+    path=$(tmux -L "${name}" display-message -p '#{socket_path}' 2>/dev/null)
+    tmux -L "${name}" kill-server 2>/dev/null
+    [[ -z "${path}" ]] && path="${TMUX_TMPDIR:-/tmp}/tmux-$(id -u)/${name}"
+    rm -f "${path}" 2>/dev/null
+    return 0
+}
+
 cleanup() {
-    [[ -n "${SOCK_B}" ]] && tmux -L "${SOCK_B}" kill-server 2>/dev/null
-    [[ -n "${SOCK_C}" ]] && tmux -L "${SOCK_C}" kill-server 2>/dev/null
+    kill_server "${SOCK_B}"
+    kill_server "${SOCK_C}"
     [[ -n "${TMPDIR_B}" ]] && rm -rf "${TMPDIR_B}"
     [[ -n "${TMPDIR_C}" ]] && rm -rf "${TMPDIR_C}"
     return 0
