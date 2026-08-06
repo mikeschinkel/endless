@@ -30,6 +30,12 @@
 # ISOLATION
 #   The tmux E2E layers run against PRIVATE tmux servers (`tmux -L <socket>`),
 #   killed on exit — your real tmux server, windows, and focus are untouched.
+#   Those servers are started with `-f /dev/null` (no ~/.tmux.conf, so no user
+#   tmux hook fires against them) and under a throwaway XDG_CONFIG_HOME, so no
+#   endless-go process running inside them can reach the real ledger. That
+#   second guard is the load-bearing one: inside a private server, $TMUX names a
+#   3-pane fake, and any code deciding liveness from `tmux list-panes -a` while
+#   pointed at the real DB would consider every real session dead (E-1898).
 #   Layer C seeds a THROWAWAY --config-dir DB; the real ledger is never written.
 #   Layer B drives `endless-go spawn-window` directly with a STUB claude binary,
 #   so no Claude session is ever launched.
@@ -223,7 +229,22 @@ echo "rc=\$?" >> "${TMPDIR_B}/spawn.log"
 EOF
     chmod +x "${TMPDIR_B}/drive.sh"
 
-    if ! tmux -L "${SOCK_B}" new-session -d -s drv -x "${WIN_COLS}" -y "${WIN_ROWS}" \
+    # Isolation, belt AND braces (see the ISOLATION note in the header):
+    #   -f /dev/null      the private server must not read ~/.tmux.conf, so no
+    #                     user tmux hook (e.g. session-created -> `endless tmux
+    #                     init`) can fire against it.
+    #   XDG_CONFIG_HOME   every descendant of this server -- spawn-window, and
+    #                     the `endless session monitor` it launches in a pane --
+    #                     inherits a THROWAWAY config dir. Those processes run
+    #                     with $TMUX pointing at a 3-pane fake server; anything
+    #                     that decided liveness from `tmux list-panes -a` while
+    #                     pointed at the real ledger could reap every live
+    #                     session in it (E-1898). They must not be able to reach
+    #                     the real ledger at all.
+    mkdir -p "${TMPDIR_B}/config"
+    if ! XDG_CONFIG_HOME="${TMPDIR_B}/config" \
+         tmux -L "${SOCK_B}" -f /dev/null \
+            new-session -d -s drv -x "${WIN_COLS}" -y "${WIN_ROWS}" \
             "${TMPDIR_B}/drive.sh" 2>/dev/null; then
         report_fail "private tmux server starts" "tmux -L new-session exit 0" "failed"
         return
@@ -289,6 +310,20 @@ EOF
     # session-status pins main regardless of cwd (E-698, c186df7d).
     local project_dir
     project_dir=$(cd "$(dirname "$(git rev-parse --git-common-dir)")" && pwd)
+
+    # A pane's #{pane_current_path} is not settled the instant the pane exists:
+    # tmux reports the inherited cwd until the pane's shell has actually chdir'd
+    # into the -c directory. Poll for steady state before asserting, with a bound
+    # so a genuine regression still fails on the real value rather than hanging.
+    local settle=0
+    while (( settle < 40 )); do
+        [[ "$(b_panes | awk -F"|" "\$1 > 0 && \$2 > 0" | cut -d"|" -f7)" == "${project_dir}" ]] && break
+        sleep 0.25; settle=$((settle + 1))
+    done
+    panes=$(b_panes)
+    left=$(printf '%s\n' "${panes}" | awk -F'|' '$1 == 0')
+    top_right=$(printf '%s\n' "${panes}" | awk -F'|' '$1 > 0 && $2 == 0')
+    bottom_right=$(printf '%s\n' "${panes}" | awk -F'|' '$1 > 0 && $2 > 0')
     assert_eq "claude pane keeps the WORKTREE cwd (it is the branch's work)" \
         "${WT}" "$(printf '%s' "${left}" | cut -d'|' -f7)"
     assert_eq "monitor pane starts in the PROJECT dir (consistent with the shell)" \
@@ -367,7 +402,11 @@ SQL
                     2>/dev/null | grep -c .)
     assert_eq "seeded frame is 1 legend + 5 task rows" "6" "${frame_lines}"
 
-    if ! tmux -L "${SOCK_C}" new-session -d -s fit -x "${WIN_COLS}" -y "${WIN_ROWS}" 2>/dev/null; then
+    # Same isolation as layer B. This layer already passes --config-dir on every
+    # endless-go call, but the server-level guard covers anything it spawns.
+    if ! XDG_CONFIG_HOME="${TMPDIR_C}/config" \
+         tmux -L "${SOCK_C}" -f /dev/null \
+            new-session -d -s fit -x "${WIN_COLS}" -y "${WIN_ROWS}" 2>/dev/null; then
         report_fail "private tmux server starts" "tmux -L new-session exit 0" "failed"
         return
     fi
