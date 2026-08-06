@@ -321,6 +321,18 @@ The handoff is deliberately lean — it delegates the workflow rules to `endless
 
 To change what every spawned session is told, edit the template — see [Customizing handoff templates](#customizing-handoff-templates). There is no per-task prompt to maintain.
 
+### Claiming into a session that's already running
+
+Spawn is not the only way a session picks up a task. When you run `endless task claim <id>` from inside a session that has been going for a while — a retrofit rather than a fresh dispatch — you get the same type handoff, delivered as context folded against that command's own output. You don't ask for it and there is nothing to render by hand.
+
+It differs from the spawn text only in its arrival framing, because that is the only thing that actually differs: a spawned session is born inside the task's worktree, whereas a claimed-in one is still wherever it was and has to `/cd` there (the cwd gate refuses write tools until it does), and it arrives carrying planning that belongs in the task's `--text`, not in the transcript. Everything else — which worktree, the `--db main` routing that implies, one-session-one-task, and the per-type deliverable and terminal-status rules — is rendered from the shared `handoff/_mechanics.tmpl` partials that the per-type spawn templates also pull from, so the two renderings cannot drift.
+
+Inspect it the same way as any other template:
+
+```bash
+endless internal template render handoff/claim < vars.json
+```
+
 Every handoff's closing `Final message` line follows one discipline: **report only what `endless session status` can't already show.** For git state it defers to `endless worktree check`, which prints one line per genuine anomaly and stays silent when the worktree is clean — so a spawned session relays whatever that command prints and otherwise says nothing about git (a branch ahead of main and the absence of stray files are not anomalies). Beyond git it surfaces state outside endless (CI, services) only when actually in play, plus the how-to-test. It must **not** recap the task's status, phase, or relationships (`session status` renders those already), and must **not** confirm the negative ("no stray files", "nothing to report") — both are duplication that adds to the information overload Endless exists to reduce.
 
 ### `endless task spawn`
@@ -416,7 +428,9 @@ It **dies / stops** on:
 
 ### Customizing handoff templates
 
-The four handoff templates ship embedded in the `endless-go` binary. The first time a template renders in a consumer project, its embedded copy is **materialized** per-file to `<project_root>/.endless/templates/handoff/<type>.md.tmpl` and auto-committed, so the on-disk file is tracked and editable.
+The handoff templates ship embedded in the `endless-go` binary. The first time a template renders in a consumer project, its embedded copy is **materialized** per-file to `<project_root>/.endless/templates/handoff/<type>.md.tmpl` and auto-committed, so the on-disk file is tracked and editable.
+
+The set is: one wrapper per task type (`todo`, `bugfix`, `research`, `epic`, `brainstorm`), the `claim` wrapper for claiming into a running session, `respawn` for a reopened task, and two shared partials the wrappers pull from — `_close.tmpl` (the closing `Final message` discipline) and `_mechanics.tmpl` (the type mechanics both the spawn and claim renderings must agree on). Edit a shared partial to change a line everywhere at once; edit a wrapper to change one context's framing.
 
 - **Customize project-wide:** edit the materialized `.tmpl` file and commit it.
 - **Restore the default:** delete the materialized file — the embedded version renders again on the next spawn (and re-materializes).

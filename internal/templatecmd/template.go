@@ -44,6 +44,19 @@ var embedded embed.FS
 // name normalization) so the leading-underscore basename stays intact.
 const closePartialName = "handoff/_close"
 
+// mechanicsPartialName is the shared type-mechanics partial (E-1822) parsed
+// into every handoff template's set alongside _close, so `handoff_worktree`,
+// `handoff_focus`, `handoff_deliverable`, `handoff_terminal`, and the
+// `handoff_mechanics` composite resolve. It carries the lines whose drift
+// between the spawn rendering and the claim-into-a-live-session rendering
+// would be a bug. Same loading rules as closePartialName.
+const mechanicsPartialName = "handoff/_mechanics"
+
+// handoffPartialNames are the shared partials parsed into the set for any
+// template under `handoff/`. Order is irrelevant — each file holds only
+// `{{define}}` blocks.
+var handoffPartialNames = []string{closePartialName, mechanicsPartialName}
+
 // Run dispatches `endless-go template <verb> [args]`.
 func Run(args []string) {
 	if len(args) < 1 {
@@ -103,35 +116,60 @@ func runRender(args []string, stdin io.Reader, stdout io.Writer) error {
 		}
 	}
 
-	content, err := loadTemplate(projectRoot, name)
-	if err != nil {
-		return err
-	}
-
-	// Handoff templates share a `{{template "handoff_close" .}}` tail defined
-	// in handoff/_close.tmpl. Parse that partial into the set so the reference
-	// resolves. It honors the same .local→.tmpl→embedded precedence and is
-	// never materialized on its own (only the requested top-level name is).
-	var partial string
-	if strings.HasPrefix(name, "handoff/") {
-		partial, err = loadTemplate(projectRoot, closePartialName)
-		if err != nil {
-			return err
-		}
-	}
-
 	vars, err := decodeVars(stdin)
 	if err != nil {
 		return err
 	}
 
-	out, err := render(name, content, partial, vars)
+	out, err := renderNamed(projectRoot, name, vars)
 	if err != nil {
 		return err
 	}
 
 	_, err = io.WriteString(stdout, out)
 	return err
+}
+
+// Render renders the named template for projectRoot with vars and returns the
+// result, honoring the same `.local.tmpl` → `.tmpl` → embedded lookup and the
+// same shared `handoff/` partials as the CLI `template render` path. It is the
+// in-process entry point for callers already running inside the endless-go
+// binary — the Claude hook renders the claim handoff through it (E-1822) rather
+// than shelling out to itself.
+//
+// Unlike the CLI path it never materializes the embedded copy to disk: a hook
+// firing mid-session must not write files into the user's repo as a side effect.
+// An already-materialized on-disk template is still honored.
+func Render(projectRoot, name string, vars map[string]any) (string, error) {
+	return renderNamed(projectRoot, normalizeName(name), vars)
+}
+
+// renderNamed loads name (already normalized) plus, for `handoff/` templates,
+// the shared partials, then renders. Shared by the CLI and in-process paths so
+// the two cannot diverge on which partials are in the set.
+func renderNamed(projectRoot, name string, vars map[string]any) (string, error) {
+	content, err := loadTemplate(projectRoot, name)
+	if err != nil {
+		return "", err
+	}
+
+	// Handoff templates share `{{template "handoff_close" .}}` (handoff/
+	// _close.tmpl) and the type-mechanics defines (handoff/_mechanics.tmpl).
+	// Parse those partials into the set so the references resolve. They honor
+	// the same .local→.tmpl→embedded precedence and are never materialized on
+	// their own (only the requested top-level name is).
+	var partials []string
+	if strings.HasPrefix(name, "handoff/") {
+		for _, p := range handoffPartialNames {
+			text, err := loadTemplate(projectRoot, p)
+			if err != nil {
+				return "", err
+			}
+			partials = append(partials, text)
+		}
+	}
+
+	return render(name, content, partials, vars)
 }
 
 // resolveProjectRoot returns the absolute path of the project root. When
@@ -362,14 +400,17 @@ func decodeVars(r io.Reader) (map[string]any, error) {
 
 // render parses content as a Go text/template and applies vars. Missing
 // keys produce `<no value>` (Go's default), matching the graceful
-// degradation of Python's string.Template.safe_substitute. When partial is
-// non-empty it is parsed into the same set first, so any `{{define}}` it
-// carries (e.g. "handoff_close") resolves from content's `{{template}}`
-// references. The partial holds only defines, leaving the named template
-// empty until content is parsed into it.
-func render(name, content, partial string, vars map[string]any) (string, error) {
+// degradation of Python's string.Template.safe_substitute. Each partial is
+// parsed into the same set first, so any `{{define}}` it carries (e.g.
+// "handoff_close", "handoff_mechanics") resolves from content's
+// `{{template}}` references. The partials hold only defines, leaving the
+// named template empty until content is parsed into it.
+func render(name, content string, partials []string, vars map[string]any) (string, error) {
 	tmpl := template.New(name)
-	if partial != "" {
+	for _, partial := range partials {
+		if partial == "" {
+			continue
+		}
 		if _, err := tmpl.Parse(partial); err != nil {
 			return "", fmt.Errorf("parse partial for %s: %w", name, err)
 		}

@@ -4741,6 +4741,11 @@ def render_handoff(spawned_id: int, title: str,
         "spawned_id": spawned_id,
         "label_prefix": _hierarchical_label_prefix(spawned_id, parent_id),
         "title": title,
+        # E-1822: the shared handoff/_mechanics partials branch on task_type,
+        # so the type must travel as a var — not only as the choice of which
+        # per-type template to render. `effective_type` (not the raw arg) so an
+        # unknown/absent type resolves to the same `todo` the template pick does.
+        "task_type": effective_type,
         "worktree_path": worktree_path or "<task worktree>",
         "branch": branch or "<task branch>",
         "child_count": child_count,

@@ -458,10 +458,32 @@ func reportRelayResponse() postToolUseResponse {
 	}
 }
 
+// claimHandoffResponse wraps a rendered claim handoff (E-1822) in the
+// PostToolUse response shape. Pure (no I/O) so the shape is unit-testable
+// independent of the rendering.
+func claimHandoffResponse(handoff string) postToolUseResponse {
+	return postToolUseResponse{
+		HookSpecificOutput: postToolUseHookOutput{
+			HookEventName:     "PostToolUse",
+			AdditionalContext: handoff,
+		},
+	}
+}
+
 func handlePostToolUse(projectID int64, payload claudePayload) error {
 	// Detect endless task claim/complete/chat commands and update session state
-	if err := handlePostToolUseSession(projectID, payload); err != nil {
+	claimHandoff, err := handlePostToolUseSession(projectID, payload)
+	if err != nil {
 		return fmt.Errorf("post tool use session: %w", err)
+	}
+
+	// E-1822: a claim into an already-running session gets the per-type handoff
+	// a spawned session is born with, folded against the claim's own tool
+	// result. Takes precedence over the report reinforcement below — only one
+	// JSON object may go to stdout, and a compound command that both claims and
+	// reports is the claim's turn.
+	if claimHandoff != "" {
+		return json.NewEncoder(os.Stdout).Encode(claimHandoffResponse(claimHandoff))
 	}
 
 	// E-1803 Arm 1: reinforce the report channel. When this Bash call ran
@@ -764,32 +786,40 @@ func blockToolUseWithRevisitPrompt(instruction string) {
 	os.Exit(0)
 }
 
-func handlePostToolUseSession(projectID int64, payload claudePayload) error {
+// handlePostToolUseSession updates session state from an `endless task ...` Bash
+// call. It returns the rendered claim handoff (E-1822) when this call was a
+// claim into an already-running session, and "" otherwise; the caller decides
+// whether to emit it as PostToolUse additionalContext.
+func handlePostToolUseSession(projectID int64, payload claudePayload) (string, error) {
 	if payload.ToolName != "Bash" {
-		return nil
+		return "", nil
 	}
 
 	var input toolInputBash
 	if err := json.Unmarshal(payload.ToolInput, &input); err != nil {
-		return nil
+		return "", nil
 	}
 
 	all, err := matchers.Load(projectID)
 	if err != nil {
 		log.Printf("loading matchers: %v", err)
-		return nil
+		return "", nil
 	}
 
 	// Detect: endless task claim <id>
 	if re := matchers.ActionRegex(all, actionStart, scopeTask); re != nil {
 		if m := re.FindStringSubmatch(input.Command); m != nil {
 			taskID, err := strconv.ParseInt(m[1], 10, 64)
-			if err == nil {
-				if err := monitor.StartWorkSession(payload.SessionID, projectID, taskID); err != nil {
-					return fmt.Errorf("starting work session: %w", err)
-				}
+			if err != nil {
+				return "", nil
 			}
-			return nil
+			if err := monitor.StartWorkSession(payload.SessionID, projectID, taskID); err != nil {
+				return "", fmt.Errorf("starting work session: %w", err)
+			}
+			// A claim reaching PostToolUse is definitionally the retrofit case:
+			// `task spawn` claims before the target session exists, so its claim
+			// never runs as a tool call inside the spawned session.
+			return claimHandoffContext(projectID, taskID, payload), nil
 		}
 	}
 
@@ -799,19 +829,19 @@ func handlePostToolUseSession(projectID int64, payload claudePayload) error {
 			taskID, err := strconv.ParseInt(m[1], 10, 64)
 			if err == nil {
 				if err := monitor.CompleteTask(payload.SessionID, taskID); err != nil {
-					return fmt.Errorf("confirming task: %w", err)
+					return "", fmt.Errorf("confirming task: %w", err)
 				}
 			}
-			return nil
+			return "", nil
 		}
 	}
 
 	// Detect: endless task chat
 	if re := matchers.ActionRegex(all, actionChat, scopeTask); re != nil && re.MatchString(input.Command) {
 		if err := monitor.StartChatSession(payload.SessionID, projectID); err != nil {
-			return fmt.Errorf("starting chat session: %w", err)
+			return "", fmt.Errorf("starting chat session: %w", err)
 		}
-		return nil
+		return "", nil
 	}
 
 	// Detect: endless channel beacon/connect/send. last_activity was
@@ -820,11 +850,11 @@ func handlePostToolUseSession(projectID int64, payload claudePayload) error {
 	// doesn't fire on a channel action.
 	for _, action := range []string{actionBeacon, actionConnect, actionSend} {
 		if re := matchers.ActionRegex(all, action, scopeChannel); re != nil && re.MatchString(input.Command) {
-			return nil
+			return "", nil
 		}
 	}
 
-	return nil
+	return "", nil
 }
 
 func handleExitPlanMode(projectID int64, payload claudePayload) error {

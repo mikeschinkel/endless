@@ -1,0 +1,21 @@
+You just claimed E-{{.spawned_id}} into an **already-running** session — this one. You were not spawned for it, so none of the type handoff a spawned session is born with has reached you. Here it is; treat it as the instructions for this task from here on.
+
+- {{.label_prefix}}: {{.title}}.
+
+**Relocate first.** A spawned session starts inside its task's worktree; a claimed-in one does not — your working directory is still wherever it was, and the cwd gate refuses write tools while it points outside the claimed worktree. Point Claude's own working directory at it:
+
+```
+/cd {{.worktree_path}}
+```
+
+{{template "handoff_mechanics" .}}
+{{if .child_count}}
+This task has {{.child_count}} children — read them with `endless task show E-{{.spawned_id}} --children --db main`.
+{{end}}{{if eq .task_type "epic"}}
+Children: {{.children_state}}.
+{{end}}
+Carry your own context across: fold the planning and findings already in this chat into the task itself — `endless task update E-{{.spawned_id}} --text <path> --db main` — rather than leaving them in the transcript. Then read what the task actually says: `endless task show E-{{.spawned_id}} --text --db main`. Run `endless guide` if you have not this session.
+
+If anything is ambiguous, the plan is insufficient, or you hit a design choice it doesn't cover — STOP and ask. Don't guess. Don't run `endless worktree land`/`drop` without asking.
+
+Final message — {{if or (eq .task_type "research") (eq .task_type "brainstorm") (eq .task_type "epic")}}{{template "handoff_nonverify" .}}{{else}}{{template "handoff_verify" .}}{{end}} {{template "handoff_close" .}}
