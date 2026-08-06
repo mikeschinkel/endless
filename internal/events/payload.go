@@ -220,10 +220,6 @@ type SessionTaskCompletedPayload struct {
 	TaskID int64 `json:"task_id"`
 }
 
-type SessionRecappedPayload struct {
-	Summary string `json:"summary"`
-}
-
 type SessionHiddenPayload struct{}
 
 // Conversation payloads

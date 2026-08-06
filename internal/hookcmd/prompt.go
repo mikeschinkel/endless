@@ -2,8 +2,6 @@ package hookcmd
 
 import (
 	"fmt"
-	"os"
-	"os/exec"
 
 	"github.com/mikeschinkel/endless/internal/monitor"
 )
@@ -44,42 +42,5 @@ func runPrompt(args []string) error {
 		return err
 	}
 
-	// Trigger background recap if any sessions need it (throttled to every 5 minutes)
-	recapThrottled, _ := monitor.ShouldThrottle(projectID, "recap", 300)
-	if !recapThrottled {
-		if triggerBackgroundRecap() {
-			// Record activity to enable throttling
-			monitor.RecordActivity(projectID, "recap", dir, nil)
-		}
-	}
-
 	return nil
-}
-
-// triggerBackgroundRecap spawns a background process to recap one stale session.
-// The process runs independently — the prompt hook exits immediately.
-// Returns true if a recap was triggered.
-func triggerBackgroundRecap() bool {
-	ids := monitor.GetSessionsNeedingRecap()
-	if len(ids) == 0 {
-		return false
-	}
-
-	// Find our own binary path
-	self, err := os.Executable()
-	if err != nil {
-		return false
-	}
-
-	// Recap just one session to limit cost/latency
-	cmd := exec.Command(self, "recap", ids[0], "--force")
-	cmd.Stdout = nil
-	cmd.Stderr = nil
-	cmd.Stdin = nil
-	// Start detached — don't wait for it
-	if err := cmd.Start(); err != nil {
-		return false
-	}
-	// Note: we intentionally don't call cmd.Wait() — the process runs in background
-	return true
 }

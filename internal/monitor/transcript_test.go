@@ -10,7 +10,7 @@ import (
 
 // seedTranscriptSession inserts a minimal sessions row so session_messages
 // inserts (which FK on sessions.session_id) and the UPDATE statements run by
-// ParseTranscript / SetTranscriptPath / FlagNeedsRecap have a target row.
+// ParseTranscript / SetTranscriptPath have a target row.
 func seedTranscriptSession(t *testing.T, db *sql.DB, sessionID string) {
 	t.Helper()
 	if _, err := db.Exec(
@@ -417,69 +417,5 @@ func TestGetTranscriptPath_MissingSessionEmpty(t *testing.T) {
 	withTestDB(t)
 	if got := GetTranscriptPath("sess-unknown"); got != "" {
 		t.Errorf("GetTranscriptPath on missing row = %q, want \"\"", got)
-	}
-}
-
-// TestFlagNeedsRecap_SetsColumnAtThreshold pins the documented behavior:
-// once a session has accumulated >= 10 user messages beyond its
-// summary_seq, FlagNeedsRecap flips needs_recap = 1.
-func TestFlagNeedsRecap_SetsColumnAtThreshold(t *testing.T) {
-	db := withTestDB(t)
-	const sid = "sess-recap"
-	seedTranscriptSession(t, db, sid)
-
-	// Seed 10 user session_messages.
-	for i := 0; i < 10; i++ {
-		if _, err := db.Exec(
-			`INSERT INTO session_messages
-			 (session_id, role, content, message_uuid, created_at)
-			 VALUES (?, 'user', 'hi', ?, '2026-05-29T00:00:00')`,
-			sid, "uuid-recap-"+itoa(int64(i)),
-		); err != nil {
-			t.Fatalf("seed message %d: %v", i, err)
-		}
-	}
-
-	FlagNeedsRecap(sid)
-
-	var flag int
-	if err := db.QueryRow(
-		"SELECT needs_recap FROM sessions WHERE session_id=?", sid,
-	).Scan(&flag); err != nil {
-		t.Fatalf("read needs_recap: %v", err)
-	}
-	if flag != 1 {
-		t.Errorf("needs_recap = %d after 10 user messages, want 1", flag)
-	}
-}
-
-// TestFlagNeedsRecap_BelowThresholdNoFlag pins the inverse: with fewer
-// than 10 new user messages since summary_seq, needs_recap stays 0.
-func TestFlagNeedsRecap_BelowThresholdNoFlag(t *testing.T) {
-	db := withTestDB(t)
-	const sid = "sess-norecap"
-	seedTranscriptSession(t, db, sid)
-
-	for i := 0; i < 5; i++ {
-		if _, err := db.Exec(
-			`INSERT INTO session_messages
-			 (session_id, role, content, message_uuid, created_at)
-			 VALUES (?, 'user', 'hi', ?, '2026-05-29T00:00:00')`,
-			sid, "uuid-norecap-"+itoa(int64(i)),
-		); err != nil {
-			t.Fatalf("seed message %d: %v", i, err)
-		}
-	}
-
-	FlagNeedsRecap(sid)
-
-	var flag int
-	if err := db.QueryRow(
-		"SELECT needs_recap FROM sessions WHERE session_id=?", sid,
-	).Scan(&flag); err != nil {
-		t.Fatalf("read needs_recap: %v", err)
-	}
-	if flag != 0 {
-		t.Errorf("needs_recap = %d after 5 user messages, want 0", flag)
 	}
 }

@@ -126,7 +126,6 @@ const (
 	KindSessionIdled         Kind = "session.idled"
 	KindSessionEnded         Kind = "session.ended"
 	KindSessionTaskCompleted Kind = "session.task_completed"
-	KindSessionRecapped      Kind = "session.recapped"
 	KindSessionHidden        Kind = "session.hidden"
 )
 
@@ -224,7 +223,6 @@ var ValidKinds = map[Kind]bool{
 	KindSessionIdled:         true,
 	KindSessionEnded:         true,
 	KindSessionTaskCompleted: true,
-	KindSessionRecapped:      true,
 	KindSessionHidden:        true,
 	// Conversation
 	KindConversationBeaconed:  true,

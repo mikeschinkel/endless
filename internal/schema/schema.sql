@@ -137,8 +137,6 @@ CREATE TABLE IF NOT EXISTS sessions (
     transcript_path TEXT,
     summary TEXT,
     hidden INTEGER NOT NULL DEFAULT 0,
-    needs_recap INTEGER NOT NULL DEFAULT 0,
-    summary_seq INTEGER NOT NULL DEFAULT 0,
     short_id TEXT,
     UNIQUE (session_id),
     UNIQUE (short_id),

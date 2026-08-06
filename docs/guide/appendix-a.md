@@ -12,5 +12,4 @@ Interactive commands on the `session` group:
 - **`endless session monitor`** — the live dashboard: loops the `session status` view, redrawing every 2 seconds and repainting only on change. The top-like pane you keep open all day; Ctrl-C exits. Takes the same `--all`/`--tree` options as `session status`.
 - **`endless session history [session]`** — show the conversation history for a session (current by default).
 - **`endless session search <query>`** — search across all session messages.
-- **`endless session recap [session]`** — generate recap summaries for sessions using Claude.
 - **`endless session hide <ids...>`** / **`endless session unhide <ids...>`** — hide sessions from (or restore them to) `session list`.

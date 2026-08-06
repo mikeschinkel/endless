@@ -6,7 +6,7 @@
 // already parsed:
 //
 //	endless-go event         emit|validate-db|rebuild-db|apply-change|backup|reap-worktrees
-//	endless-go hook          prompt|claude|codex|recap
+//	endless-go hook          prompt|claude|codex
 //	endless-go channel       (MCP server; no verbs)
 //	endless-go sandbox       run|enter|init|bind|list|prune|destroy
 //	endless-go serve         [port]
@@ -95,7 +95,7 @@ func main() {
 	}
 
 	// E-1470: ENDLESS_NO_HOOKS short-circuit. Scoped to `hook` only —
-	// internal headless `claude -p` calls (verb-check, recap) set this
+	// internal headless `claude -p` calls (the verb-check) set this
 	// env var to suppress hook side effects (session registration,
 	// activity, pane-collision). Must run BEFORE PinMainDB and before
 	// any DB work.
@@ -217,7 +217,7 @@ func usage(w *os.File) {
 	fmt.Fprintln(w, "Usage: endless-go <subcommand> [args...]")
 	fmt.Fprintln(w, "Subcommands:")
 	fmt.Fprintln(w, "  event          emit|validate-db|rebuild-db|apply-change|backup|reap-worktrees")
-	fmt.Fprintln(w, "  hook           prompt|claude|codex|recap")
+	fmt.Fprintln(w, "  hook           prompt|claude|codex")
 	fmt.Fprintln(w, "  channel        MCP server for inter-session channels")
 	fmt.Fprintln(w, "  sandbox        run|enter|init|bind|list|prune|destroy")
 	fmt.Fprintln(w, "  serve          [port]  (web dashboard)")

@@ -250,7 +250,6 @@ func runClaude(args []string) error {
 	case "Stop":
 		// Parse transcript before idling — captures the assistant's last response
 		monitor.ParseTranscript(payload.SessionID, payload.TranscriptPath)
-		monitor.FlagNeedsRecap(payload.SessionID)
 		if err := monitor.IdleSession(payload.SessionID); err != nil {
 			return fmt.Errorf("idling session: %w", err)
 		}
@@ -263,7 +262,6 @@ func runClaude(args []string) error {
 	case "SessionEnd":
 		// Final parse
 		monitor.ParseTranscript(payload.SessionID, payload.TranscriptPath)
-		monitor.FlagNeedsRecap(payload.SessionID)
 		// Release any worktree lock owned by this session (E-971 Layer D).
 		// Use session-id scan rather than walk-up: the user may have cd'd
 		// out before /quit, or the lock may live in a worktree the session

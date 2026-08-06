@@ -1,14 +1,13 @@
 // Package hookcmd implements the `endless-go hook` subcommand. It is
 // invoked by Claude Code's settings.json hook entries (PostToolUse,
-// UserPromptSubmit, Stop, SessionStart, SessionEnd) and by `claude -p`
-// recap callouts.
+// UserPromptSubmit, Stop, SessionStart, SessionEnd).
 //
 // The dispatcher (cmd/endless-go) handles two contracts before Run is
 // called:
 //
 //   - E-1470: If ENDLESS_NO_HOOKS=true the dispatcher returns BEFORE
 //     calling hookcmd.Run. Internal headless `claude -p` calls
-//     (verb-check, recap) set ENDLESS_NO_HOOKS=true to suppress the
+//     (the verb-check) set ENDLESS_NO_HOOKS=true to suppress the
 //     hook so the pane-collision rule (internal/monitor) does not mark
 //     the live caller's session ended.
 //
@@ -29,7 +28,7 @@ import (
 func Run(args []string) {
 	if len(args) < 1 {
 		fmt.Fprintln(os.Stderr, "Usage: endless-go hook <command> [args...]")
-		fmt.Fprintln(os.Stderr, "Commands: prompt, claude, codex, recap")
+		fmt.Fprintln(os.Stderr, "Commands: prompt, claude, codex")
 		os.Exit(1)
 	}
 
@@ -41,8 +40,6 @@ func Run(args []string) {
 		err = runClaude(args[1:])
 	case "codex":
 		err = runCodex(args[1:])
-	case "recap":
-		err = runRecap(args[1:])
 	default:
 		fmt.Fprintf(os.Stderr, "Unknown command: %s\n", args[0])
 		os.Exit(1)

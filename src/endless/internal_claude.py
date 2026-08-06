@@ -1,8 +1,8 @@
 """Internal headless `claude -p` invocation that fires no Endless hooks (E-1470).
 
-Endless makes a couple of internal `claude -p` calls — the verb-check in
-`task_cmd` and the recap summary in `session_cmd`. They run as subprocesses
-that inherit the caller's `TMUX_PANE`. Each gets a fresh Claude session UUID
+Endless makes internal `claude -p` calls — the verb-check in `task_cmd`.
+They run as subprocesses that inherit the caller's `TMUX_PANE`. Each gets a
+fresh Claude session UUID
 and, left unguarded, fires the `endless-go hook` subcommand; the hook's
 pane-collision rule then marks the LIVE caller's session `ended` (same pane
 string, different UUID), which breaks session resolution until the caller's

@@ -367,12 +367,11 @@ def _migrate_v3(conn: sqlite3.Connection):
         if "hidden" not in cols:
             conn.execute("ALTER TABLE sessions ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0")
             conn.commit()
-        if "needs_recap" not in cols:
-            conn.execute("ALTER TABLE sessions ADD COLUMN needs_recap INTEGER NOT NULL DEFAULT 0")
-            conn.commit()
-        if "summary_seq" not in cols:
-            conn.execute("ALTER TABLE sessions ADD COLUMN summary_seq INTEGER NOT NULL DEFAULT 0")
-            conn.commit()
+        # needs_recap / summary_seq were added here for the session-recap
+        # machinery, removed in E-1906. Their ALTERs are gone rather than
+        # merely unused: this migrator can still run on a pre-v6 DB, and
+        # re-adding the columns there would silently undo the drop that
+        # e-1906-drop-sessions-recap-columns.sql applies at land time.
 
 
 def _migrate_v5(conn: sqlite3.Connection):

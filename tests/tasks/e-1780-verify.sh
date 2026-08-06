@@ -11,7 +11,8 @@
 #      a single `appendix-a` pointer; and does NOT inline the user-facing
 #      commands (no `session goto`/`monitor`/... how-to in sessions.md).
 #   2. docs/guide/appendix-a.md exists, frames itself as "commands a human
-#      runs," and documents each of the nine user-facing session commands.
+#      runs," and documents each of the eight user-facing session commands
+#      (nine until E-1906 retired `session recap`).
 #   3. docs/guide/index.md's `## Sections` list names `appendix-a`.
 #   4. docs/guide/ yields exactly the 5 pillar sections + the appendix (no
 #      accidental extra section), and `just guide-check` is green.
@@ -121,14 +122,15 @@ check_sessions_agent_facing() {
 
     # Must NOT inline the user-facing commands — those live in the appendix.
     local cmd
-    for cmd in goto back trail monitor history search recap hide unhide; do
+    # `recap` was in this list until E-1906 retired the session-recap machinery.
+    for cmd in goto back trail monitor history search hide unhide; do
         assert_file_lacks "does not inline user-facing \`session ${cmd}\`" \
             "${f}" "session ${cmd}"
     done
 }
 
 check_appendix() {
-    section "appendix-a.md — user-facing framing + nine commands"
+    section "appendix-a.md — user-facing framing + eight commands"
     local f="${REPO_ROOT}/docs/guide/appendix-a.md"
 
     if [[ -f "${f}" ]]; then
@@ -143,7 +145,8 @@ check_appendix() {
     assert_file_has "frames these as commands a human runs" "${f}" "a **human** runs"
 
     local cmd
-    for cmd in goto back trail monitor history search recap hide unhide; do
+    # `recap` was in this list until E-1906 retired the session-recap machinery.
+    for cmd in goto back trail monitor history search hide unhide; do
         assert_file_has "documents \`session ${cmd}\`" "${f}" "session ${cmd}"
     done
 }

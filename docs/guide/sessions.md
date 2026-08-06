@@ -119,7 +119,7 @@ Three read-only commands for self-orientation and for coordinating with sibling 
 
 ## Interactive, user-run session commands
 
-The `session` group also carries commands a human runs interactively — session navigation, the live-watch dashboard, history / search / recap, and hide / unhide. These aren't part of an agent's working flow; they're documented in `endless guide appendix-a`, which you read only to point a user at one.
+The `session` group also carries commands a human runs interactively — session navigation, the live-watch dashboard, history / search, and hide / unhide. These aren't part of an agent's working flow; they're documented in `endless guide appendix-a`, which you read only to point a user at one.
 
 ## Reading snapshots
 

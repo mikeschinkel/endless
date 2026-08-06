@@ -1,0 +1,37 @@
+-- E-1906: drop sessions.needs_recap and sessions.summary_seq. Both belong to
+-- the session-recap machinery, which dated from the era when one Claude
+-- session covered many tasks and a generated recap was the only way to
+-- reconstruct what it had done. One session now maps to one task and `endless
+-- task report` covers the handoff directly, so the flag, its writer
+-- (monitor.FlagNeedsRecap), its readers (`endless-go hook recap`, `endless
+-- session recap`, the prompt hook's background trigger, the `session list`
+-- "N session(s) need recaps" notice) and the `claude -p` summarizer are all
+-- gone.
+--
+-- Both columns go, not just the flag: `summary_seq` existed solely as the
+-- recap watermark (the count of user messages at the last recap, used to
+-- decide whether enough new ones had accrued). Nothing else ever read it.
+--
+-- sessions.summary SURVIVES — it is set independently from the first assistant
+-- response (monitor.setSessionSummary) and rendered by `session list`, the
+-- live-session query, and session navigation. Only the recap generator ever
+-- wrote it alongside summary_seq.
+--
+-- The apply-change dispatcher wraps this file in a BEGIN IMMEDIATE transaction
+-- and records this change's _schema_version marker after the statements below.
+-- This runs once, at land time (`just land`), against the populated real DB
+-- where the columns still exist. The sandbox (`endless-sandbox init`) and tests
+-- build from schema.sql, which no longer declares them, and never apply change
+-- files — so there is no "column absent" path to guard.
+--
+-- Neither column participates in a trigger, index, view, or foreign key
+-- (sessions' two triggers fire on `state` only), so the drops are clean.
+--
+-- The e-1568 change file still CREATEs both columns when it rebuilds a
+-- pre-E-1568 sessions table. That is correct and deliberately untouched: it
+-- reproduces a historical shape against a DB that predates this change, and
+-- this file then drops them. Editing history there would break
+-- tests/tasks/e-1568-verify.sh, which builds that old shape inline.
+
+ALTER TABLE sessions DROP COLUMN needs_recap;
+ALTER TABLE sessions DROP COLUMN summary_seq;
