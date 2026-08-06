@@ -1,0 +1,26 @@
+-- E-1905: drop the vestigial `sessions.transcript_path` column.
+--
+-- The column was recorded ONCE at SessionStart from Claude's hook payload and
+-- never re-recorded, so it goes stale the moment a session changes cwd (Claude
+-- rotates the transcript to a new `~/.claude/projects/<encoded-cwd>/` dir; the
+-- column keeps pointing at the old file). Nothing live consumed it:
+-- `session_messages` is kept current by the Go parser (`monitor.ParseTranscript`),
+-- which is handed the payload path on every event and never reads this column.
+-- Its only readers were `endless session reimport` (removed by this same task)
+-- and one ORDER BY tiebreak in `events.inheritedSessionID` (also removed —
+-- `process IS NOT NULL` and the >=10s span still carry the evidence test).
+--
+-- The apply-change dispatcher wraps this file in a BEGIN IMMEDIATE transaction
+-- and records this change's _schema_version marker after the statement below.
+-- Runs once, at land time (`just land`), against the populated real DB where
+-- the column still exists. The sandbox (`endless-sandbox init`) and tests build
+-- from schema.sql, which no longer declares the column, and never apply change
+-- files — so there is no "column absent" path to guard.
+--
+-- SQLite 3.35+ supports `ALTER TABLE ... DROP COLUMN`, and this project already
+-- relies on it (e-1530-sessions-cleanup.sql dropped `sessions.status` the same
+-- way). `transcript_path` participates in no index, trigger, view, generated
+-- column, or foreign key — the E-1530 end-of-life triggers key off `state` and
+-- `process` only — so the drop is clean and needs no table rebuild.
+
+ALTER TABLE sessions DROP COLUMN transcript_path;

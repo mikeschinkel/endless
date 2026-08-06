@@ -10,7 +10,10 @@ import (
 
 // seedTranscriptSession inserts a minimal sessions row so session_messages
 // inserts (which FK on sessions.session_id) and the UPDATE statements run by
-// ParseTranscript / SetTranscriptPath have a target row.
+// ParseTranscript have a target row.
+//
+// Both other writers this helper once served are gone: SetTranscriptPath with
+// E-1905's column drop, FlagNeedsRecap with E-1906's recap removal.
 func seedTranscriptSession(t *testing.T, db *sql.DB, sessionID string) {
 	t.Helper()
 	if _, err := db.Exec(
@@ -394,28 +397,21 @@ func TestParseTranscriptFull_EmptyPathNoOp(t *testing.T) {
 	}
 }
 
-// TestSetGetTranscriptPath_RoundTrip pins the round-trip: SetTranscriptPath
-// stores the path on the sessions row and GetTranscriptPath returns it.
-func TestSetGetTranscriptPath_RoundTrip(t *testing.T) {
+// TestSessionsHasNoTranscriptPathColumn pins E-1905's removal: the stored
+// transcript path was recorded once at SessionStart, went stale on any cwd
+// change, and had no live consumer — session_messages is kept current by
+// ParseTranscript from the hook payload's path, not from a stored column.
+// Asserted against the schema rather than a deleted accessor so a re-added
+// column (in schema.sql or a stray change file) fails loudly here.
+func TestSessionsHasNoTranscriptPathColumn(t *testing.T) {
 	db := withTestDB(t)
-	const sid = "sess-path"
-	seedTranscriptSession(t, db, sid)
-
-	want := "/tmp/claude/transcripts/abc.jsonl"
-	if err := SetTranscriptPath(sid, want); err != nil {
-		t.Fatalf("SetTranscriptPath: %v", err)
+	var n int
+	if err := db.QueryRow(
+		"SELECT count(*) FROM pragma_table_info('sessions') WHERE name = 'transcript_path'",
+	).Scan(&n); err != nil {
+		t.Fatalf("introspect sessions columns: %v", err)
 	}
-	if got := GetTranscriptPath(sid); got != want {
-		t.Errorf("GetTranscriptPath = %q, want %q", got, want)
-	}
-}
-
-// TestGetTranscriptPath_MissingSessionEmpty pins the no-row branch: an
-// unknown session id returns "" with no panic (the QueryRow's error is
-// swallowed by design — callers treat "" as "no transcript known").
-func TestGetTranscriptPath_MissingSessionEmpty(t *testing.T) {
-	withTestDB(t)
-	if got := GetTranscriptPath("sess-unknown"); got != "" {
-		t.Errorf("GetTranscriptPath on missing row = %q, want \"\"", got)
+	if n != 0 {
+		t.Errorf("sessions still declares the dropped column: count = %d, want 0 (E-1905)", n)
 	}
 }

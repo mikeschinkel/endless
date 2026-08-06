@@ -134,7 +134,6 @@ CREATE TABLE IF NOT EXISTS sessions (
     started_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
     last_activity TEXT,
     transcript_offset INTEGER NOT NULL DEFAULT 0,
-    transcript_path TEXT,
     summary TEXT,
     hidden INTEGER NOT NULL DEFAULT 0,
     short_id TEXT,

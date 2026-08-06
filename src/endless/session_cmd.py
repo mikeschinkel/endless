@@ -1,4 +1,4 @@
-"""Session command logic — history, list, search, reimport."""
+"""Session command logic — history, list, search."""
 
 import json as json_mod
 import os
@@ -66,7 +66,7 @@ def _resolve_session(value: str) -> dict:
         int_id = int(value)
         row = db.query(
             "SELECT id, session_id, project_id, state, summary, "
-            "transcript_path, started_at, last_activity, hidden "
+            "started_at, last_activity, hidden "
             "FROM sessions WHERE id = ?",
             (int_id,),
         )
@@ -78,7 +78,7 @@ def _resolve_session(value: str) -> dict:
     # Try exact UUID match
     row = db.query(
         "SELECT id, session_id, project_id, state, summary, "
-        "transcript_path, started_at, last_activity, hidden "
+        "started_at, last_activity, hidden "
         "FROM sessions WHERE session_id = ?",
         (value,),
     )
@@ -88,7 +88,7 @@ def _resolve_session(value: str) -> dict:
     # Try UUID prefix match
     row = db.query(
         "SELECT id, session_id, project_id, state, summary, "
-        "transcript_path, started_at, last_activity, hidden "
+        "started_at, last_activity, hidden "
         "FROM sessions WHERE session_id LIKE ?",
         (value + "%",),
     )
@@ -838,135 +838,6 @@ def search_sessions(
     click.echo(click.style(f"{len(rows)} match(es)", dim=True))
 
 
-def reimport_sessions(session_value: str | None = None):
-    """Reimport transcript data from JSONL files."""
-    if session_value:
-        # Reimport a specific session
-        session = _resolve_session(session_value)
-        path = session.get("transcript_path") or ""
-        if not path:
-            # Try to find JSONL by session UUID
-            path = _find_jsonl(session["session_id"])
-        if not path:
-            raise click.ClickException(
-                f"No transcript path for session {session['id']}. "
-                "Provide the JSONL file path directly."
-            )
-        # Reset offset and re-parse
-        db.execute(
-            "UPDATE sessions SET transcript_offset = 0 WHERE session_id = ?",
-            (session["session_id"],),
-        )
-        _parse_transcript_py(session["session_id"], path)
-        count = db.scalar(
-            "SELECT count(*) FROM session_messages WHERE session_id = ?",
-            (session["session_id"],),
-        )
-        click.echo(
-            click.style("•", fg="cyan")
-            + f" Imported session {session['id']}: {count} messages"
-        )
-        return
-
-    # Reimport all — scan for JSONL files
-    claude_dir = Path.home() / ".claude" / "projects"
-    if not claude_dir.exists():
-        raise click.ClickException(f"No Claude projects dir: {claude_dir}")
-
-    jsonl_files = list(claude_dir.rglob("*.jsonl"))
-    if not jsonl_files:
-        click.echo(
-            click.style("•", fg="cyan") + " No JSONL files found"
-        )
-        return
-
-    total_messages = 0
-    total_sessions = 0
-
-    for jf in jsonl_files:
-        # Extract session ID from filename (UUID.jsonl)
-        session_id = jf.stem
-        if len(session_id) < 36:
-            continue  # not a UUID filename
-
-        # Derive project_id from JSONL path
-        project_id = _project_id_from_path(str(jf))
-
-        # Ensure session exists in DB
-        row = db.query(
-            "SELECT id FROM sessions WHERE session_id = ?",
-            (session_id,),
-        )
-        if not row:
-            # Create a minimal session record
-            if project_id:
-                db.execute(
-                    "INSERT OR IGNORE INTO sessions (session_id, project_id, state, started_at) "
-                    "VALUES (?, ?, 'ended', datetime('now'))",
-                    (session_id, project_id),
-                )
-            else:
-                db.execute(
-                    "INSERT OR IGNORE INTO sessions (session_id, state, started_at) "
-                    "VALUES (?, 'ended', datetime('now'))",
-                    (session_id,),
-                )
-        elif project_id:
-            # Backfill project_id if missing
-            db.execute(
-                "UPDATE sessions SET project_id = ? WHERE session_id = ? AND project_id IS NULL",
-                (project_id, session_id),
-            )
-
-        # Store transcript path and reset offset for re-parse
-        db.execute(
-            "UPDATE sessions SET transcript_path = ?, transcript_offset = 0 "
-            "WHERE session_id = ?",
-            (str(jf), session_id),
-        )
-
-        # Parse
-        before = db.scalar(
-            "SELECT count(*) FROM session_messages WHERE session_id = ?",
-            (session_id,),
-        ) or 0
-        _parse_transcript_py(session_id, str(jf))
-        after = db.scalar(
-            "SELECT count(*) FROM session_messages WHERE session_id = ?",
-            (session_id,),
-        ) or 0
-        new = after - before
-        if new > 0:
-            total_messages += new
-            total_sessions += 1
-
-    # Backfill summaries for sessions that don't have one
-    sessions_needing_summary = db.query(
-        "SELECT session_id FROM sessions "
-        "WHERE (summary IS NULL OR summary = '') "
-        "AND session_id IN (SELECT DISTINCT session_id FROM session_messages WHERE role = 'assistant')"
-    )
-    for s in sessions_needing_summary:
-        sid = s["session_id"]
-        first_msg = db.query(
-            "SELECT substr(content, 1, 200) as summary FROM session_messages "
-            "WHERE session_id = ? AND role = 'assistant' "
-            "ORDER BY created_at ASC LIMIT 1",
-            (sid,),
-        )
-        if first_msg and first_msg[0]["summary"]:
-            db.execute(
-                "UPDATE sessions SET summary = ? WHERE session_id = ?",
-                (first_msg[0]["summary"], sid),
-            )
-
-    click.echo(
-        click.style("•", fg="cyan")
-        + f" Added {total_messages} messages across {total_sessions} sessions "
-        + f"({len(jsonl_files)} JSONL files scanned)"
-    )
-
-
 def hide_sessions(session_values: list[str]):
     """Hide sessions from the list."""
     for value in session_values:
@@ -993,183 +864,6 @@ def unhide_sessions(session_values: list[str]):
             click.style("•", fg="cyan")
             + f" Unhidden session {session['id']}"
         )
-
-
-def _project_id_from_path(jsonl_path: str) -> int | None:
-    """Derive project_id from a JSONL transcript path.
-
-    Path format: ~/.claude/projects/-Users-mike-Projects-foo/UUID.jsonl
-    Claude encodes CWD by replacing / with -. Since directory names can
-    also contain dashes, we can't decode reliably. Instead, encode each
-    registered project path the same way and compare.
-    """
-    import re
-    match = re.search(r'/\.claude/projects/([^/]+)/', jsonl_path)
-    if not match:
-        return None
-    encoded_cwd = match.group(1)
-
-    # Encode each registered project path and find the best match
-    rows = db.query("SELECT id, path FROM projects")
-    if not rows:
-        return None
-
-    best_match = None
-    best_len = 0
-    for p in rows:
-        # Encode project path same way Claude does: / → -
-        encoded_proj = p["path"].replace("/", "-")
-        # Check if the encoded CWD starts with the encoded project path
-        if encoded_cwd == encoded_proj or encoded_cwd.startswith(encoded_proj + "-"):
-            # Longest match wins (most specific project)
-            if len(encoded_proj) > best_len:
-                best_match = p["id"]
-                best_len = len(encoded_proj)
-
-    return best_match
-
-
-def _find_jsonl(session_id: str) -> str | None:
-    """Find a JSONL file for a session ID by scanning Claude project dirs."""
-    claude_dir = Path.home() / ".claude" / "projects"
-    if not claude_dir.exists():
-        return None
-    for jf in claude_dir.rglob(f"{session_id}.jsonl"):
-        return str(jf)
-    return None
-
-
-def _parse_transcript_py(session_id: str, path: str):
-    """Python-side transcript parser for reimport. Mirrors the Go parser."""
-    import json as json_mod
-
-    try:
-        with open(path) as f:
-            summary_set = False
-            for line in f:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    obj = json_mod.loads(line)
-                except json_mod.JSONDecodeError:
-                    continue
-
-                obj_type = obj.get("type", "")
-                uuid = obj.get("uuid", "")
-                timestamp = obj.get("timestamp", "")
-                message = obj.get("message")
-
-                if obj_type not in ("user", "assistant"):
-                    continue
-                if not uuid or not message or not isinstance(message, dict):
-                    continue
-
-                role = message.get("role", "")
-                content = message.get("content", "")
-
-                if obj_type == "user" and role == "user":
-                    text = _extract_user_text(content)
-                    if not text or text.startswith("<") or text.startswith("{\"tool_use_id\""):
-                        continue
-                    _insert_message(session_id, "user", text, None, uuid, timestamp)
-
-                elif obj_type == "assistant" and role == "assistant":
-                    texts, tools = _extract_assistant_content(content)
-                    if texts:
-                        _insert_message(session_id, "assistant", texts, None, uuid, timestamp)
-                        if not summary_set:
-                            _set_summary_if_empty(session_id, texts)
-                            summary_set = True
-                    for tool in tools:
-                        tool_uuid = uuid + ":" + tool["name"]
-                        _insert_message(session_id, "tool_use", tool["summary"], tool["name"], tool_uuid, timestamp)
-
-        # Update offset to end of file
-        size = os.path.getsize(path)
-        db.execute(
-            "UPDATE sessions SET transcript_offset = ? WHERE session_id = ?",
-            (size, session_id),
-        )
-    except (OSError, IOError):
-        pass
-
-
-def _extract_user_text(content) -> str:
-    if isinstance(content, str):
-        return content.strip()
-    if isinstance(content, list):
-        parts = []
-        for block in content:
-            if isinstance(block, dict) and block.get("type") == "text":
-                parts.append(block.get("text", ""))
-        return "\n".join(parts).strip()
-    return ""
-
-
-def _extract_assistant_content(content) -> tuple[str, list[dict]]:
-    if not isinstance(content, list):
-        return "", []
-    texts = []
-    tools = []
-    for block in content:
-        if not isinstance(block, dict):
-            continue
-        if block.get("type") == "text" and block.get("text"):
-            texts.append(block["text"])
-        elif block.get("type") == "tool_use":
-            name = block.get("name", "unknown")
-            input_str = ""
-            if block.get("input"):
-                import json as json_mod
-                input_str = json_mod.dumps(block["input"])
-                if len(input_str) > 500:
-                    input_str = input_str[:500] + "..."
-            tools.append({
-                "name": name,
-                "summary": f"{name}: {input_str}" if input_str else name,
-            })
-    return "\n".join(texts), tools
-
-
-def _insert_message(session_id, role, content, tool_name, uuid, timestamp):
-    if not content:
-        return
-    db.execute(
-        "INSERT OR IGNORE INTO session_messages "
-        "(session_id, role, content, tool_name, message_uuid, created_at) "
-        "VALUES (?, ?, ?, ?, ?, ?)",
-        (session_id, role, content, tool_name, uuid, timestamp),
-    )
-
-
-def _set_summary_if_empty(session_id, text):
-    row = db.query(
-        "SELECT summary FROM sessions WHERE session_id = ?",
-        (session_id,),
-    )
-    if row and row[0]["summary"]:
-        return
-    summary = text
-    if len(summary) > 200:
-        cutoff = 200
-        for i in range(cutoff, 100, -1):
-            if summary[i] in ".!?":
-                cutoff = i + 1
-                break
-        summary = summary[:cutoff]
-    summary = summary.strip()
-    # Auto-hide sessions with error summaries
-    if summary.startswith("Not logged in") or summary.startswith("Error:"):
-        db.execute(
-            "UPDATE sessions SET summary = ?, hidden = 1 WHERE session_id = ?",
-            (summary, session_id),
-        )
-        return
-    db.execute(
-        "UPDATE sessions SET summary = ? WHERE session_id = ? AND (summary IS NULL OR summary = '')",
-        (summary, session_id),
-    )
 
 
 def _format_ts(ts: str) -> str:

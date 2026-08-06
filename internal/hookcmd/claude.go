@@ -191,10 +191,6 @@ func runClaude(args []string) error {
 		if err := monitor.ReapWorktreesForProject(projectID); err != nil {
 			log.Printf("reaping stale worktrees: %v", err)
 		}
-		// Store transcript path for reimport
-		if payload.TranscriptPath != "" {
-			monitor.SetTranscriptPath(payload.SessionID, payload.TranscriptPath)
-		}
 		// Spawn-flow auto-bind: when `endless task spawn` launches a new
 		// Claude window, it sets `@endless_spawned_by` and pre-claims the
 		// task (status flip + worktree creation) before launching. This

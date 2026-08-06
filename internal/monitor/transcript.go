@@ -314,33 +314,3 @@ func nilIfEmpty(s string) interface{} {
 	}
 	return s
 }
-
-// SetTranscriptPath stores the transcript file path for a session.
-func SetTranscriptPath(sessionID, path string) error {
-	db, err := DB()
-	if err != nil {
-		return err
-	}
-	_, err = db.Exec(
-		"UPDATE sessions SET transcript_path = ? WHERE session_id = ?",
-		path, sessionID,
-	)
-	return err
-}
-
-// GetTranscriptPath retrieves the stored transcript path for a session.
-func GetTranscriptPath(sessionID string) string {
-	db, err := DB()
-	if err != nil {
-		return ""
-	}
-	var path sql.NullString
-	db.QueryRow(
-		"SELECT transcript_path FROM sessions WHERE session_id = ?",
-		sessionID,
-	).Scan(&path)
-	if path.Valid {
-		return path.String
-	}
-	return ""
-}

@@ -1057,14 +1057,6 @@ def session_id():
     session_id_resolve()
 
 
-@session_cmd.command("reimport")
-@click.argument("session_id", required=False, default=None)
-def session_reimport(session_id):
-    """Reimport transcript data from JSONL files."""
-    from endless.session_cmd import reimport_sessions
-    reimport_sessions(session_value=session_id)
-
-
 @session_cmd.command("hide")
 @click.argument("session_ids", nargs=-1, required=True)
 def session_hide(session_ids):

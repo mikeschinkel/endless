@@ -358,9 +358,10 @@ def _migrate_v3(conn: sqlite3.Connection):
         if "transcript_offset" not in cols:
             conn.execute("ALTER TABLE sessions ADD COLUMN transcript_offset INTEGER NOT NULL DEFAULT 0")
             conn.commit()
-        if "transcript_path" not in cols:
-            conn.execute("ALTER TABLE sessions ADD COLUMN transcript_path TEXT")
-            conn.commit()
+        # transcript_path was here until E-1905 dropped the column. Do NOT
+        # re-add it: this migration runs on every Python-side connect, so an
+        # ADD COLUMN here would silently resurrect the column right after the
+        # land-time change file drops it.
         if "summary" not in cols:
             conn.execute("ALTER TABLE sessions ADD COLUMN summary TEXT")
             conn.commit()

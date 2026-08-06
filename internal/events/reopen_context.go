@@ -37,10 +37,21 @@ type ReopenContext struct {
 //
 // The inherited-session pick deliberately does NOT order by duration: a stale
 // row with a days-long span (Pattern B) would otherwise win. Instead it
-// prefers sessions that left real evidence of work — a populated process or
-// transcript_path, or a span of at least 10 seconds — and among those takes the
-// most recently started. Sub-10s ghosts (E-1640) with no evidence sort last and
-// are only chosen when nothing better exists.
+// prefers sessions that left real evidence of work — a populated process, or a
+// span of at least 10 seconds — and among those takes the most recently
+// started. Sub-10s ghosts (E-1640) with no evidence sort last and are only
+// chosen when nothing better exists.
+//
+// transcript_path was a third evidence signal until E-1905 dropped the column.
+// It was recorded once at SessionStart and never refreshed, so it was really a
+// proxy for "a SessionStart hook wrote this row" — and it was the only one of
+// the three that survived end-of-life: E-1530's triggers NULL `process` on any
+// row reaching state='ended', and this query filters to state='ended', so the
+// `process IS NOT NULL` disjunct never fires. It is kept as a deliberate
+// backstop should that invariant ever relax; in practice the ghost test is now
+// the >=10s span alone. Losing transcript_path therefore costs only the sub-10s
+// sessions that had one — which are exactly the E-1640 ghosts this is meant to
+// deprioritize anyway.
 func ResolveReopenContext(taskID int64) (ReopenContext, error) {
 	db, err := monitor.DB()
 	if err != nil {
@@ -99,7 +110,6 @@ func inheritedSessionID(db *sql.DB, taskID int64) (int64, error) {
 		`SELECT id FROM sessions
 		 WHERE active_task_id = ? AND state = 'ended'
 		 ORDER BY (process IS NOT NULL
-		           OR transcript_path IS NOT NULL
 		           OR (julianday(last_activity) - julianday(started_at)) * 86400 >= 10) DESC,
 		          started_at DESC
 		 LIMIT 1`,

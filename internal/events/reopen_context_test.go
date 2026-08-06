@@ -1,8 +1,14 @@
 // Tests for the reopen-context resolver (E-1645). The inherited-session pick
-// must prefer a prior ended session that left evidence of real work (a populated
-// transcript_path or a span of >=10s) over a sub-10s evidence-free ghost
-// (E-1640) — even when the ghost started more recently. It must NOT order by
-// duration (Pattern B would let a stale long-span row win).
+// must prefer a prior ended session that left evidence of real work over a
+// sub-10s evidence-free ghost (E-1640) — even when the ghost started more
+// recently. It must NOT order by duration (Pattern B would let a stale
+// long-span row win).
+//
+// The evidence test was three disjuncts; only the >=10s span can actually fire
+// today. transcript_path was dropped by E-1905, and `process IS NOT NULL` is
+// unreachable because the query filters to state='ended' and E-1530's triggers
+// NULL `process` on exactly those rows — pinned below by
+// TestEndedSessionProcessIsAlwaysNull so a future relaxation shows up here.
 package events
 
 import (
@@ -52,20 +58,52 @@ func seedReopenTask(t *testing.T, db *sql.DB, id int64, outcome string) {
 }
 
 // seedEndedSession inserts an ended session bound to taskID with explicit
-// started_at / last_activity (so the test controls the computed duration) and
-// an optional transcript_path (evidence of real work).
+// started_at / last_activity, so the test controls the computed duration — the
+// only evidence signal left after E-1905 dropped transcript_path (the query's
+// other disjunct, `process IS NOT NULL`, cannot fire on a state='ended' row:
+// E-1530's triggers NULL `process` the moment a row reaches that state).
 func seedEndedSession(t *testing.T, db *sql.DB, id, taskID int64,
-	startedAt, lastActivity string, transcript *string) {
+	startedAt, lastActivity string) {
 	t.Helper()
 	if _, err := db.Exec(
 		`INSERT INTO sessions
 		 (id, session_id, project_id, state, active_task_id, started_at,
-		  last_activity, transcript_path)
-		 VALUES (?, ?, 1, 'ended', ?, ?, ?, ?)`,
+		  last_activity)
+		 VALUES (?, ?, 1, 'ended', ?, ?, ?)`,
 		id, "sess-"+strconv.FormatInt(id, 10), taskID,
-		startedAt, lastActivity, transcript,
+		startedAt, lastActivity,
 	); err != nil {
 		t.Fatalf("seed ended session %d: %v", id, err)
+	}
+}
+
+// TestEndedSessionProcessIsAlwaysNull pins the premise the comment above rests
+// on: E-1530's end-of-life triggers make `process IS NOT NULL` unreachable for
+// the state='ended' rows inheritedSessionID selects from. If that invariant is
+// ever relaxed, this fails and the evidence clause becomes live again.
+func TestEndedSessionProcessIsAlwaysNull(t *testing.T) {
+	db := newReopenTestDB(t)
+	seedReopenTask(t, db, 1905, "")
+
+	if _, err := db.Exec(
+		`INSERT INTO sessions
+		 (id, session_id, project_id, state, active_task_id, started_at,
+		  last_activity, process)
+		 VALUES (901, 'sess-901', 1, 'ended', 1905,
+		         '2026-08-06T00:00:00', '2026-08-06T00:00:03', '%42')`,
+	); err != nil {
+		t.Fatalf("seed ended session with process: %v", err)
+	}
+
+	var process sql.NullString
+	if err := db.QueryRow(
+		"SELECT process FROM sessions WHERE id = 901",
+	).Scan(&process); err != nil {
+		t.Fatalf("read back process: %v", err)
+	}
+	if process.Valid {
+		t.Errorf("process on an ended row = %q, want NULL (E-1530 trigger)",
+			process.String)
 	}
 }
 
@@ -77,12 +115,12 @@ func TestReopenContext_PrefersRealOverGhost(t *testing.T) {
 	seedReopenTask(t, db, 1645, "did the thing")
 
 	const realID, ghostID = 101, 102
-	// real: 30s span, started earlier, no transcript — evidence is the span.
+	// real: 30s span, started earlier — the span is the evidence.
 	seedEndedSession(t, db, realID, 1645,
-		"2026-06-23T00:00:00", "2026-06-23T00:00:30", nil)
-	// ghost: 5s span, started later, no transcript — an E-1640 ghost.
+		"2026-06-23T00:00:00", "2026-06-23T00:00:30")
+	// ghost: 5s span, started later — an E-1640 ghost.
 	seedEndedSession(t, db, ghostID, 1645,
-		"2026-06-23T00:01:00", "2026-06-23T00:01:05", nil)
+		"2026-06-23T00:01:00", "2026-06-23T00:01:05")
 
 	ctx, err := reopenContext(db, 1645)
 	if err != nil {
@@ -94,29 +132,33 @@ func TestReopenContext_PrefersRealOverGhost(t *testing.T) {
 	}
 }
 
-// TestReopenContext_TranscriptIsEvidence: a sub-10s session still counts as real
-// when it left a transcript_path, beating a longer-span row with neither when it
-// started later. (Confirms transcript_path is honored as evidence.)
-func TestReopenContext_TranscriptIsEvidence(t *testing.T) {
+// TestReopenContext_GhostsTieBreakOnRecency pins E-1905's one intended behavior
+// change. This case used to be decided by transcript_path: the 3s row carried
+// one, so it beat the 4s row on evidence. With the column gone both rows are
+// evidence-free, the ORDER BY's first key ties, and the pick falls through to
+// `started_at DESC` — which lands on the same row here, for a different reason.
+// Recency is the right fallback among ghosts: neither did provable work, so the
+// most recent attempt is the most applicable context to reopen into.
+func TestReopenContext_GhostsTieBreakOnRecency(t *testing.T) {
 	db := newReopenTestDB(t)
 	seedReopenTask(t, db, 1645, "")
 
-	const withTranscript, plainGhost = 201, 202
-	tp := "/tmp/transcript.jsonl"
-	// 3s span but has a transcript → evidence; started later.
-	seedEndedSession(t, db, withTranscript, 1645,
-		"2026-06-23T00:02:00", "2026-06-23T00:02:03", &tp)
-	// 4s span, no transcript, started earlier → not evidence.
-	seedEndedSession(t, db, plainGhost, 1645,
-		"2026-06-23T00:00:00", "2026-06-23T00:00:04", nil)
+	const laterGhost, earlierGhost = 201, 202
+	// 3s span, started later.
+	seedEndedSession(t, db, laterGhost, 1645,
+		"2026-06-23T00:02:00", "2026-06-23T00:02:03")
+	// 4s span, started earlier — longer, but the ORDER BY must not rank by
+	// duration (Pattern B), so this must NOT win.
+	seedEndedSession(t, db, earlierGhost, 1645,
+		"2026-06-23T00:00:00", "2026-06-23T00:00:04")
 
 	ctx, err := reopenContext(db, 1645)
 	if err != nil {
 		t.Fatalf("reopenContext: %v", err)
 	}
-	if ctx.InheritedSessionID != withTranscript {
-		t.Errorf("InheritedSessionID = %d, want transcript-bearing %d",
-			ctx.InheritedSessionID, withTranscript)
+	if ctx.InheritedSessionID != laterGhost {
+		t.Errorf("InheritedSessionID = %d, want most-recent ghost %d",
+			ctx.InheritedSessionID, laterGhost)
 	}
 }
 
@@ -149,7 +191,7 @@ func TestReopenContext_RendersSnapshot(t *testing.T) {
 
 	const sid = 301
 	seedEndedSession(t, db, sid, 1645,
-		"2026-06-23T00:00:00", "2026-06-23T00:00:30", nil)
+		"2026-06-23T00:00:00", "2026-06-23T00:00:30")
 	if _, err := db.Exec(
 		`INSERT INTO session_statuses (session_id, active_task_id, headline, created_at)
 		 VALUES (?, 1645, 'RESUME HEADLINE', '2026-06-23T00:00:20')`,
