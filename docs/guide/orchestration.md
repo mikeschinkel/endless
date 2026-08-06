@@ -363,6 +363,54 @@ The spawned session can discover its task ID from the tmux window variable:
 tmux show-window-options -v @endless_task_id    # prints the task ID
 ```
 
+### Fix a bug in your own landed work
+
+**A bug in work you just landed is not new work.** It is the task you already
+did, done wrong. Reopen that task rather than filing a peer beside it:
+
+```bash
+endless task update E-<id> --status revisit    # the task that shipped the bug
+```
+
+`revisit` is where reopened landed work belongs — the status means "needs
+re-evaluation before it can proceed", which covers both a plan that no longer
+holds and work that shipped and turned out wrong. `task reopen E-<id>` and
+`task spawn E-<id> --reopen` land there too, so all three routes agree.
+
+Why this over filing a new task: a filed task is a standing claim on your
+user's attention. It gets read, re-read, and triaged past on every pass through
+the backlog, whether or not it is ever worked. Filing the bug you just
+introduced does not defer its cost — it converts a small cost now into a
+recurring one, and it splits one piece of work across two ledger entries that a
+reader has to reassemble.
+
+**Reuse the task's existing worktree.** Landing retains the worktree and its
+branch (see [Landing the work](#landing-the-work)), so the reopened task
+usually still has one:
+
+```bash
+endless worktree for-task <id>                 # path, if it still exists
+endless task spawn <id> --reopen               # reopen + get a session into it
+endless session resume <ref> --reopen          # worktree was reaped: rebuild it
+```
+
+Do **not** create a second worktree for the same task. Two worktrees on one
+task means two branches landing the same work.
+
+**Re-verify with the suite that already exists.** The task's
+`tests/tasks/e-<id>-verify.sh` still exists and still applies — it encoded the
+acceptance criteria the bug just violated. Re-run it, and extend it with the
+case that escaped rather than authoring a second script beside it.
+
+**When a separate task IS right.** The test is whether the discovery is a
+*defect in what shipped* or *new work the conversation surfaced*. Reopen for
+the first; file for the second. Signals that you are looking at new work: it
+changes what the task was supposed to do rather than whether it did it; it
+touches code the task never touched; it needs a decision your user has not
+made yet. When in doubt, ask — the cost of asking is one message, and the cost
+of guessing wrong is either a stranded task or a reopened one that never should
+have been.
+
 ### Background-agent dispatch (`--bg`)
 
 `--bg` dispatches a detached, supervised agent instead of opening a window — no tmux required. The flow:

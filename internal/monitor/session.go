@@ -164,13 +164,20 @@ func StartWorkSession(sessionID string, projectID int64, taskID int64) error {
 		// without this the claim would bind the session while silently leaving
 		// the status at `untriaged`, so the task would read as untouched while
 		// someone was actively on it.
+		//
+		// E-1889: `revisit` joins it for the same reason. Every reopen route
+		// now lands `revisit`, so `task spawn --reopen` would otherwise bind a
+		// session to a task still reading as not-started. This is the claim
+		// path only — the background-session gate (task_cmd's `ready`-only
+		// check) is separate and unchanged.
+		//
 		// changed_by_session (E-1917): this UPDATE does not go through the
 		// event executor, so it stamps its own actor. Without it the claim would
 		// inherit whichever session last touched the task and notify the wrong
 		// people about a status change this session caused.
 		"UPDATE tasks SET status='underway', "+
 			"changed_by_session=(SELECT id FROM sessions WHERE session_id=?) "+
-			"WHERE id=? AND status IN ('untriaged','unplanned','ready','blocked')",
+			"WHERE id=? AND status IN ('untriaged','unplanned','ready','blocked','revisit')",
 		sessionID, taskID,
 	)
 	return err

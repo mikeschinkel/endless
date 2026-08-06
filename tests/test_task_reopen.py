@@ -1,8 +1,8 @@
-"""Tests for `endless task reopen` and `task spawn --reopen` (E-1555).
+"""Tests for `endless task reopen` and `task spawn --reopen` (E-1555, E-1889).
 
-Exercises reopen semantics from the E-1555 plan:
-  - Reopen flips assumed/confirmed/completed → ready (text present) or
-    unplanned (text absent).
+Exercises reopen semantics from the E-1555 plan, as amended by E-1889:
+  - Reopen flips assumed/confirmed/completed → revisit, whatever the plan
+    text says. Text presence survives only as the message suffix.
   - Reopen refuses on declined/obsolete (steers to `task update --status`).
   - Reopen refuses on non-terminal statuses.
   - Reopen releases lingering session bindings to the task.
@@ -61,26 +61,31 @@ def project_at_cwd(seeded_project_at_cwd):
 # ---------- reopen_item ----------
 
 
-def test_reopen_assumed_with_text_promotes_to_ready(project_at_cwd, capsys):
+@pytest.mark.parametrize("status", ["assumed", "confirmed", "completed"])
+def test_reopen_lands_revisit_from_every_reopenable_status(
+    project_at_cwd, capsys, status,
+):
+    """E-1889: all three reopenable statuses land `revisit`, plan or no plan."""
     from endless.task_cmd import reopen_item
 
     _insert_task(
         pk=1000, project_id=project_at_cwd["project_id"],
-        status="assumed", text="# plan body\n",
+        status=status, text="# plan body\n",
     )
 
     reopen_item(1000)
 
     row = db.query("SELECT status FROM tasks WHERE id = ?", (1000,))[0]
-    assert row["status"] == "ready"
+    assert row["status"] == "revisit"
 
     captured = capsys.readouterr()
     assert "Updated E-1000" in captured.out
-    assert "assumed -> ready" in captured.out
-    assert "text: present" in captured.out
+    assert f"{status} -> revisit" in captured.out
 
 
-def test_reopen_confirmed_without_text_falls_to_unplanned(project_at_cwd, capsys):
+def test_reopen_without_text_still_lands_revisit(project_at_cwd, capsys):
+    """Text presence no longer branches the target status (E-1889) — it only
+    survives as the message suffix, which still reports it honestly."""
     from endless.task_cmd import reopen_item
 
     _insert_task(
@@ -91,14 +96,28 @@ def test_reopen_confirmed_without_text_falls_to_unplanned(project_at_cwd, capsys
     reopen_item(1001)
 
     row = db.query("SELECT status FROM tasks WHERE id = ?", (1001,))[0]
-    assert row["status"] == "unplanned"
+    assert row["status"] == "revisit"
 
     captured = capsys.readouterr()
-    assert "confirmed -> unplanned" in captured.out
+    assert "confirmed -> revisit" in captured.out
     assert "text: absent" in captured.out
 
 
-def test_reopen_completed_epic_promotes_to_ready(project_at_cwd, capsys):
+def test_reopen_with_text_reports_the_plan_in_the_suffix(project_at_cwd, capsys):
+    from endless.task_cmd import reopen_item
+
+    _insert_task(
+        pk=1004, project_id=project_at_cwd["project_id"],
+        status="assumed", text="# plan body\n",
+    )
+
+    reopen_item(1004)
+
+    captured = capsys.readouterr()
+    assert "text: present" in captured.out
+
+
+def test_reopen_completed_epic_does_not_cascade(project_at_cwd, capsys):
     from endless.task_cmd import reopen_item
 
     _insert_task(
@@ -116,7 +135,7 @@ def test_reopen_completed_epic_promotes_to_ready(project_at_cwd, capsys):
 
     parent = db.query("SELECT status FROM tasks WHERE id = 1002")[0]
     child = db.query("SELECT status FROM tasks WHERE id = 1003")[0]
-    assert parent["status"] == "ready"
+    assert parent["status"] == "revisit"
     assert child["status"] == "confirmed"
 
 
@@ -274,6 +293,69 @@ def test_spawn_no_flag_terminal_target_points_at_reopen(project_at_cwd, monkeypa
     assert "assumed" in msg
     assert "--reopen" in msg
     assert "endless task reopen" in msg
+
+
+# ---------- the background-session gate is unaffected by the revisit target ----
+
+
+def test_background_session_cannot_claim_a_reopened_task(project_at_cwd):
+    """E-1889 put `revisit` in the claim-promotion set, which is the *hook*
+    path. The background-session gate is a separate check and must still
+    refuse anything that is not human-approved `ready` work — otherwise a
+    reopen would become a way to hand unapproved work to a background loop.
+    """
+    from endless.task_cmd import claim_item, reopen_item
+
+    _insert_task(
+        pk=1700, project_id=project_at_cwd["project_id"],
+        status="confirmed", text="plan",
+    )
+    reopen_item(1700)
+    assert db.query(
+        "SELECT status FROM tasks WHERE id = 1700"
+    )[0]["status"] == "revisit"
+
+    _insert_session(
+        pk=500, session_id="s-500", project_id=project_at_cwd["project_id"],
+    )
+
+    with patch("endless.task_cmd._resolve_session_id_with_prompt",
+               return_value=500), \
+         patch("endless.task_cmd._session_is_background", return_value=True):
+        with pytest.raises(click.ClickException) as exc:
+            claim_item(1700)
+
+    msg = str(exc.value)
+    assert "background session may only claim 'ready' work" in msg
+    assert "'revisit'" in msg
+    assert db.query(
+        "SELECT status FROM tasks WHERE id = 1700"
+    )[0]["status"] == "revisit"
+
+
+def test_foreground_session_can_claim_a_reopened_task(project_at_cwd):
+    """The counterpart: an ordinary session picks the reopened task straight
+    up — `revisit` is not a dead end."""
+    from endless.task_cmd import claim_item, reopen_item
+
+    _insert_task(
+        pk=1710, project_id=project_at_cwd["project_id"],
+        status="assumed", text="plan",
+    )
+    reopen_item(1710)
+
+    _insert_session(
+        pk=510, session_id="s-510", project_id=project_at_cwd["project_id"],
+    )
+
+    with patch("endless.task_cmd._resolve_session_id_with_prompt",
+               return_value=510), \
+         patch("endless.task_cmd._session_is_background", return_value=False):
+        claim_item(1710)
+
+    assert db.query(
+        "SELECT status FROM tasks WHERE id = 1710"
+    )[0]["status"] == "underway"
 
 
 def test_spawn_no_flag_unverified_keeps_force_error(project_at_cwd, monkeypatch):

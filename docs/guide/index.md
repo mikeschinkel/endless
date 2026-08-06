@@ -64,6 +64,9 @@ stateDiagram-v2
 
     unplanned --> revisit: needs re-evaluation
     underway --> revisit
+    confirmed --> revisit: shipped work found wrong
+    assumed --> revisit: shipped work found wrong
+    completed --> revisit: shipped work found wrong
     revisit --> submitted: re-submit
 
     submitted --> declined
@@ -86,7 +89,7 @@ stateDiagram-v2
 | `confirmed`   | Verified and done. **Unblocks dependents.** Only the user confirms.                                            |
 | `assumed`     | Believed complete, will verify when used naturally. **Unblocks dependents.**                                   |
 | `blocked`     | Waiting on something else.                                                                                     |
-| `revisit`     | Was partially planned but needs re-evaluation.                                                                 |
+| `revisit`     | Needs re-evaluation before it can proceed — either a partial plan that no longer holds, or work that shipped and turned out wrong. Reopening your own landed work lands here. |
 | `declined`    | Active decision not to do this. Requires `--reason`.                                                           |
 | `obsolete`    | Made irrelevant by other changes.                                                                              |
 
@@ -219,7 +222,7 @@ listed separately. (Generated — do not hand-edit; run `/regenerate-guide`.)
 | per-task verification suite | orchestration | One suite per task and the one-command verify handoff (tests/tasks/e-*-verify.sh, verify.toml). |
 | commit message convention | orchestration | Commit subjects on a task branch take the form E-<id>: verb-first summary. |
 | landing is the user's call (ask first) | orchestration | Never run worktree land or drop on your own initiative - ask every time. |
-| filing discovered work (file it, don't fix it) | tasks | File a drive-by discovery as a task with --cleans-up instead of fixing it inline. |
+| work you discover mid-task (do it, reopen, or file it) | tasks | Four-case test for a drive-by discovery: do it now, reopen your own landed work, file it with --cleans-up, or fold symptoms into one root cause. |
 | lean toward fewer tasks | tasks | Prefer one task over several - every filed task spends the user's review attention. |
 | FULL STATUS | tasks | The keyword licenses one unconstrained response, not a sticky mode. |
 | --keep-status (edit the content, infer nothing) | tasks | Suppressing every status auto-transition that task update infers from an edit. |

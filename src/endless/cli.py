@@ -1749,7 +1749,7 @@ def task_add(title, description, description_file, text, text_file, analysis_tex
              blocks_ids, blocked_by_ids, relates_to_ids, implements_ids,
              cleans_up_ids, cleaned_up_by_ids, allow_paths):
     """Add a task."""
-    from endless.task_cmd import add_item, parse_tier, link_tasks
+    from endless.task_cmd import add_item, parse_tier, link_tasks, print_add_hints
     description = _resolve_content_flag(description, description_file, "description", allow_paths)
     text = _resolve_content_flag(text, text_file, "text", allow_paths)
     analysis_text = _resolve_content_flag(analysis_text, analysis_file, "analysis", allow_paths)
@@ -1772,6 +1772,9 @@ def task_add(title, description, description_file, text, text_file, analysis_tex
         link_tasks(new_id, tid, "cleans_up")
     for tid in cleaned_up_by_ids:
         link_tasks(new_id, tid, "cleaned_up_by")
+    # E-1889: file-time hints, after the row and its relations exist. Advisory
+    # only — never blocks the add, never raises.
+    print_add_hints(new_id, cleans_up_ids)
 
 
 @task_cmd.command("update")
@@ -2152,9 +2155,8 @@ def task_handoff(item_id):
                    "demotes it back to underway. Mirrors `claim --force`.")
 @click.option("--reopen", is_flag=True,
               help="Reopen an assumed/confirmed/completed target before "
-                   "spawning (status → ready/unplanned based on text "
-                   "presence). Use for handoff to a fresh session; "
-                   "mutually exclusive with --force.")
+                   "spawning (status → revisit). Use for handoff to a "
+                   "fresh session; mutually exclusive with --force.")
 @click.option("--bg", is_flag=True,
               help="Dispatch the agent headless via `claude --bg --name "
                    "E-<id>` instead of a tmux window. No tmux required; the "
@@ -2213,12 +2215,13 @@ def task_attach(item_id, force):
 @task_cmd.command("reopen")
 @click.argument("item_id", type=TASK_ID)
 def task_reopen(item_id):
-    """Reopen a terminal-status task back to actionable state.
+    """Reopen a terminal-status task back to `revisit`.
 
-    Flips assumed/confirmed/completed → ready (if a plan is attached)
-    or unplanned (if not). Metadata-only: no worktree creation, no
-    session binding. Caller chooses the next step (spawn, claim, or
-    hand-back).
+    Flips assumed/confirmed/completed → revisit — the status for work
+    whose prior judgment no longer holds, whether that is a stale plan or
+    something that shipped and turned out wrong. Metadata-only: no
+    worktree creation, no session binding. Caller chooses the next step
+    (spawn, claim, or hand-back).
     """
     from endless.task_cmd import reopen_item
     reopen_item(item_id)

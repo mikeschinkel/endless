@@ -108,12 +108,65 @@ def test_reopen_done_task_branches_and_revisits(monkeypatch, stub_recovery):
     assert stub_recovery["status"]["new"] == "revisit"
 
 
-@pytest.mark.parametrize("status", ["assumed", "completed", "declined", "obsolete"])
-def test_reopen_done_or_rejected_revisits(monkeypatch, stub_recovery, status):
+@pytest.mark.parametrize("status", ["assumed", "completed"])
+def test_reopen_done_revisits(monkeypatch, stub_recovery, status):
     decision, _, _ = _resolve(
         monkeypatch, _target(task_status=status), intent="reopen", override=".landed"
     )
     assert decision["status_to"] == "revisit"
+
+
+# ── E-1889: --reopen refuses a decision-bearing status ────────────────────────
+@pytest.mark.parametrize("status", ["declined", "obsolete"])
+def test_reopen_refuses_declined_obsolete_and_names_the_route(
+    monkeypatch, stub_recovery, status,
+):
+    """These used to be silently revived to `revisit` — the one reopen route
+    that reversed a deliberate decision as a side effect. Now it refuses and
+    names the explicit route."""
+    with pytest.raises(click.ClickException) as exc:
+        _resolve(
+            monkeypatch, _target(task_status=status),
+            intent="reopen", override=".landed",
+        )
+    msg = str(exc.value)
+    assert f"is '{status}'" in msg
+    assert "deliberate decision" in msg
+    assert "endless task update E-10 --status revisit" in msg
+    assert "without --reopen" in msg
+    # Refusal is total: no worktree rebuilt, no status emitted.
+    assert stub_recovery["recreate"] is None
+    assert stub_recovery["status"] is None
+
+
+@pytest.mark.parametrize("status", ["declined", "obsolete"])
+def test_review_still_allowed_on_declined_obsolete(
+    monkeypatch, stub_recovery, status,
+):
+    """The refusal is scoped to `--reopen`. `--review` is read-only — looking
+    at what was declined reverses nothing."""
+    decision, _, _ = _resolve(
+        monkeypatch, _target(task_status=status),
+        intent="review", override=".landed",
+    )
+    assert decision["mode"] == "detached"
+    assert decision["status_to"] is None
+
+
+@pytest.mark.parametrize("status", ["declined", "obsolete"])
+def test_reopen_refuses_even_when_the_worktree_survives(
+    monkeypatch, stub_recovery, status, tmp_path,
+):
+    """The refusal is a property of the flag, not of whether recovery runs."""
+    live = tmp_path / "live-wt"
+    live.mkdir()
+    with pytest.raises(click.ClickException) as exc:
+        _resolve(
+            monkeypatch,
+            _target(task_status=status, worktree_path=str(live)),
+            intent="reopen", override=".landed",
+        )
+    assert "deliberate decision" in str(exc.value)
 
 
 # ── case 3: --reopen on an active/open task → restored, status unchanged ───────

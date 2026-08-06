@@ -23,7 +23,18 @@ Your worktree is: {{.worktree_path}} (branch {{.branch}}) — confirm with `pwd`
 {{- end}}
 
 {{define "handoff_focus" -}}
-Stay focused on E-{{.spawned_id}} — one session, one task. {{if eq .task_type "brainstorm"}}As ideas resolve into concrete work, file them as new tasks (`--cleans-up E-{{.spawned_id}}`) or decisions (`endless decision add`) rather than building inline.{{else}}File unrelated discoveries as new tasks (`--cleans-up E-{{.spawned_id}}`) and confirm before implementing them — don't fix them inline.{{end}}
+Stay focused on E-{{.spawned_id}} — one session, one task. {{if eq .task_type "brainstorm"}}As ideas resolve into concrete work, file them as new tasks (`--cleans-up E-{{.spawned_id}}`) or decisions (`endless decision add`) rather than building inline.
+   Filing more than one? Check whether they share a root cause — file the
+   cause, not each symptom.{{else}}For anything you discover along the way:
+   - Could it reasonably be done now, inside the work already underway? Do it —
+     note it in the commit message, and add a `discovery` note to
+     `endless task report`.
+   - Is it a bug in work THIS session landed? Reopen that task
+     (`endless task update E-NNN --status revisit --db main`) and fix it there.
+   - Otherwise file it (`--cleans-up E-{{.spawned_id}}`) and confirm before
+     implementing.
+   - Filing more than one? Check whether they share a root cause — file the
+     cause, not each symptom.{{end}}
 {{- end}}
 
 {{define "handoff_deliverable" -}}

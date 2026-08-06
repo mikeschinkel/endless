@@ -2180,6 +2180,146 @@ def add_item(
     return item_id
 
 
+# ── E-1889: file-time hints ─────────────────────────────────────────────────
+#
+# Three advisories printed after a `task add` succeeds. Every one is a HINT and
+# never a refusal: sometimes a genuinely separate task IS the right call, and
+# telling the two apart needs judgment the CLI does not have. Their job is to
+# put the relevant fact in front of whoever is filing at the moment the choice
+# is made — not to make the choice for them.
+#
+# They run after the row exists and are collectively best-effort, so a hint's
+# own query can never cost the caller the add it just made.
+
+# How recently the current session must have landed a task for the reopen hint
+# to fire. A day out, "you broke what you just shipped" is still the likeliest
+# reading of a `--cleans-up` pointed at it; much beyond that it is not.
+_HINT_LANDED_WINDOW_HOURS = 24
+
+
+def _hint_recently_landed(
+    cleans_up_ids: tuple[int, ...], session_id: int | None,
+) -> list[str]:
+    """`--cleans-up E-X` where THIS session landed E-X inside the window.
+
+    That shape is the reflex this task exists to interrupt: a bug in work the
+    session just landed is that task done wrong, not a peer beside it. Scoped
+    to the session's own landings on purpose — another session's landed work
+    is not something this session can claim to have broken.
+    """
+    if not cleans_up_ids or session_id is None:
+        return []
+    lines: list[str] = []
+    for tid in cleans_up_ids:
+        rows = db.query(
+            "SELECT CAST((julianday('now') - julianday(landed_at)) * 24 AS INTEGER) "
+            "AS hours_ago FROM task_landings "
+            "WHERE task_id = ? AND session_id = ? "
+            "AND julianday('now') - julianday(landed_at) <= ? "
+            "ORDER BY landed_at DESC LIMIT 1",
+            (tid, session_id, _HINT_LANDED_WINDOW_HOURS / 24.0),
+        )
+        if not rows:
+            continue
+        hours = rows[0]["hours_ago"] or 0
+        lines.append(
+            f"{task_id_display(tid)} was landed by this session {hours}h ago — "
+            f"consider `endless task update {task_id_display(tid)} --status "
+            f"revisit` and fixing it there."
+        )
+    return lines
+
+
+def _hint_backlog_pressure(item_id: int) -> list[str]:
+    """How many open tasks the project now carries.
+
+    A filed task is a standing claim on attention: it is read, re-read, and
+    triaged past on every pass, worked or not. That cost is invisible at the
+    moment of filing unless something states it, so state it.
+    """
+    row = db.query(
+        "SELECT t.project_id AS pid, p.name AS name FROM tasks t "
+        "JOIN projects p ON p.id = t.project_id WHERE t.id = ?",
+        (item_id,),
+    )
+    if not row:
+        return []
+    count = db.scalar(
+        "SELECT count(*) FROM tasks WHERE project_id = ? "
+        "AND status IN ('untriaged', 'unplanned')",
+        (row[0]["pid"],),
+    ) or 0
+    return [
+        f"{row[0]['name']} now carries {count} open task"
+        f"{'' if count == 1 else 's'} (untriaged/unplanned). Each one is read "
+        f"and triaged past on every pass through the backlog."
+    ]
+
+
+def _hint_same_session_root_cause(
+    item_id: int, session_id: int | None,
+) -> list[str]:
+    """Other tasks this session has already filed, and the root-cause question.
+
+    This is the check that would have caught E-1888/E-1891 — two tasks filed
+    in one session that turned out to be a single defect. Deliberately NOT the
+    same check as backlog-wide semantic duplication (E-1739): those two were
+    different files, different symptoms, not semantically similar. Same-session
+    *common cause* and backlog-wide *similarity* are independent questions.
+    """
+    if session_id is None:
+        return []
+    rows = db.query(
+        "SELECT st.task_id AS id, COALESCE(t.title, t.description) AS title "
+        "FROM session_tasks st "
+        "JOIN session_task_relations r ON r.id = st.relation_id "
+        "JOIN tasks t ON t.id = st.task_id "
+        "WHERE st.session_id = ? AND r.slug = 'surfaced' AND st.task_id != ? "
+        "ORDER BY st.task_id",
+        (session_id, item_id),
+    )
+    if not rows:
+        return []
+    lines = [
+        f"This session has already filed {len(rows)} task"
+        f"{'' if len(rows) == 1 else 's'}:"
+    ]
+    lines += [
+        f"  {task_id_display(r['id'])}  {r['title'] or ''}".rstrip()
+        for r in rows
+    ]
+    lines.append(
+        "Does the one you just filed share a root cause with any of them? "
+        "File the cause, not each symptom."
+    )
+    return lines
+
+
+def print_add_hints(item_id: int, cleans_up_ids: tuple[int, ...] = ()) -> None:
+    """Print the post-`task add` advisories (E-1889).
+
+    Called by the CLI after the task and its relations exist. Never raises:
+    the add has already succeeded, and no advisory is worth failing it for.
+    """
+    try:
+        session_id = _current_endless_session_id()
+        # Each recently-landed line stands alone (one per --cleans-up target);
+        # the other two hints are one block each.
+        blocks = [[ln] for ln in _hint_recently_landed(cleans_up_ids, session_id)]
+        blocks.append(_hint_backlog_pressure(item_id))
+        blocks.append(_hint_same_session_root_cause(item_id, session_id))
+    except Exception:
+        return
+    blocks = [b for b in blocks if b]
+    if not blocks:
+        return
+    bullet = click.style("▸", fg="yellow")
+    click.echo("")
+    for block in blocks:
+        click.echo(f"{bullet} {block[0]}")
+        for extra in block[1:]:
+            click.echo(f"  {extra}")
+
 
 def import_json(
     data: list[dict],
@@ -4002,7 +4142,7 @@ def pause_item() -> None:
 
 
 def _reopen_task_core(item_id: int) -> tuple[str, str, bool]:
-    """Reopen a terminal-status task back to `ready` or `unplanned`.
+    """Reopen a terminal-status task back to `revisit`.
 
     Shared core for the `task reopen` verb and `task spawn --reopen` flag.
     Validates eligibility, releases any lingering session→task binding,
@@ -4038,8 +4178,19 @@ def _reopen_task_core(item_id: int) -> tuple[str, str, bool]:
             f"a terminal status ({', '.join(sorted(_REOPENABLE_TERMINAL_STATUSES))})."
         )
 
+    # E-1889: reopen always lands `revisit`, whatever the plan text says.
+    # A reopened task is by definition work whose prior judgment no longer
+    # holds — either the plan was wrong or what shipped under it was — and
+    # `revisit` is the status that means exactly that. Routing to `ready` on
+    # text-present would have re-asserted a human approval nobody re-granted;
+    # routing to `unplanned` on text-absent would have claimed the task was
+    # never planned. The other two reopen paths (`session resume --reopen`,
+    # E-1801) already landed `revisit`; this closes the divergence.
+    #
+    # `text_present` is still returned: callers render it as the message
+    # suffix, which is the one place plan-vs-no-plan is still worth saying.
     text_present = bool((row[0]["text"] or "").strip())
-    new_status = "ready" if text_present else "unplanned"
+    new_status = "revisit"
 
     _, proj_name = _resolve_project(None)
 
@@ -4083,7 +4234,7 @@ def _reopen_task_core(item_id: int) -> tuple[str, str, bool]:
 
 
 def reopen_item(item_id: int) -> None:
-    """Flip a terminal-status task back to actionable state.
+    """Flip a terminal-status task back to `revisit`.
 
     Standalone verb: no worktree side effects, no session binding. Caller
     decides next step (spawn, claim, or hand-back). For spawn-with-reopen
@@ -5306,9 +5457,9 @@ def spawn_plan(item_id: int, project_name: str | None = None,
     flip). See E-1274.
 
     `reopen=True` (E-1555) reopens an `assumed`/`confirmed`/`completed`
-    target as a pre-step (status → `ready`/`unplanned` based on text
-    presence) before proceeding with spawn. Errors on non-terminal or
-    decision-bearing (`declined`/`obsolete`) statuses.
+    target as a pre-step (status → `revisit`, per E-1889) before proceeding
+    with spawn. Errors on non-terminal or decision-bearing
+    (`declined`/`obsolete`) statuses.
 
     The foreground path launches Claude as the tmux window's *command* via the
     `endless-go spawn-window` launcher (E-1705): the handoff is delivered as
@@ -5344,7 +5495,7 @@ def spawn_plan(item_id: int, project_name: str | None = None,
     if reopen and force:
         raise click.ClickException(
             "--reopen and --force are mutually exclusive: --reopen sets "
-            "status to ready/unplanned (handoff intent), --force demotes "
+            "status to revisit (handoff intent), --force demotes "
             "to underway (self-pickup intent). Pick one."
         )
 
@@ -5489,11 +5640,11 @@ def spawn_plan(item_id: int, project_name: str | None = None,
             "last_status_snapshot": decision["last_status_snapshot"],
         }
 
-        # Reopen pre-step: flip terminal → ready/unplanned, release any
-        # lingering session binding, emit audit event.
+        # Reopen pre-step: flip terminal → revisit, release any lingering
+        # session binding, emit audit event.
         _reopen_task_core(item_id)
         # _perform_claim_work below sees the post-reopen status and
-        # promotes ready/unplanned → underway on its own.
+        # promotes revisit → underway on its own.
         current_status = db.query(
             "SELECT status FROM tasks WHERE id = ?", (item_id,),
         )[0]["status"]

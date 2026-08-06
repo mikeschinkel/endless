@@ -139,8 +139,12 @@ func TestBindSessionToTask_EmptyPaneDoesNotStompProcess(t *testing.T) {
 }
 
 // TestStartWorkSession_PromotesEligibleStatus pins the underway
-// transition: tasks in unplanned/ready/blocked flip to underway as
-// part of the defense-in-depth mirror of claim_item events.
+// transition: tasks in untriaged/unplanned/ready/blocked/revisit flip to
+// underway as part of the defense-in-depth mirror of claim_item events.
+//
+// `revisit` is in the set per E-1889: every reopen route now lands there, so
+// without it `task spawn --reopen` would bind a session to a task that still
+// reads as not-started.
 func TestStartWorkSession_PromotesEligibleStatus(t *testing.T) {
 	db := withTestDB(t)
 	seedProject(t, db, 1, "proj-test-1", "/tmp/proj-test-1")
@@ -151,6 +155,8 @@ func TestStartWorkSession_PromotesEligibleStatus(t *testing.T) {
 		{1, "unplanned"},
 		{2, "ready"},
 		{3, "blocked"},
+		{4, "untriaged"},
+		{5, "revisit"},
 	}
 	for _, c := range cases {
 		seedTask(t, db, c.taskID, 1, "task", c.status)

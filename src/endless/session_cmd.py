@@ -162,14 +162,25 @@ def _require_claude() -> str:
 
 
 # E-1801: `session resume --reopen` transitions the task's status as a function
-# of its current status. Done tasks (verified/assumed/completed) and rejected
-# tasks (declined/obsolete) flip to `revisit` — reopening resumes re-evaluation.
-# Still-active (underway/unverified) and still-open (untriaged/unplanned/
-# submitted/ready/revisit) tasks keep their status; the worktree is just
-# restored under them.
+# of its current status. Done tasks (confirmed/assumed/completed) flip to
+# `revisit` — reopening resumes re-evaluation. Still-active (underway/
+# unverified) and still-open (untriaged/unplanned/submitted/ready/revisit)
+# tasks keep their status; the worktree is just restored under them.
+#
+# E-1889 narrowed this to task_cmd's `_REOPENABLE_TERMINAL_STATUSES`.
+# `declined`/`obsolete` used to be in the set, which made `--reopen` the one
+# path that silently revived a deliberate decision not to do the work — the
+# other two reopen routes have always refused them. Reviving one is now an
+# explicit act (`task update --status revisit`), and `_resolve_resume` refuses
+# loudly with that route named.
 _REOPEN_TO_REVISIT: frozenset[str] = frozenset({
-    "confirmed", "assumed", "completed", "declined", "obsolete",
+    "confirmed", "assumed", "completed",
 })
+
+# Statuses `--reopen` refuses outright: a decision was made not to do the work,
+# so resuming into it must be a deliberate act rather than a side effect of
+# recovering a worktree.
+_REOPEN_REFUSED: frozenset[str] = frozenset({"declined", "obsolete"})
 
 
 def _resolve_resume(
@@ -203,6 +214,21 @@ def _resolve_resume(
     eid = target.get("endless_id")
     task = target.get("active_task_id")
     label = f"E-{task}" if task else f"session {eid}"
+
+    # E-1889: refuse `--reopen` on a decision-bearing status before anything
+    # else. Checked here rather than in `_recover_dropped_worktree` so the
+    # refusal is a property of the flag, not of whether the worktree happens
+    # to survive. Loud-failure-with-the-route convention, same as the verb,
+    # maybe-parent, and db gates.
+    task_status = target.get("task_status") or ""
+    if intent == "reopen" and task_status in _REOPEN_REFUSED:
+        raise click.ClickException(
+            f"E-{task} is '{task_status}' — a deliberate decision, not "
+            f"dormant work.\n"
+            f"Reviving it is an explicit act:\n"
+            f"    endless task update E-{task} --status revisit\n"
+            f"Then resume without --reopen."
+        )
 
     if not uuid:
         raise click.ClickException(

@@ -19,7 +19,8 @@
 #      section), and positioned before the `worktree land` command block.
 #      Plus E-1885, folded into this branch: that section's step 4 no longer
 #      claims land removes the worktree (it doesn't; a reaper does, later).
-#   4. Rule 3 — file-don't-fix for drive-by discoveries, with `--cleans-up`.
+#   4. Rule 3 — the four-case test for drive-by discoveries (E-1889 replaced
+#      this rule's flat "file it; don't fix it" default), with `--cleans-up`.
 #   5. Rule 4 — `FULL STATUS` licenses one response, not a sticky mode.
 #   6. Rule 5 — lean toward FEWER tasks, with the cost rationale attached.
 #   7. Doc/source sync: the wording each rule documents still matches the
@@ -156,13 +157,20 @@ assert_in "drop section carries the ask-first rule" "${DROP_SECTION}" "ask-first
 assert_file "index.md's land line requires the user's go-ahead" \
     "and your user has told you to land it" "${INDEX}"
 
-# ── 4. rule 3: file drive-bys, don't fix them ───────────────────────────────
-section "4. File-don't-fix for drive-by discoveries"
-FILING_SECTION=$(sect "${TASKS}" '^### Filing work you discover mid-task' '^### Lean toward FEWER tasks$')
-[[ -n "${FILING_SECTION}" ]] || fail "tasks.md has a filing-discovered-work section" "heading not found"
+# ── 4. rule 3: what to do with a drive-by discovery ─────────────────────────
+# E-1889 replaced the flat "file it; don't fix it" default with a four-case
+# test (do-it-now / reopen-your-own-landed-work / file / share-a-root-cause).
+# The diff-cost and blocked-anyway clauses survive as the bounds on case 1, so
+# they are still asserted here.
+section "4. Four-case test for drive-by discoveries"
+FILING_SECTION=$(sect "${TASKS}" '^### Work you discover mid-task' '^### Lean toward FEWER tasks$')
+[[ -n "${FILING_SECTION}" ]] || fail "tasks.md has a discovered-work section" "heading not found"
 
-assert_in "states the rule"                "${FILING_SECTION}" "File it; don't fix it."
+assert_in "denies that filing is the default" "${FILING_SECTION}" "not the default"
+assert_in "case 1 — do it inside the work underway" "${FILING_SECTION}" "inside the work already underway"
+assert_in "case 2 — reopen your own landed work" "${FILING_SECTION}" "--status revisit"
 assert_in "gives the --cleans-up command"  "${FILING_SECTION}" "--cleans-up <current_id>"
+assert_in "case 4 — file the cause, not each symptom" "${FILING_SECTION}" "file the cause, not each symptom"
 assert_in "explains the diff cost"         "${FILING_SECTION}" "inflates the diff"
 assert_in "names the blocked-anyway exception" "${FILING_SECTION}" "cannot complete the task without"
 
@@ -229,7 +237,8 @@ index_out=$(uv run endless guide 2>/dev/null)              || fail "endless guid
 
 assert_in "renders the commit-message form"   "${orch_out}"  '`E-<id>: <verb-first summary>`'
 assert_in "renders the ask-before-landing rule" "${orch_out}" "without asking your user first"
-assert_in "renders file-don't-fix"            "${tasks_out}" "File it; don't fix it."
+assert_in "renders the four-case discovery test" "${tasks_out}" \
+    "Filing is one of four answers, not the default."
 assert_in "renders the FULL STATUS rule"      "${tasks_out}" "licenses **one** response"
 assert_in "renders lean-toward-fewer-tasks"   "${tasks_out}" "prefer **one** task over several"
 assert_in "renders the happy path's ask-first land" "${index_out}" \
@@ -261,7 +270,7 @@ if problems:
 expected = {
     "commit message convention": "orchestration",
     "landing is the user's call (ask first)": "orchestration",
-    "filing discovered work (file it, don't fix it)": "tasks",
+    "work you discover mid-task (do it, reopen, or file it)": "tasks",
     "lean toward fewer tasks": "tasks",
     "FULL STATUS": "tasks",
 }

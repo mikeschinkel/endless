@@ -50,9 +50,9 @@ topic: landing is the user's call (ask first)
 section: orchestration
 covers: Never run worktree land or drop on your own initiative - ask every time.
 
-topic: filing discovered work (file it, don't fix it)
+topic: work you discover mid-task (do it, reopen, or file it)
 section: tasks
-covers: File a drive-by discovery as a task with --cleans-up instead of fixing it inline.
+covers: Four-case test for a drive-by discovery: do it now, reopen your own landed work, file it with --cleans-up, or fold symptoms into one root cause.
 
 topic: lean toward fewer tasks
 section: tasks

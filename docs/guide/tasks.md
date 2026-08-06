@@ -106,9 +106,21 @@ To record a decision prompted by a task, use `endless decision add "..." --about
 
 Use the task ID printed by `task add` **literally**. IDs advance globally across parallel sessions — never guess.
 
-### Filing work you discover mid-task (`--cleans-up`)
+### Work you discover mid-task (`--cleans-up`)
 
-**File it; don't fix it.** When you spot a bug, a rough edge, or an obvious cleanup while working a task, the default is a new task linked back to the one you're on — *not* an inline fix:
+**Filing is one of four answers, not the default.** When you spot a bug, a rough edge, or an obvious cleanup while working a task, run these tests in order — the handoff every spawned session receives carries the same four:
+
+**1. Could it reasonably be done now, inside the work already underway?** Then do it. Note it in the commit message, and add a `discovery` note so your user learns the scope grew without having to read the diff:
+
+```bash
+endless task report <id> --json '{"notes": [{"kind": "discovery", "text": "What you also fixed and why"}]}'
+```
+
+"Reasonably, inside the work already underway" is a real bound, not a license. A drive-by that is *unrelated* to what you are changing stays a separate task: fixing it inline inflates the diff your user reviews, couples two unrelated changes into one land, hides the change the task was actually about, and expands the blast radius of a revert.
+
+**2. Is it a bug in work THIS session landed?** Then reopen the task that shipped it — `endless task update E-<id> --status revisit` — and fix it there. A defect in your own landed work is that task done wrong, not a new task. See [Fix a bug in your own landed work](orchestration.md#fix-a-bug-in-your-own-landed-work).
+
+**3. Otherwise, file it** — a new task linked back to the one you're on, and confirm with your user before implementing it:
 
 ```bash
 endless task add "Verb-first title" --cleans-up <current_id> --description "What you saw and why it matters"
@@ -116,9 +128,9 @@ endless task add "Verb-first title" --cleans-up <current_id> --description "What
 
 `cleans_up` is the canonical follow-up link (see [When to use each relation type](#when-to-use-each-relation-type)), so the discovery stays attached to the work that surfaced it and shows up as a follow-up on the parent task's `task show`.
 
-Fixing a drive-by inline looks helpful and isn't: it inflates the diff your user reviews, couples two unrelated changes into one land, hides the change the task was actually about, and expands the blast radius of a revert. Stay on the task you claimed.
+**4. Filing more than one?** Check whether they share a root cause — file the cause, not each symptom. Two tasks that trace to one defect are one task; see [Lean toward FEWER tasks](#lean-toward-fewer-tasks) for why.
 
-The exception is a drive-by you genuinely cannot complete the task without — a broken build, a test that fails for an unrelated reason. Fix the minimum that unblocks you, and say so explicitly in your report so the user isn't surprised by it in the diff.
+One case overrides test 1's bound: a drive-by you genuinely cannot complete the task without — a broken build, a test that fails for an unrelated reason. Fix the minimum that unblocks you even when it is otherwise out of scope, and say so explicitly in your report so the user isn't surprised by it in the diff.
 
 ### Lean toward FEWER tasks
 
@@ -232,6 +244,8 @@ endless task assume <id> --outcome "..."             # believed complete, can't 
 endless task decline <id> --reason "..."             # active decision not to do
 endless task replace <id> --by <new_id>              # supersede with another task
 ```
+
+Found a bug in work you already landed? Reopen that task (`--status revisit`) instead of filing a new one — see [Fix a bug in your own landed work](orchestration.md#fix-a-bug-in-your-own-landed-work).
 
 ---
 

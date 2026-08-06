@@ -21,6 +21,9 @@ stateDiagram-v2
 
     unplanned --> revisit: needs re-evaluation
     underway --> revisit
+    confirmed --> revisit: shipped work found wrong
+    assumed --> revisit: shipped work found wrong
+    completed --> revisit: shipped work found wrong
     revisit --> submitted: re-submit
 
     submitted --> declined
