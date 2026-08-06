@@ -166,6 +166,11 @@ func main() {
 	// with --task (headless/tests) it deliberately reads the resolved sandbox
 	// context instead, so the decision lives inside sessionstatuscmd.Run (E-1685).
 
+	// Let the worktree reaper clean up each reaped worktree's sandbox (E-1904).
+	// Wired here because sandboxcmd imports monitor, so monitor cannot call into
+	// it directly. Stored, not called — free in a process that never reaps.
+	monitor.ReapSandbox = sandboxcmd.ReapSandboxForWorktree
+
 	switch sub {
 	case "event":
 		eventcmd.Run(rest)

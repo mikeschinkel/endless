@@ -78,11 +78,15 @@ func TestProvisionCollision(t *testing.T) {
 }
 
 // TestClassify verifies the live/in-use/orphaned label semantics.
+//
+// A nil guard is the "environment could not be sampled" fallback, under which
+// worktree-bound modes keep their historical unconditional stateInUse.
 func TestClassify(t *testing.T) {
 	cases := []struct {
-		name string
-		meta SandboxMeta
-		want sandboxState
+		name  string
+		meta  SandboxMeta
+		guard *ReapGuard
+		want  sandboxState
 	}{
 		{
 			name: "keep_alive",
@@ -93,6 +97,26 @@ func TestClassify(t *testing.T) {
 			name: "keep_dead_pid",
 			meta: SandboxMeta{Mode: modeKeep, CreatorPID: 1},
 			want: stateInUse,
+		},
+		{
+			// The E-1904 defect: a persistent sandbox whose worktree is long
+			// gone used to report in-use forever, so prune could never see it.
+			name:  "persistent_unprotected_is_orphaned",
+			meta:  SandboxMeta{Mode: modePersistent, Name: "e-1", CreatorPID: 1},
+			guard: emptyGuard(t),
+			want:  stateOrphaned,
+		},
+		{
+			name:  "persistent_protected_by_tmux_window",
+			meta:  SandboxMeta{Mode: modePersistent, Name: "e-2", CreatorPID: 1},
+			guard: guardWithTmux(t, "e-2"),
+			want:  stateInUse,
+		},
+		{
+			name:  "persistent_protected_by_unmerged_branch",
+			meta:  SandboxMeta{Mode: modePersistent, Name: "e-3", CreatorPID: 1},
+			guard: guardWithUnmerged(t, "e-3"),
+			want:  stateInUse,
 		},
 		{
 			name: "ephemeral_alive",
@@ -108,7 +132,7 @@ func TestClassify(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := classify(tc.meta); got != tc.want {
+			if got := classify(tc.meta, tc.guard); got != tc.want {
 				t.Fatalf("classify: got %s, want %s", got, tc.want)
 			}
 		})

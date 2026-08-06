@@ -22,13 +22,24 @@ func pruneCmd(args []string) {
 		os.Exit(1)
 	}
 
-	entries, err := scanSandboxes()
+	// Unlike list, prune DELETES — so a guard it could not build is fatal.
+	// Pruning unguarded would fall back to "no protections known", which is
+	// exactly backwards for a destructive sweep.
+	guard, err := NewReapGuard(mainCheckoutRoot())
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "endless-sandbox prune: %v\n", err)
+		fmt.Fprintln(os.Stderr, "endless-sandbox prune: refusing to prune without a reap guard")
+		os.Exit(1)
+	}
+
+	entries, err := scanSandboxes(guard)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "endless-sandbox prune: %v\n", err)
 		os.Exit(1)
 	}
 
 	var matched []listEntry
+	var spared int
 	for _, e := range entries {
 		if e.State != stateOrphaned {
 			continue
@@ -36,11 +47,21 @@ func pruneCmd(args []string) {
 		if e.Age < *olderThan {
 			continue
 		}
+		// Re-check the guard at the point of deletion rather than trusting the
+		// state classify() computed. The two agree today, but a destructive
+		// sweep must not depend on that staying true.
+		protected, reason := guard.Protected(e.Meta.Name)
+		if protected {
+			fmt.Fprintf(os.Stderr, "endless-sandbox prune: sparing %s: %s\n", e.Meta.Name, reason)
+			spared++
+			continue
+		}
 		matched = append(matched, e)
 	}
 
 	if len(matched) == 0 {
-		fmt.Fprintf(os.Stderr, "endless-sandbox prune: no orphaned ephemeral sandboxes older than %s\n", *olderThan)
+		fmt.Fprintf(os.Stderr, "endless-sandbox prune: no orphaned sandboxes older than %s (%d spared by the reap guard)\n",
+			*olderThan, spared)
 		return
 	}
 

@@ -162,9 +162,21 @@ Do not call endless channel inbox unless prompted by a channel event or the user
 		sessionDone <- session.Wait()
 	}()
 
+	// Exit when the worktree this process was launched from is reaped. Neither
+	// arm below fires in that case, which is how channel processes survived
+	// their worktrees by weeks, pinning sandboxes open (E-1904). cwd is the
+	// worktree; a Getwd error just means no watchdog, i.e. the old behavior.
+	cwd, err := os.Getwd()
+	if err != nil {
+		log.Printf("worktree watchdog disabled: %v", err)
+	}
+	worktreeGone := watchWorktreeRemoval(cwd, worktreeWatchInterval)
+
 	select {
 	case <-sigCh:
 	case <-sessionDone:
+	case <-worktreeGone:
+		log.Printf("worktree %s removed; shutting down channel", cwd)
 	}
 
 	// Cleanup — errors intentionally ignored during shutdown; best-effort cleanup only

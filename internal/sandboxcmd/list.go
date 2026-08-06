@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"text/tabwriter"
 	"time"
 )
@@ -31,7 +32,17 @@ func listCmd(args []string) {
 		os.Exit(2)
 	}
 
-	entries, err := scanSandboxes()
+	// A guard failure is not fatal to a read-only listing: classify() falls
+	// back to reporting every worktree-bound sandbox as in-use, which is the
+	// conservative direction — it can only under-report orphans, never invite
+	// a reap of protected work.
+	guard, err := NewReapGuard(mainCheckoutRoot())
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "endless-sandbox list: %v\n", err)
+		guard = nil
+	}
+
+	entries, err := scanSandboxes(guard)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "endless-sandbox list: %v\n", err)
 		os.Exit(1)
@@ -46,7 +57,7 @@ func listCmd(args []string) {
 	w.Flush()
 }
 
-func scanSandboxes() ([]listEntry, error) {
+func scanSandboxes(guard *ReapGuard) ([]listEntry, error) {
 	dir := sandboxesDir()
 	dirEntries, err := os.ReadDir(dir)
 	if err != nil {
@@ -70,7 +81,7 @@ func scanSandboxes() ([]listEntry, error) {
 		size, _ := dirSize(sbDir)
 		out = append(out, listEntry{
 			Meta:  meta,
-			State: classify(meta),
+			State: classify(meta, guard),
 			Age:   now.Sub(meta.CreatedAt),
 			Size:  size,
 			Dir:   sbDir,
@@ -79,14 +90,59 @@ func scanSandboxes() ([]listEntry, error) {
 	return out, nil
 }
 
-func classify(meta SandboxMeta) sandboxState {
-	if meta.Mode == modeKeep || meta.Mode == modePersistent {
-		return stateInUse
+// classify reports a sandbox's state.
+//
+// Worktree-bound sandboxes (keep/persistent) used to return stateInUse
+// unconditionally, which made them permanently unreclaimable: prune only
+// removes stateOrphaned, so `endless-sandbox prune` could never touch one no
+// matter how long its worktree had been gone (E-1904). They now consult the
+// guard, and report orphaned once every protection condition is false.
+//
+// A nil guard means the environment could not be sampled. That falls back to
+// the old unconditional stateInUse — under-reporting orphans is recoverable,
+// reaping protected work is not.
+func classify(meta SandboxMeta, guard *ReapGuard) sandboxState {
+	var protected bool
+
+	state := stateOrphaned
+
+	if meta.Mode != modeKeep && meta.Mode != modePersistent {
+		if isAlive(meta.CreatorPID) {
+			state = stateLive
+		}
+		goto end
 	}
-	if isAlive(meta.CreatorPID) {
-		return stateLive
+
+	if guard == nil {
+		state = stateInUse
+		goto end
 	}
-	return stateOrphaned
+
+	protected, _ = guard.Protected(meta.Name)
+	if protected {
+		state = stateInUse
+	}
+
+end:
+	return state
+}
+
+// mainCheckoutRoot resolves the main checkout, which is where worktrees and
+// branches are enumerated from. `--git-common-dir` points at the shared .git
+// even when cwd is inside a linked worktree (whose own .git is a pointer file),
+// so this returns the main checkout from anywhere in the repo.
+//
+// Returns "" when cwd is not in a git repo; NewReapGuard then fails, and every
+// caller falls back to its own conservative default.
+func mainCheckoutRoot() (root string) {
+	out, err := runGuardCmd("", "git", "rev-parse", "--path-format=absolute", "--git-common-dir")
+	if err != nil {
+		goto end
+	}
+	root = filepath.Dir(strings.TrimSpace(out))
+
+end:
+	return root
 }
 
 func dirSize(dir string) (int64, error) {

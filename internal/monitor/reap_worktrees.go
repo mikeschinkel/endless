@@ -56,6 +56,18 @@ func ParseWorktreeTTL(s string) (time.Duration, error) {
 // .endless/worktrees/e-NNNN — only the integer portion is the task ID.
 var worktreeDirRe = regexp.MustCompile(`^e-(\d+)$`)
 
+// ReapSandbox destroys the dev sandbox bound to a just-reaped worktree, named
+// by its directory basename (e-NNNN). Nil means no reaper is wired and sandbox
+// cleanup is skipped.
+//
+// A seam rather than a direct call because sandboxcmd imports this package, so
+// the dependency cannot run the other way. cmd/endless-go wires it to
+// sandboxcmd.ReapSandboxForWorktree at start-up; tests substitute a recorder.
+//
+// The implementation re-derives its own safety conditions — do NOT assume the
+// worktree checks above cover the sandbox (E-1904).
+var ReapSandbox func(worktreeName string) error
+
 // ReapStaleWorktrees removes worktree directories whose owning task has
 // at least one row in task_landings older than ttl AND has no live
 // process holding cwd inside the directory.
@@ -101,11 +113,27 @@ func ReapStaleWorktrees(projectRoot string, ttl time.Duration) error {
 			log.Printf("reap worktrees: %s: %v", displayPath(dir), err)
 			continue
 		}
-		if reaped {
-			log.Printf("reap worktrees: removed %s", displayPath(dir))
+		if !reaped {
+			continue
 		}
+		log.Printf("reap worktrees: removed %s", displayPath(dir))
+		reapBoundSandbox(e.Name())
 	}
 	return nil
+}
+
+// reapBoundSandbox destroys the sandbox bound to a reaped worktree, if a
+// reaper is wired. Failures are logged, never propagated: the worktree is
+// already gone, and a leftover sandbox must not make the sweep look failed.
+func reapBoundSandbox(worktreeName string) {
+	if ReapSandbox == nil {
+		return
+	}
+	err := ReapSandbox(worktreeName)
+	if err != nil {
+		log.Printf("reap worktrees: %s: %v", worktreeName, err)
+		return
+	}
 }
 
 // maybeReapWorktree applies the per-directory decision logic and
