@@ -218,9 +218,17 @@ layer_d() {
         report_fail "go build ./..." "exit 0" "$(printf '%s' "${output}" | tail -5)"
     fi
 
-    output=$(cd "${REPO_ROOT}" && go test ./... 2>&1); rc=$?
+    # Explicit -timeout because of a PRE-EXISTING flaw tracked as E-1908, not
+    # anything this task introduced: TestDestroyRefusesWithLiveWriter and
+    # TestDestroyForceOverridesLiveWriterCheck call t.Setenv("HOME", tmp) before
+    # shelling out to `go build`, which redirects GOCACHE into an empty temp dir
+    # and cold-rebuilds the whole dependency graph (sqlite included). Those three
+    # destroy tests measure ~205s of the sandboxcmd package's ~215s and can cross
+    # Go's default 10m package timeout on a loaded machine. Every test E-1904
+    # added runs in 0.00s. Drop this flag once E-1908 lands.
+    output=$(cd "${REPO_ROOT}" && go test -timeout 20m ./... 2>&1); rc=$?
     if [[ "${rc}" -eq 0 ]]; then
-        report_pass "go test ./..."
+        report_pass "go test ./... (-timeout 20m; see E-1908)"
     else
         report_fail "go test ./..." "exit 0" "$(printf '%s' "${output}" | grep -E '^(FAIL|---)' | head -5)"
     fi
