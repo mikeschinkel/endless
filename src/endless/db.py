@@ -31,6 +31,23 @@ def get_db() -> sqlite3.Connection:
     is_new = not config.DB_PATH.exists()
     _conn = sqlite3.connect(str(config.DB_PATH))
     _conn.row_factory = sqlite3.Row
+    # Decode TEXT leniently (E-1914). sqlite3's default text_factory raises
+    # OperationalError on a column holding invalid UTF-8, and it raises for the
+    # whole QUERY — one damaged byte anywhere in the result set takes down the
+    # command, naming a column the user did not ask about.
+    #
+    # SQLite does not validate what it stores, so a writer that truncated a
+    # string by BYTE length could leave a half-encoded codepoint behind. The
+    # known instance is sessions.summary, written by the recap generator removed
+    # in E-1906 — inert historical damage no current code can add to, but present
+    # in every long-lived DB and enough to crash `session list` and `session show`
+    # on the one row that has it.
+    #
+    # Applied at the connection, not per query, because the failure mode belongs
+    # to reading TEXT at all: fixing it per-column is whack-a-mole against data
+    # nothing can repair from here. U+FFFD marks the damage visibly instead of
+    # hiding it.
+    _conn.text_factory = lambda b: b.decode("utf-8", "replace")
     _conn.execute("PRAGMA journal_mode=WAL")
     _conn.execute("PRAGMA busy_timeout=5000")
     _conn.execute("PRAGMA foreign_keys=ON")

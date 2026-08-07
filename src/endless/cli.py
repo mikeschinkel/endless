@@ -885,7 +885,7 @@ def session_monitor(show_all, tree, show_hidden, only_hidden):
               type=click.Choice(["id", "project", "state", "count"]),
               help="Sort by column (default: state priority)")
 @click.option("--all", "show_all", is_flag=True,
-              help="Include hidden and empty sessions")
+              help="Include hidden, empty, and never-claimed-a-task sessions")
 @click.option("--hidden", "show_hidden", is_flag=True,
               help="Show only hidden sessions")
 @click.option("--empty", "show_empty", is_flag=True,
@@ -899,6 +899,8 @@ def session_list(project, all_projects, state, sort_by, show_all, show_hidden,
 
     One row per session: its id, a one-column state glyph (legend below the
     table), the task it is active on, its message count, and that task's title.
+    Sessions that never claimed a task have nothing to put in those last two
+    columns, so they are omitted until you pass --all.
 
     Scoped to the project enclosing cwd by default — sessions are machine-wide,
     and the usual question is what is happening HERE. --all-projects widens it

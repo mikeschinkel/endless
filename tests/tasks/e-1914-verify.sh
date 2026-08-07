@@ -148,10 +148,13 @@ setup_fixture() {
 
     # Two sessions on the SAME focal task — the setup the per-session guarantee
     # needs: both see $SHARED, and a hide in one must not move the other.
+    # 9004 never claimed a task: with Summary gone it has nothing to render in
+    # either of the two new columns, so it must be omitted until --all.
     E sql "INSERT INTO sessions (id, session_id, project_id, state, kind_id, active_task_id) VALUES
              ($S1, 'uuid-$S1', $probe_id, 'working',     1, $FOCAL),
              ($S2, 'uuid-$S2', $probe_id, 'needs_input', 1, $FOCAL),
-             (9003,'uuid-9003',$other_id,'idle',         1, 7004)" --write >/dev/null 2>&1
+             (9003,'uuid-9003',$other_id,'idle',         1, 7004),
+             (9004,'uuid-9004',$probe_id, 'idle',        1, NULL)" --write >/dev/null 2>&1
 
     # session_tasks: $SHARED touched by both sessions, $SOLO by $S1 only.
     E sql "INSERT INTO session_tasks (session_id, task_id, relation_id, created_at, updated_at) VALUES
@@ -163,9 +166,10 @@ setup_fixture() {
     E sql "INSERT INTO session_messages (session_id, role, content, created_at) VALUES
              ('uuid-$S1','user','hello','2026-08-07T00:00:00'),
              ('uuid-$S2','user','hello','2026-08-07T00:00:00'),
-             ('uuid-9003','user','hello','2026-08-07T00:00:00')" --write >/dev/null 2>&1
+             ('uuid-9003','user','hello','2026-08-07T00:00:00'),
+             ('uuid-9004','user','hello','2026-08-07T00:00:00')" --write >/dev/null 2>&1
 
-    [[ "$(Q "SELECT count(*) FROM sessions")" == "3" ]] || return 1
+    [[ "$(Q "SELECT count(*) FROM sessions")" == "4" ]] || return 1
     [[ "$(Q "SELECT count(*) FROM session_tasks")" == "3" ]] || return 1
     return 0
 }
@@ -465,10 +469,40 @@ test_session_list_render() {
     assert_contains "--json keeps the raw state (no glyph substitution)" '"state": "needs_input"' "$js"
 }
 
-# ─── section I: unit + regression suites ─────────────────────────────────────
+# ─── section I: task-less rows and undecodable legacy text ───────────────────
+
+test_taskless_and_bad_utf8() {
+    section "I. Task-less sessions are omitted until --all; bad UTF-8 doesn't crash"
+
+    # 9004 never claimed a task, so both new columns would be blank for it.
+    local default all
+    default="$(list_body "$(E session list --project probe 2>&1)")"
+    all="$(list_body "$(E session list --project probe --all 2>&1)")"
+    assert_eq "a session with no active task is omitted by default" \
+        "0" "$(printf '%s\n' "$default" | grep -c '^9004 ')"
+    assert_eq "...and --all reveals it" \
+        "1" "$(printf '%s\n' "$all" | grep -c '^9004 ')"
+    assert_eq "...while task-bearing sessions are unaffected" \
+        "1" "$(printf '%s\n' "$default" | grep -c "^$S1 ")"
+
+    # A byte-truncated string left behind by a long-removed writer (E-1906's
+    # recap generator) must not take the whole command down. CAST(x'..' AS TEXT)
+    # stores the half-encoded codepoint as TEXT, exactly as the damaged
+    # production row holds it.
+    E sql "UPDATE sessions SET summary = CAST(x'496ee2' AS TEXT) WHERE id = $S1" --write >/dev/null 2>&1
+    local out rc
+    out="$(E session list --project probe 2>&1)"; rc=$?
+    assert_eq "session list survives a row with invalid UTF-8" "0" "$rc"
+    assert_contains "...and still renders that row" "Focal goal task" "$out"
+    out="$(E session show "$S1" 2>&1)"; rc=$?
+    assert_eq "session show survives it too (the fix is connection-wide)" "0" "$rc"
+    E sql "UPDATE sessions SET summary = NULL WHERE id = $S1" --write >/dev/null 2>&1
+}
+
+# ─── section J: unit + regression suites ─────────────────────────────────────
 
 test_regression() {
-    section "I. Go + Python suites"
+    section "J. Go + Python suites"
     local out rc
 
     out=$(cd "$WT" && go test ./internal/sessionstatuscmd/ ./internal/monitor/ ./internal/schema/ 2>&1); rc=$?
@@ -510,6 +544,7 @@ main() {
     test_session_level_hiding_unchanged
     test_json
     test_session_list_render
+    test_taskless_and_bad_utf8
     test_regression
 
     [[ -n "$TMP" ]] && rm -rf "$TMP"

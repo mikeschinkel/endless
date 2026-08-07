@@ -699,6 +699,19 @@ def list_sessions(
         if not project_name:
             where += " AND s.project_id IS NOT NULL"
 
+        # A session that never claimed a task (E-1914). Once the discussion
+        # Summary column gave way to the active task's id and title, such a row
+        # renders as two blank cells — it can no longer say anything. This is not
+        # a rare edge either: on a long-lived DB they are the MAJORITY of the
+        # roster (384 of 750 at the time of writing), and all but 14 of those had
+        # never touched a task at all, so the listing was mostly empty rows.
+        #
+        # Omitted rather than dropped: --all reveals them, alongside the hidden
+        # and empty sessions it already reveals — same kind of noise, same
+        # switch. They stay fully addressable by id in the meantime (`session
+        # show`, `session goto`), so nothing becomes unreachable.
+        where += " AND s.active_task_id IS NOT NULL"
+
         if not show_empty:
             # Filter out empty sessions
             where += (

@@ -117,15 +117,36 @@ def test_needs_input_row_does_not_skew_the_table(one_project):
     assert len(title_offsets) == 1, f"Title column is ragged: {rows}"
 
 
-def test_session_without_an_active_task_renders_blank_cells(one_project):
+def test_session_without_an_active_task_is_omitted_by_default(one_project):
+    """Once Summary gave way to the task id + title, a session that never claimed
+    a task has nothing to put in either column — on a real DB that is most of the
+    roster. --all reveals them, as it already does for hidden and empty ones."""
     _session(551, 1, "idle", None)
+
+    default = _run("session", "list", "--project", "probe")
+    assert default.exit_code == 0, default.output
+    assert [r for r in _body(default.output) if r.startswith("551")] == []
+    assert [r for r in _body(default.output) if r.startswith("982")] != []
+
+    shown = _run("session", "list", "--project", "probe", "--all")
+    assert shown.exit_code == 0, shown.output
+    rows = [r for r in _body(shown.output) if r.startswith("551")]
+    assert len(rows) == 1
+    assert "E-" not in rows[0]
+
+
+def test_list_survives_a_row_with_invalid_utf8(one_project):
+    """A byte-truncated string left by a long-dead writer must not take down the
+    whole command. CAST(x'..' AS TEXT) stores the half-encoded codepoint as TEXT,
+    exactly as the damaged production row holds it."""
+    db.execute("UPDATE sessions SET summary = CAST(x'496ee2' AS TEXT) WHERE id = 982")
 
     result = _run("session", "list", "--project", "probe")
 
     assert result.exit_code == 0, result.output
-    rows = [r for r in _body(result.output) if r.startswith("551")]
-    assert len(rows) == 1
-    assert "E-" not in rows[0]
+    assert "Fix worktree bootstrap fallback" in result.output
+    # The damage is marked, not silently dropped.
+    assert db.query("SELECT summary FROM sessions WHERE id = 982")[0]["summary"] == "In�"
 
 
 # --- project scoping --------------------------------------------------------

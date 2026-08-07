@@ -3281,11 +3281,15 @@ def _resolve_session_id_with_prompt(
     from endless.session_cmd import list_sessions
     click.echo("There are multiple Claude sessions in this tmux window:")
     click.echo("")
-    # all_projects when unnamed: this is a disambiguation prompt, so it must list
-    # every candidate the resolver found rather than silently dropping the ones
-    # outside cwd's project — and it must not raise when cwd is not in a
-    # registered project, which E-1914's current-project default otherwise does.
-    list_sessions(project_name=project_name, all_projects=not project_name)
+    # This is a disambiguation prompt over a candidate set the resolver already
+    # settled, so the listing must show EVERY candidate — a filtered-out row the
+    # user is still allowed to type reads as a bug in the prompt. Hence both
+    # widenings (E-1914): all_projects when unnamed, so candidates outside cwd's
+    # project are not dropped (and so the current-project default cannot raise
+    # when cwd is not in a registered project), and show_all, so a candidate that
+    # is hidden, empty, or has not claimed a task still appears.
+    list_sessions(project_name=project_name, all_projects=not project_name,
+                  show_all=True)
     click.echo("")
     verb = prompt_verb or "associated with"
     question = f"Which session should this be {verb}? [ID]"
