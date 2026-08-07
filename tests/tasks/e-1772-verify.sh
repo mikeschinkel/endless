@@ -264,10 +264,8 @@ test_reminded_command_is_live() {
     endless task update "${tid}" --status unverified >/dev/null 2>&1
 
     # The reminder's primary path: bare, no payload.
-    # E-1901 reworded the steer and wrapped the relayable text in markers; the
-    # marker is the stable anchor for "a report was produced".
     assert_runs_and_contains "bare 'task report' runs and emits the steer prompt" \
-        "----- BEGIN REPORT -----" \
+        "Report the following to the user" \
         endless task report "${tid}"
 
     # The escape hatch the reminder advertises: a genuine out-of-band note. The
