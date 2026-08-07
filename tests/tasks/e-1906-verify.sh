@@ -203,13 +203,32 @@ check_regression_front() {
 #      its ALTERs are gone, event_test.go says why the ValidKinds count dropped
 #      by one. Deleting those comments would make the change less legible, not
 #      more complete. Only non-comment lines can fail this check.
-#   b. Whole files that must name what they remove or reproduce:
+#   b. Fixture DDL that reproduces a historical `sessions` shape. Any verify
+#      script testing a migration builds the pre-change table inline (see
+#      e-1568-verify.sh, e-1905-verify.sh, and check 4 below), so a line that
+#      DECLARES one of these columns — `needs_recap INTEGER NOT NULL ...` — is
+#      history, not a survivor. A line that READS or WRITES the column
+#      (`SET needs_recap = 1`, `WHERE needs_recap = 1`) is live code and still
+#      fails. Matching on line SHAPE rather than file name is deliberate: an
+#      earlier draft excluded fixture files by name and broke the moment
+#      e-1905-verify.sh landed carrying a pre-E-1906 sessions table.
+#   c. Whole files that must name what they remove or reproduce:
 #      - .endless/   the ledger, plans and outcomes are an append-only record;
 #      - e-1568-*    that change file rebuilds a pre-E-1568 sessions table which
-#                    HAD these columns, and its verify script builds that shape
-#                    inline — editing either would falsify history;
+#                    HAD these columns, in a column list rather than a DDL
+#                    declaration, so shape alone does not exempt it;
 #      - e-1906-*    this change's own `ALTER TABLE ... DROP COLUMN` statements
 #                    and this script's own assertion list.
+# live_hits IDENT — every reference to IDENT that is neither a comment nor a
+# fixture DDL column declaration. See the two filters documented above.
+live_hits() {
+    grep -rnI --exclude-dir=vendor --exclude-dir=.git --exclude-dir=.endless \
+        --exclude='e-1568-*' --exclude='e-1906-*' \
+        -e "$1" cmd internal src tests docs justfile 2>/dev/null \
+    | grep -vE ':[0-9]+:[[:space:]]*(#|--|//)' \
+    | grep -vE ':[0-9]+:[[:space:]]*(needs_recap|summary_seq)[[:space:]]+(INTEGER|TEXT)[[:space:]]'
+}
+
 check_no_references() {
     section "1 — no live-code reference survives in the source tree"
 
@@ -217,10 +236,7 @@ check_no_references() {
     for ident in needs_recap NeedsRecap FlagNeedsRecap GetSessionsNeedingRecap \
                  RecapSession RecapOneStale summary_seq \
                  KindSessionRecapped SessionRecappedPayload session.recapped; do
-        hits=$(grep -rnI --exclude-dir=vendor --exclude-dir=.git --exclude-dir=.endless \
-                   --exclude='e-1568-*' --exclude='e-1906-*' \
-                   -e "${ident}" cmd internal src tests docs justfile 2>/dev/null \
-               | grep -vE ':[0-9]+:[[:space:]]*(#|--|//)')
+        hits=$(live_hits "${ident}")
         if [[ -z "${hits}" ]]; then
             report_pass "no live \`${ident}\` anywhere in the source tree"
         else
@@ -229,17 +245,22 @@ check_no_references() {
         fi
     done
 
-    # The filter above must not be a blanket amnesty: prove it still catches a
-    # real survivor by planting one in a throwaway file inside the tree.
-    local canary="internal/monitor/e1906_canary_check.go"
-    printf 'package monitor\n\nvar e1906Canary = "needs_recap"\n' > "${canary}"
-    hits=$(grep -rnI --exclude-dir=vendor --exclude-dir=.git --exclude-dir=.endless \
-               --exclude='e-1568-*' --exclude='e-1906-*' \
-               -e needs_recap cmd internal src tests docs justfile 2>/dev/null \
-           | grep -vE ':[0-9]+:[[:space:]]*(#|--|//)')
-    rm -f "${canary}"
-    assert_contains "the reference check still detects a planted survivor" \
+    # Neither filter may become a blanket amnesty. Two canaries, planted in the
+    # tree and removed immediately, prove each one is still narrow:
+    #   - a Go usage line (not a comment, not a DDL declaration) must be caught;
+    #   - a SQL read of the column must be caught DESPITE living in a .sh
+    #     fixture file, which is exactly what the DDL filter must not excuse.
+    local go_canary="internal/monitor/e1906_canary_check.go"
+    local sh_canary="tests/tasks/e1906-canary-check.sh"
+    printf 'package monitor\n\nvar e1906Canary = "needs_recap"\n' > "${go_canary}"
+    printf '#!/bin/sh\nsqlite3 db "SELECT 1 FROM sessions WHERE needs_recap = 1;"\n' > "${sh_canary}"
+    hits=$(live_hits needs_recap)
+    rm -f "${go_canary}" "${sh_canary}"
+
+    assert_contains "a planted Go usage is still caught" \
         "${hits}" "e1906_canary_check.go"
+    assert_contains "a planted SQL read is still caught inside a fixture file" \
+        "${hits}" "e1906-canary-check.sh"
 
     # The recap generator was the only caller of the internal `claude -p`
     # helper besides the verb-check; the helper itself must survive.
