@@ -63,7 +63,7 @@ func TestRenderFaultBadge_AppearsWhenIncidentsAreOpen(t *testing.T) {
 	})
 
 	var b strings.Builder
-	renderTo(&b, oneRow(), 698, hintClaimBind, 90, false)
+	renderTo(&b, oneRow(), 698, hintClaimBind, 90, false, hiddenOmit)
 	out := b.String()
 
 	// Max severity wins: one error outranks any number of warnings.
@@ -91,7 +91,7 @@ func TestRenderFaultBadge_SilentWhenNothingIsOpen(t *testing.T) {
 	bindFaultStore(t)
 
 	var b strings.Builder
-	renderTo(&b, oneRow(), 698, hintClaimBind, 90, false)
+	renderTo(&b, oneRow(), 698, hintClaimBind, 90, false, hiddenOmit)
 
 	if strings.Contains(b.String(), "endless errors show") {
 		t.Errorf("badge rendered with no open incidents:\n%s", b.String())
@@ -111,7 +111,7 @@ func TestRenderFaultBadge_SilentWhenClearedEvenThoughHistoryRemains(t *testing.T
 	}
 
 	var b strings.Builder
-	renderTo(&b, oneRow(), 698, hintClaimBind, 90, false)
+	renderTo(&b, oneRow(), 698, hintClaimBind, 90, false, hiddenOmit)
 
 	if strings.Contains(b.String(), "endless errors show") {
 		t.Errorf("badge still rendered after clearing:\n%s", b.String())
@@ -130,7 +130,7 @@ func TestRenderFaultBadge_AppearsOnTheEmptyView(t *testing.T) {
 	// A session with no rows at all still has to surface faults; otherwise the
 	// state in which a user is MOST likely to be idle is the one that hides them.
 	var b strings.Builder
-	renderTo(&b, nil, 0, hintClaimBind, 90, false)
+	renderTo(&b, nil, 0, hintClaimBind, 90, false, hiddenOmit)
 
 	if !strings.Contains(b.String(), "endless errors show") {
 		t.Errorf("badge missing from the empty view:\n%s", b.String())
@@ -147,13 +147,13 @@ func TestRenderFaultBadge_ColorizesOnlyWhenColorIsEnabled(t *testing.T) {
 	})
 
 	var plain strings.Builder
-	renderTo(&plain, oneRow(), 698, hintClaimBind, 90, false)
+	renderTo(&plain, oneRow(), 698, hintClaimBind, 90, false, hiddenOmit)
 	if strings.Contains(plain.String(), "\033[") {
 		t.Errorf("badge emitted ANSI escapes with color disabled:\n%q", plain.String())
 	}
 
 	var colored strings.Builder
-	renderTo(&colored, oneRow(), 698, hintClaimBind, 90, true)
+	renderTo(&colored, oneRow(), 698, hintClaimBind, 90, true, hiddenOmit)
 	if !strings.Contains(colored.String(), badgeError) {
 		t.Errorf("badge did not use the error background with color enabled:\n%q", colored.String())
 	}
@@ -166,7 +166,7 @@ func TestRenderFaultBadge_SurvivesAnUnboundFaultStore(t *testing.T) {
 	// annotates: with no fault store reachable the frame renders as normal,
 	// simply without a badge.
 	var b strings.Builder
-	renderTo(&b, oneRow(), 698, hintClaimBind, 90, false)
+	renderTo(&b, oneRow(), 698, hintClaimBind, 90, false, hiddenOmit)
 
 	if !strings.Contains(b.String(), "E-698") {
 		t.Errorf("frame did not render with an unbound fault store:\n%s", b.String())

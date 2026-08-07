@@ -127,6 +127,37 @@ var actionMeta = [...]struct{ icon, label string }{
 func (a action) icon() string  { return actionMeta[a].icon }
 func (a action) label() string { return actionMeta[a].label }
 
+// hiddenMode selects how the VIEWING session's hidden task rows (E-1914) are
+// treated by one render. Hiding is per (session, task) and display-scoped: it
+// changes nothing about the task itself, only whether this session's listing
+// draws it.
+type hiddenMode int
+
+const (
+	// hiddenOmit is the default: hidden rows are dropped, and a footer reports
+	// how many. The footer is REQUIRED whenever the count is non-zero — a hidden
+	// task must never disappear without a trace.
+	hiddenOmit hiddenMode = iota
+	// hiddenShow (--show-hidden) renders everything, hidden rows marked with ⊘.
+	hiddenShow
+	// hiddenOnly (--only-hidden) renders the hidden set alone. This is the
+	// discovery path for unhiding without already knowing the ids.
+	hiddenOnly
+)
+
+// hiddenGlyph marks a hidden row under --show-hidden / --only-hidden. ⊘ (U+2298
+// CIRCLED DIVISION SLASH) reads as "suppressed" and measures single-width
+// (asserted in TestHiddenGlyphWidth), so the row prefix stays aligned. It occupies
+// its own conditional column — present only when a rendered row is hidden — the
+// same width-on-demand idiom blockField uses.
+const hiddenGlyph = "⊘"
+
+// hiddenFooter is the always-printed trace for suppressed rows in the default
+// mode. It names the flag that reveals them so the listing is self-documenting.
+func hiddenFooter(n int) string {
+	return fmt.Sprintf("… %d hidden (--show-hidden)", n)
+}
+
 // monitorInterval is the redraw cadence for the live monitor, matching the bash
 // prototype's watch loop.
 const monitorInterval = 2 * time.Second
@@ -186,9 +217,27 @@ func Run(args []string) {
 	cols := fs.Int("cols", 0, "terminal width override (0 = auto-detect)")
 	taskFlag := fs.Int64("task", 0, "explicit task id (headless: bypasses tmux/session resolution and reads the resolved DB context — the self-detected sandbox or --config-dir — instead of pinning the main DB; intended for tests)")
 	fromSession := fs.Int64("from-session", 0, "explicit spawning session id paired with --task (headless: drives the ↩ from row + --tree spawner annotation without tmux resolution; intended for tests)")
-	sessionFlag := fs.Int64("session", 0, "explicit emitting session id (headless: bypasses tmux resolution and lists that session's surfaced/revisited rows — the no-goal view — against the resolved DB context; intended for tests)")
+	sessionFlag := fs.Int64("session", 0, "explicit viewing session id (headless: bypasses tmux resolution; alone it lists that session's surfaced/revisited rows — the no-goal view — and alongside --task it names the session whose hides apply; intended for tests)")
+	showHidden := fs.Bool("show-hidden", false, "render this session's hidden task rows too, marked "+hiddenGlyph)
+	onlyHidden := fs.Bool("only-hidden", false, "render ONLY this session's hidden task rows (the discovery path for unhiding)")
+	asJSON := fs.Bool("json", false, "emit the row set as JSON instead of the table; every row carries its hidden state")
 	if err := fs.Parse(args); err != nil {
 		os.Exit(2)
+	}
+
+	// Mutually exclusive by design, not by precedence: "show everything" and
+	// "show only the hidden subset" are contradictory requests, and silently
+	// picking one would hide the other's rows without saying so.
+	if *showHidden && *onlyHidden {
+		fmt.Fprintln(os.Stderr, "session-status: --show-hidden and --only-hidden are mutually exclusive")
+		os.Exit(2)
+	}
+	hm := hiddenOmit
+	switch {
+	case *onlyHidden:
+		hm = hiddenOnly
+	case *showHidden:
+		hm = hiddenShow
 	}
 
 	// nextAnchor produces the ids this view is pinned to (see anchor). The two
@@ -206,7 +255,16 @@ func Run(args []string) {
 		// script exercise the dependents row-set against a seeded sandbox DB.
 		// --from-session supplies the spawning session id the live path would read
 		// from @endless_spawned_by, so the ↩ from row stays testable headless.
-		fixed := anchor{focal: *taskFlag, parentSession: *fromSession, hint: hintClaimBind}
+		//
+		// --session, when paired with --task, names the VIEWING session — the one
+		// whose per-session hides apply (E-1914). It does not change the row set
+		// here: focal != 0 keeps gatherRows on the focal-anchored path.
+		fixed := anchor{
+			focal:           *taskFlag,
+			parentSession:   *fromSession,
+			emittingSession: *sessionFlag,
+			hint:            hintClaimBind,
+		}
 		nextAnchor = func() (anchor, error) { return fixed, nil }
 	} else if *sessionFlag > 0 {
 		// Headless no-goal mode (E-1802 verify harness): the caller names the
@@ -251,10 +309,33 @@ func Run(args []string) {
 		nextAnchor = func() (anchor, error) { return resolveAnchor(process) }
 	}
 
+	// --json is a DATA dump, not a view: it emits every row the query returned,
+	// each carrying its own hidden state, and leaves the include/exclude decision
+	// to the consumer. It therefore ignores --show-hidden/--only-hidden (which
+	// shape a rendering, not a row set) and wins over --tree and --monitor, whose
+	// output is a drawn frame. --all still applies — that filters the QUERY.
+	if *asJSON {
+		a, err := nextAnchor()
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "session-status:", err)
+			os.Exit(1)
+		}
+		if err := renderJSON(os.Stdout, a, *all); err != nil {
+			fmt.Fprintln(os.Stderr, "session-status:", err)
+			os.Exit(1)
+		}
+		return
+	}
+
 	// --tree is an IDs-only structural view: a single frame, no legend, no monitor
 	// loop. It always considers the full do/plan set, so --all/--cols don't apply.
 	// --tree wins over --monitor (the live loop only drives the table view), the
 	// same way it short-circuited the prototype's watch loop.
+	//
+	// Per-session hiding does not apply here either, and that is deliberate: the
+	// tree is the implementation-order DAG, not a listing. Dropping a node from it
+	// because someone found the row noisy would silently misstate what has to
+	// happen before what — a structural claim, not a display preference.
 	if *tree {
 		a, err := nextAnchor()
 		if err != nil {
@@ -284,7 +365,7 @@ func Run(args []string) {
 	// before its session registers, so a resolution failure — or an empty result —
 	// at this point must not be final.
 	if *monitorMode && term.IsTerminal(int(os.Stdout.Fd())) {
-		monitorLoop(newAnchorTracker(nextAnchor), *all, *cols, color)
+		monitorLoop(newAnchorTracker(nextAnchor), *all, *cols, color, hm)
 		return
 	}
 
@@ -297,7 +378,7 @@ func Run(args []string) {
 	}
 	// The row count is the live monitor's pane-fit input (E-1851); a one-shot
 	// render has no pane to fit, so it is discarded here.
-	if _, err := renderSnapshot(os.Stdout, a.focal, a.parentSession, a.emittingSession, a.hint, *all, detectCols(*cols), color); err != nil {
+	if _, err := renderSnapshot(os.Stdout, a, *all, detectCols(*cols), color, hm); err != nil {
 		fmt.Fprintln(os.Stderr, "session-status:", err)
 		os.Exit(1)
 	}
@@ -311,9 +392,11 @@ func Run(args []string) {
 //   - parentSession — from the @endless_spawned_by window option, which
 //     spawn-launch writes immediately before its syscall.Exec, i.e. the same
 //     instant the session row does not yet exist.
-//   - emittingSession — consulted only while focal == 0, so freezing it at a
-//     stale 0 would leave the no-goal view (E-1802) permanently empty for
-//     exactly the sessions it exists to serve.
+//   - emittingSession — this pane's OWN session, wearing two hats. As the no-goal
+//     anchor (E-1802) it is consulted only while focal == 0, so freezing it at a
+//     stale 0 would leave that view permanently empty for exactly the sessions it
+//     exists to serve. As the VIEWER (E-1914) it is consulted on every path — it
+//     is the session whose per-session hides this render honors.
 //
 // hint is the message rendered when no focal task resolves, mirroring the tmux
 // status line's PaneStatusKind so the two surfaces agree (E-1698).
@@ -341,13 +424,23 @@ var resolveAnchor = func(process string) (anchor, error) {
 		parentSession: monitor.ResolveSessionStatusParentSession(process),
 		hint:          noTaskHintFor(kind),
 	}
-	// No claimed goal: anchor the no-goal view on this pane's own session so its
-	// surfaced/revisited work is still listed instead of hidden (E-1802).
-	if a.focal == 0 {
-		if a.emittingSession, err = monitor.ResolveSessionStatusSession(process); err != nil {
-			return anchor{}, err
-		}
+	// The viewing session is resolved on EVERY path now (E-1914), not only the
+	// no-goal one, because per-session task hiding is scoped to whoever is
+	// looking: the focal-anchored view needs the viewer id to know which hides
+	// apply. Its OTHER job — anchoring the no-goal view (E-1802) on this pane's
+	// own session so its surfaced/revisited work is still listed rather than
+	// hidden behind the claim/bind hint — is unchanged.
+	//
+	// The error is fatal only in the no-goal case, where this id IS the anchor and
+	// a failure means there is nothing to render. With a focal task the view stands
+	// on its own, so a lookup failure degrades to "no viewer" — which shows every
+	// row. That is the right failure mode: a listing that cannot identify its
+	// viewer must never suppress rows on some other session's behalf.
+	viewer, verr := monitor.ResolveSessionStatusSession(process)
+	if verr != nil && a.focal == 0 {
+		return anchor{}, verr
 	}
+	a.emittingSession = viewer
 	return a, nil
 }
 
@@ -403,8 +496,8 @@ var gatherRows = func(focal, parentSession, emittingSession int64, all bool) ([]
 // It returns the number of TASK rows rendered — 0 means the frame is the
 // no-task hint, which the monitor's pane fit treats differently from a short
 // real frame (see paneHeightForFrame).
-func renderSnapshot(w io.Writer, focal, parentSession, emittingSession int64, noTaskHint string, all bool, cols int, color bool) (int, error) {
-	rows, err := gatherRows(focal, parentSession, emittingSession, all)
+func renderSnapshot(w io.Writer, a anchor, all bool, cols int, color bool, hm hiddenMode) (int, error) {
+	rows, err := gatherRows(a.focal, a.parentSession, a.emittingSession, all)
 	if err != nil {
 		return 0, err
 	}
@@ -412,9 +505,21 @@ func renderSnapshot(w io.Writer, focal, parentSession, emittingSession int64, no
 	// so the renderer can mark the landed-vs-worktree delta with ◆ (E-1701). --tree
 	// takes a separate path and skips this git cost.
 	monitor.AnnotateSessionStatusUnsettled(rows)
-	renderTo(w, rows, focal, noTaskHint, cols, color)
+	// Layer the VIEWING session's hides on top (E-1914). Annotating rather than
+	// filtering in the query keeps the row set viewer-agnostic and leaves the
+	// omit/show/only decision entirely to the renderer — which is also what lets
+	// --json emit every row with its hidden state attached.
+	if err := annotateHidden(rows, a.emittingSession); err != nil {
+		return 0, err
+	}
+	renderTo(w, rows, a.focal, a.hint, cols, color, hm)
 	return len(rows), nil
 }
+
+// annotateHidden is the per-session hide source, seamed as a package var (like
+// worktreeAnomalies and gatherRows) so the renderer's hide behavior is testable
+// without a DB.
+var annotateHidden = monitor.AnnotateSessionStatusHidden
 
 // monitorFrame produces one live-monitor frame: refresh the anchor, then render
 // against it. Split out of monitorLoop so tests can drive the resolve→render
@@ -426,9 +531,9 @@ func renderSnapshot(w io.Writer, focal, parentSession, emittingSession int64, no
 // exact-fitted (E-1851). That count is exactly what changes on the tick a focal
 // task finally resolves, so the pane regrows in the same repaint the rows
 // appear in.
-func monitorFrame(tracker *anchorTracker, w io.Writer, all bool, cols int, color bool) (int, error) {
+func monitorFrame(tracker *anchorTracker, w io.Writer, all bool, cols int, color bool, hm hiddenMode) (int, error) {
 	a := tracker.refresh()
-	return renderSnapshot(w, a.focal, a.parentSession, a.emittingSession, a.hint, all, cols, color)
+	return renderSnapshot(w, a, all, cols, color, hm)
 }
 
 // monitorLoop redraws the view every monitorInterval until SIGINT/SIGTERM,
@@ -447,7 +552,7 @@ func monitorFrame(tracker *anchorTracker, w io.Writer, all bool, cols int, color
 // (E-1892), so a monitor started before its session registers — which is the
 // common case under `task spawn`'s layout — recovers instead of showing the
 // claim/bind hint forever.
-func monitorLoop(tracker *anchorTracker, all bool, colsOverride int, color bool) {
+func monitorLoop(tracker *anchorTracker, all bool, colsOverride int, color bool, hm hiddenMode) {
 	out := os.Stdout
 	fmt.Fprint(out, "\x1b[?25l")                         // hide cursor
 	restore := func() { fmt.Fprint(out, "\x1b[?25h\n") } // show cursor + trailing newline
@@ -485,7 +590,7 @@ func monitorLoop(tracker *anchorTracker, all bool, colsOverride int, color bool)
 		var b strings.Builder
 
 		fireJobs()
-		rows, err := monitorFrame(tracker, &b, all, detectCols(colsOverride), color)
+		rows, err := monitorFrame(tracker, &b, all, detectCols(colsOverride), color, hm)
 		if err != nil {
 			restore()
 			fmt.Fprintln(os.Stderr, "session-status:", err)
@@ -589,13 +694,37 @@ func eraseEachLineToEOL(frame string) string {
 // real DB/git-backed monitor.WorktreeAnomalies.
 var worktreeAnomalies = monitor.WorktreeAnomalies
 
-func renderTo(w io.Writer, rows []monitor.SessionStatusRow, focal int64, noTaskHint string, cols int, color bool) {
+func renderTo(w io.Writer, rows []monitor.SessionStatusRow, focal int64, noTaskHint string, cols int, color bool, hm hiddenMode) {
 	// Gate on rows, not focal: a session with no claimed goal (focal == 0) still
 	// has surfaced/revisited rows to render (E-1802). Only the truly-empty case —
 	// no goal AND no session work — falls through to the claim/bind (or register-
 	// session) hint, NEVER an unrelated task's rows (E-1698).
+	//
+	// Checked BEFORE the hide filter on purpose: "you have nothing here" and "you
+	// have work but you hid it" are different situations, and the claim/bind hint
+	// would be actively wrong advice for the second.
 	if len(rows) == 0 {
 		fmt.Fprintln(w, dim(noTaskHint, color))
+		renderFaultBadge(w, cols, color)
+		return
+	}
+
+	// Apply the viewing session's hides (E-1914). hiddenN counts the SUPPRESSED
+	// rows specifically, not every hidden row, so the footer reports what is
+	// missing from this frame — under --show-hidden/--only-hidden nothing is
+	// missing and there is nothing to footer.
+	rows, hiddenN := applyHiddenMode(rows, hm)
+
+	if len(rows) == 0 {
+		// Everything was hidden. The footer is the whole frame — that is exactly
+		// the trace the default mode owes the user, so it must not be swallowed by
+		// an "empty" shortcut. Under --only-hidden an empty result means the
+		// opposite (nothing is hidden), which gets its own hint.
+		if hm == hiddenOnly {
+			fmt.Fprintln(w, dim("  nothing hidden in this session", color))
+		} else if hiddenN > 0 {
+			fmt.Fprintln(w, dim(hiddenFooter(hiddenN), color))
+		}
 		renderFaultBadge(w, cols, color)
 		return
 	}
@@ -619,11 +748,22 @@ func renderTo(w io.Writer, rows []monitor.SessionStatusRow, focal int64, noTaskH
 		}
 	}
 
+	// Hidden-column width, on the same width-on-demand rule as the block column:
+	// the ⊘ slot exists only when a RENDERED row wears it, so the default view —
+	// where hidden rows are omitted outright — is byte-identical to before E-1914.
+	hw := 0
+	for _, r := range rows {
+		if r.Hidden {
+			hw = 2
+			break
+		}
+	}
+
 	// Fixed prefix width = "I L NNNNNN P " = 13 cols (icon, type letter, the
 	// 6-wide left-justified E-id, phase char, each single-spaced).
 	const prefixWidth = 13
 	blockSeg := blockSegWidth(bw)
-	titleBudget := cols - prefixWidth - blockSeg
+	titleBudget := cols - prefixWidth - blockSeg - hw
 	if titleBudget < 10 {
 		titleBudget = 10
 	}
@@ -633,9 +773,10 @@ func renderTo(w io.Writer, rows []monitor.SessionStatusRow, focal int64, noTaskH
 		line := fmt.Sprintf("%s %s%s%-6s %s ",
 			act.icon(), typeLetter(r.TypeSlug), unsettledMark(r), "E-"+strconv.FormatInt(r.ID, 10), phaseChar(r),
 		)
+		line += hiddenField(r, hw)
 		line += blockField(r, bw)
 		line += runewidth.Truncate(collapse(r.Title), titleBudget, "…")
-		fmt.Fprintln(w, colorize(line, r.Phase, isTerminal(r.Status), r.Unsettled, color))
+		fmt.Fprintln(w, colorize(line, r.Phase, isTerminal(r.Status), r.Hidden, r.Unsettled, color))
 
 		// Focal-row detail: expand the coarse ◆ marker into the specific
 		// git/worktree anomalies for the focal worktree (E-1758), the same set
@@ -661,9 +802,55 @@ func renderTo(w io.Writer, rows []monitor.SessionStatusRow, focal int64, noTaskH
 		}
 	}
 
+	// The hidden footer sits between the rows and the fault badge: it annotates
+	// the row set (it says what the table is NOT showing you), while the badge
+	// annotates the machine. Printed whenever anything was suppressed — never
+	// conditional on width, color, or row count — because a hidden task that
+	// vanishes without a trace is the one failure this feature must not have.
+	if hiddenN > 0 {
+		fmt.Fprintln(w, dim(hiddenFooter(hiddenN), color))
+	}
+
 	// Uncleared faults are appended last so they read as an annotation on the
 	// view rather than competing with the task rows for attention (E-698).
 	renderFaultBadge(w, cols, color)
+}
+
+// applyHiddenMode splits rows by the viewing session's hides and returns the set
+// to render plus the number SUPPRESSED from this frame. It never mutates the
+// input slice — --json renders the same annotated rows unfiltered.
+//
+//   - hiddenOmit: drop hidden rows; the count is what was dropped (→ footer).
+//   - hiddenShow: keep everything; nothing is suppressed, so the count is 0.
+//   - hiddenOnly: keep only hidden rows; nothing hidden is suppressed, so 0.
+func applyHiddenMode(rows []monitor.SessionStatusRow, hm hiddenMode) ([]monitor.SessionStatusRow, int) {
+	if hm == hiddenShow {
+		return rows, 0
+	}
+	out := make([]monitor.SessionStatusRow, 0, len(rows))
+	suppressed := 0
+	for _, r := range rows {
+		if r.Hidden == (hm == hiddenOnly) {
+			out = append(out, r)
+			continue
+		}
+		if hm == hiddenOmit {
+			suppressed++
+		}
+	}
+	return out, suppressed
+}
+
+// hiddenField renders the ⊘ column for a row to width hw (0 = column absent,
+// 2 = glyph + space). Companion to blockField, same width-on-demand contract.
+func hiddenField(r monitor.SessionStatusRow, hw int) string {
+	if hw == 0 {
+		return ""
+	}
+	if r.Hidden {
+		return hiddenGlyph + " "
+	}
+	return "  "
 }
 
 // buildLegend returns the dynamic header line: only the glyphs actually present
@@ -676,11 +863,14 @@ func renderTo(w io.Writer, rows []monitor.SessionStatusRow, focal int64, noTaskH
 // truncation, which would hide a real glyph).
 func buildLegend(rows []monitor.SessionStatusRow) string {
 	var present [len(actionMeta)]bool
-	var done, blocked, blocks, unsettled bool
+	var done, blocked, blocks, unsettled, hidden bool
 	for _, r := range rows {
 		present[classify(r)] = true
 		if isTerminal(r.Status) {
 			done = true
+		}
+		if r.Hidden {
+			hidden = true
 		}
 		if r.BlockedByN > 0 {
 			blocked = true
@@ -714,6 +904,12 @@ func buildLegend(rows []monitor.SessionStatusRow) string {
 	}
 	if unsettled {
 		parts = append(parts, "◆ unsettled")
+	}
+	// ⊘ comes last: it is the only decoration that describes THIS SESSION's view
+	// of the row rather than a property of the task or its worktree, and it can
+	// only ever appear under --show-hidden/--only-hidden.
+	if hidden {
+		parts = append(parts, hiddenGlyph+" hidden")
 	}
 	return strings.Join(parts, "  ")
 }
@@ -984,12 +1180,17 @@ const (
 //
 // terminal still outranks urgent (unchanged): a done urgent row reads dim, not
 // bold, unless it is unsettled.
-func colorize(line, phase string, terminal, unsettled, enabled bool) string {
+// hidden joins the dim cases (E-1914): under --show-hidden/--only-hidden a
+// suppressed row is present but deliberately demoted, which is exactly what dim
+// says. It sits inside the veto, not outside it — an unsettled hidden row still
+// renders at normal weight, because "this worktree still needs a land" outranks
+// "I asked not to see this" for the same reason it outranks "this is done".
+func colorize(line, phase string, terminal, hidden, unsettled, enabled bool) string {
 	if !enabled {
 		return line
 	}
 	switch {
-	case terminal, phase == "later", phase == "maybe":
+	case terminal, hidden, phase == "later", phase == "maybe":
 		if unsettled {
 			return line
 		}

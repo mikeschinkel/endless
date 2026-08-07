@@ -113,9 +113,28 @@ sid=$(endless sql --tsv "SELECT id FROM sessions
 
 Three read-only commands for self-orientation and for coordinating with sibling / child sessions — no snapshot required:
 
-- **`endless session status`** — a one-shot view of your current focus: the focal task, its spawning (parent) task, sibling tasks worked by other sessions on the focal task, and any cross-session in-flight work, with blocked-by / blocks decorations. The cheap "where am I, who else is live" check. Add `--tree` for the do/plan backlog as an IDs-only tree in implementation order (nesting = order, siblings = parallelizable).
+- **`endless session status`** — a one-shot view of your current focus: the focal task, its spawning (parent) task, sibling tasks worked by other sessions on the focal task, and any cross-session in-flight work, with blocked-by / blocks decorations. The cheap "where am I, who else is live" check. Add `--tree` for the do/plan backlog as an IDs-only tree in implementation order (nesting = order, siblings = parallelizable), or `--json` for the same rows as data.
 - **`endless session show [ref]`** — details for one session (yours by default; pass an endless integer id or Claude UUID prefix for another). Reach for it when you're coordinating and need to inspect a specific sibling or child session.
-- **`endless session list`** — recent sessions across the project. The roster view for finding a sibling / child session's id to `show`.
+- **`endless session list`** — recent sessions in the current project: one row per session with its id, a one-column state glyph (legend below the table), the task it's active on, its message count, and that task's title. The roster view for finding a sibling / child session's id to `show`. `--all-projects` widens it to every project (and adds a Project column); `--project <name>` picks another from anywhere.
+
+### Quieting a noisy status view
+
+A long-running session accumulates task rows it no longer cares about. `endless session hide --task <id>` (repeatable) drops them from **your** `session status` / `session monitor` view:
+
+```bash
+endless session hide --task E-1832 --task E-1902   # quiet two rows
+endless session status                             # … 2 hidden (--show-hidden)
+endless session status --only-hidden               # what did I hide?
+endless session unhide --task E-1832               # put one back
+```
+
+Three things this is deliberately **not**:
+
+- It is not a property of the task. Hiding is scoped to the *(session, task)* pair — another session working the same task sees its own view unchanged, and `task next`, blocking relations and landing are all unaffected.
+- It never expires. No status transition un-hides a row, `unverified` included; only `session unhide --task` does.
+- It never hides silently. Whenever anything is suppressed the view carries a `… N hidden (--show-hidden)` footer, in `session monitor` too. `--show-hidden` renders everything with hidden rows marked ⊘; `--only-hidden` renders just the hidden set, which is how you find ids to unhide without having recorded them.
+
+Pass a session reference (`endless session hide ES-1041 --task E-1832`) to hide for a session other than your own. Note that bare `session hide <ids...>` — no `--task` — is a different command: it hides whole SESSIONS from `session list`.
 
 ## Interactive, user-run session commands
 

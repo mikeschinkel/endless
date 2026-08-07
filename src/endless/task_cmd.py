@@ -3262,7 +3262,11 @@ def _resolve_session_id_with_prompt(
     from endless.session_cmd import list_sessions
     click.echo("There are multiple Claude sessions in this tmux window:")
     click.echo("")
-    list_sessions(project_name=project_name)
+    # all_projects when unnamed: this is a disambiguation prompt, so it must list
+    # every candidate the resolver found rather than silently dropping the ones
+    # outside cwd's project — and it must not raise when cwd is not in a
+    # registered project, which E-1914's current-project default otherwise does.
+    list_sessions(project_name=project_name, all_projects=not project_name)
     click.echo("")
     verb = prompt_verb or "associated with"
     question = f"Which session should this be {verb}? [ID]"

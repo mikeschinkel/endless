@@ -532,6 +532,34 @@ CREATE TABLE IF NOT EXISTS session_tasks (
 CREATE INDEX IF NOT EXISTS idx_session_tasks_task
     ON session_tasks(task_id);
 
+-- Per-session display suppression for a task (E-1914). A row means "session S
+-- has hidden task T from ITS OWN `session status` / `session monitor` listing".
+-- Presence is the whole state; hidden_at exists so `--only-hidden` can order by
+-- how long something has been suppressed.
+--
+-- Deliberately its OWN table rather than a hidden_at column on session_tasks
+-- (ED-1545, revising E-1912's design). `session status` renders rows that have
+-- no session_tasks row at all — read-time children, dependents and upstream
+-- blockers (E-1685/E-1691/E-1795) — so a column would have forced hide to
+-- fabricate a session_tasks row, and `task show`'s "Touched by:" block would
+-- then report a touch that never happened. Hiding is a display act, not a
+-- scope-entry, so it gets its own storage and pollutes nothing.
+--
+-- Hidden-ness belongs to the (session, task) PAIR and is never a property of the
+-- task alone: another session's view of the same task is untouched. A hide never
+-- expires — no status transition clears it, only `session unhide --task`.
+--
+-- No FKs, matching session_tasks: the row must be able to outlive its session or
+-- task rather than cascade away underneath a live listing.
+CREATE TABLE IF NOT EXISTS session_hidden_tasks (
+    session_id INTEGER NOT NULL,
+    task_id INTEGER NOT NULL,
+    hidden_at TEXT NOT NULL,
+    PRIMARY KEY (session_id, task_id)
+);
+CREATE INDEX IF NOT EXISTS idx_session_hidden_tasks_task
+    ON session_hidden_tasks(task_id);
+
 -- Curated, persistent per-project "next" list (E-1421). Five tables: header,
 -- lanes, tasks, auto-added pending tasks awaiting curation, and an event-
 -- sourced audit log of every mutation.

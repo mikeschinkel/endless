@@ -246,7 +246,7 @@ func TestRenderUnsettledIndicator(t *testing.T) {
 		{ID: 1702, Title: "settled one", Status: "ready", Phase: "now", TypeSlug: "todo", Unsettled: false},
 	}
 	var b strings.Builder
-	renderTo(&b, rows, 1701, hintClaimBind, 90, false)
+	renderTo(&b, rows, 1701, hintClaimBind, 90, false, hiddenOmit)
 	lines := strings.Split(strings.TrimRight(b.String(), "\n"), "\n")
 	if len(lines) != 3 {
 		t.Fatalf("want 3 lines (legend + 2 rows), got %d:\n%s", len(lines), b.String())
@@ -268,7 +268,7 @@ func TestRenderUnsettledIndicator(t *testing.T) {
 
 func TestRenderEmptyFocal(t *testing.T) {
 	var b strings.Builder
-	renderTo(&b, nil, 0, hintClaimBind, 90, false)
+	renderTo(&b, nil, 0, hintClaimBind, 90, false, hiddenOmit)
 	out := b.String()
 	// The no-focal render shows ONLY the claim/bind hint (E-1698) — with no rows
 	// to document there is no legend line (E-1750), so its glyphs must be absent.
@@ -294,7 +294,7 @@ func TestRenderNoGoalSurfacesRows(t *testing.T) {
 		{ID: 1776, Title: "touched this session", Status: "unplanned", Phase: "next", TypeSlug: "todo"},
 	}
 	var b strings.Builder
-	renderTo(&b, rows, 0, hintClaimBind, 90, false)
+	renderTo(&b, rows, 0, hintClaimBind, 90, false, hiddenOmit)
 	out := b.String()
 	if strings.Contains(out, "claim or bind") {
 		t.Errorf("no-goal view with rows must NOT show the claim/bind hint:\n%s", out)
@@ -461,7 +461,7 @@ func TestRenderColumnsAndTruncation(t *testing.T) {
 		{ID: 1684, Title: "Add session next --tree showing task IDs in implementation order", Status: "confirmed", Phase: "now", TypeSlug: "todo", IsFrom: true},
 	}
 	var b strings.Builder
-	renderTo(&b, rows, 1465, hintClaimBind, 40, false)
+	renderTo(&b, rows, 1465, hintClaimBind, 40, false, hiddenOmit)
 	lines := strings.Split(strings.TrimRight(b.String(), "\n"), "\n")
 	// legend + 3 rows
 	if len(lines) != 4 {
@@ -580,7 +580,7 @@ func TestColorize(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			enabled := c.name != "color disabled is untouched"
-			got := colorize(line, c.phase, c.terminal, c.unsettled, enabled)
+			got := colorize(line, c.phase, c.terminal, false, c.unsettled, enabled)
 			if got != c.want {
 				t.Errorf("colorize(phase=%q, terminal=%v, unsettled=%v) = %q, want %q",
 					c.phase, c.terminal, c.unsettled, got, c.want)
@@ -601,7 +601,7 @@ func TestRenderUnsettledRowNotDimmed(t *testing.T) {
 				TypeSlug: "todo", IsFrom: true, Unsettled: unsettled},
 		}
 		var b strings.Builder
-		renderTo(&b, rows, 1687, hintClaimBind, 90, true)
+		renderTo(&b, rows, 1687, hintClaimBind, 90, true, hiddenOmit)
 		return strings.Split(strings.TrimRight(b.String(), "\n"), "\n")[1]
 	}
 
@@ -671,7 +671,7 @@ func TestFocalExpansionSuppressesUncommitted(t *testing.T) {
 		{ID: 1768, Title: "focal", Status: "underway", Phase: "now", TypeSlug: "todo", IsFocal: true, Unsettled: true},
 	}
 	var b strings.Builder
-	renderTo(&b, rows, 1768, hintClaimBind, 90, false)
+	renderTo(&b, rows, 1768, hintClaimBind, 90, false, hiddenOmit)
 	out := b.String()
 
 	// The suppressed kind must not appear in the focal detail lines...
@@ -707,7 +707,7 @@ func TestFocalExpansionUncommittedOnlyIsSilent(t *testing.T) {
 		{ID: 1768, Title: "focal", Status: "underway", Phase: "now", TypeSlug: "todo", IsFocal: true, Unsettled: true},
 	}
 	var b strings.Builder
-	renderTo(&b, rows, 1768, hintClaimBind, 90, false)
+	renderTo(&b, rows, 1768, hintClaimBind, 90, false, hiddenOmit)
 	if n := strings.Count(b.String(), "      ◆ "); n != 0 {
 		t.Errorf("uncommitted-only focal worktree must add no detail lines, got %d:\n%s", n, b.String())
 	}

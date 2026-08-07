@@ -45,7 +45,15 @@ type SessionStatusRow struct {
 	// from the DB (task_landings only records that a land happened, not whether the
 	// tree moved since); it is filled in by AnnotateSessionStatusUnsettled, which
 	// shells out to git, and only on the flat render path. --tree leaves it false.
-	Unsettled  bool
+	Unsettled bool
+	// Hidden / HiddenAt are the VIEWING session's per-session suppression of this
+	// task (E-1914): a session_hidden_tasks row for (viewer, task). Like Unsettled
+	// they are NOT part of the row query — the row set is viewer-agnostic, and
+	// hiding is a property of the (session, task) pair, never of the task alone.
+	// AnnotateSessionStatusHidden fills them for one viewer; unannotated rows stay
+	// false/"" so every existing caller is unaffected.
+	Hidden     bool
+	HiddenAt   string
 	BlockedByN int
 	BlocksN    int
 }

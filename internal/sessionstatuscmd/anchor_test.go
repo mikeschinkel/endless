@@ -185,7 +185,7 @@ func TestMonitorFrameRendersRowsOnceFocalAppears(t *testing.T) {
 	tr := newAnchorTracker(r.resolve)
 
 	var before strings.Builder
-	nBefore, err := monitorFrame(tr, &before, false, 90, false)
+	nBefore, err := monitorFrame(tr, &before, false, 90, false, hiddenOmit)
 	if err != nil {
 		t.Fatalf("monitorFrame (unresolved): %v", err)
 	}
@@ -199,7 +199,7 @@ func TestMonitorFrameRendersRowsOnceFocalAppears(t *testing.T) {
 	}
 
 	var after strings.Builder
-	nAfter, err := monitorFrame(tr, &after, false, 90, false)
+	nAfter, err := monitorFrame(tr, &after, false, 90, false, hiddenOmit)
 	if err != nil {
 		t.Fatalf("monitorFrame (resolved): %v", err)
 	}

@@ -60,7 +60,13 @@ def _format_tool_content(content: str, tool_name: str | None = None, mode: str =
 
 
 def _resolve_session(value: str) -> dict:
-    """Resolve a session by integer ID, short UUID prefix, or full UUID."""
+    """Resolve a session by ES-NNN / integer ID, short UUID prefix, or full UUID."""
+    # `ES-NNN` is the form `task show` prints under Created:/Touched by: and the
+    # form the guide tells sessions to prefer, so accept it wherever a session
+    # reference is taken. The prefix is stripped, not looked up separately — it
+    # decorates the same integer id.
+    if value[:3].upper() == "ES-":
+        value = value[3:]
     # Try integer ID first
     try:
         int_id = int(value)
@@ -534,7 +540,12 @@ def show_history(
 
 
 def session_status_resolve(
-    show_all: bool = False, tree: bool = False, monitor: bool = False
+    show_all: bool = False,
+    tree: bool = False,
+    monitor: bool = False,
+    show_hidden: bool = False,
+    only_hidden: bool = False,
+    as_json: bool = False,
 ) -> None:
     """Render the per-session status view (E-1465, renamed E-1688).
 
@@ -550,11 +561,21 @@ def session_status_resolve(
     interrupted; Ctrl-C is the intended exit, so we swallow the KeyboardInterrupt
     (the Go child already restored the cursor on its own SIGINT handler).
 
+    --show-hidden / --only-hidden select how this session's per-session hidden
+    tasks (E-1914) are rendered; they are mutually exclusive and rejected here so
+    the user gets a click-shaped error rather than the Go flag parser's. --json
+    dumps the row set as data instead of drawing it.
+
     The Go subcommand pins the main DB (sessions live there regardless of cwd),
     so no --config-dir is threaded.
     """
     import shutil
     import subprocess
+
+    if show_hidden and only_hidden:
+        raise click.ClickException(
+            "--show-hidden and --only-hidden are mutually exclusive."
+        )
 
     go_bin = shutil.which("endless-go")
     if not go_bin:
@@ -567,6 +588,12 @@ def session_status_resolve(
         args.append("--tree")
     if monitor:
         args.append("--monitor")
+    if show_hidden:
+        args.append("--show-hidden")
+    if only_hidden:
+        args.append("--only-hidden")
+    if as_json:
+        args.append("--json")
     try:
         result = subprocess.run(args)
     except KeyboardInterrupt:
@@ -575,8 +602,63 @@ def session_status_resolve(
         raise SystemExit(result.returncode)
 
 
+# Fixed-width state glyphs for `session list` (E-1914). The old view printed the
+# raw state word, and `needs_input` is 11 characters against `idle`'s 4 — so a
+# single needs-input row shoved every following column right and the table read as
+# ragged. A one-column glyph per state makes the width constant by construction.
+#
+# ⟳ is `session status`'s own "doing" glyph, reused because it already means
+# exactly this: a live session working a task. ▶ is deliberately NOT reused — over
+# there it means "ready to spawn", a different claim. The other three states have
+# no equivalent in that vocabulary, so they get glyphs of their own; ⏸ was avoided
+# for idle because it already means "blocks" in the status view.
+SESSION_STATE_ICONS = {
+    "working": "⟳",
+    "idle": "‖",
+    "needs_input": "?",
+    "ended": "␥",
+}
+
+# Glyph for a state not in the map — a should-never-happen marker, matching the
+# ⁇-for-unknown-status idiom in internal/sessionstatuscmd.
+SESSION_STATE_UNKNOWN_ICON = "⁇"
+
+# Printed under the table. Static (all four states, always) rather than built from
+# the rows present: the legend is short, and a stable legend line means the eye
+# learns one mapping instead of re-reading a different one every invocation.
+SESSION_STATE_LEGEND = "⟳ working   ‖ idle   ? needs input   ␥ ended"
+
+
+def _session_state_icon(state: str | None) -> str:
+    return SESSION_STATE_ICONS.get(state or "", SESSION_STATE_UNKNOWN_ICON)
+
+
+def _current_project_name() -> str:
+    """The project `session list` defaults to — the one enclosing cwd.
+
+    Sessions are machine-scoped, so the unfiltered list spans every project the
+    user has ever worked in; defaulting to the current one is what makes the
+    command answer "what is going on HERE". `--all-projects` restores the old
+    machine-wide behavior and `--project <name>` picks another, so the error
+    below is always recoverable without leaving the directory.
+    """
+    from endless.task_cmd import _resolve_project
+
+    try:
+        _project_id, name = _resolve_project(None)
+    except click.ClickException:
+        raise click.ClickException(
+            "Not in a registered project directory, so there is no current "
+            "project to default to.\n"
+            "Use 'endless session list --all-projects' for every project, "
+            "or '--project <name>' for one."
+        ) from None
+    return name
+
+
 def list_sessions(
     project_name: str | None = None,
+    all_projects: bool = False,
     show_all: bool = False,
     show_hidden: bool = False,
     show_empty: bool = False,
@@ -585,7 +667,17 @@ def list_sessions(
     limit: int = 20,
     as_json: bool = False,
 ):
-    """List recent sessions."""
+    """List recent sessions, defaulting to the project enclosing cwd (E-1914)."""
+    # Not a precedence rule: naming a project and asking for all of them are
+    # contradictory requests, and silently honoring one would answer a question
+    # the user did not ask.
+    if project_name and all_projects:
+        raise click.ClickException(
+            "--project and --all-projects are mutually exclusive."
+        )
+    if not project_name and not all_projects:
+        project_name = _current_project_name()
+
     where = "WHERE 1=1"
     params: list = []
 
@@ -645,11 +737,13 @@ def list_sessions(
 
     rows = db.query(
         f"SELECT s.id, s.session_id, s.state, s.summary, "
-        f"s.started_at, s.last_activity, s.hidden, "
+        f"s.started_at, s.last_activity, s.hidden, s.active_task_id, "
+        f"COALESCE(t.title, '') as task_title, "
         f"COALESCE(p.name, '') as project_name, "
         f"(SELECT count(*) FROM session_messages m WHERE m.session_id = s.session_id) as msg_count "
         f"FROM sessions s "
         f"LEFT JOIN projects p ON s.project_id = p.id "
+        f"LEFT JOIN tasks t ON t.id = s.active_task_id "
         f"{where} "
         f"ORDER BY {order} "
         f"LIMIT ?",
@@ -664,12 +758,17 @@ def list_sessions(
 
     if as_json:
         import json
+        # Shape is unchanged apart from the new task_id field. In particular
+        # `state` stays the raw word: the glyph substitution is a rendering
+        # decision for humans reading a fixed-width table, and encoding it here
+        # would force every consumer to learn the icon vocabulary.
         out = [
             {
                 "id": r["id"],
                 "session_id": r["session_id"][:12],
                 "project": r["project_name"],
                 "state": r["state"],
+                "task_id": r["active_task_id"],
                 "messages": r["msg_count"],
                 "summary": r["summary"] or "",
                 "started": r["started_at"],
@@ -692,54 +791,58 @@ def list_sessions(
         tuple(params[:-1]),  # exclude limit param
     ) or 0
 
+    # The Project column exists only when the output actually spans more than one
+    # project; for the single-project case the project name is stated once, in the
+    # header, instead of repeated on every row.
+    project_names = {r["project_name"] for r in rows}
+    multi_project = len(project_names) > 1
+
     click.echo()
+    heading = "Sessions"
     if total_count > len(rows):
-        click.echo(click.style(f"Sessions ({len(rows)} of {total_count})", bold=True))
-    else:
-        click.echo(click.style("Sessions", bold=True))
+        heading += f" ({len(rows)} of {total_count})"
+    if not multi_project:
+        only = next(iter(project_names))
+        if only:
+            heading += f" — project: {only}"
+    click.echo(click.style(heading, bold=True))
 
-    id_w = 4
-    proj_w = max(7, max((len(r["project_name"]) for r in rows), default=7))
-    state_w = 7
-    msg_w = 4
+    def task_cell(row) -> str:
+        return f"E-{row['active_task_id']}" if row["active_task_id"] else ""
+
     gap = "  "
-    fixed = id_w + proj_w + state_w + msg_w + len(gap) * 4
-    summary_w = max(20, term_width - fixed)
+    id_w = max(4, max(len(str(r["id"])) for r in rows))
+    # The state column is exactly one column wide — that is the whole point of the
+    # glyphs (see SESSION_STATE_ICONS). ◆ heads it because there is no one-letter
+    # word for "state" that would not read as data.
+    state_w = 1
+    task_w = max(len("Task"), max(len(task_cell(r)) for r in rows))
+    msg_w = max(len("Msgs"), max(len(str(r["msg_count"])) for r in rows))
+    proj_w = max(len("Project"), max(len(r["project_name"]) for r in rows)) if multi_project else 0
 
-    header = (
-        f"{'ID':<{id_w}}{gap}"
-        f"{'Project':<{proj_w}}{gap}"
-        f"{'State':<{state_w}}{gap}"
-        f"{'Msgs':>{msg_w}}{gap}"
-        f"Summary"
-    )
-    sep = (
-        f"{'─' * id_w}{gap}"
-        f"{'─' * proj_w}{gap}"
-        f"{'─' * state_w}{gap}"
-        f"{'─' * msg_w}{gap}"
-        f"{'─' * summary_w}"
-    )
-    click.echo(header)
-    click.echo(sep)
+    columns = [("ID", id_w, "<"), ("◆", state_w, "<")]
+    if multi_project:
+        columns.append(("Project", proj_w, "<"))
+    columns += [("Task", task_w, "<"), ("Msgs", msg_w, ">")]
+
+    fixed = sum(w for _, w, _ in columns) + len(gap) * len(columns)
+    title_w = max(20, term_width - fixed)
+
+    click.echo(gap.join(f"{name:{align}{w}}" for name, w, align in columns) + gap + "Title")
+    click.echo(gap.join("─" * w for _, w, _ in columns) + gap + "─" * title_w)
 
     for row in rows:
-        if row["msg_count"] == 0:
-            summary = "(empty)"
-        else:
-            summary = row["summary"] or "(no summary)"
-        summary = " ".join(summary.split())
-        if len(summary) > summary_w:
-            summary = summary[:summary_w - 1] + "…"
-        line = (
-            f"{row['id']:<{id_w}}{gap}"
-            f"{row['project_name']:<{proj_w}}{gap}"
-            f"{row['state']:<{state_w}}{gap}"
-            f"{row['msg_count']:>{msg_w}}{gap}"
-            f"{summary}"
-        )
-        click.echo(line)
+        title = " ".join((row["task_title"] or "").split())
+        if len(title) > title_w:
+            title = title[:title_w - 1] + "…"
+        cells = [f"{row['id']:<{id_w}}", f"{_session_state_icon(row['state']):<{state_w}}"]
+        if multi_project:
+            cells.append(f"{row['project_name']:<{proj_w}}")
+        cells += [f"{task_cell(row):<{task_w}}", f"{row['msg_count']:>{msg_w}}"]
+        click.echo(gap.join(cells) + gap + title)
 
+    click.echo()
+    click.echo(click.style(SESSION_STATE_LEGEND, dim=True))
     click.echo()
 
 
@@ -863,6 +966,104 @@ def unhide_sessions(session_values: list[str]):
         click.echo(
             click.style("•", fg="cyan")
             + f" Unhidden session {session['id']}"
+        )
+
+
+def _resolve_hide_session(session_value: str | None) -> int:
+    """The session a `session hide/unhide --task` applies to (E-1914).
+
+    An explicit positional value wins; otherwise it is the session running the
+    command, resolved by the same four-layer lookup every other session-attributed
+    CLI call uses. Hiding is per (session, task), so there is no sane fallback
+    when no session resolves — a hide with nobody to own it would be a global
+    hide, which is the one thing this feature must never be.
+    """
+    if session_value:
+        return _resolve_session(session_value)["id"]
+
+    from endless.task_cmd import _current_endless_session_id
+
+    session_id = _current_endless_session_id()
+    if session_id is None:
+        raise click.ClickException(
+            "No current Endless session, so there is nothing to hide the task "
+            "FOR — hiding is per-session.\n"
+            "Name the session explicitly: endless session hide ES-<id> --task <task-id>"
+        )
+    return session_id
+
+
+def _resolve_hide_tasks(task_refs: list[str]) -> list[int]:
+    """Parse and validate `--task` values ('E-500' or '500') into task ids.
+
+    Validated up front, as a set, so a typo in the third id fails the command
+    instead of leaving the first two applied.
+    """
+    task_ids: list[int] = []
+    for raw in task_refs:
+        ref = raw.strip()
+        if ref[:2].upper() == "E-":
+            ref = ref[2:]
+        try:
+            task_id = int(ref)
+        except ValueError:
+            raise click.ClickException(
+                f"Malformed task id '{raw}' (expected E-NNN or NNN)."
+            ) from None
+        if not db.query("SELECT id FROM tasks WHERE id = ?", (task_id,)):
+            raise click.ClickException(f"No task found with id E-{task_id}")
+        if task_id not in task_ids:
+            task_ids.append(task_id)
+    return task_ids
+
+
+def hide_session_tasks(
+    session_value: str | None,
+    task_refs: list[str],
+    unhide: bool = False,
+):
+    """Hide (or unhide) tasks from ONE session's `session status` listing (E-1914).
+
+    Display-scoped and session-scoped: it changes nothing about the task, and no
+    other session's view moves. A hide never expires on its own — no status
+    transition clears it, `unverified` included — so this and `--task`-less
+    session hiding are the only things that ever write the state.
+
+    Re-hiding an already-hidden task (or unhiding one that is not hidden) is a
+    no-op, not an error: the commands are for reaching a desired state, and
+    getting there twice should not be a failure.
+    """
+    from endless.task_cmd import session_id_display, task_id_display
+
+    session_id = _resolve_hide_session(session_value)
+    task_ids = _resolve_hide_tasks(task_refs)
+
+    changed: list[int] = []
+    for task_id in task_ids:
+        if unhide:
+            cursor = db.execute(
+                "DELETE FROM session_hidden_tasks "
+                "WHERE session_id = ? AND task_id = ?",
+                (session_id, task_id),
+            )
+        else:
+            cursor = db.execute(
+                "INSERT OR IGNORE INTO session_hidden_tasks "
+                "(session_id, task_id, hidden_at) "
+                "VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%S', 'now'))",
+                (session_id, task_id),
+            )
+        if cursor.rowcount:
+            changed.append(task_id)
+
+    verb = "Unhid" if unhide else "Hid"
+    already = "not hidden" if unhide else "already hidden"
+    session_label = session_id_display(session_id)
+    for task_id in task_ids:
+        note = "" if task_id in changed else click.style(f" ({already})", dim=True)
+        click.echo(
+            click.style("•", fg="cyan")
+            + f" {verb} {task_id_display(task_id)} for {session_label}{note}"
         )
 
 

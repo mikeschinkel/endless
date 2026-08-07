@@ -814,7 +814,13 @@ def session_history(session_id, show_tools, timestamps, limit, sort_order, as_js
               help="Include done-work (terminal-status) rows")
 @click.option("--tree", is_flag=True,
               help="Render do/plan tasks as an IDs-only implementation-order tree")
-def session_status(show_all, tree):
+@click.option("--show-hidden", is_flag=True,
+              help="Render this session's hidden task rows too, marked ⊘")
+@click.option("--only-hidden", is_flag=True,
+              help="Render ONLY this session's hidden task rows")
+@click.option("--json", "as_json", is_flag=True,
+              help="Emit the rows as JSON (every row carries its hidden state)")
+def session_status(show_all, tree, show_hidden, only_hidden, as_json):
     """Show the current session's status — a one-shot snapshot.
 
     Resolves the focal task for the current tmux window (live session's active
@@ -828,9 +834,17 @@ def session_status(show_all, tree):
     order (nesting = order, siblings = parallelizable), derived from the
     blocked-by DAG and overridden by any per-session order (`endless session
     order`). No legend, titles, or icons.
+
+    Tasks this session hid (`endless session hide --task <id>`) are omitted, with
+    a '… N hidden' footer so they never vanish silently. --show-hidden renders
+    them marked ⊘; --only-hidden renders the hidden set alone, which is how you
+    find ids to unhide. Hiding is per-session and display-only: no other
+    session's view changes, and nothing about the task does.
     """
     from endless.session_cmd import session_status_resolve
-    session_status_resolve(show_all=show_all, tree=tree)
+    session_status_resolve(show_all=show_all, tree=tree,
+                           show_hidden=show_hidden, only_hidden=only_hidden,
+                           as_json=as_json)
 
 
 @session_cmd.command("monitor")
@@ -838,7 +852,11 @@ def session_status(show_all, tree):
               help="Include done-work (terminal-status) rows")
 @click.option("--tree", is_flag=True,
               help="Render do/plan tasks as an IDs-only implementation-order tree")
-def session_monitor(show_all, tree):
+@click.option("--show-hidden", is_flag=True,
+              help="Render this session's hidden task rows too, marked ⊘")
+@click.option("--only-hidden", is_flag=True,
+              help="Render ONLY this session's hidden task rows")
+def session_monitor(show_all, tree, show_hidden, only_hidden):
     """Live dashboard: repeatedly render `session status` until interrupted.
 
     The top-like pane you keep open all day. Loops the same view `session
@@ -846,13 +864,20 @@ def session_monitor(show_all, tree):
     frame changes (no flicker). Ctrl-C exits. Accepts the same --all/--tree
     options as `session status`; --tree renders a single tree frame (the live
     loop drives the table view).
+
+    Per-session task hiding applies here identically, footer included — the
+    '… N hidden' line survives the redraw loop like any other part of the frame.
     """
     from endless.session_cmd import session_status_resolve
-    session_status_resolve(show_all=show_all, tree=tree, monitor=True)
+    session_status_resolve(show_all=show_all, tree=tree, monitor=True,
+                           show_hidden=show_hidden, only_hidden=only_hidden)
 
 
 @session_cmd.command("list")
-@click.option("--project", default=None, help="Filter by project")
+@click.option("--project", default=None,
+              help="List one named project's sessions (usable from anywhere)")
+@click.option("--all-projects", is_flag=True,
+              help="List every project's sessions (default: the current project)")
 @click.option("--state", default=None,
               type=click.Choice(["working", "idle", "needs_input", "ended"]),
               help="Filter by state")
@@ -868,10 +893,24 @@ def session_monitor(show_all, tree):
 @click.option("--limit", default=20, type=int,
               help="Max sessions (default: 20)")
 @click.option("--json", "as_json", is_flag=True, help="JSON output")
-def session_list(project, state, sort_by, show_all, show_hidden, show_empty, limit, as_json):
-    """List recent sessions."""
+def session_list(project, all_projects, state, sort_by, show_all, show_hidden,
+                 show_empty, limit, as_json):
+    """List recent sessions in the current project.
+
+    One row per session: its id, a one-column state glyph (legend below the
+    table), the task it is active on, its message count, and that task's title.
+
+    Scoped to the project enclosing cwd by default — sessions are machine-wide,
+    and the usual question is what is happening HERE. --all-projects widens it
+    (and adds a Project column); --project <name> picks another from anywhere.
+    The two cannot be combined.
+
+    --hidden/--all refer to hidden SESSIONS, and are unrelated to the per-session
+    task hiding of `session hide --task`.
+    """
     from endless.session_cmd import list_sessions
-    list_sessions(project_name=project, show_all=show_all,
+    list_sessions(project_name=project, all_projects=all_projects,
+                  show_all=show_all,
                   show_hidden=show_hidden, show_empty=show_empty,
                   state_filter=state, sort_by=sort_by,
                   limit=limit, as_json=as_json)
@@ -1057,18 +1096,78 @@ def session_id():
     session_id_resolve()
 
 
+# --task turns `session hide`/`session unhide` from a SESSION verb into a
+# per-session TASK verb (E-1914). The flag is the discriminator and the no-flag
+# path is untouched: bare `session hide <id>...` still hides whole sessions from
+# `session list`, exactly as before. The two senses of "hidden" never mix — one
+# suppresses a session from a list of sessions, the other suppresses a task row
+# from one session's own status view.
+_HIDE_TASK_OPTION = click.option(
+    "--task", "task_refs", multiple=True, metavar="TASK-ID",
+    help="Hide/unhide these tasks (E-NNN, repeatable) for ONE session's "
+         "`session status` view instead of hiding whole sessions.",
+)
+
+
 @session_cmd.command("hide")
-@click.argument("session_ids", nargs=-1, required=True)
-def session_hide(session_ids):
-    """Hide sessions from the list."""
+@click.argument("session_ids", nargs=-1)
+@_HIDE_TASK_OPTION
+def session_hide(session_ids, task_refs):
+    """Hide sessions from `session list`, or tasks from one session's status.
+
+    Without --task: hides each named SESSION from `session list` (unchanged).
+
+    With --task: hides those TASKS from the status/monitor view of a single
+    session — the one named as the optional positional argument, else the current
+    one. Display-scoped: no other session's view moves, `task next` and blocking
+    are unaffected, and the task itself is untouched. A hide never expires on its
+    own; only `session unhide --task` reverses it. Re-hiding is a no-op.
+    """
+    if task_refs:
+        if len(session_ids) > 1:
+            raise click.ClickException(
+                "--task hides tasks for ONE session; name at most one session "
+                f"(got {len(session_ids)})."
+            )
+        from endless.session_cmd import hide_session_tasks
+        hide_session_tasks(session_ids[0] if session_ids else None,
+                           list(task_refs))
+        return
+    if not session_ids:
+        raise click.ClickException(
+            "Name at least one session to hide, or pass --task <id> to hide "
+            "tasks from a session's status view."
+        )
     from endless.session_cmd import hide_sessions
     hide_sessions(list(session_ids))
 
 
 @session_cmd.command("unhide")
-@click.argument("session_ids", nargs=-1, required=True)
-def session_unhide(session_ids):
-    """Unhide sessions."""
+@click.argument("session_ids", nargs=-1)
+@_HIDE_TASK_OPTION
+def session_unhide(session_ids, task_refs):
+    """Unhide sessions, or restore tasks hidden from one session's status.
+
+    Mirrors `session hide`: without --task it unhides whole SESSIONS; with
+    --task it restores those task rows to one session's status view.
+    `session status --only-hidden` lists what is currently hidden, so you can
+    find the ids without having recorded them. Unhiding twice is a no-op.
+    """
+    if task_refs:
+        if len(session_ids) > 1:
+            raise click.ClickException(
+                "--task unhides tasks for ONE session; name at most one session "
+                f"(got {len(session_ids)})."
+            )
+        from endless.session_cmd import hide_session_tasks
+        hide_session_tasks(session_ids[0] if session_ids else None,
+                           list(task_refs), unhide=True)
+        return
+    if not session_ids:
+        raise click.ClickException(
+            "Name at least one session to unhide, or pass --task <id> to "
+            "restore tasks to a session's status view."
+        )
     from endless.session_cmd import unhide_sessions
     unhide_sessions(list(session_ids))
 
