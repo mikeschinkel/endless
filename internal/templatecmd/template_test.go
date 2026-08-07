@@ -131,7 +131,12 @@ func TestRender_HandoffClose_ExceptionRule(t *testing.T) {
 	}{
 		{"todo", "Hand me exactly ONE command to verify", "Do NOT enumerate a manual checklist"},
 		{"bugfix", "Hand me exactly ONE command to verify", "Do NOT enumerate a manual checklist"},
-		{"epic", "lead with the state of the children", "there is nothing to verify"},
+		// E-1911: the epic's final-message line no longer leads with the state
+		// of the children — that directive and `task report`'s `Children:` line
+		// each justified the other while both duplicated `session status`, so
+		// both are gone. The inline pointer this case pins is now the epic's
+		// dispatch instruction, which is unaffected.
+		{"epic", "these are the units of work to dispatch", "there is nothing to verify"},
 		{"research", "say where the findings live", "there is nothing to verify"},
 		{"brainstorm", "say where the synthesis lives", "there is nothing to verify"},
 	}
@@ -164,7 +169,12 @@ func TestRender_HandoffClose_ExceptionRule(t *testing.T) {
 						t.Errorf("output missing %q\n--- output ---\n%s", w, out)
 					}
 				}
-				mustNotContain := []string{"dangling tags", "landed-vs-worktree delta"}
+				mustNotContain := []string{
+					"dangling tags", "landed-vs-worktree delta",
+					// E-1911: the retired children directive, in the one place
+					// it ever appeared.
+					"lead with the state of the children",
+				}
 				for _, w := range mustNotContain {
 					if strings.Contains(out, w) {
 						t.Errorf("output still contains retired phrase %q\n--- output ---\n%s", w, out)

@@ -2537,9 +2537,12 @@ def _maybe_emit_report_reminder(
         + click.style(f"endless task report {task_id_display(item_id)}", bold=True)
     )
     click.echo(
-        "  Relay its output verbatim; add nothing. Add --json only for"
+        "  Answer in your own words, then append its block unchanged after the"
     )
-    click.echo("  genuinely out-of-band notes or open questions.")
+    click.echo(
+        "  separator. Add --json only for genuinely out-of-band notes or open"
+    )
+    click.echo("  questions.")
 
 
 def complete_item(item_id: int, cascade: bool = False, outcome: str | None = None):
@@ -4403,7 +4406,16 @@ def detail_item(
     paged: bool = False,
     no_color: bool = False,
 ):
-    """Show full detail for a task."""
+    """Show full detail for a task.
+
+    `show_children` lists EVERY direct child, in all three render paths (JSON,
+    llm, human). It used to exclude `status = 'confirmed'` — and only that one
+    status, so an epic rendered its `obsolete` and `declined` children while
+    dropping the ones that were verified and landed. E-1906 vanished from
+    `task show E-1785 --children` that way while four obsolete children stayed,
+    which inverts what an epic nearing completion needs to see: the confirmed
+    children ARE the progress (E-1911).
+    """
     row = db.query(
         "SELECT t.id, t.title, t.description, t.analysis, t.text, t.phase, t.status, "
         "COALESCE(tt.slug, '') AS type, "
@@ -4470,7 +4482,7 @@ def detail_item(
         if show_children:
             children = db.query(
                 "SELECT id, COALESCE(title, description) as title, status, phase "
-                "FROM tasks WHERE parent_id = ? AND status != 'confirmed' "
+                "FROM tasks WHERE parent_id = ? "
                 "ORDER BY sort_order",
                 (item_id,),
             )
@@ -4532,7 +4544,7 @@ def detail_item(
         if show_children:
             children = db.query(
                 "SELECT id, COALESCE(title, description) as title, status, phase "
-                "FROM tasks WHERE parent_id = ? AND status != 'confirmed' "
+                "FROM tasks WHERE parent_id = ? "
                 "ORDER BY id",
                 (item_id,),
             )
@@ -4666,7 +4678,7 @@ def _render_detail_human(
     if show_children:
         children = db.query(
             "SELECT id, COALESCE(title, description) as title, status, phase "
-            "FROM tasks WHERE parent_id = ? AND status != 'confirmed' "
+            "FROM tasks WHERE parent_id = ? "
             "ORDER BY id",
             (item_id,),
         )

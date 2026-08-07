@@ -14,17 +14,40 @@ import (
 // relay_gate.go holds the verbatim-report-relay Stop gate (E-1901) — the
 // enforcement layer under E-1803's compose-time nudge.
 //
-// E-1803 injects "relay the report verbatim, add nothing" at PostToolUse and is
-// explicit that it is a nudge, not a gate: the harness always lets the model
+// E-1803 injected "relay the report verbatim, add nothing" at PostToolUse and
+// was explicit that it is a nudge, not a gate: the harness always lets the model
 // author its final message. Agents override it anyway, because appending does
 // not feel like defiance — it feels like thoroughness. An instruction cannot fix
 // a disguise; only a detector that catches the act and NAMES it can, which is
 // what this file is.
 //
+// PARKED as of E-1911 — `relayGateEnabled` is false and nothing below fires.
+// The rationale for keeping the machinery intact is on that constant; the
+// paragraphs above describe the contract it enforced, which the append model
+// replaced.
+//
 // Everything here is pure: no DB, no I/O, no process state. The comparison is
 // the part that must be exactly right, so it is testable without infrastructure.
 // The impure half (reading the checkpoint, emitting the block) lives in
 // claude.go's Stop branch.
+
+// relayGateEnabled parks the gate (E-1911). It is false because the contract
+// the gate enforces was inverted: `task report` no longer asks for the block to
+// BE the final message, it asks for the block to be APPENDED to an
+// unconstrained organic answer. An equality check against the block would now
+// bounce every correct reply — the gate is not wrong, its premise is gone.
+//
+// Parked, not abandoned. Everything the gate needs survives: this file, its
+// unit tests, the checkpoint the report command still records, the
+// GateKindRelay row, the session_gates columns. Reviving it under the append
+// contract is this one flip plus a comparison that keys on the separator
+// instead of demanding whole-message equality.
+//
+// The switch lives HERE and not in `settings.json` deliberately. The Stop hook
+// stays installed and stays synchronous (E-1901); disabling the gate in config
+// would drift per machine and per worktree, and would silently un-park itself
+// on the next `setup` run.
+const relayGateEnabled = false
 
 // relayFenceRe matches a line that is nothing but a markdown code fence, with an
 // optional language tag. Such lines are dropped from BOTH sides before
@@ -35,9 +58,16 @@ import (
 var relayFenceRe = regexp.MustCompile("^`{3,}[a-zA-Z0-9_+-]*$")
 
 // relayMarkerRe matches the BEGIN/END REPORT delimiter lines the report command
-// prints around the sanctioned block. They mark the block's extent for the
-// agent; they are not part of the message. Dropped from both sides so an agent
-// that copies the block *with* its markers is compliant rather than bounced.
+// USED to print around the sanctioned block. They marked the block's extent for
+// the agent; they were not part of the message. Dropped from both sides so an
+// agent that copied the block *with* its markers was compliant rather than
+// bounced.
+//
+// E-1911 replaced that pair with a single opening `----- ENDLESS REPORT -----`
+// separator, so this regex now matches nothing the command emits. It is left as
+// written because the gate is parked: reviving it means rewriting the
+// comparison around the separator anyway (the block is no longer the whole
+// message), and that rewrite is where this belongs.
 var relayMarkerRe = regexp.MustCompile(`^-{3,}\s*(BEGIN|END) REPORT\s*-{3,}$`)
 
 // normalizeRelayText reduces a message to the form the equality check compares:
@@ -195,6 +225,14 @@ type stopBlock struct {
 // gate's own ignorance, and an enforcement mechanism that strands sessions gets
 // switched off — which protects nothing.
 func enforceRelayGate(payload claudePayload) (handled bool, err error) {
+	// Parked (E-1911) — see relayGateEnabled. Returning not-handled leaves the
+	// Stop branch to proceed exactly as if no checkpoint existed: nothing is
+	// written to stdout, and the pending checkpoint is left alone rather than
+	// cleared, so a revival reads the same state a live gate would have.
+	if !relayGateEnabled {
+		return false, nil
+	}
+
 	// Never gate an Agent-tool subagent. Its final message is a return value to
 	// the parent agent, not a handoff to the user — the report contract does not
 	// apply, and blocking it would strand the parent waiting on a subagent that

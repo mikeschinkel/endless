@@ -2,6 +2,8 @@ package monitor
 
 import (
 	"database/sql"
+	"encoding/json"
+	"strings"
 	"testing"
 
 	_ "modernc.org/sqlite"
@@ -81,9 +83,6 @@ func TestTaskReportFacts_StatusAndClean(t *testing.T) {
 	if len(facts.Successors) != 0 {
 		t.Errorf("successors = %v, want none", facts.Successors)
 	}
-	if len(facts.Children) != 0 {
-		t.Errorf("children = %v, want none", facts.Children)
-	}
 }
 
 // TestTaskReportFacts_Successors covers both successor directions: a task this
@@ -147,12 +146,15 @@ func TestTaskReportFacts_Type(t *testing.T) {
 	}
 }
 
-// TestTaskReportFacts_Children returns direct children with status. Any type can
-// have them — the epic-only gate is the renderer's, not this query's.
-func TestTaskReportFacts_Children(t *testing.T) {
+// TestTaskReportFacts_NoChildrenOnTheWire pins E-1911's removal at the source:
+// a task with children reports none, because the report no longer carries them
+// at all. The facts JSON is what the Python renderer reads, so a Children field
+// reappearing here is how the retired `Children:` line would come back.
+func TestTaskReportFacts_NoChildrenOnTheWire(t *testing.T) {
 	db := reportTestDB(t)
 	epic := int64(500)
 	seedReportTask(t, db, epic, "underway", nil)
+	seedReportTaskType(t, db, epic, "epic")
 	seedReportTask(t, db, 501, "assumed", &epic)
 	seedReportTask(t, db, 502, "unplanned", &epic)
 
@@ -160,15 +162,14 @@ func TestTaskReportFacts_Children(t *testing.T) {
 	if err != nil {
 		t.Fatalf("taskReportFacts: %v", err)
 	}
-	if len(facts.Children) != 2 {
-		t.Fatalf("children = %v, want E-501 and E-502", facts.Children)
+	blob, err := json.Marshal(facts)
+	if err != nil {
+		t.Fatalf("marshal facts: %v", err)
 	}
-	status := map[int64]string{}
-	for _, r := range facts.Children {
-		status[r.ID] = r.Status
-	}
-	if status[501] != "assumed" || status[502] != "unplanned" {
-		t.Errorf("children statuses = %v, want 501:assumed 502:unplanned", status)
+	for _, unwanted := range []string{"children", "501", "502"} {
+		if strings.Contains(string(blob), unwanted) {
+			t.Errorf("facts JSON still carries %q: %s", unwanted, blob)
+		}
 	}
 }
 

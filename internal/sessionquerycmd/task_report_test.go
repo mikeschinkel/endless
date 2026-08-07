@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	_ "modernc.org/sqlite"
@@ -88,8 +89,15 @@ func TestTaskReport_BinaryEmitsFacts(t *testing.T) {
 		facts.Successors[0].Relation != "cleaned_up_by" {
 		t.Errorf("successors = %+v, want one cleaned_up_by E-11", facts.Successors)
 	}
-	if len(facts.Children) != 1 || facts.Children[0].ID != 12 {
-		t.Errorf("children = %+v, want one child E-12", facts.Children)
+	// E-1911: children are off the wire entirely. The seed gives E-10 a child
+	// (E-12) precisely so their absence here is a real assertion — `session
+	// status` is where a task's children belong, and the report duplicating
+	// them is what listed two non-children under E-1785.
+	if _, ok := raw["children"]; ok {
+		t.Errorf("facts JSON still carries a children key: %s", out)
+	}
+	if strings.Contains(string(out), "12") {
+		t.Errorf("facts JSON still names the child E-12: %s", out)
 	}
 }
 

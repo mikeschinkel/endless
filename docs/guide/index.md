@@ -32,7 +32,7 @@ When your user gives you a task ID:
 6. When implementation is complete:
    - `endless task update <id> --status unverified`, **and**
    - In your reply to the user, include **how to test**: the specific commands, files, or UI actions that verify the change. Don't just say "ready" — say "ready; verify by running X then checking Y." The user shouldn't have to ask.
-7. Report completion to your user with the task ID. Generate the report with `endless task report <id>` and relay its output verbatim — it computes the facts and prints a steering prompt; see **Reporting to your user** in `endless guide tasks`. Example: "Done — E-752 is ready for verification. To verify: run `endless guide --list` and confirm the 4 expected slugs."
+7. Report completion to your user with the task ID. Answer in your own words, then append the block from `endless task report <id>` after its separator — it computes the facts your user could not derive themselves; see **Reporting to your user** in `endless guide tasks`. Example: "Done — E-752 is ready for verification. To verify: run `endless guide --list` and confirm the 4 expected slugs."
 8. **Do not mark `confirmed` yourself.** Only your user does that, after verifying. If you can't easily verify but believe it works, run `endless task assume <id> --outcome "..."` instead.
 
 When implementation is verified **and your user has told you to land it** — never on your own initiative; see **Landing the work** in `endless guide orchestration` — land the work with `endless worktree land <id>` (auto-commits endless-managed files — **not yours; see step 5** — rebases onto main, fast-forwards, then retains the worktree and its branch; they're cleaned up automatically after a grace period rather than removed immediately).

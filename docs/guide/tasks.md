@@ -247,43 +247,52 @@ endless task report <id>
 ```
 
 It reports **only what your user could not already compute** — the verify
-command, the follow-ups you filed, an epic's children, and your gated
-notes/questions — wrapped in `----- BEGIN REPORT -----` / `----- END REPORT -----`
-markers. **Relay the block between those markers as your entire final message,
-byte for byte.** It is status-agnostic (run it at whatever status you reached,
-mid-session or at the end) and **does not change the task's status**.
+command, the follow-ups you filed, and your gated notes/questions. It is
+status-agnostic (run it at whatever status you reached, mid-session or at the
+end) and **does not change the task's status**.
 
-Status, landing, and parentage are deliberately **not** in the output: `task
-show` and `session status` already render them, and the handoff tells you not to
-recap them — the command holds itself to the same bar it enforces on your notes
-(E-1880). A session with nothing else to say reports exactly `Nothing to
-report.` rather than manufacturing a summary.
+**You append its block; you do not become it.** Answer your user in your own
+words first — that half of your reply is deliberately **not** constrained by
+this command, so say what the turn actually calls for, at whatever length it
+calls for. Then append the printed block, unchanged, after its separator:
 
-**This is enforced, not advisory.** Running the command arms a Stop hook that
-compares your final message to the block and **blocks the turn** if you appended
-to it, naming the violation to you *and* to your user (E-1901). Two things
-follow:
+```
+----- ENDLESS REPORT -----
+```
 
-- Everything you might legitimately need to say has a **field**. Pass `--json`
-  with `verify` for the one command your user runs to verify the task, `notes`
-  for genuinely out-of-band facts the command can't compute, and `questions` for
-  open decisions. That is what makes a hard equality check fair: there is no
-  legitimate reason left to write prose beside the report.
-- If you get bounced, do **not** re-send with the extra content reworded.
-  Re-run the command with the right `--json` entry so the content lands *inside*
-  the block, then relay the new block.
+The verbose half carries context; the appended half carries the guarantee. One
+opening separator, no closing one — the block runs to the end of your message,
+so nothing follows it.
+
+Status, landing, parentage, and children are deliberately **not** in the output:
+`task show` and `session status` already render them, and the handoff tells you
+not to recap them — the command holds itself to the same bar it enforces on your
+notes (E-1880, E-1911).
+
+**The separator always prints, the empty case included.** A session with nothing
+computed reports exactly `Nothing to report.` under it. That line is an
+assertion, not ceremony: an *absent* block is ambiguous between "there were no
+facts" and "the block failed to render", and your user would have to go check by
+hand to tell those apart. Append it as printed.
+
+Everything you might legitimately need to say **inside the block** has a
+**field**. Pass `--json` with `verify` for the one command your user runs to
+verify the task, `notes` for genuinely out-of-band facts the command can't
+compute, and `questions` for open decisions. Reasoning, narrative, and
+explanation are not block material — they belong in your own half, above the
+separator.
 
 The exact payload shape lives in `endless task report --help` — the single
 canonical home; read it there rather than duplicating it here.
 
 **Report by default, at every checkpoint.** The rule is functional, not a list
-of situations: acceptable content is a computed fact the user cannot derive on
-their own, XOR a genuine open decision they must make — otherwise say nothing.
-Don't enumerate the moments this applies to (any such list drifts the moment a
-new surface appears); judge each checkpoint by that function. The normal path
-takes **no payload** beyond `verify`.
+of situations: what belongs in the block is a computed fact the user cannot
+derive on their own, XOR a genuine open decision they must make. Don't enumerate
+the moments this applies to (any such list drifts the moment a new surface
+appears); judge each checkpoint by that function. The normal path takes **no
+payload** beyond `verify`.
 
-Anything the command prints *outside* the markers — currently the
+Anything the command prints *above* the separator — currently the
 uncommitted/worktree-state advisory — is **for you, not your user**. Surface it
 only if it is unexpected, and if it is, re-run the report with a `--json` anomaly
 note so it lands inside the block.

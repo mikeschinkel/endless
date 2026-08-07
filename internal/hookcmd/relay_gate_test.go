@@ -223,3 +223,37 @@ func TestNormalizeRelayText_KeepsProseVisible(t *testing.T) {
 		t.Errorf("normalizeRelayText = %q, want the prose line preserved", got)
 	}
 }
+
+// TestRelayGateIsParked pins E-1911's kill switch. Two assertions, and the
+// first is what keeps the second from being vacuous: the sample message must be
+// one the comparison genuinely rejects, or "the gate did not fire" would prove
+// nothing about the switch.
+//
+// Honest limit: this is a pure test, so it proves the call returns not-handled
+// and errorless, not that no DB was touched — an inverted branch against an
+// unknown session would also return (false, nil). The end-to-end half lives in
+// tests/tasks/e-1911-verify.sh, which arms a real checkpoint through the
+// sandbox and asserts the Stop hook still lets the turn end.
+func TestRelayGateIsParked(t *testing.T) {
+	violating := sampleSanctioned + "\nI also refactored three unrelated files."
+
+	if extra, ok := relayVerdict(sampleSanctioned, violating); ok {
+		t.Fatalf("sample is not a violation (extra=%d) — the park assertion would be vacuous", extra)
+	}
+
+	if relayGateEnabled {
+		t.Fatal("relayGateEnabled is true: the gate is live again, which contradicts " +
+			"the append contract `task report` now prints (E-1911)")
+	}
+
+	handled, err := enforceRelayGate(claudePayload{
+		SessionID:            "e1911-no-such-session",
+		LastAssistantMessage: violating,
+	})
+	if handled {
+		t.Error("enforceRelayGate handled the turn while parked — nothing may reach stdout")
+	}
+	if err != nil {
+		t.Errorf("enforceRelayGate err = %v, want nil while parked", err)
+	}
+}

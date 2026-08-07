@@ -2,32 +2,35 @@
 
 End-of-session reports stop being freeform prose the agent composes. Instead the
 agent runs this command; the command computes the facts it can (status, type,
-successors, children, worktree state), gates the free-text escape hatches
+successors, worktree state), gates the free-text escape hatches
 (notes/questions) with a per-entry Haiku check, and prints a *steering prompt*
-wrapping the sanctioned block the agent must relay. Persisting the facts as
+followed by the sanctioned block the agent appends. Persisting the facts as
 queryable rows is E-1777.
 
-E-1901 made that relay enforceable. Two changes work together:
+E-1901 made every legitimate reason to speak a FIELD. `verify` joined
+notes/questions, so the verify command — previously the one thing an agent had
+to write in prose — renders inside the block.
 
-  - Every legitimate reason to speak became a FIELD. `verify` joined
-    notes/questions, so the verify command — previously the one thing an agent
-    had to write in prose — now renders inside the block. With no legitimate
-    prose left outside it, "did the agent append?" collapses from an intractable
-    judgment ("is this sentence a real question or a banned recap?") into a
-    string comparison.
-  - The command records the block as a relay checkpoint, and a Stop hook blocks
-    the turn when the agent's final message is not that block.
+E-1911 then INVERTED the relay contract, and the shape here follows from it. The
+report is no longer the agent's whole message: the agent answers organically and
+appends this block after a fixed separator. The verbose half carries context,
+the appended half carries the guarantee — which is why reining in verbosity is
+explicitly not this command's job, and why the concise half can be molded one
+response shape at a time instead of having to be right for every reply at once.
+The Stop gate that enforced the old contract is parked (see
+`internal/hookcmd/relay_gate.go`); the checkpoint is still recorded so reviving
+it is a one-line flip.
 
 Which is why `_render_sanctioned` and `_render_agent_notes` are separate: the
-first is a contract with the user that the gate enforces byte-for-byte, the
-second is advice to the agent that must never be relayed.
+first is a contract with the user, the second is advice to the agent that must
+never be relayed.
 
 It computes more than it prints. E-1880 held the command to the bar it already
 enforces on the agent: a line is emitted only if the user could not already know
 it, so status/landed/parentage stay out of the output even though the query
 still returns them (fetching status also proves the task exists). That is what
-makes "relay this verbatim" and the handoff's "do NOT recap task status, phase,
-or relationships" satisfiable at the same time.
+makes "append this block unchanged" and the handoff's "do NOT recap task status,
+phase, or relationships" satisfiable at the same time.
 
 The normal path is `endless task report <id>` with NO payload: zero free-text
 entries means zero Haiku calls, and the command steers on computed facts alone.
@@ -239,8 +242,8 @@ def _gate(notes: list[dict], questions: list[dict], prompts: dict[str, str]) -> 
 # --- computed facts ---------------------------------------------------------
 
 def _compute_facts(item_id: int) -> dict:
-    """Fetch the computed report facts from Go (status, type, landed, successors,
-    children). Not all of them are rendered — see `_render_sanctioned`."""
+    """Fetch the computed report facts from Go (status, type, landed,
+    successors). Not all of them are rendered — see `_render_sanctioned`."""
     from endless.event_bridge import _resolve_endless_go
     go_bin = _resolve_endless_go()
     config.require_db_context()
@@ -298,8 +301,7 @@ def _render_sanctioned(facts: dict, notes: list[dict], questions: list[dict],
                        verify: str | None) -> str:
     """Assemble the SANCTIONED block — the exact text the user is to receive.
 
-    Everything in here the agent must relay verbatim, and the Stop gate (E-1901)
-    compares its final message against this string, so a line that does not
+    Everything in here the agent appends unchanged, so a line that does not
     belong in the user's hands must not appear here. That is why the worktree
     anomalies moved out to `_render_agent_notes`.
 
@@ -309,9 +311,12 @@ def _render_sanctioned(facts: dict, notes: list[dict], questions: list[dict],
     That rules out `Task:` (the user typed the id), `Status:` (`session status`
     renders it — the flip *is* the contract) and `Landed:` (computable from
     `task show`), all of which the handoff simultaneously tells the session NOT
-    to recap. What survives is what a query would not have told them: the verify
-    command, the follow-ups this session filed, an epic's children, and the gated
-    free text.
+    to recap. E-1911 retires `Children:` on the same grounds, one bar later: it
+    was kept because the epic handoff asked the session to lead with the state
+    of its children, so the two surfaces each justified the other while
+    duplicating `session status`. Both are gone. What survives is what a query
+    would not have told them: the verify command, the follow-ups this session
+    filed, and the gated free text.
 
     Empty categories are omitted; an all-empty block is legitimate and
     `report_item` substitutes the `nothing-to-report` text.
@@ -327,17 +332,6 @@ def _render_sanctioned(facts: dict, notes: list[dict], questions: list[dict],
     successors = facts.get("successors") or []
     if successors:
         lines.append(f"Follow-ups you filed: {_ref_line(successors)}")
-
-    # Children are a recap for every type but an epic, whose handoff explicitly
-    # asks the session to lead with the state of its children. The dedupe is
-    # unconditional: `--parent E-N --cleans-up E-N` — the filing pattern every
-    # handoff prescribes — lands one task in BOTH lists, and printing the same
-    # id twice under two labels is what made E-1870's report unreadable.
-    if facts.get("type") == "epic":
-        filed = {s.get("id") for s in successors}
-        children = [c for c in (facts.get("children") or []) if c.get("id") not in filed]
-        if children:
-            lines.append(f"Children: {_ref_line(children)}")
 
     if notes:
         lines.append("Notes to relay:")
@@ -359,12 +353,13 @@ def _render_agent_notes(anomalies: list[str]) -> str:
     Worktree anomalies are conditional by nature: the agent is told to surface
     them only if unexpected. That makes them the one thing that cannot live in
     the sanctioned block, which is unconditional by construction — including them
-    would force the relay of noise, and excluding them while leaving them inside
-    would bounce any agent that correctly acted on one.
+    would force the relay of noise.
 
-    So they render outside the markers with the escape route named: an anomaly
+    So they render BEFORE the separator, with the escape route named: an anomaly
     worth the user's attention is re-run material (`--json` anomaly note), which
-    puts it back INSIDE the block where the gate expects it.
+    puts it back inside the block. Their position is not cosmetic — the block has
+    an opening separator and no closing one, so anything printed after the
+    separator is part of the block by definition (E-1911).
     """
     if not anomalies:
         return ""
@@ -381,13 +376,18 @@ def _render_agent_notes(anomalies: list[str]) -> str:
 
 
 def _record_checkpoint(sanctioned: str) -> None:
-    """Record the sanctioned text as this session's verbatim-relay checkpoint.
+    """Record the sanctioned text as this session's relay checkpoint.
+
+    The gate that consumed it is parked (E-1911), so this currently records for
+    a reader that is not listening. Kept anyway, and deliberately: the checkpoint
+    is the only per-turn record of what the block actually said, and reviving the
+    gate under the append contract is a one-line flip that would otherwise also
+    need this write restored and re-proven.
 
     Best-effort by design. An unresolved session (no tmux, no CLAUDECODE, a bare
-    shell) means no checkpoint and therefore no gate — the report still prints
-    and is still correct. Enforcement failing open is right here: a report that
-    refused to run because the gate could not arm itself would break handoffs to
-    punish nobody.
+    shell) means no checkpoint — the report still prints and is still correct. A
+    report that refused to run because it could not arm itself would break
+    handoffs to punish nobody.
     """
     from endless.task_cmd import _current_endless_session_id
     from endless.event_bridge import _resolve_endless_go
@@ -409,10 +409,21 @@ def report_item(item_id: int, payload: str | None) -> None:
     """Compute facts, gate the free-text payload, print the steer, arm the gate.
 
     One path, not two. Before E-1901 an empty fact block took a separate branch
-    that told the agent to compose its own one-line sign-off — freehand prose the
-    equality gate has nothing to compare against, and the exact latitude the gate
-    exists to remove. Now the empty case has a sanctioned string of its own
-    (`nothing-to-report`), so both cases render, print, and arm identically.
+    that told the agent to compose its own one-line sign-off — freehand prose,
+    and the exact latitude the computed half exists to remove. Now the empty case
+    has a sanctioned string of its own (`nothing-to-report`), so both cases
+    render and print identically.
+
+    The separator ALWAYS prints, empty case included. That is what makes a
+    swallowed block detectable: an absent block is ambiguous between "there were
+    no facts" and "the block failed to render", and the user cannot tell those
+    apart without going and checking by hand — which is the cost this whole
+    surface exists to remove. `Nothing to report.` under the separator states the
+    null result instead of leaving it to be inferred from silence.
+
+    Print order is load-bearing: steer, then the agent-facing addendum, then the
+    separator and the block LAST. The block has no closing marker, so everything
+    after the separator is the block.
     """
     notes, questions, verify = _parse_payload(payload)
     prompts = report_prompts.load_prompts()
@@ -424,8 +435,11 @@ def report_item(item_id: int, payload: str | None) -> None:
     if not sanctioned:
         sanctioned = prompts[report_prompts.NOTHING_TO_REPORT].strip()
 
-    click.echo(prompts[report_prompts.STEER].format(facts=sanctioned))
+    click.echo(prompts[report_prompts.STEER])
     agent_notes = _render_agent_notes(anomalies)
     if agent_notes:
         click.echo(agent_notes)
+    click.echo()
+    click.echo(report_prompts.SEPARATOR)
+    click.echo(sanctioned)
     _record_checkpoint(sanctioned)

@@ -18,9 +18,13 @@ defaults. The file is JSONL, one record per line:
 E-1901 renamed `steer-empty` to `nothing-to-report`. The rename is the honest
 description of a changed role: the text used to *steer* the agent toward
 composing its own one-line sign-off when there were no facts, and now it IS the
-sanctioned message for that case — the thing the agent relays, and the string the
-Stop gate compares against. No alias is kept for the old name because nothing
-could depend on it: the override is opt-in and neither layer's file existed.
+computed block for that case — the thing the agent appends. No alias is kept for
+the old name because nothing could depend on it: the override is opt-in and
+neither layer's file existed.
+
+E-1911 inverted what `steer` asks for: the agent's own answer is unconstrained
+and the computed block is APPENDED to it after a fixed separator. The separator
+itself is deliberately NOT a prompt entry — see `SEPARATOR` below.
 
 Only the four known names are honored; unknown names are ignored. A record with
 a known name replaces the lower-precedence text for that name.
@@ -33,8 +37,8 @@ from pathlib import Path
 
 from endless import config
 
-# The four tunable prompts. `steer` frames the sanctioned block the agent must
-# relay; `nothing-to-report` IS the sanctioned block when nothing was computed
+# The four tunable prompts. `steer` frames the computed block the agent must
+# append; `nothing-to-report` IS the computed block when nothing was computed
 # (E-1901); `note-check` / `question-check` each classify one free-text entry,
 # and MUST instruct the model to answer with a leading KEEP / DROP token (see
 # report_cmd parsing).
@@ -45,37 +49,44 @@ QUESTION_CHECK = "question-check"
 
 _KNOWN = (STEER, NOTHING_TO_REPORT, NOTE_CHECK, QUESTION_CHECK)
 
-# The delimiters the steer wraps around the sanctioned block. They give
-# "verbatim" an unambiguous extent — without them "add nothing else" has to be
-# judged against a boundary the agent infers, which is exactly the judgment call
-# the E-1901 gate removes. The Stop gate strips these from both sides before
-# comparing, so relaying them is tolerated rather than bounced.
-BEGIN_MARKER = "----- BEGIN REPORT -----"
-END_MARKER = "----- END REPORT -----"
+# The line that OPENS the appended block (E-1911). One marker, not a pair: the
+# block runs to the end of the agent's message by construction, so a closing
+# marker would delimit nothing. It is therefore also why the command prints the
+# block last — anything printed after the separator would be inside the block.
+#
+# Fixed literal, and deliberately NOT one of the tunable prompt entries: this is
+# the string a validator (and the user) matches on to find the block, and a
+# machine-detectable marker that a per-machine config could override away is not
+# machine-detectable. `report_cmd` prints it directly rather than interpolating
+# it into `steer`, so overriding the steer wording cannot lose it.
+#
+# Mirrored by `reportSeparator` in internal/hookcmd/claude.go, which names it in
+# the compose-time nudge. TestReportSeparatorMatchesPython pins the two together.
+SEPARATOR = "----- ENDLESS REPORT -----"
 
-# `{facts}` in the steer text is replaced with the sanctioned block. The check
-# texts take `{text}` — the single entry under classification.
-# `nothing-to-report` takes NO placeholder: it is used verbatim as the sanctioned
-# text, so braces in an override are literal.
+# The check texts take `{text}` — the single entry under classification.
+# `steer` and `nothing-to-report` take NO placeholder: the steer is instruction
+# only (the command prints the separator and the block after it), and
+# `nothing-to-report` is used verbatim as the block text. Braces in an override
+# of either are literal.
 DEFAULTS: dict[str, str] = {
     STEER: (
-        "Relay the block between the markers below as your ENTIRE final "
-        "message — byte for byte, nothing before it, nothing after it. No "
-        "preamble, no sign-off, no success confirmation, no remark about "
-        "anything absent from it.\n"
+        "Answer the user in your own words first. That half of your reply is "
+        "NOT constrained by this block — say what the turn actually calls for, "
+        "at whatever length it calls for.\n"
         "\n"
-        "This is enforced, not advisory: a Stop hook compares your final "
-        "message against this block and blocks the turn if you appended to it, "
-        "naming the violation to you AND to the user.\n"
+        "Then APPEND the block printed below to the END of that reply, "
+        "unchanged, starting with its separator line. Reproduce the separator "
+        "and the block exactly as printed: do not edit, summarize, reorder, or "
+        "comment on the block, and write nothing after it.\n"
         "\n"
-        "If something needs saying that is not in the block, it does not go in "
-        "your reply — re-run `endless task report` with a --json note, "
-        "question, or verify entry so it lands INSIDE the block, then relay the "
-        "new block.\n"
+        "If the block is the single line `Nothing to report.`, append it "
+        "anyway. That line is the report's null result; dropping it is "
+        "indistinguishable from a block that failed to render.\n"
         "\n"
-        f"{BEGIN_MARKER}\n"
-        "{facts}\n"
-        f"{END_MARKER}"
+        "If a fact belongs inside the block and is missing, do not hand-write "
+        "it there — re-run `endless task report` with a --json note, question, "
+        "or verify entry so the command computes it, then append the new block."
     ),
     NOTHING_TO_REPORT: "Nothing to report.",
     NOTE_CHECK: (

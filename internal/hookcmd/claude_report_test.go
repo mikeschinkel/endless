@@ -2,6 +2,8 @@ package hookcmd
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -50,8 +52,12 @@ func TestTaskReportRe(t *testing.T) {
 
 // TestReportRelayResponse_Shape pins the structural contract the live-Claude
 // reinforcement depends on: PostToolUse additionalContext must be nested under
-// hookSpecificOutput with the event name, and the instruction must say relay
-// verbatim / add nothing. This is what the verify script asserts fires.
+// hookSpecificOutput with the event name, and the instruction must state the
+// APPEND contract (E-1911) — own answer first, block appended after the
+// separator. The must-not-contain half is the load-bearing part: the retired
+// "add nothing / entire reply" wording is the contract this task inverted, and
+// re-introducing it here would silently instruct the opposite of what the
+// command prints.
 func TestReportRelayResponse_Shape(t *testing.T) {
 	b, err := json.Marshal(reportRelayResponse())
 	if err != nil {
@@ -69,10 +75,31 @@ func TestReportRelayResponse_Shape(t *testing.T) {
 		t.Errorf("hookEventName = %v, want PostToolUse", hso["hookEventName"])
 	}
 	ac, _ := hso["additionalContext"].(string)
-	for _, want := range []string{"verbatim", "add nothing", "task report"} {
+	for _, want := range []string{"task report", "APPEND", reportSeparator, "Nothing to report."} {
 		if !strings.Contains(ac, want) {
 			t.Errorf("additionalContext missing %q:\n%s", want, ac)
 		}
+	}
+	for _, unwanted := range []string{"add nothing else", "entire reply", "ENFORCED"} {
+		if strings.Contains(ac, unwanted) {
+			t.Errorf("additionalContext still carries retired contract %q:\n%s", unwanted, ac)
+		}
+	}
+}
+
+// TestReportSeparatorMatchesPython pins the one literal that must be identical
+// on both sides of the language boundary. The Go instruction tells the agent to
+// look for this line; the Python command is what prints it. If they drift, the
+// agent is hunting a separator that never appears and the block silently stops
+// being detectable — a failure with no symptom at either end alone.
+func TestReportSeparatorMatchesPython(t *testing.T) {
+	src, err := os.ReadFile(filepath.Join("..", "..", "src", "endless", "report_prompts.py"))
+	if err != nil {
+		t.Fatalf("read report_prompts.py: %v", err)
+	}
+	want := `SEPARATOR = "` + reportSeparator + `"`
+	if !strings.Contains(string(src), want) {
+		t.Errorf("report_prompts.py does not define %s", want)
 	}
 }
 

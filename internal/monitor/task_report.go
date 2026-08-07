@@ -17,10 +17,10 @@ type TaskReportFacts struct {
 	// Status is the focal task's current status.
 	Status string `json:"status"`
 	// Type is the focal task's type slug (todo/bugfix/research/epic/…), or ""
-	// when the row has no type_id. The renderer gates the Children list on it:
-	// only an epic handoff is asked to lead with the state of its children
-	// (E-1880); for every other type the list is a recap of what `task show`
-	// already prints.
+	// when the row has no type_id. Computed, not currently rendered: it gated
+	// the epic-only Children list until E-1911 removed that list, and it stays
+	// on the wire because the renderer's per-type decisions are the kind that
+	// come back (Status and Landed are here on the same footing).
 	Type string `json:"type"`
 	// Landed is true when the task already has >=1 task_landings row. Almost
 	// always false at report time (landing follows verification), so the prompt
@@ -31,20 +31,21 @@ type TaskReportFacts struct {
 	// follow-ups filed against it). Each carries its current status so the agent
 	// can tersely tell the user what was spawned and where it stands.
 	Successors []TaskRef `json:"successors"`
-	// Children are this task's direct child tasks, with current status. Any task
-	// type can have them — the `--parent E-N --cleans-up E-N` filing pattern
-	// gives an ordinary task children too — so the epic-only gate lives in the
-	// renderer, not here.
-	Children []TaskRef `json:"children"`
+	// Children is deliberately absent (E-1911). The report used to carry an
+	// epic's children because the epic handoff asked the session to lead with
+	// their state, and the handoff asked for it because the report computed it —
+	// two surfaces each justifying the other while duplicating `session status`,
+	// which is where a task's children are rendered correctly. Both are gone, so
+	// the query goes too rather than lingering as an unread column.
 }
 
 // TaskRef is a lightweight reference to a related task: its id, current status,
-// and (for successors) the relation as seen from the focal task.
+// and the relation as seen from the focal task.
 type TaskRef struct {
 	ID     int64  `json:"id"`
 	Status string `json:"status"`
-	// Relation is set only for successors: "blocks" (focal blocks this) or
-	// "cleaned_up_by" (this cleans_up focal). Empty for children.
+	// Relation is the successor direction: "blocks" (focal blocks this) or
+	// "cleaned_up_by" (this cleans_up focal).
 	Relation string `json:"relation,omitempty"`
 }
 
@@ -91,11 +92,6 @@ func taskReportFacts(db *sql.DB, taskID int64) (TaskReportFacts, error) {
 		return facts, err
 	}
 
-	facts.Children, err = taskChildren(db, taskID)
-	if err != nil {
-		return facts, err
-	}
-
 	return facts, nil
 }
 
@@ -126,29 +122,6 @@ func taskSuccessors(db *sql.DB, taskID int64) ([]TaskRef, error) {
 		var r TaskRef
 		if err := rows.Scan(&r.ID, &r.Status, &r.Relation); err != nil {
 			return nil, fmt.Errorf("scan successor for E-%d: %w", taskID, err)
-		}
-		refs = append(refs, r)
-	}
-	return refs, rows.Err()
-}
-
-// taskChildren returns the focal task's direct children with current status,
-// ordered by the tree's sort order.
-func taskChildren(db *sql.DB, taskID int64) ([]TaskRef, error) {
-	rows, err := db.Query(
-		"SELECT id, status FROM tasks WHERE parent_id = ? ORDER BY sort_order, id",
-		taskID,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("query children for E-%d: %w", taskID, err)
-	}
-	defer rows.Close()
-
-	var refs []TaskRef
-	for rows.Next() {
-		var r TaskRef
-		if err := rows.Scan(&r.ID, &r.Status); err != nil {
-			return nil, fmt.Errorf("scan child for E-%d: %w", taskID, err)
 		}
 		refs = append(refs, r)
 	}

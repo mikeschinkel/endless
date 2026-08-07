@@ -194,7 +194,7 @@ def test_render_clean_task_is_empty():
     """A clean handoff has nothing the user could not already compute (E-1880):
     no Task/Status/Landed recap, no empty-category ceremony — an empty block."""
     facts = {"status": "unverified", "type": "todo", "landed": False,
-             "successors": [], "children": None}
+             "successors": []}
     block = report_cmd._render_sanctioned(facts, [], [], None)
     assert block.strip() == ""
 
@@ -253,110 +253,143 @@ def test_render_includes_nonempty_sections():
     facts = {
         "status": "unverified", "type": "epic", "landed": True,
         "successors": [{"id": 1772, "status": "unverified", "relation": "blocks"}],
-        "children": [{"id": 1800, "status": "assumed"}],
     }
     notes = [{"kind": "anomaly", "text": "base is behind main"}]
     questions = [{"text": "worktree or repo?", "type": "choice", "style": "single"}]
     block = report_cmd._render_sanctioned(facts, notes, questions, "just test")
     assert "Verify: `just test`" in block
     assert "Follow-ups you filed: E-1772 [unverified]" in block
-    assert "Children: E-1800 [assumed]" in block
     assert "[anomaly] base is behind main" in block
     assert "worktree or repo?  (choice/single)" in block
 
 
-# --- E-1880: children are epic-only, and never duplicate a follow-up ---------
+# --- E-1911: children are not the report's job at all -----------------------
 
-def test_render_hides_children_for_non_epic():
+def test_render_never_lists_children_even_for_an_epic():
+    """The Children line was epic-only (E-1880) because the epic handoff asked
+    the session to lead with their state — and that directive existed because
+    the report computed them. Both are gone: `session status` renders a task's
+    children, and the report duplicating it is what listed E-1907 and E-1908 as
+    children of E-1785 when neither was one."""
+    facts = {
+        "status": "unverified", "type": "epic", "landed": False,
+        "successors": [{"id": 1872, "status": "submitted", "relation": "cleaned_up_by"}],
+        # Present in the dict on purpose: a renderer that reads it again fails.
+        "children": [{"id": 1899, "status": "ready"},
+                     {"id": 1900, "status": "confirmed"}],
+    }
+    block = report_cmd._render_sanctioned(facts, [], [], None)
+    assert "Children" not in block
+    assert "E-1899" not in block
+    assert "E-1900" not in block
+    assert block.strip() == "Follow-ups you filed: E-1872 [submitted]"
+
+
+def test_render_epic_with_only_children_is_empty():
+    """An epic whose only related tasks are children now reports nothing rather
+    than a recap — and `report_item` turns that into `Nothing to report.`"""
+    facts = {"status": "unverified", "type": "epic", "landed": False,
+             "successors": [], "children": [{"id": 1899, "status": "ready"}]}
+    assert report_cmd._render_sanctioned(facts, [], [], None).strip() == ""
+
+
+def test_render_follow_up_appears_exactly_once():
     """`--parent E-N --cleans-up E-N` — the pattern every handoff prescribes —
-    lands a follow-up in BOTH lists. For a non-epic the Children line is a pure
-    recap, so it is not rendered and the ids appear exactly once."""
+    lands one task in both relations. With children gone the dedupe that used to
+    be needed is structural: the id can only render under follow-ups."""
     refs = [{"id": 1872, "status": "submitted", "relation": "cleaned_up_by"},
             {"id": 1873, "status": "submitted", "relation": "cleaned_up_by"}]
-    facts = {"status": "unverified", "type": "todo", "landed": False,
+    facts = {"status": "unverified", "type": "epic", "landed": False,
              "successors": refs,
              "children": [{"id": r["id"], "status": r["status"]} for r in refs]}
     block = report_cmd._render_sanctioned(facts, [], [], None)
-    assert "Children" not in block
     assert block.count("E-1872") == 1
     assert block.count("E-1873") == 1
-
-
-def test_render_epic_keeps_children_but_dedupes():
-    """An epic handoff is explicitly asked to lead with the state of its
-    children — so the line stays — but an id already listed as a follow-up is
-    never repeated under it."""
-    facts = {
-        "status": "unverified", "type": "epic", "landed": False,
-        "successors": [{"id": 1872, "status": "submitted", "relation": "cleaned_up_by"}],
-        "children": [{"id": 1872, "status": "submitted"},
-                     {"id": 1899, "status": "ready"}],
-    }
-    block = report_cmd._render_sanctioned(facts, [], [], None)
-    assert "Children: E-1899 [ready]" in block
-    assert block.count("E-1872") == 1
-
-
-def test_render_epic_all_children_filed_omits_the_line():
-    """Dedupe leaving nothing behind must omit the label, not print an empty one."""
-    facts = {
-        "status": "unverified", "type": "epic", "landed": False,
-        "successors": [{"id": 1872, "status": "submitted", "relation": "cleaned_up_by"}],
-        "children": [{"id": 1872, "status": "submitted"}],
-    }
-    block = report_cmd._render_sanctioned(facts, [], [], None)
-    assert "Children" not in block
-
-
-def test_render_missing_type_is_not_an_epic():
-    """A task with no type_id reports type "" — treat it as a non-epic rather
-    than crashing or leaking a Children recap."""
-    facts = {"status": "unverified", "type": "", "landed": False,
-             "successors": [], "children": [{"id": 1899, "status": "ready"}]}
-    assert report_cmd._render_sanctioned(facts, [], [], None).strip() == ""
 
 
 # --- steer selection --------------------------------------------------------
 
 @pytest.fixture(autouse=True)
 def _no_checkpoint(monkeypatch):
-    """Arming the Stop gate needs a live session + endless-go; these tests cover
-    rendering, so the recording side-effect is stubbed out. `test_report_item_*`
+    """Recording the checkpoint needs a live session + endless-go; these tests
+    cover rendering, so the side-effect is stubbed out. `test_report_item_*`
     below asserts it is called with the right text."""
     monkeypatch.setattr(report_cmd, "_record_checkpoint", lambda text: None)
 
 
-def _stub_facts(monkeypatch, successors=None, children=None, type_="todo"):
+def _stub_facts(monkeypatch, successors=None, type_="todo"):
     monkeypatch.setattr(report_cmd, "_compute_facts",
                         lambda i: {"status": "unverified", "type": type_, "landed": False,
-                                   "successors": successors or [], "children": children or []})
+                                   "successors": successors or []})
     monkeypatch.setattr(report_cmd, "_compute_anomalies", lambda: [])
 
 
-def test_report_item_wraps_facts_in_steer(monkeypatch, capsys):
+def _block_after_separator(out: str) -> str:
+    """The appended block: everything after the separator, which has no closing
+    marker because the block runs to the end of the message (E-1911)."""
+    assert report_prompts.SEPARATOR in out, out
+    return out.split(report_prompts.SEPARATOR, 1)[1].strip()
+
+
+def test_report_item_appends_the_block_after_the_separator(monkeypatch, capsys):
     _stub_facts(monkeypatch, successors=[{"id": 1772, "status": "ready",
                                           "relation": "cleaned_up_by"}])
     report_cmd.report_item(1771, None)
     out = capsys.readouterr().out
-    assert "Relay the block between the markers" in out  # steer header
-    assert report_prompts.BEGIN_MARKER in out
-    assert report_prompts.END_MARKER in out
-    assert "Follow-ups you filed: E-1772 [ready]" in out
+    assert "Answer the user in your own words first" in out  # steer header
+    assert _block_after_separator(out) == "Follow-ups you filed: E-1772 [ready]"
     assert "Status:" not in out
 
 
-def test_report_item_empty_block_uses_nothing_to_report(monkeypatch, capsys):
-    """The empty case is no longer a separate steer telling the agent to compose
-    a one-liner — it is a sanctioned string like any other, so the same markers
-    and the same gate apply (E-1901)."""
+def test_steer_does_not_claim_the_whole_message(monkeypatch, capsys):
+    """The inversion, stated as a prohibition. The old steer demanded the block
+    be the ENTIRE final message and named a Stop hook as enforcement; both are
+    retired (E-1911), and a steer that threatens a gate which no longer fires
+    teaches the agent to discount steers."""
     _stub_facts(monkeypatch)
     report_cmd.report_item(1771, None)
     out = capsys.readouterr().out
-    assert "Relay the block between the markers" in out
-    assert "Nothing to report." in out
-    # And it is inside the block, so the equality gate has something to match.
-    body = out.split(report_prompts.BEGIN_MARKER)[1].split(report_prompts.END_MARKER)[0]
-    assert body.strip() == "Nothing to report."
+    for retired in ("ENTIRE final message", "This is enforced, not advisory",
+                    "blocks the turn", report_prompts.SEPARATOR.replace("ENDLESS", "BEGIN")):
+        assert retired not in out, retired
+    assert "NOT constrained" in out
+
+
+def test_report_item_empty_block_still_renders_the_separator(monkeypatch, capsys):
+    """The keystone of the append contract. An ABSENT block is ambiguous — the
+    user cannot tell "no facts" from "the block failed to render" — so the null
+    case is stated rather than left as silence."""
+    _stub_facts(monkeypatch)
+    report_cmd.report_item(1771, None)
+    out = capsys.readouterr().out
+    assert _block_after_separator(out) == "Nothing to report."
+
+
+def test_separator_present_in_both_the_empty_and_non_empty_case(monkeypatch, capsys):
+    """Same property from the other side: the separator is unconditional, which
+    is what lets a validator (or the user) detect a swallowed block."""
+    _stub_facts(monkeypatch)
+    report_cmd.report_item(1771, None)
+    empty = capsys.readouterr().out
+    _stub_facts(monkeypatch, successors=[{"id": 1772, "status": "ready",
+                                          "relation": "cleaned_up_by"}])
+    report_cmd.report_item(1771, None)
+    full = capsys.readouterr().out
+    assert empty.count(report_prompts.SEPARATOR) == 1
+    assert full.count(report_prompts.SEPARATOR) == 1
+
+
+def test_agent_notes_render_above_the_separator(monkeypatch, capsys):
+    """Position is load-bearing, not cosmetic: with an opening marker and no
+    closing one, anything printed after the separator IS the block. The
+    agent-facing anomaly addendum must therefore precede it or the agent would
+    be told to append advice it was told never to relay."""
+    _stub_facts(monkeypatch)
+    monkeypatch.setattr(report_cmd, "_compute_anomalies", lambda: ["uncommitted: scratch.go"])
+    report_cmd.report_item(1771, None)
+    out = capsys.readouterr().out
+    assert out.index("uncommitted: scratch.go") < out.index(report_prompts.SEPARATOR)
+    assert _block_after_separator(out) == "Nothing to report."
 
 
 def test_nothing_to_report_is_overridable(isolated_env, monkeypatch, capsys):
@@ -369,16 +402,31 @@ def test_nothing_to_report_is_overridable(isolated_env, monkeypatch, capsys):
     )
     _stub_facts(monkeypatch)
     report_cmd.report_item(1771, None)
+    assert _block_after_separator(capsys.readouterr().out) == "EMPTY-MARKER"
+
+
+def test_separator_survives_a_steer_override(isolated_env, monkeypatch, capsys):
+    """The separator is a fixed constant the command prints itself, NOT part of
+    the tunable steer text. A user rewording the steer cannot lose the one
+    string that makes the block machine-detectable."""
+    import json
+    from endless import config
+    (config.CONFIG_DIR / "report-prompts.jsonl").write_text(
+        json.dumps({"name": "steer", "text": "SAY WHATEVER"}) + "\n"
+    )
+    _stub_facts(monkeypatch)
+    report_cmd.report_item(1771, None)
     out = capsys.readouterr().out
-    body = out.split(report_prompts.BEGIN_MARKER)[1].split(report_prompts.END_MARKER)[0]
-    assert body.strip() == "EMPTY-MARKER"
+    assert "SAY WHATEVER" in out
+    assert _block_after_separator(out) == "Nothing to report."
 
 
 def test_report_item_arms_the_gate_with_the_block_only(monkeypatch, capsys):
     """The recorded text must be the sanctioned block ALONE — not the steer that
-    frames it, and not the agent-facing anomaly addendum. Recording either would
-    gate against a string the user was never meant to receive, and every relay
-    would bounce."""
+    frames it, and not the agent-facing anomaly addendum. The gate that consumed
+    this is parked (E-1911), but the checkpoint is still what a revival compares
+    against, so recording a string the user was never meant to receive would
+    bounce every reply the moment it is switched back on."""
     recorded = []
     monkeypatch.setattr(report_cmd, "_record_checkpoint", recorded.append)
     _stub_facts(monkeypatch, successors=[{"id": 1906, "status": "untriaged",
@@ -394,7 +442,8 @@ def test_report_item_arms_the_gate_with_the_block_only(monkeypatch, capsys):
     out = capsys.readouterr().out
     assert "uncommitted: scratch.go" in out          # printed for the agent…
     assert "uncommitted" not in recorded[0]          # …but never sanctioned
-    assert "Relay the block" not in recorded[0]      # steer is not the message
+    assert "Answer the user" not in recorded[0]      # steer is not the block
+    assert report_prompts.SEPARATOR not in recorded[0]  # nor is the separator
 
 
 # --- tunable config surface -------------------------------------------------

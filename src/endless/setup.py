@@ -359,6 +359,12 @@ def _make_hook_entry(hook_bin: str, is_async: bool = True) -> dict:
 # verbatim-relay gate blocks at Stop, and would silently do nothing if the hook
 # were installed async — the worst kind of failure, since every other symptom
 # (hook fires, DB row written, no error anywhere) says it is working.
+#
+# Stop STAYS here now that E-1911 has parked that gate. The park is a code-level
+# constant at the gate's own call site precisely so this file does not move: a
+# config-level disable would drift per machine and per worktree, and would
+# silently un-park itself on the next `setup` run. Reviving the gate must not
+# also require re-discovering that Stop has to be synchronous.
 SYNC_EVENTS = {"PreToolUse", "SessionStart", "UserPromptSubmit", "PostToolUse", "Stop"}
 
 

@@ -260,11 +260,14 @@ func runClaude(args []string) error {
 	case "Stop":
 		// Parse transcript before idling — captures the assistant's last response
 		monitor.ParseTranscript(payload.SessionID, payload.TranscriptPath)
-		// E-1901: the verbatim-relay gate. Runs BEFORE IdleSession — a blocked
-		// turn is not ending, so marking the session idle would be a lie that
-		// `session list` and the status line would both render. Returns handled
-		// when it has emitted a block response; nothing further may write to
-		// stdout after that (the hook's stdout is one JSON document).
+		// E-1901: the verbatim-relay gate, PARKED by E-1911 (see
+		// relayGateEnabled) — it returns not-handled immediately, so this call
+		// is currently a no-op held in place for the revival. Runs BEFORE
+		// IdleSession — a blocked turn is not ending, so marking the session
+		// idle would be a lie that `session list` and the status line would both
+		// render. Returns handled when it has emitted a block response; nothing
+		// further may write to stdout after that (the hook's stdout is one JSON
+		// document).
 		if handled, err := enforceRelayGate(payload); err != nil {
 			log.Printf("relay gate: %v", err)
 		} else if handled {
@@ -312,14 +315,16 @@ func runClaude(args []string) error {
 // it does NOT enumerate checkpoint types (an enumerated list drifts the moment a
 // new user-facing surface appears).
 const reportChannelRule = "Report channel: at any in-session point where you " +
-	"would give the user a user-facing status update or checkpoint, do NOT " +
-	"hand-write it — run `endless task report <id>` and relay its output. " +
-	"Acceptable content is defined by function, not by a list of situations: a " +
-	"computed fact the user cannot derive on their own, XOR a genuine open " +
-	"decision they must make before the work can proceed — otherwise say " +
-	"nothing. Judge every checkpoint by that function. Relaying the report is " +
-	"enforced at turn end, so pass what you need to say as a --json " +
-	"verify/note/question entry rather than as prose beside the report."
+	"would give the user a user-facing status update or checkpoint, run " +
+	"`endless task report <id>` and append its block to the end of your reply, " +
+	"after the `" + reportSeparator + "` separator. Your own answer comes " +
+	"first and is not constrained by the block. What belongs IN the block is " +
+	"defined by function, not by a list of situations: a computed fact the " +
+	"user cannot derive on their own, XOR a genuine open decision they must " +
+	"make before the work can proceed. Judge every checkpoint by that " +
+	"function, and get such a fact into the block by re-running the command " +
+	"with a --json verify/note/question entry rather than hand-writing it into " +
+	"the block."
 
 func handleTaskContextInjection(projectID int64, payload claudePayload) error {
 	ctx, err := buildTaskContextInjection(projectID, payload)
@@ -442,24 +447,37 @@ func buildTaskContextInjection(projectID int64, payload claudePayload) (string, 
 // `;`/`&`/`|` inside a quoted string) is harmless — this is a nudge, not a gate.
 var taskReportRe = regexp.MustCompile(`(?m)(?:^|[;&|])\s*(?:\S*/)?endless\s+task\s+report\b`)
 
+// reportSeparator opens the appended report block (E-1911). It is a fixed
+// literal, mirrored by SEPARATOR in src/endless/report_prompts.py: the Python
+// command prints it and the instructions below name it, so the two must agree
+// byte for byte or the agent is told to look for a separator that never
+// appears. Kept out of the tunable prompt entries for the same reason — a
+// machine-detectable marker a user could override away is not detectable.
+const reportSeparator = "----- ENDLESS REPORT -----"
+
 // reportRelayInstruction is the compose-time reinforcement injected right after
-// a `task report` run (E-1803 Arm 1). It reinforces the command's own stdout:
-// relay that output verbatim as the whole reply, add nothing. This is the
-// strongest in-harness lever short of a regenerate loop — a strong nudge, NOT a
-// hard gate (Claude Code always lets the model author its final message; no hook
-// replaces it).
-const reportRelayInstruction = "You just ran `endless task report`. Emit the " +
-	"block between that command's BEGIN/END REPORT markers verbatim as your " +
-	"entire reply to the user, and add nothing else — no preamble, no sign-off, " +
-	"no success confirmation, and no remark about categories absent from it. " +
-	"The report IS the message; if a fact is not in it, say nothing about that " +
-	"fact.\n\n" +
-	"This is now ENFORCED (E-1901): a Stop hook compares your final message to " +
-	"that block and blocks the turn if you appended to it, naming the violation " +
-	"to you AND to the user. If something needs saying that is not in the " +
-	"block, do not put it in your reply — re-run `endless task report` with a " +
-	"--json verify/note/question entry so it lands inside the block, then relay " +
-	"the new block."
+// a `task report` run (E-1803 Arm 1). It reinforces the command's own steer.
+//
+// E-1911 inverted what that steer asks for, and this text had to invert with
+// it. It used to say the block IS the whole reply and to add nothing — the same
+// contract the (now parked) Stop gate enforced. Under the append model the
+// agent's own answer is deliberately unconstrained, so leaving the old wording
+// here would have the harness instructing the exact opposite of the command it
+// is reinforcing, and an agent that obeys either one disobeys the other.
+const reportRelayInstruction = "You just ran `endless task report`. Answer the " +
+	"user in your own words first — that half of your reply is NOT constrained " +
+	"by the report, so say what the turn actually calls for, at whatever " +
+	"length it calls for.\n\n" +
+	"Then APPEND that command's report block to the END of your reply, " +
+	"unchanged, after its `" + reportSeparator + "` separator line. Reproduce " +
+	"the separator and the block exactly as printed — do not edit, summarize, " +
+	"reorder, or comment on the block, and write nothing after it. If the block " +
+	"is the single line `Nothing to report.`, append that: it is the report's " +
+	"null result, and dropping it is indistinguishable from a block that failed " +
+	"to render.\n\n" +
+	"If a fact belongs inside the block and is missing, do not hand-write it " +
+	"there — re-run `endless task report` with a --json verify/note/question " +
+	"entry so the command computes it, then append the new block."
 
 // postToolUseResponse carries a PostToolUse additionalContext injection. Unlike
 // the top-level hookResponse.AdditionalContext used on SessionStart /
@@ -514,8 +532,8 @@ func handlePostToolUse(projectID int64, payload claudePayload) error {
 	}
 
 	// E-1803 Arm 1: reinforce the report channel. When this Bash call ran
-	// `endless task report`, inject a compose-time nudge to relay the report's
-	// stdout verbatim and add nothing.
+	// `endless task report`, inject a compose-time nudge to append the report's
+	// block after the separator (E-1911) — its own answer stays its own.
 	if payload.ToolName == "Bash" {
 		var input toolInputBash
 		if err := json.Unmarshal(payload.ToolInput, &input); err == nil &&

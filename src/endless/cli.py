@@ -1837,20 +1837,23 @@ def task_report(item_id, payload, payload_file):
     """Produce an end-of-session (or status) report for a task.
 
     It reports only what the user could NOT already compute: the verify command,
-    the follow-ups you filed, an epic's children, and your gated
-    notes/questions — wrapped in BEGIN/END REPORT markers you relay verbatim as
-    your entire final message. Status, landing, and parentage are deliberately
-    absent (`task show` / `session status` already render them, and the handoff
-    forbids recapping them). A session with none of the above reports
-    "Nothing to report." rather than inventing a summary.
+    the follow-ups you filed, and your gated notes/questions. Status, landing,
+    parentage and children are deliberately absent (`task show` /
+    `session status` already render them, and the handoff forbids recapping
+    them). A session with none of the above reports "Nothing to report." rather
+    than inventing a summary.
 
-    ENFORCED, not advisory (E-1901): running this arms a Stop hook that compares
-    your final message to the block and blocks the turn if you appended to it,
-    naming the violation to you and to the user. So everything you might need to
-    say has a field — pass --json with `verify` for the one command that verifies
-    the task, `notes` for genuinely non-computable out-of-band facts, and
-    `questions` for open decisions. Free-text entries are checked and ceremonial
-    ones bounced; `verify` is not checked (a command is not prose).
+    You APPEND the block, you do not become it (E-1911). Answer the user in your
+    own words — that half of your reply is not constrained by this command — then
+    append the printed block, unchanged, after its separator line. The separator
+    prints in every case, the empty one included, so a block that fails to render
+    is distinguishable from a report that found nothing.
+
+    Everything you might need to say inside the block has a field — pass --json
+    with `verify` for the one command that verifies the task, `notes` for
+    genuinely non-computable out-of-band facts, and `questions` for open
+    decisions. Free-text entries are checked and ceremonial ones bounced;
+    `verify` is not checked (a command is not prose).
 
     Status-agnostic: run it at whatever terminal status you reached. It does
     not change the task's status.
