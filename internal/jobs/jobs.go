@@ -9,9 +9,10 @@
 // # The runner knows nothing job-specific
 //
 // Jobs are defined by their own tasks and register themselves here. The runner
-// only ever sees Name, Schedule and Run. The registry ships EMPTY in production —
-// E-1859 (the description-sufficiency evaluator) and E-1881 (worktree auto-merge)
-// are the first real clients.
+// only ever sees Name, Schedule and Run. Registration is by blank import in
+// cmd/endless-go/main.go, so both triggers in that binary see one registry.
+// E-1859 (the description-sufficiency triager, internal/triagejob) is the first
+// real client; E-1881 (worktree auto-merge) is the next.
 //
 // # Concurrency
 //

@@ -92,7 +92,7 @@ stateDiagram-v2
 
 The agent sets `submitted` (via `task submit`, or by attaching a plan); a human sets `ready` (via `task approve`) — the two-step gate that makes `ready` mean "approved," not merely "planned."
 
-`task add` files new tasks as `untriaged` unless you pass an explicit `--status` (a `--tier 1` task still goes straight to `ready` — it is exempt from planning, so it is exempt from triage too). Until an automatic triager exists, route by hand: `task submit <id>` when the description is already a sufficient spec, or `task update <id> --status unplanned` when it needs design work first. Attaching a plan with `--text` moves an `untriaged` task to `submitted` in one step, exactly as it does from `unplanned`.
+`task add` files new tasks as `untriaged` unless you pass an explicit `--status` (a `--tier 1` task still goes straight to `ready` — it is exempt from planning, so it is exempt from triage too). Routing is automatic: `task add` triages the new task in the background, and a periodic sweep drains anything it missed (`endless triage run`). It judges the persisted description, parent, siblings and linked decisions — never the filing session's transcript — and it fails open, leaving a task `untriaged` rather than guessing. Route by hand whenever you disagree or want it now: `task submit <id>` when the description is already a sufficient spec, or `task update <id> --status unplanned` when it needs design work first. Attaching a plan with `--text` moves an `untriaged` task to `submitted` in one step, exactly as it does from `unplanned`. See `endless guide tasks`.
 
 **A material description edit sends a task back to `untriaged`.** The description IS the spec that triage and approval were judged against, so rewriting it invalidates that judgment. The reset fires only from the pre-work statuses — `untriaged`, `unplanned`, `submitted`, `ready`, `revisit` — and never from `underway` (so an edit cannot yank work out from under a live session), `unverified`, or any terminal status. Two escape hatches: an identical rewrite is a no-op, and `--keep-status` suppresses the reset for a typo- or formatting-only edit.
 
@@ -198,6 +198,7 @@ listed separately. (Generated — do not hand-edit; run `/regenerate-guide`.)
 | `task spawn` | orchestration | Spawning a session on a task: foreground/background, attach verbs, coordinator pattern. |
 | `task unsettled` | orchestration | Why a worktree hasn't settled — modified (commit or discard) vs unlanded (land). |
 | `tmux` | reference | Tmux status-line and popup integration. |
+| `triage` | tasks | Automatic routing of `untriaged` tasks by description sufficiency — the sweep, the file-time path, and the manual override. |
 | `verb` | tasks | Verbs: the registered actions that can begin a task title. |
 | `worktree` | orchestration | Per-task git worktrees: getting in, landing, abandoning, inspecting. |
 

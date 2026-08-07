@@ -46,6 +46,12 @@ def isolated_env(tmp_path, monkeypatch):
     # for ENDLESS_AUTO_MIGRATE. Tests need a fully migrated schema.
     monkeypatch.setenv("ENDLESS_AUTO_MIGRATE", "1")
 
+    # E-1859: suppress automatic file-time triage. Every `task add` in the
+    # suite would otherwise fan out a detached model call — slow, costly, and
+    # nondeterministic (it races the assertions by mutating task status).
+    # Tests that exercise the triager set this explicitly.
+    monkeypatch.setenv("ENDLESS_NO_TRIAGE", "1")
+
     # Force 'task claim' eswt-detection to default to verbose form. Without
     # this, tests would non-deterministically read the developer's actual
     # shell function table.

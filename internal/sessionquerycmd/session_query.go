@@ -91,6 +91,16 @@ func Run(args []string) {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
+	case "untriaged-tasks":
+		if err := runUntriagedTasks(args[1:]); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+	case "triage-context":
+		if err := runTriageContext(args[1:]); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
 	case "trail":
 		if err := runTrail(args[1:]); err != nil {
 			fmt.Fprintln(os.Stderr, err)
@@ -141,6 +151,10 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "                                    JSON {endless_id, session_id, active_task_id, worktree_path, state,")
 	fmt.Fprintln(os.Stderr, "                                    task_type, task_status, task_title, landed_sha} to relaunch (or recover) a lost session")
 	fmt.Fprintln(os.Stderr, "  task-report --id <task-id>        JSON {task_id, status, type, landed, successors[]} of a task's computed report facts (E-1771)")
+	fmt.Fprintln(os.Stderr, "  untriaged-tasks [--project <name>] [--limit N]")
+	fmt.Fprintln(os.Stderr, "                                    JSON array [{id, project, title}] of the triage queue, oldest first (E-1859)")
+	fmt.Fprintln(os.Stderr, "  triage-context --id <task-id>     JSON {task_id, project, title, description, type, phase, status, has_text,")
+	fmt.Fprintln(os.Stderr, "                                    parent, siblings[], decisions[]} — the persisted artifacts triage may judge (E-1859)")
 	fmt.Fprintln(os.Stderr, "  relay-checkpoint --session-id <id>")
 	fmt.Fprintln(os.Stderr, "                                    record the sanctioned report text (read from STDIN) the session")
 	fmt.Fprintln(os.Stderr, "                                    owes as its final message; the Stop gate enforces it (E-1901)")
@@ -194,6 +208,53 @@ func runTaskReport(args []string) error {
 		return fmt.Errorf("build report facts for E-%d: %w", *id, err)
 	}
 	return json.NewEncoder(os.Stdout).Encode(facts)
+}
+
+// defaultUntriagedLimit caps a triage sweep that names no limit. It exists so
+// a caller that forgets --limit cannot walk an unbounded backlog: every task
+// selected here becomes a model call downstream.
+const defaultUntriagedLimit = 10
+
+// runUntriagedTasks prints the triage queue (E-1859) as JSON — tasks in
+// `untriaged`, oldest first, capped by --limit. No --project means every
+// project: the background sweep runs from the job runner, which has a database
+// but no cwd, so ledger-wide is the only scope it can express. A human running
+// `endless triage run` inside a project passes --project.
+func runUntriagedTasks(args []string) error {
+	fs := flag.NewFlagSet("untriaged-tasks", flag.ContinueOnError)
+	project := fs.String("project", "", "registered project name (default: every project)")
+	limit := fs.Int("limit", defaultUntriagedLimit, "max tasks to return")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *limit <= 0 {
+		return fmt.Errorf("--limit must be positive")
+	}
+	tasks, err := monitor.UntriagedTasks(*project, *limit)
+	if err != nil {
+		return fmt.Errorf("read untriaged queue: %w", err)
+	}
+	return json.NewEncoder(os.Stdout).Encode(tasks)
+}
+
+// runTriageContext prints one task's triage context (E-1859) as JSON: the
+// persisted artifacts the sufficiency prompt is allowed to judge — description,
+// parent, sibling titles, linked decisions. The filing session's transcript is
+// deliberately absent; triage judges what is written down, not what was said.
+func runTriageContext(args []string) error {
+	fs := flag.NewFlagSet("triage-context", flag.ContinueOnError)
+	id := fs.Int64("id", 0, "task id")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *id == 0 {
+		return fmt.Errorf("--id is required")
+	}
+	ctx, err := monitor.BuildTriageContext(*id)
+	if err != nil {
+		return fmt.Errorf("build triage context for E-%d: %w", *id, err)
+	}
+	return json.NewEncoder(os.Stdout).Encode(ctx)
 }
 
 // runResumeTarget prints the JSON a `session resume` needs to relaunch a lost

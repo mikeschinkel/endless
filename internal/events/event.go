@@ -80,6 +80,18 @@ const (
 	ActorHook    ActorKind = "hook"
 	ActorSystem  ActorKind = "system"
 	ActorWeb     ActorKind = "web"
+
+	// ActorTriager marks a transition decided by a model rather than by a
+	// person or by a person's command (E-1859). It is deliberately not folded
+	// into ActorSystem: "a machine decided this" is a distinct, queryable claim
+	// from "cron/migration did this", and once triage starts making calls a
+	// user disagrees with, `WHERE actor.kind = 'triager'` is the query they
+	// need. Purely additive — every historical event stays valid under the
+	// kinds above, so nothing needs upcasting. Like ActorSystem and ActorWeb it
+	// carries no session (nothing to attribute to); the deciding model and its
+	// one-line rationale ride in the payload as provenance, which is a separate
+	// concern from attribution.
+	ActorTriager ActorKind = "triager"
 )
 
 // Task event kinds.
@@ -276,6 +288,7 @@ var validActorKinds = map[ActorKind]bool{
 	ActorHook:    true,
 	ActorSystem:  true,
 	ActorWeb:     true,
+	ActorTriager: true, // E-1859
 }
 
 // Validate checks that the event envelope is well-formed.

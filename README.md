@@ -117,9 +117,11 @@ endless task spawn --help
 
 Every task moves through a small set of statuses. New tasks start `untriaged`; triage
 routes each one to `unplanned` (it still needs a plan) or straight to `submitted` (its
-description is already a sufficient spec). An agent also reaches `submitted` by
-attaching a plan. From there a human runs `endless task approve` to reach `ready` — so
-`ready` provably means *approved to implement*, not merely *planned*.
+description is already a sufficient spec). That routing is automatic — filing a task
+triages it in the background, and a periodic sweep drains anything missed — and it can
+always be overridden by hand. An agent also reaches `submitted` by attaching a plan.
+From there a human runs `endless task approve` to reach `ready` — so `ready` provably
+means *approved to implement*, not merely *planned*.
 
 <!-- BEGIN canonical:docs/status-lifecycle.mmd — edit the canonical file, then re-sync; do not hand-edit here -->
 ```mermaid

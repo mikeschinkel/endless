@@ -58,6 +58,73 @@ def save_config(cfg: dict):
         f.write("\n")
 
 
+# === E-1859: one model resolver, per-purpose values ===
+#
+# Endless makes internal, headless model calls for a handful of small
+# judgments. Each such call site names a PURPOSE and resolves its model here,
+# so there is exactly one mechanism (and one place to look) rather than a model
+# alias hardcoded at each call site.
+#
+# Values are claude model aliases or full model names, resolved:
+#   <project>/.endless/config.json  "models": {"<purpose>": "..."}   (per-project)
+#   <config dir>/config.json        "models": {"<purpose>": "..."}   (per-user)
+#   INTERNAL_MODEL_DEFAULTS                                          (shipped)
+#
+# The defaults differ per purpose on purpose: "is this word a verb?" is a
+# lookup, while "is this description a sufficient spec?" is a judgment over a
+# paragraph of prose plus its parent and sibling context. A user who wants them
+# identical sets one value.
+#
+# NOT covered here: `endless task report`'s two per-entry gates, which stay
+# pinned to Haiku. E-1911 is actively reworking that contract; changing model
+# selection there would collide with it.
+INTERNAL_MODEL_DEFAULTS: dict[str, str] = {
+    # E-1264: is the first word of a task title an actionable verb?
+    "verb_check": "haiku",
+    # E-1859: is a task's description already a sufficient spec?
+    "triage": "sonnet",
+}
+
+
+def internal_model(purpose: str, project_root: Path | None = None) -> str:
+    """Resolve the model alias for an internal call of the named `purpose`.
+
+    An unknown purpose raises KeyError: purposes are a closed set declared in
+    INTERNAL_MODEL_DEFAULTS, so a typo at a call site is a programming error
+    that should fail loudly rather than silently fall through to claude's
+    default model.
+
+    A configured-but-blank value is treated as unset (falls through to the next
+    layer), so clearing a key in project config does not send an empty
+    `--model ''` to claude.
+    """
+    if purpose not in INTERNAL_MODEL_DEFAULTS:
+        raise KeyError(
+            f"unknown internal model purpose {purpose!r}; "
+            f"expected one of {sorted(INTERNAL_MODEL_DEFAULTS)}"
+        )
+
+    if project_root is None:
+        project_root = enclosing_project_root()
+    if project_root is not None:
+        proj = project_config_read(project_root) or {}
+        value = (proj.get("models") or {}).get(purpose)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+
+    try:
+        user = load_config()
+    except (OSError, json.JSONDecodeError):
+        # A missing or corrupt user config must not break a model call that
+        # has a perfectly good shipped default.
+        user = {}
+    value = (user.get("models") or {}).get(purpose)
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+
+    return INTERNAL_MODEL_DEFAULTS[purpose]
+
+
 def get_roots() -> list[Path]:
     cfg = load_config()
     roots = []

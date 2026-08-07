@@ -1,0 +1,75 @@
+You are triaging one task in a software project's task ledger.
+
+Decide ONE thing: is this task's **description** already a sufficient spec for
+an implementer to start work, or does design work have to happen first?
+
+## What "sufficient" means
+
+A description is sufficient when a competent engineer who has never discussed
+this task could read it, plus the context below, and know what to build without
+having to make a material design decision on the user's behalf. It does not
+have to be long. A one-line description of a mechanical, obvious change is
+sufficient. A paragraph that names a goal but leaves the approach open is not.
+
+Route to **UNPLANNED** when any of these hold:
+
+- The task names a problem or a desire but not a solution ("make X faster",
+  "improve the Y experience").
+- More than one materially different implementation would satisfy it, and the
+  choice between them is not obvious or not stated.
+- It requires deciding a schema, a protocol, a public interface, or a
+  user-visible contract that the description does not pin down.
+- It is exploratory: the real work is figuring out what the work is.
+- It is a large or multi-part change whose parts and their order are unstated.
+
+Route to **SUBMITTED** when:
+
+- The change is mechanical, local, or fully specified by the description.
+- It is a bug report with enough detail to reproduce and an obvious fix shape.
+- The description already names the approach, the files, or the contract.
+- It is a documentation, wording, rename, or config change.
+
+Bias toward UNPLANNED when genuinely torn. A task wrongly sent to UNPLANNED
+costs one planning pass; a task wrongly sent to SUBMITTED can be approved and
+implemented against a spec that was never a spec.
+
+Judge ONLY what is written below. There is no transcript, no prior
+conversation, and no author to ask — that is deliberate. If the description
+only makes sense to someone who was in the room when it was filed, it is not
+sufficient.
+
+## The task
+
+- ID: E-{{.task_id}}
+- Project: {{.project}}
+- Type: {{.type}}
+- Title: {{.title}}
+
+Description:
+{{if .description}}{{.description}}{{else}}(none — the task has no description at all){{end}}
+{{if .parent}}
+## Its parent
+
+- E-{{.parent.id}} [{{.parent.status}}]: {{.parent.title}}
+{{if .parent.description}}
+Parent description:
+{{.parent.description}}
+{{end}}{{end}}{{if .siblings}}
+## Sibling tasks under the same parent
+
+{{range .siblings}}- {{.}}
+{{end}}{{end}}{{if .decisions}}
+## Decisions linked to this task
+
+{{range .decisions}}- ED-{{.id}} [{{.status}}] ({{.relation}}): {{.title}}
+{{end}}{{end}}
+## Your reply
+
+Reply with EXACTLY ONE line, in one of these two forms, and nothing else — no
+preamble, no markdown, no explanation beyond the single sentence:
+
+SUBMITTED: <one sentence saying why the description is a sufficient spec>
+UNPLANNED: <one sentence saying what design decision is still open>
+
+The sentence is recorded as provenance on the transition, so a person reading
+the ledger later can see why the call was made. Keep it to one line.

@@ -163,6 +163,43 @@ func TestValidate_Valid(t *testing.T) {
 	}
 }
 
+// TestValidate_ActorTriager pins E-1859's addition: a transition decided by a
+// model validates as its own actor kind, carries no session (there is none to
+// attribute to), and does so WITHOUT any of the pre-existing kinds having to
+// change — the whole point of making the change additive is that no historical
+// event needs upcasting.
+func TestValidate_ActorTriager(t *testing.T) {
+	payload, _ := json.Marshal(events.TaskStatusChangedPayload{
+		OldStatus: "untriaged", NewStatus: "submitted",
+	})
+	evt := events.Event{
+		V:       events.Version,
+		TS:      testTimestamp(),
+		Kind:    events.KindTaskStatusChanged,
+		Project: "endless",
+		Entity:  events.EntityRef{Type: events.EntityTask, ID: "1859"},
+		Actor:   events.Actor{Kind: events.ActorTriager, ID: "mike@macbook"},
+		Payload: payload,
+	}
+	if err := evt.Validate(); err != nil {
+		t.Errorf("triager actor kind rejected: %v", err)
+	}
+	if evt.Actor.SessionID != "" {
+		t.Error("a triager event must carry no session id")
+	}
+
+	for _, kind := range []events.ActorKind{
+		events.ActorSession, events.ActorCLI, events.ActorHook,
+		events.ActorSystem, events.ActorWeb,
+	} {
+		e := evt
+		e.Actor.Kind = kind
+		if err := e.Validate(); err != nil {
+			t.Errorf("pre-existing actor kind %q broke: %v", kind, err)
+		}
+	}
+}
+
 func TestValidate_Errors(t *testing.T) {
 	ts := testTimestamp()
 	payload, _ := json.Marshal(events.TaskCreatedPayload{Title: "x", Phase: "now", Status: "unplanned", Type: "todo"})

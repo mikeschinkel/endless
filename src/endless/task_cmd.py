@@ -245,10 +245,15 @@ _VERB_CHECK_PROMPT_TEMPLATE = (
 
 
 def _check_verb_via_haiku(word: str) -> tuple[bool, str | None]:
-    """Ask claude haiku whether `word` is a verb (E-1264).
+    """Ask a model whether `word` is a verb (E-1264).
 
     Invokes the `claude` binary directly via PATH lookup — no shell, no alias
     expansion, so users' `claude` shell wrappers are bypassed.
+
+    The model is resolved through `config.internal_model("verb_check")`
+    (E-1859), the one resolver every internal call shares, rather than being
+    hardcoded here. Its default is still `haiku`, so behavior is unchanged
+    until a user configures otherwise.
 
     Returns (True, definition) only on a clean `YES: <text>` reply with a
     non-empty definition. Every other outcome — `NO`, malformed output,
@@ -256,13 +261,13 @@ def _check_verb_via_haiku(word: str) -> tuple[bool, str | None]:
     the caller to fall through to the standard verb-rejection error.
     """
     import subprocess
-    from endless import internal_claude
+    from endless import config, internal_claude
     prompt = _VERB_CHECK_PROMPT_TEMPLATE.format(word=word)
     try:
         # Hook-suppressed (E-1470): a bare `claude -p` here inherits the
         # caller's TMUX_PANE and false-ends the live caller's session.
         result = internal_claude.run_internal_claude(
-            prompt, model="haiku", timeout=30,
+            prompt, model=config.internal_model("verb_check"), timeout=30,
         )
     except (subprocess.TimeoutExpired, FileNotFoundError):
         return False, None
@@ -2203,6 +2208,20 @@ def add_item(
         _mirror_plan_to_worktree(item_id, text_content)
     if analysis is not None and analysis.strip():
         _mirror_doc_to_worktree(item_id, "analyses", "analysis", analysis)
+
+    # E-1859: triage at file time, detached. A synchronous model call here
+    # would add seconds to EVERY filing, interactive ones included, so this is
+    # a latency optimization only — the background sweep is the correctness
+    # guarantee. If the child never starts or dies, the task simply stays
+    # `untriaged` and the sweep picks it up.
+    #
+    # Gated on the RESOLVED status, not on the absence of --status: that leaves
+    # tier-1's auto-`ready` untouched (a tier-1 task is exempt from planning,
+    # so it is exempt from triage), and equally skips any explicit --status.
+    if status == "untriaged":
+        from endless import triage
+        triage.spawn_detached(item_id)
+
     return item_id
 
 
@@ -2810,10 +2829,10 @@ def _current_session_is_background() -> bool:
 # Statuses a task may be `submit`ted from: pre-approval design states.
 #
 # E-1845: `untriaged` is included so the new default status is not a dead end.
-# Until the automatic triager (E-1859) exists, `task submit` IS the routing
-# mechanism for a task whose description is already a sufficient spec — and it
-# stays useful afterward as the human override for a triage call you disagree
-# with. It is not scaffolding to remove when E-1859 lands.
+# E-1859 made the routing automatic, and `task submit` stays exactly as
+# important: it is the permanent human override for a triage call you disagree
+# with, and the route that still works when the triager is unreachable (it
+# fails open, leaving the task here). Never scaffolding to remove.
 _SUBMITTABLE_FROM = ("untriaged", "unplanned", "revisit")
 
 

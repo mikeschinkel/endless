@@ -66,9 +66,10 @@ func runList() {
 		fmt.Printf("jobs suppressed: %s\n\n", reason)
 	}
 	if len(statuses) == 0 {
-		// The expected state as of E-698: the runner ships with an EMPTY
-		// registry. Say so explicitly rather than printing a bare header, so an
-		// operator can tell "no jobs registered" from "listing failed".
+		// Since E-1859 registered the first job this is no longer expected —
+		// an empty registry now means the blank imports in
+		// cmd/endless-go/main.go were dropped. Say so explicitly either way, so
+		// an operator can tell "no jobs registered" from "listing failed".
 		fmt.Println("no jobs registered")
 		return
 	}

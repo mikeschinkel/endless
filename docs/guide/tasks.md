@@ -236,6 +236,57 @@ endless task replace <id> --by <new_id>              # supersede with another ta
 
 ---
 
+## Triage (`untriaged` → `submitted` | `unplanned`)
+
+Every new task is filed `untriaged` — nobody has looked at it. Triage moves it
+one hop by answering one question: **is this description already a sufficient
+spec?** Sufficient → `submitted` (awaiting the human's `approve`); not
+sufficient → `unplanned` (design work first).
+
+This is automatic. `endless task add` spawns the triage of that one task
+detached, so an interactive filing is usually routed within seconds, and a
+background sweep re-checks the whole queue every 15 minutes as the backstop.
+
+```bash
+endless triage run                                   # sweep this project's untriaged queue
+endless triage run --task E-123                      # just this one
+endless triage run --all-projects                    # every project (what the job does)
+endless triage run --dry-run                         # print the calls, write nothing
+```
+
+Three properties are worth knowing when you are working alongside it:
+
+- **It judges only what is written down.** The call sees the description, the
+  parent, the sibling titles, and any linked decisions — never the transcript
+  of the session that filed the task. That is deliberate: a description that
+  only makes sense to whoever was in the room is not a sufficient spec, and
+  triage is the thing that says so. Write the description for a stranger.
+- **It fails open.** A model timeout, a missing `claude`, or an unparseable
+  reply leaves the task `untriaged` and exits zero. Nothing is ever
+  mis-transitioned because the model was unreachable.
+- **You always win.** `endless task submit <id>` and
+  `endless task update <id> --status unplanned` remain the override, and a task
+  you route by hand is never overwritten by an in-flight triage call. Use them
+  freely when you disagree with a call.
+
+Attribution is queryable: a triage transition is recorded with
+`actor.kind = triager`, and its payload carries the deciding model and the
+model's one-line rationale.
+
+Two levers. The wording lives in a template, so you can tune it without
+touching product source — the render order is
+`<project>/.endless/templates/triage/sufficiency.md.local.tmpl` (yours, never
+committed) → `…/sufficiency.md.tmpl` (committed) → the shipped default. The
+model is `models.triage` in `<project>/.endless/config.json` or your user
+`config.json`, defaulting to `sonnet`. (`models.verb_check` resolves the same
+way and drives the title verb check; it defaults to `haiku`.)
+
+Set `ENDLESS_NO_TRIAGE=1` to suppress the automatic file-time path for one
+process — what a test suite or a bulk import wants. An explicit
+`endless triage run` still runs.
+
+---
+
 ## Reporting to your user
 
 At **any in-session user-facing checkpoint** — a terminal status, a status

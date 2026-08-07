@@ -2907,6 +2907,52 @@ def jobs_retry(name):
     impl(name)
 
 
+@main.group("triage")
+def triage_cmd():
+    """Route untriaged tasks by judging description sufficiency (E-1859)."""
+    pass
+
+
+@triage_cmd.command("run")
+@click.option("--task", "task_ref", default=None,
+              help="Triage exactly this task (E-N), ignoring the queue")
+@click.option("--limit", type=int, default=None,
+              help="Max tasks to triage in one sweep "
+                   "(default: 10; every task is a model call)")
+@click.option("--project", default=None,
+              help="Registered project name to sweep (default: the project cwd is in)")
+@click.option("--all-projects", is_flag=True,
+              help="Sweep every project — what the background job does")
+@click.option("--dry-run", is_flag=True,
+              help="Print the decision and rationale; write nothing")
+def triage_run(task_ref, limit, project, all_projects, dry_run):
+    """Decide, for each untriaged task, whether its description is a sufficient
+    spec (-> submitted) or design work is needed first (-> unplanned).
+
+    Fail-open by design: a model timeout, a missing `claude`, or an
+    unparseable reply leaves the task `untriaged` for the next sweep and exits
+    zero. The worst outcome is the status quo — you route it by hand with
+    `endless task submit`, which stays the permanent override.
+
+    A task that stopped being `untriaged` between selection and the write is
+    never overwritten, so a human's call always beats the triager's.
+    """
+    from endless import triage
+    from endless.task_cmd import parse_task_id
+
+    if project and all_projects:
+        raise click.ClickException(
+            "--project and --all-projects are mutually exclusive."
+        )
+    triage.run(
+        task_id=parse_task_id(task_ref) if task_ref else None,
+        limit=limit if limit is not None else triage.DEFAULT_BATCH_LIMIT,
+        project=project,
+        all_projects=all_projects,
+        dry_run=dry_run,
+    )
+
+
 @main.group("errors")
 def errors_cmd():
     """Inspect and clear recorded errors (E-698)."""
