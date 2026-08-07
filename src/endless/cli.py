@@ -1716,8 +1716,10 @@ def task_add(title, description, description_file, text, text_file, analysis_tex
               help="Regex matching an absolute path to permit in inline content "
                    "(repeatable; escape hatch for the path gate).")
 @click.option("--keep-status", is_flag=True,
-              help="Keep the current status when editing plan text on a done task "
-                   "(suppresses the auto-revisit for a typo/formatting-only edit).")
+              help="Hold the current status: no auto-transition fires for this edit "
+                   "(plan-attach promotion, description-edit reset, done-task "
+                   "auto-revisit, tier-1 advance). For a typo- or formatting-only "
+                   "edit. Cannot be combined with --status.")
 def task_update(item_ids, status, title, description, description_file, text, text_file, parent, phase, tier,
                 task_type, analysis_text, analysis_file, force, outcome, outcome_file, justification, allow_paths,
                 keep_status):

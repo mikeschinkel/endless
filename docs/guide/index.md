@@ -96,6 +96,8 @@ The agent sets `submitted` (via `task submit`, or by attaching a plan); a human 
 
 **A material description edit sends a task back to `untriaged`.** The description IS the spec that triage and approval were judged against, so rewriting it invalidates that judgment. The reset fires only from the pre-work statuses — `untriaged`, `unplanned`, `submitted`, `ready`, `revisit` — and never from `underway` (so an edit cannot yank work out from under a live session), `unverified`, or any terminal status. Two escape hatches: an identical rewrite is a no-op, and `--keep-status` suppresses the reset for a typo- or formatting-only edit.
 
+**`--keep-status` holds the status across every auto-transition.** `task update` infers a status change from what you edited in four places — attaching a plan promotes a pre-work task to `submitted`, a material description edit resets it to `untriaged`, editing the plan text of a done task flips it to `revisit`, and `--tier 1` advances a pre-work task to `ready`. `--keep-status` suppresses all four: the status you see is the status you keep. Use it when the edit is not a re-spec — a typo fix, or appending to a plan on a task deliberately parked at an unapproved status. It cannot be combined with `--status` (the call is refused): naming a status is already the explicit way to say what it should be, and it beats every inference on its own. See `endless guide tasks`.
+
 Use `assumed` (not `unverified`) when the only way to test the work is by using it in a downstream task — set `--outcome` explaining what was done and how confidence was established.
 
 ## Task phases
@@ -219,6 +221,7 @@ listed separately. (Generated — do not hand-edit; run `/regenerate-guide`.)
 | filing discovered work (file it, don't fix it) | tasks | File a drive-by discovery as a task with --cleans-up instead of fixing it inline. |
 | lean toward fewer tasks | tasks | Prefer one task over several - every filed task spends the user's review attention. |
 | FULL STATUS | tasks | The keyword licenses one unconstrained response, not a sticky mode. |
+| --keep-status (edit the content, infer nothing) | tasks | Suppressing every status auto-transition that task update infers from an edit. |
 <!-- END generated -->
 
 ## Important notes (always relevant)

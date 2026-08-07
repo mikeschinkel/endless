@@ -197,9 +197,25 @@ endless task update <id> --parent 444                # move under different pare
 endless task update <id> --parent 0                  # make it a root
 endless task update <id> --outcome "What was done"
 endless task update <id> <id2> ... --status ready    # bulk update
+endless task update <id> --text-file <path> --keep-status   # edit, infer nothing
 ```
 
 Attaching a non-empty plan (`--text`) to a `unplanned` task moves it to `submitted` (spec-complete, awaiting approval — **not** `ready`, which now means human-approved). Applies on both `task add` and `task update`. An explicit `--status` in the same call always wins. When the description alone is a sufficient spec (no plan text), run `task submit <id>` to reach `submitted` directly. A human then runs `task approve <id>` to promote `submitted → ready`.
+
+### `--keep-status`: edit the content, infer nothing
+
+`task update` reads a status change out of what you edited, in four places:
+
+| The edit | Infers |
+|---|---|
+| non-empty `--text` on an `untriaged`/`unplanned` task | → `submitted` (plan attached = spec-complete) |
+| a material `--description` change on a pre-work task | → `untriaged` (the spec every later judgment was made against changed) |
+| a real `--text` change on a done task | → `revisit` (unshipped scope on a task that reads as finished) |
+| `--tier 1` on an `untriaged`/`unplanned` task | → `ready` (tier 1 is exempt from planning and triage) |
+
+**`--keep-status` suppresses all four.** The status you see is the status you keep. Reach for it when the edit is not a re-spec — a typo fix, a formatting pass, appending a finding to a plan that is deliberately parked at an unapproved status. Without it, a one-line append to an `unplanned` task's plan silently promotes it to `submitted`.
+
+`--keep-status` cannot be combined with `--status`; the call is refused rather than silently resolved. Naming a status is already the explicit way to say what the status should be, and it wins over all four inferences on its own.
 
 ---
 

@@ -2330,6 +2330,23 @@ def _require_outcome_for_declined(status: str | None, outcome: str | None):
         )
 
 
+def _reject_status_with_keep_status(status: str | None, keep_status: bool):
+    """Refuse `--status X --keep-status` — the two flags ask for opposite things.
+
+    E-1913: `--keep-status` means "no auto-transition fires; the status you see
+    is the status you keep". Naming a status in the same call is a request to
+    change it. Resolving that silently (either way) would teach the caller a
+    precedence rule instead of telling them the call was contradictory.
+    """
+    if status is not None and keep_status:
+        raise click.ClickException(
+            "--status and --keep-status contradict each other: one sets the "
+            "status, the other holds it. Pass --status alone to change it "
+            "(an explicit status already suppresses every auto-transition), "
+            "or --keep-status alone to leave it untouched."
+        )
+
+
 def _lead_verb(title: str | None) -> str:
     """Return the lowercased first whitespace-delimited word of `title`, with
     surrounding punctuation stripped. Returns '' if title is empty or missing."""
@@ -3352,6 +3369,17 @@ _DESCRIPTION_RESET_FROM: frozenset[str] = frozenset({
 })
 
 
+# The statuses that mean "nobody has decided this task is spec-complete yet" —
+# the ones from which attaching a plan promotes to `submitted`. The promotion
+# itself lives in the Go executor; this is a mirror of its source set
+# (`isPreJudgmentStatus`, internal/events/executor.go), needed so `--keep-status`
+# can tell whether the promotion is about to fire. tests/tasks/e-1913-verify.sh
+# asserts the two stay in sync.
+_PRE_JUDGMENT_STATUSES: frozenset[str] = frozenset({
+    "untriaged", "unplanned",
+})
+
+
 def _perform_claim_work(
     item_id: int,
     title: str | None,
@@ -3909,6 +3937,7 @@ def update_plan(
     """Update fields on a task."""
     from endless.event_bridge import emit_event
 
+    _reject_status_with_keep_status(status, keep_status)
     _require_outcome_for_declined(status, outcome)
 
     row = db.query(
@@ -4037,6 +4066,27 @@ def update_plan(
     plan_attached = text is not None and text.strip() != ""
     untriage_target = "submitted" if plan_attached else "untriaged"
 
+    # E-1913: `--keep-status` holds the status across EVERY auto-transition, not
+    # only the two guarded above. The plan-attach promotion (a pre-judgment task
+    # + non-empty --text → `submitted`) is the one that used to leak through: it
+    # lives in the Go executor, and the flag has no field in the event payload
+    # to travel in. So cross the boundary in the vocabulary the executor already
+    # speaks — send the current status, and its "caller wins" branch (the same
+    # one an explicit --status uses) stands down.
+    #
+    # Pinned ONLY when the promotion would actually fire. A status field is not
+    # inert in the executor: whenever one is present it also rewrites
+    # `completed_at` and clears the tier of a terminal-status task, so pinning
+    # unconditionally would restamp the completion time of a `confirmed` task
+    # whose plan text was merely typo-fixed — the E-1762 case this flag has
+    # always served. `status is None` is not re-checked here: passing both
+    # --status and --keep-status was rejected at the top of this function.
+    keep_status_pin = (
+        keep_status
+        and plan_attached
+        and row[0]["status"] in _PRE_JUDGMENT_STATUSES
+    )
+
     # Build the fields map for the event payload, plus an ordered list of
     # (name, old, new) tuples for change-output rendering.
     fields = {}
@@ -4052,6 +4102,11 @@ def update_plan(
         _add("status", "revisit")
     elif auto_untriage:
         _add("status", untriage_target)
+    elif keep_status_pin:
+        # Deliberately not _add(): this writes back the status the row already
+        # has, purely to make the executor stand down. Nothing changed, so
+        # rendering "Status: unplanned -> unplanned" would misreport the update.
+        fields["status"] = row[0]["status"]
 
     if phase is not None:
         _add("phase", phase)
@@ -4075,11 +4130,15 @@ def update_plan(
         else:
             _add("tier", tier)
             # Tier 1 tasks are exempt from planning — and (E-1845) from triage
-            # too — so auto-advance either pre-work status to ready.
+            # too — so auto-advance either pre-work status to ready. E-1913:
+            # --keep-status suppresses this the same as the other three
+            # auto-transitions; the flag means no inferred status change, and
+            # "which tier is this" is a separate question from "is it approved".
             if (
                 tier == 1
                 and status is None
-                and row[0]["status"] in ("untriaged", "unplanned")
+                and not keep_status
+                and row[0]["status"] in _PRE_JUDGMENT_STATUSES
             ):
                 _add("status", "ready")
 

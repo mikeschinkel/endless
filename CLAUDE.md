@@ -73,7 +73,7 @@ Use `just test` to run Python tests.
 
 ## Task status lifecycle
 
-New tasks are filed `untriaged` — not yet looked at. Triage routes each one to `submitted` (the description is already a sufficient spec) or `unplanned` (design work needed first); until an automatic triager exists, do it by hand with `endless task submit <id>` or `endless task update <id> --status unplanned`. A material description edit resets a pre-work task back to `untriaged`, since the description is the spec every later judgment was made against — pass `--keep-status` for a typo- or formatting-only edit.
+New tasks are filed `untriaged` — not yet looked at. Triage routes each one to `submitted` (the description is already a sufficient spec) or `unplanned` (design work needed first); until an automatic triager exists, do it by hand with `endless task submit <id>` or `endless task update <id> --status unplanned`. A material description edit resets a pre-work task back to `untriaged`, since the description is the spec every later judgment was made against — pass `--keep-status` for a typo- or formatting-only edit. `--keep-status` is absolute: it suppresses every status inference `task update` would draw from that edit, the plan-attach promotion to `submitted` included, so appending to a plan no longer moves the task. It cannot be combined with `--status`.
 
 An agent sets `submitted` (by attaching a plan, or `endless task submit <id>` when the description alone is a sufficient spec); a human runs `endless task approve <id>` to reach `ready`. `ready` therefore provably means *approved-to-implement*, not merely *planned*, so background sessions may pick up (claim) only `ready` work and may not run `approve`.
 

@@ -61,3 +61,7 @@ covers: Prefer one task over several - every filed task spends the user's review
 topic: FULL STATUS
 section: tasks
 covers: The keyword licenses one unconstrained response, not a sticky mode.
+
+topic: --keep-status (edit the content, infer nothing)
+section: tasks
+covers: Suppressing every status auto-transition that task update infers from an edit.
