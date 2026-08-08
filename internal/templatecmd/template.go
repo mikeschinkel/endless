@@ -203,27 +203,15 @@ func projectRootByName(name string) (string, error) {
 	return abs, nil
 }
 
+// projectRootFromCwd delegates to the shared resolver and re-words the
+// no-project-context case in this command's own terms (E-1919). The search
+// itself lives in monitor because more than one command needs it.
 func projectRootFromCwd() (string, error) {
-	cwd, err := os.Getwd()
-	if err != nil {
-		return "", err
+	root, err := monitor.ProjectRootFromCwd()
+	if errors.Is(err, monitor.ErrNoProjectContext) {
+		return "", errors.New("template render requires a project context — cd into a project or pass --project <name>")
 	}
-	cwd, err = filepath.Abs(cwd)
-	if err != nil {
-		return "", err
-	}
-	dir := cwd
-	for {
-		if st, err := os.Stat(filepath.Join(dir, ".endless")); err == nil && st.IsDir() {
-			return dir, nil
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			break
-		}
-		dir = parent
-	}
-	return "", errors.New("template render requires a project context — cd into a project or pass --project <name>")
+	return root, err
 }
 
 // templatesSubdir returns the project-scoped templates directory.
