@@ -214,6 +214,7 @@ CREATE TABLE IF NOT EXISTS tasks (
     outcome TEXT,
     analysis TEXT,
     notes TEXT,
+    changed_by_session INTEGER,
     FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
     FOREIGN KEY (parent_id) REFERENCES tasks(id) ON DELETE SET NULL
 );
@@ -222,6 +223,149 @@ CREATE TRIGGER IF NOT EXISTS tasks_updated_at AFTER UPDATE ON tasks
 BEGIN
     UPDATE tasks SET updated_at = strftime('%Y-%m-%dT%H:%M:%S', 'now')
     WHERE id = NEW.id AND updated_at != strftime('%Y-%m-%dT%H:%M:%S', 'now');
+END;
+
+-- Per-session change notices (E-1917). A row means "session S has not yet been
+-- told that task T changed". The hook drains them on the session's next
+-- UserPromptSubmit, renders one line each, and sets notified = 1.
+--
+-- Why one-shot rather than re-asserting current state every turn: re-assertion
+-- costs tokens on every turn forever, and the cost of a MISSED notice is exactly
+-- the status quo (the user corrects the agent by hand, as today). So any delivery
+-- rate above zero is a strict improvement bought without per-turn context bloat.
+--
+-- Rows are immutable snapshots, NOT pointers at the task. By delivery time the
+-- task may have moved again; a notice that re-read `tasks` would lose intermediate
+-- transitions and could not render "ready → revisit" at all. Same reason an order
+-- carries its own shipping address rather than joining to the customer's current
+-- one.
+--
+-- One row per (session, update event) rather than per field: a single
+-- `task update` may change status, tier and description at once, and that is one
+-- edit — one line, one notified flip, one queryable event.
+--
+-- Per-session rows (rather than one row + a delivery table) so `notified` stays
+-- correct with multiple live sessions holding the same task, and so there is an
+-- audit trail of what was actually shown to whom.
+--
+-- No FKs, matching session_tasks: a notice must be able to outlive its session or
+-- task rather than cascade away underneath an undelivered turn.
+CREATE TABLE IF NOT EXISTS session_notices (
+    id INTEGER PRIMARY KEY,
+    session_id INTEGER NOT NULL,
+    task_id INTEGER NOT NULL,
+    changes TEXT NOT NULL,
+    changed_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
+    changed_by_session INTEGER,
+    notified INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS idx_session_notices_undelivered
+    ON session_notices(session_id, notified);
+
+-- tasks_notify_sessions (E-1917) fans a task change out to every session holding
+-- that task in session_tasks.
+--
+-- In a trigger rather than application code because the rule is "changed →
+-- notify; unchanged → don't": application code has to remember to compare OLD
+-- against NEW at every mutation site and will eventually forget, silently. The
+-- WHEN guard below fires only when a watched value actually moved, so a no-op
+-- update writes nothing. Same reasoning as tasks_updated_at above.
+--
+-- `changes` is JSON keyed by field, each value {"before":…,"after":…}. Named keys
+-- rather than a 2-element array so json_extract(changes,'$.status.after') reads as
+-- what it is, and so a third key can be added later without a breaking change.
+--
+-- Freeform fields (description/text/analysis/notes) carry the single character
+-- '…' (U+2026) in place of content — the notice says a field CHANGED without
+-- reproducing it, while still distinguishing added / cleared / emptied / edited.
+--
+-- json(v) around each object is required: without it json_group_object embeds the
+-- nested object as a *string* ({"status":"{\"before\":…}"}).
+--
+-- Self-suppression: changed_by_session is stamped by the Go executor (ED-903
+-- — Go is the single writer) before the field update lands, so a session is not
+-- told about a change it made itself. `st.session_id IS NOT NEW.changed_by_session`
+-- notifies everyone when the actor is NULL, which is correct: a NULL actor is the
+-- user editing from a bare terminal, the case this whole feature exists for.
+--
+-- DEPENDS ON tasks.changed_by_session, which the CREATE TABLE above declares for
+-- fresh DBs and internal/schema/changes/e-1917-add-tasks-changed-by-session.go
+-- adds to populated ones at land time. SQLite resolves a trigger body at FIRE
+-- time, so on a populated DB this CREATE succeeds and UPDATE tasks then fails
+-- with "no such column" until that change is applied — land before installing
+-- the new binary. See the change file's ORDERING note.
+CREATE TRIGGER IF NOT EXISTS tasks_notify_sessions AFTER UPDATE ON tasks
+WHEN OLD.status      IS NOT NEW.status
+  OR OLD.phase       IS NOT NEW.phase
+  OR OLD.tier        IS NOT NEW.tier
+  OR OLD.description IS NOT NEW.description
+  OR OLD.text        IS NOT NEW.text
+  OR OLD.analysis    IS NOT NEW.analysis
+  OR OLD.notes       IS NOT NEW.notes
+BEGIN
+    INSERT INTO session_notices
+        (session_id, task_id, changes, changed_at, changed_by_session)
+    SELECT st.session_id,
+           NEW.id,
+           (SELECT json_group_object(f, json(v)) FROM (
+                SELECT 'status' AS f,
+                       json_object('before', OLD.status, 'after', NEW.status) AS v
+                 WHERE OLD.status IS NOT NEW.status
+                UNION ALL
+                SELECT 'phase',
+                       json_object('before', OLD.phase, 'after', NEW.phase)
+                 WHERE OLD.phase IS NOT NEW.phase
+                UNION ALL
+                SELECT 'tier',
+                       json_object('before', OLD.tier, 'after', NEW.tier)
+                 WHERE OLD.tier IS NOT NEW.tier
+                UNION ALL
+                SELECT 'description',
+                       json_object(
+                           'before', CASE WHEN OLD.description IS NULL THEN NULL
+                                          WHEN OLD.description = ''   THEN ''
+                                          ELSE '…' END,
+                           'after',  CASE WHEN NEW.description IS NULL THEN NULL
+                                          WHEN NEW.description = ''   THEN ''
+                                          ELSE '…' END)
+                 WHERE OLD.description IS NOT NEW.description
+                UNION ALL
+                SELECT 'text',
+                       json_object(
+                           'before', CASE WHEN OLD.text IS NULL THEN NULL
+                                          WHEN OLD.text = ''   THEN ''
+                                          ELSE '…' END,
+                           'after',  CASE WHEN NEW.text IS NULL THEN NULL
+                                          WHEN NEW.text = ''   THEN ''
+                                          ELSE '…' END)
+                 WHERE OLD.text IS NOT NEW.text
+                UNION ALL
+                SELECT 'analysis',
+                       json_object(
+                           'before', CASE WHEN OLD.analysis IS NULL THEN NULL
+                                          WHEN OLD.analysis = ''   THEN ''
+                                          ELSE '…' END,
+                           'after',  CASE WHEN NEW.analysis IS NULL THEN NULL
+                                          WHEN NEW.analysis = ''   THEN ''
+                                          ELSE '…' END)
+                 WHERE OLD.analysis IS NOT NEW.analysis
+                UNION ALL
+                SELECT 'notes',
+                       json_object(
+                           'before', CASE WHEN OLD.notes IS NULL THEN NULL
+                                          WHEN OLD.notes = ''   THEN ''
+                                          ELSE '…' END,
+                           'after',  CASE WHEN NEW.notes IS NULL THEN NULL
+                                          WHEN NEW.notes = ''   THEN ''
+                                          ELSE '…' END)
+                 WHERE OLD.notes IS NOT NEW.notes
+           )),
+           strftime('%Y-%m-%dT%H:%M:%S', 'now'),
+           NEW.changed_by_session
+      FROM session_tasks st
+     WHERE st.task_id = NEW.id
+       AND st.session_id IS NOT NEW.changed_by_session;
 END;
 
 -- Gate kinds (E-1542). SQL mirror of the GateKind Go enum (ED-1506: const-in-code

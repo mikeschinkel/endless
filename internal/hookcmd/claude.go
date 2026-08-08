@@ -375,10 +375,18 @@ func handleUserPromptSubmit(projectID int64, payload claudePayload) error {
 	} else {
 		if session, err := monitor.GetActiveSession(payload.SessionID); err == nil &&
 			session != nil && session.ActiveTaskID != nil {
-			if title, err := monitor.GetTaskTitle(*session.ActiveTaskID); err == nil && title != "" {
-				parts = append(parts, fmt.Sprintf("Active task: E-%d — %s.", *session.ActiveTaskID, title))
+			if h, err := monitor.GetTaskHeadline(*session.ActiveTaskID); err == nil && h.Title != "" {
+				parts = append(parts, h.Render(*session.ActiveTaskID))
 			}
 		}
+	}
+
+	// E-1917: changes made to this session's tasks since its last turn, each
+	// delivered exactly once. Appended after the active-task line so a status
+	// this session is holding stale is contradicted by the freshest thing in
+	// the injection.
+	if notices := deliverNotices(projectID, payload); notices != "" {
+		parts = append(parts, notices)
 	}
 
 	if len(parts) == 0 {
@@ -387,6 +395,56 @@ func handleUserPromptSubmit(projectID int64, payload claudePayload) error {
 	return json.NewEncoder(os.Stdout).Encode(hookResponse{
 		AdditionalContext: strings.Join(parts, "\n\n"),
 	})
+}
+
+// deliverNotices drains this session's undelivered change notices (E-1917) and
+// returns them as injectable lines, marking them delivered.
+//
+// The problem it solves: the user changes a task from the CLI mid-session, the
+// agent keeps answering from the status it learned N turns ago, and the two
+// proceed on different facts until the user notices and corrects it by hand.
+//
+// Every failure path returns "" and leaves the notices PENDING rather than
+// consuming them, so a transient DB error costs a turn's delay rather than the
+// notice itself. The one thing that must never happen is marking a notice
+// delivered that was not injected: nothing would ever re-tell the session, and
+// the stale belief this exists to correct would survive silently.
+func deliverNotices(projectID int64, payload claudePayload) string {
+	session, err := monitor.GetActiveSession(payload.SessionID)
+	if err != nil || session == nil {
+		return ""
+	}
+	notices, err := monitor.PendingNotices(session.ID)
+	if err != nil || len(notices) == 0 {
+		return ""
+	}
+
+	projectRoot, rootErr := monitor.ProjectPath(projectID)
+
+	var lines []string
+	var delivered []int64
+	for _, n := range notices {
+		rendered, ok := monitor.RenderNotice(n)
+		if !ok {
+			// Unrenderable JSON: leave it pending rather than silently burn it.
+			continue
+		}
+		lines = append(lines, rendered)
+		delivered = append(delivered, n.ID)
+		if rootErr == nil {
+			monitor.AppendNoticeLog(projectRoot, session.ID, n, rendered)
+		}
+	}
+	if len(lines) == 0 {
+		return ""
+	}
+	if err := monitor.MarkNoticesDelivered(delivered); err != nil {
+		// Could not record delivery: inject nothing. Delivering now would mean
+		// these notices are shown again on the next turn, and a repeated FYI is
+		// exactly the noise that trains an agent to skim the line that matters.
+		return ""
+	}
+	return strings.Join(lines, "\n")
 }
 
 // guidePointer is the lead line of the first-injection context (E-1854).

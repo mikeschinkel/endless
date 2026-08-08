@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -182,10 +183,63 @@ func Execute(evt *Event, emit DerivedEmitter) (*ExecuteResult, error) {
 	return result, nil
 }
 
+// stampTaskActor records WHO is about to change a task, so the
+// tasks_notify_sessions trigger can skip notifying the session that made the
+// change (E-1917). A session being told about its own edit is noise, and noise
+// is what trains an agent to skim the line that matters.
+//
+// Done once here rather than in each of the eight UPDATE tasks statements
+// downstream: a mutation site that forgot would silently inherit the PREVIOUS
+// actor and suppress the wrong session. dispatch is the single choke point every
+// task mutation passes through, and it already runs inside the caller's
+// transaction, so the stamp and the field update land together or not at all.
+//
+// Writing the actor as a column rather than having the trigger discover it is
+// deliberate: a trigger runs inside SQLite and cannot read the process
+// environment, and the alternatives (a per-connection temp table, a registered
+// SQL function) both add a cross-language connection contract whose only
+// consumer is this suppression — and whose failure mode is every UPDATE tasks
+// hard-failing.
+//
+// An empty Actor.SessionID stamps NULL, which suppresses nobody. That is
+// correct, not a fallback: a NULL actor is the user editing from a bare
+// terminal, which is the case this whole feature exists for.
+//
+// Non-task events and task events whose entity id is not a single task id
+// (bulk operations) no-op here; a bulk clear's notices carry whatever actor was
+// stamped last, which is imprecise but harmless — it can only over-notify.
+func stampTaskActor(db dbQuerier, evt *Event) error {
+	if evt.Entity.Type != EntityTask {
+		return nil
+	}
+	taskID, err := strconv.ParseInt(evt.Entity.ID, 10, 64)
+	if err != nil || taskID <= 0 {
+		return nil
+	}
+	var actor any
+	if evt.Actor.SessionID != "" {
+		if sid, err := strconv.ParseInt(evt.Actor.SessionID, 10, 64); err == nil {
+			actor = sid
+		}
+	}
+	// Touches no watched field, so this UPDATE cannot itself fire the notice
+	// trigger. Affects zero rows for a task.created event (the INSERT has not
+	// happened yet), which is right: an INSERT fires no AFTER UPDATE trigger.
+	if _, err := db.Exec(
+		"UPDATE tasks SET changed_by_session = ? WHERE id = ?", actor, taskID,
+	); err != nil {
+		return fmt.Errorf("events: stamp task actor: %w", err)
+	}
+	return nil
+}
+
 // dispatch routes an event to its executor. emit (E-1541) is threaded to the
 // six task mutations that can change an epic's derived status; the remaining
 // executors ignore derivation.
 func dispatch(db dbQuerier, evt *Event, emit DerivedEmitter) (*ExecuteResult, error) {
+	if err := stampTaskActor(db, evt); err != nil {
+		return nil, err
+	}
 	switch evt.Kind {
 	case KindTaskCreated:
 		return execTaskCreated(db, evt, emit)

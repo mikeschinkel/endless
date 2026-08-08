@@ -434,7 +434,15 @@ func UpdateTaskStatus(itemID int64, newStatus string) error {
 	if err != nil {
 		return err
 	}
-	_, err = db.Exec("UPDATE tasks SET status = ? WHERE id = ?", newStatus, itemID)
+	// changed_by_session = NULL (E-1917): a dashboard edit is not a session,
+	// so it suppresses nobody and every session holding the task hears about it.
+	// Set explicitly rather than left alone, because the column would otherwise
+	// retain whichever session last touched the task and silently suppress the
+	// notice for the one agent most likely to be working on it.
+	_, err = db.Exec(
+		"UPDATE tasks SET status = ?, changed_by_session = NULL WHERE id = ?",
+		newStatus, itemID,
+	)
 	return err
 }
 

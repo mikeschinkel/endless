@@ -30,6 +30,12 @@ internal/web/assets/css/templui
 # this entry into every project's .gitignore.
 .endless/tmp/
 
+# Runtime logs (E-1917). session-notices.jsonl records every change notice the
+# hook delivers to a session — a local observability aid for `tail -f` while
+# working, not a project artifact. Per-machine and append-only; nothing here is
+# reproducible or meaningful in another checkout.
+.endless/logs/
+
 # Per-worktree companion + ownership lock files (E-1218). Each worktree
 # writes its own; main has no business carrying either, but if the
 # SessionStart hook ever walks up from a cwd inside main and writes
