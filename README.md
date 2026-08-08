@@ -1,4 +1,4 @@
-# Endless — Many projects, all at once.
+# Endless — Manage 50+ AI tasks without being overwhelmed
 
 Endless is a project awareness system for solo developers managing multiple projects with AI assistants. It allows managing a myriad of software projects using AI without losing track of the details.
 
