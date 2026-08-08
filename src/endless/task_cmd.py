@@ -970,12 +970,11 @@ def show_plan(
     related_to_id: int | None = None,
     rel_type: str | None = None,
     sort_by: str | None = None,
-    tree: bool = False,
     llm: bool = False,
     as_json: bool = False,
     type_filter: str | None = None,
 ):
-    """Show tasks for a project as a tree, or flat sorted list.
+    """Show tasks for a project as a flat sorted table.
 
     When type_filter is set (e.g. "epic"), the query joins task_types and
     keeps only rows whose type slug matches — this is the single-source
@@ -1029,7 +1028,7 @@ def show_plan(
         "created": "pi.created_at",
         "title": "pi.title",
     }
-    if not tree and not sort_by:
+    if not sort_by:
         sort_by = "id"
     order_by = sort_col_map.get(sort_by, "pi.sort_order")
 
@@ -1090,45 +1089,7 @@ def show_plan(
         click.style(f"Tasks for {proj_name}", bold=True)
     )
 
-    if not tree:
-        _render_flat_table(rows)
-    else:
-        # Tree output
-        by_id = {r["id"]: r for r in rows}
-        children_of: dict[int | None, list] = {}
-        for row in rows:
-            pid = row["parent_id"]
-            if pid is not None and pid not in by_id:
-                pid = None
-            children_of.setdefault(pid, []).append(row)
-
-        status_indicators = {
-            # ◌ reads as "not yet a ○" — filed, but not yet looked at.
-            "untriaged": click.style("◌", fg="yellow"),
-            "unplanned": click.style("○", fg="yellow"),
-            "ready": click.style("●", fg="green"),
-            "revisit": click.style("?", fg="cyan"),
-            "underway": click.style("◉", fg="blue"),
-            "unverified": click.style("◉", fg="magenta"),
-            "confirmed": click.style("●", fg="green"),
-            "completed": click.style("◆", fg="green"),
-            "blocked": click.style("✗", fg="red"),
-        }
-
-        def _render(parent_id: int | None, indent: int):
-            for row in children_of.get(parent_id, []):
-                indicator = status_indicators.get(row["status"], "?")
-                id_str = click.style(task_id_display(row['id']), dim=True)
-                phase_str = click.style(f"[{row['phase']}]", fg="cyan")
-                tier_val = row["tier"] if "tier" in row.keys() else None
-                tier_str = f" {click.style(f'[{_TIER_LABELS[tier_val]}]', fg='magenta')}" if tier_val else ""
-                pad = "  " * indent
-                click.echo(
-                    f"{pad}{indicator} {id_str} {phase_str}{tier_str} {row['title']}"
-                )
-                _render(row["id"], indent + 1)
-
-        _render(None, 1)
+    _render_flat_table(rows)
 
     click.echo()
     total = len(rows)
@@ -1244,14 +1205,6 @@ def next_tasks(
         ]
         click.echo(json.dumps(out, indent=2))
         return
-
-    status_indicators = {
-        "unplanned": "○",
-        "ready": "●",
-        "revisit": "?",
-        "underway": "◉",
-        "unverified": "◉",
-    }
 
     # Group by project
     groups: dict[str, list] = {}

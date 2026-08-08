@@ -51,7 +51,6 @@ def list_epics(
     tier_filter: int | None = None,
     parent_id: int | None = None,
     sort_by: str | None = None,
-    tree: bool = False,
     llm: bool = False,
     as_json: bool = False,
 ):
@@ -64,7 +63,6 @@ def list_epics(
         tier_filter=tier_filter,
         parent_id=parent_id,
         sort_by=sort_by,
-        tree=tree,
         llm=llm,
         as_json=as_json,
         type_filter="epic",

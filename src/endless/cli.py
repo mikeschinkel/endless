@@ -1305,14 +1305,12 @@ def task_import(file, from_claude, json_file, project, replace, parent):
 @click.option("--sort", default=None,
               type=click.Choice(["id", "status", "phase", "tier", "created", "title"]),
               help="Sort by column (default: id)")
-@click.option("--tree", "as_tree", is_flag=True,
-              help="Show as indented tree instead of flat table")
 @click.option("--llm", is_flag=True,
               help="Token-efficient output for LLMs")
 @click.option("--json", "as_json", is_flag=True,
               help="JSON output")
 def task_list(project, show_all, status, phase, tier, parent_id, related_to_id, rel_type,
-              sort, as_tree, llm, as_json):
+              sort, llm, as_json):
     """List tasks for a project."""
     from endless.task_cmd import show_plan, parse_tier_filter, parse_parent_filter
     tier_val = parse_tier_filter(tier) if tier else None
@@ -1321,7 +1319,7 @@ def task_list(project, show_all, status, phase, tier, parent_id, related_to_id, 
               status_filter=status, phase_filter=phase,
               tier_filter=tier_val, parent_id=parent_val,
               related_to_id=related_to_id, rel_type=rel_type,
-              sort_by=sort, tree=as_tree, llm=llm, as_json=as_json)
+              sort_by=sort, llm=llm, as_json=as_json)
 
 
 @task_cmd.command("show")
@@ -2610,13 +2608,11 @@ def epic_add(title, description, description_file, text, text_file, phase, proje
 @click.option("--sort", default=None,
               type=click.Choice(["id", "status", "phase", "tier", "created", "title"]),
               help="Sort by column (default: id)")
-@click.option("--tree", "as_tree", is_flag=True,
-              help="Show as indented tree instead of flat table")
 @click.option("--llm", is_flag=True,
               help="Token-efficient output for LLMs")
 @click.option("--json", "as_json", is_flag=True,
               help="JSON output")
-def epic_list(project, show_all, status, phase, tier, parent_id, sort, as_tree,
+def epic_list(project, show_all, status, phase, tier, parent_id, sort,
               llm, as_json):
     """List epics for a project."""
     from endless.epic_cmd import list_epics
@@ -2626,7 +2622,7 @@ def epic_list(project, show_all, status, phase, tier, parent_id, sort, as_tree,
     list_epics(project_name=project, show_all=show_all,
                status_filter=status, phase_filter=phase,
                tier_filter=tier_val, parent_id=parent_val,
-               sort_by=sort, tree=as_tree, llm=llm, as_json=as_json)
+               sort_by=sort, llm=llm, as_json=as_json)
 
 
 @epic_cmd.command("show")

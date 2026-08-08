@@ -31,7 +31,6 @@ Every task has multiple body fields. Knowing which to use prevents long descript
 ```bash
 # List tasks for the current project
 endless task list                                    # flat, sorted by ID
-endless task list --tree                             # hierarchical
 endless task list --all                              # include done items
 endless task list --status ready                     # filter
 endless task list --status unplanned,ready          # comma-separated
