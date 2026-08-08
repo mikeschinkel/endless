@@ -247,4 +247,31 @@ def register_project(
             + " .gitignore updated with "
             + click.style(", ".join(added), dim=True)
         )
+
+    _scaffold_output_style(project_path)
+
     return name
+
+
+def _scaffold_output_style(project_path: Path) -> None:
+    """Place (never activate) the Endless output style during registration.
+
+    Registration scaffolds the file so a newly-registered project has it on
+    disk; it deliberately does NOT select it. Activation changes how every
+    session in the project answers, which is too large a behavioral change to
+    fall out of `project init` — the user opts in with
+    `endless setup output-style --activate` or `/config output-style=Endless`.
+
+    Best-effort: registration must not fail because the style could not be
+    written (E-1919). A failure is reported, not raised.
+    """
+    from endless.setup import setup_output_style
+
+    try:
+        setup_output_style(cwd=project_path)
+    except click.ClickException as e:
+        click.echo(
+            click.style("•", fg="yellow")
+            + " Output style not scaffolded: "
+            + click.style(e.format_message(), dim=True)
+        )

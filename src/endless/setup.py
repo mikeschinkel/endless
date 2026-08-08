@@ -629,3 +629,65 @@ def remove_channel_plugin():
         + " Removed channel plugin from "
         + click.style(str(CLAUDE_JSON_PATH), bold=True)
     )
+
+
+# --- Output style (E-1919) ---------------------------------------------------
+#
+# The style file itself is embedded in the Go binary and materialized by
+# `endless-go outputstyle`. These wrappers exist so the install has a home in
+# the `setup` group alongside claude-hook/prompt-hook/shell-helpers, each of
+# which has a remove- counterpart. They stream the Go command's own output
+# rather than reformatting it, so the not-activated warning reaches the user
+# verbatim.
+
+
+def _run_outputstyle(args: list[str], cwd: "Path | None" = None) -> int:
+    """Invoke `endless-go outputstyle <args>`, streaming stdout/stderr through.
+
+    Prefers the worktree-built binary when running inside a self-dev worktree
+    (its embedded style is the candidate code under test); falls back to the
+    PATH-resolved global otherwise.
+    """
+    import subprocess
+
+    from endless import config
+
+    go_bin = config.resolved_worktree_endless_go()
+    if go_bin is None or not go_bin.exists():
+        found = shutil.which("endless-go")
+        if not found:
+            raise click.ClickException("endless-go binary not found on PATH.")
+        go_bin = Path(found)
+    try:
+        result = subprocess.run(
+            [str(go_bin), "outputstyle", *args],
+            cwd=str(cwd) if cwd else None,
+        )
+    except (FileNotFoundError, OSError) as e:
+        raise click.ClickException(f"endless-go failed: {e}")
+    return result.returncode
+
+
+def setup_output_style(activate: bool = False, project: str | None = None,
+                       force: bool = False, cwd: Path | None = None) -> None:
+    """Install the Endless Claude Code output style into the project."""
+    args = ["install"]
+    if activate:
+        args.append("--activate")
+    if force:
+        args.append("--force")
+    if project:
+        args.extend(["--project", project])
+    code = _run_outputstyle(args, cwd=cwd)
+    if code != 0:
+        raise click.ClickException("endless-go outputstyle install failed")
+
+
+def remove_output_style(project: str | None = None) -> None:
+    """Remove the Endless output style from the project and deactivate it."""
+    args = ["remove"]
+    if project:
+        args.extend(["--project", project])
+    code = _run_outputstyle(args)
+    if code != 0:
+        raise click.ClickException("endless-go outputstyle remove failed")

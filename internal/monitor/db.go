@@ -745,3 +745,33 @@ func ensureAutoRegisteredProject(db *sql.DB, dir string) (int64, error) {
 	log.Printf("auto-registered project: %s at %s", name, dir)
 	return result.LastInsertId()
 }
+
+// ErrNoProjectContext is returned by ProjectRootFromCwd when no ancestor of
+// the working directory contains a .endless/ directory. Callers wrap it with
+// a message naming the operation that needed the project context.
+var ErrNoProjectContext = errors.New("no project context: no ancestor directory contains .endless/")
+
+// ProjectRootFromCwd walks up from the working directory and returns the
+// first ancestor containing a .endless/ directory — the project root. Shared
+// by every command that must resolve a project from cwd rather than from an
+// explicit --project name (templatecmd, outputstylecmd).
+func ProjectRootFromCwd() (string, error) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return "", err
+	}
+	dir, err := filepath.Abs(cwd)
+	if err != nil {
+		return "", err
+	}
+	for {
+		if st, err := os.Stat(filepath.Join(dir, ".endless")); err == nil && st.IsDir() {
+			return dir, nil
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return "", ErrNoProjectContext
+		}
+		dir = parent
+	}
+}

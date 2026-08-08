@@ -51,6 +51,7 @@ import (
 	"github.com/mikeschinkel/endless/internal/jobscmd"
 	"github.com/mikeschinkel/endless/internal/markdowncmd"
 	"github.com/mikeschinkel/endless/internal/monitor"
+	"github.com/mikeschinkel/endless/internal/outputstylecmd"
 	"github.com/mikeschinkel/endless/internal/sandboxcmd"
 	"github.com/mikeschinkel/endless/internal/servecmd"
 	"github.com/mikeschinkel/endless/internal/sessionquerycmd"
@@ -176,6 +177,8 @@ func main() {
 		spawnlaunchcmd.Run(sub, rest)
 	case "template":
 		templatecmd.Run(rest)
+	case "outputstyle":
+		outputstylecmd.Run(rest)
 	case "markdown":
 		markdowncmd.Run(rest)
 	case "verify":

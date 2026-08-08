@@ -3213,6 +3213,25 @@ def setup_remove_shell_helpers_cmd():
     remove_shell_helpers()
 
 
+@setup.command("output-style")
+@click.option("--activate", is_flag=True,
+              help="Also select the style in .claude/settings.json.")
+@click.option("--force", is_flag=True, help="Overwrite an existing style file.")
+@click.option("--project", default=None, help="Project name (default: detect from cwd).")
+def setup_output_style_cmd(activate, force, project):
+    """Install the Endless Claude Code output style into this project."""
+    from endless.setup import setup_output_style
+    setup_output_style(activate=activate, project=project, force=force)
+
+
+@setup.command("remove-output-style")
+@click.option("--project", default=None, help="Project name (default: detect from cwd).")
+def setup_remove_output_style_cmd(project):
+    """Remove the Endless output style and deactivate it."""
+    from endless.setup import remove_output_style
+    remove_output_style(project=project)
+
+
 # tmux integration command group (E-1236)
 @main.group("tmux")
 def tmux_cmd():
