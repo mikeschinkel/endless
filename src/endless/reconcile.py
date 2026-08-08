@@ -3,6 +3,8 @@
 from datetime import datetime, timezone
 from pathlib import Path
 
+import click
+
 from endless import db, config
 
 
@@ -13,6 +15,7 @@ def reconcile():
     - Projects in DB whose path moved → update path
     - Projects in DB whose path no longer exists → remove
     - Projects on disk whose config changed → update DB
+    - Relation rows whose task endpoint is gone → remove (E-1915)
     """
     roots = config.get_roots()
 
@@ -75,6 +78,69 @@ def reconcile():
                     "DELETE FROM projects WHERE id=?",
                     (row["id"],),
                 )
+
+    repair_orphan_relations()
+
+
+def repair_orphan_relations() -> int:
+    """Delete relation rows whose task endpoint no longer exists (E-1915).
+
+    `task remove` used to delete the task row and leave every `task_deps` /
+    `decision_relations` row pointing at it. Nothing surfaced the orphan while
+    the id stayed free — every consumer reaches relations through a join to
+    `tasks` — but task ids are reused, so a later task taking the freed id
+    silently inherited the dead relations and reported them as fact.
+
+    The `task remove` guard stops NEW orphans; this clears what the ledger
+    already accumulated. Ordering hazard: this can only find orphans whose id is
+    still FREE. An orphan whose id has since been reused is indistinguishable
+    from a genuine relation and is not recoverable by query.
+
+    Returns the number of rows removed. Prints what it removed — a silent repair
+    of silent corruption teaches nothing.
+    """
+    dep_rows = db.query(
+        "SELECT id, source_type, source_id, target_type, target_id, dep_type "
+        "FROM task_deps "
+        "WHERE (source_type = 'task' AND source_id NOT IN (SELECT id FROM tasks)) "
+        "   OR (target_type = 'task' AND target_id NOT IN (SELECT id FROM tasks)) "
+        "ORDER BY id"
+    )
+    rel_rows = db.query(
+        "SELECT id, source_decision_id, target_id, relation_type "
+        "FROM decision_relations "
+        "WHERE target_kind = 'task' AND target_id NOT IN (SELECT id FROM tasks) "
+        "ORDER BY id"
+    )
+    if not dep_rows and not rel_rows:
+        return 0
+
+    def show(kind: str, item_id: int) -> str:
+        return f"ED-{item_id}" if kind == "decision" else f"E-{item_id}"
+
+    click.echo(
+        click.style("•", fg="cyan")
+        + f" Removed {len(dep_rows) + len(rel_rows)} orphaned relation row(s) "
+        "— the task they referenced no longer exists:"
+    )
+    for row in dep_rows:
+        click.echo(
+            f"    task_deps #{row['id']}: "
+            f"{show(row['source_type'], row['source_id'])} {row['dep_type']} "
+            f"{show(row['target_type'], row['target_id'])}"
+        )
+        db.execute("DELETE FROM task_deps WHERE id = ?", (row["id"],))
+    for row in rel_rows:
+        click.echo(
+            f"    decision_relations #{row['id']}: "
+            f"ED-{row['source_decision_id']} {row['relation_type']} "
+            f"E-{row['target_id']}"
+        )
+        db.execute(
+            "DELETE FROM decision_relations WHERE id = ?", (row["id"],)
+        )
+
+    return len(dep_rows) + len(rel_rows)
 
 
 def _scan_dir_for_projects(

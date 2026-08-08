@@ -2229,6 +2229,134 @@ def import_json(
     )
 
 
+def _removal_id_set(item_id: int, cascade: bool) -> list[int]:
+    """Every task id a `task remove` would delete.
+
+    Without `--cascade` that is the one task; with it, the task plus its full
+    descendant set. The guard below has to check all of them: if only the root
+    were checked, removing a parent would delete a child *and* orphan the
+    child's relations, bypassing the guard entirely.
+    """
+    if not cascade:
+        return [item_id]
+    rows = db.query(
+        "WITH RECURSIVE tree(id) AS ("
+        "  SELECT id FROM tasks WHERE id = ?"
+        "  UNION ALL"
+        "  SELECT t.id FROM tasks t JOIN tree ON t.parent_id = tree.id"
+        ") SELECT id FROM tree",
+        (item_id,),
+    )
+    return [r["id"] for r in rows]
+
+
+def _decision_id_display(item_id: int) -> str:
+    """ED-42. Local so this module need not import decision_cmd, which imports
+    from here."""
+    return f"ED-{item_id}"
+
+
+def _endpoint_display(kind: str, item_id: int) -> str:
+    return _decision_id_display(item_id) if kind == "decision" else task_id_display(item_id)
+
+
+def _relations_referencing(ids: list[int]) -> list[tuple[int, str]]:
+    """Relation rows holding any of `ids` as a TASK endpoint (E-1915).
+
+    Returns (owning_task_id, clearing_command) pairs, ordered by row id within
+    each table. `owning_task_id` is which of `ids` the row hangs off, so a
+    `--cascade` refusal can name the descendant that is actually holding things
+    up.
+
+    Two tables, one exposure. `task_deps` carries task→task and task→decision
+    rows discriminated by source_type/target_type; `decision_relations` carries
+    the decision→task rows. Neither can declare a foreign key on the task
+    endpoint — SQLite cannot express an FK whose target table varies by row —
+    so a task delete leaves both behind, and task ids are reused.
+    """
+    if not ids:
+        return []
+    marks = ",".join("?" * len(ids))
+    idset = set(ids)
+    out: list[tuple[int, str]] = []
+
+    for row in db.query(
+        "SELECT source_type, source_id, target_type, target_id, dep_type "
+        "FROM task_deps "
+        f"WHERE (source_type = 'task' AND source_id IN ({marks})) "
+        f"   OR (target_type = 'task' AND target_id IN ({marks})) "
+        "ORDER BY id",
+        tuple(ids) * 2,
+    ):
+        src = _endpoint_display(row["source_type"], row["source_id"])
+        tgt = _endpoint_display(row["target_type"], row["target_id"])
+        verb = "decision unlink" if row["source_type"] == "decision" else "task unlink"
+        # Attribute to the source when both endpoints are being removed — the
+        # command that clears the row is written from the source's side.
+        owner = (
+            row["source_id"]
+            if row["source_type"] == "task" and row["source_id"] in idset
+            else row["target_id"]
+        )
+        out.append((
+            owner,
+            f"endless {verb} {src} --to {tgt} --type {row['dep_type']}",
+        ))
+
+    for row in db.query(
+        "SELECT source_decision_id, target_id, relation_type "
+        "FROM decision_relations "
+        f"WHERE target_kind = 'task' AND target_id IN ({marks}) "
+        "ORDER BY id",
+        tuple(ids),
+    ):
+        out.append((
+            row["target_id"],
+            f"endless decision unlink {_decision_id_display(row['source_decision_id'])} "
+            f"--to {task_id_display(row['target_id'])} --type {row['relation_type']}",
+        ))
+
+    return out
+
+
+def _refuse_removal_with_relations(item_id: int, cascade: bool) -> None:
+    """Refuse to remove a task while any relation still references it (E-1915).
+
+    Deny rather than cascade: a severed relation cannot be reconstructed, and a
+    refusal costs one `unlink`. All relation types, no per-type exemption — one
+    rule that always holds beats two rules with a judgment call at the boundary,
+    and every "harmless" exemption is a second code path that can orphan rows
+    again.
+
+    Must run BEFORE the task.deleted event is emitted, or a refusal would
+    publish a deletion that never happened.
+    """
+    ids = _removal_id_set(item_id, cascade)
+    found = _relations_referencing(ids)
+    if not found:
+        return
+
+    subject = task_id_display(item_id)
+    lines = [
+        f"{subject} has {len(found)} relation(s)."
+        if not cascade else
+        f"{subject} and its descendants have {len(found)} relation(s).",
+        "Removing would orphan them — relation rows survive a task delete, and",
+        "task ids are reused, so a later task inheriting one of these ids would",
+        "inherit its relations too. Unlink them first:",
+        "",
+    ]
+    if cascade:
+        # Attribute each row to the id it hangs off, or the operator cannot
+        # tell which of the tasks being deleted is holding up the removal.
+        for owner in sorted({owner for owner, _ in found}):
+            lines.append(f"  {task_id_display(owner)}:")
+            lines += [f"      {cmd}" for o, cmd in found if o == owner]
+    else:
+        lines += [f"    {cmd}" for _, cmd in found]
+    raise click.ClickException("\n".join(lines))
+
+
 def remove_item(item_id: int, cascade: bool = False):
     """Remove a task."""
     from endless.event_bridge import emit_event
@@ -2252,6 +2380,11 @@ def remove_item(item_id: int, cascade: bool = False):
             f"Task {task_id_display(item_id)} has {child_count} child(ren). "
             f"Use --cascade to delete it and all descendants."
         )
+
+    # E-1915: refuse while relations still point at any id being deleted. There
+    # is deliberately no flag to remove a task and its relations in one step —
+    # `--cascade` above is about CHILDREN and predates this.
+    _refuse_removal_with_relations(item_id, cascade)
 
     _, proj_name = _resolve_project(None)
     emit_event(

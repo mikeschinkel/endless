@@ -373,6 +373,31 @@ endless task move --children-of <id> --root
 endless task clear <id> --<field>                    # clear a single field
 ```
 
+**`remove` refuses while the task still has relations** (E-1915). Relation rows
+carry no foreign key on their task endpoint, so they used to survive the delete
+— and task ids are reused, so a later task taking the freed id silently
+inherited the dead relations and reported them as computed fact. The refusal
+names the exact `unlink` command that clears each one:
+
+```
+E-1914 has 2 relation(s).
+Removing would orphan them — relation rows survive a task delete, and
+task ids are reused, so a later task inheriting one of these ids would
+inherit its relations too. Unlink them first:
+
+    endless task unlink E-1914 --to E-1911 --type cleans_up
+    endless decision unlink ED-42 --to E-1914 --type documents
+```
+
+Deny rather than cascade: a severed relation cannot be reconstructed, and a
+refusal costs one command. Every relation type, no exemption — `relates_to`
+included. There is deliberately no flag to remove a task *and* its relations in
+one step; `--cascade` is about children and only widens which tasks get checked
+(the whole descendant set, so removing a parent cannot bypass the guard).
+
+Rows orphaned before this landed are cleaned up by `reconcile` — which runs on
+`endless project list` / `project scan` — and it prints what it removed.
+
 ---
 
 ## Relations between tasks
