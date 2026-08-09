@@ -547,6 +547,8 @@ format  = "tap"                    # native result stream: gotest-json | pytest-
 
 A first-class `runner` (`gotest`, `pytest`) takes a structured `tests`/`paths` selection and Endless infers its `format`; any other runner is raw — you give it a literal `command` and declare its `format` (default `tap`). A project-level `.endless/verify.toml` (same directory, one level above the per-task suites) carries shared `setup`/`teardown`/`seed`/`needs` that compose beneath every per-task manifest, so a project states its common substrate once. Discovery is purely by convention: `.endless/tasks/<id>/verify.toml` per task, plus the project-root `.endless/verify.toml`.
 
+**Casing.** The suite directory is **lowercase** — `.endless/tasks/e-1758/` — the same way every other Endless path writes a task id (`.endless/worktrees/e-1889/`, `tests/tasks/e-1889-verify.sh`). The manifest's `task` field is the **canonical display form**, `task = "E-1758"`, the way a task id is written in CLI arguments and prose. Both name the same task and discovery compares them case-insensitively, so neither convention has to bend to the other. An uppercase directory still resolves; lowercase is what to write.
+
 ### The runner
 
 `endless task verify <id>` runs a task's suite under an isolated temp working dir and env, normalizes the native result streams to a single report, prints a pass/fail summary, and exits `0` on all-pass. (With no id it verifies the current session's task.) Endless's own suites are still bash scripts pending migration to a manifest, so for those, run the script directly.

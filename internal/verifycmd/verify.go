@@ -92,7 +92,7 @@ func run(id string, keep bool) (code int, err error) {
 		goto end
 	}
 
-	eff, ok = manifests[id]
+	eff, ok = manifests[verify.NormalizeTaskID(id)]
 	if !ok {
 		err = doterr.NewErr(ErrNoSuiteForTask,
 			"task", id, "available", availableIDs(manifests), "root", root)

@@ -2,6 +2,7 @@ package verify
 
 import (
 	"os"
+	"strings"
 
 	"github.com/mikeschinkel/go-doterr"
 	"github.com/mikeschinkel/go-dt"
@@ -15,6 +16,23 @@ const SuitesDir = ".endless/tasks"
 
 // ManifestFile is the manifest filename within each suite directory.
 const ManifestFile = "verify.toml"
+
+// NormalizeTaskID folds a task id to a case-insensitive comparison form.
+//
+// The same id is written two ways, for two audiences, and both are right where
+// they appear. On disk it is lowercase — `.endless/tasks/e-1758/` — matching
+// every other Endless path (`.endless/worktrees/e-1889/`,
+// `tests/tasks/e-1889-verify.sh`). In the manifest's `task` field, in CLI
+// arguments, and in prose it is the canonical display form `E-1758`, which is
+// how a task id is written everywhere else in the product.
+//
+// So nothing internal compares these raw. Forcing one convention onto the other
+// would let a string-equality detail dictate what users type and see, which is
+// backwards: normalize at the comparison instead and let each surface read the
+// way it should.
+func NormalizeTaskID(id string) string {
+	return strings.ToUpper(id)
+}
 
 // ScriptsDir is the standard home, relative to a project root, for
 // project-shared setup/seed scripts referenced from a verify config (e.g.
@@ -55,10 +73,13 @@ end:
 
 // Discover walks <root>/.endless/tasks/*/verify.toml, merges each per-task
 // manifest beneath the optional project-level <root>/.endless/verify.toml, and
-// returns the effective manifests keyed by task id (the suite directory name).
-// Each returned manifest is the merged result a runner executes (see Merge) and
-// is fully validated. A suite directory whose declared task does not match its
-// directory name fails loudly, as does any malformed manifest or project config.
+// returns the effective manifests keyed by task id (normalized — see
+// NormalizeTaskID). Each returned manifest is the merged result a runner
+// executes (see Merge) and is fully validated. A suite directory whose declared
+// task does not match its directory name fails loudly, as does any malformed
+// manifest or project config. The match is case-insensitive: the directory is
+// lowercase by path convention while the `task` field is the canonical E-NNNN
+// form, and both name the same task.
 //
 // A missing .endless/tasks directory yields an empty map and no error: a
 // project with no suites yet is not an error. A missing project-level
@@ -128,12 +149,14 @@ func Discover(root dt.DirPath) (manifests map[string]*Manifest, err error) {
 			err = doterr.WithErr(err, "filepath", manifestPath)
 			goto end
 		}
-		if eff.Task != id {
+		if NormalizeTaskID(eff.Task) != NormalizeTaskID(id) {
 			err = doterr.NewErr(ErrInvalidManifest, ErrTaskIDMismatch,
 				"dir", id, "task", eff.Task, "filepath", manifestPath)
 			goto end
 		}
-		manifests[id] = eff
+		// Keyed by the manifest's own `task` value, not the directory name, so
+		// callers look up and error-report in the id form they were given.
+		manifests[NormalizeTaskID(eff.Task)] = eff
 	}
 
 end:

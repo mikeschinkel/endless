@@ -7,7 +7,7 @@ runs — so they are the fast unit proof that the wrapper builds the command
 correctly and never swallows the runner's exit status.
 
 This module is also the reference `pytest/uv` check in E-1605's E-1603
-verification suite (.endless/tasks/E-1603/verify.toml): the exemplar that
+verification suite (.endless/tasks/e-1603/verify.toml): the exemplar that
 exercises the pytest first-class runner end to end.
 """
 

@@ -166,3 +166,56 @@ func keysOf(m map[string]*verify.Manifest) []string {
 	}
 	return keys
 }
+
+// TestDiscover_DirCasingIsIndependentOfTaskField pins the convention E-1927
+// settled: the suite DIRECTORY is lowercase, matching every other Endless path
+// (.endless/worktrees/e-1889/, tests/tasks/e-1889-verify.sh), while the
+// manifest's `task` field stays the canonical display form E-NNNN that CLI
+// arguments and prose use. They are the same id written for two audiences, so
+// discovery normalizes rather than forcing one convention onto the other.
+func TestDiscover_DirCasingIsIndependentOfTaskField(t *testing.T) {
+	cases := []struct {
+		name string
+		dir  string
+		task string
+	}{
+		{"lowercase_dir_canonical_task", "e-1234", "E-1234"},
+		{"uppercase_dir_still_works", "E-1234", "E-1234"},
+		{"lowercase_both", "e-1234", "e-1234"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			root := t.TempDir()
+			writeSuite(t, root, tc.dir, manifestFor(tc.task, "gotest"))
+
+			manifests, err := verify.Discover(dt.DirPath(root))
+			if err != nil {
+				t.Fatalf("Discover: %v", err)
+			}
+			// Always keyed canonically, whatever the directory looked like, so
+			// a caller passing `E-1234` (as the Python CLI always does) hits.
+			if _, ok := manifests["E-1234"]; !ok {
+				t.Fatalf("manifest not keyed by E-1234; got keys %v", keysOf(manifests))
+			}
+			if len(manifests) != 1 {
+				t.Fatalf("want 1 manifest, got %d", len(manifests))
+			}
+		})
+	}
+}
+
+// TestDiscover_RejectsGenuineTaskIDMismatch guards the obvious regression from
+// the normalization above: relaxing CASE must not relax IDENTITY. A manifest
+// declaring a different task than its directory is still a loud failure.
+func TestDiscover_RejectsGenuineTaskIDMismatch(t *testing.T) {
+	root := t.TempDir()
+	writeSuite(t, root, "e-1234", manifestFor("E-9999", "gotest"))
+
+	_, err := verify.Discover(dt.DirPath(root))
+	if err == nil {
+		t.Fatal("want ErrTaskIDMismatch for a manifest naming a different task, got nil")
+	}
+	if !errors.Is(err, verify.ErrTaskIDMismatch) {
+		t.Fatalf("want ErrTaskIDMismatch, got %v", err)
+	}
+}
