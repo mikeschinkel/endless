@@ -212,6 +212,121 @@ def test_a_relation_on_an_unrelated_task_does_not_block(isolated_env):
     assert task_cmd._relations_referencing([a]) == []
 
 
+# ── the bulk-clear door (E-1927) ─────────────────────────────────────────────
+#
+# `task import --replace` and `task import-json --clear` delete tasks by
+# emitting task.bulk_cleared, which never passes through remove_item. Before
+# this they orphaned relation rows exactly as `task remove` did.
+
+
+def _add_imported_task(title: str, source_file: str) -> int:
+    cur = db.execute(
+        "INSERT INTO tasks (project_id, title, status, type_id, phase, source_file, created_at) "
+        "VALUES (1, ?, 'ready', 1, 'now', ?, datetime('now'))",
+        (title, source_file),
+    )
+    return cur.lastrowid
+
+
+def test_bulk_clear_refused_when_an_imported_task_has_a_relation(isolated_env):
+    _seed_project()
+    imported = _add_imported_task("Imported", "/tmp/PLAN.md")
+    outsider = _add_task("Outsider")
+    _add_dep(imported, outsider, "blocks")
+
+    with pytest.raises(click.ClickException) as exc:
+        task_cmd._refuse_bulk_clear_with_relations(1, "/tmp/PLAN.md")
+    msg = str(exc.value)
+
+    # The file is named — the operator has to know which import is refusing.
+    assert "PLAN.md" in msg
+    assert f"endless task unlink E-{imported} --to E-{outsider} --type blocks" in msg
+    # And each row is attributed, since a bulk clear deletes many tasks at once.
+    assert f"E-{imported}:" in msg
+
+
+def test_bulk_clear_checks_every_task_from_that_file(isolated_env):
+    _seed_project()
+    first = _add_imported_task("First", "/tmp/PLAN.md")
+    second = _add_imported_task("Second", "/tmp/PLAN.md")
+    outsider = _add_task("Outsider")
+    _add_dep(first, outsider, "blocks")
+    _add_dep(outsider, second, "cleans_up")
+
+    with pytest.raises(click.ClickException) as exc:
+        task_cmd._refuse_bulk_clear_with_relations(1, "/tmp/PLAN.md")
+    msg = str(exc.value)
+
+    assert "2 relation(s)" in msg
+    assert f"E-{first}:" in msg and f"E-{second}:" in msg
+
+
+def test_bulk_clear_ignores_tasks_from_a_different_file(isolated_env):
+    _seed_project()
+    mine = _add_imported_task("Mine", "/tmp/PLAN.md")
+    theirs = _add_imported_task("Theirs", "/tmp/OTHER.md")
+    _add_dep(theirs, mine, "blocks")
+
+    # The relation hangs off a task this clear does NOT delete on its own — but
+    # it also references one that it does, so it must still refuse.
+    with pytest.raises(click.ClickException):
+        task_cmd._refuse_bulk_clear_with_relations(1, "/tmp/PLAN.md")
+
+    # A file whose tasks are wholly unrelated passes.
+    db.execute("DELETE FROM task_deps")
+    task_cmd._refuse_bulk_clear_with_relations(1, "/tmp/PLAN.md")
+
+
+def test_bulk_clear_allowed_when_nothing_is_linked(isolated_env):
+    _seed_project()
+    _add_imported_task("Imported", "/tmp/PLAN.md")
+    b, c = _add_task("B"), _add_task("C")
+    _add_dep(b, c, "blocks")
+
+    # A relation elsewhere in the project must not block an unrelated import.
+    task_cmd._refuse_bulk_clear_with_relations(1, "/tmp/PLAN.md")
+
+
+def test_bulk_clear_names_json_import_by_its_pseudo_source(isolated_env):
+    _seed_project()
+    imported = _add_imported_task("Imported", "json_import")
+    outsider = _add_task("Outsider")
+    _add_dep(imported, outsider, "relates_to")
+
+    with pytest.raises(click.ClickException) as exc:
+        task_cmd._refuse_bulk_clear_with_relations(1, "json_import")
+
+    assert "json_import" in str(exc.value)
+
+
+# ── the descendant count (E-1928) ────────────────────────────────────────────
+
+
+def test_removal_id_set_holds_the_whole_subtree(isolated_env):
+    """The count `task remove --cascade` reports is now read off this set,
+    captured BEFORE the delete. It used to run its own recursive query after
+    emit_event — which deletes the subtree synchronously — so it always
+    seeded from an empty table and reported 0 descendants."""
+    _seed_project()
+    parent = _add_task("Parent")
+    child = _add_task("Child", parent_id=parent)
+    grandchild = _add_task("Grandchild", parent_id=child)
+    _add_task("Unrelated")
+
+    ids = task_cmd._removal_id_set(parent, cascade=True)
+
+    assert sorted(ids) == sorted([parent, child, grandchild])
+    assert len(ids) - 1 == 2  # the number the command reports
+
+
+def test_removal_id_set_without_cascade_is_just_the_task(isolated_env):
+    _seed_project()
+    parent = _add_task("Parent")
+    _add_task("Child", parent_id=parent)
+
+    assert task_cmd._removal_id_set(parent, cascade=False) == [parent]
+
+
 # ── regression: the pre-existing child guard is unchanged ────────────────────
 
 

@@ -22,6 +22,14 @@
 #
 # `reconcile()` additionally clears rows earlier removals already orphaned.
 #
+# Second landing folds in two follow-ups found while verifying the first:
+#   E-1927 — `task import --replace` / `import-json --clear` delete tasks by
+#            emitting task.bulk_cleared, which never reaches remove_item, so
+#            they orphaned rows exactly as `task remove` did. Same guard now.
+#   E-1928 — `--cascade` always printed "0 descendant(s)": the count ran its own
+#            recursive query AFTER emit_event, which deletes the subtree
+#            synchronously. It now reads the id set captured before the delete.
+#
 # Run from anywhere inside the worktree:
 #   esu && ./tests/tasks/e-1915-verify.sh
 #
@@ -273,6 +281,54 @@ test_cascade_checks_descendants() {
         "0" "$(Q "SELECT count(*) FROM tasks WHERE id IN ($PARENT,$CHILD,$GRANDCHILD)")"
     assert_eq "...leaving zero task_deps rows referencing any of it" \
         "0|0|0" "$(deps_touching "$PARENT")|$(deps_touching "$CHILD")|$(deps_touching "$GRANDCHILD")"
+
+    # E-1928 (second landing): the count in that success line. It used to run
+    # its own recursive query AFTER emit_event — which deletes the subtree
+    # synchronously — so it seeded from an empty table and always said 0.
+    assert_contains "...and reports the descendants it actually deleted" \
+        "and 2 descendant(s)" "$out"
+}
+
+# ─── E2: the bulk-clear door (E-1927, second landing) ────────────────────────
+
+test_bulk_clear_guarded() {
+    section "E2. task import --replace is guarded too — the other way tasks get deleted"
+
+    printf '# Plan\n\n- [ ] Alpha item\n- [ ] Beta item\n' > "$REPO/PLAN.md"
+    E task import "$REPO/PLAN.md" >/dev/null 2>&1
+    local imported
+    imported="$(Q "SELECT MIN(id) FROM tasks WHERE source_file LIKE '%PLAN.md'")"
+    [[ -n "$imported" ]] || { report_fail "import seeded a task" "an id" "nothing"; return; }
+
+    # An unguarded re-import is what orphaned the row: the task goes, the
+    # relation stays, and a later task taking the freed id inherits it.
+    E task link "$imported" --to "E-$PEER" --type blocks >/dev/null 2>&1
+    local out rc
+    out="$(E task import "$REPO/PLAN.md" --replace 2>&1)"; rc=$?
+
+    assert_eq "the re-import is refused" "1" "$rc"
+    assert_contains "...naming the file whose import is blocked" "PLAN.md" "$out"
+    assert_contains "...and the command that clears the relation" \
+        "endless task unlink E-$imported --to E-$PEER --type blocks" "$out"
+    assert_eq "the imported task still exists" \
+        "1" "$(Q "SELECT count(*) FROM tasks WHERE id=$imported")"
+    assert_eq "...and nothing was orphaned" "1" "$(deps_touching "$imported")"
+
+    # Cleared, the re-import goes through and leaves no orphan behind.
+    E task unlink "$imported" --to "$PEER" --type blocks >/dev/null 2>&1
+    out="$(E task import "$REPO/PLAN.md" --replace 2>&1)"; rc=$?
+    assert_eq "after unlink the re-import succeeds" "0" "$rc"
+    assert_eq "...and leaves zero task_deps rows referencing the freed id" \
+        "0" "$(deps_touching "$imported")"
+
+    # An unrelated relation elsewhere must not block an import refresh.
+    E task link "$PEER" --to "E-$UPSTREAM" --type relates_to >/dev/null 2>&1
+    out="$(E task import "$REPO/PLAN.md" --replace 2>&1)"; rc=$?
+    assert_eq "a relation on a non-imported task does not block the import" "0" "$rc"
+    E task unlink "$PEER" --to "$UPSTREAM" --type relates_to >/dev/null 2>&1
+
+    W "DELETE FROM tasks WHERE source_file LIKE '%PLAN.md'"
+    rm -f "$REPO/PLAN.md"
 }
 
 # ─── F: unlink, then remove, then reuse the id ───────────────────────────────
@@ -401,6 +457,7 @@ main() {
     test_target_side_refused
     test_decision_relations_refused
     test_cascade_checks_descendants
+    test_bulk_clear_guarded
     test_unlink_then_remove_is_clean
     test_reconcile_repair
     test_regressions

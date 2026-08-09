@@ -854,6 +854,8 @@ def _do_import(
         return
 
     if replace:
+        # E-1927: same relation guard as `task remove`, before the delete.
+        _refuse_bulk_clear_with_relations(project_id, source_file)
         emit_event(
             kind="task.bulk_cleared",
             project=proj_name,
@@ -2187,9 +2189,11 @@ def import_json(
     """Import task items from a JSON array."""
     from endless.event_bridge import emit_event
 
-    _, proj_name = _resolve_project(project_name)
+    project_id, proj_name = _resolve_project(project_name)
 
     if clear:
+        # E-1927: same relation guard as `task remove`, before the delete.
+        _refuse_bulk_clear_with_relations(project_id, "json_import")
         emit_event(
             kind="task.bulk_cleared",
             project=proj_name,
@@ -2319,7 +2323,37 @@ def _relations_referencing(ids: list[int]) -> list[tuple[int, str]]:
     return out
 
 
-def _refuse_removal_with_relations(item_id: int, cascade: bool) -> None:
+def _orphan_refusal(
+    headline: str,
+    found: list[tuple[int, str]],
+    group_by_task: bool,
+) -> click.ClickException:
+    """Build the refusal every relation-orphaning delete path raises.
+
+    One message shape wherever a task is about to be deleted, so the rule reads
+    the same however the caller got here. `group_by_task` attributes each row to
+    the id it hangs off — needed whenever more than one task is being deleted,
+    or the operator cannot tell which one is holding up the removal.
+    """
+    lines = [
+        headline,
+        "Removing would orphan them — relation rows survive a task delete, and",
+        "task ids are reused, so a later task inheriting one of these ids would",
+        "inherit its relations too. Unlink them first:",
+        "",
+    ]
+    if group_by_task:
+        for owner in sorted({owner for owner, _ in found}):
+            lines.append(f"  {task_id_display(owner)}:")
+            lines += [f"      {cmd}" for o, cmd in found if o == owner]
+    else:
+        lines += [f"    {cmd}" for _, cmd in found]
+    return click.ClickException("\n".join(lines))
+
+
+def _refuse_removal_with_relations(
+    item_id: int, cascade: bool, ids: list[int],
+) -> None:
     """Refuse to remove a task while any relation still references it (E-1915).
 
     Deny rather than cascade: a severed relation cannot be reconstructed, and a
@@ -2331,30 +2365,52 @@ def _refuse_removal_with_relations(item_id: int, cascade: bool) -> None:
     Must run BEFORE the task.deleted event is emitted, or a refusal would
     publish a deletion that never happened.
     """
-    ids = _removal_id_set(item_id, cascade)
     found = _relations_referencing(ids)
     if not found:
         return
 
     subject = task_id_display(item_id)
-    lines = [
+    raise _orphan_refusal(
         f"{subject} has {len(found)} relation(s)."
         if not cascade else
         f"{subject} and its descendants have {len(found)} relation(s).",
-        "Removing would orphan them — relation rows survive a task delete, and",
-        "task ids are reused, so a later task inheriting one of these ids would",
-        "inherit its relations too. Unlink them first:",
-        "",
+        found,
+        group_by_task=cascade,
+    )
+
+
+def _refuse_bulk_clear_with_relations(project_id: int, source_file: str) -> None:
+    """Refuse a bulk clear while relations reference any task it would delete.
+
+    E-1927: `task import --replace` and `task import-json --clear` delete tasks
+    by emitting task.bulk_cleared, which the Go executor runs as a straight
+    `DELETE FROM tasks WHERE project_id = ? AND source_file = ?`. That never
+    passes through `remove_item`, so before this the two import verbs orphaned
+    relation rows exactly as `task remove` did before E-1915.
+
+    Same rule, same message: a severed relation is unrecoverable however the
+    task went away, and an imported task that has since been linked to is no
+    longer disposable just because a file regenerated it. Clear the relation
+    first, or re-import without `--replace` / `--clear`.
+
+    Must run BEFORE task.bulk_cleared is emitted.
+    """
+    ids = [
+        r["id"] for r in db.query(
+            "SELECT id FROM tasks WHERE project_id = ? AND source_file = ?",
+            (project_id, source_file),
+        )
     ]
-    if cascade:
-        # Attribute each row to the id it hangs off, or the operator cannot
-        # tell which of the tasks being deleted is holding up the removal.
-        for owner in sorted({owner for owner, _ in found}):
-            lines.append(f"  {task_id_display(owner)}:")
-            lines += [f"      {cmd}" for o, cmd in found if o == owner]
-    else:
-        lines += [f"    {cmd}" for _, cmd in found]
-    raise click.ClickException("\n".join(lines))
+    found = _relations_referencing(ids)
+    if not found:
+        return
+
+    name = Path(source_file).name if source_file != "json_import" else source_file
+    raise _orphan_refusal(
+        f"{len(found)} relation(s) reference tasks imported from {name}.",
+        found,
+        group_by_task=True,
+    )
 
 
 def remove_item(item_id: int, cascade: bool = False):
@@ -2381,10 +2437,15 @@ def remove_item(item_id: int, cascade: bool = False):
             f"Use --cascade to delete it and all descendants."
         )
 
+    # The ids this removal will delete: the task, plus its descendants under
+    # --cascade. Computed ONCE, here, before anything is deleted — both the
+    # relation guard and the descendant count reported below read it.
+    removal_ids = _removal_id_set(item_id, cascade)
+
     # E-1915: refuse while relations still point at any id being deleted. There
     # is deliberately no flag to remove a task and its relations in one step —
     # `--cascade` above is about CHILDREN and predates this.
-    _refuse_removal_with_relations(item_id, cascade)
+    _refuse_removal_with_relations(item_id, cascade, removal_ids)
 
     _, proj_name = _resolve_project(None)
     emit_event(
@@ -2399,14 +2460,11 @@ def remove_item(item_id: int, cascade: bool = False):
     )
 
     if cascade and child_count > 0:
-        desc_count = db.scalar(
-            "WITH RECURSIVE tree(id) AS ("
-            "  SELECT id FROM tasks WHERE parent_id = ?"
-            "  UNION ALL"
-            "  SELECT t.id FROM tasks t JOIN tree ON t.parent_id = tree.id"
-            ") SELECT count(*) FROM tree",
-            (item_id,),
-        ) or 0
+        # E-1928: read off removal_ids, captured before the emit above. This
+        # used to run its own recursive query HERE — after emit_event, which
+        # executes the delete synchronously — so the CTE always seeded from an
+        # already-empty table and every cascade reported "0 descendant(s)".
+        desc_count = len(removal_ids) - 1
         click.echo(
             click.style("•", fg="cyan")
             + f" Removed {task_id_display(item_id)} and {desc_count} descendant(s): {row[0]['title']}"

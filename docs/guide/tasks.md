@@ -395,6 +395,12 @@ included. There is deliberately no flag to remove a task *and* its relations in
 one step; `--cascade` is about children and only widens which tasks get checked
 (the whole descendant set, so removing a parent cannot bypass the guard).
 
+The same guard applies to **`task import --replace`** and
+**`task import-json --clear`** (E-1927), which delete tasks by source file
+rather than by id. An imported task that has since been linked to is no longer
+disposable just because the file regenerated it — clear the relation, or
+re-import without the flag.
+
 Rows orphaned before this landed are cleaned up by `reconcile` — which runs on
 `endless project list` / `project scan` — and it prints what it removed.
 
