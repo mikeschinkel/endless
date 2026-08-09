@@ -115,6 +115,15 @@ func TestClassify(t *testing.T) {
 	}
 }
 
+// shutdownWait bounds how long a supervisor may take to return after a
+// signal. It is a liveness budget, not a performance assertion — the tests
+// below prove that Run *returns*, not that it returns quickly — so it is set
+// generously. At 2s these tests flaked on a machine running several parallel
+// task sessions, where scheduling delay alone ate the budget. 10s matches
+// waitFor's deadline, so a loaded machine fails the same way everywhere
+// instead of failing here first.
+const shutdownWait = 10 * time.Second
+
 // TestSupervisorSetsProcessGroup asserts the child becomes its own pgroup
 // leader, distinct from the test parent's pgroup.
 func TestSupervisorSetsProcessGroup(t *testing.T) {
@@ -147,8 +156,8 @@ func TestSupervisorSetsProcessGroup(t *testing.T) {
 	sigCh <- syscall.SIGTERM
 	select {
 	case <-done:
-	case <-time.After(2 * time.Second):
-		t.Fatal("Supervisor.Run did not return within 2s of signal")
+	case <-time.After(shutdownWait):
+		t.Fatalf("Supervisor.Run did not return within %s of signal", shutdownWait)
 	}
 }
 
@@ -170,16 +179,10 @@ func TestSupervisorKillsDescendants(t *testing.T) {
 		t.Fatalf("Run: %v", err)
 	}
 
-	grandchild := mustAtoi(t, strings.TrimSpace(stdout.String()))
-	err := syscall.Kill(grandchild, 0)
-	if err == nil {
-		// Best-effort cleanup so we don't leave a stray sleep behind.
-		_ = syscall.Kill(grandchild, syscall.SIGKILL)
-		t.Fatalf("grandchild PID %d still alive after Run returned", grandchild)
-	}
-	if !errors.Is(err, syscall.ESRCH) {
-		t.Fatalf("kill(%d,0): want ESRCH, got %v", grandchild, err)
-	}
+	// Polled for the same reason as TestSupervisorSignalForwarding: Run
+	// returning means the pgroup was signalled, not that the descendant has
+	// finished dying.
+	assertReaped(t, mustAtoi(t, strings.TrimSpace(stdout.String())))
 }
 
 // TestSupervisorSignalForwarding asserts a signal on Signals reaches the
@@ -205,13 +208,37 @@ func TestSupervisorSignalForwarding(t *testing.T) {
 	sigCh <- syscall.SIGTERM
 	select {
 	case <-done:
-	case <-time.After(2 * time.Second):
-		t.Fatal("Supervisor.Run did not return within 2s of signal")
+	case <-time.After(shutdownWait):
+		t.Fatalf("Supervisor.Run did not return within %s of signal", shutdownWait)
 	}
 
-	if err := syscall.Kill(grandchild, 0); !errors.Is(err, syscall.ESRCH) {
-		_ = syscall.Kill(grandchild, syscall.SIGKILL)
-		t.Fatalf("grandchild not reaped: kill(%d,0)=%v", grandchild, err)
+	assertReaped(t, grandchild)
+}
+
+// assertReaped waits for `pid` to disappear, up to shutdownWait.
+//
+// Polled rather than checked once: Run returning only means the supervisor
+// signalled the pgroup. The grandchild still has to take the signal, get
+// reparented to init, and be reaped — none of which is synchronous with Run.
+// A single check right after Run therefore asserts a timing coincidence on
+// top of the behavior under test, and fails on a loaded machine while the
+// behavior is perfectly correct. The assertion itself is unchanged: the
+// grandchild must be gone, not merely likely to go.
+func assertReaped(t *testing.T, pid int) {
+	t.Helper()
+	deadline := time.Now().Add(shutdownWait)
+	for {
+		err := syscall.Kill(pid, 0)
+		if errors.Is(err, syscall.ESRCH) {
+			return
+		}
+		if time.Now().After(deadline) {
+			// Best-effort cleanup so a failure doesn't leak a stray sleep.
+			_ = syscall.Kill(pid, syscall.SIGKILL)
+			t.Fatalf("grandchild not reaped within %s: kill(%d,0)=%v",
+				shutdownWait, pid, err)
+		}
+		time.Sleep(20 * time.Millisecond)
 	}
 }
 
