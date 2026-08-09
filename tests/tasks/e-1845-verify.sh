@@ -416,11 +416,8 @@ test_registrations() {
         '"untriaged"' "$(cat "$WT/src/endless/session_status_cmd.py")"
 
     # A claim must promote it, or the task reads untouched while worked on.
-    # E-1889 appended 'revisit' to the same set for the same reason; assert
-    # only that 'untriaged' is in it, so this task's invariant survives later
-    # additions to the promotable set.
     assert_contains "claim promotes untriaged → underway" \
-        "status IN ('untriaged'," \
+        "'untriaged','unplanned','ready','blocked'" \
         "$(cat "$WT/internal/monitor/session.go")"
 }
 

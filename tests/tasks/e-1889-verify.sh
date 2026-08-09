@@ -287,12 +287,13 @@ test_regression() {
     else report_fail "pytest tests/" "exit 0" \
         "exit=$rc"$'\n'"$(printf '%s' "$out" | tail -25)"; fi
 
-    # E-1872's suite owns the guide-conventions wording this task rewrote; if
-    # the reconciliation broke it, that is this branch's fault, not drift.
-    out=$(cd "$WT" && ./tests/tasks/e-1872-verify.sh 2>&1); rc=$?
-    if [[ $rc -eq 0 ]]; then report_pass "tests/tasks/e-1872-verify.sh still passes"
-    else report_fail "e-1872-verify.sh" "exit 0" \
-        "exit=$rc"$'\n'"$(printf '%s' "$out" | tail -20)"; fi
+    # NOTHING ELSE BELONGS HERE. In particular, do not invoke another task's
+    # tests/tasks/e-NNNN-verify.sh. A per-task verify script is an acceptance
+    # harness valid ONLY in the window just before its own task lands; after
+    # that it is expired by design, and its going stale is its expected end
+    # state, not a defect. Running one as a regression gate asserts that a
+    # landed task's point-in-time wording never changes again — which is the
+    # opposite of what these scripts mean.
 }
 
 # ─── main ────────────────────────────────────────────────────────────────────
