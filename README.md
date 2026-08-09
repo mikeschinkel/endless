@@ -1,4 +1,4 @@
-# Endless — Manage 50+ AI tasks without being overwhelmed
+# Endless — Manage 50+ Claude Code tasks without going insane
 
 Endless is a project awareness system for solo developers managing multiple projects with AI assistants. It allows managing a myriad of software projects using AI without losing track of the details.
 
