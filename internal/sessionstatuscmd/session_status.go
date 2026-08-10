@@ -302,9 +302,12 @@ func Run(args []string) {
 		if !monitor.HasExplicitDBContext() {
 			monitor.PinMainDB()
 		}
-		// process is the session's process handle (sessions.process), which today
-		// holds a tmux pane id. The tmux-shaped name stays confined to the helpers
-		// that genuinely take a pane (fitPaneToFrame and the monitor.* lookups).
+		// process is the session's process handle — today a tmux pane id. The
+		// monitor.* lookups below pair it with the current tmux server's uuid to
+		// reach a `processes` row (E-1898); a bare pane id is not an identity,
+		// since the next server reissues it. The tmux-shaped name stays confined
+		// to the helpers that genuinely take a pane (fitPaneToFrame and those
+		// lookups).
 		process := os.Getenv("TMUX_PANE")
 		nextAnchor = func() (anchor, error) { return resolveAnchor(process) }
 	}

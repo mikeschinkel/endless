@@ -219,13 +219,17 @@ func runClaude(args []string) error {
 		if err := monitor.InitSession(payload.SessionID, projectID); err != nil {
 			return fmt.Errorf("initializing session: %w", err)
 		}
-		// Opportunistic dead-pane reaper (E-1426). Marks rows whose tmux
-		// pane no longer exists as `ended`, so `session list` and pane
-		// resolution don't surface ghosts. Cleanly no-ops when tmux is
-		// unavailable.
-		if err := monitor.ReapDeadTmuxPanes(projectID); err != nil {
-			log.Printf("reaping dead tmux panes: %v", err)
-		}
+		// The opportunistic dead-pane reaper (E-1426) that used to run here was
+		// removed by E-1898. It marked rows whose tmux pane it could not see as
+		// `ended` and NULLed their binding — judging them against whatever tmux
+		// server $TMUX happened to name, which on 2026-08-05 was the wrong one:
+		// 59 of 61 live bindings were destroyed in a few batched UPDATEs.
+		//
+		// Nothing replaces it, because nothing needs to. Ghost rows were only
+		// ever a READ problem ("this pane resolves to a dead session"), and that
+		// is now answered at read time by JOINing a per-invocation observation
+		// against the pane's durable identity. No sweep, so no chance for a
+		// sweep to be wrong.
 		// Opportunistic stale-worktree reaper (E-1337). Removes worktree
 		// dirs whose owning task has a landing record past worktree_ttl
 		// and no live process holding cwd. Cheap when nothing to reap.

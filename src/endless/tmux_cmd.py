@@ -52,17 +52,6 @@ def run_init(hotkey: str, status_interval: int) -> None:
         sys.exit(result.returncode)
 
 
-def run_reset() -> None:
-    """Shell out to `endless-go tmux reset`.
-
-    Marks session rows for the current project ended (and NULLs their
-    process) when their tmux pane no longer exists on the live server.
-    """
-    result = subprocess.run([_binary(), "tmux", "reset"])
-    if result.returncode != 0:
-        sys.exit(result.returncode)
-
-
 def run_status_line() -> None:
     """Shell out to `endless-go tmux status-line` and pass stdout through.
 

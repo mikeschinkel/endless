@@ -1,6 +1,8 @@
 package tmuxcmd
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"flag"
 	"fmt"
 	"os"
@@ -8,8 +10,19 @@ import (
 
 	_ "modernc.org/sqlite"
 
+	"github.com/mikeschinkel/endless/internal/faults"
 	"github.com/mikeschinkel/endless/internal/monitor"
 )
+
+// faultFingerprint groups status-line failures by CAUSE rather than by message
+// instance. The default fingerprint is derived from the summary, and this
+// summary embeds the error text — which is what we want to group by, so the
+// derivation is the same. It is passed explicitly anyway so that changing the
+// human-facing summary later cannot silently re-partition open incidents.
+func faultFingerprint(err error) string {
+	sum := sha256.Sum256([]byte(err.Error()))
+	return hex.EncodeToString(sum[:])[:16]
+}
 
 // runStatusLine prints one styled line on stdout for tmux to substitute
 // into status-format[1]. Always exits 0 — a non-zero exit causes tmux
@@ -35,8 +48,29 @@ func runStatusLine(args []string) {
 
 	status, err := monitor.GetPaneStatus(pane)
 	if err != nil {
-		// Real error (DB unreachable, etc.). Render placeholder; stay
-		// silent on stderr to avoid log spam during interactive use.
+		// Real error (schema drift, enum-integrity gate, DB context, ...).
+		// Render the placeholder and stay SILENT on stderr — the bar re-execs
+		// once per pane every status-interval, so logging here would be a
+		// firehose painted over a live TUI.
+		//
+		// But silent is not the same as unrecorded. Until E-1898 this branch
+		// wrote nothing anywhere, so the bar blanking looked exactly like "no
+		// Endless context here" and an incident that blanked 59 of 61 windows
+		// went untraced for hours. faults.Record is the right shape: it dedupes
+		// an open incident in place, so every pane failing every two seconds
+		// raises ONE incident with a rising count.
+		//
+		// Fingerprint on the error text, not the pane: the pane id would split
+		// one project-wide outage into a dozen incidents, which is the same
+		// noise problem in a different costume.
+		faults.Record(faults.Fault{
+			Code:        faults.ErrCodeStatusLineUnavailable,
+			Source:      "tmux:status-line",
+			Fingerprint: faultFingerprint(err),
+			Summary:     "tmux status line: " + err.Error(),
+			Detail:      err.Error(),
+			Fields:      map[string]any{"pane": pane},
+		})
 		fmt.Print(placeholder())
 		return
 	}

@@ -59,7 +59,16 @@ func withTestDB(t *testing.T) *sql.DB {
 	dbErr = nil
 	dbContextDir = t.TempDir() // satisfy the E-1429 gate
 
+	// Isolate every test from the developer's tmux (E-1898). `go test` run from
+	// inside a pane inherits TMUX/TMUX_PANE, so without this the binding path
+	// would stamp @server_uuid on the real server and attach fixtures to real
+	// panes. Identity only, no observation: bindings resolve, and liveness reads
+	// `unknown` — which keeps sessions listed, matching pre-E-1898 fixtures.
+	// Tests that assert on liveness call SetTestTmuxObservation themselves.
+	restoreTmux := SetTestTmuxServer(TestServerUUID)
+
 	t.Cleanup(func() {
+		restoreTmux()
 		dbOnce = prevOnce
 		dbConn = prevConn
 		dbErr = prevErr

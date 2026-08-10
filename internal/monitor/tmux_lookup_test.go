@@ -27,10 +27,9 @@ func TestGetActiveTaskForPane_DirectMatch(t *testing.T) {
 		t.Fatalf("seed task: %v", err)
 	}
 	if _, err := db.Exec(
-		`INSERT INTO sessions (session_id, project_id, platform, state, process, active_task_id, last_activity)
+		`INSERT INTO sessions (session_id, project_id, platform, state, process_id, active_task_id, last_activity)
 		 VALUES (?, ?, 'claude', 'working', ?, ?, '2026-05-20T00:00:00')`,
-		"sess-A", 1, fakePane, 55,
-	); err != nil {
+		"sess-A", 1, mustSeedPane(t, db, TestServerUUID, fakePane), 55); err != nil {
 		t.Fatalf("seed session: %v", err)
 	}
 
@@ -82,10 +81,8 @@ func TestGetActiveTaskForPane_SkipsNullActiveTask(t *testing.T) {
 	db := withTestDB(t)
 	seedProject(t, db, 1, "acme", "/tmp/acme")
 	if _, err := db.Exec(
-		`INSERT INTO sessions (session_id, project_id, platform, state, process, last_activity)
-		 VALUES (?, ?, 'claude', 'working', ?, '2026-05-20T00:00:00')`,
-		"sess-B", 1, fakePane,
-	); err != nil {
+		`INSERT INTO sessions (session_id, project_id, platform, state, process_id, last_activity)
+		 VALUES (?, ?, 'claude', 'working', ?, '2026-05-20T00:00:00')`, "sess-B", 1, mustSeedPane(t, db, TestServerUUID, fakePane)); err != nil {
 		t.Fatalf("seed session: %v", err)
 	}
 
@@ -122,10 +119,8 @@ func TestGetPaneStatus_ActiveTaskReturnsActiveKind(t *testing.T) {
 		t.Fatalf("seed task: %v", err)
 	}
 	if _, err := db.Exec(
-		`INSERT INTO sessions (session_id, project_id, platform, state, process, active_task_id, last_activity)
-		 VALUES (?, ?, 'claude', 'working', ?, ?, '2026-05-20T00:00:00')`,
-		"sess-A", 1, fakePane, 66,
-	); err != nil {
+		`INSERT INTO sessions (session_id, project_id, platform, state, process_id, active_task_id, last_activity)
+		 VALUES (?, ?, 'claude', 'working', ?, ?, '2026-05-20T00:00:00')`, "sess-A", 1, mustSeedPane(t, db, TestServerUUID, fakePane), 66); err != nil {
 		t.Fatalf("seed session: %v", err)
 	}
 
@@ -151,10 +146,8 @@ func TestGetPaneStatus_SessionWithoutTaskReturnsNoTaskKind(t *testing.T) {
 	db := withTestDB(t)
 	seedProject(t, db, 1, "acme", "/tmp/acme")
 	if _, err := db.Exec(
-		`INSERT INTO sessions (session_id, project_id, platform, state, process, last_activity)
-		 VALUES (?, ?, 'claude', 'working', ?, '2026-05-20T00:00:00')`,
-		"sess-noTask", 1, fakePane,
-	); err != nil {
+		`INSERT INTO sessions (session_id, project_id, platform, state, process_id, last_activity)
+		 VALUES (?, ?, 'claude', 'working', ?, '2026-05-20T00:00:00')`, "sess-noTask", 1, mustSeedPane(t, db, TestServerUUID, fakePane)); err != nil {
 		t.Fatalf("seed session: %v", err)
 	}
 
@@ -173,10 +166,8 @@ func TestGetLiveSessionByProcess_ReturnsLiveID(t *testing.T) {
 	db := withTestDB(t)
 	seedProject(t, db, 1, "acme", "/tmp/acme")
 	res, err := db.Exec(
-		`INSERT INTO sessions (session_id, project_id, platform, state, process, last_activity)
-		 VALUES (?, ?, 'claude', 'working', ?, '2026-05-20T00:00:00')`,
-		"sess-live", 1, fakePane,
-	)
+		`INSERT INTO sessions (session_id, project_id, platform, state, process_id, last_activity)
+		 VALUES (?, ?, 'claude', 'working', ?, '2026-05-20T00:00:00')`, "sess-live", 1, mustSeedPane(t, db, TestServerUUID, fakePane))
 	if err != nil {
 		t.Fatalf("seed session: %v", err)
 	}
@@ -201,10 +192,8 @@ func TestGetLiveSessionByProcess_FiltersEnded(t *testing.T) {
 	db := withTestDB(t)
 	seedProject(t, db, 1, "acme", "/tmp/acme")
 	if _, err := db.Exec(
-		`INSERT INTO sessions (session_id, project_id, platform, state, process, last_activity)
-		 VALUES (?, ?, 'claude', 'ended', ?, '2026-05-20T00:00:00')`,
-		"sess-dead", 1, fakePane,
-	); err != nil {
+		`INSERT INTO sessions (session_id, project_id, platform, state, process_id, last_activity)
+		 VALUES (?, ?, 'claude', 'ended', ?, '2026-05-20T00:00:00')`, "sess-dead", 1, mustSeedPane(t, db, TestServerUUID, fakePane)); err != nil {
 		t.Fatalf("seed session: %v", err)
 	}
 
@@ -222,17 +211,13 @@ func TestGetLiveSessionByProcess_PicksMostRecent(t *testing.T) {
 	db := withTestDB(t)
 	seedProject(t, db, 1, "acme", "/tmp/acme")
 	if _, err := db.Exec(
-		`INSERT INTO sessions (session_id, project_id, platform, state, process, last_activity)
-		 VALUES (?, ?, 'claude', 'working', ?, '2026-05-19T00:00:00')`,
-		"sess-old", 1, fakePane,
-	); err != nil {
+		`INSERT INTO sessions (session_id, project_id, platform, state, process_id, last_activity)
+		 VALUES (?, ?, 'claude', 'working', ?, '2026-05-19T00:00:00')`, "sess-old", 1, mustSeedPane(t, db, TestServerUUID, fakePane)); err != nil {
 		t.Fatalf("seed old: %v", err)
 	}
 	res, err := db.Exec(
-		`INSERT INTO sessions (session_id, project_id, platform, state, process, last_activity)
-		 VALUES (?, ?, 'claude', 'working', ?, '2026-05-21T00:00:00')`,
-		"sess-new", 1, fakePane,
-	)
+		`INSERT INTO sessions (session_id, project_id, platform, state, process_id, last_activity)
+		 VALUES (?, ?, 'claude', 'working', ?, '2026-05-21T00:00:00')`, "sess-new", 1, mustSeedPane(t, db, TestServerUUID, fakePane))
 	if err != nil {
 		t.Fatalf("seed new: %v", err)
 	}
@@ -330,10 +315,10 @@ func TestGetActiveBlockers_KeepsActiveDropsTerminal(t *testing.T) {
 	db := withTestDB(t)
 	seedProject(t, db, 1, "acme", "/tmp/acme")
 	seedTask(t, db, 100, 1, "current task", "underway")
-	seedTask(t, db, 301, 1, "active 301", "underway")  // active
-	seedTask(t, db, 302, 1, "terminal 302", "confirmed")  // terminal, excluded
-	seedTask(t, db, 303, 1, "active 303", "ready")        // active
-	seedTask(t, db, 304, 1, "terminal 304", "obsolete")   // terminal, excluded
+	seedTask(t, db, 301, 1, "active 301", "underway")    // active
+	seedTask(t, db, 302, 1, "terminal 302", "confirmed") // terminal, excluded
+	seedTask(t, db, 303, 1, "active 303", "ready")       // active
+	seedTask(t, db, 304, 1, "terminal 304", "obsolete")  // terminal, excluded
 	seedBlocks(t, db, 304, 100)
 	seedBlocks(t, db, 301, 100)
 	seedBlocks(t, db, 303, 100)

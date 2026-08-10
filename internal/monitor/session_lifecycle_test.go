@@ -24,11 +24,15 @@ func init() {
 // sessionLifecycleRow reads the lifecycle-relevant columns for a session.
 // Distinct from sessionRow (session_test.go) — that helper covers the
 // touch-shape (state/process/platform); this one targets the columns the
-// task-bound lifecycle helpers mutate.
+// task-bound lifecycle helpers mutate. `process` is now the pane ADDRESS read
+// back through sessions.process_id -> processes (E-1898), so these assertions
+// still read as "which pane is this session on".
 func sessionLifecycleRow(t *testing.T, db *sql.DB, sessionID string) (state string, activeTaskID *int64, process string) {
 	t.Helper()
 	err := db.QueryRow(
-		"SELECT state, active_task_id, COALESCE(process, '') FROM sessions WHERE session_id=?",
+		`SELECT s.state, s.active_task_id, COALESCE(p.address, '')
+		 FROM sessions s LEFT JOIN processes p ON p.id = s.process_id
+		 WHERE s.session_id=?`,
 		sessionID,
 	).Scan(&state, &activeTaskID, &process)
 	if err != nil {

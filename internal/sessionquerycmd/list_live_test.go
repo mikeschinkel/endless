@@ -34,10 +34,9 @@ func seedLiveSessionsDB(t *testing.T, cfgDir, projectPath string, sessions []ses
 	}
 	for _, s := range sessions {
 		if _, err := db.Exec(
-			`INSERT INTO sessions (session_id, project_id, platform, state, process, last_activity)
-			 VALUES (?, 1, 'claude', ?, ?, '2026-05-20T00:00:00')`,
-			s.sessionID, s.state, s.process,
-		); err != nil {
+			`INSERT INTO sessions (session_id, project_id, platform, state, process_id, last_activity)
+		 VALUES (?, 1, 'claude', ?, ?, '2026-05-20T00:00:00')`,
+			s.sessionID, s.state, seedPane(t, db, s.process)); err != nil {
 			t.Fatalf("seed session %s: %v", s.sessionID, err)
 		}
 	}

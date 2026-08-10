@@ -14,6 +14,7 @@ import (
 
 	"github.com/mikeschinkel/endless/internal/gatekind"
 	"github.com/mikeschinkel/endless/internal/navvia"
+	"github.com/mikeschinkel/endless/internal/processkind"
 	"github.com/mikeschinkel/endless/internal/schema"
 	"github.com/mikeschinkel/endless/internal/sessionkind"
 	"github.com/mikeschinkel/endless/internal/sessiontaskrelation"
@@ -613,6 +614,16 @@ func DB() (*sql.DB, error) {
 			if hasTable(dbConn, "session_kinds") {
 				if err := sessionkind.VerifyIntegrity(dbConn); err != nil {
 					dbErr = fmt.Errorf("session_kinds integrity check on %s: %w", path, err)
+					dbConn = nil
+					return
+				}
+			}
+			// E-1898: same fail-closed contract for the process_kinds enum mirror.
+			// Skipped on populated DBs that have not yet had the E-1898 migration
+			// applied (the table will not exist; the migration creates it).
+			if hasTable(dbConn, "process_kinds") {
+				if err := processkind.VerifyIntegrity(dbConn); err != nil {
+					dbErr = fmt.Errorf("process_kinds integrity check on %s: %w", path, err)
 					dbConn = nil
 					return
 				}

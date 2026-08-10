@@ -3746,17 +3746,15 @@ def _check_task_ownership(item_id: int, current_eid: int | None) -> bool:
     is free (or only stale sessions hold it). Raises click.ClickException
     if a *different* live session owns the task.
     """
-    # E-1807: self-heal a ghost owner first. A session that died without firing
-    # SessionEnd leaves a non-ended row pointing at a now-dead tmux pane, which
-    # the query below would read as a live owner. Reaping it (flip to `ended`,
-    # NULL `process`) before the read lets a dead-pane owner fall out naturally,
-    # so the spawn/claim proceeds with no user step. Best-effort: a reaper
-    # failure is silent and falls through to the pre-E-1807 behavior.
-    from endless.session_cmd import (
-        _live_sessions, _project_root_for_cwd, _reap_dead_panes,
-    )
+    # E-1807's ghost owner (a session that died without firing SessionEnd,
+    # leaving a non-ended row on a now-dead pane) is handled by `_live_sessions`
+    # below, which as of E-1898 omits any session whose pane was observably
+    # absent. No reaper runs first: nothing is written to make the task free,
+    # the ghost simply is not reported as live. A session whose tmux server
+    # could not be reached is reported as `unknown` and DOES still hold the
+    # task — unprovable is not the same as gone.
+    from endless.session_cmd import _live_sessions, _project_root_for_cwd
     project_root = _project_root_for_cwd()
-    _reap_dead_panes(project_root)
 
     rows = db.query(
         "SELECT id AS eid FROM sessions "
@@ -3788,9 +3786,7 @@ def _check_task_ownership(item_id: int, current_eid: int | None) -> bool:
         raise click.ClickException(
             f"E-{item_id} is already active in session {eid} "
             f"(tmux pane {pane}).\n"
-            "Switch to that session or have it release the task first.\n"
-            f"If pane {pane} is actually gone, run `endless-go tmux reset` to "
-            "clear the stale session and retry."
+            "Switch to that session or have it release the task first."
         )
 
     return owned_by_current

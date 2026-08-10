@@ -112,9 +112,9 @@ func TestSessionStatusRows_RowSetAndDecorations(t *testing.T) {
 
 	snTask(t, db, focal, 1, "underway", "now", "")
 	snTask(t, db, sibling, 1, "ready", "next", "has-plan")
-	snTask(t, db, realParent, 1, "ready", "later", "") // focal's task-tree parent
+	snTask(t, db, realParent, 1, "ready", "later", "")  // focal's task-tree parent
 	snTask(t, db, spawnerTask, 1, "ready", "later", "") // the spawning session's active task
-	snTask(t, db, blocker, 1, "underway", "now", "") // open blocker of focal
+	snTask(t, db, blocker, 1, "underway", "now", "")    // open blocker of focal
 	snTask(t, db, doneSibling, 1, "confirmed", "now", "")
 
 	// focal's real task-tree parent is realParent, NOT the spawner.
@@ -461,9 +461,8 @@ func TestRepro_E1698_UnrelatedFocalFallback(t *testing.T) {
 	// An unrelated live session on task 700, bound to a DIFFERENT pane.
 	snTask(t, db, 700, 1, "underway", "now", "")
 	if _, err := db.Exec(
-		`INSERT INTO sessions (session_id, project_id, platform, state, process, active_task_id, last_activity)
-		 VALUES (NULL, 1, 'claude', 'working', '%888', 700, '2026-06-20T00:00:00')`,
-	); err != nil {
+		`INSERT INTO sessions (session_id, project_id, platform, state, process_id, active_task_id, last_activity)
+		 VALUES (NULL, 1, 'claude', 'working', ?, 700, '2026-06-20T00:00:00')`, mustSeedPane(t, db, TestServerUUID, "%888")); err != nil {
 		t.Fatalf("seed unrelated session: %v", err)
 	}
 
@@ -487,10 +486,8 @@ func TestResolveSessionStatusFocal_ActivePaneResolves(t *testing.T) {
 	seedProject(t, db, 1, "p1", "/p1")
 	snTask(t, db, 810, 1, "underway", "now", "")
 	if _, err := db.Exec(
-		`INSERT INTO sessions (session_id, project_id, platform, state, process, active_task_id, last_activity)
-		 VALUES (NULL, 1, 'claude', 'working', ?, 810, '2026-06-20T00:00:00')`,
-		fakePane,
-	); err != nil {
+		`INSERT INTO sessions (session_id, project_id, platform, state, process_id, active_task_id, last_activity)
+		 VALUES (NULL, 1, 'claude', 'working', ?, 810, '2026-06-20T00:00:00')`, mustSeedPane(t, db, TestServerUUID, fakePane)); err != nil {
 		t.Fatalf("seed session: %v", err)
 	}
 
@@ -513,10 +510,8 @@ func TestResolveSessionStatusFocal_SessionNoTaskResolvesNoTaskKind(t *testing.T)
 	db := withTestDB(t)
 	seedProject(t, db, 1, "p1", "/p1")
 	if _, err := db.Exec(
-		`INSERT INTO sessions (session_id, project_id, platform, state, process, last_activity)
-		 VALUES (NULL, 1, 'claude', 'working', ?, '2026-06-20T00:00:00')`,
-		fakePane,
-	); err != nil {
+		`INSERT INTO sessions (session_id, project_id, platform, state, process_id, last_activity)
+		 VALUES (NULL, 1, 'claude', 'working', ?, '2026-06-20T00:00:00')`, mustSeedPane(t, db, TestServerUUID, fakePane)); err != nil {
 		t.Fatalf("seed session: %v", err)
 	}
 

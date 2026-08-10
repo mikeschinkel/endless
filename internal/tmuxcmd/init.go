@@ -51,10 +51,15 @@ func runInit(args []string) {
 		os.Exit(1)
 	}
 
-	// Order matters: stamp @server_uuid LAST so a crash mid-init still
-	// leaves the gate open for a retry. reset/apply are idempotent.
-	runReset(nil)
-
+	// This used to call runReset(nil) first, and that call was the trigger for
+	// the 2026-08-05 incident: a freshly started tmux server fires
+	// session-created -> `endless tmux init`, so the reaper ran against a
+	// ONE-PANE view of a brand-new server and concluded every session in the
+	// project was dead — 37 rows in a single batch. E-1898 removed the reaper
+	// outright; liveness is now derived per read and never swept.
+	//
+	// Order still matters: stamp @server_uuid LAST so a crash mid-init leaves
+	// the gate open for a retry. apply is idempotent.
 	applyArgs := []string{}
 	if *binary != "" {
 		applyArgs = append(applyArgs, "--binary="+*binary)

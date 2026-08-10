@@ -34,9 +34,8 @@ func TestExecSessionStatus_SentinelUsesIDDirectly(t *testing.T) {
 	// A live session whose process does NOT match what we'll send — the
 	// sentinel path must resolve by id, not by pane.
 	if _, err := db.Exec(
-		`INSERT INTO sessions (id, session_id, project_id, state, process, started_at)
-		 VALUES (42, 'sess-42', 1, 'working', '%99', '2026-06-17T00:00:00')`,
-	); err != nil {
+		`INSERT INTO sessions (id, session_id, project_id, state, process_id, started_at)
+		 VALUES (42, 'sess-42', 1, 'working', ?, '2026-06-17T00:00:00')`, seedPane(t, db, "%99")); err != nil {
 		t.Fatalf("seed session: %v", err)
 	}
 
@@ -93,9 +92,8 @@ func TestExecSessionStatus_SentinelEndedIDErrors(t *testing.T) {
 func TestExecSessionStatus_NoSentinelResolvesByPane(t *testing.T) {
 	db := newLandingTestDB(t)
 	if _, err := db.Exec(
-		`INSERT INTO sessions (id, session_id, project_id, state, process, started_at)
-		 VALUES (5, 'sess-5', 1, 'working', '%88', '2026-06-17T00:00:00')`,
-	); err != nil {
+		`INSERT INTO sessions (id, session_id, project_id, state, process_id, started_at)
+		 VALUES (5, 'sess-5', 1, 'working', ?, '2026-06-17T00:00:00')`, seedPane(t, db, "%88")); err != nil {
 		t.Fatalf("seed session: %v", err)
 	}
 
@@ -143,7 +141,7 @@ func TestRenderSessionStatusMarkdown_EmptySectionsShowEmpty(t *testing.T) {
 
 func TestRenderSessionStatusMarkdown_TaskTable(t *testing.T) {
 	p := &SessionStatusRecordedPayload{
-		Tasks:`<task id="E-1208" status="confirmed">verbs.jsonl write-time</task>` +
+		Tasks: `<task id="E-1208" status="confirmed">verbs.jsonl write-time</task>` +
 			"\n" +
 			`<task id="E-1206" status="confirmed" filed="true">db-ledger write-time</task>`,
 	}
@@ -163,7 +161,7 @@ func TestRenderSessionStatusMarkdown_MultiLineNote(t *testing.T) {
 	// Multi-line task body: newlines should render as <br> in the markdown
 	// table cell.
 	p := &SessionStatusRecordedPayload{
-		Tasks:`<task id="E-1" status="confirmed">line one
+		Tasks: `<task id="E-1" status="confirmed">line one
 line two</task>`,
 	}
 	md := renderSessionStatusMarkdown(p)

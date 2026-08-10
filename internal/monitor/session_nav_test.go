@@ -27,10 +27,9 @@ func seedNavSession(t *testing.T, db *sql.DB, sessionID string, projectID int64,
 		task = taskID
 	}
 	res, err := db.Exec(
-		`INSERT INTO sessions (session_id, project_id, platform, state, active_task_id, process, last_activity, summary)
+		`INSERT INTO sessions (session_id, project_id, platform, state, active_task_id, process_id, last_activity, summary)
 		 VALUES (?, ?, 'claude', 'working', ?, ?, '2026-06-29T00:00:00', ?)`,
-		sessionID, projectID, task, pane, summary,
-	)
+		sessionID, projectID, task, mustSeedPane(t, db, TestServerUUID, pane), summary)
 	if err != nil {
 		t.Fatalf("seed session %q: %v", sessionID, err)
 	}

@@ -26,7 +26,9 @@ func freshSessionsDB(t *testing.T) *sql.DB {
 func sessionRow(t *testing.T, db *sql.DB, sessionID string) (state, process, platform string) {
 	t.Helper()
 	err := db.QueryRow(
-		"SELECT state, COALESCE(process, ''), platform FROM sessions WHERE session_id=?",
+		`SELECT s.state, COALESCE(p.address, ''), s.platform
+		 FROM sessions s LEFT JOIN processes p ON p.id = s.process_id
+		 WHERE s.session_id=?`,
 		sessionID,
 	).Scan(&state, &process, &platform)
 	if err != nil {
@@ -227,49 +229,14 @@ func TestTouchSession_PaneReattachOverwritesProcess(t *testing.T) {
 	}
 }
 
-// TestTouchSession_CollisionInvalidationMarksPriorEnded: a new session
-// arriving on a pane already held by a different live session marks the
-// prior occupant 'ended' in the same transaction. A pane can only host
-// one harness at a time, so the prior must be dead.
-func TestTouchSession_CollisionInvalidationMarksPriorEnded(t *testing.T) {
-	db := withTestDB(t)
-	seedProject(t, db, 1, "proj-test-1", "/tmp/proj-test-1")
-
-	if err := TouchSession("sess-A", "claude", "%5", 1); err != nil {
-		t.Fatalf("touch A: %v", err)
-	}
-	// Force A into a non-default live state to verify the invalidation.
-	if _, err := db.Exec(
-		"UPDATE sessions SET state='working' WHERE session_id=?",
-		"sess-A",
-	); err != nil {
-		t.Fatalf("force working: %v", err)
-	}
-
-	// New session B takes over pane %5.
-	if err := TouchSession("sess-B", "claude", "%5", 1); err != nil {
-		t.Fatalf("touch B: %v", err)
-	}
-
-	stateA, processA, _ := sessionRow(t, db, "sess-A")
-	if stateA != "ended" {
-		t.Errorf("prior occupant A.state = %q, want ended", stateA)
-	}
-	// A's process is NULL'd along with the state flip (E-1530, Layer A).
-	// Required because tmux pane ids (`%N`) are reused after a tmux server
-	// restart — leaving the value behind lets the ghost row win the lookup
-	// for the next server's pane with the same id.
-	if processA != "" {
-		t.Errorf("prior occupant A.process = %q, want NULL (E-1530)", processA)
-	}
-	stateB, processB, _ := sessionRow(t, db, "sess-B")
-	if stateB == "ended" {
-		t.Errorf("new occupant B.state = ended; should be live")
-	}
-	if processB != "%5" {
-		t.Errorf("new occupant B.process = %q, want %%5", processB)
-	}
-}
+// Collision invalidation was REMOVED by E-1898; the test that used to live here
+// asserted a new session on an occupied pane ended the prior occupant. That
+// write killed live sessions whenever the "collision" was really a pane id
+// reissued by a restarted tmux server (E-1468), and identity now makes the
+// reissue case impossible, so there is nothing left to invalidate. The
+// replacement guarantee — a same-server collision leaves BOTH rows standing —
+// is pinned by TestTouchSession_SameServerCollisionLeavesPriorRowAlone in
+// tmux_lookup_ghost_test.go, alongside the rest of the E-1530 family.
 
 // TestTouchSession_EmptyProcessDoesNotInvalidate: an empty incoming
 // process (TMUX_PANE unset) must NOT trigger collision invalidation —
@@ -381,10 +348,8 @@ func TestListLiveSessions_FiltersEndedAndScopesToProject(t *testing.T) {
 	}
 	for _, r := range rows {
 		if _, err := db.Exec(
-			`INSERT INTO sessions (session_id, project_id, platform, state, process, last_activity)
-			 VALUES (?, ?, 'claude', ?, ?, ?)`,
-			r.sid, r.projectID, r.state, r.process, "2026-05-20T00:00:00",
-		); err != nil {
+			`INSERT INTO sessions (session_id, project_id, platform, state, process_id, last_activity)
+		 VALUES (?, ?, 'claude', ?, ?, ?)`, r.sid, r.projectID, r.state, mustSeedPane(t, db, TestServerUUID, r.process), "2026-05-20T00:00:00"); err != nil {
 			t.Fatalf("seed %s: %v", r.sid, err)
 		}
 	}

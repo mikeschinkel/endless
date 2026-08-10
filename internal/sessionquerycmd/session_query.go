@@ -29,11 +29,10 @@ func Run(args []string) {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
-	case "reap-dead-panes":
-		if err := runReapDeadPanes(args[1:]); err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
-		}
+	// `reap-dead-panes` was removed by E-1898. It existed so the Python
+	// spawn/claim guard could WRITE a ghost owner to 'ended' before reading
+	// ownership. `list-live` now excludes observably-dead sessions at read
+	// time, so the ghost is absent without anything having been written.
 	case "task-text":
 		if err := runTaskText(args[1:]); err != nil {
 			fmt.Fprintln(os.Stderr, err)
@@ -139,7 +138,6 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "usage: endless-go session-query <subcommand>")
 	fmt.Fprintln(os.Stderr, "subcommands:")
 	fmt.Fprintln(os.Stderr, "  list-live --project-root <path>   JSON array of live sessions for the project")
-	fmt.Fprintln(os.Stderr, "  reap-dead-panes --project-root <path>")
 	fmt.Fprintln(os.Stderr, "                                    end non-ended sessions whose tmux pane is gone (silent; DB error → exit 1)")
 	fmt.Fprintln(os.Stderr, "  task-text --id <task-id>          raw tasks.text for the task (empty if none)")
 	fmt.Fprintln(os.Stderr, "  task-field --id <task-id> --name <text|outcome|analysis>")
@@ -715,41 +713,6 @@ func runListLive(args []string) error {
 		return fmt.Errorf("list live sessions: %w", err)
 	}
 	return json.NewEncoder(os.Stdout).Encode(sessions)
-}
-
-// runReapDeadPanes ends any non-ended sessions for the project whose owning
-// tmux pane no longer exists (E-1807), then exits 0 with no output. It exposes
-// monitor.ReapDeadTmuxPanes to the Python spawn/claim ownership guard, which
-// calls it before reading ownership so a ghost owner (a session that died
-// without firing SessionEnd, leaving a non-ended row pointing at a now-dead
-// pane) self-heals to free instead of reading as a live collision.
-//
-// Deliberately carries NO $TMUX guard (unlike `endless-go tmux reset`): the
-// reaper already no-ops when tmux is unavailable (list-panes fails → returns
-// nil), which is the correct behavior for an internal opportunistic call. An
-// unregistered project root is a silent no-op, mirroring list-live. Nonzero
-// exit only on a real DB error.
-func runReapDeadPanes(args []string) error {
-	fs := flag.NewFlagSet("reap-dead-panes", flag.ContinueOnError)
-	projectRoot := fs.String("project-root", "", "absolute path of the project root")
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-	if *projectRoot == "" {
-		return fmt.Errorf("--project-root is required")
-	}
-
-	projectID, _, err := monitor.ProjectIDForPath(*projectRoot)
-	if err != nil {
-		return fmt.Errorf("resolve project for %s: %w", *projectRoot, err)
-	}
-	if projectID == 0 {
-		// Unregistered cwd: nothing to reap. Silent no-op so the Python
-		// caller can invoke this unconditionally before the ownership read.
-		return nil
-	}
-
-	return monitor.ReapDeadTmuxPanes(projectID)
 }
 
 // runEnsureClaudeID prints the integer sessions.id for an env-identified

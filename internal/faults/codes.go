@@ -133,6 +133,22 @@ var (
 		Severity: SeverityError,
 		Title:    "A synthetic error raised on purpose to exercise this surface",
 	}
+
+	// ErrCodeStatusLineUnavailable covers the tmux status line failing to
+	// resolve what it should display. Error severity: the bar renders a dim
+	// placeholder that is indistinguishable from "this pane has no Endless
+	// context", so without a recorded fault the failure is invisible — which is
+	// how the 2026-08-05 incident ran for hours with 59 blank status lines and
+	// no diagnostic anywhere (E-1898, absorbing E-1895).
+	//
+	// ERR-0008, not 0006: E-1950 took 0006/0007 for the synthetic codes above
+	// while this branch was in flight, and a spent number is never reused.
+	ErrCodeStatusLineUnavailable = Code{
+		ID:       "ERR-0008",
+		Slug:     "status-line-unavailable",
+		Severity: SeverityError,
+		Title:    "The tmux status line could not resolve its pane",
+	}
 )
 
 // catalog indexes every registered Code by ID. Built once at init from the
@@ -145,6 +161,7 @@ var catalog = buildCatalog(
 	ErrCodeJobStuckLease,
 	ErrCodeTestWarning,
 	ErrCodeTestError,
+	ErrCodeStatusLineUnavailable,
 )
 
 // buildCatalog indexes codes by ID. It panics on a duplicate ID: a collision is

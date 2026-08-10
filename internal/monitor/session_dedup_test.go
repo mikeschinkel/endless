@@ -126,10 +126,14 @@ func TestBindSessionToTask_DoesNotEndPanedRowSameTask(t *testing.T) {
 	t.Setenv("TMUX_PANE", "")
 
 	now := time.Now().UTC().Format("2006-01-02T15:04:05")
+	panedProcess, err := SeedPaneProcess(db, TestServerUUID, "%9")
+	if err != nil {
+		t.Fatalf("seed pane binding: %v", err)
+	}
 	if _, err := db.Exec(
-		`INSERT INTO sessions (session_id, project_id, platform, state, active_task_id, process, kind_id, started_at, last_activity)
-		 VALUES ('uuid-paned', 1, 'claude', 'working', 42, '%9', ?, ?, ?)`,
-		int64(sessionkind.SessionKindTmux), now, now,
+		`INSERT INTO sessions (session_id, project_id, platform, state, active_task_id, process_id, kind_id, started_at, last_activity)
+		 VALUES ('uuid-paned', 1, 'claude', 'working', 42, ?, ?, ?, ?)`,
+		panedProcess, int64(sessionkind.SessionKindTmux), now, now,
 	); err != nil {
 		t.Fatalf("seed paned row: %v", err)
 	}

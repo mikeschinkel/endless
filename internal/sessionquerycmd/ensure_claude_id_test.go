@@ -35,10 +35,9 @@ func seedEnsureClaudeIDDB(t *testing.T, cfgDir, projectPath string, sessions []s
 	}
 	for _, s := range sessions {
 		if _, err := db.Exec(
-			`INSERT INTO sessions (session_id, project_id, platform, state, process, last_activity)
-			 VALUES (?, 1, 'claude', ?, ?, '2026-05-20T00:00:00')`,
-			s.sessionID, s.state, s.process,
-		); err != nil {
+			`INSERT INTO sessions (session_id, project_id, platform, state, process_id, last_activity)
+		 VALUES (?, 1, 'claude', ?, ?, '2026-05-20T00:00:00')`,
+			s.sessionID, s.state, seedPane(t, db, s.process)); err != nil {
 			t.Fatalf("seed session %s: %v", s.sessionID, err)
 		}
 	}
@@ -55,7 +54,9 @@ func readSessionsRow(t *testing.T, cfgDir, sessionID string) (id int64, state, p
 	var p sql.NullString
 	var pid sql.NullInt64
 	if err := db.QueryRow(
-		"SELECT id, state, COALESCE(process,''), COALESCE(project_id,0) FROM sessions WHERE session_id = ?",
+		`SELECT s.id, s.state, COALESCE(pr.address,''), COALESCE(s.project_id,0)
+		 FROM sessions s LEFT JOIN processes pr ON pr.id = s.process_id
+		 WHERE s.session_id = ?`,
 		sessionID,
 	).Scan(&id, &state, &p, &pid); err != nil {
 		t.Fatalf("read session row %q: %v", sessionID, err)

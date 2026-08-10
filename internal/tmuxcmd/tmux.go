@@ -35,8 +35,10 @@ func Run(args []string) {
 		runApply(args[1:])
 	case "init":
 		runInit(args[1:])
-	case "reset":
-		runReset(args[1:])
+	// `reset` was removed by E-1898. It wrapped the dead-pane reaper, which no
+	// longer exists: liveness is derived at read time from a per-invocation
+	// observation rather than swept into the sessions table, so there is no
+	// stale state for an operator verb to clear.
 	case "status-line":
 		runStatusLine(args[1:])
 	case "active-id":
@@ -57,8 +59,7 @@ func Run(args []string) {
 func usage(w *os.File) {
 	fmt.Fprintf(w, "Usage: endless-go tmux <command> [flags]\n")
 	fmt.Fprintf(w, "Commands:\n")
-	fmt.Fprintf(w, "  init         Init the current tmux server (reset+apply, gated by @server_uuid)\n")
+	fmt.Fprintf(w, "  init         Init the current tmux server (apply, gated by @server_uuid)\n")
 	fmt.Fprintf(w, "  apply        Configure the running tmux server (ephemeral)\n")
-	fmt.Fprintf(w, "  reset        Mark dead-pane session rows ended for the current project\n")
 	fmt.Fprintf(w, "  status-line  Print one styled line for status-format[1]\n")
 }

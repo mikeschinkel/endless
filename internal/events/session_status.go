@@ -19,6 +19,9 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+
+	"github.com/mikeschinkel/endless/internal/monitor"
+	"github.com/mikeschinkel/endless/internal/processkind"
 )
 
 // sessionIDSentinelPrefix marks a payload `process` field that already
@@ -145,16 +148,30 @@ func sessionIDFromSentinel(db dbQuerier, process string) (int64, bool, error) {
 // monitor.GetLiveSessionByProcess (E-1315). Uses the passed dbQuerier
 // (the open Execute transaction) so we don't try to acquire a second
 // sqlite connection while the first is still locked.
+//
+// Resolves the pane through `processes` rather than matching a bare string, so
+// the answer is scoped to the tmux server this process is talking to (E-1898).
+// The server lookup shells out to tmux, not to the database, so it is safe
+// inside the caller's open transaction.
 func liveSessionByProcessTx(db dbQuerier, process string) (int64, error) {
 	if process == "" {
 		return 0, sql.ErrNoRows
 	}
+	serverUUID, err := monitor.TmuxServerUUID()
+	if err != nil || serverUUID == "" {
+		// No identifiable server: match nothing. Falling back to a bare pane
+		// comparison here would reintroduce exactly the cross-server confusion
+		// this resolution exists to prevent.
+		return 0, sql.ErrNoRows
+	}
 	var id int64
-	err := db.QueryRow(
-		`SELECT id FROM sessions
-		 WHERE process = ? AND state != 'ended'
-		 ORDER BY last_activity DESC LIMIT 1`,
-		process,
+	err = db.QueryRow(
+		`SELECT s.id FROM sessions s
+		 JOIN processes p ON p.id = s.process_id
+		 WHERE p.kind_id = ? AND p.server_uuid = ? AND p.address = ?
+		   AND s.state != 'ended'
+		 ORDER BY s.last_activity DESC LIMIT 1`,
+		int(processkind.ProcessKindTmux), serverUUID, process,
 	).Scan(&id)
 	return id, err
 }

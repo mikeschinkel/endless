@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"os"
 	"time"
 
 	"github.com/mikeschinkel/endless/internal/config"
@@ -42,7 +41,7 @@ func BindSessionToTask(sessionID string, projectID int64, taskID int64) error {
 	}
 
 	now := time.Now().UTC().Format("2006-01-02T15:04:05")
-	process := os.Getenv("TMUX_PANE")
+	processID := currentPaneProcessID()
 
 	tx, err := db.Begin()
 	if err != nil {
@@ -50,14 +49,18 @@ func BindSessionToTask(sessionID string, projectID int64, taskID int64) error {
 	}
 	defer tx.Rollback()
 
+	// COALESCE(?, sessions.process_id) keeps the E-1426 rule that a bind with no
+	// identifiable pane never stomps a known-good binding. It is now the only
+	// protection needed: the reaper that used to destroy the value this defends
+	// is gone (E-1898), so there is always something left to preserve.
 	_, err = tx.Exec(
-		`INSERT INTO sessions (session_id, project_id, platform, state, active_task_id, process, started_at, last_activity)
+		`INSERT INTO sessions (session_id, project_id, platform, state, active_task_id, process_id, started_at, last_activity)
 		 VALUES (?, ?, 'claude', 'working', ?, ?, ?, ?)
 		 ON CONFLICT(session_id) DO UPDATE SET
 		   state='working', active_task_id=?, last_activity=?, project_id=?,
-		   process=COALESCE(NULLIF(?, ''), process)`,
-		sessionID, projectID, taskID, process, now, now,
-		taskID, now, projectID, process,
+		   process_id=COALESCE(?, sessions.process_id)`,
+		sessionID, projectID, taskID, processID, now, now,
+		taskID, now, projectID, processID,
 	)
 	if err != nil {
 		return fmt.Errorf("upsert session: %w", err)
@@ -77,7 +80,7 @@ func BindSessionToTask(sessionID string, projectID int64, taskID int64) error {
 	// hold a real pane are left to TouchSession's pane-collision path.
 	dedupWhere := `active_task_id = ?
 		   AND session_id != ?
-		   AND (process IS NULL OR process = '')
+		   AND process_id IS NULL
 		   AND kind_id = ?
 		   AND state != 'ended'`
 	dedupArgs := []any{taskID, sessionID, int64(sessionkind.SessionKindTmux)}
@@ -191,16 +194,16 @@ func StartChatSession(sessionID string, projectID int64) error {
 	}
 
 	now := time.Now().UTC().Format("2006-01-02T15:04:05")
-	process := os.Getenv("TMUX_PANE")
+	processID := currentPaneProcessID()
 
 	_, err = db.Exec(
-		`INSERT INTO sessions (session_id, project_id, platform, state, active_task_id, process, started_at, last_activity)
+		`INSERT INTO sessions (session_id, project_id, platform, state, active_task_id, process_id, started_at, last_activity)
 		 VALUES (?, ?, 'claude', 'working', NULL, ?, ?, ?)
 		 ON CONFLICT(session_id) DO UPDATE SET
 		   state='working', active_task_id=NULL, last_activity=?,
-		   process=COALESCE(NULLIF(?, ''), process)`,
-		sessionID, projectID, process, now, now,
-		now, process,
+		   process_id=COALESCE(?, sessions.process_id)`,
+		sessionID, projectID, processID, now, now,
+		now, processID,
 	)
 	return err
 }
@@ -323,28 +326,30 @@ func LookupChannelPort(process string) (int, int, error) {
 
 // TouchSession is the per-event UPSERT helper. It records the session's
 // presence in the sessions table (creating the row if absent), refreshes
-// last_activity, and overwrites `process` when the new value is non-empty
-// (so a pane-reattach is tracked; an empty TMUX_PANE never stomps a
-// previously-known value). Lifecycle transitions among the LIVE states
+// last_activity, and binds `process_id` when the pane can be given an identity
+// (so a pane-reattach is tracked; an unidentifiable pane never stomps a
+// previously-known binding). Lifecycle transitions among the LIVE states
 // (working/idle/needs_input) are owned by the dedicated helpers
 // (BindSessionToTask, IdleSession, EndSession) — TouchSession never clobbers
 // a live state on UPDATE, so it can safely fire on every hook event.
 //
+// `process` is a tmux pane id ("%414") or empty. It is resolved here to a
+// processes row paired with the CURRENT tmux server's @server_uuid (E-1898),
+// which is what makes a pane id reissued by a later server a different
+// identity rather than a collision.
+//
 // Revival of `ended` (E-1686): the one state transition TouchSession owns.
 // An incoming hook is proof the session is alive, so an `ended` row is lifted
 // back to 'needs_input' (the same neutral state INSERT uses; the next
-// lifecycle hook re-derives working/idle/ended). Without this an `ended` row —
-// reached via EndSession, the pane reaper, or this helper's own collision
-// invalidation — never recovers, and since every reader filters
-// `state != 'ended'` the still-live session goes permanently invisible.
-// Gated on the ON CONFLICT(session_id) target, NOT a bare pane match: a reused
-// pane id (%N after a tmux server restart) carries a DIFFERENT session_id and
-// takes the INSERT path, so the prior occupant's ended row stays ended (E-1530).
+// lifecycle hook re-derives working/idle/ended). Without this an `ended` row
+// never recovers, and since every reader filters `state != 'ended'` the
+// still-live session goes permanently invisible. Gated on the
+// ON CONFLICT(session_id) target, NOT a pane match: a reused pane id carries a
+// DIFFERENT session_id and takes the INSERT path, so a prior occupant's ended
+// row stays ended (E-1530).
 //
-// Collision invalidation: when `process` is non-empty and matches a row
-// other than this session, that other row is marked ended in the same
-// transaction. A pane can only host one harness at a time, so the prior
-// occupant must be dead.
+// This helper no longer performs collision invalidation; see the note at the
+// commit below for why that write is gone rather than fixed.
 //
 // The platform parameter lets future non-Claude harnesses share this
 // helper; today the only caller passes "claude".
@@ -361,6 +366,7 @@ func TouchSession(sessionID, platform, process string, projectID int64) error {
 	}
 
 	now := time.Now().UTC().Format("2006-01-02T15:04:05")
+	processID := paneProcessID(process)
 
 	tx, err := db.Begin()
 	if err != nil {
@@ -368,47 +374,41 @@ func TouchSession(sessionID, platform, process string, projectID int64) error {
 	}
 	defer tx.Rollback()
 
-	// UPSERT: process is NULL on INSERT when the new value is empty, and
-	// COALESCEd against the existing value on UPDATE so an empty input
-	// never overwrites a known-good process. state defaults to
-	// 'needs_input' only on INSERT (matches InitSession semantics). On UPDATE
-	// state is preserved for every LIVE state and only an 'ended' row is
-	// revived to 'needs_input' (E-1686, see the doc comment) — the CASE keeps
-	// working↔idle authoritative while giving a stale ending a recovery path.
+	// UPSERT: process_id is NULL on INSERT when no pane identity is available,
+	// and COALESCEd against the existing value on UPDATE so an unidentifiable
+	// bind never overwrites a known-good one. state defaults to 'needs_input'
+	// only on INSERT (matches InitSession semantics). On UPDATE state is
+	// preserved for every LIVE state and only an 'ended' row is revived to
+	// 'needs_input' (E-1686, see the doc comment) — the CASE keeps working↔idle
+	// authoritative while giving a stale ending a recovery path.
 	_, err = tx.Exec(
-		`INSERT INTO sessions (session_id, project_id, platform, state, process, started_at, last_activity)
-		 VALUES (?, ?, ?, 'needs_input', NULLIF(?, ''), ?, ?)
+		`INSERT INTO sessions (session_id, project_id, platform, state, process_id, started_at, last_activity)
+		 VALUES (?, ?, ?, 'needs_input', ?, ?, ?)
 		 ON CONFLICT(session_id) DO UPDATE SET
 		   last_activity = excluded.last_activity,
-		   process       = COALESCE(NULLIF(excluded.process, ''), sessions.process),
+		   process_id    = COALESCE(excluded.process_id, sessions.process_id),
 		   state         = CASE WHEN sessions.state = 'ended' THEN 'needs_input' ELSE sessions.state END`,
-		sessionID, projectID, platform, process, now, now,
+		sessionID, projectID, platform, processID, now, now,
 	)
 	if err != nil {
 		return fmt.Errorf("upsert session: %w", err)
 	}
 
-	// Collision invalidation: only meaningful when the incoming process
-	// is non-empty (otherwise we can't be claiming any pane). NULLs the
-	// displaced row's `process` so reused pane ids after a tmux server
-	// restart can't pull it back into a lookup (E-1530, Layer A).
-	// E-1468 plans to revisit this site's logic (the displaced row may
-	// not actually be dead — a tmux server restart can reissue the same
-	// pane id to a different session); the NULL is independent of that.
-	if process != "" {
-		_, err = tx.Exec(
-			`UPDATE sessions
-			 SET state = 'ended', process = NULL, last_activity = ?
-			 WHERE process = ?
-			   AND session_id != ?
-			   AND state != 'ended'`,
-			now, process, sessionID,
-		)
-		if err != nil {
-			return fmt.Errorf("collision invalidation: %w", err)
-		}
-	}
-
+	// E-1530's collision invalidation was REMOVED here by E-1898.
+	//
+	// It used to end every other non-ended row sharing the incoming pane string,
+	// on the reasoning that a pane hosts one harness at a time. That reasoning
+	// was sound; the KEY was not. A tmux server restart reissues "%414", so the
+	// displaced row was frequently a different server's session that was simply
+	// unreachable, not dead — E-1468's land run watched a live session get ended
+	// this way.
+	//
+	// With identity as (server_uuid, address) the case cannot arise: a reissued
+	// pane resolves to a DIFFERENT processes row, so it never collides with the
+	// old binding and there is nothing to invalidate. A genuine same-server
+	// collision (two session identities in one pane) leaves both rows alone and
+	// readers order by last_activity. No liveness heuristic, no recency window,
+	// and — the point — no write that can end a session nobody observed dying.
 	return tx.Commit()
 }
 
@@ -654,8 +654,14 @@ func EndSession(sessionID string) error {
 
 	snap := SnapshotSession(sessionID)
 	now := time.Now().UTC().Format("2006-01-02T15:04:05")
+	// process_id is deliberately PRESERVED across the end (E-1898). Ending a
+	// session is a fact about the session, not about where it ran: "session 512
+	// ran on pane %414 of server abc-123" stays true, and it is the evidence you
+	// need when a binding later looks wrong. E-1530's reason for clearing it —
+	// an ended row holding "%414" winning a lookup against a reissued "%414" —
+	// no longer applies, because the reissued pane is a different processes row.
 	_, err = db.Exec(
-		"UPDATE sessions SET state='ended', process=NULL, last_activity=? WHERE session_id=?",
+		"UPDATE sessions SET state='ended', last_activity=? WHERE session_id=?",
 		now, sessionID,
 	)
 	if err != nil {

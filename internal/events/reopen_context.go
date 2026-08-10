@@ -104,12 +104,18 @@ func taskOutcome(db *sql.DB, taskID int64) (string, error) {
 
 // inheritedSessionID picks the most-applicable prior ended session for a task,
 // skipping evidence-free sub-10s ghosts. Returns 0 when none exists.
+//
+// The `process_id IS NOT NULL` half of the evidence test only began carrying
+// weight with E-1898. Before it, ending a session NULLed its binding (in code
+// and via a schema trigger), so an ENDED row — the only kind this query looks
+// at — almost never had one, and the clause was near-dead. Bindings now survive
+// the end, so "this session was attached to something" is real evidence again.
 func inheritedSessionID(db *sql.DB, taskID int64) (int64, error) {
 	var id int64
 	err := db.QueryRow(
 		`SELECT id FROM sessions
 		 WHERE active_task_id = ? AND state = 'ended'
-		 ORDER BY (process IS NOT NULL
+		 ORDER BY (process_id IS NOT NULL
 		           OR (julianday(last_activity) - julianday(started_at)) * 86400 >= 10) DESC,
 		          started_at DESC
 		 LIMIT 1`,

@@ -167,3 +167,36 @@ precedence, and the rule that an error never ages off the badge while a stale
 warning does.
 
 **What to do.** Dismiss it: `endless errors clear <id>`.
+## ERR-0008 — status-line-unavailable
+
+**Severity:** error · **Raised by:** `endless-go tmux status-line`
+
+The tmux status line could not resolve what to show for a pane, and rendered
+its dim placeholder instead.
+
+This is an error rather than a warning because of how it *looks*: the
+placeholder is byte-identical to "this pane has no Endless context", so a
+broken bar and an empty bar are indistinguishable on screen. On 2026-08-05 that
+ambiguity hid a live incident for hours — 59 of 61 windows blank, no diagnostic
+anywhere, three hypotheses eliminated by hand before the cause was found
+(E-1898, absorbing E-1895).
+
+The bar deliberately stays silent on stderr: it re-execs once per pane every
+`status-interval` (2s across a dozen-plus panes), so logging would be a firehose
+painted over a live TUI. Recording a fault is the right shape instead — the
+incident dedupes in place, so a bar failing on every pane every two seconds
+raises **one** incident with a rising occurrence count.
+
+**Coverage limit, worth knowing.** The fault recorder's database accessor is
+`monitor.DB` itself, and `faults.Record` swallows its own failures by contract
+(it must never turn a diagnostic problem into a user-visible one). So a
+status-line failure *caused by* the database being unreachable cannot be
+recorded — the recorder needs the same handle that just failed. This code
+therefore covers the schema, enum-integrity, and DB-context gates behind
+`monitor.DB()`, not a genuinely unopenable database.
+
+**What to do.** Read the detail (`endless errors show --id <n> --detail`); it
+carries the underlying error and the pane id. A schema or enum-integrity failure
+means the binary and the database disagree — usually a worktree build against
+the main DB (E-1818). If the bar is blank with *no* incident recorded, suspect
+the database itself and check `endless sql "select 1"`.

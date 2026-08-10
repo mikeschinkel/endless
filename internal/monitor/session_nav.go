@@ -41,20 +41,26 @@ func RecordNav(client, toPane string, via navvia.NavVia) (int64, error) {
 	}
 
 	// Resolve the destination pane to a live tracked session (+ its project).
-	// state != 'ended' guards against pane-id reuse after a tmux server restart
-	// (mirrors GetLiveSessionByProcess and the status-line readers).
+	// Matching on process_id scopes this to the current tmux server, so a
+	// pane id reissued after a restart cannot resolve to the previous server's
+	// session (E-1898; mirrors GetLiveSessionByProcess and the status-line
+	// readers). state != 'ended' still guards the clean-end-then-rebind case.
 	var (
 		toSessionID *int64
 		projectID   *int64
 	)
-	err = db.QueryRow(
-		`SELECT id, project_id FROM sessions
-		 WHERE process = ? AND state != 'ended'
-		 ORDER BY last_activity DESC LIMIT 1`,
-		toPane,
-	).Scan(&toSessionID, &projectID)
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return 0, fmt.Errorf("resolve destination pane %s: %w", toPane, err)
+	if paneIDs, idErr := ProcessIDsForPanes([]string{toPane}); idErr != nil {
+		return 0, fmt.Errorf("resolve destination pane %s: %w", toPane, idErr)
+	} else if len(paneIDs) > 0 {
+		err = db.QueryRow(
+			`SELECT id, project_id FROM sessions
+			 WHERE process_id = ? AND state != 'ended'
+			 ORDER BY last_activity DESC LIMIT 1`,
+			paneIDs[0],
+		).Scan(&toSessionID, &projectID)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return 0, fmt.Errorf("resolve destination pane %s: %w", toPane, err)
+		}
 	}
 
 	// Prior focus = this client's most-recent destination.

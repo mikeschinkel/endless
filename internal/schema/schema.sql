@@ -85,6 +85,71 @@ INSERT INTO session_kinds (id, slug, label) VALUES
     (2, 'background', 'Background')
 ON CONFLICT(id) DO UPDATE SET slug = excluded.slug, label = excluded.label;
 
+-- Process kinds (E-1898). SQL mirror of the ProcessKind Go enum, same ED-1506
+-- rule as session_kinds above: const-in-code is the source of truth, this table
+-- exists for FK enforcement and queryability, and the upsert reconciles a
+-- rename on connect.
+CREATE TABLE IF NOT EXISTS process_kinds (
+    id    INTEGER PRIMARY KEY,
+    slug  TEXT UNIQUE NOT NULL,
+    label TEXT NOT NULL
+);
+
+INSERT INTO process_kinds (id, slug, label) VALUES
+    (1, 'tmux', 'Tmux pane'),
+    (2, 'pid',  'OS process')
+ON CONFLICT(id) DO UPDATE SET slug = excluded.slug, label = excluded.label;
+
+-- WHERE a session runs, durably (E-1898).
+--
+-- This table exists because a bare tmux pane id is NOT unique over time: a tmux
+-- server restart reissues "%414" to an unrelated pane, so a session row keyed on
+-- the pane string alone silently resolves to the wrong session (E-1530) or gets
+-- destroyed by a sweep judging it against the wrong server (the 2026-08-05
+-- incident, which nulled 59 of 61 live bindings). The IDENTITY is the pair
+-- (server_uuid, address); the UNIQUE constraint below is what makes pane-id
+-- reuse structurally unable to collide rather than guarded against.
+--
+--   kind_id = tmux -> server_uuid is the tmux server's @server_uuid,
+--                     address is the pane id ("%414")
+--   kind_id = pid  -> server_uuid is NULL (no multiplexer),
+--                     address is the pid as text
+--
+-- Rows are append-mostly and are NEVER deleted or rewritten by an observation.
+-- "Session 512 was bound to pane %414 on server abc-123" is a fact; it stays
+-- true after the pane, the server, and the session are gone. Liveness is not
+-- stored here — it is derived at read time by JOINing the per-invocation
+-- snapshot (see internal/monitor/liveness.go). Nothing in this table goes stale,
+-- because nothing in it claims to describe the present.
+--
+-- server_uuid is nullable for two legitimate reasons: kind=pid has no server,
+-- and the E-1898 migration backfills pre-existing bindings with NULL because the
+-- binding server is not knowable retroactively. Those rows read 'unknown' (never
+-- 'dead') and self-heal to a real server_uuid on the session's next hook.
+CREATE TABLE IF NOT EXISTS processes (
+    id            INTEGER PRIMARY KEY,
+    kind_id       INTEGER NOT NULL DEFAULT 1,
+    server_uuid   TEXT,
+    address       TEXT NOT NULL,
+    first_seen_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
+    last_seen_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
+    FOREIGN KEY (kind_id) REFERENCES process_kinds(id)
+);
+
+-- The identity constraint, as an EXPRESSION index rather than an inline
+-- UNIQUE (kind_id, server_uuid, address). SQLite treats every NULL as distinct
+-- for UNIQUE, so an inline constraint would silently permit duplicate identities
+-- for exactly the two cases where server_uuid is legitimately NULL: kind=pid
+-- (no multiplexer) and E-1898's migration backfill (binding server unknowable
+-- retroactively). ifnull() collapses those to a single '' key so the constraint
+-- actually binds. Deterministic builtin, so it is legal in an index.
+--
+-- Safe to state standalone (cf. the sessions.short_id note below): the whole
+-- table is new in E-1898, so the CREATE TABLE above really does run on old DBs
+-- rather than no-opping, and the columns this references always exist by now.
+CREATE UNIQUE INDEX IF NOT EXISTS processes_identity
+    ON processes (kind_id, ifnull(server_uuid, ''), address);
+
 -- AI coding sessions
 --
 -- active_epic_id (E-1571): nullable FK to tasks(id). When the session is
@@ -130,7 +195,7 @@ CREATE TABLE IF NOT EXISTS sessions (
     active_epic_id INTEGER,
     kind_id INTEGER NOT NULL DEFAULT 1,
     plan_file_path TEXT,
-    process TEXT,
+    process_id INTEGER,
     started_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
     last_activity TEXT,
     transcript_offset INTEGER NOT NULL DEFAULT 0,
@@ -157,30 +222,26 @@ CREATE TABLE IF NOT EXISTS sessions (
     FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL,
     FOREIGN KEY (active_task_id) REFERENCES tasks(id) ON DELETE SET NULL,
     FOREIGN KEY (active_epic_id) REFERENCES tasks(id) ON DELETE SET NULL,
-    FOREIGN KEY (kind_id) REFERENCES session_kinds(id)
+    FOREIGN KEY (kind_id) REFERENCES session_kinds(id),
+    FOREIGN KEY (process_id) REFERENCES processes(id)
 );
 
--- E-1530 invariant: a session in state='ended' has process IS NULL. Code
--- writes also NULL process at end-of-life (Layer A); these triggers are
--- the schema-level backstop (Layer B). Required because tmux pane ids
--- (`%N`) are reused after a tmux server restart — without NULLing
--- `process` at end-of-life, lookups for new-server panes hit ghost rows
--- from the prior server. SQLite's recursive_triggers is OFF by default,
--- and the WHEN clause short-circuits anyway, so the inner UPDATE doesn't
--- recurse the AFTER UPDATE trigger.
-CREATE TRIGGER IF NOT EXISTS sessions_null_process_on_end_update
-AFTER UPDATE OF state ON sessions
-WHEN NEW.state = 'ended' AND NEW.process IS NOT NULL
-BEGIN
-    UPDATE sessions SET process = NULL WHERE id = NEW.id;
-END;
-
-CREATE TRIGGER IF NOT EXISTS sessions_null_process_on_end_insert
-AFTER INSERT ON sessions
-WHEN NEW.state = 'ended' AND NEW.process IS NOT NULL
-BEGIN
-    UPDATE sessions SET process = NULL WHERE id = NEW.id;
-END;
+-- E-1530's two `sessions_null_process_on_end_*` triggers were REMOVED by E-1898,
+-- and the change file drops them from existing databases.
+--
+-- They enforced "an ended session has process IS NULL", because a tmux pane id
+-- alone is reused after a server restart and an ended row holding "%414" would
+-- win a lookup against the live "%414". With processes.(server_uuid, address) as
+-- the identity that collision cannot occur: the reissued pane is a DIFFERENT
+-- processes row, so the ended row is unreachable from the new pane by
+-- construction rather than by erasure.
+--
+-- Keeping them would now be actively harmful. "Session 512 ran on pane %414 of
+-- server abc-123" is a fact that stays true after the session ends, and it is
+-- the evidence that diagnosed the 2026-08-05 incident. A trigger that erases a
+-- binding at end-of-life destroys exactly the history you need when a binding
+-- goes wrong — and it is a destructive write driven by nothing the user did,
+-- which is the class of write E-1898 removes.
 
 -- Task types (E-1538). SQL mirror of the TaskType Go enum (ED-1506: const-in-code
 -- is the source of truth, table exists for FK enforcement and queryability).

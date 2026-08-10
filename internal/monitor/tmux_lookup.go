@@ -78,36 +78,38 @@ func GetActiveTaskForPane(tmuxPane string) (*ActiveTaskInfo, error) {
 }
 
 func queryActiveTaskForPanes(db *sql.DB, panes []string) (*ActiveTaskInfo, error) {
-	if len(panes) == 0 {
+	ids, err := ProcessIDsForPanes(panes)
+	if err != nil {
+		return nil, err
+	}
+	if len(ids) == 0 {
 		return nil, ErrNoActiveTask
 	}
 
-	placeholders := strings.Repeat("?,", len(panes))
-	placeholders = placeholders[:len(placeholders)-1] // trim trailing comma
+	placeholders, args := processIDArgs(ids)
 
-	args := make([]any, len(panes))
-	for i, p := range panes {
-		args[i] = p
-	}
-
-	// state != 'ended' filter is mandatory: tmux pane ids (`%N`) are
-	// reused after a tmux server restart. Without it, stale ended-session
-	// rows from a prior server win the lookup for currently-live panes
-	// (E-1530). Sibling readers (anySessionForPanes, GetLiveSessionByProcess)
-	// apply the same filter.
+	// Matching on process_id rather than a bare pane string is what makes this
+	// lookup server-scoped (E-1898): ProcessIDsForPanes resolved these panes
+	// against the CURRENT server's uuid, so a row bound to "%414" on a previous
+	// server holds a different process_id and cannot win here. That is the
+	// structural version of what E-1530 could only approximate by NULLing the
+	// pane out of dead rows.
+	//
+	// state != 'ended' is still required, for the unrelated case of a session
+	// that ended cleanly in a pane still open and rebound to a new session.
 	q := `SELECT t.id, t.title, t.status, COALESCE(tt.slug, ''), t.phase, t.tier, COALESCE(p.name, ''), s.active_epic_id
 	      FROM sessions s
 	      JOIN live_tasks t ON t.id = s.active_task_id
 	      LEFT JOIN projects p ON p.id = t.project_id
 	      LEFT JOIN task_types tt ON tt.id = t.type_id
-	      WHERE s.process IN (` + placeholders + `)
+	      WHERE s.process_id IN (` + placeholders + `)
 	        AND s.active_task_id IS NOT NULL
 	        AND s.state != 'ended'
 	      ORDER BY s.last_activity DESC
 	      LIMIT 1`
 
 	var info ActiveTaskInfo
-	err := db.QueryRow(q, args...).Scan(
+	err = db.QueryRow(q, args...).Scan(
 		&info.TaskID, &info.Title, &info.Status,
 		&info.Type, &info.Phase, &info.Tier, &info.ProjectName, &info.ActiveEpicID,
 	)
@@ -215,7 +217,18 @@ func GetPaneStatus(tmuxPane string) (*PaneStatus, error) {
 		return &PaneStatus{Kind: PaneStatusNoTask}, nil
 	}
 
-	if paneIsRunningClaude(tmuxPane) {
+	// Inverted from "does this look like Claude" to "is this a bare shell"
+	// (E-1898): the pane of a live Claude reports its version string, which no
+	// name-matching test can keep up with. The trade is that a pane running
+	// something else entirely — vim, less, a long build — in a window with NO
+	// Endless session now shows the register hint instead of the placeholder.
+	// Accepted: it is a hint, it is self-correcting, and the alternative is the
+	// hint never firing at all, which is the state this replaced.
+	//
+	// `known` gates the inversion. If tmux could not tell us what the pane is
+	// running, we have not learned that it is NOT a shell — we have learned
+	// nothing, and the placeholder is the honest render.
+	if isShell, known := paneIsRunningShell(tmuxPane); known && !isShell {
 		return &PaneStatus{Kind: PaneStatusClaudeNoSession}, nil
 	}
 
@@ -236,17 +249,18 @@ func anySessionForPanes(panes []string) (bool, error) {
 		return false, err
 	}
 
-	placeholders := strings.Repeat("?,", len(panes))
-	placeholders = placeholders[:len(placeholders)-1]
-
-	args := make([]any, len(panes))
-	for i, p := range panes {
-		args[i] = p
+	ids, err := ProcessIDsForPanes(panes)
+	if err != nil {
+		return false, err
 	}
+	if len(ids) == 0 {
+		return false, nil
+	}
+	placeholders, args := processIDArgs(ids)
 
 	var found int
 	err = db.QueryRow(
-		"SELECT 1 FROM sessions WHERE process IN ("+placeholders+") AND state != 'ended' LIMIT 1",
+		"SELECT 1 FROM sessions WHERE process_id IN ("+placeholders+") AND state != 'ended' LIMIT 1",
 		args...,
 	).Scan(&found)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -258,19 +272,62 @@ func anySessionForPanes(panes []string) (bool, error) {
 	return true, nil
 }
 
-// paneIsRunningClaude asks tmux for the pane's current foreground
-// command and returns true when it looks like a Claude session.
-// Matches Claude Code's known process names ("claude", "claude-code").
-// Best-effort: returns false on any tmux error rather than propagating.
-func paneIsRunningClaude(tmuxPane string) bool {
+// knownShells is the set of interactive shells a pane reports when nothing else
+// is in its foreground. Positively enumerated because shell names are stable —
+// the alternative, enumerating what Claude looks like, is not (see
+// isShellCommand).
+var knownShells = map[string]bool{
+	"zsh": true, "bash": true, "sh": true, "fish": true,
+}
+
+// isShellCommand reports whether a pane_current_command value is an interactive
+// shell — i.e. the pane is sitting at a prompt rather than running a harness.
+//
+// This inverts the old paneIsRunningClaude, which tested `cmd == "claude" ||
+// cmd == "claude-code"` and was WRONG for every real Claude pane: Claude Code
+// sets its process title to its version, so a live pane reports "2.1.220".
+// The old helper therefore always returned false and the hint it gated never
+// fired correctly. Shell names do not change between releases; version strings
+// change every release, which is why the test is framed this way round.
+//
+// Pure function of the command string, so the truth table is testable without
+// tmux.
+func isShellCommand(cmd string) bool {
+	return knownShells[strings.TrimSpace(cmd)]
+}
+
+// paneIsRunningShell asks tmux for the pane's current foreground command and
+// reports whether it is a shell, plus whether we actually found out.
+//
+// The second return is not ceremony. Callers invert this test ("not a shell, so
+// something is running here"), and a tmux failure returning a bare false would
+// invert into a confident "something is running" about a pane we could not see
+// at all — the same collapse of "unknown" into a verdict that liveness.go
+// exists to prevent, in miniature. known=false means: draw no conclusion.
+//
+// SCOPE LIMIT, load-bearing: this may inform the cosmetic "pane is running
+// Claude but has no session row" hint and NOTHING ELSE. It must never reach
+// liveness. Ctrl+Z puts the shell back in the foreground, so a
+// suspended-but-alive Claude reports "zsh" here — treating that as death would
+// drop the session's status line and free its task to be claimed out from under
+// it. A hint that is briefly wrong misleads nobody and owns nothing; a liveness
+// verdict that is briefly wrong loses work. See internal/monitor/liveness.go.
+func paneIsRunningShell(tmuxPane string) (isShell, known bool) {
 	out, err := exec.Command("tmux",
 		"display-message", "-p", "-t", tmuxPane, "#{pane_current_command}",
 	).Output()
 	if err != nil {
-		return false
+		return false, false
 	}
+	// An EMPTY answer is also "we did not find out". tmux exits 0 and prints
+	// nothing when `-t` names a pane that does not exist on this server, so a
+	// blank command is not evidence that the pane is running something other
+	// than a shell — it is evidence there is no such pane to ask about.
 	cmd := strings.TrimSpace(string(out))
-	return cmd == "claude" || cmd == "claude-code"
+	if cmd == "" {
+		return false, false
+	}
+	return isShellCommand(cmd), true
 }
 
 // ResolveSessionStatusSession returns the emitting session's integer id for the
@@ -308,15 +365,17 @@ func sessionForPanes(panes []string) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	placeholders := strings.Repeat("?,", len(panes))
-	placeholders = placeholders[:len(placeholders)-1]
-	args := make([]any, len(panes))
-	for i, p := range panes {
-		args[i] = p
+	ids, err := ProcessIDsForPanes(panes)
+	if err != nil {
+		return 0, err
 	}
+	if len(ids) == 0 {
+		return 0, nil
+	}
+	placeholders, args := processIDArgs(ids)
 	var id int64
 	err = db.QueryRow(
-		"SELECT id FROM sessions WHERE process IN ("+placeholders+") AND state != 'ended' ORDER BY last_activity DESC LIMIT 1",
+		"SELECT id FROM sessions WHERE process_id IN ("+placeholders+") AND state != 'ended' ORDER BY last_activity DESC LIMIT 1",
 		args...,
 	).Scan(&id)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -383,17 +442,23 @@ func GetActiveBlockers(taskID int64) ([]int64, error) {
 	return ids, nil
 }
 
-// GetLiveSessionByProcess returns the most-recently-active live session
-// whose `process` column matches the given identifier (typically a tmux
-// pane id like "%124"). Filters out state='ended' rows so the result is
-// always the live binding for the given process.
+// GetLiveSessionByProcess returns the most-recently-active live session bound
+// to the given tmux pane id (e.g. "%124") ON THE SERVER THIS PROCESS CAN REACH.
+// Filters out state='ended' rows so the result is always the live binding.
 //
-// Per E-1312, this is the canonical session-discovery function for
-// callers that know their process identifier — used by `endless session
-// status add` and `endless task id` to map "I'm running in this tmux
-// pane" to "I'm session N."
+// Per E-1312, this is the canonical session-discovery function for callers that
+// know their pane — used by `endless session status add` and `endless task id`
+// to map "I'm running in this tmux pane" to "I'm session N."
 //
-// Returns sql.ErrNoRows when no live session matches.
+// The server scoping (E-1898) is the important part and is why this cannot be a
+// plain string match: "%124" on a restarted tmux server is a different pane
+// than "%124" was an hour ago, and answering "you are session N" from the wrong
+// server's binding is how a session ends up writing under someone else's
+// identity.
+//
+// Returns sql.ErrNoRows when no live session matches — including when the
+// server cannot be identified, because an unidentifiable server must match
+// nothing rather than fall back to a bare pane comparison.
 func GetLiveSessionByProcess(process string) (int64, error) {
 	if process == "" {
 		return 0, sql.ErrNoRows
@@ -402,12 +467,19 @@ func GetLiveSessionByProcess(process string) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
+	ids, err := ProcessIDsForPanes([]string{process})
+	if err != nil {
+		return 0, err
+	}
+	if len(ids) == 0 {
+		return 0, sql.ErrNoRows
+	}
 	var id int64
 	err = db.QueryRow(
 		`SELECT id FROM sessions
-		 WHERE process = ? AND state != 'ended'
+		 WHERE process_id = ? AND state != 'ended'
 		 ORDER BY last_activity DESC LIMIT 1`,
-		process,
+		ids[0],
 	).Scan(&id)
 	return id, err
 }

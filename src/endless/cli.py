@@ -3342,17 +3342,6 @@ def tmux_init(hotkey, status_interval):
     run_init(hotkey, status_interval)
 
 
-@tmux_cmd.command("reset")
-def tmux_reset():
-    """Mark dead-pane session rows ended for the current project.
-
-    Wraps `endless-go tmux reset`. Useful for debugging when sessions
-    survive a tmux server restart and won't get reaped naturally.
-    """
-    from endless.tmux_cmd import run_reset
-    run_reset()
-
-
 @main.group("db")
 def db_cmd():
     """Database administration."""

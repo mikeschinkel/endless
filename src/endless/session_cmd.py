@@ -1188,9 +1188,11 @@ def _live_sessions(project_root: Path, harness: str = "claude") -> list[dict]:
     companion record — endless_session_id, harness_session_id, harness,
     pane_id, cwd, worktree_path, started_at — plus richer DB fields
     (state, active_task_id, last_activity, summary). The `pid` field of
-    the old companion record is intentionally absent: liveness is now
-    `state != 'ended'` (filtered by the Go side), and crashed-pane
-    detection is handled by `ReapDeadTmuxPanes` at SessionStart.
+    the old companion record is intentionally absent: liveness is decided
+    Go-side, which filters out both ended rows and sessions whose pane was
+    observably absent from a tmux server it actually reached (E-1898). A
+    session whose server could NOT be reached is still reported, carrying
+    `liveness: "unknown"` — unprovable is not the same as gone.
 
     The `harness` filter currently only accepts "claude"; future
     harnesses would each get their own per-platform list helper.
@@ -1237,35 +1239,6 @@ def _live_sessions(project_root: Path, harness: str = "claude") -> list[dict]:
             "summary": r.get("summary") or "",
         })
     return live
-
-
-def _reap_dead_panes(project_root: Path) -> None:
-    """Best-effort: end sessions whose owning tmux pane is gone (E-1807).
-
-    Shells to `endless-go session-query reap-dead-panes` — mirroring how
-    `_live_sessions` shells to `list-live` — so a ghost owner (a non-ended
-    session row whose tmux pane no longer exists, left behind when a session
-    died without firing SessionEnd) is flipped to `ended` before the
-    spawn/claim ownership guard reads it. The guard's
-    `state != 'ended'` query then excludes the just-reaped ghost and the task
-    reads as free.
-
-    Silent on every failure: a reaper error must never block a spawn/claim, so
-    a missing binary, timeout, or nonzero exit simply falls through to the
-    existing ownership behavior.
-    """
-    import subprocess
-
-    from endless import config
-    try:
-        subprocess.run(
-            ["endless-go", *config.go_db_context_args(),
-             "session-query", "reap-dead-panes",
-             "--project-root", str(project_root)],
-            capture_output=True, text=True, timeout=5,
-        )
-    except (FileNotFoundError, subprocess.SubprocessError):
-        return
 
 
 def _project_root_for_cwd() -> Path:
