@@ -4,11 +4,12 @@
 // recently. It must NOT order by duration (Pattern B would let a stale
 // long-span row win).
 //
-// The evidence test was three disjuncts; only the >=10s span can actually fire
-// today. transcript_path was dropped by E-1905, and `process IS NOT NULL` is
-// unreachable because the query filters to state='ended' and E-1530's triggers
-// NULL `process` on exactly those rows — pinned below by
-// TestEndedSessionProcessIsAlwaysNull so a future relaxation shows up here.
+// The evidence test was three disjuncts and is now two. transcript_path was
+// dropped by E-1905. `process IS NOT NULL` used to be unreachable — the query
+// filters to state='ended', and E-1530's triggers NULLed the binding on exactly
+// those rows — but E-1898 removed both the triggers and the code that cleared
+// it, so an ended session keeps the binding it ran on. That disjunct is live
+// again, and TestEndedSessionKeepsItsBinding pins it.
 package events
 
 import (
@@ -77,33 +78,54 @@ func seedEndedSession(t *testing.T, db *sql.DB, id, taskID int64,
 	}
 }
 
-// TestEndedSessionProcessIsAlwaysNull pins the premise the comment above rests
-// on: E-1530's end-of-life triggers make `process IS NOT NULL` unreachable for
-// the state='ended' rows inheritedSessionID selects from. If that invariant is
-// ever relaxed, this fails and the evidence clause becomes live again.
-func TestEndedSessionProcessIsAlwaysNull(t *testing.T) {
+// TestEndedSessionKeepsItsBinding INVERTS the former
+// TestEndedSessionProcessIsAlwaysNull, which pinned E-1530's rule that an ended
+// session has no binding and warned that "if that invariant is ever relaxed,
+// this fails and the evidence clause becomes live again". E-1898 relaxed it,
+// deliberately, and this is that clause becoming live.
+//
+// A binding is history: "session 901 ran on pane %42 of server test-server"
+// stays true after the session ends, and erasing it at end-of-life destroyed
+// the evidence that diagnosed the 2026-08-05 incident. E-1530 only cleared it
+// so a reused pane id could not resolve to a dead row; identity now makes that
+// collision impossible, so the erasure bought nothing and cost the record.
+func TestEndedSessionKeepsItsBinding(t *testing.T) {
 	db := newReopenTestDB(t)
 	seedReopenTask(t, db, 1905, "")
+
+	res, err := db.Exec(
+		`INSERT INTO processes (kind_id, server_uuid, address) VALUES (1, 'test-server', '%42')`,
+	)
+	if err != nil {
+		t.Fatalf("seed process identity: %v", err)
+	}
+	processID, err := res.LastInsertId()
+	if err != nil {
+		t.Fatalf("last insert id: %v", err)
+	}
 
 	if _, err := db.Exec(
 		`INSERT INTO sessions
 		 (id, session_id, project_id, state, active_task_id, started_at,
-		  last_activity, process)
+		  last_activity, process_id)
 		 VALUES (901, 'sess-901', 1, 'ended', 1905,
-		         '2026-08-06T00:00:00', '2026-08-06T00:00:03', '%42')`,
+		         '2026-08-06T00:00:00', '2026-08-06T00:00:03', ?)`,
+		processID,
 	); err != nil {
-		t.Fatalf("seed ended session with process: %v", err)
+		t.Fatalf("seed ended session with a binding: %v", err)
 	}
 
-	var process sql.NullString
+	var got sql.NullInt64
 	if err := db.QueryRow(
-		"SELECT process FROM sessions WHERE id = 901",
-	).Scan(&process); err != nil {
-		t.Fatalf("read back process: %v", err)
+		"SELECT process_id FROM sessions WHERE id = 901",
+	).Scan(&got); err != nil {
+		t.Fatalf("read back process_id: %v", err)
 	}
-	if process.Valid {
-		t.Errorf("process on an ended row = %q, want NULL (E-1530 trigger)",
-			process.String)
+	if !got.Valid {
+		t.Fatal("process_id on an ended row was cleared; the binding is history and must survive")
+	}
+	if got.Int64 != processID {
+		t.Errorf("process_id = %d, want %d (unchanged)", got.Int64, processID)
 	}
 }
 

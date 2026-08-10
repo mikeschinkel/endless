@@ -159,10 +159,11 @@ CREATE UNIQUE INDEX IF NOT EXISTS processes_identity
 -- equal to active_task_id -> [E-<epic>] (viewing the epic itself); different
 -- -> [E-<epic>:E-<child>].
 --
--- kind_id (E-1571): FK to session_kinds. 'tmux' rows are pane-bound (process
--- holds the tmux pane id); 'background' rows are headless agents that
--- legitimately leave process NULL. Defaults to 1 (tmux) for every existing
--- and foreground-spawned row.
+-- kind_id (E-1571): FK to session_kinds. 'tmux' rows are pane-bound (process_id
+-- points at the `processes` row identifying the pane AND the server that issued
+-- it); 'background' rows are headless agents that legitimately leave process_id
+-- NULL. Defaults to 1 (tmux) for every existing and foreground-spawned row.
+-- A NULL process_id reads as liveness 'unbound', never 'dead' (E-1898).
 --
 -- session_id (E-1568): nullable. Background agents (kind_id=2) are dispatched
 -- with session_id NULL because `claude --bg` returns only the short_id at
