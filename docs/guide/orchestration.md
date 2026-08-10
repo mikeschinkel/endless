@@ -519,40 +519,6 @@ A verify suite proves *one* task before it lands. Running it is a **one-shot, la
 - **Don't edit a landed task's verify suite.** It records what was true when that task landed; retrofitting it to a later change rewrites that history. If your change alters a string or behavior a landed suite asserted, leave the suite alone.
 - **Coverage that must survive belongs in the project's own test suite** (what `just test` / `go test` exercises), not only in a verify suite. If a verify suite is the *only* place a behavior is checked, that behavior is unprotected the moment the task lands — mirror it into the durable suite.
 
-### The `verify.toml` manifest
-
-The settled form a suite takes as the runner matures is a per-task manifest — a **pointer to native test runners**, never a re-description of the tests. It lives at `.endless/tasks/<id>/verify.toml`:
-
-```toml
-schema = 1
-task   = "E-1607"
-
-# preconditions, all optional; run provision(needs) -> setup -> seed -> checks -> teardown
-needs    = ["postgres"]            # substrate the checks require
-setup    = ["go build ./..."]      # prepare the project (build/install/migrate/codegen)
-seed     = ["fixtures/base.json"]  # load state
-teardown = ["scripts/cleanup.sh"]
-tiers    = ["sandbox"]
-
-[[check]]
-runner = "gotest"                  # first-class runner: gotest | pytest
-tests  = ["TestDiscover"]          # structured selection Endless translates to the native filter
-paths  = ["./internal/verify/..."]
-
-[[check]]
-runner  = "bats"                   # any other runner is "raw"
-command = "bats tests/cli.bats"    # the literal command a bare clone runs
-format  = "tap"                    # native result stream: gotest-json | pytest-json | tap
-```
-
-A first-class `runner` (`gotest`, `pytest`) takes a structured `tests`/`paths` selection and Endless infers its `format`; any other runner is raw — you give it a literal `command` and declare its `format` (default `tap`). A project-level `.endless/verify.toml` (same directory, one level above the per-task suites) carries shared `setup`/`teardown`/`seed`/`needs` that compose beneath every per-task manifest, so a project states its common substrate once. Discovery is purely by convention: `.endless/tasks/<id>/verify.toml` per task, plus the project-root `.endless/verify.toml`.
-
-**Casing.** The suite directory is **lowercase** — `.endless/tasks/e-1758/` — the same way every other Endless path writes a task id (`.endless/worktrees/e-1889/`, `tests/tasks/e-1889-verify.sh`). The manifest's `task` field is the **canonical display form**, `task = "E-1758"`, the way a task id is written in CLI arguments and prose. Both name the same task and discovery compares them case-insensitively, so neither convention has to bend to the other. An uppercase directory still resolves; lowercase is what to write.
-
-### The runner
-
-`endless task verify <id>` runs a task's suite under an isolated temp working dir and env, normalizes the native result streams to a single report, prints a pass/fail summary, and exits `0` on all-pass. (With no id it verifies the current session's task.) Endless's own suites are still bash scripts pending migration to a manifest, so for those, run the script directly.
-
 ### The one-command handoff contract
 
 This is the load-bearing policy. When a session hands a finished task back for verification, it must:
@@ -566,7 +532,7 @@ The point is that verification is *dense*: one line the user runs, one prose sen
 
 ### Forthcoming
 
-The `just verify` wrapper for Endless's own suites, the runnability modes (how a suite declares what substrate it can run against), and the sandbox/mise tier ladder are in progress. Until they ship, realize the convention with the per-task script.
+A declarative per-task manifest, the runner that consumes it, the runnability modes (how a suite declares what substrate it can run against), and the sandbox tier ladder are all in progress. Until they ship, realize the convention with the per-task script described above.
 
 ---
 
