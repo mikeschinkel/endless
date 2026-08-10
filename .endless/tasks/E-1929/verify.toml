@@ -1,0 +1,63 @@
+# Verification suite for E-1929 — task removal marks `removed = 1` instead of
+# deleting, so a task id is never re-minted (ED-1547).
+#
+# Two checks. The gotest check covers the executor and projector handlers in
+# isolation. The sh check is the one that matters: it drives the real CLI end to
+# end, because the failure this task exists to prevent is only observable across
+# a full remove -> allocate -> rebuild cycle, which no unit test spans.
+#
+# Written with the plan; the tests and e2e.sh are the implementing session's
+# work. Test names below are the contract they satisfy, not tests that exist yet.
+
+schema = 1
+task   = "E-1929"
+
+# Executor and projector handlers for task.deleted and task.bulk_cleared, plus
+# the id allocator. The allocator test is the load-bearing one: it must assert
+# that allocation still counts removed rows, i.e. that it reads the tasks table
+# and not the live_tasks view. Pointed at the view, every other test here still
+# passes and the bug is fully reintroduced.
+[[check]]
+runner = "gotest"
+tests  = [
+  "TestTaskDeletedMarksRemoved",
+  "TestTaskDeletedCascadeMarksDescendants",
+  "TestTaskDeletedNullsActiveTaskPointers",
+  "TestTaskDeletedKeepsTaskLandings",
+  "TestTaskDeletedDropsPendingNotices",
+  "TestBulkClearedMarksRemoved",
+  "TestNextTaskIDCountsRemovedRows",
+]
+paths  = ["./internal/events/..."]
+
+# Read paths: assert the live_tasks view hides removed rows everywhere a task
+# can surface. Covers the session_status joins that motivated E-1926 — they
+# inner-join tasks today and start matching once the row is retained, so they
+# are where a missed rewrite leaks a removed task into `session status` and the
+# monitor.
+[[check]]
+runner = "gotest"
+tests  = [
+  "TestSessionStatusExcludesRemovedTasks",
+  "TestSessionNextExcludesRemovedTasks",
+  "TestWebQueriesExcludeRemovedTasks",
+]
+paths  = ["./internal/monitor/...", "./internal/web/..."]
+
+# End-to-end CLI check against the sandbox DB. Every endless invocation inside
+# e2e.sh passes `--db sandbox` so the suite can never touch the real ledger.
+#
+# The decisive assertion is the id-monotonicity one, run twice: once live, then
+# again after rebuilding the DB from the db-ledger. The rebuild pass is what
+# catches an executor/projector divergence — if the projector still replays
+# removal as a real DELETE, the live pass passes, the rebuild re-frees the id,
+# and the change ships looking complete while reintroducing the bug.
+#
+# Scripting the rebuild inside the suite is deliberate and untried (agreed with
+# the requester: small downside if it turns out not to be safe). If it proves
+# unsafe to automate, split the rebuild pass out as a manual step and say so
+# here rather than dropping the assertion.
+[[check]]
+runner  = "sh"
+command = "sh .endless/tasks/E-1929/e2e.sh"
+format  = "tap"
