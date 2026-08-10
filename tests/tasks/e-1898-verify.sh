@@ -370,21 +370,69 @@ run_e2e_layer() {
 # real data) would first execute on the user's own database.
 run_migration_layer() {
     section "E0 — the migration, against a synthetic pre-E-1898 database"
-    note "builds an OLD-schema DB from git HEAD, seeds the shapes that matter,"
+    note "builds a literal pre-E-1898 fixture DB, seeds the shapes that matter,"
     note "applies the change file, and checks what it did with each of them"
 
     local mdir mdb
     mdir=$(mktemp -d) || { report_fail "migration scratch dir" "mktemp -d ok" "failed"; return; }
     mdb="${mdir}/old.db"
 
-    if ! git show HEAD:internal/schema/schema.sql > "${mdir}/old-schema.sql" 2>/dev/null; then
-        report_fail "read pre-change schema from git HEAD" "git show ok" "failed"
+    # The fixture is written out HERE rather than read from git history.
+    #
+    # It used to be `git show HEAD:internal/schema/schema.sql`, which worked
+    # exactly until this work was committed — after that HEAD *is* the
+    # post-E-1898 schema, so the "pre-change" database came up already migrated
+    # and every assertion below collapsed (`duplicate column name: process_id`).
+    # Any git-relative reference has the same defect on a different day:
+    # merge-base breaks once the branch lands.
+    #
+    # So the pre-change shape is stated literally. It is the subset the change
+    # file actually touches — `sessions.process` plus E-1530's two nulling
+    # triggers — which is also a readable statement of what is being migrated
+    # away from.
+    sqlite3 "${mdb}" >/dev/null 2>&1 <<'SQL'
+CREATE TABLE projects (
+    id   INTEGER PRIMARY KEY,
+    name TEXT NOT NULL,
+    path TEXT NOT NULL
+);
+CREATE TABLE sessions (
+    id             INTEGER PRIMARY KEY,
+    session_id     TEXT,
+    project_id     INTEGER,
+    platform       TEXT NOT NULL DEFAULT 'claude',
+    state          TEXT NOT NULL DEFAULT 'working',
+    active_task_id INTEGER,
+    kind_id        INTEGER NOT NULL DEFAULT 1,
+    process        TEXT,
+    started_at     TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
+    last_activity  TEXT,
+    UNIQUE (session_id)
+);
+CREATE TRIGGER sessions_null_process_on_end_update
+AFTER UPDATE OF state ON sessions
+WHEN NEW.state = 'ended' AND NEW.process IS NOT NULL
+BEGIN
+    UPDATE sessions SET process = NULL WHERE id = NEW.id;
+END;
+CREATE TRIGGER sessions_null_process_on_end_insert
+AFTER INSERT ON sessions
+WHEN NEW.state = 'ended' AND NEW.process IS NOT NULL
+BEGIN
+    UPDATE sessions SET process = NULL WHERE id = NEW.id;
+END;
+SQL
+    if [[ ! -s "${mdb}" ]]; then
+        report_fail "build a pre-E-1898 database" "fixture schema applies" "failed"
         rm -rf "${mdir}"; return
     fi
-    if ! sqlite3 "${mdb}" < "${mdir}/old-schema.sql" >/dev/null 2>&1; then
-        report_fail "build a pre-E-1898 database" "old schema applies" "failed"
-        rm -rf "${mdir}"; return
-    fi
+    # Prove the fixture is genuinely pre-migration before trusting anything it
+    # reports — a fixture that came up already migrated is how this layer
+    # silently stopped testing the migration in the first place.
+    assert_eq "the fixture DB is pre-migration (has sessions.process)" "1" \
+        "$(sqlite3 "${mdb}" "SELECT count(*) FROM pragma_table_info('sessions') WHERE name='process'" 2>/dev/null)"
+    assert_eq "the fixture DB is pre-migration (no process_id yet)" "0" \
+        "$(sqlite3 "${mdb}" "SELECT count(*) FROM pragma_table_info('sessions') WHERE name='process_id'" 2>/dev/null)"
 
     # The shapes that decide whether the backfill is right:
     #   two sessions on ONE pane   -> must collapse to ONE identity
