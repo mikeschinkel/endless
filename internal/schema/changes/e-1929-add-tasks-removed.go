@@ -1,15 +1,15 @@
 //go:build ignore
 
-// E-1929: add tasks.removed, the live_tasks read view, and its index —
-// implementing ED-1547 for tasks. `task remove` stops issuing a DELETE and marks
+// E-1929: add tasks.removed and the live_tasks read view — implementing ED-1547
+// for tasks. `task remove` stops issuing a DELETE and marks
 // the row removed = 1, so a task id can never be re-minted and the FK-free rows
 // that deliberately outlive their task (session_tasks, session_notices,
 // task_landings) can never resurrect against unrelated work.
 //
-// Additive, so schema.sql declares the post-migration shape (the column, the
-// view, the index) and this file brings existing DBs up to it. CREATE TABLE IF
-// NOT EXISTS no-ops on a populated DB, so a new column never reaches one without
-// a change file.
+// Additive, so schema.sql declares the post-migration shape (the column and the
+// view) and this file brings existing DBs up to it. CREATE TABLE IF NOT EXISTS
+// no-ops on a populated DB, so a new column never reaches one without a change
+// file.
 //
 // A `.go` change rather than `.sql` because SQLite has no ADD COLUMN IF NOT
 // EXISTS: the probe below makes this a no-op on a DB already built from
@@ -18,16 +18,25 @@
 // table. A plain `ALTER TABLE tasks ADD COLUMN` in a .sql file would hard-error
 // there instead. The _schema_version marker gates re-runs on top of that.
 //
-// ORDERING (important): schema.sql's live_tasks view reads tasks.removed, and
-// SQLite resolves a view body at PREPARE time, not CREATE time — so on a
-// populated DB, CREATE VIEW succeeds and every read through live_tasks then
-// fails with "no such column: removed" until this change is applied. Apply it at
-// land (`endless worktree land` runs `endless db apply-change`) BEFORE the new
-// binary becomes the deployed one via `just install`. Landing first is the
-// normal order and leaves no window; installing an unlanded build against the
-// real ledger is what would open one. E-1818 already bars a worktree binary
-// pinned onto a real DB from applying schema.SQL at all, so a self-dev worktree
-// cannot create the view on the real DB ahead of this change.
+// ORDERING (important, and learned the hard way): `endless db apply-change` opens
+// the DB through monitor.DB() — which applies schema.sql — BEFORE it dispatches
+// to this script. So the NEW schema.sql always runs against the OLD, column-less
+// DB first, and anything in it that resolves `removed` eagerly aborts the whole
+// land before this file gets a chance to add the column. That is exactly what an
+// index on tasks(removed) did on the first land attempt:
+//
+//	Error: apply-change failed: open db: applying schema to …/endless.db:
+//	SQL logic error: no such column: removed (1)
+//
+// The view survives that ordering only because SQLite resolves a view body at
+// PREPARE time, not CREATE time. See the note in schema.sql; the standing rule is
+// that an eagerly-resolved reference to a change-file column cannot live there.
+//
+// The remaining ordering constraint is benign: between schema.sql creating the
+// view and this file adding the column, a read THROUGH live_tasks would fail. The
+// land applies changes before `just install` swaps in the new binary, and nothing
+// between monitor.DB() and this script reads live_tasks, so that window is never
+// entered in practice.
 //
 // FK actions that stop firing once removal is an UPDATE, and what replaces them:
 //   - sessions.active_task_id / session_statuses.active_task_id were ON DELETE
@@ -72,16 +81,19 @@ func main() {
 			}
 		}
 
+		// IF NOT EXISTS because schema.sql, applied on every connection, has very
+		// likely created this already — including on the connection this very
+		// dispatcher opened a moment ago, before handing off to this script.
+		//
+		// No index on tasks(removed) accompanies it. See the long note in
+		// schema.sql: CREATE INDEX resolves its columns eagerly, so an index there
+		// would abort schema application on every populated DB and this migration
+		// could never run. Adding one only here would leave fresh and migrated DBs
+		// with different shapes, which is the drift ED-1472 exists to prevent.
 		if _, err = tx.Exec(
 			"CREATE VIEW IF NOT EXISTS live_tasks AS SELECT * FROM tasks WHERE removed = 0",
 		); err != nil {
 			return fmt.Errorf("creating live_tasks view: %w", err)
-		}
-
-		if _, err = tx.Exec(
-			"CREATE INDEX IF NOT EXISTS idx_tasks_removed ON tasks(removed)",
-		); err != nil {
-			return fmt.Errorf("creating idx_tasks_removed: %w", err)
 		}
 
 		// One-shot repair of id reuse that already happened (absorbed E-1932).

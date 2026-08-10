@@ -248,10 +248,27 @@ CREATE TABLE IF NOT EXISTS tasks (
 --
 -- SELECT * is deliberate: the view inherits future tasks columns automatically,
 -- so ALTER TABLE does not need a matching edit here.
+--
+-- NO INDEX ON tasks(removed), and that is load-bearing, not an omission.
+--
+-- This file is executed on EVERY connection, including the one
+-- `endless db apply-change` opens before it dispatches to the change script that
+-- adds the column. CREATE VIEW resolves its column names lazily (at PREPARE time
+-- of a query against it), so the view above is a no-op on a DB that has no
+-- `removed` column yet. CREATE INDEX resolves them EAGERLY, at CREATE time — so
+-- `CREATE INDEX ... ON tasks(removed)` here would abort schema application with
+-- "no such column: removed" on every populated DB, and the migration that adds
+-- the column could never run. It would deadlock its own rollout.
+--
+-- The index bought nothing anyway: `removed = 0` matches virtually every row, so
+-- SQLite would ignore an index for the view's own filter, and `removed = 1`
+-- (`task list --removed`) is a rare scan over a small table.
+--
+-- The rule this encodes for the next column added here: an eagerly-resolved
+-- reference (index, generated column, CHECK) to a column that only reaches
+-- populated DBs via a change file cannot live in schema.sql.
 CREATE VIEW IF NOT EXISTS live_tasks AS
     SELECT * FROM tasks WHERE removed = 0;
-
-CREATE INDEX IF NOT EXISTS idx_tasks_removed ON tasks(removed);
 
 CREATE TRIGGER IF NOT EXISTS tasks_updated_at AFTER UPDATE ON tasks
 BEGIN

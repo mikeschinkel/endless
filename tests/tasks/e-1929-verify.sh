@@ -29,10 +29,19 @@
 # Output: pass/fail per check, then a summary. Exit 0 on all-passed, 1 on any
 # failure, 2 on a setup problem.
 #
-# Section A is a FAIL-FAST gate: the Go executor/projector-parity tests and the
-# task-removal pytest suite run first, and the script stops there if they fail.
-# Everything after them asserts end-to-end behavior that is meaningless if the
-# unit level is already broken.
+# Section A is a FAIL-FAST gate: the Go executor/projector-parity tests, the
+# schema-ordering guard, and the task-removal pytest suite run first, and the
+# script stops there if they fail. Everything after them asserts end-to-end
+# behavior that is meaningless if the unit level is already broken.
+#
+# Section K covers the land itself. `endless db apply-change` opens the DB
+# through monitor.DB() — which applies schema.sql — BEFORE dispatching to the
+# change script, so the new schema.sql always meets the old, column-less DB
+# first. An index on tasks(removed) there aborted the first land attempt with
+# "no such column: removed", because CREATE INDEX resolves its columns eagerly
+# while CREATE VIEW does not. The guard in section A pins that; section K pins
+# that the change still applies, and re-applies as a no-op so a failed land can
+# be retried.
 #
 # Isolation: a throwaway git repo as project root under a temp dir, with its own
 # XDG_CONFIG_HOME (own DB and ledger) and XDG_CACHE_HOME. No real DB, ledger or
@@ -213,12 +222,52 @@ test_unit_gate() {
     else report_fail "go: executor/projector removal parity + id floor" "exit 0" \
         "exit=$rc"$'\n'"$(printf '%s' "$out" | tail -25)"; fi
 
+    # The migration-ordering guard. `endless db apply-change` opens the DB
+    # through monitor.DB(), which applies schema.sql, BEFORE dispatching to the
+    # change script — so the new schema.sql always meets the old, column-less DB
+    # first. Anything in it that resolves `removed` eagerly (an index, a CHECK, a
+    # generated column) aborts the land before the column can ever be added. That
+    # is not hypothetical: an index on tasks(removed) did exactly this on the
+    # first land attempt.
+    out=$(cd "$WT" && go test ./internal/schema/ \
+        -run 'TestSchema_AppliesToDBPredatingItsNewestColumn' -count=1 2>&1); rc=$?
+    if [[ $rc -eq 0 ]]; then report_pass "go: schema.sql applies to a DB that predates tasks.removed"
+    else report_fail "go: schema.sql applies to a DB that predates tasks.removed" "exit 0" \
+        "exit=$rc"$'\n'"$(printf '%s' "$out" | tail -25)"; fi
+
     out=$(cd "$WT" && uv run pytest tests/test_task_remove_relations.py -q 2>&1); rc=$?
     if [[ $rc -eq 0 ]]; then report_pass "pytest test_task_remove_relations passes"
     else report_fail "pytest test_task_remove_relations" "exit 0" \
         "exit=$rc"$'\n'"$(printf '%s' "$out" | tail -25)"; fi
 
     [[ "${FAIL_COUNT}" -eq 0 ]]
+}
+
+# ─── K: the migration, through the dispatcher that runs it at land ───────────
+
+test_migration_applies() {
+    section "K. The schema change applies through the land-time dispatcher"
+
+    # Its OWN config dir: this asserts on _schema_version, and the main fixture
+    # DB must not carry a marker it never earned.
+    local migdir="$TMP/migration/endless" out rc
+    mkdir -p "$migdir"
+
+    # First touch builds the DB from schema.sql — the fresh-DB shape, which
+    # already HAS the column. Applying the change here is the idempotence case
+    # the sandbox and every test DB hit, and the one a plain `.sql` ALTER would
+    # hard-error on.
+    "$EGO" --config-dir "$migdir" session-status --task 1 >/dev/null 2>&1
+
+    out=$("$EGO" --config-dir "$migdir" event apply-change \
+        "$WT/internal/schema/changes/e-1929-add-tasks-removed.go" 2>&1); rc=$?
+    assert_eq "the change applies through the dispatcher" "0" "$rc"
+    assert_contains "...reporting applied" '"status":"applied"' "$out"
+
+    out=$("$EGO" --config-dir "$migdir" event apply-change \
+        "$WT/internal/schema/changes/e-1929-add-tasks-removed.go" 2>&1); rc=$?
+    assert_eq "re-applying is a no-op, so a failed land can be retried" "0" "$rc"
+    assert_contains "...reporting skipped" '"status":"skipped"' "$out"
 }
 
 # ─── B: the row survives, flagged ────────────────────────────────────────────
@@ -441,10 +490,10 @@ test_guards_still_refuse() {
         "1" "$(Q "SELECT removed FROM tasks WHERE id=$imported")"
 }
 
-# ─── K: broader suites ───────────────────────────────────────────────────────
+# ─── L: broader suites ───────────────────────────────────────────────────────
 
 test_suites() {
-    section "K. Regression suites"
+    section "L. Regression suites"
     local out rc
 
     out=$(cd "$WT" && go test ./internal/events/ ./internal/monitor/ ./internal/web/ -count=1 2>&1); rc=$?
@@ -498,6 +547,7 @@ main() {
     test_pending_notices_dropped
     test_cascade
     test_guards_still_refuse
+    test_migration_applies
     test_suites
 
     [[ -n "$TMP" ]] && rm -rf "$TMP"
