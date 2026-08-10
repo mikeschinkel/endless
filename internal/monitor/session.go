@@ -469,7 +469,7 @@ func RecordBgAgentSession(taskID int64, shortID string) (int64, error) {
 	// NULL rather than 0 (which would be a dangling FK to projects).
 	var projectID *int64
 	if err = db.QueryRow(
-		"SELECT project_id FROM tasks WHERE id=?", taskID,
+		"SELECT project_id FROM live_tasks WHERE id=?", taskID,
 	).Scan(&projectID); err != nil {
 		return 0, fmt.Errorf("resolve project for E-%d: %w", taskID, err)
 	}
@@ -511,7 +511,7 @@ func CountActiveBgAgents(taskID int64) (int64, error) {
 	// tasks.project_id is NOT NULL (schema), so a plain scan is safe.
 	var projectID int64
 	if err = db.QueryRow(
-		"SELECT project_id FROM tasks WHERE id=?", taskID,
+		"SELECT project_id FROM live_tasks WHERE id=?", taskID,
 	).Scan(&projectID); err != nil {
 		return 0, fmt.Errorf("resolve project for E-%d: %w", taskID, err)
 	}
@@ -533,10 +533,10 @@ func CountActiveBgAgents(taskID int64) (int64, error) {
 func nearestEpicAncestor(db *sql.DB, taskID int64) (*int64, error) {
 	const q = `
 		WITH RECURSIVE ancestry(id, parent_id, type_id, depth) AS (
-			SELECT id, parent_id, type_id, 0 FROM tasks WHERE id = ?
+			SELECT id, parent_id, type_id, 0 FROM live_tasks WHERE id = ?
 			UNION ALL
 			SELECT t.id, t.parent_id, t.type_id, a.depth + 1
-			FROM tasks t JOIN ancestry a ON t.id = a.parent_id
+			FROM live_tasks t JOIN ancestry a ON t.id = a.parent_id
 		)
 		SELECT a.id
 		FROM ancestry a

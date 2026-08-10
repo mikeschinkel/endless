@@ -91,10 +91,10 @@ func recomputeEpicStatus(db dbQuerier, emit DerivedEmitter, parentIDs ...int64) 
 func epicAncestorsInclusive(db dbQuerier, startID int64) ([]int64, error) {
 	rows, err := db.Query(
 		`WITH RECURSIVE ancestors(id, parent_id, type_id, depth) AS (
-			SELECT id, parent_id, type_id, 0 FROM tasks WHERE id = ?
+			SELECT id, parent_id, type_id, 0 FROM live_tasks WHERE id = ?
 			UNION ALL
 			SELECT t.id, t.parent_id, t.type_id, a.depth + 1
-			FROM tasks t JOIN ancestors a ON t.id = a.parent_id
+			FROM live_tasks t JOIN ancestors a ON t.id = a.parent_id
 			WHERE a.depth < ?
 		)
 		SELECT id FROM ancestors WHERE type_id = ? ORDER BY depth ASC`,
@@ -123,7 +123,7 @@ func epicAncestorsInclusive(db dbQuerier, startID int64) ([]int64, error) {
 func deriveOneEpic(db dbQuerier, emit DerivedEmitter, epicID int64) error {
 	var current string
 	if err := db.QueryRow(
-		"SELECT status FROM tasks WHERE id = ?", epicID,
+		"SELECT status FROM live_tasks WHERE id = ?", epicID,
 	).Scan(&current); err != nil {
 		return fmt.Errorf("events: read epic %d status: %w", epicID, err)
 	}
@@ -165,7 +165,7 @@ func deriveOneEpic(db dbQuerier, emit DerivedEmitter, epicID int64) error {
 // unplanned/untriaged nor fully terminal). In that case the epic is left
 // unchanged.
 func deriveTargetStatus(db dbQuerier, epicID int64) (string, bool, error) {
-	rows, err := db.Query("SELECT status FROM tasks WHERE parent_id = ?", epicID)
+	rows, err := db.Query("SELECT status FROM live_tasks WHERE parent_id = ?", epicID)
 	if err != nil {
 		return "", false, fmt.Errorf("events: read children of epic %d: %w", epicID, err)
 	}
@@ -240,7 +240,7 @@ func deriveTargetStatus(db dbQuerier, epicID int64) (string, bool, error) {
 func taskParentID(db dbQuerier, taskID int64) (int64, bool, error) {
 	var pid sql.NullInt64
 	if err := db.QueryRow(
-		"SELECT parent_id FROM tasks WHERE id = ?", taskID,
+		"SELECT parent_id FROM live_tasks WHERE id = ?", taskID,
 	).Scan(&pid); err != nil {
 		if err == sql.ErrNoRows {
 			return 0, false, nil

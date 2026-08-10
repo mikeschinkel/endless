@@ -69,7 +69,7 @@ func taskReportFacts(db *sql.DB, taskID int64) (TaskReportFacts, error) {
 	// (an untyped task reports "", which is simply "not an epic").
 	err := db.QueryRow(
 		`SELECT t.status, COALESCE(tt.slug, '')
-		   FROM tasks t
+		   FROM live_tasks t
 		   LEFT JOIN task_types tt ON tt.id = t.type_id
 		  WHERE t.id = ?`, taskID,
 	).Scan(&facts.Status, &facts.Type)
@@ -101,12 +101,12 @@ func taskReportFacts(db *sql.DB, taskID int64) (TaskReportFacts, error) {
 func taskSuccessors(db *sql.DB, taskID int64) ([]TaskRef, error) {
 	rows, err := db.Query(
 		`SELECT t.id AS id, t.status AS status, 'blocks' AS rel
-		   FROM task_deps d JOIN tasks t ON t.id = d.target_id
+		   FROM task_deps d JOIN live_tasks t ON t.id = d.target_id
 		  WHERE d.source_id = ? AND d.source_type = 'task' AND d.target_type = 'task'
 		    AND d.dep_type = 'blocks'
 		 UNION
 		 SELECT t.id AS id, t.status AS status, 'cleaned_up_by' AS rel
-		   FROM task_deps d JOIN tasks t ON t.id = d.source_id
+		   FROM task_deps d JOIN live_tasks t ON t.id = d.source_id
 		  WHERE d.target_id = ? AND d.source_type = 'task' AND d.target_type = 'task'
 		    AND d.dep_type = 'cleans_up'
 		 ORDER BY id`,

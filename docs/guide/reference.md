@@ -32,10 +32,16 @@ After registering, `endless project list` should show the project and `endless p
 `endless sql` runs SQL against the Endless DB. Read-only by default.
 
 ```bash
-endless sql "SELECT COUNT(*) FROM tasks WHERE status='unverified'"
-endless sql "SELECT id, title FROM tasks WHERE phase='now' AND status='ready' LIMIT 10"
-endless sql "SELECT * FROM tasks WHERE id = 1248" --tsv
+endless sql "SELECT COUNT(*) FROM live_tasks WHERE status='unverified'"
+endless sql "SELECT id, title FROM live_tasks WHERE phase='now' AND status='ready' LIMIT 10"
+endless sql "SELECT * FROM live_tasks WHERE id = 1248" --tsv
 ```
+
+**Query `live_tasks`, not `tasks`** (E-1929). A removed task keeps its row —
+that is how its id is prevented from ever being re-minted — so raw `tasks`
+includes removed work and any count off it is wrong. `live_tasks` is the same
+columns filtered to `removed = 0`. Read raw `tasks` only when you specifically
+want the removed rows too.
 
 ### Flags
 

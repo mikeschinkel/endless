@@ -97,7 +97,7 @@ func queryActiveTaskForPanes(db *sql.DB, panes []string) (*ActiveTaskInfo, error
 	// apply the same filter.
 	q := `SELECT t.id, t.title, t.status, COALESCE(tt.slug, ''), t.phase, t.tier, COALESCE(p.name, ''), s.active_epic_id
 	      FROM sessions s
-	      JOIN tasks t ON t.id = s.active_task_id
+	      JOIN live_tasks t ON t.id = s.active_task_id
 	      LEFT JOIN projects p ON p.id = t.project_id
 	      LEFT JOIN task_types tt ON tt.id = t.type_id
 	      WHERE s.process IN (` + placeholders + `)
@@ -355,7 +355,7 @@ func GetActiveBlockers(taskID int64) ([]int64, error) {
 	rows, err := db.Query(
 		`SELECT t.id
 		   FROM task_deps td
-		   JOIN tasks t ON t.id = td.source_id
+		   JOIN live_tasks t ON t.id = td.source_id
 		  WHERE td.target_type = 'task'
 		    AND td.target_id = ?
 		    AND td.source_type = 'task'

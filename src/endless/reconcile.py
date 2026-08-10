@@ -98,6 +98,13 @@ def repair_orphan_relations() -> int:
 
     Returns the number of rows removed. Prints what it removed — a silent repair
     of silent corruption teaches nothing.
+
+    Reads the raw `tasks` table, NOT live_tasks (E-1929). "Orphan" here means the
+    row NO LONGER EXISTS — the only case where a reused id could inherit it. A
+    relation pointing at a removed-but-retained row is not that: the id can never
+    be re-minted, and the row is there to explain the reference. Pointing this at
+    live_tasks would turn a one-time repair of real corruption into a routine
+    deleter of every removed task's relations.
     """
     dep_rows = db.query(
         "SELECT id, source_type, source_id, target_type, target_id, dep_type "

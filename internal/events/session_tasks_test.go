@@ -409,9 +409,15 @@ func TestSessionTasks_IdempotentReplay(t *testing.T) {
 }
 
 // TestSessionTasks_DeletedTaskRetainsRow verifies the no-FK design: a
-// task.deleted records a session_tasks row, and the row survives the
-// subsequent DELETE FROM tasks. If session_tasks had a FK on task_id
-// with ON DELETE CASCADE, this test would fail.
+// task.deleted records a session_tasks row, and the row survives the removal.
+// If session_tasks had a FK on task_id with ON DELETE CASCADE, this test would
+// fail.
+//
+// E-1929 changed what "the task is gone" means: removal marks the row
+// removed = 1 rather than DELETEing it, so the assertion below is that the row
+// is RETAINED and marked, and that it is invisible through live_tasks. That
+// retention is what makes the surviving session_tasks row safe — its task id can
+// never be re-minted, so the row can never reattach to unrelated work.
 func TestSessionTasks_DeletedTaskRetainsRow(t *testing.T) {
 	db := newSessionTasksTestDB(t)
 
@@ -430,12 +436,19 @@ func TestSessionTasks_DeletedTaskRetainsRow(t *testing.T) {
 		t.Error("expected (42, 100) row to remain after task deletion")
 	}
 
-	// And confirm the task itself is gone.
-	var taskCount int
-	if err := db.QueryRow("SELECT count(*) FROM tasks WHERE id = ?", 100).Scan(&taskCount); err != nil {
-		t.Fatalf("count tasks: %v", err)
+	// And confirm the task row is retained, flagged, and hidden from reads.
+	var removed int
+	if err := db.QueryRow("SELECT removed FROM tasks WHERE id = ?", 100).Scan(&removed); err != nil {
+		t.Fatalf("read removed flag for task 100 (row should be retained): %v", err)
 	}
-	if taskCount != 0 {
-		t.Errorf("expected task 100 to be deleted, found %d row(s)", taskCount)
+	if removed != 1 {
+		t.Errorf("tasks.removed = %d for removed task 100, want 1", removed)
+	}
+	var liveCount int
+	if err := db.QueryRow("SELECT count(*) FROM live_tasks WHERE id = ?", 100).Scan(&liveCount); err != nil {
+		t.Fatalf("count live_tasks: %v", err)
+	}
+	if liveCount != 0 {
+		t.Errorf("removed task 100 still visible through live_tasks (%d row(s))", liveCount)
 	}
 }

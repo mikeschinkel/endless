@@ -50,6 +50,14 @@ func PreAllocateTaskID() (id int64, execAndCommit func(*Event, DerivedEmitter) (
 		return 0, nil, nil, fmt.Errorf("events: begin immediate: %w", err)
 	}
 
+	// DO NOT point this at live_tasks (E-1929). Removed tasks are retained with
+	// removed = 1 precisely so MAX(id) keeps counting past them and an id is
+	// never re-minted. Through the view MAX(id) would drop back to the highest
+	// LIVE id, ids would be reused again, and the FK-free rows that outlive a
+	// task (session_tasks, session_notices, task_landings) would reattach to
+	// unrelated work — reintroducing the exact bug ED-1547 exists to fix, while
+	// appearing to fix it. Only the highest id is ever re-freed this way;
+	// interior gaps are never refilled, which is why retention alone suffices.
 	err = db.QueryRow("SELECT COALESCE(MAX(id), 0) + 1 FROM tasks").Scan(&id)
 	if err != nil {
 		db.Exec("ROLLBACK")
@@ -784,34 +792,23 @@ func execTaskDeleted(db dbQuerier, evt *Event, emit DerivedEmitter) (*ExecuteRes
 
 	taskID := evt.Entity.ID
 
-	// E-1541: capture the parent before the row is gone so its epic chain can
-	// be recomputed after the deletion (the task left the parent's child set).
+	// E-1541: capture the parent before the removal so its epic chain can be
+	// recomputed afterwards (the task left the parent's child set).
 	parentID, hasParent, err := taskParentID(db, mustParseInt64(taskID))
 	if err != nil {
 		return nil, err
 	}
 
-	if p.Cascade {
-		if _, err := db.Exec(
-			`WITH RECURSIVE tree(id) AS (
-				SELECT id FROM tasks WHERE id = ?
-				UNION ALL
-				SELECT t.id FROM tasks t JOIN tree ON t.parent_id = tree.id
-			) DELETE FROM tasks WHERE id IN (SELECT id FROM tree)`,
-			taskID,
-		); err != nil {
-			return nil, fmt.Errorf("events: cascade delete: %w", err)
-		}
-	} else {
-		db.Exec("UPDATE tasks SET parent_id = NULL WHERE parent_id = ?", taskID)
-		if _, err := db.Exec("DELETE FROM tasks WHERE id = ?", taskID); err != nil {
-			return nil, fmt.Errorf("events: delete task: %w", err)
-		}
+	// ED-1547 (E-1929): mark removed, never DELETE — see task_removal.go. The
+	// projector's replay handler calls the same function, so the live path and
+	// the rebuild path cannot disagree about what removal means.
+	if _, err = removeTaskTree(db, mustParseInt64(taskID), p.Cascade); err != nil {
+		return nil, err
 	}
 
 	// Record only the primary entity even on cascade — cascaded child
-	// deletes are derived effects, not direct touches by the session.
-	// session_tasks has no FK on task_id, so the row survives the delete.
+	// removals are derived effects, not direct touches by the session.
+	// session_tasks has no FK on task_id, so the row survives the removal.
 	if shouldRecordSessionTouch(evt) {
 		// Touched a pre-existing task (not claimed) → revisited.
 		if err := upsertSessionTask(db, evt.Actor.SessionID, mustParseInt64(evt.Entity.ID), sessiontaskrelation.RelationRevisited); err != nil {
@@ -839,45 +836,22 @@ func execTaskBulkCleared(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 		return nil, err
 	}
 
-	// Enumerate target task IDs BEFORE the delete so session_tasks can
-	// record per-cleared-task touches. session_tasks has no FK on
-	// task_id, so the rows survive the subsequent delete.
+	// ED-1547 (E-1929): mark removed, never DELETE — see task_removal.go, which
+	// the projector's replay handler calls too. It returns the ids it covered so
+	// session_tasks can record a per-cleared-task touch; session_tasks has no FK
+	// on task_id, so those rows outlive the removal.
+	ids, err := removeTasksBySourceFile(db, projectID, p.SourceFile)
+	if err != nil {
+		return nil, err
+	}
+
 	if shouldRecordSessionTouch(evt) {
-		rows, err := db.Query(
-			"SELECT id FROM tasks WHERE project_id = ? AND source_file = ?",
-			projectID, p.SourceFile,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("events: enumerate bulk_cleared tasks: %w", err)
-		}
-		var ids []int64
-		for rows.Next() {
-			var id int64
-			if err := rows.Scan(&id); err != nil {
-				rows.Close()
-				return nil, fmt.Errorf("events: scan bulk_cleared id: %w", err)
-			}
-			ids = append(ids, id)
-		}
-		rows.Close()
 		for _, id := range ids {
 			// Bulk-clear touches pre-existing tasks → revisited.
 			if err := upsertSessionTask(db, evt.Actor.SessionID, id, sessiontaskrelation.RelationRevisited); err != nil {
 				return nil, fmt.Errorf("events: %w", err)
 			}
 		}
-	}
-
-	db.Exec(
-		`UPDATE tasks SET parent_id = NULL WHERE parent_id IN (
-			SELECT id FROM tasks WHERE project_id = ? AND source_file = ?
-		)`, projectID, p.SourceFile,
-	)
-	if _, err := db.Exec(
-		"DELETE FROM tasks WHERE project_id = ? AND source_file = ?",
-		projectID, p.SourceFile,
-	); err != nil {
-		return nil, fmt.Errorf("events: bulk clear: %w", err)
 	}
 
 	return &ExecuteResult{}, nil

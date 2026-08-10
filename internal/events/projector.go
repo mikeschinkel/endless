@@ -440,24 +440,12 @@ func replayTaskDeleted(db *sql.DB, evt *Event, result *ProjectResult) error {
 		return nil
 	}
 
-	taskID := evt.Entity.ID
-
-	if p.Cascade {
-		if _, err := db.Exec(
-			`WITH RECURSIVE tree(id) AS (
-				SELECT id FROM tasks WHERE id = ?
-				UNION ALL
-				SELECT t.id FROM tasks t JOIN tree ON t.parent_id = tree.id
-			) DELETE FROM tasks WHERE id IN (SELECT id FROM tree)`,
-			taskID,
-		); err != nil {
-			return err
-		}
-	} else {
-		db.Exec("UPDATE tasks SET parent_id = NULL WHERE parent_id = ?", taskID)
-		if _, err := db.Exec("DELETE FROM tasks WHERE id = ?", taskID); err != nil {
-			return err
-		}
+	// ED-1547 (E-1929): replay removal exactly as the executor performs it, by
+	// calling the same function. If this path still DELETEd while the executor
+	// marked removed = 1, a rebuild would re-free every removed id and reuse
+	// would return on a path nobody would think to test.
+	if _, err := removeTaskTree(db, mustParseInt64(evt.Entity.ID), p.Cascade); err != nil {
+		return err
 	}
 	result.TasksDeleted++
 	return nil
@@ -474,15 +462,8 @@ func replayTaskBulkCleared(db *sql.DB, evt *Event, result *ProjectResult) error 
 		return err
 	}
 
-	db.Exec(
-		`UPDATE tasks SET parent_id = NULL WHERE parent_id IN (
-			SELECT id FROM tasks WHERE project_id = ? AND source_file = ?
-		)`, projectID, p.SourceFile,
-	)
-	if _, err := db.Exec(
-		"DELETE FROM tasks WHERE project_id = ? AND source_file = ?",
-		projectID, p.SourceFile,
-	); err != nil {
+	// Same shared removal as the executor — see replayTaskDeleted above.
+	if _, err := removeTasksBySourceFile(db, projectID, p.SourceFile); err != nil {
 		return err
 	}
 	result.TasksDeleted++

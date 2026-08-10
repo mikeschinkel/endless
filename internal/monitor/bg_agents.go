@@ -29,7 +29,7 @@ const bgAgentQuery = `
 	SELECT s.id, COALESCE(s.short_id, ''), s.active_task_id,
 	       COALESCE(t.title, ''), COALESCE(s.started_at, '')
 	  FROM sessions s
-	  LEFT JOIN tasks t ON t.id = s.active_task_id
+	  LEFT JOIN live_tasks t ON t.id = s.active_task_id
 	 WHERE s.kind_id = ? AND s.state = 'working' AND `
 
 // ListBgAgentsForEpic returns the working background-agent sessions whose

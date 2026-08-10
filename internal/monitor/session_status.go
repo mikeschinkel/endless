@@ -178,22 +178,22 @@ ftask(tid) AS (SELECT ?),
 -- sfoc.stid = the SPAWNING session's active task (session lineage → ↩ from).
 sfoc(stid) AS (SELECT active_task_id FROM sessions WHERE id = ?),
 -- rpar.rpid = the focal's real task-tree parent (tasks.parent_id → ↑ parent).
-rpar(rpid) AS (SELECT parent_id FROM tasks WHERE id = (SELECT tid FROM ftask)),
+rpar(rpid) AS (SELECT parent_id FROM live_tasks WHERE id = (SELECT tid FROM ftask)),
 base AS (
   SELECT t.id, t.project_id, t.title, t.status, t.phase, t.text, t.type_id
-    FROM session_tasks st JOIN tasks t ON t.id = st.task_id
+    FROM session_tasks st JOIN live_tasks t ON t.id = st.task_id
    WHERE st.session_id IN (
      SELECT id FROM sessions WHERE active_task_id = (SELECT tid FROM ftask)
    )
   UNION
   SELECT t.id, t.project_id, t.title, t.status, t.phase, t.text, t.type_id
-    FROM tasks t WHERE t.id = (SELECT tid FROM ftask)
+    FROM live_tasks t WHERE t.id = (SELECT tid FROM ftask)
   UNION
   SELECT t.id, t.project_id, t.title, t.status, t.phase, t.text, t.type_id
-    FROM tasks t, rpar WHERE t.id = rpar.rpid
+    FROM live_tasks t, rpar WHERE t.id = rpar.rpid
   UNION
   SELECT t.id, t.project_id, t.title, t.status, t.phase, t.text, t.type_id
-    FROM tasks t, sfoc WHERE t.id = sfoc.stid
+    FROM live_tasks t, sfoc WHERE t.id = sfoc.stid
   UNION
   -- E-1685: the focal task's direct dependents (tasks it blocks), read-time
   -- only. Computed here rather than materialized into session_tasks so the
@@ -201,7 +201,7 @@ base AS (
   -- in the final SELECT drops done dependents unless --all; the BlockedByN
   -- column drives their ⊗ while the focal stays open.
   SELECT t.id, t.project_id, t.title, t.status, t.phase, t.text, t.type_id
-    FROM tasks t
+    FROM live_tasks t
    WHERE EXISTS (
      SELECT 1 FROM task_deps d
       WHERE d.source_type = 'task' AND d.target_type = 'task'
@@ -218,7 +218,7 @@ base AS (
   -- exploding the whole subtree. The terminal-status filter in the final SELECT
   -- drops done children unless --all, matching the dependent behavior.
   SELECT t.id, t.project_id, t.title, t.status, t.phase, t.text, t.type_id
-    FROM tasks t WHERE t.parent_id = (SELECT tid FROM ftask)
+    FROM live_tasks t WHERE t.parent_id = (SELECT tid FROM ftask)
 ),
 -- E-1795: the UPSTREAM blocker chain of every task already in base, walked
 -- TRANSITIVELY. Seeded from base's ids, each step adds the OPEN tasks that block
@@ -236,7 +236,7 @@ upchain(id) AS (
   SELECT d.source_id
     FROM task_deps d
     JOIN upchain u ON d.target_id = u.id
-    JOIN tasks blk ON blk.id = d.source_id
+    JOIN live_tasks blk ON blk.id = d.source_id
    WHERE d.source_type = 'task' AND d.target_type = 'task'
      AND d.dep_type = 'blocks'
      AND blk.status NOT IN (` + terminalStatusSet + `)
@@ -248,7 +248,7 @@ allbase AS (
   SELECT id, project_id, title, status, phase, text, type_id FROM base
   UNION
   SELECT t.id, t.project_id, t.title, t.status, t.phase, t.text, t.type_id
-    FROM tasks t JOIN upchain u ON u.id = t.id
+    FROM live_tasks t JOIN upchain u ON u.id = t.id
 ),
 enr AS (
   SELECT b.id, b.project_id, b.title, b.status, b.phase,
@@ -270,7 +270,7 @@ enr AS (
     -- filter) but the renderer routes it to ⏚ landed rather than a fresh ▶/✎/☑
     -- (E-1750 split the old ⁇ catch-all this line used to name into ⏚ + ⁇).
     EXISTS(SELECT 1 FROM task_landings tl WHERE tl.task_id = b.id) AS landed,
-    (SELECT count(*) FROM task_deps d JOIN tasks blk ON blk.id = d.source_id
+    (SELECT count(*) FROM task_deps d JOIN live_tasks blk ON blk.id = d.source_id
        WHERE d.source_type = 'task' AND d.target_type = 'task'
          AND d.dep_type = 'blocks' AND d.target_id = b.id
          AND blk.status NOT IN (` + terminalStatusSet + `)) AS blocked_by_n,
@@ -346,7 +346,7 @@ func SessionStatusRowsForSession(sessionID int64, includeAll bool) ([]SessionSta
 	q := `
 WITH base AS (
   SELECT t.id, t.project_id, t.title, t.status, t.phase, t.text, t.type_id
-    FROM session_tasks st JOIN tasks t ON t.id = st.task_id
+    FROM session_tasks st JOIN live_tasks t ON t.id = st.task_id
    WHERE st.session_id = ?
      AND st.relation_id IN (2, 3)
 ),
@@ -362,7 +362,7 @@ enr AS (
         WHERE s.state != 'ended' AND s.active_task_id = b.id
      ) AS in_flight,
     EXISTS(SELECT 1 FROM task_landings tl WHERE tl.task_id = b.id) AS landed,
-    (SELECT count(*) FROM task_deps d JOIN tasks blk ON blk.id = d.source_id
+    (SELECT count(*) FROM task_deps d JOIN live_tasks blk ON blk.id = d.source_id
        WHERE d.source_type = 'task' AND d.target_type = 'task'
          AND d.dep_type = 'blocks' AND d.target_id = b.id
          AND blk.status NOT IN (` + terminalStatusSet + `)) AS blocked_by_n,
@@ -434,7 +434,7 @@ func SessionStatusBlockerEdges(ids []int64) (map[int64][]int64, error) {
 	// Both endpoints must be in the candidate set; the blocker must be open.
 	q := `
 SELECT d.target_id, d.source_id
-  FROM task_deps d JOIN tasks blk ON blk.id = d.source_id
+  FROM task_deps d JOIN live_tasks blk ON blk.id = d.source_id
  WHERE d.source_type = 'task' AND d.target_type = 'task'
    AND d.dep_type = 'blocks'
    AND blk.status NOT IN (` + terminalStatusSet + `)

@@ -91,7 +91,7 @@ func reopenContext(db *sql.DB, taskID int64) (ReopenContext, error) {
 func taskOutcome(db *sql.DB, taskID int64) (string, error) {
 	var outcome string
 	err := db.QueryRow(
-		"SELECT COALESCE(outcome, '') FROM tasks WHERE id = ?", taskID,
+		"SELECT COALESCE(outcome, '') FROM live_tasks WHERE id = ?", taskID,
 	).Scan(&outcome)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", nil

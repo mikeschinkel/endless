@@ -381,17 +381,37 @@ terseness. If the user wants another full answer, they type it again.
 ```bash
 endless task remove <id>                             # warns if it has children
 endless task remove <id> --cascade                   # also remove descendants
+endless task list --removed                          # what has been removed
 endless task move <id> --parent <parent_id>
 endless task move <id> --root
 endless task move --children-of <id> --root
 endless task clear <id> --<field>                    # clear a single field
 ```
 
+**`remove` does not delete the row — it marks it removed** (E-1929, implementing
+ED-1547). The id is therefore never re-minted: the allocator counts past every
+removed task, so an id that was used once is used once forever.
+
+That matters because several tables deliberately outlive their task and carry no
+foreign key on it — `session_tasks`, `session_notices`, `task_landings`. While
+ids were re-freed, a later task taking a freed id silently inherited those rows
+and reported them as fact. Retention closes that at the source.
+
+What you see:
+
+- The task disappears from every listing — `task list`, `task next`,
+  `session status`, the monitor, search.
+- **`endless task show <id>` still renders it**, marked `⊘ REMOVED`. An id that
+  is now a hole explains itself instead of erroring.
+- **`endless task list --removed`** lists the removed set. It *replaces* the live
+  listing rather than adding to it, so the two never interleave.
+- Undelivered change notices about the task are dropped (delivered history
+  stays), and any session pointing at it has its active task cleared. Landing
+  history survives — it is audit data, and the retained row is what explains it.
+
 **`remove` refuses while the task still has relations** (E-1915). Relation rows
-carry no foreign key on their task endpoint, so they used to survive the delete
-— and task ids are reused, so a later task taking the freed id silently
-inherited the dead relations and reported them as computed fact. The refusal
-names the exact `unlink` command that clears each one:
+carry no foreign key on their task endpoint, so they survive the removal. The
+refusal names the exact `unlink` command that clears each one:
 
 ```
 E-1914 has 2 relation(s).
@@ -410,10 +430,11 @@ one step; `--cascade` is about children and only widens which tasks get checked
 (the whole descendant set, so removing a parent cannot bypass the guard).
 
 The same guard applies to **`task import --replace`** and
-**`task import-json --clear`** (E-1927), which delete tasks by source file
+**`task import-json --clear`** (E-1927), which remove tasks by source file
 rather than by id. An imported task that has since been linked to is no longer
 disposable just because the file regenerated it — clear the relation, or
-re-import without the flag.
+re-import without the flag. Bulk clear retains its rows too: one rule, no second
+path that can orphan anything.
 
 Rows orphaned before this landed are cleaned up by `reconcile` — which runs on
 `endless project list` / `project scan` — and it prints what it removed.

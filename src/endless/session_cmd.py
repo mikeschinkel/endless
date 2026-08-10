@@ -782,7 +782,7 @@ def list_sessions(
         f"(SELECT count(*) FROM session_messages m WHERE m.session_id = s.session_id) as msg_count "
         f"FROM sessions s "
         f"LEFT JOIN projects p ON s.project_id = p.id "
-        f"LEFT JOIN tasks t ON t.id = s.active_task_id "
+        f"LEFT JOIN live_tasks t ON t.id = s.active_task_id "
         f"{where} "
         f"ORDER BY {order} "
         f"LIMIT ?",
@@ -1049,7 +1049,7 @@ def _resolve_hide_tasks(task_refs: list[str]) -> list[int]:
             raise click.ClickException(
                 f"Malformed task id '{raw}' (expected E-NNN or NNN)."
             ) from None
-        if not db.query("SELECT id FROM tasks WHERE id = ?", (task_id,)):
+        if not db.query("SELECT id FROM live_tasks WHERE id = ?", (task_id,)):
             raise click.ClickException(f"No task found with id E-{task_id}")
         if task_id not in task_ids:
             task_ids.append(task_id)
@@ -1616,7 +1616,7 @@ def session_show_resolve(session_ref: str | None, as_json: bool = False) -> None
     task_info = None
     if r["active_task_id"]:
         t = db.query(
-            "SELECT id, title, status FROM tasks WHERE id = ?",
+            "SELECT id, title, status FROM live_tasks WHERE id = ?",
             (r["active_task_id"],),
         )
         if t:

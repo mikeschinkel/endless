@@ -220,7 +220,7 @@ func GetTaskHeadline(taskID int64) (TaskHeadline, error) {
 	var title, status, phase sql.NullString
 	var tier sql.NullInt64
 	err = db.QueryRow(
-		`SELECT title, status, phase, tier FROM tasks WHERE id=?`, taskID,
+		`SELECT title, status, phase, tier FROM live_tasks WHERE id=?`, taskID,
 	).Scan(&title, &status, &phase, &tier)
 	if err == sql.ErrNoRows {
 		return h, nil

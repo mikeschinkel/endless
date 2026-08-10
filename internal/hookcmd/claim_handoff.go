@@ -109,7 +109,7 @@ func claimHandoffVars(projectID, taskID int64) (map[string]any, error) {
 	)
 	err = db.QueryRow(
 		"SELECT COALESCE(t.title, t.description, ''), COALESCE(tt.slug, ''), t.parent_id "+
-			"FROM tasks t LEFT JOIN task_types tt ON tt.id = t.type_id WHERE t.id = ?",
+			"FROM live_tasks t LEFT JOIN task_types tt ON tt.id = t.type_id WHERE t.id = ?",
 		taskID,
 	).Scan(&title, &typeSlug, &parentID)
 	if err != nil {
@@ -166,7 +166,7 @@ func hierarchicalLabelPrefix(taskID int64, parentID sql.NullInt64) string {
 // returns "no children yet". Mirrors Python's `_children_state` (E-1567).
 func childrenBreakdown(db *sql.DB, taskID int64) (int, string, error) {
 	rows, err := db.Query(
-		"SELECT status, count(*) FROM tasks WHERE parent_id = ? GROUP BY status",
+		"SELECT status, count(*) FROM live_tasks WHERE parent_id = ? GROUP BY status",
 		taskID,
 	)
 	if err != nil {

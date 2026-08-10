@@ -810,7 +810,7 @@ def link_decision(
                 f"Decision {decision_id_display(target_id)} not found."
             )
     elif target_kind == "task":
-        if not db.exists("SELECT 1 FROM tasks WHERE id = ?", (target_id,)):
+        if not db.exists("SELECT 1 FROM live_tasks WHERE id = ?", (target_id,)):
             raise click.ClickException(
                 f"Task {task_id_display(target_id)} not found."
             )
@@ -973,7 +973,7 @@ def link_task_to_decision(
 ):
     """Link a task → decision (writes a task_deps row with target_type='decision')."""
     require_legal_relation_type("task", "decision", dep_type)
-    if not db.exists("SELECT 1 FROM tasks WHERE id = ?", (source_task_id,)):
+    if not db.exists("SELECT 1 FROM live_tasks WHERE id = ?", (source_task_id,)):
         raise click.ClickException(
             f"Task {task_id_display(source_task_id)} not found."
         )

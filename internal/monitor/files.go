@@ -12,7 +12,7 @@ func GetTaskTitle(taskID int64) (string, error) {
 		return "", err
 	}
 	var title sql.NullString
-	err = db.QueryRow(`SELECT title FROM tasks WHERE id=?`, taskID).Scan(&title)
+	err = db.QueryRow(`SELECT title FROM live_tasks WHERE id=?`, taskID).Scan(&title)
 	if err == sql.ErrNoRows {
 		return "", nil
 	}
@@ -30,7 +30,7 @@ func GetTaskStatus(taskID int64) (string, error) {
 		return "", err
 	}
 	var status sql.NullString
-	err = db.QueryRow(`SELECT status FROM tasks WHERE id=?`, taskID).Scan(&status)
+	err = db.QueryRow(`SELECT status FROM live_tasks WHERE id=?`, taskID).Scan(&status)
 	if err == sql.ErrNoRows {
 		return "", nil
 	}

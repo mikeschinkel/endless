@@ -1,3 +1,5 @@
+//go:build ignore
+
 // E-1917: add tasks.changed_by_session — the session that last changed a task,
 // so the tasks_notify_sessions trigger can skip notifying the session that made
 // the change. A session told about its own edit is noise, and noise is what
@@ -22,6 +24,11 @@
 // real ledger is what would open one. Note E-1818 already bars a worktree
 // binary pinned onto a real DB from applying schema.SQL at all, so a self-dev
 // worktree cannot create the trigger on the real DB ahead of this change.
+//
+// The //go:build ignore tag keeps this one-off `package main` script out of
+// `go build/vet/test ./...` (matching e-1568 and e-1571); `go run <path>` names
+// the file explicitly and so runs it regardless. Added by E-1929, which was the
+// second untagged script in this directory and so collided on `func main`.
 package main
 
 import (

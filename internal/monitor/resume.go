@@ -197,7 +197,7 @@ func fillRecoveryInfo(t *ResumeTarget, taskID int64) error {
 	}
 	err = db.QueryRow(
 		`SELECT COALESCE(tt.slug, ''), t.status, COALESCE(t.title, '')
-		   FROM tasks t
+		   FROM live_tasks t
 		   LEFT JOIN task_types tt ON tt.id = t.type_id
 		  WHERE t.id = ?`, taskID,
 	).Scan(&t.TaskType, &t.TaskStatus, &t.TaskTitle)

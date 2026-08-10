@@ -1305,12 +1305,14 @@ def task_import(file, from_claude, json_file, project, replace, parent):
 @click.option("--sort", default=None,
               type=click.Choice(["id", "status", "phase", "tier", "created", "title"]),
               help="Sort by column (default: id)")
+@click.option("--removed", "removed_only", is_flag=True,
+              help="List REMOVED tasks instead of live ones (E-1929)")
 @click.option("--llm", is_flag=True,
               help="Token-efficient output for LLMs")
 @click.option("--json", "as_json", is_flag=True,
               help="JSON output")
 def task_list(project, show_all, status, phase, tier, parent_id, related_to_id, rel_type,
-              sort, llm, as_json):
+              sort, removed_only, llm, as_json):
     """List tasks for a project."""
     from endless.task_cmd import show_plan, parse_tier_filter, parse_parent_filter
     tier_val = parse_tier_filter(tier) if tier else None
@@ -1319,7 +1321,7 @@ def task_list(project, show_all, status, phase, tier, parent_id, related_to_id, 
               status_filter=status, phase_filter=phase,
               tier_filter=tier_val, parent_id=parent_val,
               related_to_id=related_to_id, rel_type=rel_type,
-              sort_by=sort, llm=llm, as_json=as_json)
+              sort_by=sort, removed_only=removed_only, llm=llm, as_json=as_json)
 
 
 @task_cmd.command("show")

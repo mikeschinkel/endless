@@ -28,7 +28,7 @@ func GetActiveTasks(projectID int64) ([]Task, error) {
 
 	rows, err := db.Query(
 		"SELECT id, phase, description, status "+
-			"FROM tasks "+
+			"FROM live_tasks "+
 			"WHERE project_id = ? AND status IN ('underway', 'untriaged', 'unplanned', 'submitted', 'ready') "+
 			"ORDER BY CASE status WHEN 'underway' THEN 0 ELSE 1 END, sort_order",
 		projectID,
@@ -164,7 +164,7 @@ func TaskField(taskID int64, column string) (string, error) {
 	}
 	var value string
 	err = db.QueryRow(
-		fmt.Sprintf("SELECT COALESCE(%s, '') FROM tasks WHERE id = ?", column),
+		fmt.Sprintf("SELECT COALESCE(%s, '') FROM live_tasks WHERE id = ?", column),
 		taskID,
 	).Scan(&value)
 	if errors.Is(err, sql.ErrNoRows) {

@@ -183,3 +183,201 @@ func TestProjectToTempDB_CreateThenUpdateApplied(t *testing.T) {
 		t.Errorf("title after update = %q, want %q", title, "Revised")
 	}
 }
+
+// appendTaskCreated stages one task.created event in dir's ledger.
+func appendTaskCreated(t *testing.T, w *events.Writer, project, id, ts, title string) {
+	t.Helper()
+	payload, err := json.Marshal(events.TaskCreatedPayload{
+		Title: title, Phase: "now", Status: "unplanned", Type: "todo",
+	})
+	if err != nil {
+		t.Fatalf("marshal created payload: %v", err)
+	}
+	appendEvent(t, w, events.Event{
+		V:       events.Version,
+		TS:      ts,
+		Kind:    events.KindTaskCreated,
+		Project: project,
+		Entity:  events.EntityRef{Type: events.EntityTask, ID: id},
+		Actor:   events.Actor{Kind: events.ActorCLI, ID: "tester"},
+		Payload: payload,
+	})
+}
+
+func appendEvent(t *testing.T, w *events.Writer, evt events.Event) {
+	t.Helper()
+	line, err := json.Marshal(evt)
+	if err != nil {
+		t.Fatalf("marshal %s evt: %v", evt.Kind, err)
+	}
+	if err := w.Append(line); err != nil {
+		t.Fatalf("Append %s: %v", evt.Kind, err)
+	}
+}
+
+// allocatorFloor runs the exact query the task-id allocator uses
+// (events.PreAllocateTaskID). It reads `tasks`, never `live_tasks` — that is
+// the property under test.
+func allocatorFloor(t *testing.T, db *sql.DB) int64 {
+	t.Helper()
+	var next int64
+	if err := db.QueryRow("SELECT COALESCE(MAX(id), 0) + 1 FROM tasks").Scan(&next); err != nil {
+		t.Fatalf("allocator floor query: %v", err)
+	}
+	return next
+}
+
+// TestProjectToTempDB_TaskDeletedRetainsRowAndIDFloor is the executor/projector
+// parity check for ED-1547 (E-1929), the failure that would otherwise ship
+// looking complete.
+//
+// The executor marks a removed task `removed = 1`. If the projector still
+// replayed task.deleted as a real DELETE, then rebuilding the DB from the ledger
+// would drop the retained row, MAX(id) would fall back, and the next task
+// allocated would REUSE the removed id — re-orphaning every FK-free row that
+// deliberately outlives its task. Nothing in normal use would surface it.
+//
+// Deliberately NOT verified by rebuilding a real DB: `rebuild-db` is not yet
+// reliable, so a test that used it would risk real data and produce failures
+// attributable to the rebuild rather than to this change. A synthetic event
+// stream into a temp DB exercises the same handler in isolation.
+func TestProjectToTempDB_TaskDeletedRetainsRowAndIDFloor(t *testing.T) {
+	dir := t.TempDir()
+
+	w, err := events.NewWriter(dir, "dead")
+	if err != nil {
+		t.Fatalf("NewWriter: %v", err)
+	}
+
+	appendTaskCreated(t, w, "proj-removal", "900", "5WYM00000001", "Survivor")
+	appendTaskCreated(t, w, "proj-removal", "901", "5WYM00000002", "Doomed")
+
+	deletedPayload, err := json.Marshal(events.TaskDeletedPayload{Title: "Doomed"})
+	if err != nil {
+		t.Fatalf("marshal deleted payload: %v", err)
+	}
+	appendEvent(t, w, events.Event{
+		V:       events.Version,
+		TS:      "5WYM00000003",
+		Kind:    events.KindTaskDeleted,
+		Project: "proj-removal",
+		Entity:  events.EntityRef{Type: events.EntityTask, ID: "901"},
+		Actor:   events.Actor{Kind: events.ActorCLI, ID: "tester"},
+		Payload: deletedPayload,
+	})
+
+	tempPath, _, err := events.ProjectToTempDB(dir)
+	if err != nil {
+		t.Fatalf("ProjectToTempDB: %v", err)
+	}
+	t.Cleanup(func() { os.Remove(tempPath) })
+
+	db, err := sql.Open("sqlite", tempPath)
+	if err != nil {
+		t.Fatalf("open temp db: %v", err)
+	}
+	defer db.Close()
+
+	var removed int
+	if err := db.QueryRow("SELECT removed FROM tasks WHERE id = 901").Scan(&removed); err != nil {
+		t.Fatalf("replayed removal deleted the row instead of marking it: %v", err)
+	}
+	if removed != 1 {
+		t.Errorf("tasks.removed = %d for replayed removal, want 1", removed)
+	}
+
+	var live int
+	if err := db.QueryRow("SELECT count(*) FROM live_tasks WHERE id = 901").Scan(&live); err != nil {
+		t.Fatalf("count live_tasks: %v", err)
+	}
+	if live != 0 {
+		t.Errorf("removed task visible through live_tasks (%d row(s))", live)
+	}
+
+	// The regression this whole change exists to prevent: the next id allocated
+	// against the rebuilt DB must be ABOVE the removed one, never reuse it.
+	if got := allocatorFloor(t, db); got != 902 {
+		t.Errorf("allocator floor after replaying removal of the highest id = %d, want 902 "+
+			"(a value of 901 means the id was re-freed and would be reused)", got)
+	}
+}
+
+// TestProjectToTempDB_TaskBulkClearedRetainsRowsAndIDFloor is the same parity
+// check for the bulk-clear path (`task import --replace`). Bulk clear retains
+// too — one rule, no second orphaning path — so a rebuild must not re-free the
+// ids it cleared either.
+func TestProjectToTempDB_TaskBulkClearedRetainsRowsAndIDFloor(t *testing.T) {
+	dir := t.TempDir()
+
+	w, err := events.NewWriter(dir, "bulk")
+	if err != nil {
+		t.Fatalf("NewWriter: %v", err)
+	}
+
+	importedPayload, err := json.Marshal(events.TaskImportedPayload{
+		Title: "From file", Phase: "now", Status: "unplanned", SourceFile: "PLAN.md",
+	})
+	if err != nil {
+		t.Fatalf("marshal imported payload: %v", err)
+	}
+	for i, id := range []string{"910", "911"} {
+		appendEvent(t, w, events.Event{
+			V:       events.Version,
+			TS:      []string{"5WYM00000001", "5WYM00000002"}[i],
+			Kind:    events.KindTaskImported,
+			Project: "proj-bulk",
+			Entity:  events.EntityRef{Type: events.EntityTask, ID: id},
+			Actor:   events.Actor{Kind: events.ActorCLI, ID: "tester"},
+			Payload: importedPayload,
+		})
+	}
+
+	clearedPayload, err := json.Marshal(events.TaskBulkClearedPayload{SourceFile: "PLAN.md"})
+	if err != nil {
+		t.Fatalf("marshal bulk_cleared payload: %v", err)
+	}
+	appendEvent(t, w, events.Event{
+		V:       events.Version,
+		TS:      "5WYM00000003",
+		Kind:    events.KindTaskBulkCleared,
+		Project: "proj-bulk",
+		Entity:  events.EntityRef{Type: events.EntityTask, ID: "910"},
+		Actor:   events.Actor{Kind: events.ActorCLI, ID: "tester"},
+		Payload: clearedPayload,
+	})
+
+	tempPath, _, err := events.ProjectToTempDB(dir)
+	if err != nil {
+		t.Fatalf("ProjectToTempDB: %v", err)
+	}
+	t.Cleanup(func() { os.Remove(tempPath) })
+
+	db, err := sql.Open("sqlite", tempPath)
+	if err != nil {
+		t.Fatalf("open temp db: %v", err)
+	}
+	defer db.Close()
+
+	var retained int
+	if err := db.QueryRow(
+		"SELECT count(*) FROM tasks WHERE id IN (910, 911) AND removed = 1",
+	).Scan(&retained); err != nil {
+		t.Fatalf("count retained bulk-cleared rows: %v", err)
+	}
+	if retained != 2 {
+		t.Errorf("bulk-cleared rows retained with removed = 1: %d, want 2", retained)
+	}
+
+	var live int
+	if err := db.QueryRow("SELECT count(*) FROM live_tasks WHERE id IN (910, 911)").Scan(&live); err != nil {
+		t.Fatalf("count live_tasks: %v", err)
+	}
+	if live != 0 {
+		t.Errorf("bulk-cleared tasks visible through live_tasks (%d row(s))", live)
+	}
+
+	if got := allocatorFloor(t, db); got != 912 {
+		t.Errorf("allocator floor after replaying bulk clear = %d, want 912 "+
+			"(a lower value means the cleared ids were re-freed)", got)
+	}
+}

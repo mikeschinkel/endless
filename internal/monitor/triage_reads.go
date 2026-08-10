@@ -117,7 +117,7 @@ func untriagedTasks(db *sql.DB, projectName string, limit int) ([]UntriagedTask,
 	// filing three follow-ups lands them in one second), so id breaks the tie
 	// and keeps the sweep's order deterministic across invocations.
 	query := `SELECT t.id, p.name, t.title
-	            FROM tasks t
+	            FROM live_tasks t
 	            JOIN projects p ON p.id = t.project_id
 	           WHERE t.status = 'untriaged'`
 	args := []any{}
@@ -171,7 +171,7 @@ func triageContext(db *sql.DB, taskID int64) (TriageContext, error) {
 		`SELECT p.name, p.path, t.title, COALESCE(t.description, ''),
 		        COALESCE(tt.slug, ''), t.phase, t.status,
 		        COALESCE(t.text, '') != '', t.parent_id
-		   FROM tasks t
+		   FROM live_tasks t
 		   JOIN projects p ON p.id = t.project_id
 		   LEFT JOIN task_types tt ON tt.id = t.type_id
 		  WHERE t.id = ?`, taskID,
@@ -210,7 +210,7 @@ func triageParent(db *sql.DB, parentID int64) (*TriageParent, error) {
 	p := TriageParent{ID: parentID}
 	err := db.QueryRow(
 		`SELECT title, COALESCE(description, ''), status
-		   FROM tasks WHERE id = ?`, parentID,
+		   FROM live_tasks WHERE id = ?`, parentID,
 	).Scan(&p.Title, &p.Description, &p.Status)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
@@ -223,7 +223,7 @@ func triageParent(db *sql.DB, parentID int64) (*TriageParent, error) {
 
 func triageSiblings(db *sql.DB, parentID, selfID int64) ([]string, error) {
 	rows, err := db.Query(
-		`SELECT title FROM tasks
+		`SELECT title FROM live_tasks
 		  WHERE parent_id = ? AND id != ?
 		  ORDER BY sort_order, id
 		  LIMIT ?`, parentID, selfID, triageSiblingLimit,

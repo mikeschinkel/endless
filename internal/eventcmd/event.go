@@ -622,7 +622,14 @@ func runRebuildDB(args []string) {
 		os.Exit(1)
 	}
 
-	// Delete current tasks for this project and insert from projection
+	// Delete current tasks for this project and insert from projection.
+	//
+	// Raw `tasks` on both sides, never live_tasks (E-1929): this is a wholesale
+	// replacement of the table from the ledger, so removed rows must be cleared
+	// and re-inserted with their removed flag intact. Filtering either side would
+	// drop the retained rows and re-free their ids — the failure ED-1547 names.
+	// `SELECT *` carries the flag across because schema.sql declares `removed`
+	// last on tasks, the same position ALTER TABLE gives it on a migrated DB.
 	if _, err := tx.Exec("DELETE FROM tasks WHERE project_id IN (SELECT id FROM projects WHERE name IN (SELECT name FROM proj.projects))"); err != nil {
 		tx.Rollback()
 		os.Remove(tempPath)

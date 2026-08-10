@@ -433,7 +433,7 @@ def _main_root_for_task(task_id: int) -> Path | None:
     """Return the registered main-checkout root of the project that owns this task."""
     row = db.query(
         "SELECT p.path FROM projects p "
-        "JOIN tasks t ON t.project_id = p.id "
+        "JOIN live_tasks t ON t.project_id = p.id "
         "WHERE t.id = ? LIMIT 1",
         (task_id,),
     )
@@ -975,18 +975,32 @@ def show_plan(
     llm: bool = False,
     as_json: bool = False,
     type_filter: str | None = None,
+    removed_only: bool = False,
 ):
     """Show tasks for a project as a flat sorted table.
 
     When type_filter is set (e.g. "epic"), the query joins task_types and
     keeps only rows whose type slug matches — this is the single-source
     listing path shared by `endless epic list`.
+
+    `removed_only` (E-1929) REPLACES the live set rather than adding to it: it
+    reads the raw `tasks` table filtered to removed = 1, so removed and live
+    rows never interleave in one listing. It also bypasses the default
+    terminal-status exclusion — a removed task keeps whatever status it had, and
+    "show me what was removed" should not silently drop the obsolete ones. An
+    explicit --status still narrows it.
     """
     project_id, proj_name = _resolve_project(project_name)
 
+    # Reads go through live_tasks so removed rows can never leak into a listing.
+    # --removed is the one exception, and says so above.
+    table = "tasks" if removed_only else "live_tasks"
     join = ""
     where = "WHERE pi.project_id = ?"
     params: list = [project_id]
+    if removed_only:
+        where += " AND pi.removed = 1"
+        show_all = True
     if type_filter is not None:
         join = " JOIN task_types tt ON tt.id = pi.type_id"
         where += " AND tt.slug = ?"
@@ -1038,20 +1052,21 @@ def show_plan(
         f"SELECT pi.id, pi.phase, COALESCE(pi.title, pi.description) as title, "
         f"pi.description, pi.status, pi.parent_id, "
         f"pi.created_at, pi.completed_at, pi.tier "
-        f"FROM tasks pi{join} {where} "
+        f"FROM {table} pi{join} {where} "
         f"ORDER BY {order_by}",
         tuple(params),
     )
 
+    noun = "removed tasks" if removed_only else "tasks"
     if not rows:
         if as_json:
             click.echo("[]")
         elif llm:
-            click.echo(f"# {proj_name}\n(no tasks)")
+            click.echo(f"# {proj_name}\n(no {noun})")
         else:
             click.echo(
                 click.style("•", fg="cyan")
-                + f" No tasks for "
+                + f" No {noun} for "
                 + click.style(proj_name, bold=True)
             )
         return
@@ -1075,7 +1090,7 @@ def show_plan(
         return
 
     if llm:
-        click.echo(f"# {proj_name}")
+        click.echo(f"# {proj_name} (removed)" if removed_only else f"# {proj_name}")
         for row in rows:
             tier_val = row["tier"]
             tier_str = f" tier={_TIER_LABELS[tier_val]}" if tier_val else ""
@@ -1088,7 +1103,11 @@ def show_plan(
     # Header
     click.echo()
     click.echo(
-        click.style(f"Tasks for {proj_name}", bold=True)
+        click.style(
+            f"Removed tasks for {proj_name}" if removed_only
+            else f"Tasks for {proj_name}",
+            bold=True,
+        )
     )
 
     _render_flat_table(rows)
@@ -1120,12 +1139,12 @@ def next_tasks(
     # where the routing decision belongs.
     where = (
         "WHERE t.status NOT IN ('confirmed', 'assumed', 'completed', 'blocked', 'declined', 'obsolete', 'underway', 'unverified', 'submitted', 'untriaged') "
-        "AND (SELECT count(*) FROM tasks c WHERE c.parent_id = t.id) = 0 "
+        "AND (SELECT count(*) FROM live_tasks c WHERE c.parent_id = t.id) = 0 "
         "AND t.id NOT IN ("
         "  SELECT td.target_id FROM task_deps td"
         "  WHERE td.target_type = 'task' AND td.dep_type = 'blocks'"
         "    AND td.source_id IN ("
-        "      SELECT t2.id FROM tasks t2 "
+        "      SELECT t2.id FROM live_tasks t2 "
         "      WHERE t2.status NOT IN ('confirmed', 'assumed', 'completed')"
         "    )"
         ")"
@@ -1166,7 +1185,7 @@ def next_tasks(
     rows = db.query(
         f"SELECT t.id, t.phase, COALESCE(t.title, t.description) as title, "
         f"t.status, t.tier, p.name as project_name "
-        f"FROM tasks t "
+        f"FROM live_tasks t "
         f"JOIN projects p ON t.project_id = p.id "
         f"{where} "
         f"ORDER BY "
@@ -1344,7 +1363,7 @@ def active_tasks(
     rows = db.query(
         f"SELECT t.id, t.phase, COALESCE(t.title, t.description) as title, "
         f"t.status, t.tier, p.name as project_name "
-        f"FROM tasks t "
+        f"FROM live_tasks t "
         f"JOIN projects p ON t.project_id = p.id "
         f"{where} "
         f"ORDER BY "
@@ -1435,7 +1454,7 @@ def recent_tasks(
     rows = db.query(
         f"SELECT t.id, t.phase, COALESCE(t.title, t.description) as title, "
         f"t.status, t.tier, p.name as project_name "
-        f"FROM tasks t "
+        f"FROM live_tasks t "
         f"JOIN projects p ON t.project_id = p.id "
         f"{where} "
         f"ORDER BY t.updated_at DESC "
@@ -1553,7 +1572,7 @@ def landed_list(
         f"t.status, t.tier, p.name AS project_name, "
         f"MAX(l.landed_at) AS last_landed, COUNT(l.id) AS land_count "
         f"FROM task_landings l "
-        f"JOIN tasks t ON t.id = l.task_id "
+        f"JOIN live_tasks t ON t.id = l.task_id "
         f"JOIN projects p ON t.project_id = p.id "
         f"{where} "
         f"GROUP BY t.id "
@@ -1615,7 +1634,7 @@ def landed_item(item_id: int, llm: bool = False, as_json: bool = False):
     row = db.query(
         "SELECT t.id, COALESCE(t.title, t.description) AS title, "
         "p.name AS project_name "
-        "FROM tasks t JOIN projects p ON t.project_id = p.id "
+        "FROM live_tasks t JOIN projects p ON t.project_id = p.id "
         "WHERE t.id = ?",
         (item_id,),
     )
@@ -1752,7 +1771,7 @@ def _unsettled_rows(project_id: int, root: Path) -> list[dict]:
         r["id"]: {"title": r["title"], "status": r["status"], "phase": r["phase"]}
         for r in db.query(
             "SELECT t.id, COALESCE(t.title, t.description) AS title, t.status, t.phase "
-            "FROM tasks t WHERE t.project_id = ? AND t.id IN "
+            "FROM live_tasks t WHERE t.project_id = ? AND t.id IN "
             f"({','.join('?' * len(ids))})",
             (project_id, *ids),
         )
@@ -1899,7 +1918,7 @@ def unsettled_item(item_id: int, llm: bool = False, as_json: bool = False):
     row = db.query(
         "SELECT t.id, COALESCE(t.title, t.description) AS title, t.status, "
         "p.name AS project_name "
-        "FROM tasks t JOIN projects p ON t.project_id = p.id WHERE t.id = ?",
+        "FROM live_tasks t JOIN projects p ON t.project_id = p.id WHERE t.id = ?",
         (item_id,),
     )
     from endless.worktree_cmd import _project_root
@@ -2027,7 +2046,7 @@ def _research_gate_check(parent_id: int | None, justification: str | None) -> No
         raise click.ClickException(_RESEARCH_GATE_MSG)
     row = db.query(
         "SELECT t.status, COALESCE(tt.slug, '') AS type_slug "
-        "FROM tasks t LEFT JOIN task_types tt ON tt.id = t.type_id "
+        "FROM live_tasks t LEFT JOIN task_types tt ON tt.id = t.type_id "
         "WHERE t.id = ?",
         (parent_id,),
     )
@@ -2238,14 +2257,14 @@ def _hint_backlog_pressure(item_id: int) -> list[str]:
     moment of filing unless something states it, so state it.
     """
     row = db.query(
-        "SELECT t.project_id AS pid, p.name AS name FROM tasks t "
+        "SELECT t.project_id AS pid, p.name AS name FROM live_tasks t "
         "JOIN projects p ON p.id = t.project_id WHERE t.id = ?",
         (item_id,),
     )
     if not row:
         return []
     count = db.scalar(
-        "SELECT count(*) FROM tasks WHERE project_id = ? "
+        "SELECT count(*) FROM live_tasks WHERE project_id = ? "
         "AND status IN ('untriaged', 'unplanned')",
         (row[0]["pid"],),
     ) or 0
@@ -2273,7 +2292,7 @@ def _hint_same_session_root_cause(
         "SELECT st.task_id AS id, COALESCE(t.title, t.description) AS title "
         "FROM session_tasks st "
         "JOIN session_task_relations r ON r.id = st.relation_id "
-        "JOIN tasks t ON t.id = st.task_id "
+        "JOIN live_tasks t ON t.id = st.task_id "
         "WHERE st.session_id = ? AND r.slug = 'surfaced' AND st.task_id != ? "
         "ORDER BY st.task_id",
         (session_id, item_id),
@@ -2374,20 +2393,24 @@ def import_json(
 
 
 def _removal_id_set(item_id: int, cascade: bool) -> list[int]:
-    """Every task id a `task remove` would delete.
+    """Every task id a `task remove` would remove.
 
     Without `--cascade` that is the one task; with it, the task plus its full
     descendant set. The guard below has to check all of them: if only the root
-    were checked, removing a parent would delete a child *and* orphan the
+    were checked, removing a parent would remove a child *and* orphan the
     child's relations, bypassing the guard entirely.
+
+    Reads live_tasks (E-1929), matching the Go executor's own enumeration: an
+    already-removed descendant is not re-removed, and the walk covers exactly
+    the rows that would have existed back when removal was a hard delete.
     """
     if not cascade:
         return [item_id]
     rows = db.query(
         "WITH RECURSIVE tree(id) AS ("
-        "  SELECT id FROM tasks WHERE id = ?"
+        "  SELECT id FROM live_tasks WHERE id = ?"
         "  UNION ALL"
-        "  SELECT t.id FROM tasks t JOIN tree ON t.parent_id = tree.id"
+        "  SELECT t.id FROM live_tasks t JOIN tree ON t.parent_id = tree.id"
         ") SELECT id FROM tree",
         (item_id,),
     )
@@ -2416,7 +2439,12 @@ def _relations_referencing(ids: list[int]) -> list[tuple[int, str]]:
     rows discriminated by source_type/target_type; `decision_relations` carries
     the decision→task rows. Neither can declare a foreign key on the task
     endpoint — SQLite cannot express an FK whose target table varies by row —
-    so a task delete leaves both behind, and task ids are reused.
+    so a task removal leaves both behind.
+
+    E-1929 closed the second half of that exposure (ids are no longer re-minted,
+    so a left-behind row can never reattach to unrelated work), but this guard
+    still stands on its own: a relation that survives its task is a dangling
+    reference whether or not something else can inherit it.
     """
     if not ids:
         return []
@@ -2503,7 +2531,7 @@ def _refuse_removal_with_relations(
     again.
 
     Must run BEFORE the task.deleted event is emitted, or a refusal would
-    publish a deletion that never happened.
+    publish a removal that never happened.
     """
     found = _relations_referencing(ids)
     if not found:
@@ -2520,13 +2548,13 @@ def _refuse_removal_with_relations(
 
 
 def _refuse_bulk_clear_with_relations(project_id: int, source_file: str) -> None:
-    """Refuse a bulk clear while relations reference any task it would delete.
+    """Refuse a bulk clear while relations reference any task it would remove.
 
-    E-1927: `task import --replace` and `task import-json --clear` delete tasks
-    by emitting task.bulk_cleared, which the Go executor runs as a straight
-    `DELETE FROM tasks WHERE project_id = ? AND source_file = ?`. That never
-    passes through `remove_item`, so before this the two import verbs orphaned
-    relation rows exactly as `task remove` did before E-1915.
+    E-1927: `task import --replace` and `task import-json --clear` remove tasks
+    by emitting task.bulk_cleared, which the Go executor runs as a bulk removal
+    of every task that project's source file owns. That never passes through
+    `remove_item`, so before this the two import verbs orphaned relation rows
+    exactly as `task remove` did before E-1915.
 
     Same rule, same message: a severed relation is unrecoverable however the
     task went away, and an imported task that has since been linked to is no
@@ -2537,7 +2565,7 @@ def _refuse_bulk_clear_with_relations(project_id: int, source_file: str) -> None
     """
     ids = [
         r["id"] for r in db.query(
-            "SELECT id FROM tasks WHERE project_id = ? AND source_file = ?",
+            "SELECT id FROM live_tasks WHERE project_id = ? AND source_file = ?",
             (project_id, source_file),
         )
     ]
@@ -2554,11 +2582,19 @@ def _refuse_bulk_clear_with_relations(project_id: int, source_file: str) -> None
 
 
 def remove_item(item_id: int, cascade: bool = False):
-    """Remove a task."""
+    """Remove a task.
+
+    E-1929: removal marks the row `removed = 1` rather than deleting it, so the
+    id is never re-minted and the FK-free rows that outlive a task can never
+    reattach to unrelated work. The guards and messaging here are unchanged —
+    only what the emitted event does to the row. The task disappears from every
+    listing; `task show E-NNN` still renders it, marked removed, and
+    `task list --removed` lists them.
+    """
     from endless.event_bridge import emit_event
 
     row = db.query(
-        "SELECT id, COALESCE(title, description) as title FROM tasks WHERE id = ?",
+        "SELECT id, COALESCE(title, description) as title FROM live_tasks WHERE id = ?",
         (item_id,),
     )
     if not row:
@@ -2567,22 +2603,22 @@ def remove_item(item_id: int, cascade: bool = False):
         )
 
     child_count = db.scalar(
-        "SELECT count(*) FROM tasks WHERE parent_id = ?",
+        "SELECT count(*) FROM live_tasks WHERE parent_id = ?",
         (item_id,),
     ) or 0
 
     if child_count > 0 and not cascade:
         raise click.ClickException(
             f"Task {task_id_display(item_id)} has {child_count} child(ren). "
-            f"Use --cascade to delete it and all descendants."
+            f"Use --cascade to remove it and all descendants."
         )
 
-    # The ids this removal will delete: the task, plus its descendants under
-    # --cascade. Computed ONCE, here, before anything is deleted — both the
+    # The ids this removal covers: the task, plus its descendants under
+    # --cascade. Computed ONCE, here, before anything is removed — both the
     # relation guard and the descendant count reported below read it.
     removal_ids = _removal_id_set(item_id, cascade)
 
-    # E-1915: refuse while relations still point at any id being deleted. There
+    # E-1915: refuse while relations still point at any id being removed. There
     # is deliberately no flag to remove a task and its relations in one step —
     # `--cascade` above is about CHILDREN and predates this.
     _refuse_removal_with_relations(item_id, cascade, removal_ids)
@@ -2602,8 +2638,8 @@ def remove_item(item_id: int, cascade: bool = False):
     if cascade and child_count > 0:
         # E-1928: read off removal_ids, captured before the emit above. This
         # used to run its own recursive query HERE — after emit_event, which
-        # executes the delete synchronously — so the CTE always seeded from an
-        # already-empty table and every cascade reported "0 descendant(s)".
+        # executes the removal synchronously — so the CTE always seeded from an
+        # already-cleared set and every cascade reported "0 descendant(s)".
         desc_count = len(removal_ids) - 1
         click.echo(
             click.style("•", fg="cyan")
@@ -2618,7 +2654,7 @@ def remove_item(item_id: int, cascade: bool = False):
 
 def _next_sort_order(project_id: int, phase: str) -> int:
     val = db.scalar(
-        "SELECT MAX(sort_order) FROM tasks "
+        "SELECT MAX(sort_order) FROM live_tasks "
         "WHERE project_id = ? AND phase = ?",
         (project_id, phase),
     )
@@ -2764,13 +2800,13 @@ def _refuse_cascade_across_typed_descendants(item_id: int, status: str):
         return
     offenders = db.query(
         "WITH RECURSIVE tree(id) AS ("
-        "  SELECT id FROM tasks WHERE id = ?"
+        "  SELECT id FROM live_tasks WHERE id = ?"
         "  UNION ALL"
-        "  SELECT t.id FROM tasks t JOIN tree ON t.parent_id = tree.id"
+        "  SELECT t.id FROM live_tasks t JOIN tree ON t.parent_id = tree.id"
         ") "
         "SELECT t.id, COALESCE(t.title, t.description) AS title, "
         "       COALESCE(tt.slug, '') AS type "
-        "FROM   tasks t "
+        "FROM live_tasks t "
         "LEFT JOIN task_types tt ON tt.id = t.type_id "
         "WHERE  t.id IN (SELECT id FROM tree) "
         "  AND  COALESCE(tt.slug, '') IN ('research', 'epic') "
@@ -2855,7 +2891,7 @@ def complete_item(item_id: int, cascade: bool = False, outcome: str | None = Non
     row = db.query(
         "SELECT t.id, COALESCE(t.title, t.description) as title, t.status, "
         "       COALESCE(tt.slug, '') AS type "
-        "FROM   tasks t "
+        "FROM live_tasks t "
         "LEFT JOIN task_types tt ON tt.id = t.type_id "
         "WHERE  t.id = ?",
         (item_id,),
@@ -2902,9 +2938,9 @@ def complete_item(item_id: int, cascade: bool = False, outcome: str | None = Non
     if cascade:
         count = db.scalar(
             "WITH RECURSIVE tree(id) AS ("
-            "  SELECT id FROM tasks WHERE id = ?"
+            "  SELECT id FROM live_tasks WHERE id = ?"
             "  UNION ALL"
-            "  SELECT t.id FROM tasks t JOIN tree ON t.parent_id = tree.id"
+            "  SELECT t.id FROM live_tasks t JOIN tree ON t.parent_id = tree.id"
             ") SELECT count(*) FROM tree",
             (item_id,),
         ) or 1
@@ -2919,7 +2955,7 @@ def assume_item(item_id: int, cascade: bool = False, outcome: str | None = None)
     row = db.query(
         "SELECT t.id, COALESCE(t.title, t.description) as title, t.status, "
         "       COALESCE(tt.slug, '') AS type "
-        "FROM   tasks t "
+        "FROM live_tasks t "
         "LEFT JOIN task_types tt ON tt.id = t.type_id "
         "WHERE  t.id = ?",
         (item_id,),
@@ -2966,9 +3002,9 @@ def assume_item(item_id: int, cascade: bool = False, outcome: str | None = None)
     if cascade:
         count = db.scalar(
             "WITH RECURSIVE tree(id) AS ("
-            "  SELECT id FROM tasks WHERE id = ?"
+            "  SELECT id FROM live_tasks WHERE id = ?"
             "  UNION ALL"
-            "  SELECT t.id FROM tasks t JOIN tree ON t.parent_id = tree.id"
+            "  SELECT t.id FROM live_tasks t JOIN tree ON t.parent_id = tree.id"
             ") SELECT count(*) FROM tree",
             (item_id,),
         ) or 1
@@ -2991,8 +3027,8 @@ def mark_completed_item(item_id: int, outcome: str):
 
     row = db.query(
         "SELECT id, COALESCE(title, description) as title, status, "
-        "       COALESCE((SELECT slug FROM task_types WHERE id = tasks.type_id), '') AS type "
-        "FROM tasks WHERE id = ?",
+        "       COALESCE((SELECT slug FROM task_types WHERE id = live_tasks.type_id), '') AS type "
+        "FROM live_tasks WHERE id = ?",
         (item_id,),
     )
     if not row:
@@ -3046,7 +3082,7 @@ def decline_item(item_id: int, reason: str):
     _require_outcome_for_declined("declined", reason)
 
     row = db.query(
-        "SELECT id, COALESCE(title, description) as title, status FROM tasks "
+        "SELECT id, COALESCE(title, description) as title, status FROM live_tasks "
         "WHERE id = ?",
         (item_id,),
     )
@@ -3132,7 +3168,7 @@ def submit_item(item_id: int):
     from endless.event_bridge import emit_event
 
     row = db.query(
-        "SELECT id, COALESCE(title, description) as title, status FROM tasks "
+        "SELECT id, COALESCE(title, description) as title, status FROM live_tasks "
         "WHERE id = ?",
         (item_id,),
     )
@@ -3191,7 +3227,7 @@ def approve_item(item_id: int):
         )
 
     row = db.query(
-        "SELECT id, COALESCE(title, description) as title, status FROM tasks "
+        "SELECT id, COALESCE(title, description) as title, status FROM live_tasks "
         "WHERE id = ?",
         (item_id,),
     )
@@ -3800,7 +3836,7 @@ def claim_item(item_id: int, force: bool = False):
     resolves and not force: refuse.
     """
     row = db.query(
-        "SELECT id, COALESCE(title, description) as title, status FROM tasks "
+        "SELECT id, COALESCE(title, description) as title, status FROM live_tasks "
         "WHERE id = ?",
         (item_id,),
     )
@@ -3933,7 +3969,7 @@ def bind_item(item_id: int) -> None:
     from endless.event_bridge import emit_event
 
     row = db.query(
-        "SELECT id, COALESCE(title, description) as title, status FROM tasks "
+        "SELECT id, COALESCE(title, description) as title, status FROM live_tasks "
         "WHERE id = ?",
         (item_id,),
     )
@@ -4154,7 +4190,7 @@ def _reopen_task_core(item_id: int) -> tuple[str, str, bool]:
 
     row = db.query(
         "SELECT id, COALESCE(title, description) as title, status, text "
-        "FROM tasks WHERE id = ?",
+        "FROM live_tasks WHERE id = ?",
         (item_id,),
     )
     if not row:
@@ -4267,9 +4303,9 @@ def update_plan(
 
     row = db.query(
         "SELECT id, title, description, text, notes, status, "
-        "       COALESCE((SELECT slug FROM task_types WHERE id = tasks.type_id), '') AS type, "
+        "       COALESCE((SELECT slug FROM task_types WHERE id = live_tasks.type_id), '') AS type, "
         "       phase, tier, parent_id, outcome, analysis "
-        "FROM   tasks WHERE id = ?",
+        "FROM live_tasks WHERE id = ?",
         (item_id,),
     )
     if not row:
@@ -4738,11 +4774,16 @@ def detail_item(
     which inverts what an epic nearing completion needs to see: the confirmed
     children ARE the progress (E-1911).
     """
+    # Raw `tasks`, NOT live_tasks (E-1929). This is the payoff for retaining a
+    # removed row: `task show E-NNN` on an id that is now a hole explains itself
+    # — who filed it, what it said, that it was removed — instead of erroring as
+    # if the id had never existed. Every OTHER read here goes through live_tasks.
     row = db.query(
         "SELECT t.id, t.title, t.description, t.analysis, t.text, t.phase, t.status, "
         "COALESCE(tt.slug, '') AS type, "
         "t.parent_id, t.source_file, t.created_at, t.updated_at, "
-        "t.completed_at, t.sort_order, t.tier, t.outcome, p.name as project_name "
+        "t.completed_at, t.sort_order, t.tier, t.outcome, t.removed, "
+        "p.name as project_name "
         "FROM tasks t "
         "JOIN projects p ON t.project_id = p.id "
         "LEFT JOIN task_types tt ON tt.id = t.type_id "
@@ -4800,11 +4841,15 @@ def detail_item(
             "analysis_chars": len(item["analysis"]) if item["analysis"] else None,
             "text_chars": len(item["text"]) if item["text"] else None,
             "outcome_chars": len(item["outcome"]) if item["outcome"] else None,
+            # E-1929: the row is retained after `task remove`, so a consumer must
+            # be able to tell a removed task from a live one. Always present, so
+            # the absence of the key never reads as "live".
+            "removed": bool(item["removed"]),
         }
         if show_children:
             children = db.query(
                 "SELECT id, COALESCE(title, description) as title, status, phase "
-                "FROM tasks WHERE parent_id = ? "
+                "FROM live_tasks WHERE parent_id = ? "
                 "ORDER BY sort_order",
                 (item_id,),
             )
@@ -4818,6 +4863,11 @@ def detail_item(
 
     if llm:
         click.echo(f"# E-{item['id']} {item['title']}")
+        if item["removed"]:
+            # First line after the title, before anything else (E-1929): every
+            # field below describes a task that no longer exists, and an agent
+            # that skims must not act on it.
+            click.echo("removed=true")
         click.echo(f"project={item['project_name']}")
         tier_str = f" tier={tier_display(item['tier'])}" if item["tier"] else ""
         click.echo(f"type={item['type']} phase={item['phase']} "
@@ -4866,7 +4916,7 @@ def detail_item(
         if show_children:
             children = db.query(
                 "SELECT id, COALESCE(title, description) as title, status, phase "
-                "FROM tasks WHERE parent_id = ? "
+                "FROM live_tasks WHERE parent_id = ? "
                 "ORDER BY id",
                 (item_id,),
             )
@@ -4951,6 +5001,15 @@ def _render_detail_human(
     click.echo(click.style("Task Detail", fg="green", bold=True))
     click.echo(click.style("───────────", dim=True))
 
+    # E-1929: `task remove` retains the row, and this command is the one place it
+    # is still visible. Say so LOUDLY and FIRST — the fields below describe a task
+    # that no longer exists, and reading them as current is the whole risk of
+    # retaining it.
+    if item["removed"]:
+        click.echo(click.style("⊘ REMOVED — this task no longer exists.", fg="red", bold=True))
+        click.echo(click.style(
+            "  Its id is retained so nothing can be re-filed under it.", dim=True))
+
     click.echo(f"{label('ID:')} {val(task_id_display(item['id']))}")
     click.echo(f"{label('Title:')} {val(item['title'])}")
     click.echo(f"{label('Project:')} {val(item['project_name'])}")
@@ -5000,7 +5059,7 @@ def _render_detail_human(
     if show_children:
         children = db.query(
             "SELECT id, COALESCE(title, description) as title, status, phase "
-            "FROM tasks WHERE parent_id = ? "
+            "FROM live_tasks WHERE parent_id = ? "
             "ORDER BY id",
             (item_id,),
         )
@@ -5072,7 +5131,7 @@ def _children_state(parent_id: int) -> str:
     children it returns ``"no children yet"``. See E-1567.
     """
     rows = db.query(
-        "SELECT status, count(*) AS n FROM tasks WHERE parent_id = ? "
+        "SELECT status, count(*) AS n FROM live_tasks WHERE parent_id = ? "
         "GROUP BY status",
         (parent_id,),
     )
@@ -5139,7 +5198,7 @@ def render_handoff(spawned_id: int, title: str,
 
     effective_type = task_type if task_type in _HANDOFF_TYPES else "todo"
     child_rows = db.query(
-        "SELECT count(*) AS n FROM tasks WHERE parent_id = ?",
+        "SELECT count(*) AS n FROM live_tasks WHERE parent_id = ?",
         (spawned_id,),
     )
     child_count = child_rows[0]["n"] if child_rows else 0
@@ -5181,7 +5240,7 @@ def show_handoff(item_id: int):
     """Render the spawn handoff for a task and print it."""
     row = db.query(
         "SELECT t.id, t.title, t.parent_id, COALESCE(tt.slug, '') AS type_slug "
-        "FROM tasks t LEFT JOIN task_types tt ON tt.id = t.type_id "
+        "FROM live_tasks t LEFT JOIN task_types tt ON tt.id = t.type_id "
         "WHERE t.id = ?",
         (item_id,),
     )
@@ -5528,7 +5587,7 @@ def spawn_plan(item_id: int, project_name: str | None = None,
         "SELECT p.id, p.title, p.status, p.project_id, p.parent_id, "
         "proj.path as project_path, proj.name as project_name, "
         "COALESCE(tt.slug, '') AS type_slug "
-        "FROM tasks p "
+        "FROM live_tasks p "
         "JOIN projects proj ON p.project_id = proj.id "
         "LEFT JOIN task_types tt ON tt.id = p.type_id "
         "WHERE p.id = ?",
@@ -5646,7 +5705,7 @@ def spawn_plan(item_id: int, project_name: str | None = None,
         # _perform_claim_work below sees the post-reopen status and
         # promotes revisit → underway on its own.
         current_status = db.query(
-            "SELECT status FROM tasks WHERE id = ?", (item_id,),
+            "SELECT status FROM live_tasks WHERE id = ?", (item_id,),
         )[0]["status"]
 
     # Mirror claim's done-ish-status gate
@@ -6042,7 +6101,7 @@ def search_tasks(
     rows = db.query(
         f"SELECT t.id, t.phase, COALESCE(t.title, t.description) as title, "
         f"t.status "
-        f"FROM tasks t "
+        f"FROM live_tasks t "
         f"{where} "
         f"ORDER BY t.updated_at DESC "
         f"LIMIT ?",
@@ -6131,7 +6190,7 @@ def move_task(
     target_parent_id = None
     if parent:
         row = db.query(
-            "SELECT id FROM tasks WHERE id = ?",
+            "SELECT id FROM live_tasks WHERE id = ?",
             (parent,),
         )
         if not row:
@@ -6145,7 +6204,7 @@ def move_task(
     if children_of:
         # Verify source parent exists
         row = db.query(
-            "SELECT id FROM tasks WHERE id = ?",
+            "SELECT id FROM live_tasks WHERE id = ?",
             (children_of,),
         )
         if not row:
@@ -6155,7 +6214,7 @@ def move_task(
 
         # Count children
         count = db.scalar(
-            "SELECT count(*) FROM tasks WHERE parent_id = ?",
+            "SELECT count(*) FROM live_tasks WHERE parent_id = ?",
             (children_of,),
         ) or 0
         if count == 0:
@@ -6182,7 +6241,7 @@ def move_task(
 
     # Verify task exists
     row = db.query(
-        "SELECT id, parent_id, phase FROM tasks WHERE id = ?",
+        "SELECT id, parent_id, phase FROM live_tasks WHERE id = ?",
         (item_id,),
     )
     if not row:
@@ -6251,7 +6310,7 @@ def link_tasks(source_id: int, target_id: int, dep_type: str):
     if source_id == target_id:
         raise click.ClickException("A task cannot link to itself.")
     for tid in (source_id, target_id):
-        if not db.exists("SELECT 1 FROM tasks WHERE id = ?", (tid,)):
+        if not db.exists("SELECT 1 FROM live_tasks WHERE id = ?", (tid,)):
             raise click.ClickException(f"Task {task_id_display(tid)} not found.")
 
     stored, swap = CANONICAL_DEP_TYPES[dep_type]
@@ -6405,7 +6464,7 @@ def replace_task(old_id: int, new_id: int, status: str = "obsolete", outcome: st
     if old_id == new_id:
         raise click.ClickException("A task cannot replace itself.")
     for tid in (old_id, new_id):
-        if not db.exists("SELECT 1 FROM tasks WHERE id = ?", (tid,)):
+        if not db.exists("SELECT 1 FROM live_tasks WHERE id = ?", (tid,)):
             raise click.ClickException(f"Task {task_id_display(tid)} not found.")
 
     # "old replaced_by new" → display='replaced_by' resolves to stored='replaces' with
@@ -6421,7 +6480,7 @@ def replace_task(old_id: int, new_id: int, status: str = "obsolete", outcome: st
 
     old_status_row = db.query(
         "SELECT COALESCE(title, description) as title, status "
-        "FROM   tasks WHERE id = ?", (old_id,)
+        "FROM live_tasks WHERE id = ?", (old_id,)
     )
     payload = {
         "old_status": old_status_row[0]["status"],
@@ -6464,8 +6523,8 @@ def get_all_relations(item_id: int) -> dict[str, list]:
         "       t_src.title as src_title, t_src.status as src_status, "
         "       t_tgt.title as tgt_title, t_tgt.status as tgt_status "
         "FROM   task_deps td "
-        "JOIN   tasks t_src ON t_src.id = td.source_id "
-        "JOIN   tasks t_tgt ON t_tgt.id = td.target_id "
+        "JOIN live_tasks t_src ON t_src.id = td.source_id "
+        "JOIN live_tasks t_tgt ON t_tgt.id = td.target_id "
         "WHERE  td.source_type = 'task' AND td.target_type = 'task' "
         "AND    (td.source_id = ? OR td.target_id = ?) "
         "ORDER BY td.dep_type, td.source_id, td.target_id",
@@ -6733,7 +6792,7 @@ def _related_task_ids(item_id: int, rel_type: str | None = None) -> list[int]:
 
 def show_relations(item_id: int, llm: bool = False):
     """Show all of a task's relations under a single 'Links:' section (E-1477)."""
-    if not db.exists("SELECT 1 FROM tasks WHERE id = ?", (item_id,)):
+    if not db.exists("SELECT 1 FROM live_tasks WHERE id = ?", (item_id,)):
         raise click.ClickException(f"Task {task_id_display(item_id)} not found.")
 
     if llm:

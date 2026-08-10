@@ -215,9 +215,43 @@ CREATE TABLE IF NOT EXISTS tasks (
     analysis TEXT,
     notes TEXT,
     changed_by_session INTEGER,
+    removed INTEGER NOT NULL DEFAULT 0,
     FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
     FOREIGN KEY (parent_id) REFERENCES tasks(id) ON DELETE SET NULL
 );
+
+-- live_tasks (E-1929, implementing ED-1547) is the read surface for tasks.
+-- `task remove` no longer DELETEs: it sets removed = 1, so the id can never be
+-- re-minted and the FK-free rows that deliberately outlive their task
+-- (session_tasks, session_notices, task_landings) can never resurrect against
+-- unrelated work.
+--
+-- Retaining the row is what makes this view mandatory rather than cosmetic.
+-- Every read that used to drop a dangling reference by accident — an inner join
+-- to `tasks` that simply matched nothing — now MATCHES the retained row, so a
+-- removed task leaks into `task list`, `session status` and the monitor unless
+-- the read goes through here. A view rather than an `AND removed = 0` at every
+-- site because the filter is a property of "what a task is", and one omission is
+-- a silent leak.
+--
+-- Reads use live_tasks; writes must keep naming `tasks` (SQLite views are not
+-- writable). Three deliberate exceptions read `tasks` directly and say so at
+-- their call site: the task-id allocator in internal/events/executor.go (see the
+-- warning below), the removal path itself (it must see and set what the view
+-- hides), and `task show` / `task list --removed`, which exist to render a
+-- removed task.
+--
+-- WARNING: the allocator's `SELECT COALESCE(MAX(id), 0) + 1 FROM tasks` must
+-- NEVER be pointed at this view. Through live_tasks, MAX(id) drops back past
+-- every removed row and ids get reused again — reintroducing the exact bug this
+-- change exists to fix, while appearing to fix it.
+--
+-- SELECT * is deliberate: the view inherits future tasks columns automatically,
+-- so ALTER TABLE does not need a matching edit here.
+CREATE VIEW IF NOT EXISTS live_tasks AS
+    SELECT * FROM tasks WHERE removed = 0;
+
+CREATE INDEX IF NOT EXISTS idx_tasks_removed ON tasks(removed);
 
 CREATE TRIGGER IF NOT EXISTS tasks_updated_at AFTER UPDATE ON tasks
 BEGIN

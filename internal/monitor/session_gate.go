@@ -30,10 +30,10 @@ func NearestRevisitEpicAncestor(taskID int64) (epicID int64, found bool, err err
 	}
 	const q = `
 		WITH RECURSIVE ancestry(id, parent_id, type_id, status, depth) AS (
-			SELECT id, parent_id, type_id, status, 0 FROM tasks WHERE id = ?
+			SELECT id, parent_id, type_id, status, 0 FROM live_tasks WHERE id = ?
 			UNION ALL
 			SELECT t.id, t.parent_id, t.type_id, t.status, a.depth + 1
-			FROM tasks t JOIN ancestry a ON t.id = a.parent_id
+			FROM live_tasks t JOIN ancestry a ON t.id = a.parent_id
 			WHERE a.depth < 32
 		)
 		SELECT a.id
