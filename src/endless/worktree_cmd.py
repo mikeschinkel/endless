@@ -1894,6 +1894,144 @@ def _resolve_land_endless_go(worktree_path: Path, project_root: Path) -> str | N
     return str(wt_bin)
 
 
+def _refuse_if_behind_base(
+    worktree_path: Path, base_branch: str, canonical: str, project_root: Path
+) -> None:
+    """Refuse a self_dev land whose branch is behind base (E-1941).
+
+    A self_dev land runs the WORKTREE's endless-go against the REAL DB — first to
+    apply this branch's schema changes, then to record the landing. That binary is
+    built from the worktree's source, so if the source is behind main the binary
+    is behind main's DB, and it fails `VerifyIntegrity` on connect naming whatever
+    enum main added meanwhile. E-1709 made the binary match the SOURCE; nothing
+    made the source match MAIN. This does.
+
+    Refuse rather than auto-rebase: E-1898's own rebase stopped on a conflict, and
+    a rebase that stalls partway is worse than a clean refusal.
+
+    self_dev only. A downstream branch being behind main is the ordinary case the
+    land's rebase exists to handle — refusing there would break normal product
+    usage — and downstream branches carry no schema changes, so the binary/DB skew
+    this guards has no way to arise.
+    """
+    from endless import config
+    if not config.project_is_self_dev(project_root):
+        return
+    try:
+        out = _git_run(
+            ["rev-list", "--count", f"HEAD..{base_branch}"], cwd=worktree_path,
+        )
+    except subprocess.CalledProcessError as e:
+        raise click.ClickException(
+            f"git rev-list (behind-{base_branch} check) failed: {e.stderr or e}"
+        )
+    behind = int(out.stdout.strip() or "0")
+    if behind == 0:
+        return
+    commits = "commit" if behind == 1 else "commits"
+    raise click.ClickException(
+        f"cannot land {canonical}: the branch is {behind} {commits} behind "
+        f"{base_branch}.\n\n"
+        f"This land would run the worktree's endless-go against the real "
+        f"database — to apply schema changes and to record the landing. That "
+        f"binary is built from this worktree's source, so source behind "
+        f"{base_branch} means a binary behind the real DB, which fails its "
+        f"integrity check on connect.\n\n"
+        f"Bring the branch current, then retry:\n\n"
+        f"    cd {_display_path(worktree_path)}\n"
+        f"    git rebase {base_branch}\n\n"
+        f"If that rebase conflicts under {DB_LEDGER_DIR}/, {base_branch}'s "
+        f"history was probably rewritten beneath this branch — check with "
+        f"`git reflog show {base_branch}` for a 'rebase (finish)' entry (a "
+        f"`git pull` with pull.rebase=true does this), or `git cherry "
+        f"{base_branch} HEAD`, which reports the inherited commits as "
+        f"patch-equivalent. That conflict is a known unsolved problem (E-1943), "
+        f"not something to resolve by hand: the ledger is recorded on "
+        f"{base_branch} only, so hand-merging it corrupts shared history. Stop "
+        f"and ask."
+    )
+
+
+def _branch_schema_changes(worktree_path: Path, base_branch: str) -> list[str]:
+    """Repo-relative schema-change files this branch ADDS since base (E-1941).
+
+    Must be called while `base_branch` and the branch still differ — i.e. BEFORE
+    the ff-merge. Afterwards they are the same commit, the three-dot diff is
+    empty, and every change would be silently skipped.
+
+    The runner/ package is excluded: library code, not a change script.
+    """
+    out = _git_run(
+        [
+            "diff", f"{base_branch}...HEAD", "--diff-filter=A", "--name-only",
+            "--", "internal/schema/changes/",
+            ":(exclude)internal/schema/changes/runner/",
+        ],
+        cwd=worktree_path,
+    )
+    return [
+        ln.strip() for ln in out.stdout.splitlines()
+        if ln.strip().endswith((".sql", ".go"))
+    ]
+
+
+def _apply_branch_schema_changes(
+    rel_paths: list[str],
+    worktree_path: Path,
+    canonical: str,
+    base_branch: str,
+    endless_go_bin: str | None,
+) -> None:
+    """Back up, then apply this branch's schema changes — AFTER the ff-merge.
+
+    Ordering is the whole point of E-1941. Applying BEFORE the merge meant a
+    merge failure left the real DB migrated to a schema no installed binary
+    understood: unrecoverable without a restore, and on 2026-08-10 it froze
+    session tracking machine-wide. Applying AFTER inverts that asymmetry — main
+    has the code and the DB merely lags, which `endless db apply-change` fixes on
+    a re-run (it is idempotent, gated by _schema_version).
+
+    It cannot move later still: `_record_landing` runs this same binary against
+    the real DB, and for a branch adding a mirrored-enum value that binary
+    carries a constant the DB lacks until these changes land — E-1664's failure
+    inverted. Between the ff-merge and the record is the only correct place.
+
+    The backup is retained from the Justfile original: a change set can be
+    several files, so one can apply and the next fail, leaving a partial
+    migration no re-run heals — and there is still no `endless db restore`
+    (E-1942).
+    """
+    from endless.event_bridge import apply_change, backup_db
+
+    def _post_merge_failure(what: str, detail: str) -> click.ClickException:
+        return click.ClickException(
+            f"Landed {canonical} into {base_branch}: main was advanced, but "
+            f"{what} failed:\n\n{detail}\n\n"
+            f"The code is on {base_branch}; the database has not been migrated "
+            f"yet. Nothing is lost and no restore is needed — resolve the cause "
+            f"above and re-run `just land {canonical}`. The ff-merge is "
+            f"idempotent and each schema change is gated by _schema_version, so "
+            f"the retry applies only what is still outstanding."
+        )
+
+    click.echo(
+        click.style("•", fg="cyan") + " Backing up DB before applying schema changes"
+    )
+    try:
+        backup_db(endless_go_bin=endless_go_bin)
+    except Exception as e:
+        detail = e.message if isinstance(e, click.ClickException) else str(e)
+        raise _post_merge_failure("the pre-apply database backup", detail)
+
+    for rel in rel_paths:
+        click.echo(click.style("•", fg="cyan") + f" Applying schema change: {rel}")
+        try:
+            apply_change(str(worktree_path / rel), endless_go_bin=endless_go_bin)
+        except Exception as e:
+            detail = e.message if isinstance(e, click.ClickException) else str(e)
+            raise _post_merge_failure(f"applying schema change {rel}", detail)
+
+
 def _record_only_landing(
     canonical: str,
     sha: str | None,
@@ -2028,9 +2166,17 @@ def land_worktree(
       3. If auto-commit is non-empty: 'git add' and commit them as
          'Endless: auto-record session activity'.
       4. Rebase the worktree branch onto main (in the worktree).
+      4.5 List the schema changes this branch adds (while main and the branch
+         still differ — after Step 5 the diff is empty).
       5. ff-merge from main.
+      5.5 Apply those schema changes, self_dev only (E-1941). AFTER the merge,
+         so a failure leaves the DB lagging landed code (a re-run fixes it)
+         rather than migrated ahead of code that never landed.
       6. Emit task.landed event. Worktree dir and branch stay; a
          separate reaper sweep removes them after worktree_ttl.
+
+    A self_dev land also refuses up front when the branch is behind main
+    (E-1941): the binary it points at the real DB is built from this source.
 
     Retry up to LAND_MAX_RETRIES if a concurrent writer dirties auto-files
     between auto-commit and merge attempt. Re-landing after a follow-up
@@ -2078,6 +2224,13 @@ def land_worktree(
         click.echo(f"  Base:     {base_branch}")
         click.echo(f"  Main:     {main_root}")
         return
+
+    # E-1941: refuse a self_dev land whose source is behind base before anything
+    # else runs. The binary this land points at the real DB is built from that
+    # source, so stale source means a binary that fails VerifyIntegrity on
+    # connect. Cheapest possible failure: nothing has been built, touched or
+    # merged yet.
+    _refuse_if_behind_base(worktree_path, base_branch, canonical, main_root)
 
     # Resolve the binary the record-landing emit must use BEFORE the ff-merge,
     # so a self_dev worktree that isn't built fails loudly here rather than
@@ -2203,6 +2356,18 @@ def land_worktree(
             _git_run(["rebase", "--abort"], cwd=worktree_path, check=False)
             raise click.ClickException(msg)
 
+        # Step 4.5 (E-1941): list this branch's schema changes while base and the
+        # branch are still different commits. After Step 5 they are the same
+        # commit and the three-dot diff is empty, so computing it later would
+        # silently skip every change. Listing is read-only — the DB is not
+        # touched until Step 5.5, after main has actually advanced.
+        try:
+            schema_changes = _branch_schema_changes(worktree_path, base_branch)
+        except subprocess.CalledProcessError as e:
+            raise click.ClickException(
+                f"listing schema changes on the branch failed: {e.stderr or e}"
+            )
+
         # Step 5: ff-merge.
         try:
             _git_run(["merge", "--ff-only", branch], cwd=main_root)
@@ -2213,6 +2378,22 @@ def land_worktree(
                 continue
             raise click.ClickException(
                 f"ff-merge failed: {err_text}"
+            )
+
+        # Step 5.5 (E-1941): apply this branch's schema changes now that main
+        # HAS advanced. Before the merge this was the irreversible case (DB
+        # migrated, code not landed, no installed binary able to read it);
+        # after it, a failure merely leaves the DB lagging code that is already
+        # on main, which a re-run fixes. Must precede Step 6, which runs this
+        # same binary against the real DB and needs the rows these changes
+        # write (E-1664 inverted).
+        # self_dev only: `internal/schema/changes/` is endless's OWN schema, so a
+        # downstream branch has no business migrating the user's DB even if a
+        # path happened to match.
+        if schema_changes and config.project_is_self_dev(main_root):
+            _apply_branch_schema_changes(
+                schema_changes, worktree_path, canonical, base_branch,
+                endless_go_bin,
             )
 
         # Step 6 (E-1337): record the landing in task_landings via the

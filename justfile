@@ -166,7 +166,11 @@ install mode="":
 # `endless worktree land` because beta-tester users never rebuild.
 land task_id="":
     #!/usr/bin/env bash
-    set -euo pipefail
+    # No `set -e` / `set -o pipefail` (house rule): this recipe must OBSERVE a
+    # non-zero exit from the land rather than die at it — main may have advanced
+    # before the failure, and the binaries then have to be refreshed to match.
+    # `set -u` is kept; it catches genuine bugs without hijacking control flow.
+    set -u
     tid="{{task_id}}"
     if [ -z "$tid" ]; then
         # Prefer the DB-backed source. Works from any cwd — main, the
@@ -190,12 +194,18 @@ land task_id="":
     # Computing main_root first and cd'ing there after the land sidesteps
     # that race.
     main_root=$(cd "$(dirname "$(git rev-parse --git-common-dir)")" && pwd)
-    # Apply this branch's schema-change files to the DB before the
-    # (irreversible) ff-merge, backing up first as cheap insurance. The
-    # worktree still exists here; `main...HEAD` lists only the change files
-    # this branch added since diverging from main. The runner/ helper package
-    # is excluded — it is library code, not a change script. If any apply
-    # fails, the land aborts before main advances (clean recovery).
+    if [ -z "${main_root}" ]; then
+        echo "just land: could not resolve the main checkout." >&2
+        exit 1
+    fi
+    # Schema changes are NO LONGER applied here. `endless worktree land` applies
+    # them itself, between the ff-merge and the record-landing step (E-1941).
+    # They used to run at this point — before the irreversible merge — and on
+    # 2026-08-10 the apply succeeded, the merge then failed, and the real DB was
+    # left migrated to a schema no installed binary could read: session tracking
+    # froze machine-wide and recovery needed a hand-rolled restore. Applying
+    # after main advances inverts that: the DB merely lags landed code, which a
+    # re-run fixes.
     wt="$main_root/.endless/worktrees/e-${tid#[Ee]-}"
     if [ -d "$wt" ]; then
         # E-1709: rebuild the worktree's endless-go up-front, BEFORE the
@@ -208,47 +218,69 @@ land task_id="":
         # blocking the land (the E-1664 guard only checks the binary is
         # PRESENT, not CURRENT). `just go` (go build only) suffices here:
         # cmd/endless-go does not import internal/web and the generated
-        # *_templ.go / output.css are git-tracked. Unconditional (not gated on
-        # $changes) because the skew fires even when THIS branch adds no schema
-        # change, as long as main's DB moved ahead of the worktree binary. If
-        # the build breaks, set -euo pipefail aborts here — loud, before main
-        # advances. The trailing `just build` in main_root still runs after the
-        # merge to refresh the GLOBAL symlinked binaries.
+        # *_templ.go / output.css are git-tracked. Unconditional because the
+        # skew fires even when THIS branch adds no schema change, as long as
+        # main's DB moved ahead of the worktree binary.
+        #
+        # E-1941: refuse first if the branch is behind main. `just go` would
+        # otherwise faithfully rebuild a still-stale binary. The authoritative
+        # refusal lives in `endless worktree land` (self_dev-gated, so it also
+        # covers direct callers); this duplicates only the cheap count, to skip
+        # a pointless build before that refusal fires.
+        behind=$(git -C "$wt" rev-list --count "HEAD..main" 2>/dev/null)
+        if [ -n "${behind}" ] && [ "${behind}" -ne 0 ]; then
+            echo "just land: branch is ${behind} commit(s) behind main." >&2
+            echo "  Rebuilding now would produce a binary older than the real" >&2
+            echo "  database. Bring the branch current and retry:" >&2
+            echo "      cd ${wt} && git rebase main" >&2
+            echo "  If that rebase conflicts under .endless/db-ledger/, see" >&2
+            echo "  E-1943 — do not hand-resolve it; stop and ask." >&2
+            exit 1
+        fi
         echo "→ Rebuilding worktree endless-go before land (just go)"
         ( cd "$wt" && just go )
-        changes=$(git -C "$wt" diff main...HEAD --diff-filter=A --name-only \
-            -- internal/schema/changes/ ':(exclude)internal/schema/changes/runner/')
-        if [ -n "$changes" ]; then
-            # E-1510: PATH-prepend so the Python wrapper's shutil.which finds
-            # the worktree-built endless-go (whose embedded schema.sql matches
-            # this branch). The global /usr/local/bin/endless-go is main's
-            # binary; using it here applies changes against main's baseline
-            # and 'no such table' errors follow.
-            echo "→ Backing up DB before applying schema changes"
-            PATH="$wt/bin:$PATH" endless db backup
-            for f in $changes; do
-                case "$f" in
-                    *.sql|*.go)
-                        echo "→ Applying schema change: $f"
-                        PATH="$wt/bin:$PATH" endless db apply-change "$wt/$f"
-                        ;;
-                esac
-            done
+        go_rc=$?
+        if [ "${go_rc}" -ne 0 ]; then
+            echo "just land: worktree build failed; aborting before main" >&2
+            echo "  advances (nothing has been merged or migrated)." >&2
+            exit "${go_rc}"
         fi
     fi
-    # E-1664: binary selection for the land's record-landing step is enforced
-    # inside `endless worktree land` itself — for a self_dev land it always uses
-    # the worktree's endless-go (whose embedded schema/enums match the rows the
-    # apply-change loop above just inserted), and fails loudly if that build is
-    # missing. No PATH-prepend needed here (this supersedes E-1660's per-call
-    # PATH hack, which silently fell back to the stale global when unbuilt). The
-    # up-front `just go` above guarantees that build is not just present but
-    # CURRENT, so the guard's present-check is satisfied by a fresh binary
-    # (E-1709).
+    # E-1664: binary selection for the land's schema-apply and record-landing
+    # steps is enforced inside `endless worktree land` itself — for a self_dev
+    # land it always uses the worktree's endless-go (whose embedded schema/enums
+    # match the rows it is applying), and fails loudly if that build is missing.
+    # No PATH-prepend needed here (this supersedes E-1660's per-call PATH hack,
+    # which silently fell back to the stale global when unbuilt). The up-front
+    # `just go` above guarantees that build is not just present but CURRENT, so
+    # the guard's present-check is satisfied by a fresh binary (E-1709).
+    #
+    # E-1941: MAIN ADVANCING is what obliges a rebuild — not the land's exit
+    # code. The land can advance main and still fail afterwards (a schema apply
+    # or the record-landing step), and bailing out there would leave the global
+    # binaries older than the DB they now have to read: the very skew that took
+    # session tracking down. So compare main before and after, refresh whenever
+    # it moved, and only then propagate the land's status.
+    main_before=$(git -C "$main_root" rev-parse main 2>/dev/null)
     endless worktree land "$tid"
-    echo "→ Refreshing binaries (just build)"
-    cd "$main_root"
-    just build
+    land_rc=$?
+    main_after=$(git -C "$main_root" rev-parse main 2>/dev/null)
+    if [ "${main_before}" != "${main_after}" ]; then
+        echo "→ Refreshing binaries (just build)"
+        ( cd "$main_root" && just build )
+        build_rc=$?
+        if [ "${build_rc}" -ne 0 ]; then
+            echo "just land: main advanced but 'just build' failed; the" >&2
+            echo "  installed binaries are older than main. Re-run 'just" >&2
+            echo "  build' in ${main_root} before using endless." >&2
+            if [ "${land_rc}" -eq 0 ]; then
+                exit "${build_rc}"
+            fi
+        fi
+    elif [ "${land_rc}" -eq 0 ]; then
+        echo "→ Land reported success but main did not move; skipping rebuild."
+    fi
+    exit "${land_rc}"
 
 # Generate go.work for the current checkout/worktree (E-996).
 #

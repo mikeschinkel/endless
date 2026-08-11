@@ -235,15 +235,23 @@ def emit_event(
     return None
 
 
-def apply_change(path: str) -> dict:
+def apply_change(path: str, endless_go_bin: str | None = None) -> dict:
     """Shell out to `endless-go event apply-change <path>` and return parsed JSON.
 
     Applies one per-ticket schema-change file (internal/schema/changes/<name>)
     and records it in _schema_version. Returns {"name", "status"[, "reason"]}.
     Raises click.ClickException on failure (binary missing or non-zero exit).
+
+    endless_go_bin pins the binary, exactly as `emit_event` does (E-1664). A
+    self_dev land passes the worktree's build: its embedded schema.sql matches
+    the change file being applied, where the global is still main's baseline and
+    would produce 'no such table'. This replaces the caller-side
+    `PATH="<wt>/bin:$PATH"` prepend the Justfile used to need (E-1510/E-1660) —
+    the last of those hacks, superseded here as E-1664 superseded the one on the
+    record-landing step (E-1941).
     """
     config.require_db_context()  # E-1429
-    event_bin = _resolve_endless_go()
+    event_bin = _resolve_endless_go(override=endless_go_bin)
     cmd = [event_bin, *config.go_db_context_args(), "event", "apply-change", str(path)]
     result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode != 0:
@@ -260,13 +268,17 @@ def apply_change(path: str) -> dict:
     return json.loads(result.stdout.strip())
 
 
-def backup_db() -> dict:
+def backup_db(endless_go_bin: str | None = None) -> dict:
     """Shell out to `endless-go event backup` (VACUUM INTO a timestamped copy).
 
     Raises click.ClickException on failure (binary missing or non-zero exit).
+
+    endless_go_bin pins the binary; see apply_change. A land backs up with the
+    same build it is about to apply changes with, so the snapshot and the
+    migration cannot come from two different schema baselines.
     """
     config.require_db_context()  # E-1429
-    event_bin = _resolve_endless_go()
+    event_bin = _resolve_endless_go(override=endless_go_bin)
     result = subprocess.run(
         [event_bin, *config.go_db_context_args(), "event", "backup"],
         capture_output=True, text=True,
