@@ -41,8 +41,9 @@ fi
 
 TMP=""
 RAISED=""
-# Redefined in section 7 once a synthetic incident exists, so the probe is
-# always cleared however this script exits.
+# The synthetic incident lives in a throwaway config dir under TMP (see section
+# 7), so removing TMP disposes of it — nothing to clear, and nothing that can
+# outlive a failed run.
 cleanup() { [[ -n "${TMP}" ]] && rm -rf "${TMP}"; }
 trap 'cleanup' EXIT
 
@@ -187,23 +188,39 @@ pass "session-status renders without the orphaned hint row"
 
 # `errors raise` is what makes this section possible: before it, the badge could
 # only be exercised end-to-end by waiting for something to actually break.
-"${GO_BIN}" errors raise --summary "e-1950 verify probe" >"${TMP}/raise.txt" 2>&1 \
+#
+# Both sides take an explicit --config-dir at a throwaway path, for two reasons.
+# It keeps the probe out of the real error record AND out of the worktree's
+# sandbox — but more importantly it is the only way to make the two agree:
+# `errors` pins main and `session-status` pins main on its normal path, while
+# `--task` deliberately reads the resolved context. An explicit --config-dir
+# overrides all three, so raise and render provably name one database.
+PROBE_DIR="${TMP}/config"
+mkdir -p "${PROBE_DIR}"
+GO_PROBE=("${GO_BIN}" --config-dir "${PROBE_DIR}")
+
+"${GO_PROBE[@]}" errors raise --summary "e-1950 verify probe" >"${TMP}/raise.txt" 2>&1 \
     || fail "errors raise failed" "$(head -3 "${TMP}/raise.txt")"
 RAISED=$(grep -oE 'as error [0-9]+' "${TMP}/raise.txt" | grep -oE '[0-9]+$')
 [[ -n "${RAISED}" ]] || fail "errors raise did not report an incident id" "$(cat "${TMP}/raise.txt")"
-# Always put it back, however this script exits.
-cleanup() {
-    [[ -n "${RAISED:-}" ]] && "${GO_BIN}" errors clear "${RAISED}" >/dev/null 2>&1
-    [[ -n "${TMP}" ]] && rm -rf "${TMP}"
-}
 pass "errors raise records a synthetic incident (id ${RAISED})"
+
+# The badge and the command it points at must name the SAME record. Left on cwd
+# routing, `errors show` read the per-worktree sandbox while the badge read
+# main, so the badge could count an incident `eeh` would not list (E-1950).
+"${GO_PROBE[@]}" errors show >"${TMP}/show.txt" 2>&1 \
+    || fail "errors show failed against the probe DB"
+grep -q "e-1950 verify probe" "${TMP}/show.txt" \
+    || fail "errors show does not list the incident errors raise just recorded" \
+            "the badge would be pointing at a command that cannot explain it"
+pass "errors show lists what errors raise recorded (one DB, not two)"
 
 # The badge must be ONE row at every width, and must never exceed it. Sweeping
 # here rather than checking one width on purpose: terminal width is not a fixed
 # property of anyone's setup, and a single sampled width tests nobody's terminal
 # but the sampler's.
 for cols in 20 34 40 60 80 94 100 120 200; do
-    "${GO_BIN}" session-status --task 1950 --cols "${cols}" >"${TMP}/w${cols}.txt" 2>&1 \
+    "${GO_PROBE[@]}" session-status --task 1950 --cols "${cols}" >"${TMP}/w${cols}.txt" 2>&1 \
         || fail "session-status --cols ${cols} exited non-zero"
     badge=$(grep -nE '(WARNING|ERROR)' "${TMP}/w${cols}.txt" || true)
     n=$(printf '%s' "${badge}" | grep -c . || true)

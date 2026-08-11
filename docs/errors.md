@@ -149,8 +149,10 @@ It records through the same path a real fault takes — same upsert, same
 fingerprinting, same detail line — so what you are looking at is shaped exactly
 like the real thing. Only the code marks it synthetic.
 
-It writes to whichever database the invoking process resolved, so from a self-dev
-worktree it lands in that worktree's sandbox rather than in the real ledger.
+It writes to the same database the badge reads: the whole `errors` surface pins
+main, so `raise` then `session status` works from anywhere, including inside a
+self-dev worktree. Pass `--config-dir <dir>` to `endless-go` to route both sides
+somewhere throwaway instead.
 
 **What to do.** Dismiss it: `endless errors clear <id>`. If you did not raise it
 yourself, someone was testing; it is not a fault report.

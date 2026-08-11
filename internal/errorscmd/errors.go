@@ -73,8 +73,10 @@ func usage(w *os.File) {
 // fingerprinting, same JSONL detail line. Only the CODE marks it synthetic, and
 // the catalog titles say so out loud.
 //
-// It writes to whichever database the process resolved, so from a self-dev
-// worktree it lands in that worktree's sandbox rather than the real ledger.
+// It writes to the same DB the badge reads — main.go pins main for the whole
+// `errors` subcommand — so `raise` then `session status` works from anywhere,
+// including inside a self-dev worktree. An explicit --config-dir overrides that
+// on both sides, which is how the verify suite stays hermetic.
 func runRaise(args []string) {
 	fs := flag.NewFlagSet("raise", flag.ExitOnError)
 	severity := fs.String("severity", "warning", "severity to raise: warning or error")

@@ -25,6 +25,8 @@
 //
 //   - hook → ENDLESS_NO_HOOKS=true short-circuit (E-1470), then PinMainDB (E-1450/E-1429).
 //   - channel, tmux → PinMainDB (E-1429).
+//   - errors → PinMainDB (E-1950), so the operator surface over the fault
+//     record names the same DB the badge counting it reads.
 //   - session-status → PinMainDB on its normal path (it reads the live sessions
 //     table, which hook writes pin to main regardless of cwd), but with --task
 //     (headless/tests) it skips the pin and reads the resolved sandbox/
@@ -129,13 +131,25 @@ func main() {
 	// whatever --config-dir (or absence of one) ConsumeDBContextFlag
 	// already established above.
 	switch sub {
-	case "hook", "channel", "tmux":
+	case "hook", "channel", "tmux", "errors":
 		// An explicit --config-dir wins over the main pin (E-1429: a
 		// per-invocation flag is trustworthy; the env-driven pin is the
 		// fallback). Production invokers of these binaries never pass
 		// --config-dir, so the pin still applies for real hook/channel/tmux
 		// traffic; only tests and sandbox tooling (e.g. the E-1682 nav-trail
 		// verify driving `tmux record-nav` against a sandbox DB) flip this.
+		//
+		// `errors` joins them for a coherence reason rather than a write-
+		// ownership one (E-1950). The fault badge is rendered by session-status,
+		// which pins main on its normal path, and real faults are recorded by
+		// the hook, which pins main too. Left on cwd routing, `errors show` read
+		// the per-worktree sandbox — so the badge could count incidents that
+		// `eeh`, the very command the badge tells you to run, did not list. A
+		// diagnostic surface that disagrees with the badge advertising it is
+		// worse than no surface: it makes the badge look like it is lying.
+		//
+		// This covers show, clear and raise alike: reading, dismissing and
+		// exercising all have to name the same record the badge is counting.
 		if !monitor.HasExplicitDBContext() {
 			monitor.PinMainDB()
 		}

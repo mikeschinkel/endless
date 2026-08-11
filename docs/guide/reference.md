@@ -127,7 +127,9 @@ endless session status                  # the badge, at your terminal's real wid
 endless errors clear <id>               # put it back
 ```
 
-It writes to whichever database the invoking process resolved, so from a self-dev worktree it lands in that worktree's sandbox. `session status` pins the *main* DB on its normal path, so to see a sandbox-raised fault on the badge use the headless form, which reads the resolved sandbox context: `endless-go session-status --task <id>`. That form also takes `--cols N`, which renders the badge at any width without resizing anything.
+**Which database the error record lives in.** The whole `errors` surface — `show`, `clear`, `raise` — pins the **main** DB, and so does the badge that counts it. That is deliberate and is not the usual cwd/sandbox routing: real faults are recorded by the hook, which pins main regardless of cwd, and the badge is rendered by `session status`, which pins main on its normal path. If `errors show` followed cwd routing instead, a self-dev worktree would read its sandbox while the badge read main — and the badge could count an incident that `eeh`, the command it tells you to run, would not list (E-1950).
+
+So `endless errors raise` followed by `endless session status` works from anywhere, including inside a worktree. To route the whole surface elsewhere for a hermetic test, pass `--config-dir <dir>` to `endless-go`; it overrides the pin on both sides. `endless-go session-status` also takes `--cols N`, which renders the badge at any width without resizing anything.
 
 The badge is one row: severity chip, the latest incident, and `Run eeh` right-aligned. `eeh` is the shell helper for `errors show` (see **Shell helpers** in `endless guide orchestration`), and `errors show` closes by naming `errors clear` — the badge has no room to spell out the dismissal, so the command it points at does.
 
