@@ -1,4 +1,4 @@
-# Endless — Manage 50+ Claude Code tasks without going insane
+# Endless — Manage 50+ AI tasks without becoming overwhelmed
 
 Endless lets one developer run many Claude Code sessions at once — each tracked by
 an Endless "task" and with its own Git worktree and its own config/DB sandbox, so
