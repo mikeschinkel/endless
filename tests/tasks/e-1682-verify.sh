@@ -128,7 +128,7 @@ assert_eq() {
 # ─── checks ───────────────────────────────────────────────────────────────────
 
 test_build() {
-    section "Build — \`just build\` (templ, tailwind, Go binaries)"
+    section "Build — \`just build\` (Go binaries)"
     note "produces bin/endless-go, which the E2E sections below drive"
     assert_succeeds "just build" just build
 }

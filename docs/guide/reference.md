@@ -183,11 +183,3 @@ If you see "Endless: auto-record session activity" commits in `git log`, those a
 | `/usr/local/bin/endless-hook`                 | Claude Code hook binary (Go).                                            |
 | `/usr/local/bin/endless-event`                | Event-write binary (Go).                                                 |
 | `/usr/local/bin/endless-tmux`                 | tmux-integration binary (Go).                                            |
-
-### Web dashboard
-
-```bash
-endless serve       # starts http://localhost:8484
-```
-
-Useful for browsing the task tree visually when the CLI gets unwieldy.

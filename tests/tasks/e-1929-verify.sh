@@ -496,9 +496,10 @@ test_suites() {
     section "L. Regression suites"
     local out rc
 
-    out=$(cd "$WT" && go test ./internal/events/ ./internal/monitor/ ./internal/web/ -count=1 2>&1); rc=$?
-    if [[ $rc -eq 0 ]]; then report_pass "go: events + monitor + web suites pass"
-    else report_fail "go: events + monitor + web suites" "exit 0" \
+    # internal/web was in this list until E-1939 excised the web dashboard.
+    out=$(cd "$WT" && go test ./internal/events/ ./internal/monitor/ -count=1 2>&1); rc=$?
+    if [[ $rc -eq 0 ]]; then report_pass "go: events + monitor suites pass"
+    else report_fail "go: events + monitor suites" "exit 0" \
         "exit=$rc"$'\n'"$(printf '%s' "$out" | tail -30)"; fi
 
     out=$(cd "$WT" && uv run pytest tests/ -q -x 2>&1); rc=$?

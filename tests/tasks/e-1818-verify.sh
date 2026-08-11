@@ -73,7 +73,7 @@ REPO_ROOT=""
 BIN=""
 
 step_build() {
-    section "1. Build — just build (templ, tailwind, Go binaries)"
+    section "1. Build — just build (Go binaries)"
     note "produces bin/endless-go, the candidate binary the E2E below drives"
     if ! out=$(just build 2>&1); then
         fail "just build" "${out}"

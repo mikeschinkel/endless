@@ -8,9 +8,9 @@ import (
 
 // SetTestDB rebinds the monitor.DB() singleton to db and returns a
 // restore func that reverts the package vars to their prior state. It
-// exists so packages outside `monitor` (notably `internal/web`) can
-// exercise functions that internally call monitor.DB() without needing
-// their own DB-injection refactor.
+// exists so packages outside `monitor` can exercise functions that
+// internally call monitor.DB() without needing their own DB-injection
+// refactor.
 //
 // USE ONLY IN TESTS. Production callers never need this — they accept
 // the singleton's lifecycle. The function is exported (rather than

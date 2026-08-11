@@ -1,9 +1,8 @@
 // Package mdterm renders markdown to colorized ANSI for terminal display.
 //
-// It shares goldmark's parser with the web HTML renderer
-// (internal/web/components/markdown) but targets ANSI SGR output instead of
-// HTML — HTML and ANSI are different output targets, so the parser is shared
-// and the renderer is separate (E-1746).
+// It drives goldmark's parser but targets ANSI SGR output rather than
+// goldmark's own HTML renderer — parsing is markdown-generic, rendering is
+// per-output-target, so only the renderer is ours (E-1746).
 //
 // The core design choice versus glow/glamour: **prose is never reflowed.** Each
 // markdown paragraph is emitted as a single logical line — no hard breaks are

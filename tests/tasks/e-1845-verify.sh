@@ -410,8 +410,8 @@ test_registrations() {
     assert_contains "_SUBMITTABLE_FROM accepts it" \
         '_SUBMITTABLE_FROM = ("untriaged", "unplanned", "revisit")' \
         "$(cat "$WT/src/endless/task_cmd.py")"
-    assert_contains "the web status-update handler accepts it" \
-        '"untriaged": true' "$(cat "$WT/internal/web/handlers.go")"
+    # The web dashboard's status-update handler was a registration site too;
+    # E-1939 excised the dashboard, so that assertion went with it.
     assert_contains "session snapshot validation accepts it" \
         '"untriaged"' "$(cat "$WT/src/endless/session_status_cmd.py")"
 

@@ -4,7 +4,6 @@ go 1.26.2
 
 require (
 	github.com/BurntSushi/toml v1.5.0
-	github.com/a-h/templ v0.3.1001
 	github.com/google/uuid v1.6.0
 	github.com/mattn/go-runewidth v0.0.16
 	github.com/mikeschinkel/go-cfgstore v0.3.0
@@ -12,8 +11,8 @@ require (
 	github.com/mikeschinkel/go-dt v0.6.0
 	github.com/modelcontextprotocol/go-sdk v0.3.0
 	github.com/rogpeppe/go-internal v1.14.1
-	github.com/templui/templui v1.9.5
 	github.com/yuin/goldmark v1.8.2
+	golang.org/x/term v0.40.0
 	modernc.org/sqlite v1.48.2
 )
 
@@ -33,7 +32,6 @@ replace (
 )
 
 require (
-	github.com/Oudwins/tailwind-merge-go v0.2.0 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/google/jsonschema-go v0.4.2 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
@@ -49,7 +47,6 @@ require (
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
 	golang.org/x/oauth2 v0.35.0 // indirect
 	golang.org/x/sys v0.42.0 // indirect
-	golang.org/x/term v0.40.0 // indirect
 	golang.org/x/tools v0.42.0 // indirect
 	modernc.org/libc v1.70.0 // indirect
 	modernc.org/mathutil v1.7.1 // indirect

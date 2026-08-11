@@ -1,5 +1,5 @@
-// Command endless-go is the single Go binary for endless's seven former
-// per-binary tools, collapsed into one dispatcher with seven subcommands
+// Command endless-go is the single Go binary for endless's former
+// per-binary tools, collapsed into one dispatcher with a subcommand each
 // (E-1367).
 //
 // Subcommand layout — preserves the inner verbs each former binary
@@ -9,7 +9,6 @@
 //	endless-go hook          prompt|claude|codex
 //	endless-go channel       (MCP server; no verbs)
 //	endless-go sandbox       run|enter|init|bind|list|prune|destroy
-//	endless-go serve         [port]
 //	endless-go tmux          apply|status-line|active-id|show-menu
 //	endless-go session-query list-live|task-text|reopen-context
 //	endless-go session-status  (renders the per-session status view; --monitor loops it)
@@ -29,7 +28,7 @@
 //     table, which hook writes pin to main regardless of cwd), but with --task
 //     (headless/tests) it skips the pin and reads the resolved sandbox/
 //     --config-dir context; the decision lives in sessionstatuscmd.Run (E-1685).
-//   - event, serve, session-query → ConsumeDBContextFlag (E-1429).
+//   - event, session-query → ConsumeDBContextFlag (E-1429).
 //   - sandbox → no DB-context init.
 //
 // The ENDLESS_NO_HOOKS gate is scoped to the `hook` subcommand only —
@@ -53,7 +52,6 @@ import (
 	"github.com/mikeschinkel/endless/internal/monitor"
 	"github.com/mikeschinkel/endless/internal/outputstylecmd"
 	"github.com/mikeschinkel/endless/internal/sandboxcmd"
-	"github.com/mikeschinkel/endless/internal/servecmd"
 	"github.com/mikeschinkel/endless/internal/sessionquerycmd"
 	"github.com/mikeschinkel/endless/internal/sessionstatuscmd"
 	"github.com/mikeschinkel/endless/internal/spawnlaunchcmd"
@@ -177,8 +175,6 @@ func main() {
 		channelcmd.Run(rest)
 	case "sandbox":
 		sandboxcmd.Run(rest)
-	case "serve":
-		servecmd.Run(rest)
 	case "tmux":
 		tmuxcmd.Run(rest)
 	case "session-query":
@@ -241,7 +237,6 @@ func usage(w *os.File) {
 	fmt.Fprintln(w, "  hook           prompt|claude|codex")
 	fmt.Fprintln(w, "  channel        MCP server for inter-session channels")
 	fmt.Fprintln(w, "  sandbox        run|enter|init|bind|list|prune|destroy")
-	fmt.Fprintln(w, "  serve          [port]  (web dashboard)")
 	fmt.Fprintln(w, "  tmux           apply|status-line|active-id|show-menu")
 	fmt.Fprintln(w, "  session-query  list-live|task-text|reopen-context")
 	fmt.Fprintln(w, "  session-status render the per-session status view (--monitor loops it)")

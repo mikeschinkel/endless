@@ -199,12 +199,9 @@ test_new_slugs_present() {
         internal/events/session_status.go 'case "unverified":'
     assert_present "session rollup bucket is 'Unverified'" \
         internal/events/session_status.go '"Unverified"'
-    assert_present "web status legend lists Unverified" \
-        internal/web/pages/status_detail.templ '{"unverified", "Unverified",'
-    assert_present "web status legend lists Underway" \
-        internal/web/pages/status_detail.templ '{"underway", "Underway",'
-    assert_present "web status legend lists Unplanned" \
-        internal/web/pages/status_detail.templ '{"unplanned", "Unplanned",'
+    # The web dashboard's status legend was a fourth definition site for these
+    # slugs; E-1939 excised the dashboard, so the three assertions over
+    # internal/web/pages/status_detail.templ are gone with it.
 }
 
 test_not_over_renamed() {

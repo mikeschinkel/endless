@@ -27,7 +27,6 @@ your `PATH` before building:
 - **[just](https://github.com/casey/just)** — the command runner used for build/install.
 - **[Go](https://go.dev/) 1.26+** — builds the Go binaries.
 - **[uv](https://github.com/astral-sh/uv)** with **[Python](https://www.python.org/) 3.12+** — runs and installs the Python CLI.
-- **[templ](https://templ.guide/)** and **[tailwindcss](https://tailwindcss.com/)** — invoked by the build.
 - **[sqlite3](https://www.sqlite.org/)** and **[jq](https://jqlang.org/)** — used by tooling and the verification scripts.
 
 Endless does not yet install these for you; wiring up prerequisite setup that
@@ -46,7 +45,7 @@ installs the Python CLI via `uv tool`.
 To build without installing, or to run the tests:
 
 ```bash
-just build    # templ generate, tailwind CSS, Go binaries
+just build    # Go binaries
 just test     # run Python tests
 ```
 

@@ -3,17 +3,10 @@
 # Show available commands
 help:
     @echo "Development:"
-    @echo "  just build        Build everything (templ, CSS, Go binaries)"
+    @echo "  just build        Build everything — the Go binaries (alias: just go)"
     @echo "  just install      Build + symlink binaries + install Python CLI"
-    @echo "  just dev          Run templ + tailwind watchers for development"
     @echo "  just test         Run Python tests"
     @echo "  just verify [E-NNNN]  Run a task's Tier-0 verify suite (self_dev; derives ID from cwd if omitted)"
-    @echo "  just kill         Kill any running endless-go serve process"
-    @echo ""
-    @echo "Build (individual):"
-    @echo "  just generate     Generate templ files (one-shot)"
-    @echo "  just css          Build CSS (one-shot)"
-    @echo "  just go           Build Go binaries only"
     @echo ""
     @echo "Workflow:"
     @echo "  just land [E-NNNN]  Land a task (derives ID from cwd if omitted), then refresh binaries"
@@ -34,31 +27,11 @@ help:
     @echo "  cd deploy/machine && just demo-sync     Sync to demo machine"
     @echo "  cd deploy/machine && just demo-prepare  Prepare demo machine"
 
-# Resolve the templUI module path and symlink it for CSS imports
-_link-templui:
-    #!/usr/bin/env bash
-    templui_dir=$(go list -m -f '{{"{{"}}.Dir{{"}}"}}' github.com/templui/templui 2>/dev/null)
-    if [ -n "$templui_dir" ]; then
-        ln -sfn "$templui_dir" internal/web/assets/css/templui
-    fi
-
-# Run all watchers for development (templ + tailwind + go server)
-dev:
-    just tailwind & just templ
-
-# Watch and regenerate templ files, proxy to Go server
-templ:
-    templ generate --watch --proxy="http://localhost:8484" --cmd="go run ./cmd/endless-go serve"
-
-# Watch and rebuild Tailwind CSS
-tailwind: _link-templui
-    tailwindcss -i internal/web/assets/css/input.css -o internal/web/assets/css/output.css --watch
-
-# Build everything for production
-build: _link-templui
-    templ generate
-    tailwindcss -i internal/web/assets/css/input.css -o internal/web/assets/css/output.css
-    go build -o bin/endless-go ./cmd/endless-go
+# E-1939 excised the web dashboard, so no codegen step is left and the
+# aggregate build is exactly `just go`. Both names are kept because docs,
+# hooks and the land recipe each name one of them.
+# Build everything for production (currently just the Go binaries)
+build: go
 
 # Build and install everything, overloaded by checkout context (E-1036).
 #
@@ -216,11 +189,9 @@ land task_id="":
         # would land with a STALE binary whose embedded enums no longer match
         # the real DB's task_types rows, failing the integrity check and
         # blocking the land (the E-1664 guard only checks the binary is
-        # PRESENT, not CURRENT). `just go` (go build only) suffices here:
-        # cmd/endless-go does not import internal/web and the generated
-        # *_templ.go / output.css are git-tracked. Unconditional because the
-        # skew fires even when THIS branch adds no schema change, as long as
-        # main's DB moved ahead of the worktree binary.
+        # PRESENT, not CURRENT). Unconditional because the skew fires even
+        # when THIS branch adds no schema change, as long as main's DB moved
+        # ahead of the worktree binary.
         #
         # E-1941: the behind-base refusal lives in `endless worktree land`, NOT
         # here. A duplicate pre-check once lived at this point and had to be
@@ -506,14 +477,6 @@ guide-index:
 guide-check:
     uv run python -m endless.guide_map check
 
-# Generate templ files (one-shot)
-generate:
-    templ generate
-
-# Build CSS (one-shot)
-css: _link-templui
-    tailwindcss -i internal/web/assets/css/input.css -o internal/web/assets/css/output.css
-
 # Build just the Go binary
 go:
     go build -o bin/endless-go ./cmd/endless-go
@@ -522,10 +485,6 @@ go:
 # list of five; the wildcard auto-includes new packages as they grow tests).
 test-go:
     go test ./internal/... -v
-
-# Kill any running endless-go serve process
-kill:
-    pkill -f 'endless-go serve' || true
 
 # Export this project's Endless data (tasks, notes, deps) for version control
 db-export:

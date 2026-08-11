@@ -15,7 +15,7 @@ import (
 // withMonitorDB stands up a fresh schema-applied SQLite DB and rebinds
 // monitor.DB() to it for the lifetime of t via monitor.SetTestDB, so
 // the renderer's GetActiveBlockers call resolves against a seeded DB
-// instead of the real one. Pattern lifted from internal/web tests.
+// instead of the real one.
 //
 // Concurrency: SetTestDB mutates package-level state in monitor; tests
 // using this helper must NOT call t.Parallel().

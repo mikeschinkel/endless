@@ -11,7 +11,6 @@ Endless is a project awareness tool. It tracks **what you're working on**, **why
 - **Per-task git worktrees** — your work happens in an isolated branch, not on `main`.
 - **Session tracking** — records which Claude session is working on which task.
 - **Enforcement** (optional) — a hook that can block Write/Edit until you claim a task.
-- A **web dashboard** at `http://localhost:8484` (start with `endless serve`).
 
 ## Status
 
@@ -188,7 +187,6 @@ listed separately. (Generated — do not hand-edit; run `/regenerate-guide`.)
 | `phrase` | _(none yet)_ | matchers (action regexes) config isn't covered by the guide yet. |
 | `plan` | tasks | 'plan' is the former name for 'task' (renamed); use 'task'. |
 | `project` | reference | Managing registered projects (register, list, status, set, rename, scan, discover, purge, unregister). |
-| `serve` | reference | The web dashboard at http://localhost:8484. |
 | `session` | sessions | Recording session status; discovery (who am I); reading status. |
 | `setup` | _(none yet)_ | hook/integration setup (claude-hook, prompt-hook, channel-plugin) isn't covered by the guide yet. |
 | `shell-init` | orchestration | Shell helpers (esu/eswt) to enter your task's worktree. |
