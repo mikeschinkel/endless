@@ -248,7 +248,11 @@ This adds the following functions:
 | `esu`    | "Endless session use." Resolves a Claude session (active one by default, or `<id>` if given) and (a) cd's to its worktree and (b) exports `ENDLESS_SESSION_ID`. Subsequent endless commands then route through that worktree's source. | After `task claim`, run `esu` to drop into the worktree fully bound. |
 | `esp`    | "Endless session project." cd's to the project root (main checkout) of the active or given session.                                   | When you need to do something in `main` (e.g. inspect `git log` or pull) and want to come back. |
 | `esf`    | "Endless session forget." Unsets `ENDLESS_SESSION_ID` in the current shell. The session keeps running; only the shell's pointer is cleared. | When you're done coordinating one session and want a fresh shell. |
+| `esm`    | "Endless session monitor." Live dashboard — re-renders `session status` every 2s until Ctrl-C. Passes through `--all` / `--tree`.        | Watching a spawned session work without polling by hand.  |
+| `eeh`    | "Endless errors here." Runs `errors show`: the recorded errors the `session status` badge is counting, plus how to dismiss them. Takes `--detail` / `--all`. | The badge says `Run eeh` — this is what it means.        |
 | `eswt`   | *(Planned, not yet shipped.)* "Endless switch worktree." Pure `cd` to a task's worktree, given a task ID. Distinct from `esu` in that it does not export `ENDLESS_SESSION_ID`. | Quick navigation without binding. Until shipped, use `cd "$(endless worktree for-task <id>)"`. |
+
+`esm` and `eeh` are read-only views and need no session binding.
 
 These helpers move the **shell's** working directory and (for `esu`) set session
 routing. They do **not** change **Claude's own** working directory — the one

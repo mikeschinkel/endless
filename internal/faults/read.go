@@ -57,22 +57,35 @@ type Overview struct {
 // Callers on a render path must treat any error as "show no badge" rather than
 // as a failure: a missing table (a binary pinned schema-passive onto a DB it
 // does not own) or a locked DB must never take down the view.
+//
+// A caller that applies its own display policy — the session-status badge
+// suppresses stale warnings (E-1950) — should call List and Summarize instead,
+// so the aggregate is computed over the incidents it actually intends to show.
 func Open() (overview Overview, err error) {
-	var db *sql.DB
 	var incidents []Incident
+
+	incidents, err = List(false, 0)
+	if err != nil {
+		overview.Counts = make(map[Severity]int, 2)
+		goto end
+	}
+	overview = Summarize(incidents)
+
+end:
+	return overview, err
+}
+
+// Summarize aggregates a set of incidents into the shape the badge renders.
+//
+// Split out from Open so a caller that filters the set first — by staleness, by
+// severity — gets counts consistent with what it displays rather than with what
+// the table holds. Latest is the most recently seen of the incidents PASSED IN,
+// which requires them to be ordered last_seen_at DESC; both List and Open
+// produce that order.
+func Summarize(incidents []Incident) (overview Overview) {
 	var incident Incident
 
 	overview.Counts = make(map[Severity]int, 2)
-
-	db, err = database()
-	if err != nil {
-		goto end
-	}
-
-	incidents, err = query(db, `WHERE cleared_at IS NULL`, 0)
-	if err != nil {
-		goto end
-	}
 
 	for _, incident = range incidents {
 		overview.Counts[incident.Severity]++
@@ -82,14 +95,12 @@ func Open() (overview Overview, err error) {
 		}
 	}
 	if len(incidents) > 0 {
-		// query orders by last_seen_at DESC, so the first row is the most
-		// recently seen. Copied into a local so Latest does not alias the slice.
+		// Copied into a local so Latest does not alias the caller's slice.
 		incident = incidents[0]
 		overview.Latest = &incident
 	}
 
-end:
-	return overview, err
+	return overview
 }
 
 // List returns incidents, most recently seen first. When includeCleared is

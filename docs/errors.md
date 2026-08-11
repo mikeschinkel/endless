@@ -106,6 +106,13 @@ No job state is corrupted — every scheduling write is a single statement — a
 the next invocation retries. A persistent occurrence means something is wrong
 with the database itself rather than with any job.
 
+Creating the scheduling row retries contention in place before raising this
+(E-1950): three attempts, each behind the connection's five-second
+`busy_timeout`. Losing a single lock race is what a database with concurrent
+writers does, not a fault, and this code is only raised once losing it has
+stopped being explicable that way. Errors that are *not* contention — a missing
+table, a disk failure — are raised immediately without retrying.
+
 **What to do.** Check that the database is reachable and that the schema is
 current. A binary pinned onto a database it does not own opens schema-passive
 (E-1818) and will not have created the `jobs` table; that is the expected cause

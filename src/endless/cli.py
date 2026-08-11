@@ -661,6 +661,18 @@ esm() {
     _endless_run session monitor "$@"
 }
 
+# eeh — show the recorded errors the session-status badge is counting,
+#       plus how to dismiss them.
+#   eeh            → list open errors
+#   eeh --detail   → include every occurrence's full capture
+#   eeh --all      → include already-cleared errors
+# Exists because the badge has one row to spend and `endless errors show`
+# does not fit beside the incident text it would be explaining (E-1950).
+# No session guard: errors are machine-local, not session-scoped.
+eeh() {
+    _endless_run errors show "$@"
+}
+
 # <<< endless shell helpers <<<
 """
 
@@ -748,8 +760,9 @@ def sql_query(query, write, tsv):
 def shell_init():
     """Print shell helper functions for bash/zsh.
 
-    Wraps 'endless session use', 'session cd --target project', and
-    'session forget' with short functions (esu, esp, esf).
+    Wraps 'endless session use', 'session cd --target project',
+    'session forget', 'session monitor', and 'errors show' with short
+    functions (esu, esp, esf, esm, eeh).
 
     To install, run:
 

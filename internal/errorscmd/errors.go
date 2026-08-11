@@ -98,6 +98,34 @@ func runShow(args []string) {
 			printDetails(incident.ID)
 		}
 	}
+
+	printClearHint(incidents)
+}
+
+// printClearHint names the command that makes these rows go away.
+//
+// The badge and this listing were the only surfaces a user ever saw, and neither
+// mentioned `clear` — so the one action available on a fault that had already
+// self-healed was undiscoverable, and a stale warning read as permanent (E-1950).
+// Suppressed when nothing here is still open, since clearing a cleared incident
+// does nothing.
+func printClearHint(incidents []faults.Incident) {
+	open := 0
+	for _, incident := range incidents {
+		if incident.ClearedAt == "" {
+			open++
+		}
+	}
+	if open == 0 {
+		return
+	}
+
+	fmt.Println()
+	fmt.Println("Once you have read these, dismiss them:")
+	fmt.Println("  endless errors clear            mark every open error above as seen")
+	fmt.Println("  endless errors clear <id>       dismiss just one")
+	fmt.Println()
+	fmt.Println("Clearing is an acknowledgement, not a retry — it does not re-arm a failing job.")
 }
 
 // showOne prints a single incident in long form.

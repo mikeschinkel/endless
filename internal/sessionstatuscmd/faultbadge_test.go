@@ -2,8 +2,10 @@ package sessionstatuscmd
 
 import (
 	"database/sql"
+	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	_ "modernc.org/sqlite"
 
@@ -76,7 +78,7 @@ func TestRenderFaultBadge_AppearsWhenIncidentsAreOpen(t *testing.T) {
 	if !strings.Contains(out, "1 warning") {
 		t.Errorf("badge does not count the warning:\n%s", out)
 	}
-	if !strings.Contains(out, "endless errors show") {
+	if !strings.Contains(out, badgeHint) {
 		t.Errorf("badge does not name the command that explains it:\n%s", out)
 	}
 
@@ -93,7 +95,7 @@ func TestRenderFaultBadge_SilentWhenNothingIsOpen(t *testing.T) {
 	var b strings.Builder
 	renderTo(&b, oneRow(), 698, hintClaimBind, 90, false, hiddenOmit)
 
-	if strings.Contains(b.String(), "endless errors show") {
+	if strings.Contains(b.String(), badgeHint) {
 		t.Errorf("badge rendered with no open incidents:\n%s", b.String())
 	}
 }
@@ -113,7 +115,7 @@ func TestRenderFaultBadge_SilentWhenClearedEvenThoughHistoryRemains(t *testing.T
 	var b strings.Builder
 	renderTo(&b, oneRow(), 698, hintClaimBind, 90, false, hiddenOmit)
 
-	if strings.Contains(b.String(), "endless errors show") {
+	if strings.Contains(b.String(), badgeHint) {
 		t.Errorf("badge still rendered after clearing:\n%s", b.String())
 	}
 }
@@ -132,7 +134,7 @@ func TestRenderFaultBadge_AppearsOnTheEmptyView(t *testing.T) {
 	var b strings.Builder
 	renderTo(&b, nil, 0, hintClaimBind, 90, false, hiddenOmit)
 
-	if !strings.Contains(b.String(), "endless errors show") {
+	if !strings.Contains(b.String(), badgeHint) {
 		t.Errorf("badge missing from the empty view:\n%s", b.String())
 	}
 }
@@ -154,7 +156,7 @@ func TestRenderFaultBadge_ColorizesOnlyWhenColorIsEnabled(t *testing.T) {
 
 	var colored strings.Builder
 	renderTo(&colored, oneRow(), 698, hintClaimBind, 90, true, hiddenOmit)
-	if !strings.Contains(colored.String(), badgeError) {
+	if !strings.Contains(colored.String(), rowError) {
 		t.Errorf("badge did not use the error background with color enabled:\n%q", colored.String())
 	}
 }
@@ -171,7 +173,149 @@ func TestRenderFaultBadge_SurvivesAnUnboundFaultStore(t *testing.T) {
 	if !strings.Contains(b.String(), "E-698") {
 		t.Errorf("frame did not render with an unbound fault store:\n%s", b.String())
 	}
-	if strings.Contains(b.String(), "endless errors show") {
+	if strings.Contains(b.String(), badgeHint) {
 		t.Errorf("badge rendered with an unbound fault store:\n%s", b.String())
+	}
+}
+
+// --- E-1950: one-line badge, stale-warning age-off, non-redundant counts ---
+
+// activeClock returns an activeSince function that reports a fixed amount of
+// active time regardless of the timestamp asked about.
+func activeClock(d time.Duration) func(time.Time) (time.Duration, error) {
+	return func(time.Time) (time.Duration, error) { return d, nil }
+}
+
+// brokenClock stands in for an unreadable activity table.
+func brokenClock() func(time.Time) (time.Duration, error) {
+	return func(time.Time) (time.Duration, error) {
+		return 0, errors.New("activity table unreadable")
+	}
+}
+
+func warned(lastSeen string) faults.Incident {
+	return faults.Incident{
+		ID: 1, Code: "ERR-0004", Severity: faults.SeverityWarning,
+		Source: "job:triage", Summary: "job scheduling row could not be created",
+		Occurrences: 1, LastSeenAt: lastSeen,
+	}
+}
+
+func errored(lastSeen string) faults.Incident {
+	return faults.Incident{
+		ID: 2, Code: "ERR-0002", Severity: faults.SeverityError,
+		Source: "job:exploding", Summary: `job "exploding" panicked`,
+		Occurrences: 1, LastSeenAt: lastSeen,
+	}
+}
+
+func TestBadgeworthy_DropsAWarningOnlyAfterAnActiveHour(t *testing.T) {
+	stale := warned("2026-08-10T09:49:09")
+
+	kept := badgeworthy([]faults.Incident{stale}, activeClock(59*time.Minute))
+	if len(kept) != 1 {
+		t.Errorf("warning dropped before an active hour elapsed: kept=%d, want 1", len(kept))
+	}
+
+	kept = badgeworthy([]faults.Incident{stale}, activeClock(time.Hour))
+	if len(kept) != 0 {
+		t.Errorf("warning survived a full active hour: kept=%d, want 0", len(kept))
+	}
+}
+
+func TestBadgeworthy_NeverAgesOutAnError(t *testing.T) {
+	// An error is the case the manual-clear rule was written for: it stays until
+	// someone acknowledges it, however long ago it last fired.
+	kept := badgeworthy([]faults.Incident{errored("2020-01-01T00:00:00")}, activeClock(1000*time.Hour))
+	if len(kept) != 1 {
+		t.Errorf("error aged off the badge: kept=%d, want 1", len(kept))
+	}
+}
+
+func TestBadgeworthy_KeepsWhatItCannotMeasure(t *testing.T) {
+	// Unreadable activity table and unparseable timestamp both mean "cannot
+	// justify hiding this", which must never resolve to hiding it.
+	kept := badgeworthy([]faults.Incident{warned("2026-08-10T09:49:09")}, brokenClock())
+	if len(kept) != 1 {
+		t.Errorf("warning hidden despite an unreadable clock: kept=%d, want 1", len(kept))
+	}
+
+	kept = badgeworthy([]faults.Incident{warned("not-a-timestamp")}, activeClock(1000*time.Hour))
+	if len(kept) != 1 {
+		t.Errorf("warning hidden on an unparseable timestamp: kept=%d, want 1", len(kept))
+	}
+}
+
+func TestBadgeLine_IsOneRowCarryingBothTextAndHint(t *testing.T) {
+	overview := faults.Summarize([]faults.Incident{warned("2026-08-10T09:49:09")})
+
+	line := badgeLine(overview, 90, false)
+
+	if strings.Contains(line, "\n") {
+		t.Errorf("badge spans more than one row:\n%q", line)
+	}
+	if !strings.Contains(line, "WARNING") {
+		t.Errorf("badge lost its severity chip:\n%q", line)
+	}
+	if !strings.Contains(line, "ERR-0004") {
+		t.Errorf("badge lost the incident code:\n%q", line)
+	}
+	if !strings.HasSuffix(line, badgeHint) {
+		t.Errorf("hint is not right-aligned at the end of the row:\n%q", line)
+	}
+}
+
+func TestBadgeLine_OmitsTheCountASingleChipAlreadyConveys(t *testing.T) {
+	overview := faults.Summarize([]faults.Incident{warned("2026-08-10T09:49:09")})
+
+	line := badgeLine(overview, 90, false)
+
+	// " WARNING  1 warning — ..." said the same thing twice.
+	if strings.Contains(line, "1 warning") {
+		t.Errorf("badge restates the count the chip already carries:\n%q", line)
+	}
+}
+
+func TestBadgeLine_CountsWhenThereIsMoreThanOneIncident(t *testing.T) {
+	overview := faults.Summarize([]faults.Incident{
+		errored("2026-08-10T10:00:00"),
+		warned("2026-08-10T09:49:09"),
+	})
+
+	line := badgeLine(overview, 90, false)
+
+	if !strings.Contains(line, "1 error") || !strings.Contains(line, "1 warning") {
+		t.Errorf("badge dropped the tally that the single chip cannot convey:\n%q", line)
+	}
+}
+
+func TestBadgeLine_KeepsTheTextWhenTheRowIsTooNarrowForBoth(t *testing.T) {
+	overview := faults.Summarize([]faults.Incident{warned("2026-08-10T09:49:09")})
+
+	line := badgeLine(overview, 30, false)
+
+	if strings.Contains(line, "\n") {
+		t.Errorf("narrow badge wrapped onto a second row:\n%q", line)
+	}
+	if !strings.Contains(line, "ERR-0004") {
+		t.Errorf("narrow badge dropped the incident text instead of the hint:\n%q", line)
+	}
+}
+
+func TestBadgeLine_UsesThemeIndependentColors(t *testing.T) {
+	overview := faults.Summarize([]faults.Incident{warned("2026-08-10T09:49:09")})
+
+	line := badgeLine(overview, 90, true)
+
+	// The 30-47 ANSI range is remapped by the terminal theme, which is what made
+	// the old black-on-yellow chip unreadable. 256-color indices are fixed.
+	if strings.Contains(line, "\033[30;43m") {
+		t.Errorf("badge fell back to theme-remapped ANSI colors:\n%q", line)
+	}
+	if !strings.Contains(line, rowWarning) {
+		t.Errorf("badge did not reverse the whole row:\n%q", line)
+	}
+	if !strings.Contains(line, chipWarning) {
+		t.Errorf("chip is not inverted against the row:\n%q", line)
 	}
 }

@@ -109,16 +109,20 @@ A job that fails is rescheduled rather than abandoned. Jobs that declare a backo
 Anything that goes wrong in the background is recorded as a classified, clearable **error** with a stable `ERR-NNNN` code. `session status` and `session monitor` show a trailing badge whenever uncleared errors exist — the most severe wins, and `error` outranks `warning`.
 
 ```bash
-endless errors show                    # open errors
+endless errors show                    # open errors  (shell helper: eeh)
 endless errors show --all              # include cleared ones (history)
 endless errors show --id N --detail    # one error, with every occurrence's full capture
 endless errors clear                   # mark every open error cleared
+endless errors clear N                 # dismiss just one
 endless errors codes                   # the documented catalog
 ```
 
-Two behaviors are worth knowing before you rely on this:
+The badge is one row: severity chip, the latest incident, and `Run eeh` right-aligned. `eeh` is the shell helper for `errors show` (see **Shell helpers** in `endless guide orchestration`), and `errors show` closes by naming `errors clear` — the badge has no room to spell out the dismissal, so the command it points at does.
 
-- **Clearing never deletes, and nothing clears itself.** An error stays on the badge until a human dismisses it, even if the job has since been succeeding — an intermittent fault that healed itself out of view would never get fixed. A recurrence after clearing opens a *new* error beside the cleared one, so a problem that came back is visibly distinct from one that never left.
+Three behaviors are worth knowing before you rely on this:
+
+- **Clearing never deletes.** A recurrence after clearing opens a *new* error beside the cleared one, so a problem that came back is visibly distinct from one that never left.
+- **An error never leaves the badge on its own; a stale warning does.** Errors stay until a human dismisses them, even if the job has since been succeeding — an intermittent fault that healed itself out of view would never get fixed. A *warning* stops being badged once an hour of **active** time has passed since it last occurred (E-1950); it is neither cleared nor deleted, and `errors show` still lists it. The hour is measured in time the user was actually at the machine — idle stretches don't count — so a warning cannot expire overnight without ever having been seen.
 - **Clearing is not retrying.** `errors clear` means "I have seen this"; making a backed-off job due again is `jobs retry`. They are separate verbs so that tidying your error list cannot silently re-arm a job that is still broken.
 
 The database stores only the index — code, source, summary, counts. Each occurrence's full capture goes to `<config-dir>/log/errors.jsonl` and comes back through `--detail`, so the table stays bounded by how many *distinct* things are wrong rather than how often they happen. That file is machine-local: it is not the db-ledger, it is never replayed into the database, and errors emit no ledger events.

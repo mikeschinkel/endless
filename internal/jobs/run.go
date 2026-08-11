@@ -9,6 +9,7 @@ import (
 	"os"
 	"runtime/debug"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -158,7 +159,7 @@ func runOne(ctx context.Context, db *sql.DB, job Job) (outcome Outcome) {
 		goto end
 	}
 
-	err = ensureRow(db, job.Name())
+	err = ensureRowWithRetry(db, job.Name())
 	if err != nil {
 		outcome.Err = err
 		recordSchedulingFault(job.Name(), "job scheduling row could not be created", err)
@@ -218,6 +219,62 @@ func runGuarded(ctx context.Context, job Job) (err error) {
 // ensureRow creates the job's scheduling row if absent, due immediately. A newly
 // registered job therefore runs on the next tick rather than waiting out an
 // interval it was never scheduled for.
+// ensureRowBusyRetries is how many extra attempts ensureRowWithRetry makes when
+// the write loses to a concurrent writer.
+//
+// The connection already carries PRAGMA busy_timeout=5000, so each attempt has
+// waited five seconds before failing; these retries cover the case where a
+// writer held the lock across that whole window. Three attempts is the point
+// past which "contended" stops being a credible explanation and the fault the
+// caller records is the honest answer.
+const ensureRowBusyRetries = 2
+
+// ensureRowBusyBackoff is the pause between busy retries. Short, because the
+// busy_timeout is doing the actual waiting — this only breaks up lockstep
+// retries between two invocations that collided.
+const ensureRowBusyBackoff = 250 * time.Millisecond
+
+// ensureRowWithRetry creates the job's scheduling row, retrying when SQLite
+// reports the database busy or locked.
+//
+// docs/errors.md has always said of ERR-0004 that "no job state is corrupted —
+// every scheduling write is a single statement — and the next invocation
+// retries", but the runner still recorded a user-visible warning on the FIRST
+// contended write (E-1950). Losing a lock race is the expected behavior of a
+// database with concurrent writers, not a fault; only losing it repeatedly says
+// anything about the database worth telling the user.
+func ensureRowWithRetry(db *sql.DB, name string) (err error) {
+	var attempt int
+
+	for attempt = 0; ; attempt++ {
+		err = ensureRow(db, name)
+		if err == nil {
+			goto end
+		}
+		if attempt >= ensureRowBusyRetries || !isBusy(err) {
+			goto end
+		}
+		time.Sleep(ensureRowBusyBackoff)
+	}
+
+end:
+	return err
+}
+
+// isBusy reports whether err is SQLite's "database is locked"/"database table is
+// locked" contention signal.
+//
+// Matched on message text rather than on a driver error code: the driver is
+// reached through database/sql and doterr wrapping, and the concrete
+// sqlite3.Error is not reliably recoverable through both.
+func isBusy(err error) (busy bool) {
+	text := strings.ToLower(err.Error())
+	busy = strings.Contains(text, "database is locked") ||
+		strings.Contains(text, "database table is locked") ||
+		strings.Contains(text, "sqlite_busy")
+	return busy
+}
+
 func ensureRow(db *sql.DB, name string) (err error) {
 	_, err = db.Exec(
 		`INSERT INTO jobs (name, next_due_at, created_at, updated_at)

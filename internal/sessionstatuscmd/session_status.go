@@ -619,9 +619,10 @@ func monitorLoop(tracker *anchorTracker, all bool, colsOverride int, color bool,
 // count IS the line count — no off-by-one for a trailing empty segment.
 //
 // Measuring the RENDERED frame, rather than deriving a height from the row
-// count, is what keeps the fit correct as the view grows new parts: E-698's
-// fault badge adds two lines when an incident is open and none when it isn't,
-// and the fit tracks that for free.
+// count, is what keeps the fit correct as the view grows new parts: the fault
+// badge adds a line when an incident is open and none when it isn't, and the fit
+// tracks that for free. (It cost two lines under E-698 and one since E-1950 —
+// neither number appears here, which is the point.)
 func frameLines(frame string) int {
 	return strings.Count(frame, "\n")
 }
