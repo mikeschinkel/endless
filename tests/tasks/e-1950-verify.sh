@@ -175,6 +175,18 @@ grep -q '^eeh()' <(uv run endless shell-init 2>/dev/null) \
     || fail "shell-init does not define eeh" "the badge points at a helper that does not exist"
 pass "shell-init defines the eeh helper"
 
+# Every check in this suite once drove `endless-go` directly, so `errors raise`
+# shipping in the binary with no Python command went green anyway — the verb a
+# user types did not exist. Assert the surface a human actually uses.
+uv run endless errors --help 2>&1 | grep -qE '^\s+raise\s' \
+    || fail "'endless errors' does not expose raise" \
+            "a verb only endless-go can reach is unshipped, however well documented"
+pass "'endless errors raise' exists on the Python CLI, not just in the binary"
+
+uv run pytest tests/test_go_cli_parity.py -q >"${TMP}/parity.log" 2>&1 \
+    || { sed 's/^/      /' "${TMP}/parity.log" >&2; fail "Go/Python CLI parity"; }
+pass "every endless-go errors/jobs verb is reachable from the Python CLI"
+
 # ── 7. it actually renders ──────────────────────────────────────────────────
 section "7. End-to-end render"
 

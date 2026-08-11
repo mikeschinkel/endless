@@ -3009,6 +3009,31 @@ def errors_codes():
     impl()
 
 
+@errors_cmd.command("raise")
+@click.option("--severity", type=click.Choice(["warning", "error"]),
+              default="warning", show_default=True,
+              help="Severity to raise")
+@click.option("--summary", default=None,
+              help="Incident summary (defaults to the code's title)")
+@click.option("--source", default=None,
+              help="Source subsystem to attribute it to")
+@click.option("--repeat", type=int, default=1, show_default=True,
+              help="Record this many occurrences (they collapse into one incident)")
+def errors_raise(severity, summary, source, repeat):
+    """Record a SYNTHETIC fault, to see this surface work.
+
+    Nothing is wrong when one appears. It exists so the session-status badge,
+    this listing and the detail log can be exercised on demand instead of only
+    when something genuinely breaks (E-1950).
+
+    It records through the same path a real fault takes, so what you get is
+    shaped exactly like the real thing; only the code marks it synthetic
+    (ERR-0006 warning / ERR-0007 error). Dismiss it with `errors clear <id>`.
+    """
+    from endless.jobs_cmd import errors_raise as impl
+    impl(severity, summary, source, repeat)
+
+
 @main.group("verb")
 def verb_cmd():
     """Manage verbs — the registered actions that can start task titles."""

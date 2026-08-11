@@ -93,3 +93,16 @@ def errors_clear(ids: tuple[int, ...]) -> None:
 def errors_codes() -> None:
     """Print the documented error catalog."""
     _run_go("errors", ["codes"])
+
+
+def errors_raise(severity: str, summary: str | None, source: str | None,
+                 repeat: int) -> None:
+    """Record a synthetic fault so the error surface can be exercised."""
+    args = ["raise", "--severity", severity]
+    if summary:
+        args += ["--summary", summary]
+    if source:
+        args += ["--source", source]
+    if repeat != 1:
+        args += ["--repeat", str(repeat)]
+    _run_go("errors", args)
