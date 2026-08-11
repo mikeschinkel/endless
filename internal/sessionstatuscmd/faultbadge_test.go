@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/mattn/go-runewidth"
 	_ "modernc.org/sqlite"
 
 	"github.com/mikeschinkel/endless/internal/faults"
@@ -318,4 +319,153 @@ func TestBadgeLine_UsesThemeIndependentColors(t *testing.T) {
 	if !strings.Contains(line, chipWarning) {
 		t.Errorf("chip is not inverted against the row:\n%q", line)
 	}
+}
+
+// --- E-1950: the badge must be correct at EVERY width, not at a chosen one ---
+//
+// Terminal width is not a property of any one person's setup: it changes with
+// the monitor, the split, the font, and the window. Asserting the layout at a
+// hand-picked width only moves the guess around, so these sweep the range and
+// assert the invariants that must hold at all of them.
+
+// badgeWidths is the sweep: absurdly narrow through wider than any real
+// terminal, including every boundary the layout logic can turn on.
+func badgeWidths() (widths []int) {
+	for w := 1; w <= 240; w++ {
+		widths = append(widths, w)
+	}
+	return widths
+}
+
+// printedWidth is the badge's width in terminal columns, with the ANSI escapes
+// — which occupy no columns — removed.
+func printedWidth(line string) int {
+	var out strings.Builder
+	for i := 0; i < len(line); i++ {
+		if line[i] != '\033' {
+			out.WriteByte(line[i])
+			continue
+		}
+		for i < len(line) && line[i] != 'm' {
+			i++
+		}
+	}
+	return runewidth.StringWidth(out.String())
+}
+
+func TestBadgeLine_NeverExceedsTheTerminalWidth(t *testing.T) {
+	cases := map[string]faults.Overview{
+		"warning":    faults.Summarize([]faults.Incident{warned("2026-08-10T09:49:09")}),
+		"error":      faults.Summarize([]faults.Incident{errored("2026-08-10T10:00:00")}),
+		"both":       faults.Summarize([]faults.Incident{errored("2026-08-10T10:00:00"), warned("2026-08-10T09:49:09")}),
+		"long":       faults.Summarize([]faults.Incident{longWarning()}),
+		"wide runes": faults.Summarize([]faults.Incident{wideRuneWarning()}),
+	}
+
+	for name, overview := range cases {
+		for _, cols := range badgeWidths() {
+			for _, color := range []bool{false, true} {
+				line := badgeLine(overview, cols, color)
+
+				if strings.Contains(line, "\n") {
+					t.Fatalf("%s/cols=%d/color=%v: badge contains a newline:\n%q", name, cols, color, line)
+				}
+				// cols-1, not cols: a line ending exactly at the right margin sits
+				// on the deferred-wrap boundary where tmux can emit a phantom row.
+				if got := printedWidth(line); got > cols-1 {
+					t.Fatalf("%s/cols=%d/color=%v: printed width %d exceeds cols-1:\n%q",
+						name, cols, color, got, line)
+				}
+			}
+		}
+	}
+}
+
+func TestBadgeLine_AlwaysShowsTheSeverityAndTheCode(t *testing.T) {
+	overview := faults.Summarize([]faults.Incident{warned("2026-08-10T09:49:09")})
+
+	// Whatever else gives way, the severity is the last thing standing: a badge
+	// that cannot say what happened is not worth the row it costs.
+	//
+	// Both thresholds are DERIVED from the layout's own constants, not chosen.
+	// A hand-picked width would just be a different guess about someone's
+	// terminal, and would silently stop testing the boundary the moment the
+	// chip text or the hint changed length.
+	chip := severityLabel(faults.SeverityWarning)
+	chipWidth := runewidth.StringWidth(chip)
+	// The bare severity word must fit whole; below that the badge renders nothing.
+	minSeverity := runewidth.StringWidth(strings.TrimSpace(chip))
+	minCode := chipWidth + 2 + len("ERR-0004…") // chip, space, and a code that survives truncation
+
+	for _, cols := range badgeWidths() {
+		line := badgeLine(overview, cols, false)
+
+		if cols-1 < minSeverity {
+			if line != "" {
+				t.Fatalf("cols=%d: rendered a badge too narrow to be legible:\n%q", cols, line)
+			}
+			continue
+		}
+		if !strings.Contains(line, "WARNING") {
+			t.Fatalf("cols=%d: badge lost its severity:\n%q", cols, line)
+		}
+		if cols >= minCode && !strings.Contains(line, "ERR-0004") {
+			t.Fatalf("cols=%d: badge lost the incident code:\n%q", cols, line)
+		}
+	}
+}
+
+func TestBadgeLine_DropsTheHintOnlyWhenItCannotFit(t *testing.T) {
+	overview := faults.Summarize([]faults.Incident{longWarning()})
+
+	// The hint is reserved BEFORE the text, so at any width where both fit it is
+	// present — and once present it must never disappear again as the terminal
+	// gets wider. Assert that transition happens exactly once.
+	seen := false
+	for _, cols := range badgeWidths() {
+		line := badgeLine(overview, cols, false)
+		has := strings.Contains(line, badgeHint)
+		if has {
+			seen = true
+			if !strings.HasSuffix(line, badgeHint) {
+				t.Fatalf("cols=%d: hint is present but not right-aligned:\n%q", cols, line)
+			}
+			continue
+		}
+		if seen {
+			t.Fatalf("cols=%d: hint reappeared as missing after fitting at a narrower width:\n%q", cols, line)
+		}
+	}
+	if !seen {
+		t.Fatal("the hint never fit at any width up to 240")
+	}
+}
+
+func TestBadgeLine_ResetsEveryColorItOpens(t *testing.T) {
+	overview := faults.Summarize([]faults.Incident{warned("2026-08-10T09:49:09")})
+
+	// An unreset background bleeds into the rest of the pane — including the
+	// user's prompt after the command exits.
+	for _, cols := range badgeWidths() {
+		line := badgeLine(overview, cols, true)
+		if line == "" {
+			continue // too narrow to render at all — nothing opened, nothing to reset
+		}
+		if !strings.HasSuffix(line, badgeReset) {
+			t.Fatalf("cols=%d: badge does not end with a reset:\n%q", cols, line)
+		}
+	}
+}
+
+func longWarning() faults.Incident {
+	w := warned("2026-08-10T09:49:09")
+	w.Summary = strings.Repeat("a very long summary that will certainly not fit ", 8)
+	return w
+}
+
+func wideRuneWarning() faults.Incident {
+	w := warned("2026-08-10T09:49:09")
+	// Double-width runes are where a byte-length budget silently overflows.
+	w.Summary = strings.Repeat("日本語テキスト", 12)
+	return w
 }

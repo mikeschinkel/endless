@@ -115,7 +115,19 @@ endless errors show --id N --detail    # one error, with every occurrence's full
 endless errors clear                   # mark every open error cleared
 endless errors clear N                 # dismiss just one
 endless errors codes                   # the documented catalog
+endless errors raise                   # record a SYNTHETIC fault, to see the surface work
 ```
+
+**Seeing it work without waiting for a failure.** `errors raise` records a real incident carrying a synthetic code (ERR-0006 warning / ERR-0007 error), through the same path a genuine fault takes — same upsert, same fingerprinting, same detail line. It exists because the one view whose job is reporting trouble was otherwise the hardest view to inspect (E-1950).
+
+```bash
+endless errors raise --severity error   # exercise the red styling and max-severity precedence
+endless errors raise --repeat 4         # one incident, four occurrences
+endless session status                  # the badge, at your terminal's real width
+endless errors clear <id>               # put it back
+```
+
+It writes to whichever database the invoking process resolved, so from a self-dev worktree it lands in that worktree's sandbox. `session status` pins the *main* DB on its normal path, so to see a sandbox-raised fault on the badge use the headless form, which reads the resolved sandbox context: `endless-go session-status --task <id>`. That form also takes `--cols N`, which renders the badge at any width without resizing anything.
 
 The badge is one row: severity chip, the latest incident, and `Run eeh` right-aligned. `eeh` is the shell helper for `errors show` (see **Shell helpers** in `endless guide orchestration`), and `errors show` closes by naming `errors clear` — the badge has no room to spell out the dismissal, so the command it points at does.
 

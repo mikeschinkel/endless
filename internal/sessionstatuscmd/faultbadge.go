@@ -76,6 +76,7 @@ const staleWarningAfter = time.Hour
 func renderFaultBadge(w io.Writer, cols int, color bool) {
 	var incidents []faults.Incident
 	var overview faults.Overview
+	var line string
 	var err error
 
 	incidents, err = faults.List(false, 0)
@@ -89,7 +90,14 @@ func renderFaultBadge(w io.Writer, cols int, color bool) {
 		goto end
 	}
 
-	fmt.Fprintln(w, badgeLine(overview, cols, color))
+	line = badgeLine(overview, cols, color)
+	if line == "" {
+		// Too narrow to render anything legible. A blank reversed row would be
+		// worse than no row: it costs the same space and says nothing.
+		goto end
+	}
+
+	fmt.Fprintln(w, line)
 
 end:
 	return
@@ -144,39 +152,72 @@ func badgeworthy(
 // frameLines, which counts newlines, so a visual wrap it cannot see would
 // mis-fit the pane. One unpainted column at the right edge is invisible; a
 // wrapped badge is not.
+// Terminal width is not a fixed property of anyone's setup — it changes with the
+// monitor, the split, the font and the window — so every branch below is derived
+// from `cols` rather than tuned against any particular one. The invariant the
+// width-sweep tests hold it to: the printed width never exceeds cols-1, at any
+// width, for any content, in color or out.
+//
+// Degradation order as the row narrows: the hint goes first (it is reserved
+// before the text, so it survives every width where both fit), then the text
+// truncates toward nothing, then the chip itself truncates. The severity is the
+// last thing standing, because a badge that cannot say what happened is not
+// worth the row it costs.
 func badgeLine(overview faults.Overview, cols int, color bool) (line string) {
 	var chip string
 	var text string
 	var hint string
 	var width int
+	var chipWidth int
+	var avail int
 	var budget int
-	var used int
 	var pad int
 
 	width = cols - 1
+	if width < 1 {
+		goto end
+	}
+
 	chip = severityLabel(overview.Max)
+	chipWidth = runewidth.StringWidth(chip)
+
+	// No room for the padded chip plus any text: fall back to the bare severity
+	// word, unpadded. It either fits whole or the badge renders nothing —
+	// a sliver of a truncated word ("WARN", " ", "W") is not a badge, it is
+	// debris occupying a row.
+	if chipWidth+1 >= width {
+		chip = strings.TrimSpace(chip)
+		if runewidth.StringWidth(chip) > width {
+			goto end
+		}
+		line = chip
+		if color {
+			line = chipStyle(overview.Max) + chip + badgeReset
+		}
+		goto end
+	}
+
 	text = badgeText(overview)
 	hint = badgeHint
 
-	budget = textBudget(width, chip, hint)
+	// Columns left for text + hint, after the chip and the space following it.
+	avail = width - chipWidth - 1
+
+	budget = textBudget(avail, hint)
+	if budget == avail {
+		// textBudget kept the whole span for the text, which is how it reports
+		// that the hint does not fit.
+		hint = ""
+	}
 	text = runewidth.Truncate(text, budget, "…")
 
-	// Space the hint out to the right edge. When the row is too narrow to hold
-	// both, textBudget has already given the text the hint's columns back, so
-	// drop the hint rather than wrapping the line.
-	used = runewidth.StringWidth(chip) + 1 + runewidth.StringWidth(text)
-	pad = width - used - runewidth.StringWidth(hint)
-	if pad < 1 {
-		hint = ""
-		pad = width - used
-	}
+	pad = avail - runewidth.StringWidth(text) - runewidth.StringWidth(hint)
 	if pad < 0 {
 		pad = 0
 	}
 
 	if !color {
-		line = chip + " " + text + strings.Repeat(" ", pad) + hint
-		line = strings.TrimRight(line, " ")
+		line = strings.TrimRight(chip+" "+text+strings.Repeat(" ", pad)+hint, " ")
 		goto end
 	}
 
@@ -265,25 +306,32 @@ func severityLabel(severity faults.Severity) (label string) {
 	return label
 }
 
-// textBudget returns how many columns the incident text may occupy once the chip
-// and the right-aligned hint have taken theirs.
+// minTextBudget is the narrowest incident text worth keeping the hint for.
 //
-// The hint is reserved BEFORE the text so it survives truncation — except on a
-// terminal too narrow to hold both, where the text wins and badgeLine drops the
-// hint entirely.
-func textBudget(cols int, chip, hint string) (budget int) {
-	reserved := runewidth.StringWidth(chip) + 1 + runewidth.StringWidth(hint) + 2
+// Below it the hint is costing more than it is worth: a badge truncated to
+// "ERR-0004 job sch…" has stopped telling the user what happened, and pointing
+// them at a command to read more is no substitute for the text itself.
+const minTextBudget = 20
 
-	budget = cols - reserved
-	if budget >= 20 {
+// textBudget returns how many of `avail` columns the incident text may occupy
+// beside the right-aligned hint. Returning `avail` unchanged means the hint does
+// not fit and badgeLine should drop it.
+//
+// The hint is reserved BEFORE the text so it survives truncation at every width
+// where both fit — a badge whose reader cannot act on it is just noise. The
+// exception is a row too narrow for both, where the text wins.
+//
+// Never returns more than `avail`: overflowing here is what wraps the badge.
+func textBudget(avail int, hint string) (budget int) {
+	reserved := runewidth.StringWidth(hint) + 2
+
+	budget = avail - reserved
+	if budget >= minTextBudget {
 		goto end
 	}
 
-	// Too tight for both: give the text the hint's columns back.
-	budget = cols - runewidth.StringWidth(chip) - 1
-	if budget < 20 {
-		budget = 20
-	}
+	// Too tight for both — the text takes the whole span.
+	budget = avail
 
 end:
 	return budget

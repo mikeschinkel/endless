@@ -40,8 +40,11 @@ else
 fi
 
 TMP=""
+RAISED=""
+# Redefined in section 7 once a synthetic incident exists, so the probe is
+# always cleared however this script exits.
 cleanup() { [[ -n "${TMP}" ]] && rm -rf "${TMP}"; }
-trap cleanup EXIT
+trap 'cleanup' EXIT
 
 pass() { printf '  %s✓%s %s\n' "${GREEN}" "${RESET}" "$1"; }
 fail() {
@@ -182,11 +185,46 @@ grep -qE '^\s*endless errors show\s*$' "${TMP}/status.txt" \
     && fail "the standalone hint row is still being rendered"
 pass "session-status renders without the orphaned hint row"
 
-# Whatever the badge renders must fit on one line. Count the rows that carry a
-# severity chip; two would mean the second line came back.
-chips=$(grep -cE '(WARNING|ERROR)' "${TMP}/status.txt" || true)
-(( chips <= 1 )) || fail "the badge occupies ${chips} rows" "want at most 1"
-pass "the badge occupies at most one row in a live render"
+# `errors raise` is what makes this section possible: before it, the badge could
+# only be exercised end-to-end by waiting for something to actually break.
+"${GO_BIN}" errors raise --summary "e-1950 verify probe" >"${TMP}/raise.txt" 2>&1 \
+    || fail "errors raise failed" "$(head -3 "${TMP}/raise.txt")"
+RAISED=$(grep -oE 'as error [0-9]+' "${TMP}/raise.txt" | grep -oE '[0-9]+$')
+[[ -n "${RAISED}" ]] || fail "errors raise did not report an incident id" "$(cat "${TMP}/raise.txt")"
+# Always put it back, however this script exits.
+cleanup() {
+    [[ -n "${RAISED:-}" ]] && "${GO_BIN}" errors clear "${RAISED}" >/dev/null 2>&1
+    [[ -n "${TMP}" ]] && rm -rf "${TMP}"
+}
+pass "errors raise records a synthetic incident (id ${RAISED})"
+
+# The badge must be ONE row at every width, and must never exceed it. Sweeping
+# here rather than checking one width on purpose: terminal width is not a fixed
+# property of anyone's setup, and a single sampled width tests nobody's terminal
+# but the sampler's.
+for cols in 20 34 40 60 80 94 100 120 200; do
+    "${GO_BIN}" session-status --task 1950 --cols "${cols}" >"${TMP}/w${cols}.txt" 2>&1 \
+        || fail "session-status --cols ${cols} exited non-zero"
+    badge=$(grep -nE '(WARNING|ERROR)' "${TMP}/w${cols}.txt" || true)
+    n=$(printf '%s' "${badge}" | grep -c . || true)
+    (( n <= 1 )) || fail "at cols=${cols} the badge occupies ${n} rows" "want at most 1"
+
+    # The BADGE line must never exceed the width, or the terminal wraps it and
+    # the monitor's newline-counting pane fit never sees the extra row. Scoped to
+    # the badge on purpose: other rows (e.g. the fixed no-task hint) have their
+    # own width behavior that predates this task.
+    # Measured in DISPLAY COLUMNS, not bytes: the truncation ellipsis is three
+    # bytes and one column, and a byte count would report a false overflow.
+    width=$(sed 's/\x1b\[[0-9;]*m//g' "${TMP}/w${cols}.txt" \
+            | grep -E '(WARNING|ERROR)' \
+            | python3 -c '
+import sys, unicodedata
+def w(s):
+    return sum(2 if unicodedata.east_asian_width(c) in "WF" else 1 for c in s)
+print(max([w(l.rstrip("\n")) for l in sys.stdin] or [0]))')
+    (( width < cols )) || fail "at cols=${cols} the badge is ${width} columns wide" "must stay under cols"
+done
+pass "the badge is one row and never overflows, swept across 20-200 columns"
 
 # ── 8. documentation ────────────────────────────────────────────────────────
 section "8. Documentation"
@@ -208,7 +246,7 @@ pass "the guide no longer overstates the manual-clear rule"
 grep -q 'E-1950' docs/errors.md || fail "docs/errors.md does not describe the ERR-0004 retry"
 pass "docs/errors.md describes the scheduling-write retry"
 
-for code in ERR-0001 ERR-0002 ERR-0003 ERR-0004 ERR-0005; do
+for code in ERR-0001 ERR-0002 ERR-0003 ERR-0004 ERR-0005 ERR-0006 ERR-0007; do
     grep -q "^## ${code} — " docs/errors.md || fail "docs/errors.md has no section for ${code}"
 done
 pass "docs/errors.md still documents every catalog code"

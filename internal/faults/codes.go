@@ -107,6 +107,32 @@ var (
 		Severity: SeverityWarning,
 		Title:    "A background job outran its lease and was re-claimed",
 	}
+
+	// ErrCodeTestWarning and ErrCodeTestError are raised only by
+	// `endless errors raise` (E-1950). Nothing has gone wrong when one appears.
+	//
+	// They exist because the badge, the store and the detail log had no way to
+	// be exercised without waiting for a real failure — which made the one
+	// surface whose whole job is reporting trouble the hardest one to look at.
+	// Two codes rather than a --severity flag on one, because severity is a
+	// property of the CODE here and a flag would be the first exception to that.
+	//
+	// The titles say "synthetic" so a raised fault is never mistaken for a real
+	// one in `errors show`, in a screenshot, or in a bug report.
+	ErrCodeTestWarning = Code{
+		ID:       "ERR-0006",
+		Slug:     "test-warning",
+		Severity: SeverityWarning,
+		Title:    "A synthetic warning raised on purpose to exercise this surface",
+	}
+
+	// ErrCodeTestError is the error-severity counterpart to ErrCodeTestWarning.
+	ErrCodeTestError = Code{
+		ID:       "ERR-0007",
+		Slug:     "test-error",
+		Severity: SeverityError,
+		Title:    "A synthetic error raised on purpose to exercise this surface",
+	}
 )
 
 // catalog indexes every registered Code by ID. Built once at init from the
@@ -117,6 +143,8 @@ var catalog = buildCatalog(
 	ErrCodeJobTimedOut,
 	ErrCodeJobScheduling,
 	ErrCodeJobStuckLease,
+	ErrCodeTestWarning,
+	ErrCodeTestError,
 )
 
 // buildCatalog indexes codes by ID. It panics on a duplicate ID: a collision is

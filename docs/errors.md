@@ -129,3 +129,39 @@ invocation — so two invocations may have run it concurrently.
 worst-case runtime. Also confirm the job is genuinely idempotent: the lease is
 time-boxed rather than an OS lock precisely so a dead process needs no cleanup,
 and the unavoidable cost of that design is that a slow job can be re-entered.
+
+## ERR-0006 — test-warning
+
+**Severity:** warning · **Raised by:** `endless errors raise`
+
+Nothing is wrong. This code exists only so the error surface can be exercised on
+demand — the badge on `session status`, the `errors show` listing, the JSONL
+detail log — without waiting for something to genuinely break (E-1950).
+
+```bash
+endless errors raise                          # a synthetic warning
+endless errors raise --severity error         # a synthetic error (ERR-0007)
+endless errors raise --repeat 4               # one incident, four occurrences
+endless errors raise --summary "custom text"  # override the summary
+```
+
+It records through the same path a real fault takes — same upsert, same
+fingerprinting, same detail line — so what you are looking at is shaped exactly
+like the real thing. Only the code marks it synthetic.
+
+It writes to whichever database the invoking process resolved, so from a self-dev
+worktree it lands in that worktree's sandbox rather than in the real ledger.
+
+**What to do.** Dismiss it: `endless errors clear <id>`. If you did not raise it
+yourself, someone was testing; it is not a fault report.
+
+## ERR-0007 — test-error
+
+**Severity:** error · **Raised by:** `endless errors raise --severity error`
+
+The error-severity counterpart to ERR-0006, for exercising the surfaces that
+treat `error` differently from `warning` — the red badge styling, the max-severity
+precedence, and the rule that an error never ages off the badge while a stale
+warning does.
+
+**What to do.** Dismiss it: `endless errors clear <id>`.

@@ -39,6 +39,8 @@ func Run(args []string) {
 		runClear(args[1:])
 	case "codes":
 		runCodes()
+	case "raise":
+		runRaise(args[1:])
 	case "-h", "--help", "help":
 		usage(os.Stdout)
 	default:
@@ -54,6 +56,85 @@ func usage(w *os.File) {
 	fmt.Fprintln(w, "  show [--all] [--detail] [--id N]  list uncleared errors (--all includes cleared)")
 	fmt.Fprintln(w, "  clear [<id>...]                   mark errors cleared (all open ones when no id given)")
 	fmt.Fprintln(w, "  codes                             print the documented error catalog")
+	fmt.Fprintln(w, "  raise [--severity S] [--summary T] [--repeat N]")
+	fmt.Fprintln(w, "                                    record a SYNTHETIC fault, to see this surface work")
+}
+
+// runRaise records a synthetic fault so the badge, the store and the detail log
+// can be exercised on demand.
+//
+// Before this, the only way to look at the error surface was to wait for
+// something to actually break (E-1950) — which made the one view whose whole job
+// is reporting trouble the hardest view in the system to inspect, and left the
+// session-status badge with no end-to-end test that rendered a real incident.
+//
+// It goes through faults.Record, not a direct INSERT, so what it produces is
+// indistinguishable in shape from a genuine fault: same upsert, same
+// fingerprinting, same JSONL detail line. Only the CODE marks it synthetic, and
+// the catalog titles say so out loud.
+//
+// It writes to whichever database the process resolved, so from a self-dev
+// worktree it lands in that worktree's sandbox rather than the real ledger.
+func runRaise(args []string) {
+	fs := flag.NewFlagSet("raise", flag.ExitOnError)
+	severity := fs.String("severity", "warning", "severity to raise: warning or error")
+	summary := fs.String("summary", "", "incident summary (defaults to the code's title)")
+	source := fs.String("source", "manual:raise", "source subsystem to attribute it to")
+	repeat := fs.Int("repeat", 1, "record this many occurrences (they collapse into one incident)")
+	if err := fs.Parse(args); err != nil {
+		os.Exit(2)
+	}
+
+	var code faults.Code
+	switch *severity {
+	case "warning":
+		code = faults.ErrCodeTestWarning
+	case "error":
+		code = faults.ErrCodeTestError
+	default:
+		fmt.Fprintf(os.Stderr, "endless-go errors: raise: unknown severity %q (want warning or error)\n", *severity)
+		os.Exit(2)
+	}
+
+	if *repeat < 1 {
+		fmt.Fprintln(os.Stderr, "endless-go errors: raise: --repeat must be at least 1")
+		os.Exit(2)
+	}
+
+	if !faults.Bound() {
+		fmt.Fprintln(os.Stderr, "endless-go errors: raise: the fault store is not bound")
+		os.Exit(1)
+	}
+
+	for i := 0; i < *repeat; i++ {
+		faults.Record(faults.Fault{
+			Code:    code,
+			Source:  *source,
+			Summary: *summary,
+			Detail:  "Raised deliberately by `endless errors raise`. Nothing is wrong.",
+			Fields:  map[string]any{"synthetic": true, "occurrence": i + 1},
+		})
+	}
+
+	// Record cannot report failure — by contract it swallows everything — so
+	// confirm by reading the incident back rather than by assuming it landed.
+	incidents, err := faults.List(false, 0)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "endless-go errors: raise: recorded, but could not read it back:", err)
+		os.Exit(1)
+	}
+	for _, incident := range incidents {
+		if incident.Code != code.ID || incident.Source != *source {
+			continue
+		}
+		fmt.Printf("raised %s (%s) as error %d, %d occurrence(s)\n",
+			code.ID, code.Severity, incident.ID, incident.Occurrences)
+		fmt.Println("dismiss it with: endless errors clear", incident.ID)
+		return
+	}
+
+	fmt.Fprintln(os.Stderr, "endless-go errors: raise: the fault did not land")
+	os.Exit(1)
 }
 
 // runShow lists incidents.
