@@ -178,13 +178,13 @@ def test_ledger_only_drift_does_not_refuse(landable, monkeypatch):
     _refuse_if_behind_base(wt, "main", CANON, main)  # must not raise
 
 
-def test_mixed_commit_touching_source_still_counts(landable, monkeypatch):
-    """A commit touching a ledger file AND real source is real drift."""
+def test_mixed_commit_touching_go_still_counts(landable, monkeypatch):
+    """A commit touching a ledger file AND Go source is real drift."""
     main, wt = landable["main"], landable["worktree"]
     seg = main / ".endless" / "db-ledger" / "db-entries-aaaa-000001.jsonl"
     seg.parent.mkdir(parents=True, exist_ok=True)
     seg.write_text('{"e":0}\n')
-    (main / "README").write_text("changed\n")
+    _write(main, "internal/tasktype/kind.go", "package tasktype\n")
     _git(["git", "add", "-A"], main)
     _git(["git", "commit", "-q", "-m", "Endless: record ledger entry"], main)
     monkeypatch.setattr("endless.config.project_is_self_dev", lambda root: True)
@@ -193,10 +193,47 @@ def test_mixed_commit_touching_source_still_counts(landable, monkeypatch):
         _refuse_if_behind_base(wt, "main", CANON, main)
 
 
+@pytest.mark.parametrize("rel", [
+    "src/endless/worktree_cmd.py",   # the land runs main's Python, not this
+    "justfile",
+    "tests/test_something.py",
+    ".endless/decisions/ED-1551.md",
+    "docs/guide/index.md",
+    "README.md",
+])
+def test_non_binary_drift_does_not_refuse(landable, monkeypatch, rel):
+    """Regression: nothing outside the Go build inputs can make endless-go
+    stale, so it must not block a land. Each of these refused in an earlier
+    round and blocked real work."""
+    main, wt = landable["main"], landable["worktree"]
+    _write(main, rel, "x\n")
+    _git(["git", "add", "-A"], main)
+    _git(["git", "commit", "-q", "-m", f"change {rel}"], main)
+    monkeypatch.setattr("endless.config.project_is_self_dev", lambda root: True)
+    _refuse_if_behind_base(wt, "main", CANON, main)  # must not raise
+
+
+@pytest.mark.parametrize("rel", [
+    "cmd/endless-go/main.go",
+    "internal/schema/changes/0100-x.sql",
+    "go.mod",
+    "go.sum",
+])
+def test_binary_input_drift_does_refuse(landable, monkeypatch, rel):
+    """The hazard the guard exists for: drift in what endless-go is built from."""
+    main, wt = landable["main"], landable["worktree"]
+    _write(main, rel, "x\n")
+    _git(["git", "add", "-A"], main)
+    _git(["git", "commit", "-q", "-m", f"change {rel}"], main)
+    monkeypatch.setattr("endless.config.project_is_self_dev", lambda root: True)
+    with pytest.raises(click.ClickException):
+        _refuse_if_behind_base(wt, "main", CANON, main)
+
+
 def test_behind_branch_is_refused_with_actionable_message(landable, monkeypatch):
     main, wt = landable["main"], landable["worktree"]
     for i in range(3):
-        (main / "README").write_text(f"x{i}\n")
+        _write(main, f"internal/pkg{i}/x.go", f"package pkg{i}\n")
         _git(["git", "add", "-A"], main)
         _git(["git", "commit", "-q", "-m", f"main {i}"], main)
     # Ledger noise alongside the real drift must not change the count.
@@ -206,7 +243,7 @@ def test_behind_branch_is_refused_with_actionable_message(landable, monkeypatch)
     with pytest.raises(click.ClickException) as ei:
         _refuse_if_behind_base(wt, "main", CANON, main)
     msg = ei.value.message
-    assert "3 source commits behind main" in msg
+    assert "3 Go commits behind main" in msg
     assert "git rebase main" in msg
     # Must not issue a bare "rebase" instruction: under a rewritten main that
     # rebase is itself what conflicts, so the message has to name that case.

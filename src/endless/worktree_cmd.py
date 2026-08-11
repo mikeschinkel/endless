@@ -66,6 +66,26 @@ AUTO_COMMIT_GLOBS = (
 # recorded on the main checkout only) and must never ride a land into main.
 DB_LEDGER_DIR = ".endless/db-ledger"
 
+# E-1941: everything that can end up INSIDE the endless-go binary. The
+# behind-base refusal exists for exactly one hazard — a worktree binary whose
+# embedded schema/enums are older than the real DB's rows — so only drift in
+# these paths can justify it.
+#
+# Deliberately narrow, learned the hard way. Counting all commits refused every
+# land (ledger auto-commits land on main constantly). Counting all non-auto
+# commits still refused on Python-, justfile-, test-, and decision-only drift,
+# none of which is compiled into anything. Note especially that src/endless/**
+# does NOT belong here: the land executes the GLOBAL Python (uv installs it
+# editable from the main checkout), never the worktree's copy, so worktree
+# Python can't be stale in a way that affects a land.
+#
+# Fails permissive by construction: Go moving to a new top-level directory would
+# be missed here. That is the right direction to fail — since the E-1941
+# reorder, a stale binary produces a loud VerifyIntegrity error AFTER main
+# advances, which a re-run fixes, whereas a spurious refusal blocks every land
+# and tells the user to run the one operation that risks the E-1943 conflict.
+BINARY_SOURCE_PATHS = ("cmd/", "internal/", "go.mod", "go.sum")
+
 # Mirrors internal/events/commit.go (E-1342). Subjects whose auto-commits
 # can amend in place via canAmend, producing orphans at the base of task
 # branches when main amends past a branch's fork-point SHA. The orphan-drop
@@ -1914,22 +1934,23 @@ def _refuse_if_behind_base(
     usage — and downstream branches carry no schema changes, so the binary/DB skew
     this guards has no way to arise.
 
-    Counts only commits touching NON-auto paths. Ledger auto-commits
-    (AUTO_COMMIT_GLOBS / DB_LEDGER_DIR) land on main continuously — several a
-    minute during an active session — and touch nothing that can go into a
-    binary, so counting them made the guard fire on essentially every land. Worse,
-    the remedy it names is a rebase, which is exactly the operation that risks the
-    E-1943 ledger conflict: the common case would have demanded the dangerous
-    move. A commit touching both a ledger file and real source still counts.
+    Counts ONLY commits touching BINARY_SOURCE_PATHS — the paths that actually
+    end up inside endless-go. The hazard is a binary older than the real DB's
+    rows; drift anywhere else cannot cause it. Two rounds of false positives
+    taught this: counting everything refused on ledger auto-commits (which land
+    on main continuously), and counting all non-auto paths still refused on
+    Python-, justfile-, test- and decision-only drift. Each spurious refusal told
+    the user to rebase, the one operation that risks the E-1943 ledger conflict.
     """
     from endless import config
     if not config.project_is_self_dev(project_root):
         return
-    excludes = [f":(exclude){glob}" for glob in AUTO_COMMIT_GLOBS]
-    excludes.append(f":(exclude){DB_LEDGER_DIR}/")
     try:
         out = _git_run(
-            ["rev-list", "--count", f"HEAD..{base_branch}", "--", *excludes],
+            [
+                "rev-list", "--count", f"HEAD..{base_branch}",
+                "--", *BINARY_SOURCE_PATHS,
+            ],
             cwd=worktree_path,
         )
     except subprocess.CalledProcessError as e:
@@ -1941,8 +1962,9 @@ def _refuse_if_behind_base(
         return
     commits = "commit" if behind == 1 else "commits"
     raise click.ClickException(
-        f"cannot land {canonical}: the branch is {behind} source {commits} "
-        f"behind {base_branch} (ledger auto-commits are not counted).\n\n"
+        f"cannot land {canonical}: the branch is {behind} Go {commits} behind "
+        f"{base_branch} (only {', '.join(BINARY_SOURCE_PATHS)} are counted — "
+        f"the paths compiled into endless-go).\n\n"
         f"This land would run the worktree's endless-go against the real "
         f"database — to apply schema changes and to record the landing. That "
         f"binary is built from this worktree's source, so source behind "
