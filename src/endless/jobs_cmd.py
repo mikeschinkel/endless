@@ -30,9 +30,23 @@ def _run_go(subcommand: str, args: list[str]) -> None:
     - WHICH DATABASE: --config-dir threads the resolved DB context (E-1429), so
       the subprocess opens the same database this CLI resolved instead of being
       refused by the Go-side self-dev worktree gate.
+
+    require_db_context() MUST precede go_db_context_args() here — that is the
+    contract go_db_context_args documents, and omitting it silently defeated the
+    E-1429 gate for every verb routed through this helper (E-1950).
+
+    Without it, `endless errors clear` or `jobs retry` inside a self-dev worktree
+    with no --db threaded no --config-dir at all, and the Go binary fell through
+    to E-1368 cwd self-detection: the command ran, reported success, and
+    mutated whichever database that guessed. The gate exists precisely so a
+    human or an agent cannot hit the wrong DB by omission — a silent guess is
+    the failure mode it was built to prevent, so these verbs must refuse rather
+    than choose.
     """
     from endless import config
     from endless.event_bridge import _resolve_endless_go
+
+    config.require_db_context()
 
     result = subprocess.run(
         [_resolve_endless_go(), *config.go_db_context_args(), subcommand, *args],

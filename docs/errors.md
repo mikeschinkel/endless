@@ -149,10 +149,10 @@ It records through the same path a real fault takes — same upsert, same
 fingerprinting, same detail line — so what you are looking at is shaped exactly
 like the real thing. Only the code marks it synthetic.
 
-It writes to the same database the badge reads: the whole `errors` surface pins
-main, so `raise` then `session status` works from anywhere, including inside a
-self-dev worktree. Pass `--config-dir <dir>` to `endless-go` to route both sides
-somewhere throwaway instead.
+Inside a self-dev worktree it requires an explicit `--db main|sandbox`, like
+every other `errors` verb, and refuses without one — so a synthetic fault cannot
+land in a record you did not mean to touch. Use `--db main` to see it on the
+`session status` badge, which reads main.
 
 **What to do.** Dismiss it: `endless errors clear <id>`. If you did not raise it
 yourself, someone was testing; it is not a fault report.

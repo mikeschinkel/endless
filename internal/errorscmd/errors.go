@@ -73,10 +73,12 @@ func usage(w *os.File) {
 // fingerprinting, same JSONL detail line. Only the CODE marks it synthetic, and
 // the catalog titles say so out loud.
 //
-// It writes to the same DB the badge reads — main.go pins main for the whole
-// `errors` subcommand — so `raise` then `session status` works from anywhere,
-// including inside a self-dev worktree. An explicit --config-dir overrides that
-// on both sides, which is how the verify suite stays hermetic.
+// Which database it writes to is the CALLER's decision, never this command's.
+// Inside a self-dev worktree the Python CLI requires an explicit --db and
+// refuses without one (E-1429/E-1950); `endless-go` takes --config-dir. Pinning
+// a database here on the user's behalf was tried and reverted: it let
+// `errors clear` dismiss incidents in the real record from a worktree with no
+// flag, which is the failure the gate exists to prevent.
 func runRaise(args []string) {
 	fs := flag.NewFlagSet("raise", flag.ExitOnError)
 	severity := fs.String("severity", "warning", "severity to raise: warning or error")

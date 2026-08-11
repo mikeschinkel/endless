@@ -364,3 +364,87 @@ def test_db_path_requires_db_flag(monkeypatch):
     result = CliRunner().invoke(main, ["db", "path"])
     assert result.exit_code != 0
     assert "needs an explicit --db" in result.output
+
+
+# --- the gate must cover every Go-shellout verb, not just some (E-1950) ------
+#
+# `_run_go` in jobs_cmd threads go_db_context_args() but omitted the
+# require_db_context() call that function's docstring requires. With no --db in
+# a gated worktree it therefore threaded NO --config-dir, and the Go binary fell
+# through to cwd self-detection: `endless errors clear` and `jobs retry` ran,
+# reported success, and mutated whichever database that resolved to — observed
+# clearing incidents in the REAL record from inside a worktree.
+#
+# The gate's whole purpose is that a human or an agent cannot reach the wrong DB
+# by omission, so these verbs must REFUSE rather than guess.
+
+
+def _run_go_calls(monkeypatch):
+    """Run every jobs_cmd verb, returning the ones that did NOT refuse."""
+    from endless import jobs_cmd
+
+    # Fail loudly if the gate is bypassed: the subprocess must never be reached.
+    def _boom(*a, **k):
+        raise AssertionError("subprocess spawned without an explicit --db")
+
+    monkeypatch.setattr(jobs_cmd.subprocess, "run", _boom)
+
+    verbs = {
+        "jobs_list": lambda: jobs_cmd.jobs_list(),
+        "jobs_run": lambda: jobs_cmd.jobs_run(None),
+        "jobs_retry": lambda: jobs_cmd.jobs_retry("some-job"),
+        "errors_show": lambda: jobs_cmd.errors_show(False, False, None),
+        "errors_clear": lambda: jobs_cmd.errors_clear(()),
+        "errors_codes": lambda: jobs_cmd.errors_codes(),
+    }
+
+    leaked = []
+    for name, call in verbs.items():
+        try:
+            call()
+        except click.ClickException as exc:
+            if exc.message == config.WORKTREE_DB_REFUSAL:
+                continue
+            leaked.append(f"{name}: unexpected refusal {exc.message!r}")
+        except AssertionError as exc:
+            leaked.append(f"{name}: {exc}")
+        else:
+            leaked.append(f"{name}: completed with no --db")
+    return leaked
+
+
+def test_go_shellout_verbs_refuse_without_db_in_gated_worktree(tmp_path, monkeypatch):
+    wt = _make_worktree(tmp_path, sandbox=True, task_id="1950")
+    monkeypatch.chdir(wt)
+    monkeypatch.setattr(config, "RESOLVED_CONFIG_DIR", None)
+
+    leaked = _run_go_calls(monkeypatch)
+
+    assert not leaked, "verbs reached the DB without an explicit --db: " + "; ".join(leaked)
+
+
+def test_go_shellout_verbs_proceed_once_db_is_resolved(tmp_path, monkeypatch):
+    """The gate must not become a wall: with --db resolved, the verbs run."""
+    from endless import event_bridge, jobs_cmd
+
+    wt = _make_worktree(tmp_path, sandbox=True, task_id="1951")
+    monkeypatch.chdir(wt)
+    monkeypatch.setattr(config, "RESOLVED_CONFIG_DIR", tmp_path / "cfg")
+    # _run_go imports this from event_bridge at call time, so patch it there.
+    monkeypatch.setattr(event_bridge, "_resolve_endless_go", lambda: "/bin/true")
+
+    spawned = []
+
+    class _Result:
+        returncode = 0
+
+    def _record(argv, *a, **k):
+        spawned.append(argv)
+        return _Result()
+
+    monkeypatch.setattr(jobs_cmd.subprocess, "run", _record)
+
+    jobs_cmd.errors_clear(())
+    assert len(spawned) == 1
+    # And the resolved context must actually be threaded through.
+    assert "--config-dir" in spawned[0]
