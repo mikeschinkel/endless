@@ -165,6 +165,118 @@ func ProcessIDsForPanes(panes []string) ([]int64, error) {
 	return ids, rows.Err()
 }
 
+// AdoptPaneBindings repoints non-ended sessions whose binding has NO server
+// (E-1898's migration backfill) onto the server that currently owns their pane.
+//
+// # Why this exists
+//
+// The backfill cannot know which tmux server issued a pane recorded months ago,
+// so it writes server_uuid NULL. That is honest, but it means every pre-existing
+// session resolves against nothing: pane lookups match on (current server uuid,
+// address), and a NULL-server row matches no server at all. The first cut of
+// this migration shipped without adoption on the theory that each session would
+// re-bind on its next hook. Only sessions that FIRE hooks do — an idle window
+// fires none, so in practice the whole board went unresolvable and stayed that
+// way. Measured on the real ledger: 63 of 64 bound sessions were sitting on
+// panes that were live on the running server at migration time.
+//
+// # Why this is an observation, not a guess
+//
+// A pane id in `panes` exists on the server named by serverUUID right now. If
+// exactly one non-ended session claims that address, it is that pane's occupant
+// — the same conclusion its next hook would reach, reached one step earlier.
+//
+// Two guards keep it from inventing anything:
+//
+//   - EXACTLY ONE non-ended session may claim the address. Two would mean
+//     sessions from different servers collided on a reused pane id, which is
+//     precisely the ambiguity E-1898 exists to stop resolving by guesswork.
+//     Ambiguous addresses are left NULL and read `unknown`.
+//   - A NEW processes row is created rather than mutating the NULL-server one.
+//     The backfill deduplicates by address, so one NULL-server row can be shared
+//     by every session that ever used that pane across every server. Stamping a
+//     server onto it would retroactively claim all of that history happened on
+//     THIS server — reintroducing exactly the cross-server confusion this task
+//     removed. The NULL-server row stays as the honest record for the rest.
+//
+// A pane that is NOT currently live is left alone: it is a binding from a server
+// that is gone, which is the one case where `unknown` is the true answer.
+//
+// Returns the number of sessions repointed. Caller supplies the tx so this
+// composes into the migration's single transaction.
+func AdoptPaneBindings(tx *sql.Tx, serverUUID string, panes []string) (int, error) {
+	if serverUUID == "" || len(panes) == 0 {
+		return 0, nil
+	}
+	adopted := 0
+	for _, pane := range panes {
+		// The candidate: the single non-ended session bound to a server-less
+		// tmux binding at this address. sql.ErrNoRows covers both "no session
+		// here" and, via the HAVING, "more than one" — both mean leave it.
+		var sessionID int64
+		err := tx.QueryRow(
+			`SELECT s.id FROM sessions s
+			   JOIN processes p ON p.id = s.process_id
+			  WHERE s.state != 'ended'
+			    AND p.kind_id = ?
+			    AND p.server_uuid IS NULL
+			    AND p.address = ?
+			  GROUP BY p.address
+			 HAVING count(*) = 1`,
+			int(processkind.ProcessKindTmux), pane,
+		).Scan(&sessionID)
+		if errors.Is(err, sql.ErrNoRows) {
+			continue
+		}
+		if err != nil {
+			return adopted, fmt.Errorf("adopt %s: find session: %w", pane, err)
+		}
+
+		var processID int64
+		if err = tx.QueryRow(
+			`INSERT INTO processes (kind_id, server_uuid, address)
+			 VALUES (?, ?, ?)
+			 ON CONFLICT (kind_id, ifnull(server_uuid, ''), address)
+			 DO UPDATE SET last_seen_at = strftime('%Y-%m-%dT%H:%M:%S', 'now')
+			 RETURNING id`,
+			int(processkind.ProcessKindTmux), serverUUID, pane,
+		).Scan(&processID); err != nil {
+			return adopted, fmt.Errorf("adopt %s: ensure identity: %w", pane, err)
+		}
+
+		if _, err = tx.Exec(
+			`UPDATE sessions SET process_id = ? WHERE id = ?`, processID, sessionID,
+		); err != nil {
+			return adopted, fmt.Errorf("adopt %s: repoint session %d: %w", pane, sessionID, err)
+		}
+		adopted++
+	}
+	return adopted, nil
+}
+
+// ObserveLocalTmux reports the ambient tmux server's uuid and its live pane
+// addresses, for callers that need one observation outside the liveness
+// snapshot (the E-1898 migration's adoption step). Returns ("", nil) when no
+// server is reachable or it carries no @server_uuid — adoption then no-ops,
+// leaving bindings server-less rather than attributing them to a server that
+// could not name itself.
+func ObserveLocalTmux() (serverUUID string, panes []string) {
+	serverUUID, err := TmuxServerUUID()
+	if err != nil || serverUUID == "" {
+		return "", nil
+	}
+	out, err := exec.Command("tmux", "list-panes", "-a", "-F", "#{pane_id}").Output()
+	if err != nil {
+		return "", nil
+	}
+	for _, line := range strings.Split(string(out), "\n") {
+		if addr := strings.TrimSpace(line); addr != "" {
+			panes = append(panes, addr)
+		}
+	}
+	return serverUUID, panes
+}
+
 // processIDArgs renders a processes.id slice as an IN-list placeholder string
 // plus its bind arguments. Shared by every pane-scoped reader so they cannot
 // drift apart in how they match a binding.

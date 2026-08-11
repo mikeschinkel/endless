@@ -18,14 +18,29 @@
 // by no user action, and it destroys the very history that diagnosed the
 // incident.
 //
-// BACKFILL AND ITS LIMIT. Existing bindings get a processes row with
-// server_uuid NULL, because which tmux server issued a pane months ago is not
-// knowable retroactively. Those rows read 'unknown' — never 'dead' — so nothing
-// is condemned, and they self-heal to a real server_uuid the next time the
-// session fires a hook (seconds, in practice). A row whose `process` matches
-// neither "%N" nor "pid:N" is left with process_id NULL rather than guessed at:
-// a wrong guess mints an identity that can never match an observation, which is
-// worse than an honest absence.
+// BACKFILL, IN TWO STEPS.
+//
+// Step one gives every existing binding a processes row with server_uuid NULL,
+// because which tmux server issued a pane months ago is not knowable
+// retroactively. A row whose `process` matches neither "%N" nor "pid:N" is left
+// with process_id NULL rather than guessed at: a wrong guess mints an identity
+// that can never match an observation, which is worse than an honest absence.
+//
+// Step two ADOPTS what is observable right now. This step was missing from the
+// first cut and its absence was the whole failure: pane lookups match on
+// (current server uuid, address), so a NULL-server binding matches no server,
+// and every pre-existing session became unresolvable the moment this ran. The
+// original reasoning was that each session would re-bind on its next hook —
+// true only for sessions that FIRE hooks. An idle window fires none, so the
+// board went blank and stayed blank. Measured on the real ledger when this bit:
+// 63 of 64 bound sessions were sitting on panes live on the running server, and
+// exactly one was a genuine leftover from a dead server.
+//
+// Adoption is an observation, not a repair heuristic: a pane in the live set
+// exists on the named server NOW, and monitor.AdoptPaneBindings refuses any
+// address claimed by more than one non-ended session. Panes that are not live,
+// and every binding when no tmux server is reachable, keep server_uuid NULL and
+// read 'unknown' — never 'dead', so nothing is condemned either way.
 //
 // Authored as a .go change (not .sql) for the same reason as e-1571: the runner
 // opens its own connection with foreign_keys at SQLite's default (OFF), so
@@ -39,7 +54,9 @@ package main
 
 import (
 	"database/sql"
+	"log"
 
+	"github.com/mikeschinkel/endless/internal/monitor"
 	"github.com/mikeschinkel/endless/internal/schema/changes/runner"
 )
 
@@ -123,6 +140,18 @@ func main() {
 				return err
 			}
 		}
+
+		// Step two: attribute the bindings we can actually observe to the server
+		// that owns them, inside the same transaction as the backfill that
+		// created them. Skipped silently when no tmux server is reachable —
+		// this is a migration, so it must complete on a headless machine too.
+		serverUUID, panes := monitor.ObserveLocalTmux()
+		adopted, err := monitor.AdoptPaneBindings(tx, serverUUID, panes)
+		if err != nil {
+			return err
+		}
+		log.Printf("e-1898: adopted %d live pane binding(s) onto server %q",
+			adopted, serverUUID)
 		return nil
 	})
 }

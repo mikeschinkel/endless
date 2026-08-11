@@ -341,3 +341,200 @@ func TestLiveness_NoTmuxBinaryIsUnknownNotDead(t *testing.T) {
 		t.Errorf("liveness = %q; no tmux must mean no opinion, not death", got)
 	}
 }
+
+// ── migration adoption (E-1898) ─────────────────────────────────────────────
+//
+// AdoptPaneBindings is the fix for the defect that took the board down on
+// 2026-08-10: the migration backfilled every binding with server_uuid NULL, and
+// a NULL-server binding matches no server, so all 64 pre-existing sessions went
+// unresolvable at once. The original reasoning — "each re-binds on its next
+// hook" — holds only for sessions that fire hooks; idle windows fire none.
+
+// seedNullServerBinding creates a server-less (backfill-shaped) binding at
+// address and points a non-ended session at it. Returns the session id.
+func seedNullServerBinding(t *testing.T, db *sql.DB, sessionID, address string) int64 {
+	t.Helper()
+	pid, err := ensureProcess(db, processkind.ProcessKindTmux, "", address)
+	if err != nil {
+		t.Fatalf("seed null-server binding %q: %v", address, err)
+	}
+	return seedLivenessSession(t, db, sessionID, pid, sessionkind.SessionKindTmux)
+}
+
+// TestAdoptPaneBindings_AttributesLivePanes is the core case: a backfilled
+// binding whose pane is live on the running server is repointed to that server,
+// so it resolves immediately instead of waiting for a hook that may never come.
+func TestAdoptPaneBindings_AttributesLivePanes(t *testing.T) {
+	db := withTestDB(t)
+	seedProject(t, db, 1, "acme", "/tmp/acme")
+
+	live := seedNullServerBinding(t, db, "sess-live", "%1")
+	stale := seedNullServerBinding(t, db, "sess-stale", "%404")
+
+	tx, err := db.Begin()
+	if err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+	n, err := AdoptPaneBindings(tx, "srv", []string{"%1"})
+	if err != nil {
+		t.Fatalf("AdoptPaneBindings: %v", err)
+	}
+	if err = tx.Commit(); err != nil {
+		t.Fatalf("commit: %v", err)
+	}
+	if n != 1 {
+		t.Errorf("adopted %d, want 1", n)
+	}
+
+	// The live pane now resolves against the server that owns it...
+	if got := serverOf(t, db, live); got != "srv" {
+		t.Errorf("live session server_uuid = %q, want \"srv\"", got)
+	}
+	// ...and the pane that is NOT live keeps its honest absence of a server.
+	if got := serverOf(t, db, stale); got != "" {
+		t.Errorf("stale session server_uuid = %q, want NULL — its server is gone", got)
+	}
+
+	// End to end: the adopted one reads live, the stale one reads unknown.
+	defer SetTestTmuxObservation("srv", map[string]string{"%1": "2.1.220"})()
+	if err = RefreshLiveness(); err != nil {
+		t.Fatalf("RefreshLiveness: %v", err)
+	}
+	if got, _ := SessionLiveness(live); got != LivenessLive {
+		t.Errorf("adopted session liveness = %q, want %q", got, LivenessLive)
+	}
+	if got, _ := SessionLiveness(stale); got != LivenessUnknown {
+		t.Errorf("stale session liveness = %q, want %q (never dead)", got, LivenessUnknown)
+	}
+}
+
+// TestAdoptPaneBindings_RefusesAmbiguousAddress pins the guard. Two non-ended
+// sessions claiming one address means bindings from different servers collided
+// on a reused pane id — exactly the ambiguity E-1898 exists to stop resolving by
+// guesswork. Adoption must decline and leave both `unknown`.
+func TestAdoptPaneBindings_RefusesAmbiguousAddress(t *testing.T) {
+	db := withTestDB(t)
+	seedProject(t, db, 1, "acme", "/tmp/acme")
+
+	a := seedNullServerBinding(t, db, "sess-a", "%7")
+	// Second session on the SAME server-less binding.
+	pid, err := ensureProcess(db, processkind.ProcessKindTmux, "", "%7")
+	if err != nil {
+		t.Fatalf("reuse binding: %v", err)
+	}
+	b := seedLivenessSession(t, db, "sess-b", pid, sessionkind.SessionKindTmux)
+
+	tx, err := db.Begin()
+	if err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+	n, err := AdoptPaneBindings(tx, "srv", []string{"%7"})
+	if err != nil {
+		t.Fatalf("AdoptPaneBindings: %v", err)
+	}
+	if err = tx.Commit(); err != nil {
+		t.Fatalf("commit: %v", err)
+	}
+	if n != 0 {
+		t.Errorf("adopted %d, want 0 — the address is claimed by two sessions", n)
+	}
+	for _, id := range []int64{a, b} {
+		if got := serverOf(t, db, id); got != "" {
+			t.Errorf("session %d server_uuid = %q, want NULL (ambiguous)", id, got)
+		}
+	}
+}
+
+// TestAdoptPaneBindings_PreservesSharedHistoryRow pins why adoption creates a
+// NEW processes row rather than stamping a server onto the existing one. The
+// backfill deduplicates by address, so one NULL-server row can be shared by
+// every session that ever used that pane on every server. Mutating it would
+// retroactively claim all of that history happened on THIS server.
+func TestAdoptPaneBindings_PreservesSharedHistoryRow(t *testing.T) {
+	db := withTestDB(t)
+	seedProject(t, db, 1, "acme", "/tmp/acme")
+
+	shared, err := ensureProcess(db, processkind.ProcessKindTmux, "", "%9")
+	if err != nil {
+		t.Fatalf("seed shared binding: %v", err)
+	}
+	// An ended session from some earlier server, plus the current occupant.
+	seedPaneSession(t, db, "sess-ancient", shared, "ended", 0, "2026-01-01T00:00:00")
+	current := seedLivenessSession(t, db, "sess-current", shared, sessionkind.SessionKindTmux)
+
+	tx, err := db.Begin()
+	if err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+	if _, err = AdoptPaneBindings(tx, "srv", []string{"%9"}); err != nil {
+		t.Fatalf("AdoptPaneBindings: %v", err)
+	}
+	if err = tx.Commit(); err != nil {
+		t.Fatalf("commit: %v", err)
+	}
+
+	// The current session moved to a new, server-scoped identity...
+	if got := serverOf(t, db, current); got != "srv" {
+		t.Errorf("current session server_uuid = %q, want \"srv\"", got)
+	}
+	// ...and the ancient row still points at the untouched server-less record.
+	var ancientPID int64
+	if err = db.QueryRow(
+		"SELECT process_id FROM sessions WHERE session_id = 'sess-ancient'",
+	).Scan(&ancientPID); err != nil {
+		t.Fatalf("read ancient: %v", err)
+	}
+	if ancientPID != shared {
+		t.Errorf("ancient session was repointed (%d != %d); its server is unknown, not 'srv'",
+			ancientPID, shared)
+	}
+	var serverOfShared sql.NullString
+	if err = db.QueryRow(
+		"SELECT server_uuid FROM processes WHERE id = ?", shared,
+	).Scan(&serverOfShared); err != nil {
+		t.Fatalf("read shared row: %v", err)
+	}
+	if serverOfShared.Valid {
+		t.Errorf("shared history row was stamped with %q; it must stay server-less",
+			serverOfShared.String)
+	}
+}
+
+// TestAdoptPaneBindings_NoServerIsNoOp: on a headless machine the migration
+// must still complete, adopting nothing.
+func TestAdoptPaneBindings_NoServerIsNoOp(t *testing.T) {
+	db := withTestDB(t)
+	seedProject(t, db, 1, "acme", "/tmp/acme")
+	id := seedNullServerBinding(t, db, "sess-x", "%1")
+
+	tx, err := db.Begin()
+	if err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+	n, err := AdoptPaneBindings(tx, "", []string{"%1"})
+	if err != nil {
+		t.Fatalf("AdoptPaneBindings: %v", err)
+	}
+	if err = tx.Commit(); err != nil {
+		t.Fatalf("commit: %v", err)
+	}
+	if n != 0 {
+		t.Errorf("adopted %d with no reachable server, want 0", n)
+	}
+	if got := serverOf(t, db, id); got != "" {
+		t.Errorf("server_uuid = %q, want NULL", got)
+	}
+}
+
+// serverOf reads the server_uuid behind a session's binding ("" when NULL).
+func serverOf(t *testing.T, db *sql.DB, sessionID int64) string {
+	t.Helper()
+	var s sql.NullString
+	if err := db.QueryRow(
+		`SELECT p.server_uuid FROM sessions s JOIN processes p ON p.id = s.process_id
+		  WHERE s.id = ?`, sessionID,
+	).Scan(&s); err != nil {
+		t.Fatalf("read server for session %d: %v", sessionID, err)
+	}
+	return s.String
+}

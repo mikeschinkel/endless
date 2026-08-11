@@ -200,6 +200,18 @@ run_unit_layer() {
         go test ./internal/monitor/ -count=1 -run 'TestEnsureProcess_IdentityIsServerScoped'
     assert_succeeds "identity: a tmux binding without a server_uuid is refused" \
         go test ./internal/monitor/ -count=1 -run 'TestEnsureProcess_RefusesTmuxBindingWithoutServer'
+
+    # The 2026-08-10 regression: the migration left every pre-existing binding
+    # server-less, so nothing resolved until each session next fired a hook —
+    # which idle windows never do. Adoption attributes what is observable.
+    assert_succeeds "migration adoption: live panes are attributed to their server" \
+        go test ./internal/monitor/ -count=1 -run 'TestAdoptPaneBindings_AttributesLivePanes'
+    assert_succeeds "migration adoption: an address claimed twice is refused" \
+        go test ./internal/monitor/ -count=1 -run 'TestAdoptPaneBindings_RefusesAmbiguousAddress'
+    assert_succeeds "migration adoption: the shared history row is never stamped" \
+        go test ./internal/monitor/ -count=1 -run 'TestAdoptPaneBindings_PreservesSharedHistoryRow'
+    assert_succeeds "migration adoption: no reachable tmux is a clean no-op" \
+        go test ./internal/monitor/ -count=1 -run 'TestAdoptPaneBindings_NoServerIsNoOp'
     assert_succeeds "identity: a reissued pane cannot resolve to the old server's session" \
         go test ./internal/monitor/ -count=1 \
             -run 'TestGetActiveTaskForPane_ReusedPaneOnNewServerIsDifferentIdentity'
@@ -331,9 +343,9 @@ run_e2e_layer() {
 
     # `tmux reset` must be gone from the CLI surface, both languages.
     assert_fails "\`endless-go tmux reset\` is no longer a verb" \
-        "${BIN}" tmux reset
+        "${BIN}" --config-dir "${TMPDIR_D}" tmux reset
     local usage
-    usage=$("${BIN}" tmux --help 2>&1)
+    usage=$("${BIN}" --config-dir "${TMPDIR_D}" tmux --help 2>&1)
     if [[ "${usage}" != *"reset"* ]]; then
         report_pass "\`tmux --help\` no longer advertises reset"
     else
@@ -358,7 +370,7 @@ run_e2e_layer() {
     # monitor.DB, and it swallows its own failures by contract) — that coverage
     # limit is stated in docs/errors.md rather than pretended away here.
     assert_contains "ERR-0006 status-line-unavailable is in the catalog" \
-        "ERR-0006" "$("${BIN}" errors codes 2>&1)"
+        "ERR-0006" "$("${BIN}" --config-dir "${TMPDIR_D}" errors codes 2>&1)"
 }
 
 # ─── layer E0 — the migration ───────────────────────────────────────────────
@@ -441,9 +453,9 @@ SQL
     sqlite3 "${mdb}" >/dev/null 2>&1 <<'SQL'
 INSERT INTO projects (id,name,path) VALUES (1,'acme','/tmp/acme');
 INSERT INTO sessions (session_id,project_id,platform,state,process,last_activity) VALUES
- ('s-live-1',1,'claude','working','%414','2026-08-09T00:00:00'),
- ('s-live-2',1,'claude','needs_input','%257','2026-08-09T00:00:00'),
- ('s-dup',   1,'claude','idle','%414','2026-08-09T00:00:00'),
+ ('s-live-1',1,'claude','working','%999901','2026-08-09T00:00:00'),
+ ('s-live-2',1,'claude','needs_input','%999902','2026-08-09T00:00:00'),
+ ('s-dup',   1,'claude','idle','%999901','2026-08-09T00:00:00'),
  ('s-pid',   1,'claude','working','pid:1234','2026-08-09T00:00:00'),
  ('s-none',  1,'claude','working',NULL,'2026-08-09T00:00:00'),
  ('s-weird', 1,'claude','working','garbage','2026-08-09T00:00:00');
@@ -462,14 +474,16 @@ SQL
     assert_eq "both sessions on %414 point at the same identity" "1" \
         "$(sqlite3 "${mdb}" "SELECT count(DISTINCT process_id) FROM sessions WHERE session_id IN ('s-live-1','s-dup')" 2>/dev/null)"
 
-    assert_eq "a tmux binding backfills as kind=tmux with the pane as address" "tmux|%257" \
+    assert_eq "a tmux binding backfills as kind=tmux with the pane as address" "tmux|%999902" \
         "$(sqlite3 "${mdb}" "SELECT pk.slug || '|' || p.address FROM sessions s JOIN processes p ON p.id=s.process_id JOIN process_kinds pk ON pk.id=p.kind_id WHERE s.session_id='s-live-2'" 2>/dev/null)"
     assert_eq "a pid: binding backfills as kind=pid with the prefix stripped" "pid|1234" \
         "$(sqlite3 "${mdb}" "SELECT pk.slug || '|' || p.address FROM sessions s JOIN processes p ON p.id=s.process_id JOIN process_kinds pk ON pk.id=p.kind_id WHERE s.session_id='s-pid'" 2>/dev/null)"
 
-    # Backfilled bindings carry NO server: which tmux server issued a pane months
-    # ago is not knowable. They read `unknown` (never `dead`) and self-heal on the
-    # session's next hook.
+    # Backfilled bindings carry no server UNLESS their pane is live on the
+    # running server, in which case step two adopts them (monitor.AdoptPaneBindings,
+    # unit-tested exhaustively in internal/monitor). The fixture deliberately uses
+    # %9999xx addresses that cannot be real panes, so adoption is a no-op here and
+    # these assertions stay deterministic on any machine, with or without tmux.
     assert_eq "backfilled bindings carry no server_uuid (it is not knowable)" "0" \
         "$(sqlite3 "${mdb}" "SELECT count(*) FROM processes WHERE server_uuid IS NOT NULL" 2>/dev/null)"
 
@@ -524,6 +538,29 @@ run_ledger_guard() {
     note "the count of bound, non-ended sessions in the REAL ledger must not move"
     assert_eq "real ledger's bound-session count is unchanged" \
         "${LEDGER_BEFORE}" "$(count_real_bindings)"
+
+    # A count alone would not have caught the real hazard. The tmux/hook/channel
+    # subcommands call PinMainDB, so ANY invocation of the worktree binary that
+    # omits --config-dir opens the REAL ledger and applies this branch's
+    # schema.sql to it — creating tables there that main's code has never heard
+    # of. That happened for real on 2026-08-10 (an ad-hoc diagnostic, not this
+    # suite), and a bound-session count would have read clean straight through
+    # it. This greps the suite's own source so the rule is enforced, not trusted.
+    local unguarded
+    # The `grep -v e-1898-verify.sh` drops this check's OWN grep line, which
+    # necessarily contains the pattern it searches for. Without it the tripwire
+    # reports itself forever, which is worse than not having one — a check that
+    # always fails gets ignored, and then stops checking anything.
+    unguarded=$(grep -n '\${BIN}"' "${WT}/tests/tasks/e-1898-verify.sh" \
+                  | grep -v -- '--config-dir' \
+                  | grep -v 'e-1898-verify\.sh' \
+                  | grep -v '^[0-9]*: *#' || true)
+    if [[ -z "${unguarded}" ]]; then
+        report_pass "every worktree-binary call in this suite passes --config-dir"
+    else
+        report_fail "every worktree-binary call in this suite passes --config-dir" \
+            "no unguarded \${BIN} invocations" "$(printf '%s' "${unguarded}" | head -3)"
+    fi
 }
 
 # ─── main ───────────────────────────────────────────────────────────────────
