@@ -149,18 +149,64 @@ def test_current_branch_is_not_refused(landable, monkeypatch):
     )  # must not raise
 
 
+def _advance_main_ledger_only(main, n):
+    """n commits on main touching ONLY the db-ledger — what actually accumulates
+    on main during any active session."""
+    seg = main / ".endless" / "db-ledger" / "db-entries-aaaa-000001.jsonl"
+    seg.parent.mkdir(parents=True, exist_ok=True)
+    for i in range(n):
+        with seg.open("a") as f:
+            f.write('{"e":%d}\n' % i)
+        _git(["git", "add", "-A"], main)
+        _git(["git", "commit", "-q", "-m", "Endless: record ledger entry"], main)
+
+
+def test_ledger_only_drift_does_not_refuse(landable, monkeypatch):
+    """Regression: ledger auto-commits land on main continuously and cannot
+    affect a binary. Counting them refused nearly every land — and the remedy
+    the message names is a rebase, the very operation that risks the E-1943
+    ledger conflict. The common case must not demand the dangerous move."""
+    main, wt = landable["main"], landable["worktree"]
+    _advance_main_ledger_only(main, 3)
+    monkeypatch.setattr("endless.config.project_is_self_dev", lambda root: True)
+    # Unfiltered, this branch reads as 3 behind; none of it is source.
+    raw = subprocess.run(
+        ["git", "rev-list", "--count", "HEAD..main"], cwd=str(wt),
+        capture_output=True, text=True, check=True,
+    ).stdout.strip()
+    assert raw == "3"
+    _refuse_if_behind_base(wt, "main", CANON, main)  # must not raise
+
+
+def test_mixed_commit_touching_source_still_counts(landable, monkeypatch):
+    """A commit touching a ledger file AND real source is real drift."""
+    main, wt = landable["main"], landable["worktree"]
+    seg = main / ".endless" / "db-ledger" / "db-entries-aaaa-000001.jsonl"
+    seg.parent.mkdir(parents=True, exist_ok=True)
+    seg.write_text('{"e":0}\n')
+    (main / "README").write_text("changed\n")
+    _git(["git", "add", "-A"], main)
+    _git(["git", "commit", "-q", "-m", "Endless: record ledger entry"], main)
+    monkeypatch.setattr("endless.config.project_is_self_dev", lambda root: True)
+
+    with pytest.raises(click.ClickException):
+        _refuse_if_behind_base(wt, "main", CANON, main)
+
+
 def test_behind_branch_is_refused_with_actionable_message(landable, monkeypatch):
     main, wt = landable["main"], landable["worktree"]
     for i in range(3):
         (main / "README").write_text(f"x{i}\n")
         _git(["git", "add", "-A"], main)
         _git(["git", "commit", "-q", "-m", f"main {i}"], main)
+    # Ledger noise alongside the real drift must not change the count.
+    _advance_main_ledger_only(main, 4)
     monkeypatch.setattr("endless.config.project_is_self_dev", lambda root: True)
 
     with pytest.raises(click.ClickException) as ei:
         _refuse_if_behind_base(wt, "main", CANON, main)
     msg = ei.value.message
-    assert "3 commits behind main" in msg
+    assert "3 source commits behind main" in msg
     assert "git rebase main" in msg
     # Must not issue a bare "rebase" instruction: under a rewritten main that
     # rebase is itself what conflicts, so the message has to name that case.

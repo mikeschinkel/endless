@@ -174,12 +174,23 @@ make_sandbox() {
         git -C "${wt}" commit -q -m "E-9999: work"
     fi
 
+    local i
     if [[ "${behind}" == behind ]]; then
-        local i
         for i in 1 2 3; do
             printf '%s\n' "${i}" >> "${main}/README.md"
             git -C "${main}" add -A
             git -C "${main}" commit -q -m "main ${i}"
+        done
+    elif [[ "${behind}" == ledger-behind ]]; then
+        # What actually accumulates on main during any active session: commits
+        # touching ONLY the db-ledger. These cannot affect a binary, so they
+        # must not make the land refuse.
+        mkdir -p "${main}/.endless/db-ledger"
+        for i in 1 2 3; do
+            printf '{"e":%s}\n' "${i}" \
+                >> "${main}/.endless/db-ledger/db-entries-aaaa-000001.jsonl"
+            git -C "${main}" add -A
+            git -C "${main}" commit -q -m "Endless: record ledger entry"
         done
     fi
     return 0
@@ -290,26 +301,32 @@ test_failed_land_leaves_db_clean() {
 # ─── check 2: behind-main refusal ───────────────────────────────────────────
 
 test_behind_main_is_refused() {
-    section "2. A behind-main branch is refused before anything is built"
+    section "2. Behind-base refusal has ONE home, and ignores ledger noise"
 
-    local res rc dbstate moved tmp calls out
-    res="$(run_recipe behind change fail)"
+    # The rule lives in `endless worktree land` (self_dev-gated, so direct
+    # callers get it too). A duplicate pre-check once sat in the recipe and had
+    # to be fixed twice for the same bug — it counted ledger auto-commits, which
+    # land on main constantly and cannot affect a binary, so it refused nearly
+    # every land while telling the user to rebase: the very operation that risks
+    # the E-1943 ledger conflict. Guard against that copy coming back.
+    local code
+    code="$(printf '%s\n' "${RECIPE_BODY}" | grep -vE '^[[:space:]]*#')"
+    assert_not_contains "recipe has no behind-check of its own (one rule, one home)" \
+        "${code}" "rev-list --count"
+
+    # End-to-end: ledger-only drift must NOT block the recipe. The stubbed land
+    # cannot exercise the real refusal — that rule is asserted by the pytest
+    # layer in check 5 (_refuse_if_behind_base) — but a recipe-level false
+    # positive would surface right here.
+    local res rc dbstate moved tmp calls
+    res="$(run_recipe ledger-behind nochange ok)"
     IFS='|' read -r rc dbstate moved tmp <<< "${res}"
     calls="$(cat "${tmp}/calls.log" 2>/dev/null)"
-    out="$(cat "${tmp}/out.txt" 2>/dev/null)"
 
-    assert_eq "recipe refuses (exit non-zero)" \
-        "nonzero" "$([[ "${rc}" -ne 0 ]] && echo nonzero || echo "exit=${rc}")"
-    assert_contains "message states how far behind the branch is" \
-        "${out}" "3 commit(s) behind main"
-    assert_not_contains "never rebuilds the worktree binary ('just go')" \
-        "${calls}" "just go"
-    assert_not_contains "never invokes the land" "${calls}" "worktree land"
-    assert_eq "DB untouched" "clean" "${dbstate}"
-    # A bare "rebase" instruction would walk the user into the ledger conflict.
-    assert_contains "message names the ledger-conflict case, not just 'rebase'" \
-        "${out}" ".endless/db-ledger"
-    assert_contains "message points at the owning task" "${out}" "E-1943"
+    assert_eq "a ledger-only-behind branch is not blocked (exit 0)" "0" "${rc}"
+    assert_contains "reaches the worktree rebuild" "${calls}" "just go"
+    assert_contains "reaches the land" "${calls}" "worktree land"
+    assert_eq "DB untouched by the recipe" "clean" "${dbstate}"
 
     rm -rf "${tmp}"
     bail_if_failed

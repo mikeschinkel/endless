@@ -1913,13 +1913,24 @@ def _refuse_if_behind_base(
     land's rebase exists to handle — refusing there would break normal product
     usage — and downstream branches carry no schema changes, so the binary/DB skew
     this guards has no way to arise.
+
+    Counts only commits touching NON-auto paths. Ledger auto-commits
+    (AUTO_COMMIT_GLOBS / DB_LEDGER_DIR) land on main continuously — several a
+    minute during an active session — and touch nothing that can go into a
+    binary, so counting them made the guard fire on essentially every land. Worse,
+    the remedy it names is a rebase, which is exactly the operation that risks the
+    E-1943 ledger conflict: the common case would have demanded the dangerous
+    move. A commit touching both a ledger file and real source still counts.
     """
     from endless import config
     if not config.project_is_self_dev(project_root):
         return
+    excludes = [f":(exclude){glob}" for glob in AUTO_COMMIT_GLOBS]
+    excludes.append(f":(exclude){DB_LEDGER_DIR}/")
     try:
         out = _git_run(
-            ["rev-list", "--count", f"HEAD..{base_branch}"], cwd=worktree_path,
+            ["rev-list", "--count", f"HEAD..{base_branch}", "--", *excludes],
+            cwd=worktree_path,
         )
     except subprocess.CalledProcessError as e:
         raise click.ClickException(
@@ -1930,8 +1941,8 @@ def _refuse_if_behind_base(
         return
     commits = "commit" if behind == 1 else "commits"
     raise click.ClickException(
-        f"cannot land {canonical}: the branch is {behind} {commits} behind "
-        f"{base_branch}.\n\n"
+        f"cannot land {canonical}: the branch is {behind} source {commits} "
+        f"behind {base_branch} (ledger auto-commits are not counted).\n\n"
         f"This land would run the worktree's endless-go against the real "
         f"database — to apply schema changes and to record the landing. That "
         f"binary is built from this worktree's source, so source behind "

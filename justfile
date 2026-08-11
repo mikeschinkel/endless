@@ -222,21 +222,14 @@ land task_id="":
         # skew fires even when THIS branch adds no schema change, as long as
         # main's DB moved ahead of the worktree binary.
         #
-        # E-1941: refuse first if the branch is behind main. `just go` would
-        # otherwise faithfully rebuild a still-stale binary. The authoritative
-        # refusal lives in `endless worktree land` (self_dev-gated, so it also
-        # covers direct callers); this duplicates only the cheap count, to skip
-        # a pointless build before that refusal fires.
-        behind=$(git -C "$wt" rev-list --count "HEAD..main" 2>/dev/null)
-        if [ -n "${behind}" ] && [ "${behind}" -ne 0 ]; then
-            echo "just land: branch is ${behind} commit(s) behind main." >&2
-            echo "  Rebuilding now would produce a binary older than the real" >&2
-            echo "  database. Bring the branch current and retry:" >&2
-            echo "      cd ${wt} && git rebase main" >&2
-            echo "  If that rebase conflicts under .endless/db-ledger/, see" >&2
-            echo "  E-1943 — do not hand-resolve it; stop and ask." >&2
-            exit 1
-        fi
+        # E-1941: the behind-base refusal lives in `endless worktree land`, NOT
+        # here. A duplicate pre-check once lived at this point and had to be
+        # fixed twice for the same bug (it counted ledger auto-commits, which
+        # land on main constantly and cannot affect a binary, so it refused
+        # nearly every land). It also pre-empted the Python refusal, whose
+        # message is the useful one — it names the rewritten-history case and
+        # E-1943. One rule, one home. The cost is a wasted `just go` on the rare
+        # genuine refusal, which is cheaper than a second copy of the rule.
         echo "→ Rebuilding worktree endless-go before land (just go)"
         ( cd "$wt" && just go )
         go_rc=$?
