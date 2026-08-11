@@ -214,10 +214,32 @@ def test_non_binary_drift_does_not_refuse(landable, monkeypatch, rel):
 
 
 @pytest.mark.parametrize("rel", [
+    # Endless's own metadata dir is never compiled: data.sql is the db-export
+    # dump (rewritten constantly) and migrations/*.go are one-offs nothing
+    # imports. Both match the extensions, so the exclusion must hold them out.
+    ".endless/data.sql",
+    ".endless/migrations/e-1754-backfill.go",
+])
+def test_endless_metadata_dir_does_not_refuse(landable, monkeypatch, rel):
+    main, wt = landable["main"], landable["worktree"]
+    _write(main, rel, "x\n")
+    _git(["git", "add", "-A"], main)
+    _git(["git", "commit", "-q", "-m", f"change {rel}"], main)
+    monkeypatch.setattr("endless.config.project_is_self_dev", lambda root: True)
+    _refuse_if_behind_base(wt, "main", CANON, main)  # must not raise
+
+
+@pytest.mark.parametrize("rel", [
     "cmd/endless-go/main.go",
     "internal/schema/changes/0100-x.sql",
     "go.mod",
     "go.sum",
+    # The refactor case: Go relocated to top-level directories that do not
+    # exist today. Matching on what a file IS rather than where it LIVES is the
+    # whole reason these pass — a hardcoded cmd//internal/ list missed them.
+    "pkg/store/store.go",
+    "api/v1/server.go",
+    "main.go",
 ])
 def test_binary_input_drift_does_refuse(landable, monkeypatch, rel):
     """The hazard the guard exists for: drift in what endless-go is built from."""

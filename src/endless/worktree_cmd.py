@@ -66,25 +66,37 @@ AUTO_COMMIT_GLOBS = (
 # recorded on the main checkout only) and must never ride a land into main.
 DB_LEDGER_DIR = ".endless/db-ledger"
 
-# E-1941: everything that can end up INSIDE the endless-go binary. The
-# behind-base refusal exists for exactly one hazard — a worktree binary whose
-# embedded schema/enums are older than the real DB's rows — so only drift in
-# these paths can justify it.
+# E-1941: what the Go compiler READS to produce endless-go — not what ends up
+# inside it, though internal/schema/schema.sql is both (it is go:embed-ed). The
+# behind-base refusal exists for exactly one hazard: a worktree binary whose
+# embedded schema/enums are older than the real DB's rows. Only drift in these
+# can cause it.
 #
-# Deliberately narrow, learned the hard way. Counting all commits refused every
-# land (ledger auto-commits land on main constantly). Counting all non-auto
-# commits still refused on Python-, justfile-, test-, and decision-only drift,
-# none of which is compiled into anything. Note especially that src/endless/**
-# does NOT belong here: the land executes the GLOBAL Python (uv installs it
-# editable from the main checkout), never the worktree's copy, so worktree
-# Python can't be stale in a way that affects a land.
+# Matched by WHAT A FILE IS, not WHERE IT LIVES. An earlier version hardcoded
+# `cmd/` and `internal/`, which is the wrong shape for a repo that will be
+# reorganized — Go moving to a new top-level directory (pkg/, api/) would have
+# been missed silently. Extensions survive any refactor.
 #
-# Fails permissive by construction: Go moving to a new top-level directory would
-# be missed here. That is the right direction to fail — since the E-1941
-# reorder, a stale binary produces a loud VerifyIntegrity error AFTER main
-# advances, which a re-run fixes, whereas a spurious refusal blocks every land
-# and tells the user to run the one operation that risks the E-1943 conflict.
-BINARY_SOURCE_PATHS = ("cmd/", "internal/", "go.mod", "go.sum")
+# *.sql earns its place twice: internal/schema/schema.sql is compiled in, and
+# internal/schema/changes/*.sql are what migrate the real DB — the precise drift
+# this guard is about. Embedded TEMPLATES are deliberately absent: a stale
+# template cannot fail VerifyIntegrity.
+#
+# Two rounds of false positives shaped this. Counting every commit refused
+# nearly every land, because ledger auto-commits hit main continuously. Counting
+# all non-auto paths still refused on Python-, justfile-, test- and
+# decision-only drift, none of which is compiled into anything. Note especially
+# that src/endless/** does NOT belong here: a land executes the GLOBAL Python
+# (uv installs it editable from the main checkout), never the worktree's copy,
+# so worktree Python cannot be stale in a way that affects a land.
+BINARY_SOURCE_PATHS = ("*.go", "go.mod", "go.sum", "*.sql")
+
+# Endless's own metadata directory is never compiled: it holds data.sql (the
+# `just db-export` dump, rewritten constantly) and one-off migration scripts
+# under migrations/*.go that nothing imports. Both match the extensions above,
+# so without this they would resurrect the false-positive class the extensions
+# are scoped to avoid.
+BINARY_SOURCE_EXCLUDES = (".endless/",)
 
 # Mirrors internal/events/commit.go (E-1342). Subjects whose auto-commits
 # can amend in place via canAmend, producing orphans at the base of task
@@ -1934,8 +1946,8 @@ def _refuse_if_behind_base(
     usage — and downstream branches carry no schema changes, so the binary/DB skew
     this guards has no way to arise.
 
-    Counts ONLY commits touching BINARY_SOURCE_PATHS — the paths that actually
-    end up inside endless-go. The hazard is a binary older than the real DB's
+    Counts ONLY commits touching BINARY_SOURCE_PATHS — what the Go compiler
+    reads to build endless-go. The hazard is a binary older than the real DB's
     rows; drift anywhere else cannot cause it. Two rounds of false positives
     taught this: counting everything refused on ledger auto-commits (which land
     on main continuously), and counting all non-auto paths still refused on
@@ -1948,8 +1960,9 @@ def _refuse_if_behind_base(
     try:
         out = _git_run(
             [
-                "rev-list", "--count", f"HEAD..{base_branch}",
-                "--", *BINARY_SOURCE_PATHS,
+                "rev-list", "--count", f"HEAD..{base_branch}", "--",
+                *BINARY_SOURCE_PATHS,
+                *(f":(exclude){p}" for p in BINARY_SOURCE_EXCLUDES),
             ],
             cwd=worktree_path,
         )
