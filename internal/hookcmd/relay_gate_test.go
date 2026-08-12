@@ -23,7 +23,7 @@ func TestRelayVerdict_Compliant(t *testing.T) {
 		// The agent said nothing. Not what the report asked for, but the offense
 		// this gate exists to catch is APPENDING; bouncing silence would punish
 		// an agent for under-speaking while trying to obey.
-		"empty message": "",
+		"empty message":   "",
 		"whitespace only": "   \n\n  \t\n",
 
 		// Cosmetic-only differences. Each of these is an agent relaying the
@@ -34,11 +34,9 @@ func TestRelayVerdict_Compliant(t *testing.T) {
 		"leading and trailing blank lines": "\n\n" + sampleSanctioned + "\n\n\n",
 		"extra blank line between": "Verify: `esu && ./tests/tasks/e-1901-verify.sh`\n\n\n" +
 			"Follow-ups you filed: E-1906 [untriaged]",
-		"wrapped in a code fence": "```\n" + sampleSanctioned + "\n```",
+		"wrapped in a code fence":   "```\n" + sampleSanctioned + "\n```",
 		"wrapped in a tagged fence": "```text\n" + sampleSanctioned + "\n```",
-		"markers copied along": "----- BEGIN REPORT -----\n" + sampleSanctioned +
-			"\n----- END REPORT -----",
-		"CRLF line endings": strings.ReplaceAll(sampleSanctioned, "\n", "\r\n"),
+		"CRLF line endings":         strings.ReplaceAll(sampleSanctioned, "\n", "\r\n"),
 	}
 	for name, actual := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -160,8 +158,15 @@ func TestRelayBlockResponse_NamesBothAudiences(t *testing.T) {
 	if !strings.Contains(reason, sampleSanctioned) {
 		t.Error("reason does not include the sanctioned text to resend")
 	}
-	if !strings.Contains(reason, "--json") {
+	// An agent bounced with no legitimate channel for what it wanted to say
+	// will rationalize appending it again, so the bounce has to name one. Under
+	// E-1953 that channel is the appeal: re-draft and re-minimize, rather than
+	// the retired --json fields.
+	if !strings.Contains(reason, "--draft-file") {
 		t.Error("reason does not name the legitimate channel for the extra content")
+	}
+	if !strings.Contains(reason, "one such appeal") {
+		t.Error("reason does not bound the appeal, so the agent may read it as unlimited")
 	}
 	sysMsg, _ := decoded["systemMessage"].(string)
 	if !strings.Contains(sysMsg, "3 lines") {
@@ -193,16 +198,17 @@ func TestRelayExhaustedMessage_IsNotSilent(t *testing.T) {
 	if msg == "" {
 		t.Fatal("exhausted message is empty — the user would see a violation as a clean handoff")
 	}
-	if !strings.Contains(msg, "NOT the sanctioned report") {
+	if !strings.Contains(msg, "NOT the minimized report") {
 		t.Errorf("exhausted message does not warn that the final message is unsanctioned: %q", msg)
 	}
 }
 
 // A subagent's final message is a return value to the parent agent, not a user
 // handoff. Gating it would block on a contract that does not apply and strand
-// the parent. This runs before any DB access, so it is safe without fixtures.
-func TestRelayGate_SkipsSubagents(t *testing.T) {
-	handled, err := enforceRelayGate(claudePayload{
+// the parent — nothing may sit between an agent and its subagent. This runs
+// before any DB access, so it is safe without fixtures.
+func TestReportGate_SkipsSubagents(t *testing.T) {
+	handled, err := enforceReportGate(1, true, claudePayload{
 		AgentID:              "agent-123",
 		SessionID:            "some-session",
 		LastAssistantMessage: "Here is my analysis, at length, with plenty of prose.",
@@ -215,6 +221,21 @@ func TestRelayGate_SkipsSubagents(t *testing.T) {
 	}
 }
 
+// An unregistered project is outside Endless entirely. Gating it would mean a
+// tool the user never opted into holding turns in a directory it does not track.
+func TestReportGate_SkipsUnregisteredProjects(t *testing.T) {
+	handled, err := enforceReportGate(0, false, claudePayload{
+		SessionID:            "some-session",
+		LastAssistantMessage: "A reply that never went through the minimizer.",
+	})
+	if err != nil {
+		t.Fatalf("unregistered path returned an error: %v", err)
+	}
+	if handled {
+		t.Error("unregistered project was gated")
+	}
+}
+
 func TestNormalizeRelayText_KeepsProseVisible(t *testing.T) {
 	// Normalization must never erase a line that carries words — that is the
 	// property the whole gate rests on.
@@ -224,36 +245,57 @@ func TestNormalizeRelayText_KeepsProseVisible(t *testing.T) {
 	}
 }
 
-// TestRelayGateIsParked pins E-1911's kill switch. Two assertions, and the
-// first is what keeps the second from being vacuous: the sample message must be
-// one the comparison genuinely rejects, or "the gate did not fire" would prove
-// nothing about the switch.
+// TestReportGateIsLive pins the un-parking (E-1953). The first assertion keeps
+// the second from being vacuous: the sample must be a message the comparison
+// genuinely rejects, or "the gate fires" would prove nothing.
 //
-// Honest limit: this is a pure test, so it proves the call returns not-handled
-// and errorless, not that no DB was touched — an inverted branch against an
-// unknown session would also return (false, nil). The end-to-end half lives in
-// tests/tasks/e-1911-verify.sh, which arms a real checkpoint through the
-// sandbox and asserts the Stop hook still lets the turn end.
-func TestRelayGateIsParked(t *testing.T) {
+// E-1911 parked this gate behind a `relayGateEnabled` constant because the
+// append contract had made whole-message equality wrong. E-1953 restored the
+// premise — the minimizer's output IS the reply — so the constant is gone
+// rather than flipped, and the live/off decision moved to
+// `.endless/config.json` where it can differ per project and sits outside an
+// agent's normal editing surface.
+func TestReportGateIsLive(t *testing.T) {
 	violating := sampleSanctioned + "\nI also refactored three unrelated files."
 
-	if extra, ok := relayVerdict(sampleSanctioned, violating); ok {
-		t.Fatalf("sample is not a violation (extra=%d) — the park assertion would be vacuous", extra)
+	extra, ok := relayVerdict(sampleSanctioned, violating)
+	if ok {
+		t.Fatalf("sample is not a violation (extra=%d) — the liveness assertion would be vacuous", extra)
 	}
+	if extra != 1 {
+		t.Errorf("extra = %d, want 1 appended line", extra)
+	}
+}
 
-	if relayGateEnabled {
-		t.Fatal("relayGateEnabled is true: the gate is live again, which contradicts " +
-			"the append contract `task report` now prints (E-1911)")
+// TestReportMissingReason_AsksForTheWholeDraft pins the bypass bounce. The
+// reason has to demand the draft the agent ALREADY wrote: an agent told merely
+// to "report" will compose a summary, which means the minimizer minimizes the
+// wrong artifact and the restatement tax that broke the old command is back.
+func TestReportMissingReason_AsksForTheWholeDraft(t *testing.T) {
+	reason := reportMissingReason()
+	for _, want := range []string{"--draft-file", "in full", "no summarizing", "verbatim"} {
+		if !strings.Contains(reason, want) {
+			t.Errorf("reportMissingReason missing %q:\n%s", want, reason)
+		}
 	}
+	// The task id must be optional in the instruction, or an unclaimed session
+	// reads the bounce as "claim something first" and the gate taxes a one-line
+	// question.
+	if !strings.Contains(reason, "optional") {
+		t.Errorf("reportMissingReason does not say the task id is optional:\n%s", reason)
+	}
+}
 
-	handled, err := enforceRelayGate(claudePayload{
-		SessionID:            "e1911-no-such-session",
-		LastAssistantMessage: violating,
-	})
-	if handled {
-		t.Error("enforceRelayGate handled the turn while parked — nothing may reach stdout")
+// TestReportExhaustedMessage_IsNotSilent pins the surrender. A silent livelock
+// and a silent surrender are indistinguishable from outside, and the second is
+// how a gate rots unnoticed — so when the budget is spent the user is told the
+// reply below did not go through the minimizer.
+func TestReportExhaustedMessage_IsNotSilent(t *testing.T) {
+	msg := reportExhaustedMessage(2)
+	if msg == "" {
+		t.Fatal("exhausted message is empty — the user would see an ungated reply as a normal one")
 	}
-	if err != nil {
-		t.Errorf("enforceRelayGate err = %v, want nil while parked", err)
+	if !strings.Contains(msg, "did NOT go through the minimizer") {
+		t.Errorf("exhausted message does not warn the reply was unminimized: %q", msg)
 	}
 }

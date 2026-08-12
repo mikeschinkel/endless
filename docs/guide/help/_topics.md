@@ -58,9 +58,13 @@ topic: lean toward fewer tasks
 section: tasks
 covers: Prefer one task over several - every filed task spends the user's review attention.
 
-topic: FULL STATUS
+topic: $FULL
 section: tasks
-covers: The keyword licenses one unconstrained response, not a sticky mode.
+covers: The sigil licenses one response that bypasses the minimizer entirely, not a sticky mode.
+
+topic: $CUT / $BLOAT / $WRONG / $GOOD
+section: tasks
+covers: The four labels that annotate the preceding turn and build the minimizer's eval corpus.
 
 topic: --keep-status (edit the content, infer nothing)
 section: tasks

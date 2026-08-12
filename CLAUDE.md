@@ -67,6 +67,33 @@ The setup writes an `XDG_CONFIG_HOME` value into `<worktree>/.claude/settings.js
 
 Sandbox cleanup on worktree drop/land is not yet automatic; manually `endless-sandbox destroy e-NNN` if the cache needs reclaiming.
 
+## Reporting to the user — the minimizer gate (E-1953)
+
+Every reply a session sends goes through `endless task report [<id>] --draft-file
+<path>`: write the reply in full to a file, run it, send the output verbatim. A
+Stop hook blocks a final message that differs from that output, and blocks a turn
+that produced a reply without running the command. `endless task report --raw`
+prints the draft back unchanged, so an over-aggressive cut is recoverable.
+
+**The gate is OFF in this repo**, via `"report_gate": false` in
+`.endless/config.json`. It ships **on** for every other project; Endless's own
+checkout opts out because this is where the minimizer prompt is tuned, and a
+session tuning the prompt cannot be governed by the prompt it is editing.
+
+Resolution is nearest-`.endless/config.json`-wins walking up from cwd, falling
+back to the registered project root. That is what lets a worktree exempt its own
+sessions before the branch lands. Only an explicit key counts — a config that
+says nothing inherits rather than resetting to the default.
+
+The switch deliberately does **not** live in `.claude/settings.json`: a gate an
+agent edits in the course of normal work is not a gate.
+
+Prompt wording is a config surface, not source. Override `minimize` / `denylist`
+in `.endless/report-prompts.jsonl` (or the machine layer) — that needs no task
+and no land. Promoting an override into the embedded default in
+`src/endless/report_prompts.py` is where the ceremony lives, gated on beating the
+current default over the persisted corpus.
+
 ## Tests
 
 Use `just test` to run Python tests.

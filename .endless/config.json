@@ -9,5 +9,6 @@
     "rules": []
   },
   "matchers": [],
-  "self_dev": true
+  "self_dev": true,
+  "report_gate": false
 }

@@ -58,8 +58,8 @@ func TestRender_Claim_ArrivalMechanicsClose(t *testing.T) {
 				"--db main",
 				"one session, one task",
 				// Close tail.
-				"endless task report E-9999 --db main",
-				"FULL STATUS",
+				"endless task report E-9999 --draft-file <path> --db main",
+				"$FULL",
 				"endless worktree check",
 			}
 			for _, w := range wants {

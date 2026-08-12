@@ -35,12 +35,19 @@ def run_internal_claude(
     *,
     timeout: int,
     model: str | None = None,
+    effort: str = "low",
 ) -> subprocess.CompletedProcess[str]:
     """Run a headless, hook-suppressed ``claude -p`` call.
 
     `model` is a claude alias or full model name; omit it to use claude's
     default. Propagates ``subprocess.TimeoutExpired`` / ``FileNotFoundError``
     to the caller, which decides how to degrade.
+
+    `effort` defaults to ``low``, which is right for the trivial classification
+    calls this module was built for (the verb check, the old KEEP/DROP gate).
+    The minimizer (E-1953) raises it: applying hard invariants — a table
+    surviving byte for byte while the paragraph beside it is deleted — is an
+    editing task, and low effort drops exactly those constraints first.
 
     Invokes `claude` via PATH (no shell), so users' `claude` shell wrappers
     are bypassed. Variadic flags (``--tools``/``--mcp-config``) are placed
@@ -51,7 +58,7 @@ def run_internal_claude(
     if model:
         argv += ["--model", model]
     argv += [
-        "--effort", "low",
+        "--effort", effort,
         "--no-session-persistence",
         "--strict-mcp-config",
         "--tools", "",

@@ -1869,48 +1869,50 @@ def task_assume(item_ids, cascade, outcome, outcome_file, allow_paths):
 
 
 @task_cmd.command("report")
-@click.argument("item_id", type=TASK_ID)
-@click.option("--json", "payload", default=None,
-              help='Structured report payload, inline JSON: '
-                   '{"verify":"<one command>",'
-                   '"notes":[{"kind":"anomaly|discovery","text":"…"}],'
-                   '"questions":[{"text":"…","type":"text|integer|real|boolean|choice","style":"…"}]}')
-@click.option("--json-file", "payload_file", default=None,
-              help="Load the report payload from a JSON file")
-def task_report(item_id, payload, payload_file):
-    """Produce an end-of-session (or status) report for a task.
+@click.argument("item_id", type=TASK_ID, required=False)
+@click.option("--draft-file", "draft_file", default=None,
+              help="Path to your ENTIRE draft reply, as plain markdown.")
+@click.option("--raw", "raw", is_flag=True, default=False,
+              help="Print this session's most recent raw draft, unchanged.")
+def task_report(item_id, draft_file, raw):
+    """Minimize your draft reply into the message you are allowed to send.
 
-    It reports only what the user could NOT already compute: the verify command,
-    the follow-ups you filed, and your gated notes/questions. Status, landing,
-    parentage and children are deliberately absent (`task show` /
-    `session status` already render them, and the handoff forbids recapping
-    them). A session with none of the above reports "Nothing to report." rather
-    than inventing a summary.
+    Write the reply you were about to send — in full, exactly as you drafted it,
+    tables and code blocks and all — to a file, then run this command with
+    --draft-file. An adversarial editor deletes what the user did not ask for,
+    and its output is your entire final message. Send it verbatim. A Stop hook
+    compares your final message against it and also blocks a turn that never ran
+    this command at all.
 
-    You APPEND the block, you do not become it (E-1911). Answer the user in your
-    own words — that half of your reply is not constrained by this command — then
-    append the printed block, unchanged, after its separator line. The separator
-    prints in every case, the empty one included, so a block that fails to render
-    is distinguishable from a report that found nothing.
+    Do NOT pre-summarize. The minimizer can only cut what it is given, so
+    trimming first replaces its judgment with yours — which is the failure this
+    command exists to fix. It is not a length limit either: the objective is to
+    delete what was not asked for, so a discussion the user asked for survives at
+    whatever length it takes.
 
-    Everything you might need to say inside the block has a field — pass --json
-    with `verify` for the one command that verifies the task, `notes` for
-    genuinely non-computable out-of-band facts, and `questions` for open
-    decisions. Free-text entries are checked and ceremonial ones bounced;
-    `verify` is not checked (a command is not prose).
+    Your draft is persisted. --raw prints it back unchanged, which is what makes
+    an over-aggressive cut recoverable rather than lost.
 
-    Status-agnostic: run it at whatever terminal status you reached. It does
-    not change the task's status.
+    The task id is optional — pass it to attribute the report, omit it when you
+    have nothing claimed. It does not change the task's status.
+
+    You get ONE appeal per turn: re-run with a draft that argues for content the
+    minimizer cut. The appeal is minimized too.
     """
-    from endless.report_cmd import report_item
-    if payload is not None and payload_file is not None:
-        raise click.ClickException("Pass either --json or --json-file, not both.")
-    if payload_file is not None:
-        p = Path(payload_file).expanduser()
-        if not p.exists():
-            raise click.ClickException(f"File not found: {p}")
-        payload = p.read_text()
-    report_item(item_id, payload)
+    from endless.report_cmd import report_item, show_raw
+    if raw:
+        if draft_file is not None:
+            raise click.ClickException("Pass either --raw or --draft-file, not both.")
+        show_raw()
+        return
+    if draft_file is None:
+        raise click.ClickException(
+            "--draft-file is required.\n"
+            "\n"
+            "  Write the reply you were about to send to a file and pass its path.\n"
+            "  Pass the whole thing — the minimizer decides what survives."
+        )
+    report_item(item_id, draft_file)
 
 
 @task_cmd.command("decline")

@@ -1,384 +1,349 @@
-"""Tests for `endless task report` (E-1771) — payload parsing, the per-entry
-Haiku gate (mocked), and the steering-prompt render. The computed facts (Go
-`session-query task-report`) are covered by Go unit tests + the verify script;
-here `_compute_facts`/`_compute_anomalies` are stubbed so these stay fast and
-hermetic."""
+"""Tests for `endless task report` (E-1771, rebuilt as a minimizer by E-1953).
+
+Hermetic and fast: the model call is stubbed everywhere here, and the DB round
+trips are stubbed at the `_run_go` seam. What that leaves provable is the
+PLUMBING — that a draft reaches the minimizer whole, that only the minimized
+text reaches stdout, that failures fail closed, and that the appeal is bounded.
+
+What it deliberately does NOT cover is the minimizer's judgment, which is the
+only thing a stub cannot fake. That lives in `tests/tasks/e-1953-verify.sh`,
+which runs the real model against `tests/fixtures/report-draft.md` and asserts
+the six properties the plan names. No stubbed test substitutes for it, and one
+pretending to would be worse than none.
+"""
 
 import subprocess
+from pathlib import Path
 
 import click
 import pytest
 
 from endless import report_cmd, report_prompts
 
+FIXTURE = Path(__file__).parent / "fixtures" / "report-draft.md"
+
 
 def _completed(stdout: str, code: int = 0) -> subprocess.CompletedProcess:
     return subprocess.CompletedProcess(args=["claude"], returncode=code, stdout=stdout, stderr="")
 
 
-def _mock_haiku(monkeypatch, reply: str, code: int = 0):
-    monkeypatch.setattr(
-        report_cmd.internal_claude, "run_internal_claude",
-        lambda prompt, **kw: _completed(reply, code),
-    )
+def _mock_model(monkeypatch, reply: str, code: int = 0):
+    """Stub the minimizer's model call, capturing the prompt it was handed."""
+    seen = {}
 
+    def fake(prompt, **kw):
+        seen["prompt"] = prompt
+        seen["kw"] = kw
+        return _completed(reply, code)
 
-# --- payload parsing --------------------------------------------------------
+    monkeypatch.setattr(report_cmd.internal_claude, "run_internal_claude", fake)
+    return seen
 
-def test_empty_payload_is_normal_path():
-    assert report_cmd._parse_payload(None) == ([], [], None)
-    assert report_cmd._parse_payload("") == ([], [], None)
-    assert report_cmd._parse_payload("   ") == ([], [], None)
 
+def _mock_model_raising(monkeypatch, exc):
+    def fake(prompt, **kw):
+        raise exc
+    monkeypatch.setattr(report_cmd.internal_claude, "run_internal_claude", fake)
 
-def test_parse_valid_notes_and_questions():
-    payload = (
-        '{"notes":[{"kind":"anomaly","text":"base is behind main"}],'
-        '"questions":[{"text":"go-pkgs worktree or repo?","type":"choice","style":"single"}]}'
-    )
-    notes, questions, verify = report_cmd._parse_payload(payload)
-    assert notes == [{"kind": "anomaly", "text": "base is behind main"}]
-    assert questions == [{"text": "go-pkgs worktree or repo?", "type": "choice", "style": "single"}]
-    assert verify is None
 
+@pytest.fixture(autouse=True)
+def _no_session(monkeypatch):
+    """Default to an unresolvable session: no persistence, no appeal counter.
 
-def test_question_type_defaults_to_text():
-    _, questions, _ = report_cmd._parse_payload('{"questions":[{"text":"proceed?"}]}')
-    assert questions == [{"text": "proceed?", "type": "text"}]
-
-
-# --- E-1901: the verify field -----------------------------------------------
-
-def test_parse_verify_command():
-    payload = '{"verify":"esu && ./tests/tasks/e-1901-verify.sh"}'
-    notes, questions, verify = report_cmd._parse_payload(payload)
-    assert (notes, questions) == ([], [])
-    assert verify == "esu && ./tests/tasks/e-1901-verify.sh"
-
-
-def test_verify_is_stripped():
-    _, _, verify = report_cmd._parse_payload('{"verify":"  just test  "}')
-    assert verify == "just test"
-
-
-def test_empty_verify_rejected():
-    with pytest.raises(click.ClickException, match="non-empty string"):
-        report_cmd._parse_payload('{"verify":"   "}')
-
-
-def test_non_string_verify_rejected():
-    with pytest.raises(click.ClickException, match="non-empty string"):
-        report_cmd._parse_payload('{"verify":["a","b"]}')
-
-
-def test_multiline_verify_rejected():
-    """The handoff contract is ONE command. A multi-line value is a checklist
-    wearing a field's clothes — exactly the ceremony this replaces."""
-    with pytest.raises(click.ClickException, match="ONE command"):
-        report_cmd._parse_payload('{"verify":"just build\\njust test"}')
-
-
-def test_verify_is_never_haiku_gated(monkeypatch):
-    """A command is not prose. Sending it to the ceremony classifier would
-    invent a failure mode rather than catch one."""
-    def boom(prompt, **kw):
-        raise AssertionError("verify must not be classified")
-    monkeypatch.setattr(report_cmd.internal_claude, "run_internal_claude", boom)
-    notes, questions, verify = report_cmd._parse_payload('{"verify":"just test"}')
-    report_cmd._gate(notes, questions, report_prompts.DEFAULTS)
-    assert verify == "just test"
-
-
-def test_malformed_json_rejected():
-    with pytest.raises(click.ClickException, match="not valid JSON"):
-        report_cmd._parse_payload("{not json")
-
-
-def test_non_object_payload_rejected():
-    with pytest.raises(click.ClickException, match="must be a JSON object"):
-        report_cmd._parse_payload('["a","b"]')
-
-
-def test_unknown_top_level_field_rejected():
-    with pytest.raises(click.ClickException, match="unknown report field"):
-        report_cmd._parse_payload('{"notes":[],"summary":"hi"}')
-
-
-def test_bad_note_kind_rejected():
-    with pytest.raises(click.ClickException, match="kind must be one of"):
-        report_cmd._parse_payload('{"notes":[{"kind":"chatter","text":"x"}]}')
-
-
-def test_unknown_note_field_rejected():
-    with pytest.raises(click.ClickException, match="unknown field"):
-        report_cmd._parse_payload('{"notes":[{"kind":"anomaly","text":"x","extra":1}]}')
-
-
-def test_empty_note_text_rejected():
-    with pytest.raises(click.ClickException, match="non-empty 'text'"):
-        report_cmd._parse_payload('{"notes":[{"kind":"anomaly","text":"  "}]}')
-
-
-def test_bad_question_type_rejected():
-    with pytest.raises(click.ClickException, match="type must be one of"):
-        report_cmd._parse_payload('{"questions":[{"text":"x","type":"date"}]}')
-
-
-# --- per-entry Haiku gate ---------------------------------------------------
-
-def test_classify_keep(monkeypatch):
-    _mock_haiku(monkeypatch, "KEEP")
-    keep, reason = report_cmd._classify("check {text}", "a real anomaly")
-    assert keep is True and reason is None
-
-
-def test_classify_drop_with_reason(monkeypatch):
-    _mock_haiku(monkeypatch, "DROP: this just confirms the tree is clean")
-    keep, reason = report_cmd._classify("check {text}", "working tree clean")
-    assert keep is False
-    assert "confirms the tree is clean" in reason
-
-
-def test_classify_fail_open_on_nonzero(monkeypatch):
-    _mock_haiku(monkeypatch, "", code=1)
-    keep, reason = report_cmd._classify("check {text}", "anything")
-    assert keep is True and reason is None
-
-
-def test_classify_fail_open_on_unparseable(monkeypatch):
-    _mock_haiku(monkeypatch, "I think maybe?")
-    keep, _ = report_cmd._classify("check {text}", "anything")
-    assert keep is True
-
-
-def test_classify_fail_open_on_missing_binary(monkeypatch):
-    def boom(prompt, **kw):
-        raise FileNotFoundError("claude")
-    monkeypatch.setattr(report_cmd.internal_claude, "run_internal_claude", boom)
-    keep, _ = report_cmd._classify("check {text}", "anything")
-    assert keep is True
-
-
-def test_gate_bounces_ceremonial_note(monkeypatch):
-    _mock_haiku(monkeypatch, "DROP: ceremony")
-    prompts = report_prompts.DEFAULTS
-    with pytest.raises(click.ClickException, match="ceremony"):
-        report_cmd._gate([{"kind": "anomaly", "text": "tree clean"}], [], prompts)
-
-
-def test_gate_passes_genuine_note(monkeypatch):
-    _mock_haiku(monkeypatch, "KEEP")
-    prompts = report_prompts.DEFAULTS
-    report_cmd._gate([{"kind": "discovery", "text": "E-1648 landed mid-session"}], [], prompts)
-
-
-def test_gate_bounce_agent_phrasing(monkeypatch):
-    monkeypatch.setenv("CLAUDECODE", "1")
-    _mock_haiku(monkeypatch, "DROP: settled")
-    prompts = report_prompts.DEFAULTS
-    with pytest.raises(click.ClickException) as exc:
-        report_cmd._gate([], [{"text": "should I proceed?", "type": "text"}], prompts)
-    assert "Do not invent a decision" in exc.value.message
-
-
-def test_gate_no_entries_never_calls_haiku(monkeypatch):
-    def boom(prompt, **kw):
-        raise AssertionError("Haiku must not be called on the empty path")
-    monkeypatch.setattr(report_cmd.internal_claude, "run_internal_claude", boom)
-    report_cmd._gate([], [], report_prompts.DEFAULTS)
-
-
-# --- render -----------------------------------------------------------------
-
-def test_render_clean_task_is_empty():
-    """A clean handoff has nothing the user could not already compute (E-1880):
-    no Task/Status/Landed recap, no empty-category ceremony — an empty block."""
-    facts = {"status": "unverified", "type": "todo", "landed": False,
-             "successors": []}
-    block = report_cmd._render_sanctioned(facts, [], [], None)
-    assert block.strip() == ""
-
-
-def test_verify_leads_the_sanctioned_block():
-    """It is the one line the user acts on, so it comes first."""
-    facts = {"status": "unverified", "type": "todo", "landed": False,
-             "successors": [{"id": 1906, "status": "untriaged", "relation": "relates_to"}],
-             "children": []}
-    block = report_cmd._render_sanctioned(facts, [], [], "esu && ./x.sh")
-    assert block.splitlines()[0] == "Verify: `esu && ./x.sh`"
-
-
-def test_verify_alone_makes_the_block_non_empty():
-    """The keystone: an otherwise-clean session still has a sanctioned block,
-    because the deliverable pointer is a field now instead of freehand prose."""
-    facts = {"status": "unverified", "type": "todo", "landed": False,
-             "successors": [], "children": []}
-    block = report_cmd._render_sanctioned(facts, [], [], "just test")
-    assert block.strip() == "Verify: `just test`"
-
-
-def test_anomalies_are_not_in_the_sanctioned_block():
-    """Anomalies are conditional ('surface only if unexpected') and the
-    sanctioned block is unconditional — including them would force the relay of
-    noise the agent was told to judge."""
-    facts = {"status": "unverified", "type": "todo", "landed": False,
-             "successors": [], "children": []}
-    block = report_cmd._render_sanctioned(facts, [], [], None)
-    assert "uncommitted" not in block
-    addendum = report_cmd._render_agent_notes(["uncommitted: scratch.go"])
-    assert "uncommitted: scratch.go" in addendum
-    assert "NOT part of the report" in addendum
-    assert "--json anomaly note" in addendum  # names the way back in
-
-
-def test_no_anomalies_renders_no_addendum():
-    assert report_cmd._render_agent_notes([]) == ""
-
-
-def test_render_omits_computable_lines():
-    """Status/Landed/Task are computable from `task show` + `session status`, and
-    the handoff forbids recapping them — so the command must not emit them even
-    when it has the values."""
-    facts = {"status": "unverified", "type": "todo", "landed": True,
-             "successors": [{"id": 1772, "status": "unverified", "relation": "blocks"}],
-             "children": []}
-    block = report_cmd._render_sanctioned(facts, [], [], None)
-    assert "Status:" not in block
-    assert "Landed" not in block
-    assert "Task: E-" not in block
-    assert "Follow-ups you filed: E-1772 [unverified]" in block
-
-
-def test_render_includes_nonempty_sections():
-    facts = {
-        "status": "unverified", "type": "epic", "landed": True,
-        "successors": [{"id": 1772, "status": "unverified", "relation": "blocks"}],
-    }
-    notes = [{"kind": "anomaly", "text": "base is behind main"}]
-    questions = [{"text": "worktree or repo?", "type": "choice", "style": "single"}]
-    block = report_cmd._render_sanctioned(facts, notes, questions, "just test")
-    assert "Verify: `just test`" in block
-    assert "Follow-ups you filed: E-1772 [unverified]" in block
-    assert "[anomaly] base is behind main" in block
-    assert "worktree or repo?  (choice/single)" in block
-
-
-# --- E-1911: children are not the report's job at all -----------------------
-
-def test_render_never_lists_children_even_for_an_epic():
-    """The Children line was epic-only (E-1880) because the epic handoff asked
-    the session to lead with their state — and that directive existed because
-    the report computed them. Both are gone: `session status` renders a task's
-    children, and the report duplicating it is what listed E-1907 and E-1908 as
-    children of E-1785 when neither was one."""
-    facts = {
-        "status": "unverified", "type": "epic", "landed": False,
-        "successors": [{"id": 1872, "status": "submitted", "relation": "cleaned_up_by"}],
-        # Present in the dict on purpose: a renderer that reads it again fails.
-        "children": [{"id": 1899, "status": "ready"},
-                     {"id": 1900, "status": "confirmed"}],
-    }
-    block = report_cmd._render_sanctioned(facts, [], [], None)
-    assert "Children" not in block
-    assert "E-1899" not in block
-    assert "E-1900" not in block
-    assert block.strip() == "Follow-ups you filed: E-1872 [submitted]"
-
-
-def test_render_epic_with_only_children_is_empty():
-    """An epic whose only related tasks are children now reports nothing rather
-    than a recap — and `report_item` turns that into `Nothing to report.`"""
-    facts = {"status": "unverified", "type": "epic", "landed": False,
-             "successors": [], "children": [{"id": 1899, "status": "ready"}]}
-    assert report_cmd._render_sanctioned(facts, [], [], None).strip() == ""
-
-
-def test_render_follow_up_appears_exactly_once():
-    """`--parent E-N --cleans-up E-N` — the pattern every handoff prescribes —
-    lands one task in both relations. With children gone the dedupe that used to
-    be needed is structural: the id can only render under follow-ups."""
-    refs = [{"id": 1872, "status": "submitted", "relation": "cleaned_up_by"},
-            {"id": 1873, "status": "submitted", "relation": "cleaned_up_by"}]
-    facts = {"status": "unverified", "type": "epic", "landed": False,
-             "successors": refs,
-             "children": [{"id": r["id"], "status": r["status"]} for r in refs]}
-    block = report_cmd._render_sanctioned(facts, [], [], None)
-    assert block.count("E-1872") == 1
-    assert block.count("E-1873") == 1
-
-
-# --- E-1953 increment 1: the render path is OFF -----------------------------
-
-def test_report_item_refuses_while_disabled(monkeypatch):
-    """The disable is asserted through the PUBLIC entry point, not the flag.
-
-    A test that only read `REPORT_DISABLED` would pass against a build whose
-    `report_item` had stopped consulting it — which is exactly the regression
-    that matters, because the render path below it is still fully intact for
-    increment 2 to rebuild in place.
+    Tests that care about persistence opt back in explicitly. This keeps the
+    common case from needing a DB, and it exercises the bare-shell path — the
+    same condition under which the Stop gate fails open, since it resolves the
+    session the same way.
     """
-    called = []
-    monkeypatch.setattr(report_cmd, "_compute_facts", lambda i: called.append("facts"))
-    monkeypatch.setattr(report_cmd, "_classify", lambda p, t: called.append("haiku"))
-    monkeypatch.setattr(report_cmd, "_record_checkpoint", lambda t: called.append("gate"))
+    monkeypatch.setattr(report_cmd, "_session_id", lambda: None)
 
+
+def _draft(tmp_path, text="Here is the answer.\n") -> str:
+    p = tmp_path / "draft.md"
+    p.write_text(text)
+    return str(p)
+
+
+def _mock_go(monkeypatch, handlers: dict):
+    """Stub the Go seam. `handlers` maps subcommand -> CompletedProcess."""
+    calls = []
+
+    def fake(args, *, input_text=None):
+        calls.append((args, input_text))
+        return handlers.get(args[0], _completed(""))
+
+    monkeypatch.setattr(report_cmd, "_run_go", fake)
+    monkeypatch.setattr(report_cmd, "_session_id", lambda: 42)
+    return calls
+
+
+# --- draft input ------------------------------------------------------------
+
+def test_missing_draft_file_is_rejected(tmp_path):
     with pytest.raises(click.ClickException) as e:
-        report_cmd.report_item(1953, None)
-    assert "disabled" in str(e.value)
-
-    # Nothing on the way to the refusal: no model call, no DB read, no gate arm.
-    # A disabled command that still costs a Haiku round-trip is not disabled.
-    assert called == []
+        report_cmd.report_item(1953, str(tmp_path / "nope.md"))
+    assert "not found" in str(e.value)
 
 
-def test_disabled_refusal_forbids_hand_writing_a_block(monkeypatch):
-    """The refusal must not leave the agent believing it should improvise one.
-
-    An agent told only "the command is off" reproduces the block from memory —
-    it has seen hundreds of them. Naming the separator and the `Nothing to
-    report.` line as things NOT to write is the whole point of the message.
-    """
+def test_empty_draft_is_rejected(tmp_path):
+    """An empty draft is the shape of an agent satisfying the gate without
+    submitting anything, so the refusal says what to send instead."""
+    p = tmp_path / "empty.md"
+    p.write_text("   \n\n")
     with pytest.raises(click.ClickException) as e:
-        report_cmd.report_item(1953, None)
-    msg = str(e.value)
-    assert "Do NOT hand-write" in msg
-    assert "Nothing to report." in msg
+        report_cmd.report_item(1953, str(p))
+    assert "in full" in str(e.value)
 
 
-def test_disabled_refusal_precedes_payload_validation():
-    """Refusal beats rejection. A malformed payload must produce the DISABLED
-    message, not a parse error — otherwise an agent debugging its JSON never
-    learns the command is off and keeps retrying a surface that is gone."""
+def test_draft_reaches_the_minimizer_whole(monkeypatch):
+    """The whole point of --draft-file: nothing is summarized, tagged or escaped
+    on the way in. The fixture carries a table, a fenced code block and a
+    backtick-heavy line, all of which must arrive intact."""
+    seen = _mock_model(monkeypatch, "minimized")
+    report_cmd.report_item(None, str(FIXTURE))
+    assert FIXTURE.read_text() in seen["prompt"]
+
+
+def test_minimizer_runs_at_the_pinned_model_and_effort(tmp_path, monkeypatch):
+    """Model and effort are not tunable — two installs that disagreed about them
+    would produce incomparable corpora while looking identical."""
+    seen = _mock_model(monkeypatch, "minimized")
+    report_cmd.report_item(None, _draft(tmp_path))
+    assert seen["kw"]["model"] == "sonnet"
+    assert seen["kw"]["effort"] == "medium"
+
+
+# --- output contract --------------------------------------------------------
+
+def test_only_the_minimized_text_reaches_stdout(tmp_path, monkeypatch, capsys):
+    """The agent sends stdout verbatim, so anything else printed here is
+    something the USER receives. No framing, no labels, no separator."""
+    _mock_model(monkeypatch, "The answer is yes.")
+    report_cmd.report_item(1953, _draft(tmp_path))
+    assert capsys.readouterr().out == "The answer is yes.\n"
+
+
+def test_minimized_output_is_stripped(tmp_path, monkeypatch, capsys):
+    _mock_model(monkeypatch, "\n\n  The answer is yes.  \n\n")
+    report_cmd.report_item(1953, _draft(tmp_path))
+    assert capsys.readouterr().out == "The answer is yes.\n"
+
+
+# --- failing closed ---------------------------------------------------------
+#
+# The one place in the reporting surface that does NOT fail open. Everywhere
+# else a false block costs more than a missed check; here, passing the draft
+# through on failure would turn enforcement into a silent no-op that nothing
+# downstream could distinguish from a draft needing no cuts.
+
+def test_nonzero_exit_fails_closed(tmp_path, monkeypatch, capsys):
+    _mock_model(monkeypatch, "", code=1)
+    with pytest.raises(click.ClickException):
+        report_cmd.report_item(1953, _draft(tmp_path))
+    assert capsys.readouterr().out == ""
+
+
+def test_empty_model_reply_fails_closed(tmp_path, monkeypatch):
+    """An empty reply is a failed call, not a verdict that the draft was all
+    ceremony — the prompt forbids outputting nothing."""
+    _mock_model(monkeypatch, "   \n")
     with pytest.raises(click.ClickException) as e:
-        report_cmd.report_item(1953, "{not json")
-    assert "disabled" in str(e.value)
+        report_cmd.report_item(1953, _draft(tmp_path))
+    assert "returned nothing" in str(e.value)
+
+
+def test_timeout_fails_closed(tmp_path, monkeypatch):
+    _mock_model_raising(monkeypatch, subprocess.TimeoutExpired("claude", 180))
+    with pytest.raises(click.ClickException) as e:
+        report_cmd.report_item(1953, _draft(tmp_path))
+    assert "timed out" in str(e.value)
+
+
+def test_missing_claude_binary_fails_closed(tmp_path, monkeypatch):
+    """Named explicitly because it is the failure most likely to be met with a
+    'just pass the draft through' patch, which is the one fix that must never
+    land: it would silently turn the whole contract into a no-op."""
+    _mock_model_raising(monkeypatch, FileNotFoundError())
+    with pytest.raises(click.ClickException) as e:
+        report_cmd.report_item(1953, _draft(tmp_path))
+    assert "no-op" in str(e.value)
+
+
+# --- the bounded appeal -----------------------------------------------------
+
+def test_appeal_is_bounded_at_one(tmp_path, monkeypatch):
+    """Two runs is the whole budget: the report, then one appeal. A third is
+    refused — an agent that can re-run freely will re-draft until something it
+    prefers survives, which is the self-judgment the minimizer replaced."""
+    _mock_go(monkeypatch, {"report-runs": _completed("2\n")})
+    seen = _mock_model(monkeypatch, "minimized")
+    with pytest.raises(click.ClickException) as e:
+        report_cmd.report_item(1953, _draft(tmp_path))
+    assert "already used this turn's one appeal" in str(e.value)
+    # Refused BEFORE the model call — the bound must not cost a round trip.
+    assert seen == {}
+
+
+def test_second_run_is_allowed(tmp_path, monkeypatch, capsys):
+    _mock_go(monkeypatch, {"report-runs": _completed("1\n")})
+    _mock_model(monkeypatch, "the appeal, minimized")
+    report_cmd.report_item(1953, _draft(tmp_path))
+    assert capsys.readouterr().out == "the appeal, minimized\n"
+
+
+def test_checkpoint_carries_the_draft_and_task(tmp_path, monkeypatch):
+    """The corpus row and the gate are armed in one call, and the raw draft goes
+    with it — that is what makes an over-cut recoverable rather than lost."""
+    calls = _mock_go(monkeypatch, {"report-runs": _completed("0\n")})
+    _mock_model(monkeypatch, "minimized")
+    draft = _draft(tmp_path)
+    report_cmd.report_item(1953, draft)
+
+    checkpoint = [c for c in calls if c[0][0] == "relay-checkpoint"]
+    assert len(checkpoint) == 1
+    args, stdin = checkpoint[0]
+    assert stdin == "minimized"
+    assert "--draft-file" in args and draft in args
+    assert "--task-id" in args and "1953" in args
+
+
+def test_id_less_report_omits_the_task(tmp_path, monkeypatch):
+    """An unclaimed quick-question session is exactly where sprawl happens, so
+    the id is optional and the corpus keys on the session instead."""
+    calls = _mock_go(monkeypatch, {"report-runs": _completed("0\n")})
+    _mock_model(monkeypatch, "minimized")
+    report_cmd.report_item(None, _draft(tmp_path))
+
+    args, _ = [c for c in calls if c[0][0] == "relay-checkpoint"][0]
+    assert "--task-id" not in args
+
+
+def test_user_prompt_is_read_from_the_session_not_the_agent(tmp_path, monkeypatch):
+    """Asking the agent for the prompt would collect paraphrases, and would hand
+    it a lever over how its own draft is judged — it could describe the user as
+    having asked for exactly what it wrote."""
+    _mock_go(monkeypatch, {
+        "report-runs": _completed("0\n"),
+        "report-prompt": _completed("does the parser handle nested quotes?"),
+    })
+    seen = _mock_model(monkeypatch, "minimized")
+    report_cmd.report_item(None, _draft(tmp_path))
+    assert "does the parser handle nested quotes?" in seen["prompt"]
+
+
+def test_unresolvable_session_still_prints(tmp_path, monkeypatch, capsys):
+    """A bare shell has no session, so nothing persists and no gate is armed.
+    The command must still work: the Stop gate resolves the session the same
+    way and fails open for the same reason, so the two agree by construction."""
+    _mock_model(monkeypatch, "minimized")
+    report_cmd.report_item(None, _draft(tmp_path))
+    assert capsys.readouterr().out == "minimized\n"
+
+
+# --- --raw ------------------------------------------------------------------
+
+def test_raw_round_trips_the_draft(monkeypatch, capsys):
+    """Byte-for-byte, no re-wrapping: its whole purpose is to prove nothing the
+    minimizer cut was lost."""
+    original = FIXTURE.read_text()
+    _mock_go(monkeypatch, {"report-draft": _completed(original)})
+    report_cmd.show_raw()
+    assert capsys.readouterr().out == original
+
+
+def test_raw_without_a_persisted_draft_says_so(monkeypatch):
+    _mock_go(monkeypatch, {"report-draft": _completed("", code=1)})
+    with pytest.raises(click.ClickException) as e:
+        report_cmd.show_raw()
+    assert "--draft-file" in str(e.value)
+
+
+def test_raw_without_a_session_says_so(monkeypatch):
+    with pytest.raises(click.ClickException) as e:
+        report_cmd.show_raw()
+    assert "No resolvable Endless session" in str(e.value)
+
+
+# --- the prompt as a shipped asset ------------------------------------------
+
+def test_prompt_splices_without_str_format():
+    """A draft containing braces — JSON, an f-string, a shell brace expansion —
+    must not make the splice raise or interpolate the agent's own text. The
+    minimizer must never fail on the CONTENT of what it is minimizing."""
+    prompts = report_prompts.load_prompts()
+    hostile = 'Config is {"a": 1} and ${HOME} and {unclosed'
+    built = report_prompts.build_minimize_prompt(prompts, "q?", hostile)
+    assert hostile in built
+
+
+def test_prompt_carries_the_invariants():
+    """These four are the contract the golden test measures against. They are
+    guidance to an adversarial reader, not regex gates — a gate would mangle a
+    legitimate quotation of a banned phrase."""
+    text = report_prompts.DEFAULTS[report_prompts.MINIMIZE]
+    for want in ("TABLES survive byte for byte", "FENCED CODE BLOCKS survive byte for byte",
+                 "meant to RUN always survives", "DIRECT QUESTION GETS ITS DIRECT ANSWER"):
+        assert want in text, want
+
+
+def test_objective_is_not_brevity():
+    """A pure minimizer guts a requested discussion. The distinction between
+    'delete what was not asked for' and 'make it short' is the whole job, so it
+    is stated as an explicit negation rather than left to be inferred."""
+    text = report_prompts.DEFAULTS[report_prompts.MINIMIZE]
+    assert "NOT TO MAKE IT SHORT" in text
+    assert "DELETE WHAT THE USER" in text
+
+
+def test_denylist_sits_under_a_generative_rule():
+    """A phrase list alone never converges — ban 'load-bearing', get 'does the
+    heavy lifting'. The list is anchors beneath a rule, not a substitute."""
+    text = report_prompts.DEFAULTS[report_prompts.MINIMIZE]
+    assert "CHARACTERIZES THE REASONING OR NARRATES THE ANALYSIS" in text
+    assert "anchors for it, not a checklist" in text
+
+
+def test_denylist_is_spliced_into_the_prompt():
+    prompts = report_prompts.load_prompts()
+    built = report_prompts.build_minimize_prompt(prompts, "q?", "draft")
+    assert "load-bearing" in built
+    assert "{denylist}" not in built
 
 
 # --- tunable config surface -------------------------------------------------
 
 def test_prompts_default_to_embedded(isolated_env):
-    prompts = report_prompts.load_prompts()
-    assert prompts == report_prompts.DEFAULTS
+    assert report_prompts.load_prompts()[report_prompts.MINIMIZE] == \
+        report_prompts.DEFAULTS[report_prompts.MINIMIZE]
 
 
 def test_machine_layer_overrides_embedded(isolated_env):
-    import json
-    from endless import config
-    (config.CONFIG_DIR / "report-prompts.jsonl").write_text(
-        json.dumps({"name": "steer", "text": "MACHINE STEER {facts}"}) + "\n"
-    )
+    """Editing an override needs no task and no land — the wording will take
+    substantial tuning, and routing every adjustment through ceremony means it
+    never gets tuned."""
+    path = report_prompts._machine_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text('{"name": "minimize", "text": "cut it: {draft}"}\n')
+    assert report_prompts.load_prompts()[report_prompts.MINIMIZE] == "cut it: {draft}"
+
+
+def test_denylist_is_separately_overridable(isolated_env):
+    """Kept separate from the instruction so `$BLOAT "<phrase>"` can append to
+    it directly, turning an annoyance into config without a round trip."""
+    path = report_prompts._machine_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text('{"name": "denylist", "text": "  \\"synergize\\""}\n')
     prompts = report_prompts.load_prompts()
-    assert prompts[report_prompts.STEER] == "MACHINE STEER {facts}"
-    # untouched names keep the embedded default
-    assert prompts[report_prompts.NOTE_CHECK] == report_prompts.DEFAULTS[report_prompts.NOTE_CHECK]
+    assert prompts[report_prompts.DENYLIST] == '  "synergize"'
+    # The instruction is untouched, and the override is what gets spliced.
+    built = report_prompts.build_minimize_prompt(prompts, "q?", "d")
+    assert "synergize" in built
+    assert "load-bearing" not in built
 
 
 def test_unknown_name_ignored(isolated_env):
-    import json
-    from endless import config
-    (config.CONFIG_DIR / "report-prompts.jsonl").write_text(
-        json.dumps({"name": "bogus", "text": "nope"}) + "\n"
-    )
-    prompts = report_prompts.load_prompts()
-    assert "bogus" not in prompts
-    assert prompts == report_prompts.DEFAULTS
+    path = report_prompts._machine_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text('{"name": "not-a-real-prompt", "text": "x"}\n')
+    assert report_prompts.load_prompts()[report_prompts.MINIMIZE] == \
+        report_prompts.DEFAULTS[report_prompts.MINIMIZE]

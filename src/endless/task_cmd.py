@@ -2873,15 +2873,17 @@ def _maybe_emit_report_reminder(
     )
     click.echo(
         "      "
-        + click.style(f"endless task report {task_id_display(item_id)}", bold=True)
+        + click.style(
+            f"endless task report {task_id_display(item_id)} --draft-file <path>",
+            bold=True)
     )
     click.echo(
-        "  Answer in your own words, then append its block unchanged after the"
+        "  Write the reply you were about to send to a file — in full, no"
     )
     click.echo(
-        "  separator. Add --json only for genuinely out-of-band notes or open"
+        "  pre-summarizing — then send that command's output verbatim as your"
     )
-    click.echo("  questions.")
+    click.echo("  entire message.")
 
 
 def complete_item(item_id: int, cascade: bool = False, outcome: str | None = None):

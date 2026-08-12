@@ -11,43 +11,39 @@ import (
 	"github.com/mikeschinkel/endless/internal/monitor"
 )
 
-// relay_gate.go holds the verbatim-report-relay Stop gate (E-1901) — the
-// enforcement layer under E-1803's compose-time nudge.
+// relay_gate.go holds the Stop gate that makes `endless task report` an
+// enforcer instead of a suggestion.
 //
-// E-1803 injected "relay the report verbatim, add nothing" at PostToolUse and
-// was explicit that it is a nudge, not a gate: the harness always lets the model
-// author its final message. Agents override it anyway, because appending does
-// not feel like defiance — it feels like thoroughness. An instruction cannot fix
-// a disguise; only a detector that catches the act and NAMES it can, which is
-// what this file is.
+// OWNED BY E-1953. The file was built by E-1901, parked by E-1911, and left
+// orphaned when E-1911 landed — no task owned it and nothing fired it. E-1953
+// adopts it explicitly: the machinery E-1901 built is exactly what the minimizer
+// needs, because both enforce the same shape of claim (the agent owes the user
+// one specific string as its final message) and differ only in where that string
+// comes from. E-1901 rendered it from fields the agent volunteered; E-1953 gets
+// it by handing the agent's whole draft to an adversarial minimizer.
 //
-// PARKED as of E-1911 — `relayGateEnabled` is false and nothing below fires.
-// The rationale for keeping the machinery intact is on that constant; the
-// paragraphs above describe the contract it enforced, which the append model
-// replaced.
+// That difference is why the gate can be live now and could not be then. Under
+// E-1911's append model an equality check would have bounced every correct
+// reply, since the agent's own answer was deliberately unconstrained. Under the
+// minimizer the output IS the reply, so equality is once again the right test.
 //
-// Everything here is pure: no DB, no I/O, no process state. The comparison is
-// the part that must be exactly right, so it is testable without infrastructure.
-// The impure half (reading the checkpoint, emitting the block) lives in
-// claude.go's Stop branch.
-
-// relayGateEnabled parks the gate (E-1911). It is false because the contract
-// the gate enforces was inverted: `task report` no longer asks for the block to
-// BE the final message, it asks for the block to be APPENDED to an
-// unconstrained organic answer. An equality check against the block would now
-// bounce every correct reply — the gate is not wrong, its premise is gone.
+// The gate catches two distinct violations, and the second is the one that
+// matters:
 //
-// Parked, not abandoned. Everything the gate needs survives: this file, its
-// unit tests, the checkpoint the report command still records, the
-// GateKindRelay row, the session_gates columns. Reviving it under the append
-// contract is this one flip plus a comparison that keys on the separator
-// instead of demanding whole-message equality.
+//   - The agent reported, then embellished. Caught by comparing the final
+//     message against the checkpoint.
+//   - The agent never reported at all. This is the trivial bypass — an
+//     enforcement that only fires once you opt in enforces nothing — and it is
+//     new here, because under E-1901 "no checkpoint" was the fail-open case.
 //
-// The switch lives HERE and not in `settings.json` deliberately. The Stop hook
-// stays installed and stays synchronous (E-1901); disabling the gate in config
-// would drift per machine and per worktree, and would silently un-park itself
-// on the next `setup` run.
-const relayGateEnabled = false
+// The `relay` gate KIND keeps its slug and its columns. The name still describes
+// the job accurately (the agent relays the minimizer's output verbatim) and
+// renaming it would churn the schema, the enum, and the integrity check for no
+// behavior change.
+//
+// Everything except enforceReportGate is pure: no DB, no I/O, no process state.
+// The comparison is the part that must be exactly right, so it is testable
+// without infrastructure.
 
 // relayFenceRe matches a line that is nothing but a markdown code fence, with an
 // optional language tag. Such lines are dropped from BOTH sides before
@@ -57,29 +53,15 @@ const relayGateEnabled = false
 // the gate is noise, and the deterrent dies with the trust.
 var relayFenceRe = regexp.MustCompile("^`{3,}[a-zA-Z0-9_+-]*$")
 
-// relayMarkerRe matches the BEGIN/END REPORT delimiter lines the report command
-// USED to print around the sanctioned block. They marked the block's extent for
-// the agent; they were not part of the message. Dropped from both sides so an
-// agent that copied the block *with* its markers was compliant rather than
-// bounced.
-//
-// E-1911 replaced that pair with a single opening `----- ENDLESS REPORT -----`
-// separator, so this regex now matches nothing the command emits. It is left as
-// written because the gate is parked: reviving it means rewriting the
-// comparison around the separator anyway (the block is no longer the whole
-// message), and that rewrite is where this belongs.
-var relayMarkerRe = regexp.MustCompile(`^-{3,}\s*(BEGIN|END) REPORT\s*-{3,}$`)
-
 // normalizeRelayText reduces a message to the form the equality check compares:
 // the sequence of its non-empty lines, each stripped of surrounding whitespace,
-// with code fences and block markers removed.
+// with code fences removed.
 //
 // Blank lines and indentation are discarded outright rather than preserved,
-// because neither carries meaning in a sanctioned block (the renderer joins
-// single newlines) while both vary freely in how an agent formats a relay. Any
-// difference the gate keys on must be a difference that MATTERS — spacing does
-// not, and treating it as a violation produces bounces the agent cannot learn
-// from.
+// because neither carries meaning the gate should enforce while both vary freely
+// in how an agent reproduces a block. Any difference the gate keys on must be a
+// difference that MATTERS — spacing does not, and treating it as a violation
+// produces bounces the agent cannot learn from.
 //
 // What survives is every line containing words, on both sides. That is the one
 // property the gate rests on: prose cannot be normalized away.
@@ -88,7 +70,7 @@ func normalizeRelayText(s string) string {
 	out := make([]string, 0, len(raw))
 	for _, line := range raw {
 		bare := strings.TrimSpace(line)
-		if bare == "" || relayFenceRe.MatchString(bare) || relayMarkerRe.MatchString(bare) {
+		if bare == "" || relayFenceRe.MatchString(bare) {
 			continue
 		}
 		out = append(out, bare)
@@ -96,18 +78,18 @@ func normalizeRelayText(s string) string {
 	return strings.Join(out, "\n")
 }
 
-// relayVerdict compares an agent's actual final message against the sanctioned
-// report text and reports whether the turn may end.
+// relayVerdict compares an agent's actual final message against the minimized
+// text and reports whether the turn may end.
 //
 // Compliant is deliberately two cases, not one:
 //
-//   - normalized-equal — the agent relayed the report and nothing else.
+//   - normalized-equal — the agent relayed the minimized output and nothing else.
 //   - normalized-empty — the agent said nothing at all. Silence is not what the
-//     report asked for, but it is not the violation this gate exists to catch:
+//     minimizer asked for, but it is not the violation this gate exists to catch:
 //     the offense is APPENDING, and a gate that bounced silence would punish an
 //     agent for under-speaking while trying to obey.
 //
-// extra counts the lines present in the actual message that the sanctioned text
+// extra counts the lines present in the actual message that the minimized text
 // does not contain. It is what makes the bounce reason specific ("appended 4
 // lines beyond the report") rather than a generic mismatch complaint — the agent
 // can see exactly how much it added, and so can the user.
@@ -129,7 +111,7 @@ func relayVerdict(sanctioned, actual string) (extra int, ok bool) {
 		extra++
 	}
 	// The message differs but adds no unaccounted line — it dropped or reordered
-	// sanctioned content instead. Still a violation (the report was not relayed
+	// sanctioned content instead. Still a violation (the output was not relayed
 	// verbatim), so report at least one line's worth of divergence rather than
 	// returning a contradictory "0 extra lines, blocked".
 	if extra == 0 {
@@ -138,49 +120,89 @@ func relayVerdict(sanctioned, actual string) (extra int, ok bool) {
 	return extra, false
 }
 
-// relayBlockReason is the text Claude reads when the gate fires. It names the
-// act, quantifies it, and gives the two ways out — resend clean, or route the
-// extra content through the report where it belongs. The second matters: an
-// agent bounced with no legitimate channel for what it wanted to say will
-// rationalize appending it again.
+// relayBlockReason is the text Claude reads when it embellished a report. It
+// names the act, quantifies it, and gives the two ways out — resend clean, or
+// put the extra content through the minimizer, which is the channel that exists
+// precisely so an agent with something more to say is not left choosing between
+// silence and defiance.
 func relayBlockReason(extra int, sanctioned string) string {
 	return fmt.Sprintf(
-		"BLOCKED: you appended %s beyond the sanctioned `endless task report` "+
-			"output. The report IS the message — relaying it verbatim is the whole "+
-			"job, and adding to it is the exact habit this gate exists to catch.\n\n"+
+		"BLOCKED: you added %s beyond the output of `endless task report`. That "+
+			"output IS your message — sending it verbatim is the whole job, and "+
+			"adding to it is the exact habit this gate exists to catch.\n\n"+
 			"Resend your final message as EXACTLY this and nothing else:\n\n"+
 			"%s\n\n"+
-			"If what you added was a genuine open decision, a non-computable fact, "+
-			"or the verify command, it does not belong in prose alongside the "+
-			"report — re-run `endless task report <id> --json` with a "+
-			"notes/questions/verify entry so it lands INSIDE the block, then relay "+
-			"the new block.",
+			"If what you added genuinely belongs in the reply, do not paste it "+
+			"alongside — write your full draft (including that content) to a file "+
+			"and re-run `endless task report --draft-file <path>`, then send the "+
+			"new output verbatim. You get one such appeal per turn.",
 		pluralLines(extra), sanctioned,
 	)
 }
 
-// relaySystemMessage is the user-visible half of the bounce. The block reason
-// goes to Claude; this goes to the user, so the violation is named where BOTH
-// can see it. That is the point of the design: a catch the agent could absorb
-// privately is just another instruction to reinterpret, while one the user
-// watches is a cost.
+// reportMissingReason is the text Claude reads when it never ran the command at
+// all. It is the bypass case, so it does not argue — it states the contract and
+// hands over the exact invocation.
+//
+// It asks for the draft the agent ALREADY wrote rather than for a summary. A
+// minimizer handed a pre-summarized draft is minimizing the wrong artifact, and
+// the restatement tax of composing one is the very failure that made the old
+// field-based command leak content into prose.
+func reportMissingReason() string {
+	return "BLOCKED: this turn has a reply but never ran `endless task report`.\n\n" +
+		"Every turn that speaks to the user goes through the minimizer. Do this:\n\n" +
+		"  1. Write the reply you were about to send — in full, exactly as you " +
+		"drafted it, no summarizing — to a file.\n" +
+		"  2. Run `endless task report [<task-id>] --draft-file <path>`. The task " +
+		"id is optional; omit it when nothing is claimed.\n" +
+		"  3. Send that command's output as your entire final message, verbatim.\n\n" +
+		"Do not hand-write a shortened reply to satisfy this. The minimizer decides " +
+		"what survives; your job is to give it everything you meant to say."
+}
+
+// relaySystemMessage is the user-visible half of the embellishment bounce. The
+// block reason goes to Claude; this goes to the user, so the violation is named
+// where BOTH can see it. That is the point of the design: a catch the agent
+// could absorb privately is just another instruction to reinterpret, while one
+// the user watches is a cost.
 func relaySystemMessage(extra int) string {
 	return fmt.Sprintf(
-		"Endless: blocked an appended handoff — the session added %s beyond its "+
-			"`task report` output and was told to resend the report verbatim.",
+		"Endless: blocked an embellished reply — the session added %s beyond its "+
+			"`task report` output and was told to resend it verbatim.",
 		pluralLines(extra),
 	)
 }
 
-// relayExhaustedMessage is shown to the user when the bounce budget runs out and
-// the gate stops holding the turn. It is deliberately not silent: the honest
-// ceiling here is that a re-prompted model can keep drifting, and a gate that
-// gave up quietly would misreport that ceiling as compliance.
+// reportMissingSystemMessage is the user-visible half of the never-called
+// bounce.
+func reportMissingSystemMessage() string {
+	return "Endless: blocked a reply that skipped `task report` — the session was " +
+		"told to put its draft through the minimizer."
+}
+
+// relayExhaustedMessage is shown to the user when the embellishment budget runs
+// out and the gate stops holding the turn.
 func relayExhaustedMessage(bounces int) string {
 	return fmt.Sprintf(
-		"Endless: the session appended to its `task report` output %s and did not "+
+		"Endless: the session added to its `task report` output %s and did not "+
 			"resend it verbatim; letting the turn end. The final message below is "+
-			"NOT the sanctioned report.",
+			"NOT the minimized report.",
+		pluralTimes(bounces),
+	)
+}
+
+// reportExhaustedMessage is shown to the user when the never-called budget runs
+// out.
+//
+// Surrender is announced, never silent — the authoring session was explicit that
+// a silent livelock and a silent surrender look identical from outside, and the
+// second is how a gate rots unnoticed. Whoever reads this knows the reply below
+// it went un-minimized, which is the difference between a known limitation and a
+// gate everyone believes is working.
+func reportExhaustedMessage(bounces int) string {
+	return fmt.Sprintf(
+		"Endless: the session did not run `task report` after %s; letting the turn "+
+			"end. The final message below did NOT go through the minimizer.",
 		pluralTimes(bounces),
 	)
 }
@@ -210,33 +232,31 @@ type stopBlock struct {
 	SystemMessage string `json:"systemMessage,omitempty"`
 }
 
-// enforceRelayGate is the impure half: it reads the session's pending relay
-// checkpoint, compares the turn's final message against it, and either clears
-// the checkpoint (compliant) or emits the block response (violation).
+// enforceReportGate is the impure half: it decides whether the turn ending may
+// end, and either clears the checkpoint or emits a block response.
 //
 // Returns handled=true only when it has written a response to stdout, so the
 // caller knows to stop — the hook's stdout is a single JSON document and a
 // second write would corrupt it.
 //
-// Fails OPEN throughout. Every early return here is a case where the gate cannot
-// prove a violation: no session row, no pending checkpoint, an empty
-// last_assistant_message (a tool-only turn, or a Claude Code build that does not
-// send the field). Blocking on any of those would hold a turn hostage over the
-// gate's own ignorance, and an enforcement mechanism that strands sessions gets
-// switched off — which protects nothing.
-func enforceRelayGate(payload claudePayload) (handled bool, err error) {
-	// Parked (E-1911) — see relayGateEnabled. Returning not-handled leaves the
-	// Stop branch to proceed exactly as if no checkpoint existed: nothing is
-	// written to stdout, and the pending checkpoint is left alone rather than
-	// cleared, so a revival reads the same state a live gate would have.
-	if !relayGateEnabled {
+// Fails OPEN on every case where it cannot prove a violation: an unregistered
+// project, a project that switched the gate off, a subagent, no session row, a
+// `$FULL` license, an empty last_assistant_message, or a DB error. Blocking on
+// any of those would hold a turn hostage over the gate's own ignorance, and an
+// enforcement mechanism that strands sessions gets switched off — which protects
+// nothing.
+func enforceReportGate(projectID int64, isRegistered bool, payload claudePayload) (handled bool, err error) {
+	// Unregistered projects are outside Endless entirely. Gating them would mean
+	// a tool the user never opted into holding turns in a directory it does not
+	// track.
+	if !isRegistered {
 		return false, nil
 	}
 
 	// Never gate an Agent-tool subagent. Its final message is a return value to
-	// the parent agent, not a handoff to the user — the report contract does not
-	// apply, and blocking it would strand the parent waiting on a subagent that
-	// is being told to relay a user-facing report nobody will read.
+	// the parent agent, not a handoff to a user — nothing may sit between an
+	// agent and its subagent, and the parent's own reply (the thing the user
+	// actually reads) is already gated.
 	if payload.AgentID != "" {
 		return false, nil
 	}
@@ -245,23 +265,50 @@ func enforceRelayGate(payload claudePayload) (handled bool, err error) {
 	if err != nil || session == nil {
 		return false, err
 	}
-	sanctioned, bounces, found, err := monitor.PendingRelayCheckpoint(session.ID)
-	if err != nil || !found {
-		return false, err
+
+	// Burn the `$FULL` license FIRST, before any other early return can skip it.
+	// A license that survived a turn it did not cover would be indistinguishable
+	// from the gate being off, and the user has no way to tell which they are in.
+	exempt, err := monitor.ConsumeReportExemption(session.ID)
+	if err != nil {
+		log.Printf("consuming report exemption: %v", err)
+	}
+	if exempt {
+		// The licensed reply does not go through the minimizer — routing it
+		// through would contradict the license. Any checkpoint from earlier in
+		// the turn is retired rather than enforced.
+		if _, cerr := monitor.ClearRelayCheckpoint(session.ID, "relay_exempt"); cerr != nil {
+			log.Printf("clearing checkpoint under $FULL: %v", cerr)
+		}
+		return false, nil
 	}
 
-	// An empty final message is handled HERE as well as inside relayVerdict, and
-	// the difference is the side effect, not the verdict — neither blocks.
+	// Same resolution the SessionStart rule uses, so a project is never told to
+	// use a channel that will not gate it, nor gated without being told.
+	if !reportChannelOn(projectID, isRegistered, payload.CWD) {
+		return false, nil
+	}
+
+	// An empty final message is ambiguous in a way nothing here can resolve: it
+	// is either a tool-only turn with nothing to minimize, an agent that
+	// genuinely said nothing, or a Claude Code build that does not populate the
+	// field. None of those is a violation this gate can prove, so all three pass.
 	//
-	// The string is ambiguous in a way nothing here can resolve: it is either an
-	// agent that genuinely said nothing, or a Claude Code build that does not
-	// populate last_assistant_message. Clearing on it would mean that on such a
-	// build every checkpoint closes as "complied" and the gate silently reports
-	// success while enforcing nothing — the one failure mode worse than not
-	// shipping the gate. So the checkpoint stays OPEN; the debt is still owed,
-	// and the next user prompt retires it harmlessly either way.
+	// For the embellishment case the checkpoint stays OPEN rather than being
+	// cleared: clearing on empty would mean that on a build which never populates
+	// the field, every checkpoint closes as "complied" and the gate silently
+	// reports success while enforcing nothing — the one failure mode worse than
+	// not shipping the gate. The next user prompt retires it harmlessly.
 	if strings.TrimSpace(payload.LastAssistantMessage) == "" {
 		return false, nil
+	}
+
+	sanctioned, bounces, found, err := monitor.PendingRelayCheckpoint(session.ID)
+	if err != nil {
+		return false, err
+	}
+	if !found {
+		return enforceReportCalled(session.ID)
 	}
 
 	extra, ok := relayVerdict(sanctioned, payload.LastAssistantMessage)
@@ -270,9 +317,7 @@ func enforceRelayGate(payload claudePayload) (handled bool, err error) {
 		return false, cerr
 	}
 
-	// Budget exhausted: clear and let the turn end, but say so out loud. The
-	// analysis is explicit that this gate cannot guarantee compliance, and a
-	// silent surrender would misreport a violation as a clean handoff.
+	// Budget exhausted: clear and let the turn end, but say so out loud.
 	if bounces >= monitor.RelayBounceLimit {
 		if _, cerr := monitor.ClearRelayCheckpoint(session.ID, "relay_exhausted"); cerr != nil {
 			return false, cerr
@@ -292,12 +337,34 @@ func enforceRelayGate(payload claudePayload) (handled bool, err error) {
 	})
 }
 
+// enforceReportCalled handles the bypass: a turn that produced a reply without
+// ever running `task report`.
+//
+// Its loop guard is a session counter rather than session_gates.bounces, because
+// the defining feature of this case is that no gate row exists to count on. The
+// counter resets when the user next speaks (StageUserPrompt), so the budget is
+// per-turn rather than per-session.
+func enforceReportCalled(sessionID int64) (handled bool, err error) {
+	bounces, err := monitor.BumpReportBounce(sessionID)
+	if err != nil {
+		return false, err
+	}
+	if bounces > monitor.ReportBounceLimit {
+		return true, json.NewEncoder(os.Stdout).Encode(stopBlock{
+			SystemMessage: reportExhaustedMessage(bounces - 1),
+		})
+	}
+	return true, json.NewEncoder(os.Stdout).Encode(stopBlock{
+		Decision:      "block",
+		Reason:        reportMissingReason(),
+		SystemMessage: reportMissingSystemMessage(),
+	})
+}
+
 // clearRelayCheckpointForNewTurn drops any unconsumed checkpoint when the user
 // submits a new prompt. A checkpoint is a debt owed within ONE turn; once the
 // user has spoken again, the moment it was recorded for has passed and holding
-// it would bounce a later, unrelated reply. This is also what keeps the
-// `FULL STATUS` escape hatch working — that keyword arrives as a user prompt,
-// which clears the gate before the licensed response is composed.
+// it would bounce a later, unrelated reply.
 func clearRelayCheckpointForNewTurn(payload claudePayload) {
 	session, err := monitor.GetActiveSession(payload.SessionID)
 	if err != nil || session == nil {

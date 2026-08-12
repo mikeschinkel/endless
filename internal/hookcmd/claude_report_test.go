@@ -2,8 +2,6 @@ package hookcmd
 
 import (
 	"encoding/json"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -53,11 +51,12 @@ func TestTaskReportRe(t *testing.T) {
 // TestReportRelayResponse_Shape pins the structural contract the live-Claude
 // reinforcement depends on: PostToolUse additionalContext must be nested under
 // hookSpecificOutput with the event name, and the instruction must state the
-// APPEND contract (E-1911) — own answer first, block appended after the
-// separator. The must-not-contain half is the load-bearing part: the retired
-// "add nothing / entire reply" wording is the contract this task inverted, and
-// re-introducing it here would silently instruct the opposite of what the
-// command prints.
+// VERBATIM contract (E-1953) plus the appeal that makes it resistible.
+//
+// The must-not-contain half is the load-bearing part. Every retired contract
+// this surface has carried — "append the block", the separator, "Nothing to
+// report." — would, if reintroduced, instruct the exact opposite of what the
+// command now prints, and an agent obeying either one disobeys the other.
 func TestReportRelayResponse_Shape(t *testing.T) {
 	b, err := json.Marshal(reportRelayResponse())
 	if err != nil {
@@ -75,64 +74,76 @@ func TestReportRelayResponse_Shape(t *testing.T) {
 		t.Errorf("hookEventName = %v, want PostToolUse", hso["hookEventName"])
 	}
 	ac, _ := hso["additionalContext"].(string)
-	for _, want := range []string{"task report", "APPEND", reportSeparator, "Nothing to report."} {
+	for _, want := range []string{
+		"task report", "verbatim", "entire final message", "ONE appeal", "--raw",
+	} {
 		if !strings.Contains(ac, want) {
 			t.Errorf("additionalContext missing %q:\n%s", want, ac)
 		}
 	}
-	for _, unwanted := range []string{"add nothing else", "entire reply", "ENFORCED"} {
+	for _, unwanted := range []string{
+		"APPEND", "ENDLESS REPORT", "Nothing to report.", "in your own words",
+	} {
 		if strings.Contains(ac, unwanted) {
-			t.Errorf("additionalContext still carries retired contract %q:\n%s", unwanted, ac)
+			t.Errorf("additionalContext still carries a retired contract %q:\n%s", unwanted, ac)
 		}
 	}
 }
 
-// TestReportSeparatorMatchesPython pins the one literal that must be identical
-// on both sides of the language boundary. The Go instruction tells the agent to
-// look for this line; the Python command is what prints it. If they drift, the
-// agent is hunting a separator that never appears and the block silently stops
-// being detectable — a failure with no symptom at either end alone.
-func TestReportSeparatorMatchesPython(t *testing.T) {
-	src, err := os.ReadFile(filepath.Join("..", "..", "src", "endless", "report_prompts.py"))
-	if err != nil {
-		t.Fatalf("read report_prompts.py: %v", err)
+// TestReportChannelRule_StatesTheMechanicNotAStandard pins the SessionStart
+// rule's shape (E-1953).
+//
+// Every previous version of this rule tried to teach the agent what deserves to
+// be said, and every one failed the same way — the agent judged its own output
+// while writing it, and judged generously. The minimizer is a second party, so
+// the rule only has to get the whole draft to it. Re-introducing a quality
+// standard here would put the agent back in the seat the minimizer took.
+func TestReportChannelRule_StatesTheMechanicNotAStandard(t *testing.T) {
+	for _, want := range []string{
+		"--draft-file", "in full", "verbatim", "optional", "Do NOT pre-summarize", "--raw",
+	} {
+		if !strings.Contains(reportChannelRule, want) {
+			t.Errorf("reportChannelRule missing %q:\n%s", want, reportChannelRule)
+		}
 	}
-	want := `SEPARATOR = "` + reportSeparator + `"`
-	if !strings.Contains(string(src), want) {
-		t.Errorf("report_prompts.py does not define %s", want)
+	// The retired self-judgment standard, in the exact words it last used.
+	for _, unwanted := range []string{"cannot derive", "XOR", "append", "--json"} {
+		if strings.Contains(reportChannelRule, unwanted) {
+			t.Errorf("reportChannelRule still asks the agent to judge its own output (%q):\n%s",
+				unwanted, reportChannelRule)
+		}
 	}
 }
 
-// TestComposeSessionStartContext pins SessionStart delivery under the E-1953
-// increment 1 disable: the coverage rule is WITHHELD and the one-shot task list
-// passes through untouched.
+// TestComposeSessionStartContext pins SessionStart delivery (E-1953): the
+// coverage rule rides along when the project runs the channel, and is withheld
+// when it does not.
 //
-// The empty case is the load-bearing one. Returning "" (rather than a
-// rule-shaped string) is what makes handleTaskContextInjection suppress the
-// injection entirely, so a session whose task list was already delivered on an
-// earlier start gets no injection at all instead of an instruction to run a
-// command that refuses.
+// The withheld-and-empty case is the load-bearing one. Returning "" (rather than
+// a rule-shaped string) is what makes handleTaskContextInjection suppress the
+// injection entirely, so a project that switched the channel off in
+// .endless/config.json is not told to use it.
 func TestComposeSessionStartContext(t *testing.T) {
-	if got := composeSessionStartContext(""); got != "" {
-		t.Errorf("empty task list = %q, want %q (rule withheld while disabled)", got, "")
+	if got := composeSessionStartContext("", true); got != reportChannelRule {
+		t.Errorf("empty task list = %q, want just the rule", got)
+	}
+	if got := composeSessionStartContext("", false); got != "" {
+		t.Errorf("channel off + empty task list = %q, want %q", got, "")
 	}
 
-	combined := composeSessionStartContext("Active tasks:\n  E-1 foo")
-	if strings.Contains(combined, "task report") {
-		t.Errorf("SessionStart still points at the disabled command:\n%s", combined)
+	combined := composeSessionStartContext("Active tasks:\n  E-1 foo", true)
+	if !strings.Contains(combined, reportChannelRule) {
+		t.Errorf("combined dropped the rule:\n%s", combined)
 	}
 	if !strings.Contains(combined, "E-1 foo") {
 		t.Errorf("combined dropped the task list:\n%s", combined)
 	}
-}
 
-// TestReportChannelDisabled pins the disable itself (E-1953 increment 1). Both
-// halves of the channel must be off together: a live SessionStart rule with a
-// dead command tells every session to run something that refuses, and a live
-// PostToolUse reinforcement tells it to append a block that never printed —
-// which is how an agent ends up hand-writing one.
-func TestReportChannelDisabled(t *testing.T) {
-	if reportChannelEnabled {
-		t.Fatal("reportChannelEnabled is true; E-1953 increment 1 requires the report channel OFF")
+	off := composeSessionStartContext("Active tasks:\n  E-1 foo", false)
+	if strings.Contains(off, "task report") {
+		t.Errorf("channel-off SessionStart still points at the command:\n%s", off)
+	}
+	if !strings.Contains(off, "E-1 foo") {
+		t.Errorf("channel-off SessionStart dropped the task list:\n%s", off)
 	}
 }

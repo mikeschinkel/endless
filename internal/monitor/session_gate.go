@@ -144,6 +144,29 @@ const RelayBounceLimit = 2
 // same turn legitimately replaces the sanctioned text (that is the prescribed
 // way to add a note or question), and only the newest text can be owed.
 func SetRelayCheckpoint(sessionID int64, sanctioned string) error {
+	return SetReportCheckpoint(sessionID, ReportCheckpoint{Sanctioned: sanctioned})
+}
+
+// ReportCheckpoint is one reported turn: the minimizer's output (which the
+// session now owes the user verbatim) plus the two other legs of the eval-corpus
+// triple. TaskID is optional — an id-less report is legitimate, so the row keys
+// on the session and the task is attribution only (E-1953).
+type ReportCheckpoint struct {
+	Sanctioned string // the minimized output — the ONLY thing the agent may say
+	RawDraft   string // the agent's whole freeform draft, before minimization
+	UserPrompt string // the message that prompted the turn
+	TaskID     *int64
+}
+
+// SetReportCheckpoint opens a relay checkpoint for the session, recording the
+// exact text the session owes the user as its final message alongside the raw
+// draft and prompting message it was minimized from.
+//
+// Superseding CLOSES the older row, it does not delete it. That is deliberate:
+// the corpus wants every draft the session produced this turn, including the one
+// the agent thought better of, because an agent that re-runs the minimizer is
+// itself a signal about the first output.
+func SetReportCheckpoint(sessionID int64, cp ReportCheckpoint) error {
 	db, err := DB()
 	if err != nil {
 		return err
@@ -157,13 +180,89 @@ func SetRelayCheckpoint(sessionID int64, sanctioned string) error {
 		return fmt.Errorf("supersede open relay checkpoint for session %d: %w", sessionID, err)
 	}
 	if _, err = db.Exec(
-		`INSERT INTO session_gates (session_id, kind_id, sanctioned_text, bounces, triggered_at)
-		 VALUES (?, ?, ?, 0, ?)`,
-		sessionID, int(gatekind.GateKindRelay), sanctioned, now,
+		`INSERT INTO session_gates
+		   (session_id, kind_id, sanctioned_text, raw_draft, user_prompt, task_id, bounces, triggered_at)
+		 VALUES (?, ?, ?, ?, ?, ?, 0, ?)`,
+		sessionID, int(gatekind.GateKindRelay), cp.Sanctioned,
+		nullString(cp.RawDraft), nullString(cp.UserPrompt), cp.TaskID, now,
 	); err != nil {
 		return fmt.Errorf("insert relay checkpoint for session %d: %w", sessionID, err)
 	}
+	// Count the run against the turn's appeal budget. Incremented HERE rather
+	// than at the command's entry point so only a run that actually produced
+	// output spends the budget — a run that failed to reach the minimizer must
+	// not cost the agent its one appeal.
+	if _, err = db.Exec(
+		`UPDATE sessions SET report_runs = report_runs + 1 WHERE id=?`, sessionID,
+	); err != nil {
+		return fmt.Errorf("count report run for session %d: %w", sessionID, err)
+	}
 	return nil
+}
+
+// nullString maps "" to a SQL NULL so an absent leg of the corpus triple is
+// distinguishable from a genuinely empty one. `--raw` needs that distinction:
+// "no draft was persisted" and "the draft was blank" call for different answers.
+func nullString(s string) any {
+	if s == "" {
+		return nil
+	}
+	return s
+}
+
+// LatestReportDraft returns the raw draft of the session's most recent report,
+// open or already cleared. Backs `task report --raw`, so it deliberately ignores
+// cleared_at: the agent asks for the raw draft precisely when the minimized
+// version turned out to be missing something, which is usually after the
+// checkpoint has been consumed.
+func LatestReportDraft(sessionID int64) (draft string, found bool, err error) {
+	db, err := DB()
+	if err != nil {
+		return "", false, err
+	}
+	var raw sql.NullString
+	err = db.QueryRow(
+		`SELECT raw_draft FROM session_gates
+		 WHERE session_id=? AND kind_id=? AND raw_draft IS NOT NULL
+		 ORDER BY id DESC LIMIT 1`,
+		sessionID, int(gatekind.GateKindRelay),
+	).Scan(&raw)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, fmt.Errorf("query latest report draft for session %d: %w", sessionID, err)
+	}
+	return raw.String, true, nil
+}
+
+// LabelLatestReport attaches a `$CUT`/`$BLOAT`/`$WRONG`/`$GOOD` label to the
+// session's most recent corpus row and returns whether a row was found.
+//
+// "Most recent" is the right target because the label arrives on the turn AFTER
+// the one it judges: the user reads the minimized output, then types their
+// complaint as the next prompt. By then the row is closed, so this too ignores
+// cleared_at.
+func LabelLatestReport(sessionID int64, label, text string) (found bool, err error) {
+	db, err := DB()
+	if err != nil {
+		return false, err
+	}
+	res, err := db.Exec(
+		`UPDATE session_gates SET label=?, label_text=?
+		 WHERE id = (SELECT id FROM session_gates
+		             WHERE session_id=? AND kind_id=? AND sanctioned_text IS NOT NULL
+		             ORDER BY id DESC LIMIT 1)`,
+		label, nullString(text), sessionID, int(gatekind.GateKindRelay),
+	)
+	if err != nil {
+		return false, fmt.Errorf("label latest report for session %d: %w", sessionID, err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, fmt.Errorf("report label rows affected: %w", err)
+	}
+	return n > 0, nil
 }
 
 // PendingRelayCheckpoint returns the sanctioned text and bounce count of the

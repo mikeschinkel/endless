@@ -121,7 +121,10 @@ func TestRender_FullVars_ContainsExpectedSubstitutions(t *testing.T) {
 // carry the one-command contract, while the information-deliverable handoffs
 // (epic, research, brainstorm) carry the anti-checklist prohibition. E-1773
 // adds two more lines every partial-using type must carry: reporting routed
-// through `endless task report` and the `FULL STATUS` per-response bypass.
+// through `endless task report` and the per-response bypass keyword — which
+// E-1953 changed from `FULL STATUS` to the `$FULL` sigil, and whose meaning
+// changed with it (it no longer licenses an unconstrained answer alongside a
+// block; it bypasses the minimizer entirely for one turn).
 func TestRender_HandoffClose_ExceptionRule(t *testing.T) {
 	returnLine := "tmux move-window -t archive:"
 	cases := []struct {
@@ -155,14 +158,19 @@ func TestRender_HandoffClose_ExceptionRule(t *testing.T) {
 				}
 				mustContain := []string{
 					"endless worktree check",
-					`do NOT confirm the negative`,
+					// E-1953 dropped `do NOT confirm the negative` from the
+					// close. Telling the agent not to confirm the absence of a
+					// problem is the self-judgment the minimizer replaced — the
+					// instruction now lives in the minimize prompt, where a
+					// second party applies it.
 					c.prefix,
 					c.contract,
-					// E-1773: the shared close now routes reporting through the
-					// `endless task report` command and carries the FULL STATUS
-					// per-response bypass keyword.
+					// E-1773: the shared close routes reporting through the
+					// `endless task report` command. E-1953: it now hands over
+					// the whole draft and names the `$FULL` bypass sigil.
 					"endless task report",
-					"FULL STATUS",
+					"--draft-file",
+					"$FULL",
 				}
 				for _, w := range mustContain {
 					if !strings.Contains(out, w) {

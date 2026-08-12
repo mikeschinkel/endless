@@ -86,6 +86,21 @@ func Run(args []string) {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
+	case "report-draft":
+		if err := runReportDraft(args[1:]); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+	case "report-prompt":
+		if err := runReportPrompt(args[1:]); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+	case "report-runs":
+		if err := runReportRuns(args[1:]); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
 	case "task-report":
 		if err := runTaskReport(args[1:]); err != nil {
 			fmt.Fprintln(os.Stderr, err)
@@ -155,24 +170,39 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "                                    JSON array [{id, project, title}] of the triage queue, oldest first (E-1859)")
 	fmt.Fprintln(os.Stderr, "  triage-context --id <task-id>     JSON {task_id, project, title, description, type, phase, status, has_text,")
 	fmt.Fprintln(os.Stderr, "                                    parent, siblings[], decisions[]} — the persisted artifacts triage may judge (E-1859)")
-	fmt.Fprintln(os.Stderr, "  relay-checkpoint --session-id <id>")
-	fmt.Fprintln(os.Stderr, "                                    record the sanctioned report text (read from STDIN) the session")
-	fmt.Fprintln(os.Stderr, "                                    owes as its final message; the Stop gate enforces it (E-1901)")
+	fmt.Fprintln(os.Stderr, "  relay-checkpoint --session-id <id> [--draft-file <path>] [--task-id <id>]")
+	fmt.Fprintln(os.Stderr, "                                    record the minimized report text (read from STDIN) the session")
+	fmt.Fprintln(os.Stderr, "                                    owes as its final message; the Stop gate enforces it (E-1901/E-1953).")
+	fmt.Fprintln(os.Stderr, "                                    --draft-file completes the eval-corpus triple; the prompting user")
+	fmt.Fprintln(os.Stderr, "                                    message is read from the session row, not passed in")
+	fmt.Fprintln(os.Stderr, "  report-draft --session-id <id>    print the raw draft of the session's most recent report (E-1953);")
+	fmt.Fprintln(os.Stderr, "                                    exit 1 when none exists")
+	fmt.Fprintln(os.Stderr, "  report-prompt --session-id <id>   print the message that prompted the turn in flight (E-1953)")
+	fmt.Fprintln(os.Stderr, "  report-runs --session-id <id>     print how many times `task report` produced output this turn (E-1953)")
 }
 
 // runRelayCheckpoint records the verbatim-relay checkpoint written by `endless
-// task report` (E-1901): the exact text the session now owes the user as its
-// final message. The Stop hook reads it back and blocks the turn if the agent
-// appended to it.
+// task report` (E-1901, extended by E-1953): the exact text the session now owes
+// the user as its final message. The Stop hook reads it back and blocks the turn
+// if the agent sent anything else.
 //
-// The sanctioned text arrives on STDIN, not as a flag. A report block is
-// unbounded (follow-ups, notes, questions, a verify command) and contains
-// newlines and quotes, so passing it through argv would invite both quoting bugs
-// and ARG_MAX truncation — and a truncated sanctioned text would silently gate
-// against the wrong string, bouncing a compliant agent forever.
+// The sanctioned text arrives on STDIN, not as a flag. It is unbounded and full
+// of newlines and quotes, so passing it through argv would invite both quoting
+// bugs and ARG_MAX truncation — and a truncated sanctioned text would silently
+// gate against the wrong string, bouncing a compliant agent forever. The raw
+// draft is larger still, so it arrives as a FILE path rather than competing for
+// the one stdin.
+//
+// The prompting user message is deliberately NOT a parameter. It is read here
+// from the session row where UserPromptSubmit staged it, because the caller is a
+// subprocess of the agent and has no view of the conversation — asking it for
+// the prompt would mean asking the agent to retype what the user said, which is
+// a corpus of paraphrases rather than of prompts.
 func runRelayCheckpoint(args []string) error {
 	fs := flag.NewFlagSet("relay-checkpoint", flag.ContinueOnError)
 	sessionID := fs.Int64("session-id", 0, "sessions.id (integer PK) recording the checkpoint")
+	draftFile := fs.String("draft-file", "", "path to the raw draft this output was minimized from")
+	taskID := fs.Int64("task-id", 0, "task the report is attributed to (0 = none)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -183,7 +213,101 @@ func runRelayCheckpoint(args []string) error {
 	if err != nil {
 		return fmt.Errorf("reading sanctioned text from stdin: %w", err)
 	}
-	return monitor.SetRelayCheckpoint(*sessionID, string(sanctioned))
+
+	cp := monitor.ReportCheckpoint{Sanctioned: string(sanctioned)}
+	if *draftFile != "" {
+		draft, rerr := os.ReadFile(*draftFile)
+		if rerr != nil {
+			return fmt.Errorf("reading draft file %s: %w", *draftFile, rerr)
+		}
+		cp.RawDraft = string(draft)
+	}
+	if *taskID != 0 {
+		cp.TaskID = taskID
+	}
+	// Best-effort: a missing prompt costs one leg of one corpus sample, whereas
+	// refusing the checkpoint would leave the turn ungated over a nice-to-have.
+	if prompt, found, perr := monitor.LastUserPrompt(*sessionID); perr == nil && found {
+		cp.UserPrompt = prompt
+	}
+	return monitor.SetReportCheckpoint(*sessionID, cp)
+}
+
+// runReportDraft prints the raw draft of the session's most recent report
+// (E-1953) — what `endless task report --raw` shows.
+//
+// This is the escape hatch that lets the minimizer be aggressive. With the draft
+// retrievable, an over-cut is an inconvenience rather than lost work, so the
+// prompt can be tuned toward cutting hard instead of hedging toward keeping.
+//
+// Exit 1 with nothing on stdout when no draft exists, so a caller can tell
+// "never reported" from "reported an empty draft".
+func runReportDraft(args []string) error {
+	fs := flag.NewFlagSet("report-draft", flag.ContinueOnError)
+	sessionID := fs.Int64("session-id", 0, "sessions.id (integer PK) whose draft to print")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *sessionID == 0 {
+		return fmt.Errorf("--session-id is required")
+	}
+	draft, found, err := monitor.LatestReportDraft(*sessionID)
+	if err != nil {
+		return err
+	}
+	if !found {
+		return fmt.Errorf("no persisted draft for session %d", *sessionID)
+	}
+	_, err = os.Stdout.WriteString(draft)
+	return err
+}
+
+// runReportPrompt prints the message that prompted the turn in flight, staged on
+// the session row by the UserPromptSubmit hook (E-1953).
+//
+// The minimizer needs it to judge what the user actually asked for — "delete
+// what the user did not ask for" is unanswerable without knowing what they
+// asked. It is read from the DB rather than passed by the caller because the
+// caller is the agent, and an agent that supplies its own description of the
+// request can describe the user as having asked for exactly what it wrote.
+//
+// Prints nothing and exits 0 when no prompt is staged: the minimizer degrades to
+// judging the draft alone, which is worse but not wrong.
+func runReportPrompt(args []string) error {
+	fs := flag.NewFlagSet("report-prompt", flag.ContinueOnError)
+	sessionID := fs.Int64("session-id", 0, "sessions.id (integer PK)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *sessionID == 0 {
+		return fmt.Errorf("--session-id is required")
+	}
+	prompt, found, err := monitor.LastUserPrompt(*sessionID)
+	if err != nil || !found {
+		return err
+	}
+	_, err = os.Stdout.WriteString(prompt)
+	return err
+}
+
+// runReportRuns prints how many times `task report` has produced output this
+// turn (E-1953). The command reads it back to bound the appeal at one before
+// spending a model call on a run it would refuse.
+func runReportRuns(args []string) error {
+	fs := flag.NewFlagSet("report-runs", flag.ContinueOnError)
+	sessionID := fs.Int64("session-id", 0, "sessions.id (integer PK)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *sessionID == 0 {
+		return fmt.Errorf("--session-id is required")
+	}
+	runs, err := monitor.ReportRunsThisTurn(*sessionID)
+	if err != nil {
+		return err
+	}
+	fmt.Println(runs)
+	return nil
 }
 
 // runTaskReport prints the computed, non-agent-supplied facts for a `task

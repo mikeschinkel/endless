@@ -27,8 +27,7 @@ Stay focused on E-{{.spawned_id}} — one session, one task. {{if eq .task_type 
    Filing more than one? Check whether they share a root cause — file the
    cause, not each symptom.{{else}}For anything you discover along the way:
    - Could it reasonably be done now, inside the work already underway? Do it —
-     note it in the commit message, and add a `discovery` note to
-     `endless task report`.
+     note it in the commit message, and say so in your reply draft.
    - Is it a bug in work THIS session landed? Reopen that task
      (`endless task update E-NNN --status revisit --db main`) and fix it there.
    - Otherwise file it (`--cleans-up E-{{.spawned_id}}`) and confirm before

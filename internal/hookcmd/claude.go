@@ -233,14 +233,19 @@ func runClaude(args []string) error {
 		// maybeCwdBind for the gating rationale (spawn-race recovery,
 		// subagent / background-agent exclusions).
 		maybeCwdBind(projectID, payload, spawnBound)
-		return handleTaskContextInjection(projectID, payload)
+		return handleTaskContextInjection(projectID, isRegistered, payload)
 
 	case "UserPromptSubmit":
 		// Parse transcript to capture new messages
 		monitor.ParseTranscript(payload.SessionID, payload.TranscriptPath)
 		// E-1901: a new user turn retires any unconsumed relay checkpoint.
 		clearRelayCheckpointForNewTurn(payload)
-		return handleUserPromptSubmit(projectID, payload)
+		// E-1953: reset the per-turn gate state, then read the prompt's sigils —
+		// labels against the PRECEDING turn's corpus row, and a `$FULL` license
+		// for the turn now starting. Both precede the response so the license is
+		// in the DB before Stop reads it back.
+		stageReportTurn(payload)
+		return handleUserPromptSubmit(projectID, payload, applySigils(payload))
 
 	case "PreToolUse":
 		if err := monitor.ReapWorktreesForProject(projectID); err != nil {
@@ -260,16 +265,13 @@ func runClaude(args []string) error {
 	case "Stop":
 		// Parse transcript before idling — captures the assistant's last response
 		monitor.ParseTranscript(payload.SessionID, payload.TranscriptPath)
-		// E-1901: the verbatim-relay gate, PARKED by E-1911 (see
-		// relayGateEnabled) — it returns not-handled immediately, so this call
-		// is currently a no-op held in place for the revival. Runs BEFORE
-		// IdleSession — a blocked turn is not ending, so marking the session
-		// idle would be a lie that `session list` and the status line would both
-		// render. Returns handled when it has emitted a block response; nothing
-		// further may write to stdout after that (the hook's stdout is one JSON
-		// document).
-		if handled, err := enforceRelayGate(payload); err != nil {
-			log.Printf("relay gate: %v", err)
+		// E-1953: the minimizer's Stop gate. Runs BEFORE IdleSession — a blocked
+		// turn is not ending, so marking the session idle would be a lie that
+		// `session list` and the status line would both render. Returns handled
+		// when it has emitted a block response; nothing further may write to
+		// stdout after that (the hook's stdout is one JSON document).
+		if handled, err := enforceReportGate(projectID, isRegistered, payload); err != nil {
+			log.Printf("report gate: %v", err)
 		} else if handled {
 			return nil
 		}
@@ -309,43 +311,73 @@ func runClaude(args []string) error {
 	return nil
 }
 
-// reportChannelEnabled switches off BOTH halves of the report channel — the
-// SessionStart coverage rule and the PostToolUse reinforcement (E-1953
-// increment 1). It is false because the command they point at now refuses.
+// reportChannelRule is the coverage rule, delivered on every SessionStart so the
+// reporting contract is always in context rather than depending on the agent
+// re-reading the guide (E-1803 Arm 2, rewritten by E-1953).
 //
-// Both halves must go together. Leaving either one live would instruct every
-// session to run a disabled command and then to append a block that never
-// printed, which is worse than the noise the disable exists to stop: an agent
-// told to append a block it cannot obtain will hand-write one.
+// It states a MECHANIC, not a standard of quality. Every previous version of
+// this rule tried to teach the agent what deserves to be said — "a computed fact
+// the user cannot derive, XOR a genuine open decision" — and every one of them
+// failed the same way: the agent judged its own output in the same breath as
+// writing it, and judged generously. The minimizer is a second party, so the
+// rule no longer has to describe good output. It only has to get the draft to
+// the minimizer.
 //
-// The switch is a code constant only because it is TRANSITIONAL — increment 2
-// replaces both texts and moves the live/off decision to `.endless/config.json`,
-// where an agent cannot reach it in the course of normal work.
-const reportChannelEnabled = false
+// Which is also why it says "write it in full, do not pre-summarize". An agent
+// that shortens before submitting has done the minimizer's job badly and
+// destroyed the evidence, and a short draft is exactly what an agent trying to
+// look compliant will produce.
+const reportChannelRule = "Report channel: every reply you send the user goes " +
+	"through `endless task report` first. Write your reply exactly as you mean " +
+	"to send it — in full, at whatever length the turn calls for, tables and " +
+	"code blocks and all — to a file, then run `endless task report [<task-id>] " +
+	"--draft-file <path>`. The task id is optional; omit it when you have " +
+	"nothing claimed. Send that command's output as your entire final message, " +
+	"verbatim: no preamble, no additions, nothing after it.\n\n" +
+	"Do NOT pre-summarize the draft. An adversarial minimizer decides what " +
+	"survives, and it can only cut what it is given — trimming first replaces " +
+	"its judgment with yours, which is the thing this channel exists to stop. " +
+	"If it cuts something you needed, `endless task report --raw` prints your " +
+	"draft back unchanged; nothing is destroyed.\n\n" +
+	"A Stop hook enforces both halves: it blocks a final message that differs " +
+	"from the command's output, and it blocks a turn that never ran the command " +
+	"at all."
 
-// reportChannelRule is the coverage rule (E-1803 Arm 2), delivered on every
-// SessionStart so the functional reporting rule is always in context rather than
-// depending on the agent re-reading the guide. Defined FUNCTIONALLY on purpose:
-// it does NOT enumerate checkpoint types (an enumerated list drifts the moment a
-// new user-facing surface appears).
-const reportChannelRule = "Report channel: at any in-session point where you " +
-	"would give the user a user-facing status update or checkpoint, run " +
-	"`endless task report <id>` and append its block to the end of your reply, " +
-	"after the `" + reportSeparator + "` separator. Your own answer comes " +
-	"first and is not constrained by the block. What belongs IN the block is " +
-	"defined by function, not by a list of situations: a computed fact the " +
-	"user cannot derive on their own, XOR a genuine open decision they must " +
-	"make before the work can proceed. Judge every checkpoint by that " +
-	"function, and get such a fact into the block by re-running the command " +
-	"with a --json verify/note/question entry rather than hand-writing it into " +
-	"the block."
+// reportChannelOn reports whether this session runs the report channel. There is
+// no code-level switch any more: the live/off decision belongs to
+// `.endless/config.json`, because it must be settable per project — so
+// Endless's own checkout can opt out while the minimizer prompt is tuned without
+// every other project shipping ungated — and it must sit somewhere an agent does
+// not edit in the course of normal work, which rules out
+// `.claude/settings.json`.
+//
+// Resolution is nearest-config-wins from cwd (see ReportGateEnabledForCwd), so a
+// worktree's own branch state governs its sessions. That is what makes a branch
+// which is CHANGING the gate able to exempt itself before it lands.
+//
+// Unregistered projects are off: Endless does not gate a directory it does not
+// track. A project whose path cannot be resolved is off for the same reason.
+//
+// Used by BOTH the SessionStart rule and the Stop gate, deliberately: a session
+// must never be told to use a channel that will not gate it, nor gated without
+// having been told.
+func reportChannelOn(projectID int64, isRegistered bool, cwd string) bool {
+	if !isRegistered {
+		return false
+	}
+	root, err := monitor.ProjectPath(projectID)
+	if err != nil || root == "" {
+		return false
+	}
+	return monitor.ReportGateEnabledForCwd(cwd, root)
+}
 
-func handleTaskContextInjection(projectID int64, payload claudePayload) error {
+func handleTaskContextInjection(projectID int64, isRegistered bool, payload claudePayload) error {
 	ctx, err := buildTaskContextInjection(projectID, payload)
 	if err != nil {
 		return err
 	}
-	combined := composeSessionStartContext(ctx)
+	combined := composeSessionStartContext(ctx, reportChannelOn(projectID, isRegistered, payload.CWD))
 	if combined == "" {
 		return nil
 	}
@@ -357,10 +389,12 @@ func handleTaskContextInjection(projectID int64, payload claudePayload) error {
 // SessionStart — even when the task list was already injected on an earlier
 // start (resume/compact) — so coverage never depends on the one-shot gate. Pure
 // so the composition is unit-testable.
-func composeSessionStartContext(taskListCtx string) string {
-	// E-1953 increment 1: with the command disabled the rule is withheld, and the
-	// task-list context is returned alone (or "", which suppresses the injection).
-	if !reportChannelEnabled {
+func composeSessionStartContext(taskListCtx string, channelOn bool) string {
+	// A project that switched the channel off in .endless/config.json is not told
+	// to use it. Returning "" (rather than a rule-shaped string) is what lets
+	// handleTaskContextInjection suppress the injection entirely when there is
+	// also no task list to deliver.
+	if !channelOn {
 		return taskListCtx
 	}
 	if taskListCtx == "" {
@@ -375,8 +409,15 @@ func composeSessionStartContext(taskListCtx string) string {
 //  1. Pending inter-session message banner (existing fallback).
 //  2. Layer 1: first-time full task list (one-shot) OR per-prompt
 //     "Active task: E-XXX — <title>." reminder.
-func handleUserPromptSubmit(projectID int64, payload claudePayload) error {
+func handleUserPromptSubmit(projectID int64, payload claudePayload, sigilNotice string) error {
 	var parts []string
+
+	// E-1953: a refused label leads. The user believes they just taught the
+	// minimizer something; if the notice were buried under a task list the agent
+	// would skip it and the correction would be lost twice over.
+	if sigilNotice != "" {
+		parts = append(parts, sigilNotice)
+	}
 
 	// Pending inter-session messages
 	pane := os.Getenv("TMUX_PANE")
@@ -524,37 +565,25 @@ func buildTaskContextInjection(projectID int64, payload claudePayload) (string, 
 // `;`/`&`/`|` inside a quoted string) is harmless — this is a nudge, not a gate.
 var taskReportRe = regexp.MustCompile(`(?m)(?:^|[;&|])\s*(?:\S*/)?endless\s+task\s+report\b`)
 
-// reportSeparator opens the appended report block (E-1911). It is a fixed
-// literal, mirrored by SEPARATOR in src/endless/report_prompts.py: the Python
-// command prints it and the instructions below name it, so the two must agree
-// byte for byte or the agent is told to look for a separator that never
-// appears. Kept out of the tunable prompt entries for the same reason — a
-// machine-detectable marker a user could override away is not detectable.
-const reportSeparator = "----- ENDLESS REPORT -----"
-
 // reportRelayInstruction is the compose-time reinforcement injected right after
-// a `task report` run (E-1803 Arm 1). It reinforces the command's own steer.
+// a `task report` run that actually produced output (E-1803 Arm 1, rewritten by
+// E-1953).
 //
-// E-1911 inverted what that steer asks for, and this text had to invert with
-// it. It used to say the block IS the whole reply and to add nothing — the same
-// contract the (now parked) Stop gate enforced. Under the append model the
-// agent's own answer is deliberately unconstrained, so leaving the old wording
-// here would have the harness instructing the exact opposite of the command it
-// is reinforcing, and an agent that obeys either one disobeys the other.
-const reportRelayInstruction = "You just ran `endless task report`. Answer the " +
-	"user in your own words first — that half of your reply is NOT constrained " +
-	"by the report, so say what the turn actually calls for, at whatever " +
-	"length it calls for.\n\n" +
-	"Then APPEND that command's report block to the END of your reply, " +
-	"unchanged, after its `" + reportSeparator + "` separator line. Reproduce " +
-	"the separator and the block exactly as printed — do not edit, summarize, " +
-	"reorder, or comment on the block, and write nothing after it. If the block " +
-	"is the single line `Nothing to report.`, append that: it is the report's " +
-	"null result, and dropping it is indistinguishable from a block that failed " +
-	"to render.\n\n" +
-	"If a fact belongs inside the block and is missing, do not hand-write it " +
-	"there — re-run `endless task report` with a --json verify/note/question " +
-	"entry so the command computes it, then append the new block."
+// It restates the contract at the moment of maximum temptation. The agent has
+// just watched the minimizer delete most of what it wrote, and the pull toward
+// "I'll send its output plus the two sentences it shouldn't have cut" is
+// strongest right here. Naming the appeal is what makes that resistible: an
+// agent with a legitimate objection and no channel for it will rationalize
+// appending instead.
+const reportRelayInstruction = "You just ran `endless task report`. Its output " +
+	"is now your entire final message. Send it verbatim — no preamble, no " +
+	"framing sentence, no additions, nothing after it. A Stop hook compares your " +
+	"final message against it.\n\n" +
+	"If the minimizer cut something the user genuinely needs, do not paste it " +
+	"back. You get ONE appeal per turn: re-run `endless task report " +
+	"--draft-file <path>` with a draft that argues for the missing content, and " +
+	"send the new output instead. `endless task report --raw` prints your " +
+	"original draft unchanged if you need to see what was removed."
 
 // postToolUseResponse carries a PostToolUse additionalContext injection. Unlike
 // the top-level hookResponse.AdditionalContext used on SessionStart /
@@ -578,6 +607,27 @@ func reportRelayResponse() postToolUseResponse {
 			AdditionalContext: reportRelayInstruction,
 		},
 	}
+}
+
+// reportRendered reports whether the session now owes a minimized message —
+// i.e. whether the `task report` run that just finished actually produced one.
+//
+// This is the "keyed on a successful render" test (E-1953). It asks the DB
+// rather than parsing the tool result because the checkpoint is written by the
+// command itself, on the success path only: there is no output shape to pattern
+// match, no exit code to trust through a shell pipeline, and no way for a
+// `--help` or a failed run to fake it.
+//
+// Fails closed (returns false): with no resolvable session there is no
+// checkpoint, so there is nothing to reinforce, and injecting the instruction
+// anyway would tell the agent to relay output that was never sanctioned.
+func reportRendered(sessionID string) bool {
+	session, err := monitor.GetActiveSession(sessionID)
+	if err != nil || session == nil {
+		return false
+	}
+	_, _, found, err := monitor.PendingRelayCheckpoint(session.ID)
+	return err == nil && found
 }
 
 // claimHandoffResponse wraps a rendered claim handoff (E-1822) in the
@@ -608,18 +658,20 @@ func handlePostToolUse(projectID int64, payload claudePayload) error {
 		return json.NewEncoder(os.Stdout).Encode(claimHandoffResponse(claimHandoff))
 	}
 
-	// E-1803 Arm 1: reinforce the report channel. When this Bash call ran
-	// `endless task report`, inject a compose-time nudge to append the report's
-	// block after the separator (E-1911) — its own answer stays its own.
+	// E-1803 Arm 1: reinforce the report channel right after a run that produced
+	// something to relay.
 	//
-	// Off since E-1953 increment 1 (see reportChannelEnabled). This is also the
-	// branch that fired on `endless task report --help`, because it keys on the
-	// command NAME rather than on a render having succeeded — the defect
-	// increment 2 fixes when it rewrites the reinforcement.
-	if reportChannelEnabled && payload.ToolName == "Bash" {
+	// E-1953 fixed what this branch keys on. It used to fire on the command NAME,
+	// so `endless task report --help` injected "now send that output verbatim"
+	// after a run that rendered nothing. The reliable signal for "a render
+	// succeeded" is the checkpoint the command writes on success: `--help`
+	// writes none, a failed run writes none, and a successful one always does.
+	// The regex survives only as a cheap prefilter so an ordinary Bash call does
+	// not pay for a DB query.
+	if payload.ToolName == "Bash" {
 		var input toolInputBash
 		if err := json.Unmarshal(payload.ToolInput, &input); err == nil &&
-			taskReportRe.MatchString(input.Command) {
+			taskReportRe.MatchString(input.Command) && reportRendered(payload.SessionID) {
 			return json.NewEncoder(os.Stdout).Encode(reportRelayResponse())
 		}
 	}

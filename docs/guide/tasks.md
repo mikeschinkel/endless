@@ -113,7 +113,8 @@ Use the task ID printed by `task add` **literally**. IDs advance globally across
 **1. Could it reasonably be done now, inside the work already underway?** Then do it. Note it in the commit message, and add a `discovery` note so your user learns the scope grew without having to read the diff:
 
 ```bash
-endless task report <id> --json '{"notes": [{"kind": "discovery", "text": "What you also fixed and why"}]}'
+# Discoveries go in your reply draft; the minimizer decides what survives.
+endless task report <id> --draft-file <path>
 ```
 
 "Reasonably, inside the work already underway" is a real bound, not a license. A drive-by that is *unrelated* to what you are changing stays a separate task: fixing it inline inflates the diff your user reviews, couples two unrelated changes into one land, hides the change the task was actually about, and expands the blast radius of a revert.
@@ -302,77 +303,111 @@ process — what a test suite or a bulk import wants. An explicit
 
 ## Reporting to your user
 
-At **any in-session user-facing checkpoint** — a terminal status, a status
-request, "here's where the work stands", a blocker, a decision you need — route
-the update through this command rather than composing one by hand:
+**Every reply you send your user goes through the minimizer first.** Write the
+reply exactly as you mean to send it — in full, at whatever length the turn
+calls for, tables and code blocks and all — to a file, then:
 
 ```bash
-endless task report <id>
+endless task report [<id>] --draft-file <path>
 ```
 
-It reports **only what your user could not already compute** — the verify
-command, the follow-ups you filed, and your gated notes/questions. It is
-status-agnostic (run it at whatever status you reached, mid-session or at the
-end) and **does not change the task's status**.
+Send that command's output as your **entire final message, verbatim**. No
+preamble, no framing sentence, nothing after it.
 
-**You append its block; you do not become it.** Answer your user in your own
-words first — that half of your reply is deliberately **not** constrained by
-this command, so say what the turn actually calls for, at whatever length it
-calls for. Then append the printed block, unchanged, after its separator:
+The task id is **optional**. Pass it to attribute the report; omit it when you
+have nothing claimed. An unclaimed quick question is exactly where sprawl
+happens, so the channel covers it too. The command never changes the task's
+status.
 
+### Why a second party
+
+The previous design took a structured payload — `verify`, `notes`, `questions` —
+and rendered a block you appended to your own prose. Two output channels
+existed, so content landed in the cheap one: sessions wrote the verify command
+in prose and then told `task report` there was nothing to report.
+
+Every variant of that design fails identically, because in all of them the agent
+decides what to volunteer — which means the agent is judging its own output in
+the same breath as writing it, and judging generously. An adversarial minimizer
+is a **second party**. That is the whole fix (E-1952, E-1953).
+
+### Do not pre-summarize
+
+The minimizer can only cut what it is given. Trimming first replaces its
+judgment with yours, which is the exact failure this command exists to remove —
+and it destroys the evidence, since the raw draft is what the eval corpus learns
+from.
+
+It is **not a length limit**. Its objective is to delete what your user did not
+ask for, not to make the reply short. A discussion your user asked for survives
+at whatever length it takes; a single question gets a single answer and nothing
+else, however well written.
+
+Four invariants are guaranteed: markdown tables survive byte for byte, fenced
+code blocks survive byte for byte, a command your user is meant to RUN always
+survives, and a direct question gets its direct answer.
+
+### Your draft is never lost
+
+```bash
+endless task report --raw        # prints your draft back, unchanged
 ```
------ ENDLESS REPORT -----
-```
 
-The verbose half carries context; the appended half carries the guarantee. One
-opening separator, no closing one — the block runs to the end of your message,
-so nothing follows it.
+This is what lets the minimizer be maximally aggressive at zero risk — nothing
+is destroyed, only hidden. If it cut something your user genuinely needs, you
+get **one appeal per turn**: re-run with a draft that argues for the missing
+content. The appeal goes through the minimizer too.
 
-Status, landing, parentage, and children are deliberately **not** in the output:
-`task show` and `session status` already render them, and the handoff tells you
-not to recap them — the command holds itself to the same bar it enforces on your
-notes (E-1880, E-1911).
+### It is enforced
 
-**The separator always prints, the empty case included.** A session with nothing
-computed reports exactly `Nothing to report.` under it. That line is an
-assertion, not ceremony: an *absent* block is ambiguous between "there were no
-facts" and "the block failed to render", and your user would have to go check by
-hand to tell those apart. Append it as printed.
+A Stop hook blocks a final message that differs from the command's output, and
+blocks a turn that produced a reply without running the command at all. The
+second is the one that matters — an enforcement you only meet by opting in
+enforces nothing.
 
-Everything you might legitimately need to say **inside the block** has a
-**field**. Pass `--json` with `verify` for the one command your user runs to
-verify the task, `notes` for genuinely out-of-band facts the command can't
-compute, and `questions` for open decisions. Reasoning, narrative, and
-explanation are not block material — they belong in your own half, above the
-separator.
+The gate fails open wherever it cannot prove a violation: unregistered projects,
+Agent-tool subagents (their final message is a return value to the parent, not a
+handoff), turns with no assistant text, and any session it cannot resolve. When
+its bounce budget is spent it lets the turn end and **says so to the user**, so
+a surrender is never mistaken for compliance.
 
-The exact payload shape lives in `endless task report --help` — the single
-canonical home; read it there rather than duplicating it here.
+Switch it off per project with `"report_gate": false` in `.endless/config.json`.
+It defaults **on**, and it deliberately does not live in `.claude/settings.json`
+— a gate an agent can switch off in the course of normal work is not a gate.
 
-**Report by default, at every checkpoint.** The rule is functional, not a list
-of situations: what belongs in the block is a computed fact the user cannot
-derive on their own, XOR a genuine open decision they must make. Don't enumerate
-the moments this applies to (any such list drifts the moment a new surface
-appears); judge each checkpoint by that function. The normal path takes **no
-payload** beyond `verify`.
+### Telling the minimizer how it did
 
-Anything the command prints *above* the separator — currently the
-uncommitted/worktree-state advisory — is **for you, not your user**. Surface it
-only if it is unexpected, and if it is, re-run the report with a `--json` anomaly
-note so it lands inside the block.
+Four labels, recognized only as the **first token of a line** of your user's
+prompt. They attach to the preceding turn and form the eval corpus alongside the
+persisted (prompt, raw draft, minimized output) triple:
 
-### The `FULL STATUS` escape hatch
+| Signal   | Meaning                                              | Text |
+|----------|------------------------------------------------------|------|
+| `$CUT`   | it dropped something needed — show the raw            | required |
+| `$BLOAT` | still too long, or said things nobody asked for       | required |
+| `$WRONG` | off-target regardless of length                       | required |
+| `$GOOD`  | it worked                                             | optional |
 
-Reports are deliberately terse, and spawned sessions are told not to recap
-status, phase, or relationships. When the user wants the full picture anyway,
-they type **`FULL STATUS`**.
+Text is **required** on the three complaints: a bare complaint gives the corpus
+nothing to learn from, so it is refused out loud rather than silently stored.
+`$GOOD` may stand alone, and it is not politeness — a corpus made only of
+complaints trains the minimizer toward verbosity, because every recorded failure
+is a cut the user resented.
 
-That keyword licenses **one** response, answered fully and unconstrained: recap
-whatever is useful, at whatever length the answer needs, ignoring the
-report-only-what-it-can't-compute discipline for that reply.
+The sigil is what buys immunity. `WRONG:` and `GOOD:` at line start are exactly
+what a user naturally types as a prose label; one character makes the signal
+unambiguous. `CUT the scope` does not fire.
 
-It is **not a mode switch**. The response after it returns to the default
-terseness. If the user wants another full answer, they type it again.
+### The `$FULL` escape hatch
+
+When your user wants an answer that bypasses the minimizer entirely, they type
+**`$FULL`** as the first token of a line. That licenses **one** response,
+answered fully and unconstrained — it does not go through the minimizer at all.
+
+`$FULL` is a *directive*, not a label, so unlike the four above it may stand
+alone or carry the question with it: `$FULL why did the rebase conflict?`
+
+It is **not a mode switch**. The next turn returns to the default.
 
 ---
 

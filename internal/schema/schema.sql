@@ -137,6 +137,21 @@ CREATE TABLE IF NOT EXISTS sessions (
     summary TEXT,
     hidden INTEGER NOT NULL DEFAULT 0,
     short_id TEXT,
+    -- Per-turn report state (E-1953). All four are reset when the user speaks
+    -- again, because a turn is exactly the span between two user prompts.
+    -- last_user_prompt is staged at UserPromptSubmit so `task report` — a
+    -- subprocess with no view of the turn — can copy it into the corpus row.
+    -- report_bounces is the loop guard for the never-called case, which has no
+    -- session_gates row to count on. report_exempt carries the `$FULL` license
+    -- across the gap between UserPromptSubmit and Stop, which are separate
+    -- processes and so cannot share a flag in memory. report_runs bounds the
+    -- appeal at one: the first run is the report, the second is the appeal, a
+    -- third is refused — an unbounded appeal is a second bite the agent will
+    -- always take.
+    last_user_prompt TEXT,
+    report_bounces INTEGER NOT NULL DEFAULT 0,
+    report_exempt INTEGER NOT NULL DEFAULT 0,
+    report_runs INTEGER NOT NULL DEFAULT 0,
     UNIQUE (session_id),
     UNIQUE (short_id),
     FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL,
@@ -461,7 +476,22 @@ CREATE TABLE IF NOT EXISTS session_gates (
     -- bounce counter is the loop guard — Claude Code's stop_hook_active flag is
     -- undocumented, so blocking is capped on a value we control.
     sanctioned_text TEXT,
-    bounces INTEGER NOT NULL DEFAULT 0
+    bounces INTEGER NOT NULL DEFAULT 0,
+    -- 'relay' kind (E-1953): the rest of the eval-corpus triple. sanctioned_text
+    -- above is the minimized output; these two are the raw draft the agent
+    -- submitted and the user message that prompted the turn. raw_draft is also
+    -- what `task report --raw` prints, which is what lets the minimizer be
+    -- aggressive at zero risk — nothing it cuts is destroyed, only hidden.
+    --
+    -- label / label_text arrive on the FOLLOWING turn ($CUT/$BLOAT/$WRONG/$GOOD
+    -- as the first token of a user prompt), so they are nullable and written by
+    -- a second statement against an already-closed row. task_id is attribution
+    -- only — an id-less report is legitimate, so the corpus keys on the session.
+    raw_draft TEXT,
+    user_prompt TEXT,
+    task_id INTEGER REFERENCES tasks(id) ON DELETE SET NULL,
+    label TEXT,
+    label_text TEXT
 );
 
 CREATE INDEX IF NOT EXISTS session_gates_open

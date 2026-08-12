@@ -368,6 +368,80 @@ func projectIsSelfDev(root string) bool {
 // outside the monitor package (e.g. templatecmd).
 func ProjectIsSelfDev(root string) bool { return projectIsSelfDev(root) }
 
+// ReportGateEnabled reports whether the minimizer's Stop gate is live for the
+// project rooted at root (E-1953). Reads "report_gate" from
+// <root>/.endless/config.json and DEFAULTS TO TRUE — absent file, absent key,
+// unreadable, or malformed all mean enabled.
+//
+// Default-on is the product decision, not a fallback: the pain of an ungated
+// session is what the gate exists to remove, so shipping it inert would ship
+// nothing. Only an explicit `"report_gate": false` turns it off, which is why
+// the pointer below is required — with a plain bool, "absent" and "false"
+// collapse into the same zero value and every project would ship ungated while
+// appearing to be configured.
+//
+// The switch lives in .endless/config.json and NOT in .claude/settings.json,
+// and that is a security property rather than a filing preference: a gate an
+// agent can switch off is not a gate, and agents edit .claude/settings.json in
+// the course of normal work. Nor is it a code constant — it has to be settable
+// per project, so that Endless's own checkout can opt out while the minimizer
+// prompt is being tuned without every other project shipping ungated too.
+func ReportGateEnabled(root string) bool {
+	on, _ := readReportGate(root)
+	return on
+}
+
+// readReportGate reads "report_gate" from <root>/.endless/config.json. declared
+// is false when the file is absent, unreadable, malformed, or has no such key —
+// which is what lets a caller distinguish "this layer says nothing" from "this
+// layer says false" and fall through to another layer.
+func readReportGate(root string) (enabled, declared bool) {
+	data, err := os.ReadFile(filepath.Join(root, ".endless", "config.json"))
+	if err != nil {
+		return true, false
+	}
+	var cfg struct {
+		ReportGate *bool `json:"report_gate"`
+	}
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		return true, false
+	}
+	if cfg.ReportGate == nil {
+		return true, false
+	}
+	return *cfg.ReportGate, true
+}
+
+// ReportGateEnabledForCwd resolves the gate switch for a session working in cwd,
+// preferring the nearest enclosing `.endless/config.json` and falling back to
+// the registered project root.
+//
+// The cwd layer exists for worktrees. A task branch carries its own copy of
+// `.endless/config.json`, so a branch that is CHANGING the gate — or any
+// self-dev branch that must not be governed by the code it is still writing —
+// can switch it off for its own sessions without touching the project root or
+// every other worktree. Reading only the project root would mean the opt-out
+// could not take effect until after the branch landed, which is exactly
+// backwards.
+//
+// Precedence is nearest-wins, and only an explicit key counts. A worktree that
+// says nothing inherits the project's answer rather than resetting it to the
+// default, so removing the key from a branch does not silently re-enable a gate
+// the project had switched off.
+func ReportGateEnabledForCwd(cwd, projectRoot string) bool {
+	for dir := cwd; dir != ""; {
+		if enabled, declared := readReportGate(dir); declared {
+			return enabled
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+		dir = parent
+	}
+	return ReportGateEnabled(projectRoot)
+}
+
 // InSelfDevWorktree reports whether the current working directory sits inside a
 // task worktree of a self_dev project — the exact condition under which this
 // process's DB context should resolve to the per-worktree sandbox rather than

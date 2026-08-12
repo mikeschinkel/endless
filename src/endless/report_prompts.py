@@ -1,35 +1,37 @@
-"""User-editable prompt wording for `endless task report` (E-1771).
+"""The minimizer prompt for `endless task report` (E-1771, rebuilt by E-1953).
 
-The reporting command's steering prompt and its two per-entry Haiku checks are
-NOT hardcoded in the product — they live in a user-editable config file so that
-when the agent freelances, the user tells it to improve the wording and the
-agent edits the *config*, not product source (ED-1531, Requirement 5).
+The prompt IS the product here, so it is a shipped asset with a user-editable
+override layer rather than a string buried in the command.
 
 Precedence mirrors the verbs.jsonl surface (E-1268): a registered project's
 `.endless/report-prompts.jsonl` overrides the machine layer
-`~/.config/endless/report-prompts.jsonl`, which overrides the embedded
-defaults. The file is JSONL, one record per line:
+`~/.config/endless/report-prompts.jsonl`, which overrides the embedded defaults
+below. The file is JSONL, one record per line:
 
-    {"name": "steer", "text": "…"}
-    {"name": "nothing-to-report", "text": "…"}
-    {"name": "note-check", "text": "…"}
-    {"name": "question-check", "text": "…"}
+    {"name": "minimize", "text": "…"}
+    {"name": "denylist", "text": "…"}
 
-E-1901 renamed `steer-empty` to `nothing-to-report`. The rename is the honest
-description of a changed role: the text used to *steer* the agent toward
-composing its own one-line sign-off when there were no facts, and now it IS the
-computed block for that case — the thing the agent appends. No alias is kept for
-the old name because nothing could depend on it: the override is opt-in and
-neither layer's file existed.
+Only known names are honored; unknown names are ignored.
 
-E-1911 inverted what `steer` asks for: the agent's own answer is unconstrained
-and the computed block is APPENDED to it after a fixed separator. The separator
-itself is deliberately NOT a prompt entry — see `SEPARATOR` below.
+Two lifecycles, deliberately different (ED-1552 / E-1952):
 
-Only the four known names are honored; unknown names are ignored. A record with
-a known name replaces the lower-precedence text for that name.
+  * Editing an OVERRIDE needs no task and no land. That is the whole point of
+    the layer — the wording will take substantial tuning, and routing every
+    adjustment through ceremony would mean it never gets tuned.
+  * PROMOTING an override into the embedded default below is where the ceremony
+    lives, and it is gated on evidence: the override has to beat the current
+    default over the persisted corpus (prompting message, raw draft, minimized
+    output, and the user's `$CUT`/`$BLOAT`/`$WRONG`/`$GOOD` label). Promotion by
+    feel is how a prompt slowly acquires everyone's pet phrasing.
 
-The Haiku *model* is fixed (not tunable) — only the wording is a lever (Req 4).
+Why the anti-puffery half is SHIPPED rather than left to the user layer: it is a
+stated product benefit, not personal configuration. "Endless filters out that
+crap" has to be true out of the box or it is not a feature. The user layer holds
+additions, not the baseline.
+
+The minimizer is guidance to an adversarial reader, NOT a set of regex gates. A
+gate would mangle a legitimate quotation of a banned phrase — a draft that says
+`the user asked me to stop writing "load-bearing"` must survive intact.
 """
 
 import json
@@ -37,82 +39,112 @@ from pathlib import Path
 
 from endless import config
 
-# The four tunable prompts. `steer` frames the computed block the agent must
-# append; `nothing-to-report` IS the computed block when nothing was computed
-# (E-1901); `note-check` / `question-check` each classify one free-text entry,
-# and MUST instruct the model to answer with a leading KEEP / DROP token (see
-# report_cmd parsing).
-STEER = "steer"
-NOTHING_TO_REPORT = "nothing-to-report"
-NOTE_CHECK = "note-check"
-QUESTION_CHECK = "question-check"
+# The tunable entries. `minimize` is the instruction; `denylist` is the concrete
+# anchor list spliced into it, kept separate so a user can extend the anchors
+# without restating the whole instruction (and so `$BLOAT "<phrase>"` can append
+# to it directly, turning an annoyance into config without a round trip).
+MINIMIZE = "minimize"
+DENYLIST = "denylist"
 
-_KNOWN = (STEER, NOTHING_TO_REPORT, NOTE_CHECK, QUESTION_CHECK)
+_KNOWN = (MINIMIZE, DENYLIST)
 
-# The line that OPENS the appended block (E-1911). One marker, not a pair: the
-# block runs to the end of the agent's message by construction, so a closing
-# marker would delimit nothing. It is therefore also why the command prints the
-# block last — anything printed after the separator would be inside the block.
-#
-# Fixed literal, and deliberately NOT one of the tunable prompt entries: this is
-# the string a validator (and the user) matches on to find the block, and a
-# machine-detectable marker that a per-machine config could override away is not
-# machine-detectable. `report_cmd` prints it directly rather than interpolating
-# it into `steer`, so overriding the steer wording cannot lose it.
-#
-# Mirrored by `reportSeparator` in internal/hookcmd/claude.go, which names it in
-# the compose-time nudge. TestReportSeparatorMatchesPython pins the two together.
-SEPARATOR = "----- ENDLESS REPORT -----"
-
-# The check texts take `{text}` — the single entry under classification.
-# `steer` and `nothing-to-report` take NO placeholder: the steer is instruction
-# only (the command prints the separator and the block after it), and
-# `nothing-to-report` is used verbatim as the block text. Braces in an override
-# of either are literal.
+# `minimize` takes two placeholders — {prompt} (what the user asked) and {draft}
+# (the agent's whole reply) — plus {denylist}, spliced from the entry below.
+# Braces in an override are otherwise literal.
 DEFAULTS: dict[str, str] = {
-    STEER: (
-        "Answer the user in your own words first. That half of your reply is "
-        "NOT constrained by this block — say what the turn actually calls for, "
-        "at whatever length it calls for.\n"
+    MINIMIZE: (
+        "You are an adversarial editor. An AI agent has drafted a reply to a "
+        "user. Your job is to cut it down to what the user actually asked for, "
+        "and to output the result as the reply the user will receive.\n"
         "\n"
-        "Then APPEND the block printed below to the END of that reply, "
-        "unchanged, starting with its separator line. Reproduce the separator "
-        "and the block exactly as printed: do not edit, summarize, reorder, or "
-        "comment on the block, and write nothing after it.\n"
+        "YOUR OBJECTIVE IS NOT TO MAKE IT SHORT. It is to DELETE WHAT THE USER "
+        "DID NOT ASK FOR. Those are different, and the difference is the whole "
+        "job. If the user asked for a discussion, a long discussion is correct "
+        "and cutting it is a failure. If the user asked one question, one "
+        "answer is correct and everything else goes, however well written.\n"
         "\n"
-        "If the block is the single line `Nothing to report.`, append it "
-        "anyway. That line is the report's null result; dropping it is "
-        "indistinguishable from a block that failed to render.\n"
+        "=== WHAT THE USER ASKED ===\n"
+        "{prompt}\n"
         "\n"
-        "If a fact belongs inside the block and is missing, do not hand-write "
-        "it there — re-run `endless task report` with a --json note, question, "
-        "or verify entry so the command computes it, then append the new block."
+        "=== THE AGENT'S DRAFT ===\n"
+        "{draft}\n"
+        "\n"
+        "=== INVARIANTS — never violate these ===\n"
+        "\n"
+        "1. Markdown TABLES survive byte for byte, or are deleted whole. Never "
+        "reformat, re-align, reorder, or partially trim a table.\n"
+        "2. FENCED CODE BLOCKS survive byte for byte, fences included, or are "
+        "deleted whole. Never reformat, re-indent, abbreviate, or elide code.\n"
+        "3. A command the user is meant to RUN always survives — a verify "
+        "command, a repro, an invocation they asked for. This is the single "
+        "most common thing to lose and the most expensive: the user cannot "
+        "reconstruct it.\n"
+        "4. A DIRECT QUESTION GETS ITS DIRECT ANSWER. If the user asked "
+        "something answerable, the answer is in your output, stated plainly and "
+        "early. Never cut the answer and keep the context around it.\n"
+        "5. Anything the user explicitly asked to see survives, even if it "
+        "looks like ceremony to you.\n"
+        "\n"
+        "=== WHAT TO DELETE ===\n"
+        "\n"
+        "The generative rule, which governs everything below it:\n"
+        "\n"
+        "  DELETE ANY SENTENCE THAT CHARACTERIZES THE REASONING OR NARRATES THE "
+        "ANALYSIS RATHER THAN DELIVERING INFORMATION THE USER NEEDS.\n"
+        "\n"
+        "Apply that rule first and always. The specifics below are anchors for "
+        "it, not a checklist that replaces it — a draft will invent new ways to "
+        "narrate itself that no list anticipates.\n"
+        "\n"
+        "Delete:\n"
+        "  - Preamble and throat-clearing. Start at the first useful word.\n"
+        "  - Restatements of what the user just said or asked.\n"
+        "  - Announcements of what you are about to do, or just did.\n"
+        "  - Self-assessment: how hard, clean, elegant, subtle, or interesting "
+        "the work was. The user judges that.\n"
+        "  - Recaps of state the user can look up themselves.\n"
+        "  - Confirmations that a problem does NOT exist — \"no stray files\", "
+        "\"nothing else was affected\", \"no regressions\". A clean result is "
+        "reported by silence unless the user asked.\n"
+        "  - Summaries of a thing that is itself directly above.\n"
+        "  - Sign-offs, offers of further help, and closing flourishes.\n"
+        "  - Hedging that carries no information (\"it's worth noting\", "
+        "\"interestingly\").\n"
+        "  - Consulting-speak and puffery, including these anchors:\n"
+        "{denylist}\n"
+        "\n"
+        "=== OUTPUT ===\n"
+        "\n"
+        "Output ONLY the edited reply, ready to send. No preamble, no "
+        "explanation of your edits, no markers, no commentary about what you "
+        "cut or why. Do not address the agent. Do not wrap the whole reply in a "
+        "code fence.\n"
+        "\n"
+        "Preserve the draft's own voice and formatting in what survives — you "
+        "are deleting, not rewriting. Reword only where a deletion left a "
+        "sentence ungrammatical.\n"
+        "\n"
+        "If the entire draft is content the user asked for, output it "
+        "unchanged. If nothing in it is, output the single most useful sentence "
+        "it contains. Never output nothing."
     ),
-    NOTHING_TO_REPORT: "Nothing to report.",
-    NOTE_CHECK: (
-        "An agent is filing a handoff NOTE for a human reviewer. A GOOD note "
-        "states a real thing the reviewer could NOT compute from git or the "
-        "task tracker — an out-of-band fact or a genuine anomaly. A BAD note is "
-        "ceremony: it confirms the ABSENCE of a problem, restates something "
-        "already visible in git/task state, or is self-congratulatory.\n"
-        "\n"
-        'NOTE: "{text}"\n'
-        "\n"
-        'Reply "KEEP" if it is a genuine non-computable fact. Reply '
-        '"DROP: <short reason>" if it is ceremony or already computable. '
-        "Do not rationalize a ceremonial note into a real one to let it pass."
-    ),
-    QUESTION_CHECK: (
-        "An agent is filing a handoff QUESTION for the user. A GOOD question is "
-        "a real decision the user must make before the work can proceed or "
-        "land. A BAD question restates settled state, asks the user to confirm "
-        "something already decided, or is rhetorical.\n"
-        "\n"
-        'QUESTION: "{text}"\n'
-        "\n"
-        'Reply "KEEP" if it is a genuine open decision the user needs to make. '
-        'Reply "DROP: <short reason>" if it restates settled state or is '
-        "ceremony. Do not invent a decision to let a settled-state question pass."
+    # Anchors, not a gate. A denylist alone never converges — ban
+    # "load-bearing" and you get "does the heavy lifting" — which is why it sits
+    # UNDER a generative rule rather than standing in for one. The first three
+    # entries are from the session that designed this command, which is the
+    # honest place to draw them from.
+    DENYLIST: (
+        "      \"the thing that survives from your instinct\"\n"
+        "      \"that reframes the decision\"\n"
+        "      \"load-bearing\"\n"
+        "      \"the key insight is\"\n"
+        "      \"at its core\"\n"
+        "      \"fundamentally\"\n"
+        "      \"it's worth noting that\"\n"
+        "      \"this is where it gets interesting\"\n"
+        "      \"the real question is\"\n"
+        "      \"deep dive\", \"unpack\", \"tease apart\"\n"
+        "      \"robust\", \"seamless\", \"elegant\" as self-praise"
     ),
 }
 
@@ -157,10 +189,27 @@ def _project_path() -> Path | None:
 
 
 def load_prompts() -> dict[str, str]:
-    """Return the three prompt texts, applying project > machine > embedded."""
+    """Return the prompt texts, applying project > machine > embedded."""
     prompts = dict(DEFAULTS)
     _read_layer(_machine_path(), prompts)
     pp = _project_path()
     if pp is not None:
         _read_layer(pp, prompts)
     return prompts
+
+
+def build_minimize_prompt(prompts: dict[str, str], user_prompt: str, draft: str) -> str:
+    """Splice the denylist and the turn's material into the minimize template.
+
+    `replace` rather than `str.format` because the draft is arbitrary user
+    content: a draft containing a JSON object, an f-string, or a shell brace
+    expansion would make `format` raise KeyError or silently interpolate part of
+    the agent's own text. The minimizer must never fail on the CONTENT of what it
+    is minimizing.
+
+    Order matters — the denylist is spliced first so that an override which
+    inlines its own anchors is not re-substituted against the draft.
+    """
+    text = prompts[MINIMIZE].replace("{denylist}", prompts.get(DENYLIST, ""))
+    text = text.replace("{prompt}", user_prompt or "(not recorded)")
+    return text.replace("{draft}", draft)

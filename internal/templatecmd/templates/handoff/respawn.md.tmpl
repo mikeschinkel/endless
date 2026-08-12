@@ -44,8 +44,7 @@ Once you know the goal:
 
 - Stay focused on E-{{.spawned_id}}. For anything you discover along the way:
   - Could it reasonably be done now, inside the work already underway? Do it —
-    note it in the commit message, and add a `discovery` note to
-    `endless task report`.
+    note it in the commit message, and say so in your reply draft.
   - Is it a bug in work THIS session landed? Reopen that task
     (`endless task update E-NNN --status revisit --db main`) and fix it there.
   - Otherwise file it (`--cleans-up E-{{.spawned_id}}`) and confirm before
@@ -53,5 +52,5 @@ Once you know the goal:
   - Filing more than one? Check whether they share a root cause — file the
     cause, not each symptom.
 - If anything is ambiguous or you hit a design choice the plan doesn't cover — STOP and ask me. Don't guess.
-- When work is done: `endless task update E-{{.spawned_id}} --status unverified --db main`. {{template "handoff_verify" .}} Produce end-of-session and status reports by running `endless task report E-{{.spawned_id}} --db main` and appending its block, unchanged, after the separator it prints — your own answer comes first and is not constrained by the block, so don't hand-write the block or drop it; for out-of-band anomalies, `endless task report --help` shows the `--json` payload shape. If I type `FULL STATUS`, answer that one response fully and unconstrained — the keyword licenses one response, not a sticky mode. In that final message, run `endless worktree check` and relay anything it prints — it stays silent when the worktree is clean, so a clean handoff says nothing about git; flag external state (CI, services) only if it's actually in play. Do NOT recap task status, phase, or relationships, and do NOT confirm the negative ("no stray files") in your own half — the block's `Nothing to report.` line is the command's, and you append it as printed. Don't mark `confirmed`/`assumed` yourself.
+- When work is done: `endless task update E-{{.spawned_id}} --status unverified --db main`. {{template "handoff_verify" .}} Every reply you send me goes through the minimizer first: write the reply exactly as you mean to send it — in full, at whatever length the turn calls for — to a file, run `endless task report E-{{.spawned_id}} --draft-file <path> --db main`, and send that command's output as your entire message, verbatim. Do NOT pre-summarize the draft; an adversarial editor decides what survives, and `endless task report --raw` prints your draft back unchanged if it cuts too far. You get one appeal per turn. If I type `$FULL`, that one response bypasses the minimizer entirely — it licenses one response, not a sticky mode. In your final draft, run `endless worktree check` and include anything it prints — it stays silent when the worktree is clean, so a clean handoff says nothing about git; flag external state (CI, services) only if it's actually in play. Don't mark `confirmed`/`assumed` yourself.
 - Don't run `endless worktree land`/`drop` without asking.

@@ -31,7 +31,7 @@ When your user gives you a task ID:
 6. When implementation is complete:
    - `endless task update <id> --status unverified`, **and**
    - In your reply to the user, include **how to test**: the specific commands, files, or UI actions that verify the change. Don't just say "ready" — say "ready; verify by running X then checking Y." The user shouldn't have to ask.
-7. Report completion to your user with the task ID. Answer in your own words, then append the block from `endless task report <id>` after its separator — it computes the facts your user could not derive themselves; see **Reporting to your user** in `endless guide tasks`. Example: "Done — E-752 is ready for verification. To verify: run `endless guide --list` and confirm the 4 expected slugs."
+7. Report completion to your user with the task ID. Write your reply in full to a file, run `endless task report <id> --draft-file <path>`, and send that command's output verbatim as your entire message — an adversarial minimizer deletes what your user did not ask for, and a Stop hook enforces both halves. See **Reporting to your user** in `endless guide tasks`.
 8. **Do not mark `confirmed` yourself.** Only your user does that, after verifying. If you can't easily verify but believe it works, run `endless task assume <id> --outcome "..."` instead.
 
 When implementation is verified **and your user has told you to land it** — never on your own initiative; see **Landing the work** in `endless guide orchestration` — land the work with `endless worktree land <id>` (auto-commits endless-managed files — **not yours; see step 5** — rebases onto main, fast-forwards, then retains the worktree and its branch; they're cleaned up automatically after a grace period rather than removed immediately).
@@ -222,7 +222,8 @@ listed separately. (Generated — do not hand-edit; run `/regenerate-guide`.)
 | landing is the user's call (ask first) | orchestration | Never run worktree land or drop on your own initiative - ask every time. |
 | work you discover mid-task (do it, reopen, or file it) | tasks | Four-case test for a drive-by discovery: do it now, reopen your own landed work, file it with --cleans-up, or fold symptoms into one root cause. |
 | lean toward fewer tasks | tasks | Prefer one task over several - every filed task spends the user's review attention. |
-| FULL STATUS | tasks | The keyword licenses one unconstrained response, not a sticky mode. |
+| $FULL | tasks | The sigil licenses one response that bypasses the minimizer entirely, not a sticky mode. |
+| $CUT / $BLOAT / $WRONG / $GOOD | tasks | The four labels that annotate the preceding turn and build the minimizer's eval corpus. |
 | --keep-status (edit the content, infer nothing) | tasks | Suppressing every status auto-transition that task update infers from an edit. |
 <!-- END generated -->
 
