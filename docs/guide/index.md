@@ -90,7 +90,7 @@ stateDiagram-v2
 | `blocked`     | Waiting on something else.                                                                                     |
 | `revisit`     | Needs re-evaluation before it can proceed — either a partial plan that no longer holds, or work that shipped and turned out wrong. Reopening your own landed work lands here. |
 | `declined`    | Active decision not to do this. Requires `--reason`.                                                           |
-| `obsolete`    | Made irrelevant by other changes.                                                                              |
+| `obsolete`    | Made irrelevant by other changes — it never needed doing. **Refused on work that already shipped** (`unverified`/`confirmed`/`assumed`/`completed`): that work happened, and if something superseded it the fact to record is a `replaced_by` relation. Use `task replace <old> --by <new>`. |
 
 The agent sets `submitted` (via `task submit`, or by attaching a plan); a human sets `ready` (via `task approve`) — the two-step gate that makes `ready` mean "approved," not merely "planned."
 

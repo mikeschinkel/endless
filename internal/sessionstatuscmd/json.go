@@ -17,6 +17,7 @@ package sessionstatuscmd
 import (
 	"encoding/json"
 	"io"
+	"strconv"
 
 	"github.com/mikeschinkel/endless/internal/monitor"
 )
@@ -47,6 +48,11 @@ type jsonRow struct {
 	HiddenAt   string `json:"hidden_at,omitempty"`
 	BlockedByN int    `json:"blocked_by_n"`
 	BlocksN    int    `json:"blocks_n"`
+	// ReplacedBy is emitted UNGATED — the table only draws the supersession on a
+	// terminal row because that is a display rule, and --json is data. A
+	// consumer is entitled to the raw relation. Always present (possibly empty)
+	// so an absent key never has to be read as "not replaced".
+	ReplacedBy []string `json:"replaced_by"`
 }
 
 // jsonFrame wraps the rows with the ids they were resolved against, so a
@@ -81,6 +87,10 @@ func renderJSON(w io.Writer, a anchor, all bool) error {
 		Rows:          make([]jsonRow, 0, len(rows)),
 	}
 	for _, r := range rows {
+		replaced := make([]string, 0, len(r.ReplacedBy))
+		for _, id := range r.ReplacedBy {
+			replaced = append(replaced, "E-"+strconv.FormatInt(id, 10))
+		}
 		out.Rows = append(out.Rows, jsonRow{
 			ID:         r.ID,
 			ProjectID:  r.ProjectID,
@@ -100,6 +110,7 @@ func renderJSON(w io.Writer, a anchor, all bool) error {
 			HiddenAt:   r.HiddenAt,
 			BlockedByN: r.BlockedByN,
 			BlocksN:    r.BlocksN,
+			ReplacedBy: replaced,
 		})
 	}
 

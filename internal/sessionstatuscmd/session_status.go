@@ -765,8 +765,8 @@ func renderTo(w io.Writer, rows []monitor.SessionStatusRow, focal int64, noTaskH
 	const prefixWidth = 13
 	blockSeg := blockSegWidth(bw)
 	titleBudget := cols - prefixWidth - blockSeg - hw
-	if titleBudget < 10 {
-		titleBudget = 10
+	if titleBudget < minTitleBudget {
+		titleBudget = minTitleBudget
 	}
 
 	for _, r := range rows {
@@ -776,7 +776,16 @@ func renderTo(w io.Writer, rows []monitor.SessionStatusRow, focal int64, noTaskH
 		)
 		line += hiddenField(r, hw)
 		line += blockField(r, bw)
-		line += runewidth.Truncate(collapse(r.Title), titleBudget, "…")
+		// The supersession note is charged to the title's budget, not appended
+		// past it: the row must still fit `cols`, and the note is the part that
+		// must survive — a title truncated a few glyphs earlier costs nothing,
+		// a wrapped row costs the whole table's alignment (E-1956).
+		note := replacedByNote(r)
+		avail := titleBudget - runewidth.StringWidth(note)
+		if avail < minTitleBudget {
+			avail = minTitleBudget
+		}
+		line += runewidth.Truncate(collapse(r.Title), avail, "…") + note
 		fmt.Fprintln(w, colorize(line, r.Phase, isTerminal(r.Status), r.Hidden, r.Unsettled, color))
 
 		// Focal-row detail: expand the coarse ◆ marker into the specific
@@ -840,6 +849,31 @@ func applyHiddenMode(rows []monitor.SessionStatusRow, hm hiddenMode) ([]monitor.
 		}
 	}
 	return out, suppressed
+}
+
+// minTitleBudget is the floor on the columns left for a row's title, applied
+// both to the shared budget and again after the supersession note is charged
+// against it. Below this a title is all ellipsis and the row says nothing.
+const minTitleBudget = 10
+
+// replacedByNote is the inline ' (replaced by E-NNN)' suffix for a row, or ""
+// (E-1956).
+//
+// Gated on a TERMINAL status, matching the Python surfaces: that is where the
+// row otherwise reads as the end of the story — ⇥ closed on a superseded task
+// looks abandoned rather than handed on. An open task with a replaced_by keeps
+// its plain row; the fact is still in `task show`. Gating here also means the
+// DEFAULT view, which has no terminal rows in it at all, renders exactly as it
+// did before this existed.
+func replacedByNote(r monitor.SessionStatusRow) string {
+	if len(r.ReplacedBy) == 0 || !isTerminal(r.Status) {
+		return ""
+	}
+	ids := make([]string, 0, len(r.ReplacedBy))
+	for _, id := range r.ReplacedBy {
+		ids = append(ids, "E-"+strconv.FormatInt(id, 10))
+	}
+	return "  (replaced by " + strings.Join(ids, ", ") + ")"
 }
 
 // hiddenField renders the ⊘ column for a row to width hw (0 = column absent,

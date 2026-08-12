@@ -3,6 +3,7 @@
 import os
 import re
 import sys
+from collections.abc import Sequence
 from pathlib import Path
 
 import click
@@ -10,6 +11,7 @@ import click
 from endless import __version__
 from endless import agent_help
 from endless.agent_help import AgentHelpMixin
+from endless.statuses import TASK_STATUSES, TASK_STATUS_HELP
 
 # Subcommands that are safe to run inside an `endless-go sandbox` subshell
 # (no project/global I/O — pure stdout). Anything else is refused at
@@ -119,16 +121,16 @@ class TaskOrDecisionIDType(click.ParamType):
 
 TASK_OR_DECISION_ID = TaskOrDecisionIDType()
 
-TASK_STATUSES = ["untriaged", "unplanned", "submitted", "ready", "underway",
-                 "unverified", "confirmed", "assumed", "completed",
-                 "blocked", "revisit", "declined", "obsolete"]
+# TASK_STATUSES / TASK_STATUS_HELP are imported at the top of this module from
+# endless.statuses, which owns the vocabulary so update_plan's validator and
+# session_status_cmd read the same list (E-1956).
 
 
 class MultiChoice(click.ParamType):
     """Click parameter type that accepts comma-separated values from a fixed set."""
     name = "multi_choice"
 
-    def __init__(self, choices: list[str]):
+    def __init__(self, choices: Sequence[str]):
         self.choices = choices
 
     def convert(self, value, param, ctx):
@@ -1721,8 +1723,7 @@ def task_add(title, description, description_file, text, text_file, analysis_tex
 
 @task_cmd.command("update")
 @click.argument("item_ids", type=TASK_ID, nargs=-1, required=True)
-@click.option("--status", default=None,
-              help="Status: untriaged, unplanned, ready, underway, unverified, confirmed, assumed, blocked, revisit, declined, obsolete")
+@click.option("--status", default=None, help=TASK_STATUS_HELP)
 @click.option("--title", default=None,
               help="New title")
 @click.option("--description", default=None,
@@ -2230,9 +2231,13 @@ def task_block(item_id, blocker_id):
 @click.argument("item_id", type=TASK_ID)
 @click.option("--by", "replacement_id", type=TASK_ID, required=True,
               help="Task ID that replaces this task")
-@click.option("--status", "new_status", default="obsolete",
+@click.option("--status", "new_status", default=None,
               type=click.Choice(["obsolete", "declined", "confirmed", "assumed", "completed"]),
-              help="Status to set on the replaced task (default: obsolete)")
+              help="Status to set on the replaced task. Default: 'obsolete', "
+                   "except on work that already shipped (unverified/confirmed/"
+                   "assumed/completed), which keeps the status it earned — "
+                   "the supersession is the relation, not a status that reads "
+                   "as 'never happened'.")
 @click.option("--outcome", default=None,
               help="Outcome — why this was replaced (inline; required if --status=declined)")
 @click.option("--outcome-file", default=None,
@@ -2241,7 +2246,11 @@ def task_block(item_id, blocker_id):
               help="Regex matching an absolute path to permit in inline content "
                    "(repeatable; escape hatch for the path gate).")
 def task_replace(item_id, replacement_id, new_status, outcome, outcome_file, allow_paths):
-    """Mark a task as replaced by another task (sets status, default 'obsolete')."""
+    """Mark a task as replaced by another task, recording a replaced_by relation.
+
+    The replaced task's status defaults to 'obsolete', but work that already
+    shipped keeps the status it earned (E-1956) — see --status.
+    """
     from endless.task_cmd import replace_task
     outcome = _resolve_content_flag(outcome, outcome_file, "outcome", allow_paths)
     replace_task(item_id, replacement_id, status=new_status, outcome=outcome)
@@ -2608,8 +2617,7 @@ def epic_show(item_ids, no_description, show_analysis, show_text,
 
 @epic_cmd.command("update")
 @click.argument("item_ids", type=TASK_ID, nargs=-1, required=True)
-@click.option("--status", default=None,
-              help="Status: untriaged, unplanned, ready, underway, unverified, confirmed, assumed, blocked, revisit, declined, obsolete")
+@click.option("--status", default=None, help=TASK_STATUS_HELP)
 @click.option("--title", default=None,
               help="New title")
 @click.option("--description", default=None,

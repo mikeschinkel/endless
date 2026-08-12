@@ -248,6 +248,31 @@ endless task replace <id> --by <new_id>              # supersede with another ta
 
 Found a bug in work you already landed? Reopen that task (`--status revisit`) instead of filing a new one — see [Fix a bug in your own landed work](orchestration.md#fix-a-bug-in-your-own-landed-work).
 
+### Superseded work is `replaced_by`, never `obsolete`
+
+**`obsolete` is refused on a task that already shipped** — one that is
+`unverified`, `confirmed`, `assumed`, or `completed`. `obsolete` means *made
+irrelevant by other changes*, and it reads as **never happened**, which is
+simply false of work that ran and merged. Setting it would also throw away the
+one fact worth keeping: that the work was *superseded*.
+
+That fact is a relation, not a status:
+
+```bash
+endless task replace <old> --by <new>       # relation recorded; shipped status held
+```
+
+`task replace` keeps a shipped task's status exactly as it stands (an unshipped
+one still defaults to `obsolete`) and records `replaced_by`. Every surface that
+shows a **terminal** status then shows the supersession alongside it —
+`assumed (replaced by E-1953)` in `task show` and `task list`, and appended to
+the row in `session status`. So a superseded task reads as *handed on*, not
+*abandoned*, without anyone having to go looking for its relations.
+
+The refusal is keyed to the task's **current** status. Work that shipped and was
+later reopened to `revisit` is genuinely back in play, so closing it as
+`obsolete` is allowed.
+
 ---
 
 ## Triage (`untriaged` → `submitted` | `unplanned`)
@@ -496,7 +521,7 @@ endless task unlink <a> --to <b> --type implements
 | `implements`    | A is the implementation of a plan, idea, or decision recorded in B. Common pattern: B is type=`plan` or type=`decision`, A is the work. |
 | `cleans_up` / `cleaned_up_by` | A handles a loose end discovered while working on B. **This is the canonical "follow-up" link** — use it for follow-up tasks filed mid-stream. (We considered `follows_up` and rejected it in favor of `cleans_up` to keep the vocabulary tight.) |
 | `documents`    | A is a decision that explains B. Auto-created when you pass `--about <task>` to `endless decision add`.              |
-| `replaces`     | A supersedes B (B is now obsolete). Typically paired with `task replace`.                                                 |
+| `replaces`     | A supersedes B. Record it with `task replace B --by A`, which holds B's status if B's work already shipped — `obsolete` is refused there, because superseded is not the same as never happened. |
 
 **Quick decision tree:**
 

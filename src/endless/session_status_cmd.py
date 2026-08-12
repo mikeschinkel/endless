@@ -26,13 +26,14 @@ from pathlib import Path
 import click
 
 from endless import event_bridge
+from endless.statuses import TASK_STATUSES
 from endless.task_cmd import _current_endless_session_id, _resolve_project
 
 
-_VALID_STATUSES = frozenset({
-    "untriaged", "unplanned", "ready", "underway", "unverified", "confirmed",
-    "assumed", "completed", "blocked", "revisit", "declined", "obsolete",
-})
+# E-1956: read from the shared vocabulary. This was a fourth hand-maintained
+# copy and had drifted to omit `submitted`, so a snapshot naming a submitted
+# task was rejected as carrying an invalid status.
+_VALID_STATUSES = frozenset(TASK_STATUSES)
 
 _TASK_ID_RE = re.compile(r"^E-\d+$")
 _SHA_RE = re.compile(r"^[0-9a-f]{7,40}$")

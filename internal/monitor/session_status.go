@@ -1,6 +1,7 @@
 package monitor
 
 import (
+	"database/sql"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -56,6 +57,46 @@ type SessionStatusRow struct {
 	HiddenAt   string
 	BlockedByN int
 	BlocksN    int
+	// ReplacedBy holds the ids of the tasks that supersede this one. `old
+	// replaced_by new` is stored active-voice as (source=new, target=old,
+	// dep_type='replaces'), so these are the source_ids of the 'replaces' rows
+	// pointing AT this task.
+	//
+	// E-1956: a terminal status is the end of the story as the view tells it —
+	// ⇥ closed says the task is finished and nothing follows — so a superseded
+	// task read off this view looked abandoned unless you went and ran `task
+	// show`. Part of the row query rather than an annotation (unlike Unsettled
+	// and Hidden) because it is a property of the task alone: viewer-agnostic,
+	// no git, no session. Empty for the overwhelming majority of rows.
+	ReplacedBy []int64
+}
+
+// replacedByExpr is the `enr`-CTE column that collects a task's replacements as
+// a comma-separated id list (NULL when there are none). Shared by both row
+// queries so the two cannot drift. The live_tasks join keeps a removed
+// replacement from being named.
+const replacedByExpr = `
+    (SELECT group_concat(d.source_id)
+       FROM task_deps d JOIN live_tasks rep ON rep.id = d.source_id
+      WHERE d.source_type = 'task' AND d.target_type = 'task'
+        AND d.dep_type = 'replaces' AND d.target_id = b.id) AS replaced_by`
+
+// parseReplacedBy turns replacedByExpr's group_concat result into ids. A
+// malformed element is skipped rather than failing the whole view: this column
+// is an annotation, and no row set is worth losing over one unparseable id.
+func parseReplacedBy(s string) []int64 {
+	if s == "" {
+		return nil
+	}
+	var out []int64
+	for _, part := range strings.Split(s, ",") {
+		id, err := strconv.ParseInt(strings.TrimSpace(part), 10, 64)
+		if err != nil {
+			continue
+		}
+		out = append(out, id)
+	}
+	return out
 }
 
 // terminalStatusSet is the canonical "done-work" status set: these unblock
@@ -276,11 +317,12 @@ enr AS (
          AND blk.status NOT IN (` + terminalStatusSet + `)) AS blocked_by_n,
     (SELECT count(*) FROM task_deps d
        WHERE d.source_type = 'task' AND d.source_id = b.id
-         AND d.dep_type = 'blocks') AS blocks_n
+         AND d.dep_type = 'blocks') AS blocks_n,` + replacedByExpr + `
   FROM allbase b
 )
 SELECT id, project_id, title, status, phase, type_slug, has_text,
-       is_focal, is_parent, is_from, in_flight, landed, blocked_by_n, blocks_n
+       is_focal, is_parent, is_from, in_flight, landed, blocked_by_n, blocks_n,
+       replaced_by
   FROM enr
  WHERE (? = 1) OR is_focal OR is_parent OR is_from
        OR status NOT IN (` + terminalStatusSet + `)
@@ -292,15 +334,26 @@ SELECT id, project_id, title, status, phase, type_slug, has_text,
 	}
 	defer rows.Close()
 
+	return scanSessionStatusRows(rows)
+}
+
+// scanSessionStatusRows drains a row set produced by either of the two
+// session-status queries. They select the same column list in the same order —
+// which is exactly why this is one function: a column added to one query and
+// not the other now fails to compile rather than silently mis-scanning.
+func scanSessionStatusRows(rows *sql.Rows) ([]SessionStatusRow, error) {
 	var out []SessionStatusRow
 	for rows.Next() {
 		var r SessionStatusRow
+		var replaced sql.NullString
 		if err := rows.Scan(
 			&r.ID, &r.ProjectID, &r.Title, &r.Status, &r.Phase, &r.TypeSlug, &r.HasText,
 			&r.IsFocal, &r.IsParent, &r.IsFrom, &r.InFlight, &r.Landed, &r.BlockedByN, &r.BlocksN,
+			&replaced,
 		); err != nil {
 			return nil, err
 		}
+		r.ReplacedBy = parseReplacedBy(replaced.String)
 		out = append(out, r)
 	}
 	if err := rows.Err(); err != nil {
@@ -368,11 +421,12 @@ enr AS (
          AND blk.status NOT IN (` + terminalStatusSet + `)) AS blocked_by_n,
     (SELECT count(*) FROM task_deps d
        WHERE d.source_type = 'task' AND d.source_id = b.id
-         AND d.dep_type = 'blocks') AS blocks_n
+         AND d.dep_type = 'blocks') AS blocks_n,` + replacedByExpr + `
   FROM base b
 )
 SELECT id, project_id, title, status, phase, type_slug, has_text,
-       is_focal, is_parent, is_from, in_flight, landed, blocked_by_n, blocks_n
+       is_focal, is_parent, is_from, in_flight, landed, blocked_by_n, blocks_n,
+       replaced_by
   FROM enr
  WHERE (? = 1) OR status NOT IN (` + terminalStatusSet + `)
 `
@@ -383,21 +437,7 @@ SELECT id, project_id, title, status, phase, type_slug, has_text,
 	}
 	defer rows.Close()
 
-	var out []SessionStatusRow
-	for rows.Next() {
-		var r SessionStatusRow
-		if err := rows.Scan(
-			&r.ID, &r.ProjectID, &r.Title, &r.Status, &r.Phase, &r.TypeSlug, &r.HasText,
-			&r.IsFocal, &r.IsParent, &r.IsFrom, &r.InFlight, &r.Landed, &r.BlockedByN, &r.BlocksN,
-		); err != nil {
-			return nil, err
-		}
-		out = append(out, r)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return out, nil
+	return scanSessionStatusRows(rows)
 }
 
 // intPlaceholders renders "?,?,…" with len(ids) slots and the matching []any

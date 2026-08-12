@@ -15,6 +15,7 @@ import click
 from tabulate import tabulate
 
 from endless import db, config
+from endless.statuses import TASK_STATUSES
 
 
 _TIER_LABELS = {0: "n/a", 1: "auto", 2: "quick", 3: "deep", 4: "discuss"}
@@ -918,9 +919,19 @@ def _render_flat_table(rows):
         and any(r["tier"] is not None for r in rows)
     )
 
+    # E-1956: a terminal status carries its supersession inline, so the Status
+    # cell — not the raw column value — is what the width is measured against.
+    # Non-terminal rows get an empty note, which is why a default listing (no
+    # terminal statuses in it) renders byte-identically to before.
+    replaced = replaced_by_map(r["id"] for r in rows)
+    status_cells = [
+        r["status"] + replaced_by_note(r["status"], replaced.get(r["id"]))
+        for r in rows
+    ]
+
     id_w = max(2, max(len(task_id_display(r["id"])) for r in rows))
     ph_w = max(5, max(len(r["phase"]) for r in rows))
-    st_w = max(6, max(len(r["status"]) for r in rows))
+    st_w = max(6, max(len(s) for s in status_cells))
     ti_w = max(4, max(
         (len(_TIER_LABELS.get(r["tier"], "-")) if r["tier"] is not None else 1)
         for r in rows
@@ -948,11 +959,11 @@ def _render_flat_table(rows):
     click.echo(header)
     click.echo(sep)
 
-    for row, title in zip(rows, display_titles):
+    for row, title, status_cell in zip(rows, display_titles, status_cells):
         line = (
             f"{task_id_display(row['id']):<{id_w}}{gap}"
             f"{row['phase']:<{ph_w}}{gap}"
-            f"{row['status']:<{st_w}}"
+            f"{status_cell:<{st_w}}"
         )
         if has_tier:
             tier_val = row["tier"]
@@ -1071,6 +1082,9 @@ def show_plan(
             )
         return
 
+    # E-1956: the supersession travels with the status in every output mode.
+    replaced = replaced_by_map(row["id"] for row in rows)
+
     if as_json:
         import json
         out = [
@@ -1078,6 +1092,14 @@ def show_plan(
                 "id": f"E-{row['id']}",
                 "phase": row["phase"],
                 "status": row["status"],
+                # JSON is DATA, not a rendering, so the relation is emitted
+                # whenever it exists — the terminal-status gate the human and
+                # --llm views apply is a display rule, and a consumer is
+                # entitled to the raw fact. Always present (possibly empty) so
+                # an absent key never has to be read as "not replaced".
+                "replaced_by": [
+                    f"E-{i}" for i in replaced.get(row["id"], ())
+                ],
                 "tier": row["tier"],
                 "title": row["title"],
                 "parent": f"E-{row['parent_id']}" if row["parent_id"] else None,
@@ -1094,9 +1116,18 @@ def show_plan(
         for row in rows:
             tier_val = row["tier"]
             tier_str = f" tier={_TIER_LABELS[tier_val]}" if tier_val else ""
+            # key=value rather than the human view's parenthetical, so the line
+            # stays parseable — but in the same position, right after the status
+            # it qualifies.
+            note = replaced_by_note(row["status"], replaced.get(row["id"]))
+            rb_str = (
+                " replaced_by=" + ",".join(
+                    f"E-{i}" for i in replaced[row["id"]]
+                )
+            ) if note else ""
             click.echo(
                 f"E-{row['id']} {row['phase']} "
-                f"{row['status']}{tier_str} {row['title']}"
+                f"{row['status']}{tier_str}{rb_str} {row['title']}"
             )
         return
 
@@ -2792,6 +2823,58 @@ def _require_status_allowed_for_type(status: str | None, task_type: str | None):
         )
 
 
+# E-1956: the statuses that mean the task's work SHIPPED — it reached the
+# verification gate or passed it. `obsolete` is refused on these.
+#
+# Deliberately NOT the terminal set (_RELATION_TERMINAL_STATUSES): `declined`
+# and `obsolete` are terminal but never shipped, and 'unverified' ships without
+# being terminal. And deliberately CURRENT status only, not "ever reached" — a
+# task that shipped and was later reopened to `revisit` is genuinely back in
+# play, and re-closing it as obsolete is a legitimate call.
+_SHIPPED_STATUSES = ("unverified", "confirmed", "assumed", "completed")
+
+
+def _refuse_obsolete_on_shipped_work(
+    item_id: int,
+    status: str | None,
+    current_status: str,
+    via_replace: bool = False,
+):
+    """E-1956: refuse `obsolete` on a task whose work already shipped.
+
+    `obsolete` means "made irrelevant by other changes" — it reads as *never
+    happened*, which is simply false of work that ran, merged, and is being
+    superseded. The fact worth keeping is the supersession, and that is a
+    `replaced_by` relation, not a status. So the tempting-but-lossy move is
+    closed off and the caller is pointed at `task replace`, which records the
+    relation and leaves the shipped status standing.
+
+    A hard gate with no --force, matching `_require_status_allowed_for_type`
+    (E-1577): the fix is to record the right fact, not to override the check.
+    `via_replace` only swaps the remedy sentence — `task replace` is already
+    the command in hand there, so telling the caller to run it would be noise.
+    """
+    if status != "obsolete" or current_status not in _SHIPPED_STATUSES:
+        return
+    if via_replace:
+        remedy = (
+            f"Omit --status to keep {current_status!r} (the replaced_by "
+            f"relation is recorded either way), or name a terminal that is "
+            f"true of it."
+        )
+    else:
+        remedy = (
+            "If it was superseded, record that instead:\n"
+            f"    endless task replace {task_id_display(item_id)} --by <new-id>\n"
+            f"(keeps {current_status!r}, adds a replaced_by relation)"
+        )
+    raise click.ClickException(
+        f"{task_id_display(item_id)} is {current_status!r} — shipped work "
+        f"cannot be marked obsolete; that reads as \"never happened\" and "
+        f"loses the fact that it shipped.\n\n{remedy}"
+    )
+
+
 def _refuse_cascade_across_typed_descendants(item_id: int, status: str):
     """E-1577: when --cascade would set 'assumed'/'confirmed' on a subtree,
     refuse loudly if any descendant is research/epic. Naming offenders
@@ -4329,15 +4412,15 @@ def update_plan(
     if description is not None:
         validate_description(description)
 
-    # Validate status if provided
+    # Validate status if provided. E-1956: read from the shared vocabulary
+    # rather than a local copy — this tuple had drifted to omit `submitted`,
+    # which every other surface accepts (`task submit` sets it), so
+    # `task update --status submitted` was refused for no stated reason.
     if status is not None:
-        valid = ("untriaged", "unplanned", "ready", "underway",
-                 "unverified", "confirmed", "assumed", "completed",
-                 "blocked", "revisit", "declined", "obsolete")
-        if status not in valid:
+        if status not in TASK_STATUSES:
             raise click.ClickException(
                 f"Invalid status '{status}'. "
-                f"Valid: {', '.join(valid)}"
+                f"Valid: {', '.join(TASK_STATUSES)}"
             )
         # E-1240: gate `completed` on a completable lead verb. Use the
         # incoming title if provided (the title is being changed in the
@@ -4352,6 +4435,10 @@ def update_plan(
         # E-1577/E-1579: research/epic tasks reject 'unverified'/'assumed'/
         # 'confirmed'; their only type-specific terminal is 'completed'.
         _require_status_allowed_for_type(status, effective_type)
+        # E-1956: `obsolete` is refused on work that already shipped — the fact
+        # to record there is a replaced_by relation, not a status that reads as
+        # "never happened".
+        _refuse_obsolete_on_shipped_work(item_id, status, row[0]["status"])
 
     # Reject a maybe-phase task gaining (or keeping) a parent. Only evaluate
     # when this update touches phase or parent_id — an unrelated edit must not
@@ -4813,6 +4900,12 @@ def detail_item(
             "type": item["type"],
             "phase": item["phase"],
             "status": item["status"],
+            # E-1956: emitted ungated (a terminal status is a display rule; this
+            # is data) and always present, so an absent key never has to be read
+            # as "not replaced".
+            "replaced_by": [
+                f"E-{i}" for i in replaced_by_map([item_id]).get(item_id, ())
+            ],
             "parent": f"E-{item['parent_id']}" if item["parent_id"] else None,
             "created": item["created_at"],
             # Session provenance (E-1866). `created_by` is null for a task filed
@@ -4872,8 +4965,15 @@ def detail_item(
             click.echo("removed=true")
         click.echo(f"project={item['project_name']}")
         tier_str = f" tier={tier_display(item['tier'])}" if item["tier"] else ""
+        # E-1956: key=value rather than the human view's parenthetical, so the
+        # line stays parseable — but on the status line, not buried in `links=`,
+        # because a terminal status read without it is misleading on its own.
+        replaced_ids = replaced_by_map([item_id]).get(item_id)
+        rb_str = (
+            " replaced_by=" + ",".join(f"E-{i}" for i in replaced_ids)
+        ) if replaced_by_note(item["status"], replaced_ids) else ""
         click.echo(f"type={item['type']} phase={item['phase']} "
-                    f"status={item['status']}{tier_str}")
+                    f"status={item['status']}{tier_str}{rb_str}")
         if item["parent_id"]:
             click.echo(f"parent=E-{item['parent_id']}")
         links = _flatten_relations(item_id)
@@ -5017,7 +5117,17 @@ def _render_detail_human(
     click.echo(f"{label('Project:')} {val(item['project_name'])}")
     click.echo(f"{label('Type:')} {val(item['type'])}")
     click.echo(f"{label('Phase:')} {val(item['phase'])}")
-    click.echo(f"{label('Status:')} {val(item['status'])}")
+    # E-1956: a terminal status reads as the end of the story, so when the task
+    # was superseded that fact rides along with it rather than living only in
+    # the 'This task:' block below. Dim: it annotates the status, it is not a
+    # second value competing with it.
+    status_note = replaced_by_note(
+        item["status"], replaced_by_map([item_id]).get(item_id)
+    )
+    click.echo(
+        f"{label('Status:')} {val(item['status'])}"
+        + click.style(status_note, dim=True)
+    )
     if item["tier"]:
         click.echo(f"{label('Tier:')} {val(tier_display(item['tier']))}")
     if item["parent_id"]:
@@ -6478,17 +6588,42 @@ def _relation_display_name_from(row, perspective_id: int) -> str:
     return stored
 
 
-def replace_task(old_id: int, new_id: int, status: str = "obsolete", outcome: str | None = None):
-    """Mark old_id as replaced by new_id. Sets old to `status` (default 'obsolete') and records relationship."""
-    from endless.event_bridge import emit_event
+def replace_task(
+    old_id: int,
+    new_id: int,
+    status: str | None = None,
+    outcome: str | None = None,
+):
+    """Mark old_id as replaced by new_id: record the relation, set the status.
 
-    _require_outcome_for_declined(status, outcome)
+    `status` is what the REPLACED task becomes. None means "derive it from what
+    the task is now" (E-1956): work that already SHIPPED keeps the status it
+    earned — the supersession is carried by the `replaced_by` relation, and
+    overwriting a true terminal with `obsolete` would assert the work never
+    happened — while everything else takes the historical 'obsolete' default.
+    An explicit status still wins, subject to the same shipped-work guard.
+    """
+    from endless.event_bridge import emit_event
 
     if old_id == new_id:
         raise click.ClickException("A task cannot replace itself.")
     for tid in (old_id, new_id):
         if not db.exists("SELECT 1 FROM live_tasks WHERE id = ?", (tid,)):
             raise click.ClickException(f"Task {task_id_display(tid)} not found.")
+
+    # Read the old row BEFORE anything is written: it decides the default status
+    # and feeds the guard, and both must run while the call can still be refused
+    # without leaving a half-applied relation behind.
+    old_row = db.query(
+        "SELECT COALESCE(title, description) as title, status "
+        "FROM live_tasks WHERE id = ?", (old_id,)
+    )[0]
+    old_status = old_row["status"]
+
+    if status is None:
+        status = old_status if old_status in _SHIPPED_STATUSES else "obsolete"
+    _require_outcome_for_declined(status, outcome)
+    _refuse_obsolete_on_shipped_work(old_id, status, old_status, via_replace=True)
 
     # "old replaced_by new" → display='replaced_by' resolves to stored='replaces' with
     # swap=True → row stored as source=new, target=old, dep_type='replaces' (active voice).
@@ -6501,38 +6636,54 @@ def replace_task(old_id: int, new_id: int, status: str = "obsolete", outcome: st
             )
         raise
 
-    old_status_row = db.query(
-        "SELECT COALESCE(title, description) as title, status "
-        "FROM live_tasks WHERE id = ?", (old_id,)
-    )
-    payload = {
-        "old_status": old_status_row[0]["status"],
-        "new_status": status,
-        "cascade": False,
-    }
-    if outcome:
-        payload["outcome"] = outcome
+    changes = []
     _, proj_name = _resolve_project(None)
-    emit_event(
-        kind="task.status_changed",
-        project=proj_name,
-        entity_type="task",
-        entity_id=str(old_id),
-        payload=payload,
-    )
+    # A status_changed event whose old and new are the same value would write a
+    # no-op transition into the ledger and misreport a held status as a change,
+    # so the held case routes any outcome through fields_updated instead — the
+    # outcome still lands, the status history stays honest.
+    if status != old_status:
+        payload = {
+            "old_status": old_status,
+            "new_status": status,
+            "cascade": False,
+        }
+        if outcome:
+            payload["outcome"] = outcome
+        emit_event(
+            kind="task.status_changed",
+            project=proj_name,
+            entity_type="task",
+            entity_id=str(old_id),
+            payload=payload,
+        )
+        changes.append(("status", old_status, status))
+    elif outcome:
+        emit_event(
+            kind="task.fields_updated",
+            project=proj_name,
+            entity_type="task",
+            entity_id=str(old_id),
+            payload={"fields": {"outcome": outcome}},
+        )
 
     if outcome and outcome.strip():
         _mirror_doc_to_worktree(old_id, "outcomes", "outcome", outcome)
 
-    changes = [("status", old_status_row[0]["status"], status)]
     if outcome:
         changes.append(("outcome", None, outcome))
     _emit_field_changes(
         old_id,
-        old_status_row[0]["title"],
+        old_row["title"],
         changes,
         suffix=f"(replaced by {task_id_display(new_id)})",
     )
+    if status == old_status:
+        # The header alone would read as "nothing happened". Say what was kept
+        # and why, so the held status is visibly a decision rather than a miss.
+        click.echo(click.style(
+            f"  status held at {old_status!r} — shipped work keeps what it "
+            f"earned; the supersession is the relation.", dim=True))
 
 
 def get_all_relations(item_id: int) -> dict[str, list]:
@@ -6590,6 +6741,52 @@ def get_all_relations(item_id: int) -> dict[str, list]:
 
 # Statuses that count as "done" for relation-row coloring (E-1477).
 _RELATION_TERMINAL_STATUSES = ("confirmed", "assumed", "completed", "declined", "obsolete")
+
+
+def replaced_by_map(item_ids) -> dict[int, list[int]]:
+    """Map each id in `item_ids` to the ids of the tasks that replace it.
+
+    `old replaced_by new` is stored active-voice as (source=new, target=old,
+    dep_type='replaces'), so a task's replacements are the source_ids of the
+    'replaces' rows pointing AT it. Joined to live_tasks so a removed
+    replacement is never named.
+
+    Batched over the whole id set on purpose (E-1956): this feeds table
+    renderers, which would otherwise issue one query per row.
+    """
+    ids = list(item_ids)
+    if not ids:
+        return {}
+    placeholders = ",".join("?" for _ in ids)
+    rows = db.query(
+        "SELECT td.target_id AS old_id, td.source_id AS new_id "
+        "FROM   task_deps td "
+        "JOIN   live_tasks t ON t.id = td.source_id "
+        "WHERE  td.source_type = 'task' AND td.target_type = 'task' "
+        f"AND    td.dep_type = 'replaces' AND td.target_id IN ({placeholders}) "
+        "ORDER BY td.source_id",
+        tuple(ids),
+    )
+    out: dict[int, list[int]] = {}
+    for row in rows:
+        out.setdefault(row["old_id"], []).append(row["new_id"])
+    return out
+
+
+def replaced_by_note(status: str | None, ids: list[int] | None) -> str:
+    """The inline ' (replaced by E-NNN)' annotation for a status display, or ''.
+
+    E-1956: rendered ONLY alongside a TERMINAL status. A terminal status is the
+    one that reads as the end of the story — `obsolete` as "never happened",
+    `assumed` as "done, nothing follows" — so that is exactly where dropping the
+    supersession loses information a reader cannot recover from the row. An open
+    task's replaced_by is still carried by `task show`'s 'This task:' block, and
+    leaving it off the open rows keeps every default listing (which excludes
+    terminal statuses) rendering as it did before.
+    """
+    if not ids or status not in _RELATION_TERMINAL_STATUSES:
+        return ""
+    return " (replaced by " + ", ".join(task_id_display(i) for i in ids) + ")"
 
 
 def _flatten_relations(item_id: int) -> list[dict]:
