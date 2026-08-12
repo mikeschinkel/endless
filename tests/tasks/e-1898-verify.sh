@@ -365,12 +365,12 @@ run_e2e_layer() {
     else
         report_fail "the bar still renders" "non-empty output" "empty"
     fi
-    # ERR-0006 must be in the catalog and documented; the fault ITSELF cannot be
+    # ERR-0008 must be in the catalog and documented; the fault ITSELF cannot be
     # recorded when the DB is the thing that failed (faults.Record's accessor is
     # monitor.DB, and it swallows its own failures by contract) — that coverage
     # limit is stated in docs/errors.md rather than pretended away here.
-    assert_contains "ERR-0006 status-line-unavailable is in the catalog" \
-        "ERR-0006" "$("${BIN}" --config-dir "${TMPDIR_D}" errors codes 2>&1)"
+    assert_contains "ERR-0008 status-line-unavailable is in the catalog" \
+        "ERR-0008" "$("${BIN}" --config-dir "${TMPDIR_D}" errors codes 2>&1)"
 }
 
 # ─── layer E0 — the migration ───────────────────────────────────────────────
