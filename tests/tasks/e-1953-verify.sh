@@ -248,8 +248,9 @@ test_build_and_suites() {
         go test ./internal/hookcmd/... -count=1 -run 'TestScanSigils|TestSigilRejectionNotice'
     assert_succeeds "go test: the switch defaults on and resolves nearest-first" \
         go test ./internal/monitor/... -count=1 -run 'TestReportGate'
-    assert_succeeds "go test: handoffs teach the draft contract" \
-        go test ./internal/templatecmd/... -count=1 -run 'TestRender_HandoffClose_ExceptionRule'
+    assert_succeeds "go test: handoffs teach the draft contract, and drop it when the gate is off" \
+        go test ./internal/templatecmd/... -count=1 \
+        -run 'TestRender_HandoffClose_ExceptionRule|TestRender_HandoffClose_OmitsReportingWhenGateOff'
 
     assert_succeeds "go test ./internal/hookcmd/... (full package)" \
         go test ./internal/hookcmd/... -count=1
@@ -547,6 +548,17 @@ test_reinforcement_respects_switch() {
     assert_str_not_contains "gate OFF: no claim that a Stop hook is watching" \
         "Stop hook" "${off}"
     assert_eq "gate OFF: nothing is injected at all" "" "${off}"
+
+    # The spawn handoff is the third surface that could impose the channel. A
+    # gate-off project must not be handed the instructions at all — an
+    # instruction nothing enforces and nothing reads is pure per-turn overhead.
+    local off_handoff
+    off_handoff=$(printf '{"spawned_id":1,"label_prefix":"E-1","title":"T","worktree_path":"/w","branch":"b","child_count":0,"children_state":"none","report_gate":false,"bg":false}' \
+        | go_sandbox template render handoff/todo 2>/dev/null)
+    assert_str_not_contains "gate OFF: the spawn handoff omits the channel" \
+        "--draft-file" "${off_handoff}"
+    assert_str_contains "gate OFF: but keeps the worktree check" \
+        "endless worktree check" "${off_handoff}"
 
     # And the render-keyed half still holds where the gate IS on: `--help`
     # renders nothing, so nothing is reinforced.

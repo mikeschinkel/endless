@@ -151,7 +151,8 @@ func TestRender_HandoffClose_ExceptionRule(t *testing.T) {
 				vars := fmt.Sprintf(
 					`{"spawned_id":1,"label_prefix":"E-1","title":"T",`+
 						`"worktree_path":"/w",`+
-						`"branch":"b","child_count":0,"children_state":"none","bg":%v}`, bg)
+						`"branch":"b","child_count":0,"children_state":"none",`+
+						`"report_gate":true,"bg":%v}`, bg)
 				out, errOut, err := runRenderInProject(t, root, "handoff/"+c.typ, vars)
 				if err != nil {
 					t.Fatalf("render: %v\nstderr: %s", err, errOut)
@@ -659,5 +660,51 @@ func hasEndlessAncestor(dir string) bool {
 			return false
 		}
 		check = parent
+	}
+}
+
+// TestRender_HandoffClose_OmitsReportingWhenGateOff pins the other half of the
+// switch (E-1953).
+//
+// `report_gate: false` has to mean the reporting channel is not there at all,
+// not merely that nobody checks. A handoff that still told every spawned
+// session to route each reply through the minimizer would impose a per-turn
+// model round trip that nothing enforces and nothing reads — pure overhead in a
+// project that explicitly declined the feature.
+//
+// The gate-ON case is covered by TestRender_HandoffClose_ExceptionRule; this is
+// its complement, and the two together are what make the var load-bearing
+// rather than decorative.
+func TestRender_HandoffClose_OmitsReportingWhenGateOff(t *testing.T) {
+	for _, typ := range []string{"todo", "bugfix", "epic", "research", "brainstorm"} {
+		t.Run(typ, func(t *testing.T) {
+			root := projectFixture(t)
+			vars := `{"spawned_id":1,"label_prefix":"E-1","title":"T",` +
+				`"worktree_path":"/w","branch":"b","child_count":0,` +
+				`"children_state":"none","report_gate":false,"bg":false}`
+			out, errOut, err := runRenderInProject(t, root, "handoff/"+typ, vars)
+			if err != nil {
+				t.Fatalf("render: %v\nstderr: %s", err, errOut)
+			}
+			for _, unwanted := range []string{
+				"task report", "--draft-file", "minimizer", "$FULL", "--raw",
+			} {
+				if strings.Contains(out, unwanted) {
+					t.Errorf("gate-off handoff still mentions %q:\n%s", unwanted, out)
+				}
+			}
+			// What must SURVIVE the branch. The worktree probe is unrelated to
+			// reporting, and dropping it with the reporting block would silently
+			// lose the one git check every handoff depends on.
+			if !strings.Contains(out, "endless worktree check") {
+				t.Errorf("gate-off handoff lost the worktree check:\n%s", out)
+			}
+			// With no minimizer to delete ceremony, the prohibitions the
+			// minimizer had taken over have to come back — otherwise switching
+			// the gate off silently switches off the discipline too.
+			if !strings.Contains(out, "do NOT confirm the negative") {
+				t.Errorf("gate-off handoff dropped the anti-ceremony rule:\n%s", out)
+			}
+		})
 	}
 }

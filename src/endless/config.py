@@ -197,6 +197,29 @@ def project_is_self_dev(project_path: Path) -> bool:
     return bool(cfg.get("self_dev", False))
 
 
+def project_report_gate(project_path: Path) -> bool:
+    """True if the minimizer's report channel is live for this project (E-1953).
+
+    Mirrors monitor.ReportGateEnabled on the Go side, including the default:
+    absent file, absent key, or unreadable all mean ENABLED. Only an explicit
+    `"report_gate": false` turns it off, so a project that has never heard of
+    the setting still gets the channel.
+
+    Read here so the spawn handoff can omit the reporting instructions entirely
+    for a project that switched the channel off. Rendering them anyway would
+    hand every spawned session a per-turn model round trip that nothing
+    enforces and nothing reads — pure overhead, and worse, an instruction the
+    project has explicitly declined.
+    """
+    cfg = project_config_read(project_path)
+    if cfg is None:
+        return True
+    value = cfg.get("report_gate")
+    if value is None:
+        return True
+    return bool(value)
+
+
 def project_config_write(project_path: Path, data: dict):
     p = project_config_path(project_path)
     p.parent.mkdir(parents=True, exist_ok=True)

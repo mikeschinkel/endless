@@ -5219,6 +5219,11 @@ def render_handoff(spawned_id: int, title: str,
         "child_count": child_count,
         "children_state": _children_state(spawned_id),
         "bg": bg,
+        # E-1953: whether this project runs the minimizer's report channel. A
+        # project that switched it off must not be handed the reporting
+        # instructions at all — they would cost every spawned session a per-turn
+        # model round trip that nothing enforces and nothing reads.
+        "report_gate": _handoff_report_gate(),
     }
     if respawn:
         vars_payload["restore_case"] = restore_case or "reused"
@@ -5236,6 +5241,22 @@ def render_handoff(spawned_id: int, title: str,
             f"endless-go template render failed: {result.stderr.strip()}"
         )
     return result.stdout
+
+
+def _handoff_report_gate() -> bool:
+    """Whether the enclosing project runs the report channel (E-1953).
+
+    Defaults to True when no project root can be resolved, matching the Go
+    side: the channel ships on, and an unresolvable root is ignorance rather
+    than an opt-out. A handoff that silently dropped the instructions because a
+    path lookup failed would leave sessions ungoverned in a project that wanted
+    the gate — the failure direction that actually costs something.
+    """
+    from endless import config
+    root = config.enclosing_project_root()
+    if root is None:
+        return True
+    return config.project_report_gate(root)
 
 
 def show_handoff(item_id: int):

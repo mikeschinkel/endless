@@ -97,6 +97,11 @@ func claimHandoffContext(projectID, taskID int64, payload claudePayload) string 
 // identical data and the shared `handoff/_mechanics` partials render the same
 // lines from either side.
 func claimHandoffVars(projectID, taskID int64) (map[string]any, error) {
+	projectRoot, err := monitor.ProjectPath(projectID)
+	if err != nil {
+		return nil, fmt.Errorf("project path for %d: %w", projectID, err)
+	}
+
 	db, err := monitor.DB()
 	if err != nil {
 		return nil, fmt.Errorf("open db: %w", err)
@@ -147,6 +152,10 @@ func claimHandoffVars(projectID, taskID int64) (map[string]any, error) {
 		"child_count":    childCount,
 		"children_state": childrenState,
 		"bg":             false,
+		// E-1953: a project that switched the report channel off must not be
+		// handed the reporting instructions. They would cost the session a
+		// per-turn model round trip that nothing enforces and nothing reads.
+		"report_gate": monitor.ReportGateEnabledForCwd(worktreePath, projectRoot),
 	}, nil
 }
 

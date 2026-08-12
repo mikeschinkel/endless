@@ -19,6 +19,7 @@ func handoffVarsForType(typ string) string {
 		"branch": "task/9999-test",
 		"child_count": 0,
 		"children_state": "3 ready (3 total)",
+		"report_gate": true,
 		"bg": false
 	}`, typ)
 }
@@ -169,7 +170,7 @@ func TestRender_Claim_UnknownTaskType_FallsBackToTodo(t *testing.T) {
 		"unknown": handoffVarsForType("chore"),
 		"absent": `{"spawned_id":9999,"label_prefix":"E-9999","title":"T",` +
 			`"worktree_path":"/w","branch":"b","child_count":0,` +
-			`"children_state":"none","bg":false}`,
+			`"children_state":"none","report_gate":true,"bg":false}`,
 	}
 	for name, vars := range cases {
 		t.Run(name, func(t *testing.T) {
