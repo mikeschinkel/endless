@@ -2,6 +2,7 @@ package hookcmd
 
 import (
 	"encoding/json"
+	"os"
 	"strings"
 	"testing"
 )
@@ -145,5 +146,42 @@ func TestComposeSessionStartContext(t *testing.T) {
 	}
 	if !strings.Contains(off, "E-1 foo") {
 		t.Errorf("channel-off SessionStart dropped the task list:\n%s", off)
+	}
+}
+
+// TestReportReinforcement_RespectsTheSwitch pins the fix for a defect E-1953
+// shipped: the PostToolUse reinforcement fired regardless of `report_gate`, so
+// in a project that had switched the gate OFF it still injected "a Stop hook
+// compares your final message against it" — a statement that was simply false
+// there. It was observed against Endless's own repo, which ships the gate off.
+//
+// The distinction this test protects is between an instruction and a claim. An
+// instruction may outlive its enforcement harmlessly ("send it verbatim" is
+// still reasonable advice with no gate behind it). A factual assertion about
+// enforcement may not: a session told it is being checked when it is not learns
+// that Endless's statements about its own behavior cannot be relied on.
+//
+// Asserted at the text level because the branch itself needs a DB and a project
+// row. The end-to-end half — the hook staying silent in a gate-off project — is
+// in tests/tasks/e-1953-verify.sh.
+func TestReportReinforcement_RespectsTheSwitch(t *testing.T) {
+	ac := reportRelayInstruction
+
+	// If this claim is ever removed from the text, the gating below stops being
+	// load-bearing and this test should be revisited rather than left passing.
+	if !strings.Contains(ac, "Stop hook") {
+		t.Fatal("the reinforcement no longer claims a Stop hook is watching; " +
+			"re-evaluate whether it still needs to be gated on report_gate")
+	}
+
+	// The call site must consult reportChannelOn before emitting it.
+	src, err := os.ReadFile("claude.go")
+	if err != nil {
+		t.Fatalf("read claude.go: %v", err)
+	}
+	if !strings.Contains(string(src),
+		`payload.ToolName == "Bash" && reportChannelOn(projectID, isRegistered, payload.CWD)`) {
+		t.Error("the PostToolUse reinforcement is not gated on reportChannelOn; " +
+			"a gate-off project would be told a Stop hook is checking it when none is")
 	}
 }

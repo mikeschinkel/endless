@@ -143,6 +143,15 @@ prompt_hook() {
         | go_sandbox hook claude 2>/dev/null
 }
 
+# Feed one PostToolUse Bash payload; echo the hook's stdout. cwd decides whether
+# the project has the gate on.
+posttooluse_hook() {
+    local cwd="$1" cmd="$2"
+    printf '{"session_id":"%s","cwd":"%s","hook_event_name":"PostToolUse","tool_name":"Bash","tool_input":{"command":"%s"}}' \
+        "${TEST_UUID}" "${cwd}" "${cmd}" \
+        | go_sandbox hook claude 2>/dev/null
+}
+
 # Arm the gate with a known minimized text (and optionally a raw draft).
 arm_gate() {
     local minimized="$1" draft_file="${2:-}"
@@ -512,6 +521,41 @@ test_signals() {
     assert_eq "\`WRONG: ...\` does not fire" "" "$(label_of)"
 }
 
+# ─── Part 5b: the reinforcement respects the switch ─────────────────────────
+
+test_reinforcement_respects_switch() {
+    section "Part 5b — the reinforcement never claims a gate that is off"
+
+    # Regression for a defect E-1953 itself shipped: the PostToolUse
+    # reinforcement fired regardless of `report_gate`, so a project with the
+    # gate OFF was still told "a Stop hook compares your final message against
+    # it". That is a claim about enforcement, not a request — and it was false
+    # wherever the switch was off, Endless's own repo included.
+    reset_turn
+    arm_gate "minimized text" "${FIXTURE}" >/dev/null
+
+    # Gate ON: a real render, so the reinforcement is both true and expected.
+    local on
+    on=$(posttooluse_hook "${GATE_DIR}" "endless task report --draft-file /tmp/d.md")
+    assert_str_contains "gate ON: the reinforcement fires" "Stop hook" "${on}"
+
+    # Gate OFF (the repo root, which ships report_gate false): silence. Same
+    # session, same armed checkpoint, same command — only cwd differs, so this
+    # isolates the switch as the cause.
+    local off
+    off=$(posttooluse_hook "$(pwd)" "endless task report --draft-file /tmp/d.md")
+    assert_str_not_contains "gate OFF: no claim that a Stop hook is watching" \
+        "Stop hook" "${off}"
+    assert_eq "gate OFF: nothing is injected at all" "" "${off}"
+
+    # And the render-keyed half still holds where the gate IS on: `--help`
+    # renders nothing, so nothing is reinforced.
+    reset_turn
+    local helped
+    helped=$(posttooluse_hook "${GATE_DIR}" "endless task report --help")
+    assert_eq "gate ON but nothing rendered: still silent" "" "${helped}"
+}
+
 # ─── Part 6: the switch ─────────────────────────────────────────────────────
 
 test_switch() {
@@ -596,6 +640,7 @@ main() {
     test_raw_round_trip
     test_enforcement
     test_signals
+    test_reinforcement_respects_switch
     test_switch
 
     summary

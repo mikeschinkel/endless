@@ -257,7 +257,7 @@ func runClaude(args []string) error {
 		if err := monitor.ReapWorktreesForProject(projectID); err != nil {
 			log.Printf("reaping stale worktrees: %v", err)
 		}
-		return handlePostToolUse(projectID, payload)
+		return handlePostToolUse(projectID, isRegistered, payload)
 
 	case "ExitPlanMode":
 		return handleExitPlanMode(projectID, payload)
@@ -642,7 +642,7 @@ func claimHandoffResponse(handoff string) postToolUseResponse {
 	}
 }
 
-func handlePostToolUse(projectID int64, payload claudePayload) error {
+func handlePostToolUse(projectID int64, isRegistered bool, payload claudePayload) error {
 	// Detect endless task claim/complete/chat commands and update session state
 	claimHandoff, err := handlePostToolUseSession(projectID, payload)
 	if err != nil {
@@ -668,7 +668,15 @@ func handlePostToolUse(projectID int64, payload claudePayload) error {
 	// writes none, a failed run writes none, and a successful one always does.
 	// The regex survives only as a cheap prefilter so an ordinary Bash call does
 	// not pay for a DB query.
-	if payload.ToolName == "Bash" {
+	//
+	// reportChannelOn comes FIRST, and is not an optimization. This instruction
+	// asserts that "a Stop hook compares your final message against it" — a claim
+	// about enforcement, not a request. In a project that set
+	// `"report_gate": false` no Stop hook will compare anything, so firing here
+	// would state something false to every session in that project (including
+	// Endless's own, which is exactly where it was observed). An instruction may
+	// outlive its enforcement; a factual claim about enforcement may not.
+	if payload.ToolName == "Bash" && reportChannelOn(projectID, isRegistered, payload.CWD) {
 		var input toolInputBash
 		if err := json.Unmarshal(payload.ToolInput, &input); err == nil &&
 			taskReportRe.MatchString(input.Command) && reportRendered(payload.SessionID) {
