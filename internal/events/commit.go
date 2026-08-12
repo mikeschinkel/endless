@@ -7,8 +7,11 @@
 // It flows through commitPaths, which decides amend-vs-new-commit based on
 // HEAD's subject (must match the subject we're about to commit), shared-ref
 // status (never amend a commit reachable from any ref besides the current
-// branch — a landed worktree branch, a remote-tracking ref, or a tag), and
-// index hygiene (never bundle unrelated user-staged work into our amend).
+// branch — a landed worktree branch, a remote-tracking ref, or a tag),
+// ledger-content sharing (never amend a ledger tip whose content a task branch
+// still holds, even once a history rewrite has erased the SHA that proved it —
+// E-1955), and index hygiene (never bundle unrelated user-staged work into our
+// amend).
 
 package events
 
@@ -70,6 +73,7 @@ func CommitDoc(projectRoot, relPath, subject string) error {
 //
 //	HEAD subject == subject
 //	AND HEAD not reachable from any ref besides the current branch
+//	AND (ledger commits only) no task branch holds HEAD's ledger tree
 //	AND index has no staged paths outside excludeGlob
 //	→ git add -- <paths>...
 //	  git commit -o <paths>... --amend --no-edit
@@ -174,11 +178,13 @@ func ensureMainCheckout(projectRoot string, paths []string) error {
 	return nil
 }
 
-// canAmend returns true iff all three preconditions hold:
+// canAmend returns true iff all four preconditions hold:
 //  1. HEAD's subject equals the subject we're about to commit.
 //  2. HEAD is not reachable from any ref besides the current branch (a landed
 //     worktree branch, a remote-tracking ref, or a tag all disqualify it).
-//  3. Index has no staged paths outside excludeGlob.
+//  3. No refs/heads/task/* tip holds a .endless/db-ledger tree byte-identical
+//     to HEAD's (ledger commits only — E-1955).
+//  4. Index has no staged paths outside excludeGlob.
 //
 // Errors only on subprocess failure; a "no" answer to any precondition
 // returns (false, nil).
@@ -222,6 +228,28 @@ func canAmend(projectRoot, subject, excludeGlob string) (bool, error) {
 		return false, nil
 	}
 
+	// The reachability test above is SHA-level, so any rewrite of main's
+	// history blinds it (E-1955): `git pull --rebase` reassigns every local
+	// SHA, after which no task branch "contains" main's ledger tip even though
+	// every one of them still carries the very ledger content that tip holds —
+	// amending it diverges main from their base and conflicts on the ledger
+	// segment at land. A tree hash is content-addressed, so it survives the
+	// rewrite that invalidates a SHA: ask the same question ("does a task
+	// branch depend on the commit I'm about to amend?") in those terms.
+	//
+	// This is additive, not a replacement. It scans only refs/heads/task/*, so
+	// it is structurally blind to a tip already pushed to origin/main or
+	// carrying a tag — exactly the cases the reachability test gets right.
+	if subject == LedgerCommitSubject {
+		shared, err := ledgerTreeSharedWithTaskBranch(projectRoot, curRef)
+		if err != nil {
+			return false, err
+		}
+		if shared {
+			return false, nil
+		}
+	}
+
 	staged, err := runGitOutput(projectRoot,
 		"diff-index", "--cached", "--name-only", "HEAD",
 		"--", ":!"+excludeGlob,
@@ -234,6 +262,84 @@ func canAmend(projectRoot, subject, excludeGlob string) (bool, error) {
 	}
 
 	return true, nil
+}
+
+// ledgerTreeSharedWithTaskBranch reports whether any `refs/heads/task/*` tip
+// other than curRef holds a `.endless/<LedgerDirName>` tree byte-identical to
+// the one at HEAD (E-1955). A tree OID is content-addressed, so — unlike the
+// commit SHA the reachability test compares — it is unchanged by a rebase,
+// amend, or any other rewrite of the history the tree hangs off.
+//
+// Resolves every candidate in ONE `git cat-file --batch-check` rather than a
+// `rev-parse` per branch: measured on this repo (147 task branches) at 30ms
+// batched vs 1.4s for 148 spawns. This runs on EVERY ledger event, so the
+// per-branch form would be a visible tax on ordinary `endless` commands.
+//
+// A missing tree — at HEAD or on a branch — reads as "no match", never as a
+// match with another missing one and never as an error: `--batch-check` prints
+// `<rev> missing` and still exits 0.
+func ledgerTreeSharedWithTaskBranch(projectRoot, curRef string) (bool, error) {
+	refs, err := runGitOutput(projectRoot,
+		"for-each-ref", "--format=%(refname)", "refs/heads/task",
+	)
+	if err != nil {
+		return false, fmt.Errorf("list task branches: %w", err)
+	}
+
+	ledgerSuffix := ":.endless/" + LedgerDirName
+	specs := []string{"HEAD" + ledgerSuffix}
+	for _, r := range strings.Split(strings.TrimSpace(refs), "\n") {
+		r = strings.TrimSpace(r)
+		if r == "" || r == curRef {
+			// Skipping curRef mirrors the reachability test's own exclusion: if
+			// the main checkout happens to sit ON a task branch, that branch
+			// trivially holds HEAD's tree, and counting it would refuse every
+			// amend forever.
+			continue
+		}
+		specs = append(specs, r+ledgerSuffix)
+	}
+	if len(specs) == 1 {
+		// No task branches: nothing to be identical to.
+		return false, nil
+	}
+
+	out, err := runGitInput(projectRoot, strings.Join(specs, "\n")+"\n",
+		"cat-file", "--batch-check",
+	)
+	if err != nil {
+		return false, fmt.Errorf("batch-resolve task branch ledger trees: %w", err)
+	}
+	lines := strings.Split(strings.TrimRight(out, "\n"), "\n")
+	if len(lines) != len(specs) {
+		return false, fmt.Errorf(
+			"cat-file --batch-check returned %d lines for %d revisions",
+			len(lines), len(specs))
+	}
+
+	headTree := batchCheckOID(lines[0])
+	if headTree == "" {
+		// HEAD carries no ledger tree at all — there is nothing for a task
+		// branch to be holding identically. Do not suppress the amend.
+		return false, nil
+	}
+	for _, line := range lines[1:] {
+		if batchCheckOID(line) == headTree {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// batchCheckOID returns the object id from one `git cat-file --batch-check`
+// output line ("<oid> <type> <size>"), or "" for an unresolvable revision
+// (git prints "<rev> missing" — two fields — and keeps going).
+func batchCheckOID(line string) string {
+	fields := strings.Fields(line)
+	if len(fields) != 3 {
+		return ""
+	}
+	return fields[0]
 }
 
 // runGit runs `git -C projectRoot <args>` with a sanitized env (E-1309)
@@ -263,6 +369,27 @@ func runGitOutput(projectRoot string, args ...string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("git %s: %w: %s",
 			strings.Join(args, " "), err, strings.TrimSpace(string(out)))
+	}
+	return string(out), nil
+}
+
+// runGitInput runs `git -C projectRoot <args>` with a sanitized env (E-1309),
+// feeding stdin, and returns stdout. Separate from runGitOutput because stderr
+// must stay OUT of stdout here — callers parse the output line-for-line
+// against the input they fed (E-1955). stderr is folded into the error on
+// non-zero exit.
+func runGitInput(projectRoot, stdin string, args ...string) (string, error) {
+	full := append([]string{"-C", projectRoot}, args...)
+	cmd := exec.Command("git", full...)
+	cmd.Env = sanitizedGitEnv()
+	cmd.Stdin = strings.NewReader(stdin)
+	var errBuf strings.Builder
+	cmd.Stderr = &errBuf
+	debugLogGit(projectRoot, args)
+	out, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("git %s: %w: %s",
+			strings.Join(args, " "), err, strings.TrimSpace(errBuf.String()))
 	}
 	return string(out), nil
 }
