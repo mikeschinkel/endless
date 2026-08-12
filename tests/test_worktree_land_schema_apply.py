@@ -14,15 +14,24 @@ It cannot move later than Step 6: `_record_landing` runs the same binary against
 the real DB and needs the rows these changes write (E-1664 inverted). Hence the
 narrow window, and hence the ordering assertions here.
 
+Staleness is handled by REMOVING it, not by gating on a proxy for it. Step 4.2
+rebuilds the worktree's endless-go right after Step 4's rebase, so the binary
+Steps 5.5 and 6 point at the real DB is built from exactly main + this branch.
+An earlier version instead REFUSED any land whose branch was behind base; that
+asked a proxy question, got it wrong three times, and even once tuned blocked
+every worktree continuously (main takes a Go commit every few hours) while
+directing users to hand-rebase — the operation that risks the E-1943 conflict.
+
 Three layers:
-  1. Unit — `_refuse_if_behind_base` and `_branch_schema_changes` against real
+  1. Unit — `_rebuild_worktree_binary` and `_branch_schema_changes` against real
      throwaway repos.
   2. Ordering — a genuine land (real rebase + ff-merge) recording the sequence of
-     apply / record calls and main's SHA at the moment the apply runs.
+     rebuild / apply / record calls and main's SHA at each point.
   3. Failure surfacing — an apply that raises must report main as advanced and
      must not unwind the merge.
 """
 
+import os
 import subprocess
 from pathlib import Path
 
@@ -32,7 +41,7 @@ import pytest
 from endless import worktree_cmd
 from endless.worktree_cmd import (
     _branch_schema_changes,
-    _refuse_if_behind_base,
+    _rebuild_worktree_binary,
     land_worktree,
 )
 
@@ -125,6 +134,11 @@ def _patch_land(monkeypatch, main, worktree, *, self_dev=True):
         worktree_cmd, "_check_post_land_residue", lambda root, canon, before: None
     )
     monkeypatch.setattr(worktree_cmd, "_ignored_present_files", lambda root: set())
+    # Step 4.2's real rebuild shells out to `just go`; the throwaway repo has no
+    # justfile. Tests that care about its position record it instead.
+    monkeypatch.setattr(
+        worktree_cmd, "_rebuild_worktree_binary", lambda wt, canon: None
+    )
 
 
 def _noop_record(item_id, proj_name, branch, base_branch, canonical,
@@ -139,151 +153,63 @@ def _commit_change_on_feat(worktree, rel=CHANGE):
 
 
 # ---------------------------------------------------------------------------
-# 1. unit: the behind-base refusal
+# 1. unit: the post-rebase rebuild (replaces the behind-base refusal)
 # ---------------------------------------------------------------------------
 
-def test_current_branch_is_not_refused(landable, monkeypatch):
+def _fake_just(tmp_path, exit_code=0, marker=None):
+    """A `just` stub on PATH that records its invocation."""
+    d = tmp_path / "stubs"
+    d.mkdir(exist_ok=True)
+    log = marker or (tmp_path / "just.log")
+    (d / "just").write_text(
+        "#!/usr/bin/env bash\n"
+        f'printf "%s\\n" "$*" >> {log}\n'
+        f"exit {exit_code}\n"
+    )
+    (d / "just").chmod(0o755)
+    return d, log
+
+
+def test_rebuild_runs_just_go_in_the_worktree(landable, monkeypatch, tmp_path):
+    wt = landable["worktree"]
     monkeypatch.setattr("endless.config.project_is_self_dev", lambda root: True)
-    _refuse_if_behind_base(
-        landable["worktree"], "main", CANON, landable["main"]
-    )  # must not raise
+    d, log = _fake_just(tmp_path)
+    monkeypatch.setenv("PATH", f"{d}:{os.environ['PATH']}")
+    _rebuild_worktree_binary(wt, CANON)
+    assert log.read_text().strip() == "go"
 
 
-def _advance_main_ledger_only(main, n):
-    """n commits on main touching ONLY the db-ledger — what actually accumulates
-    on main during any active session."""
-    seg = main / ".endless" / "db-ledger" / "db-entries-aaaa-000001.jsonl"
-    seg.parent.mkdir(parents=True, exist_ok=True)
-    for i in range(n):
-        with seg.open("a") as f:
-            f.write('{"e":%d}\n' % i)
-        _git(["git", "add", "-A"], main)
-        _git(["git", "commit", "-q", "-m", "Endless: record ledger entry"], main)
-
-
-def test_ledger_only_drift_does_not_refuse(landable, monkeypatch):
-    """Regression: ledger auto-commits land on main continuously and cannot
-    affect a binary. Counting them refused nearly every land — and the remedy
-    the message names is a rebase, the very operation that risks the E-1943
-    ledger conflict. The common case must not demand the dangerous move."""
-    main, wt = landable["main"], landable["worktree"]
-    _advance_main_ledger_only(main, 3)
+def test_rebuild_failure_raises_before_anything_advances(
+    landable, monkeypatch, tmp_path
+):
+    wt = landable["worktree"]
     monkeypatch.setattr("endless.config.project_is_self_dev", lambda root: True)
-    # Unfiltered, this branch reads as 3 behind; none of it is source.
-    raw = subprocess.run(
-        ["git", "rev-list", "--count", "HEAD..main"], cwd=str(wt),
-        capture_output=True, text=True, check=True,
-    ).stdout.strip()
-    assert raw == "3"
-    _refuse_if_behind_base(wt, "main", CANON, main)  # must not raise
-
-
-def test_mixed_commit_touching_go_still_counts(landable, monkeypatch):
-    """A commit touching a ledger file AND Go source is real drift."""
-    main, wt = landable["main"], landable["worktree"]
-    seg = main / ".endless" / "db-ledger" / "db-entries-aaaa-000001.jsonl"
-    seg.parent.mkdir(parents=True, exist_ok=True)
-    seg.write_text('{"e":0}\n')
-    _write(main, "internal/tasktype/kind.go", "package tasktype\n")
-    _git(["git", "add", "-A"], main)
-    _git(["git", "commit", "-q", "-m", "Endless: record ledger entry"], main)
-    monkeypatch.setattr("endless.config.project_is_self_dev", lambda root: True)
-
-    with pytest.raises(click.ClickException):
-        _refuse_if_behind_base(wt, "main", CANON, main)
-
-
-@pytest.mark.parametrize("rel", [
-    "src/endless/worktree_cmd.py",   # the land runs main's Python, not this
-    "justfile",
-    "tests/test_something.py",
-    ".endless/decisions/ED-1551.md",
-    "docs/guide/index.md",
-    "README.md",
-])
-def test_non_binary_drift_does_not_refuse(landable, monkeypatch, rel):
-    """Regression: nothing outside the Go build inputs can make endless-go
-    stale, so it must not block a land. Each of these refused in an earlier
-    round and blocked real work."""
-    main, wt = landable["main"], landable["worktree"]
-    _write(main, rel, "x\n")
-    _git(["git", "add", "-A"], main)
-    _git(["git", "commit", "-q", "-m", f"change {rel}"], main)
-    monkeypatch.setattr("endless.config.project_is_self_dev", lambda root: True)
-    _refuse_if_behind_base(wt, "main", CANON, main)  # must not raise
-
-
-@pytest.mark.parametrize("rel", [
-    # Endless's own metadata dir is never compiled: data.sql is the db-export
-    # dump (rewritten constantly) and migrations/*.go are one-offs nothing
-    # imports. Both match the extensions, so the exclusion must hold them out.
-    ".endless/data.sql",
-    ".endless/migrations/e-1754-backfill.go",
-])
-def test_endless_metadata_dir_does_not_refuse(landable, monkeypatch, rel):
-    main, wt = landable["main"], landable["worktree"]
-    _write(main, rel, "x\n")
-    _git(["git", "add", "-A"], main)
-    _git(["git", "commit", "-q", "-m", f"change {rel}"], main)
-    monkeypatch.setattr("endless.config.project_is_self_dev", lambda root: True)
-    _refuse_if_behind_base(wt, "main", CANON, main)  # must not raise
-
-
-@pytest.mark.parametrize("rel", [
-    "cmd/endless-go/main.go",
-    "internal/schema/changes/0100-x.sql",
-    "go.mod",
-    "go.sum",
-    # The refactor case: Go relocated to top-level directories that do not
-    # exist today. Matching on what a file IS rather than where it LIVES is the
-    # whole reason these pass — a hardcoded cmd//internal/ list missed them.
-    "pkg/store/store.go",
-    "api/v1/server.go",
-    "main.go",
-])
-def test_binary_input_drift_does_refuse(landable, monkeypatch, rel):
-    """The hazard the guard exists for: drift in what endless-go is built from."""
-    main, wt = landable["main"], landable["worktree"]
-    _write(main, rel, "x\n")
-    _git(["git", "add", "-A"], main)
-    _git(["git", "commit", "-q", "-m", f"change {rel}"], main)
-    monkeypatch.setattr("endless.config.project_is_self_dev", lambda root: True)
-    with pytest.raises(click.ClickException):
-        _refuse_if_behind_base(wt, "main", CANON, main)
-
-
-def test_behind_branch_is_refused_with_actionable_message(landable, monkeypatch):
-    main, wt = landable["main"], landable["worktree"]
-    for i in range(3):
-        _write(main, f"internal/pkg{i}/x.go", f"package pkg{i}\n")
-        _git(["git", "add", "-A"], main)
-        _git(["git", "commit", "-q", "-m", f"main {i}"], main)
-    # Ledger noise alongside the real drift must not change the count.
-    _advance_main_ledger_only(main, 4)
-    monkeypatch.setattr("endless.config.project_is_self_dev", lambda root: True)
-
+    d, _ = _fake_just(tmp_path, exit_code=1)
+    monkeypatch.setenv("PATH", f"{d}:{os.environ['PATH']}")
     with pytest.raises(click.ClickException) as ei:
-        _refuse_if_behind_base(wt, "main", CANON, main)
+        _rebuild_worktree_binary(wt, CANON)
     msg = ei.value.message
-    assert "3 Go commits behind main" in msg
-    assert "git rebase main" in msg
-    # Must not issue a bare "rebase" instruction: under a rewritten main that
-    # rebase is itself what conflicts, so the message has to name that case.
-    assert ".endless/db-ledger" in msg
-    assert "E-1943" in msg
-    assert "reflog" in msg
+    assert "Nothing has been merged or migrated" in msg
 
 
-def test_non_self_dev_is_never_refused(landable, monkeypatch):
-    """A downstream branch being behind main is the ordinary case the land's
-    rebase exists to handle — refusing there would break normal usage."""
-    main, wt = landable["main"], landable["worktree"]
-    for i in range(5):
-        (main / "README").write_text(f"y{i}\n")
-        _git(["git", "add", "-A"], main)
-        _git(["git", "commit", "-q", "-m", f"main {i}"], main)
+def test_rebuild_skipped_for_non_self_dev(landable, monkeypatch, tmp_path):
+    """Downstream users never build endless-go."""
+    wt = landable["worktree"]
     monkeypatch.setattr("endless.config.project_is_self_dev", lambda root: False)
-    _refuse_if_behind_base(wt, "main", CANON, main)  # must not raise
+    d, log = _fake_just(tmp_path)
+    monkeypatch.setenv("PATH", f"{d}:{os.environ['PATH']}")
+    _rebuild_worktree_binary(wt, CANON)
+    assert not log.exists()
+
+
+def test_no_behind_base_refusal_exists(landable, monkeypatch):
+    """Regression: the behind-base refusal is gone for good. It gated on a proxy
+    for staleness and blocked every worktree continuously — main takes a Go
+    commit every few hours — while telling users to hand-rebase, the operation
+    that risks the E-1943 ledger conflict. Step 4.2 removes the staleness
+    instead of gating on it."""
+    assert not hasattr(worktree_cmd, "_refuse_if_behind_base")
+    assert not hasattr(worktree_cmd, "BINARY_SOURCE_PATHS")
 
 
 # ---------------------------------------------------------------------------
@@ -333,6 +259,13 @@ def test_apply_runs_after_merge_and_before_record(landable, monkeypatch):
 
     calls = []
     main_at_apply = {}
+    main_at_rebuild = {}
+
+    def fake_rebuild(wt, canon):
+        calls.append(("rebuild", canon))
+        main_at_rebuild["sha"] = _head(main, "main")
+
+    monkeypatch.setattr(worktree_cmd, "_rebuild_worktree_binary", fake_rebuild)
 
     def fake_backup(endless_go_bin=None):
         calls.append(("backup", endless_go_bin))
@@ -354,12 +287,16 @@ def test_apply_runs_after_merge_and_before_record(landable, monkeypatch):
     feat_tip = _head(wt)
     land_worktree(CANON, dry_run=False)
 
-    assert [c[0] for c in calls] == ["backup", "apply", "record"]
+    assert [c[0] for c in calls] == ["rebuild", "backup", "apply", "record"]
+    # The rebuild happens BEFORE main advances, so a broken build aborts with
+    # base and the DB untouched.
+    assert main_at_rebuild["sha"] != feat_tip
     # The apply saw main ALREADY advanced — the ordering the incident inverted.
     assert main_at_apply["sha"] == feat_tip
-    assert calls[1][1].endswith(CHANGE)
-    # The pinned worktree binary reaches both DB calls (E-1664's invariant).
-    assert calls[0][1] == "/bin/echo"
+    by_name = dict(calls)
+    assert by_name["apply"].endswith(CHANGE)
+    # The pinned worktree binary reaches the DB calls (E-1664's invariant).
+    assert by_name["backup"] == "/bin/echo"
 
 
 def test_no_schema_changes_skips_backup_and_apply(landable, monkeypatch):

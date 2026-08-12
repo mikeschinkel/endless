@@ -66,37 +66,6 @@ AUTO_COMMIT_GLOBS = (
 # recorded on the main checkout only) and must never ride a land into main.
 DB_LEDGER_DIR = ".endless/db-ledger"
 
-# E-1941: what the Go compiler READS to produce endless-go — not what ends up
-# inside it, though internal/schema/schema.sql is both (it is go:embed-ed). The
-# behind-base refusal exists for exactly one hazard: a worktree binary whose
-# embedded schema/enums are older than the real DB's rows. Only drift in these
-# can cause it.
-#
-# Matched by WHAT A FILE IS, not WHERE IT LIVES. An earlier version hardcoded
-# `cmd/` and `internal/`, which is the wrong shape for a repo that will be
-# reorganized — Go moving to a new top-level directory (pkg/, api/) would have
-# been missed silently. Extensions survive any refactor.
-#
-# *.sql earns its place twice: internal/schema/schema.sql is compiled in, and
-# internal/schema/changes/*.sql are what migrate the real DB — the precise drift
-# this guard is about. Embedded TEMPLATES are deliberately absent: a stale
-# template cannot fail VerifyIntegrity.
-#
-# Two rounds of false positives shaped this. Counting every commit refused
-# nearly every land, because ledger auto-commits hit main continuously. Counting
-# all non-auto paths still refused on Python-, justfile-, test- and
-# decision-only drift, none of which is compiled into anything. Note especially
-# that src/endless/** does NOT belong here: a land executes the GLOBAL Python
-# (uv installs it editable from the main checkout), never the worktree's copy,
-# so worktree Python cannot be stale in a way that affects a land.
-BINARY_SOURCE_PATHS = ("*.go", "go.mod", "go.sum", "*.sql")
-
-# Endless's own metadata directory is never compiled: it holds data.sql (the
-# `just db-export` dump, rewritten constantly) and one-off migration scripts
-# under migrations/*.go that nothing imports. Both match the extensions above,
-# so without this they would resurrect the false-positive class the extensions
-# are scoped to avoid.
-BINARY_SOURCE_EXCLUDES = (".endless/",)
 
 # Mirrors internal/events/commit.go (E-1342). Subjects whose auto-commits
 # can amend in place via canAmend, producing orphans at the base of task
@@ -1926,75 +1895,60 @@ def _resolve_land_endless_go(worktree_path: Path, project_root: Path) -> str | N
     return str(wt_bin)
 
 
-def _refuse_if_behind_base(
-    worktree_path: Path, base_branch: str, canonical: str, project_root: Path
-) -> None:
-    """Refuse a self_dev land whose branch is behind base (E-1941).
+def _rebuild_worktree_binary(worktree_path: Path, canonical: str) -> None:
+    """Rebuild the worktree's endless-go AFTER the rebase onto base (E-1941).
 
-    A self_dev land runs the WORKTREE's endless-go against the REAL DB — first to
-    apply this branch's schema changes, then to record the landing. That binary is
-    built from the worktree's source, so if the source is behind main the binary
-    is behind main's DB, and it fails `VerifyIntegrity` on connect naming whatever
-    enum main added meanwhile. E-1709 made the binary match the SOURCE; nothing
-    made the source match MAIN. This does.
+    This is the whole staleness fix, and it replaces the behind-base REFUSAL that
+    shipped first. That refusal asked a proxy question — "is the source behind
+    base?" — as a stand-in for "is the binary stale?". The proxy was wrong three
+    times over (it counted ledger auto-commits, then Python/justfile/test drift,
+    then hardcoded directories), and even once tuned it was structurally
+    unworkable: main takes a Go commit every few hours, so every worktree in the
+    repo goes "behind" continuously and every land is refused until its branch is
+    hand-rebased. The remedy it printed was that hand-rebase — the one operation
+    that risks the E-1943 ledger conflict. Cost exceeded benefit.
 
-    Refuse rather than auto-rebase: E-1898's own rebase stopped on a conflict, and
-    a rebase that stalls partway is worse than a clean refusal.
+    Answer the real question instead. Step 4 has just rebased this branch onto
+    base, so the worktree's SOURCE is current by definition. Rebuilding here makes
+    the BINARY current by construction, and there is nothing left to check: the
+    binary that Step 5.5 and Step 6 point at the real DB is built from exactly
+    main + this branch.
 
-    self_dev only. A downstream branch being behind main is the ordinary case the
-    land's rebase exists to handle — refusing there would break normal product
-    usage — and downstream branches carry no schema changes, so the binary/DB skew
-    this guards has no way to arise.
+    Note this adds no rebase. Step 4's rebase is pre-existing; the plan's
+    "refuse, do not auto-rebase" ruled out the JUSTFILE rebasing ahead of the
+    land, which is still not done.
 
-    Counts ONLY commits touching BINARY_SOURCE_PATHS — what the Go compiler
-    reads to build endless-go. The hazard is a binary older than the real DB's
-    rows; drift anywhere else cannot cause it. Two rounds of false positives
-    taught this: counting everything refused on ledger auto-commits (which land
-    on main continuously), and counting all non-auto paths still refused on
-    Python-, justfile-, test- and decision-only drift. Each spurious refusal told
-    the user to rebase, the one operation that risks the E-1943 ledger conflict.
+    Placed before Step 5 so a broken build aborts while main and the DB are
+    untouched — strictly safer than the pre-rebase `just go` in the Justfile,
+    which could only ever build stale source. Runs `just go` rather than an
+    inlined `go build` so the build command has one definition.
+
+    self_dev only: downstream users never build endless-go.
     """
     from endless import config
-    if not config.project_is_self_dev(project_root):
+    if not config.project_is_self_dev(worktree_path):
         return
-    try:
-        out = _git_run(
-            [
-                "rev-list", "--count", f"HEAD..{base_branch}", "--",
-                *BINARY_SOURCE_PATHS,
-                *(f":(exclude){p}" for p in BINARY_SOURCE_EXCLUDES),
-            ],
-            cwd=worktree_path,
-        )
-    except subprocess.CalledProcessError as e:
+    if shutil.which("just") is None:
         raise click.ClickException(
-            f"git rev-list (behind-{base_branch} check) failed: {e.stderr or e}"
+            f"cannot land {canonical}: `just` is not on PATH, so the worktree's "
+            f"endless-go cannot be rebuilt after the rebase onto base. That "
+            f"rebuild is what guarantees the binary about to touch the real "
+            f"database matches the code being landed."
         )
-    behind = int(out.stdout.strip() or "0")
-    if behind == 0:
-        return
-    commits = "commit" if behind == 1 else "commits"
-    raise click.ClickException(
-        f"cannot land {canonical}: the branch is {behind} Go {commits} behind "
-        f"{base_branch} (only {', '.join(BINARY_SOURCE_PATHS)} are counted — "
-        f"the paths compiled into endless-go).\n\n"
-        f"This land would run the worktree's endless-go against the real "
-        f"database — to apply schema changes and to record the landing. That "
-        f"binary is built from this worktree's source, so source behind "
-        f"{base_branch} means a binary behind the real DB, which fails its "
-        f"integrity check on connect.\n\n"
-        f"Bring the branch current, then retry:\n\n"
-        f"    cd {_display_path(worktree_path)}\n"
-        f"    git rebase {base_branch}\n\n"
-        f"If that rebase conflicts under {DB_LEDGER_DIR}/, {base_branch}'s "
-        f"history was probably rewritten beneath this branch — check with "
-        f"`git reflog show {base_branch}` for a 'rebase (finish)' entry (a "
-        f"`git pull` with pull.rebase=true does this), or `git cherry "
-        f"{base_branch} HEAD`, which reports the inherited commits as "
-        f"patch-equivalent. That conflict is a known unsolved problem (E-1943), "
-        f"not something to resolve by hand: the ledger is recorded on "
-        f"{base_branch} only, so hand-merging it corrupts shared history. Stop "
-        f"and ask."
+    result = subprocess.run(
+        ["just", "go"], cwd=str(worktree_path), capture_output=True, text=True,
+    )
+    if result.returncode != 0:
+        raise click.ClickException(
+            f"cannot land {canonical}: rebuilding the worktree's endless-go "
+            f"after the rebase onto base failed.\n\n"
+            f"{(result.stderr or result.stdout).strip()}\n\n"
+            f"Nothing has been merged or migrated — base and the database are "
+            f"untouched. Fix the build and retry."
+        )
+    click.echo(
+        click.style("•", fg="cyan")
+        + " Rebuilt worktree endless-go from the rebased source"
     )
 
 
@@ -2212,6 +2166,9 @@ def land_worktree(
       3. If auto-commit is non-empty: 'git add' and commit them as
          'Endless: auto-record session activity'.
       4. Rebase the worktree branch onto main (in the worktree).
+      4.2 Rebuild the worktree's endless-go from the now-current source,
+         self_dev only (E-1941), so the binary Steps 5.5/6 point at the real DB
+         provably matches what is being landed.
       4.5 List the schema changes this branch adds (while main and the branch
          still differ — after Step 5 the diff is empty).
       5. ff-merge from main.
@@ -2221,8 +2178,8 @@ def land_worktree(
       6. Emit task.landed event. Worktree dir and branch stay; a
          separate reaper sweep removes them after worktree_ttl.
 
-    A self_dev land also refuses up front when the branch is behind main
-    (E-1941): the binary it points at the real DB is built from this source.
+    Step 4.2 is why there is no behind-base refusal: rather than gating on a
+    proxy for staleness, the land removes the staleness (E-1941).
 
     Retry up to LAND_MAX_RETRIES if a concurrent writer dirties auto-files
     between auto-commit and merge attempt. Re-landing after a follow-up
@@ -2270,13 +2227,6 @@ def land_worktree(
         click.echo(f"  Base:     {base_branch}")
         click.echo(f"  Main:     {main_root}")
         return
-
-    # E-1941: refuse a self_dev land whose source is behind base before anything
-    # else runs. The binary this land points at the real DB is built from that
-    # source, so stale source means a binary that fails VerifyIntegrity on
-    # connect. Cheapest possible failure: nothing has been built, touched or
-    # merged yet.
-    _refuse_if_behind_base(worktree_path, base_branch, canonical, main_root)
 
     # Resolve the binary the record-landing emit must use BEFORE the ff-merge,
     # so a self_dev worktree that isn't built fails loudly here rather than
@@ -2401,6 +2351,14 @@ def land_worktree(
             )
             _git_run(["rebase", "--abort"], cwd=worktree_path, check=False)
             raise click.ClickException(msg)
+
+        # Step 4.2 (E-1941): the branch is now rebased onto base, so the
+        # worktree's source is current — rebuild endless-go from it. This is what
+        # makes the binary that Steps 5.5 and 6 point at the real DB provably
+        # match the code being landed, and it replaces the behind-base refusal
+        # that shipped first (see _rebuild_worktree_binary). Before Step 5, so a
+        # broken build aborts with base and the DB untouched.
+        _rebuild_worktree_binary(worktree_path, canonical)
 
         # Step 4.5 (E-1941): list this branch's schema changes while base and the
         # branch are still different commits. After Step 5 they are the same

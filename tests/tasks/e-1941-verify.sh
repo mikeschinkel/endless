@@ -301,29 +301,41 @@ test_failed_land_leaves_db_clean() {
 # ─── check 2: behind-main refusal ───────────────────────────────────────────
 
 test_behind_main_is_refused() {
-    section "2. Behind-base refusal has ONE home, and ignores ledger noise"
+    section "2. No behind-base refusal anywhere — staleness is removed, not gated"
 
-    # The rule lives in `endless worktree land` (self_dev-gated, so direct
-    # callers get it too). A duplicate pre-check once sat in the recipe and had
-    # to be fixed twice for the same bug — it counted ledger auto-commits, which
-    # land on main constantly and cannot affect a binary, so it refused nearly
-    # every land while telling the user to rebase: the very operation that risks
-    # the E-1943 ledger conflict. Guard against that copy coming back.
+    # History: the first fix REFUSED any land whose branch was behind base. That
+    # gated on a proxy for "is the binary stale?", got the proxy wrong three
+    # times (ledger auto-commits, then Python/justfile/test drift, then
+    # hardcoded directories), and even once tuned blocked every worktree in the
+    # repo continuously — main takes a Go commit every few hours — while
+    # printing a hand-rebase as the remedy, which is the one operation that
+    # risks the E-1943 ledger conflict. Step 4.2 now rebuilds the binary from
+    # the freshly-rebased source instead, so nothing needs gating.
     local code
     code="$(printf '%s\n' "${RECIPE_BODY}" | grep -vE '^[[:space:]]*#')"
-    assert_not_contains "recipe has no behind-check of its own (one rule, one home)" \
-        "${code}" "rev-list --count"
+    assert_not_contains "recipe has no behind-check" "${code}" "rev-list --count"
 
-    # End-to-end: ledger-only drift must NOT block the recipe. The stubbed land
-    # cannot exercise the real refusal — that rule is asserted by the pytest
-    # layer in check 5 (_refuse_if_behind_base) — but a recipe-level false
-    # positive would surface right here.
+    if uv run python -c "
+import sys
+from endless import worktree_cmd as w
+sys.exit(0 if not hasattr(w, '_refuse_if_behind_base')
+         and not hasattr(w, 'BINARY_SOURCE_PATHS') else 1)
+" >/dev/null 2>&1; then
+        report_pass "no behind-base refusal survives in worktree_cmd"
+    else
+        report_fail "no behind-base refusal survives in worktree_cmd" \
+            "_refuse_if_behind_base / BINARY_SOURCE_PATHS both gone" "still present"
+    fi
+
+    # End-to-end: a branch behind base must run straight through the recipe.
+    # Ledger-only drift was the first false-positive shape and is the cheapest
+    # to re-check here.
     local res rc dbstate moved tmp calls
     res="$(run_recipe ledger-behind nochange ok)"
     IFS='|' read -r rc dbstate moved tmp <<< "${res}"
     calls="$(cat "${tmp}/calls.log" 2>/dev/null)"
 
-    assert_eq "a ledger-only-behind branch is not blocked (exit 0)" "0" "${rc}"
+    assert_eq "a behind branch is not blocked (exit 0)" "0" "${rc}"
     assert_contains "reaches the worktree rebuild" "${calls}" "just go"
     assert_contains "reaches the land" "${calls}" "worktree land"
     assert_eq "DB untouched by the recipe" "clean" "${dbstate}"
