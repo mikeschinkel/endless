@@ -103,28 +103,36 @@ func TestReportSeparatorMatchesPython(t *testing.T) {
 	}
 }
 
-// TestComposeSessionStartContext pins the Arm 2 delivery: the coverage rule is
-// always present at SessionStart — whether or not the one-shot task list has
-// content — and the task list, when present, is preserved alongside it.
+// TestComposeSessionStartContext pins SessionStart delivery under the E-1953
+// increment 1 disable: the coverage rule is WITHHELD and the one-shot task list
+// passes through untouched.
+//
+// The empty case is the load-bearing one. Returning "" (rather than a
+// rule-shaped string) is what makes handleTaskContextInjection suppress the
+// injection entirely, so a session whose task list was already delivered on an
+// earlier start gets no injection at all instead of an instruction to run a
+// command that refuses.
 func TestComposeSessionStartContext(t *testing.T) {
-	// Rule always delivered, even when the task-list context is empty (already
-	// injected on an earlier start).
-	if got := composeSessionStartContext(""); got != reportChannelRule {
-		t.Errorf("empty task list = %q, want just the rule", got)
+	if got := composeSessionStartContext(""); got != "" {
+		t.Errorf("empty task list = %q, want %q (rule withheld while disabled)", got, "")
 	}
 
 	combined := composeSessionStartContext("Active tasks:\n  E-1 foo")
-	if !strings.Contains(combined, reportChannelRule) {
-		t.Errorf("combined dropped the rule:\n%s", combined)
+	if strings.Contains(combined, "task report") {
+		t.Errorf("SessionStart still points at the disabled command:\n%s", combined)
 	}
 	if !strings.Contains(combined, "E-1 foo") {
 		t.Errorf("combined dropped the task list:\n%s", combined)
 	}
+}
 
-	// The rule is functional, not an enumerated checklist of situations.
-	for _, want := range []string{"task report", "function", "cannot derive"} {
-		if !strings.Contains(reportChannelRule, want) {
-			t.Errorf("reportChannelRule missing %q:\n%s", want, reportChannelRule)
-		}
+// TestReportChannelDisabled pins the disable itself (E-1953 increment 1). Both
+// halves of the channel must be off together: a live SessionStart rule with a
+// dead command tells every session to run something that refuses, and a live
+// PostToolUse reinforcement tells it to append a block that never printed —
+// which is how an agent ends up hand-writing one.
+func TestReportChannelDisabled(t *testing.T) {
+	if reportChannelEnabled {
+		t.Fatal("reportChannelEnabled is true; E-1953 increment 1 requires the report channel OFF")
 	}
 }

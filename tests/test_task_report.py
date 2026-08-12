@@ -307,143 +307,51 @@ def test_render_follow_up_appears_exactly_once():
     assert block.count("E-1873") == 1
 
 
-# --- steer selection --------------------------------------------------------
+# --- E-1953 increment 1: the render path is OFF -----------------------------
 
-@pytest.fixture(autouse=True)
-def _no_checkpoint(monkeypatch):
-    """Recording the checkpoint needs a live session + endless-go; these tests
-    cover rendering, so the side-effect is stubbed out. `test_report_item_*`
-    below asserts it is called with the right text."""
-    monkeypatch.setattr(report_cmd, "_record_checkpoint", lambda text: None)
+def test_report_item_refuses_while_disabled(monkeypatch):
+    """The disable is asserted through the PUBLIC entry point, not the flag.
 
+    A test that only read `REPORT_DISABLED` would pass against a build whose
+    `report_item` had stopped consulting it — which is exactly the regression
+    that matters, because the render path below it is still fully intact for
+    increment 2 to rebuild in place.
+    """
+    called = []
+    monkeypatch.setattr(report_cmd, "_compute_facts", lambda i: called.append("facts"))
+    monkeypatch.setattr(report_cmd, "_classify", lambda p, t: called.append("haiku"))
+    monkeypatch.setattr(report_cmd, "_record_checkpoint", lambda t: called.append("gate"))
 
-def _stub_facts(monkeypatch, successors=None, type_="todo"):
-    monkeypatch.setattr(report_cmd, "_compute_facts",
-                        lambda i: {"status": "unverified", "type": type_, "landed": False,
-                                   "successors": successors or []})
-    monkeypatch.setattr(report_cmd, "_compute_anomalies", lambda: [])
+    with pytest.raises(click.ClickException) as e:
+        report_cmd.report_item(1953, None)
+    assert "disabled" in str(e.value)
 
-
-def _block_after_separator(out: str) -> str:
-    """The appended block: everything after the separator, which has no closing
-    marker because the block runs to the end of the message (E-1911)."""
-    assert report_prompts.SEPARATOR in out, out
-    return out.split(report_prompts.SEPARATOR, 1)[1].strip()
-
-
-def test_report_item_appends_the_block_after_the_separator(monkeypatch, capsys):
-    _stub_facts(monkeypatch, successors=[{"id": 1772, "status": "ready",
-                                          "relation": "cleaned_up_by"}])
-    report_cmd.report_item(1771, None)
-    out = capsys.readouterr().out
-    assert "Answer the user in your own words first" in out  # steer header
-    assert _block_after_separator(out) == "Follow-ups you filed: E-1772 [ready]"
-    assert "Status:" not in out
+    # Nothing on the way to the refusal: no model call, no DB read, no gate arm.
+    # A disabled command that still costs a Haiku round-trip is not disabled.
+    assert called == []
 
 
-def test_steer_does_not_claim_the_whole_message(monkeypatch, capsys):
-    """The inversion, stated as a prohibition. The old steer demanded the block
-    be the ENTIRE final message and named a Stop hook as enforcement; both are
-    retired (E-1911), and a steer that threatens a gate which no longer fires
-    teaches the agent to discount steers."""
-    _stub_facts(monkeypatch)
-    report_cmd.report_item(1771, None)
-    out = capsys.readouterr().out
-    for retired in ("ENTIRE final message", "This is enforced, not advisory",
-                    "blocks the turn", report_prompts.SEPARATOR.replace("ENDLESS", "BEGIN")):
-        assert retired not in out, retired
-    assert "NOT constrained" in out
+def test_disabled_refusal_forbids_hand_writing_a_block(monkeypatch):
+    """The refusal must not leave the agent believing it should improvise one.
+
+    An agent told only "the command is off" reproduces the block from memory —
+    it has seen hundreds of them. Naming the separator and the `Nothing to
+    report.` line as things NOT to write is the whole point of the message.
+    """
+    with pytest.raises(click.ClickException) as e:
+        report_cmd.report_item(1953, None)
+    msg = str(e.value)
+    assert "Do NOT hand-write" in msg
+    assert "Nothing to report." in msg
 
 
-def test_report_item_empty_block_still_renders_the_separator(monkeypatch, capsys):
-    """The keystone of the append contract. An ABSENT block is ambiguous — the
-    user cannot tell "no facts" from "the block failed to render" — so the null
-    case is stated rather than left as silence."""
-    _stub_facts(monkeypatch)
-    report_cmd.report_item(1771, None)
-    out = capsys.readouterr().out
-    assert _block_after_separator(out) == "Nothing to report."
-
-
-def test_separator_present_in_both_the_empty_and_non_empty_case(monkeypatch, capsys):
-    """Same property from the other side: the separator is unconditional, which
-    is what lets a validator (or the user) detect a swallowed block."""
-    _stub_facts(monkeypatch)
-    report_cmd.report_item(1771, None)
-    empty = capsys.readouterr().out
-    _stub_facts(monkeypatch, successors=[{"id": 1772, "status": "ready",
-                                          "relation": "cleaned_up_by"}])
-    report_cmd.report_item(1771, None)
-    full = capsys.readouterr().out
-    assert empty.count(report_prompts.SEPARATOR) == 1
-    assert full.count(report_prompts.SEPARATOR) == 1
-
-
-def test_agent_notes_render_above_the_separator(monkeypatch, capsys):
-    """Position is load-bearing, not cosmetic: with an opening marker and no
-    closing one, anything printed after the separator IS the block. The
-    agent-facing anomaly addendum must therefore precede it or the agent would
-    be told to append advice it was told never to relay."""
-    _stub_facts(monkeypatch)
-    monkeypatch.setattr(report_cmd, "_compute_anomalies", lambda: ["uncommitted: scratch.go"])
-    report_cmd.report_item(1771, None)
-    out = capsys.readouterr().out
-    assert out.index("uncommitted: scratch.go") < out.index(report_prompts.SEPARATOR)
-    assert _block_after_separator(out) == "Nothing to report."
-
-
-def test_nothing_to_report_is_overridable(isolated_env, monkeypatch, capsys):
-    """It stays a registered prompt name, so the wording is user-editable like
-    the other three (ED-1531 Req 5)."""
-    import json
-    from endless import config
-    (config.CONFIG_DIR / "report-prompts.jsonl").write_text(
-        json.dumps({"name": "nothing-to-report", "text": "EMPTY-MARKER"}) + "\n"
-    )
-    _stub_facts(monkeypatch)
-    report_cmd.report_item(1771, None)
-    assert _block_after_separator(capsys.readouterr().out) == "EMPTY-MARKER"
-
-
-def test_separator_survives_a_steer_override(isolated_env, monkeypatch, capsys):
-    """The separator is a fixed constant the command prints itself, NOT part of
-    the tunable steer text. A user rewording the steer cannot lose the one
-    string that makes the block machine-detectable."""
-    import json
-    from endless import config
-    (config.CONFIG_DIR / "report-prompts.jsonl").write_text(
-        json.dumps({"name": "steer", "text": "SAY WHATEVER"}) + "\n"
-    )
-    _stub_facts(monkeypatch)
-    report_cmd.report_item(1771, None)
-    out = capsys.readouterr().out
-    assert "SAY WHATEVER" in out
-    assert _block_after_separator(out) == "Nothing to report."
-
-
-def test_report_item_arms_the_gate_with_the_block_only(monkeypatch, capsys):
-    """The recorded text must be the sanctioned block ALONE — not the steer that
-    frames it, and not the agent-facing anomaly addendum. The gate that consumed
-    this is parked (E-1911), but the checkpoint is still what a revival compares
-    against, so recording a string the user was never meant to receive would
-    bounce every reply the moment it is switched back on."""
-    recorded = []
-    monkeypatch.setattr(report_cmd, "_record_checkpoint", recorded.append)
-    _stub_facts(monkeypatch, successors=[{"id": 1906, "status": "untriaged",
-                                          "relation": "relates_to"}])
-    monkeypatch.setattr(report_cmd, "_compute_anomalies", lambda: ["uncommitted: scratch.go"])
-    report_cmd.report_item(1901, '{"verify":"esu && ./tests/tasks/e-1901-verify.sh"}')
-
-    assert len(recorded) == 1
-    assert recorded[0] == (
-        "Verify: `esu && ./tests/tasks/e-1901-verify.sh`\n"
-        "Follow-ups you filed: E-1906 [untriaged]"
-    )
-    out = capsys.readouterr().out
-    assert "uncommitted: scratch.go" in out          # printed for the agent…
-    assert "uncommitted" not in recorded[0]          # …but never sanctioned
-    assert "Answer the user" not in recorded[0]      # steer is not the block
-    assert report_prompts.SEPARATOR not in recorded[0]  # nor is the separator
+def test_disabled_refusal_precedes_payload_validation():
+    """Refusal beats rejection. A malformed payload must produce the DISABLED
+    message, not a parse error — otherwise an agent debugging its JSON never
+    learns the command is off and keeps retrying a surface that is gone."""
+    with pytest.raises(click.ClickException) as e:
+        report_cmd.report_item(1953, "{not json")
+    assert "disabled" in str(e.value)
 
 
 # --- tunable config surface -------------------------------------------------

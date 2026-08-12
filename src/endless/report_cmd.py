@@ -46,6 +46,31 @@ from endless import config, internal_claude, report_prompts
 _NOTE_KINDS = ("anomaly", "discovery")
 _QUESTION_TYPES = ("text", "integer", "real", "boolean", "choice")
 
+# E-1953 increment 1: the payload-and-render command is OFF.
+#
+# It emitted `Nothing to report.` most of the time and unrequested noise the
+# rest, so the PostToolUse hook was demanding that every agent append a block
+# carrying no signal. The root cause is structural, not cosmetic — two output
+# channels exist and content lands in the cheap one — so the four render defects
+# in E-1952's seed are subsumed by the rebuild rather than patched here.
+#
+# Everything below stays reachable on purpose: E-1953 increment 2 rebuilds the
+# command IN PLACE (a minimizer over the agent's whole draft) and reuses the
+# facts query, the prompt-layering module, and the checkpoint write. Deleting it
+# would mean re-deriving all three.
+REPORT_DISABLED = True
+
+_DISABLED_MESSAGE = (
+    "`endless task report` is disabled (E-1953).\n"
+    "\n"
+    "  It is being rebuilt as a minimizer over your entire draft reply rather\n"
+    "  than a renderer of fields you volunteer. Until that lands, there is no\n"
+    "  block to append — answer the user in your own words.\n"
+    "\n"
+    "  Do NOT hand-write a block, a separator, or a `Nothing to report.` line\n"
+    "  to stand in for this command's output."
+)
+
 
 # --- payload parsing --------------------------------------------------------
 
@@ -424,7 +449,15 @@ def report_item(item_id: int, payload: str | None) -> None:
     Print order is load-bearing: steer, then the agent-facing addendum, then the
     separator and the block LAST. The block has no closing marker, so everything
     after the separator is the block.
+
+    Refuses outright while `REPORT_DISABLED` holds (E-1953). The refusal is the
+    FIRST statement so no model call, DB read, or checkpoint write happens on the
+    way to it — a disabled command that still costs a Haiku round-trip is not
+    disabled.
     """
+    if REPORT_DISABLED:
+        raise click.ClickException(_DISABLED_MESSAGE)
+
     notes, questions, verify = _parse_payload(payload)
     prompts = report_prompts.load_prompts()
     _gate(notes, questions, prompts)  # raises on a bounced entry

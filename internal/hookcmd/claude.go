@@ -309,6 +309,20 @@ func runClaude(args []string) error {
 	return nil
 }
 
+// reportChannelEnabled switches off BOTH halves of the report channel — the
+// SessionStart coverage rule and the PostToolUse reinforcement (E-1953
+// increment 1). It is false because the command they point at now refuses.
+//
+// Both halves must go together. Leaving either one live would instruct every
+// session to run a disabled command and then to append a block that never
+// printed, which is worse than the noise the disable exists to stop: an agent
+// told to append a block it cannot obtain will hand-write one.
+//
+// The switch is a code constant only because it is TRANSITIONAL — increment 2
+// replaces both texts and moves the live/off decision to `.endless/config.json`,
+// where an agent cannot reach it in the course of normal work.
+const reportChannelEnabled = false
+
 // reportChannelRule is the coverage rule (E-1803 Arm 2), delivered on every
 // SessionStart so the functional reporting rule is always in context rather than
 // depending on the agent re-reading the guide. Defined FUNCTIONALLY on purpose:
@@ -344,6 +358,11 @@ func handleTaskContextInjection(projectID int64, payload claudePayload) error {
 // start (resume/compact) — so coverage never depends on the one-shot gate. Pure
 // so the composition is unit-testable.
 func composeSessionStartContext(taskListCtx string) string {
+	// E-1953 increment 1: with the command disabled the rule is withheld, and the
+	// task-list context is returned alone (or "", which suppresses the injection).
+	if !reportChannelEnabled {
+		return taskListCtx
+	}
 	if taskListCtx == "" {
 		return reportChannelRule
 	}
@@ -592,7 +611,12 @@ func handlePostToolUse(projectID int64, payload claudePayload) error {
 	// E-1803 Arm 1: reinforce the report channel. When this Bash call ran
 	// `endless task report`, inject a compose-time nudge to append the report's
 	// block after the separator (E-1911) — its own answer stays its own.
-	if payload.ToolName == "Bash" {
+	//
+	// Off since E-1953 increment 1 (see reportChannelEnabled). This is also the
+	// branch that fired on `endless task report --help`, because it keys on the
+	// command NAME rather than on a render having succeeded — the defect
+	// increment 2 fixes when it rewrites the reinforcement.
+	if reportChannelEnabled && payload.ToolName == "Bash" {
 		var input toolInputBash
 		if err := json.Unmarshal(payload.ToolInput, &input); err == nil &&
 			taskReportRe.MatchString(input.Command) {
