@@ -25,9 +25,9 @@
 #
 # How the harnesses are simulated: by the environment, because that is literally
 # the whole mechanism. Claude Code CLI exports CLAUDE_CODE_ENTRYPOINT=cli to its
-# subprocesses; the Desktop app hosts the agent through the Agent SDK and exports
-# CLAUDE_AGENT_SDK_VERSION with none of the CLI's variables. These are not stubs
-# — they reproduce the observed conditions exactly (dumps taken 2026-08-13).
+# subprocesses; Desktop exports CLAUDE_CODE_ENTRYPOINT=claude-desktop. Both are
+# transcribed from real harness-process dumps (2026-08-13) — see DESKTOP_ENV
+# below for why the source of the dump matters more than it looks.
 #
 # What this suite does NOT do: run any other task's verify script. Those are
 # pre-land gates for their own task in their own worktree, not a regression
@@ -70,6 +70,21 @@ SANDBOX_CFG=""
 SESSION_EID=""
 GATE_ON_DIR=""
 GATE_OFF_DIR=""
+
+# The Claude Code Desktop environment, transcribed from the HARNESS process on
+# 2026-08-13 — `ps eww` on the bundled claude binary inside Claude.app (Claude
+# Code 2.1.227), not from Desktop's Bash tool.
+#
+# That distinction is the whole reason E-1962 shipped broken the first time. The
+# original version of this script simulated a Desktop with NO
+# CLAUDE_CODE_ENTRYPOINT, because the only sample available came from Desktop's
+# Bash tool and was incomplete. Every check passed against a faithful
+# reproduction of an environment that does not exist. Re-derive this from the
+# harness process, never by asking the agent to run `env`.
+DESKTOP_ENV="CLAUDE_CODE_ENTRYPOINT=claude-desktop \
+__CFBundleIdentifier=com.anthropic.claudefordesktop \
+CLAUDE_AGENT_SDK_VERSION=0.3.227 \
+CLAUDE_CODE_HOST_SESSION_ID=local_e44c9f73-0054-4197-ac66-6c6638fc3f95"
 
 # ─── output ─────────────────────────────────────────────────────────────────
 
@@ -125,9 +140,7 @@ hook() {
     case "${harness}" in
         terminal) printf '%s' "${payload}" | env CLAUDE_CODE_ENTRYPOINT=cli \
                       ./bin/endless-go --config-dir "${SANDBOX_CFG}" hook claude 2>/dev/null ;;
-        desktop)  printf '%s' "${payload}" | env -u CLAUDE_CODE_ENTRYPOINT \
-                      CLAUDE_AGENT_SDK_VERSION=0.3.222 \
-                      __CFBundleIdentifier=com.anthropic.claudefordesktop \
+        desktop)  printf '%s' "${payload}" | env ${DESKTOP_ENV} \
                       ./bin/endless-go --config-dir "${SANDBOX_CFG}" hook claude 2>/dev/null ;;
         *)        printf 'BAD HARNESS %s' "${harness}" ;;
     esac
@@ -139,9 +152,7 @@ cli() {
     local harness="$1"; shift
     case "${harness}" in
         terminal) env CLAUDE_CODE_ENTRYPOINT=cli uv run endless "$@" 2>&1 ;;
-        desktop)  env -u CLAUDE_CODE_ENTRYPOINT CLAUDE_AGENT_SDK_VERSION=0.3.222 \
-                      __CFBundleIdentifier=com.anthropic.claudefordesktop \
-                      uv run endless "$@" 2>&1 ;;
+        desktop)  env ${DESKTOP_ENV} uv run endless "$@" 2>&1 ;;
         human)    env -u CLAUDE_CODE_ENTRYPOINT -u CLAUDE_AGENT_SDK_VERSION \
                       -u __CFBundleIdentifier -u CLAUDECODE \
                       uv run endless "$@" 2>&1 ;;

@@ -38,6 +38,14 @@ _LABELS = {
 _SUPPORTED = frozenset({CLAUDE_CLI})
 
 
+ENTRYPOINT_VAR = "CLAUDE_CODE_ENTRYPOINT"
+BUNDLE_VAR = "__CFBundleIdentifier"
+
+CLI_ENTRYPOINT = "cli"
+DESKTOP_ENTRYPOINT = "claude-desktop"
+DESKTOP_BUNDLE_ID = "com.anthropic.claudefordesktop"
+
+
 def _claude_cli(env: Lookup) -> bool:
     """Claude Code in a terminal.
 
@@ -47,23 +55,29 @@ def _claude_cli(env: Lookup) -> bool:
     Keyed on the entrypoint alone — it is the variable that names the surface,
     and Claude Code sets the others on surfaces this must not claim.
     """
-    return env("CLAUDE_CODE_ENTRYPOINT") == "cli"
+    return env(ENTRYPOINT_VAR) == CLI_ENTRYPOINT
 
 
 def _claude_desktop(env: Lookup) -> bool:
     """The Claude Code Desktop app.
 
-    Observed 2026-08-13: __CFBundleIdentifier=com.anthropic.claudefordesktop and
-    CLAUDE_AGENT_SDK_VERSION=0.3.222, with CLAUDE_CODE_ENTRYPOINT, CLAUDECODE and
-    AI_AGENT all ABSENT — Desktop hosts the agent through the Agent SDK rather
-    than the CLI, so none of the CLI's variables reach a subprocess there.
+    Observed 2026-08-13 by reading the Desktop harness process environment
+    directly (`ps eww` on the bundled claude binary inside Claude.app, Claude
+    Code 2.1.227): CLAUDE_CODE_ENTRYPOINT=claude-desktop,
+    __CFBundleIdentifier=com.anthropic.claudefordesktop,
+    CLAUDE_AGENT_SDK_VERSION=0.3.227.
 
-    That absence is the signal, which is why this runs second: the CLI's positive
-    match gets first refusal.
+    Desktop names itself in the entrypoint. An earlier version of this function
+    asserted the opposite — that Desktop set no entrypoint, and that the absence
+    was the signal — because the only sample then available came from Desktop's
+    Bash tool and was incomplete. Sample the HARNESS process when re-deriving
+    this: the Bash tool is a subprocess whose environment may differ from the one
+    hooks inherit.
+
+    Runs second so the CLI's positive match gets first refusal.
     """
-    if env("__CFBundleIdentifier") == "com.anthropic.claudefordesktop":
-        return True
-    return bool(env("CLAUDE_AGENT_SDK_VERSION")) and not env("CLAUDE_CODE_ENTRYPOINT")
+    return (env(ENTRYPOINT_VAR) == DESKTOP_ENTRYPOINT
+            or env(BUNDLE_VAR) == DESKTOP_BUNDLE_ID)
 
 
 # Ordered most-specific first; the first claim wins. This is the extension

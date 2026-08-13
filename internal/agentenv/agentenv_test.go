@@ -33,17 +33,39 @@ func TestDetect(t *testing.T) {
 			ClaudeCLI,
 		},
 		{
-			"claude code desktop (observed)",
+			// Read from the Desktop HARNESS process (`ps eww` on the bundled
+			// claude binary), not from Desktop's Bash tool. The distinction
+			// matters: an earlier version of this test encoded a Bash-tool
+			// sample in which the entrypoint was absent, and the detector was
+			// written to match that fiction.
+			"claude code desktop (observed, harness process)",
 			map[string]string{
-				"__CFBundleIdentifier":     "com.anthropic.claudefordesktop",
-				"CLAUDE_AGENT_SDK_VERSION": "0.3.222",
+				"CLAUDE_CODE_ENTRYPOINT":      "claude-desktop",
+				"__CFBundleIdentifier":        "com.anthropic.claudefordesktop",
+				"CLAUDE_AGENT_SDK_VERSION":    "0.3.227",
+				"CLAUDE_CODE_HOST_SESSION_ID": "local_e44c9f73-0054-4197-ac66-6c6638fc3f95",
 			},
 			ClaudeDesktop,
 		},
 		{
-			"desktop on a platform without bundle ids",
-			map[string]string{"CLAUDE_AGENT_SDK_VERSION": "0.3.222"},
+			// The portable half alone — no macOS bundle identifier.
+			"desktop entrypoint without a bundle id",
+			map[string]string{"CLAUDE_CODE_ENTRYPOINT": "claude-desktop"},
 			ClaudeDesktop,
+		},
+		{
+			// The macOS half alone.
+			"desktop bundle id without an entrypoint",
+			map[string]string{"__CFBundleIdentifier": "com.anthropic.claudefordesktop"},
+			ClaudeDesktop,
+		},
+		{
+			// An Agent SDK version by itself is NOT Desktop. The retired branch
+			// treated it as one, which was a guess; "an SDK hosts this" is not
+			// "this is the Desktop app".
+			"agent sdk version alone is not desktop",
+			map[string]string{"CLAUDE_AGENT_SDK_VERSION": "0.3.227"},
+			Unknown,
 		},
 
 		// Ordering: the CLI's positive match gets first refusal. A terminal
@@ -55,6 +77,17 @@ func TestDetect(t *testing.T) {
 			map[string]string{
 				"CLAUDE_CODE_ENTRYPOINT":   "cli",
 				"CLAUDE_AGENT_SDK_VERSION": "0.3.222",
+			},
+			ClaudeCLI,
+		},
+		{
+			// The reverse ordering check, now that Desktop has a positive
+			// entrypoint of its own: a terminal session on macOS running under
+			// some Anthropic-bundled process must not be claimed by Desktop.
+			"cli entrypoint beats a desktop bundle id",
+			map[string]string{
+				"CLAUDE_CODE_ENTRYPOINT": "cli",
+				"__CFBundleIdentifier":   "com.anthropic.claudefordesktop",
 			},
 			ClaudeCLI,
 		},

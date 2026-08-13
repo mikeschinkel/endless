@@ -27,17 +27,38 @@ TERMINAL = dict(
     __CFBundleIdentifier="com.apple.Terminal",
 )
 
+# Read from the Desktop HARNESS process (`ps eww` on the bundled claude
+# binary), not from Desktop's Bash tool. An earlier version of this file encoded
+# a Bash-tool sample in which the entrypoint was absent, and the detector was
+# written to match that fiction.
 DESKTOP = dict(
+    CLAUDE_CODE_ENTRYPOINT="claude-desktop",
     __CFBundleIdentifier="com.anthropic.claudefordesktop",
-    CLAUDE_AGENT_SDK_VERSION="0.3.222",
+    CLAUDE_AGENT_SDK_VERSION="0.3.227",
+    CLAUDE_CODE_HOST_SESSION_ID="local_e44c9f73-0054-4197-ac66-6c6638fc3f95",
 )
 
 
 @pytest.mark.parametrize("name,vars_,expected", [
     ("claude code in a terminal (observed)", TERMINAL, agent_env.CLAUDE_CLI),
-    ("claude code desktop (observed)", DESKTOP, agent_env.CLAUDE_DESKTOP),
-    ("desktop without bundle ids",
-     dict(CLAUDE_AGENT_SDK_VERSION="0.3.222"), agent_env.CLAUDE_DESKTOP),
+    ("claude code desktop (observed, harness process)", DESKTOP,
+     agent_env.CLAUDE_DESKTOP),
+    ("desktop entrypoint without a bundle id",
+     dict(CLAUDE_CODE_ENTRYPOINT="claude-desktop"), agent_env.CLAUDE_DESKTOP),
+    ("desktop bundle id without an entrypoint",
+     dict(__CFBundleIdentifier="com.anthropic.claudefordesktop"),
+     agent_env.CLAUDE_DESKTOP),
+
+    # An Agent SDK version by itself is NOT Desktop. The retired branch treated
+    # it as one, which was a guess: "an SDK hosts this" is not "this is Desktop".
+    ("agent sdk version alone is not desktop",
+     dict(CLAUDE_AGENT_SDK_VERSION="0.3.227"), agent_env.UNKNOWN),
+
+    # Ordering, now that Desktop has a positive entrypoint of its own.
+    ("cli entrypoint beats a desktop bundle id",
+     dict(CLAUDE_CODE_ENTRYPOINT="cli",
+          __CFBundleIdentifier="com.anthropic.claudefordesktop"),
+     agent_env.CLAUDE_CLI),
 
     # Ordering: the CLI's positive match gets first refusal. A terminal session
     # carrying an SDK version — a background or SDK-driven session launched FROM
@@ -87,8 +108,8 @@ def test_go_and_python_tables_agree():
     guide`. They are transcriptions of the same observed environments, so they
     should only ever diverge by mistake."""
     go_src = _read_go_source()
-    for needle in ('"cli"', "com.anthropic.claudefordesktop",
-                   "CLAUDE_AGENT_SDK_VERSION", "claude_cli", "claude_desktop"):
+    for needle in ('"cli"', '"claude-desktop"', "com.anthropic.claudefordesktop",
+                   "claude_cli", "claude_desktop"):
         assert needle in go_src, f"Go detector lost {needle!r}"
 
 

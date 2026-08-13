@@ -13,6 +13,18 @@ package agentenv
 
 import "os"
 
+// The environment variables and values the detectors key on. Named because they
+// appear in both the table and its tests, and a typo in either would silently
+// mean "no harness matched" rather than a compile error.
+const (
+	entrypointVar = "CLAUDE_CODE_ENTRYPOINT"
+	bundleVar     = "__CFBundleIdentifier"
+
+	cliEntrypoint     = "cli"
+	desktopEntrypoint = "claude-desktop"
+	desktopBundleID   = "com.anthropic.claudefordesktop"
+)
+
 // ID names an agent harness. Values are stable strings because they are
 // intended to become config and DB values (see E-1505, which needs a
 // platform='claude-desktop' discriminator on the session row).
@@ -66,35 +78,39 @@ var detectors = []detector{
 		// produced by Claude Code, not typed by a human, so a near-miss is a
 		// different surface or a corrupted environment, not this one.
 		id:     ClaudeCLI,
-		claims: func(env Lookup) bool { return env("CLAUDE_CODE_ENTRYPOINT") == "cli" },
+		claims: func(env Lookup) bool { return env(entrypointVar) == cliEntrypoint },
 	},
 	{
-		// Observed 2026-08-13, Claude Code Desktop:
+		// Observed 2026-08-13 by reading the Desktop harness process environment
+		// directly (`ps eww` on the bundled `claude` binary inside Claude.app,
+		// Claude Code 2.1.227):
+		//
+		//   CLAUDE_CODE_ENTRYPOINT=claude-desktop
 		//   __CFBundleIdentifier=com.anthropic.claudefordesktop
-		//   CLAUDE_AGENT_SDK_VERSION=0.3.222
-		//   CLAUDE_CODE_ENTRYPOINT   (absent)
-		//   CLAUDECODE               (absent)
-		//   AI_AGENT                 (absent)
+		//   CLAUDE_AGENT_SDK_VERSION=0.3.227
+		//   CLAUDE_CODE_HOST_SESSION_ID=local_<uuid>
 		//
-		// Desktop hosts the agent through the Agent SDK rather than the CLI, so
-		// none of the CLI's own variables reach a subprocess there. That absence
-		// is the whole signal, which is why this row runs SECOND — ClaudeCLI's
-		// positive match has to get first refusal.
+		// Desktop DOES set the entrypoint — it names itself. An earlier version
+		// of this file asserted the opposite (that Desktop set no entrypoint at
+		// all, and that its absence was the signal) because the only sample
+		// available then came from Desktop's Bash tool and was incomplete. The
+		// code happened to still classify Desktop correctly, via the bundle id,
+		// which is worse than a clean failure: a wrong explanation sitting next
+		// to working code, with a fallback branch that could never fire.
 		//
-		// Two signals, and the honest reading of each: the bundle identifier is
-		// proof but macOS-only, while the SDK version is portable but means "an
-		// Agent SDK hosts this", which some future non-Desktop host could also
-		// set. Neither is load-bearing today — everything except ClaudeCLI is
-		// unsupported, so a mislabel here changes a diagnostic string and
-		// nothing else. It becomes load-bearing under E-1505, and should be
-		// re-derived from a fresh dump then rather than trusted from here.
+		// Both signals below are now observed rather than inferred. The
+		// entrypoint is the primary one and is portable; the bundle identifier
+		// is corroboration and is macOS-only. The old "Agent SDK version is set
+		// and the entrypoint is empty" branch is gone — it described an
+		// environment that does not exist.
+		//
+		// Read the harness process directly when re-deriving this. Desktop's
+		// Bash tool is a subprocess whose environment may differ from the one
+		// hooks inherit, and asking the agent to run `env` samples the former.
 		id: ClaudeDesktop,
 		claims: func(env Lookup) bool {
-			if env("__CFBundleIdentifier") == "com.anthropic.claudefordesktop" {
-				return true
-			}
-			return env("CLAUDE_AGENT_SDK_VERSION") != "" &&
-				env("CLAUDE_CODE_ENTRYPOINT") == ""
+			return env(entrypointVar) == desktopEntrypoint ||
+				env(bundleVar) == desktopBundleID
 		},
 	},
 }

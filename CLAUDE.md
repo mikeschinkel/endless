@@ -116,12 +116,28 @@ workers under an epic "agents" (`endless agents`). This is about the *host*.
 | harness | id | supported | signal |
 |---|---|---|---|
 | Claude Code, terminal | `claude_cli` | **yes** | `CLAUDE_CODE_ENTRYPOINT=cli` |
-| Claude Code Desktop | `claude_desktop` | no | `__CFBundleIdentifier=com.anthropic.claudefordesktop`, or `CLAUDE_AGENT_SDK_VERSION` set with no entrypoint |
+| Claude Code Desktop | `claude_desktop` | no | `CLAUDE_CODE_ENTRYPOINT=claude-desktop`, or `__CFBundleIdentifier=com.anthropic.claudefordesktop` (macOS only) |
 | anything else | `unknown` | no | — |
 
 Adding a harness is a row in `detectors` plus an id constant. Do **not** add one
-speculatively: a detector never checked against a real `env` dump of that harness
-is a guess, and a guess fails silently. Get the dump first.
+speculatively: a detector never checked against a real environment dump of that
+harness is a guess, and a guess fails silently. Get the dump first.
+
+**Sample the HARNESS PROCESS, not the agent's Bash tool.** Ask an agent to run
+`env` and you get the environment of a shell it spawned, which need not match the
+one hooks inherit. Read the harness directly instead:
+
+```sh
+ps -axo pid,command | grep claude          # find the harness pid
+ps eww -p <pid> | tr ' ' '\n' | grep ^CLAUDE
+```
+
+This is not a style note. E-1962 shipped once against a Bash-tool sample in which
+Desktop appeared to set no `CLAUDE_CODE_ENTRYPOINT` at all; the detector was
+written to key on that absence, every test passed against a faithful
+reproduction of an environment that does not exist, and the real value turned out
+to be `claude-desktop`. Beware dumps that are also grep-filtered — the sample
+that started it had been narrowed by a pattern that hid the answer.
 
 `supported` is an allow-list. An unrecognized harness lands outside it, so a
 newly shipped host cannot silently start obeying contracts nobody chose for it.
