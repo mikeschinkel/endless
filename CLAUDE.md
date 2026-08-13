@@ -128,15 +128,24 @@ newly shipped host cannot silently start obeying contracts nobody chose for it.
 Making support project-configurable waits on **E-1505** (add support for Claude
 Desktop) — there is no second supported harness to configure until then.
 
-**What is gated:** the Claude hooks, and `endless guide`. Nothing else. A hook
-fires inside the session and speaks to the agent, so it is where an unsupported
-harness gets mis-instructed; `endless guide` is the one command whose entire
-output is instructions. Commands a user runs by hand are not gated — an
-unsupported harness running `endless task add` is a person using a tool.
+**What is gated:** the Claude hooks (silently — nothing to enforce, so nothing to
+say), and the **whole Python CLI**, which refuses with a banner and exits 1.
 
-The guide banner fails **open** on `unknown` (a human at a shell prompt still
-gets the guide) while the hooks fail **closed**. Deliberate asymmetry: the hooks
-are enforcement, the banner is advice.
+The CLI refusal is why this exists at all: CLAUDE.md files say "First: run
+`endless guide`", so an agent on an unsupported harness reads that, runs it, and
+without the banner walks into a workflow it cannot complete. The banner tells it
+the command did not run, that this is expected rather than a bug to diagnose, and
+that the CLAUDE.md instruction does not apply there. It cites **no task id** — "do
+not use Endless here" plus "see E-NNNN" is a contradiction, since resolving the
+second requires the first.
+
+`endless-go` is not blanket-gated: its hook path must keep running on any harness
+(it is what registers sessions at all), and E-1962 gates only the report-channel
+consumers within it.
+
+The CLI refusal fails **open** on `unknown` (a human at a shell prompt keeps their
+tool) while the hooks fail **closed**. Deliberate asymmetry: the hooks are
+enforcement, the refusal is advice with an exit code.
 
 ## Tests
 

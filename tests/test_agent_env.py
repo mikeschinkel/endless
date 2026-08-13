@@ -98,42 +98,74 @@ def _read_go_source() -> str:
     return (root / "internal" / "agentenv" / "agentenv.go").read_text()
 
 
-# ─── the `endless guide` banner ─────────────────────────────────────────────
+# ─── the CLI refusal ────────────────────────────────────────────────────────
 
 
-def _guide(monkeypatch, **vars_):
-    """Run `endless guide` with a synthetic environment."""
+def _run(monkeypatch, args, **vars_):
+    """Invoke the CLI with a synthetic harness environment."""
     from endless import cli
     for key in ("CLAUDE_CODE_ENTRYPOINT", "CLAUDE_AGENT_SDK_VERSION",
                 "__CFBundleIdentifier", "CLAUDECODE"):
         monkeypatch.delenv(key, raising=False)
     for key, value in vars_.items():
         monkeypatch.setenv(key, value)
-    return CliRunner().invoke(cli.main, ["guide"])
+    return CliRunner().invoke(cli.main, args)
 
 
-def test_guide_refuses_on_an_unsupported_harness(monkeypatch):
-    result = _guide(monkeypatch, **DESKTOP)
-    assert result.exit_code == 0
+@pytest.mark.parametrize("args", [
+    ["guide"],
+    ["task", "list"],
+    ["session", "status"],
+    ["project", "list"],
+])
+def test_every_command_refuses_on_an_unsupported_harness(monkeypatch, args):
+    """The refusal lives in the group callback, so it covers the whole surface.
+
+    Per-command gating would still leave an agent walking the surface to learn
+    what one banner can say up front — and the failures it hits on the way are
+    the confusing kind (session-gated commands failing for want of a tmux pane),
+    not the informative kind.
+    """
+    result = _run(monkeypatch, args, **DESKTOP)
+    assert result.exit_code == 1, f"{args} did not refuse"
     assert "does not support Claude Code Desktop" in result.output
-    assert "Ignore Endless for this session" in result.output
-    assert "E-1505" in result.output
-    # The banner and the guide are contradictory instructions; only one ships.
-    assert "## The happy path" not in result.output
+    assert "This command did not run" in result.output
 
 
-def test_guide_prints_normally_on_the_supported_harness(monkeypatch):
-    result = _guide(monkeypatch, CLAUDE_CODE_ENTRYPOINT="cli")
+def test_refusal_names_the_claude_md_instruction(monkeypatch):
+    """The reason this matters at all: CLAUDE.md files say "Run `endless
+    guide`". An agent that reads that and lands here needs to be told, in the
+    same breath, that the instruction does not apply."""
+    result = _run(monkeypatch, ["guide"], **DESKTOP)
+    assert "CLAUDE.md" in result.output
+    assert "does not apply here" in result.output
+
+
+def test_refusal_cites_no_endless_task_id(monkeypatch):
+    """"Do not use Endless here" plus "see E-NNNN" is a contradiction: resolving
+    the second requires the first."""
+    result = _run(monkeypatch, ["guide"], **DESKTOP)
+    import re
+    assert not re.search(r"\bE-\d+", result.output), result.output
+
+
+def test_refusal_withholds_the_output(monkeypatch):
+    """The banner and the guide are contradictory instructions; only one ships."""
+    result = _run(monkeypatch, ["guide"], **DESKTOP)
+    assert "The happy path" not in result.output
+
+
+def test_supported_harness_runs_normally(monkeypatch):
+    result = _run(monkeypatch, ["guide"], CLAUDE_CODE_ENTRYPOINT="cli")
     assert result.exit_code == 0
     assert "does not support" not in result.output
-    assert "Endless" in result.output
+    assert "Using Endless in a Claude Code Session" in result.output
 
 
-def test_guide_fails_open_for_a_human_at_a_shell(monkeypatch):
-    """UNKNOWN is overwhelmingly a person at a prompt — the docs tell you to run
-    `endless guide`. This banner fails OPEN where the hooks fail closed, because
-    refusing a human breaks a real workflow to defend against a harness that may
-    not exist."""
-    result = _guide(monkeypatch)
+def test_refusal_fails_open_for_a_human_at_a_shell(monkeypatch):
+    """UNKNOWN is overwhelmingly a person at a prompt. This fails OPEN where the
+    hooks fail closed — locking a human out of their own tool to defend against
+    a harness that may not exist is the worse trade."""
+    result = _run(monkeypatch, ["guide"])
     assert result.exit_code == 0
     assert "does not support" not in result.output

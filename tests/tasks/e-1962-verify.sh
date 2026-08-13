@@ -10,7 +10,7 @@
 #
 #   0. Build + the automated suites: internal/agentenv (the detector table and
 #      the allow-list), internal/hookcmd (call-site placement), and the Python
-#      mirror plus the guide banner.
+#      mirror plus the CLI refusal.
 #   1. Harness discrimination through the real hook, on all three consumers:
 #      the SessionStart rule, the Stop gate, and the PostToolUse reinforcement.
 #      Claude Code CLI fires; Desktop is silent on every one of them.
@@ -18,8 +18,8 @@
 #      carrying `"report_gate": false` stays off.
 #   3. The claim handoff carries the same discrimination; the Python spawn
 #      handoff provably does not.
-#   4. `endless guide` tells an unsupported harness to ignore Endless — and
-#      still prints for a human at a shell prompt.
+#   4. The CLI refuses an unsupported harness on EVERY command — and still
+#      runs for a human at a shell prompt.
 #
 # Exit 0 on all-passed, 1 on any failure.
 #
@@ -133,17 +133,19 @@ hook() {
     esac
 }
 
-# guide HARNESS -> `endless guide` stdout under that harness.
-guide() {
-    case "$1" in
-        terminal) env CLAUDE_CODE_ENTRYPOINT=cli uv run endless guide 2>&1 ;;
+# cli HARNESS ARGS... -> `endless ARGS...` output under that harness, with its
+# exit status preserved as this function's.
+cli() {
+    local harness="$1"; shift
+    case "${harness}" in
+        terminal) env CLAUDE_CODE_ENTRYPOINT=cli uv run endless "$@" 2>&1 ;;
         desktop)  env -u CLAUDE_CODE_ENTRYPOINT CLAUDE_AGENT_SDK_VERSION=0.3.222 \
                       __CFBundleIdentifier=com.anthropic.claudefordesktop \
-                      uv run endless guide 2>&1 ;;
+                      uv run endless "$@" 2>&1 ;;
         human)    env -u CLAUDE_CODE_ENTRYPOINT -u CLAUDE_AGENT_SDK_VERSION \
                       -u __CFBundleIdentifier -u CLAUDECODE \
-                      uv run endless guide 2>&1 ;;
-        *)        printf 'BAD HARNESS %s' "$1" ;;
+                      uv run endless "$@" 2>&1 ;;
+        *)        printf 'BAD HARNESS %s' "${harness}" ;;
     esac
 }
 
@@ -185,6 +187,12 @@ assert_succeeds() {
     output=$("$@" 2>&1); rc=$?
     if [[ "${rc}" -eq 0 ]]; then report_pass "${desc}"; return; fi
     report_fail "${desc}" "exit == 0" "exit=${rc} | output=${output}"
+}
+
+assert_eq() {
+    local desc="$1" want="$2" got="$3"
+    if [[ "${got}" == "${want}" ]]; then report_pass "${desc}"; return; fi
+    report_fail "${desc}" "${want}" "${got}"
 }
 
 assert_text_contains() {
@@ -317,39 +325,63 @@ test_claim_handoff() {
     fi
 }
 
-# ─── Part 4: the guide banner ───────────────────────────────────────────────
+# ─── Part 4: the CLI refusal ────────────────────────────────────────────────
 
 # The one place Endless SPEAKS to an unsupported harness rather than staying
 # silent. Silence is right for the hooks — there is nothing to enforce — but a
-# Desktop session that runs `endless guide` has asked a direct question, and the
-# honest answer is that this tool does not support it.
-test_guide_banner() {
-    section "Part 4 — endless guide refuses an unsupported harness"
+# Desktop session running `endless` has asked a direct question, and the honest
+# answer is that this tool does not support it.
+#
+# Why it matters at all: CLAUDE.md files say "First: run `endless guide`". An
+# agent on Desktop reads that, runs it, and without this lands in a workflow it
+# cannot complete.
+test_cli_refusal() {
+    section "Part 4 — the CLI refuses an unsupported harness"
 
-    local out
+    local out rc
 
-    out=$(guide desktop)
+    out=$(cli desktop guide); rc=$?
     assert_text_contains "desktop: names the harness" \
         'does not support Claude Code Desktop' "${out}"
-    assert_text_contains "desktop: tells it to ignore Endless" \
-        'Ignore Endless for this session' "${out}"
-    assert_text_contains "desktop: points at the tracking task" 'E-1505' "${out}"
-    # The banner and the guide are contradictory instructions; only one ships.
-    if [[ "${out}" == *"The happy path"* ]]; then
-        report_fail "desktop: the guide itself is withheld" \
-            "no guide body after the banner" "guide body present"
+    assert_text_contains "desktop: says the command did not run" \
+        'This command did not run' "${out}"
+    assert_text_contains "desktop: disarms the CLAUDE.md instruction" \
+        'does not apply here' "${out}"
+    assert_eq "desktop: exits non-zero" "1" "${rc}"
+
+    # No task id. "Do not use Endless here" plus "look up E-NNNN" is a
+    # contradiction — resolving the second requires the first.
+    if [[ "${out}" =~ E-[0-9]+ ]]; then
+        report_fail "desktop: cites no Endless task id" \
+            "no E-NNNN in the banner" "found one"
     else
-        report_pass "desktop: the guide itself is withheld"
+        report_pass "desktop: cites no Endless task id"
     fi
 
-    out=$(guide terminal)
+    # The banner and the guide are contradictory instructions; only one ships.
+    if [[ "${out}" == *"The happy path"* ]]; then
+        report_fail "desktop: the output itself is withheld" \
+            "no guide body after the banner" "guide body present"
+    else
+        report_pass "desktop: the output itself is withheld"
+    fi
+
+    # Every command, not just guide — the refusal is in the group callback.
+    local cmd
+    for cmd in "task list" "session status" "project list"; do
+        out=$(cli desktop ${cmd})
+        assert_text_contains "desktop: \`endless ${cmd}\` refuses too" \
+            'does not support Claude Code Desktop' "${out}"
+    done
+
+    out=$(cli terminal guide)
     assert_text_contains "terminal: the guide prints normally" \
         'Using Endless in a Claude Code Session' "${out}"
 
     # Fails OPEN where the hooks fail closed, and on purpose: UNKNOWN is
-    # overwhelmingly a person at a prompt, and refusing them would break a real
-    # workflow to defend against a harness that may not exist.
-    out=$(guide human)
+    # overwhelmingly a person at a prompt, and locking them out of their own
+    # tool to defend against a harness that may not exist is the worse trade.
+    out=$(cli human guide)
     assert_text_contains "bare shell: a human still gets the guide" \
         'Using Endless in a Claude Code Session' "${out}"
 }
@@ -413,7 +445,7 @@ main() {
     test_harness_discrimination
     test_harness_does_not_override_config
     test_claim_handoff
-    test_guide_banner
+    test_cli_refusal
 
     summary
 }
