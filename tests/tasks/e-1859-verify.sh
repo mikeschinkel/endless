@@ -177,15 +177,31 @@ setup() {
     GO="${REPO_ROOT}/bin/endless-go"
     command -v uv >/dev/null 2>&1 || { printf 'ERROR: uv not on PATH\n' >&2; exit 2; }
     [[ -x "${GO}" ]] || { printf 'ERROR: %s missing — run `just build`\n' "${GO}" >&2; exit 2; }
-    # A STALE binary is worse than a missing one: every Go-side assertion below
-    # silently tests the previous build, which after a rebase means testing
-    # somebody else's code. Caught for real on E-1859's own rebase, where a
-    # binary three minutes old reported "unknown subcommand" for a verb that was
-    # sitting in the source.
+    # A WRONG binary is worse than a missing one: every Go-side assertion below
+    # silently tests some other build, producing a wall of unrelated failures.
+    # Both traps below were hit for real while finishing this task.
+    #
+    # Trap 1 — stale: you edited Go and did not rebuild.
     local newest_go
     newest_go=$(find "${REPO_ROOT}/cmd" "${REPO_ROOT}/internal" -name '*.go' -newer "${GO}" -print -quit 2>/dev/null)
     if [[ -n "${newest_go}" ]]; then
         printf 'ERROR: %s is older than %s — run `just build`\n' "${GO}" "${newest_go}" >&2
+        exit 2
+    fi
+    #
+    # Trap 2 — foreign: the worktree bootstrap COPIES main's prebuilt binary
+    # into bin/ (see CLAUDE.md), which gives a fresh mtime with stale content,
+    # so the timestamp check above sails straight past it. Ask the binary what
+    # it can actually do instead — the only check a copy cannot fool.
+    local verbs missing_verb v
+    verbs=$("${GO}" session-query 2>&1)
+    for v in untriaged-tasks triage-context triage-claim triage-release; do
+        if ! grep -q -- "${v}" <<<"${verbs}"; then missing_verb="${v}"; break; fi
+    done
+    if [[ -n "${missing_verb:-}" ]]; then
+        printf 'ERROR: %s does not implement `session-query %s`.\n' "${GO}" "${missing_verb}" >&2
+        printf '       It is probably main'"'"'s binary copied in by the worktree bootstrap.\n' >&2
+        printf '       Rebuild this worktree: just build\n' >&2
         exit 2
     fi
     if [[ ! -x "${EN}" ]]; then
