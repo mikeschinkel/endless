@@ -220,6 +220,29 @@ def test_every_command_refuses_on_an_unsupported_harness(monkeypatch, args):
     assert "This command did not run" in result.output
 
 
+def test_refusal_covers_help_so_the_agent_block_never_lands(monkeypatch):
+    """`--help` is refused too, which is the seam E-1966 opened.
+
+    Folding `is_claude_code_agent()` onto the detector widened
+    `_should_augment()` from "Claude Code CLI" to "any recognized harness", so
+    Desktop now answers True and the directive block IS computed for it. It
+    never reaches anyone: Click runs the root group callback before rendering a
+    subcommand's help, so the banner replaces the whole output. Were that
+    ordering to change, an unsupported harness would start being handed
+    `endless guide <section>` — a pointer to a command that refuses.
+    """
+    assert agent_env.detect(env(**DESKTOP)) != agent_env.UNKNOWN  # block computed
+    result = _run(monkeypatch, ["task", "spawn", "--help"], **DESKTOP)
+    assert "does not support Claude Code Desktop" in result.output
+    assert "AGENT — read this" not in result.output
+    assert "Usage:" not in result.output
+
+    # The supported harness still gets it — this pins the ordering, not the
+    # augmentation.
+    result = _run(monkeypatch, ["task", "spawn", "--help"], **TERMINAL)
+    assert "AGENT — read this" in result.output
+
+
 def test_refusal_names_the_claude_md_instruction(monkeypatch):
     """The reason this matters at all: CLAUDE.md files say "Run `endless
     guide`". An agent that reads that and lands here needs to be told, in the
