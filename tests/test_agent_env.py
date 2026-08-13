@@ -119,6 +119,69 @@ def _read_go_source() -> str:
     return (root / "internal" / "agentenv" / "agentenv.go").read_text()
 
 
+# ─── the consumers ask the detector, not the environment (E-1966) ───────────
+#
+# Two helpers predate this module and each carried its own CLAUDECODE=1 test:
+# task_cmd._running_under_agent() and agent_help.is_claude_code_agent(). Three
+# spellings of one question, of which two answered "some Claude Code" rather
+# than which, and missed every non-Claude harness. Both now delegate here; the
+# second is gone entirely, folded into its only caller.
+
+
+def _pin_env(monkeypatch, **vars_):
+    """Put the real os.environ into a known harness state."""
+    for key in ("CLAUDE_CODE_ENTRYPOINT", "CLAUDE_AGENT_SDK_VERSION",
+                "__CFBundleIdentifier", "CLAUDECODE"):
+        monkeypatch.delenv(key, raising=False)
+    for key, value in vars_.items():
+        monkeypatch.setenv(key, value)
+
+
+@pytest.mark.parametrize("name,vars_,expected", [
+    ("claude code in a terminal", TERMINAL, True),
+    ("bare shell", {}, False),
+    # The case that proves the delegation: the retired body returned True here.
+    ("claudecode without an entrypoint", dict(CLAUDECODE="1"), False),
+])
+def test_running_under_agent_follows_the_detector(monkeypatch, name, vars_, expected):
+    from endless import task_cmd
+    _pin_env(monkeypatch, **vars_)
+    assert task_cmd._running_under_agent() is expected, name
+
+
+@pytest.mark.parametrize("name,vars_,expected", [
+    ("claude code in a terminal", TERMINAL, True),
+    ("bare shell", {}, False),
+    ("claudecode without an entrypoint", dict(CLAUDECODE="1"), False),
+])
+def test_help_augmentation_follows_the_detector(monkeypatch, name, vars_, expected):
+    from endless import agent_help
+    _pin_env(monkeypatch, **vars_)
+    monkeypatch.setattr(agent_help, "_AGENT_VIEW", False)
+    assert agent_help._should_augment() is expected, name
+    # --agent-view is a human's deliberate preview, not harness detection, so it
+    # stays an independent term rather than being folded in.
+    monkeypatch.setattr(agent_help, "_AGENT_VIEW", True)
+    assert agent_help._should_augment() is True
+
+
+def test_the_third_spelling_is_gone():
+    """agent_help no longer answers the harness question itself.
+
+    Its `is_claude_code_agent()` was folded into `_should_augment()`, its only
+    caller. Re-adding a module-level harness predicate here is how the codebase
+    grows a second answer to a question that has one.
+
+    Scoped to harness IDENTITY. task_cmd still reads CLAUDECODE in two places
+    that ask something else: `_current_endless_session_id()` pairs it with
+    CLAUDE_CODE_SESSION_ID to resolve WHICH session this is (E-1455), and
+    `task_attach_impl` uses it to refuse an exec that would kill the caller's
+    own Claude process (E-1570). Neither asks which harness is running.
+    """
+    from endless import agent_help
+    assert not hasattr(agent_help, "is_claude_code_agent")
+
+
 # ─── the CLI refusal ────────────────────────────────────────────────────────
 
 

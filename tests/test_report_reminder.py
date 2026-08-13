@@ -13,11 +13,14 @@ The reminder fires ONLY on the agent-driven wind-down transitions:
 
 It does NOT fire on submitted, ready, confirmed, the claim's -> underway, or
 the revisit/declined/obsolete management transitions.
+
+Nor in a project that turned the report channel off with `"report_gate": false`
+(E-1966) — see the last section.
 """
 
 import pytest
 
-from endless import agent_help, db, task_cmd
+from endless import agent_help, config, db, task_cmd
 
 # Stable substring of the reminder — the pointer at the report command.
 # The reminder renders `endless task report E-<id>`; this fragment is what
@@ -178,3 +181,65 @@ def test_agent_view_flag_lets_human_preview(seeded_project_at_cwd, capsys, monke
     tid = _add_task("Fix the agent-view path", status="underway")
     task_cmd.update_plan(tid, status="unverified")
     assert _fired(capsys)
+
+
+# ─── the report_gate gate (E-1966) ────────────────────────────────────────────
+#
+# The nudge does not merely advise; it asserts that all further reporting for
+# the session goes through `task report`. Where the project set
+# `"report_gate": false` nothing routes it and nothing enforces it, so the
+# assertion is false — and a session told it is being checked when it is not
+# learns that Endless's statements about its own behavior cannot be relied on.
+# The Go side already refuses to emit its PostToolUse twin under the same key
+# (E-1953, TestReportReinforcement_RespectsTheSwitch); this emitter was missed.
+#
+# Every test here runs with the agent gate open (autouse fixture above), so a
+# silence below is the config key's doing and nothing else.
+
+
+def _write_gate(project_dir, value) -> None:
+    """Give the cwd project a .endless/config.json — with or without the key."""
+    cfg = {"name": "test", "status": "active"}
+    if value is not None:
+        cfg["report_gate"] = value
+    config.project_config_write(project_dir, cfg)
+
+
+def _wind_down(title: str) -> None:
+    task_cmd.update_plan(_add_task(title, status="underway"), status="unverified")
+
+
+def test_report_gate_off_stays_silent(seeded_project_at_cwd, capsys):
+    _write_gate(seeded_project_at_cwd, False)
+    _wind_down("Fix the gate-off path")
+    assert not _fired(capsys)
+
+
+def test_report_gate_on_still_fires(seeded_project_at_cwd, capsys):
+    _write_gate(seeded_project_at_cwd, True)
+    _wind_down("Fix the gate-on path")
+    assert _fired(capsys)
+
+
+def test_report_gate_unset_still_fires(seeded_project_at_cwd, capsys):
+    # A project that never heard of the setting keeps the channel: only an
+    # explicit `false` turns it off (config.project_report_gate's default).
+    _write_gate(seeded_project_at_cwd, None)
+    _wind_down("Fix the gate-unset path")
+    assert _fired(capsys)
+
+
+def test_unresolvable_project_root_fails_open(seeded_project_at_cwd, capsys, monkeypatch):
+    # Ignorance is not an opt-out. Dropping the nudge because a path lookup
+    # failed would leave sessions ungoverned in a project that wanted the gate.
+    monkeypatch.setattr(config, "enclosing_project_root", lambda cwd=None: None)
+    _wind_down("Fix the no-root path")
+    assert _fired(capsys)
+
+
+def test_gate_is_read_from_the_shared_helper(seeded_project_at_cwd, capsys, monkeypatch):
+    # The nudge and the spawn handoff ask the same question through the same
+    # function — no second copy of the three-line read to drift.
+    monkeypatch.setattr(task_cmd, "_report_gate_on", lambda: False)
+    _wind_down("Fix the shared-helper path")
+    assert not _fired(capsys)

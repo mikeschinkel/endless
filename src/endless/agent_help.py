@@ -18,17 +18,10 @@ import os
 
 import click
 
+from endless import agent_env
 from endless.guide_map import load_map
 
 _AGENT_VIEW = False
-
-
-def is_claude_code_agent() -> bool:
-    """Is the current process running inside a Claude Code agent harness?
-
-    Today: Claude Code (sets CLAUDECODE=1). Extend as other harnesses appear.
-    """
-    return os.environ.get("CLAUDECODE") == "1"
 
 
 def set_agent_view(value: bool) -> None:
@@ -41,7 +34,15 @@ def agent_view_requested() -> bool:
 
 
 def _should_augment() -> bool:
-    return is_claude_code_agent() or _AGENT_VIEW
+    """An agent is reading this help, or a human asked to see what one sees.
+
+    Harness detection is `agent_env`'s job (E-1962). This module used to carry
+    its own `is_claude_code_agent()` keyed on CLAUDECODE=1 — a third spelling
+    of the same question, alongside `task_cmd._running_under_agent()` and the
+    detector itself. Folded in E-1966: one detector, no copies that can drift
+    apart.
+    """
+    return agent_env.detect() != agent_env.UNKNOWN or _AGENT_VIEW
 
 
 def _command_path(ctx: click.Context) -> str:

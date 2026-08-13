@@ -226,14 +226,25 @@ def _emit_field_changes(
 
 
 def _running_under_agent() -> bool:
-    """True if invoked from an LLM agent harness.
+    """True if invoked from an LLM agent harness — any recognized one.
 
-    Today: Claude Code (sets CLAUDECODE=1). Extend as other harnesses are
-    encountered. Used only to surface a stronger anti-rationalization variant
-    of the verb-gate error — never to gate behavior.
+    A convenience wrapper, not a second implementation: `agent_env` (E-1962)
+    owns harness detection, and this names the question its two callers
+    actually ask — the anti-rationalization variant of the verb-gate error, and
+    the wind-down report nudge — in their vocabulary. It used to key on
+    CLAUDECODE=1 directly, which answered "some Claude Code" rather than which,
+    and missed every non-Claude harness.
+
+    Deliberately `detect() != UNKNOWN`, not `supported()`: both callers want
+    "am I talking to an agent at all", not "is this harness supported". Since
+    E-1962 the CLI refuses an unsupported harness at the group callback, so by
+    the time either caller runs a recognized harness is a supported one.
+
+    (An earlier docstring said "never to gate behavior". That stopped being
+    true when E-1772 added the nudge, which does.)
     """
-    import os
-    return os.environ.get("CLAUDECODE") == "1"
+    from endless import agent_env
+    return agent_env.detect() != agent_env.UNKNOWN
 
 
 _VERB_CHECK_PROMPT_TEMPLATE = (
@@ -2936,14 +2947,25 @@ def _maybe_emit_report_reminder(
 
     The reminder steers an *agent*; a human running `task assume`/`complete`
     interactively should not see it. So it fires only when the invoker is an
-    agent (CLAUDECODE=1) or a human explicitly asked to preview the agent's
-    view with the global `--agent-view` flag — the same gate the agent `--help`
-    augmentation uses."""
+    agent harness or a human explicitly asked to preview the agent's view with
+    the global `--agent-view` flag — the same gate the agent `--help`
+    augmentation uses.
+
+    And only in a project that actually runs the report channel (E-1966). The
+    nudge asserts that all further reporting goes through `task report`; where
+    `report_gate` is off nothing routes it and nothing enforces it, so the
+    assertion is simply false — the Python twin of the PostToolUse defect
+    E-1953 fixed on the Go side. An instruction may outlive its enforcement
+    harmlessly; a claim about enforcement may not, because a session told it is
+    being checked when it is not learns that Endless's statements about its own
+    behavior cannot be relied on."""
     from endless.agent_help import agent_view_requested
 
     if not (_running_under_agent() or agent_view_requested()):
         return
     if not _is_report_wind_down(old_status, new_status, outcome_present):
+        return
+    if not _report_gate_on():
         return
     bullet = click.style("▸", fg="yellow")
     click.echo("")
@@ -5333,7 +5355,7 @@ def render_handoff(spawned_id: int, title: str,
         # project that switched it off must not be handed the reporting
         # instructions at all — they would cost every spawned session a per-turn
         # model round trip that nothing enforces and nothing reads.
-        "report_gate": _handoff_report_gate(),
+        "report_gate": _report_gate_on(),
     }
     if respawn:
         vars_payload["restore_case"] = restore_case or "reused"
@@ -5353,14 +5375,19 @@ def render_handoff(spawned_id: int, title: str,
     return result.stdout
 
 
-def _handoff_report_gate() -> bool:
+def _report_gate_on() -> bool:
     """Whether the enclosing project runs the report channel (E-1953).
+
+    Not handoff-specific: two emitters ask this now — the spawn handoff, which
+    omits the reporting instructions entirely where the channel is off, and the
+    wind-down nudge (E-1966). Anything that tells a session the channel is live
+    asks here first.
 
     Defaults to True when no project root can be resolved, matching the Go
     side: the channel ships on, and an unresolvable root is ignorance rather
-    than an opt-out. A handoff that silently dropped the instructions because a
-    path lookup failed would leave sessions ungoverned in a project that wanted
-    the gate — the failure direction that actually costs something.
+    than an opt-out. An emitter that silently dropped the instructions because
+    a path lookup failed would leave sessions ungoverned in a project that
+    wanted the gate — the failure direction that actually costs something.
     """
     from endless import config
     root = config.enclosing_project_root()
