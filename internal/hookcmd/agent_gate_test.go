@@ -24,6 +24,50 @@ func TestSupportedAgent_TracksTheHarness(t *testing.T) {
 	}
 }
 
+// TestRunClaude_NoOpsOnAnUnsupportedHarness pins that the Claude hook returns
+// before it does ANYTHING on an unsupported harness (E-1962).
+//
+// Proved by feeding it stdin that cannot be parsed. On a supported harness that
+// is an error; on an unsupported one it must be invisible, because the early
+// return happens before stdin is read at all. Asserting the returned error this
+// way is what distinguishes a real early return from a hook that runs and merely
+// happens to produce no output.
+func TestRunClaude_NoOpsOnAnUnsupportedHarness(t *testing.T) {
+	withStdin := func(t *testing.T, content string) {
+		t.Helper()
+		r, w, err := os.Pipe()
+		if err != nil {
+			t.Fatalf("pipe: %v", err)
+		}
+		if _, err := w.WriteString(content); err != nil {
+			t.Fatalf("write: %v", err)
+		}
+		w.Close()
+		orig := os.Stdin
+		os.Stdin = r
+		t.Cleanup(func() { os.Stdin = orig; r.Close() })
+	}
+
+	t.Run("desktop: never reads stdin", func(t *testing.T) {
+		os.Unsetenv("CLAUDE_CODE_ENTRYPOINT")
+		t.Setenv("CLAUDE_AGENT_SDK_VERSION", "0.3.222")
+		withStdin(t, "this is not JSON")
+		if err := runClaude(nil); err != nil {
+			t.Errorf("runClaude = %v, want nil — the hook must no-op before "+
+				"parsing anything on an unsupported harness", err)
+		}
+	})
+
+	t.Run("terminal: does read stdin", func(t *testing.T) {
+		t.Setenv("CLAUDE_CODE_ENTRYPOINT", "cli")
+		withStdin(t, "this is not JSON")
+		if err := runClaude(nil); err == nil {
+			t.Error("runClaude = nil on unparseable stdin; the supported-harness " +
+				"path is not running, so the test above proves nothing")
+		}
+	})
+}
+
 // TestReportChannelOn_ChecksTheHarness pins that the harness test sits inside
 // reportChannelOn rather than at one of its call sites (E-1962).
 //

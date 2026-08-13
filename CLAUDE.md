@@ -128,8 +128,16 @@ newly shipped host cannot silently start obeying contracts nobody chose for it.
 Making support project-configurable waits on **E-1505** (add support for Claude
 Desktop) — there is no second supported harness to configure until then.
 
-**What is gated:** the Claude hooks (silently — nothing to enforce, so nothing to
-say), and the **whole Python CLI**, which refuses with a banner and exits 1.
+**What is gated:** the Claude hook — `hook claude` returns immediately, before it
+reads stdin, so the entire hook is a no-op on an unsupported harness — and the
+**whole Python CLI**, which refuses with a banner and exits 1.
+
+The hook's no-op is **silent, exit 0, no stdout**. Anything else would surface as
+a Claude Code hook failure on every event, turning "we don't support this" into a
+stream of errors to chase. Half-running was the worse option: it gave a Desktop
+session a session row with an empty `process` (no tmux pane), so every
+pane→session lookup missed, and it once registered the home directory as a
+project (both recorded in E-1505).
 
 The CLI refusal is why this exists at all: CLAUDE.md files say "First: run
 `endless guide`", so an agent on an unsupported harness reads that, runs it, and
@@ -139,9 +147,9 @@ that the CLAUDE.md instruction does not apply there. It cites **no task id** —
 not use Endless here" plus "see E-NNNN" is a contradiction, since resolving the
 second requires the first.
 
-`endless-go` is not blanket-gated: its hook path must keep running on any harness
-(it is what registers sessions at all), and E-1962 gates only the report-channel
-consumers within it.
+`endless-go`'s other subcommands are not gated — they are invoked by the Python
+CLI and by tests, not by an agent. `hook codex` is an unimplemented stub and is
+left alone; gating it on `claude_cli` would be wrong the day it is written.
 
 The CLI refusal fails **open** on `unknown` (a human at a shell prompt keeps their
 tool) while the hooks fail **closed**. Deliberate asymmetry: the hooks are

@@ -94,6 +94,35 @@ type preToolUseHookOutput struct {
 }
 
 func runClaude(args []string) error {
+	// E-1962: on an unsupported harness the whole hook is a no-op — silently,
+	// and before stdin is even read.
+	//
+	// Not merely "skip the report channel". Endless cannot do its job on a
+	// harness it does not support, and the half-work is worse than nothing: a
+	// Desktop session gets a session row with an empty `process` (no tmux pane),
+	// which every pane→session lookup then fails to match, so session-gated
+	// commands fail for reasons that have nothing to do with what the user did.
+	// E-1505 also records the pollution this caused — a SessionStart from
+	// Desktop registering the home directory as a project.
+	//
+	// It also decouples the hook from the CLI refusal added alongside this:
+	// autoImportTask shells out to the Python `endless`, which now exits 1 on an
+	// unsupported harness. Returning here means that path is never reached
+	// there, rather than reached and failing.
+	//
+	// Silent and nil, never an error. A hook that logged or exited non-zero
+	// would surface as a Claude Code hook failure on every event — turning "we
+	// don't support this" into a stream of errors for the user to chase. Nothing
+	// is written to stdout either: the hook's stdout is one JSON document, and
+	// no output is exactly how a hook says "no action".
+	//
+	// Today the gate is "what is implemented" (the agentenv allow-list). E-1505
+	// is where a harness earns support, and where a project-level override would
+	// hang if one is ever wanted.
+	if !supportedAgent() {
+		return nil
+	}
+
 	data, err := io.ReadAll(os.Stdin)
 	if err != nil {
 		return fmt.Errorf("reading stdin: %w", err)

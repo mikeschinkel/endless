@@ -171,12 +171,26 @@ arm_checkpoint() {
         session-query relay-checkpoint --session-id "${SESSION_EID}" >/dev/null 2>&1
 }
 
+# `sql` is a PYTHON CLI subcommand — endless-go has no such verb. Routing it
+# through endless-go silently no-ops (the error goes to the /dev/null these calls
+# used to carry), which is how an earlier version of this script "reset" nothing
+# and still passed.
+sql() {
+    uv run endless sql "$1" --db sandbox 2>/dev/null
+}
+
+sql_write() {
+    uv run endless sql "$1" --write --db sandbox >/dev/null 2>&1
+}
+
+# sql_scalar QUERY -> the single value in the first result row.
+sql_scalar() {
+    sql "$1" | sed -n '3p' | tr -d ' '
+}
+
 reset_turn() {
-    ./bin/endless-go --config-dir "${SANDBOX_CFG}" sql \
-        "DELETE FROM session_gates" --write >/dev/null 2>&1
-    ./bin/endless-go --config-dir "${SANDBOX_CFG}" sql \
-        "UPDATE sessions SET report_bounces=0, report_exempt=0, report_runs=0" \
-        --write >/dev/null 2>&1
+    sql_write "DELETE FROM session_gates"
+    sql_write "UPDATE sessions SET report_bounces=0, report_exempt=0, report_runs=0"
 }
 
 # ─── assertions ─────────────────────────────────────────────────────────────
@@ -212,7 +226,12 @@ assert_empty() {
 test_build_and_suites() {
     section "Part 0 — build + automated suites (fail-fast)"
 
-    assert_succeeds "go build ./..." go build ./...
+    # `just build`, NOT `go build ./...`. The latter compiles and discards; it
+    # leaves bin/endless-go untouched, so every end-to-end part below would drive
+    # whatever binary happened to be lying there. That is not hypothetical — it
+    # bit this suite during development, and a stale binary passing looks exactly
+    # like the change working.
+    assert_succeeds "just build (refreshes bin/endless-go)" just build
     assert_succeeds "go vet ./internal/agentenv/... ./internal/hookcmd/..." \
         go vet ./internal/agentenv/... ./internal/hookcmd/...
     assert_succeeds "go test ./internal/agentenv/... (detector table + allow-list)" \
@@ -273,6 +292,33 @@ test_harness_discrimination() {
     out=$(hook desktop "$(posttooluse_payload "${GATE_ON_DIR}")")
     assert_empty "PostToolUse/desktop: no reinforcement" "${out}"
     reset_turn
+
+    # The stronger claim: on an unsupported harness the hook is a NO-OP, not
+    # merely quiet. Silence alone would also be produced by a hook that ran, wrote
+    # a session row and had nothing to say — and that row is the actual harm
+    # (E-1505: a Desktop session gets an empty `process`, so every pane→session
+    # lookup misses, and a SessionStart once registered the home directory as a
+    # project). Proved by writing to the DB, not by reading stdout.
+    local fresh="e1962dead-0000-4000-8000-00000000dead" rows
+    # Clear first: the sandbox DB survives between runs, so a row left by an
+    # earlier run would make this assert the past instead of the present.
+    sql_write "DELETE FROM sessions WHERE session_id = '${fresh}'"
+    rm -f .endless/worktree.lock
+    hook desktop "$(printf '{"session_id":"%s","cwd":"%s","hook_event_name":"SessionStart","transcript_path":"","source":"startup"}' \
+        "${fresh}" "${GATE_ON_DIR}")" >/dev/null
+    rows=$(sql_scalar "SELECT COUNT(*) FROM sessions WHERE session_id = '${fresh}'")
+    assert_eq "SessionStart/desktop: registers no session row" "0" "${rows}"
+
+    # And it leaves no worktree lock. Same point one layer out: the lock is
+    # written during the same event, and a stray one blocks the next real claim
+    # with "this worktree is already owned by <a session that never existed>".
+    if [[ -f .endless/worktree.lock ]] && grep -q "${fresh}" .endless/worktree.lock; then
+        report_fail "SessionStart/desktop: writes no worktree lock" \
+            "no lock naming the desktop session" "$(cat .endless/worktree.lock)"
+        rm -f .endless/worktree.lock
+    else
+        report_pass "SessionStart/desktop: writes no worktree lock"
+    fi
 }
 
 # ─── Part 2: the harness vetoes, never overrides ────────────────────────────────
