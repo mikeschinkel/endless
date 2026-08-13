@@ -613,6 +613,16 @@ main() {
     fi
     cd "${repo_root}" || exit 2
 
+    # E-1962: the report channel is a TERMINAL contract — the hook reads
+    # CLAUDE_CODE_ENTRYPOINT and stays silent on any other surface. Every hook
+    # invocation below is impersonating a terminal Claude session, so it has to
+    # supply the environment one would carry. Exported rather than assumed
+    # because this script is normally run from a BARE shell (`esu &&
+    # ./tests/tasks/...`), where the variable is absent and the gate would
+    # correctly refuse to fire — 12 assertions would fail proving nothing about
+    # E-1953.
+    export CLAUDE_CODE_ENTRYPOINT=cli
+
     if ! command -v uv >/dev/null 2>&1; then
         printf 'ERROR: uv not on PATH\n' >&2
         exit 2

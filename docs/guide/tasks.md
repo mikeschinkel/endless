@@ -400,6 +400,19 @@ Switch it off per project with `"report_gate": false` in `.endless/config.json`.
 It defaults **on**, and it deliberately does not live in `.claude/settings.json`
 — a gate an agent can switch off in the course of normal work is not a gate.
 
+The channel is **terminal-only** (E-1962). A session running in the Claude Code
+Desktop app, an IDE extension, or any other host is neither told to use the
+channel nor gated by it, whatever `report_gate` says — the two are independent
+vetoes and both must say yes. Surface is read from `CLAUDE_CODE_ENTRYPOINT`,
+which terminal Claude Code sets to `cli` and which the Desktop app (an Agent SDK
+host) does not set at all. It is an allow-list, so a Claude Code surface nobody
+has seen yet lands outside the channel rather than silently inside it.
+
+One consequence worth knowing: `endless task spawn` opens a **tmux window**, so
+the session it hands off to is a terminal one and gets the contract regardless of
+which surface ran the command. `endless task claim` renders its handoff in the
+claiming session's own hook, so that one does follow the surface.
+
 ### Telling the minimizer how it did
 
 Four labels, recognized only as the **first token of a line** of your user's

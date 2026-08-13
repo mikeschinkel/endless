@@ -1,0 +1,380 @@
+#!/usr/bin/env bash
+#
+# E-1962 verification — the report channel is a TERMINAL contract.
+#
+# Run from anywhere inside the worktree:
+#   ./tests/tasks/e-1962-verify.sh
+#
+# Single entry point (per E-1596). Fail-fast on the unit contracts, then drive
+# the REAL hook binary once per surface and watch what it does.
+#
+#   0. Build + `go test ./internal/hookcmd/...` (the allow-list table and the
+#      call-site placement assertions).
+#   1. Surface discrimination through the real hook, on all three consumers:
+#      the SessionStart rule, the Stop gate, and the PostToolUse reinforcement.
+#      Terminal fires; Desktop is silent on every one of them.
+#   2. Surface VETOES, it does not override: a terminal session in a project
+#      carrying `"report_gate": false` stays off.
+#   3. The claim handoff carries the same discrimination.
+#   4. E-1953's own suite still passes — the regression this change could most
+#      easily have caused.
+#
+# Exit 0 on all-passed, 1 on any failure.
+#
+# How the two surfaces are simulated: by the environment, because that is
+# literally the whole mechanism. Terminal Claude Code exports
+# CLAUDE_CODE_ENTRYPOINT=cli to its hook subprocesses; the Desktop app hosts the
+# agent through the Agent SDK and exports nothing of the sort. `env -u` is
+# therefore not a stub of Desktop — it reproduces the Desktop condition exactly.
+#
+# Why the hook runs with an explicit --config-dir: `endless-go hook` calls
+# PinMainDB (E-1450/E-1429) so hook-fired writes always hit the REAL DB
+# regardless of cwd. HasExplicitDBContext is the documented seam for exactly
+# this case, which is what lets a test drive the hook against the sandbox
+# instead of the user's real ledger.
+#
+# Why a synthetic cwd: this repo ships `"report_gate": false` in its own
+# .endless/config.json, so a gate test run from the worktree root would fail
+# open and prove nothing. Two throwaway directories under the gitignored
+# .endless/tmp/ carry an explicit `true` and `false`, exercising the REAL
+# nearest-config resolution.
+#
+# Model: tests/tasks/e-1953-verify.sh.
+
+set -u
+
+# ─── globals ────────────────────────────────────────────────────────────────
+
+PASS_COUNT=0
+FAIL_COUNT=0
+FAILED_TESTS=()
+
+if [[ -t 1 ]]; then
+    GREEN=$'\033[32m'; RED=$'\033[31m'; DIM=$'\033[2m'; BOLD=$'\033[1m'; RESET=$'\033[0m'
+else
+    GREEN=""; RED=""; DIM=""; BOLD=""; RESET=""
+fi
+
+UNDERLINE="──────────────────────────────────────────────────────────────"
+
+# A fixed synthetic session UUID so the end-to-end path does not depend on this
+# script being run from inside a Claude session.
+TEST_UUID="e1962e1962-0000-4000-8000-000000000962"
+SANDBOX_CFG=""
+SESSION_EID=""
+GATE_ON_DIR=""
+GATE_OFF_DIR=""
+
+# ─── output ─────────────────────────────────────────────────────────────────
+
+section() {
+    printf '\n%s%s%s\n' "${BOLD}" "$1" "${RESET}"
+    printf '%s\n' "${UNDERLINE}"
+}
+
+report_pass() {
+    printf '  %s✓%s %s\n' "${GREEN}" "${RESET}" "$1"
+    PASS_COUNT=$((PASS_COUNT + 1))
+}
+
+report_fail() {
+    printf '  %s✗%s %s\n' "${RED}" "${RESET}" "$1"
+    printf '      %sexpected:%s %s\n' "${DIM}" "${RESET}" "$2"
+    printf '      %sgot:%s      %s\n' "${DIM}" "${RESET}" "$3"
+    FAIL_COUNT=$((FAIL_COUNT + 1))
+    FAILED_TESTS+=("$1")
+}
+
+note() {
+    printf '  %s•%s %s\n' "${DIM}" "${RESET}" "$1"
+}
+
+summary() {
+    printf '\n%sSummary%s\n' "${BOLD}" "${RESET}"
+    printf '%s\n' "${UNDERLINE}"
+    if [[ "${FAIL_COUNT}" -eq 0 ]]; then
+        printf '  %s%d passed%s\n' "${GREEN}" "${PASS_COUNT}" "${RESET}"
+        printf '\n  %sALL PASSED%s\n\n' "${GREEN}${BOLD}" "${RESET}"
+        return 0
+    fi
+    printf '  %s%d passed%s, %s%d failed%s\n' \
+        "${GREEN}" "${PASS_COUNT}" "${RESET}" "${RED}" "${FAIL_COUNT}" "${RESET}"
+    printf '\n  %sFAILED:%s\n' "${RED}${BOLD}" "${RESET}"
+    local t
+    for t in "${FAILED_TESTS[@]}"; do
+        printf '    - %s\n' "${t}"
+    done
+    printf '\n'
+    return 1
+}
+
+# ─── helpers ────────────────────────────────────────────────────────────────
+
+# hook SURFACE PAYLOAD -> the hook's stdout.
+#
+# SURFACE is `terminal` or `desktop`, and is the ONLY difference between the two
+# calls: same binary, same DB, same payload, same cwd.
+hook() {
+    local surface="$1" payload="$2"
+    case "${surface}" in
+        terminal) printf '%s' "${payload}" | env CLAUDE_CODE_ENTRYPOINT=cli \
+                      ./bin/endless-go --config-dir "${SANDBOX_CFG}" hook claude 2>/dev/null ;;
+        desktop)  printf '%s' "${payload}" | env -u CLAUDE_CODE_ENTRYPOINT \
+                      ./bin/endless-go --config-dir "${SANDBOX_CFG}" hook claude 2>/dev/null ;;
+        *)        printf 'BAD SURFACE %s' "${surface}" ;;
+    esac
+}
+
+session_start_payload() {
+    printf '{"session_id":"%s","cwd":"%s","hook_event_name":"SessionStart","transcript_path":"","source":"startup"}' \
+        "${TEST_UUID}" "$1"
+}
+
+stop_payload() {
+    printf '{"session_id":"%s","cwd":"%s","hook_event_name":"Stop","transcript_path":"","last_assistant_message":"I finished the thing."}' \
+        "${TEST_UUID}" "$1"
+}
+
+posttooluse_payload() {
+    printf '{"session_id":"%s","cwd":"%s","hook_event_name":"PostToolUse","tool_name":"Bash","tool_input":{"command":"endless task report --draft-file /tmp/d.md"}}' \
+        "${TEST_UUID}" "$1"
+}
+
+# Arm a rendered-report checkpoint, which is what the PostToolUse reinforcement
+# keys on (E-1953 made it key on the render, not the command name).
+arm_checkpoint() {
+    printf 'a minimized reply' | ./bin/endless-go --config-dir "${SANDBOX_CFG}" \
+        session-query relay-checkpoint --session-id "${SESSION_EID}" >/dev/null 2>&1
+}
+
+reset_turn() {
+    ./bin/endless-go --config-dir "${SANDBOX_CFG}" sql \
+        "DELETE FROM session_gates" --write >/dev/null 2>&1
+    ./bin/endless-go --config-dir "${SANDBOX_CFG}" sql \
+        "UPDATE sessions SET report_bounces=0, report_exempt=0, report_runs=0" \
+        --write >/dev/null 2>&1
+}
+
+# ─── assertions ─────────────────────────────────────────────────────────────
+
+assert_succeeds() {
+    local desc="$1"; shift
+    local output rc
+    output=$("$@" 2>&1); rc=$?
+    if [[ "${rc}" -eq 0 ]]; then report_pass "${desc}"; return; fi
+    report_fail "${desc}" "exit == 0" "exit=${rc} | output=${output}"
+}
+
+assert_text_contains() {
+    local desc="$1" needle="$2" haystack="$3"
+    if [[ "${haystack}" == *"${needle}"* ]]; then report_pass "${desc}"; return; fi
+    report_fail "${desc}" "output contains '${needle}'" "${haystack:0:200}"
+}
+
+assert_empty() {
+    local desc="$1" got="$2"
+    if [[ -z "${got}" ]]; then report_pass "${desc}"; return; fi
+    report_fail "${desc}" "no hook output at all" "${got:0:200}"
+}
+
+# ─── Part 0: build + automated suites ───────────────────────────────────────
+
+test_build_and_suites() {
+    section "Part 0 — build + automated suites (fail-fast)"
+
+    assert_succeeds "go build ./..." go build ./...
+    assert_succeeds "go vet ./internal/hookcmd/..." go vet ./internal/hookcmd/...
+    assert_succeeds "go test ./internal/hookcmd/... (allow-list + call sites)" \
+        go test ./internal/hookcmd/...
+
+    if [[ "${FAIL_COUNT}" -gt 0 ]]; then
+        printf '\n  %sFail-fast: the unit contracts are broken; skipping the live parts.%s\n' \
+            "${RED}${BOLD}" "${RESET}"
+        summary
+        exit 1
+    fi
+}
+
+# ─── Part 1: the three consumers discriminate ───────────────────────────────
+
+# The load-bearing part. E-1953's invariant is that a session is never TOLD to
+# use a channel that will not gate it, nor gated without having been told — so
+# it is not enough that Desktop stops being blocked at Stop. All three consumers
+# have to move together, which is why the surface check lives in
+# reportChannelOn rather than at any one call site.
+test_surface_discrimination() {
+    section "Part 1 — terminal fires, Desktop is silent (real hook binary)"
+
+    local out
+
+    out=$(hook terminal "$(session_start_payload "${GATE_ON_DIR}")")
+    assert_text_contains "SessionStart/terminal: the report rule is injected" \
+        'Report channel: every reply you send the user' "${out}"
+    assert_text_contains "SessionStart/terminal: names the command" \
+        '--draft-file' "${out}"
+
+    out=$(hook desktop "$(session_start_payload "${GATE_ON_DIR}")")
+    assert_empty "SessionStart/desktop: nothing injected" "${out}"
+
+    reset_turn
+    out=$(hook terminal "$(stop_payload "${GATE_ON_DIR}")")
+    assert_text_contains "Stop/terminal: an unreported reply is blocked" \
+        '"decision":"block"' "${out}"
+    assert_text_contains "Stop/terminal: names the command it wanted" \
+        'endless task report' "${out}"
+
+    reset_turn
+    out=$(hook desktop "$(stop_payload "${GATE_ON_DIR}")")
+    assert_empty "Stop/desktop: the turn is allowed to end" "${out}"
+
+    reset_turn
+    arm_checkpoint
+    out=$(hook terminal "$(posttooluse_payload "${GATE_ON_DIR}")")
+    assert_text_contains "PostToolUse/terminal: the reinforcement fires" \
+        'verbatim' "${out}"
+
+    reset_turn
+    arm_checkpoint
+    out=$(hook desktop "$(posttooluse_payload "${GATE_ON_DIR}")")
+    assert_empty "PostToolUse/desktop: no reinforcement" "${out}"
+    reset_turn
+}
+
+# ─── Part 2: surface vetoes, never overrides ────────────────────────────────
+
+# The direction that protects Endless's own checkout. Surface and `report_gate`
+# are independent veto axes: a terminal session is necessary for the channel,
+# never sufficient. If this regressed, the one repo that deliberately opted out
+# would have the gate switched back on under it.
+test_surface_does_not_override_config() {
+    section "Part 2 — surface VETOES; it does not override report_gate"
+
+    local out
+    out=$(hook terminal "$(session_start_payload "${GATE_OFF_DIR}")")
+    assert_empty "terminal + report_gate:false: still no rule" "${out}"
+
+    reset_turn
+    out=$(hook terminal "$(stop_payload "${GATE_OFF_DIR}")")
+    assert_empty "terminal + report_gate:false: Stop still not gated" "${out}"
+    reset_turn
+
+    note "this repo's own .endless/config.json ships report_gate:false"
+}
+
+# ─── Part 3: the claim handoff ──────────────────────────────────────────────
+
+# The claim handoff renders in the CLAIMING session's own hook, so its
+# environment is that session's. A Desktop session that claims a task must not
+# be handed a contract its own Stop hook will not enforce — the same defect,
+# one surface over.
+test_claim_handoff() {
+    section "Part 3 — the claim handoff carries the same discrimination"
+
+    local src
+    src=$(cat internal/hookcmd/claim_handoff.go)
+    assert_text_contains "claim handoff ANDs surface with the config key" \
+        'terminalSurface() && monitor.ReportGateEnabledForCwd(' "${src}"
+
+    # And that the Python spawn handoff was deliberately left alone: `task
+    # spawn` opens a tmux window, so the session it describes is a terminal by
+    # construction no matter which surface ran the command. Gating it on the
+    # CALLER's environment would strip the contract from terminal sessions
+    # spawned from Desktop.
+    local py
+    py=$(cat src/endless/task_cmd.py)
+    if [[ "${py}" == *"CLAUDE_CODE_ENTRYPOINT"* ]]; then
+        report_fail "python spawn handoff stays surface-agnostic" \
+            "no CLAUDE_CODE_ENTRYPOINT in task_cmd.py" "found one"
+    else
+        report_pass "python spawn handoff stays surface-agnostic"
+    fi
+}
+
+# ─── Part 4: E-1953 still passes ────────────────────────────────────────────
+
+# The regression this change could most easily have caused: E-1953's script
+# drives the same hook from a bare shell, where CLAUDE_CODE_ENTRYPOINT is
+# absent. It now exports the terminal environment it is impersonating.
+test_e1953_unbroken() {
+    section "Part 4 — E-1953's suite still passes (delegated)"
+
+    if [[ ! -x tests/tasks/e-1953-verify.sh ]]; then
+        report_fail "E-1953 suite is runnable" "tests/tasks/e-1953-verify.sh executable" "missing"
+        return
+    fi
+
+    assert_text_contains "E-1953 supplies the terminal environment it impersonates" \
+        'export CLAUDE_CODE_ENTRYPOINT=cli' "$(cat tests/tasks/e-1953-verify.sh)"
+
+    note "running E-1953 end-to-end (calls a model; this takes a minute)"
+    local out
+    out=$(env -u CLAUDE_CODE_ENTRYPOINT ./tests/tasks/e-1953-verify.sh 2>&1)
+    assert_text_contains "E-1953 passes from a BARE shell (no inherited env)" \
+        "ALL PASSED" "${out}"
+}
+
+# ─── main ───────────────────────────────────────────────────────────────────
+
+cleanup() {
+    [[ -n "${GATE_ON_DIR}"  && -d "${GATE_ON_DIR}"  ]] && rm -rf "${GATE_ON_DIR}"
+    [[ -n "${GATE_OFF_DIR}" && -d "${GATE_OFF_DIR}" ]] && rm -rf "${GATE_OFF_DIR}"
+    return 0
+}
+
+main() {
+    local repo_root
+    repo_root=$(git rev-parse --show-toplevel 2>/dev/null)
+    if [[ -z "${repo_root}" ]]; then
+        printf 'ERROR: not inside a git worktree\n' >&2
+        exit 2
+    fi
+    cd "${repo_root}" || exit 2
+
+    # Deliberately NOT exported here, unlike E-1953's script: this suite's whole
+    # subject is the difference between the two environments, so each hook call
+    # sets its own.
+    unset CLAUDE_CODE_ENTRYPOINT
+
+    if ! command -v uv >/dev/null 2>&1; then
+        printf 'ERROR: uv not on PATH\n' >&2
+        exit 2
+    fi
+
+    SANDBOX_CFG="$(uv run endless db path --db sandbox 2>/dev/null | xargs dirname)"
+    if [[ -z "${SANDBOX_CFG}" || ! -d "${SANDBOX_CFG}" ]]; then
+        printf 'ERROR: cannot resolve the sandbox config dir; run `just dev-sandbox-init`\n' >&2
+        exit 2
+    fi
+
+    GATE_ON_DIR="${repo_root}/.endless/tmp/e-1962-gate-on"
+    GATE_OFF_DIR="${repo_root}/.endless/tmp/e-1962-gate-off"
+    trap cleanup EXIT
+    mkdir -p "${GATE_ON_DIR}/.endless" "${GATE_OFF_DIR}/.endless"
+    printf '{"report_gate": true}\n'  > "${GATE_ON_DIR}/.endless/config.json"
+    printf '{"report_gate": false}\n' > "${GATE_OFF_DIR}/.endless/config.json"
+
+    printf '%sE-1962 verification%s\n' "${BOLD}" "${RESET}"
+    printf '%s\n' "${UNDERLINE}"
+    printf '  cwd:      %s\n' "${repo_root}"
+    printf '  db:       sandbox (%s)\n' "${SANDBOX_CFG}"
+    printf '  gate on:  %s\n' "${GATE_ON_DIR}"
+    printf '  gate off: %s\n' "${GATE_OFF_DIR}"
+
+    test_build_and_suites
+
+    SESSION_EID=$(./bin/endless-go --config-dir "${SANDBOX_CFG}" session-query ensure-claude-id \
+        --session-id "${TEST_UUID}" --project-root "${repo_root}" 2>/dev/null)
+    if [[ ! "${SESSION_EID}" =~ ^[0-9]+$ ]]; then
+        printf '\nERROR: could not create a sandbox session row (got %q)\n' "${SESSION_EID}" >&2
+        exit 2
+    fi
+
+    test_surface_discrimination
+    test_surface_does_not_override_config
+    test_claim_handoff
+    test_e1953_unbroken
+
+    summary
+}
+
+main "$@"

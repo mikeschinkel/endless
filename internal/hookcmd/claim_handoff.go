@@ -155,7 +155,15 @@ func claimHandoffVars(projectID, taskID int64) (map[string]any, error) {
 		// E-1953: a project that switched the report channel off must not be
 		// handed the reporting instructions. They would cost the session a
 		// per-turn model round trip that nothing enforces and nothing reads.
-		"report_gate": monitor.ReportGateEnabledForCwd(worktreePath, projectRoot),
+		//
+		// E-1962: same for a non-terminal surface. This handoff is rendered by
+		// the claiming session's own hook, so the environment read here IS that
+		// session's — a Desktop session claiming a task must not be handed a
+		// contract its Stop hook will not enforce. (Contrast the Python spawn
+		// handoff, which stays surface-agnostic on purpose: `task spawn` opens a
+		// tmux window, so the session it describes is a terminal by
+		// construction, whatever surface ran the command.)
+		"report_gate": terminalSurface() && monitor.ReportGateEnabledForCwd(worktreePath, projectRoot),
 	}, nil
 }
 

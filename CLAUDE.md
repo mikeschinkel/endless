@@ -88,6 +88,16 @@ says nothing inherits rather than resetting to the default.
 The switch deliberately does **not** live in `.claude/settings.json`: a gate an
 agent edits in the course of normal work is not a gate.
 
+**Terminal-only** (E-1962). Surface is a second, independent veto: the channel
+runs only when `CLAUDE_CODE_ENTRYPOINT=cli` — terminal Claude Code — so a Desktop
+app or IDE-extension session is neither told to use it nor gated by it, whatever
+`report_gate` says. Detection is an allow-list in
+`internal/hookcmd/surface.go:terminalSurface`, consulted from `reportChannelOn`
+so the SessionStart rule, the PostToolUse reinforcement, and the Stop gate can
+never disagree. Anything that drives the hook while impersonating a terminal
+session — `tests/tasks/e-1953-verify.sh`, for one — has to export that variable,
+because a bare shell does not have it.
+
 Prompt wording is a config surface, not source. Override `minimize` / `denylist`
 in `.endless/report-prompts.jsonl` (or the machine layer) — that needs no task
 and no land. Promoting an override into the embedded default in
