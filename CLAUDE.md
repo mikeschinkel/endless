@@ -88,15 +88,14 @@ says nothing inherits rather than resetting to the default.
 The switch deliberately does **not** live in `.claude/settings.json`: a gate an
 agent edits in the course of normal work is not a gate.
 
-**Terminal-only** (E-1962). Surface is a second, independent veto: the channel
-runs only when `CLAUDE_CODE_ENTRYPOINT=cli` — terminal Claude Code — so a Desktop
-app or IDE-extension session is neither told to use it nor gated by it, whatever
-`report_gate` says. Detection is an allow-list in
-`internal/hookcmd/surface.go:terminalSurface`, consulted from `reportChannelOn`
-so the SessionStart rule, the PostToolUse reinforcement, and the Stop gate can
-never disagree. Anything that drives the hook while impersonating a terminal
-session — `tests/tasks/e-1953-verify.sh`, for one — has to export that variable,
-because a bare shell does not have it.
+**Supported harnesses only** (E-1962). The agent harness is a second,
+independent veto: the channel runs only under a harness Endless supports, so a
+Desktop session is neither told to use it nor gated by it, whatever `report_gate`
+says. Consulted from `reportChannelOn`, so the SessionStart rule, the PostToolUse
+reinforcement, and the Stop gate can never disagree.
+
+Anything that drives the hook while impersonating a session has to export that
+session's environment — a bare shell is not a recognized harness.
 
 Prompt wording is a config surface, not source. Override `minimize` / `denylist`
 in `.endless/report-prompts.jsonl` (or the machine layer) — that needs no task
@@ -104,9 +103,50 @@ and no land. Promoting an override into the embedded default in
 `src/endless/report_prompts.py` is where the ceremony lives, gated on beating the
 current default over the persisted corpus.
 
+## Which agent harness is this? — E-1962
+
+`internal/agentenv` answers "which agent harness is running Endless, and do we
+support it?" from the environment the harness exports to its subprocesses.
+Python mirror: `src/endless/agent_env.py` (thin, for `endless guide`; the Go side
+is the one that enforces).
+
+Named `agentenv`, not `agent`, because Endless already calls the background
+workers under an epic "agents" (`endless agents`). This is about the *host*.
+
+| harness | id | supported | signal |
+|---|---|---|---|
+| Claude Code, terminal | `claude_cli` | **yes** | `CLAUDE_CODE_ENTRYPOINT=cli` |
+| Claude Code Desktop | `claude_desktop` | no | `__CFBundleIdentifier=com.anthropic.claudefordesktop`, or `CLAUDE_AGENT_SDK_VERSION` set with no entrypoint |
+| anything else | `unknown` | no | — |
+
+Adding a harness is a row in `detectors` plus an id constant. Do **not** add one
+speculatively: a detector never checked against a real `env` dump of that harness
+is a guess, and a guess fails silently. Get the dump first.
+
+`supported` is an allow-list. An unrecognized harness lands outside it, so a
+newly shipped host cannot silently start obeying contracts nobody chose for it.
+Making support project-configurable waits on **E-1505** (add support for Claude
+Desktop) — there is no second supported harness to configure until then.
+
+**What is gated:** the Claude hooks, and `endless guide`. Nothing else. A hook
+fires inside the session and speaks to the agent, so it is where an unsupported
+harness gets mis-instructed; `endless guide` is the one command whose entire
+output is instructions. Commands a user runs by hand are not gated — an
+unsupported harness running `endless task add` is a person using a tool.
+
+The guide banner fails **open** on `unknown` (a human at a shell prompt still
+gets the guide) while the hooks fail **closed**. Deliberate asymmetry: the hooks
+are enforcement, the banner is advice.
+
 ## Tests
 
 Use `just test` to run Python tests.
+
+**Verify scripts (`tests/tasks/e-NNNN-verify.sh`) are pre-land gates, not a
+regression suite.** One is valid only immediately before land, in the worktree
+for its own task. Do not run another task's script, do not edit a landed one to
+keep it green, and do not have yours delegate to one. Project-wide regression is
+`go build/vet/test ./...` plus `just test`.
 
 ## Task status lifecycle
 

@@ -1,31 +1,37 @@
 #!/usr/bin/env bash
 #
-# E-1962 verification — the report channel is a TERMINAL contract.
+# E-1962 verification — Endless runs against SUPPORTED agent harnesses only.
 #
 # Run from anywhere inside the worktree:
 #   ./tests/tasks/e-1962-verify.sh
 #
 # Single entry point (per E-1596). Fail-fast on the unit contracts, then drive
-# the REAL hook binary once per surface and watch what it does.
+# the REAL hook binary once per harness and watch what it does.
 #
-#   0. Build + `go test ./internal/hookcmd/...` (the allow-list table and the
-#      call-site placement assertions).
-#   1. Surface discrimination through the real hook, on all three consumers:
+#   0. Build + the automated suites: internal/agentenv (the detector table and
+#      the allow-list), internal/hookcmd (call-site placement), and the Python
+#      mirror plus the guide banner.
+#   1. Harness discrimination through the real hook, on all three consumers:
 #      the SessionStart rule, the Stop gate, and the PostToolUse reinforcement.
-#      Terminal fires; Desktop is silent on every one of them.
-#   2. Surface VETOES, it does not override: a terminal session in a project
+#      Claude Code CLI fires; Desktop is silent on every one of them.
+#   2. The harness VETOES, it does not override: a terminal session in a project
 #      carrying `"report_gate": false` stays off.
-#   3. The claim handoff carries the same discrimination.
-#   4. E-1953's own suite still passes — the regression this change could most
-#      easily have caused.
+#   3. The claim handoff carries the same discrimination; the Python spawn
+#      handoff provably does not.
+#   4. `endless guide` tells an unsupported harness to ignore Endless — and
+#      still prints for a human at a shell prompt.
 #
 # Exit 0 on all-passed, 1 on any failure.
 #
-# How the two surfaces are simulated: by the environment, because that is
-# literally the whole mechanism. Terminal Claude Code exports
-# CLAUDE_CODE_ENTRYPOINT=cli to its hook subprocesses; the Desktop app hosts the
-# agent through the Agent SDK and exports nothing of the sort. `env -u` is
-# therefore not a stub of Desktop — it reproduces the Desktop condition exactly.
+# How the harnesses are simulated: by the environment, because that is literally
+# the whole mechanism. Claude Code CLI exports CLAUDE_CODE_ENTRYPOINT=cli to its
+# subprocesses; the Desktop app hosts the agent through the Agent SDK and exports
+# CLAUDE_AGENT_SDK_VERSION with none of the CLI's variables. These are not stubs
+# — they reproduce the observed conditions exactly (dumps taken 2026-08-13).
+#
+# What this suite does NOT do: run any other task's verify script. Those are
+# pre-land gates for their own task in their own worktree, not a regression
+# suite. Project-wide regression here is `go build/vet/test ./...` + `just test`.
 #
 # Why the hook runs with an explicit --config-dir: `endless-go hook` calls
 # PinMainDB (E-1450/E-1429) so hook-fired writes always hit the REAL DB
@@ -110,18 +116,34 @@ summary() {
 
 # ─── helpers ────────────────────────────────────────────────────────────────
 
-# hook SURFACE PAYLOAD -> the hook's stdout.
+# hook HARNESS PAYLOAD -> the hook's stdout.
 #
-# SURFACE is `terminal` or `desktop`, and is the ONLY difference between the two
+# HARNESS is `terminal` or `desktop`, and is the ONLY difference between the two
 # calls: same binary, same DB, same payload, same cwd.
 hook() {
-    local surface="$1" payload="$2"
-    case "${surface}" in
+    local harness="$1" payload="$2"
+    case "${harness}" in
         terminal) printf '%s' "${payload}" | env CLAUDE_CODE_ENTRYPOINT=cli \
                       ./bin/endless-go --config-dir "${SANDBOX_CFG}" hook claude 2>/dev/null ;;
         desktop)  printf '%s' "${payload}" | env -u CLAUDE_CODE_ENTRYPOINT \
+                      CLAUDE_AGENT_SDK_VERSION=0.3.222 \
+                      __CFBundleIdentifier=com.anthropic.claudefordesktop \
                       ./bin/endless-go --config-dir "${SANDBOX_CFG}" hook claude 2>/dev/null ;;
-        *)        printf 'BAD SURFACE %s' "${surface}" ;;
+        *)        printf 'BAD HARNESS %s' "${harness}" ;;
+    esac
+}
+
+# guide HARNESS -> `endless guide` stdout under that harness.
+guide() {
+    case "$1" in
+        terminal) env CLAUDE_CODE_ENTRYPOINT=cli uv run endless guide 2>&1 ;;
+        desktop)  env -u CLAUDE_CODE_ENTRYPOINT CLAUDE_AGENT_SDK_VERSION=0.3.222 \
+                      __CFBundleIdentifier=com.anthropic.claudefordesktop \
+                      uv run endless guide 2>&1 ;;
+        human)    env -u CLAUDE_CODE_ENTRYPOINT -u CLAUDE_AGENT_SDK_VERSION \
+                      -u __CFBundleIdentifier -u CLAUDECODE \
+                      uv run endless guide 2>&1 ;;
+        *)        printf 'BAD HARNESS %s' "$1" ;;
     esac
 }
 
@@ -183,9 +205,14 @@ test_build_and_suites() {
     section "Part 0 — build + automated suites (fail-fast)"
 
     assert_succeeds "go build ./..." go build ./...
-    assert_succeeds "go vet ./internal/hookcmd/..." go vet ./internal/hookcmd/...
-    assert_succeeds "go test ./internal/hookcmd/... (allow-list + call sites)" \
+    assert_succeeds "go vet ./internal/agentenv/... ./internal/hookcmd/..." \
+        go vet ./internal/agentenv/... ./internal/hookcmd/...
+    assert_succeeds "go test ./internal/agentenv/... (detector table + allow-list)" \
+        go test ./internal/agentenv/...
+    assert_succeeds "go test ./internal/hookcmd/... (call-site placement)" \
         go test ./internal/hookcmd/...
+    assert_succeeds "pytest tests/test_agent_env.py (python mirror + banner)" \
+        uv run pytest tests/test_agent_env.py -q
 
     if [[ "${FAIL_COUNT}" -gt 0 ]]; then
         printf '\n  %sFail-fast: the unit contracts are broken; skipping the live parts.%s\n' \
@@ -200,10 +227,10 @@ test_build_and_suites() {
 # The load-bearing part. E-1953's invariant is that a session is never TOLD to
 # use a channel that will not gate it, nor gated without having been told — so
 # it is not enough that Desktop stops being blocked at Stop. All three consumers
-# have to move together, which is why the surface check lives in
+# have to move together, which is why the harness check lives in
 # reportChannelOn rather than at any one call site.
-test_surface_discrimination() {
-    section "Part 1 — terminal fires, Desktop is silent (real hook binary)"
+test_harness_discrimination() {
+    section "Part 1 — Claude Code CLI fires, Desktop is silent (real hook binary)"
 
     local out
 
@@ -240,14 +267,14 @@ test_surface_discrimination() {
     reset_turn
 }
 
-# ─── Part 2: surface vetoes, never overrides ────────────────────────────────
+# ─── Part 2: the harness vetoes, never overrides ────────────────────────────────
 
-# The direction that protects Endless's own checkout. Surface and `report_gate`
+# The direction that protects Endless's own checkout. The harness and `report_gate`
 # are independent veto axes: a terminal session is necessary for the channel,
 # never sufficient. If this regressed, the one repo that deliberately opted out
 # would have the gate switched back on under it.
-test_surface_does_not_override_config() {
-    section "Part 2 — surface VETOES; it does not override report_gate"
+test_harness_does_not_override_config() {
+    section "Part 2 — the harness VETOES; it does not override report_gate"
 
     local out
     out=$(hook terminal "$(session_start_payload "${GATE_OFF_DIR}")")
@@ -266,51 +293,65 @@ test_surface_does_not_override_config() {
 # The claim handoff renders in the CLAIMING session's own hook, so its
 # environment is that session's. A Desktop session that claims a task must not
 # be handed a contract its own Stop hook will not enforce — the same defect,
-# one surface over.
+# one harness over.
 test_claim_handoff() {
     section "Part 3 — the claim handoff carries the same discrimination"
 
     local src
     src=$(cat internal/hookcmd/claim_handoff.go)
-    assert_text_contains "claim handoff ANDs surface with the config key" \
-        'terminalSurface() && monitor.ReportGateEnabledForCwd(' "${src}"
+    assert_text_contains "claim handoff ANDs the harness with the config key" \
+        'supportedAgent() && monitor.ReportGateEnabledForCwd(' "${src}"
 
     # And that the Python spawn handoff was deliberately left alone: `task
-    # spawn` opens a tmux window, so the session it describes is a terminal by
-    # construction no matter which surface ran the command. Gating it on the
-    # CALLER's environment would strip the contract from terminal sessions
-    # spawned from Desktop.
+    # spawn` opens a tmux window, so the session it describes is a terminal
+    # Claude Code one by construction, no matter which harness ran the command.
+    # Gating it on the CALLER's environment would strip the contract from
+    # terminal sessions spawned from Desktop.
     local py
     py=$(cat src/endless/task_cmd.py)
-    if [[ "${py}" == *"CLAUDE_CODE_ENTRYPOINT"* ]]; then
-        report_fail "python spawn handoff stays surface-agnostic" \
-            "no CLAUDE_CODE_ENTRYPOINT in task_cmd.py" "found one"
+    if [[ "${py}" == *"agent_env"* || "${py}" == *"CLAUDE_CODE_ENTRYPOINT"* ]]; then
+        report_fail "python spawn handoff stays harness-agnostic" \
+            "no harness detection in task_cmd.py" "found some"
     else
-        report_pass "python spawn handoff stays surface-agnostic"
+        report_pass "python spawn handoff stays harness-agnostic"
     fi
 }
 
-# ─── Part 4: E-1953 still passes ────────────────────────────────────────────
+# ─── Part 4: the guide banner ───────────────────────────────────────────────
 
-# The regression this change could most easily have caused: E-1953's script
-# drives the same hook from a bare shell, where CLAUDE_CODE_ENTRYPOINT is
-# absent. It now exports the terminal environment it is impersonating.
-test_e1953_unbroken() {
-    section "Part 4 — E-1953's suite still passes (delegated)"
+# The one place Endless SPEAKS to an unsupported harness rather than staying
+# silent. Silence is right for the hooks — there is nothing to enforce — but a
+# Desktop session that runs `endless guide` has asked a direct question, and the
+# honest answer is that this tool does not support it.
+test_guide_banner() {
+    section "Part 4 — endless guide refuses an unsupported harness"
 
-    if [[ ! -x tests/tasks/e-1953-verify.sh ]]; then
-        report_fail "E-1953 suite is runnable" "tests/tasks/e-1953-verify.sh executable" "missing"
-        return
+    local out
+
+    out=$(guide desktop)
+    assert_text_contains "desktop: names the harness" \
+        'does not support Claude Code Desktop' "${out}"
+    assert_text_contains "desktop: tells it to ignore Endless" \
+        'Ignore Endless for this session' "${out}"
+    assert_text_contains "desktop: points at the tracking task" 'E-1505' "${out}"
+    # The banner and the guide are contradictory instructions; only one ships.
+    if [[ "${out}" == *"The happy path"* ]]; then
+        report_fail "desktop: the guide itself is withheld" \
+            "no guide body after the banner" "guide body present"
+    else
+        report_pass "desktop: the guide itself is withheld"
     fi
 
-    assert_text_contains "E-1953 supplies the terminal environment it impersonates" \
-        'export CLAUDE_CODE_ENTRYPOINT=cli' "$(cat tests/tasks/e-1953-verify.sh)"
+    out=$(guide terminal)
+    assert_text_contains "terminal: the guide prints normally" \
+        'Using Endless in a Claude Code Session' "${out}"
 
-    note "running E-1953 end-to-end (calls a model; this takes a minute)"
-    local out
-    out=$(env -u CLAUDE_CODE_ENTRYPOINT ./tests/tasks/e-1953-verify.sh 2>&1)
-    assert_text_contains "E-1953 passes from a BARE shell (no inherited env)" \
-        "ALL PASSED" "${out}"
+    # Fails OPEN where the hooks fail closed, and on purpose: UNKNOWN is
+    # overwhelmingly a person at a prompt, and refusing them would break a real
+    # workflow to defend against a harness that may not exist.
+    out=$(guide human)
+    assert_text_contains "bare shell: a human still gets the guide" \
+        'Using Endless in a Claude Code Session' "${out}"
 }
 
 # ─── main ───────────────────────────────────────────────────────────────────
@@ -330,7 +371,7 @@ main() {
     fi
     cd "${repo_root}" || exit 2
 
-    # Deliberately NOT exported here, unlike E-1953's script: this suite's whole
+    # Deliberately NOT exported here: this suite's whole
     # subject is the difference between the two environments, so each hook call
     # sets its own.
     unset CLAUDE_CODE_ENTRYPOINT
@@ -369,10 +410,10 @@ main() {
         exit 2
     fi
 
-    test_surface_discrimination
-    test_surface_does_not_override_config
+    test_harness_discrimination
+    test_harness_does_not_override_config
     test_claim_handoff
-    test_e1953_unbroken
+    test_guide_banner
 
     summary
 }

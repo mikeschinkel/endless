@@ -156,14 +156,14 @@ func claimHandoffVars(projectID, taskID int64) (map[string]any, error) {
 		// handed the reporting instructions. They would cost the session a
 		// per-turn model round trip that nothing enforces and nothing reads.
 		//
-		// E-1962: same for a non-terminal surface. This handoff is rendered by
-		// the claiming session's own hook, so the environment read here IS that
-		// session's — a Desktop session claiming a task must not be handed a
-		// contract its Stop hook will not enforce. (Contrast the Python spawn
-		// handoff, which stays surface-agnostic on purpose: `task spawn` opens a
-		// tmux window, so the session it describes is a terminal by
-		// construction, whatever surface ran the command.)
-		"report_gate": terminalSurface() && monitor.ReportGateEnabledForCwd(worktreePath, projectRoot),
+		// E-1962: same for an unsupported agent harness. This handoff is rendered
+		// by the claiming session's own hook, so the environment read here IS
+		// that session's — a Desktop session claiming a task must not be handed
+		// a contract its Stop hook will not enforce. (Contrast the Python spawn
+		// handoff, which stays harness-agnostic on purpose: `task spawn` opens a
+		// tmux window, so the session it describes is a terminal Claude Code one
+		// by construction, whatever harness ran the command.)
+		"report_gate": supportedAgent() && monitor.ReportGateEnabledForCwd(worktreePath, projectRoot),
 	}, nil
 }
 

@@ -362,20 +362,24 @@ const reportChannelRule = "Report channel: every reply you send the user goes " 
 // must never be told to use a channel that will not gate it, nor gated without
 // having been told.
 //
-// E-1962: the channel is a TERMINAL contract. A Claude Code Desktop session on a
-// gate-on project was being handed the reporting rule — an instruction that
-// costs it a per-turn round trip and that Mike does not currently want on that
-// surface. Surface is checked HERE, alongside the config key, so all three
-// consumers (SessionStart rule, PostToolUse reinforcement, Stop gate) move
-// together; gating one of them would break the told-iff-gated invariant above.
+// E-1962: the channel runs only on a SUPPORTED agent harness — Claude Code in a
+// terminal, and nothing else today. A Claude Code Desktop session on a gate-on
+// project was being handed the reporting rule: an instruction that costs it a
+// per-turn round trip and that no Stop hook there will enforce. The harness is
+// checked HERE, alongside the config key, so all three consumers (SessionStart
+// rule, PostToolUse reinforcement, Stop gate) move together; gating one of them
+// would break the told-iff-gated invariant above.
 //
 // The two axes are independent and both must say yes: `report_gate` is the
-// project's decision, terminalSurface is the product's.
+// project's decision, supportedAgent is the product's. Making the harness axis
+// project-configurable is deliberately deferred to E-1505 (add support for
+// Claude Desktop) — there is no second supported harness to configure until
+// then.
 func reportChannelOn(projectID int64, isRegistered bool, cwd string) bool {
 	if !isRegistered {
 		return false
 	}
-	if !terminalSurface() {
+	if !supportedAgent() {
 		return false
 	}
 	root, err := monitor.ProjectPath(projectID)

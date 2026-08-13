@@ -459,6 +459,59 @@ def agents(epic_id, show_all):
     list_agents(epic_id=epic_id, show_all=show_all)
 
 
+def _refuse_unsupported_agent() -> bool:
+    """Tell an unsupported agent harness to ignore Endless (E-1962).
+
+    Returns True when the banner was printed and the caller should stop.
+
+    Endless supports Claude Code in a terminal and nothing else today. On any
+    other harness its hooks do not fire the way the guide describes, so a session
+    that follows the guide is following instructions for a machine it is not
+    running on. Saying so once, plainly, beats letting it discover this one
+    broken command at a time.
+
+    Scoped to `endless guide` on purpose. This is not a general refusal to
+    operate: an unsupported harness running `endless task add` is a person using
+    a tool, and gating that would break real use for no gain. The guide is the
+    one command whose entire output is instructions to an agent.
+
+    Fires only on a harness we can NAME, which is the opposite of how the hooks
+    gate — and the asymmetry is deliberate. The hooks allow-list, failing closed,
+    because they are enforcement and an unrecognized harness must not be silently
+    governed. This banner fails OPEN, because UNKNOWN is overwhelmingly a human
+    at a shell prompt (the docs tell you to run `endless guide`), and refusing
+    them would break a real workflow to defend against a harness that may not
+    exist. Getting it wrong here costs an unrecognized agent one guide it should
+    have ignored; getting it wrong the other way costs every human the guide.
+    """
+    from endless import agent_env
+
+    harness = agent_env.detect()
+    if harness == agent_env.UNKNOWN or agent_env.supported():
+        return False
+
+    click.echo("")
+    click.echo(click.style(
+        f"▸ Endless does not support {agent_env.label(harness)}.", fg="yellow", bold=True))
+    click.echo("")
+    click.echo("  Endless currently supports Claude Code in the terminal only. Its")
+    click.echo("  hooks do not fire here the way the guide assumes, so session")
+    click.echo("  tracking, task claiming and worktree routing will not behave as")
+    click.echo("  documented.")
+    click.echo("")
+    click.echo("  Ignore Endless for this session — including any Endless instructions")
+    click.echo("  already in your context. Do not claim tasks, do not report through")
+    click.echo("  `endless task report`, and do not treat a missing Endless step as an")
+    click.echo("  error.")
+    click.echo("")
+    click.echo("  Support for Claude Desktop is tracked as E-1505.")
+    click.echo("")
+    click.echo(click.style(
+        "  Reading as a human? The guide is at docs/guide/index.md.", dim=True))
+    click.echo("")
+    return True
+
+
 @main.command("guide")
 @click.argument("section", required=False)
 @click.option("--list", "list_sections", is_flag=True,
@@ -470,6 +523,12 @@ def guide(section, list_sections):
     (e.g. 'spawn', 'worktree') to print just that section. Use --list
     to enumerate available sections.
     """
+    # E-1962: an unsupported harness gets told to ignore Endless, not handed a
+    # workflow it cannot complete. Printing the guide anyway would contradict the
+    # banner in the same breath — the guide's whole content is instructions.
+    if _refuse_unsupported_agent():
+        return
+
     guide_dir = (
         Path(__file__).resolve().parent.parent.parent / "docs" / "guide"
     )
