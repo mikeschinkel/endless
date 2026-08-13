@@ -131,17 +131,25 @@ cli() {
         human)      : ;;
         *)          printf 'BAD HARNESS %s' "${harness}"; return 1 ;;
     esac
-    # Inside the worktree the self-dev gate demands an explicit --db, and its
-    # refusal is an ERROR that happens to contain no nudge. An earlier version
-    # of this script omitted it and the gate-off case "passed" on that error —
-    # a silence produced by not running at all. assert_silent now rejects any
-    # output carrying an error, so this can only regress loudly.
-    local -a db_args=()
-    [[ "${dir}" == "${REPO_ROOT}" ]] && db_args=(--db sandbox)
+    # Two flags this script must always carry, both for the same reason: an
+    # ERROR prints no nudge either, so anything that stops the command from
+    # running reads as a passing "silent" case unless assert_silent catches it
+    # (it does now — both of these were found that way).
+    #
+    #   --db sandbox   inside the worktree the self-dev gate demands an
+    #                  explicit --db. Refused from the tmp dirs, hence the
+    #                  conditional; those route by XDG_CONFIG_HOME instead.
+    #   --no-session   every call here is from a bare shell, and the session
+    #                  resolver refuses a pane it cannot map to a live Claude
+    #                  session. Without it the suite only passes when whoever
+    #                  runs it happens to sit in a bound pane.
+    local -a extra_args=(--no-session)
+    [[ "${dir}" == "${REPO_ROOT}" ]] && extra_args+=(--db sandbox)
     (cd "${dir}" && env -u CLAUDE_CODE_ENTRYPOINT -u CLAUDECODE \
         -u __CFBundleIdentifier -u CLAUDE_AGENT_SDK_VERSION \
+        -u ENDLESS_SESSION_ID -u TMUX_PANE \
         "${env_args[@]}" uv run --project "${REPO_ROOT}" endless "$@" \
-        "${db_args[@]+"${db_args[@]}"}" 2>&1)
+        "${extra_args[@]}" 2>&1)
 }
 
 # wind_down DIR HARNESS -> the output of one underway -> unverified transition

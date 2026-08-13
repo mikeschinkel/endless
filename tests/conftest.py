@@ -73,6 +73,16 @@ def isolated_env(tmp_path, monkeypatch):
     monkeypatch.delenv("CLAUDECODE", raising=False)
     monkeypatch.delenv("CLAUDE_CODE_SESSION_ID", raising=False)
 
+    # E-1966: and the two signals `agent_env` detects a harness from (E-1962),
+    # for the same reason one layer over. Anything reading _running_under_agent
+    # or _should_augment would otherwise answer from the RUNNER's harness, so a
+    # test asserting the agent-facing form of a message passes when a Claude
+    # Code session runs pytest and fails in a bare shell — which is exactly how
+    # E-1966 shipped a broken test_verb_gate assertion green. Every var the
+    # detector reads belongs here, not just the one that has bitten us.
+    monkeypatch.delenv("CLAUDE_CODE_ENTRYPOINT", raising=False)
+    monkeypatch.delenv("__CFBundleIdentifier", raising=False)
+
     # Prepend this worktree's bin/ to PATH so subprocesses (e.g. endless-event
     # invoked by event_bridge.emit_event) find the locally-built binary, not
     # the globally-installed one symlinked from a sibling worktree.

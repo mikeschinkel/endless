@@ -54,19 +54,33 @@ def git_project_at_cwd(isolated_env, monkeypatch):
 
 
 def test_verb_gate_human_form_omits_force_and_alternatives(monkeypatch):
-    monkeypatch.delenv("CLAUDECODE", raising=False)
+    monkeypatch.delenv("CLAUDE_CODE_ENTRYPOINT", raising=False)
 
     with pytest.raises(click.ClickException) as exc:
         task_cmd.validate_title("nonverbword some title")
 
     msg = exc.value.message
+    # The discriminating assertion. Without it this test passes under BOTH
+    # forms — the agent form also omits "Common verbs:" and "--force" and also
+    # names the register command — so it would not have caught the harness
+    # regression its sibling below caught.
+    assert "IF YES:" not in msg
     assert "Common verbs:" not in msg
     assert "--force" not in msg
     assert "endless verb add 'nonverbword'" in msg
 
 
 def test_verb_gate_agent_form_includes_binary_and_anti_rationalization(monkeypatch):
-    monkeypatch.setenv("CLAUDECODE", "1")
+    # The harness signal, not CLAUDECODE. `_running_under_agent()` delegates to
+    # agent_env (E-1966), which keys on the entrypoint: CLAUDECODE=1 alone says
+    # "some Claude Code", not which surface, and is no longer an agent.
+    #
+    # This test passed against the OLD contract for a while after the new one
+    # shipped, because the runner's own shell exported CLAUDE_CODE_ENTRYPOINT
+    # and conftest did not strip it. It now does, so this line is load-bearing:
+    # delete it and the test fails rather than quietly reading the runner's
+    # environment.
+    monkeypatch.setenv("CLAUDE_CODE_ENTRYPOINT", "cli")
 
     with pytest.raises(click.ClickException) as exc:
         task_cmd.validate_title("nonverbword some title")
