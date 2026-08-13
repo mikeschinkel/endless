@@ -177,6 +177,17 @@ setup() {
     GO="${REPO_ROOT}/bin/endless-go"
     command -v uv >/dev/null 2>&1 || { printf 'ERROR: uv not on PATH\n' >&2; exit 2; }
     [[ -x "${GO}" ]] || { printf 'ERROR: %s missing — run `just build`\n' "${GO}" >&2; exit 2; }
+    # A STALE binary is worse than a missing one: every Go-side assertion below
+    # silently tests the previous build, which after a rebase means testing
+    # somebody else's code. Caught for real on E-1859's own rebase, where a
+    # binary three minutes old reported "unknown subcommand" for a verb that was
+    # sitting in the source.
+    local newest_go
+    newest_go=$(find "${REPO_ROOT}/cmd" "${REPO_ROOT}/internal" -name '*.go' -newer "${GO}" -print -quit 2>/dev/null)
+    if [[ -n "${newest_go}" ]]; then
+        printf 'ERROR: %s is older than %s — run `just build`\n' "${GO}" "${newest_go}" >&2
+        exit 2
+    fi
     if [[ ! -x "${EN}" ]]; then
         ( cd "${REPO_ROOT}" && uv run endless --version >/dev/null 2>&1 ) || {
             printf 'ERROR: could not materialize .venv (uv run endless failed)\n' >&2; exit 2; }
