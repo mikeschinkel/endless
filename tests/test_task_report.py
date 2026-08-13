@@ -64,8 +64,15 @@ def _draft(tmp_path, text="Here is the answer.\n") -> str:
     return str(p)
 
 
-def _mock_go(monkeypatch, handlers: dict):
-    """Stub the Go seam. `handlers` maps subcommand -> CompletedProcess."""
+def _mock_go(monkeypatch, handlers: dict, *, gate: bool = True):
+    """Stub the Go seam. `handlers` maps subcommand -> CompletedProcess.
+
+    `gate` is the project's report_gate. It defaults ON so the enforcement
+    tests below assert enforcement rather than silently exercising the
+    gate-off path — which is what they would do if the real resolver ran, since
+    this repo ships the gate off.
+    """
+    monkeypatch.setattr(report_cmd, "_report_gate_on", lambda: gate)
     calls = []
 
     def fake(args, *, input_text=None):
@@ -175,13 +182,32 @@ def test_appeal_is_bounded_at_one(tmp_path, monkeypatch):
     """Two runs is the whole budget: the report, then one appeal. A third is
     refused — an agent that can re-run freely will re-draft until something it
     prefers survives, which is the self-judgment the minimizer replaced."""
-    _mock_go(monkeypatch, {"report-runs": _completed("2\n")})
+    _mock_go(monkeypatch, {"report-runs": _completed("2\n")}, gate=True)
     seen = _mock_model(monkeypatch, "minimized")
     with pytest.raises(click.ClickException) as e:
         report_cmd.report_item(1953, _draft(tmp_path))
     assert "already used this turn's one appeal" in str(e.value)
     # Refused BEFORE the model call — the bound must not cost a round trip.
     assert seen == {}
+
+
+def test_appeal_budget_is_not_enforced_when_the_gate_is_off(tmp_path, monkeypatch, capsys):
+    """E-1973: the budget is ENFORCEMENT state, so it must not refuse where
+    nothing enforces.
+
+    Where `report_gate` is off no Stop gate holds the turn and nothing reads the
+    counter, so refusing here denies a command no one is enforcing on the basis
+    of a number no one consults — and it strands a session that reached for the
+    minimizer voluntarily, which is the one behavior a gate-off project should
+    be encouraging.
+
+    The run count is deliberately well past the limit: the assertion is that the
+    budget is not consulted at all, not that it is generously sized.
+    """
+    _mock_go(monkeypatch, {"report-runs": _completed("7\n")}, gate=False)
+    _mock_model(monkeypatch, "minimized")
+    report_cmd.report_item(1973, _draft(tmp_path))
+    assert capsys.readouterr().out == "minimized\n"
 
 
 def test_second_run_is_allowed(tmp_path, monkeypatch, capsys):

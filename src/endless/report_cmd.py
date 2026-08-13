@@ -123,6 +123,18 @@ def _minimize(draft: str, user_prompt: str) -> str:
 
 # --- session plumbing -------------------------------------------------------
 
+def _report_gate_on() -> bool:
+    """Whether this project runs the report channel.
+
+    Shared with the wind-down nudge and the spawn handoff rather than
+    reimplemented, so the three emitters can never disagree about whether the
+    channel is live — a command that refuses on a budget the handoff never
+    mentioned would be worse than either behavior alone.
+    """
+    from endless.task_cmd import _report_gate_on as impl
+    return impl()
+
+
 def _session_id() -> int | None:
     """This session's `sessions.id`, or None outside a resolvable session.
 
@@ -212,8 +224,21 @@ def report_item(item_id: int | None, draft_path: str) -> None:
     draft = _read_draft(draft_path)
     session_id = _session_id()
 
-    # Bound the appeal BEFORE spending a model call on it.
-    if session_id is not None:
+    # Bound the appeal BEFORE spending a model call on it — but only where the
+    # channel is actually live (E-1973).
+    #
+    # The budget is ENFORCEMENT state. It exists so an agent cannot re-draft
+    # until something it prefers survives, and that only means anything while a
+    # Stop gate is holding the turn against a checkpoint. Where `report_gate` is
+    # off nothing holds the turn and nothing reads the counter, so refusing here
+    # denies a command no one is enforcing on the basis of a number no one
+    # consults — and it strands a session that used the minimizer voluntarily,
+    # which is the one behavior a gate-off project should be encouraging.
+    #
+    # Same principle as the wind-down nudge (E-1966) and the PostToolUse
+    # reinforcement (E-1953): off means the channel is not there, not that
+    # nobody is watching.
+    if session_id is not None and _report_gate_on():
         runs = _runs_this_turn(session_id)
         if runs >= 2:
             raise click.ClickException(
