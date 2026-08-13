@@ -489,9 +489,29 @@ def _refuse_unsupported_agent(ctx) -> None:
     at a task would be telling the reader to use Endless to look up why it
     cannot. Tracking lives in the ledger, for people who can reach it.
 
-    Exits non-zero, matching the ENDLESS_SANDBOX refusal above: the command did
-    not run, and an exit status that says otherwise would be a lie a script could
-    act on. The text carries the "this is expected, do not debug it" half.
+    Exits ZERO, and this is the one place where "the command did not run" is
+    better said in prose than in the exit status.
+
+    An earlier version exited 1, reasoning from the ENDLESS_SANDBOX refusal above
+    that a success status would be a lie a script could act on. That reasoning
+    does not transfer, because the two refusals are different in kind. The
+    sandbox refusal is RECOVERABLE — leave the subshell and run it again — so a
+    non-zero status correctly says "act on this". This one is terminal: there is
+    nothing to fix, nothing to retry, and no other way to run the command here.
+
+    A non-zero status contradicts the message beside it. The banner says "do not
+    treat it as a failure to diagnose" while the exit code says "a failure
+    occurred", and the exit code is the channel agents read mechanically. A
+    Claude Code Desktop session confirmed the pull is real — asked directly, it
+    reported that "the exit=1 would normally be a pull toward debugging" and
+    that it resisted only because the prose overrode it. An instruction that has
+    to win a fight with its own exit status is a badly built instruction.
+
+    The scripting objection does not survive contact either: nothing scripts
+    `endless` on a harness Endless does not support, and on supported harnesses
+    this never fires. What replaces the status is the explicit "This command did
+    not run." line — a claim in the same channel as the rest of the message,
+    rather than one buried in a number that says the opposite.
     """
     from endless import agent_env
 
@@ -519,7 +539,7 @@ def _refuse_unsupported_agent(ctx) -> None:
     echo(click.style(
         "  Reading as a human? The guide is at docs/guide/index.md.", dim=True))
     echo()
-    ctx.exit(1)
+    ctx.exit(0)
 
 
 @main.command("guide")

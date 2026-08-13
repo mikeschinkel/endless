@@ -404,7 +404,13 @@ test_cli_refusal() {
         'This command did not run' "${out}"
     assert_text_contains "desktop: disarms the CLAUDE.md instruction" \
         'does not apply here' "${out}"
-    assert_eq "desktop: exits non-zero" "1" "${rc}"
+    # Exit ZERO on purpose. The refusal is terminal, not recoverable (contrast
+    # the ENDLESS_SANDBOX refusal, which exits 1 because leaving the subshell
+    # and retrying IS the fix). A non-zero status here would contradict the
+    # "do not treat it as a failure to diagnose" line beside it, in the one
+    # channel an agent reads mechanically — a Desktop session confirmed the
+    # pull toward debugging was real.
+    assert_eq "desktop: exits zero (the refusal is terminal, not an error)" "0" "${rc}"
 
     # No task id. "Do not use Endless here" plus "look up E-NNNN" is a
     # contradiction — resolving the second requires the first.

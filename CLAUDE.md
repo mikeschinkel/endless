@@ -146,7 +146,15 @@ Desktop) — there is no second supported harness to configure until then.
 
 **What is gated:** the Claude hook — `hook claude` returns immediately, before it
 reads stdin, so the entire hook is a no-op on an unsupported harness — and the
-**whole Python CLI**, which refuses with a banner and exits 1.
+**whole Python CLI**, which refuses with a banner and exits **0**.
+
+Exit 0 is deliberate, and differs from the `ENDLESS_SANDBOX` refusal beside it,
+which exits 1. That one is recoverable — leave the subshell, run it again — so a
+non-zero status correctly says "act on this". The harness refusal is terminal:
+nothing to fix, nothing to retry. A non-zero status there contradicts the "do not
+treat it as a failure to diagnose" line in the same message, in the one channel
+an agent reads mechanically. The explicit "This command did not run." line
+carries that meaning instead.
 
 The hook's no-op is **silent, exit 0, no stdout**. Anything else would surface as
 a Claude Code hook failure on every event, turning "we don't support this" into a

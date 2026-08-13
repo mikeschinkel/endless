@@ -148,7 +148,11 @@ def test_every_command_refuses_on_an_unsupported_harness(monkeypatch, args):
     not the informative kind.
     """
     result = _run(monkeypatch, args, **DESKTOP)
-    assert result.exit_code == 1, f"{args} did not refuse"
+    # Exit ZERO. The refusal is terminal, not recoverable, so a non-zero status
+    # would contradict the "do not treat this as a failure to diagnose" line
+    # sitting right next to it — and the exit code is the channel an agent reads
+    # mechanically. "This command did not run" carries that meaning instead.
+    assert result.exit_code == 0, f"{args} exited non-zero"
     assert "does not support Claude Code Desktop" in result.output
     assert "This command did not run" in result.output
 
