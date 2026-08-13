@@ -190,6 +190,14 @@ run_unit_layer() {
         go test ./internal/monitor/ -count=1 -run 'TestLiveness_BackgroundAgentIsUnboundNotDead'
     assert_succeeds "liveness: a shell in the pane (Ctrl+Z) stays 'live'" \
         go test ./internal/monitor/ -count=1 -run 'TestLiveness_ShellPaneStaysLive'
+    # Regression, 2026-08-13: a LINKED tmux window's panes are listed once per
+    # session the window is linked into, and the observation table had no
+    # uniqueness constraint, so session_liveness's LEFT JOIN multiplied every
+    # session row. `esu` could not resolve a sibling pane at all.
+    assert_succeeds "liveness: a pane observed twice still yields ONE session row" \
+        go test ./internal/monitor/ -count=1 -run 'TestLiveness_DuplicatePaneYieldsOneRow'
+    assert_succeeds "liveness: a server observed twice still yields ONE session row" \
+        go test ./internal/monitor/ -count=1 -run 'TestLiveness_DuplicateServerYieldsOneRow'
     assert_succeeds "liveness: the snapshot parser keeps command-less panes present" \
         go test ./internal/monitor/ -count=1 -run 'TestParsePaneList'
     assert_succeeds "shell predicate: true for zsh/bash/sh/fish, FALSE for '2.1.220'" \

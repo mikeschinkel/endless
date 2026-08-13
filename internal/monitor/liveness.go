@@ -109,6 +109,21 @@ const (
 		command     TEXT
 	)`
 
+	// An observation table states the SAME identity as the durable one, so it
+	// carries the same constraint. Omitting it was a real defect: `tmux
+	// list-panes -a` lists a LINKED window's panes once per tmux session the
+	// window is linked into (measured 2026-08-13: 442 rows for 245 distinct
+	// panes, every pane twice), and session_liveness LEFT JOINs this table, so a
+	// pane recorded N times multiplied its session's row N times. `list-live`
+	// returned 114 rows for 57 sessions and `esu` refused to resolve a sibling
+	// pane at all.
+	//
+	// ifnull() for the same reason processes_identity uses it: SQLite treats
+	// every NULL as distinct, so a plain UNIQUE would not bind for the
+	// NULL-server rows. A pane seen twice in one snapshot is one pane.
+	createLiveProcessesIdentity = `CREATE UNIQUE INDEX IF NOT EXISTS live_processes_identity
+		ON live_processes (kind_id, ifnull(server_uuid, ''), address)`
+
 	// createObservedServers records WHICH servers the snapshot actually reached.
 	// Without it, "no live_processes row" is ambiguous between "the pane is gone"
 	// and "we never looked", and collapsing those two is exactly the 2026-08-05
@@ -117,6 +132,14 @@ const (
 		kind_id     INTEGER NOT NULL,
 		server_uuid TEXT
 	)`
+
+	// Same rule, same reason. observed_servers is joined by session_liveness too,
+	// so a server recorded twice would multiply rows exactly as a duplicate pane
+	// did. Only one socket answers @server_uuid today, so this is prevention
+	// rather than a fix — which is the point: the sibling table had the identical
+	// gap and only one of them happened to be exercised.
+	createObservedServersIdentity = `CREATE UNIQUE INDEX IF NOT EXISTS observed_servers_identity
+		ON observed_servers (kind_id, ifnull(server_uuid, ''))`
 
 	// createLivenessView is the single definition of liveness. Consumers SELECT
 	// from it; none re-derive the CASE. ifnull() on both sides of the server
@@ -230,7 +253,11 @@ func setTestTmux(serverUUID string, panes map[string]string, reachable bool) (re
 // could only be tested by standing up private tmux servers, which is why its
 // edge cases went unexplored.
 func EnsureLivenessTables(db *sql.DB) error {
-	for _, stmt := range []string{createLiveProcesses, createObservedServers, createLivenessView} {
+	for _, stmt := range []string{
+		createLiveProcesses, createLiveProcessesIdentity,
+		createObservedServers, createObservedServersIdentity,
+		createLivenessView,
+	} {
 		if _, err := db.Exec(stmt); err != nil {
 			return fmt.Errorf("liveness: create observation tables: %w", err)
 		}
@@ -276,14 +303,14 @@ func refreshLiveness(db *sql.DB) error {
 
 	for _, srv := range observeServers() {
 		if _, err = tx.Exec(
-			`INSERT INTO observed_servers (kind_id, server_uuid) VALUES (?, ?)`,
+			`INSERT OR IGNORE INTO observed_servers (kind_id, server_uuid) VALUES (?, ?)`,
 			int(processkind.ProcessKindTmux), srv.uuid,
 		); err != nil {
 			return fmt.Errorf("liveness: record observed server: %w", err)
 		}
 		for _, pane := range srv.panes {
 			if _, err = tx.Exec(
-				`INSERT INTO live_processes (kind_id, server_uuid, address, command)
+				`INSERT OR IGNORE INTO live_processes (kind_id, server_uuid, address, command)
 				 VALUES (?, ?, ?, ?)`,
 				int(processkind.ProcessKindTmux), srv.uuid, pane.address, pane.command,
 			); err != nil {

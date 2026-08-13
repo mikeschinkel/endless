@@ -538,3 +538,111 @@ func serverOf(t *testing.T, db *sql.DB, sessionID int64) string {
 	}
 	return s.String
 }
+
+// ── duplicate observations (regression, 2026-08-13) ─────────────────────────
+
+// TestLiveness_DuplicatePaneYieldsOneRow is the regression test for the defect
+// that shipped with E-1898 and surfaced hours after land.
+//
+// `tmux list-panes -a` lists a LINKED window's panes once per tmux session the
+// window is linked into — 442 rows for 245 distinct panes on the machine where
+// it bit. live_processes had no uniqueness constraint, session_liveness
+// LEFT JOINs it, so a pane recorded twice returned every one of its sessions
+// twice: `list-live` gave 114 rows for 57 sessions and `esu` refused to resolve
+// a sibling pane at all.
+//
+// It INSERTS the duplicate DIRECTLY rather than going through
+// SetTestTmuxObservation, and that is the whole point. That seam takes a
+// map[string]string of address -> command, which cannot hold the same address
+// twice, so every existing fixture was structurally incapable of reproducing
+// this. A test written through the seam would restate the blind spot instead of
+// closing it.
+func TestLiveness_DuplicatePaneYieldsOneRow(t *testing.T) {
+	db := withTestDB(t)
+	seedProject(t, db, 1, "acme", "/tmp/acme")
+	if err := EnsureLivenessTables(db); err != nil {
+		t.Fatalf("EnsureLivenessTables: %v", err)
+	}
+
+	pid := mustSeedPane(t, db, "srv", "%1")
+	id := seedLivenessSession(t, db, "sess-linked", pid, sessionkind.SessionKindTmux)
+
+	if _, err := db.Exec(
+		`INSERT OR IGNORE INTO observed_servers (kind_id, server_uuid) VALUES (?, ?)`,
+		int(processkind.ProcessKindTmux), "srv",
+	); err != nil {
+		t.Fatalf("seed observed server: %v", err)
+	}
+	// The same pane, twice — what a linked window actually produces.
+	for i := 0; i < 2; i++ {
+		if _, err := db.Exec(
+			`INSERT OR IGNORE INTO live_processes (kind_id, server_uuid, address, command)
+			 VALUES (?, ?, ?, ?)`,
+			int(processkind.ProcessKindTmux), "srv", "%1", "2.1.220",
+		); err != nil {
+			t.Fatalf("seed duplicate pane %d: %v", i, err)
+		}
+	}
+
+	var observed int
+	if err := db.QueryRow(
+		`SELECT count(*) FROM live_processes WHERE address = '%1'`,
+	).Scan(&observed); err != nil {
+		t.Fatalf("count live_processes: %v", err)
+	}
+	if observed != 1 {
+		t.Errorf("live_processes holds %d rows for one pane, want 1", observed)
+	}
+
+	var rows int
+	if err := db.QueryRow(
+		`SELECT count(*) FROM session_liveness WHERE session_id = ?`, id,
+	).Scan(&rows); err != nil {
+		t.Fatalf("count session_liveness: %v", err)
+	}
+	if rows != 1 {
+		t.Errorf("session_liveness returned %d rows for one session, want 1 — "+
+			"a duplicate observation multiplied the join", rows)
+	}
+}
+
+// TestLiveness_DuplicateServerYieldsOneRow covers the sibling table. Only one
+// socket answers @server_uuid today, so this guards a gap rather than closing an
+// observed bug — which is exactly why it is here: observed_servers had the
+// identical missing constraint and merely happened not to be exercised.
+func TestLiveness_DuplicateServerYieldsOneRow(t *testing.T) {
+	db := withTestDB(t)
+	seedProject(t, db, 1, "acme", "/tmp/acme")
+	if err := EnsureLivenessTables(db); err != nil {
+		t.Fatalf("EnsureLivenessTables: %v", err)
+	}
+
+	pid := mustSeedPane(t, db, "srv", "%2")
+	id := seedLivenessSession(t, db, "sess-dupsrv", pid, sessionkind.SessionKindTmux)
+
+	for i := 0; i < 3; i++ {
+		if _, err := db.Exec(
+			`INSERT OR IGNORE INTO observed_servers (kind_id, server_uuid) VALUES (?, ?)`,
+			int(processkind.ProcessKindTmux), "srv",
+		); err != nil {
+			t.Fatalf("seed observed server %d: %v", i, err)
+		}
+	}
+	if _, err := db.Exec(
+		`INSERT OR IGNORE INTO live_processes (kind_id, server_uuid, address, command)
+		 VALUES (?, ?, ?, ?)`,
+		int(processkind.ProcessKindTmux), "srv", "%2", "2.1.220",
+	); err != nil {
+		t.Fatalf("seed pane: %v", err)
+	}
+
+	var rows int
+	if err := db.QueryRow(
+		`SELECT count(*) FROM session_liveness WHERE session_id = ?`, id,
+	).Scan(&rows); err != nil {
+		t.Fatalf("count session_liveness: %v", err)
+	}
+	if rows != 1 {
+		t.Errorf("session_liveness returned %d rows, want 1", rows)
+	}
+}
