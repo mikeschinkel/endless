@@ -149,6 +149,27 @@ var (
 		Severity: SeverityError,
 		Title:    "The tmux status line could not resolve its pane",
 	}
+
+	// ErrCodeTriageFailed covers a triage attempt that could not produce a
+	// verdict (E-1859): the model call timed out, `claude` was missing, the
+	// process exited non-zero, or the reply did not parse.
+	//
+	// Warning rather than error: triage is fail-open by design, so the task
+	// simply stays `untriaged` and the sweep retries — nothing is lost or
+	// corrupted. It is recorded at all because the inline path runs DETACHED,
+	// where a crash and a considered no-verdict are otherwise
+	// indistinguishable and neither is written anywhere. Repeats collapse into
+	// one incident with an occurrence count, so a machine with no `claude`
+	// installed raises one warning, not one per filing.
+	//
+	// ERR-0009, not 0008: E-1898 took 0008 for the status-line code while this
+	// branch was in flight, and a spent number is never reused.
+	ErrCodeTriageFailed = Code{
+		ID:       "ERR-0009",
+		Slug:     "triage-failed",
+		Severity: SeverityWarning,
+		Title:    "Triage could not reach a verdict and left the task untriaged",
+	}
 )
 
 // catalog indexes every registered Code by ID. Built once at init from the
@@ -162,6 +183,7 @@ var catalog = buildCatalog(
 	ErrCodeTestWarning,
 	ErrCodeTestError,
 	ErrCodeStatusLineUnavailable,
+	ErrCodeTriageFailed,
 )
 
 // buildCatalog indexes codes by ID. It panics on a duplicate ID: a collision is

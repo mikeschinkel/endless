@@ -39,6 +39,8 @@ func Run(args []string) {
 		runClear(args[1:])
 	case "codes":
 		runCodes()
+	case "record":
+		runRecord(args[1:])
 	case "raise":
 		runRaise(args[1:])
 	case "-h", "--help", "help":
@@ -56,6 +58,8 @@ func usage(w *os.File) {
 	fmt.Fprintln(w, "  show [--all] [--detail] [--id N]  list uncleared errors (--all includes cleared)")
 	fmt.Fprintln(w, "  clear [<id>...]                   mark errors cleared (all open ones when no id given)")
 	fmt.Fprintln(w, "  codes                             print the documented error catalog")
+	fmt.Fprintln(w, "  record --code ID --summary T [--source S] [--detail D]")
+	fmt.Fprintln(w, "                                   record a real catalog fault (internal; used by `endless triage run`)")
 	fmt.Fprintln(w, "  raise [--severity S] [--summary T] [--repeat N]")
 	fmt.Fprintln(w, "                                    record a SYNTHETIC fault, to see this surface work")
 }
@@ -319,4 +323,50 @@ func severityText(incident faults.Incident) (text string) {
 // invented.
 func clearedBy() string {
 	return os.Getenv("USER")
+}
+
+// runRecord records a REAL catalog fault. It is the bridge the Python CLI needs:
+// `endless triage run` executes detached, where a failure has nowhere to go, and
+// the fault store is the surface a user actually watches (the `session status` /
+// `session monitor` badge). Distinct from `raise`, which only ever emits the two
+// synthetic test codes and says so in its detail text.
+//
+// --code must name a catalog entry, so this cannot invent classifications that
+// have no docs/errors.md section; an unknown ID is a usage error.
+func runRecord(args []string) {
+	fs := flag.NewFlagSet("record", flag.ExitOnError)
+	codeID := fs.String("code", "", "catalog code ID, e.g. ERR-0008")
+	summary := fs.String("summary", "", "short summary shown in lists and the badge")
+	source := fs.String("source", "", "subsystem raising it, e.g. triage:inline")
+	detail := fs.String("detail", "", "long capture; goes to the detail log, never the DB")
+	fingerprint := fs.String("fingerprint", "", "grouping key (defaults to the summary)")
+	if err := fs.Parse(args); err != nil {
+		os.Exit(2)
+	}
+	if *codeID == "" || *summary == "" {
+		fmt.Fprintln(os.Stderr, "endless-go errors: record: --code and --summary are required")
+		os.Exit(2)
+	}
+
+	code, ok := faults.LookupCode(*codeID)
+	if !ok {
+		fmt.Fprintf(os.Stderr, "endless-go errors: record: unknown code %q\n", *codeID)
+		os.Exit(2)
+	}
+
+	if !faults.Bound() {
+		// Not an error: a caller with no fault store bound (a test DB, a
+		// sandbox) still has a working triager. Say so and exit clean rather
+		// than failing the caller for a diagnostic side effect.
+		fmt.Fprintln(os.Stderr, "endless-go errors: record: the fault store is not bound; nothing recorded")
+		return
+	}
+
+	faults.Record(faults.Fault{
+		Code:        code,
+		Source:      *source,
+		Fingerprint: *fingerprint,
+		Summary:     *summary,
+		Detail:      *detail,
+	})
 }

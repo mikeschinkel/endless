@@ -90,6 +90,24 @@ def errors_clear(ids: tuple[int, ...]) -> None:
     _run_go("errors", ["clear", *[str(i) for i in ids]])
 
 
+def errors_record(code: str, summary: str, source: str, detail: str,
+                  fingerprint: str) -> None:
+    """Record a real catalog fault (E-1859).
+
+    The bridge `endless triage run` needs: it executes detached, where a failure
+    has nowhere to go, and the fault store is the surface a user actually
+    watches. Distinct from `raise`, which only emits the synthetic test codes.
+    """
+    args = ["record", "--code", code, "--summary", summary]
+    if source:
+        args += ["--source", source]
+    if detail:
+        args += ["--detail", detail]
+    if fingerprint:
+        args += ["--fingerprint", fingerprint]
+    _run_go("errors", args)
+
+
 def errors_codes() -> None:
     """Print the documented error catalog."""
     _run_go("errors", ["codes"])

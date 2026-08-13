@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"time"
 
 	"github.com/mikeschinkel/endless/internal/events"
 	"github.com/mikeschinkel/endless/internal/gatekind"
@@ -115,6 +116,16 @@ func Run(args []string) {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
+	case "triage-claim":
+		if err := runTriageClaim(args[1:]); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+	case "triage-release":
+		if err := runTriageRelease(args[1:]); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
 	case "trail":
 		if err := runTrail(args[1:]); err != nil {
 			fmt.Fprintln(os.Stderr, err)
@@ -168,6 +179,10 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "                                    JSON array [{id, project, title}] of the triage queue, oldest first (E-1859)")
 	fmt.Fprintln(os.Stderr, "  triage-context --id <task-id>     JSON {task_id, project, title, description, type, phase, status, has_text,")
 	fmt.Fprintln(os.Stderr, "                                    parent, siblings[], decisions[]} — the persisted artifacts triage may judge (E-1859)")
+	fmt.Fprintln(os.Stderr, "  triage-claim --id <task-id> --ttl-seconds N [--owner <id>]")
+	fmt.Fprintln(os.Stderr, "                                    take the per-task triage claim; prints 1 if won, 0 if another holds it (E-1859)")
+	fmt.Fprintln(os.Stderr, "  triage-release --id <task-id> [--owner <id>]")
+	fmt.Fprintln(os.Stderr, "                                    drop this owner's triage claim (E-1859)")
 	fmt.Fprintln(os.Stderr, "  relay-checkpoint --session-id <id> [--draft-file <path>] [--task-id <id>]")
 	fmt.Fprintln(os.Stderr, "                                    record the minimized report text (read from STDIN) the session")
 	fmt.Fprintln(os.Stderr, "                                    owes as its final message; the Stop gate enforces it (E-1901/E-1953).")
@@ -377,6 +392,62 @@ func runTriageContext(args []string) error {
 		return fmt.Errorf("build triage context for E-%d: %w", *id, err)
 	}
 	return json.NewEncoder(os.Stdout).Encode(ctx)
+}
+
+// runTriageClaim takes the per-task triage claim (E-1859) and prints "1" when
+// this process won it, "0" when another holds a live claim. Zero is an ordinary
+// outcome, not an error, so the exit status stays 0 either way — the caller
+// branches on the printed value.
+//
+// The claim exists so the inline file-time path and the background sweep cannot
+// both pay for the same task's model call; see internal/monitor/triage_claims.go.
+func runTriageClaim(args []string) error {
+	fs := flag.NewFlagSet("triage-claim", flag.ContinueOnError)
+	id := fs.Int64("id", 0, "task id")
+	owner := fs.String("owner", "", "claimant identity (default: this process)")
+	ttl := fs.Int("ttl-seconds", 0, "claim lifetime; must exceed the worst-case model call")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *id == 0 {
+		return fmt.Errorf("--id is required")
+	}
+	if *ttl <= 0 {
+		return fmt.Errorf("--ttl-seconds must be positive")
+	}
+	who := *owner
+	if who == "" {
+		who = monitor.TriageClaimOwner()
+	}
+	claimed, err := monitor.ClaimTriage(*id, who, time.Duration(*ttl)*time.Second)
+	if err != nil {
+		return fmt.Errorf("claim triage for E-%d: %w", *id, err)
+	}
+	if claimed {
+		fmt.Println("1")
+		return nil
+	}
+	fmt.Println("0")
+	return nil
+}
+
+// runTriageRelease drops this owner's triage claim (E-1859). Releasing a claim
+// that already lapsed and was taken by someone else is a no-op, not a steal.
+func runTriageRelease(args []string) error {
+	fs := flag.NewFlagSet("triage-release", flag.ContinueOnError)
+	id := fs.Int64("id", 0, "task id")
+	owner := fs.String("owner", "", "claimant identity (default: this process)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *id == 0 {
+		return fmt.Errorf("--id is required")
+	}
+	who := *owner
+	if who == "" {
+		who = monitor.TriageClaimOwner()
+	}
+	return monitor.ReleaseTriage(*id, who)
 }
 
 // runResumeTarget prints the JSON a `session resume` needs to relaunch a lost

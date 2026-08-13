@@ -54,10 +54,17 @@ const (
 	// the lease; the Python side enforces it.
 	perTaskTimeout = 120 * time.Second
 
-	// interval is the sweep cadence. The inline path handles interactive
-	// filings immediately, so this only has to be frequent enough that a task
-	// the inline path missed is not stranded for long.
-	interval = 15 * time.Minute
+	// interval is the sweep cadence.
+	//
+	// It does NOT trade against model spend, contrary to what an earlier
+	// version of this comment claimed: the sweep selects `untriaged` rows
+	// first, so an empty queue costs one query. Spend is proportional to tasks
+	// FILED, not to how often we poll.
+	//
+	// Five minutes, not one: with many `session monitor` instances live, each
+	// firing RunDue, tighter polling buys latency that the per-task claim
+	// (monitor.ClaimTriage) should be providing instead.
+	interval = 5 * time.Minute
 
 	// maxBackoff caps exponential backoff after consecutive failures.
 	// internal/jobs names model-calling jobs as exactly the case MaxBackoff

@@ -189,6 +189,8 @@ def test_triage_one_dry_run_writes_nothing(monkeypatch):
         lambda _id: {"status": "untriaged", "project": "p"},
     )
     monkeypatch.setattr(triage, "render_prompt", lambda _ctx: "prompt")
+    monkeypatch.setattr(triage, "claim", lambda _id: True)
+    monkeypatch.setattr(triage, "release", lambda _id: None)
     monkeypatch.setattr(triage, "evaluate", lambda _p: ("submitted", "because"))
 
     def fail(*_a, **_kw):
@@ -208,14 +210,19 @@ def test_inline_triage_is_suppressed_by_the_env_var(monkeypatch):
     assert triage.spawn_detached(1) is False
 
 
-def test_inline_triage_is_suppressed_in_a_worktree_pinned_to_main(monkeypatch):
-    """The E-1281 hazard, mirrored from internal/jobs.Suppressed: candidate,
-    unreviewed triage code must never be pointed at the real ledger."""
+def test_a_worktree_pinned_to_main_is_NOT_suppressed_by_itself(monkeypatch):
+    """The corrected rule (E-1859 reopened). Being in a self-dev worktree under
+    `--db main` is NOT the hazard — it is how every agent session files, and the
+    CLI spawned there is main's editable install. Suppressing on this alone was
+    the reason automatic triage never fired in endless's own repo. The hazard is
+    candidate CODE against the real ledger, which is what the path check below
+    (and its own tests) catches."""
     monkeypatch.delenv(triage.NO_TRIAGE_ENV, raising=False)
     monkeypatch.setattr(config, "gated_worktree_root", lambda *_a, **_k: Path("/repo"))
+    monkeypatch.setattr(config, "worktree_dir_name", lambda *_a, **_k: "e-1")
     monkeypatch.setattr(config, "RESOLVED_CONFIG_DIR", config.main_config_dir())
-    assert "self-dev worktree" in triage.inline_suppressed()
-    assert triage.spawn_detached(1) is False
+    monkeypatch.setattr(triage, "_self_cli_path", lambda: "/usr/local/bin/endless")
+    assert triage.inline_suppressed() == ""
 
 
 def test_inline_triage_runs_when_nothing_suppresses_it(monkeypatch):
@@ -295,3 +302,136 @@ def test_triage_module_holds_no_sqlite_knowledge():
             assert func.value.id != "db", (
                 f"triage.py calls db.{func.attr}() at line {node.lineno}"
             )
+
+
+# --- E-1859 reopened: the five fixes ----------------------------------------
+
+def test_suppression_allows_a_landed_cli_against_the_real_ledger(monkeypatch):
+    """Fix 1. `--db main` from a worktree is how every agent files, and the CLI
+    it spawns is main's editable install — landed code. Suppressing that was
+    the reason automatic triage never fired in endless's own repo."""
+    monkeypatch.delenv(triage.NO_TRIAGE_ENV, raising=False)
+    monkeypatch.setattr(config, "RESOLVED_CONFIG_DIR", config.main_config_dir())
+    monkeypatch.setattr(triage, "_enclosing_worktree", lambda: Path("/repo/.endless/worktrees/e-1"))
+    monkeypatch.setattr(triage, "_self_cli_path", lambda: "/usr/local/bin/endless")
+    assert triage.inline_suppressed() == ""
+
+
+def test_suppression_blocks_a_candidate_cli_against_the_real_ledger(monkeypatch):
+    """Fix 1, the half that must stay: candidate code + real ledger is E-698's
+    hazard, and path-gating keeps it caught if anyone runs `uv run endless`
+    from a worktree."""
+    monkeypatch.delenv(triage.NO_TRIAGE_ENV, raising=False)
+    monkeypatch.setattr(config, "RESOLVED_CONFIG_DIR", config.main_config_dir())
+    wt = Path("/repo/.endless/worktrees/e-1")
+    monkeypatch.setattr(triage, "_enclosing_worktree", lambda: wt)
+    monkeypatch.setattr(triage, "_self_cli_path", lambda: str(wt / ".venv/bin/endless"))
+    assert "candidate CLI" in triage.inline_suppressed()
+
+
+def test_suppression_allows_candidate_cli_against_a_sandbox(monkeypatch):
+    """Fix 1: candidate + sandbox IS the test, never suppressed."""
+    monkeypatch.delenv(triage.NO_TRIAGE_ENV, raising=False)
+    monkeypatch.setattr(config, "RESOLVED_CONFIG_DIR", Path("/cache/endless/sandboxes/e-1/endless"))
+    assert triage.inline_suppressed() == ""
+
+
+def test_claim_is_taken_before_the_model_call(monkeypatch):
+    """Fix 2: the claim must precede evaluate(), or the spend it protects is
+    already committed by the time we find out someone else was working."""
+    order = []
+    monkeypatch.setattr(triage, "build_context", lambda _id: {"status": "untriaged", "project": "p"})
+    monkeypatch.setattr(triage, "render_prompt", lambda _c: "prompt")
+    monkeypatch.setattr(triage, "claim", lambda _id: order.append("claim") or True)
+    monkeypatch.setattr(triage, "release", lambda _id: order.append("release"))
+    monkeypatch.setattr(triage, "evaluate", lambda _p: order.append("evaluate") or ("submitted", "why"))
+    monkeypatch.setattr(triage, "apply", lambda *_a: True)
+
+    triage.triage_one(5)
+    assert order == ["claim", "evaluate", "release"]
+
+
+def test_losing_the_claim_skips_without_calling_the_model(monkeypatch):
+    monkeypatch.setattr(triage, "build_context", lambda _id: {"status": "untriaged", "project": "p"})
+    monkeypatch.setattr(triage, "claim", lambda _id: False)
+
+    def boom(_p):
+        raise AssertionError("model called despite losing the claim")
+
+    monkeypatch.setattr(triage, "evaluate", boom)
+    result = triage.triage_one(5)
+    assert result["outcome"] == "skipped"
+    assert "claim" in result["detail"]
+
+
+def test_the_claim_is_released_even_when_the_call_fails(monkeypatch):
+    released = []
+    monkeypatch.setattr(triage, "build_context", lambda _id: {"status": "untriaged", "project": "p"})
+    monkeypatch.setattr(triage, "render_prompt", lambda _c: "prompt")
+    monkeypatch.setattr(triage, "claim", lambda _id: True)
+    monkeypatch.setattr(triage, "release", lambda tid: released.append(tid))
+    monkeypatch.setattr(triage, "evaluate", lambda _p: None)
+    monkeypatch.setattr(triage, "report_failure", lambda *_a: None)
+
+    triage.triage_one(5)
+    assert released == [5], "a held claim would wedge the task until the TTL lapsed"
+
+
+def test_a_failed_triage_records_a_fault(monkeypatch):
+    """Fix 3: fail-open must not mean silent. The detached child has nowhere
+    else to report."""
+    recorded = []
+    monkeypatch.setattr(triage, "build_context", lambda _id: {"status": "untriaged", "project": "p"})
+    monkeypatch.setattr(triage, "render_prompt", lambda _c: "prompt")
+    monkeypatch.setattr(triage, "claim", lambda _id: True)
+    monkeypatch.setattr(triage, "release", lambda _id: None)
+    monkeypatch.setattr(triage, "evaluate", lambda _p: None)
+    monkeypatch.setattr(triage, "report_failure", lambda *a: recorded.append(a))
+
+    result = triage.triage_one(5)
+    assert result["outcome"] == "failed"
+    assert len(recorded) == 1
+    assert recorded[0][0] == 5
+
+
+def test_failure_source_names_the_path(monkeypatch):
+    monkeypatch.delenv(triage.INLINE_ENV, raising=False)
+    assert triage._failure_source() == "triage:sweep"
+    monkeypatch.setenv(triage.INLINE_ENV, "1")
+    assert triage._failure_source() == "triage:inline"
+
+
+def test_a_routed_task_records_no_fault(monkeypatch):
+    recorded = []
+    monkeypatch.setattr(triage, "build_context", lambda _id: {"status": "untriaged", "project": "p"})
+    monkeypatch.setattr(triage, "render_prompt", lambda _c: "prompt")
+    monkeypatch.setattr(triage, "claim", lambda _id: True)
+    monkeypatch.setattr(triage, "release", lambda _id: None)
+    monkeypatch.setattr(triage, "evaluate", lambda _p: ("submitted", "why"))
+    monkeypatch.setattr(triage, "apply", lambda *_a: True)
+    monkeypatch.setattr(triage, "report_failure", lambda *a: recorded.append(a))
+
+    assert triage.triage_one(5)["outcome"] == "routed"
+    assert recorded == []
+
+
+def test_claim_ttl_exceeds_the_call_timeout():
+    """A TTL shorter than the call it guards lets a healthy claimant get
+    re-claimed underneath itself — the duplicate spend, reintroduced."""
+    assert triage.CLAIM_TTL_SECONDS > triage.CALL_TIMEOUT_SECONDS
+
+
+def test_claim_and_release_use_one_stable_owner(monkeypatch):
+    """Claim and release are two separate `endless-go` invocations. If the
+    owner defaulted to the Go helper's own process identity they would never
+    match, so every release would be a no-op and the claim would strand the
+    task until its TTL lapsed."""
+    calls = []
+    monkeypatch.setattr(triage, "_endless_go", lambda args, stdin=None: calls.append(args) or "1")
+
+    triage.claim(3)
+    triage.release(3)
+
+    owners = [a[a.index("--owner") + 1] for a in calls if "--owner" in a]
+    assert len(owners) == 2, "both claim and release must name an explicit owner"
+    assert owners[0] == owners[1], "release used a different owner than claim"

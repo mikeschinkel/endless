@@ -3022,6 +3022,25 @@ def errors_clear(ids):
     impl(ids)
 
 
+@errors_cmd.command("record", hidden=True)
+@click.option("--code", required=True, help="Catalog code ID, e.g. ERR-0008")
+@click.option("--summary", required=True, help="Short text shown in lists and the badge")
+@click.option("--source", default="", help="Subsystem raising it, e.g. triage:inline")
+@click.option("--detail", default="", help="Long capture; goes to the detail log")
+@click.option("--fingerprint", default="", help="Grouping key (defaults to the summary)")
+def errors_record(code, summary, source, detail, fingerprint):
+    """Record a real catalog fault.
+
+    Hidden because it is an internal bridge, not a verb a person needs: the
+    detached `endless triage run` child uses it to put a failed triage on the
+    session-status badge, since Python cannot write the fault store directly
+    (E-1486). Shipped rather than Go-only so it is reachable from the CLI a
+    user actually types (E-1950).
+    """
+    from endless.jobs_cmd import errors_record as impl
+    impl(code, summary, source, detail, fingerprint)
+
+
 @errors_cmd.command("codes")
 def errors_codes():
     """Print the documented error catalog (see docs/errors.md)."""

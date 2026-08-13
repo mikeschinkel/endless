@@ -33,8 +33,10 @@ emitting and refuses to move a row that is no longer `untriaged`, so a person
 who routed the task by hand in the interval is never overwritten.
 """
 
+import functools
 import json
 import os
+import socket
 import subprocess
 import sys
 from pathlib import Path
@@ -130,6 +132,65 @@ def build_context(task_id: int) -> dict:
         return json.loads(out)
     except json.JSONDecodeError as exc:
         raise TriageError(f"triage-context returned non-JSON: {exc}") from exc
+
+
+# CLAIM_TTL_SECONDS bounds a claim. It must EXCEED the worst-case model call,
+# or a slow-but-healthy claimant gets its task re-claimed underneath it and the
+# duplicate spend this claim exists to prevent happens anyway. Headroom covers
+# the two Go reads and the render that bracket the call.
+CLAIM_TTL_SECONDS = CALL_TIMEOUT_SECONDS + 60
+
+
+@functools.lru_cache(maxsize=1)
+def _claim_owner() -> str:
+    """This PYTHON process's claim identity, stable for its lifetime.
+
+    It must be passed explicitly to both claim and release. The Go helper
+    defaults the owner to its OWN process identity, and claim and release are
+    two separate `endless-go` invocations — so letting it default would make
+    every release a no-op against a different owner, stranding the claim until
+    its TTL lapsed and blocking the task for CLAIM_TTL_SECONDS.
+    """
+    return f"{socket.gethostname()}:{os.getpid()}"
+
+
+def claim(task_id: int) -> bool:
+    """Take the per-task triage claim; True when this process won it.
+
+    Both triage paths call this BEFORE the model call. The inline file-time
+    child never enters the E-698 job runner, so the runner's job lease cannot
+    arbitrate between it and a sweep — without this, a sweep firing mid-call
+    re-selects the same still-`untriaged` row and pays for a second model call.
+    The post-call status re-read in `apply` keeps the ledger correct either way;
+    only the claim protects the spend.
+
+    False is an ordinary outcome (someone else is mid-call on this task), not an
+    error. A failure to reach the claim table is also False: refusing to triage
+    is the safe direction, and the sweep retries.
+    """
+    try:
+        out = _endless_go([
+            "session-query", "triage-claim",
+            "--id", str(task_id),
+            "--ttl-seconds", str(CLAIM_TTL_SECONDS),
+            "--owner", _claim_owner(),
+        ])
+    except TriageError:
+        return False
+    return out.strip() == "1"
+
+
+def release(task_id: int) -> None:
+    """Drop this process's claim. Best-effort: a claim left behind simply
+    lapses, which is the whole point of time-boxing it rather than locking."""
+    try:
+        _endless_go([
+            "session-query", "triage-release",
+            "--id", str(task_id),
+            "--owner", _claim_owner(),
+        ])
+    except TriageError:
+        pass
 
 
 def render_prompt(context: dict) -> str:
@@ -234,6 +295,48 @@ def apply(task_id: int, decision: str, rationale: str) -> bool:
     return True
 
 
+# --- failure reporting ------------------------------------------------------
+
+# The catalog code for "triage could not reach a verdict" (docs/errors.md).
+TRIAGE_FAILED_CODE = "ERR-0009"
+
+# Set by spawn_detached in the child's environment so a recorded fault can say
+# WHICH path failed. Read only for labelling; it gates nothing.
+INLINE_ENV = "ENDLESS_TRIAGE_INLINE"
+
+
+def _failure_source() -> str:
+    return "triage:inline" if os.environ.get(INLINE_ENV) else "triage:sweep"
+
+
+def report_failure(task_id: int, detail: str, source: str) -> None:
+    """Record a fault so a failed triage reaches a surface a user watches.
+
+    `triage.run` is fail-open by design, and the inline path runs DETACHED —
+    so without this, a crashed child and a considered no-verdict are
+    indistinguishable and neither is written anywhere. The fault store puts it
+    on the `session status` / `session monitor` badge and writes the detail to
+    its own log; repeats collapse into one incident with an occurrence count,
+    so a machine with no `claude` raises one warning, not one per filing.
+
+    Best-effort and silent on failure: a diagnostic must never be the reason a
+    fail-open path starts failing closed.
+    """
+    try:
+        _endless_go([
+            "errors", "record",
+            "--code", TRIAGE_FAILED_CODE,
+            "--source", source,
+            "--summary", f"triage left E-{task_id} untriaged: {detail}"[:200],
+            "--detail", detail,
+            # Group by CAUSE, not by task: "claude is missing" is one incident
+            # however many tasks hit it.
+            "--fingerprint", f"triage-failed:{detail[:80]}",
+        ])
+    except TriageError:
+        pass
+
+
 # --- entry points -----------------------------------------------------------
 
 
@@ -242,7 +345,24 @@ def triage_one(task_id: int, dry_run: bool = False) -> dict:
 
     `outcome` is one of: `routed` (status moved), `dry-run`, `skipped` (no
     longer untriaged), or `failed` (fail-open — the task stays untriaged).
+
+    Every `failed` outcome is ALSO recorded as a fault, so it reaches the
+    session-status badge instead of dying in a detached child's closed stdout.
+    Fail-open stays fail-open: the task keeps its status and the caller still
+    exits zero. Silence was the bug, not the tolerance.
     """
+    result = _triage_one(task_id, dry_run=dry_run)
+    if result["outcome"] == "failed":
+        report_failure(
+            task_id,
+            result.get("detail") or "no detail recorded",
+            _failure_source(),
+        )
+    return result
+
+
+def _triage_one(task_id: int, dry_run: bool = False) -> dict:
+    """The decision itself. See triage_one for the reporting wrapper."""
     result: dict = {"task_id": task_id, "outcome": "failed", "detail": ""}
     try:
         context = build_context(task_id)
@@ -255,35 +375,46 @@ def triage_one(task_id: int, dry_run: bool = False) -> dict:
         result["detail"] = f"status is {context.get('status')!r}, not untriaged"
         return result
 
-    try:
-        prompt = render_prompt(context)
-    except TriageError as exc:
-        result["detail"] = str(exc)
-        return result
-
-    verdict = evaluate(prompt)
-    if verdict is None:
-        result["detail"] = "no usable verdict from the model"
-        return result
-
-    decision, rationale = verdict
-    result["decision"] = decision
-    result["rationale"] = rationale
-
-    if dry_run:
-        result["outcome"] = "dry-run"
+    # The claim is taken BEFORE the model call and covers everything through
+    # the write, so a sweep and an inline child cannot both pay for this task.
+    # --dry-run claims too: it makes the same call, so it costs the same.
+    if not claim(task_id):
+        result["outcome"] = "skipped"
+        result["detail"] = "another triage run holds the claim on this task"
         return result
 
     try:
-        moved = apply(task_id, decision, rationale)
-    except (TriageError, click.ClickException) as exc:
-        result["detail"] = str(exc)
-        return result
+        try:
+            prompt = render_prompt(context)
+        except TriageError as exc:
+            result["detail"] = str(exc)
+            return result
 
-    result["outcome"] = "routed" if moved else "skipped"
-    if not moved:
-        result["detail"] = "left untriaged: the row moved before the write"
-    return result
+        verdict = evaluate(prompt)
+        if verdict is None:
+            result["detail"] = "no usable verdict from the model"
+            return result
+
+        decision, rationale = verdict
+        result["decision"] = decision
+        result["rationale"] = rationale
+
+        if dry_run:
+            result["outcome"] = "dry-run"
+            return result
+
+        try:
+            moved = apply(task_id, decision, rationale)
+        except (TriageError, click.ClickException) as exc:
+            result["detail"] = str(exc)
+            return result
+
+        result["outcome"] = "routed" if moved else "skipped"
+        if not moved:
+            result["detail"] = "left untriaged: the row moved before the write"
+        return result
+    finally:
+        release(task_id)
 
 
 def triage_batch(
@@ -310,25 +441,73 @@ def triage_batch(
 NO_TRIAGE_ENV = "ENDLESS_NO_TRIAGE"
 
 
+def _enclosing_worktree() -> Path | None:
+    """The self-dev worktree cwd sits inside, or None when cwd is outside one."""
+    dir_name = config.worktree_dir_name()
+    root = config.gated_worktree_root()
+    if dir_name is None or root is None:
+        return None
+    return (Path(root) / ".endless" / "worktrees" / dir_name).resolve()
+
+
 def inline_suppressed() -> str:
     """Why automatic file-time triage must not fire here, or "" when it may.
 
-    Two suppressions, mirroring `internal/jobs.Suppressed` (E-698) — the same
-    hazards apply, because this spawns the same candidate code:
+    The hazard being guarded is E-698's, and it is a PAIR of conditions, not
+    one: CANDIDATE code writing the REAL ledger.
 
-    - `ENDLESS_NO_TRIAGE` set: the explicit opt-out.
-    - a self-dev worktree pinned to the real ledger: candidate, unreviewed
-      triage code pointed at the developer's actual tasks is exactly the
-      pollution the per-worktree sandbox (E-1281) exists to prevent.
+        binary     DB        verdict
+        ---------  --------  ------------------------------
+        candidate  sandbox   fine — this IS the test
+        candidate  real      forbidden — the E-698 hazard
+        landed     real      fine — this is triage
+
+    An earlier version suppressed on "self-dev worktree + --db main" alone,
+    copying `internal/jobs.suppressedWithReason` without re-deriving it. That
+    was wrong here and was the primary reason automatic triage never fired in
+    endless's own repo: `--db main` from a worktree is exactly how every agent
+    session is told to file, and agents file nearly every task, so the inline
+    path was suppressed on the normal path and everything waited on the sweep.
+
+    The suppression is correct THERE because the Claude hooks invoke
+    `<worktree>/bin/endless-go`, which is genuinely candidate. It is not true
+    here: under `--db main` the child spawned is `sys.argv[0]` — the `endless`
+    shim, which `just install` points at the MAIN checkout's editable source —
+    and that child writes through `event_bridge._resolve_endless_go()`, which
+    prefers the worktree binary only under `--db sandbox`. Both halves are
+    landed code.
+
+    So gate on where the CLI that would actually be spawned LIVES, not on
+    whether the project is self-dev. Path-gating rather than deleting the clause
+    keeps it correct if anyone later runs `uv run endless` from a worktree,
+    which today nobody does.
     """
     if os.environ.get(NO_TRIAGE_ENV):
         return f"{NO_TRIAGE_ENV} is set"
-    if (
-        config.gated_worktree_root() is not None
-        and config.RESOLVED_CONFIG_DIR == config.main_config_dir()
-    ):
-        return "self-dev worktree pinned to the real ledger"
-    return ""
+
+    # Anything but the real ledger is a sandbox or a test DB: candidate code is
+    # supposed to write those.
+    if config.RESOLVED_CONFIG_DIR != config.main_config_dir():
+        return ""
+
+    worktree = _enclosing_worktree()
+    if worktree is None:
+        return ""
+
+    cli = _self_cli_path()
+    if cli is None:
+        # Nothing resolvable to spawn; spawn_detached reports that separately.
+        return ""
+
+    try:
+        Path(cli).resolve().relative_to(worktree)
+    except ValueError:
+        # Landed CLI + real ledger — this is ordinary triage, the whole point.
+        return ""
+
+    return (
+        f"candidate CLI inside the worktree ({cli}) is pinned to the real ledger"
+    )
 
 
 def spawn_detached(task_id: int) -> bool:
@@ -348,24 +527,53 @@ def spawn_detached(task_id: int) -> bool:
         return False
 
     env = dict(os.environ)
+    # Lets the child label its own faults `triage:inline` rather than
+    # `triage:sweep` — the two fail for different reasons and a user reading
+    # the badge needs to know which path is broken.
+    env[INLINE_ENV] = "1"
     if config.RESOLVED_CONFIG_DIR is not None:
         # The config dir is always <XDG_CONFIG_HOME>/endless, so handing the
         # child the parent reproduces this process's DB routing.
         env["XDG_CONFIG_HOME"] = str(config.RESOLVED_CONFIG_DIR.parent)
 
     argv = [cli, *_child_db_args(), "triage", "run", "--task", str(task_id)]
+    # stdout/stderr go to a machine-local log, NOT to DEVNULL. The child records
+    # its own fault for a failure it can observe (see report_failure); this log
+    # is the floor beneath that — it catches the failures the child cannot
+    # report because it died before it could, an import error or a signal.
+    # Never inherited: `task add` may be printing to a terminal a user is
+    # reading, and a detached child writing over it is worse than silence.
+    try:
+        log = _child_log_handle()
+    except OSError:
+        log = subprocess.DEVNULL
     try:
         subprocess.Popen(
             argv,
             stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+            stdout=log,
+            stderr=subprocess.STDOUT,
             start_new_session=True,
             env=env,
         )
     except OSError:
         return False
+    finally:
+        if log is not subprocess.DEVNULL:
+            log.close()
     return True
+
+
+def child_log_path() -> Path:
+    """Where a detached triage child's output lands."""
+    return config.CONFIG_DIR / "logs" / "triage-inline.log"
+
+
+def _child_log_handle():
+    """Append-mode handle for the child log, creating the directory."""
+    path = child_log_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    return open(path, "a", buffering=1)
 
 
 def _self_cli_path() -> str | None:

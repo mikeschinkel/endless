@@ -28,7 +28,8 @@
 #   0. Fail-fast unit front: tests/test_triage.py (which owns the timeout
 #      fail-open case — a real 120s timeout is not a shell-test shape), the Go
 #      read helpers, the new ActorKind, the job's registration and lease
-#      arithmetic, and tests/tasks/e-1648-verify.sh for the re-synced doc block.
+#      arithmetic, and the canonical status-lifecycle block this task's docs
+#      re-synced (asserted HERE, not by chaining another task's suite).
 #   1. A stubbed SUBMITTED verdict routes to `submitted`; UNPLANNED to `unplanned`.
 #   2. Fail-open: unparseable reply, non-zero exit, and a missing `claude`
 #      binary each leave the task `untriaged` and exit 0.
@@ -47,6 +48,12 @@
 #      linked decisions are present; nothing session-scoped is.
 #  12. Filing a task triages it without the filing waiting on the model, and
 #      ENDLESS_NO_TRIAGE suppresses that automatic path.
+#  13. (reopened) The per-task claim serializes the two triage paths, so a
+#      second attempt on a task already in flight skips instead of paying for a
+#      duplicate model call — and a lapsed claim is reclaimable.
+#  14. (reopened) A triage that reaches no verdict records an ERR-0009 fault, so
+#      fail-open stops meaning silent.
+#  15. (reopened) The sweep interval and the reworded reset message.
 #
 # Output: pass/fail per check, then a summary. Exit 0 all-passed, 1 any failure,
 # 2 setup error.
@@ -154,6 +161,11 @@ status_of() {
     en task show "$1" 2>&1 | grep -E '^Status:' | awk '{print $2}'
 }
 
+# go_q runs a session-query verb against the throwaway DB. The DB context must
+# be threaded explicitly: the script's cwd is the self-dev worktree, so without
+# --config-dir the Go binary refuses (E-1429) rather than reading the temp env.
+go_q() { "${GO}" --config-dir "${XDG_CONFIG_HOME}/endless" "$@"; }
+
 # The ledger the Go executor appends every event to. Read directly rather than
 # through a query surface: the point of check 7 is the WIRE shape.
 ledger() { cat "${PROJ}"/.endless/db-ledger/*.jsonl 2>/dev/null; }
@@ -244,17 +256,42 @@ ${out}"; fi
     else report_fail "Go job registration, runner and template render pass" "go test exit 0" "exit ${rc}
 ${out}"; fi
 
-    # The status-lifecycle prose this task rewrote lives in three files; E-1648's
-    # script is what proves the canonical block is still byte-identical across them.
-    if [[ -x "${REPO_ROOT}/tests/tasks/e-1648-verify.sh" ]]; then
-        out=$("${REPO_ROOT}/tests/tasks/e-1648-verify.sh" 2>&1); rc=$?
-        if [[ "${rc}" -eq 0 ]]; then report_pass "doc block still in sync (e-1648-verify.sh)"
-        else report_fail "doc block still in sync (e-1648-verify.sh)" "exit 0" "exit ${rc}
-${out}"; fi
-    else
-        report_fail "doc block still in sync (e-1648-verify.sh)" \
-            "tests/tasks/e-1648-verify.sh is executable" "missing"
+    # The status-lifecycle prose this task rewrote lives in three files that must
+    # carry the canonical block byte-identically.
+    #
+    # Asserted HERE rather than by invoking tests/tasks/e-1648-verify.sh. A
+    # landed verify suite is a point-in-time proof, frozen at its own land and
+    # UNDEFINED afterward — chaining one makes this suite's result depend on
+    # another task's expired assertions, which is exactly how E-1859's suite
+    # once reported red for a reason with nothing to do with triage.
+    local canonical extracted ok=1 f
+    canonical="${REPO_ROOT}/docs/status-lifecycle.mmd"
+    if [[ ! -f "${canonical}" ]]; then
+        report_fail "canonical status-lifecycle block exists" "${canonical}" "missing"
+        return
     fi
+    for f in README.md CLAUDE.md docs/guide/index.md; do
+        # The embedded copies wrap the canonical text in a ```mermaid fence;
+        # strip it so the comparison is against the canonical file's contents.
+        # Match the HTML-comment markers specifically. The canonical text ITSELF
+        # mentions the marker names in a `%%` comment, so a bare substring match
+        # would treat that line as a marker and silently drop it.
+        extracted=$(awk '
+            /^<!-- BEGIN canonical:docs\/status-lifecycle.mmd/ {grab=1; next}
+            /^<!-- END canonical:docs\/status-lifecycle.mmd/    {grab=0}
+            grab' "${REPO_ROOT}/${f}" | sed '1{/^```mermaid$/d;}; ${/^```$/d;}')
+        if [[ -z "${extracted}" ]]; then
+            report_fail "${f} carries the canonical block" "the marked block" "not found"
+            ok=0
+            continue
+        fi
+        if [[ "${extracted}" != "$(cat "${canonical}")" ]]; then
+            report_fail "${f} matches docs/status-lifecycle.mmd" \
+                "byte-identical to the canonical file" "differs"
+            ok=0
+        fi
+    done
+    [[ "${ok}" -eq 1 ]] && report_pass "the canonical status-lifecycle block is in sync across all three copies"
 }
 
 check_routes_both_ways() {
@@ -351,7 +388,7 @@ check_tier1_never_selected() {
 
 check_dry_run() {
     section "6 — --dry-run writes nothing"
-    local t out before after
+    local t out
 
     t=$(add_task "Remove the stale fixture" --description "Delete tests/fixtures/old.json.") || return
     before=$(ledger | wc -l | tr -d ' ')
@@ -519,6 +556,74 @@ check_inline_file_time_path() {
         "$(status_of "${t}")" "untriaged"
 }
 
+check_claim_serializes_the_paths() {
+    section "13 — the per-task claim stops two paths paying for one task"
+    local t out held
+
+    t=$(add_task "Add the claim-guarded thing" --description "Add a flag.") || return
+
+    # Hold the claim as some other process, then ask triage to run. It must
+    # decline WITHOUT calling the model.
+    held=$(go_q session-query triage-claim --id "${t#E-}" --ttl-seconds 300 --owner other-proc 2>&1)
+    assert_eq "another process can take the claim" "${held}" "1"
+
+    out=$(STUB_REPLY="SUBMITTED: must never be applied." en triage run --task "${t}" 2>&1)
+    assert_contains "triage declines a claimed task" "${out}" "claim"
+    assert_eq "the task is untouched" "$(status_of "${t}")" "untriaged"
+
+    # Release it, and the same run now succeeds — proving the skip was the
+    # claim and not some unrelated refusal.
+    go_q session-query triage-release --id "${t#E-}" --owner other-proc >/dev/null 2>&1
+    STUB_REPLY="SUBMITTED: now it may run." en triage run --task "${t}" >/dev/null 2>&1
+    assert_eq "releasing the claim unblocks triage" "$(status_of "${t}")" "submitted"
+
+    # A claimant that dies must not wedge the task: a zero-TTL claim is already
+    # lapsed, so the next claimant takes it over.
+    local t2 lapsed
+    t2=$(add_task "Add the lapsed-claim thing" --description "Add another flag.") || return
+    go_q session-query triage-claim --id "${t2#E-}" --ttl-seconds 1 --owner dead-proc >/dev/null 2>&1
+    sleep 2
+    lapsed=$(go_q session-query triage-claim --id "${t2#E-}" --ttl-seconds 300 --owner live-proc 2>&1)
+    assert_eq "a lapsed claim is reclaimable" "${lapsed}" "1"
+    go_q session-query triage-release --id "${t2#E-}" --owner live-proc >/dev/null 2>&1
+}
+
+check_failure_is_recorded() {
+    section "14 — a no-verdict triage records a fault instead of vanishing"
+    local t out before after
+
+    t=$(add_task "Add the observable-failure thing" --description "Add a thing.") || return
+
+    STUB_REPLY="this is not a verdict at all" en triage run --task "${t}" >/dev/null 2>&1
+    assert_eq "the task stays untriaged (still fail-open)" "$(status_of "${t}")" "untriaged"
+
+    # The store deliberately collapses repeats into one incident with an
+    # occurrence count, so assert on presence and attribution rather than on a
+    # row-count delta — a second failure raises the count, not the row count.
+    out=$(en errors show --all 2>&1)
+    assert_contains "the failure is recorded as ERR-0009" "${out}" "ERR-0009"
+    assert_contains "the incident names the task" "${out}" "${t}"
+    assert_contains "the incident names which path failed" "${out}" "triage:"
+
+    # ERR-0009 must be a documented catalog code, not an invented string.
+    assert_contains "ERR-0009 is in the catalog" "$(en errors codes 2>&1)" "ERR-0009"
+}
+
+check_reopened_constants() {
+    section "15 — sweep cadence and the reworded reset message"
+    local out t
+
+    out=$(en jobs list 2>&1)
+    assert_contains "the sweep runs every 5m" "${out}" "5m0s"
+
+    # Fix 5: the note must name the COST of re-triage, not offer an undo.
+    t=$(add_task "Add the reset-message thing" --description "Original description.") || return
+    en task approve "${t}" >/dev/null 2>&1
+    out=$(en task update "${t}" --description "A materially different description now." 2>&1)
+    assert_contains "the note names the model-call cost" "${out}" "one model call"
+    assert_not_contains "it no longer reads as an undo offer" "${out}" "to suppress"
+}
+
 main() {
     setup
 
@@ -541,6 +646,9 @@ main() {
     check_job_registered
     check_context_is_persisted_artifacts_only
     check_inline_file_time_path
+    check_claim_serializes_the_paths
+    check_failure_is_recorded
+    check_reopened_constants
 
     summary
 }

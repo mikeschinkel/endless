@@ -200,3 +200,28 @@ carries the underlying error and the pane id. A schema or enum-integrity failure
 means the binary and the database disagree — usually a worktree build against
 the main DB (E-1818). If the bar is blank with *no* incident recorded, suspect
 the database itself and check `endless sql "select 1"`.
+
+## ERR-0009 — triage-failed
+
+**Severity:** warning · **Raised by:** `endless triage run` (E-1859)
+
+Triage could not reach a verdict for a task, so the task was left `untriaged`.
+Causes: the model call timed out, `claude` was not found on PATH, the process
+exited non-zero, or the reply did not begin with `SUBMITTED:` or `UNPLANNED:`.
+
+Nothing is lost or corrupted — triage is fail-open, the task keeps its
+`untriaged` status, and the background sweep retries it. The warning exists
+because the file-time triage path runs DETACHED: without it, a child that
+crashed and a child that considered the description and declined to route look
+identical, and neither is recorded anywhere.
+
+The source names which path failed — `triage:inline` for the child `task add`
+spawns, `triage:sweep` for the background job. Repeats collapse into a single
+incident with an occurrence count, so a machine with no `claude` installed
+raises one warning rather than one per filing.
+
+**What to do.** Check that `claude` is on PATH and answering — the incident's
+detail log carries the failing invocation. If triage is not wanted on this
+machine, set `ENDLESS_NO_TRIAGE=1` to stop the automatic path, or route by hand
+with `endless task submit <id>` / `endless task update <id> --status unplanned`.
+Dismiss with `endless errors clear <id>`.

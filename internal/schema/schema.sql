@@ -847,6 +847,26 @@ CREATE TABLE IF NOT EXISTS session_hidden_tasks (
 CREATE INDEX IF NOT EXISTS idx_session_hidden_tasks_task
     ON session_hidden_tasks(task_id);
 
+-- Per-task triage claims (E-1859). Taken BEFORE the sufficiency model call so
+-- the inline file-time path and the background sweep cannot both pay for the
+-- same task; the post-call status re-read guards the write, but only a claim
+-- guards the spend.
+--
+-- Time-boxed like the jobs lease rather than an OS lock, so a claimant that dies
+-- mid-call needs no cleanup: its claim lapses and the next attempt re-claims.
+-- Every due/expiry comparison uses SQLite's clock so racing processes agree.
+--
+-- No FK to tasks: a claim must outlive a task deleted mid-call rather than
+-- cascade away underneath a running model call.
+CREATE TABLE IF NOT EXISTS triage_claims (
+    task_id INTEGER PRIMARY KEY,
+    owner TEXT NOT NULL,
+    claimed_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_triage_claims_expires
+    ON triage_claims(expires_at);
+
 -- Curated, persistent per-project "next" list (E-1421). Five tables: header,
 -- lanes, tasks, auto-added pending tasks awaiting curation, and an event-
 -- sourced audit log of every mutation.

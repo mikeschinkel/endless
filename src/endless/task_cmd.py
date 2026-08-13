@@ -4686,12 +4686,23 @@ def update_plan(
             else "the description is the spec that triage and approval were "
                  "judged against"
         )
-        click.echo(
-            f"{task_id_display(item_id)} was '{row[0]['status']}'; description "
-            f"changed → status set to {untriage_target} "
-            f"({because}; pass --keep-status to suppress for a "
-            f"typo/formatting-only edit)."
-        )
+        # E-1859 (reopened): the offer here is about COST, not about whether the
+        # transition was right. The previous wording ended "pass --keep-status
+        # to suppress", which read as an undo offered after the fact and invited
+        # agents to relay a completed, correct transition to the user as a
+        # decision to accept — observed four times in one session. `--keep-status`
+        # is a spend control: every re-triage is a model call, and a filer who
+        # already knows the edit was cosmetic should skip paying for one.
+        if untriage_target == "untriaged":
+            click.echo(
+                f"{task_id_display(item_id)} → untriaged; re-triage will run "
+                f"(one model call). Pass --keep-status on a typo- or "
+                f"formatting-only edit to skip it."
+            )
+        else:
+            click.echo(
+                f"{task_id_display(item_id)} → {untriage_target} ({because})."
+            )
 
     # E-1772: nudge toward `endless task report` on an agent's wind-down. Only
     # when this update actually set a status; effective_outcome covers the
