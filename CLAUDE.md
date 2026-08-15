@@ -67,6 +67,43 @@ The setup writes an `XDG_CONFIG_HOME` value into `<worktree>/.claude/settings.js
 
 Sandbox cleanup on worktree drop/land is not yet automatic; manually `endless-sandbox destroy e-NNN` if the cache needs reclaiming.
 
+## Uppercase `$KEYWORD` markers in a user message
+
+A user message beginning with `$WORD` in caps (e.g. `$JARGON`, `$FULL STATUS`)
+carries a marker that **hooks act on**. Do not act on the marker yourself — in
+particular, do NOT hand-append a lesson to `~/.claude/LESSONS.md` for a
+`$JARGON` correction; that recording is automatic, and doing it manually risks a
+duplicate entry.
+
+Respond to the CONTENT of the message normally. The marker is addressed to the
+tooling, not to you.
+
+This is the one exception to the global rule that every correction is recorded
+by hand.
+
+## PRODUCT — evaluate as a product, not as Mike's setup
+
+When the user writes **PRODUCT** in caps, they are telling you your
+recommendation or evaluation is being judged as shipped software, not as a
+convenience for this machine. Two things follow, and both change answers:
+
+1. **Other people will run Endless.** A fix that is correct only because of how
+   Mike's machine happens to be configured is not a fix. Ask what it does on a
+   fresh install, for someone with a different shell, no tmux, no worktrees, or
+   a project that is not Endless.
+
+2. **`self_dev` is a real mode with different behavior, and both sides are
+   supported.** Endless managing tasks for ENDLESS (self_dev, the sandbox DB,
+   per-worktree candidate binaries) behaves differently from Endless managing
+   tasks for ANY OTHER project (the real ledger, one installed binary). A design
+   that only works in one of those is incomplete; say which mode you reasoned
+   about and what happens in the other.
+
+The marker exists because the default failure is silent: reasoning from this
+one machine produces answers that look right here and break for everyone else.
+Volunteering the product view when a change plausibly affects other users is
+correct even without the keyword — the keyword makes it mandatory.
+
 ## Reporting to the user — the minimizer gate (E-1953)
 
 Every reply a session sends goes through `endless task report [<id>] --draft-file
