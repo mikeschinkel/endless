@@ -1058,26 +1058,40 @@ def session_goto(target_ref, resume):
          "task flips to `revisit`. Bare uses `.landed`; =<ref> overrides.",
 )
 @click.option(
-    "--print-decision", is_flag=True,
-    help="With --review/--reopen: perform the recovery but skip the "
-         "`claude --resume` launch, printing the resolved decision as JSON.",
+    "--dry-run", is_flag=True,
+    help="Resolve (and create) everything the resume needs, then decline the "
+         "`claude --resume` launch and print the resolved target as JSON.",
 )
-def session_resume(ref, review, reopen, print_decision):
+@click.option(
+    # E-1918 renamed this to --dry-run once it worked on every path: it is no
+    # longer printing a *recovery* decision, it is declining to act, which is
+    # what --dry-run already means elsewhere in this CLI (`triage run`). The old
+    # spelling keeps working for muscle memory and E-1801's verify script;
+    # hidden so only one name is advertised.
+    "--print-decision", is_flag=True, hidden=True,
+)
+def session_resume(ref, review, reopen, dry_run, print_decision):
     """Relaunch a lost Claude session in the CURRENT tmux pane.
 
-    REF is a task id (E-NNNN, as shown on the tmux tab) or a session id /
-    Claude UUID prefix. A task id resolves to that task's most-recent
-    resumable session. cd's to the task's worktree, then execs
-    `claude --resume <uuid>` so the resumed session takes over this pane.
+    REF is a task id (E-NNNN, as shown on the tmux tab), a session id
+    (ES-NNNN, or a bare integer), or a Claude UUID prefix. A task id resolves
+    to that task's most-recent resumable session; ES-NNNN names the session id
+    space explicitly and never falls back to a task lookup. cd's to the task's
+    worktree, then execs `claude --resume <uuid>` so the resumed session takes
+    over this pane.
 
     Unlike `session goto`, this includes ended sessions — recovering the
     sessions orphaned when tmux crashes is exactly what it is for.
+
+    A session that never claimed a task gets a container task and worktree
+    created for it, so it has somewhere to be resumed into.
 
     When the worktree was dropped after landing, `--review`/`--reopen` rebuild
     it from the surviving transcript so no git ref need be typed.
     """
     from endless.session_cmd import resume_session
-    resume_session(ref, review=review, reopen=reopen, print_decision=print_decision)
+    resume_session(ref, review=review, reopen=reopen,
+                   dry_run=dry_run or print_decision)
 
 
 @session_cmd.command("back")

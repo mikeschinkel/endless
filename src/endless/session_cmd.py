@@ -183,6 +183,125 @@ _REOPEN_TO_REVISIT: frozenset[str] = frozenset({
 _REOPEN_REFUSED: frozenset[str] = frozenset({"declined", "obsolete"})
 
 
+def _taskless_resume_description(eid: int) -> str:
+    """Describe the container task minted for task-less session `eid` (E-1918).
+
+    Names the tasks the session had already touched, so the placeholder is not
+    contentless: those ids are the only evidence on hand of what the session was
+    doing, and they are what makes the container findable later. Kept to one
+    line and inside `validate_description`'s length cap — long tails are elided
+    rather than truncated mid-id.
+    """
+    base = (
+        f"Container task auto-created so session ES-{eid} could be resumed "
+        f"into a worktree."
+    )
+    rows = db.query(
+        "SELECT task_id FROM session_tasks WHERE session_id = ? ORDER BY task_id",
+        (eid,),
+    )
+    ids = [f"E-{r['task_id']}" for r in rows]
+    if not ids:
+        return base + " The session had not touched any tasks."
+    shown, extra = ids[:20], max(0, len(ids) - 20)
+    tail = f", and {extra} more" if extra else ""
+    return base + f" The session had already touched: {', '.join(shown)}{tail}."
+
+
+def _auto_task_for_taskless_session(target: dict) -> tuple[str, int]:
+    """Mint + claim a task for a session that never claimed one (E-1918).
+
+    A no-goal session has nowhere to be resumed into, even though its transcript
+    is intact and it did real work. Resuming into the project root was rejected
+    (that is the main checkout, which sessions must not edit, with no branch and
+    nowhere to commit), and prompting for a title was rejected (someone resuming
+    a task-less session is doing so *because* they do not know what it was
+    about). So: create the task, claim it, resume into its worktree.
+
+    Idempotency needs no bookkeeping — claiming sets `sessions.active_task_id`,
+    so the next resume of this session takes the ordinary task path and mints
+    nothing. tests/tasks/e-1918-verify.sh asserts that rather than trusting it.
+
+    Returns (worktree_path, task_id).
+    """
+    from endless.task_cmd import create_claimed_task_for_session
+
+    eid = target.get("endless_id")
+    uuid = target.get("session_id") or ""
+    project_path = target.get("project_path") or ""
+    if not project_path:
+        raise click.ClickException(
+            f"session {eid} belongs to no registered project, so there is "
+            f"nowhere to create a task or a worktree for it.\n"
+            f"Resume it by hand, without a worktree:\n"
+            f"    claude --resume {uuid}"
+        )
+    root = Path(project_path)
+    rows = db.query(
+        "SELECT name FROM projects WHERE id = ?", (target.get("project_id"),)
+    )
+    if not rows:
+        raise click.ClickException(
+            f"session {eid}'s project (id {target.get('project_id')}) is not in "
+            f"the ledger, so there is nowhere to create a task for it.\n"
+            f"Resume it by hand, without a worktree:\n"
+            f"    claude --resume {uuid}"
+        )
+
+    title = f"Auto-resumed task for session ES-{eid}"
+    click.echo(
+        click.style("•", fg="cyan")
+        + f" session ES-{eid} never claimed a task — creating one to resume into",
+        err=True,
+    )
+    try:
+        task_id, wt_path = create_claimed_task_for_session(
+            title=title,
+            description=_taskless_resume_description(eid),
+            project_name=rows[0]["name"],
+            project_root=root,
+            session_id=eid,
+        )
+    except click.ClickException as e:
+        raise click.ClickException(
+            f"could not give session {eid} a task worktree to resume into: "
+            f"{e.format_message()}\n"
+            f"Resume it by hand, without a worktree:\n"
+            f"    claude --resume {uuid}"
+        )
+    return str(wt_path), task_id
+
+
+def _resume_decision(
+    uuid: str,
+    worktree: str,
+    label: str,
+    eid: int,
+    task: int | None,
+    decision_out: dict | None,
+    **fields,
+) -> tuple[str, str, str, int]:
+    """Fill `decision_out` with what `--dry-run` prints, and return the target.
+
+    Every resume path funnels through here so the JSON shape is the same on all
+    of them (E-1918) — the plain path included, which is what makes the whole
+    command testable without exec'ing `claude`. `setdefault` leaves fields an
+    earlier step already decided (`_recover_dropped_worktree`'s recovery block).
+    """
+    if decision_out is not None:
+        decision_out.update({
+            "uuid": uuid,
+            "endless_id": eid,
+            "worktree": worktree,
+            "label": label,
+            "active_task_id": task,
+        })
+        decision_out.update(fields)
+        decision_out.setdefault("recovered", False)
+        decision_out.setdefault("created_task", False)
+    return uuid, worktree, label, eid
+
+
 def _resolve_resume(
     ref: str,
     *,
@@ -198,7 +317,11 @@ def _resolve_resume(
     --resume` (new window) so both agree on what "resumable" means and emit
     identical diagnostics (E-1797).
 
-    When the worktree is gone (dropped after landing) but the transcript
+    A session that never claimed a task has no worktree to be resumed into, so
+    one is minted for it: a container task, claimed straight to `underway`, with
+    the worktree `task claim` would have built (E-1918).
+
+    When a task's worktree is gone (dropped after landing) but the transcript
     survives, behavior depends on `intent` (E-1801):
       - intent is None → raise an error naming `--review`/`--reopen` (the shared
         diagnostic both surfaces get).
@@ -206,7 +329,7 @@ def _resolve_resume(
         landing/branch history and return its path. `override` is the explicit
         base ref from `--review=<ref>`/`--reopen=<ref>` (or ".landed"/None for
         the default base chain). `decision_out`, if given, is filled with the
-        resolved decision for `--print-decision`.
+        resolved decision for `--dry-run`.
     """
     target = _resume_target(ref)
     uuid = target.get("session_id") or ""
@@ -237,19 +360,20 @@ def _resolve_resume(
         )
 
     if worktree and os.path.isdir(worktree):
-        if decision_out is not None:
-            decision_out.update(
-                {"recovered": False, "worktree": worktree, "label": label}
-            )
-        return uuid, worktree, label, eid
+        return _resume_decision(uuid, worktree, label, eid, task, decision_out)
 
-    # Worktree is gone (or never mapped to a task).
+    # No task at all: mint one, rather than refusing a session whose transcript
+    # is intact (E-1918). The old refusal here blamed "a background agent that
+    # never started?" — plainly wrong for a 133-message session, and a
+    # parenthetical that belongs only on the no-UUID branch above.
     if task is None:
-        raise click.ClickException(
-            f"session {eid} has no task worktree to resume into "
-            "(a background agent that never started?)."
+        worktree, task = _auto_task_for_taskless_session(target)
+        return _resume_decision(
+            uuid, worktree, f"E-{task}", eid, task, decision_out,
+            created_task=True,
         )
 
+    # The task's worktree is gone (dropped after landing).
     if intent is None:
         raise click.ClickException(
             f"{label}'s worktree is gone (dropped after landing). Recover it "
@@ -261,7 +385,7 @@ def _resolve_resume(
         )
 
     worktree = _recover_dropped_worktree(target, intent, override, decision_out)
-    return uuid, worktree, label, eid
+    return _resume_decision(uuid, worktree, label, eid, task, decision_out)
 
 
 def _resolve_recovery_base(
@@ -401,7 +525,7 @@ def resume_session(
     ref: str,
     review: str | None = None,
     reopen: str | None = None,
-    print_decision: bool = False,
+    dry_run: bool = False,
 ) -> None:
     """Relaunch a lost Claude session in the current tmux pane.
 
@@ -415,10 +539,15 @@ def resume_session(
     after landing: `--review` rebuilds a detached, read-mostly inspection tree
     (no status change); `--reopen` rebuilds a working branch and, for a
     done/rejected task, flips it to `revisit`. Each accepts an optional base ref
-    (`--review=<ref>`); bare, they use `.landed` (the latest landing). With
-    `--print-decision` the recovery is performed but the `claude --resume` launch
-    is skipped and the resolved decision is printed as JSON — the seam the verify
-    script asserts against.
+    (`--review=<ref>`); bare, they use `.landed` (the latest landing).
+
+    `--dry-run` stops one line short of the exec: everything the resume needs is
+    resolved (and any worktree or container task it implies is created), then the
+    `claude --resume` launch is declined and the resolved target is printed as
+    JSON instead. E-1918 widened it from the `--review`/`--reopen` paths to
+    every path, so the whole command is testable without launching Claude; it
+    costs nothing, since the plain path already filled the same dict.
+    `--print-decision` is its deprecated spelling, kept working.
 
     To resume a non-live target in a NEW window instead of clobbering the
     current pane, use `session goto <ref> --resume` (E-1797).
@@ -429,17 +558,13 @@ def resume_session(
         )
     intent = "review" if review is not None else "reopen" if reopen is not None else None
     override = review if review is not None else reopen
-    if print_decision and intent is None:
-        raise click.ClickException(
-            "--print-decision applies only with --review or --reopen."
-        )
 
     decision: dict = {}
     uuid, worktree, label, eid = _resolve_resume(
         ref, intent=intent, override=override, decision_out=decision
     )
 
-    if print_decision:
+    if dry_run:
         click.echo(json_mod.dumps(decision, indent=2))
         return
 
@@ -1777,9 +1902,18 @@ def _run_use_extension(path: Path, extra_env: dict[str, str]) -> str | None:
 def _match_companions(live: list[dict], ref: str) -> list[dict]:
     """Match a session-ref against live companions.
 
-    Numeric ref matches endless_session_id exactly. Otherwise the ref is
-    treated as a Claude UUID prefix (case-insensitive).
+    An `ES-`/`es-` prefix is stripped first, then a numeric ref matches
+    endless_session_id exactly. Otherwise the ref is treated as a Claude UUID
+    prefix (case-insensitive).
+
+    Stripping the prefix is what makes `session show`/`cd`/`use ES-NNN` work
+    (E-1918): without it the ref skipped the isdigit() branch, fell through to
+    the UUID-prefix branch, and matched nothing — so the one form `task show`
+    prints and the guide tells sessions to prefer was the one form these three
+    commands rejected.
     """
+    if ref[:3].upper() == "ES-":
+        ref = ref[3:]
     if ref.isdigit():
         target = int(ref)
         return [c for c in live if c.get("endless_session_id") == target]

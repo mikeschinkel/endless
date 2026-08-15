@@ -21,12 +21,21 @@ import (
 // from the task's type (epic is refused), current status (drives the --reopen
 // transition), title (derives the branch name), and latest landing sha (the
 // `.landed` base). All four are empty for a session with no active task.
+//
+// ProjectID/ProjectPath are filled UNCONDITIONALLY (E-1918) — including on the
+// task-less branch, which is the branch that needs them: resuming a session
+// that never claimed a task auto-creates one, and the task has to be created in
+// the resumed session's project rather than in whatever project the resuming
+// shell happens to stand in. ProjectPath is "" when the id is 0 or names no
+// registered row; the Python caller turns that into a "nowhere to put it" error.
 type ResumeTarget struct {
 	EndlessID    int64  `json:"endless_id"`
 	SessionID    string `json:"session_id"`
 	ActiveTaskID *int64 `json:"active_task_id"`
 	WorktreePath string `json:"worktree_path"`
 	State        string `json:"state"`
+	ProjectID    int64  `json:"project_id"`
+	ProjectPath  string `json:"project_path"`
 	TaskType     string `json:"task_type,omitempty"`
 	TaskStatus   string `json:"task_status,omitempty"`
 	TaskTitle    string `json:"task_title,omitempty"`
@@ -37,12 +46,19 @@ const resumeSelect = `SELECT id, session_id, COALESCE(project_id, 0), active_tas
 	FROM sessions`
 
 // ResolveResumeTarget resolves a task or session reference to the session
-// `session resume` should relaunch. Resolution is task-first, because the
-// primary handle is the task id shown on the tmux tab:
+// `session resume` should relaunch. Resolution is task-first for the ambiguous
+// forms, because the primary handle is the task id shown on the tmux tab:
 //
-//   - "E-<n>" / "e-<n>": the task's most-recent resumable session (errors if none).
-//   - bare "<n>":        the task's most-recent resumable session, else sessions.id <n>.
-//   - anything else:     a Claude UUID (exact match, then unique prefix).
+//   - "ES-<n>" / "es-<n>": sessions.id <n>, and ONLY that (errors if none).
+//   - "E-<n>" / "e-<n>":   the task's most-recent resumable session (errors if none).
+//   - bare "<n>":          the task's most-recent resumable session, else sessions.id <n>.
+//   - anything else:       a Claude UUID (exact match, then unique prefix).
+//
+// The `ES-` branch is session-EXPLICIT and never falls back to the task lookup,
+// mirroring how `E-` is task-explicit (E-1918). Naming the id space is the whole
+// purpose of the prefix, so `ES-500` resolving to task E-500's session would
+// defeat it. `ES-` is also the form `task show` prints under `Created:`/`Touched
+// by:` and the form the guide tells sessions to prefer.
 //
 // "Resumable" means session_id IS NOT NULL. Unlike `session goto`, ended
 // sessions are included: a tmux crash takes every session to a dead pane, and
@@ -55,6 +71,27 @@ func ResolveResumeTarget(ref string) (ResumeTarget, error) {
 	ref = strings.TrimSpace(ref)
 	if ref == "" {
 		return ResumeTarget{}, fmt.Errorf("empty session/task reference")
+	}
+
+	// Checked before the "E-" branch below: "ES-963"[:2] is "ES", not "E-", so
+	// the two cannot collide — but reading them in prefix-length order is how a
+	// later editor keeps it that way.
+	if len(ref) > 3 && strings.EqualFold(ref[:3], "es-") {
+		bare := ref[3:]
+		n, convErr := strconv.ParseInt(bare, 10, 64)
+		if convErr != nil {
+			return ResumeTarget{}, fmt.Errorf(
+				"%q is not a session reference: ES- takes an integer session id "+
+					"(e.g. ES-963)", ref)
+		}
+		t, found, err := resumeBySessionID(db, n)
+		if err != nil {
+			return ResumeTarget{}, err
+		}
+		if !found {
+			return ResumeTarget{}, fmt.Errorf("no session with id %d", n)
+		}
+		return t, nil
 	}
 
 	bare := ref
@@ -169,7 +206,21 @@ func scanResume(row *sql.Row) (ResumeTarget, bool, error) {
 }
 
 func buildResumeTarget(r resumeRow) (ResumeTarget, error) {
-	t := ResumeTarget{EndlessID: r.id, SessionID: r.sessionID.String, State: r.state}
+	t := ResumeTarget{
+		EndlessID: r.id,
+		SessionID: r.sessionID.String,
+		State:     r.state,
+		ProjectID: r.projectID,
+	}
+	// Best-effort, and outside the task branch on purpose (E-1918). A session
+	// whose project row is missing (or whose project_id is 0) is not an error
+	// here: the caller that needs a project — the task-less auto-create path —
+	// raises its own diagnostic, and every other caller is unaffected.
+	if r.projectID > 0 {
+		if path, err := ProjectPath(r.projectID); err == nil {
+			t.ProjectPath = path
+		}
+	}
 	if r.activeTask.Valid {
 		v := r.activeTask.Int64
 		t.ActiveTaskID = &v

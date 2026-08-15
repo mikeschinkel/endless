@@ -3839,6 +3839,7 @@ def _perform_claim_work(
     current_status: str,
     target_session: int | None,
     proj_name: str,
+    project_root: Path | None = None,
 ):
     """Emit claim events, print status/binding/worktree lines, create the worktree.
 
@@ -3849,6 +3850,11 @@ def _perform_claim_work(
     target_session=None is the spawn pre-claim case (Claude not yet
     started); skips the task.claimed event entirely. SessionStart's
     spawn-marker auto-bind records the binding once Claude is up.
+
+    `project_root` defaults to cwd's project, which is right for every
+    interactive claim. `session resume`'s task-less auto-claim (E-1918) passes
+    it explicitly: there the project is a property of the RESUMED session, and
+    the resuming shell can be standing anywhere.
     """
     from endless.event_bridge import emit_event
     from endless.worktree_cmd import create_task_worktree, _project_root
@@ -3862,7 +3868,8 @@ def _perform_claim_work(
     # E-1500: secure the worktree FIRST. If creation refuses (orphan branch
     # carrying real work, a DB/file plan mismatch, an undeletable branch),
     # the task's status is left untouched rather than stranded underway.
-    project_root = _project_root()
+    if project_root is None:
+        project_root = _project_root()
     slug_source = title or "task"
     wt_path, created = create_task_worktree(item_id, slug_source, project_root)
 
@@ -3919,6 +3926,47 @@ def _perform_claim_work(
         pass
 
     return wt_path, created
+
+
+def create_claimed_task_for_session(
+    *,
+    title: str,
+    description: str,
+    project_name: str,
+    project_root: Path,
+    session_id: int,
+) -> tuple[int, Path]:
+    """Create a task already claimed by `session_id`, and give it a worktree.
+
+    The container `session resume` mints for a session that never claimed a task
+    (E-1918). Created straight at `underway` and bound in one step, skipping
+    triage and the approve gate deliberately: a human ran `session resume`, so
+    the approval that gate exists to capture already happened interactively —
+    and triage could not judge a placeholder title anyway.
+
+    `force=True` on the add is about the title, not the gates: the title is a
+    fixed placeholder that does not open with a registered verb, and letting it
+    fall through to the haiku verb-check would put a network call on the resume
+    path (and mint a bogus verb if it answered YES).
+
+    Returns (task_id, worktree_path).
+    """
+    item_id = add_item(
+        title,
+        description=description,
+        project_name=project_name,
+        status="underway",
+        force=True,
+    )
+    wt_path, _ = _perform_claim_work(
+        item_id=item_id,
+        title=title,
+        current_status="underway",
+        target_session=session_id,
+        proj_name=project_name,
+        project_root=project_root,
+    )
+    return item_id, wt_path
 
 
 def claim_item(item_id: int, force: bool = False):

@@ -239,15 +239,38 @@ def test_bare_resume_worktree_gone_names_both_flags(monkeypatch):
     assert "--review" in msg and "--reopen" in msg
 
 
-# ── mutual exclusivity + print-decision guard (resume_session surface) ────────
+# ── mutual exclusivity (resume_session surface) ───────────────────────────────
 def test_review_and_reopen_mutually_exclusive(monkeypatch):
     with pytest.raises(click.ClickException, match="mutually exclusive"):
         session_cmd.resume_session("E-10", review=".landed", reopen=".landed")
 
 
-def test_print_decision_requires_intent(monkeypatch):
-    with pytest.raises(click.ClickException, match="print-decision"):
-        session_cmd.resume_session("E-10", print_decision=True)
+# E-1918 removed the "--print-decision applies only with --review/--reopen"
+# guard: the plain path already populated the same dict, so the guard was the
+# only thing keeping the seam off it. The flag must now stop before the exec on
+# the plain path too — asserted by a stub `claude` that fails the test if reached.
+def test_dry_run_on_plain_path_prints_and_skips_exec(
+    monkeypatch, capsys, tmp_path
+):
+    import json
+    wt = tmp_path / "live"
+    wt.mkdir()
+    monkeypatch.setattr(
+        session_cmd, "_resume_target",
+        lambda ref: _target(worktree_path=str(wt)),
+    )
+    monkeypatch.setattr(
+        session_cmd.os, "execvp",
+        lambda *a: pytest.fail("--dry-run must not exec claude"),
+    )
+    session_cmd.resume_session("E-10", dry_run=True)
+    decision = json.loads(capsys.readouterr().out)
+    assert decision["uuid"] == "uuid-xyz"
+    assert decision["endless_id"] == 99
+    assert decision["active_task_id"] == 10
+    assert decision["worktree"] == str(wt)
+    assert decision["recovered"] is False
+    assert decision["created_task"] is False
 
 
 # ── present worktree: intent is a no-op (recovery only fires on a drop) ────────
