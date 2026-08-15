@@ -83,9 +83,14 @@ by hand.
 
 ## PRODUCT — evaluate as a product, not as Mike's setup
 
-When the user writes **PRODUCT** in caps, they are telling you your
-recommendation or evaluation is being judged as shipped software, not as a
-convenience for this machine. Two things follow, and both change answers:
+When the user writes **PRODUCT** — all caps, the whole word — they are telling
+you your recommendation or evaluation is being judged as shipped software, not
+as a convenience for this machine.
+
+Only the all-caps form is the marker. "product" or "Product" in ordinary prose
+is just a word; do not treat it as this instruction.
+
+Two things follow, and both change answers:
 
 1. **Other people will run Endless.** A fix that is correct only because of how
    Mike's machine happens to be configured is not a fix. Ask what it does on a
@@ -101,8 +106,9 @@ convenience for this machine. Two things follow, and both change answers:
 
 The marker exists because the default failure is silent: reasoning from this
 one machine produces answers that look right here and break for everyone else.
-Volunteering the product view when a change plausibly affects other users is
-correct even without the keyword — the keyword makes it mandatory.
+Ask the two questions above whenever a change could affect someone other than
+Mike, whether or not he typed PRODUCT. Typing it makes answering them required;
+not typing it is not permission to ignore other users.
 
 ## Reporting to the user — the minimizer gate (E-1953)
 
