@@ -150,6 +150,59 @@ Every code's cause and remedy is documented in `docs/errors.md`.
 
 ---
 
+## Restoring the database from a backup
+
+`endless db backup` writes a timestamped copy to `<config dir>/backups/` (last
+60 kept). `just land` fires it before a schema change, so a backup of the real
+ledger almost always exists. `endless db restore` is the other half — the
+supported way to *use* one.
+
+```bash
+endless db restore --dry-run        # the report you want first, mid-incident
+endless db restore                  # restore the newest backup
+endless db restore endless-20260810-051500.db   # or a named one (path, or bare
+                                                # filename inside backups/)
+endless db restore --force          # restore even though something has it open
+```
+
+Recovery by hand is a `cp`, and a `cp` gets two things wrong that are hard to
+diagnose afterwards. `restore` handles both:
+
+- **Copying over an open database leaves a hot journal.** A read-only
+  connection cannot roll one back, so every reader then fails with `database is
+  locked`. `restore` enumerates what holds the file open — **by pid and full
+  command** — and **refuses**, printing the list. It never kills anything: on
+  2026-08-10 the holders were two `session-status --monitor` processes and four
+  `endless task show -p` invocations abandoned in pagers for up to 22 days, and
+  which of those you want dead is your call, not the tool's. `--force`
+  overrides, and says plainly that those processes keep reading the parked copy
+  until they are restarted. If neither `lsof` nor `/proc` is available to ask,
+  that counts as unsafe too, not as an all-clear.
+
+- **Backups are rollback-journal, the live database is WAL.** `db backup` uses
+  `VACUUM INTO`, which never produces a WAL file, so a plain copy silently
+  changes journal mode and every connection then fights for an exclusive lock
+  trying to switch back. `restore` re-establishes `journal_mode=WAL` afterwards
+  and runs `PRAGMA integrity_check`, failing loudly on anything but `ok`.
+
+The restore itself is reversible: the pre-restore database and any `-wal` /
+`-shm` / `-journal` sidecars are moved to `<config dir>/pre-restore/` before the
+backup is copied into place, and the final report names the parked file. Moving
+the sidecars is not tidiness — a stale `-journal` left beside a fresh database
+is the hot-journal failure all over again.
+
+Backups are validated before anything is touched: the file must open read-only,
+pass `integrity_check`, and actually be an Endless ledger. Nothing here goes
+through the normal connection helper, which applies schema on connect — a
+restore that quietly migrated would defeat the point, since the usual reason to
+restore is that a migration ran when it should not have.
+
+Inside a self-dev worktree, restore takes the ordinary explicit `--db`. Unlike
+`db backup`, which `just land` fires unattended and always aims at main, a
+restore is destructive and aimed by hand.
+
+---
+
 ## File layout
 
 A quick map of the files and directories Endless manages.
@@ -178,6 +231,8 @@ If you see "Endless: auto-record session activity" commits in `git log`, those a
 | Path                                          | Purpose                                                                  |
 |-----------------------------------------------|--------------------------------------------------------------------------|
 | `~/.config/endless/endless.db`                | SQLite DB (rebuildable projection of all project ledgers).               |
+| `~/.config/endless/backups/endless-<ts>.db`   | `endless db backup` output (`VACUUM INTO`), last 60 kept. Restore one with `endless db restore`. |
+| `~/.config/endless/pre-restore/endless-<ts>.db` | The database a restore replaced, parked with its sidecars so the restore is reversible. Not rotated — delete by hand. |
 | `~/.config/endless/config.json`               | Per-machine Endless config (node_id, defaults).                          |
 | `/usr/local/bin/endless`                      | Python CLI entry point (installed via `uv tool install -e .`).           |
 | `/usr/local/bin/endless-hook`                 | Claude Code hook binary (Go).                                            |

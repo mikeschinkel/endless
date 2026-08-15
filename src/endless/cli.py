@@ -3402,6 +3402,35 @@ def db_backup():
     click.echo("Database backed up.")
 
 
+@db_cmd.command("restore")
+@click.argument("backup", required=False)
+@click.option("--dry-run", is_flag=True,
+              help="Print holders, journal modes, sizes and paths; change nothing.")
+@click.option("--force", is_flag=True,
+              help="Restore even though processes still hold the database open.")
+def db_restore(backup, dry_run, force):
+    """Restore the database from a backup (default: the newest one).
+
+    Reports which processes still have the database open — by pid and command —
+    and refuses rather than killing them, because copying over an open database
+    is what left every reader failing with 'database is locked' on 2026-08-10.
+    Parks the pre-restore database (and its -wal/-shm/-journal sidecars) under
+    <config dir>/pre-restore/ so the restore itself is reversible, then
+    re-establishes journal_mode=WAL — `db backup` uses VACUUM INTO, which writes
+    a rollback-journal file — and runs PRAGMA integrity_check, failing loudly on
+    anything but 'ok'.
+
+    BACKUP is a path, or a bare filename resolved inside the backups directory.
+    Use --dry-run first: mid-incident it is the report you actually want.
+    """
+    # Deliberately NOT config.default_db_to_main(): unlike `db backup`, which
+    # `just land` fires unattended, a restore is a destructive operation a human
+    # aims by hand. Inside a self-dev worktree it therefore takes the ordinary
+    # explicit --db, enforced by require_db_context() in run_restore.
+    from endless.db_restore import run_restore
+    run_restore(backup, dry_run, force)
+
+
 @db_cmd.command("path")
 def db_path():
     """Print the absolute path to the database selected by the global --db.

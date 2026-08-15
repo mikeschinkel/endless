@@ -176,6 +176,7 @@ listed separately. (Generated — do not hand-edit; run `/regenerate-guide`.)
 | `agents` | _(none yet)_ | the `endless agents` command (epic-scoped listing of working background agents) isn't covered by the guide yet. |
 | `channel` | orchestration | Inter-session channels: messaging between concurrent sessions. |
 | `db` | orchestration | Choosing the database (--db main/sandbox) in self-dev worktrees. |
+| `db restore` | reference | Recovering the ledger from a backup — holders, sidecars, WAL, and the reversible pre-restore copy. |
 | `decision` | decisions | Decisions as first-class items; preference vs prohibition (read this). |
 | `docs` | _(none yet)_ | the `docs` command is temporarily disabled and not covered by the guide. |
 | `epic` | _(none yet)_ | the `endless epic` convenience surface (add/show/list/update over type=epic tasks) isn't covered by the guide yet. |
