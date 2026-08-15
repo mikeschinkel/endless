@@ -669,12 +669,29 @@ func hasTable(db *sql.DB, table string) bool {
 	return count > 0
 }
 
+// BackupResult reports what BackupDB did, so a caller can name the file rather
+// than claim a backup happened and leave the user to guess where (E-1942:
+// `endless db backup` printed a bare "Database backed up.", which is unusable
+// as the first half of a restore).
+type BackupResult struct {
+	// Path is the backup written, or — when Skipped — the recent backup that
+	// made writing another unnecessary.
+	Path string
+	// Skipped is true when a backup newer than the throttle window already
+	// existed, so nothing was written this call.
+	Skipped bool
+}
+
 // BackupDB copies the database file to the backups directory if the last
 // backup is older than 60 seconds. Keeps the last 60 backups.
-func BackupDB() {
+//
+// Returns the resulting path (see BackupResult). Errors are returned rather
+// than only logged: the CLI surfaces them, and the hook — which fires this on
+// every prompt — logs them and carries on.
+func BackupDB() (BackupResult, error) {
 	src := DBPath()
 	if _, err := os.Stat(src); err != nil {
-		return
+		return BackupResult{}, fmt.Errorf("no database at %s: %w", src, err)
 	}
 
 	// Backups follow the DB: when ForceRealDB() has redirected DBPath() to the
@@ -690,7 +707,13 @@ func BackupDB() {
 		newest := entries[len(entries)-1]
 		info, err := newest.Info()
 		if err == nil && time.Since(info.ModTime()) < 60*time.Second {
-			return // recent backup exists
+			// A recent backup exists. Name it: the caller reports a path either
+			// way, and reporting the one that already covers this moment is
+			// both true and the path a restore would use.
+			return BackupResult{
+				Path:    filepath.Join(backupDir, newest.Name()),
+				Skipped: true,
+			}, nil
 		}
 	}
 
@@ -700,7 +723,7 @@ func BackupDB() {
 
 	backupDB, err := sql.Open("sqlite", src)
 	if err != nil {
-		return
+		return BackupResult{}, fmt.Errorf("open %s: %w", src, err)
 	}
 	defer backupDB.Close()
 
@@ -712,8 +735,7 @@ func BackupDB() {
 
 	_, err = backupDB.Exec("VACUUM INTO ?", dst)
 	if err != nil {
-		log.Printf("backup failed: %v", err)
-		return
+		return BackupResult{}, fmt.Errorf("VACUUM INTO %s: %w", dst, err)
 	}
 
 	// Rotate: keep last 60 backups
@@ -723,6 +745,7 @@ func BackupDB() {
 			os.Remove(filepath.Join(backupDir, e.Name()))
 		}
 	}
+	return BackupResult{Path: dst}, nil
 }
 
 // ProjectPath returns the registered filesystem path for a project ID.

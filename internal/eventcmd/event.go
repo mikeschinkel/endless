@@ -817,9 +817,20 @@ func applyGoChange(path, name string) {
 	emitChangeResult(name, "applied", "")
 }
 
+// runBackup reports the destination path so the CLI can name the file it just
+// wrote. "skipped" means a backup newer than the 60s throttle window already
+// existed and `path` is that one — the caller must not claim it wrote it (E-1942).
 func runBackup() {
-	monitor.BackupDB()
-	b, _ := json.Marshal(map[string]any{"status": "ok"})
+	res, err := monitor.BackupDB()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "endless-go event backup: %v\n", err)
+		os.Exit(1)
+	}
+	status := "ok"
+	if res.Skipped {
+		status = "skipped"
+	}
+	b, _ := json.Marshal(map[string]any{"status": status, "path": res.Path})
 	fmt.Println(string(b))
 }
 

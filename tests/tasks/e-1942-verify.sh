@@ -229,6 +229,17 @@ test_unit_suite() {
     assert_succeeds "pytest tests/test_db_restore.py" \
         uv run pytest tests/test_db_restore.py -q
     bail_if_failed
+
+    # The `db backup` message layer. Covered by pytest rather than end-to-end
+    # because `db backup` pins main_config_dir() by design, so there is no
+    # throwaway config dir to point it at.
+    assert_succeeds "pytest tests/test_db_backup_message.py" \
+        uv run pytest tests/test_db_backup_message.py -q
+    bail_if_failed
+
+    assert_succeeds "go test ./internal/eventcmd/ -run TestEventBackup" \
+        go test ./internal/eventcmd/ -run TestEventBackup
+    bail_if_failed
 }
 
 # ─── check 2: the command exists and is discoverable ────────────────────────
@@ -427,6 +438,59 @@ test_refusals() {
     bail_if_failed
 }
 
+# ─── check 7: backup names the file it wrote ────────────────────────────────
+
+test_backup_names_the_file() {
+    section "7. Backing up names the file it wrote"
+
+    # A restore starts by picking a backup, so "Database backed up." — with no
+    # path — is unusable as the first half of one. Driven against the WORKTREE
+    # binary: the global endless-go predates this change.
+    local root="${SANDBOX}/backup"
+    mkdir -p "${root}/endless"
+    "${PYBIN}" -c '
+import sqlite3, sys
+c = sqlite3.connect(sys.argv[1])
+c.execute("CREATE TABLE tasks (id INTEGER PRIMARY KEY, title TEXT)")
+c.commit(); c.close()
+' "${root}/endless/endless.db"
+
+    local first second path
+    first="$("${REPO_ROOT}/bin/endless-go" --config-dir "${root}/endless" \
+        event backup 2>&1)"
+    assert_contains "reports success" "${first}" '"status":"ok"'
+    assert_contains "reports a path" "${first}" '"path":'
+
+    path="$("${PYBIN}" -c '
+import json, sys
+print(json.loads(sys.argv[1])["path"])
+' "${first}" 2>/dev/null)"
+    assert_file "the reported path is a real file" "${path}"
+    assert_contains "…and it is under the config dir it was told to use" \
+        "${path}" "${root}/endless/backups/"
+
+    # Inside the 60s throttle nothing is written; claiming otherwise would date
+    # the user's backup wrong by up to a minute at exactly the wrong moment.
+    second="$("${REPO_ROOT}/bin/endless-go" --config-dir "${root}/endless" \
+        event backup 2>&1)"
+    assert_contains "a throttled re-run says it wrote nothing" \
+        "${second}" '"status":"skipped"'
+    assert_contains "…and names the backup that already covers it" \
+        "${second}" "${path}"
+
+    # Nothing to back up is a failure, not a silent success.
+    local bare rc out
+    bare="${SANDBOX}/backup-bare"
+    mkdir -p "${bare}/endless"
+    out="$("${REPO_ROOT}/bin/endless-go" --config-dir "${bare}/endless" \
+        event backup 2>&1)"; rc=$?
+    assert_eq "no database to back up exits non-zero" \
+        "nonzero" "$([[ "${rc}" -ne 0 ]] && echo nonzero || echo "exit=${rc}")"
+    assert_contains "…and names the path it looked for" "${out}" "no database at"
+
+    bail_if_failed
+}
+
 # ─── main ───────────────────────────────────────────────────────────────────
 
 cleanup() {
@@ -466,6 +530,7 @@ main() {
     test_refuses_while_open
     test_restore
     test_refusals
+    test_backup_names_the_file
 
     summary
 }

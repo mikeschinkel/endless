@@ -3398,8 +3398,23 @@ def db_backup():
     from endless import config
     config.default_db_to_main()
     from endless.event_bridge import backup_db
-    backup_db()
-    click.echo("Database backed up.")
+    result = backup_db()
+
+    # E-1942: name the file. "Database backed up." is unusable as the first half
+    # of a restore — the whole point of a backup is being able to say which one.
+    path = result.get("path")
+    if not path:
+        # An endless-go older than E-1942 reports no path. Can happen in a
+        # self-dev worktree, where --db main runs the worktree's Python against
+        # the globally installed binary.
+        click.echo("Database backed up.")
+        return
+    if result.get("status") == "skipped":
+        click.echo("Database already backed up within the last 60s — "
+                   "nothing written.")
+        click.echo(f"Existing backup: {config.tilde(path)}")
+        return
+    click.echo(f"Database backed up to {config.tilde(path)}")
 
 
 @db_cmd.command("restore")

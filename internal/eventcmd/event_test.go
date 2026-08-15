@@ -518,6 +518,92 @@ func TestEventBackup_WritesBackupFileUnderConfigDir(t *testing.T) {
 	}
 }
 
+// TestEventBackup_ReportsTheDestinationPath pins E-1942's contract: stdout
+// carries the file that was written, and it is the file that is actually on
+// disk. `endless db backup` prints that path, so "backed up" stops being a
+// claim the user has to go and verify by hand before a restore.
+func TestEventBackup_ReportsTheDestinationPath(t *testing.T) {
+	cfgDir := t.TempDir()
+	initSchemaDB(t, cfgDir)
+
+	bin := endlessGoBin(t)
+	out, err := exec.Command(bin, "--config-dir", cfgDir, "event", "backup").Output()
+	if err != nil {
+		t.Fatalf("backup failed: %v\nstdout: %s", err, out)
+	}
+	var result map[string]any
+	if err := json.Unmarshal(bytes.TrimSpace(out), &result); err != nil {
+		t.Fatalf("decode output: %v\nraw: %s", err, out)
+	}
+	if got := result["status"]; got != "ok" {
+		t.Fatalf("expected status=ok, got %v; raw: %s", got, out)
+	}
+	path, _ := result["path"].(string)
+	if path == "" {
+		t.Fatalf("expected a path in the output; raw: %s", out)
+	}
+	if dir := filepath.Dir(path); dir != filepath.Join(cfgDir, "backups") {
+		t.Errorf("backup landed outside <cfgDir>/backups: %s", path)
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Errorf("reported path does not exist: %v", err)
+	}
+}
+
+// TestEventBackup_SkippedReportsTheExistingBackup covers the throttle: a second
+// call inside the 60s window writes nothing, and must say so rather than
+// reporting a path it did not write. Reporting "ok" here would have the CLI
+// claim a fresh backup that does not exist.
+func TestEventBackup_SkippedReportsTheExistingBackup(t *testing.T) {
+	cfgDir := t.TempDir()
+	initSchemaDB(t, cfgDir)
+
+	bin := endlessGoBin(t)
+	first, err := exec.Command(bin, "--config-dir", cfgDir, "event", "backup").Output()
+	if err != nil {
+		t.Fatalf("first backup failed: %v\nstdout: %s", err, first)
+	}
+	second, err := exec.Command(bin, "--config-dir", cfgDir, "event", "backup").Output()
+	if err != nil {
+		t.Fatalf("second backup failed: %v\nstdout: %s", err, second)
+	}
+
+	var one, two map[string]any
+	if err := json.Unmarshal(bytes.TrimSpace(first), &one); err != nil {
+		t.Fatalf("decode first: %v\nraw: %s", err, first)
+	}
+	if err := json.Unmarshal(bytes.TrimSpace(second), &two); err != nil {
+		t.Fatalf("decode second: %v\nraw: %s", err, second)
+	}
+	if got := two["status"]; got != "skipped" {
+		t.Errorf("expected status=skipped inside the throttle window, got %v; raw: %s",
+			got, second)
+	}
+	if two["path"] != one["path"] {
+		t.Errorf("skipped run should name the existing backup %v, got %v",
+			one["path"], two["path"])
+	}
+}
+
+// TestEventBackup_NoDatabaseFailsLoudly: there is nothing to back up, so
+// claiming success would be a lie the user only discovers when they need the
+// backup. Exits non-zero and names the path it looked for.
+func TestEventBackup_NoDatabaseFailsLoudly(t *testing.T) {
+	cfgDir := t.TempDir()
+
+	bin := endlessGoBin(t)
+	cmd := exec.Command(bin, "--config-dir", cfgDir, "event", "backup")
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	out, err := cmd.Output()
+	if err == nil {
+		t.Fatalf("expected a non-zero exit with no database; stdout: %s", out)
+	}
+	if !strings.Contains(stderr.String(), "no database at") {
+		t.Errorf("expected the missing-database path to be named, got: %s", stderr.String())
+	}
+}
+
 // TestEvent_UnknownSubcommandExitsNonZero pins the dispatcher's
 // unknown-subcommand branch: an unrecognized verb after `event` exits
 // non-zero with a stderr message naming it.

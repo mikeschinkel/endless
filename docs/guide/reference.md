@@ -153,9 +153,11 @@ Every code's cause and remedy is documented in `docs/errors.md`.
 ## Restoring the database from a backup
 
 `endless db backup` writes a timestamped copy to `<config dir>/backups/` (last
-60 kept). `just land` fires it before a schema change, so a backup of the real
-ledger almost always exists. `endless db restore` is the other half — the
-supported way to *use* one.
+60 kept) and prints the path it wrote. `just land` fires it before a schema
+change, so a backup of the real ledger almost always exists. Backups are
+throttled to one a minute — inside that window `db backup` writes nothing and
+says so, naming the existing backup rather than claiming a fresh one.
+`endless db restore` is the other half — the supported way to *use* one.
 
 ```bash
 endless db restore --dry-run        # the report you want first, mid-incident

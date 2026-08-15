@@ -972,9 +972,8 @@ _FILLER_WORDS = frozenset({
 
 def _tilde(p: Path) -> str:
     """Display a Path with $HOME collapsed to ~. Falls back to absolute."""
-    s = str(p)
-    home = str(Path.home())
-    return s.replace(home, "~", 1) if s.startswith(home) else s
+    from endless import config
+    return config.tilde(p)
 
 
 def _slugify_title(title: str) -> str:

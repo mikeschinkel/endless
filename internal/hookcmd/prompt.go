@@ -2,6 +2,7 @@ package hookcmd
 
 import (
 	"fmt"
+	"log"
 
 	"github.com/mikeschinkel/endless/internal/monitor"
 )
@@ -34,8 +35,11 @@ func runPrompt(args []string) error {
 		sessionCtx = tmuxCtx.ToMap()
 	}
 
-	// Backup DB (throttled internally to every 60s)
-	monitor.BackupDB()
+	// Backup DB (throttled internally to every 60s). A failed backup must not
+	// fail the prompt hook — log it and carry on.
+	if _, err := monitor.BackupDB(); err != nil {
+		log.Printf("prompt hook: backup: %v", err)
+	}
 
 	// Record activity
 	if err := monitor.RecordActivity(projectID, "prompt", dir, sessionCtx); err != nil {

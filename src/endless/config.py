@@ -38,6 +38,18 @@ DEFAULT_CONFIG = {
 }
 
 
+def tilde(p: Path | str) -> str:
+    """Display a path with $HOME collapsed to ~, for output a human reads.
+
+    Only a leading $HOME is collapsed, and only once: a path is being shown so
+    it can be copied and pasted, and rewriting a home-shaped segment in the
+    middle of one would break that.
+    """
+    s = str(p)
+    home = str(Path.home())
+    return s.replace(home, "~", 1) if s.startswith(home) else s
+
+
 def ensure_config_dir():
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
 
