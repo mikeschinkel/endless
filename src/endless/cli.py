@@ -3504,9 +3504,9 @@ def worktree_land(task_id, dry_run, record_only, sha, branch, at):
 @worktree_cmd.command("drop")
 @click.argument("name_or_path")
 @click.option("--force", is_flag=True,
-              help="Drop even if modified/unlanded/foreign")
+              help="Drop even if in use/modified/unlanded/foreign")
 def worktree_drop(name_or_path, force):
-    """Remove a worktree (refuses modified/unlanded/foreign without --force)."""
+    """Remove a worktree (refuses in-use/modified/unlanded/foreign without --force)."""
     from endless.worktree_cmd import drop_worktree
     drop_worktree(name_or_path, force)
 

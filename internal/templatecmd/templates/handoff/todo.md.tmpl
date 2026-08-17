@@ -10,7 +10,7 @@ You're a worktree-bound Claude Code session spawned to take this task end to end
 5. If anything is ambiguous, the plan is insufficient, or you hit a design choice the plan
    doesn't cover — STOP and ask me. Don't guess.
 6. {{template "handoff_terminal" .}}
-7. Don't run `endless worktree land`/`drop` without asking.
+7. {{template "handoff_land_drop" .}}
 {{- if .child_count}}
 
 This task has {{.child_count}} children — read them with `endless task show E-{{.spawned_id}} --children`.

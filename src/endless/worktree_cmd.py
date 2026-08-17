@@ -2592,8 +2592,71 @@ def land_worktree(
     )
 
 
+def _guard_worktree_in_use(worktree_path: Path) -> None:
+    """Refuse to drop a worktree anything is still using (E-1947).
+
+    Shells out to `endless-go worktree in-use`, which is monitor.WorktreeInUse
+    — the SAME predicate the worktree reaper applies before removing a
+    directory. It is not reimplemented here on purpose: two copies of a check
+    that gates `rm -rf`, in two languages, is the shape of the failure that
+    already cost two-plus weeks. Do not inline an `lsof` call or a sessions
+    query in this module.
+
+    Exit codes from the verb: 0 not in use, 3 in use (reason on stdout),
+    anything else undetermined. Undetermined refuses, as does a missing
+    binary — a guard that cannot answer must not wave the caller through.
+
+    Callers pass --force to skip this entirely, as with drop's other refusals.
+    """
+    from endless import config
+
+    task_id = _task_id_from_worktree_path(worktree_path)
+    # `--task 0` means "no owning task", which the verb reads as "run only the
+    # live-process probe". A worktree outside the e-NNN convention has no task
+    # row to look up, so that is the whole answer available for it.
+    task_arg = task_id.removeprefix("E-") if task_id else "0"
+
+    binary = shutil.which("endless-go")
+    if not binary:
+        raise click.ClickException(
+            f"Cannot verify whether this worktree is in use: endless-go is "
+            f"not on PATH.\n{worktree_path}\n"
+            f"Install it (`just install`) or use --force to drop anyway."
+        )
+
+    # E-1429: the verb READS the sessions table, so thread the resolved --db
+    # context. Without it a drop run from a self-dev worktree would ask the
+    # real ledger about a sandbox's sessions and be told nobody is home.
+    result = subprocess.run(
+        [binary, *config.go_db_context_args(), "worktree", "in-use",
+         "--dir", str(worktree_path), "--task", task_arg],
+        capture_output=True, text=True,
+    )
+    if result.returncode == 0:
+        return
+
+    detail = (result.stdout.strip() or result.stderr.strip()
+              or f"exit {result.returncode}")
+    if result.returncode != 3:
+        raise click.ClickException(
+            f"Cannot verify whether this worktree is in use: {detail}\n"
+            f"{worktree_path}\n"
+            f"Resolve the error, or use --force to drop anyway."
+        )
+    raise click.ClickException(
+        f"Refusing to drop a worktree that is in use: {worktree_path}\n"
+        f"  {detail}\n\n"
+        f"Dropping removes the directory out from under whatever is standing "
+        f"in it, orphaning that session's cwd.\n"
+        f"If the goal is to discard diverged history rather than the "
+        f"directory, reset or rebase the branch in place — the worktree "
+        f"survives and the session keeps working.\n"
+        f"Use --force only once you know nothing is using it."
+    )
+
+
 def drop_worktree(name_or_path: str, force: bool) -> None:
-    """Remove a worktree explicitly. Refuses modified/unlanded/foreign without --force."""
+    """Remove a worktree explicitly. Refuses in-use/modified/foreign without --force."""
     main_root = _project_root()
     rows = _enriched_list(main_root)
 
@@ -2625,6 +2688,11 @@ def drop_worktree(name_or_path: str, force: bool) -> None:
                 f"{worktree_path}\n"
                 f"Use --force to drop anyway, or remove via 'git worktree remove'."
             )
+        # Before the git-state checks: a worktree in use must say so FIRST.
+        # "uncommitted changes" invites --force, and reaching for --force on a
+        # directory a live session is sitting in is the exact damage E-1947
+        # exists to prevent.
+        _guard_worktree_in_use(worktree_path)
         # Check for uncommitted changes in the worktree
         try:
             res = _git_run(

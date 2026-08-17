@@ -209,12 +209,29 @@ After the post-land script runs (or if none was shipped), `worktree land` verifi
 
 ```bash
 endless worktree drop <id>
-endless worktree drop <id> --force          # refuses modified/unlanded/foreign without this
+endless worktree drop <id> --force          # refuses in-use/modified/unlanded/foreign without this
 ```
 
 Use `drop` when the work is being abandoned (task declined/obsolete). Don't `drop` over `land` to skip review.
 
 `drop` is under the same **ask-first** rule as `land` (see [Landing the work](#landing-the-work)) — more so, since it discards work rather than publishing it. Deciding that a task is abandoned is the user's decision to make, not yours to act on.
+
+#### Diverged history is a reset, never a drop
+
+**Never offer to drop a worktree.** Retention is the design — landing keeps the worktree and its branch so a reopened task still has one, and the reaper reclaims it after a grace period. A retained worktree is recovery state, not leftover mess. "Ask first" is a boundary, not an invitation to keep asking.
+
+`drop` removes a **directory**. A live session is *sitting in* that directory, so dropping it deletes that session's cwd out from under it — the session is orphaned, and the only recovery is recreating the directory by hand. Reach for `drop` only when the *work* is being abandoned.
+
+Twice recently a session recommended dropping a worktree because its git history had diverged from `main`, when no committed work would have been lost and the correct move was to fix the branch **in place**:
+
+```bash
+git -C <worktree> rebase main          # replay the branch on current main
+git -C <worktree> reset --hard main    # discard the branch's commits, keep the worktree
+```
+
+Both leave the directory — and whoever is working in it — intact. "The branch is in a bad state" is a branch problem; deleting the checkout to fix it is like reinstalling the OS to rename a file.
+
+`drop` now refuses when anything is still using the worktree — a non-ended session with the task active, or any process holding cwd inside it — and names which. That refusal is a backstop, not the rule: **if the answer is "reset or rebase", never propose the drop in the first place.** `--force` skips the check; using it to get past a refusal you did not read is how the orphaning happens.
 
 ### Commit-to-main policy
 

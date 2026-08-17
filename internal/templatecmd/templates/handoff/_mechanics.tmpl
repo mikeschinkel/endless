@@ -36,6 +36,19 @@ Stay focused on E-{{.spawned_id}} — one session, one task. {{if eq .task_type 
      cause, not each symptom.{{end}}
 {{- end}}
 
+{{/*
+  E-1947: the ask-first rule for the two destructive worktree verbs, plus what
+  to do INSTEAD of a drop. Extracted because all seven wrappers already carried
+  the same sentence verbatim, and the guidance half of E-1947 has to reach every
+  one of them: a gate stops the damage but not the advice, and twice recently a
+  session RECOMMENDED dropping a worktree whose history had merely diverged.
+  Emits one paragraph with no leading marker, so it drops into a numbered item,
+  a bullet, or mid-sentence unchanged.
+*/ -}}
+{{define "handoff_land_drop" -}}
+Don't run `endless worktree land`/`drop` without asking, and never OFFER to drop one — retention is the design, and worktree lifecycle belongs to the spawning session. If a branch's history has diverged from main, the fix is `git rebase main` or `git reset --hard main` **in place**; `drop` deletes the directory a live session is sitting in, and is only for abandoning the work itself.
+{{- end}}
+
 {{define "handoff_deliverable" -}}
 {{if eq .task_type "research"}}Findings are the deliverable. Write them into `tasks.outcome` via `endless task update E-{{.spawned_id}} --outcome-file <path> --db main` (or `--outcome '<inline text>'`). End state is `completed` (research has its own gate, ED-1502), not `unverified`.
 

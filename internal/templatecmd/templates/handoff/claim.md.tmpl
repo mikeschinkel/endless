@@ -16,6 +16,6 @@ Children: {{.children_state}}.
 {{end}}
 Carry your own context across: fold the planning and findings already in this chat into the task itself — `endless task update E-{{.spawned_id}} --text <path> --db main` — rather than leaving them in the transcript. Then read what the task actually says: `endless task show E-{{.spawned_id}} --text --db main`. Run `endless guide` if you have not this session.
 
-If anything is ambiguous, the plan is insufficient, or you hit a design choice it doesn't cover — STOP and ask. Don't guess. Don't run `endless worktree land`/`drop` without asking.
+If anything is ambiguous, the plan is insufficient, or you hit a design choice it doesn't cover — STOP and ask. Don't guess. {{template "handoff_land_drop" .}}
 
 Final message — {{if or (eq .task_type "research") (eq .task_type "brainstorm") (eq .task_type "epic")}}{{template "handoff_nonverify" .}}{{else}}{{template "handoff_verify" .}}{{end}} {{template "handoff_close" .}}

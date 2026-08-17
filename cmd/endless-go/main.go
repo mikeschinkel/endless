@@ -10,6 +10,7 @@
 //	endless-go sandbox       run|enter|init|bind|list|prune|destroy
 //	endless-go tmux          apply|status-line|active-id|show-menu
 //	endless-go session-query list-live|task-text|resume-target
+//	endless-go worktree      in-use   (the shared "is this worktree still in use" guard)
 //	endless-go session-status  (renders the per-session status view; --monitor loops it)
 //	endless-go spawn-window  (the multiplexer seam: creates the tmux window that launches Claude on a task)
 //	endless-go spawn-launch  (internal: sets @endless_* window options, then execs claude inside the window)
@@ -28,7 +29,7 @@
 //     table, which hook writes pin to main regardless of cwd), but with --task
 //     (headless/tests) it skips the pin and reads the resolved sandbox/
 //     --config-dir context; the decision lives in sessionstatuscmd.Run (E-1685).
-//   - event, session-query → ConsumeDBContextFlag (E-1429).
+//   - event, session-query, worktree → ConsumeDBContextFlag (E-1429).
 //   - sandbox → no DB-context init.
 //
 // The ENDLESS_NO_HOOKS gate is scoped to the `hook` subcommand only —
@@ -57,6 +58,7 @@ import (
 	"github.com/mikeschinkel/endless/internal/taskstatuscmd"
 	"github.com/mikeschinkel/endless/internal/templatecmd"
 	"github.com/mikeschinkel/endless/internal/tmuxcmd"
+	"github.com/mikeschinkel/endless/internal/worktreecmd"
 
 	// Job registrations (E-698). Imported for side effect only: each package's
 	// init() adds itself to the jobs registry. This is the ONE place the
@@ -182,6 +184,8 @@ func main() {
 		tmuxcmd.Run(rest)
 	case "session-query":
 		sessionquerycmd.Run(rest)
+	case "worktree":
+		worktreecmd.Run(rest)
 	case "session-status":
 		sessionstatuscmd.Run(rest)
 	case "spawn-window", "spawn-launch":
@@ -243,6 +247,7 @@ func usage(w *os.File) {
 	fmt.Fprintln(w, "  sandbox        run|enter|init|bind|list|prune|destroy")
 	fmt.Fprintln(w, "  tmux           apply|status-line|active-id|show-menu")
 	fmt.Fprintln(w, "  session-query  list-live|task-text|resume-target")
+	fmt.Fprintln(w, "  worktree       in-use  (is this worktree still in use?)")
 	fmt.Fprintln(w, "  session-status render the per-session status view (--monitor loops it)")
 	fmt.Fprintln(w, "  spawn-window   create the tmux window that launches Claude on a task")
 	fmt.Fprintln(w, "  spawn-launch   (internal) set window options and exec claude inside the window")

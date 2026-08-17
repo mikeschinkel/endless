@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -157,6 +158,11 @@ func reapBoundSandbox(worktreeName string) {
 //     (`git -C <wt> status --porcelain` empty).
 //  6. No live process holds cwd inside the dir.
 //
+// Conditions 3 and 6 are not evaluated here: they are WorktreeInUse, the one
+// implementation `endless worktree drop` also consults (E-1947), and it is
+// called after the cheap git conditions since its lsof probe is the expensive
+// one. They are still listed above in significance order.
+//
 // Any git error while running 4 or 5 — including a default branch that
 // cannot be resolved — is treated as "in use". The reaper would rather
 // skip a candidate it can't reason about than destroy in-flight work.
@@ -204,18 +210,6 @@ func maybeReapWorktree(db *sql.DB, projectRoot, dir string, taskID int64, cutoff
 		return false, nil
 	}
 
-	var activeSessions int
-	err = db.QueryRow(
-		`SELECT count(*) FROM sessions WHERE task_id = ? AND state != 'ended'`,
-		taskID,
-	).Scan(&activeSessions)
-	if err != nil {
-		return false, fmt.Errorf("query active sessions: %w", err)
-	}
-	if activeSessions > 0 {
-		return false, nil
-	}
-
 	// Unmerged commits on the branch → skip. Treat any git error as "in use" —
 	// better to skip than destroy a worktree we can't inspect.
 	//
@@ -253,11 +247,18 @@ func maybeReapWorktree(db *sql.DB, projectRoot, dir string, taskID int64, cutoff
 		return false, nil
 	}
 
-	live, err := hasLiveProcessInDir(dir)
+	// Conditions 3 and 6 in one call — the shared "is anything still using
+	// this directory" predicate `endless worktree drop` also consults, so the
+	// two destructive paths can never disagree (E-1947). Placed here rather
+	// than at condition 3's position in the list because its lsof probe is the
+	// most expensive check in this function: the cheap local-git conditions
+	// above have already excluded most candidates by now. Order among skip
+	// reasons is not observable — every one of them yields (false, nil).
+	inUse, _, err := WorktreeInUse(db, dir, taskID)
 	if err != nil {
-		return false, fmt.Errorf("check live processes: %w", err)
+		return false, err
 	}
-	if live {
+	if inUse {
 		return false, nil
 	}
 
@@ -322,12 +323,26 @@ func removeStrandedWorktreeDir(projectRoot, dir string) error {
 }
 
 // hasLiveProcessInDir reports whether any process has cwd inside dir.
-// Uses `lsof -d cwd +D <dir>`:
-//   - exit 0 with output → at least one match → live
-//   - exit 1 with empty output → no matches → not live (the common case
-//     post-TTL on an abandoned worktree)
-//   - other exit codes → propagate as an error so the caller skips reap
-//     rather than guessing
+//
+// Runs `lsof -t -a -d cwd +D <dir>` and reads STDOUT, not the exit status.
+// Both details are load-bearing, and getting either wrong silently disables
+// the guard rather than failing visibly (E-1947 found this probe answering
+// "no" for a directory a live process was demonstrably sitting in):
+//
+//   - `-a` ANDs the selection criteria. lsof ORs them by default, so
+//     `-d cwd +D <dir>` means "fd is cwd OR path is under dir" — which
+//     matches every process on the machine, since they all have a cwd.
+//   - the exit status cannot decide anything. lsof exits 1 both when nothing
+//     matched AND when its +D tree-walk hit an entry it could not stat, the
+//     normal case on a real worktree. It returned 1 WITH matching output in
+//     the reproduction. `-t` (terse) prints one PID per line and nothing at
+//     all when there is no match, so stdout is an unambiguous answer.
+//     internal/sandboxcmd/livewriters.go reached the same conclusion.
+//
+// A non-empty stdout therefore means live. An error is returned only when
+// lsof could not be run at all (absent, not executable) — callers fail
+// closed on that, so a machine without lsof refuses to remove rather than
+// removing blind.
 //
 // stderr is intentionally discarded: lsof emits "can't stat() smbfs file
 // system /Volumes/.timemachine/..." warnings on macOS with mounted
@@ -339,20 +354,19 @@ func removeStrandedWorktreeDir(projectRoot, dir string) error {
 var hasLiveProcessInDir = realHasLiveProcessInDir
 
 func realHasLiveProcessInDir(dir string) (bool, error) {
-	cmd := exec.Command("lsof", "-d", "cwd", "+D", dir)
+	cmd := exec.Command("lsof", "-t", "-a", "-d", "cwd", "+D", dir)
 	var stdout bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = nil
 	err := cmd.Run()
-	if err == nil {
-		return stdout.Len() > 0, nil
-	}
-	if exitErr, ok := err.(*exec.ExitError); ok {
-		if exitErr.ExitCode() == 1 {
-			return false, nil
+	if err != nil {
+		var exitErr *exec.ExitError
+		if !errors.As(err, &exitErr) {
+			// Never started: lsof missing, not executable, fork failure.
+			return false, err
 		}
 	}
-	return false, err
+	return strings.TrimSpace(stdout.String()) != "", nil
 }
 
 // AnnotateSessionStatusUnsettled fills each row's Unsettled flag from the git

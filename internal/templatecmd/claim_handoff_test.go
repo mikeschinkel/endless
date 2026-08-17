@@ -114,23 +114,28 @@ func TestRender_MechanicsPartial_SharedBySpawnAndClaim(t *testing.T) {
 	// (deliverable, terminal) are covered by their own type's expectation.
 	shared := map[string][]string{
 		"todo": {
+			"the fix is `git rebase main` or `git reset --hard main` **in place**",
 			"Your worktree is: /tmp/wt/e-9999 (branch task/9999-test) — confirm with `pwd`. Don't edit the main checkout.",
 			"Stay focused on E-9999 — one session, one task.",
 			"When implementation is done: `endless task update E-9999 --status unverified --db main`",
 		},
 		"bugfix": {
+			"the fix is `git rebase main` or `git reset --hard main` **in place**",
 			"Stay focused on E-9999 — one session, one task.",
 			"When implementation is done: `endless task update E-9999 --status unverified --db main`",
 		},
 		"research": {
+			"the fix is `git rebase main` or `git reset --hard main` **in place**",
 			"Findings are the deliverable.",
 			"When findings are ready: `endless task update E-9999 --status completed --outcome-file <path> --db main`",
 		},
 		"brainstorm": {
+			"the fix is `git rebase main` or `git reset --hard main` **in place**",
 			"The synthesis is the deliverable.",
 			"When the synthesis is ready: `endless task update E-9999 --status completed --outcome-file <path> --db main`",
 		},
 		"epic": {
+			"the fix is `git rebase main` or `git reset --hard main` **in place**",
 			"You're the coordinator on this epic.",
 			"When all children are `confirmed`/`assumed`: `endless task update E-9999 --status completed --db main`",
 		},
