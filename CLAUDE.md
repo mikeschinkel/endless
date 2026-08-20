@@ -90,7 +90,7 @@ deliberately; leave them, do not delete them.
 
 **Where corrections go instead.** After ANY correction from the user:
 immediately and without asking, append the pattern to
-**`~/Projects/endless/.endless/LESSONS.md`** — the *main checkout*, always, even
+**`<worktree>/.endless/LESSONS.md`** — the *main checkout*, always, even
 when you are in a worktree. Do not resolve it with `git rev-parse
 --show-toplevel`: inside a worktree that yields the worktree root, and the log
 would be destroyed when the worktree is dropped. Recording is unconditional —
@@ -102,24 +102,11 @@ Do NOT read it, and do NOT load or act on it at session start or during a
 session.
 
 - Name the full path when you report a recording: "Recorded to
-  `~/Projects/endless/.endless/LESSONS.md`" — never a bare "Recorded".
+  `<worktree>/.endless/LESSONS.md`" — never a bare "Recorded".
 - Do not claim a lesson is or is not already in the file based on a `tail`.
   Other sessions append between yours, so position proves nothing — `grep` for
   the heading, or say nothing about it.
 
-## Uppercase `$KEYWORD` markers in a user message
-
-A user message beginning with `$WORD` in caps (e.g. `$JARGON`, `$FULL STATUS`)
-carries a marker that **hooks act on**. Do not act on the marker yourself — in
-particular, do NOT hand-append a lesson to `~/.claude/LESSONS.md` for a
-`$JARGON` correction; that recording is automatic, and doing it manually risks a
-duplicate entry.
-
-Respond to the CONTENT of the message normally. The marker is addressed to the
-tooling, not to you.
-
-This is the one exception to the rule above that every correction is recorded
-by hand.
 
 ## PRODUCT — evaluate as a product, not as Mike's setup
 
