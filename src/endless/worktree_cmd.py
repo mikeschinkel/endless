@@ -2120,6 +2120,12 @@ def _record_landing(
     recording failed, rather than one that implies nothing landed. The
     ff-merge is idempotent, so re-running `just land` records the landing once
     the cause is resolved (E-1474).
+
+    base_branch rides in the payload (E-2005) so task_landings records the
+    branch the work landed ON, not just the task branch it landed FROM. It is
+    what the "E-NNNN landed on main (1dd0006)" notice reads back to a session,
+    and it is known only here — the Go executor sees the event, never the git
+    repo it came from.
     """
     from endless.event_bridge import emit_event
 
@@ -2131,6 +2137,7 @@ def _record_landing(
             entity_id=str(item_id),
             payload={
                 "branch": branch,
+                "base_branch": base_branch,
                 "merge_commit_sha": merge_sha,
             },
             prompt_verb="landed for",

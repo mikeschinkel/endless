@@ -752,18 +752,105 @@ END;
 -- branch is nullable: a historical/record-only landing (E-1719) has no
 -- surviving branch to name (the worktree is long gone), so it records NULL
 -- rather than a fabricated name. A normal live land still records its branch.
+-- base_branch (E-2005) is the branch the work landed ON; `branch` is the one it
+-- landed FROM. Nullable for the same reason `branch` is: a record-only backfill
+-- has no base branch to name, and "main" written there would be a guess stored
+-- as a fact.
+--
+-- landed_by_harness (E-2005) names the agent harness that ran the land — an
+-- agentenv.ID, or NULL when a PERSON ran it. It is the axis session_id cannot
+-- supply: session_id answers "which session is this about" and its resolver
+-- deliberately credits a bare shell in a sibling tmux pane to the agent beside
+-- it, so a human's land routinely arrives carrying an agent's session id.
+-- Written by the Go executor from the event envelope's actor.harness, observed
+-- in the emitting process rather than declared by its caller.
 CREATE TABLE IF NOT EXISTS task_landings (
-    id               INTEGER PRIMARY KEY,
-    task_id          INTEGER NOT NULL,
-    session_id       INTEGER,
-    branch           TEXT,
-    merge_commit_sha TEXT    NOT NULL,
-    landed_at        TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
+    id                INTEGER PRIMARY KEY,
+    task_id           INTEGER NOT NULL,
+    session_id        INTEGER,
+    branch            TEXT,
+    base_branch       TEXT,
+    merge_commit_sha  TEXT    NOT NULL,
+    landed_at         TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
+    landed_by_harness TEXT,
     FOREIGN KEY (task_id)    REFERENCES tasks(id)    ON DELETE CASCADE,
     FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE SET NULL
 );
 CREATE INDEX IF NOT EXISTS idx_task_landings_task
     ON task_landings(task_id, landed_at DESC);
+
+-- task_landings_notify_sessions (E-2005) tells a session its work reached the
+-- base branch.
+--
+-- Landing changes no field tasks_notify_sessions watches, so before this trigger
+-- a session was never told its own task had landed — the notice a user most
+-- wants after landing from another terminal simply did not exist.
+--
+-- It writes into session_notices rather than a parallel table on purpose: the
+-- one-shot drain, the `notified` flag, ReapNoticesForEndedSessions, the
+-- .endless/logs/session-notices.jsonl delivery log, the ordering after the
+-- active-task line, and E-2001's framing fix (without which none of it reaches
+-- the agent) all come free. The synthetic `landed` key is not a task field, so
+-- monitor.RenderNotice handles it ahead of noticeFieldOrder.
+--
+-- SUPPRESSION, and why it is spelled on the harness rather than the session:
+-- an AGENT is not told about a land it performed itself, and a PERSON's land is
+-- announced to every holder INCLUDING the session the land was attributed to.
+-- That second half is the 99th-percentile case and is inexpressible from
+-- session_id alone, because a human running `endless worktree land` in a
+-- sibling pane produces the adjacent agent's session id (E-1294) — suppressing
+-- on `st.session_id = NEW.session_id` alone would silence exactly the session
+-- that needed to hear. NULL harness therefore notifies everybody, which is the
+-- direction a missed detection must fail in: one redundant FYI, never silence.
+--
+-- Fan-out excludes sessions in state 'ended' for the same reason
+-- tasks_notify_sessions does: they never take another turn, so their notices
+-- are undeliverable by construction and only accumulate.
+--
+-- A full-ledger replay fires this too, because ProjectToTempDB applies this
+-- whole file to its scratch DB. Harmless: that DB has no sessions and no
+-- session_tasks (neither is rebuilt from the ledger), and `event rebuild` copies
+-- back only tasks, decisions and decision_relations — never session_notices.
+--
+-- changed_by_session records the acting session ONLY when an agent acted,
+-- matching what tasks.changed_by_session means for the sibling trigger: a
+-- human's land stamps NULL there even though session_id on the landing row is
+-- populated.
+--
+-- json() around the inner object is required: without it json_object embeds the
+-- nested object as a *string*. Same trap as tasks_notify_sessions above.
+--
+-- DEPENDS ON task_landings.base_branch and .landed_by_harness, which the CREATE
+-- TABLE above declares for fresh DBs and
+-- internal/schema/changes/e-2005-add-task-landing-notice-columns.go adds to
+-- populated ones at land time. SQLite resolves a trigger body at FIRE time, so
+-- on a populated DB this CREATE succeeds and INSERT INTO task_landings then
+-- fails with "no such column" until that change is applied — land before
+-- installing the new binary. See the change file's ORDERING note.
+CREATE TRIGGER IF NOT EXISTS task_landings_notify_sessions
+AFTER INSERT ON task_landings
+BEGIN
+    INSERT INTO session_notices
+        (session_id, task_id, changes, changed_at, changed_by_session)
+    SELECT st.session_id,
+           NEW.task_id,
+           json_object('landed', json(json_object(
+               'before', NULL,
+               'after', CASE
+                            WHEN NEW.base_branch IS NULL OR NEW.base_branch = ''
+                            THEN substr(NEW.merge_commit_sha, 1, 7)
+                            ELSE NEW.base_branch || '@' ||
+                                 substr(NEW.merge_commit_sha, 1, 7)
+                        END))),
+           NEW.landed_at,
+           CASE WHEN NEW.landed_by_harness IS NOT NULL THEN NEW.session_id END
+      FROM session_tasks st
+      JOIN sessions s ON s.id = st.session_id
+     WHERE st.task_id = NEW.task_id
+       AND s.state != 'ended'
+       AND NOT (NEW.landed_by_harness IS NOT NULL
+                AND st.session_id IS NEW.session_id);
+END;
 
 -- Session status snapshots (E-1312 / E-1314). Latest row by created_at is the
 -- current status. `tasks` holds all <task> elements; `summary` holds <layer>

@@ -192,11 +192,8 @@ func run(kindStr, project, entityTypeStr, entityID, actorKindStr, actorID,
 				Type: events.EntityType(entityTypeStr),
 				ID:   fmt.Sprintf("%d", newID),
 			},
-			Actor: events.Actor{
-				Kind:      events.ActorKind(actorKindStr),
-				ID:        actorID,
-				SessionID: sessionID,
-			},
+			Actor: events.EmittingActor(
+				events.ActorKind(actorKindStr), actorID, sessionID),
 			CorrelationID: correlationID,
 			Payload:       json.RawMessage(payloadStr),
 		}
@@ -273,11 +270,8 @@ func run(kindStr, project, entityTypeStr, entityID, actorKindStr, actorID,
 				Type: events.EntityType(entityTypeStr),
 				ID:   entityID,
 			},
-			Actor: events.Actor{
-				Kind:      events.ActorKind(actorKindStr),
-				ID:        actorID,
-				SessionID: sessionID,
-			},
+			Actor: events.EmittingActor(
+				events.ActorKind(actorKindStr), actorID, sessionID),
 			CorrelationID: correlationID,
 			Payload:       json.RawMessage(payloadStr),
 		}
@@ -387,6 +381,10 @@ func makeDerivedEmitter(clock *kairos.Clock, project, nodeIDStr, projectRoot str
 				Type: events.EntityTask,
 				ID:   fmt.Sprintf("%d", epicID),
 			},
+			// Actor built literally rather than via events.EmittingActor:
+			// this event is synthesized by Endless, not typed by anyone, so
+			// stamping the emitting process's harness onto it would answer a
+			// question it was never asked (E-2005).
 			Actor: events.Actor{
 				Kind: events.ActorSystem,
 				ID:   "epic-derivation",
@@ -453,11 +451,8 @@ func runProjectNextRevise(evtKind events.Kind, project, entityType, entityID,
 			Type: events.EntityType(entityType),
 			ID:   entityID,
 		},
-		Actor: events.Actor{
-			Kind:      events.ActorKind(actorKindStr),
-			ID:        actorID,
-			SessionID: sessionID,
-		},
+		Actor: events.EmittingActor(
+			events.ActorKind(actorKindStr), actorID, sessionID),
 		CorrelationID: correlationID,
 		Payload:       json.RawMessage(payloadStr),
 	}

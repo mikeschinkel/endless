@@ -955,10 +955,9 @@ func execTaskLanded(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 	}
 	// A record-only/historical landing (E-1719) carries an empty branch — the
 	// original branch is gone — so record NULL rather than an empty string.
-	var branch any
-	if p.Branch != "" {
-		branch = p.Branch
-	}
+	// Same reasoning for base_branch (E-2005), which a backfill never knows.
+	branch := nullIfEmpty(p.Branch)
+	baseBranch := nullIfEmpty(p.BaseBranch)
 	// landed_at is the event timestamp, not now(): a historical record-only
 	// landing (E-1719) sets evt.TS to the commit date via `emit --ts`, so the
 	// row records when the work actually landed. For a normal live land evt.TS
@@ -966,9 +965,12 @@ func execTaskLanded(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 	// live insert agree with replayTaskLanded, which already uses evt.TS.
 	landedAt := kairosToISO(evt.TS)
 	if _, err := db.Exec(
-		`INSERT INTO task_landings (task_id, session_id, branch, merge_commit_sha, landed_at)
-		 VALUES (?, ?, ?, ?, ?)`,
-		taskID, sessionID, branch, p.MergeCommitSHA, landedAt,
+		`INSERT INTO task_landings
+		     (task_id, session_id, branch, base_branch, merge_commit_sha,
+		      landed_at, landed_by_harness)
+		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		taskID, sessionID, branch, baseBranch, p.MergeCommitSHA, landedAt,
+		nullIfEmpty(evt.Actor.Harness),
 	); err != nil {
 		return nil, fmt.Errorf("events: insert task_landing: %w", err)
 	}
@@ -1141,4 +1143,19 @@ func mustParseInt64(s string) int64 {
 	var n int64
 	fmt.Sscanf(s, "%d", &n)
 	return n
+}
+
+// nullIfEmpty binds a string as SQL NULL when it is empty, and as itself
+// otherwise.
+//
+// The distinction is load-bearing wherever a column means "nobody recorded
+// this": an empty string is a recorded value, so `IS NULL` stops answering the
+// question and every reader has to remember to spell it as NULL-or-empty.
+// task_landings.branch established the rule for a record-only backfill
+// (E-1719); base_branch and landed_by_harness (E-2005) inherit it.
+func nullIfEmpty(s string) any {
+	if s == "" {
+		return nil
+	}
+	return s
 }

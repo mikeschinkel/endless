@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/mikeschinkel/endless/internal/agentenv"
 	"github.com/mikeschinkel/endless/internal/kairos"
 )
 
@@ -47,6 +48,68 @@ type Actor struct {
 	Kind      ActorKind `json:"kind"`
 	ID        string    `json:"id"`
 	SessionID string    `json:"session_id,omitempty"`
+
+	// Harness names the agent host that emitted this event — an agentenv.ID
+	// ("claude_cli"), or "" when no agent harness was detected, meaning a
+	// person at a shell (E-2005).
+	//
+	// It answers "WHO did this", which none of the three fields above can.
+	// Kind names the CHANNEL, and `cli` is produced identically by a human
+	// typing `endless worktree land` and an agent shelling out to the same
+	// command. SessionID is worse than useless for the question: it answers
+	// "which session is this ABOUT", and its resolver deliberately credits a
+	// bare shell in a sibling tmux pane to the Claude session next to it
+	// (E-1294), so a human's command routinely arrives carrying the agent's
+	// own session id.
+	//
+	// Orthogonal to Kind on purpose. `hook` is always an agent, `web` never
+	// is, and `cli` is the ambiguous one this resolves; folding agent-ness
+	// into Kind would multiply the enum and break the closed set every
+	// consumer switches on.
+	//
+	// Stamped in Go at emit time by EmittingActor from the environment this
+	// process inherited, never passed in as a flag: the emitting process is
+	// the authoritative observer, and a value the caller supplies is a value a
+	// stale or hand-rolled caller can get wrong.
+	//
+	// Purely additive — every historical event stays valid unchanged, the same
+	// argument ActorTriager makes in its own comment.
+	Harness string `json:"harness,omitempty"`
+}
+
+// EmittingActor builds the Actor for an event THIS process is about to emit,
+// stamping Harness from the environment (E-2005).
+//
+// Every emit path that takes its actor from the caller goes through here, so
+// "the harness is observed, not declared" is a property of one function rather
+// than a convention three call sites have to remember.
+//
+// Deliberately not used by the epic-derivation emitter in internal/eventcmd:
+// that event is synthesized by Endless as a consequence of another mutation and
+// is attributed to the system actor. "Which harness typed it" has no answer
+// there, and "" — no agent — would be the wrong one.
+func EmittingActor(kind ActorKind, id, sessionID string) Actor {
+	return Actor{
+		Kind:      kind,
+		ID:        id,
+		SessionID: sessionID,
+		Harness:   DetectedHarness(),
+	}
+}
+
+// DetectedHarness names the agent harness running this process, or "" when
+// there is none.
+//
+// The empty string rather than agentenv.Unknown: "" is what `omitempty` drops
+// from the envelope, so a human's event carries no harness key at all, and
+// downstream SQL can spell "a human did this" as IS NULL. Recording the literal
+// "unknown" would make every historical event that predates this field look
+// different from a human's, which is the one distinction that has to hold.
+func DetectedHarness() string {
+	if id := agentenv.Detect(); id != agentenv.Unknown {
+		return string(id)
+	}
+	return ""
 }
 
 // Kind is a closed enumeration of event types.

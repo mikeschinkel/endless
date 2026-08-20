@@ -298,6 +298,47 @@ func TestRenderNotice(t *testing.T) {
 	}
 }
 
+// TestRenderNoticeLanded covers the synthetic `landed` key the
+// task_landings_notify_sessions trigger writes (E-2005). It is not a task
+// field, so it renders as a sentence rather than a "before → after" pair, and
+// it is answered before noticeFieldOrder is consulted.
+func TestRenderNoticeLanded(t *testing.T) {
+	tests := []struct {
+		name    string
+		changes string
+		want    string
+	}{
+		{
+			name:    "the ordinary land names the branch and the commit",
+			changes: `{"landed":{"before":null,"after":"main@1dd0006"}}`,
+			want:    "FYI — E-500 landed on main (1dd0006)",
+		},
+		{
+			name:    "a base branch containing @ splits on the last one",
+			changes: `{"landed":{"before":null,"after":"release@2@6671bca"}}`,
+			want:    "FYI — E-500 landed on release@2 (6671bca)",
+		},
+		{
+			name: "a record-only backfill has no base branch to name",
+			// E-1719: the land it records predates anything being asked to
+			// remember one, and "main" written there would be a guess.
+			changes: `{"landed":{"before":null,"after":"6671bca"}}`,
+			want:    "FYI — E-500 landed (6671bca)",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, ok := RenderNotice(Notice{TaskID: 500, Changes: tc.changes})
+			if !ok {
+				t.Fatalf("RenderNotice returned not-ok for %s", tc.changes)
+			}
+			if got != tc.want {
+				t.Errorf("want %q, got %q", tc.want, got)
+			}
+		})
+	}
+}
+
 // TestRenderNoticeRejectsUnrenderable pins the fail-safe: a notice that cannot
 // be rendered must report not-ok so the caller leaves it PENDING. Delivering a
 // blank and marking it done would consume the only copy of a correction.

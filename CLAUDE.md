@@ -296,6 +296,28 @@ The CLI refusal fails **open** on `unknown` (a human at a shell prompt keeps the
 tool) while the hooks fail **closed**. Deliberate asymmetry: the hooks are
 enforcement, the refusal is advice with an exit code.
 
+**The harness is also recorded, not only enforced on** (E-2005).
+`events.Actor.Harness` carries the detected `agentenv.ID` on every event, or `""`
+for a person at a shell. It is the only field that answers "was this a HUMAN or
+an AGENT": `ActorKind` names the *channel* (a human typing `endless worktree
+land` and an agent shelling out to it both produce `cli`), and `SessionID`
+answers "which session is this *about*" — its resolver deliberately credits a
+bare shell in a sibling tmux pane to the Claude session beside it (E-1294), so a
+human's command routinely arrives carrying an agent's session id.
+
+Stamped by `events.EmittingActor` in the emitting Go process, never passed in as
+a flag: that process inherits the harness's environment and is the authoritative
+observer, while a caller-supplied value is one a stale caller can get wrong. Use
+`EmittingActor` for any new emit path whose actor comes from a caller; build an
+`Actor` literally only for an event Endless synthesizes itself, where "who typed
+it" has no answer.
+
+First consumer: `task_landings.landed_by_harness` and the
+`task_landings_notify_sessions` trigger, so an agent is not told about a land it
+performed while a person's land is announced to every session holding the task.
+`tasks_notify_sessions` still decides the same question from `CLAUDECODE` in
+`stampTaskActor`; converging the two is **E-2006**.
+
 ## One project-path spelling — E-2002
 
 Project paths are stored and compared **absolute, with every symlink

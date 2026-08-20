@@ -70,6 +70,18 @@ type TaskClaimedPayload struct {
 type TaskLandedPayload struct {
 	Branch         string `json:"branch"`
 	MergeCommitSHA string `json:"merge_commit_sha"`
+
+	// BaseBranch is the branch the work landed ON — `main` for almost every
+	// project, whatever `origin/HEAD` names for the rest (E-2005). Branch above
+	// is the branch it landed FROM, which is the task branch and is not what a
+	// human wants read back to them ("E-2005 landed on main", not "landed on
+	// task/2005-notify-session-…").
+	//
+	// omitempty and nullable downstream. A record-only backfill (E-1719) has no
+	// base branch to name — the land it records happened before anything was
+	// asked to remember one — and a fabricated "main" there would be a guess
+	// stored as a fact.
+	BaseBranch string `json:"base_branch,omitempty"`
 }
 
 // Epic derivation payloads (E-1541). Recorded once per epic whose status the

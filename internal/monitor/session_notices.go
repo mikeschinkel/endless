@@ -38,6 +38,12 @@ type noticeChange struct {
 // recognising elided content. It is one character (U+2026), not three dots.
 const elisionSentinel = "…"
 
+// noticeLandedKey is the synthetic key the task_landings_notify_sessions trigger
+// writes (E-2005). It is deliberately NOT in noticeFieldOrder below: a landing
+// is not a field that moved from one value to another, so it renders as its own
+// sentence rather than as a "before → after" pair.
+const noticeLandedKey = "landed"
+
 // noticeFieldOrder pins the rendering order of a multi-field change. Go map
 // iteration is randomised, so without this the same edit would render its fields
 // in a different order on every run — noise in a log meant for eyeballing, and
@@ -130,6 +136,11 @@ func RenderNotice(n Notice) (string, bool) {
 	if err := json.Unmarshal([]byte(n.Changes), &changes); err != nil {
 		return "", false
 	}
+	// A landing arrives alone, from its own trigger on its own table, so it is
+	// answered before the field loop rather than merged into it.
+	if landed, ok := changes[noticeLandedKey]; ok {
+		return fmt.Sprintf("FYI — E-%d %s", n.TaskID, landedPhrase(landed.After)), true
+	}
 	var parts []string
 	for _, field := range noticeFieldOrder {
 		change, ok := changes[field]
@@ -147,6 +158,24 @@ func RenderNotice(n Notice) (string, bool) {
 		return "", false
 	}
 	return fmt.Sprintf("FYI — E-%d %s", n.TaskID, strings.Join(parts, "; ")), true
+}
+
+// landedPhrase renders the `landed` notice's after-value, which the trigger
+// encodes as "<base_branch>@<sha7>" — or as a bare sha7 when the landing
+// recorded no base branch (a record-only backfill, E-1719, which has none to
+// record).
+//
+// Split on the LAST '@' because a git branch name may legally contain one
+// (`feature@2`) while an abbreviated sha never does.
+func landedPhrase(after any) string {
+	value, _ := after.(string)
+	if at := strings.LastIndex(value, "@"); at > 0 {
+		return fmt.Sprintf("landed on %s (%s)", value[:at], value[at+1:])
+	}
+	if value == "" {
+		return "landed"
+	}
+	return fmt.Sprintf("landed (%s)", value)
 }
 
 // freeformVerb names what happened to an elided field. The four cases are

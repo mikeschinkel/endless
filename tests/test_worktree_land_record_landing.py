@@ -36,6 +36,23 @@ def test_record_landing_success(monkeypatch):
     assert calls[0]["payload"]["merge_commit_sha"] == "deadbeef"
 
 
+def test_record_landing_payload_carries_the_base_branch(monkeypatch):
+    """E-2005: the notice reads back the branch the work landed ON.
+
+    `branch` is the task branch it landed FROM, and "E-1474 landed on
+    task/1474-x" is not what anyone wants to be told. base_branch is known only
+    here — the Go executor sees the event, never the git repo behind it — so a
+    payload that drops it makes the notice unable to name a branch at all.
+    """
+    calls = []
+    monkeypatch.setattr(
+        "endless.event_bridge.emit_event", lambda **kw: calls.append(kw)
+    )
+    _record_landing(**_args())
+    assert calls[0]["payload"]["base_branch"] == "main"
+    assert calls[0]["payload"]["branch"] == "task/1474-x"
+
+
 def test_record_landing_clickexception_is_recoverable(monkeypatch):
     # Simulate the E-1470 attribution gate raising during the emit.
     def boom(**kw):
