@@ -196,11 +196,9 @@ func projectRootByName(name string) (string, error) {
 	if strings.TrimSpace(path) == "" {
 		return "", fmt.Errorf("project %s has no registered path", name)
 	}
-	abs, err := filepath.Abs(path)
-	if err != nil {
-		return "", err
-	}
-	return abs, nil
+	// The column is STORED form — `~/...` for a project under $HOME — and
+	// filepath.Abs would turn that into `<cwd>/~/...` (E-2011).
+	return monitor.ResolvedProjectPath(path)
 }
 
 // projectRootFromCwd delegates to the shared resolver and re-words the

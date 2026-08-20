@@ -7,7 +7,7 @@ from pathlib import Path
 import click
 
 from endless import db, config
-from endless.project_path import normalize
+from endless.project_path import resolved, stored
 
 NAME_PATTERN = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
 
@@ -90,17 +90,20 @@ def register_project(
 ) -> str:
     """Register or update a project. Returns the name."""
 
-    project_path = normalize(project_path)
+    # The RESOLVED form is what everything below touches on disk; the STORED
+    # form is what the projects column holds (E-2011).
+    project_path = resolved(project_path)
     if not project_path.is_dir():
         raise click.ClickException(
             f"Directory not found: {project_path}"
         )
+    stored_path = stored(project_path)
 
     # Check if already registered
     existing = db.query(
         "SELECT id, name, label, description, language, status "
         "FROM projects WHERE path = ?",
-        (str(project_path),),
+        (stored_path,),
     )
     is_update = len(existing) > 0
 
@@ -213,7 +216,7 @@ def register_project(
             "description=?, status=?, language=?, updated_at=? "
             "WHERE path=?",
             (name, label, group_name, description, status,
-             language, now, str(project_path)),
+             language, now, stored_path),
         )
         click.echo(
             click.style("•", fg="cyan")
@@ -225,7 +228,7 @@ def register_project(
             "(name, label, path, group_name, description, "
             "status, language, created_at, updated_at) "
             "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (name, label, str(project_path), group_name,
+            (name, label, stored_path, group_name,
              description, status, language, now, now),
         )
         click.echo(

@@ -6,6 +6,7 @@ import click
 
 from endless import db, config
 from endless.register import validate_name
+from endless.project_path import resolved
 from endless.resolve_name import resolve_project
 
 
@@ -30,7 +31,7 @@ def rename_project(
             f"Name '{new_name}' is already in use"
         )
 
-    project_path = Path(project["path"])
+    project_path = resolved(project["path"])
 
     # Update DB
     db.execute(

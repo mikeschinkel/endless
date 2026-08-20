@@ -8,7 +8,7 @@ from pathlib import Path
 import click
 
 from endless import db
-from endless.project_path import match_project_path, normalize
+from endless.project_path import match_project_path, resolved
 
 
 def _format_tool_content(content: str, tool_name: str | None = None, mode: str = "truncated") -> str:
@@ -1376,14 +1376,15 @@ def _project_root_for_cwd() -> Path:
     Both sides of the comparison are normalized (E-2002): cwd on the way in,
     and each candidate row inside match_project_path, so a project reached
     through a symlink resolves to its registered root instead of falling
-    through to cwd.
+    through to cwd. The return is the RESOLVED form — this is a directory,
+    not the `~/...` the column holds (E-2011).
     """
-    cwd = normalize(Path.cwd())
+    cwd = resolved(Path.cwd())
     candidate = cwd
     while True:
-        stored = match_project_path(candidate)
-        if stored is not None:
-            return normalize(stored)
+        stored_path = match_project_path(candidate)
+        if stored_path is not None:
+            return resolved(stored_path)
         if candidate.parent == candidate:
             break
         candidate = candidate.parent
@@ -1490,7 +1491,8 @@ def _session_project_root(c: dict) -> str:
     )
     if not rows:
         return ""
-    return rows[0]["path"] or ""
+    # The column is STORED form; this is a cd target (E-2011).
+    return str(resolved(rows[0]["path"])) if rows[0]["path"] else ""
 
 
 def _resolve_target(c: dict, target: str) -> str | None:

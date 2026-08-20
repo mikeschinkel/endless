@@ -16,7 +16,7 @@ from tabulate import tabulate
 
 from endless import db, config
 from endless.statuses import TASK_STATUSES
-from endless.project_path import normalize, project_name_for_cwd
+from endless.project_path import project_name_for_cwd, resolved
 
 
 _TIER_LABELS = {0: "n/a", 1: "auto", 2: "quick", 3: "deep", 4: "discuss"}
@@ -454,7 +454,7 @@ def _main_root_for_task(task_id: int) -> Path | None:
     )
     if not row:
         return None
-    return normalize(row[0]["path"])
+    return resolved(row[0]["path"])
 
 
 def _worktree_for_task(task_id: int) -> Path | None:
@@ -768,7 +768,9 @@ def import_plan(
             "SELECT path FROM projects WHERE id = ?",
             (project_id,),
         )
-        proj_path = row[0]["path"] if row else ""
+        # Plans on disk spell paths absolutely, so match on the resolved
+        # form rather than the `~/...` the column holds (E-2011).
+        proj_path = str(resolved(row[0]["path"])) if row else ""
 
         found = []
         for f in sorted(plans_dir.glob("*.md")):
@@ -824,7 +826,7 @@ def import_plan(
             (project_id,),
         )
         if row:
-            plan_path = Path(row[0]["path"]) / "PLAN.md"
+            plan_path = resolved(row[0]["path"]) / "PLAN.md"
             if plan_path.exists():
                 content = plan_path.read_text()
                 _do_import(

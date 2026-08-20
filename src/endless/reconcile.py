@@ -6,7 +6,7 @@ from pathlib import Path
 import click
 
 from endless import db, config
-from endless.project_path import normalize
+from endless.project_path import resolved, stored
 
 
 def reconcile():
@@ -31,41 +31,45 @@ def reconcile():
     db_by_name: dict[str, dict] = {
         row["name"]: dict(row) for row in db_rows
     }
-    # Keyed on the canonical form, not the stored string (E-2002): a project
+    # Keyed on the RESOLVED form, not the stored string (E-2002): a project
     # whose row predates this normalization must still be recognized as the
     # same project as the directory found on disk, or reconcile inserts a
     # second row for it.
     db_by_path: dict[str, dict] = {
-        str(normalize(row["path"])): dict(row) for row in db_rows
+        str(resolved(row["path"])): dict(row) for row in db_rows
     }
 
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
 
     # Reconcile: disk → DB
     for name, (disk_path, cfg) in found_on_disk.items():
-        # Normalized on the way into the DB, so a root reached through a
-        # symlink is stored the one canonical way both halves compare against.
-        # Repairs a stale row in passing: a project matched by name whose
-        # stored path is unresolved gets rewritten to the canonical form.
-        disk_path = normalize(disk_path)
-        path_str = str(disk_path)
+        # Canonicalized on the way into the DB, so a root reached through a
+        # symlink is stored the one way both halves compare against. Repairs a
+        # stale row in passing: a project matched by name whose stored path is
+        # in an older spelling gets rewritten to the canonical form.
+        disk_path = resolved(disk_path)
+        stored_path = stored(disk_path)
+        # db_by_path is keyed on the resolved form, so the lookup below uses
+        # that; only the column write uses the stored form.
+        resolved_str = str(disk_path)
 
         if name in db_by_name:
             db_entry = db_by_name[name]
-            if db_entry["path"] != path_str:
-                # Path changed (moved/renamed) → update
+            if db_entry["path"] != stored_path:
+                # Path changed (moved/renamed), or the row is in an older
+                # spelling → update
                 db.execute(
                     "UPDATE projects SET path=?, "
                     "group_name=?, updated_at=? "
                     "WHERE id=?",
-                    (path_str, _detect_group(disk_path),
+                    (stored_path, _detect_group(disk_path),
                      now, db_entry["id"]),
                 )
             # Also sync any config changes
             _sync_config_to_db(db_entry["id"], cfg, now)
-        elif path_str in db_by_path:
+        elif resolved_str in db_by_path:
             # Same path but name changed → update name
-            db_entry = db_by_path[path_str]
+            db_entry = db_by_path[resolved_str]
             db.execute(
                 "UPDATE projects SET name=?, updated_at=? "
                 "WHERE id=?",
@@ -80,7 +84,7 @@ def reconcile():
 
     # Reconcile: DB entries whose paths no longer exist
     for row in db_rows:
-        path = Path(row["path"])
+        path = resolved(row["path"])
         if not path.exists():
             # Path gone and name not found elsewhere on disk
             if row["name"] not in found_on_disk:
@@ -246,7 +250,7 @@ def _insert_from_config(
         (
             name,
             cfg.get("label", ""),
-            str(project_path),
+            stored(project_path),
             _detect_group(project_path),
             cfg.get("description", ""),
             cfg.get("status", "active"),

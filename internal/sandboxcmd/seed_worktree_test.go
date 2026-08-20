@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/mikeschinkel/endless/internal/monitor"
 	"github.com/mikeschinkel/endless/internal/schema"
 )
 
@@ -134,8 +135,15 @@ func TestSeedFromWorktree_CopiesProjectAndSeedsSessionFromEnv(t *testing.T) {
 	if name != "test-proj" {
 		t.Errorf("project name = %q, want test-proj", name)
 	}
-	if path != mainCheckout {
-		t.Errorf("project path = %q, want %q (main checkout)", path, mainCheckout)
+	// The seeded row is a WRITE, so it holds the STORED form — home-relative
+	// (E-2011). The fixture's main checkout lives directly under the fake
+	// $HOME, so that is `~/<basename>`.
+	wantPath, err := monitor.StoredProjectPath(mainCheckout)
+	if err != nil {
+		t.Fatalf("StoredProjectPath: %v", err)
+	}
+	if path != wantPath {
+		t.Errorf("project path = %q, want %q (main checkout, stored form)", path, wantPath)
 	}
 
 	var sid string

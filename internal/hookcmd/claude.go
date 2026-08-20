@@ -183,12 +183,20 @@ func runClaude(args []string) error {
 	// Normalize the harness-supplied cwd ONCE, here, before anything reads it
 	// (E-2002). Every project path this hook compares it against — the projects
 	// row, the worktree root derived from it, the lock paths — comes back from
-	// monitor already symlink-resolved, because that is the form the Python CLI
-	// writes. Claude Code reports cwd however the user's shell spelled it, so
-	// normalizing at the single entry point is what keeps the project lookup,
-	// the E-1586 cwd gate, worktree adoption and the recorded activity row all
-	// comparing the same two paths instead of two spellings of one directory.
-	payload.CWD = monitor.NormalizeProjectPath(payload.CWD)
+	// monitor already resolved, because monitor.ProjectPath expands the stored
+	// form on the way out. Claude Code reports cwd however the user's shell
+	// spelled it, so normalizing at the single entry point is what keeps the
+	// project lookup, the E-1586 cwd gate, worktree adoption and the recorded
+	// activity row all comparing the same two paths instead of two spellings of
+	// one directory.
+	//
+	// RESOLVED, not stored: cwd is used as a directory throughout this hook.
+	// Only the projects column speaks tilde (E-2011).
+	resolvedCWD, err := monitor.ResolvedProjectPath(payload.CWD)
+	if err != nil {
+		return fmt.Errorf("resolving cwd %s: %w", payload.CWD, err)
+	}
+	payload.CWD = resolvedCWD
 
 	projectID, isRegistered, err := monitor.ProjectIDForPath(payload.CWD)
 	if err != nil {

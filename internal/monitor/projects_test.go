@@ -2,6 +2,8 @@ package monitor
 
 import (
 	"database/sql"
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -301,45 +303,319 @@ func TestProjectIDForPath_DuplicateRowsPreferTheOlder(t *testing.T) {
 	}
 }
 
-// TestNormalizeProjectPath_MissingLeafResolvesExistingPrefix pins the
+// ─── the two forms (E-2011) ─────────────────────────────────────────────────
+
+// withTempHome points $HOME at a fresh directory and returns it in resolved
+// form. Every home-relative assertion needs a home it controls: asserting
+// against the developer's real $HOME would pass on this machine and prove
+// nothing about the rule.
+func withTempHome(t *testing.T) string {
+	t.Helper()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	resolved, err := ResolvedProjectPath(home)
+	if err != nil {
+		t.Fatalf("ResolvedProjectPath(home): %v", err)
+	}
+	return resolved
+}
+
+// TestResolvedProjectPath_MissingLeafResolvesExistingPrefix pins the
 // non-strict behavior that makes the Go half match pathlib.Path.resolve():
 // filepath.EvalSymlinks fails outright when the leaf does not exist, which
 // would leave a not-yet-created project directory unresolved and reintroduce
 // the very mismatch this closes.
-func TestNormalizeProjectPath_MissingLeafResolvesExistingPrefix(t *testing.T) {
+func TestResolvedProjectPath_MissingLeafResolvesExistingPrefix(t *testing.T) {
 	real := tempProjectRoot(t)
 	link := filepath.Join(t.TempDir(), "link-to-parent")
 	if err := os.Symlink(real, link); err != nil {
 		t.Fatalf("symlink: %v", err)
 	}
 
-	got := NormalizeProjectPath(filepath.Join(link, "not", "created", "yet"))
+	got, err := ResolvedProjectPath(filepath.Join(link, "not", "created", "yet"))
+	if err != nil {
+		t.Fatalf("ResolvedProjectPath: %v", err)
+	}
 	want := filepath.Join(real, "not", "created", "yet")
 	if got != want {
-		t.Errorf("NormalizeProjectPath = %q, want %q", got, want)
+		t.Errorf("ResolvedProjectPath = %q, want %q", got, want)
 	}
 }
 
-// TestNormalizeProjectPath_ExpandsTilde pins the tilde expansion ProjectPath
-// used to do inline and now inherits from the shared rule. This is input
-// tolerance, NOT part of the canonical stored form — every writer of
-// projects.path normalizes first, so a tilde never reaches that column. It is
-// pinned because the Python half's Path.resolve() treats a literal `~` as an
-// ordinary directory name and silently yields `<cwd>/~/x`, so the two halves
-// agree only while both expand it.
-func TestNormalizeProjectPath_ExpandsTilde(t *testing.T) {
-	home, err := os.UserHomeDir()
-	if err != nil || home == "" {
-		t.Skip("no home dir resolvable")
+// TestResolvedProjectPath_ExpandsTilde pins the read half of the storage rule.
+// Since E-2011 the tilde is the shape projects.path normally holds, so every
+// caller that treats the result as a directory depends on this branch — and
+// bare filepath.Abs on `~/x` yields `<cwd>/~/x`, which fails much later and
+// somewhere else.
+func TestResolvedProjectPath_ExpandsTilde(t *testing.T) {
+	home := withTempHome(t)
+
+	got, err := ResolvedProjectPath("~/some-project")
+	if err != nil {
+		t.Fatalf("ResolvedProjectPath: %v", err)
 	}
-	got := NormalizeProjectPath("~/some-project")
-	want := filepath.Join(NormalizeProjectPath(home), "some-project")
+	want := filepath.Join(home, "some-project")
 	if got != want {
-		t.Errorf("NormalizeProjectPath(~/some-project) = %q, want %q", got, want)
+		t.Errorf("ResolvedProjectPath(~/some-project) = %q, want %q", got, want)
+	}
+
+	got, err = ResolvedProjectPath("~")
+	if err != nil {
+		t.Fatalf("ResolvedProjectPath(~): %v", err)
+	}
+	if got != home {
+		t.Errorf("ResolvedProjectPath(~) = %q, want %q", got, home)
 	}
 }
 
-// ─── RepairProjectPaths (the E-2002 change script's data half) ──────────────
+// TestStoredProjectPath_IsHomeRelative is the rule itself: what the column
+// holds for a project under $HOME, and the reason `endless sql` output is
+// readable.
+func TestStoredProjectPath_IsHomeRelative(t *testing.T) {
+	home := withTempHome(t)
+
+	got, err := StoredProjectPath(filepath.Join(home, "Projects", "acme"))
+	if err != nil {
+		t.Fatalf("StoredProjectPath: %v", err)
+	}
+	if got != "~/Projects/acme" {
+		t.Errorf("StoredProjectPath = %q, want %q", got, "~/Projects/acme")
+	}
+}
+
+// TestStoredProjectPath_HomeItselfIsBareTilde covers the boundary case the
+// prefix test cannot: $HOME is under $HOME, and `~/` + "" would be `~/`.
+func TestStoredProjectPath_HomeItselfIsBareTilde(t *testing.T) {
+	home := withTempHome(t)
+
+	got, err := StoredProjectPath(home)
+	if err != nil {
+		t.Fatalf("StoredProjectPath: %v", err)
+	}
+	if got != "~" {
+		t.Errorf("StoredProjectPath(home) = %q, want %q", got, "~")
+	}
+}
+
+// TestStoredProjectPath_OutsideHomeStaysAbsolute pins the mixed column ED-1562
+// chose deliberately: /opt/src/acme has no home-relative spelling, so it keeps
+// the absolute one rather than acquiring a `../..` that no reader could parse.
+func TestStoredProjectPath_OutsideHomeStaysAbsolute(t *testing.T) {
+	withTempHome(t)
+	outside := tempProjectRoot(t) // a temp dir, not under the temp home
+
+	got, err := StoredProjectPath(outside)
+	if err != nil {
+		t.Fatalf("StoredProjectPath: %v", err)
+	}
+	if got != outside {
+		t.Errorf("StoredProjectPath = %q, want %q (unchanged)", got, outside)
+	}
+}
+
+// TestStoredProjectPath_DoesNotSwallowASiblingOfHome guards the off-by-one that
+// a naive prefix test has: /Users/mikey does not live inside /Users/mike, and
+// storing it as `~y` would point the expansion at a directory that never
+// existed.
+func TestStoredProjectPath_DoesNotSwallowASiblingOfHome(t *testing.T) {
+	home := withTempHome(t)
+	sibling := home + "-sibling"
+	if err := os.MkdirAll(sibling, 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+
+	got, err := StoredProjectPath(sibling)
+	if err != nil {
+		t.Fatalf("StoredProjectPath: %v", err)
+	}
+	if got != sibling {
+		t.Errorf("StoredProjectPath = %q, want %q (a sibling of home is not inside it)", got, sibling)
+	}
+}
+
+// TestStoredProjectPath_ResolvesSymlinksBeforeRelativizing pins that E-2011
+// re-points E-2002's invariant rather than weakening it: the stored spelling
+// still must not depend on how the caller's shell spelled the path.
+func TestStoredProjectPath_ResolvesSymlinksBeforeRelativizing(t *testing.T) {
+	home := withTempHome(t)
+	real := filepath.Join(home, "Projects", "acme")
+	if err := os.MkdirAll(real, 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	link := filepath.Join(t.TempDir(), "link-to-acme")
+	if err := os.Symlink(real, link); err != nil {
+		t.Fatalf("symlink: %v", err)
+	}
+
+	got, err := StoredProjectPath(link)
+	if err != nil {
+		t.Fatalf("StoredProjectPath: %v", err)
+	}
+	if got != "~/Projects/acme" {
+		t.Errorf("StoredProjectPath(symlink) = %q, want %q", got, "~/Projects/acme")
+	}
+}
+
+// TestStoredProjectPath_RoundTripsThroughResolved is the property the whole
+// split rests on: the two accessors are inverses for any path, so nothing is
+// lost by storing the shorter form.
+func TestStoredProjectPath_RoundTripsThroughResolved(t *testing.T) {
+	home := withTempHome(t)
+	for _, dir := range []string{
+		home,
+		filepath.Join(home, "Projects", "acme"),
+		tempProjectRoot(t),
+	} {
+		stored, err := StoredProjectPath(dir)
+		if err != nil {
+			t.Fatalf("StoredProjectPath(%s): %v", dir, err)
+		}
+		back, err := ResolvedProjectPath(stored)
+		if err != nil {
+			t.Fatalf("ResolvedProjectPath(%s): %v", stored, err)
+		}
+		if back != dir {
+			t.Errorf("round trip of %q via %q = %q", dir, stored, back)
+		}
+	}
+}
+
+// TestProjectPathsFailLoudlyWithoutHome pins the contract E-2011 asked for by
+// name. A silent answer here is `<cwd>/~/Projects/acme` on the read side and a
+// second spelling of an already-registered directory on the write side; both
+// surface far from the cause, so both refuse instead.
+//
+// A path with no tilde needs no home and so must still succeed — that is what
+// keeps a machine with a broken $HOME able to look up a project stored
+// absolutely.
+func TestProjectPathsFailLoudlyWithoutHome(t *testing.T) {
+	outside := tempProjectRoot(t)
+	t.Setenv("HOME", "")
+
+	if _, err := ResolvedProjectPath("~/Projects/acme"); !errors.Is(err, ErrNoHomeDir) {
+		t.Errorf("ResolvedProjectPath(~/…) error = %v, want ErrNoHomeDir", err)
+	}
+	if _, err := StoredProjectPath(outside); !errors.Is(err, ErrNoHomeDir) {
+		t.Errorf("StoredProjectPath error = %v, want ErrNoHomeDir", err)
+	}
+	got, err := ResolvedProjectPath(outside)
+	if err != nil {
+		t.Errorf("ResolvedProjectPath(absolute) = %v, want no error", err)
+	}
+	if got != outside {
+		t.Errorf("ResolvedProjectPath(absolute) = %q, want %q", got, outside)
+	}
+}
+
+// ─── the two forms, through the DB (E-2011) ─────────────────────────────────
+
+// TestProjectIDForPath_MatchesAHomeRelativeRow is the shape every row takes
+// after E-2011: the column holds `~/…` and the hook hands in an absolute cwd.
+// If the walk did not convert each rung to the stored form, this would miss and
+// auto-register a duplicate — the E-2002 failure, in a new spelling.
+func TestProjectIDForPath_MatchesAHomeRelativeRow(t *testing.T) {
+	db := withTestDB(t)
+	home := withTempHome(t)
+	root := filepath.Join(home, "Projects", "acme")
+	if err := os.MkdirAll(filepath.Join(root, "src"), 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	seedProject(t, db, 1, "acme", "~/Projects/acme")
+
+	for _, dir := range []string{root, filepath.Join(root, "src")} {
+		id, registered, err := ProjectIDForPath(dir)
+		if err != nil {
+			t.Fatalf("ProjectIDForPath(%s): %v", dir, err)
+		}
+		if id != 1 || !registered {
+			t.Errorf("ProjectIDForPath(%s) = (%d, %v), want (1, true)", dir, id, registered)
+		}
+	}
+	if n := countProjects(t, db); n != 1 {
+		t.Errorf("projects rows = %d, want 1", n)
+	}
+}
+
+// TestProjectIDForPath_AutoRegistersInStoredForm pins the write side of the
+// same loop. The hook auto-registers whatever it could not find; writing that
+// row absolute would leave the column mixed for no reason and make the NEXT
+// lookup take the fallback scan instead of the index.
+func TestProjectIDForPath_AutoRegistersInStoredForm(t *testing.T) {
+	db := withTestDB(t)
+	home := withTempHome(t)
+	root := filepath.Join(home, "Projects", "newcomer")
+	if err := os.MkdirAll(root, 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+
+	id, registered, err := ProjectIDForPath(root)
+	if err != nil {
+		t.Fatalf("ProjectIDForPath: %v", err)
+	}
+	if registered {
+		t.Errorf("registered = true, want false (this is an auto-registration)")
+	}
+	if got := projectPathOf(t, db, id); got != "~/Projects/newcomer" {
+		t.Errorf("auto-registered path = %q, want %q", got, "~/Projects/newcomer")
+	}
+	if n := countProjects(t, db); n != 1 {
+		t.Errorf("projects rows = %d, want 1", n)
+	}
+}
+
+// TestProjectPath_HomeRelativeRowComesBackResolved is the read half at the DB
+// boundary: every caller of ProjectPath uses the answer as a directory, so the
+// stored tilde must never escape this function.
+func TestProjectPath_HomeRelativeRowComesBackResolved(t *testing.T) {
+	db := withTestDB(t)
+	home := withTempHome(t)
+	seedProject(t, db, 1, "acme", "~/Projects/acme")
+
+	got, err := ProjectPath(1)
+	if err != nil {
+		t.Fatalf("ProjectPath: %v", err)
+	}
+	want := filepath.Join(home, "Projects", "acme")
+	if got != want {
+		t.Errorf("ProjectPath = %q, want %q", got, want)
+	}
+}
+
+// TestMatchProjectPath_FindsBothSpellings pins the fast path and the fallback
+// side by side: a row written the E-2011 way is matched on the indexed exact
+// compare, and a row still written the E-2002 way (absolute) is matched by the
+// resolved-form scan — so upgrading a ledger cannot spawn duplicates before the
+// change script runs.
+func TestMatchProjectPath_FindsBothSpellings(t *testing.T) {
+	db := withTestDB(t)
+	home := withTempHome(t)
+	root := filepath.Join(home, "Projects", "acme")
+	if err := os.MkdirAll(root, 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+
+	seedProject(t, db, 1, "acme", "~/Projects/acme")
+	stored, found, err := MatchProjectPath(db, root)
+	if err != nil || !found {
+		t.Fatalf("MatchProjectPath = (%q, %v, %v)", stored, found, err)
+	}
+	if stored != "~/Projects/acme" {
+		t.Errorf("stored = %q, want %q", stored, "~/Projects/acme")
+	}
+
+	if _, err = db.Exec("UPDATE projects SET path = ? WHERE id = 1", root); err != nil {
+		t.Fatalf("rewrite row absolute: %v", err)
+	}
+	stored, found, err = MatchProjectPath(db, root)
+	if err != nil || !found {
+		t.Fatalf("MatchProjectPath (absolute row) = (%q, %v, %v)", stored, found, err)
+	}
+	if stored != root {
+		t.Errorf("stored = %q, want %q", stored, root)
+	}
+}
+
+// ─── RepairProjectPaths (the change scripts' data half) ─────────────────────
 
 // repairInTx runs RepairProjectPaths against db inside its own transaction,
 // the way the change script does.
@@ -388,6 +664,34 @@ func TestRepairProjectPaths_RewritesUnresolvedRow(t *testing.T) {
 	}
 	if got := projectPathOf(t, db, 1); got != real {
 		t.Errorf("path = %q, want %q", got, real)
+	}
+}
+
+// TestRepairProjectPaths_RewritesAbsoluteRowHomeRelative is the E-2011 half:
+// a ledger already repaired by E-2002 holds the PREVIOUS canonical form, and
+// the same function brings it to the current one. This is what
+// internal/schema/changes/e-2011-home-relative-project-paths.go runs.
+func TestRepairProjectPaths_RewritesAbsoluteRowHomeRelative(t *testing.T) {
+	db := withTestDB(t)
+	home := withTempHome(t)
+	root := filepath.Join(home, "Projects", "acme")
+	if err := os.MkdirAll(root, 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	seedProject(t, db, 1, "acme", root)
+
+	repair := repairInTx(t, db)
+
+	if repair.Rewritten != 1 || repair.Merged != 0 {
+		t.Errorf("repair = %+v, want {Merged:0 Rewritten:1}", repair)
+	}
+	if got := projectPathOf(t, db, 1); got != "~/Projects/acme" {
+		t.Errorf("path = %q, want %q", got, "~/Projects/acme")
+	}
+
+	// Idempotent across BOTH changes: re-running finds it already canonical.
+	if again := repairInTx(t, db); again.Rewritten != 0 || again.Merged != 0 {
+		t.Errorf("second repair = %+v, want a no-op", again)
 	}
 }
 
@@ -539,8 +843,9 @@ func TestRepairProjectPaths_LeavesUnrelatedProjectsAlone(t *testing.T) {
 
 // TestProjectLookupNeverNormalizesWithAbsAlone is the guard against the exact
 // revert that shipped the bug. `filepath.Abs` makes a path absolute and stops
-// there, leaving symlink components in place; every project-path comparison in
-// this package must go through NormalizeProjectPath instead.
+// there, leaving symlink components in place — and, since E-2011, turning a
+// stored `~/Projects/acme` into `<cwd>/~/Projects/acme`. Every project-path
+// comparison in this package must go through ResolvedProjectPath instead.
 //
 // A source-level check because the failure is silent — a comparison that uses
 // Abs alone works perfectly on any machine whose paths happen to have no
@@ -563,7 +868,82 @@ func TestProjectLookupNeverNormalizesWithAbsAlone(t *testing.T) {
 				continue
 			}
 			t.Errorf("%s:%d normalizes a path with filepath.Abs alone: %s\n"+
-				"use monitor.NormalizeProjectPath", name, i+1, strings.TrimSpace(line))
+				"use monitor.ResolvedProjectPath", name, i+1, strings.TrimSpace(line))
 		}
 	}
+}
+
+// TestEveryProjectsPathReaderResolves is the E-2011 companion guard, and it
+// spans the whole repo rather than this package: the tilde made `projects.path`
+// a string that LOOKS usable. `filepath.Join(path, ".endless")` on `~/x`
+// compiles, runs, and produces a directory that has never existed — so the
+// hazard is not "did you resolve symlinks" any more, it is "did you resolve at
+// all", and it lands in whichever command reads the column next.
+//
+// The rule it enforces: a Go file that SELECTs `path` from `projects` must name
+// ResolvedProjectPath or StoredProjectPath somewhere in it. Deliberately
+// file-granular — pinning it any tighter would mean parsing Go, and the point
+// is to make the omission visible, not to prove the use is correct.
+func TestEveryProjectsPathReaderResolves(t *testing.T) {
+	root := filepath.Join("..", "..")
+	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			// The walk root is literally "..", whose Name() starts with a dot —
+			// skipping it would silently walk nothing and pass forever.
+			if path == root {
+				return nil
+			}
+			// Vendored code, and any nested worktree checkout, are not ours.
+			if name := d.Name(); name == "vendor" || strings.HasPrefix(name, ".") {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+			return nil
+		}
+		src, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		text := string(src)
+		if strings.Contains(text, "ResolvedProjectPath") || strings.Contains(text, "StoredProjectPath") {
+			return nil
+		}
+		for i, line := range strings.Split(text, "\n") {
+			if !selectsProjectsPath(line) {
+				continue
+			}
+			t.Errorf("%s:%d reads projects.path but never resolves it: %s\n"+
+				"a stored path is `~/…`; pass it through monitor.ResolvedProjectPath "+
+				"before it touches the filesystem (E-2011)",
+				path, i+1, strings.TrimSpace(line))
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("walk: %v", err)
+	}
+}
+
+// selectsProjectsPath reports whether one source line is a SELECT of the `path`
+// column from `projects`. Line-granular on purpose: a query split across string
+// concatenations is missed rather than guessed at, which costs a false negative
+// and never a false positive.
+func selectsProjectsPath(line string) bool {
+	upper := strings.ToUpper(line)
+	sel := strings.Index(upper, "SELECT ")
+	from := strings.Index(upper, "FROM PROJECTS")
+	if sel < 0 || from < sel {
+		return false
+	}
+	for _, col := range strings.Split(upper[sel+len("SELECT "):from], ",") {
+		if strings.TrimSpace(col) == "PATH" {
+			return true
+		}
+	}
+	return false
 }

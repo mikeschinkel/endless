@@ -6,6 +6,7 @@ from pathlib import Path
 import click
 
 from endless import db, config
+from endless.project_path import resolved
 
 
 def unregister_project(name: str):
@@ -24,7 +25,7 @@ def unregister_project(name: str):
             f"No project found with name '{name}'"
         )
 
-    project_path = Path(row[0]["path"])
+    project_path = resolved(row[0]["path"])
     project_id = row[0]["id"]
 
     # Update config on disk to status=unregistered
@@ -78,7 +79,7 @@ def purge_project(name: str):
             f"No project found with name '{name}'"
         )
 
-    project_path = Path(row[0]["path"])
+    project_path = resolved(row[0]["path"])
     project_id = row[0]["id"]
 
     # Confirm

@@ -40,7 +40,7 @@ from pathlib import Path
 import click
 
 from endless.task_cmd import _display_path, _resolve_project, recover_task_text
-from endless.project_path import normalize
+from endless.project_path import resolved
 
 
 COMPANION_FILENAME = ".endless/worktree.json"
@@ -119,7 +119,7 @@ def _project_root() -> Path:
     row = db.query("SELECT path FROM projects WHERE id = ? LIMIT 1", (project_id,))
     if not row:
         raise click.ClickException(f"Project id {project_id} has no registered path")
-    return normalize(row[0]["path"])
+    return resolved(row[0]["path"])
 
 
 def _git(args: list[str], cwd: Path) -> str:

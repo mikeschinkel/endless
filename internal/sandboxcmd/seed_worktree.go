@@ -220,9 +220,13 @@ func readMainProjectRow(dbPath, mainCheckout string) (*projectRow, error) {
 	if err != nil {
 		return nil, fmt.Errorf("reading project row: %w", err)
 	}
-	// Seed the sandbox with the canonical form even when the main row predates
-	// E-2002 and holds an unresolved path: this is a fresh write into a fresh
-	// DB, and there is no reason to copy the mismatch forward.
-	p.Path = monitor.NormalizeProjectPath(p.Path)
+	// Seed the sandbox with the canonical STORED form even when the main row
+	// predates E-2011 or E-2002 and holds another spelling: this is a fresh
+	// write into a fresh DB, and there is no reason to copy the mismatch
+	// forward.
+	p.Path, err = monitor.StoredProjectPath(p.Path)
+	if err != nil {
+		return nil, fmt.Errorf("canonicalizing project path %s: %w", p.Path, err)
+	}
 	return &p, nil
 }

@@ -6,6 +6,7 @@ from pathlib import Path
 import click
 
 from endless import db
+from endless.project_path import resolved
 
 
 def scan_project(project_id: int, project_name: str, project_path: Path):
@@ -57,7 +58,7 @@ def run_scan(project_name: str | None = None, docs_only: bool = False):
         return
 
     for row in rows:
-        scan_project(row["id"], row["name"], Path(row["path"]))
+        scan_project(row["id"], row["name"], resolved(row["path"]))
         projects_scanned += 1
 
     click.echo()

@@ -13,8 +13,12 @@ func runPrompt(args []string) error {
 	}
 	// Normalized for the same reason claude.go normalizes payload.CWD (E-2002):
 	// the directory arrives from the shell, the project row was written
-	// symlink-resolved by the Python CLI, and an unresolved spelling misses.
-	dir := monitor.NormalizeProjectPath(args[0])
+	// canonically by the Python CLI, and a raw spelling misses. Resolved, not
+	// stored — this is a directory, not a column value (E-2011).
+	dir, err := monitor.ResolvedProjectPath(args[0])
+	if err != nil {
+		return fmt.Errorf("resolving %s: %w", args[0], err)
+	}
 
 	// Look up project
 	projectID, _, err := monitor.ProjectIDForPath(dir)

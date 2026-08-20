@@ -224,7 +224,10 @@ func newClaimFixture(t *testing.T) *claimFixture {
 	// — so a fixture registered at the raw t.TempDir() (under /var on macOS, a
 	// symlink into /private/var) would be asserting against a spelling the
 	// product deliberately no longer emits.
-	root := monitor.NormalizeProjectPath(t.TempDir())
+	root, rootErr := monitor.ResolvedProjectPath(t.TempDir())
+	if rootErr != nil {
+		t.Fatalf("ResolvedProjectPath: %v", rootErr)
+	}
 	worktree := filepath.Join(root, ".endless", "worktrees", "e-10")
 	if err := os.MkdirAll(worktree, 0755); err != nil {
 		t.Fatalf("mkdir worktree: %v", err)

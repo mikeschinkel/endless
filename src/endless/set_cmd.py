@@ -9,7 +9,7 @@ from endless import db, config
 from endless.register import validate_name
 from endless.resolve_name import resolve_project
 from endless.models import VALID_STATUSES
-from endless.project_path import project_name_for_cwd
+from endless.project_path import project_name_for_cwd, resolved
 
 SETTABLE_FIELDS = {
     "name", "label", "description", "language", "status",
@@ -59,7 +59,7 @@ def set_field(expression: str, path_hint: str | None = None):
             f"{', '.join(sorted(SETTABLE_FIELDS))}"
         )
 
-    project_path = Path(project["path"])
+    project_path = resolved(project["path"])
     name = project["name"]
 
     # Validate specific fields

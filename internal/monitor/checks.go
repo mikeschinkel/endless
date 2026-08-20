@@ -23,6 +23,11 @@ func IsCheckEnabled(projectID int64, name string) bool {
 	if err != nil {
 		return config.DefaultCheckEnabled(name)
 	}
+	// The column is STORED form; config.Load reads a directory (E-2011).
+	projectPath, err = ResolvedProjectPath(projectPath)
+	if err != nil {
+		return config.DefaultCheckEnabled(name)
+	}
 	cfg, err := config.Load(dt.DirPath(projectPath))
 	if err != nil {
 		return config.DefaultCheckEnabled(name)

@@ -748,13 +748,17 @@ func BackupDB() (BackupResult, error) {
 	return BackupResult{Path: dst}, nil
 }
 
-// ProjectPath returns the registered filesystem path for a project ID,
-// normalized through NormalizeProjectPath so callers can use it directly and
-// compare it against a path the Python CLI computed for the same project. That
-// includes the ~ expansion this used to do on its own; the Python read sides
-// (task_cmd, worktree_cmd, decision_cmd, matchers) all do `expanduser().
-// resolve()` on the same column, so anything less here is a string the two
-// halves disagree about (E-2002).
+// ProjectPath returns the registered filesystem path for a project ID in
+// RESOLVED form, so callers can hand it straight to os.Stat, filepath.Join or
+// git and compare it against a path the Python CLI computed for the same
+// project. Every caller here treats the result as a real directory — worktree
+// roots, lock files, the claim handoff's cd line — which is precisely why this
+// one returns the resolved form and never the stored one (E-2011): the column
+// now normally holds `~/...`, and a tilde is not a path in Go.
+//
+// The Python read sides (task_cmd, worktree_cmd, decision_cmd, matchers) call
+// endless.project_path.resolved on the same column, so anything less here is a
+// string the two halves disagree about (E-2002).
 func ProjectPath(id int64) (string, error) {
 	db, err := DB()
 	if err != nil {
@@ -765,7 +769,7 @@ func ProjectPath(id int64) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return NormalizeProjectPath(path), nil
+	return ResolvedProjectPath(path)
 }
 
 // ProjectIDForPath looks up a registered project by working directory.
@@ -773,25 +777,36 @@ func ProjectPath(id int64) (string, error) {
 // Returns (id, true) if found, or creates/finds an anonymous project
 // and returns (id, false) if the directory is not registered.
 //
-// dir is normalized first (E-2002): the Python CLI stores a resolved path, so
-// comparing an unresolved cwd against it misses on every project reached
-// through a symlink and auto-registers a duplicate. The indexed walk runs
-// against the normalized ancestors; only when the whole walk misses does
-// projectIDForNormalizedPath scan for a row that was itself stored unresolved.
+// dir is normalized first (E-2002): the Python CLI stores a canonical path, so
+// comparing a raw cwd against it misses on every project reached through a
+// symlink and auto-registers a duplicate. The walk climbs RESOLVED ancestors —
+// the only form `filepath.Dir` can climb — and queries each one in STORED form,
+// which is what the indexed column holds (E-2011). Home is looked up once for
+// the whole walk rather than per rung.
+//
+// Only when the whole walk misses does projectIDForResolvedPath scan for a row
+// written in an older spelling.
 func ProjectIDForPath(dir string) (int64, bool, error) {
 	db, err := DB()
 	if err != nil {
 		return 0, false, err
 	}
 
-	dir = NormalizeProjectPath(dir)
+	dir, err = ResolvedProjectPath(dir)
+	if err != nil {
+		return 0, false, err
+	}
+	home, err := resolvedHomeDir()
+	if err != nil {
+		return 0, false, err
+	}
 
 	// Walk up looking for a registered project
 	check := dir
 	for {
 		var id int64
-		err := db.QueryRow(
-			"SELECT id FROM projects WHERE path = ?", check,
+		err = db.QueryRow(
+			"SELECT id FROM projects WHERE path = ?", homeRelative(check, home),
 		).Scan(&id)
 		if err == nil {
 			return id, true, nil
@@ -804,9 +819,9 @@ func ProjectIDForPath(dir string) (int64, bool, error) {
 		check = parent
 	}
 
-	// Nothing stored in canonical form matched — a row may predate E-2002 and
-	// hold an unresolved path that denotes this directory anyway.
-	id, found, err := projectIDForNormalizedPath(db, dir)
+	// Nothing stored in canonical form matched — a row may predate E-2011 or
+	// E-2002 and hold another spelling that denotes this directory anyway.
+	id, found, err := projectIDForResolvedPath(db, dir)
 	if err != nil {
 		return 0, false, err
 	}
@@ -824,12 +839,21 @@ func ProjectIDForPath(dir string) (int64, bool, error) {
 
 // ensureAutoRegisteredProject auto-registers an unregistered directory
 // as an active project. Uses the directory basename as the project name.
+//
+// dir arrives RESOLVED; the row is written in STORED form, the same shape
+// `endless project register` writes, so the indexed lookup above matches it on
+// the next event instead of falling through to the scan (E-2011).
 func ensureAutoRegisteredProject(db *sql.DB, dir string) (int64, error) {
+	stored, err := StoredProjectPath(dir)
+	if err != nil {
+		return 0, err
+	}
+
 	// Check if already exists at this path
 	var id int64
-	err := db.QueryRow(
+	err = db.QueryRow(
 		"SELECT id FROM projects WHERE path = ?",
-		dir,
+		stored,
 	).Scan(&id)
 	if err == nil {
 		return id, nil
@@ -855,13 +879,13 @@ func ensureAutoRegisteredProject(db *sql.DB, dir string) (int64, error) {
 	result, err := db.Exec(
 		"INSERT INTO projects (name, path, status, created_at, updated_at) "+
 			"VALUES (?, ?, 'active', ?, ?)",
-		name, dir, now, now,
+		name, stored, now, now,
 	)
 	if err != nil {
-		return 0, fmt.Errorf("auto-registering project %s at %s: %w", name, dir, err)
+		return 0, fmt.Errorf("auto-registering project %s at %s: %w", name, stored, err)
 	}
 
-	log.Printf("auto-registered project: %s at %s", name, dir)
+	log.Printf("auto-registered project: %s at %s", name, stored)
 	return result.LastInsertId()
 }
 
@@ -875,15 +899,18 @@ var ErrNoProjectContext = errors.New("no project context: no ancestor directory 
 // by every command that must resolve a project from cwd rather than from an
 // explicit --project name (templatecmd, outputstylecmd).
 //
-// Normalized like every other project path Endless produces (E-2002), so the
-// root this returns is the same string the projects row holds and the Python
-// CLI computes, rather than whichever spelling the caller's shell was in.
+// Returns the RESOLVED form (E-2002/E-2011): this walks the filesystem with
+// os.Stat and the caller uses the answer as a directory, so it is deliberately
+// not the tilde-prefixed form the projects column holds.
 func ProjectRootFromCwd() (string, error) {
 	cwd, err := os.Getwd()
 	if err != nil {
 		return "", err
 	}
-	dir := NormalizeProjectPath(cwd)
+	dir, err := ResolvedProjectPath(cwd)
+	if err != nil {
+		return "", err
+	}
 	for {
 		if st, err := os.Stat(filepath.Join(dir, ".endless")); err == nil && st.IsDir() {
 			return dir, nil

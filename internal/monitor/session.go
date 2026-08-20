@@ -748,6 +748,12 @@ func GetTrackingMode(projectID int64) string {
 		return "off"
 	}
 
+	// The column is STORED form; config.Load reads a directory (E-2011).
+	projectPath, err = ResolvedProjectPath(projectPath)
+	if err != nil {
+		return "enforce"
+	}
+
 	cfg, err := config.Load(dt.DirPath(projectPath))
 	if err != nil {
 		return "enforce"

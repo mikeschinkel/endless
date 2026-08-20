@@ -316,7 +316,9 @@ func projectRootByName(name string) (string, error) {
 	if err := db.QueryRow("SELECT path FROM projects WHERE name = ?", name).Scan(&path); err != nil {
 		return "", fmt.Errorf("project not found: %s", name)
 	}
-	return filepath.Abs(path)
+	// The column is STORED form — `~/...` for a project under $HOME — and
+	// filepath.Abs would turn that into `<cwd>/~/...` (E-2011).
+	return monitor.ResolvedProjectPath(path)
 }
 
 // rel renders a path relative to the project root for display, falling back to

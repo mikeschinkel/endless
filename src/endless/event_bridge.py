@@ -193,7 +193,8 @@ def emit_event(
             (project,),
         )
         if row:
-            project_root = str(Path(row[0]["path"]).expanduser())
+            from endless.project_path import resolved
+            project_root = str(resolved(row[0]["path"]))
         else:
             project_root = str(Path.cwd())
 

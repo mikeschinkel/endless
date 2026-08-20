@@ -349,16 +349,40 @@ an agent acted, NULL otherwise. Deliberately not mirroring `task_landings`'
 two-column shape: the extra fact that recovers (which session a HUMAN's edit was
 credited to) has no consumer.
 
-## One project-path spelling — E-2002
+## One project-path spelling, in two forms — E-2002, E-2011
 
-Project paths are stored and compared **absolute, with every symlink
-component resolved**. One rule, two implementations that must not drift:
-`monitor.NormalizeProjectPath` / `MatchProjectPath`
-(`internal/monitor/project_path.go`) and `endless.project_path` — see either
-file for why. Normalize at the boundaries: the DB read, and the
-harness-supplied cwd (done once at the top of `hook claude`). A new comparison
-between a project path and a cwd needs no normalization of its own; one that
-re-derives a path from a raw cwd does.
+A project path has **two** forms, and confusing them is the bug this section
+exists to prevent:
+
+- **stored** — home-relative (`~/Projects/acme`), absolute only outside `$HOME`.
+  This is what `projects.path` holds and what comparisons run in. It is **not a
+  filesystem path**: neither Go nor `pathlib` expands a tilde, so
+  `filepath.Join`/`Path(...)` on it yields `<cwd>/~/Projects/acme`, which
+  fails somewhere else entirely.
+- **resolved** — absolute, every symlink component resolved. This is what
+  touches disk.
+
+Symlinks are still resolved before relativizing, so there is still exactly one
+canonical spelling per directory. Home-relative because `endless sql` is a
+supported surface and ad-hoc queries over the ledger are far easier to read
+without a column of identical home prefixes (ED-1562); the byte saving is under
+a kilobyte and is not the reason.
+
+One rule, two implementations that must not drift: `monitor.StoredProjectPath` /
+`ResolvedProjectPath` / `MatchProjectPath` (`internal/monitor/project_path.go`)
+and `endless.project_path` (`stored()` returns a `str`, `resolved()` returns a
+`Path` — the type tells you which one you hold). See either file for why.
+
+Normalize at the boundaries: the DB read, and the harness-supplied cwd (done
+once at the top of `hook claude`). A new comparison between a project path and a
+cwd needs no normalization of its own; one that re-derives a path from a raw cwd
+does, and one that reads `projects.path` to touch the filesystem must resolve it
+— two guard tests fail the build if a reader forgets
+(`TestEveryProjectsPathReaderResolves`, `test_every_projects_path_reader_normalizes`).
+
+`$HOME` unset is a hard error on both sides, never a silent fallback: a guess
+there produces `<cwd>/~/…` on read, or a second spelling of an
+already-registered directory on write.
 
 ## Tests
 

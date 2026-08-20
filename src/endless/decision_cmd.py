@@ -16,7 +16,7 @@ from pathlib import Path
 import click
 
 from endless import db
-from endless.project_path import normalize
+from endless.project_path import resolved
 from endless.task_cmd import (
     _display_path,
     _format_timestamp,
@@ -383,7 +383,7 @@ def _main_root_for_project(project_id: int) -> Path | None:
     )
     if not row:
         return None
-    return normalize(row[0]["path"])
+    return resolved(row[0]["path"])
 
 
 def _mirror_decision_body(

@@ -448,6 +448,11 @@ func ReapWorktreesForProject(projectID int64) error {
 	if path == "" {
 		return nil
 	}
+	// The column is STORED form; everything below walks the filesystem (E-2011).
+	path, err = ResolvedProjectPath(path)
+	if err != nil {
+		return fmt.Errorf("reap worktrees for project %d: resolve path: %w", projectID, err)
+	}
 	ttl := DefaultWorktreeTTL
 	if s := ReadWorktreeTTLConfig(path); s != "" {
 		if parsed, perr := ParseWorktreeTTL(s); perr == nil {

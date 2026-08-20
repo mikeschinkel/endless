@@ -2,31 +2,57 @@ package monitor
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 )
 
-// NormalizeProjectPath returns the one canonical form Endless stores and
-// compares a project path in: absolute, with every symlink component resolved.
+// A project path has TWO forms and they must never be confused (ED-1562):
 //
-// It also expands a leading `~`. That is INPUT TOLERANCE, not part of the
-// canonical form — nothing writes a tilde into projects.path, since every
-// writer runs through here first. It is kept because the Python half's
-// `Path.resolve()` treats a literal `~` as an ordinary directory name and
-// silently yields `<cwd>/~/x`, and because ProjectPath expanded `~` before
-// E-2002 folded it into this rule; dropping it would quietly change what a
-// hand-edited row resolves to.
+//   - the STORED form — home-relative, `~/Projects/acme`, absolute only for a
+//     directory outside $HOME. This is what `projects.path` holds and what
+//     comparisons run in. It is NOT a filesystem path: Go expands no tilde, so
+//     handing one to os.Stat, filepath.Join or git yields `<cwd>/~/Projects/acme`
+//     and a mystery much later.
+//   - the RESOLVED form — absolute, every symlink component resolved. This is
+//     what touches disk.
+//
+// StoredProjectPath and ResolvedProjectPath are the two accessors, named so the
+// call site says which one it holds. Normalize at the BOUNDARIES — the DB read
+// and the harness-supplied cwd, done once at the top of `hook claude` — never
+// per comparison.
+//
+// Stored home-relative for legibility: `endless sql` is a supported surface,
+// and an ad-hoc query over the ledger reads better with `~/Projects/acme` than
+// with a column of identical 20-character prefixes (E-2011). The byte saving is
+// not the reason; it is under a kilobyte.
+
+// ErrNoHomeDir is returned when $HOME cannot be determined. Both forms need it
+// — one to expand a stored tilde, the other to decide whether to write one —
+// and neither may guess: silently leaving `~` unexpanded produces `<cwd>/~/x`,
+// and silently skipping the relativization produces a second spelling of a
+// directory that already has a row. So this fails loudly instead (E-2011).
+var ErrNoHomeDir = errors.New("cannot determine home directory ($HOME unset?)")
+
+// ResolvedProjectPath returns the RESOLVED form of a project path: absolute,
+// with every symlink component resolved, and a leading `~` expanded. Use it for
+// anything that touches the filesystem — os.Stat, filepath.Join, a git -C, a cd
+// target handed to a session.
+//
+// The tilde is no longer mere input tolerance: since E-2011 it is the shape
+// `projects.path` normally holds, so expanding it here is the read half of the
+// storage rule rather than a kindness to hand-edited rows.
 //
 // This is the Go half of a rule the Python CLI implements identically in
-// endless.project_path.normalize (E-2002). The two halves MUST agree: the
-// Python CLI writes projects.path, the Go hook reads it on every Claude event,
-// and a disagreement makes the hook miss the registered row and auto-register a
+// endless.project_path.resolved (E-2002). The two halves MUST agree: the Python
+// CLI writes projects.path, the Go hook reads it on every Claude event, and a
+// disagreement makes the hook miss the registered row and auto-register a
 // second project for the same directory — leaving the session bound to an empty
-// duplicate. That is not hypothetical; it is the bug this function exists to
-// close, hit on any macOS project reached through /var or /tmp (both symlinks
-// into /private) and on any user whose projects live under a symlinked parent.
+// duplicate. That is not hypothetical; it is the bug this pair exists to close,
+// hit on any macOS project reached through /var or /tmp (both symlinks into
+// /private) and on any user whose projects live under a symlinked parent.
 //
 // Non-strict, matching pathlib.Path.resolve(): a path that does not exist yet
 // is still resolved as far as it does exist, and the missing tail is appended.
@@ -34,18 +60,85 @@ import (
 // silently leave those paths unresolved and reintroduce the mismatch for
 // exactly the directories a register-then-create flow touches first.
 //
-// Never returns an error: a path Endless cannot resolve is more useful to a
-// caller in its absolute form than as a failure, and every call site here is a
-// comparison that degrades to the pre-E-2002 behavior rather than breaking.
-func NormalizeProjectPath(p string) string {
+// Errors ONLY when it must expand a `~` and cannot. A path with no tilde needs
+// no home directory and so cannot fail: an unresolvable path is more useful to
+// a caller in its absolute form than as an error, and every comparison here
+// degrades to the pre-E-2002 behavior rather than breaking.
+func ResolvedProjectPath(p string) (string, error) {
 	if p == "" {
-		return ""
+		return "", nil
 	}
 	if p == "~" || strings.HasPrefix(p, "~/") {
-		if home, err := os.UserHomeDir(); err == nil {
-			p = filepath.Join(home, strings.TrimPrefix(p[1:], "/"))
+		home, err := resolvedHomeDir()
+		if err != nil {
+			return "", fmt.Errorf("resolving project path %q: %w", p, err)
 		}
+		p = filepath.Join(home, strings.TrimPrefix(p[1:], "/"))
 	}
+	return resolveAbs(p), nil
+}
+
+// StoredProjectPath returns the STORED form of a project path: the resolved
+// form rewritten home-relative with a `~/` prefix, or left absolute when the
+// directory is not under $HOME. Use it for every write to projects.path and
+// every comparison against it — and for nothing else, because it is a string,
+// not a path.
+//
+// Symlinks are still resolved first: relativizing an unresolved path would make
+// the stored spelling depend on how the caller's shell spelled it, which is
+// exactly what E-2002 closed.
+//
+// Mirrors endless.project_path.stored on the Python side.
+func StoredProjectPath(p string) (string, error) {
+	if p == "" {
+		return "", nil
+	}
+	resolved, err := ResolvedProjectPath(p)
+	if err != nil {
+		return "", err
+	}
+	home, err := resolvedHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("storing project path %q: %w", p, err)
+	}
+	return homeRelative(resolved, home), nil
+}
+
+// resolvedHomeDir is $HOME in the same resolved form project paths take, so the
+// prefix test in homeRelative compares like with like. A $HOME reached through
+// a symlink (a relocated home directory, a container bind mount) would
+// otherwise never prefix-match a resolved project path, and every project would
+// silently store absolute.
+//
+// Not cached: tests set HOME per-case, and the cost is one EvalSymlinks.
+func resolvedHomeDir() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("%w: %v", ErrNoHomeDir, err)
+	}
+	if home == "" {
+		return "", ErrNoHomeDir
+	}
+	return resolveAbs(home), nil
+}
+
+// homeRelative rewrites a RESOLVED path home-relative. `home` must already be
+// resolved. The separator in the prefix test is what keeps `/Users/mikey` from
+// being read as living inside `/Users/mike`.
+func homeRelative(resolved, home string) string {
+	if resolved == home {
+		return "~"
+	}
+	if strings.HasPrefix(resolved, home+string(filepath.Separator)) {
+		return "~" + resolved[len(home):]
+	}
+	return resolved
+}
+
+// resolveAbs is the symlink-resolving core shared by both forms: absolute, every
+// component resolved, non-strict. It knows nothing about `~` — by the time it
+// runs, any tilde has already been expanded.
+func resolveAbs(p string) string {
 	abs, err := filepath.Abs(p)
 	if err != nil {
 		return filepath.Clean(p)
@@ -71,23 +164,28 @@ func NormalizeProjectPath(p string) string {
 }
 
 // MatchProjectPath returns the projects.path AS STORED for the row that denotes
-// dir, and whether one was found. Exact string match first — the indexed fast
-// path that every correctly-normalized row takes — then a normalized comparison
-// across the table.
+// dir, and whether one was found. Exact match on the STORED form first — the
+// indexed fast path every correctly-written row takes — then a comparison in
+// RESOLVED form across the table.
 //
-// The fallback covers rows holding an unresolved path. E-2002's change script
-// rewrites those (see RepairProjectPaths), so on a repaired ledger it never
-// fires — but a row can be written by hand, restored from an old backup, or
-// created by a DB that has not run the change yet, and a lookup that missed in
-// those cases would auto-register a duplicate all over again. Ordering by id
-// makes the pick deterministic when two rows normalize to the same directory:
-// the older row wins, which is the genuine registration rather than the
-// auto-registered duplicate.
+// The two forms are deliberate. The fast path compares what the column actually
+// holds; the fallback compares what the rows MEAN, so it still matches a row in
+// any older spelling — absolute since E-2011 re-pointed the canonical form,
+// unresolved since before E-2002. Each ticket's change script rewrites those
+// (see RepairProjectPaths), so on a repaired ledger the fallback never fires —
+// but a row can be written by hand, restored from an old backup, or created by
+// a DB that has not run the change yet, and a lookup that missed in those cases
+// would auto-register a duplicate all over again. Ordering by id makes the pick
+// deterministic when two rows denote the same directory: the older row wins,
+// which is the genuine registration rather than the auto-registered duplicate.
 func MatchProjectPath(db *sql.DB, dir string) (string, bool, error) {
-	target := NormalizeProjectPath(dir)
+	target, err := StoredProjectPath(dir)
+	if err != nil {
+		return "", false, err
+	}
 
 	var stored string
-	err := db.QueryRow(
+	err = db.QueryRow(
 		"SELECT path FROM projects WHERE path = ?", target,
 	).Scan(&stored)
 	if err == nil {
@@ -97,6 +195,10 @@ func MatchProjectPath(db *sql.DB, dir string) (string, bool, error) {
 		return "", false, err
 	}
 
+	resolvedTarget, err := ResolvedProjectPath(dir)
+	if err != nil {
+		return "", false, err
+	}
 	rows, err := db.Query("SELECT path FROM projects ORDER BY id")
 	if err != nil {
 		return "", false, err
@@ -104,27 +206,35 @@ func MatchProjectPath(db *sql.DB, dir string) (string, bool, error) {
 	defer rows.Close()
 	for rows.Next() {
 		var candidate string
-		if err := rows.Scan(&candidate); err != nil {
+		if err = rows.Scan(&candidate); err != nil {
 			return "", false, err
 		}
-		if NormalizeProjectPath(candidate) == target {
+		resolved, rerr := ResolvedProjectPath(candidate)
+		if rerr != nil {
+			return "", false, rerr
+		}
+		if resolved == resolvedTarget {
 			return candidate, true, nil
 		}
 	}
 	return "", false, rows.Err()
 }
 
-// projectIDForNormalizedPath is the legacy-row half of ProjectIDForPath's
-// lookup, run only after the indexed walk up dir's ancestors has missed. It
-// scans the projects table once, normalizes each stored path, and returns the
-// DEEPEST row that is dir or an ancestor of it — the same nearest-enclosing
-// -project answer the walk gives, reached without an index.
+// projectIDForResolvedPath is the legacy-row half of ProjectIDForPath's lookup,
+// run only after the indexed walk up dir's ancestors has missed. It scans the
+// projects table once, resolves each stored path, and returns the DEEPEST row
+// that is dir or an ancestor of it — the same nearest-enclosing-project answer
+// the walk gives, reached without an index.
+//
+// dir arrives already RESOLVED, and each candidate is resolved to match: this is
+// the comparison that has to see through every stored spelling at once, so it
+// runs in the form they all mean rather than the form they are written in.
 //
 // Deepest, not first, because projects nest: a row for ~/Projects and a row for
 // ~/Projects/endless must both be reachable, and a cwd inside the latter
-// belongs to the latter. Ties (two rows normalizing to the same directory) go
-// to the lower id, matching MatchProjectPath.
-func projectIDForNormalizedPath(db *sql.DB, dir string) (int64, bool, error) {
+// belongs to the latter. Ties (two rows denoting the same directory) go to the
+// lower id, matching MatchProjectPath.
+func projectIDForResolvedPath(db *sql.DB, dir string) (int64, bool, error) {
 	rows, err := db.Query("SELECT id, path FROM projects ORDER BY id")
 	if err != nil {
 		return 0, false, err
@@ -136,15 +246,18 @@ func projectIDForNormalizedPath(db *sql.DB, dir string) (int64, bool, error) {
 	for rows.Next() {
 		var id int64
 		var path string
-		if err := rows.Scan(&id, &path); err != nil {
+		if err = rows.Scan(&id, &path); err != nil {
 			return 0, false, err
 		}
-		normalized := NormalizeProjectPath(path)
-		if normalized != dir && !strings.HasPrefix(dir, normalized+string(filepath.Separator)) {
+		resolved, rerr := ResolvedProjectPath(path)
+		if rerr != nil {
+			return 0, false, rerr
+		}
+		if resolved != dir && !strings.HasPrefix(dir, resolved+string(filepath.Separator)) {
 			continue
 		}
-		if len(normalized) > bestLen {
-			bestID, bestLen = id, len(normalized)
+		if len(resolved) > bestLen {
+			bestID, bestLen = id, len(resolved)
 		}
 	}
 	if err := rows.Err(); err != nil {
@@ -162,13 +275,23 @@ type ProjectPathRepair struct {
 	Rewritten int // rows whose stored path was replaced by its canonical form
 }
 
-// RepairProjectPaths rewrites every projects.path to its canonical form and
-// folds away rows that turn out to denote the same directory.
+// RepairProjectPaths rewrites every projects.path to its canonical STORED form
+// and folds away rows that turn out to denote the same directory.
 //
 // This is the one-shot data half of E-2002, run by
-// internal/schema/changes/e-2002-normalize-project-paths.go. It lives here
-// rather than in that script so it can be tested; it stays here forever because
-// a migration has to keep working on a DB that has never seen it.
+// internal/schema/changes/e-2002-normalize-project-paths.go, and re-run by
+// internal/schema/changes/e-2011-home-relative-project-paths.go once E-2011
+// re-pointed the canonical form from absolute to home-relative. One function
+// serves both because "canonical" is defined in exactly one place —
+// StoredProjectPath — so a ledger that has run either change ends in whatever
+// spelling the current build calls canonical, and a ledger that runs both in
+// sequence is not rewritten twice for nothing. It lives here rather than in
+// those scripts so it can be tested; it stays here forever because a migration
+// has to keep working on a DB that has never seen it.
+//
+// Grouping is by RESOLVED form and rewriting is to STORED form: two rows denote
+// the same directory when they resolve to the same place, whatever spelling
+// each is written in.
 //
 // The duplicates are real rows with real history: the auto-registered project
 // the hook created is what the sessions of that period were bound to, and
@@ -190,9 +313,10 @@ func RepairProjectPaths(tx *sql.Tx) (ProjectPathRepair, error) {
 	var repair ProjectPathRepair
 
 	type row struct {
-		id         int64
-		path       string
-		normalized string
+		id       int64
+		path     string
+		resolved string // identity: which directory this row denotes
+		stored   string // what the path column should hold
 	}
 	rows, err := tx.Query("SELECT id, path FROM projects ORDER BY id")
 	if err != nil {
@@ -205,7 +329,14 @@ func RepairProjectPaths(tx *sql.Tx) (ProjectPathRepair, error) {
 			rows.Close()
 			return repair, fmt.Errorf("scanning projects: %w", err)
 		}
-		r.normalized = NormalizeProjectPath(r.path)
+		if r.resolved, err = ResolvedProjectPath(r.path); err != nil {
+			rows.Close()
+			return repair, fmt.Errorf("resolving project %d path %s: %w", r.id, r.path, err)
+		}
+		if r.stored, err = StoredProjectPath(r.path); err != nil {
+			rows.Close()
+			return repair, fmt.Errorf("canonicalizing project %d path %s: %w", r.id, r.path, err)
+		}
 		all = append(all, r)
 	}
 	if err = rows.Err(); err != nil {
@@ -219,19 +350,19 @@ func RepairProjectPaths(tx *sql.Tx) (ProjectPathRepair, error) {
 		return repair, err
 	}
 
-	// Group by canonical path, preserving id order so the first member of each
-	// group is its survivor.
+	// Group by the directory each row denotes, preserving id order so the first
+	// member of each group is its survivor.
 	order := make([]string, 0, len(all))
 	groups := make(map[string][]row, len(all))
 	for _, r := range all {
-		if _, seen := groups[r.normalized]; !seen {
-			order = append(order, r.normalized)
+		if _, seen := groups[r.resolved]; !seen {
+			order = append(order, r.resolved)
 		}
-		groups[r.normalized] = append(groups[r.normalized], r)
+		groups[r.resolved] = append(groups[r.resolved], r)
 	}
 
-	for _, normalized := range order {
-		group := groups[normalized]
+	for _, resolved := range order {
+		group := groups[resolved]
 		keeper := group[0]
 
 		for _, dup := range group[1:] {
@@ -241,13 +372,13 @@ func RepairProjectPaths(tx *sql.Tx) (ProjectPathRepair, error) {
 			repair.Merged++
 		}
 
-		if keeper.path != normalized {
+		if keeper.path != keeper.stored {
 			if _, err = tx.Exec(
-				"UPDATE projects SET path = ? WHERE id = ?", normalized, keeper.id,
+				"UPDATE projects SET path = ? WHERE id = ?", keeper.stored, keeper.id,
 			); err != nil {
 				return repair, fmt.Errorf(
 					"rewriting project %d path %s -> %s: %w",
-					keeper.id, keeper.path, normalized, err,
+					keeper.id, keeper.path, keeper.stored, err,
 				)
 			}
 			repair.Rewritten++
