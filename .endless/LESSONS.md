@@ -2317,3 +2317,9 @@ does not dirty main — Endless auto-commits its own files under `.endless/`.
 - **Rule**: When a question names a specific external system and a specific behavior of it, the answer must be about that system, not about the adjacent thing I control. Restate the question in my own words before answering if there is any chance I am about to answer a neighbor of it. And when the honest answer is "I don't know how that product's extension surface works," go find out — the binary, the docs, the settings schema — rather than answering the part I do know.
 - **Project**: endless
 
+### [2026-08-20] Lesson entries are far too long to be useful
+- **What went wrong**: Mike: "You are beyond verbose when writing lessons; our current LESSONS.md file is almost 200,000 bytes." Measured: 199,591 bytes, 2,319 lines. My own entries this session run 6-10 lines each of dense prose.
+- **Why**: I wrote each entry as a self-contained essay — full narrative, evidence, and reasoning — when the reusable part is one rule. Claude Code loads only the first 200 lines / 25KB of a memory index, so a verbose log is not merely untidy; most of it can never be read back.
+- **Rule**: One line for the rule. Add narrative only if the rule is unintelligible without it, and keep it to two sentences. If an entry needs more, it is a task or a decision record, not a lesson.
+- **Project**: endless
+
