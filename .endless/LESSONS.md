@@ -2104,3 +2104,43 @@ printed to one user on one machine and never committed.
 
 Do not silently rewrite another session's pre-existing violations in a spec you
 happen to be editing; fix your own and flag theirs.
+
+## LESSONS.md lives at `.endless/LESSONS.md` in the main checkout (2026-08-20)
+
+CLAUDE.md still says `~/Projects/endless/.claude/LESSONS.md`. It moved to
+`.endless/LESSONS.md`. I wrote to the stale path twice in one turn — first to
+`~/.claude/LESSONS.md` (the global file, wrong project entirely), then
+"corrected" it to the project's `.claude/` path, which was also wrong. Both
+entries were lost when that file was cleaned up; only the transcript survived.
+
+Two failures, not one. The stale doc caused the second miss, but the first was
+mine: the rule says the MAIN checkout, and I appended to a global file without
+checking. Read the path, then check the file exists before appending — creating
+a LESSONS.md is a signal you have the wrong path, not a fresh start.
+
+## Don't invoke a decision to critique yourself, then violate it two turns later
+
+E-2001. I read ED-1550 (agents must close more than they file; fold before
+filing) and correctly judged that filing E-2002 instead of folding it was a
+miss. Two turns later, when the user pointed out that landing a task produces no
+notice, I argued the gap "is a new task, not a regression of E-2001" — filing
+again, on exactly the grounds I had just conceded were wrong.
+
+E-2001 IS the notification-delivery task. "Land doesn't notify" is the same
+area. Reaching for a taxonomic distinction (regression vs. missing feature) to
+justify a new task is the proliferation ED-1550 names, dressed as rigor.
+
+Test before filing: is there an open task whose SUBJECT already covers this,
+regardless of whether the finding is technically in its scope as written? If
+yes, fold — reopening a task is cheap and costs the backlog nothing.
+
+## `revisit` does not discard work — say what a status actually does
+
+Same session. I told the user that moving E-2001 to `revisit` "would discard a
+fix you just watched work", as an argument against reopening. False: `revisit`
+is a status, the commit is untouched. I used an invented consequence to defend a
+position, and it was the kind of claim that would have changed his decision if
+he had believed it.
+
+Before arguing against a state transition, check what the transition actually
+does. Endless statuses are metadata; none of them touch git.

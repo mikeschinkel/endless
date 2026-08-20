@@ -90,7 +90,7 @@ deliberately; leave them, do not delete them.
 
 **Where corrections go instead.** After ANY correction from the user:
 immediately and without asking, append the pattern to
-**`~/Projects/endless/.claude/LESSONS.md`** — the *main checkout*, always, even
+**`~/Projects/endless/.endless/LESSONS.md`** — the *main checkout*, always, even
 when you are in a worktree. Do not resolve it with `git rev-parse
 --show-toplevel`: inside a worktree that yields the worktree root, and the log
 would be destroyed when the worktree is dropped. Recording is unconditional —
@@ -102,7 +102,7 @@ Do NOT read it, and do NOT load or act on it at session start or during a
 session.
 
 - Name the full path when you report a recording: "Recorded to
-  `~/Projects/endless/.claude/LESSONS.md`" — never a bare "Recorded".
+  `~/Projects/endless/.endless/LESSONS.md`" — never a bare "Recorded".
 - Do not claim a lesson is or is not already in the file based on a `tail`.
   Other sessions append between yours, so position proves nothing — `grep` for
   the heading, or say nothing about it.
