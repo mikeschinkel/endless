@@ -101,10 +101,16 @@ W() { E sql "$1" --write >/dev/null 2>&1; }
 # print the additionalContext it injects (empty when it injects nothing).
 # Driving the real binary on stdin is the point — the delivery half only exists
 # inside the hook, and a unit test cannot observe it.
+# CLAUDE_CODE_ENTRYPOINT=cli is REQUIRED, not decoration (E-1962): the hook is
+# gated on the harness and returns immediately — exit 0, no stdout — when the
+# environment is not a supported agent host. A bare shell is not one. Without
+# this the hook silently injects nothing and every check below fails for the
+# user while passing for an agent whose own environment happens to carry the
+# variable. Scoped to this subprocess so nothing else in the suite inherits it.
 HOOK() {
     printf '{"session_id":"%s","cwd":"%s","hook_event_name":"UserPromptSubmit","prompt":"hello"}' \
         "$1" "$REPO" \
-    | "$EGO" --config-dir "$DBDIR" hook claude 2>/dev/null \
+    | CLAUDE_CODE_ENTRYPOINT=cli "$EGO" --config-dir "$DBDIR" hook claude 2>/dev/null \
     | python3 -c 'import json,sys
 raw = sys.stdin.read().strip()
 if not raw:
