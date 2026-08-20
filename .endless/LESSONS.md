@@ -2601,3 +2601,26 @@ The difference matters. I had turned it into a portability checklist — enumera
 environment variations, tick them off. It is a statement about MY bias: writing
 Endless from inside Endless makes this machine and this project feel like the
 world. The instruction is to correct for that pull, not to run a matrix.
+
+### [2026-08-20] Accepted decisions are the source of truth, not code comments (E-1817)
+
+Mike: "We have seen a lot of problems with you taking comments as gospel when
+you wrote them w/o any input from me. I think accepted decisions should be the
+source, not code comments. Code comments should be viewed with suspicion."
+
+My whole audit routed cut material to "code comments beside what enforces them",
+and I justified deleting CLAUDE.md sections by pointing at comments I found
+authoritative. Those comments were written by agents. Citing one as the reason a
+rule can be dropped is circular — I am checking my own homework and calling it a
+source.
+
+Caught in this very audit: I called
+`internal/monitor/project_path.go`'s comment "richer than CLAUDE.md" and used it
+to justify deleting the E-2002 section. That comment says "nothing writes a
+tilde into projects.path". Accepted ED-1562 says stored paths ARE home-relative
+with a tilde prefix. The comment describes today's code correctly and the
+decided design wrongly — and I had promoted it to source of truth.
+
+Hierarchy: an ACCEPTED decision is authoritative because Mike approved it. A
+`proposed` decision is not — and I spent this audit treating proposed ED-1564 as
+settled. Code comments are evidence about code, nothing more.
