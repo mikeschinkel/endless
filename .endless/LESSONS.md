@@ -2671,3 +2671,20 @@ responsibility onto a job whose name no longer describes it.
 
 When a system has a registry, new capability registers alongside. Name the peer,
 not the host — and check the registry before writing the title.
+
+### [2026-08-20] An enforcement message must not publish its own bypass (E-1817)
+
+Mike: "If an action is highly discouraged, why are we advertising it?"
+
+The commit-on-main block ended with "Bypass (NOT recommended): git commit
+--no-verify". I had flagged it as suspect and filed a task, then left it in
+place while continuing to talk about it.
+
+Two defects, one cause. The message described a BLOCKED action as "highly
+discouraged", and then supplied the workaround. PreToolUse fires for exactly one
+audience — an agent — and an agent reading a block is already looking for a way
+through. Softened language plus a published escape hatch reads as permission
+with a disclaimer.
+
+`--no-verify` still works; not naming it simply stops handing it over. If an
+enforcement message names its own bypass, it is not enforcement.
