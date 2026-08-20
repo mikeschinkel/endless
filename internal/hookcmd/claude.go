@@ -236,6 +236,15 @@ func runClaude(args []string) error {
 		if err := monitor.ReapWorktreesForProject(projectID); err != nil {
 			log.Printf("reaping stale worktrees: %v", err)
 		}
+		// Opportunistic notice reaper (E-1917 fix). Drops undelivered notices
+		// for sessions that have ended: they never take another turn, so those
+		// rows are undeliverable by construction. SessionStart only — the write
+		// trigger already excludes ended sessions, so this is cleanup for
+		// sessions that ended after their notice was written, and once per
+		// session start is frequent enough for that.
+		if err := monitor.ReapNoticesForEndedSessions(); err != nil {
+			log.Printf("reaping notices for ended sessions: %v", err)
+		}
 		// Spawn-flow auto-bind: when `endless task spawn` launches a new
 		// Claude window, it sets `@endless_spawned_by` and pre-claims the
 		// task (status flip + worktree creation) before launching. This

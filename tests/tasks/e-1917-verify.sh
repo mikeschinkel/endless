@@ -189,6 +189,17 @@ else
     exit 1
 fi
 
+# The self-suppression regression suite. These drive the EXECUTOR with a real
+# environment rather than seeding changed_by_session with SQL — the gap that let
+# the original defect ship past 20 green checks.
+if go_out="$(cd "$WT" && go test ./internal/events/ -run StampTaskActor 2>&1)"; then
+    report_pass "go test ./internal/events -run StampTaskActor"
+else
+    report_fail "go test ./internal/events -run StampTaskActor" "all tests pass" "$go_out"
+    summary
+    exit 1
+fi
+
 # ─── end-to-end ─────────────────────────────────────────────────────────────
 
 if ! setup_fixture; then

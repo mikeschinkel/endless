@@ -312,3 +312,35 @@ func AppendNoticeLog(projectRoot string, sessionID int64, n Notice, rendered str
 		fmt.Fprintf(os.Stderr, "endless: notice log write: %v\n", err)
 	}
 }
+
+// ReapNoticesForEndedSessions deletes undelivered notices belonging to sessions
+// that have ended (E-1917 fix).
+//
+// The trigger's fan-out already skips ended sessions, but that is not enough on
+// its own: a session can end AFTER its notice is written, and that row is then
+// undeliverable forever because an ended session never takes another turn. Left
+// alone the table grows without bound — 553 of 679 rows (82%) were stranded this
+// way before this existed, the largest holders being sessions ended days
+// earlier.
+//
+// Only notified = 0 rows are removed. A delivered notice is a record of what an
+// agent was actually shown and is left alone, matching the delivery log.
+//
+// Opportunistic and best-effort, called from the hook alongside the other
+// reapers: cheap when there is nothing to reap, and a failure must never break
+// the turn it runs on.
+func ReapNoticesForEndedSessions() error {
+	db, err := DB()
+	if err != nil {
+		return err
+	}
+	_, err = db.Exec(
+		`DELETE FROM session_notices
+		  WHERE notified = 0
+		    AND session_id IN (SELECT id FROM sessions WHERE state = 'ended')`,
+	)
+	if err != nil {
+		return fmt.Errorf("reaping notices for ended sessions: %w", err)
+	}
+	return nil
+}

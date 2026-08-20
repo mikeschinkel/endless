@@ -423,6 +423,15 @@ CREATE INDEX IF NOT EXISTS idx_session_notices_undelivered
 -- time, so on a populated DB this CREATE succeeds and UPDATE tasks then fails
 -- with "no such column" until that change is applied — land before installing
 -- the new binary. See the change file's ORDERING note.
+-- Fan-out excludes sessions in state 'ended' (E-1917 fix): they never take
+-- another turn, so their notices are undeliverable by construction and only
+-- accumulate — 82% of the table was dead weight before this filter. `idle` and
+-- `needs_input` sessions are NOT excluded; they can come back, and a notice
+-- surviving until they do is the entire point of one-shot delivery. The JOIN is
+-- inner on purpose: session_tasks deliberately has no FK to sessions, so a row
+-- whose session is gone entirely has nobody to notify. A session that ends AFTER
+-- its notice is written still strands a row, which is what
+-- ReapNoticesForEndedSessions cleans up.
 CREATE TRIGGER IF NOT EXISTS tasks_notify_sessions AFTER UPDATE ON tasks
 WHEN OLD.status      IS NOT NEW.status
   OR OLD.phase       IS NOT NEW.phase
@@ -492,8 +501,10 @@ BEGIN
            strftime('%Y-%m-%dT%H:%M:%S', 'now'),
            NEW.changed_by_session
       FROM session_tasks st
+      JOIN sessions s ON s.id = st.session_id
      WHERE st.task_id = NEW.id
-       AND st.session_id IS NOT NEW.changed_by_session;
+       AND st.session_id IS NOT NEW.changed_by_session
+       AND s.state != 'ended';
 END;
 
 -- Gate kinds (E-1542). SQL mirror of the GateKind Go enum (ED-1506: const-in-code

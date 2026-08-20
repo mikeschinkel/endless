@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -216,6 +217,37 @@ func Execute(evt *Event, emit DerivedEmitter) (*ExecuteResult, error) {
 // Non-task events and task events whose entity id is not a single task id
 // (bulk operations) no-op here; a bulk clear's notices carry whatever actor was
 // stamped last, which is imprecise but harmless — it can only over-notify.
+// agentRanThisCommand reports whether the AGENT ITSELF is the process making
+// this change, as opposed to a person at a shell prompt (E-1917 fix).
+//
+// This distinction is the whole correctness of self-suppression, and the first
+// implementation got it wrong by assuming evt.Actor.SessionID answered it.
+// It does not. That value answers "which session should this command be
+// CREDITED to", and _current_endless_session_id resolves it through four layers,
+// three of which fire for a human:
+//
+//   - ENDLESS_SESSION_ID, exported into the USER'S OWN SHELL by `esu` /
+//     `endless shell-init` — which `endless guide` instructs the user to run, so
+//     following the documented workflow was enough to trigger the bug;
+//   - a TMUX_PANE match;
+//   - the sibling-pane inference (E-1294), which deliberately credits a shell
+//     pane's command to the lone Claude session sharing its tmux window.
+//
+// Only CLAUDECODE=1 means the mutating process IS the agent: Claude Code exports
+// it into the subprocesses it spawns, and a user's shell never has it (verified
+// — an agent's Bash tool sees CLAUDECODE=1 with ENDLESS_SESSION_ID unset, while
+// a user shell running `esu` has the reverse). It is the same signal layer 2 of
+// the Python resolver already trusts for exactly this question.
+//
+// This gate is SUBTRACTIVE: it can only turn an attribution into NULL, never
+// create one. So no change that is notified today can become suppressed by it,
+// and the only movement possible is suppressed -> notified — the direction of
+// the bug. A missed detection therefore over-notifies (one redundant line)
+// rather than silencing the one session that needed to hear.
+func agentRanThisCommand() bool {
+	return os.Getenv("CLAUDECODE") == "1"
+}
+
 func stampTaskActor(db dbQuerier, evt *Event) error {
 	if evt.Entity.Type != EntityTask {
 		return nil
@@ -225,7 +257,7 @@ func stampTaskActor(db dbQuerier, evt *Event) error {
 		return nil
 	}
 	var actor any
-	if evt.Actor.SessionID != "" {
+	if agentRanThisCommand() && evt.Actor.SessionID != "" {
 		if sid, err := strconv.ParseInt(evt.Actor.SessionID, 10, 64); err == nil {
 			actor = sid
 		}

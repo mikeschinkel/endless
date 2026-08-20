@@ -358,3 +358,123 @@ func TestGetTaskHeadlineReadsCurrentValues(t *testing.T) {
 		t.Errorf("headline should reflect current row, got %+v", h)
 	}
 }
+
+// TestNoticeTrigger_SkipsEndedSessions pins the write-side half of the E-1917
+// fix. An ended session never takes another turn, so a notice written for it is
+// undeliverable the moment it is created — 82% of the table was stranded this
+// way before the fan-out filtered on state.
+func TestNoticeTrigger_SkipsEndedSessions(t *testing.T) {
+	db := withTestDB(t)
+	seedProject(t, db, 1, "p1", "/p1")
+	snTask(t, db, 500, 1, "ready", "now", "")
+	snSession(t, db, 9001, 1, 500, "working")
+	snSession(t, db, 9002, 1, 500, "ended")
+	snSessionTask(t, db, 9001, 500)
+	snSessionTask(t, db, 9002, 500)
+
+	if _, err := db.Exec("UPDATE tasks SET status='revisit' WHERE id=500"); err != nil {
+		t.Fatalf("update: %v", err)
+	}
+
+	got := snNotices(t, db)
+	if len(got) != 1 {
+		t.Fatalf("only the live session should get a notice, got %d: %v", len(got), got)
+	}
+	if got[0][0].(int64) != 9001 {
+		t.Errorf("notice should go to the live session 9001, got %v", got[0][0])
+	}
+}
+
+// TestNoticeTrigger_KeepsIdleAndNeedsInputSessions guards the other side of that
+// filter. Only `ended` is excluded: an idle or waiting session can still come
+// back, and a notice surviving until it does is the entire point of one-shot
+// delivery. Widening the filter to "not working" would silently drop the
+// notices most worth keeping.
+func TestNoticeTrigger_KeepsIdleAndNeedsInputSessions(t *testing.T) {
+	db := withTestDB(t)
+	seedProject(t, db, 1, "p1", "/p1")
+	snTask(t, db, 500, 1, "ready", "now", "")
+	snSession(t, db, 9001, 1, 500, "idle")
+	snSession(t, db, 9002, 1, 500, "needs_input")
+	snSessionTask(t, db, 9001, 500)
+	snSessionTask(t, db, 9002, 500)
+
+	if _, err := db.Exec("UPDATE tasks SET status='revisit' WHERE id=500"); err != nil {
+		t.Fatalf("update: %v", err)
+	}
+
+	if got := snNotices(t, db); len(got) != 2 {
+		t.Errorf("idle and needs_input sessions must still be notified, got %d: %v",
+			len(got), got)
+	}
+}
+
+// TestReapNoticesForEndedSessions covers the case the write-side filter cannot:
+// a session that ends AFTER its notice was written. Those rows are undeliverable
+// forever, and without the reaper they accumulate without bound.
+func TestReapNoticesForEndedSessions(t *testing.T) {
+	db := withTestDB(t)
+	seedProject(t, db, 1, "p1", "/p1")
+	snTask(t, db, 500, 1, "ready", "now", "")
+	snSession(t, db, 9001, 1, 500, "working")
+	snSession(t, db, 9002, 1, 500, "idle")
+	snSessionTask(t, db, 9001, 500)
+	snSessionTask(t, db, 9002, 500)
+
+	if _, err := db.Exec("UPDATE tasks SET status='revisit' WHERE id=500"); err != nil {
+		t.Fatalf("update: %v", err)
+	}
+	if got := snNotices(t, db); len(got) != 2 {
+		t.Fatalf("setup: want 2 notices, got %d", len(got))
+	}
+
+	// 9001 ends after its notice was written; 9002 stays idle.
+	if _, err := db.Exec("UPDATE sessions SET state='ended' WHERE id=9001"); err != nil {
+		t.Fatalf("ending session: %v", err)
+	}
+	if err := ReapNoticesForEndedSessions(); err != nil {
+		t.Fatalf("ReapNoticesForEndedSessions: %v", err)
+	}
+
+	got := snNotices(t, db)
+	if len(got) != 1 {
+		t.Fatalf("want only the idle session's notice to survive, got %d: %v", len(got), got)
+	}
+	if got[0][0].(int64) != 9002 {
+		t.Errorf("the surviving notice should belong to 9002, got %v", got[0][0])
+	}
+}
+
+// TestReapNoticesLeavesDeliveredRows pins that the reaper only removes
+// UNDELIVERED rows. A delivered notice records what an agent was actually shown
+// — the same fact the delivery log carries — and deleting it would destroy
+// evidence rather than reclaim waste.
+func TestReapNoticesLeavesDeliveredRows(t *testing.T) {
+	db := withTestDB(t)
+	seedProject(t, db, 1, "p1", "/p1")
+	snTask(t, db, 500, 1, "ready", "now", "")
+	snSession(t, db, 9001, 1, 500, "working")
+	snSessionTask(t, db, 9001, 500)
+
+	if _, err := db.Exec("UPDATE tasks SET status='revisit' WHERE id=500"); err != nil {
+		t.Fatalf("update: %v", err)
+	}
+	notices, err := PendingNotices(9001)
+	if err != nil || len(notices) != 1 {
+		t.Fatalf("setup: PendingNotices got %d, err %v", len(notices), err)
+	}
+	if err := MarkNoticesDelivered([]int64{notices[0].ID}); err != nil {
+		t.Fatalf("MarkNoticesDelivered: %v", err)
+	}
+
+	if _, err := db.Exec("UPDATE sessions SET state='ended' WHERE id=9001"); err != nil {
+		t.Fatalf("ending session: %v", err)
+	}
+	if err := ReapNoticesForEndedSessions(); err != nil {
+		t.Fatalf("ReapNoticesForEndedSessions: %v", err)
+	}
+
+	if got := snNotices(t, db); len(got) != 1 {
+		t.Errorf("a delivered notice must survive the reaper, got %d: %v", len(got), got)
+	}
+}
