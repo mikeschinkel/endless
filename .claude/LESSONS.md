@@ -2008,3 +2008,23 @@ banner" but asserted on `esf`'s own `no active session` message — text the
 snippet prints itself, without ever calling `endless`. It could not have proved
 what its label claimed even in the shell where it passed. Assert on output that
 only the code under test can produce.
+
+## Never restate a task's status from memory — re-read it (2026-08-20, E-1997)
+
+I told Mike "E-1997 itself is unchanged and still `unverified`". He had already
+confirmed it, and it had already landed (2cdcc26). I was quoting the status I
+set myself an hour earlier and presenting it as current.
+
+Task status is shared mutable state. The user, another session, a hook, or a
+sweep can move it between one turn and the next, and a long session guarantees
+the gap is wide. `endless task show <id>` is one cheap call; a stale status
+assertion sends the user to re-verify something already done, or worse, to
+re-land it.
+
+Rule: any sentence stating a task's status, or what remains to be done to it,
+is preceded by a fresh read in that same turn. If I did not just read it, I do
+not say it. This applies hardest to closing summaries, which is exactly where
+the temptation to recap from memory is strongest.
+
+Related failure shape to E-1997's verify-script bug earlier the same session:
+both were me asserting something I had observed once and assuming it still held.
