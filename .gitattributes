@@ -4,3 +4,22 @@
 # produced by union merge are absorbed silently by the load-time dedup in
 # matchers._add_verb_to_file.
 .endless/verbs.jsonl merge=union
+# E-2000: `.endless/LESSONS.md` — the corrections log — is append-only in normal
+# use: every session adds an entry at the end. `merge=union` keeps both sides
+# instead of conflicting when two task branches each record a lesson before
+# either lands. Measured from pristine fixtures: two branches appending
+# different entries merge clean with no duplication, and an identical entry on
+# both sides is kept once (git sees one change, not a conflict).
+#
+# Differs from verbs.jsonl above in one way worth knowing: that file has a
+# load-time dedup reader (matchers._add_verb_to_file) to absorb union's
+# duplicates. This one's only reader is a human, so there is no dedup pass. The
+# residual hazard is therefore NOT appends but concurrent edits to the SAME
+# line — two branches rewriting the header both survive, silently, one after
+# the other. Header edits are rare and land visibly in review; entries are the
+# common case and are safe.
+#
+# NOT applied to `.endless/db-ledger/*.jsonl`, where concatenating both sides
+# would duplicate DB mutation records. That directory avoids conflicts by
+# sharding filenames per machine instead, so no two writers share a path.
+.endless/LESSONS.md merge=union

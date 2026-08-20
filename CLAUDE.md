@@ -89,12 +89,43 @@ existing memory files under
 deliberately; leave them, do not delete them.
 
 **Where corrections go instead.** After ANY correction from the user:
-immediately and without asking, append the pattern to
-**`<worktree>/.endless/LESSONS.md`** — the *main checkout*, always, even
-when you are in a worktree. Do not resolve it with `git rev-parse
---show-toplevel`: inside a worktree that yields the worktree root, and the log
-would be destroyed when the worktree is dropped. Recording is unconditional —
-never ask permission to record.
+immediately and without asking, append the pattern to the copy of the log in
+**your own worktree**:
+
+```
+<worktree>/.endless/LESSONS.md
+```
+
+Commit it on your task branch with the rest of your work; it reaches main when
+you land. Recording is unconditional — never ask permission to record.
+
+If you have **no claimed task** — a session working directly in the main
+checkout — append to `.endless/LESSONS.md` there.
+
+**Never append to the main checkout's copy from a worktree.** It is a tracked
+file, so writing to it leaves an uncommitted change in a checkout you are not
+working in, belonging to no branch and no task — the isolation break worktrees
+exist to prevent. Resolve the path from *your* worktree root, not from
+`~/Projects/endless`. (E-2000.)
+
+**It lives in `.endless/`, not `.claude/`.** `.claude/` is the Claude Code
+harness's directory; this log is an Endless artifact and a `self_dev`-only one
+at that. No other project has this file — everywhere else §3 of
+`~/.claude/CLAUDE.md` governs and corrections go to memory. `~/.claude/LESSONS.md`
+is the retired location and is no longer written.
+
+**Concurrent appends merge themselves.** `.gitattributes` carries
+`.endless/LESSONS.md merge=union`, the same treatment `.endless/verbs.jsonl` has
+had since E-1268, so two branches that each add an entry before either lands are
+concatenated rather than conflicting. Measured, not assumed: different entries
+merge with no duplication, and an identical entry on both sides is kept once.
+
+The one thing union does badly is a *same-line* edit — if two branches both
+rewrite a line of the header, both survive, silently, one after the other.
+Entries are appends and are safe; if you are editing the header, look at what
+landed. Do **not** extend union to `.endless/db-ledger/*.jsonl`, where
+concatenating both sides would duplicate DB mutation records; that directory
+avoids conflicts by sharding filenames per machine instead. (E-2000.)
 
 **It is write-only.** `LESSONS.md` is a capture log for Mike's periodic review,
 not context to consult. Appending is a plain file write, not the memory feature.
@@ -106,7 +137,6 @@ session.
 - Do not claim a lesson is or is not already in the file based on a `tail`.
   Other sessions append between yours, so position proves nothing — `grep` for
   the heading, or say nothing about it.
-
 
 ## PRODUCT — evaluate as a product, not as Mike's setup
 

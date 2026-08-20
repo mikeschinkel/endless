@@ -1,7 +1,27 @@
 # Lessons Learned
 
-Track mistakes and patterns here. After ANY correction from the user, add an entry.
-Review this file at the start of each session.
+A **write-only** capture log, for Mike's periodic review. After ANY correction
+from the user, add an entry at the end.
+
+**Do NOT read this file** at session start or during a session, and do not act
+on its contents. It is not context — a session that quietly compensates for a
+bad behavior hides the defect that should have been fixed in the product. That
+is the whole reason memory is off in this project; reading this file back would
+reinstate the loop by other means. See "Corrections go to LESSONS.md" in
+`CLAUDE.md`.
+
+**Write to your own worktree's copy** and commit it on your task branch, like
+any other work. Never append to the main checkout's copy from a worktree: it is
+tracked, so that leaves an uncommitted change in a checkout you are not working
+in, belonging to no branch and no task. A session working directly in main with
+no claimed task appends here.
+
+Concurrent appends take care of themselves: `.gitattributes` gives this file
+`merge=union`, as `.endless/verbs.jsonl` has had since E-1268, so two branches
+each adding an entry are concatenated rather than conflicting. Union's weak spot
+is a same-line edit — two branches rewriting the same header line both survive,
+silently — so if you are changing the header rather than appending, check what
+landed. (E-2000.)
 
 ## Format
 
@@ -120,8 +140,6 @@ Each entry should follow this pattern:
 - **Why**: Forgot the single-connection pool constraint. SQLite + `SetMaxOpenConns(1)` is the canonical pattern for SQLite in Go, and it is hostile to nested queries.
 - **Rule**: When a Go function uses a SQLite db with `SetMaxOpenConns(1)` (Endless does this in `internal/monitor/db.go`), never issue a second DB call between `db.Query()` and `rows.Close()`. Pattern: drain the iterator into a slice first (`for rows.Next() { append(&out, ...) }`), close rows, THEN do further DB work. Same applies to nested transactions, nested QueryRow inside QueryRow scans, anywhere the connection might be in-use. If unsure, restructure to a "fetch all, then process" two-phase shape.
 - **Project**: Endless / any Go project pinning SetMaxOpenConns to a low number
-
-
 
 <!-- Claude: append new entries below this line -->
 
@@ -1885,7 +1903,6 @@ Rule: a grep match tells you a string occurs, not what the surrounding code does
 State a path, a code behavior, or a quotation only with the command that produced
 it in the same turn. If you can't show the command, say you don't know.
 
-
 ## 2026-08-16 — cwd is NOT the DB routing signal once XDG_CONFIG_HOME is set
 
 I filed a task into a landed worktree's sandbox DB. I had `cd`'d to the main
@@ -2164,7 +2181,6 @@ the opening. If the action item is "none, I'll file it", say that in those words
 This was the third length complaint in one session. Terse is not a style
 preference here; it is the difference between a finding being received and not.
 
-
 ### [2026-08-20] CLAUDE.md prose used to justify skipped work
 - **What went wrong**: On E-2002 I added a ~46-line CLAUDE.md section whose bulk was rationale for NOT repairing the damaged `projects` rows, instead of just repairing them.
 - **Why**: I treated "document the decision" as equivalent to "do the work", and CLAUDE.md as free space. It is not — every session in the project loads it, so length there is a permanent per-session token tax, and spending it to explain an omission is the worst form of that trade.
@@ -2200,17 +2216,23 @@ Compounding it: appending to `.endless/LESSONS.md` is itself mandated by
 CLAUDE.md and dirties main, so following one rule blocks the next land. That is
 a product defect, not a reason to commit; say so and leave the file dirty.
 
-## A file I read earlier is not the file as it is now (2026-08-20)
+### [2026-08-20] Invented provenance for a rule, then argued from it as "the original rationale"
+- **What went wrong**: CLAUDE.md said to append corrections to the *main checkout's* `.claude/LESSONS.md` "always, even when you are in a worktree," because the log "would be destroyed when the worktree is dropped." I repeated that back to Mike as "the original rationale for always main" and called it sound. Mike: "What original rationale for 'always main'? I thought the original rationale was 'NEVER main.'" He was right. `git show 029208d9 -- CLAUDE.md` shows the entire section — rule and rationale together — was added hours earlier by a Claude Code Desktop session not running under Endless. There was no prior position; the actual intent was the opposite.
+- **Why**: I treated prose in a tracked file as settled intent. A paragraph in CLAUDE.md is only an assertion by whoever last wrote it, and `git log -p` on the file says who and when. I skipped that check even though the task I had just been handed was literally "a session that does not use Endless broke an invariant" — the provenance was the whole subject.
+- **Rule**: Before arguing from a documented rule — especially one you are being asked to repair — run `git log -p` / `git show` on the lines that state it. Cite the commit, not the prose. A rationale written in the same commit as its rule is self-justification, not history.
+- **Project**: endless
 
-I told Mike `CLAUDE.md` still named the obsolete `.claude/LESSONS.md` path "in
-three places (lines 93, 105, 114)". By the time I wrote that sentence he had
-already fixed it — the file's mtime was newer than my grep. My line numbers and
-quotes were accurate for a version that no longer existed.
+### [2026-08-20] Handed the user's chosen approach back as one of four options
+- **What went wrong**: Mike had asked for per-worktree lesson files reconciled at land. I filed the task, then presented a four-option menu with his approach listed fourth and asked him to choose. Mike: "That was what I was asking for before you 2nd guessed me."
+- **Why**: I pattern-matched "design-bearing change" to "present trade-offs," without checking whether the decision was still open. It was not. The menu looked like diligence but was the user's own instruction returned to him with three distractors attached, costing a round-trip and implying I had not registered what he asked for.
+- **Rule**: When the user has named an approach, build it. The legitimate follow-up question is narrower — the concrete shape of the thing they chose, or a specific conflict you found with it — never a re-offered menu that includes their answer as one entry.
+- **Project**: endless
 
-This generalizes the earlier "never restate a task's status from memory" entry
-beyond task status: it applies to ANY observed state I report — file contents,
-line numbers, test results, git status. The gap between reading and reporting is
-where the user edits, another session lands, or main advances.
+### [2026-08-20] Over-weighted worktree loss as a design risk
+- **What went wrong**: I rejected worktree-local storage for the lesson log because the data would not "survive the worktree being dropped." Mike: "You are WAY over-indexing on potential of worktree drop. Essentially, worktrees do not get dropped until all changes have landed in main."
+- **Why**: I inherited the fear from the CLAUDE.md paragraph I was supposed to be fixing and never checked it against how land actually behaves — `endless worktree land` retains the worktree and its branch and only reaps them after a TTL, well after the work is on main.
+- **Rule**: In this codebase, data committed on a task branch inside a worktree is not at risk; worktrees are reaped after their work lands, not before. Do not treat worktree-local storage as lossy-by-default, and check `_reap_stale_worktrees` / the land flow before claiming a durability problem.
+- **Project**: endless
 
 Rule: if a claim about current state is going into my reply, the read that backs
 it happens in the SAME tool-call block as the reply, not earlier in the turn.
@@ -2240,3 +2262,39 @@ evidence, the check is one command — here, `git ls-files --error-unmatch <path
 
 Also worth knowing: writing to the main checkout's copy from a worktree session
 does not dirty main — Endless auto-commits its own files under `.endless/`.
+
+### [2026-08-20] Cited a file's existence as proof it was still in use
+- **What went wrong**: I reported `~/.claude/LESSONS.md` as a live second write target — "155 KB, also exists" — and built a "two competing canonical paths" defect around it. Mike: "That is a grep fail; `~/.claude/LESSONS.md` should no longer be used." It is the retired location. A `strings` check on the hook binary and a repo-wide grep both showed nothing writes it.
+- **Why**: I inferred a live writer from a file's size and mtime. Those prove the file was written at some point, not that anything writes it now. The stale reference in CLAUDE.md was real and worth fixing, but I described it as an active ambiguity — a stronger claim than my evidence supported.
+- **Rule**: To claim a path is in use, find the writer: grep the source, check the hook binaries (`strings`), or show a recent write you can attribute. Existence, size, and mtime establish history, not current behavior. Report a dangling reference as a stale reference until you have located something that still writes it.
+- **Project**: endless
+
+### [2026-08-20] Deferred work to the user on an unchecked claim that it couldn't be done on the branch
+- **What went wrong**: I found that `.claude/LESSONS.md`'s header said "Review this file at the start of each session," contradicting the write-only rule I was codifying. Instead of fixing it, I handed it back to Mike as needing "a one-line edit on main," asserting that a worktree edit to that file "would conflict with the fold" (a fold mechanism I had built, and later removed as over-engineering). Mike: "Fix the header." The assertion was wrong — the header is at line 3 and appends land at EOF ~2000 lines away, so git merges them cleanly. Worse, my proposed alternative (edit main directly) would have left main dirty, which is the exact defect the task existed to fix.
+- **Why**: I generalized "never append lessons to the shared log from a worktree" into "never touch that file from a worktree," then reasoned from the broadened rule instead of testing it. `git merge-tree` and a two-branch fixture each answer this in seconds; I ran neither before declining the work.
+- **Rule**: Before deferring work to the user as impossible-here, execute the check that would prove it. For a merge-conflict claim specifically: `git merge-tree --write-tree <base> <branch>`, or build the two branches and merge them. And when an invariant forbids one operation on a file, do not silently promote it to forbidding all of them — a rule about appending is not a rule about editing.
+- **Project**: endless
+
+### [2026-08-20] Built a mechanism to dodge a problem the user was willing to just live with
+- **What went wrong**: Asked for per-worktree lesson files reconciled at land, I shipped a `_fold_task_lessons` function in `worktree_cmd.py`, per-task `E-NNNN.md` files, a call site in `land_worktree`, and a 9-test module. Mike: "Why do we need `<worktree>/.claude/lessons/E-NNNN.md` vs. just editing LESSONS.md and then merging? Seems over-engineered." He was right. The whole apparatus existed to avoid an occasional rebase conflict in an append-only log — a conflict whose resolution is always "keep both sides." The final fix is a CLAUDE.md wording change, a `git mv`, and zero lines of product code.
+- **Why**: I found a real edge case (two branches appending at EOF do conflict — I measured it) and treated "a problem exists" as "a mechanism is warranted," without weighing the cost of the conflict against the cost of the machinery. Occasional, visible, trivially-resolved friction does not justify permanent product code. It was compounded by the code living in `worktree_cmd.py`, where it burdened every project with a convention only this one uses.
+- **Rule**: Before building a mechanism to prevent a failure, price the failure. How often, how visible, how hard to recover? If the answer is "rarely, loudly, and in ten seconds," document the recovery and ship nothing. Especially reject product code whose only beneficiary is this repo's own conventions. Measuring that a problem is real is necessary but not sufficient — the next question is whether it is worth solving.
+- **Project**: endless
+
+### [2026-08-20] Put a project artifact in .claude/ without asking what owns it
+- **What went wrong**: I kept the corrections log at `.claude/LESSONS.md` and added `.claude/lessons/` beside it, inheriting the path from the Desktop session's commit without ever questioning it. Mike: "since LESSONS.md is an Endless-only thing, and ONLY for self_dev (did you not realize that since I did not mention) ... they should be written to .endless and not to .claude."
+- **Why**: I treated the existing path as a given because it was already there, and never asked which system owns the artifact. `.claude/` is the Claude Code harness's directory — settings, commands, output styles. LESSONS.md is an Endless artifact, and a `self_dev`-only one: no downstream project has it, because everywhere else corrections go to memory. That ownership question also had a second answer I missed — a self_dev-only convention should not be served by code in `worktree_cmd.py`.
+- **Rule**: When placing a file, name the system that owns it and put it in that system's directory: `.claude/` for harness config, `.endless/` for Endless artifacts. Inheriting a path from prior code is not a decision. And when something is self_dev-only, say so out loud — it constrains where both the data and the code belong.
+- **Project**: endless
+
+### [2026-08-20] Built a test that manufactured its own expected failure, then designed against it
+- **What went wrong**: To decide whether `merge=union` was safe for LESSONS.md I ran a scratch experiment, saw entry "From A" appear twice, and concluded union silently duplicates entries. I said so to Mike, wrote it into CLAUDE.md and the log's header, and pinned it as a verify-suite assertion (`grep -c 'From A' == 2`) — which passed. It was all wrong. My fixture had rebuilt branches A and B from a `main` that had *already* fast-forwarded A, so the script appended A's entry a second time itself. Union never duplicated anything. Mike caught it by asking a question I should have asked first: "can't we do it by file though? I am pretty sure we do it for verbs.jsonl." `.gitattributes` has carried `.endless/verbs.jsonl merge=union` since E-1268.
+- **Why**: Two failures compounding. First, I measured without a control — I never checked that my fixture produced the *correct* result in the non-union case, so I could not tell fixture noise from real behavior. Second, when the measurement said "the house's existing pattern is unsafe," I took that as a finding instead of as a signal to go read how the house does it. A result that contradicts established local practice is far more likely to be a broken experiment than a discovery. The verify suite then locked the error in: an assertion that reproduces the bug in its own setup passes forever and proves nothing.
+- **Rule**: Before concluding a mechanism misbehaves, (a) grep for whether this codebase already uses it and read why — `.gitattributes`, existing config, the commit that added it; and (b) run the negative control, confirming the fixture yields the expected result when the mechanism is absent. If a fixture builds branches, build every one of them from a pristine base — never from a base that has already absorbed one of them. And an assertion whose expected value came from the same script that produced the observation is not evidence.
+- **Project**: endless
+
+### [2026-08-20] Extracted a block of text by line count and silently clipped it
+- **What went wrong**: Rebuilding this branch on a moved-on main, I saved my `.gitattributes` addition with `tail -16 .gitattributes`. The block was 18 lines. The two lines it dropped were the comment's opening — including the sentence naming which file the rule was for — so the re-applied version began mid-sentence at "# task branches record a lesson before either lands." I committed it. Mike found it by asking a question the mangled comment could no longer answer: "Just to be clear, which 'log?'"
+- **Why**: I addressed the content positionally instead of by its boundaries, and never read back what I had extracted. The verify suite could not catch it either: it asserted `git check-attr merge` reported `union`, which is true of a file whose comments are shredded, so I had coverage that felt like coverage. Then, patching it, I reached for more string surgery on the damaged text and produced worse garbage ("Measured: two branches Measured: two branches") before rebuilding the file from `git show main:.gitattributes` plus a clean heredoc.
+- **Rule**: Extract text by its delimiters, never by line count — `sed -n '/START/,/END/p'`, an explicit marker, or the whole file. Read back anything extracted before committing it. When a patch damages a file, stop patching and regenerate it from a known-good source. And when an assertion checks a mechanism's *effect* (an attribute resolves) it says nothing about the *artifact* (the file is coherent) — if the artifact is meant for humans, assert on its shape too.
+- **Project**: endless
