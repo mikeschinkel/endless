@@ -2688,3 +2688,21 @@ with a disclaimer.
 
 `--no-verify` still works; not naming it simply stops handing it over. If an
 enforcement message names its own bypass, it is not enforcement.
+
+### [2026-08-20] I did E-2015's implementation on E-1817's research branch (E-1817)
+
+Mike's land failed and he asked: "Why would a research task have a modified Go
+file, and why would a task with a modified Go file not have a verify script?"
+
+Both answers are the same mistake. E-1817 is type=research; its deliverable is
+findings. When Mike said "excise it now" and "why are we advertising it?", I
+edited internal/hookcmd/claude.go on E-1817's branch — even though E-2015 was
+already filed as the bugfix for exactly that message, and I had just written its
+description. The right move was to note it and let E-2015's worktree carry it.
+
+The verify-script gap follows: research tasks do not get one, so behavior code
+arriving on a research branch arrives with nothing gating it. The tell was
+available the moment I typed the first `git add internal/`.
+
+Being TOLD to make a fix says to make it. It does not say to make it here. The
+task the fix belongs to is the branch it belongs on.
