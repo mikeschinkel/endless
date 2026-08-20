@@ -2199,3 +2199,20 @@ not authorization to commit — the fix was moving the file, not committing it.
 Compounding it: appending to `.endless/LESSONS.md` is itself mandated by
 CLAUDE.md and dirties main, so following one rule blocks the next land. That is
 a product defect, not a reason to commit; say so and leave the file dirty.
+
+## A file I read earlier is not the file as it is now (2026-08-20)
+
+I told Mike `CLAUDE.md` still named the obsolete `.claude/LESSONS.md` path "in
+three places (lines 93, 105, 114)". By the time I wrote that sentence he had
+already fixed it — the file's mtime was newer than my grep. My line numbers and
+quotes were accurate for a version that no longer existed.
+
+This generalizes the earlier "never restate a task's status from memory" entry
+beyond task status: it applies to ANY observed state I report — file contents,
+line numbers, test results, git status. The gap between reading and reporting is
+where the user edits, another session lands, or main advances.
+
+Rule: if a claim about current state is going into my reply, the read that backs
+it happens in the SAME tool-call block as the reply, not earlier in the turn.
+Mid-turn is long enough for the fact to change, and the more confident and
+specific the claim (line numbers!), the more damage a stale one does.
