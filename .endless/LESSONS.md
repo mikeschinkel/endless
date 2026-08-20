@@ -2144,3 +2144,22 @@ he had believed it.
 
 Before arguing against a state transition, check what the transition actually
 does. Endless statuses are metadata; none of them touch git.
+
+## Bury the action item and the finding does not exist (2026-08-20, E-2001)
+
+I closed a handoff with "One thing I held back deliberately, flagged in the plan
+rather than done:" followed by a paragraph on trigger internals, tmux window vs
+pane, and which test suite pinned it. The user's response was that he could not
+work out what his action items were.
+
+The finding was real and worth having. It failed to land because the sentence
+that mattered — "if you edit a task from a pane of the same tmux window, that
+session gets no notice" — was fourth in the paragraph, behind the mechanism, the
+scope reasoning, and a justification for not fixing it.
+
+Lead with what the user observes and what he must do. Mechanism is support, not
+the opening. If the action item is "none, I'll file it", say that in those words
+— an unlabeled aside reads as a request for a decision he cannot locate.
+
+This was the third length complaint in one session. Terse is not a style
+preference here; it is the difference between a finding being received and not.
