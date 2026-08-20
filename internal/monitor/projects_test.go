@@ -320,9 +320,13 @@ func TestNormalizeProjectPath_MissingLeafResolvesExistingPrefix(t *testing.T) {
 	}
 }
 
-// TestNormalizeProjectPath_ExpandsTilde pins ~ expansion, which ProjectPath
-// used to do inline and now inherits from the shared rule — the Python half
-// calls expanduser() before resolve() for the same reason.
+// TestNormalizeProjectPath_ExpandsTilde pins the tilde expansion ProjectPath
+// used to do inline and now inherits from the shared rule. This is input
+// tolerance, NOT part of the canonical stored form — every writer of
+// projects.path normalizes first, so a tilde never reaches that column. It is
+// pinned because the Python half's Path.resolve() treats a literal `~` as an
+// ordinary directory name and silently yields `<cwd>/~/x`, so the two halves
+// agree only while both expand it.
 func TestNormalizeProjectPath_ExpandsTilde(t *testing.T) {
 	home, err := os.UserHomeDir()
 	if err != nil || home == "" {

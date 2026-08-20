@@ -48,8 +48,12 @@ def test_normalize_is_non_strict(tmp_path):
 
 
 def test_normalize_expands_tilde():
+    """Input tolerance, not part of the canonical stored form — nothing writes
+    a tilde into projects.path. Pinned because bare `Path.resolve()` treats a
+    literal `~` as an ordinary directory name and returns `<cwd>/~/...`."""
     assert normalize("~/some-project") == \
         Path.home().resolve() / "some-project"
+    assert normalize("~/some-project") != Path("~/some-project").resolve()
 
 
 def test_normalize_is_idempotent(tmp_path):

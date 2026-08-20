@@ -8,8 +8,8 @@ disagreement makes the hook miss the registered row and auto-register a second
 project for the same directory — leaving the session bound to an empty
 duplicate that reports "no tasks yet" for a project full of them (E-2002).
 
-The rule: a project path is stored and compared absolute, `~` expanded, and
-with every symlink component resolved. `Path.resolve()` is exactly that, and is
+The rule: a project path is stored and compared absolute, with every symlink
+component resolved. `Path.resolve()` is exactly that, and is
 non-strict — a directory that does not exist yet still gets its existing prefix
 resolved. The Go half reproduces the non-strict part by hand, because
 `filepath.EvalSymlinks` fails outright on a missing leaf.
@@ -30,8 +30,15 @@ from endless import config, db
 
 
 def normalize(path: Path | str) -> Path:
-    """The canonical form of a project path: absolute, ~ expanded, symlinks
-    resolved. Mirrors monitor.NormalizeProjectPath on the Go side."""
+    """The canonical form of a project path: absolute, symlinks resolved.
+    Mirrors monitor.NormalizeProjectPath on the Go side.
+
+    `expanduser()` is input tolerance, not part of the canonical form —
+    nothing writes a tilde into `projects.path`. It is here because
+    `Path("~/x").resolve()` treats the tilde as an ordinary directory name and
+    silently returns `<cwd>/~/x`, which is the kind of wrong answer that shows
+    up much later as a mystery.
+    """
     return Path(path).expanduser().resolve()
 
 

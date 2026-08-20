@@ -9,8 +9,15 @@ import (
 )
 
 // NormalizeProjectPath returns the one canonical form Endless stores and
-// compares a project path in: absolute, `~` expanded, and every symlink
-// component resolved.
+// compares a project path in: absolute, with every symlink component resolved.
+//
+// It also expands a leading `~`. That is INPUT TOLERANCE, not part of the
+// canonical form — nothing writes a tilde into projects.path, since every
+// writer runs through here first. It is kept because the Python half's
+// `Path.resolve()` treats a literal `~` as an ordinary directory name and
+// silently yields `<cwd>/~/x`, and because ProjectPath expanded `~` before
+// E-2002 folded it into this rule; dropping it would quietly change what a
+// hand-edited row resolves to.
 //
 // This is the Go half of a rule the Python CLI implements identically in
 // endless.project_path.normalize (E-2002). The two halves MUST agree: the
