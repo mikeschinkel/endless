@@ -2408,3 +2408,17 @@ main policy documentation gap".
   Producing X is not misusing X; missing a guard is not being reachable without
   one. This matters most in a plan: a misframed cause is an instruction to break
   something that works.
+## Do not narrate an artifact back to the person who can open it (2026-08-20, E-2001)
+
+Asked to retype E-1817, I did it and then wrote five paragraphs summarizing the
+analysis I had just saved onto the task. Mike could read it there. The spawned
+session reads it there. The summary served nobody.
+
+The tell: if the content I am about to write already exists in a task, decision
+or file the user can open, the report is "done" plus anything that is NOT in the
+artifact — a surprise, a refusal, a thing I could not do. Writing to a durable
+artifact and then restating it in chat is paying twice and reading once.
+
+Related but distinct from the earlier length lessons: this is not burying the
+action item, it is having no action item and writing anyway. Confirmation of a
+completed instruction is one line.
