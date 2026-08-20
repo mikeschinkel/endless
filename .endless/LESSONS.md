@@ -2323,3 +2323,24 @@ does not dirty main — Endless auto-commits its own files under `.endless/`.
 - **Rule**: One line for the rule. Add narrative only if the rule is unintelligible without it, and keep it to two sentences. If an entry needs more, it is a task or a decision record, not a lesson.
 - **Project**: endless
 
+
+## Two independent claims fused into one paragraph read as one argument (2026-08-20)
+
+I raised (a) a real conflict — the user wanting lessons queried vs E-2007 gating
+the read path off under `self_dev` — and (b) a supporting example, a lesson about
+my own stale-state habit. Separate claims, put in one paragraph, so the user
+reasonably read them as a single argument and had to ask whether I was saying
+querying lessons conflicts with his wanting no stale state. I was not.
+
+Two faults, and the second is the worse one:
+
+1. Structural — an argument and an illustration of one of its premises get
+   separate sentences with explicit roles ("the conflict is X"; "as an example of
+   Y"), or the reader has to reverse-engineer which is which.
+2. Substantive — he had just called that class of correction "orthogonal to
+   lessons", and I reached for an example from the category he had that moment
+   set aside, to argue about the category. Picking an illustration the other
+   person has already excluded guarantees the point lands as confusion.
+
+Neither showed up as a wrong fact, which is why it survived my own check: both
+claims were individually true. Adjacency did the damage.
