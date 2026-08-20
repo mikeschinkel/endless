@@ -2561,3 +2561,43 @@ plan's scope line because it let me stop.
 A plan's scope bounds what I go LOOKING for. It does not exempt me from fixing
 what I trip over. The real test is whether the fix belongs to someone else's
 open task — that is out of scope; "the plan didn't mention it" is not.
+
+### [2026-08-20] What CLAUDE.md is FOR: the agent, not the reader (E-1817)
+
+Mike's review of the minimized draft, as a set:
+
+- `task spawn` is a USER command. CLAUDE.md is instructions to the agent; a
+  command the agent never issues does not belong in it.
+- Claude should NOT create worktrees by hand for Endless. I had a line telling
+  it how to recover one — teaching a workflow it must not use.
+- I never stated that a ledger exists and that its files are sacred. The old
+  file only implied it, and my minimized draft dropped even the implication. A
+  destructive-action prohibition is exactly the kind of rule that must be
+  explicit; "shorter" is not a licence to drop it.
+- I never stated the Python/Go split. It shapes where every change goes.
+- I kept "reclaim a sandbox: endless-go sandbox destroy" — an uncommon
+  operation Claude should probably never perform. Rare + not-the-agent's-job =
+  the guide, not CLAUDE.md.
+- "From a bare shell in a worktree" was jargon I never defined, filed under
+  "Database" where it did not belong.
+- I wrote "§3 of ~/.claude/CLAUDE.md" — a cross-reference by number to a
+  document the reader may not have open. Name the rule, do not number it.
+
+The through-line: I minimized by deleting words, not by asking what the agent
+must be told. Cutting is not the goal — a short file that omits a prohibition
+is worse than a long one that states it.
+
+### [2026-08-20] PRODUCT means dogfooding bias, not portability trivia (E-1817)
+
+I had written PRODUCT as "what does this do on a fresh install — a different
+shell, no tmux, no worktrees, a project that isn't Endless?"
+
+Mike: "We are currently dogfooding endless to write endless, so you gravitate
+towards solutions that assume my machine and this project. You need to consider
+how the software will behave when used by someone else on a different machine to
+manage a project that is not Endless."
+
+The difference matters. I had turned it into a portability checklist — enumerate
+environment variations, tick them off. It is a statement about MY bias: writing
+Endless from inside Endless makes this machine and this project feel like the
+world. The instruction is to correct for that pull, not to run a matrix.
