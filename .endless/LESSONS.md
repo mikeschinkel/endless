@@ -2516,3 +2516,18 @@ The pattern: when the task IS reducing something, the deliverable is judged by
 the same standard as the subject. An audit of bloat written at length has
 already failed its own thesis. And a percentage is not a goal — ask what "small
 enough" means before deciding you hit it.
+
+### [2026-08-20] CLAUDE.md says WHAT, not WHY (E-1817)
+
+Mike: "CLAUDE.md should just say WHAT, not WHY. Shorter means less to get
+confused."
+
+I had proposed keeping `Why: ED-NNNN` pointers, treating a one-line citation as
+a free way to preserve rationale. It is not free — it is another thing on the
+page to read, evaluate, and possibly chase. The rule is stricter than "move the
+rationale elsewhere": rationale does not appear in CLAUDE.md in ANY form,
+including as a pointer. Decisions are findable without being advertised.
+
+Also: when I noticed ED-1541 was stale, I flagged it and asked. Mike had to say
+"ED-1541 needs to be updated." A stale artifact I discovered in the course of
+the work is work, not a question.
