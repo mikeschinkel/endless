@@ -1,9 +1,13 @@
 """The canonical status-lifecycle mermaid stays byte-identical everywhere.
 
 `docs/status-lifecycle.mmd` is the single source of truth for the task status
-diagram; README.md, CLAUDE.md, and docs/guide/index.md embed it verbatim
-between BEGIN/END markers. Drift means an agent reading one of the copies gets
-a different lifecycle than the one the CLI implements.
+diagram; README.md and docs/guide/index.md embed it verbatim between
+BEGIN/END markers. Drift means an agent reading one of the copies gets a
+different lifecycle than the one the CLI implements.
+
+CLAUDE.md was a third copy until E-1817 removed it: the project CLAUDE.md
+states WHAT, not WHY, and the lifecycle it duplicated is already canonical in
+`endless guide`.
 
 This is a permanent invariant, not point-in-time acceptance. It had been
 re-asserted by hand in three separate per-task verify scripts (e-1648, e-1832,
@@ -17,7 +21,7 @@ import pytest
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _CANON = _REPO_ROOT / "docs" / "status-lifecycle.mmd"
-_COPIES = ("README.md", "CLAUDE.md", "docs/guide/index.md")
+_COPIES = ("README.md", "docs/guide/index.md")
 
 _BEGIN = "<!-- BEGIN canonical:docs/status-lifecycle.mmd"
 _END = "<!-- END canonical:docs/status-lifecycle.mmd"
