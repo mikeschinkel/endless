@@ -2365,3 +2365,21 @@ Consequence to expect, not to avoid: appending here produces a commit that has t
 land, and both copies grow at EOF, so a rebase can conflict there. That conflict
 class is exactly what E-2007 exists to remove. It is not a reason to write to main
 instead.
+## Search before proposing a task, not just before filing one (2026-08-20, E-2001)
+
+I offered to "file one task covering the CLAUDE.md edits and the allowlist
+change" without searching. E-1817 already owned it — an open audit of CLAUDE.md
+for unenforced, stale and misleading rules, which is exactly where both of my
+findings belong. Mike knew I hadn't searched because he knew E-1817 existed.
+
+Worse than an ordinary miss: I had rewritten ED-1550 myself an hour earlier,
+including rule 4, "search the area for an owning task first". I applied the rule
+to the decision text and not to my own next action.
+
+The gate belongs BEFORE the offer, not before the filing. By the time "want me
+to file X?" is on screen, the search should already have happened — otherwise
+the user has to know the backlog better than the agent does, which is the work
+Endless exists to remove.
+
+Search terms are the subject, not my framing of it: "CLAUDE.md", not "commit to
+main policy documentation gap".
