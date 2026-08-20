@@ -2216,3 +2216,27 @@ Rule: if a claim about current state is going into my reply, the read that backs
 it happens in the SAME tool-call block as the reply, not earlier in the turn.
 Mid-turn is long enough for the fact to change, and the more confident and
 specific the claim (line numbers!), the more damage a stale one does.
+
+## I kept asserting a worktree file "dies when dropped" without checking (2026-08-20)
+
+I claimed, more than once, that a lesson written to `<worktree>/.endless/LESSONS.md`
+would be destroyed when the worktree is dropped. Wrong twice over:
+
+1. `.endless/LESSONS.md` is TRACKED in git (`git ls-files` confirms). A worktree's
+   copy lands with its branch like any other tracked file.
+2. A worktree is not dropped until its changes have landed. So there is no window
+   in which the content exists only in a doomed directory.
+
+Where the stale belief came from: the rule predates the file's move. The OLD
+location, `.claude/LESSONS.md`, was UNTRACKED — that is why "the main checkout,
+always" existed and why the loss warning was once true. The move to `.endless/`
+made it tracked and killed the rationale, and I carried the justification forward
+because it was sitting in CLAUDE.md next to the path, without asking whether it
+still held.
+
+The general fault: an instruction's stated REASON can go stale independently of
+the instruction. When I catch myself repeating a rationale as though it were
+evidence, the check is one command — here, `git ls-files --error-unmatch <path>`.
+
+Also worth knowing: writing to the main checkout's copy from a worktree session
+does not dirty main — Endless auto-commits its own files under `.endless/`.
