@@ -2344,3 +2344,24 @@ Two faults, and the second is the worse one:
 
 Neither showed up as a wrong fact, which is why it survived my own check: both
 claims were individually true. Adjacency did the damage.
+## LESSONS.md is written in the worktree, not the main checkout (2026-08-20)
+
+Corrections are appended to `<worktree>/.endless/LESSONS.md` — the checkout I am
+actually working in. Not `~/Projects/endless/.endless/LESSONS.md`.
+
+I wrote all seven of this session's entries into main. The reasoning was a chain
+of stale facts: CLAUDE.md's old "the *main checkout*, always" clause, which
+existed because the file used to live at the UNTRACKED `.claude/LESSONS.md` and
+would have been lost with a dropped worktree. The file moved to `.endless/` and
+became tracked; a worktree's copy now lands with its branch like any other
+tracked file, and the worktree is not dropped before it lands. Both halves of the
+old rule were dead and I was still following them.
+
+Writing into main also makes the entry bypass review entirely — Endless
+auto-commits files under `.endless/`, so an append to main's copy is committed to
+main directly, never appearing in a branch, never in a land.
+
+Consequence to expect, not to avoid: appending here produces a commit that has to
+land, and both copies grow at EOF, so a rebase can conflict there. That conflict
+class is exactly what E-2007 exists to remove. It is not a reason to write to main
+instead.
