@@ -2028,3 +2028,51 @@ the temptation to recap from memory is strongest.
 
 Related failure shape to E-1997's verify-script bug earlier the same session:
 both were me asserting something I had observed once and assuming it still held.
+
+## Don't smuggle my own softening into a stated invariant (2026-08-20, ED-1560)
+
+Mike said: "once active_task_id is set, it cannot be unset" and "a session only
+ever gets one active task." I filed ED-1560 as "write-once: a task binding is
+**superseded**, never cleared" — inventing an escape hatch (123 → 124 repointing)
+he never granted, and which contradicts "only ever gets one."
+
+The pattern: when the user states an invariant in absolute terms, I reach for the
+version that sounds more reasonable to me and write that down instead. An
+invariant with an exception I added is a different invariant. If the absolute
+form looks wrong or unworkable, say so and ask — do not quietly weaken it in the
+artifact that outlives the conversation.
+
+Second error in the same decision: I asserted `session_tasks` was "the durable
+ownership record." It is not — it records which tasks a session was INVOLVED
+with (goal/surfaced/revisited). I had picked that framing up from E-1967's
+existing description, repeated it into my correction OF that description, and
+then into a decision. A wrong premise I inherit becomes mine the moment I restate
+it; restating is not quoting.
+
+Fix used: `endless decision update ED-1560 --title … --description-file …` (it
+does exist — I had assumed from the /whats-left brief's "no decision-update verb"
+that it did not, without running `endless decision --help`).
+
+## Verify scripts must be run with the agent-only environment stripped
+
+E-1917: the verify suite passed 21/21 for the agent and failed 10/21 for Mike.
+The suite drives `endless-go hook claude`, which E-1962 gates on the harness —
+it returns immediately, exit 0 and no stdout, unless CLAUDE_CODE_ENTRYPOINT names
+a supported host. An agent's Bash tool inherits CLAUDE_CODE_ENTRYPOINT=cli; a
+user's terminal does not. So the hook ran for the agent and no-opped for the
+user, and every hook-dependent check silently inverted.
+
+Two rules:
+
+1. A script that drives the hook must export a supported harness itself
+   (CLAUDE_CODE_ENTRYPOINT=cli on that subprocess), per CLAUDE.md's "anything
+   that drives the hook while impersonating a session has to export that
+   session's environment".
+2. Before claiming a verify suite passes, run it the way the USER will:
+   `env -u CLAUDE_CODE_ENTRYPOINT -u CLAUDECODE -u CLAUDE_CODE_SESSION_ID ./tests/tasks/e-NNNN-verify.sh`
+   A green run inside the agent's own environment is not evidence the user will
+   see green.
+
+Same shape as the defect the task was fixing: a correct mechanism fed an
+environment nobody validated. The agent's environment is not the user's, and
+every difference between them is a place a check can pass for the wrong reason.
