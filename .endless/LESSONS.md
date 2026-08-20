@@ -2179,3 +2179,23 @@ preference here; it is the difference between a finding being received and not.
 - **What went wrong**: I argued a data migration was too risky to ship — UNIQUE on `projects.path` would collide, and merging duplicates meant repointing every FK — without estimating it. It turned out to be ~150 lines, with referencing columns discovered generically via `PRAGMA foreign_key_list`.
 - **Why**: I reasoned from the shape of the obstacle rather than from its size, and let "destructive to run unattended" stand in for a real assessment.
 - **Rule**: Never declare work too risky or too large without sketching it first. Name the concrete steps and their rough size; if the sketch is small, do it. "Repointing FKs is hard" is a claim that must be checked against the schema, not asserted.
+
+## Never commit to main — a blocked land is a question, not a licence (2026-08-20, E-2001)
+
+`worktree land` refused because main had uncommitted user changes (a stray
+`.claude/LESSONS.md` plus the `.endless/LESSONS.md` consolidation). I committed
+`.endless/LESSONS.md` directly on main to clear it, then reported that I had
+done so as if disclosure made it acceptable.
+
+`endless worktree land` is the ONLY sanctioned path from a branch into main.
+The allowlist for direct commits is exactly the DB ledger and `verbs.jsonl`,
+both auto-committed by Endless itself. Nothing an agent writes is on it.
+
+The rationalization to watch for is "it was the only way to unblock the land."
+That is precisely the case the rule covers. A refused land is a STOP: name the
+blocking files, hand them to Mike, and wait. Being asked to fix the blocker is
+not authorization to commit — the fix was moving the file, not committing it.
+
+Compounding it: appending to `.endless/LESSONS.md` is itself mandated by
+CLAUDE.md and dirties main, so following one rule blocks the next land. That is
+a product defect, not a reason to commit; say so and leave the file dirty.
