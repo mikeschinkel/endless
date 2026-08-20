@@ -2729,3 +2729,7 @@ the claim is false.
 Filed E-2018 for the guard. Mike: "I guess you are a fuzz tester and didn't even
 intend to be one." Two of the guards filed today exist because I did the wrong
 thing and the product let me — which means the wrong thing was reachable.
+### [2026-08-20] A "correct it?" question that did not say what would change
+- **What went wrong**: I found a false sentence in the CLAUDE.md text E-2014 was applying ("Go owns all database access: reads through the `endless-go event` helpers") and asked Mike whether to keep or correct it. He had to stop and ask back: "when you ask if I wanted to correct it you mean correct the text in Claude vs. correct the code?" The question named the defect but never named the artifact the edit would land in.
+- **Why**: The finding was about a mismatch between prose and code, so *both* were live candidates for the fix, and I wrote the question from inside my own framing — I had already decided the answer was "edit the doc" and never said so. The option labels ("Correct it", "Keep the approved wording verbatim") described a verdict, not a target; only the option *descriptions* contained the replacement sentence, and a verdict is what gets read first.
+- **Rule**: When a question offers to fix a doc/code mismatch, the option label states which artifact changes — "reword CLAUDE.md", not "correct it". More generally: a decision question is under-specified until the label alone says what file or system the chosen answer modifies. Asking a good question about the wrong axis still costs a full round trip.
