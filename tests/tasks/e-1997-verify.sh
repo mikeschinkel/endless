@@ -161,19 +161,28 @@ assert_text_lacks() {
 # Interactive (-i) on purpose: that is when a shell reads .zshrc, and "as soon
 # as I open a terminal" is half the reported symptom. The other half is the Bash
 # tool, whose shell reads the same file.
+#
+# ENDLESS_SESSION_ID is scrubbed from every run. The documented way to invoke
+# this suite is `esu && ./tests/tasks/e-1997-verify.sh`, and `esu` EXPORTS that
+# variable — so a check written in a shell that had not run `esu` can pass for
+# its author and fail for everyone following the instructions. The helpers
+# branch on it (see _endless_run and esf), so leaving it inherited makes this
+# suite's subject the caller's session state instead of the harness.
 shell() {
     local rcfile="$1" harness="$2" cmd="$3"
     local zdotdir; zdotdir=$(dirname "${rcfile}")
     case "${harness}" in
         desktop)
-            env ${DESKTOP_ENV} ZDOTDIR="${zdotdir}" PATH="${SHIM_DIR}:${PATH}" \
+            env -u ENDLESS_SESSION_ID ${DESKTOP_ENV} \
+                ZDOTDIR="${zdotdir}" PATH="${SHIM_DIR}:${PATH}" \
                 zsh -i -c "${cmd}" 2>&1 ;;
         terminal)
-            env CLAUDE_CODE_ENTRYPOINT=cli ZDOTDIR="${zdotdir}" PATH="${SHIM_DIR}:${PATH}" \
+            env -u ENDLESS_SESSION_ID CLAUDE_CODE_ENTRYPOINT=cli \
+                ZDOTDIR="${zdotdir}" PATH="${SHIM_DIR}:${PATH}" \
                 zsh -i -c "${cmd}" 2>&1 ;;
         human)
-            env -u CLAUDE_CODE_ENTRYPOINT -u CLAUDE_AGENT_SDK_VERSION \
-                -u __CFBundleIdentifier -u CLAUDECODE \
+            env -u ENDLESS_SESSION_ID -u CLAUDE_CODE_ENTRYPOINT \
+                -u CLAUDE_AGENT_SDK_VERSION -u __CFBundleIdentifier -u CLAUDECODE \
                 ZDOTDIR="${zdotdir}" PATH="${SHIM_DIR}:${PATH}" \
                 zsh -i -c "${cmd}" 2>&1 ;;
         *) printf 'BAD HARNESS %s' "${harness}" ;;
@@ -184,10 +193,12 @@ shell() {
 cli() {
     local harness="$1"; shift
     case "${harness}" in
-        desktop)  env ${DESKTOP_ENV} uv run --directory "${REPO_ROOT}" endless "$@" 2>&1 ;;
-        terminal) env CLAUDE_CODE_ENTRYPOINT=cli uv run --directory "${REPO_ROOT}" endless "$@" 2>&1 ;;
-        human)    env -u CLAUDE_CODE_ENTRYPOINT -u CLAUDE_AGENT_SDK_VERSION \
-                      -u __CFBundleIdentifier -u CLAUDECODE \
+        desktop)  env -u ENDLESS_SESSION_ID ${DESKTOP_ENV} \
+                      uv run --directory "${REPO_ROOT}" endless "$@" 2>&1 ;;
+        terminal) env -u ENDLESS_SESSION_ID CLAUDE_CODE_ENTRYPOINT=cli \
+                      uv run --directory "${REPO_ROOT}" endless "$@" 2>&1 ;;
+        human)    env -u ENDLESS_SESSION_ID -u CLAUDE_CODE_ENTRYPOINT \
+                      -u CLAUDE_AGENT_SDK_VERSION -u __CFBundleIdentifier -u CLAUDECODE \
                       uv run --directory "${REPO_ROOT}" endless "$@" 2>&1 ;;
         *)        printf 'BAD HARNESS %s' "${harness}" ;;
     esac
@@ -299,9 +310,14 @@ test_banner_survives() {
 
     # Calling a helper through a real shell, which is the path a Desktop user
     # takes: the function exists, runs endless, and meets the banner there.
-    out=$(shell "${RC_WITH}" desktop 'esf')
+    #
+    # `esp`, not `esf`. esf short-circuits on an unset ENDLESS_SESSION_ID and
+    # prints its own "no active session" from the SNIPPET, never reaching
+    # endless at all — so asserting on that text proved nothing about the banner
+    # and inverted with the caller's session state. esp always calls through.
+    out=$(shell "${RC_WITH}" desktop 'esp')
     assert_text_contains "desktop: invoking a helper reaches the banner" \
-        'no active session' "${out}"
+        'does not support Claude Code Desktop' "${out}"
 
     out=$(cli terminal guide)
     assert_text_contains "terminal: the guide prints normally" \
