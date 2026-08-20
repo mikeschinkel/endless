@@ -219,7 +219,12 @@ func newClaimFixture(t *testing.T) *claimFixture {
 	restore := monitor.SetTestDB(db)
 	t.Cleanup(restore)
 
-	root := t.TempDir()
+	// Canonical form (E-2002): the hook normalizes the cwd it is handed and
+	// reads the project row back through ProjectPath, which resolves symlinks
+	// — so a fixture registered at the raw t.TempDir() (under /var on macOS, a
+	// symlink into /private/var) would be asserting against a spelling the
+	// product deliberately no longer emits.
+	root := monitor.NormalizeProjectPath(t.TempDir())
 	worktree := filepath.Join(root, ".endless", "worktrees", "e-10")
 	if err := os.MkdirAll(worktree, 0755); err != nil {
 		t.Fatalf("mkdir worktree: %v", err)

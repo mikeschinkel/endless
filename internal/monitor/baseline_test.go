@@ -93,6 +93,19 @@ func seedProject(t *testing.T, db *sql.DB, id int64, name, path string) int64 {
 	return id
 }
 
+// tempProjectRoot returns a fresh temp directory in the canonical form Endless
+// stores project paths in. t.TempDir() alone is not that form on macOS, where
+// it hands back a path under /var — a symlink to /private/var — so a project
+// seeded at it is a row written the way a pre-E-2002 ledger holds one, and
+// every path derived from it through ProjectPath comes back resolved instead.
+// Tests asserting on derived paths seed through here so the fixture and the
+// production code agree on the spelling; the tolerance for unresolved rows is
+// pinned deliberately in projects_test.go, not incidentally everywhere.
+func tempProjectRoot(t *testing.T) string {
+	t.Helper()
+	return NormalizeProjectPath(t.TempDir())
+}
+
 // TestSchemaFreshDB_CreatesAllTables verifies that applying schema.SQL to an
 // empty database produces every table the rest of the codebase expects to
 // exist. With the V-migration framework gone, schema.sql is the single source

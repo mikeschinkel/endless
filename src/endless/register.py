@@ -7,6 +7,7 @@ from pathlib import Path
 import click
 
 from endless import db, config
+from endless.project_path import normalize
 
 NAME_PATTERN = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
 
@@ -89,7 +90,7 @@ def register_project(
 ) -> str:
     """Register or update a project. Returns the name."""
 
-    project_path = project_path.resolve()
+    project_path = normalize(project_path)
     if not project_path.is_dir():
         raise click.ClickException(
             f"Directory not found: {project_path}"

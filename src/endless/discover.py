@@ -5,7 +5,8 @@ from pathlib import Path
 import click
 from tabulate import tabulate
 
-from endless import db, config
+from endless import config
+from endless.project_path import match_project_path
 from endless.models import Signal
 from endless.signals import detect_signals, count_git_subdirs
 from endless.register import register_project
@@ -21,10 +22,10 @@ TIER_LABELS = {
 
 
 def _is_registered(path: Path) -> bool:
-    return db.exists(
-        "SELECT 1 FROM projects WHERE path=?",
-        (str(path),),
-    )
+    # Normalized comparison (E-2002): a discovered directory reached through a
+    # symlink is the same project as the registered row, and must not be
+    # offered as a new one.
+    return match_project_path(path) is not None
 
 
 def _print_tier_table(entries: list[Signal]):

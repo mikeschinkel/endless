@@ -279,6 +279,17 @@ The CLI refusal fails **open** on `unknown` (a human at a shell prompt keeps the
 tool) while the hooks fail **closed**. Deliberate asymmetry: the hooks are
 enforcement, the refusal is advice with an exit code.
 
+## One project-path spelling — E-2002
+
+Project paths are stored and compared **absolute, `~` expanded, symlinks
+resolved**. One rule, two implementations that must not drift:
+`monitor.NormalizeProjectPath` / `MatchProjectPath`
+(`internal/monitor/project_path.go`) and `endless.project_path` — see either
+file for why. Normalize at the boundaries: the DB read, and the
+harness-supplied cwd (done once at the top of `hook claude`). A new comparison
+between a project path and a cwd needs no normalization of its own; one that
+re-derives a path from a raw cwd does.
+
 ## Tests
 
 Use `just test` to run Python tests.

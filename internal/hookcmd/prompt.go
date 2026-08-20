@@ -11,7 +11,10 @@ func runPrompt(args []string) error {
 	if len(args) < 1 {
 		return fmt.Errorf("usage: endless-hook prompt <directory>")
 	}
-	dir := args[0]
+	// Normalized for the same reason claude.go normalizes payload.CWD (E-2002):
+	// the directory arrives from the shell, the project row was written
+	// symlink-resolved by the Python CLI, and an unresolved spelling misses.
+	dir := monitor.NormalizeProjectPath(args[0])
 
 	// Look up project
 	projectID, _, err := monitor.ProjectIDForPath(dir)

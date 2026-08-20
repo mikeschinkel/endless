@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/mikeschinkel/endless/internal/monitor"
 	"github.com/mikeschinkel/endless/internal/schema"
 
 	_ "modernc.org/sqlite"
@@ -195,11 +196,23 @@ func readMainProjectRow(dbPath, mainCheckout string) (*projectRow, error) {
 	}
 	defer db.Close()
 
+	// Match on the normalized path, not the raw one git handed back (E-2002):
+	// the CLI stores a symlink-resolved path, so a main checkout reached
+	// through a symlinked parent would otherwise report "no project in main
+	// DB" for a project that is plainly registered.
+	stored, found, err := monitor.MatchProjectPath(db, mainCheckout)
+	if err != nil {
+		return nil, fmt.Errorf("matching project path %s: %w", mainCheckout, err)
+	}
+	if !found {
+		return nil, fmt.Errorf("no project in main DB at path %s; run `endless register %s` from the main checkout first", mainCheckout, mainCheckout)
+	}
+
 	var p projectRow
 	err = db.QueryRow(
 		"SELECT name, label, path, group_name, description, status, language, created_at, updated_at "+
 			"FROM projects WHERE path = ?",
-		mainCheckout,
+		stored,
 	).Scan(&p.Name, &p.Label, &p.Path, &p.GroupName, &p.Description, &p.Status, &p.Language, &p.CreatedAt, &p.UpdatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("no project in main DB at path %s; run `endless register %s` from the main checkout first", mainCheckout, mainCheckout)
@@ -207,5 +220,9 @@ func readMainProjectRow(dbPath, mainCheckout string) (*projectRow, error) {
 	if err != nil {
 		return nil, fmt.Errorf("reading project row: %w", err)
 	}
+	// Seed the sandbox with the canonical form even when the main row predates
+	// E-2002 and holds an unresolved path: this is a fresh write into a fresh
+	// DB, and there is no reason to copy the mismatch forward.
+	p.Path = monitor.NormalizeProjectPath(p.Path)
 	return &p, nil
 }

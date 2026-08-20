@@ -8,6 +8,7 @@ from pathlib import Path
 import click
 
 from endless import db
+from endless.project_path import match_project_path, normalize
 
 
 def _format_tool_content(content: str, tool_name: str | None = None, mode: str = "truncated") -> str:
@@ -1371,16 +1372,18 @@ def _project_root_for_cwd() -> Path:
 
     Walks up from cwd looking for a registered project path. Falls back to
     cwd itself if not registered (companion files are still per-project).
+
+    Both sides of the comparison are normalized (E-2002): cwd on the way in,
+    and each candidate row inside match_project_path, so a project reached
+    through a symlink resolves to its registered root instead of falling
+    through to cwd.
     """
-    cwd = Path.cwd().resolve()
+    cwd = normalize(Path.cwd())
     candidate = cwd
     while True:
-        row = db.query(
-            "SELECT path FROM projects WHERE path = ?",
-            (str(candidate),),
-        )
-        if row:
-            return Path(row[0]["path"])
+        stored = match_project_path(candidate)
+        if stored is not None:
+            return normalize(stored)
         if candidate.parent == candidate:
             break
         candidate = candidate.parent

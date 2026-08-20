@@ -748,8 +748,13 @@ func BackupDB() (BackupResult, error) {
 	return BackupResult{Path: dst}, nil
 }
 
-// ProjectPath returns the registered filesystem path for a project ID.
-// Path is returned with ~ expansion applied so callers can use it directly.
+// ProjectPath returns the registered filesystem path for a project ID,
+// normalized through NormalizeProjectPath so callers can use it directly and
+// compare it against a path the Python CLI computed for the same project. That
+// includes the ~ expansion this used to do on its own; the Python read sides
+// (task_cmd, worktree_cmd, decision_cmd, matchers) all do `expanduser().
+// resolve()` on the same column, so anything less here is a string the two
+// halves disagree about (E-2002).
 func ProjectPath(id int64) (string, error) {
 	db, err := DB()
 	if err != nil {
@@ -760,30 +765,26 @@ func ProjectPath(id int64) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if strings.HasPrefix(path, "~/") {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return "", err
-		}
-		path = filepath.Join(home, path[2:])
-	}
-	return path, nil
+	return NormalizeProjectPath(path), nil
 }
 
 // ProjectIDForPath looks up a registered project by working directory.
 // Checks the exact path first, then walks up parent directories.
 // Returns (id, true) if found, or creates/finds an anonymous project
 // and returns (id, false) if the directory is not registered.
+//
+// dir is normalized first (E-2002): the Python CLI stores a resolved path, so
+// comparing an unresolved cwd against it misses on every project reached
+// through a symlink and auto-registers a duplicate. The indexed walk runs
+// against the normalized ancestors; only when the whole walk misses does
+// projectIDForNormalizedPath scan for a row that was itself stored unresolved.
 func ProjectIDForPath(dir string) (int64, bool, error) {
 	db, err := DB()
 	if err != nil {
 		return 0, false, err
 	}
 
-	dir, err = filepath.Abs(dir)
-	if err != nil {
-		return 0, false, err
-	}
+	dir = NormalizeProjectPath(dir)
 
 	// Walk up looking for a registered project
 	check := dir
@@ -803,8 +804,18 @@ func ProjectIDForPath(dir string) (int64, bool, error) {
 		check = parent
 	}
 
+	// Nothing stored in canonical form matched — a row may predate E-2002 and
+	// hold an unresolved path that denotes this directory anyway.
+	id, found, err := projectIDForNormalizedPath(db, dir)
+	if err != nil {
+		return 0, false, err
+	}
+	if found {
+		return id, true, nil
+	}
+
 	// No registered project found — auto-register as active
-	id, err := ensureAutoRegisteredProject(db, dir)
+	id, err = ensureAutoRegisteredProject(db, dir)
 	if err != nil {
 		return 0, false, err
 	}
@@ -863,15 +874,16 @@ var ErrNoProjectContext = errors.New("no project context: no ancestor directory 
 // first ancestor containing a .endless/ directory — the project root. Shared
 // by every command that must resolve a project from cwd rather than from an
 // explicit --project name (templatecmd, outputstylecmd).
+//
+// Normalized like every other project path Endless produces (E-2002), so the
+// root this returns is the same string the projects row holds and the Python
+// CLI computes, rather than whichever spelling the caller's shell was in.
 func ProjectRootFromCwd() (string, error) {
 	cwd, err := os.Getwd()
 	if err != nil {
 		return "", err
 	}
-	dir, err := filepath.Abs(cwd)
-	if err != nil {
-		return "", err
-	}
+	dir := NormalizeProjectPath(cwd)
 	for {
 		if st, err := os.Stat(filepath.Join(dir, ".endless")); err == nil && st.IsDir() {
 			return dir, nil

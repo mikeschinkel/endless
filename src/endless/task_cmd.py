@@ -16,6 +16,7 @@ from tabulate import tabulate
 
 from endless import db, config
 from endless.statuses import TASK_STATUSES
+from endless.project_path import normalize, project_name_for_cwd
 
 
 _TIER_LABELS = {0: "n/a", 1: "auto", 2: "quick", 3: "deep", 4: "discuss"}
@@ -451,7 +452,7 @@ def _main_root_for_task(task_id: int) -> Path | None:
     )
     if not row:
         return None
-    return Path(row[0]["path"]).expanduser().resolve()
+    return normalize(row[0]["path"])
 
 
 def _worktree_for_task(task_id: int) -> Path | None:
@@ -542,16 +543,7 @@ def _resolve_project(name: str | None) -> tuple[int, str]:
         # so cwd-keyed lookups find the canonical project row instead of
         # the worktree's path. See config.resolution_cwd.
         cwd = config.resolution_cwd()
-        pcfg = config.project_config_read(cwd)
-        if pcfg:
-            name = pcfg.get("name")
-        if not name:
-            row = db.query(
-                "SELECT name FROM projects WHERE path = ?",
-                (str(cwd),),
-            )
-            if row:
-                name = row[0]["name"]
+        name = project_name_for_cwd(cwd)
         if not name:
             raise click.ClickException(
                 "Not in a registered project directory. "

@@ -156,7 +156,7 @@ func TestResolveResumeTarget_ESPrefixNeverFallsBackToTask(t *testing.T) {
 // on the branch that has no task — not only alongside a worktree.
 func TestResolveResumeTarget_CarriesProjectOnTaskLessSession(t *testing.T) {
 	db := withTestDB(t)
-	root := t.TempDir()
+	root := tempProjectRoot(t)
 	seedProject(t, db, 7, "p7", root)
 	sid := insertResumeSession(t, db, 7, nil, ptrStr("loose-uuid-3333"), "2026-06-20T00:00:00")
 

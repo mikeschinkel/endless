@@ -31,6 +31,7 @@ from pathlib import Path
 from typing import Any
 
 from endless import config
+from endless.project_path import normalize
 
 
 # Default matchers seeded into the machine config on first run if no
@@ -118,7 +119,7 @@ def project_verbs_path() -> Path | None:
         return None
     if not row:
         return None
-    return Path(row[0]["path"]).expanduser().resolve() / ".endless" / "verbs.jsonl"
+    return normalize(row[0]["path"]) / ".endless" / "verbs.jsonl"
 
 
 def machine_verbs_path() -> Path:

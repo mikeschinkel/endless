@@ -11,7 +11,7 @@ import (
 // the full absolute path.
 func TestWorktreePathForTask_FindsBareDir(t *testing.T) {
 	db := withTestDB(t)
-	projectRoot := t.TempDir()
+	projectRoot := tempProjectRoot(t)
 	seedProject(t, db, 1, "acme", projectRoot)
 
 	wantWT := filepath.Join(projectRoot, ".endless", "worktrees", "e-808")
@@ -34,7 +34,7 @@ func TestWorktreePathForTask_FindsBareDir(t *testing.T) {
 // dir alone yields "".
 func TestWorktreePathForTask_IgnoresSluggedDir(t *testing.T) {
 	db := withTestDB(t)
-	projectRoot := t.TempDir()
+	projectRoot := tempProjectRoot(t)
 	seedProject(t, db, 1, "acme", projectRoot)
 
 	if err := os.MkdirAll(
@@ -59,7 +59,7 @@ func TestWorktreePathForTask_IgnoresSluggedDir(t *testing.T) {
 // "" with nil error.
 func TestWorktreePathForTask_NoMatchReturnsEmpty(t *testing.T) {
 	db := withTestDB(t)
-	projectRoot := t.TempDir()
+	projectRoot := tempProjectRoot(t)
 	seedProject(t, db, 1, "acme", projectRoot)
 
 	// Near-miss: e-8080 shares the "e-808" prefix but is task 8080, not 808.
@@ -84,7 +84,7 @@ func TestWorktreePathForTask_NoMatchReturnsEmpty(t *testing.T) {
 // can fire unconditionally.
 func TestWorktreePathForTask_ZeroTaskIDReturnsEmpty(t *testing.T) {
 	db := withTestDB(t)
-	projectRoot := t.TempDir()
+	projectRoot := tempProjectRoot(t)
 	seedProject(t, db, 1, "acme", projectRoot)
 
 	got, err := WorktreePathForTask(1, 0)

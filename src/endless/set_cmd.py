@@ -9,6 +9,7 @@ from endless import db, config
 from endless.register import validate_name
 from endless.resolve_name import resolve_project
 from endless.models import VALID_STATUSES
+from endless.project_path import project_name_for_cwd
 
 SETTABLE_FIELDS = {
     "name", "label", "description", "language", "status",
@@ -43,16 +44,7 @@ def set_field(expression: str, path_hint: str | None = None):
 
         # Detect project from current directory
         cwd = Path.cwd()
-        pcfg = config.project_config_read(cwd)
-        if pcfg:
-            name = pcfg.get("name")
-        if not name:
-            row = db.query(
-                "SELECT name FROM projects WHERE path = ?",
-                (str(cwd),),
-            )
-            if row:
-                name = row[0]["name"]
+        name = project_name_for_cwd(cwd)
         if not name:
             raise click.ClickException(
                 "Not in a registered project directory. "

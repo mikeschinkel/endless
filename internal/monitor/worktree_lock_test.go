@@ -378,7 +378,7 @@ func TestTaskIDFromWorktreePath_IgnoresCompanionField(t *testing.T) {
 // because the function is filesystem-driven.
 func TestFindLockBySessionID_FindsMatchingLock(t *testing.T) {
 	db := withTestDB(t)
-	projectRoot := t.TempDir()
+	projectRoot := tempProjectRoot(t)
 	seedProject(t, db, 1, "acme", projectRoot)
 
 	wantWT := filepath.Join(projectRoot, ".endless", "worktrees", "e-808")
@@ -405,7 +405,7 @@ func TestFindLockBySessionID_FindsMatchingLock(t *testing.T) {
 // nil — not an error, so SessionEnd can early-out cleanly.
 func TestFindLockBySessionID_NoMatchReturnsEmpty(t *testing.T) {
 	db := withTestDB(t)
-	projectRoot := t.TempDir()
+	projectRoot := tempProjectRoot(t)
 	seedProject(t, db, 1, "acme", projectRoot)
 
 	wt := filepath.Join(projectRoot, ".endless", "worktrees", "e-808")
@@ -430,7 +430,7 @@ func TestFindLockBySessionID_NoMatchReturnsEmpty(t *testing.T) {
 // .endless/worktrees directory is normal, not an error.
 func TestFindLockBySessionID_MissingWorktreesDirReturnsEmpty(t *testing.T) {
 	db := withTestDB(t)
-	projectRoot := t.TempDir()
+	projectRoot := tempProjectRoot(t)
 	seedProject(t, db, 1, "acme", projectRoot)
 
 	got, err := FindLockBySessionID(1, "sess-anything")

@@ -6,6 +6,7 @@ from pathlib import Path
 import click
 
 from endless import db, config
+from endless.project_path import normalize
 
 
 def reconcile():
@@ -30,14 +31,23 @@ def reconcile():
     db_by_name: dict[str, dict] = {
         row["name"]: dict(row) for row in db_rows
     }
+    # Keyed on the canonical form, not the stored string (E-2002): a project
+    # whose row predates this normalization must still be recognized as the
+    # same project as the directory found on disk, or reconcile inserts a
+    # second row for it.
     db_by_path: dict[str, dict] = {
-        row["path"]: dict(row) for row in db_rows
+        str(normalize(row["path"])): dict(row) for row in db_rows
     }
 
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
 
     # Reconcile: disk → DB
     for name, (disk_path, cfg) in found_on_disk.items():
+        # Normalized on the way into the DB, so a root reached through a
+        # symlink is stored the one canonical way both halves compare against.
+        # Repairs a stale row in passing: a project matched by name whose
+        # stored path is unresolved gets rewritten to the canonical form.
+        disk_path = normalize(disk_path)
         path_str = str(disk_path)
 
         if name in db_by_name:

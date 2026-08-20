@@ -4,7 +4,8 @@ from pathlib import Path
 
 import click
 
-from endless import db, config
+from endless import db
+from endless.project_path import project_name_for_cwd
 
 
 def show_status(name: str | None = None):
@@ -14,16 +15,7 @@ def show_status(name: str | None = None):
     # Auto-detect from current directory if no name given
     if not name:
         cwd = Path.cwd()
-        pcfg = config.project_config_read(cwd)
-        if pcfg:
-            name = pcfg.get("name")
-        if not name:
-            row = db.query(
-                "SELECT name FROM projects WHERE path = ?",
-                (str(cwd),),
-            )
-            if row:
-                name = row[0]["name"]
+        name = project_name_for_cwd(cwd)
         if not name:
             raise click.ClickException(
                 "Not in a registered project directory. "
