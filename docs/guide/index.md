@@ -41,9 +41,9 @@ When implementation is verified **and your user has told you to land it** — ne
 <!-- BEGIN canonical:docs/status-lifecycle.mmd — edit the canonical file, then re-sync; do not hand-edit here -->
 ```mermaid
 %% Canonical task status lifecycle — single source of truth.
-%% Embedded (byte-identical) in README.md, CLAUDE.md, and docs/guide/index.md
-%% between <!-- BEGIN canonical:docs/status-lifecycle.mmd --> / <!-- END ... -->
-%% markers. Edit HERE, then re-sync the copies (tests/tasks/e-1648-verify.sh
+%% Embedded (byte-identical) in README.md and docs/guide/index.md between
+%% <!-- BEGIN canonical:docs/status-lifecycle.mmd --> / <!-- END ... --> markers.
+%% Edit HERE, then re-sync the copies (tests/test_status_lifecycle_sync.py
 %% asserts they match). Blocking is a relation (blocked_by), not a state, so it
 %% is intentionally absent.
 stateDiagram-v2

@@ -128,8 +128,9 @@ func writeSandboxConfig(sandboxDir string) error {
 }
 
 // mainCheckoutFromWorktree walks from a path inside a git worktree to the
-// main checkout via the git-dir vs git-common-dir discriminator (documented
-// in this project's CLAUDE.md and used in Go at internal/monitor/db.go).
+// main checkout via the git-dir vs git-common-dir discriminator (also used in
+// Go at internal/monitor/db.go, and by the `install` and `claude-settings-init`
+// recipes in the justfile to refuse running from the wrong checkout).
 func mainCheckoutFromWorktree(dir string) (string, error) {
 	gitDir, err := runGit(dir, "rev-parse", "--git-dir")
 	if err != nil {
