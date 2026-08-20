@@ -2383,3 +2383,28 @@ Endless exists to remove.
 
 Search terms are the subject, not my framing of it: "CLAUDE.md", not "commit to
 main policy documentation gap".
+
+### [2026-08-20] Called a correct mechanism "the harm" because a consumer misused it
+
+- **What went wrong**: Wrote that the tmux sibling-pane session resolver "fires
+  constantly; only that one gate prevents the harm" — framing correct behavior
+  (crediting a command to the session whose tmux window it was typed in) as the
+  thing harm attaches to. Mike: "Why is recording the correct session ID for the
+  tmux window considering harm?!?" The same framing was already sitting in an
+  attached plan, where it would have told the next implementer to "fix" a
+  working part. Earlier in the same turn, the same error in a different shape:
+  asserted `monitor.StartWorkSession` / `CompleteTask` were a live ungated gap
+  because no harness check appeared at the site, without checking that their
+  only caller is the harness-gated hook. There was no gap.
+- **Why**: Judged a defect from local code shape without checking what the
+  surrounding system does with the value, or who can actually reach the code. A
+  value a consumer misreads gets described as if the value were wrong; a
+  function with no guard gets described as unguarded without looking at its
+  callers.
+- **Rule**: Before naming something a defect, name the consumer and the caller.
+  Ask "who reads this value, and what question do they think it answers?" and
+  "who can actually reach this code?" Then put the defect at the site drawing
+  the wrong inference, never at the mechanism producing a correct value.
+  Producing X is not misusing X; missing a guard is not being reachable without
+  one. This matters most in a plan: a misframed cause is an instruction to break
+  something that works.
