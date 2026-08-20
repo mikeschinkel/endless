@@ -2531,3 +2531,17 @@ including as a pointer. Decisions are findable without being advertised.
 Also: when I noticed ED-1541 was stale, I flagged it and asked. Mike had to say
 "ED-1541 needs to be updated." A stale artifact I discovered in the course of
 the work is work, not a question.
+
+### [2026-08-20] Deliverables live in the DB, not in a docs/ file (E-1817)
+
+Mike: "Why are we working off docs/proposal-2026-08-20-claude-md-minimized.md?
+In Endless we have moved away from files and instead keep the data in the DB."
+
+I invented a `docs/proposal-<date>-*.md` artifact for a proposed CLAUDE.md
+rewrite because `docs/` had older files matching that shape. Those are legacy.
+Endless keeps task content in DB fields (description, text, analysis, outcome),
+mirrored to disk by Endless itself — a hand-written file in docs/ is outside
+that system and drifts.
+
+Precedent in a directory is not a convention. Before adding a file, ask which DB
+field already holds this kind of content.
