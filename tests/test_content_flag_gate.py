@@ -172,3 +172,130 @@ def test_resolve_file_content_is_never_gated(tmp_path):
     p = tmp_path / "plan.md"
     p.write_text("the sandbox lives at /tmp/anything and that is fine here")
     assert _resolve_content_flag(None, str(p), "text").startswith("the sandbox")
+
+
+# ═══ E-2008 — the empty-file gate ═══════════════════════════════════════════
+#
+# `--<name>-file` wrote whatever the file held, so a path that came back empty
+# (a failed extraction, a sed that matched nothing) silently replaced existing
+# content and the command reported success. Zero bytes is never a legitimate
+# value for these fields, so an empty or whitespace-only file is refused
+# unconditionally — no --force. Clearing is a separate, field-named act.
+
+from endless.cli import _apply_clear_flags
+
+
+def _empty_file_error(tmp_path, body, name="analysis", clearable=False):
+    p = tmp_path / "extracted.md"
+    p.write_text(body)
+    with pytest.raises(click.ClickException) as exc:
+        _resolve_content_flag(None, str(p), name, clearable=clearable)
+    return str(exc.value), p
+
+
+@pytest.mark.parametrize("body", [
+    "",              # zero bytes — the E-1817 case
+    " ",
+    "\n",
+    "\n\n\t  \n",    # whitespace-only is just as much a failed pipeline
+])
+def test_empty_file_is_refused(tmp_path, body):
+    msg, _ = _empty_file_error(tmp_path, body)
+    assert "loaded no content" in msg
+
+
+def test_refusal_names_the_offending_path(tmp_path):
+    # Naming the path is the actionable part — the caller has to know WHICH
+    # file came back empty to find the step that produced it.
+    msg, p = _empty_file_error(tmp_path, "")
+    assert str(p) in msg
+
+
+def test_refusal_distinguishes_zero_bytes_from_whitespace(tmp_path):
+    # Which one it is tells you which step of the pipeline failed.
+    assert "0 bytes" in _empty_file_error(tmp_path, "")[0]
+    assert "all whitespace" in _empty_file_error(tmp_path, "  \n\n")[0]
+
+
+def test_refusal_names_the_field_and_its_file_flag(tmp_path):
+    msg, _ = _empty_file_error(tmp_path, "", name="text")
+    assert "--text-file" in msg
+    assert "blank text" in msg
+
+
+def test_refusal_offers_clear_only_where_clear_exists(tmp_path):
+    # The `update` verbs carry --clear; `add` and the status-transition verbs
+    # do not (there is nothing to clear when a field is first written).
+    assert "--clear analysis" in _empty_file_error(
+        tmp_path, "", clearable=True)[0]
+    assert "--clear" not in _empty_file_error(tmp_path, "")[0]
+
+
+def test_no_force_style_escape_hatch_exists(tmp_path):
+    # Deliberate (E-2008): --force is the flag a mistaken caller reflexively
+    # appends after reading a refusal, which would restore the exact failure
+    # mode with an audit trail claiming it was intended.
+    msg, _ = _empty_file_error(tmp_path, "", clearable=True)
+    assert "--force" not in msg
+
+
+def test_file_with_real_content_still_loads(tmp_path):
+    p = tmp_path / "plan.md"
+    p.write_text("\n  real content surrounded by blank lines  \n\n")
+    # Returned verbatim — the emptiness test strips, the value does not.
+    assert _resolve_content_flag(None, str(p), "text") == \
+        "\n  real content surrounded by blank lines  \n\n"
+
+
+def test_inline_empty_string_still_clears(tmp_path):
+    # The inline form is unaffected: it names the field and cannot be reached
+    # by a failed pipeline, so it stays a legitimate way to empty a field.
+    assert _resolve_content_flag("", None, "analysis") == ""
+
+
+def test_missing_file_still_reports_not_found(tmp_path):
+    # The empty gate must not swallow the pre-existing not-found error.
+    with pytest.raises(click.ClickException) as exc:
+        _resolve_content_flag(None, str(tmp_path / "gone.md"), "text")
+    assert "File not found" in str(exc.value)
+
+
+# ─── --clear <field> — the named escape hatch ───────────────────────────────
+
+def test_clear_sets_the_field_to_empty_string():
+    out = _apply_clear_flags(("analysis",), {"analysis": None, "text": None})
+    assert out == {"analysis": "", "text": None}
+
+
+def test_clear_is_repeatable_across_fields():
+    out = _apply_clear_flags(("analysis", "text"),
+                             {"analysis": None, "text": None})
+    assert out == {"analysis": "", "text": ""}
+
+
+def test_same_field_cleared_twice_is_harmless():
+    # The conflict test reads the ORIGINAL map, not the accumulating one, so a
+    # repeated --clear text is a no-op rather than a self-conflict.
+    out = _apply_clear_flags(("text", "text"), {"text": None})
+    assert out == {"text": ""}
+
+
+@pytest.mark.parametrize("competing", ["real content", ""])
+def test_clear_conflicts_with_the_same_fields_value_flag(competing):
+    # Both spellings conflict: two flags writing one column is exactly the
+    # ambiguity the gate exists to remove.
+    with pytest.raises(click.ClickException) as exc:
+        _apply_clear_flags(("text",), {"text": competing})
+    msg = str(exc.value)
+    assert "--clear text conflicts with --text/--text-file" in msg
+
+
+def test_clear_does_not_disturb_other_fields():
+    out = _apply_clear_flags(("analysis",),
+                             {"analysis": None, "text": "a plan", "outcome": None})
+    assert out == {"analysis": "", "text": "a plan", "outcome": None}
+
+
+def test_clear_of_nothing_is_a_passthrough():
+    resolved = {"text": "a plan", "analysis": None}
+    assert _apply_clear_flags((), resolved) == resolved

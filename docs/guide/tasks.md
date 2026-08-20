@@ -19,6 +19,7 @@ Every task has multiple body fields. Knowing which to use prevents long descript
 
 ### Distinctions in practice
 
+- **Loading a field from a file.** Every long-form field has a `--<field>-file <path>` twin. It refuses an empty or whitespace-only file rather than blanking what's there — see [An empty `--<field>-file` is refused](#an-empty---field-file-is-refused) below.
 - **Description vs text.** Description is a pitch — max 1024 character — readable in 30 seconds, fits in a list view. Text is the plan you'd hand to an engineer. If you're writing four paragraphs into `--description`, stop — put it in a plan file and load with `--text-file` (`--text` stores its argument verbatim as inline content; pass a path to `--text-file` to load a file).
 - **Text vs handoff.** Text is the plan — for humans and for the spawned session, which `endless task spawn` directs it to read. The session's *opening input* (the handoff) is generated from a template at spawn time, not stored on the task; see `endless guide orchestration`.
 - **Analysis vs text.** Analysis is supporting evidence gathered *before a plan is written on a do-task* — comparisons, findings, raw material. Text is the actionable plan. A deliverable-shaped task (an audit, or a `research`-type task) puts its *result* in `outcome`, not `text` or `analysis`; for research tasks specifically, see the Research-task field model below.
@@ -210,6 +211,7 @@ endless task update <id> --parent 0                  # make it a root
 endless task update <id> --outcome "What was done"
 endless task update <id> <id2> ... --status ready    # bulk update
 endless task update <id> --text-file <path> --keep-status   # edit, infer nothing
+endless task update <id> --clear analysis            # empty a field, on purpose
 ```
 
 Attaching a non-empty plan (`--text`) to a `unplanned` task moves it to `submitted` (spec-complete, awaiting approval — **not** `ready`, which now means human-approved). Applies on both `task add` and `task update`. An explicit `--status` in the same call always wins. When the description alone is a sufficient spec (no plan text), run `task submit <id>` to reach `submitted` directly. A human then runs `task approve <id>` to promote `submitted → ready`.
@@ -228,6 +230,31 @@ Attaching a non-empty plan (`--text`) to a `unplanned` task moves it to `submitt
 **`--keep-status` suppresses all four.** The status you see is the status you keep. Reach for it when the edit is not a re-spec — a typo fix, a formatting pass, appending a finding to a plan that is deliberately parked at an unapproved status. Without it, a one-line append to an `unplanned` task's plan silently promotes it to `submitted`.
 
 `--keep-status` cannot be combined with `--status`; the call is refused rather than silently resolved. Naming a status is already the explicit way to say what the status should be, and it wins over all four inferences on its own.
+
+### An empty `--<field>-file` is refused
+
+`--description-file`, `--text-file`, `--analysis-file` and `--outcome-file` write whatever the file holds. When the file comes back empty — a failed extraction, a `sed` that matched nothing — that used to replace the existing content with nothing and print a normal success line. It happened to a 3.5KB analysis, and the content survived only because the session still had it in context.
+
+**Zero bytes is never a legitimate value for these fields**, so an empty *or whitespace-only* file is refused. The error names the path, so you can find the step that produced it:
+
+```
+Error: --analysis-file loaded no content from /tmp/extract.md (0 bytes).
+  Refusing to blank analysis: an empty file is far more often a failed
+  extraction than an intent to erase the field. Re-check the command
+  that produced the file.
+  To erase analysis on purpose, say so: --clear analysis
+```
+
+The refusal is unconditional. **There is no `--force`** — that is the whole design, not an omission. `--force` is exactly the flag a mistaken caller appends after reading a refusal, which would restore the failure mode with an audit trail claiming it was deliberate.
+
+Emptying a field is a separate, explicit act:
+
+```bash
+endless task update <id> --clear analysis                  # repeatable
+endless task update <id> --clear description --clear text
+```
+
+`--clear` names the field it erases, so it cannot be produced by a pipeline that went wrong, and it is refused alongside that same field's `--<field>` / `--<field>-file` — two flags writing one column is the ambiguity the guard exists to remove. It is available on `task update`, `epic update` and `decision update`; not on `task add` or the status-transition verbs, where there is nothing yet to clear. The inline `--<field> ''` form still clears too, for the same reason `--clear` is safe: it names the field.
 
 ---
 

@@ -1752,12 +1752,63 @@ def _guard_inline_content(inline, name, allow_paths):
         )
 
 
-def _resolve_content_flag(inline, file_path, name, allow_paths=()):
+# ─── empty-file gate (E-2008) ────────────────────────────────────────────────
+# `--<name>-file` writes whatever the file holds, so a path that is empty — or
+# produced by an extraction that silently yielded nothing — replaced existing
+# description/text/analysis/outcome content with nothing and reported success.
+# Observed on E-1817: a sed round-trip produced a zero-byte file and
+# `task update --analysis-file` wrote it over 3.5KB, recoverable only because
+# the session still had the content in context.
+#
+# Zero bytes is never a legitimate value for these fields, so the file flags
+# refuse an empty or whitespace-only file UNCONDITIONALLY — there is no --force.
+# That is deliberate: --force is exactly the flag a mistaken caller appends
+# after reading the refusal, which would restore the failure mode with an audit
+# trail claiming it was intended. Clearing is instead an explicit, field-named
+# act (`--clear <field>`, below) that a failed pipeline cannot reach by accident.
+
+CLEARABLE_CONTENT_FIELDS = ("description", "text", "analysis", "outcome")
+
+
+def _describe_empty_file(content):
+    """Human-readable reason a loaded file counts as empty: distinguishes a
+    truly zero-byte file from one holding only whitespace, since which one it is
+    tells you which step of the pipeline failed."""
+    if not content:
+        return "0 bytes"
+    return f"{len(content)} bytes, all whitespace"
+
+
+def _refuse_empty_file(path, content, name, clearable):
+    """Raise the empty-`--<name>-file` refusal. Names the offending path (the
+    whole point — the caller has to know *which* file came back empty) and, when
+    the calling command offers it, the `--clear <field>` recovery, so the way out
+    is discoverable at the moment it is needed rather than buried in docs."""
+    msg = (
+        f"--{name}-file loaded no content from {path} ({_describe_empty_file(content)}).\n"
+        f"  Refusing to blank {name}: an empty file is far more often a failed\n"
+        f"  extraction than an intent to erase the field. Re-check the command\n"
+        f"  that produced the file."
+    )
+    if clearable:
+        msg += (
+            f"\n  To erase {name} on purpose, say so: --clear {name}"
+        )
+    raise click.ClickException(msg)
+
+
+def _resolve_content_flag(inline, file_path, name, allow_paths=(), clearable=False):
     """Resolve a paired `--<name>` (inline) / `--<name>-file` (path) option pair
     into content. Returns the content string, or None if neither was given.
-    Raises if both were given, the file does not exist, or an inline value fails
-    the path gate (see _guard_inline_content). `--<name>-file` content is trusted
-    and never gated — it is the sanctioned way to load a file."""
+    Raises if both were given, the file does not exist or is empty (E-2008), or
+    an inline value fails the path gate (see _guard_inline_content).
+    `--<name>-file` content is otherwise trusted and never gated — it is the
+    sanctioned way to load a file.
+
+    `clearable` says whether the calling command carries `--clear <field>`; it
+    only shapes the empty-file refusal's recovery line. The `update` verbs set
+    it; `add` and the status-transition verbs do not, because there is nothing
+    to clear when a field is being written for the first time."""
     if inline is not None and file_path is not None:
         raise click.ClickException(
             f"Pass either --{name} or --{name}-file, not both."
@@ -1766,10 +1817,39 @@ def _resolve_content_flag(inline, file_path, name, allow_paths=()):
         p = Path(file_path).expanduser()
         if not p.exists():
             raise click.ClickException(f"File not found: {p}")
-        return p.read_text()
+        content = p.read_text()
+        if not content.strip():
+            _refuse_empty_file(p, content, name, clearable)
+        return content
     if inline is not None:
         _guard_inline_content(inline, name, allow_paths)
     return inline
+
+
+def _apply_clear_flags(clear_fields, resolved):
+    """Fold `--clear <field>` (repeatable) into a map of field name → resolved
+    content, as produced by _resolve_content_flag (None where neither the inline
+    nor the file flag was passed).
+
+    A cleared field becomes `""` — the same value the inline `--<name> ''` form
+    already writes — so nothing downstream learns a new sentinel.
+
+    Refuses `--clear <field>` alongside that field's own `--<field>` /
+    `--<field>-file`: the two say opposite things about one column, and letting
+    either win silently is the class of bug this gate exists to prevent. Repeating
+    the same `--clear <field>` is harmless (the conflict test reads the original
+    map, not the accumulating one)."""
+    out = dict(resolved)
+    for name in clear_fields:
+        if resolved.get(name) is not None:
+            raise click.ClickException(
+                f"--clear {name} conflicts with --{name}/--{name}-file in the "
+                f"same command.\n"
+                f"  Two flags writing one field is exactly the ambiguity this guard "
+                f"exists to remove; pass one or the other."
+            )
+        out[name] = ""
+    return out
 
 
 @task_cmd.command("add")
@@ -1900,15 +1980,27 @@ def task_add(title, description, description_file, text, text_file, analysis_tex
                    "(plan-attach promotion, description-edit reset, done-task "
                    "auto-revisit, tier-1 advance). For a typo- or formatting-only "
                    "edit. Cannot be combined with --status.")
+@click.option("--clear", "clear_fields", multiple=True,
+              type=click.Choice(CLEARABLE_CONTENT_FIELDS),
+              help="Erase a content field, naming it (repeatable). --<field>-file "
+                   "refuses an empty file, so this is the deliberate way to empty "
+                   "description/text/analysis/outcome. Conflicts with the same "
+                   "field's --<field>/--<field>-file.")
 def task_update(item_ids, status, title, description, description_file, text, text_file, parent, phase, tier,
                 task_type, analysis_text, analysis_file, force, outcome, outcome_file, justification, allow_paths,
-                keep_status):
+                keep_status, clear_fields):
     """Update fields on one or more tasks."""
     from endless.task_cmd import update_plan, parse_tier
-    description = _resolve_content_flag(description, description_file, "description", allow_paths)
-    text = _resolve_content_flag(text, text_file, "text", allow_paths)
-    analysis_text = _resolve_content_flag(analysis_text, analysis_file, "analysis", allow_paths)
-    outcome = _resolve_content_flag(outcome, outcome_file, "outcome", allow_paths)
+    resolved = _apply_clear_flags(clear_fields, {
+        "description": _resolve_content_flag(description, description_file, "description", allow_paths, clearable=True),
+        "text": _resolve_content_flag(text, text_file, "text", allow_paths, clearable=True),
+        "analysis": _resolve_content_flag(analysis_text, analysis_file, "analysis", allow_paths, clearable=True),
+        "outcome": _resolve_content_flag(outcome, outcome_file, "outcome", allow_paths, clearable=True),
+    })
+    description = resolved["description"]
+    text = resolved["text"]
+    analysis_text = resolved["analysis"]
+    outcome = resolved["outcome"]
     tier_val = parse_tier(tier) if tier else None
     for item_id in item_ids:
         update_plan(item_id, status=status, title=title,
@@ -2503,11 +2595,18 @@ def decision_add(title, description, description_file, project, about_ids, decid
 @click.option("--allow-path", "allow_paths", multiple=True,
               help="Regex matching an absolute path to permit in inline content "
                    "(repeatable; escape hatch for the path gate).")
-def decision_update(item_id, title, description, description_file, allow_paths):
+@click.option("--clear", "clear_fields", multiple=True,
+              type=click.Choice(["description"]),
+              help="Erase the description, naming it. --description-file refuses an "
+                   "empty file, so this is the deliberate way to empty it. Conflicts "
+                   "with --description/--description-file.")
+def decision_update(item_id, title, description, description_file, allow_paths, clear_fields):
     """Edit a decision's title and/or description in place (no new ID)."""
     from endless.decision_cmd import update_decision
-    description = _resolve_content_flag(description, description_file, "description", allow_paths)
-    update_decision(item_id, title=title, description=description)
+    resolved = _apply_clear_flags(clear_fields, {
+        "description": _resolve_content_flag(description, description_file, "description", allow_paths, clearable=True),
+    })
+    update_decision(item_id, title=title, description=resolved["description"])
 
 
 @decision_cmd.command("show")
@@ -2783,9 +2882,15 @@ def epic_show(item_ids, no_description, show_analysis, show_text,
 @click.option("--allow-path", "allow_paths", multiple=True,
               help="Regex matching an absolute path to permit in inline content "
                    "(repeatable; escape hatch for the path gate).")
+@click.option("--clear", "clear_fields", multiple=True,
+              type=click.Choice(CLEARABLE_CONTENT_FIELDS),
+              help="Erase a content field, naming it (repeatable). --<field>-file "
+                   "refuses an empty file, so this is the deliberate way to empty "
+                   "description/text/analysis/outcome. Conflicts with the same "
+                   "field's --<field>/--<field>-file.")
 def epic_update(item_ids, status, title, description, description_file, text,
                 text_file, parent, phase, tier, analysis_text, analysis_file,
-                force, outcome, outcome_file, allow_paths):
+                force, outcome, outcome_file, allow_paths, clear_fields):
     """Update one or more epics (promotes type to epic).
 
     Updating an existing task-typed row through this verb also promotes it to
@@ -2793,10 +2898,16 @@ def epic_update(item_ids, status, title, description, description_file, text,
     """
     from endless.epic_cmd import update_epic
     from endless.task_cmd import parse_tier
-    description = _resolve_content_flag(description, description_file, "description", allow_paths)
-    text = _resolve_content_flag(text, text_file, "text", allow_paths)
-    analysis_text = _resolve_content_flag(analysis_text, analysis_file, "analysis", allow_paths)
-    outcome = _resolve_content_flag(outcome, outcome_file, "outcome", allow_paths)
+    resolved = _apply_clear_flags(clear_fields, {
+        "description": _resolve_content_flag(description, description_file, "description", allow_paths, clearable=True),
+        "text": _resolve_content_flag(text, text_file, "text", allow_paths, clearable=True),
+        "analysis": _resolve_content_flag(analysis_text, analysis_file, "analysis", allow_paths, clearable=True),
+        "outcome": _resolve_content_flag(outcome, outcome_file, "outcome", allow_paths, clearable=True),
+    })
+    description = resolved["description"]
+    text = resolved["text"]
+    analysis_text = resolved["analysis"]
+    outcome = resolved["outcome"]
     tier_val = parse_tier(tier) if tier else None
     for item_id in item_ids:
         update_epic(item_id, status=status, title=title,

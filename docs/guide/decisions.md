@@ -110,9 +110,13 @@ To fix a decision's wording after the fact, edit it in place — there's no need
 ```bash
 endless decision update <id> --title "Corrected statement"
 endless decision update <id> --description "Corrected explanation"
+endless decision update <id> --description-file <path>
+endless decision update <id> --clear description       # erase it, on purpose
 ```
 
 Either flag is optional; pass one or both. A decision's title/description is metadata, so it's editable in any status (proposed, accepted, or rejected).
+
+`--description-file` refuses an empty or whitespace-only file rather than silently blanking the description — see [An empty `--<field>-file` is refused](tasks.md#an-empty---field-file-is-refused), which covers the same rule and the `--clear` escape hatch for every field on every verb.
 
 ## Distinguishing decision from task
 
