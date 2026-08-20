@@ -2076,3 +2076,31 @@ Two rules:
 Same shape as the defect the task was fixing: a correct mechanism fed an
 environment nobody validated. The agent's environment is not the user's, and
 every difference between them is a place a check can pass for the wrong reason.
+
+## Never put session refs in committed or ledger content (2026-08-20, ED-1560)
+
+Sessions are user-machine state, not project state. `ES-NNNN`, session UUIDs, and
+raw `session_id` integers must NEVER appear in anything that gets committed to
+version control or written to the ledger-derived parts of the DB — task
+descriptions, analyses, plan text, decision descriptions, outcomes. The sessions
+table is deliberately not journaled to `.endless/db-ledger` for exactly this
+reason; writing a session id into a task's analysis smuggles machine-local state
+into the shareable artifact anyway.
+
+I did it four times in one session, without noticing, because a session id was
+the most convenient handle for the evidence I was citing ("claimed by ES-1048",
+"session 1048" in a pasted ledger trace, "session 1114 was excluded").
+
+Write the ROLE, not the id: "its claiming session", "the holding session", "the
+session that did the work". Where the evidence is a ledger trace, strip the
+actor column — the task id, branch, and merge commit are project facts and carry
+the argument on their own.
+
+Two carve-outs that are NOT violations: the `Created:` / `Surfaced:` /
+`Revisited:` header lines in `task show` output (rendered by the CLI from the
+sessions table, not stored in the artifact), and session ids in RUNTIME CLI
+output, e.g. a refusal that names which session holds a task — that text is
+printed to one user on one machine and never committed.
+
+Do not silently rewrite another session's pre-existing violations in a spec you
+happen to be editing; fix your own and flag theirs.
