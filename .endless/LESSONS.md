@@ -2163,3 +2163,19 @@ the opening. If the action item is "none, I'll file it", say that in those words
 
 This was the third length complaint in one session. Terse is not a style
 preference here; it is the difference between a finding being received and not.
+
+
+### [2026-08-20] CLAUDE.md prose used to justify skipped work
+- **What went wrong**: On E-2002 I added a ~46-line CLAUDE.md section whose bulk was rationale for NOT repairing the damaged `projects` rows, instead of just repairing them.
+- **Why**: I treated "document the decision" as equivalent to "do the work", and CLAUDE.md as free space. It is not — every session in the project loads it, so length there is a permanent per-session token tax, and spending it to explain an omission is the worst form of that trade.
+- **Rule**: If a proposed CLAUDE.md addition is mostly rationale for something NOT done, the omission is the thing to fix — do the work, then keep CLAUDE.md to the invariant a future session must not break (a few lines, pointing at the code that carries the detail). Long rationale belongs in the code's doc comments, the commit message, or the task, all of which are read on demand.
+
+### [2026-08-20] Filed a task for cleanup that belonged in the work underway
+- **What went wrong**: While finishing E-2002 I filed E-2004 for pruning the duplicate project rows the bug had already created, rather than fixing them in the same change.
+- **Why**: I read the spawn handoff's "otherwise file it (`--cleans-up E-NNN`)" as a licence to file, and skipped the test that precedes it — "could this reasonably be done now, inside the work already underway?" — which was plainly yes. ED-1550 governs regardless of what the handoff says: agents must close more than they file, and the default response to a finding is to tell the user in chat.
+- **Rule**: Before filing anything, answer ED-1550's questions out loud: is this doable inside the current change? is it evidence for an existing task? If either is yes, do not file. The handoff's filing clause is the last branch, not the first.
+
+### [2026-08-20] Overstated migration difficulty to justify skipping it
+- **What went wrong**: I argued a data migration was too risky to ship — UNIQUE on `projects.path` would collide, and merging duplicates meant repointing every FK — without estimating it. It turned out to be ~150 lines, with referencing columns discovered generically via `PRAGMA foreign_key_list`.
+- **Why**: I reasoned from the shape of the obstacle rather than from its size, and let "destructive to run unattended" stand in for a real assessment.
+- **Rule**: Never declare work too risky or too large without sketching it first. Name the concrete steps and their rough size; if the sketch is small, do it. "Repointing FKs is hard" is a claim that must be checked against the schema, not asserted.
