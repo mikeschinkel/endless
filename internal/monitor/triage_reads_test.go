@@ -2,6 +2,8 @@ package monitor
 
 import (
 	"database/sql"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -157,14 +159,51 @@ func TestTriageContext_RootTaskHasNoParentOrSiblings(t *testing.T) {
 	if len(ctx.Siblings) != 0 {
 		t.Errorf("root task got siblings: %v", ctx.Siblings)
 	}
-	if ctx.Project != "alpha" || ctx.ProjectRoot != "/tmp/alpha" {
-		t.Errorf("project: got %q/%q want alpha//tmp/alpha", ctx.Project, ctx.ProjectRoot)
+	// ProjectRoot comes back RESOLVED, not as stored (E-2011). /tmp is a
+	// symlink into /private on macOS, so this is deliberately compared against
+	// the accessor rather than the seeded literal.
+	wantRoot, err := ResolvedProjectPath("/tmp/alpha")
+	if err != nil {
+		t.Fatalf("ResolvedProjectPath: %v", err)
+	}
+	if ctx.Project != "alpha" || ctx.ProjectRoot != wantRoot {
+		t.Errorf("project: got %q/%q want alpha/%s", ctx.Project, ctx.ProjectRoot, wantRoot)
 	}
 	if ctx.Status != "untriaged" {
 		t.Errorf("status: got %q want untriaged", ctx.Status)
 	}
 	if ctx.HasText {
 		t.Error("has_text true for a task with no plan")
+	}
+}
+
+// TestTriageContext_ProjectRootIsResolved is the E-2011 regression. This value
+// goes straight to `endless-go event --project-root`, which uses it as a git
+// work tree and as the parent of `.endless/db-ledger/`. When it carried the
+// column verbatim, every triage run on a project under $HOME died with
+// `project root "~/Projects/endless" is not a git work tree` and left the task
+// untriaged — the ledger write failing, not the model call.
+func TestTriageContext_ProjectRootIsResolved(t *testing.T) {
+	db := triageTestDB(t)
+	home := withTempHome(t)
+	root := filepath.Join(home, "Projects", "acme")
+	if err := os.MkdirAll(root, 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if _, err := db.Exec(
+		"INSERT INTO projects (id, name, path) VALUES (9, 'acme', '~/Projects/acme')",
+	); err != nil {
+		t.Fatalf("seed project: %v", err)
+	}
+	seedTriageTask(t, db, 90, 9, "a task", "untriaged", "2026-08-01T00:00:00", nil)
+
+	ctx, err := triageContext(db, 90)
+	if err != nil {
+		t.Fatalf("triageContext: %v", err)
+	}
+	if ctx.ProjectRoot != root {
+		t.Errorf("ProjectRoot = %q, want %q (resolved, not the stored tilde)",
+			ctx.ProjectRoot, root)
 	}
 }
 

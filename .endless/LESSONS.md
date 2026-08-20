@@ -2482,3 +2482,22 @@ widespread pattern. A two-link chain that would have become three.
 - **Compounding it**: when asked "why did you mention that?", the answer is the
   answer. Don't re-litigate the reasoning, re-cite the policy, or re-justify the
   original note.
+
+## A source-level guard must be tested against the shapes that exist, not just proved non-vacuous (E-2011)
+
+- **What went wrong**: I added `TestEveryProjectsPathReaderResolves` to catch
+  readers of `projects.path` that forget to resolve it. I checked it was
+  non-vacuous — it found 10 call sites, all covered — and shipped it. It matched
+  line by line, so it could not see a query split across concatenated string
+  literals. `monitor/triage_reads.go` selected `p.path` through a multi-line
+  `JOIN projects p`, passed the raw `~/Projects/endless` to `endless-go event
+  --project-root`, and every triage run failed with "is not a git work tree".
+  The guard passed the whole time.
+- **The rule**: "it finds N things and they are all fine" proves the walk runs,
+  not that the matcher is right. Before trusting a source-level guard, (a)
+  enumerate the real shapes of the thing in the tree — multi-line SQL, nested
+  subqueries, concatenated literals — and confirm the matcher sees each, and (b)
+  break the real call site and watch the guard fail. I did (b) only after the
+  bug shipped, and it took one command.
+- **Corollary**: a guard that silently under-reports is worse than no guard,
+  because it converts "nobody checked" into "something checked and it's fine".

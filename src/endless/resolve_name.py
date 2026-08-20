@@ -3,6 +3,7 @@
 import click
 
 from endless import db
+from endless.project_path import stored
 
 
 def resolve_project(name: str, path_hint: str | None = None) -> dict:
@@ -35,7 +36,7 @@ def resolve_project(name: str, path_hint: str | None = None) -> dict:
 
     # Multiple matches — need disambiguation
     if not path_hint:
-        paths = [r["path"] for r in rows]
+        paths = [stored(r["path"]) for r in rows]
         path_list = "\n  ".join(paths)
         raise click.ClickException(
             f"Multiple projects with name '{name}':\n"
@@ -56,7 +57,7 @@ def resolve_project(name: str, path_hint: str | None = None) -> dict:
             f"matching path '{path_hint}'"
         )
     if len(matches) > 1:
-        paths = [r["path"] for r in matches]
+        paths = [stored(r["path"]) for r in matches]
         path_list = "\n  ".join(paths)
         raise click.ClickException(
             f"Path hint '{path_hint}' still matches "

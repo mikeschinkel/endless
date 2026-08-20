@@ -1,11 +1,10 @@
 """List command logic."""
 
-from pathlib import Path
-
 import click
 from tabulate import tabulate
 
 from endless import db
+from endless.project_path import stored
 
 STATUS_COLORS = {
     "active": "green",
@@ -52,7 +51,6 @@ def list_projects(status_filter: str | None = None, group: bool = False):
             )
         return
 
-    home = str(Path.home())
     current_group = None
     table_rows = []
 
@@ -73,7 +71,9 @@ def list_projects(status_filter: str | None = None, group: bool = False):
                 click.echo(click.style("[ungrouped]", bold=True, dim=True))
             current_group = grp
 
-        short_path = row["path"].replace(home, "~")
+        # Display the STORED form, so a row still written absolute renders
+        # like every other one (E-2011).
+        short_path = stored(row["path"])
 
         status_str = click.style(
             row["status"],

@@ -307,6 +307,25 @@ tmpl_out="$( ( cd "$HOMEBASE" && printf '{}' | "$EGO" --config-dir "$DBDIR" \
 assert_contains "Go: \`template render --project\` resolves the row to a real root" \
     "e2011-template-rendered" "$tmpl_out"
 
+section "A \`~/…\` row handed to a command that shells out with it"
+
+# The regression this section exists for. \`endless-go session-query
+# triage-context\` puts the project root on the wire, and the Python triage path
+# passes it straight to \`endless-go event --project-root\`, which uses it as a
+# git work tree. Carrying the column verbatim made every triage run die with
+# \`project root "~/Projects/endless" is not a git work tree\` and leave the task
+# untriaged — a ledger write failing, nowhere near the code that read the row.
+ctx_root="$( ( cd "$HOMEBASE" && "$EGO" --config-dir "$DBDIR" \
+    session-query triage-context --id 7211 ) 2>/dev/null \
+    | python3 -c 'import json,sys; print(json.load(sys.stdin)["project_root"])' )"
+
+assert_eq "the triage context carries the RESOLVED root, not the stored tilde" \
+    "$REAL" "$ctx_root"
+
+# ...and it is a real work tree, which is the property git actually needs.
+assert_eq "...which git accepts as a work tree" \
+    "true" "$(git -C "$ctx_root" rev-parse --is-inside-work-tree 2>&1)"
+
 # ─── the upgrade path ───────────────────────────────────────────────────────
 
 section "A ledger repaired by E-2002 but not yet by E-2011"

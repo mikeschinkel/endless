@@ -880,10 +880,18 @@ func TestProjectLookupNeverNormalizesWithAbsAlone(t *testing.T) {
 // hazard is not "did you resolve symlinks" any more, it is "did you resolve at
 // all", and it lands in whichever command reads the column next.
 //
-// The rule it enforces: a Go file that SELECTs `path` from `projects` must name
+// The rule it enforces: a Go file that SELECTs `projects.path` must name
 // ResolvedProjectPath or StoredProjectPath somewhere in it. Deliberately
-// file-granular — pinning it any tighter would mean parsing Go, and the point
-// is to make the omission visible, not to prove the use is correct.
+// file-granular — pinning it tighter would mean parsing Go, and the point is to
+// make the omission visible, not to prove the use is correct.
+//
+// It scans a NORMALIZED blob, not raw lines. The first cut of this guard
+// matched line by line and so saw only single-line queries; it passed while
+// monitor/triage_reads.go selected `p.path` through a multi-line
+// `JOIN projects p`, shipped the raw column into `endless-go event
+// --project-root`, and made every triage run fail with `project root
+// "~/Projects/endless" is not a git work tree`. Collapsing Go string
+// concatenation and newlines first is what closes that.
 func TestEveryProjectsPathReaderResolves(t *testing.T) {
 	root := filepath.Join("..", "..")
 	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
@@ -913,14 +921,10 @@ func TestEveryProjectsPathReaderResolves(t *testing.T) {
 		if strings.Contains(text, "ResolvedProjectPath") || strings.Contains(text, "StoredProjectPath") {
 			return nil
 		}
-		for i, line := range strings.Split(text, "\n") {
-			if !selectsProjectsPath(line) {
-				continue
-			}
-			t.Errorf("%s:%d reads projects.path but never resolves it: %s\n"+
+		if query, found := selectsProjectsPath(text); found {
+			t.Errorf("%s reads projects.path but never resolves it:\n  %s\n"+
 				"a stored path is `~/…`; pass it through monitor.ResolvedProjectPath "+
-				"before it touches the filesystem (E-2011)",
-				path, i+1, strings.TrimSpace(line))
+				"before it touches the filesystem (E-2011)", path, query)
 		}
 		return nil
 	})
@@ -929,21 +933,145 @@ func TestEveryProjectsPathReaderResolves(t *testing.T) {
 	}
 }
 
-// selectsProjectsPath reports whether one source line is a SELECT of the `path`
-// column from `projects`. Line-granular on purpose: a query split across string
-// concatenations is missed rather than guessed at, which costs a false negative
-// and never a false positive.
-func selectsProjectsPath(line string) bool {
-	upper := strings.ToUpper(line)
-	sel := strings.Index(upper, "SELECT ")
-	from := strings.Index(upper, "FROM PROJECTS")
-	if sel < 0 || from < sel {
-		return false
+// selectsProjectsPath reports whether source contains a SELECT that reads the
+// `path` column of `projects`, and returns the matching query for the message.
+//
+// Analyzing SQL means looking at the SQL, not at the Go around it. Working on
+// raw source went wrong twice: the first cut matched line by line and could not
+// see a query split across concatenated literals — which is exactly how
+// triage_reads.go hid a `JOIN projects p` selecting `p.path`, shipped the raw
+// column into `endless-go event --project-root`, and made every triage run fail
+// with `project root "~/Projects/endless" is not a git work tree`. Treating the
+// whole file as SQL then makes `db.Query("SELECT …")` itself look like a
+// parenthesized subquery. Pulling the literals out first leaves clean SQL.
+//
+// Each SELECT's window ends at the next SELECT, so a neighbouring query cannot
+// lend it a `projects` it does not reference; subqueries are flattened away
+// first so that cut lands between statements rather than inside one.
+func selectsProjectsPath(source string) (string, bool) {
+	sql := flattenSubqueries(collapseSpace(sqlLiterals(source)))
+	upper := strings.ToUpper(sql)
+	starts := []int{}
+	for i := 0; ; {
+		j := strings.Index(upper[i:], "SELECT ")
+		if j < 0 {
+			break
+		}
+		starts = append(starts, i+j)
+		i += j + len("SELECT ")
 	}
-	for _, col := range strings.Split(upper[sel+len("SELECT "):from], ",") {
-		if strings.TrimSpace(col) == "PATH" {
-			return true
+	for i, sel := range starts {
+		end := len(sql)
+		if i+1 < len(starts) {
+			end = starts[i+1]
+		}
+		window := sql[sel:end]
+		windowUpper := upper[sel:end]
+		if !strings.Contains(windowUpper, "FROM PROJECTS") &&
+			!strings.Contains(windowUpper, "JOIN PROJECTS") {
+			continue
+		}
+		from := strings.Index(windowUpper, " FROM ")
+		if from < 0 {
+			continue
+		}
+		for _, col := range strings.Split(window[len("SELECT "):from], ",") {
+			col = strings.ToLower(strings.TrimSpace(col))
+			if col == "path" || strings.HasSuffix(col, ".path") ||
+				col == "*" || strings.HasSuffix(col, ".*") {
+				if len(window) > 120 {
+					window = window[:120]
+				}
+				return strings.TrimSpace(window), true
+			}
 		}
 	}
-	return false
+	return "", false
+}
+
+// sqlLiterals returns every string-literal body in source, joined by spaces, so
+// a statement split across concatenated literals reads as one statement.
+// Comments are skipped — prose about a query is not a query. Two unrelated
+// literals may run together, which can only over-report; over-reporting costs
+// an import, under-reporting costs a shipped bug.
+func sqlLiterals(source string) string {
+	var out strings.Builder
+	for i := 0; i < len(source); {
+		switch {
+		case strings.HasPrefix(source[i:], "//"):
+			j := strings.IndexByte(source[i:], '\n')
+			if j < 0 {
+				return out.String()
+			}
+			i += j
+		case strings.HasPrefix(source[i:], "/*"):
+			j := strings.Index(source[i+2:], "*/")
+			if j < 0 {
+				return out.String()
+			}
+			i += 2 + j + 2
+		case source[i] == '`':
+			j := strings.IndexByte(source[i+1:], '`')
+			if j < 0 {
+				return out.String()
+			}
+			out.WriteString(source[i+1 : i+1+j])
+			out.WriteByte(' ')
+			i += 1 + j + 1
+		case source[i] == '"' || source[i] == '\'':
+			quote := source[i]
+			j := i + 1
+			for j < len(source) && source[j] != quote && source[j] != '\n' {
+				if source[j] == '\\' {
+					j++
+				}
+				j++
+			}
+			if j < len(source) && source[j] == quote {
+				out.WriteString(source[i+1 : j])
+				out.WriteByte(' ')
+			}
+			i = j + 1
+		default:
+			i++
+		}
+	}
+	return out.String()
+}
+
+// collapseSpace reduces every run of whitespace to a single space.
+func collapseSpace(s string) string {
+	return strings.Join(strings.Fields(s), " ")
+}
+
+// flattenSubqueries flattens parentheses, deleting any group that contains its
+// own SELECT. Innermost group first, and non-SELECT groups are unwrapped rather
+// than dropped, so a subquery containing a function call
+// (`(SELECT count(*) FROM …)`) becomes innermost in turn and is deleted whole.
+// Matching SELECT-bearing groups directly would miss exactly that one, which is
+// the shape actually in the tree.
+func flattenSubqueries(sql string) string {
+	for {
+		open := -1
+		closed := -1
+		for i := 0; i < len(sql); i++ {
+			switch sql[i] {
+			case '(':
+				open = i
+			case ')':
+				closed = i
+			}
+			if closed >= 0 {
+				break
+			}
+		}
+		if open < 0 || closed < 0 || closed < open {
+			return sql
+		}
+		body := sql[open+1 : closed]
+		if strings.Contains(strings.ToUpper(body), "SELECT") {
+			body = ""
+		}
+		sql = sql[:open] + " " + body + " " + sql[closed+1:]
+	}
 }

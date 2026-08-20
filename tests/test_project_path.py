@@ -290,6 +290,96 @@ def test_match_still_finds_a_row_left_absolute(isolated_env, temp_home):
 
 # ─── the guard ──────────────────────────────────────────────────────────────
 
+def _sql_literals(source: str) -> str:
+    """Every string-literal body in `source`, concatenated.
+
+    Analyzing SQL means looking at the SQL, not at the Python around it.
+    Working on raw source went wrong twice: the first cut matched line by line
+    and could not see a query split across adjacent literals, and treating the
+    whole file as SQL makes `db.query("SELECT ...")` itself look like a
+    parenthesized subquery. Pulling the literals out first leaves clean SQL,
+    where the rest of this is straightforward.
+
+    Comments are dropped — prose about a query is not a query. Literals are
+    joined by a space, so adjacent literals forming one statement read as one
+    statement; two unrelated literals may also run together, which can only
+    over-report. Over-reporting costs an import; under-reporting costs a
+    shipped bug.
+    """
+    triples = ('"' * 3, "'" * 3)
+    out: list[str] = []
+    i, n = 0, len(source)
+    while i < n:
+        ch = source[i]
+        if ch == "#":
+            j = source.find("\n", i)
+            i = n if j < 0 else j
+            continue
+        if source.startswith(triples, i):
+            delim = source[i:i + 3]
+            j = source.find(delim, i + 3)
+            if j < 0:
+                break
+            out.append(source[i + 3:j])
+            i = j + 3
+            continue
+        if ch in "\"'":
+            j = i + 1
+            while j < n and source[j] != ch:
+                j += 2 if source[j] == "\\" else 1
+            out.append(source[i + 1:j])
+            i = j + 1
+            continue
+        i += 1
+    return " ".join(out)
+
+
+def _strip_subqueries(sql: str) -> str:
+    """Flatten parentheses, deleting any group that contains its own SELECT.
+
+    Without this, an inline scalar subquery inside a column list — as
+    `endless project list` has — hides the outer query's `FROM projects` behind
+    a nearer SELECT and the outer query goes unseen.
+
+    Innermost group first, and non-SELECT groups are unwrapped rather than
+    dropped, so a subquery containing a function call (`(SELECT count(*) ...)`)
+    becomes innermost in turn and is deleted whole. Matching SELECT-bearing
+    groups directly would miss exactly that one, which is the shape actually in
+    the tree.
+    """
+    group = re.compile(r"\(([^()]*)\)")
+    while True:
+        m = group.search(sql)
+        if not m:
+            return sql
+        body = "" if re.search(r"\bSELECT\b", m.group(1), re.IGNORECASE) else m.group(1)
+        sql = sql[:m.start()] + " " + body + " " + sql[m.end():]
+
+
+def _selects_projects_path(source: str) -> str | None:
+    """The first query in `source` that reads `projects.path`, else None.
+
+    Each SELECT's window ends at the next SELECT, so a neighbouring query
+    cannot lend it a `projects` it does not reference; subqueries are stripped
+    first so that cut lands between statements rather than inside one.
+    """
+    sql = _strip_subqueries(re.sub(r"\s+", " ", _sql_literals(source)))
+    starts = [m.start() for m in re.finditer(r"\bSELECT\b", sql, re.IGNORECASE)]
+    for i, sel in enumerate(starts):
+        end = starts[i + 1] if i + 1 < len(starts) else len(sql)
+        window = sql[sel:end]
+        if not re.search(r"\b(FROM|JOIN)\s+projects\b", window, re.IGNORECASE):
+            continue
+        head = re.split(r"\s+FROM\s+", window, maxsplit=1, flags=re.IGNORECASE)
+        if len(head) < 2:
+            continue
+        for col in head[0][len("SELECT"):].split(","):
+            col = col.strip().lower()
+            if col == "path" or col.endswith(".path") or col == "*" or col.endswith(".*"):
+                return window[:120].strip()
+    return None
+
+
 def test_every_projects_path_reader_normalizes():
     """The Python companion to Go's TestEveryProjectsPathReaderResolves.
 
@@ -298,25 +388,21 @@ def test_every_projects_path_reader_normalizes():
     the hazard is no longer "did you resolve symlinks", it is "did you resolve
     at all", and it lands in whichever command reads the column next.
 
-    The rule: a module that SELECTs `path` from `projects` must import from
-    `endless.project_path`. File-granular on purpose — pinning it tighter would
-    mean parsing Python, and the point is to make the omission visible, not to
-    prove the use is correct.
+    The rule: a module that SELECTs `projects.path` must import from
+    `endless.project_path` — `resolved()` when the value touches the
+    filesystem, `stored()` when it is displayed or compared. File-granular on
+    purpose: pinning it tighter would mean parsing Python, and the point is to
+    make the omission visible, not to prove the use is correct.
     """
     src_dir = Path(__file__).resolve().parent.parent / "src" / "endless"
-    select_path = re.compile(
-        r"SELECT\s+(?P<cols>[^\n]*?)\s+FROM\s+projects", re.IGNORECASE
-    )
     offenders = []
     for module in sorted(src_dir.glob("*.py")):
         text = module.read_text()
         if "endless.project_path" in text or module.name == "project_path.py":
             continue
-        for m in select_path.finditer(text):
-            cols = [c.strip().split(".")[-1] for c in m.group("cols").split(",")]
-            if "path" in cols:
-                line = text[: m.start()].count("\n") + 1
-                offenders.append(f"{module.name}:{line}: {m.group(0)}")
+        query = _selects_projects_path(text)
+        if query:
+            offenders.append(f"{module.name}: {query}")
     assert not offenders, (
         "these read projects.path without importing endless.project_path; "
         "a stored path is `~/...` and must go through resolved() before it "

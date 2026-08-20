@@ -57,10 +57,18 @@ type TriageDecision struct {
 type TriageContext struct {
 	TaskID  int64  `json:"task_id"`
 	Project string `json:"project"`
-	// ProjectRoot is the project's registered path. It is on the wire so the
-	// Python caller can pass it to emit_event directly; without it emit_event
-	// looks the path up itself through Python's `db.query`, which would put
-	// SQLite back on the triage path this feature exists to keep off it.
+	// ProjectRoot is the project's registered path, in RESOLVED form. It is on
+	// the wire so the Python caller can pass it to emit_event directly; without
+	// it emit_event looks the path up itself through Python's `db.query`, which
+	// would put SQLite back on the triage path this feature exists to keep off
+	// it.
+	//
+	// Resolved, not as stored (E-2011): this value is handed to
+	// `endless-go event --project-root`, which uses it as a git work tree and
+	// as the parent of `.endless/db-ledger/`. The column normally holds
+	// `~/Projects/acme`, and git does not expand a tilde — it reported
+	// `project root "~/Projects/endless" is not a git work tree` and left the
+	// task untriaged.
 	ProjectRoot string `json:"project_root"`
 	Title       string `json:"title"`
 	Description string `json:"description"`
@@ -182,6 +190,9 @@ func triageContext(db *sql.DB, taskID int64) (TriageContext, error) {
 	}
 	if err != nil {
 		return ctx, fmt.Errorf("read task E-%d: %w", taskID, err)
+	}
+	if ctx.ProjectRoot, err = ResolvedProjectPath(ctx.ProjectRoot); err != nil {
+		return ctx, fmt.Errorf("resolving project root for E-%d: %w", taskID, err)
 	}
 
 	ctx.Siblings = []string{}

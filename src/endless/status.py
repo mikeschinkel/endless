@@ -5,7 +5,7 @@ from pathlib import Path
 import click
 
 from endless import db
-from endless.project_path import project_name_for_cwd
+from endless.project_path import project_name_for_cwd, stored
 
 
 def show_status(name: str | None = None):
@@ -32,8 +32,9 @@ def show_status(name: str | None = None):
         raise click.ClickException(f"No project found with name '{name}'")
 
     p = row[0]
-    home = str(Path.home())
-    short_path = p["path"].replace(home, "~")
+    # Display the STORED form, so a row still written absolute renders like
+    # every other one (E-2011).
+    short_path = stored(p["path"])
 
     # Header
     click.echo()
