@@ -2624,3 +2624,36 @@ decided design wrongly — and I had promoted it to source of truth.
 Hierarchy: an ACCEPTED decision is authoritative because Mike approved it. A
 `proposed` decision is not — and I spent this audit treating proposed ED-1564 as
 settled. Code comments are evidence about code, nothing more.
+
+### [2026-08-20] I filed a task to build something that already ships (E-1817)
+
+I filed E-2015 — "decide how to enforce that a refused worktree land is a STOP"
+— listing "a code gate" as an option to design. `endless task add` printed, in
+response to that very command, "Does the one you just filed share a root cause
+with any of them? File the cause, not each symptom." I did not check. Mike had
+to ask.
+
+**E-1012 is `confirmed`.** A PreToolUse hook (`blockCommitOnMainIfApplicable`,
+internal/hookcmd/claude.go:1230) already denies `git commit` from main's working
+tree in a Claude session. So the gate is not a design question — it is shipped,
+and a session got past it anyway. The real question was why, and I would never
+have asked it.
+
+Search before filing, always, and search for the MECHANISM, not just the title.
+"commit to main" returned nothing; "commit on main" surfaced E-1013, whose
+description names E-1012 in its first sentence. One failed search is not
+evidence of absence.
+
+### [2026-08-20] A type describes the task, not how we treated it (E-1817)
+
+I reported that E-1817's type "didn't stick" as a brainstorm — inventing a
+system failure out of Mike's remark that we had treated it as one.
+
+Mike: "Nothing TURNED it into a brainstorm other than our behavior. It is still
+listed as a research task. That's like me saying 'My Porsche 911 isn't an
+off-road car, but I took it off-road anyway.' Me taking it off road didn't make
+it an off-road vehicle, and it being a street car didn't stop me from taking it
+off road."
+
+When a human describes what people DID, do not translate it into a claim about
+what the system RECORDED, and do not go looking for a bug in the recording.
