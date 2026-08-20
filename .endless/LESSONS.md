@@ -2501,3 +2501,18 @@ widespread pattern. A two-link chain that would have become three.
   bug shipped, and it took one command.
 - **Corollary**: a guard that silently under-reports is worse than no guard,
   because it converts "nobody checked" into "something checked and it's fine".
+
+### [2026-08-20] A minimization deliverable must itself be minimal (E-1817)
+
+What I did wrong: audited CLAUDE.md for verbosity and delivered a 270-line
+outcome plus a ~400-word reply. Mike had to say "that outcome is far too much to
+read and so is the wall of text above." The work product contradicted the work.
+
+Also: I cut 73% and called it done without asking whether 73% was the goal. The
+task said "minimized"; Mike's actual goal was "really shrink a dumping ground."
+Those are different targets, and I optimized for the first without checking.
+
+The pattern: when the task IS reducing something, the deliverable is judged by
+the same standard as the subject. An audit of bloat written at length has
+already failed its own thesis. And a percentage is not a goal — ask what "small
+enough" means before deciding you hit it.
