@@ -99,6 +99,9 @@ W() { E sql "$1" --write >/dev/null 2>&1; }
 
 # HOOK SESSION_ID: feed one UserPromptSubmit payload to the candidate hook and
 # print the additionalContext it injects (empty when it injects nothing).
+# E-2001: that is hookSpecificOutput.additionalContext, and only there — the
+# bare top-level field this used to read was parsed and discarded by the
+# harness, so every notice it reported as delivered had in fact been dropped.
 # Driving the real binary on stdin is the point — the delivery half only exists
 # inside the hook, and a unit test cannot observe it.
 # CLAUDE_CODE_ENTRYPOINT=cli is REQUIRED, not decoration (E-1962): the hook is
@@ -116,7 +119,7 @@ raw = sys.stdin.read().strip()
 if not raw:
     sys.exit(0)
 try:
-    print(json.loads(raw).get("additionalContext", ""))
+    print(json.loads(raw).get("hookSpecificOutput", {}).get("additionalContext", ""))
 except Exception:
     print(raw)'
 }

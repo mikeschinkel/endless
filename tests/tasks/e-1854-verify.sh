@@ -126,13 +126,20 @@ mkdir -p "${CFG_DIR}" "${PROJ_DIR}"
 # XDG_CONFIG_HOME and TMUX_PANE are stripped: the first would route config/log
 # writes at the caller's sandbox, and the second would make the probe collide
 # with — and invalidate — the live session occupying that tmux pane.
+#
+# E-2001: reads hookSpecificOutput.additionalContext, and ONLY there. That is
+# the sole shape the harness honors; the bare top-level field this used to read
+# was parsed and discarded, so a probe that still accepted it would report a
+# guide pointer the agent never received. Deliberately not tolerant of both —
+# tolerance is what would let the shape regress unnoticed.
 fire() { # <session_id> <event> [source]
     printf '{"session_id":"%s","cwd":"%s","hook_event_name":"%s","source":"%s","prompt":"probe"}\n' \
         "$1" "${PROJ_DIR}" "$2" "${3:-startup}" |
         env -u XDG_CONFIG_HOME -u TMUX_PANE "${GOBIN}" --config-dir "${CFG_DIR}" hook claude 2>/dev/null |
         python3 -c 'import json,sys
 raw = sys.stdin.read().strip()
-sys.stdout.write(json.loads(raw).get("additionalContext", "") if raw else "")'
+hso = json.loads(raw).get("hookSpecificOutput", {}) if raw else {}
+sys.stdout.write(hso.get("additionalContext", ""))'
 }
 
 # 1. Brand-new downstream project, no tasks filed: the first-run product user.

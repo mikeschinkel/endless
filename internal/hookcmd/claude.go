@@ -71,9 +71,57 @@ type toolInputBash struct {
 	Command string `json:"command"`
 }
 
-// hookResponse is the JSON we return on stdout for Claude to read.
-type hookResponse struct {
-	AdditionalContext string `json:"additionalContext,omitempty"`
+// contextInjection is THE shape for handing Claude a string of context, on
+// every event that accepts one: `additionalContext` nested under
+// `hookSpecificOutput` alongside the name of the event that fired.
+//
+// There is no second accepted shape, and this is the whole of E-2001. Until
+// that task, SessionStart and UserPromptSubmit emitted a bare top-level
+// `{"additionalContext":"…"}` — and every word Endless injected on those two
+// events had been silently discarded since the day it was written: the guide
+// pointer, the one-shot task list, the per-turn active-task line, E-1917 change
+// notices, the pending-message banner and the report-channel rule. PostToolUse
+// arrived the whole time, because it already nested.
+//
+// Why the bare shape failed SILENTLY, which is what made it survive so long:
+// the harness picks how to read a hook's stdout from its first character. A
+// leading `{` means "parse as JSON", so the plain-text-stdout channel that
+// UserPromptSubmit and SessionStart additionally support is NOT a fallback for
+// a JSON document the harness fails to recognise. The object parsed, carried no
+// field the event honors, and was dropped — no error, no transcript entry, exit
+// 0. Nothing downstream could tell "emitted" from "delivered".
+//
+// Contract: Claude Code hooks reference, "Add context for Claude" ("Return
+// `additionalContext` inside `hookSpecificOutput` alongside the event name")
+// and "Exit code 0" (the first-character parsing rule).
+type contextInjection struct {
+	HookSpecificOutput hookContextOutput `json:"hookSpecificOutput"`
+}
+
+type hookContextOutput struct {
+	HookEventName     string `json:"hookEventName"`
+	AdditionalContext string `json:"additionalContext"`
+}
+
+// injectContext builds an injection for one event.
+//
+// Call sites inside an event handler pass payload.EventName rather than a
+// literal. The bug this replaces was born of one response type shared across
+// four different events; echoing the event that actually fired makes a handler
+// structurally incapable of labelling its output with the wrong one.
+func injectContext(event, ctx string) contextInjection {
+	return contextInjection{
+		HookSpecificOutput: hookContextOutput{
+			HookEventName:     event,
+			AdditionalContext: ctx,
+		},
+	}
+}
+
+// writeContextInjection encodes one injection to stdout. The hook's stdout is a
+// single JSON document, so at most one of these may be written per invocation.
+func writeContextInjection(event, ctx string) error {
+	return json.NewEncoder(os.Stdout).Encode(injectContext(event, ctx))
 }
 
 // preToolUseBlock is the JSON block response for PreToolUse (E-1542). decision
@@ -83,14 +131,9 @@ type hookResponse struct {
 // E-1542 §4/§5: the decision+additionalContext interaction needs live
 // verification, and the always-works fallback is blockToolUse (stderr + exit 2).
 type preToolUseBlock struct {
-	Decision           string               `json:"decision"`
-	Reason             string               `json:"reason"`
-	HookSpecificOutput preToolUseHookOutput `json:"hookSpecificOutput"`
-}
-
-type preToolUseHookOutput struct {
-	HookEventName     string `json:"hookEventName"`
-	AdditionalContext string `json:"additionalContext"`
+	Decision           string            `json:"decision"`
+	Reason             string            `json:"reason"`
+	HookSpecificOutput hookContextOutput `json:"hookSpecificOutput"`
 }
 
 func runClaude(args []string) error {
@@ -266,9 +309,7 @@ func runClaude(args []string) error {
 		if refusal, err := handleWorktreeAdoption(projectID, payload); err != nil {
 			return fmt.Errorf("worktree adoption: %w", err)
 		} else if refusal != "" {
-			return json.NewEncoder(os.Stdout).Encode(hookResponse{
-				AdditionalContext: refusal,
-			})
+			return writeContextInjection(payload.EventName, refusal)
 		}
 		// Cwd-based auto-bind fallback (E-1291 / E-1700). Runs after
 		// worktree adoption so a refused session is never bound. See
@@ -440,7 +481,7 @@ func handleTaskContextInjection(projectID int64, isRegistered bool, payload clau
 	if combined == "" {
 		return nil
 	}
-	return json.NewEncoder(os.Stdout).Encode(hookResponse{AdditionalContext: combined})
+	return writeContextInjection(payload.EventName, combined)
 }
 
 // composeSessionStartContext prepends the report-channel coverage rule to the
@@ -511,9 +552,7 @@ func handleUserPromptSubmit(projectID int64, payload claudePayload, sigilNotice 
 	if len(parts) == 0 {
 		return nil
 	}
-	return json.NewEncoder(os.Stdout).Encode(hookResponse{
-		AdditionalContext: strings.Join(parts, "\n\n"),
-	})
+	return writeContextInjection(payload.EventName, strings.Join(parts, "\n\n"))
 }
 
 // deliverNotices drains this session's undelivered change notices (E-1917) and
@@ -644,28 +683,10 @@ const reportRelayInstruction = "You just ran `endless task report`. Its output "
 	"send the new output instead. `endless task report --raw` prints your " +
 	"original draft unchanged if you need to see what was removed."
 
-// postToolUseResponse carries a PostToolUse additionalContext injection. Unlike
-// the top-level hookResponse.AdditionalContext used on SessionStart /
-// UserPromptSubmit, PostToolUse additionalContext must be nested under
-// hookSpecificOutput with the event name (Claude Code hooks contract).
-type postToolUseResponse struct {
-	HookSpecificOutput postToolUseHookOutput `json:"hookSpecificOutput"`
-}
-
-type postToolUseHookOutput struct {
-	HookEventName     string `json:"hookEventName"`
-	AdditionalContext string `json:"additionalContext"`
-}
-
 // reportRelayResponse builds the PostToolUse reinforcement emitted after a
 // `task report` run. Pure (no I/O) so the response shape is unit-testable.
-func reportRelayResponse() postToolUseResponse {
-	return postToolUseResponse{
-		HookSpecificOutput: postToolUseHookOutput{
-			HookEventName:     "PostToolUse",
-			AdditionalContext: reportRelayInstruction,
-		},
-	}
+func reportRelayResponse() contextInjection {
+	return injectContext("PostToolUse", reportRelayInstruction)
 }
 
 // reportRendered reports whether the session now owes a minimized message —
@@ -692,13 +713,8 @@ func reportRendered(sessionID string) bool {
 // claimHandoffResponse wraps a rendered claim handoff (E-1822) in the
 // PostToolUse response shape. Pure (no I/O) so the shape is unit-testable
 // independent of the rendering.
-func claimHandoffResponse(handoff string) postToolUseResponse {
-	return postToolUseResponse{
-		HookSpecificOutput: postToolUseHookOutput{
-			HookEventName:     "PostToolUse",
-			AdditionalContext: handoff,
-		},
-	}
+func claimHandoffResponse(handoff string) contextInjection {
+	return injectContext("PostToolUse", handoff)
 }
 
 func handlePostToolUse(projectID int64, isRegistered bool, payload claudePayload) error {
@@ -772,13 +788,10 @@ func handlePostToolUse(projectID int64, isRegistered bool, payload claudePayload
 		return fmt.Errorf("getting active tasks: %w", err)
 	}
 
-	resp := hookResponse{
-		AdditionalContext: fmt.Sprintf(
-			"Plan file synced to Endless. %d active item(s) tracked.",
-			len(items),
-		),
-	}
-	return json.NewEncoder(os.Stdout).Encode(resp)
+	return writeContextInjection(payload.EventName, fmt.Sprintf(
+		"Plan file synced to Endless. %d active item(s) tracked.",
+		len(items),
+	))
 }
 
 // writeTools are the only tools that require task registration.
@@ -1014,7 +1027,7 @@ func revisitBlockResponse(instruction string) preToolUseBlock {
 	return preToolUseBlock{
 		Decision: "block",
 		Reason:   instruction,
-		HookSpecificOutput: preToolUseHookOutput{
+		HookSpecificOutput: hookContextOutput{
 			HookEventName:     "PreToolUse",
 			AdditionalContext: instruction,
 		},
@@ -1147,13 +1160,10 @@ func handleExitPlanMode(projectID int64, payload claudePayload) error {
 		return fmt.Errorf("getting active tasks: %w", err)
 	}
 
-	resp := hookResponse{
-		AdditionalContext: fmt.Sprintf(
-			"Plan accepted and synced to Endless. %d active item(s) tracked.",
-			len(items),
-		),
-	}
-	return json.NewEncoder(os.Stdout).Encode(resp)
+	return writeContextInjection(payload.EventName, fmt.Sprintf(
+		"Plan accepted and synced to Endless. %d active item(s) tracked.",
+		len(items),
+	))
 }
 
 // gitCommitRe matches common forms of 'git commit' at the start of a command:
