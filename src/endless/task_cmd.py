@@ -31,12 +31,12 @@ PARENT_NONE = 0
 
 
 # Task relation vocabulary (E-957/E-958; informs dropped per E-1003;
-# documents added per E-1007).
+# documents added per E-1007; duplicates added per E-1185).
 # display_name -> (stored_dep_type, swap_source_target)
 # Stored types are active voice (source is the actor): blocks, implements,
-# replaces, documents, cleans_up, reverses, modifies, relates_to. Inverse
-# views (blocked_by, implemented_by, etc.) resolve to the same stored row
-# queried with source/target swapped. The reverses/modifies pair (E-1156)
+# replaces, duplicates, documents, cleans_up, reverses, modifies, relates_to.
+# Inverse views (blocked_by, implemented_by, etc.) resolve to the same stored
+# row queried with source/target swapped. The reverses/modifies pair (E-1156)
 # are decision-to-decision relations; the others are task-to-task or task-
 # to-decision.
 CANONICAL_DEP_TYPES: dict[str, tuple[str, bool]] = {
@@ -46,6 +46,8 @@ CANONICAL_DEP_TYPES: dict[str, tuple[str, bool]] = {
     "implemented_by":  ("implements", True),
     "replaces":        ("replaces",   False),  # source replaces target
     "replaced_by":     ("replaces",   True),
+    "duplicates":      ("duplicates", False),  # source is the redundant filing of target's concern; target is the one kept
+    "duplicated_by":   ("duplicates", True),
     "documents":       ("documents",  False),  # source documents target (records rationale for)
     "documented_by":   ("documents",  True),
     "cleans_up":       ("cleans_up",  False),  # source is post-ship cleanup of target; target does not wait
@@ -57,17 +59,20 @@ CANONICAL_DEP_TYPES: dict[str, tuple[str, bool]] = {
     "relates_to":      ("relates_to", False),  # symmetric
 }
 
-# The 8 canonical stored types (the values in CANONICAL_DEP_TYPES, deduplicated).
+# The 9 canonical stored types (the values in CANONICAL_DEP_TYPES, deduplicated).
 STORED_DEP_TYPES = (
-    "blocks", "implements", "replaces", "documents",
+    "blocks", "implements", "replaces", "duplicates", "documents",
     "cleans_up", "reverses", "modifies", "relates_to",
 )
 
 # Display order for `task show` — actionability descending; symmetric last.
+# `duplicates` sits with `replaces`: both say "this one is not the task to do,
+# that one is", and reading them adjacently is how you tell them apart.
 RELATION_DISPLAY_ORDER = (
     "blocked_by", "blocks",
     "implements", "implemented_by",
     "replaces",   "replaced_by",
+    "duplicates", "duplicated_by",
     "reverses",   "reversed_by",
     "modifies",   "modified_by",
     "documents",  "documented_by",
@@ -83,6 +88,8 @@ RELATION_LABELS = {
     "implemented_by": "Implemented by",
     "replaces":       "Replaces",
     "replaced_by":    "Replaced by",
+    "duplicates":     "Duplicates",
+    "duplicated_by":  "Duplicated by",
     "reverses":       "Reverses",
     "reversed_by":    "Reversed by",
     "modifies":       "Modifies",

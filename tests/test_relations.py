@@ -518,3 +518,121 @@ def test_task_relations_none(isolated_env):
     a = _add_task("A")
     out = _invoke("task", "relations", str(a))
     assert "(none)" in out
+
+
+# ── duplicates / duplicated_by (E-1185) ──────────────────────────────────────
+
+
+def test_link_duplicates_no_swap(isolated_env, monkeypatch):
+    """E-1185: 'duplicates' stores active-voice; source is the redundant filing."""
+    _seed_project_at_cwd(monkeypatch, isolated_env)
+    dupe = _add_task("Add extensions/worktree-init.sh hook")
+    keeper = _add_task("Add post-worktree-create.sh hook")
+    task_cmd.link_tasks(dupe, keeper, "duplicates")
+    rows = list(db.query("SELECT source_id, target_id, dep_type FROM task_deps"))
+    assert rows[0]["source_id"] == dupe
+    assert rows[0]["target_id"] == keeper
+    assert rows[0]["dep_type"] == "duplicates"
+
+
+def test_link_duplicated_by_swaps(isolated_env, monkeypatch):
+    """E-1185: 'duplicated_by' is the inverse view — same row, written from the
+    keeper's side."""
+    _seed_project_at_cwd(monkeypatch, isolated_env)
+    keeper = _add_task("Add post-worktree-create.sh hook")
+    dupe = _add_task("Add extensions/worktree-init.sh hook")
+    # "keeper duplicated_by dupe" → stored as "dupe duplicates keeper"
+    task_cmd.link_tasks(keeper, dupe, "duplicated_by")
+    rows = list(db.query("SELECT source_id, target_id, dep_type FROM task_deps"))
+    assert rows[0]["source_id"] == dupe
+    assert rows[0]["target_id"] == keeper
+    assert rows[0]["dep_type"] == "duplicates"
+
+
+def test_unlink_duplicates(isolated_env, monkeypatch):
+    _seed_project_at_cwd(monkeypatch, isolated_env)
+    dupe = _add_task("Filed twice")
+    keeper = _add_task("Filed first")
+    task_cmd.link_tasks(dupe, keeper, "duplicates")
+    task_cmd.unlink_tasks(dupe, keeper, "duplicates")
+    rows = list(db.query("SELECT * FROM task_deps"))
+    assert rows == []
+
+
+def test_duplicates_in_canonical_registries():
+    """E-1185: registries expose both directions and the stored type."""
+    assert task_cmd.CANONICAL_DEP_TYPES["duplicates"] == ("duplicates", False)
+    assert task_cmd.CANONICAL_DEP_TYPES["duplicated_by"] == ("duplicates", True)
+    assert "duplicates" in task_cmd.STORED_DEP_TYPES
+    assert "duplicates" in task_cmd.RELATION_DISPLAY_ORDER
+    assert "duplicated_by" in task_cmd.RELATION_DISPLAY_ORDER
+    assert task_cmd.RELATION_LABELS["duplicates"] == "Duplicates"
+    assert task_cmd.RELATION_LABELS["duplicated_by"] == "Duplicated by"
+
+
+def test_duplicates_is_its_own_stored_type():
+    """E-1185: the whole point — a duplicate is not a `replaces` and not a
+    `relates_to`. Storing it as either loses the fact."""
+    assert task_cmd.CANONICAL_DEP_TYPES["duplicates"][0] not in (
+        "replaces", "relates_to",
+    )
+    assert task_cmd.STORED_DEP_TYPES.count("duplicates") == 1
+
+
+def test_duplicates_display_order_sits_with_replaces():
+    """E-1185: adjacent to `replaces` — the two are told apart by reading them
+    side by side, and the order is what puts them there."""
+    order = task_cmd.RELATION_DISPLAY_ORDER
+    assert order.index("duplicates") == order.index("replaced_by") + 1
+    assert order.index("duplicated_by") == order.index("duplicates") + 1
+
+
+def test_duplicates_renders_in_links_section(isolated_env):
+    """E-1185: both directions render with their own heading in `task show`."""
+    _seed_project()
+    dupe = _add_task("Filed twice", status="ready")
+    keeper = _add_task("Filed first", status="ready")
+    _add_dep(dupe, keeper, "duplicates")
+
+    assert "Duplicates:" in _invoke("task", "relations", str(dupe))
+    assert "Duplicated by:" in _invoke("task", "relations", str(keeper))
+
+
+def test_duplicates_llm_line(isolated_env):
+    """E-1185: the --llm line carries the directional phrase, not a raw type."""
+    _seed_project()
+    dupe = _add_task("Filed twice")
+    keeper = _add_task("Filed first")
+    _add_dep(dupe, keeper, "duplicates")
+
+    assert f"Links: E-{keeper} (duplicates)" in _invoke(
+        "task", "relations", str(dupe), "--llm")
+    assert f"Links: E-{dupe} (duplicated by)" in _invoke(
+        "task", "relations", str(keeper), "--llm")
+
+
+def test_task_link_help_lists_duplicates():
+    """E-1185: `task link --help` names both directions — the surface the task
+    title calls out. An agent that cannot see the type will not use it."""
+    out = _invoke("task", "link", "--help")
+    assert "duplicates" in out
+    assert "duplicated_by" in out
+
+
+def test_duplicates_rejected_toward_a_decision(isolated_env):
+    """E-1185: task→decision keeps its own narrower vocabulary; `duplicates` is
+    a task↔task relation and must not leak into it."""
+    from click.testing import CliRunner
+
+    from endless.cli import main
+
+    _seed_project()
+    a = _add_task("A")
+    db.execute(
+        "INSERT INTO decisions (id, project_id, title, status, created_at) "
+        "VALUES (9, 1, 'A decision', 'accepted', datetime('now'))"
+    )
+    result = CliRunner().invoke(
+        main, ["task", "link", str(a), "--to", "ED-9", "--type", "duplicates"])
+    assert result.exit_code != 0
+    assert "not legal for task→decision" in result.output

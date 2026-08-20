@@ -2413,7 +2413,8 @@ def task_chat():
 @click.option("--type", "dep_type", required=True,
               help="Relation type — legal set depends on target kind "
                    "(task→task: blocks, blocked_by, implements, implemented_by, "
-                   "replaces, replaced_by, documents, documented_by, "
+                   "replaces, replaced_by, duplicates, duplicated_by, "
+                   "documents, documented_by, "
                    "cleans_up, cleaned_up_by, relates_to; "
                    "task→decision: implements, cleans_up, documents, relates_to)")
 def task_link(source_id, target, dep_type):

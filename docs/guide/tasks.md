@@ -561,15 +561,41 @@ endless task unlink <a> --to <b> --type implements
 | `cleans_up` / `cleaned_up_by` | A handles a loose end discovered while working on B. **This is the canonical "follow-up" link** — use it for follow-up tasks filed mid-stream. (We considered `follows_up` and rejected it in favor of `cleans_up` to keep the vocabulary tight.) |
 | `documents`    | A is a decision that explains B. Auto-created when you pass `--about <task>` to `endless decision add`.              |
 | `replaces`     | A supersedes B. Record it with `task replace B --by A`, which holds B's status if B's work already shipped — `obsolete` is refused there, because superseded is not the same as never happened. |
+| `duplicates` / `duplicated_by` | A and B were filed for the **same concern** — two descriptions of one piece of work, not two pieces. A is the redundant filing; B is the one kept. |
 
 **Quick decision tree:**
 
 - *"B has to be done before A can land"* → `blocks`.
 - *"I noticed an issue while doing B; here's a separate task A to fix it"* → `cleans_up`.
 - *"A is the work and B is the spec/decision behind it"* → `implements` (or `documents` if B is a decision).
+- *"A and B are the same task filed twice"* → `duplicates`.
 - *"They're related, no firm dependency"* → `relates_to`.
 
 If you find yourself reaching for an undocumented type or `relates_to` for everything, that's a signal — surface it to the user.
+
+### `duplicates` vs `replaces` vs `relates_to`
+
+The three are easy to confuse, and picking the wrong one loses the fact you were
+trying to record:
+
+- `replaces` says B **was** the work and A **took over** from it — the concern
+  moved, usually because B's approach was wrong or its scope changed. Two
+  distinct pieces of work, one handing off to the other.
+- `duplicates` says there was only ever **one** piece of work, described twice.
+  Nothing handed off; a second filing simply should not exist.
+- `relates_to` says they share context. It is true of duplicates too, which is
+  why it is the wrong answer — it is true of almost everything, so it records
+  nothing.
+
+Recorded, not enforced: linking `duplicates` changes no status. Close the
+redundant task separately — `obsolete` when it never shipped, and for work that
+already shipped the relation *is* the record, exactly as with `replaces` (see
+the `obsolete` row in [Task statuses](index.md#task-statuses)).
+
+```bash
+endless task link E-986 --to E-1086 --type duplicates    # E-986 is the redundant filing
+endless task link E-1086 --to E-986 --type duplicated_by # same row, written from the keeper's side
+```
 
 ---
 
