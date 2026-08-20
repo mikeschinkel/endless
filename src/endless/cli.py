@@ -22,6 +22,28 @@ SANDBOX_SAFE_SUBCOMMANDS = frozenset({
     "shell-init",  # static stdout, no I/O
 })
 
+# Subcommands exempt from the unsupported-harness refusal (E-1962/E-1997).
+#
+# The banner is advice addressed to an agent that deliberately typed an
+# `endless` command. Anything Endless itself wires into a shell's startup is not
+# that: it runs on every shell the harness spawns, including the one behind
+# every Bash tool call, and the banner goes to stderr — which `$( )` does not
+# capture — so it lands in the output of whatever command that shell was
+# actually spawned to run. There "This command did not run" is a false
+# statement about someone else's command, and "do not retry it, do not work
+# around it" tells the agent to abandon real work.
+#
+# Keep this set to commands that (a) Endless installs into automatic execution
+# and (b) have no side effect for the refusal to withhold. New subcommands
+# inherit the refusal automatically; opt in here only with a one-line
+# justification in the diff.
+HARNESS_EXEMPT_SUBCOMMANDS = frozenset({
+    # `endless setup shell-helpers` appends 'eval "$(endless shell-init)"' to
+    # the user's rc, so this runs on every shell launch. Static stdout, no I/O
+    # (see SANDBOX_SAFE_SUBCOMMANDS above) — nothing to refuse.
+    "shell-init",
+})
+
 
 class TaskIDType(click.ParamType):
     """Click parameter type that accepts task IDs with optional E- prefix.
@@ -478,6 +500,13 @@ def _refuse_unsupported_agent(ctx) -> None:
     kind (session-gated commands failing because there is no tmux pane to bind
     to) rather than the informative kind.
 
+    The one carve-out is HARNESS_EXEMPT_SUBCOMMANDS: commands Endless wires into
+    a shell's startup, which are never the deliberate invocation this banner is
+    written for. Their stderr belongs to whatever the harness spawned that shell
+    to run, and a banner there misreports someone else's command (E-1997). This
+    is not a return to per-command gating — the exempt commands are the ones an
+    agent never types.
+
     Fires only on a harness we can NAME, which is the opposite of how the hooks
     gate — and the asymmetry is deliberate. The hooks allow-list, failing closed,
     because they are enforcement and an unrecognized harness must not be silently
@@ -513,6 +542,9 @@ def _refuse_unsupported_agent(ctx) -> None:
     not run." line — a claim in the same channel as the rest of the message,
     rather than one buried in a number that says the opposite.
     """
+    if ctx.invoked_subcommand in HARNESS_EXEMPT_SUBCOMMANDS:
+        return
+
     from endless import agent_env
 
     harness = agent_env.detect()
@@ -784,6 +816,12 @@ def shell_init():
     helpers regenerate on every shell launch and always reflect the
     current snippet. For a manual install, add that eval line to your
     rc file directly (or, for bash, your ~/.bashrc).
+
+    Because that eval runs on EVERY shell launch, this command is exempt from
+    the unsupported-harness refusal (HARNESS_EXEMPT_SUBCOMMANDS, E-1997) — the
+    banner would otherwise be written to the stderr of every shell the harness
+    spawns. The helpers it prints all call `endless`, so an unsupported harness
+    still gets the banner the moment one is actually used.
     """
     click.echo(_SHELL_INIT_SNIPPET, nl=False)
 

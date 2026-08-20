@@ -280,3 +280,74 @@ def test_refusal_fails_open_for_a_human_at_a_shell(monkeypatch):
     result = _run(monkeypatch, ["guide"])
     assert result.exit_code == 0
     assert "does not support" not in result.output
+
+
+# ─── the refusal must not leak into other commands' output (E-1997) ──────────
+
+
+def test_shell_init_prints_only_its_snippet_on_an_unsupported_harness(monkeypatch):
+    """The reported bug, at its narrowest.
+
+    `endless setup shell-helpers` appends 'eval "$(endless shell-init)"' to the
+    user's rc, so this command runs on EVERY shell the harness launches —
+    including the shell behind every Bash tool call. The banner goes to stderr,
+    which `$( )` does not capture, so it surfaced ahead of the output of an
+    unrelated `gh repo deploy-key add` the user had approved, and again on every
+    terminal opened inside Claude Code Desktop.
+
+    Exact equality, not a substring check: any byte on either stream is a byte
+    that lands in somebody else's tool output.
+    """
+    from endless import cli
+    result = _run(monkeypatch, ["shell-init"], **DESKTOP)
+    assert result.exit_code == 0
+    assert result.output == cli._SHELL_INIT_SNIPPET
+
+
+def test_shell_init_output_is_identical_across_harnesses(monkeypatch):
+    """Whatever the harness, the eval'd snippet is the same static text — so the
+    helpers stay defined and no rc grows a harness-conditional branch."""
+    from endless import cli
+    for vars_ in (DESKTOP, TERMINAL, {}):
+        result = _run(monkeypatch, ["shell-init"], **vars_)
+        assert result.output == cli._SHELL_INIT_SNIPPET, vars_
+
+
+def test_the_rc_line_endless_installs_invokes_an_exempt_subcommand():
+    """Pins the exemption to what the installer actually writes.
+
+    The defect was not "shell-init is special", it was "Endless put an `endless`
+    call into the user's shell startup and then made that call talk". If the rc
+    line is ever repointed at another subcommand, that subcommand needs the same
+    exemption — and this fails until it gets one.
+    """
+    from endless import cli, setup
+    assert setup.SHELL_HELPERS_EVAL == 'eval "$(endless shell-init)"'
+    assert "shell-init" in cli.HARNESS_EXEMPT_SUBCOMMANDS
+
+
+def test_exempt_subcommands_have_nothing_to_withhold():
+    """An exemption is only defensible for a command with no side effect the
+    refusal could be withholding — otherwise "This command did not run" would be
+    replaced by silently running it. SANDBOX_SAFE_SUBCOMMANDS already carries
+    exactly that property (pure stdout, no project/global I/O), so exemption is
+    a subset of it, not a parallel judgment call."""
+    from endless import cli
+    assert cli.HARNESS_EXEMPT_SUBCOMMANDS <= cli.SANDBOX_SAFE_SUBCOMMANDS
+
+
+@pytest.mark.parametrize("args", [
+    ["session", "use"],
+    ["session", "cd", "--target", "project"],
+    ["session", "forget"],
+])
+def test_the_helpers_themselves_still_refuse(monkeypatch, args):
+    """The exemption buys silence for defining the helpers, not for using them.
+
+    esu/esp/esf each shell out to `endless`, so an unsupported harness still
+    meets the banner the moment someone deliberately invokes one — which is the
+    invocation the banner was written for.
+    """
+    result = _run(monkeypatch, args, **DESKTOP)
+    assert result.exit_code == 0
+    assert "does not support Claude Code Desktop" in result.output

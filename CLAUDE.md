@@ -229,7 +229,24 @@ Desktop) — there is no second supported harness to configure until then.
 
 **What is gated:** the Claude hook — `hook claude` returns immediately, before it
 reads stdin, so the entire hook is a no-op on an unsupported harness — and the
-**whole Python CLI**, which refuses with a banner and exits **0**.
+Python CLI, which refuses with a banner and exits **0**.
+
+**Except what Endless itself put in the user's shell rc** (E-1997).
+`endless setup shell-helpers` appends `eval "$(endless shell-init)"` to the rc,
+so that one command runs on every shell the harness launches — including the
+shell behind every Bash tool call. The banner writes to stderr, which `$( )`
+does not capture, so it surfaced ahead of the output of an unrelated `gh` command
+the user had approved, where "This command did not run" is a false statement
+about someone else's command. `shell-init` is therefore listed in
+`HARNESS_EXEMPT_SUBCOMMANDS` (`src/endless/cli.py`) and prints its snippet
+unchanged on every harness.
+
+The exemption is not a return to per-command gating: it is for commands an agent
+never types. Two properties qualify one — Endless wires it into automatic
+execution, and it has no side effect for the refusal to withhold (enforced as
+`HARNESS_EXEMPT_SUBCOMMANDS <= SANDBOX_SAFE_SUBCOMMANDS`). The helpers the
+snippet defines all shell out to `endless`, so the banner still lands the moment
+one is deliberately used.
 
 Exit 0 is deliberate, and differs from the `ENDLESS_SANDBOX` refusal beside it,
 which exits 1. That one is recoverable — leave the subshell, run it again — so a
