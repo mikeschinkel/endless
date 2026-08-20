@@ -1256,7 +1256,7 @@ func blockCommitOnMainIfApplicable(payload claudePayload) {
 		return
 	}
 
-	blockToolUse(`Direct commits to main are blocked when using endless.
+	blockToolUse(`Direct commits to main are highly discouraged when using endless.
 
 main is the integration target. Make changes in a worktree on a per-task
 branch, then merge via ` + "`endless worktree land <task-id>`" + `.
@@ -1264,9 +1264,14 @@ branch, then merge via ` + "`endless worktree land <task-id>`" + `.
 If you have an Endless task for this work:
   endless task claim E-NNN          # creates worktree at .endless/worktrees/e-NNN
 
-If you do not:
-  endless task add "<title>"
-  endless task claim E-NNN`)
+Or by hand:
+  git worktree add -b task/NNN-<slug> .endless/worktrees/e-NNN main
+  cd .endless/worktrees/e-NNN
+  # ... do work, commit ...
+  endless worktree land E-NNN
+
+Bypass (NOT recommended):
+  git commit --no-verify`)
 }
 
 // blockPlanFileWriteIfApplicable refuses any Write/Edit/NotebookEdit whose
@@ -1830,14 +1835,16 @@ func enforceWorktreeGate(projectID int64, payload claudePayload) {
 					*session.ActiveTaskID, wp, wp)
 			}
 		}
-		blockToolUse("Edits in main are blocked when using endless.\n\n" +
+		blockToolUse("Edits in main are highly discouraged when using endless.\n\n" +
 			"main is the integration target — every edit ideally should go through\n" +
 			"a worktree.\n\n" +
 			"If you do not yet have an active task, create one and start it:\n" +
 			"  endless task add \"<title>\"\n" +
 			"  endless task claim E-NNN          # auto-creates the worktree\n\n" +
 			"If you already have an active task without a worktree:\n" +
-			"  endless task claim E-NNN          # idempotent; creates if missing" +
+			"  endless task claim E-NNN          # idempotent; creates if missing\n\n" +
+			"Or create the worktree by hand or via `endless pivot` (when available):\n" +
+			"  git worktree add -b task/NNN-<slug> .endless/worktrees/e-NNN main" +
 			redirectHint)
 		return
 	}
