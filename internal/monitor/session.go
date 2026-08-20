@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/mikeschinkel/endless/internal/agentenv"
 	"github.com/mikeschinkel/endless/internal/config"
 	"github.com/mikeschinkel/endless/internal/sessionkind"
 	"github.com/mikeschinkel/go-dt"
@@ -136,6 +137,33 @@ func collectDedupTargets(tx *sql.Tx, where string, args []any) []SessionSnapshot
 	return out
 }
 
+// stampableSession is the value to bind to a changed_by_session sub-select for
+// a task mutation this process is about to make: the session id when an AGENT is
+// making the change, nil (→ SQL NULL, suppressing nobody) when a person is.
+//
+// It is the internal/monitor spelling of the rule internal/events applies to
+// every task mutation that goes through the event executor — `Actor.Harness !=
+// ""` there, agentenv.Present() here, both resolving to the same comparison in
+// the same leaf package (E-2006). monitor cannot read an event envelope: events
+// imports monitor, so the dependency runs one way only, and these two writes
+// bypass the executor entirely.
+//
+// EXPECTED TO BE A NO-OP FOREVER, and that is the point of adding it. The only
+// caller of either write is internal/hookcmd/claude.go, and `hook claude`
+// returns before it reads stdin on an unsupported harness (E-1962) — so an
+// agent is the only thing that can reach them and an unconditional stamp is
+// right BY CONSTRUCTION. Nothing at the call site said so, which is the defect:
+// a future caller from the CLI would have inherited a stamp that silences the
+// human's own session. This states the dependency instead of leaving it to be
+// re-derived. If the gate ever does fire, the caller set changed and the notice
+// was already going to the wrong session.
+func stampableSession(sessionID string) any {
+	if !agentenv.Present() {
+		return nil
+	}
+	return sessionID
+}
+
 // StartWorkSession binds the session AND marks the task as underway.
 // Defense-in-depth mirror of Python claim_item's emitted events for the
 // post-bash `endless task claim` detector — runs in the hook so the next
@@ -177,11 +205,12 @@ func StartWorkSession(sessionID string, projectID int64, taskID int64) error {
 		// changed_by_session (E-1917): this UPDATE does not go through the
 		// event executor, so it stamps its own actor. Without it the claim would
 		// inherit whichever session last touched the task and notify the wrong
-		// people about a status change this session caused.
+		// people about a status change this session caused. Gated on an agent
+		// actually running this process — see stampableSession (E-2006).
 		"UPDATE tasks SET status='underway', "+
 			"changed_by_session=(SELECT id FROM sessions WHERE session_id=?) "+
 			"WHERE id=? AND status IN ('untriaged','unplanned','ready','blocked','revisit')",
-		sessionID, taskID,
+		stampableSession(sessionID), taskID,
 	)
 	return err
 }
@@ -594,11 +623,12 @@ func CompleteTask(sessionID string, taskID int64) error {
 	// Mark task as confirmed
 	_, err = db.Exec(
 		// changed_by_session (E-1917): stamped here for the same reason as
-		// StartWorkSession — this path bypasses the event executor's stamp.
+		// StartWorkSession — this path bypasses the event executor's stamp — and
+		// gated the same way, see stampableSession (E-2006).
 		"UPDATE tasks SET status='confirmed', completed_at=?, "+
 			"changed_by_session=(SELECT id FROM sessions WHERE session_id=?) "+
 			"WHERE id=?",
-		now, sessionID, taskID,
+		now, stampableSession(sessionID), taskID,
 	)
 	if err != nil {
 		return err

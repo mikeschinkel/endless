@@ -315,8 +315,39 @@ it" has no answer.
 First consumer: `task_landings.landed_by_harness` and the
 `task_landings_notify_sessions` trigger, so an agent is not told about a land it
 performed while a person's land is announced to every session holding the task.
-`tasks_notify_sessions` still decides the same question from `CLAUDECODE` in
-`stampTaskActor`; converging the two is **E-2006**.
+
+**One question, one answer — E-2006.** `tasks_notify_sessions` used to decide the
+same thing a second way: `stampTaskActor` re-read `CLAUDECODE` from the executing
+process. Two answers that could disagree in both directions, and the one that
+decided suppression was ambient process state that was never persisted, so a
+notice that was dropped left nothing behind explaining why. `stampTaskActor` now
+reads `evt.Actor.Harness`, and that was the last `CLAUDECODE` read in Go.
+
+Reading the envelope rather than re-detecting matters beyond de-duplication: for
+every real path the two are the same process, but the envelope's answer is the
+recorded one, and a hand-rolled or replayed event carries its own instead of
+inheriting whichever process executes it.
+
+The predicate itself lives in `agentenv.Present()` — `Detect() != Unknown`, and
+deliberately **not** `Supported()`. "An agent typed this" and "Endless supports
+this harness" are different questions: a Desktop agent is still an agent, and its
+own edit is still noise to itself. It sits in `agentenv` because `internal/monitor`
+needs it too and cannot import `internal/events` (`events` imports `monitor`).
+`agent_env.present()` is the Python mirror, and is what `task_cmd._running_under_agent`
+and `agent_help._should_augment` now call instead of spelling the comparison out.
+
+`monitor.StartWorkSession` and `monitor.CompleteTask` bypass the executor and so
+have no envelope to read; they call `agentenv.Present()` via `stampableSession`.
+Those two are expected to be a **no-op forever** — their only caller is
+`hook claude`, which returns before reading stdin on an unsupported harness, so an
+agent is the only thing that can reach them. The gate states that dependency
+rather than leaving it to be re-derived: if it ever fires, the caller set changed
+and the notice was already going to the wrong session.
+
+`tasks.changed_by_session` keeps its meaning unchanged — the acting session when
+an agent acted, NULL otherwise. Deliberately not mirroring `task_landings`'
+two-column shape: the extra fact that recovers (which session a HUMAN's edit was
+credited to) has no consumer.
 
 ## One project-path spelling — E-2002
 

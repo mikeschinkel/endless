@@ -119,6 +119,31 @@ def _read_go_source() -> str:
     return (root / "internal" / "agentenv" / "agentenv.go").read_text()
 
 
+# ─── present(): agent-vs-person, which is not supported-vs-not (E-2006) ─────
+
+
+@pytest.mark.parametrize("name,vars_,expected", [
+    ("claude code in a terminal", TERMINAL, True),
+    # The row that carries the meaning: Desktop is an AGENT and is NOT
+    # supported. Answering "did an agent do this?" with supported() would call
+    # a Desktop session's own edit a person's.
+    ("claude desktop, detected but unsupported",
+     dict(CLAUDE_CODE_ENTRYPOINT="claude-desktop"), True),
+    ("bare shell", {}, False),
+    ("an unrecognized harness", dict(CLAUDE_CODE_ENTRYPOINT="holodeck"), False),
+    ("claudecode without an entrypoint", dict(CLAUDECODE="1"), False),
+])
+def test_present(name, vars_, expected):
+    assert agent_env.present(env(**vars_)) is expected, name
+
+
+def test_present_is_not_supported():
+    """Pin that the two predicates differ, so neither collapses into the other."""
+    desktop = env(CLAUDE_CODE_ENTRYPOINT="claude-desktop")
+    assert agent_env.present(desktop) is True
+    assert agent_env.supported(desktop) is False
+
+
 # ─── the consumers ask the detector, not the environment (E-1966) ───────────
 #
 # Two helpers predate this module and each carried its own CLAUDECODE=1 test:

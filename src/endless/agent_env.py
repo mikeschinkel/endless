@@ -113,6 +113,22 @@ def supported(env: Lookup | None = None) -> bool:
     return detect(env) in _SUPPORTED
 
 
+def present(env: Lookup | None = None) -> bool:
+    """Whether an AGENT is running this process, as opposed to a person (E-2006).
+
+    Deliberately not `supported()`: "an agent did this" and "Endless runs here"
+    are different questions, and a Desktop agent is still an agent. Mirrors Go's
+    `agentenv.Present`, which is in turn the same rule as a non-empty
+    `events.Actor.Harness` on an event envelope.
+
+    Exists because `detect() != UNKNOWN` was written out by hand at each of its
+    call sites, with the same "not supported()" caveat re-argued in each
+    docstring — the shape that let the Go side grow a second, disagreeing answer
+    to this question in the first place.
+    """
+    return detect(env) != UNKNOWN
+
+
 def label(harness_id: str) -> str:
     """Render a harness identity for a human.
 

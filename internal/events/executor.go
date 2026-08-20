@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -217,8 +216,8 @@ func Execute(evt *Event, emit DerivedEmitter) (*ExecuteResult, error) {
 // Non-task events and task events whose entity id is not a single task id
 // (bulk operations) no-op here; a bulk clear's notices carry whatever actor was
 // stamped last, which is imprecise but harmless — it can only over-notify.
-// agentRanThisCommand reports whether the AGENT ITSELF is the process making
-// this change, as opposed to a person at a shell prompt (E-1917 fix).
+//
+// The AGENT-vs-PERSON question, and where its answer comes from.
 //
 // This distinction is the whole correctness of self-suppression, and the first
 // implementation got it wrong by assuming evt.Actor.SessionID answered it.
@@ -233,21 +232,33 @@ func Execute(evt *Event, emit DerivedEmitter) (*ExecuteResult, error) {
 //   - the sibling-pane inference (E-1294), which deliberately credits a shell
 //     pane's command to the lone Claude session sharing its tmux window.
 //
-// Only CLAUDECODE=1 means the mutating process IS the agent: Claude Code exports
-// it into the subprocesses it spawns, and a user's shell never has it (verified
-// — an agent's Bash tool sees CLAUDECODE=1 with ENDLESS_SESSION_ID unset, while
-// a user shell running `esu` has the reverse). It is the same signal layer 2 of
-// the Python resolver already trusts for exactly this question.
+// The answer is evt.Actor.Harness: non-empty means an agent harness was running
+// the process that EMITTED this event, "" means a person at a shell (E-2005).
+//
+// E-1917's fix read os.Getenv("CLAUDECODE") here instead — correct in practice,
+// but a SECOND answer to a question the envelope had begun recording, and the
+// two could disagree in both directions (CLAUDECODE=1 with no entrypoint said
+// "agent" where agentenv says none; the reverse said "person" where agentenv
+// says claude_cli). E-2006 deleted it. Reading the envelope rather than
+// re-sniffing the environment matters for two reasons beyond having one answer:
+// the deciding value is now DURABLE — a notice that was dropped can be
+// explained afterward from the ledger line, where ambient process state left
+// nothing behind — and a hand-rolled or replayed event carries its own answer
+// instead of inheriting whichever process happens to be executing it.
 //
 // This gate is SUBTRACTIVE: it can only turn an attribution into NULL, never
 // create one. So no change that is notified today can become suppressed by it,
 // and the only movement possible is suppressed -> notified — the direction of
 // the bug. A missed detection therefore over-notifies (one redundant line)
-// rather than silencing the one session that needed to hear.
-func agentRanThisCommand() bool {
-	return os.Getenv("CLAUDECODE") == "1"
-}
-
+// rather than silencing the one session that needed to hear. That is also the
+// failure direction of the residual risk: an emit path that hand-builds an
+// Actor instead of using events.EmittingActor carries no harness and so stamps
+// NULL.
+//
+// epic.status_derived is the one event whose Actor is built literally with no
+// harness (E-2005: nobody typed it). It cannot reach here — dispatch's switch
+// has no case for it, so Execute rejects it and it is appended to the ledger
+// only — so it needs no exception.
 func stampTaskActor(db dbQuerier, evt *Event) error {
 	if evt.Entity.Type != EntityTask {
 		return nil
@@ -257,7 +268,7 @@ func stampTaskActor(db dbQuerier, evt *Event) error {
 		return nil
 	}
 	var actor any
-	if agentRanThisCommand() && evt.Actor.SessionID != "" {
+	if evt.Actor.Harness != "" && evt.Actor.SessionID != "" {
 		if sid, err := strconv.ParseInt(evt.Actor.SessionID, 10, 64); err == nil {
 			actor = sid
 		}

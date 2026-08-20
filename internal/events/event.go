@@ -105,11 +105,17 @@ func EmittingActor(kind ActorKind, id, sessionID string) Actor {
 // downstream SQL can spell "a human did this" as IS NULL. Recording the literal
 // "unknown" would make every historical event that predates this field look
 // different from a human's, which is the one distinction that has to hold.
+//
+// Spelled through agentenv.Present rather than repeating `Detect() != Unknown`
+// (E-2006): that comparison IS the "an agent did this" predicate, and it is
+// also what internal/monitor needs for the two stamps that bypass the executor.
+// Two hand-written copies of one comparison is how the divergence E-2006 closed
+// got in.
 func DetectedHarness() string {
-	if id := agentenv.Detect(); id != agentenv.Unknown {
-		return string(id)
+	if !agentenv.Present() {
+		return ""
 	}
-	return ""
+	return string(agentenv.Detect())
 }
 
 // Kind is a closed enumeration of event types.

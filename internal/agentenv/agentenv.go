@@ -9,6 +9,11 @@
 // "is this a terminal?". Terminal-vs-Desktop is the distinction that motivated
 // it, but the shape has to hold for Codex CLI and whatever comes next, so the
 // answer is an identity with a support flag rather than a boolean.
+//
+// A third question rides on the same detection and must not be confused with
+// the second: Present answers "did an AGENT do this, or a person?", where
+// Supported answers "may Endless run here?". Both Claude surfaces are agents;
+// only one is supported (E-2006).
 package agentenv
 
 import "os"
@@ -152,6 +157,31 @@ func Supported() bool {
 // SupportedWith is Supported against an arbitrary environment.
 func SupportedWith(env Lookup) bool {
 	return supported[DetectWith(env)]
+}
+
+// Present reports whether an agent harness is running this process, as opposed
+// to a person at a shell prompt.
+//
+// This is the "who typed this" predicate, and it is deliberately NOT Supported.
+// "An agent typed this" and "Endless supports this harness" are different
+// questions: a Desktop agent is still an agent, and its own edit is still noise
+// to itself. The spelling matches events.Actor.Harness != "" exactly (E-2005) —
+// that equivalence is the point, not a coincidence, and it is what lets a
+// consumer holding an event envelope and a consumer holding only a process
+// environment reach the same answer.
+//
+// It lives here, in a package that imports nothing but os, because
+// internal/monitor needs it too and cannot import internal/events — events
+// imports monitor, so the dependency runs one way only. One spelling in the
+// leaf package is what keeps the two sides from diverging again, which is the
+// whole of E-2006.
+func Present() bool {
+	return PresentWith(os.Getenv)
+}
+
+// PresentWith is Present against an arbitrary environment.
+func PresentWith(env Lookup) bool {
+	return DetectWith(env) != Unknown
 }
 
 // Label renders an ID for a human. Unknown gets a phrase rather than the bare

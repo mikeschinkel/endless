@@ -40,9 +40,11 @@ def _should_augment() -> bool:
     its own `is_claude_code_agent()` keyed on CLAUDECODE=1 — a third spelling
     of the same question, alongside `task_cmd._running_under_agent()` and the
     detector itself. Folded in E-1966: one detector, no copies that can drift
-    apart.
+    apart. E-2006 folded the last of it — the `!= UNKNOWN` comparison itself,
+    which was still written out here and in `_running_under_agent` — into
+    `agent_env.present`.
     """
-    return agent_env.detect() != agent_env.UNKNOWN or _AGENT_VIEW
+    return agent_env.present() or _AGENT_VIEW
 
 
 def _command_path(ctx: click.Context) -> str:

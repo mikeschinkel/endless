@@ -236,16 +236,18 @@ def _running_under_agent() -> bool:
     CLAUDECODE=1 directly, which answered "some Claude Code" rather than which,
     and missed every non-Claude harness.
 
-    Deliberately `detect() != UNKNOWN`, not `supported()`: both callers want
-    "am I talking to an agent at all", not "is this harness supported". Since
-    E-1962 the CLI refuses an unsupported harness at the group callback, so by
-    the time either caller runs a recognized harness is a supported one.
+    Deliberately `present()`, not `supported()`: both callers want "am I
+    talking to an agent at all", not "is this harness supported". Since E-1962
+    the CLI refuses an unsupported harness at the group callback, so by the time
+    either caller runs a recognized harness is a supported one. (E-2006 moved
+    that comparison into `agent_env.present`; this used to spell it out here,
+    and so did `agent_help._should_augment`.)
 
     (An earlier docstring said "never to gate behavior". That stopped being
     true when E-1772 added the nudge, which does.)
     """
     from endless import agent_env
-    return agent_env.detect() != agent_env.UNKNOWN
+    return agent_env.present()
 
 
 _VERB_CHECK_PROMPT_TEMPLATE = (

@@ -151,6 +151,76 @@ func TestSupported(t *testing.T) {
 	}
 }
 
+// TestPresent pins the AGENT-vs-PERSON predicate, which is deliberately NOT
+// Supported (E-2006).
+//
+// The ClaudeDesktop row is the whole reason this is a separate function: Desktop
+// is an agent — its own edit is still noise to itself — and it is not supported.
+// Answering "did an agent do this?" with SupportedWith would tell a Desktop
+// session a person made the change it just made.
+func TestPresent(t *testing.T) {
+	cases := []struct {
+		name string
+		vars map[string]string
+		want bool
+	}{
+		{"claude code cli", map[string]string{"CLAUDE_CODE_ENTRYPOINT": "cli"}, true},
+		{"claude desktop, detected but unsupported",
+			map[string]string{"CLAUDE_CODE_ENTRYPOINT": "claude-desktop"}, true},
+		{"claude desktop by bundle id",
+			map[string]string{"__CFBundleIdentifier": "com.anthropic.claudefordesktop"}, true},
+		{"a person at a shell", map[string]string{}, false},
+		{"an unrecognized harness", map[string]string{"CLAUDE_CODE_ENTRYPOINT": "holodeck"}, false},
+		// The disagreement E-2006 removed. The old predicate read CLAUDECODE=1
+		// alone and called this an agent; Detect does not claim it, so neither
+		// does Present. Subtractive either way — this can only over-notify.
+		{"claudecode without an entrypoint", map[string]string{"CLAUDECODE": "1"}, false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := PresentWith(env(c.vars)); got != c.want {
+				t.Errorf("PresentWith(%s) = %v, want %v", c.name, got, c.want)
+			}
+		})
+	}
+}
+
+// TestPresentIsNotSupported pins that the two predicates actually differ, so a
+// later simplification cannot quietly collapse them into one.
+func TestPresentIsNotSupported(t *testing.T) {
+	desktop := env(map[string]string{"CLAUDE_CODE_ENTRYPOINT": "claude-desktop"})
+	if !PresentWith(desktop) {
+		t.Error("Claude Desktop is not an agent; it is one, whether or not Endless supports it")
+	}
+	if SupportedWith(desktop) {
+		t.Error("Claude Desktop is supported; it is not, until E-1505")
+	}
+}
+
+// TestPresentMatchesTheEnvelopeConvention pins the equivalence E-2006 exists to
+// hold: events.DetectedHarness() returns "" exactly when Present() is false, so
+// the executor's `Actor.Harness != ""` and monitor's agentenv.Present() are one
+// rule with two spellings rather than two rules that can drift.
+//
+// Asserted here, in the leaf package, because internal/events imports this one
+// and not the reverse — and stated as DetectWith == Unknown, which is what
+// DetectedHarness is built on.
+func TestPresentMatchesTheEnvelopeConvention(t *testing.T) {
+	for _, vars := range []map[string]string{
+		{"CLAUDE_CODE_ENTRYPOINT": "cli"},
+		{"CLAUDE_CODE_ENTRYPOINT": "claude-desktop"},
+		{"CLAUDECODE": "1"},
+		{},
+	} {
+		lookup := env(vars)
+		harnessRecorded := DetectWith(lookup) != Unknown
+		if harnessRecorded != PresentWith(lookup) {
+			t.Errorf("env %v: envelope would record harness=%v but Present()=%v",
+				vars, harnessRecorded, PresentWith(lookup))
+		}
+	}
+}
+
 // TestLabel pins that every ID renders as a phrase, since these reach users in
 // the `endless guide` banner.
 func TestLabel(t *testing.T) {
