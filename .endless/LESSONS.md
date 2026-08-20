@@ -2466,3 +2466,19 @@ so out loud instead of following it.
 Scope check, measured not assumed: only two scripts in `tests/tasks/` actually
 execute another task's script — `e-2005-verify.sh` (one) and mine (two). Not a
 widespread pattern. A two-link chain that would have become three.
+
+## Don't report breakage in artifacts whose validity is already undefined (E-2011)
+
+- **What went wrong**: My rename broke `tests/tasks/e-2002-verify.sh` (it
+  imported the removed `normalize`). I volunteered that in the handoff, then
+  spent a second reply re-explaining it. A landed verify script is a pre-land
+  gate for its own task; after land its validity is UNDEFINED. So "it broke" is
+  not a fact about the product, not a fact about anything Mike will run, and not
+  a decision he has to make — it is pure noise dressed up as diligence.
+- **The rule**: before adding an unrequested note to a handoff, ask what the
+  reader would DO with it. If the answer is "nothing, by existing project
+  policy", cut it. Volunteering a non-actionable observation is not thoroughness;
+  it makes the reader audit my judgment instead of the work.
+- **Compounding it**: when asked "why did you mention that?", the answer is the
+  answer. Don't re-litigate the reasoning, re-cite the policy, or re-justify the
+  original note.
