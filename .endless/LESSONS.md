@@ -2657,3 +2657,17 @@ off road."
 
 When a human describes what people DID, do not translate it into a claim about
 what the system RECORDED, and do not go looking for a bug in the recording.
+
+### [2026-08-20] A new job is a peer in the registry, not an addition to an existing one (E-1817)
+
+I titled a task "Add duplicate detection to the triage job." Mike: 'That wording
+is wrong. This would be more correct: "Add a duplicate detection job as a peer to
+other triage jobs."'
+
+The registry (`endless-go jobs list`) holds one job today, `triage-sufficiency`,
+and its name says what it judges. "The triage job" treats that single occupant
+as the category, so the natural implementation becomes bolting a second
+responsibility onto a job whose name no longer describes it.
+
+When a system has a registry, new capability registers alongside. Name the peer,
+not the host — and check the registry before writing the title.
