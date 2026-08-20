@@ -199,9 +199,9 @@ Each entry should follow this pattern:
 - **Project**: gomion / ALL Bubble Tea projects
 
 ### [2026-03-15] NEVER run git clean or git rm -rf without preserving gitignored files
-- **What went wrong**: During a git history rebuild, ran `git rm -rf .` followed by `git clean -fd`. The `git rm` deleted `.gitignore` from the working tree, so `git clean` no longer knew which files were protected. This wiped the user's local config files: `homelab.local.json`, `homepage.template.yaml`, `paperless.template.yaml`, `hardware-inventory.md`, and `homepage-bookmarks.yaml`.
-- **Why**: The rebuild script focused on saving tracked files but didn't consider gitignored local files. `git clean -fd` without a `.gitignore` in place treats everything as untracked.
-- **Rule**: Before ANY destructive git operation (`git clean`, `git rm -rf`, `git checkout --orphan`): (1) Find ALL gitignored files: `git ls-files --others --ignored --exclude-standard`. (2) Copy them to a safe location OUTSIDE the repo. (3) After the operation, restore them. NEVER run `git clean` after removing `.gitignore`. Better yet, avoid `git clean -fd` entirely — use targeted `git rm` of specific files instead. This is a data-loss scenario that cannot be undone.
+- **What went wrong**: During a git history rebuild, ran `git rm -rf .` followed by `git clean -fd`. The `git rm` deleted `../.gitignore` from the working tree, so `git clean` no longer knew which files were protected. This wiped the user's local config files: `homelab.local.json`, `homepage.template.yaml`, `paperless.template.yaml`, `hardware-inventory.md`, and `homepage-bookmarks.yaml`.
+- **Why**: The rebuild script focused on saving tracked files but didn't consider gitignored local files. `git clean -fd` without a `../.gitignore` in place treats everything as untracked.
+- **Rule**: Before ANY destructive git operation (`git clean`, `git rm -rf`, `git checkout --orphan`): (1) Find ALL gitignored files: `git ls-files --others --ignored --exclude-standard`. (2) Copy them to a safe location OUTSIDE the repo. (3) After the operation, restore them. NEVER run `git clean` after removing `../.gitignore`. Better yet, avoid `git clean -fd` entirely — use targeted `git rm` of specific files instead. This is a data-loss scenario that cannot be undone.
 - **Project**: ALL
 
 ### [2026-03-23] NEVER create PRs or push to upstream repos without explicit user request
@@ -366,7 +366,7 @@ aren't real. Handoff points at the script + `just test`, nothing more.
 ### [2026-07-01] Brainstorm/research synthesis goes in `outcome`, never `text`
 - **What went wrong**: Running an `endless` brainstorm task (E-1687) under Claude's `/plan` mode, I wrote the synthesis into the task's `--text` field. `text` on a brainstorm/research task is the **seed/framing (input)**; the deliverable synthesis belongs in `--outcome`. The template (`handoff/brainstorm.md.tmpl:15`) and guide (`docs/guide/tasks.md:138-139`) both already say this correctly — the error was mine.
 - **Why**: Two compounding habits. (1) The user asked to *view* the result via `endless task show --text`, and I mapped the **view command** onto the **storage field** — proposed writing to `text`. (2) `/plan` mode + my global "save the plan to `--text`" reflex primed `--text` as the destination for any long-form artifact. That reflex does NOT apply to `brainstorm`/`research` tasks, which have no "plan" — they have an outcome.
-- **Rule**: On `brainstorm`/`research` tasks, the synthesis/deliverable goes in `--outcome` (viewed with `task show --outcome`); `--text` holds only the seed/request. Never let `/plan` mode's plan→`--text` reflex override this. Never conflate the field a user *reads with* against the field you *store in* — check the task-type field model (`docs/guide/tasks.md`) before choosing.
+- **Rule**: On `brainstorm`/`research` tasks, the synthesis/deliverable goes in `--outcome` (viewed with `task show --outcome`); `--text` holds only the seed/request. Never let `/plan` mode's plan→`--text` reflex override this. Never conflate the field a user *reads with* against the field you *store in* — check the task-type field model (`../docs/guide/tasks.md`) before choosing.
 - **Project**: endless / task field model
 
 ### [2026-07-10] REPEAT OFFENSE — never state a task's status without querying it THIS turn
@@ -402,7 +402,7 @@ aren't real. Handoff points at the script + `just test`, nothing more.
 
 ## 2026-08-03 — Worktree discipline
 
-- **ALWAYS make in-repo changes in the task's worktree, never in the main checkout — unless explicitly directed otherwise.** I edited `docs/guide/tasks.md` in the main working tree; `just land E-1829` then failed with "main has uncommitted user changes; cannot land." The land recipe refuses to run while main is dirty.
+- **ALWAYS make in-repo changes in the task's worktree, never in the main checkout — unless explicitly directed otherwise.** I edited `../docs/guide/tasks.md` in the main working tree; `just land E-1829` then failed with "main has uncommitted user changes; cannot land." The land recipe refuses to run while main is dirty.
 - Changes to files **outside** the repo (`~/.claude/*`, LESSONS.md, the memory dir) are exempt — only tracked repo files must live in the worktree.
 - Recovery when main is accidentally dirtied: preserve the change's content, `git restore <file>` in main to unblock the land, then re-apply the change inside the proper worktree.
 
@@ -611,7 +611,7 @@ re-planning.
 
 ## Verify scripts are valid ONLY prior to landing (2026-08-05, endless / E-1880)
 
-**Correction:** I found `tests/tasks/e-1771-verify.sh` asserting the output shape
+**Correction:** I found `../tests/tasks/e-1771-verify.sh` asserting the output shape
 my task was changing, "repaired" its assertions to match the new behavior, and
 then filed a task (E-1896) to fix 6 more landed verify scripts that die on a
 renamed CLI command.
@@ -767,7 +767,7 @@ multiple tasks separately instead of grouping together when those tasks' changes
 are very likely to conflict."
 
 **What I did:** While implementing E-1901 (a Stop-hook gate added to the `Stop`
-branch of `internal/hookcmd/claude.go`), Mike noted `FlagNeedsRecap` — called on
+branch of `../internal/hookcmd/claude.go`), Mike noted `FlagNeedsRecap` — called on
 the adjacent line of that same branch — was vestigial. I filed it as separate
 task E-1906 rather than folding it in, reasoning that removing it required
 auditing every reader and so deserved its own scope.
@@ -795,7 +795,7 @@ scripts for tasks that have already landed... THIS IS A REAL PROBLEM BECAUSE IT
 WILL BE THE 3RD TIME YOU DEVOTED TIME, ATTENTION, AND POTENTIALLY TOKENS AIMED
 AT SOLVING A NON-PROBLEM."
 
-**The rule, already documented** in `docs/guide/orchestration.md` under "A verify
+**The rule, already documented** in `../docs/guide/orchestration.md` under "A verify
 suite is a land-time gate, not a standing regression suite":
 
 > A verify suite proves *one* task before it lands. Running it is a one-shot,
@@ -816,7 +816,7 @@ suite is a land-time gate, not a standing regression suite":
    non-problems, both later declined.
 
 **Root cause:** I treated `tests/tasks/*.sh` as a test suite because it is shaped
-like one and lives under `tests/`. Shape is not contract. The handoff even named
+like one and lives under `../tests`. Shape is not contract. The handoff even named
 `endless guide orchestration`, which states the rule outright.
 
 **Pattern:** Only ONE verify suite is ever live — the one for the task in hand,
@@ -962,7 +962,7 @@ read that file while tracing the model call.
 **Correction (Mike):** "Why doesn't it get its prompts from Go templates like we
 use for handoffs?"
 
-**Pattern:** `internal/templatecmd` (E-1565/E-1822) already provides exactly the
+**Pattern:** `../internal/templatecmd` (E-1565/E-1822) already provides exactly the
 needed thing and is better on every axis: `.local.tmpl` -> committed `.tmpl` ->
 embedded lookup, materialized into `<project>/.endless/templates/`, rendered from
 stdin JSON variables — so a prompt with interpolated parent/sibling/decision
@@ -1058,7 +1058,7 @@ enforcement:" not "One caveat worth having on the record:".
 that past several hundred tasks have implemented and specified I use to verify."
 
 I wrote E-1899's plan as a "removal checklist" and let verification degrade into
-prose bullets, never naming `tests/tasks/e-1899-verify.sh`. Endless's convention
+prose bullets, never naming `../tests/tasks/e-1899-verify.sh`. Endless's convention
 is that every task ships one, and the final handoff hands the user exactly one
 command to run. I had followed it correctly on E-1845 and specified it properly
 in E-1889's plan — then dropped it on the task I judged trivial.
@@ -1181,9 +1181,9 @@ ARE YOU FORGETTING THAT a tasks verify script is ONLY, ONLY valid just prior to
 landing, and never defined to be valid afterwards?!?"
 
 **What I did wrong:**
-- Edited `tests/tasks/e-1845-verify.sh` unilaterally (relaxed an assertion my
+- Edited `../tests/tasks/e-1845-verify.sh` unilaterally (relaxed an assertion my
   change broke) — never asked.
-- Offered "update `tests/tasks/e-1872-verify.sh`'s assertions" as a menu option
+- Offered "update `../tests/tasks/e-1872-verify.sh`'s assertions" as a menu option
   in AskUserQuestion. Mike picked it, but *I framed the choice*. Presenting a
   prohibited action as an option is how the prohibition gets laundered into
   approval.
@@ -1344,7 +1344,7 @@ Mike to record them*. Read it as: file the decision, then surface the approval.
 
 Filed a task claiming "epic status rollup does not exist" after grepping for
 `rollup|roll_up|rollUp` and skimming the Python command wrapper. The feature was
-fully implemented as `internal/events/epic_derivation.go` (E-1541) — named
+fully implemented as `../internal/events/epic_derivation.go` (E-1541) — named
 *derivation*, living in the Go events layer, not the Python CLI layer.
 
 Compounding failure: the evidence was already in my own terminal output. An
@@ -1659,7 +1659,7 @@ believing I had verified new behavior. `go build ./...` compiles and DISCARDS;
 bin/ was stale, so I was testing the old binary and read its output as proof.
 
 **Do instead:** in this repo, `just build` before any end-to-end check against
-`bin/`. In a verify script, make the build step `just build`, never
+`../bin`. In a verify script, make the build step `just build`, never
 `go build ./...`.
 
 **Wider pattern:** a check that cannot fail is worse than no check. Same session
@@ -1732,7 +1732,7 @@ not "something regressed."
 ## NEVER chain one verify script from another (2026-08-13, E-1859)
 
 Corollary of the above, and a concrete error I shipped. I put
-`tests/tasks/e-1648-verify.sh` in e-1859-verify.sh's fail-fast front to cover a
+`../tests/tasks/e-1648-verify.sh` in e-1859-verify.sh's fail-fast front to cover a
 doc block both tasks touched.
 
 Since a landed suite is undefined afterward, chaining one makes MY suite's
@@ -1823,7 +1823,7 @@ is not the same as "the reader can tell what happens." The data sense still hide
 register is self-explanatory and unpack each usage into a plain sentence.
 
 **Don't comment on repo/system state I read minutes ago as though it were current.** Flagged
-staged `.DS_Store` and `.idea/` files as messy in a book repo; Mike was cleaning the index at
+staged `.DS_Store` and `../.idea` files as messy in a book repo; Mike was cleaning the index at
 that moment and had already removed them. Volunteered housekeeping commentary is doubly bad
 when it's stale — re-read state immediately before remarking on it, and prefer not remarking
 at all on things the user hasn't asked about and is plainly already handling.
@@ -1849,7 +1849,7 @@ basis is my failure to observe it, ask rather than encode it.
 ## Never suggest dropping a worktree the live session is running inside
 
 **Context:** Endless worktree `e-1914`; the Claude session's cwd was
-`.endless/worktrees/e-1914`. `endless task unsettled` reported a false
+`worktrees/e-1914`. `endless task unsettled` reported a false
 "unlanded (251 commits)" because `worktree land` rebases onto main, leaving the
 branch pointing at orphaned pre-rebase hashes whose content had in fact landed.
 
@@ -1891,7 +1891,7 @@ it in the same turn. If you can't show the command, say you don't know.
 I filed a task into a landed worktree's sandbox DB. I had `cd`'d to the main
 checkout first, and assumed that routed me to the real ledger. It did not:
 `XDG_CONFIG_HOME=~/.cache/endless/sandboxes/e-1904` was injected into the
-worktree's `.claude/settings.json` at claim time, is inherited by every Bash
+worktree's `../.claude/settings.json` at claim time, is inherited by every Bash
 subprocess for the session's entire life, outranks the cwd self-detection
 (E-1368/E-1513), and is completely immune to `cd`.
 
@@ -2083,7 +2083,7 @@ Sessions are user-machine state, not project state. `ES-NNNN`, session UUIDs, an
 raw `session_id` integers must NEVER appear in anything that gets committed to
 version control or written to the ledger-derived parts of the DB — task
 descriptions, analyses, plan text, decision descriptions, outcomes. The sessions
-table is deliberately not journaled to `.endless/db-ledger` for exactly this
+table is deliberately not journaled to `db-ledger` for exactly this
 reason; writing a session id into a task's analysis smuggles machine-local state
 into the shareable artifact anyway.
 
