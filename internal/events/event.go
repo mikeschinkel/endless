@@ -241,6 +241,28 @@ const (
 	KindSessionTasksOrdered Kind = "session_tasks.ordered"
 )
 
+// Session task-membership event kinds (E-1696). The verbs that add a task to,
+// and drop a task from, the emitting session's scope — the correction path for
+// the otherwise-automatic session_tasks capture.
+//
+//   - queued:  `session task add` promotes tasks to relation `queued` (decided
+//     session work). Goes through upsertSessionTask, so it obeys the same
+//     upgrade-only ladder as every automatic capture and cannot demote a goal.
+//   - removed: `session task remove` DELETES the session_tasks row outright.
+//     Distinct from `session hide --task` (E-1914), which suppresses the row
+//     from one session's listing while keeping the association — hide is for a
+//     capture that is real but noisy, remove is for one that was simply wrong.
+//
+// Both are session-scoped live state, not replayed by rebuild-db, and both are
+// deliberate low-volume acts — so they ride the committed ledger on E-1683's
+// `session_tasks.ordered` precedent rather than waiting on the machine-user
+// ledger split (E-1673). The high-volume automatic read capture is what needs
+// that split, and it is not these.
+const (
+	KindSessionTasksQueued  Kind = "session_tasks.queued"
+	KindSessionTasksRemoved Kind = "session_tasks.removed"
+)
+
 // Curated next-list event kinds (E-1421).
 const (
 	KindProjectNextRevised Kind = "project_next.revised"
@@ -319,6 +341,9 @@ var ValidKinds = map[Kind]bool{
 	KindSessionStatusRecorded: true,
 	// Session task ordering (E-1683)
 	KindSessionTasksOrdered: true,
+	// Session task membership (E-1696)
+	KindSessionTasksQueued:  true,
+	KindSessionTasksRemoved: true,
 	// Curated next list (E-1421)
 	KindProjectNextRevised: true,
 	// Decision (E-1378)

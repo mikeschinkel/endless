@@ -1293,6 +1293,82 @@ def session_snapshot_add(input_file, session_id_override):
     impl(input_file, session_id_override)
 
 
+@session_cmd.group("task")
+def session_task_cmd():
+    """Correct which tasks this session's list holds (E-1696).
+
+    `session_tasks` capture is otherwise automatic: the event executors record
+    a row for every task a session claims, files or edits, classified by how it
+    entered scope (goal / surfaced / revisited). These verbs cover the two
+    cases automation cannot reach — work you have decided on but not yet
+    touched, and a capture that should not have happened.
+
+    Note the group is `session task <verb>` (it acts on a TASK within the
+    session), not `session <verb>`, which acts on sessions themselves.
+    """
+    pass
+
+
+_SESSION_ID_OPTION = click.option(
+    "--session-id", "session_id_override", type=int, default=None,
+    help="Use this Endless session id directly instead of resolving the "
+         "current session (test fixtures / non-tmux callers).",
+)
+
+
+@session_task_cmd.command("add")
+@click.argument("task_refs", nargs=-1, metavar="TASK-ID...")
+@_SESSION_ID_OPTION
+def session_task_add(task_refs, session_id_override):
+    """Add tasks to this session as decided work (relation `queued`).
+
+    For work you have committed to but have not touched yet — nothing has
+    happened to those tasks, so no automatic capture would ever record them.
+    They appear in `session status` immediately, ranked above incidental
+    surfaced/revisited rows.
+
+    Promotion is upgrade-only: queuing a task this session merely read or
+    edited strengthens its relation, and queuing your own claimed task leaves
+    it as the goal (reported, not an error). Adding the same task twice is a
+    no-op.
+
+    Example:
+
+      \b
+      endless session task add E-100 E-101
+    """
+    from endless.session_task_cmd import session_task_add as impl
+    impl(task_refs, session_id_override)
+
+
+@session_task_cmd.command("remove")
+@click.argument("task_refs", nargs=-1, metavar="TASK-ID...")
+@_SESSION_ID_OPTION
+def session_task_remove(task_refs, session_id_override):
+    """Drop tasks from this session's list entirely.
+
+    For a capture that should not have happened. This DELETES the association
+    — the touch, its relation and its `session order` position — so
+    `task show`'s "Touched by:" stops reporting it, and any hide on the same
+    pair is cleared with it.
+
+    Not the same as `session hide --task`, which suppresses a row from this
+    session's listing but KEEPS the association: hide is for a capture that is
+    real but noisy, remove is for one that was simply wrong. There is no undo
+    beyond touching the task again.
+
+    Refused on this session's own goal task — release the task instead. Naming
+    a task this session never touched is a reported no-op, not an error.
+
+    Example:
+
+      \b
+      endless session task remove E-100
+    """
+    from endless.session_task_cmd import session_task_remove as impl
+    impl(task_refs, session_id_override)
+
+
 @session_cmd.command("order")
 @click.argument("spec")
 @click.option("--json", "as_json", is_flag=True,

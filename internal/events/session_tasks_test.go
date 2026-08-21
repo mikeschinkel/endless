@@ -9,6 +9,7 @@ import (
 
 	"github.com/mikeschinkel/endless/internal/monitor"
 	"github.com/mikeschinkel/endless/internal/schema"
+	"github.com/mikeschinkel/endless/internal/sessiontaskrelation"
 	_ "modernc.org/sqlite"
 )
 
@@ -208,11 +209,11 @@ func TestSessionTasks_RelationClassification(t *testing.T) {
 	}
 }
 
-// TestSessionTasks_RelationSetOnce verifies set-once semantics: once a task's
-// relation is recorded, a later touch only bumps updated_at and must NOT change
-// the relation. A task surfaced (created) in-session that is later edited stays
-// surfaced; it does not downgrade to revisited.
-func TestSessionTasks_RelationSetOnce(t *testing.T) {
+// TestSessionTasks_RelationNeverDowngrades is the half of E-1462's set-once rule
+// that E-1696's upgrade-only ladder preserves: a weaker later capture must not
+// weaken a stronger stored relation. A task surfaced (created) in-session that is
+// later edited stays surfaced; it does not downgrade to revisited.
+func TestSessionTasks_RelationNeverDowngrades(t *testing.T) {
 	db := newSessionTasksTestDB(t)
 	actor := Actor{Kind: ActorSession, ID: "s1", SessionID: "42"}
 
@@ -223,7 +224,102 @@ func TestSessionTasks_RelationSetOnce(t *testing.T) {
 		t.Fatalf("dispatch update: %v", err)
 	}
 	if got := sessionTaskRelation(t, db, 42, 100); got != "surfaced" {
-		t.Errorf("set-once violated: relation = %q after later edit, want surfaced", got)
+		t.Errorf("downgraded: relation = %q after later edit, want surfaced", got)
+	}
+}
+
+// TestSessionTasks_RelationUpgrades is the half E-1696 ADDS: a stronger later
+// capture replaces a weaker stored relation. This is the bug set-once had.
+//
+// The load-bearing case is referenced→goal. `endless guide`'s happy path is
+// `task show <id>` THEN `task claim <id>`, so under set-once the read gate would
+// pin every session's own goal task at `referenced` forever — the read arrives
+// first and the claim could never correct it. surfaced→goal is the same defect
+// set-once already shipped with: a task filed and then claimed in one session
+// read `surfaced`, not `goal`.
+//
+// upsertSessionTask is called directly for the `referenced` rows because no
+// emitter produces that relation yet (the read gate ships with the machine-user
+// ledger, E-1673); every other step goes through a real event.
+func TestSessionTasks_RelationUpgrades(t *testing.T) {
+	db := newSessionTasksTestDB(t)
+	actor := Actor{Kind: ActorSession, ID: "s1", SessionID: "42"}
+
+	// referenced → goal (the read-before-claim happy path).
+	if err := upsertSessionTask(db, "42", 100, sessiontaskrelation.RelationReferenced); err != nil {
+		t.Fatalf("seed referenced: %v", err)
+	}
+	if got := sessionTaskRelation(t, db, 42, 100); got != "referenced" {
+		t.Fatalf("seed: relation = %q, want referenced", got)
+	}
+	if _, err := dispatch(db, taskClaimedEvent(t, 100, actor), nil); err != nil {
+		t.Fatalf("dispatch claim: %v", err)
+	}
+	if got := sessionTaskRelation(t, db, 42, 100); got != "goal" {
+		t.Errorf("read-then-claim: relation = %q, want goal", got)
+	}
+
+	// referenced → revisited (a read the session later acts on).
+	if err := upsertSessionTask(db, "42", 101, sessiontaskrelation.RelationReferenced); err != nil {
+		t.Fatalf("seed referenced: %v", err)
+	}
+	if _, err := dispatch(db, taskFieldsUpdatedEvent(t, 101, actor), nil); err != nil {
+		t.Fatalf("dispatch update: %v", err)
+	}
+	if got := sessionTaskRelation(t, db, 42, 101); got != "revisited" {
+		t.Errorf("read-then-edit: relation = %q, want revisited", got)
+	}
+
+	// surfaced → goal (file it, then claim it).
+	if _, err := dispatch(db, taskCreatedEvent(t, 102, actor), nil); err != nil {
+		t.Fatalf("dispatch create: %v", err)
+	}
+	if _, err := dispatch(db, taskClaimedEvent(t, 102, actor), nil); err != nil {
+		t.Fatalf("dispatch claim: %v", err)
+	}
+	if got := sessionTaskRelation(t, db, 42, 102); got != "goal" {
+		t.Errorf("create-then-claim: relation = %q, want goal", got)
+	}
+}
+
+// TestSessionTasks_RelationEqualCaptureIsNoOp pins that an equal relation does
+// not count as an upgrade — Outranks is strict. It matters because every repeat
+// touch of the same kind takes this path, and a non-strict comparison would
+// rewrite relation_id on every one of them for no reason.
+func TestSessionTasks_RelationEqualCaptureIsNoOp(t *testing.T) {
+	db := newSessionTasksTestDB(t)
+	actor := Actor{Kind: ActorSession, ID: "s1", SessionID: "42"}
+
+	if _, err := dispatch(db, taskFieldsUpdatedEvent(t, 100, actor), nil); err != nil {
+		t.Fatalf("dispatch update: %v", err)
+	}
+	if _, err := dispatch(db, taskFieldsUpdatedEvent(t, 100, actor), nil); err != nil {
+		t.Fatalf("dispatch second update: %v", err)
+	}
+	if got := sessionTaskRelation(t, db, 42, 100); got != "revisited" {
+		t.Errorf("repeat capture: relation = %q, want revisited", got)
+	}
+}
+
+// TestSessionTasks_RelationFillsNullHistoricalRow covers the pre-E-1462 rows the
+// schema comment promises to heal: relation_id NULL ranks below every real
+// relation, so the next capture — even the weakest one — fills it in rather than
+// leaving it NULL forever. relationRankCase's ELSE arm is what makes this work,
+// and a CASE that mishandled NULL would silently strand these rows.
+func TestSessionTasks_RelationFillsNullHistoricalRow(t *testing.T) {
+	db := newSessionTasksTestDB(t)
+
+	if _, err := db.Exec(
+		`INSERT INTO session_tasks (session_id, task_id, relation_id, created_at, updated_at)
+		 VALUES (42, 100, NULL, '2026-01-01T00:00:00', '2026-01-01T00:00:00')`,
+	); err != nil {
+		t.Fatalf("seed historical row: %v", err)
+	}
+	if err := upsertSessionTask(db, "42", 100, sessiontaskrelation.RelationReferenced); err != nil {
+		t.Fatalf("upsert: %v", err)
+	}
+	if got := sessionTaskRelation(t, db, 42, 100); got != "referenced" {
+		t.Errorf("NULL historical row: relation = %q, want referenced", got)
 	}
 }
 

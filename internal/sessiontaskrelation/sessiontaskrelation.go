@@ -4,15 +4,22 @@
 // outside internal/events and internal/monitor so both can depend on it without
 // a cycle.
 //
-// Relation classifies HOW a task entered a session's scope, set once at capture
-// time by the task-mutation executors (E-1462):
-//   - goal:      the session's claimed task (task.claimed)
-//   - surfaced:  created during the session (task.created / task.imported)
-//   - revisited: a pre-existing task the session touched but did not claim
+// Relation classifies HOW a task entered a session's scope, captured by the
+// task-mutation executors (E-1462) and by the session-task verbs (E-1696):
+//   - goal:       the session's claimed task (task.claimed)
+//   - surfaced:   created during the session (task.created / task.imported)
+//   - queued:     explicitly promoted to session work (`session task add`)
+//   - revisited:  a pre-existing task the session touched but did not claim
+//   - referenced: read-only relevance — the session looked at the task without
+//     editing it. Reserved by E-1696 for the auto-capture read gate; no emitter
+//     produces it yet (that gate needs the gitignored machine-user ledger E-1673
+//     routes to, so it ships separately). Defined here now so the precedence
+//     ladder and the display tier land against a stable enum.
 //
 // Adding a value = add an enum constant here + add a seed row in
 // internal/schema/schema.sql + add a row in the per-ticket migration that
-// introduces it. The VerifyIntegrity startup check fails closed on drift.
+// introduces it + give it a Rank. The VerifyIntegrity startup check fails closed
+// on drift.
 package sessiontaskrelation
 
 import (
@@ -27,6 +34,12 @@ const (
 	RelationGoal      Relation = 1
 	RelationSurfaced  Relation = 2
 	RelationRevisited Relation = 3
+	// RelationReferenced and RelationQueued are APPENDED (E-1696), never
+	// renumbered: the ids are persisted in session_tasks.relation_id, so
+	// inserting a value in the middle would silently reclassify live rows.
+	// Display order and precedence are carried by Rank(), not by id.
+	RelationReferenced Relation = 4
+	RelationQueued     Relation = 5
 )
 
 // String returns the lowercase machine slug (matches session_task_relations.slug).
@@ -38,6 +51,10 @@ func (r Relation) String() string {
 		return "surfaced"
 	case RelationRevisited:
 		return "revisited"
+	case RelationReferenced:
+		return "referenced"
+	case RelationQueued:
+		return "queued"
 	default:
 		return fmt.Sprintf("Relation(%d)", int(r))
 	}
@@ -52,6 +69,10 @@ func (r Relation) Label() string {
 		return "Surfaced"
 	case RelationRevisited:
 		return "Revisited"
+	case RelationReferenced:
+		return "Referenced"
+	case RelationQueued:
+		return "Queued"
 	default:
 		return ""
 	}
@@ -67,9 +88,14 @@ func Parse(s string) (Relation, error) {
 		return RelationSurfaced, nil
 	case "revisited":
 		return RelationRevisited, nil
+	case "referenced":
+		return RelationReferenced, nil
+	case "queued":
+		return RelationQueued, nil
 	default:
 		return 0, fmt.Errorf(
-			"sessiontaskrelation: invalid relation %q (valid: goal, surfaced, revisited)", s,
+			"sessiontaskrelation: invalid relation %q "+
+				"(valid: goal, surfaced, queued, revisited, referenced)", s,
 		)
 	}
 }
@@ -83,7 +109,56 @@ func Validate(s string) error {
 // All returns the canonical set in id order. Used by VerifyIntegrity and by
 // callers that need to enumerate the enum.
 func All() []Relation {
-	return []Relation{RelationGoal, RelationSurfaced, RelationRevisited}
+	return []Relation{
+		RelationGoal, RelationSurfaced, RelationRevisited,
+		RelationReferenced, RelationQueued,
+	}
+}
+
+// Rank orders the relations from strongest claim on the session to weakest:
+// goal < queued < surfaced < revisited < referenced. LOWER rank = STRONGER.
+//
+// One ladder serves two jobs, deliberately, because they are the same judgment:
+//
+//  1. CAPTURE PRECEDENCE (E-1696). upsertSessionTask upgrades a row's relation
+//     when an incoming capture outranks the stored one, and never downgrades.
+//     This replaced E-1462's set-once rule, which was correct only while
+//     `referenced` did not exist: the documented happy path is `task show <id>`
+//     THEN `task claim <id>`, so under set-once the read gate would stamp every
+//     session's own goal task `referenced` forever. Set-once also had the
+//     inverse bug already — claim-then-edit was fine, but create-then-claim
+//     left a session's goal reading `surfaced`.
+//
+//  2. DISPLAY TIER (E-1462's Extension). `session status` ranks equally
+//     actionable rows by this order, so decided work (goal/queued) sits above
+//     incidental work (surfaced/revisited) and read-only relevance
+//     (`referenced`) sinks to the bottom.
+//
+// An unknown value ranks last, so a relation from a newer binary degrades to
+// "least prominent, never upgrades over anything" rather than silently
+// outranking real work.
+func (r Relation) Rank() int {
+	switch r {
+	case RelationGoal:
+		return 0
+	case RelationQueued:
+		return 1
+	case RelationSurfaced:
+		return 2
+	case RelationRevisited:
+		return 3
+	case RelationReferenced:
+		return 4
+	default:
+		return 5
+	}
+}
+
+// Outranks reports whether r is a strictly stronger claim than other — the
+// upgrade test for upsertSessionTask. Equal relations do not outrank each other,
+// so a repeat capture of the same kind is a no-op on relation_id.
+func (r Relation) Outranks(other Relation) bool {
+	return r.Rank() < other.Rank()
 }
 
 // VerifyIntegrity asserts that the session_task_relations SQL table matches the

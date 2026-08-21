@@ -12,9 +12,11 @@ import (
 
 func TestParse_AcceptsKnownSlugs(t *testing.T) {
 	cases := map[string]sessiontaskrelation.Relation{
-		"goal":      sessiontaskrelation.RelationGoal,
-		"surfaced":  sessiontaskrelation.RelationSurfaced,
-		"revisited": sessiontaskrelation.RelationRevisited,
+		"goal":       sessiontaskrelation.RelationGoal,
+		"surfaced":   sessiontaskrelation.RelationSurfaced,
+		"revisited":  sessiontaskrelation.RelationRevisited,
+		"referenced": sessiontaskrelation.RelationReferenced,
+		"queued":     sessiontaskrelation.RelationQueued,
 	}
 	for slug, want := range cases {
 		got, err := sessiontaskrelation.Parse(slug)
@@ -29,7 +31,7 @@ func TestParse_AcceptsKnownSlugs(t *testing.T) {
 }
 
 func TestParse_RejectsUnknown(t *testing.T) {
-	for _, slug := range []string{"", "Goal", "GOAL", "referenced", "queued"} {
+	for _, slug := range []string{"", "Goal", "GOAL", "Referenced", "QUEUED", "read"} {
 		_, err := sessiontaskrelation.Parse(slug)
 		if err == nil {
 			t.Errorf("Parse(%q) accepted invalid value", slug)
@@ -56,8 +58,8 @@ func TestRelation_StringRoundTrip(t *testing.T) {
 }
 
 func TestAll_HasExpectedCount(t *testing.T) {
-	if all := sessiontaskrelation.All(); len(all) != 3 {
-		t.Errorf("All() returned %d, want 3", len(all))
+	if all := sessiontaskrelation.All(); len(all) != 5 {
+		t.Errorf("All() returned %d, want 5", len(all))
 	}
 }
 
@@ -77,7 +79,8 @@ func newSeededDB(t *testing.T) *sql.DB {
 func seedAll(t *testing.T, db *sql.DB) {
 	t.Helper()
 	if _, err := db.Exec(`INSERT INTO session_task_relations (id, slug, label) VALUES
-		(1, 'goal', 'Goal'), (2, 'surfaced', 'Surfaced'), (3, 'revisited', 'Revisited')`); err != nil {
+		(1, 'goal', 'Goal'), (2, 'surfaced', 'Surfaced'), (3, 'revisited', 'Revisited'),
+		(4, 'referenced', 'Referenced'), (5, 'queued', 'Queued')`); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 }
@@ -100,7 +103,7 @@ func TestVerifyIntegrity_MissingEnumRow(t *testing.T) {
 
 func TestVerifyIntegrity_SlugMismatch(t *testing.T) {
 	db := newSeededDB(t)
-	if _, err := db.Exec(`INSERT INTO session_task_relations VALUES (1, 'wrong', 'Goal'), (2, 'surfaced', 'Surfaced'), (3, 'revisited', 'Revisited')`); err != nil {
+	if _, err := db.Exec(`INSERT INTO session_task_relations VALUES (1, 'wrong', 'Goal'), (2, 'surfaced', 'Surfaced'), (3, 'revisited', 'Revisited'), (4, 'referenced', 'Referenced'), (5, 'queued', 'Queued')`); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 	err := sessiontaskrelation.VerifyIntegrity(db)
@@ -111,7 +114,7 @@ func TestVerifyIntegrity_SlugMismatch(t *testing.T) {
 
 func TestVerifyIntegrity_LabelMismatch(t *testing.T) {
 	db := newSeededDB(t)
-	if _, err := db.Exec(`INSERT INTO session_task_relations VALUES (1, 'goal', 'Wrong'), (2, 'surfaced', 'Surfaced'), (3, 'revisited', 'Revisited')`); err != nil {
+	if _, err := db.Exec(`INSERT INTO session_task_relations VALUES (1, 'goal', 'Wrong'), (2, 'surfaced', 'Surfaced'), (3, 'revisited', 'Revisited'), (4, 'referenced', 'Referenced'), (5, 'queued', 'Queued')`); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 	err := sessiontaskrelation.VerifyIntegrity(db)
@@ -129,5 +132,64 @@ func TestVerifyIntegrity_UnknownTableRow(t *testing.T) {
 	err := sessiontaskrelation.VerifyIntegrity(db)
 	if err == nil || !strings.Contains(err.Error(), "no matching enum constant") {
 		t.Errorf("expected unknown-row error, got %v", err)
+	}
+}
+
+// TestRank_IsStrictTotalOrder pins the ladder E-1696 introduced: goal < queued <
+// surfaced < revisited < referenced, with no two relations sharing a rank.
+//
+// Ties are the failure this guards. Rank drives BOTH the upsert's upgrade test
+// and the display tier, so two relations at the same rank would make captures
+// non-deterministic (neither outranks the other, so whichever arrived first
+// sticks) while looking perfectly correct in every single-relation test.
+func TestRank_IsStrictTotalOrder(t *testing.T) {
+	want := []sessiontaskrelation.Relation{
+		sessiontaskrelation.RelationGoal,
+		sessiontaskrelation.RelationQueued,
+		sessiontaskrelation.RelationSurfaced,
+		sessiontaskrelation.RelationRevisited,
+		sessiontaskrelation.RelationReferenced,
+	}
+	for i := 1; i < len(want); i++ {
+		if !want[i-1].Outranks(want[i]) {
+			t.Errorf("%s should outrank %s (ranks %d, %d)",
+				want[i-1], want[i], want[i-1].Rank(), want[i].Rank())
+		}
+	}
+	seen := make(map[int]sessiontaskrelation.Relation, len(want))
+	for _, rel := range sessiontaskrelation.All() {
+		if prev, dup := seen[rel.Rank()]; dup {
+			t.Errorf("rank %d shared by %s and %s", rel.Rank(), prev, rel)
+		}
+		seen[rel.Rank()] = rel
+	}
+	if len(seen) != len(sessiontaskrelation.All()) {
+		t.Errorf("ranks cover %d relations, want %d", len(seen), len(sessiontaskrelation.All()))
+	}
+}
+
+// TestOutranks_IsStrict pins that an equal relation does NOT outrank itself. The
+// upsert's upgrade test is `incoming.Outranks(stored)`, so a non-strict
+// comparison would rewrite relation_id on every repeat touch for no reason.
+func TestOutranks_IsStrict(t *testing.T) {
+	for _, rel := range sessiontaskrelation.All() {
+		if rel.Outranks(rel) {
+			t.Errorf("%s outranks itself", rel)
+		}
+	}
+}
+
+// TestRank_UnknownRanksLast covers the ELSE arm of the SQL CASE built from this
+// enum (events.relationRankCase): a NULL relation_id and an id from a newer
+// binary both land on Relation(0). It must rank BELOW every real relation, so a
+// NULL historical row gets filled in by the next capture and an unknown value
+// never outranks real work.
+func TestRank_UnknownRanksLast(t *testing.T) {
+	unknown := sessiontaskrelation.Relation(0)
+	for _, rel := range sessiontaskrelation.All() {
+		if !rel.Outranks(unknown) {
+			t.Errorf("%s (rank %d) should outrank unknown (rank %d)",
+				rel, rel.Rank(), unknown.Rank())
+		}
 	}
 }

@@ -306,3 +306,17 @@ type SessionTasksOrderedPayload struct {
 	Process string     `json:"process"`
 	Groups  [][]string `json:"groups"`
 }
+
+// SessionTaskMembershipPayload carries the task list for the two session-task
+// membership verbs (E-1696): `session_tasks.queued` (`session task add`) and
+// `session_tasks.removed` (`session task remove`). Process is the session
+// identifier, resolved exactly as SessionTasksOrderedPayload's is. TaskIDs are
+// display form ("E-100"); the executors strip the prefix.
+//
+// One struct for both kinds because the INPUT is identical — a session and a set
+// of tasks — and the KIND carries the verb. Splitting it would give two types
+// that must be kept byte-identical by hand, which is the drift this avoids.
+type SessionTaskMembershipPayload struct {
+	Process string   `json:"process"`
+	TaskIDs []string `json:"task_ids"`
+}

@@ -227,12 +227,15 @@ func TestApplyHiddenMode(t *testing.T) {
 // names the viewer the hidden flags belong to — without which `hidden: true`
 // would be an unattributed claim.
 func TestRenderJSON_CarriesHiddenState(t *testing.T) {
-	prevGather, prevAnnotate := gatherRows, annotateHidden
-	t.Cleanup(func() { gatherRows, annotateHidden = prevGather, prevAnnotate })
+	prevGather, prevAnnotate, prevRelation := gatherRows, annotateHidden, annotateRelation
+	t.Cleanup(func() {
+		gatherRows, annotateHidden, annotateRelation = prevGather, prevAnnotate, prevRelation
+	})
 	gatherRows = func(focal, parentSession, emittingSession int64, all bool) ([]monitor.SessionStatusRow, error) {
 		return hiddenRows(), nil
 	}
 	annotateHidden = func(rows []monitor.SessionStatusRow, viewer int64) error { return nil }
+	annotateRelation = func(rows []monitor.SessionStatusRow, viewer int64) error { return nil }
 
 	var b strings.Builder
 	if err := renderJSON(&b, anchor{focal: 1914, emittingSession: 42}, false); err != nil {

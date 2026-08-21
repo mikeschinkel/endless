@@ -30,6 +30,7 @@ import (
 
 	"github.com/mikeschinkel/endless/internal/jobs"
 	"github.com/mikeschinkel/endless/internal/monitor"
+	"github.com/mikeschinkel/endless/internal/sessiontaskrelation"
 )
 
 // fallbackCols is used when the terminal width can't be detected (output not a
@@ -515,6 +516,14 @@ func renderSnapshot(w io.Writer, a anchor, all bool, cols int, color bool, hm hi
 	if err := annotateHidden(rows, a.emittingSession); err != nil {
 		return 0, err
 	}
+	// Layer the VIEWING session's relations on for the display tier (E-1696).
+	// Annotated, not queried, for the same reason as the hides — and one more:
+	// the focal row set unions EVERY session working the focal task, so a
+	// relation taken from the query would report some other session's
+	// classification as yours.
+	if err := annotateRelation(rows, a.emittingSession); err != nil {
+		return 0, err
+	}
 	renderTo(w, rows, a.focal, a.hint, cols, color, hm)
 	return len(rows), nil
 }
@@ -523,6 +532,10 @@ func renderSnapshot(w io.Writer, a anchor, all bool, cols int, color bool, hm hi
 // worktreeAnomalies and gatherRows) so the renderer's hide behavior is testable
 // without a DB.
 var annotateHidden = monitor.AnnotateSessionStatusHidden
+
+// annotateRelation is the per-session relation source, seamed as a package var
+// on the same rule as annotateHidden so the tier is testable without a DB.
+var annotateRelation = monitor.AnnotateSessionStatusRelation
 
 // monitorFrame produces one live-monitor frame: refresh the anchor, then render
 // against it. Split out of monitorLoop so tests can drive the resolve→render
@@ -763,11 +776,16 @@ func renderTo(w io.Writer, rows []monitor.SessionStatusRow, focal int64, noTaskH
 		}
 	}
 
+	// Relation-column width, same width-on-demand rule (E-1696): the ⊕/· slot
+	// exists only when a RENDERED row carries a mark, so a frame with no queued
+	// or referenced rows is byte-identical to before.
+	rw := relationColWidth(rows)
+
 	// Fixed prefix width = "I L NNNNNN P " = 13 cols (icon, type letter, the
 	// 6-wide left-justified E-id, phase char, each single-spaced).
 	const prefixWidth = 13
 	blockSeg := blockSegWidth(bw)
-	titleBudget := cols - prefixWidth - blockSeg - hw
+	titleBudget := cols - prefixWidth - blockSeg - hw - rw
 	if titleBudget < minTitleBudget {
 		titleBudget = minTitleBudget
 	}
@@ -778,6 +796,7 @@ func renderTo(w io.Writer, rows []monitor.SessionStatusRow, focal int64, noTaskH
 			act.icon(), typeLetter(r.TypeSlug), unsettledMark(r), "E-"+strconv.FormatInt(r.ID, 10), phaseChar(r),
 		)
 		line += hiddenField(r, hw)
+		line += relationField(r, rw)
 		line += blockField(r, bw)
 		// The supersession note is charged to the title's budget, not appended
 		// past it: the row must still fit `cols`, and the note is the part that
@@ -789,7 +808,7 @@ func renderTo(w io.Writer, rows []monitor.SessionStatusRow, focal int64, noTaskH
 			avail = minTitleBudget
 		}
 		line += runewidth.Truncate(collapse(r.Title), avail, "…") + note
-		fmt.Fprintln(w, colorize(line, r.Phase, isTerminal(r.Status), r.Hidden, r.Unsettled, color))
+		fmt.Fprintln(w, colorize(line, r, color))
 
 		// Focal-row detail: expand the coarse ◆ marker into the specific
 		// git/worktree anomalies for the focal worktree (E-1758), the same set
@@ -920,7 +939,7 @@ func hiddenField(r monitor.SessionStatusRow, hw int) string {
 // truncation, which would hide a real glyph).
 func buildLegend(rows []monitor.SessionStatusRow) string {
 	var present [len(actionMeta)]bool
-	var done, blocked, blocks, unsettled, hidden bool
+	var done, blocked, blocks, unsettled, hidden, queued, referenced bool
 	for _, r := range rows {
 		present[classify(r)] = true
 		if isTerminal(r.Status) {
@@ -928,6 +947,12 @@ func buildLegend(rows []monitor.SessionStatusRow) string {
 		}
 		if r.Hidden {
 			hidden = true
+		}
+		switch r.Relation {
+		case sessiontaskrelation.RelationQueued:
+			queued = true
+		case sessiontaskrelation.RelationReferenced:
+			referenced = true
 		}
 		if r.BlockedByN > 0 {
 			blocked = true
@@ -967,6 +992,15 @@ func buildLegend(rows []monitor.SessionStatusRow) string {
 	// only ever appear under --show-hidden/--only-hidden.
 	if hidden {
 		parts = append(parts, hiddenGlyph+" hidden")
+	}
+	// ⊕/· join ⊘ in the view-scoped tail: like hidden, they describe how the row
+	// entered THIS SESSION's scope rather than anything about the task (E-1696).
+	// ⊕ before ·, matching the order they sort in.
+	if queued {
+		parts = append(parts, queuedGlyph+" queued")
+	}
+	if referenced {
+		parts = append(parts, referencedGlyph+" referenced")
 	}
 	return strings.Join(parts, "  ")
 }
@@ -1039,9 +1073,24 @@ func classify(r monitor.SessionStatusRow) action {
 
 func sortRows(rows []monitor.SessionStatusRow) {
 	sort.SliceStable(rows, func(i, j int) bool {
+		// E-1696, primary key: `referenced` rows sink below EVERYTHING, whatever
+		// their status. Flood control — reads are high-volume and would otherwise
+		// push real work off the top of the pane. This is the only key that
+		// outranks the action classification, and only in the sinking direction.
+		ri, rj := isReferenced(rows[i]), isReferenced(rows[j])
+		if ri != rj {
+			return !ri
+		}
 		ai, aj := classify(rows[i]), classify(rows[j])
 		if ai != aj {
 			return ai < aj
+		}
+		// E-1696, tiebreak only: between equally actionable rows, decided work
+		// (goal/queued) sorts above incidental work. Deliberately BELOW the action
+		// key — a queued task parked in `later` must not jump the row you are
+		// actually working.
+		if pi, pj := prominence(rows[i]), prominence(rows[j]); pi != pj {
+			return pi < pj
 		}
 		pi, pj := phaseRank(rows[i].Phase), phaseRank(rows[j].Phase)
 		if pi != pj {
@@ -1242,13 +1291,26 @@ const (
 // says. It sits inside the veto, not outside it — an unsettled hidden row still
 // renders at normal weight, because "this worktree still needs a land" outranks
 // "I asked not to see this" for the same reason it outranks "this is done".
-func colorize(line, phase string, terminal, hidden, unsettled, enabled bool) string {
+// colorize applies the row's intensity: dim for muted rows, bold for urgent,
+// normal otherwise.
+//
+// It takes the ROW rather than the five flags it used to derive them from
+// (E-1696). Adding `referenced` to the dim set would have made a sixth boolean
+// in a positional list of five, where every call site is a row anyway and a
+// transposed pair is invisible at the call and at the definition.
+//
+// `referenced` joins the existing dim set rather than getting its own arm, so
+// E-1707's unsettled veto covers it on the same terms as every other dim case:
+// a diverged worktree always reads at full intensity, whatever put the row here.
+func colorize(line string, r monitor.SessionStatusRow, enabled bool) string {
 	if !enabled {
 		return line
 	}
+	phase := r.Phase
 	switch {
-	case terminal, hidden, phase == "later", phase == "maybe":
-		if unsettled {
+	case isTerminal(r.Status), r.Hidden, isReferenced(r),
+		phase == "later", phase == "maybe":
+		if r.Unsettled {
 			return line
 		}
 		return ansiDim + line + ansiReset

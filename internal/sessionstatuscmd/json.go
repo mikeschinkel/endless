@@ -30,22 +30,30 @@ import (
 // rather than the glyph keeps consumers off the icon vocabulary, which is a
 // rendering detail free to change.
 type jsonRow struct {
-	ID         int64  `json:"id"`
-	ProjectID  int64  `json:"project_id"`
-	Title      string `json:"title"`
-	Status     string `json:"status"`
-	Phase      string `json:"phase"`
-	Type       string `json:"type"`
-	Action     string `json:"action"`
-	HasText    bool   `json:"has_text"`
-	IsFocal    bool   `json:"is_focal"`
-	IsParent   bool   `json:"is_parent"`
-	IsFrom     bool   `json:"is_from"`
-	InFlight   bool   `json:"in_flight"`
-	Landed     bool   `json:"landed"`
-	Unsettled  bool   `json:"unsettled"`
-	Hidden     bool   `json:"hidden"`
-	HiddenAt   string `json:"hidden_at,omitempty"`
+	ID        int64  `json:"id"`
+	ProjectID int64  `json:"project_id"`
+	Title     string `json:"title"`
+	Status    string `json:"status"`
+	Phase     string `json:"phase"`
+	Type      string `json:"type"`
+	Action    string `json:"action"`
+	HasText   bool   `json:"has_text"`
+	IsFocal   bool   `json:"is_focal"`
+	IsParent  bool   `json:"is_parent"`
+	IsFrom    bool   `json:"is_from"`
+	InFlight  bool   `json:"in_flight"`
+	Landed    bool   `json:"landed"`
+	Unsettled bool   `json:"unsettled"`
+	Hidden    bool   `json:"hidden"`
+	HiddenAt  string `json:"hidden_at,omitempty"`
+	// Relation is how this task entered the VIEWING session's scope (E-1696) —
+	// the machine slug ("goal", "queued", "surfaced", "revisited",
+	// "referenced"). Omitted when the viewer has no session_tasks row for the
+	// task: the read-time children, dependents and upstream blockers, which
+	// legitimately entered scope no way at all. Attributed by the frame's
+	// `viewer_session`, exactly as `hidden` is — relation is a property of the
+	// (session, task) pair, so an unattributed value would be meaningless.
+	Relation   string `json:"relation,omitempty"`
 	BlockedByN int    `json:"blocked_by_n"`
 	BlocksN    int    `json:"blocks_n"`
 	// ReplacedBy is emitted UNGATED — the table only draws the supersession on a
@@ -77,6 +85,13 @@ func renderJSON(w io.Writer, a anchor, all bool) error {
 	}
 	monitor.AnnotateSessionStatusUnsettled(rows)
 	if err := annotateHidden(rows, a.emittingSession); err != nil {
+		return err
+	}
+	// Required, not optional: sortRows keys on relation (E-1696), so skipping
+	// this would leave --json ordered by a field it never filled and silently
+	// desync it from the table — the one thing this function's contract promises
+	// it will not do.
+	if err := annotateRelation(rows, a.emittingSession); err != nil {
 		return err
 	}
 	sortRows(rows)
@@ -114,6 +129,7 @@ func renderJSON(w io.Writer, a anchor, all bool) error {
 			Unsettled:  r.Unsettled,
 			Hidden:     r.Hidden,
 			HiddenAt:   r.HiddenAt,
+			Relation:   relationSlug(r),
 			BlockedByN: r.BlockedByN,
 			BlocksN:    r.BlocksN,
 			ReplacedBy: replaced,
@@ -124,4 +140,14 @@ func renderJSON(w io.Writer, a anchor, all bool) error {
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
 	return enc.Encode(out)
+}
+
+// relationSlug renders a row's relation for JSON, or "" when the viewer has no
+// session_tasks row for the task (Relation(0), which String() would otherwise
+// render as the debug form "Relation(0)").
+func relationSlug(r monitor.SessionStatusRow) string {
+	if r.Relation == 0 {
+		return ""
+	}
+	return r.Relation.String()
 }

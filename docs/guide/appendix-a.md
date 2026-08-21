@@ -14,3 +14,4 @@ Interactive commands on the `session` group:
 - **`endless session history [session]`** — show the conversation history for a session (current by default).
 - **`endless session search <query>`** — search across all session messages.
 - **`endless session hide <ids...>`** / **`endless session unhide <ids...>`** — hide sessions from (or restore them to) `session list`. With `--task <id>` (repeatable) they switch senses entirely and hide/restore individual TASK rows in one session's `session status` view — see **Quieting a noisy status view** in `endless guide sessions`.
+- **`endless session task add <ids...>`** / **`endless session task remove <ids...>`** — add tasks to a session's list as decided work (`queued`), or drop the association entirely. Distinct from `session hide --task`, which suppresses a row while keeping the association — see **Correcting what your session's list holds** in `endless guide sessions`.

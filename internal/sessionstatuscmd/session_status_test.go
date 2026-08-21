@@ -580,7 +580,16 @@ func TestColorize(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			enabled := c.name != "color disabled is untouched"
-			got := colorize(line, c.phase, c.terminal, false, c.unsettled, enabled)
+			status := "underway"
+			if c.terminal {
+				status = "confirmed"
+			}
+			row := monitor.SessionStatusRow{
+				Phase:     c.phase,
+				Status:    status,
+				Unsettled: c.unsettled,
+			}
+			got := colorize(line, row, enabled)
 			if got != c.want {
 				t.Errorf("colorize(phase=%q, terminal=%v, unsettled=%v) = %q, want %q",
 					c.phase, c.terminal, c.unsettled, got, c.want)

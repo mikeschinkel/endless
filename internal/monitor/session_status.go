@@ -5,6 +5,8 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+
+	"github.com/mikeschinkel/endless/internal/sessiontaskrelation"
 )
 
 // SessionStatusRow is one task row in the per-session "what's next" view
@@ -53,8 +55,23 @@ type SessionStatusRow struct {
 	// hiding is a property of the (session, task) pair, never of the task alone.
 	// AnnotateSessionStatusHidden fills them for one viewer; unannotated rows stay
 	// false/"" so every existing caller is unaffected.
-	Hidden     bool
-	HiddenAt   string
+	Hidden   bool
+	HiddenAt string
+	// Relation is how this task entered the VIEWING session's scope (E-1696):
+	// the session_tasks.relation_id of the (viewer, task) row. Like Hidden it is
+	// an annotation, not part of the row query, and for the same reason — the row
+	// set is viewer-agnostic while relation belongs to the (session, task) pair.
+	// The focal view in particular unions rows from EVERY session working the
+	// focal task, so a relation baked into the query would report some other
+	// session's classification as if it were yours.
+	//
+	// Zero (sessiontaskrelation.Relation(0), not a member of All()) means "this
+	// viewer has no session_tasks row for the task" — the read-time children,
+	// dependents and upstream blockers (E-1685/E-1691/E-1795), which have no
+	// session_tasks row by design. Rank() puts it last, which is where an
+	// unclassified row belongs. AnnotateSessionStatusRelation fills this for one
+	// viewer; unannotated rows stay 0 so every existing caller is unaffected.
+	Relation   sessiontaskrelation.Relation
 	BlockedByN int
 	BlocksN    int
 	// ReplacedBy holds the ids of the tasks that supersede this one. `old
@@ -413,14 +430,19 @@ func SessionStatusRowsForSession(sessionID int64, includeAll bool) ([]SessionSta
 		allFlag = 1
 	}
 
-	// relation_id 2=surfaced, 3=revisited (sessiontaskrelation.Relation). Goal (1)
-	// is excluded — a goal-bearing session resolves via SessionStatusRows.
+	// Every relation EXCEPT goal (1). Goal is excluded because a goal-bearing
+	// session resolves via SessionStatusRows, so a goal row reaching here would
+	// mean the anchor already took the other path. queued (5) and referenced (4)
+	// are included on their merits: `session task add` promotes work the session
+	// has decided on but not touched, and that is precisely the case this no-goal
+	// view exists to show. The set is built from the enum rather than written as
+	// a literal so adding a relation cannot silently omit it here (E-1696).
 	q := `
 WITH base AS (
   SELECT t.id, t.project_id, t.title, t.status, t.phase, t.text, t.type_id
     FROM session_tasks st JOIN live_tasks t ON t.id = st.task_id
    WHERE st.session_id = ?
-     AND st.relation_id IN (2, 3)
+     AND st.relation_id IN (` + nonGoalRelationIDs + `)
 ),
 enr AS (
   SELECT b.id, b.project_id, b.title, b.status, b.phase,

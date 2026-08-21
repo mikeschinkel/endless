@@ -245,8 +245,9 @@ func TestValidKinds_Count(t *testing.T) {
 	// + decision_relation.{created,deleted}) + 1 (E-1541 epic.status_derived)
 	// + 1 (E-1683 session_tasks.ordered)
 	// + 2 (E-1864 decision.{unaccepted,unrejected})
-	// - 1 (E-1906 session.recapped, retired with the session-recap machinery) = 43.
-	want := 43
+	// - 1 (E-1906 session.recapped, retired with the session-recap machinery)
+	// + 2 (E-1696 session_tasks.{queued,removed}) = 45.
+	want := 45
 	got := len(events.ValidKinds)
 	if got != want {
 		t.Errorf("ValidKinds has %d entries, want %d", got, want)

@@ -2861,3 +2861,31 @@ half I had a tidy story for.
 
 When asked why, answer why. A fix offered in place of an answer is an evasion
 wearing a deliverable.
+
+## Don't borrow a neighbouring comment's rationale for your own decision
+
+E-1696, 2026-08-21. I justified `session task remove` clearing the row in
+`session_hidden_tasks` by writing "session_hidden_tasks has no FK (by design — a
+hide must outlive its session or task), so the row would otherwise be orphaned."
+
+Mike: "neither session nor task rows should ever be deleted (they get marked as
+deleted but not removed), so you just made a moot point, right?"
+
+Right. Tasks are soft-removed (`removed = 1`, ED-1547/E-1929) — retention is the
+whole point, so the id can never be re-minted. Sessions are never deleted. The
+only `DELETE FROM tasks` in the tree are the db-restore path and a 2026
+migration. So "must outlive its session or task" describes a scenario that does
+not occur.
+
+I had lifted that sentence off schema.sql's own comment on the table. It is about
+a DIFFERENT relationship — session_hidden_tasks to tasks/sessions — and I
+repurposed it for mine, which is session_hidden_tasks to session_tasks. The real
+reason needed no FK argument at all: the two tables are independent, keyed on the
+same pair, with no relationship between them, so deleting membership leaves the
+hide behind regardless of any deletion policy anywhere. A re-captured task would
+come back already hidden.
+
+The lesson: when a nearby comment sounds like it justifies what I'm doing, check
+whether it is talking about the same relationship. Restating an adjacent
+rationale reads as grounded and isn't. Write the reason my own change actually
+has, even when a plausible one is sitting right there to copy.

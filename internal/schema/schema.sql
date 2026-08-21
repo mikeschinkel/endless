@@ -886,9 +886,14 @@ CREATE TABLE IF NOT EXISTS session_task_relations (
 );
 
 INSERT OR IGNORE INTO session_task_relations (id, slug, label) VALUES
-    (1, 'goal',      'Goal'),
-    (2, 'surfaced',  'Surfaced'),
-    (3, 'revisited', 'Revisited');
+    (1, 'goal',       'Goal'),
+    (2, 'surfaced',   'Surfaced'),
+    (3, 'revisited',  'Revisited'),
+    -- E-1696. Ids are APPENDED, never renumbered: they are persisted in
+    -- session_tasks.relation_id, so inserting in the middle would reclassify
+    -- live rows. Prominence order is Relation.Rank() in Go, not the id.
+    (4, 'referenced', 'Referenced'),
+    (5, 'queued',     'Queued');
 
 -- Which sessions touched which tasks (E-1322). Query-speed projection of the
 -- events ledger. No FKs on session_id/task_id by design: rows must outlive their
@@ -899,11 +904,22 @@ INSERT OR IGNORE INTO session_task_relations (id, slug, label) VALUES
 -- Session-scoped (not tasks.sort_order, which is global): two sessions may
 -- order the same task differently. Set by `endless session order` via the
 -- session_tasks.ordered event; replace-all (unlisted rows reset to NULL).
--- relation_id (E-1462): how the task entered this session's scope, FK to
--- session_task_relations. Set once at capture time by the task-mutation executors
--- (claim→goal, create/import→surfaced, else→revisited) and never changed on a
--- later touch. NULL = pre-E-1462 historical row (the live side-effect table is
--- not replayed from the ledger, so there is nothing to backfill).
+-- relation_id (E-1462, revised E-1696): how the task entered this session's
+-- scope, FK to session_task_relations. Written at capture time by the
+-- task-mutation executors (claim→goal, create/import→surfaced, else→revisited)
+-- and by the session-task verbs (`session task add`→queued).
+--
+-- E-1696 replaced E-1462's set-once rule with an UPGRADE-ONLY ladder
+-- (sessiontaskrelation.Relation.Rank(): goal < queued < surfaced < revisited <
+-- referenced). A later capture may strengthen a row's relation but never weaken
+-- it. Set-once was correct only while `referenced` did not exist: the documented
+-- happy path reads a task before claiming it, so the read gate would otherwise
+-- pin every session's own goal task at `referenced` permanently.
+--
+-- NULL = pre-E-1462 historical row (the live side-effect table is not replayed
+-- from the ledger, so there is nothing to backfill). A NULL row is treated as
+-- weaker than every real relation, so the first capture after the upgrade fills
+-- it in.
 CREATE TABLE IF NOT EXISTS session_tasks (
     id INTEGER PRIMARY KEY,
     session_id INTEGER NOT NULL,
