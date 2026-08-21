@@ -3071,3 +3071,15 @@ edit it. Project-wide regression is `go build/vet/test ./...` plus `just test`.
 
 The finding was still worth acting on — for the script being written, which is
 about to run. Fix yours; ignore the landed ones.
+
+## The task TITLE is spec — don't ask for a word it already chose (E-1920)
+
+E-1920 is titled "Add **superseded** and obsolete end states for decisions." I
+designed the feature, then asked Mike to choose between a new `supersedes`
+relation and reusing `reverses` — a naming question his title had already
+answered. Worse, I framed it as the one call I "didn't want to make for him."
+
+Read the title as part of the spec, not as a label on the description. When a
+naming question comes up, check whether the title, description, or an existing
+sibling already fixes the vocabulary. Asking for a decision that is already
+recorded spends the user's attention to tell me something I could have read.
