@@ -1,8 +1,10 @@
 """SQLite database helpers."""
 
 import os
+import re
 import sqlite3
 from pathlib import Path
+from typing import NamedTuple
 
 import click
 
@@ -13,6 +15,12 @@ _conn: sqlite3.Connection | None = None
 
 # Find schema.sql relative to this package (temporary until E-894 moves all SQL to Go)
 _SCHEMA_PATH = Path(__file__).resolve().parent.parent.parent / "internal" / "schema" / "schema.sql"
+
+# The per-ticket schema changes that carry an existing DB from one shape to the
+# next, beside the schema they amend. Present when endless is installed from a
+# source checkout (`just install` installs the Python CLI editable), absent when
+# it is not — every reader below tolerates the absence (E-2036).
+_CHANGES_DIR = _SCHEMA_PATH.parent / "changes"
 
 
 def _should_auto_migrate() -> bool:
@@ -491,11 +499,211 @@ def _migrate_v6(conn: sqlite3.Connection):
         conn.commit()
 
 
-def _is_missing_schema_error(err: sqlite3.OperationalError) -> bool:
-    """sqlite3 raises OperationalError with these prefixes when the DB is
-    structurally absent. Distinct from per-row errors we want to keep raising."""
-    msg = str(err).lower()
-    return msg.startswith("no such table") or msg.startswith("no such column")
+class _MissingObject(NamedTuple):
+    """One table or column the database does not have, as sqlite3 named it."""
+
+    kind: str           # "table" or "column"
+    name: str           # exactly as sqlite3 named it, qualifier and all
+    table: str | None   # the owning table, on the one error form that carries it
+
+    @property
+    def ident(self) -> str:
+        """The bare identifier: 'd.superseded_by' names the column 'superseded_by'."""
+        return self.name.rsplit(".", 1)[-1]
+
+    @property
+    def label(self) -> str:
+        """How the message names it — qualified by its table when that is known.
+
+        The alias sqlite3 echoes back ('d.superseded_by') is dropped: 'd' is a
+        query-local name for a table the reader would have to reconstruct, and
+        the failing statement is printed underneath anyway.
+        """
+        return f"{self.table}.{self.ident}" if self.table else self.ident
+
+
+_NO_SUCH_TABLE_RE = re.compile(r"^no such table:\s*(\S+)", re.IGNORECASE)
+_NO_SUCH_COLUMN_RE = re.compile(r"^no such column:\s*(\S+)", re.IGNORECASE)
+_NO_COLUMN_NAMED_RE = re.compile(
+    r"^table\s+(\S+)\s+has no column named\s+(\S+)", re.IGNORECASE
+)
+
+
+def _classify_schema_error(err: sqlite3.OperationalError) -> _MissingObject | None:
+    """Name what the database is missing, or None if that isn't what failed.
+
+    sqlite3 phrases it three ways: "no such table: X" and "no such column: X"
+    from a SELECT/UPDATE/ORDER BY, and "table T has no column named C" from an
+    INSERT. Everything else — syntax errors, locking, per-row failures — is a
+    real error to keep raising.
+    """
+    msg = str(err).strip()
+    m = _NO_SUCH_TABLE_RE.match(msg)
+    if m:
+        return _MissingObject("table", m.group(1), None)
+    m = _NO_SUCH_COLUMN_RE.match(msg)
+    if m:
+        return _MissingObject("column", m.group(1), None)
+    m = _NO_COLUMN_NAMED_RE.match(msg)
+    if m:
+        return _MissingObject("column", m.group(2), m.group(1))
+    return None
+
+
+def _change_files() -> list[Path]:
+    """Every per-ticket schema-change file this install ships.
+
+    runner/ is a directory (library code, not a change), so is_file() excludes
+    it. Empty when the directory is absent, which is the case for an install
+    that is a copy of src/endless/ rather than a source checkout — the hint
+    below degrades to naming the missing column and nothing more.
+    """
+    if not _CHANGES_DIR.is_dir():
+        return []
+    return sorted(
+        p for p in _CHANGES_DIR.iterdir()
+        if p.is_file() and p.suffix in (".sql", ".go")
+    )
+
+
+def _unapplied_changes(conn: sqlite3.Connection) -> list[Path]:
+    """The change files with no _schema_version marker in THIS database.
+
+    The marker key is the file's basename without extension — the same key
+    `endless db apply-change` computes (internal/schema/changes/runner). A DB
+    predating the marker table has applied nothing we can prove, so every file
+    counts as outstanding.
+    """
+    files = _change_files()
+    if not files:
+        return []
+    applied: set[str] = set()
+    if _has_table(conn, "_schema_version"):
+        applied = {r[0] for r in conn.execute("SELECT name FROM _schema_version")}
+    return [p for p in files if p.stem not in applied]
+
+
+def _changes_naming(
+    missing: _MissingObject, candidates: list[Path]
+) -> tuple[list[Path], bool]:
+    """The candidate changes that name the missing object, and how they name it.
+
+    Two tiers, because they are worth different confidence. A change whose text
+    carries the DDL that creates the object *adds* it — that is the file to
+    apply, and the flag says so. A change that merely mentions the identifier
+    (a .go change explaining an ordering constraint in a comment, say) is a
+    lead, not an answer, and the message words it as one.
+
+    The DDL match is a text match, not a parse: a `.go` change builds the same
+    statement as a string, so one pattern covers both file kinds.
+    """
+    ident = re.escape(missing.ident)
+    if missing.kind == "column":
+        ddl = re.compile(rf"ADD\s+(?:COLUMN\s+)?[\"'`\[]?{ident}\b", re.IGNORECASE)
+    else:
+        ddl = re.compile(
+            rf"CREATE\s+(?:TABLE|VIEW)\s+(?:IF\s+NOT\s+EXISTS\s+)?[\"'`\[]?{ident}\b",
+            re.IGNORECASE,
+        )
+    mention = re.compile(rf"\b{ident}\b")
+    adders, mentions = [], []
+    for path in candidates:
+        try:
+            text = path.read_text(errors="replace")
+        except OSError:
+            continue
+        if ddl.search(text):
+            adders.append(path)
+        elif mention.search(text):
+            mentions.append(path)
+    if adders:
+        return adders, True
+    return mentions, False
+
+
+def _sql_excerpt(sql: str, limit: int = 160) -> str:
+    """The failing statement on one line, short enough to read."""
+    one_line = " ".join(sql.split())
+    if len(one_line) <= limit:
+        return one_line
+    return one_line[:limit - 1] + "…"
+
+
+def _schema_error_hint(
+    err: sqlite3.OperationalError, sql: str
+) -> click.ClickException | None:
+    """Diagnose a failed statement, or None to let the error through unchanged.
+
+    E-2036: one missing column used to be reported as an uninitialized
+    database — the message named XDG_CONFIG_HOME and the db file's byte count
+    while `decision list`, which did not select that column, worked fine in the
+    same second. A database that HAS the endless schema and lacks one object is
+    a different problem with a different fix, so it gets a different message.
+    """
+    missing = _classify_schema_error(err)
+    if missing is None:
+        return None
+    conn = _conn
+    if conn is None or not _has_table(conn, "projects"):
+        return _missing_schema_hint()
+    return _incomplete_schema_hint(conn, missing, sql)
+
+
+def _incomplete_schema_hint(
+    conn: sqlite3.Connection, missing: _MissingObject, sql: str
+) -> click.ClickException:
+    """Build the message for a schema'd database missing one table or column.
+
+    Two outcomes, because they need opposite fixes. An outstanding change file
+    names the object: the database lags the code, and the fix is to apply that
+    file. None does: the object exists nowhere, so the query is wrong or the
+    change that adds it was never written — and saying "out of date" there
+    would send the reader after a migration that does not exist.
+    """
+    def line(label: str, value: str) -> str:
+        return f"    {label:<15} {value}"
+
+    outstanding = _unapplied_changes(conn)
+    named_by, adds_it = _changes_naming(missing, outstanding)
+    lines = []
+    if named_by:
+        lines.append(
+            f"endless database schema is out of date at {config.tilde(config.DB_PATH)}"
+        )
+        lines.append(line(f"missing {missing.kind}:", missing.label))
+        for path in named_by:
+            lines.append(line(
+                "added by:" if adds_it else "named by:",
+                f"{config.tilde(path)} — not applied to this database",
+            ))
+        lines.append(line(
+            "apply it:" if adds_it else "try:",
+            f"endless db apply-change {config.tilde(named_by[0])}",
+        ))
+    else:
+        lines.append(
+            f"endless database at {config.tilde(config.DB_PATH)} "
+            f"has no {missing.kind} {missing.label}"
+        )
+        lines.append(
+            "    the database is initialized; only this one object is absent"
+        )
+        if not _CHANGES_DIR.is_dir():
+            lines.append(
+                f"    no schema changes to check against: "
+                f"{config.tilde(_CHANGES_DIR)} is not part of this install"
+            )
+        else:
+            lines.append(
+                f"    no outstanding schema change adds it "
+                f"({len(outstanding)} checked in {config.tilde(_CHANGES_DIR)})"
+            )
+        lines.append(
+            "    so either the query names it wrongly, or the change that adds "
+            "it was never written"
+        )
+    lines.append(line("query:", _sql_excerpt(sql)))
+    return click.ClickException("\n".join(lines))
 
 
 def _missing_schema_hint() -> click.ClickException:
@@ -536,8 +744,9 @@ def execute(sql: str, params: tuple = ()) -> sqlite3.Cursor:
     try:
         cursor = db.execute(sql, params)
     except sqlite3.OperationalError as e:
-        if _is_missing_schema_error(e):
-            raise _missing_schema_hint() from e
+        hint = _schema_error_hint(e, sql)
+        if hint is not None:
+            raise hint from e
         raise
     db.commit()
     return cursor
@@ -547,8 +756,9 @@ def query(sql: str, params: tuple = ()) -> list[sqlite3.Row]:
     try:
         return get_db().execute(sql, params).fetchall()
     except sqlite3.OperationalError as e:
-        if _is_missing_schema_error(e):
-            raise _missing_schema_hint() from e
+        hint = _schema_error_hint(e, sql)
+        if hint is not None:
+            raise hint from e
         raise
 
 
@@ -556,8 +766,9 @@ def scalar(sql: str, params: tuple = ()):
     try:
         row = get_db().execute(sql, params).fetchone()
     except sqlite3.OperationalError as e:
-        if _is_missing_schema_error(e):
-            raise _missing_schema_hint() from e
+        hint = _schema_error_hint(e, sql)
+        if hint is not None:
+            raise hint from e
         raise
     if row is None:
         return None
