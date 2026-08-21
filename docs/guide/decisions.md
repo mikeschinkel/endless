@@ -2,8 +2,6 @@
 
 Decisions are first-class items in Endless. They live alongside tasks and capture *why* something is the way it is — choices about approach, scope, conventions, deferrals.
 
-> **Implementation note (transitional):** decisions are currently stored in the `tasks` table with `type=decision` and will move to their own table in a future release. The CLI surface (`endless decision ...`) is stable; the underlying storage is implementation detail you can ignore today.
-
 ## STRONG guidance (read this before writing decisions)
 
 **Always document decisions where applicable.** When you and your user resolve a non-obvious question — choosing between approaches, scoping in/out, picking conventions, deferring something to later — file it. Decisions you didn't write down will be re-argued in three weeks.
@@ -73,11 +71,32 @@ endless decision list --llm                      # token-efficient
 endless decision show <id>
 endless decision link <a> --to <b> --type ...    # decision-to-decision typed link
 endless decision unlink <a> --to <b> --type ...
+endless decision list --llm | grep superseded    # what stopped governing, and what took over
 ```
 
 ## Decision status
 
-A decision starts `proposed` and moves to one of two settled statuses. Status changes use dedicated verbs, not `decision update` (which only edits title/description):
+A decision starts `proposed`, is settled as `accepted` or `rejected`, and — if it was accepted — may later stop governing:
+
+```mermaid
+stateDiagram-v2
+    [*] --> proposed
+    proposed --> accepted: accept
+    proposed --> rejected: reject --reason
+    accepted --> proposed: unaccept / reconsider
+    rejected --> proposed: unreject / reconsider
+    accepted --> superseded: supersede --by
+    accepted --> obsolete: obsolete --reason
+    superseded --> accepted: reinstate
+    obsolete --> accepted: reinstate
+    rejected --> [*]
+    superseded --> [*]
+    obsolete --> [*]
+```
+
+Status changes use dedicated verbs, not `decision update` (which only edits title/description).
+
+### Settling it: accepted or rejected
 
 ```bash
 endless decision accept <id>                     # proposed → accepted
@@ -94,14 +113,50 @@ endless decision reconsider <id>                 # whichever of the two applies
 
 `unaccept` and `unreject` refuse if the decision isn't in the status they undo — so if you believe ED-42 was accepted and it was actually rejected, `unaccept ED-42` tells you rather than quietly performing the other reversal. Reach for `reconsider` when you don't care which way it went and just want the decision back on the table.
 
-Reversing is for correcting the record — an accidental accept, a reject you want to re-argue. A decision that was *rightly* settled and is now being overturned is better captured as a new decision that `reverses` the old one, which keeps both the original reasoning and the change of mind:
+Unrejecting clears `rejection_reason` from the row, since a decision back in `proposed` has not been rejected. The reason isn't lost — it stays in the `decision.rejected` entry in the event ledger.
+
+### Retiring it: superseded or obsolete
+
+An accepted decision governs until something stops it. **Say which**, or the record keeps reading as current long after it isn't — and the next session cites it at you with total confidence:
+
+```bash
+endless decision supersede <id> --by <new_id>    # accepted → superseded (names the successor)
+endless decision obsolete <id> --reason "..."    # accepted → obsolete (says what went away)
+```
+
+- **`superseded`** — a newer decision took over. The successor is recorded as a `supersedes` relation, so `decision show` and `decision list` can name it. Use this whenever there IS a replacement, even one that refines rather than contradicts.
+- **`obsolete`** — it stopped applying and nothing replaced it, because the code, feature or constraint it governed is simply gone. `--reason` is required: it is the only thing distinguishing a rule you retired deliberately from one that quietly stopped being mentioned.
+
+Both apply **only to `accepted` decisions**, and that restriction is the point: only an accepted decision ever governed, so only an accepted decision can stop. A `proposed` decision that turned out not to matter was never in force — reject it, or leave it. A `rejected` one never took effect and has nothing to retire.
+
+Retirement is reversible, and one verb covers both — there is only ever one status to go back to:
+
+```bash
+endless decision reinstate <id>                  # superseded | obsolete → accepted
+```
+
+`reinstate` drops the `supersedes` relation and clears the stored obsolete reason, the same way `unreject` clears the rejection reason: a decision back in force has not been retired, and leaving either behind would reproduce exactly the contradiction these statuses exist to remove. Both facts stay recoverable from the ledger.
+
+Use it to correct the record — a supersede aimed at the wrong decision, a retirement that turned out to be premature. A decision rightly retired and now *genuinely* back in force is better recorded as a new decision, so the gap in which it did not apply stays visible.
+
+### Retiring vs. reversing vs. reconsidering
+
+Three things look similar and mean different things:
+
+| You want to say | Use |
+|---|---|
+| "This was never settled correctly — put it back on the table." | `reconsider` / `unaccept` / `unreject` (→ `proposed`) |
+| "This governed, and a newer decision now governs instead." | `supersede --by` (→ `superseded`) |
+| "This governed, and what it governed is gone." | `obsolete --reason` (→ `obsolete`) |
+| "The new decision asserts the *opposite* of the old one." | `supersede`, plus a `reverses` link if the contradiction is worth recording |
+
+`reverses` and `modifies` describe how two decisions relate in *content*: `reverses` says the new one asserts the opposite, `modifies` says the old one is still partly in force. Neither changes a status — linking never does. `supersedes` is the one that pairs with a status, and `decision supersede` is what sets it:
 
 ```bash
 endless decision add "Statement of the new decision" --about <task_id>
-endless decision link <new_id> --to <old_id> --type reverses
+endless decision supersede <old_id> --by <new_id>
+endless decision link <new_id> --to <old_id> --type reverses   # optional, if it contradicts
 ```
-
-Unrejecting clears `rejection_reason` from the row, since a decision back in `proposed` has not been rejected. The reason isn't lost — it stays in the `decision.rejected` entry in the event ledger.
 
 ## Editing a decision
 
@@ -114,7 +169,7 @@ endless decision update <id> --description-file <path>
 endless decision update <id> --clear description       # erase it, on purpose
 ```
 
-Either flag is optional; pass one or both. A decision's title/description is metadata, so it's editable in any status (proposed, accepted, or rejected).
+Either flag is optional; pass one or both. A decision's title/description is metadata, so it's editable in any status — including a retired one, where fixing the wording of a superseded decision is often exactly what a reader needs.
 
 `--description-file` refuses an empty or whitespace-only file rather than silently blanking the description — see [An empty `--<field>-file` is refused](tasks.md#an-empty---field-file-is-refused), which covers the same rule and the `--clear` escape hatch for every field on every verb.
 

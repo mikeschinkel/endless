@@ -8,8 +8,9 @@ import (
 
 // Executor functions for decision and decision_relation events (E-1378).
 //
-// Decisions live in their own table, separate from tasks, with a 3-state
-// lifecycle: proposed (initial) -> accepted | rejected (both terminal).
+// Decisions live in their own table, separate from tasks, with a 5-state
+// lifecycle: proposed (initial) -> accepted | rejected, and accepted ->
+// superseded | obsolete (E-1920, both terminal).
 // Decision-sourced relations live in decision_relations (target_kind can be
 // 'task' or 'decision'); task-sourced relations stay in task_deps until
 // E-1389 renames it.
@@ -25,10 +26,19 @@ var allowedDecisionFields = map[string]string{
 
 // validDecisionStatuses gates the status column in application code; there
 // is no CHECK constraint in schema.sql (schema.sql line 11-13 forbids them).
+//
+// `superseded` and `obsolete` (E-1920) are listed because decision.created
+// validates against this map, and a projector replaying a legacy import may
+// legitimately land a decision straight into an end state. The FORWARD
+// transitions into them are narrower than this map — each executor guards on
+// `status = 'accepted'` — so listing them here does not make them reachable
+// from anywhere the CLI would refuse.
 var validDecisionStatuses = map[string]bool{
-	"proposed": true,
-	"accepted": true,
-	"rejected": true,
+	"proposed":   true,
+	"accepted":   true,
+	"rejected":   true,
+	"superseded": true,
+	"obsolete":   true,
 }
 
 // validRelationTargetKinds: decision_relations.target_kind is 'task' or
@@ -228,6 +238,114 @@ func execDecisionUnrejected(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 		return nil, fmt.Errorf("events: unreject decision: %w", err)
 	}
 	if err := requireDecisionRowAffected(db, result, evt.Entity.ID, "unreject", "rejected"); err != nil {
+		return nil, err
+	}
+	return &ExecuteResult{}, nil
+}
+
+// execDecisionSuperseded records that a newer decision took over: accepted ->
+// superseded (E-1920).
+//
+// The guard is `status = 'accepted'` because only an accepted decision
+// governs, so only an accepted decision can stop governing. Superseding a
+// `proposed` decision is a category error — nothing was in force to hand over
+// — and superseding an already-`obsolete` one would overwrite the truer fact.
+//
+// The replacement's identity is NOT written here. It lives in the
+// `supersedes` row in decision_relations, emitted as its own
+// decision_relation.created event by the caller, which keeps one fact in one
+// place and lets the relation be read by the same machinery as every other
+// decision link. The payload's id is ledger provenance only.
+func execDecisionSuperseded(db dbQuerier, evt *Event) (*ExecuteResult, error) {
+	var p DecisionSupersededPayload
+	if err := json.Unmarshal(evt.Payload, &p); err != nil {
+		return nil, fmt.Errorf("events: unmarshal decision.superseded payload: %w", err)
+	}
+	if p.BySupersedingID == 0 {
+		return nil, fmt.Errorf("events: decision.superseded requires by_superseding_id")
+	}
+	if fmt.Sprint(p.BySupersedingID) == evt.Entity.ID {
+		return nil, fmt.Errorf("events: decision %s cannot supersede itself", evt.Entity.ID)
+	}
+
+	result, err := db.Exec(
+		`UPDATE decisions SET status = 'superseded' WHERE id = ? AND status = 'accepted'`,
+		evt.Entity.ID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("events: supersede decision: %w", err)
+	}
+	if err = requireDecisionRowAffected(db, result, evt.Entity.ID, "supersede", "accepted"); err != nil {
+		return nil, err
+	}
+	return &ExecuteResult{}, nil
+}
+
+// execDecisionObsoleted records that a decision stopped applying with no
+// replacement: accepted -> obsolete (E-1920).
+//
+// Same `accepted` guard as supersede, for the same reason. The reason is
+// stored on the row rather than left to the ledger because it is the only
+// thing distinguishing "retired deliberately" from "quietly stopped being
+// mentioned", and a reader hitting the decision needs it inline.
+func execDecisionObsoleted(db dbQuerier, evt *Event) (*ExecuteResult, error) {
+	var p DecisionObsoletedPayload
+	if err := json.Unmarshal(evt.Payload, &p); err != nil {
+		return nil, fmt.Errorf("events: unmarshal decision.obsoleted payload: %w", err)
+	}
+	if p.Reason == "" {
+		return nil, fmt.Errorf("events: decision.obsoleted requires non-empty reason")
+	}
+
+	result, err := db.Exec(
+		`UPDATE decisions
+		    SET status = 'obsolete', obsolete_reason = ?
+		  WHERE id = ? AND status = 'accepted'`,
+		p.Reason, evt.Entity.ID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("events: obsolete decision: %w", err)
+	}
+	if err = requireDecisionRowAffected(db, result, evt.Entity.ID, "obsolete", "accepted"); err != nil {
+		return nil, err
+	}
+	return &ExecuteResult{}, nil
+}
+
+// execDecisionReinstated reverses either end state: superseded | obsolete ->
+// accepted (E-1920).
+//
+// ONE reversal for two forward transitions, unlike the E-1864 pair. That is
+// not a departure from their precedent but a consequence of it: those two
+// guard narrowly so undoing the wrong one errors, and the risk they guard
+// against is the destination being wrong. Here both end states are reachable
+// only FROM `accepted`, so both reversals have the same destination and there
+// is no wrong one to land on.
+//
+// obsolete_reason is cleared in the same statement, exactly as unreject clears
+// rejection_reason: a decision back in `accepted` has not been obsoleted, and
+// leaving the text would render a stale "Obsolete:" line on a live decision.
+// The reason survives in the decision.obsoleted ledger entry. The `supersedes`
+// relation is retired by the caller, which emits decision_relation.deleted for
+// it — the mirror of the split on the way in.
+func execDecisionReinstated(db dbQuerier, evt *Event) (*ExecuteResult, error) {
+	var p DecisionReinstatedPayload
+	if err := json.Unmarshal(evt.Payload, &p); err != nil {
+		return nil, fmt.Errorf("events: unmarshal decision.reinstated payload: %w", err)
+	}
+
+	result, err := db.Exec(
+		`UPDATE decisions
+		    SET status = 'accepted', obsolete_reason = NULL
+		  WHERE id = ? AND status IN ('superseded', 'obsolete')`,
+		evt.Entity.ID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("events: reinstate decision: %w", err)
+	}
+	if err = requireDecisionRowAffected(
+		db, result, evt.Entity.ID, "reinstate", "superseded or obsolete",
+	); err != nil {
 		return nil, err
 	}
 	return &ExecuteResult{}, nil
@@ -461,6 +579,47 @@ func replayDecisionUnrejected(db *sql.DB, evt *Event, result *ProjectResult) err
 	)
 	if err != nil {
 		return fmt.Errorf("unreject decision %s: %w", evt.Entity.ID, err)
+	}
+	return nil
+}
+
+func replayDecisionSuperseded(db *sql.DB, evt *Event, result *ProjectResult) error {
+	_, err := db.Exec(
+		`UPDATE decisions SET status = 'superseded' WHERE id = ? AND status = 'accepted'`,
+		evt.Entity.ID,
+	)
+	if err != nil {
+		return fmt.Errorf("supersede decision %s: %w", evt.Entity.ID, err)
+	}
+	return nil
+}
+
+func replayDecisionObsoleted(db *sql.DB, evt *Event, result *ProjectResult) error {
+	var p DecisionObsoletedPayload
+	if err := json.Unmarshal(evt.Payload, &p); err != nil {
+		return fmt.Errorf("unmarshal decision.obsoleted: %w", err)
+	}
+	_, err := db.Exec(
+		`UPDATE decisions
+		    SET status = 'obsolete', obsolete_reason = ?
+		  WHERE id = ? AND status = 'accepted'`,
+		p.Reason, evt.Entity.ID,
+	)
+	if err != nil {
+		return fmt.Errorf("obsolete decision %s: %w", evt.Entity.ID, err)
+	}
+	return nil
+}
+
+func replayDecisionReinstated(db *sql.DB, evt *Event, result *ProjectResult) error {
+	_, err := db.Exec(
+		`UPDATE decisions
+		    SET status = 'accepted', obsolete_reason = NULL
+		  WHERE id = ? AND status IN ('superseded', 'obsolete')`,
+		evt.Entity.ID,
+	)
+	if err != nil {
+		return fmt.Errorf("reinstate decision %s: %w", evt.Entity.ID, err)
 	}
 	return nil
 }

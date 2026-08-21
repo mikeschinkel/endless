@@ -100,7 +100,8 @@ def test_legal_decision_to_task_types():
 
 def test_legal_decision_to_decision_types():
     legal = decision_cmd.LEGAL_TYPES_BY_PAIR[("decision", "decision")]
-    assert legal == ("reverses", "modifies", "documents", "relates_to")
+    assert legal == ("supersedes", "reverses", "modifies", "documents",
+                     "relates_to")
 
 
 def test_legal_task_to_decision_types():
@@ -668,3 +669,399 @@ def test_decision_reversal_commands_registered(subcommand):
     result = runner.invoke(main, ["decision", subcommand, "--help"])
     assert result.exit_code == 0
     assert "ITEM_IDS..." in result.output
+
+
+# ────────────────────────────────────────────────────────────────────────
+# End states: supersede / obsolete / reinstate (E-1920)
+#
+# The CLI-side properties. The executor's own guards are covered by
+# internal/events/decision_endstate_test.go; what matters here is that the
+# CLI refuses before emitting, that supersede writes BOTH facts (the
+# relation and the status), and that the renderers surface the successor —
+# a `superseded` row whose replacement is unnameable is the state E-1920
+# exists to remove.
+# ────────────────────────────────────────────────────────────────────────
+
+
+def _pid_at_cwd() -> int:
+    """The id of the project `seeded_project_at_cwd` registered.
+
+    link/unlink/list all resolve the project from cwd, so the tests that
+    exercise them need that fixture rather than a bare `_seed_project()`.
+    """
+    return db.query("SELECT id FROM projects WHERE name = 'test'")[0]["id"]
+
+
+def _link_supersedes(new_id: int, old_id: int) -> None:
+    """Store `old superseded by new` in its active-voice form: the SOURCE is
+    the decision that took over."""
+    db.execute(
+        "INSERT INTO decision_relations "
+        "(source_decision_id, target_kind, target_id, relation_type) "
+        "VALUES (?, 'decision', ?, 'supersedes')",
+        (new_id, old_id),
+    )
+
+
+def test_supersedes_is_legal_between_decisions():
+    decision_cmd.require_legal_relation_type("decision", "decision", "supersedes")
+
+
+def test_supersedes_is_not_legal_toward_a_task():
+    """A task cannot supersede a decision or vice versa — supersession is a
+    statement about which rule governs, and a task is not a rule."""
+    import click
+    with pytest.raises(click.ClickException):
+        decision_cmd.require_legal_relation_type("decision", "task", "supersedes")
+
+
+def test_superseded_by_map_reads_the_stored_direction(isolated_env):
+    pid = _seed_project()
+    old = _add_decision(pid, "old", status="superseded")
+    new = _add_decision(pid, "new", status="accepted")
+    _link_supersedes(new, old)
+
+    assert decision_cmd.superseded_by_map([old, new]) == {old: [new]}
+
+
+def test_superseded_by_map_is_empty_for_an_empty_id_set(isolated_env):
+    _seed_project()
+    assert decision_cmd.superseded_by_map([]) == {}
+
+
+def test_superseded_by_map_collects_every_superseder(isolated_env):
+    """A decision split into two replacements names both."""
+    pid = _seed_project()
+    old = _add_decision(pid, "old", status="superseded")
+    a = _add_decision(pid, "a", status="accepted")
+    b = _add_decision(pid, "b", status="accepted")
+    _link_supersedes(a, old)
+    _link_supersedes(b, old)
+
+    assert decision_cmd.superseded_by_map([old]) == {old: [a, b]}
+
+
+def test_superseded_by_note_renders_only_for_superseded():
+    assert decision_cmd.superseded_by_note("superseded", [7]) == " (by ED-7)"
+    assert decision_cmd.superseded_by_note("accepted", [7]) == ""
+    assert decision_cmd.superseded_by_note("obsolete", [7]) == ""
+
+
+def test_superseded_by_note_is_empty_without_ids():
+    assert decision_cmd.superseded_by_note("superseded", None) == ""
+    assert decision_cmd.superseded_by_note("superseded", []) == ""
+
+
+def test_superseded_by_note_joins_multiple():
+    assert decision_cmd.superseded_by_note("superseded", [7, 9]) == " (by ED-7, ED-9)"
+
+
+def test_supersede_emits_relation_then_status(seeded_project_at_cwd, monkeypatch):
+    """Both facts, relation first — the status alone cannot carry a pointer."""
+    pid = _pid_at_cwd()
+    old = _add_decision(pid, "old", status="accepted")
+    new = _add_decision(pid, "new", status="accepted")
+    emitted = _stub_status_emit(monkeypatch)
+
+    decision_cmd.supersede_decision(old, new)
+
+    assert [e["kind"] for e in emitted] == [
+        "decision_relation.created", "decision.superseded",
+    ]
+    assert emitted[0]["payload"] == {
+        "source_decision_id": new,
+        "target_kind": "decision",
+        "target_id": old,
+        "relation_type": "supersedes",
+    }
+    assert emitted[1]["entity_id"] == str(old)
+    assert emitted[1]["payload"] == {"by_superseding_id": new}
+
+
+def test_supersede_accepts_a_still_proposed_successor(
+    seeded_project_at_cwd, monkeypatch
+):
+    """Retiring on the strength of a successor that is not yet accepted is
+    ordinary; gating it would force an order the work does not have."""
+    pid = _pid_at_cwd()
+    old = _add_decision(pid, "old", status="accepted")
+    new = _add_decision(pid, "new", status="proposed")
+    emitted = _stub_status_emit(monkeypatch)
+
+    decision_cmd.supersede_decision(old, new)
+
+    assert emitted[-1]["kind"] == "decision.superseded"
+
+
+@pytest.mark.parametrize("status", ["proposed", "rejected", "superseded", "obsolete"])
+def test_supersede_refuses_anything_but_accepted(isolated_env, monkeypatch, status):
+    """Only an accepted decision governs, so only one can stop governing."""
+    import click
+    pid = _seed_project()
+    old = _add_decision(pid, "old", status=status)
+    new = _add_decision(pid, "new", status="accepted")
+    emitted = _stub_status_emit(monkeypatch)
+
+    with pytest.raises(click.ClickException) as exc:
+        decision_cmd.supersede_decision(old, new)
+
+    assert f"{status!r}" in str(exc.value.message)
+    assert emitted == [], "must refuse BEFORE writing the relation"
+
+
+@pytest.mark.parametrize("status", ["rejected", "superseded", "obsolete"])
+def test_supersede_refuses_a_successor_that_does_not_govern(
+    isolated_env, monkeypatch, status
+):
+    """Closing the old decision behind a successor that never takes effect is
+    strictly worse than leaving it accepted."""
+    import click
+    pid = _seed_project()
+    old = _add_decision(pid, "old", status="accepted")
+    new = _add_decision(pid, "new", status=status)
+    emitted = _stub_status_emit(monkeypatch)
+
+    with pytest.raises(click.ClickException) as exc:
+        decision_cmd.supersede_decision(old, new)
+
+    assert f"{status!r}" in str(exc.value.message)
+    assert emitted == []
+
+
+def test_supersede_refuses_self(isolated_env, monkeypatch):
+    import click
+    pid = _seed_project()
+    did = _add_decision(pid, "D", status="accepted")
+    emitted = _stub_status_emit(monkeypatch)
+
+    with pytest.raises(click.ClickException) as exc:
+        decision_cmd.supersede_decision(did, did)
+
+    assert "itself" in str(exc.value.message)
+    assert emitted == []
+
+
+def test_obsolete_emits_obsoleted_with_reason(isolated_env, monkeypatch):
+    pid = _seed_project()
+    did = _add_decision(pid, "D", status="accepted")
+    emitted = _stub_status_emit(monkeypatch)
+
+    decision_cmd.obsolete_decision(did, "the subsystem it governed was deleted")
+
+    assert len(emitted) == 1
+    assert emitted[0]["kind"] == "decision.obsoleted"
+    assert emitted[0]["entity_id"] == str(did)
+    assert emitted[0]["payload"] == {
+        "reason": "the subsystem it governed was deleted"
+    }
+
+
+@pytest.mark.parametrize("reason", ["", "   ", None])
+def test_obsolete_requires_a_non_empty_reason(isolated_env, monkeypatch, reason):
+    """The reason is the only thing separating a rule retired deliberately
+    from one that quietly stopped being mentioned."""
+    import click
+    pid = _seed_project()
+    did = _add_decision(pid, "D", status="accepted")
+    emitted = _stub_status_emit(monkeypatch)
+
+    with pytest.raises(click.ClickException) as exc:
+        decision_cmd.obsolete_decision(did, reason)
+
+    assert "--reason" in str(exc.value.message)
+    assert emitted == []
+
+
+@pytest.mark.parametrize("status", ["proposed", "rejected", "superseded", "obsolete"])
+def test_obsolete_refuses_anything_but_accepted(isolated_env, monkeypatch, status):
+    import click
+    pid = _seed_project()
+    did = _add_decision(pid, "D", status=status)
+    emitted = _stub_status_emit(monkeypatch)
+
+    with pytest.raises(click.ClickException) as exc:
+        decision_cmd.obsolete_decision(did, "gone")
+
+    assert f"{status!r}" in str(exc.value.message)
+    assert emitted == []
+
+
+def test_supersede_refusal_on_proposed_points_at_accept_or_reject(
+    isolated_env, monkeypatch
+):
+    """The three wrong statuses fail for three different reasons, so the
+    message says which one it hit and what to do instead."""
+    import click
+    pid = _seed_project()
+    old = _add_decision(pid, "old", status="proposed")
+    new = _add_decision(pid, "new", status="accepted")
+    _stub_status_emit(monkeypatch)
+
+    with pytest.raises(click.ClickException) as exc:
+        decision_cmd.supersede_decision(old, new)
+
+    msg = str(exc.value.message)
+    assert "never accepted" in msg
+    assert "reject" in msg
+
+
+def test_obsolete_refusal_on_an_end_state_points_at_reinstate(
+    isolated_env, monkeypatch
+):
+    import click
+    pid = _seed_project()
+    did = _add_decision(pid, "D", status="obsolete")
+    _stub_status_emit(monkeypatch)
+
+    with pytest.raises(click.ClickException) as exc:
+        decision_cmd.obsolete_decision(did, "gone")
+
+    assert "reinstate" in str(exc.value.message)
+
+
+def test_reinstate_from_obsolete_emits_reinstated(isolated_env, monkeypatch):
+    pid = _seed_project()
+    did = _add_decision(pid, "D", status="obsolete")
+    emitted = _stub_status_emit(monkeypatch)
+
+    decision_cmd.reinstate_decision(did)
+
+    assert len(emitted) == 1
+    assert emitted[0]["kind"] == "decision.reinstated"
+    assert emitted[0]["entity_id"] == str(did)
+    assert emitted[0]["payload"] == {}
+
+
+def test_reinstate_from_superseded_retires_the_relation_first(
+    seeded_project_at_cwd, monkeypatch
+):
+    """A decision back in force must not still carry a successor — that is
+    the contradiction E-1920 exists to remove."""
+    pid = _pid_at_cwd()
+    old = _add_decision(pid, "old", status="superseded")
+    new = _add_decision(pid, "new", status="accepted")
+    _link_supersedes(new, old)
+    emitted = _stub_status_emit(monkeypatch)
+
+    decision_cmd.reinstate_decision(old)
+
+    assert [e["kind"] for e in emitted] == [
+        "decision_relation.deleted", "decision.reinstated",
+    ]
+    assert emitted[0]["payload"]["source_decision_id"] == new
+    assert emitted[0]["payload"]["relation_type"] == "supersedes"
+
+
+def test_reinstate_drops_every_superseder(seeded_project_at_cwd, monkeypatch):
+    pid = _pid_at_cwd()
+    old = _add_decision(pid, "old", status="superseded")
+    a = _add_decision(pid, "a", status="accepted")
+    b = _add_decision(pid, "b", status="accepted")
+    _link_supersedes(a, old)
+    _link_supersedes(b, old)
+    emitted = _stub_status_emit(monkeypatch)
+
+    decision_cmd.reinstate_decision(old)
+
+    deleted = [e for e in emitted if e["kind"] == "decision_relation.deleted"]
+    assert {e["payload"]["source_decision_id"] for e in deleted} == {a, b}
+
+
+@pytest.mark.parametrize("status", ["proposed", "accepted", "rejected"])
+def test_reinstate_refuses_a_live_decision(isolated_env, monkeypatch, status):
+    import click
+    pid = _seed_project()
+    did = _add_decision(pid, "D", status=status)
+    emitted = _stub_status_emit(monkeypatch)
+
+    with pytest.raises(click.ClickException) as exc:
+        decision_cmd.reinstate_decision(did)
+
+    assert f"{status!r}" in str(exc.value.message)
+    assert emitted == []
+
+
+@pytest.mark.parametrize("status", ["accepted", "rejected"])
+def test_reinstate_refusal_points_at_reconsider(isolated_env, monkeypatch, status):
+    import click
+    pid = _seed_project()
+    did = _add_decision(pid, "D", status=status)
+    _stub_status_emit(monkeypatch)
+
+    with pytest.raises(click.ClickException) as exc:
+        decision_cmd.reinstate_decision(did)
+
+    assert "reconsider" in str(exc.value.message)
+
+
+@pytest.mark.parametrize("status", ["superseded", "obsolete"])
+def test_reconsider_refusal_points_at_reinstate(isolated_env, monkeypatch, status):
+    """reconsider means 'back on the table'; a retired decision has to regain
+    force first, or reinstating a mis-aimed supersede would silently discard
+    the accept it should return to."""
+    import click
+    pid = _seed_project()
+    did = _add_decision(pid, "D", status=status)
+    _stub_status_emit(monkeypatch)
+
+    with pytest.raises(click.ClickException) as exc:
+        decision_cmd.reconsider_decision(did)
+
+    assert "reinstate" in str(exc.value.message)
+
+
+def test_decision_show_names_the_successor(isolated_env, capsys):
+    """The whole point: a superseded decision must say what took over."""
+    pid = _seed_project()
+    old = _add_decision(pid, "old rule", status="superseded")
+    new = _add_decision(pid, "new rule", status="accepted")
+    _link_supersedes(new, old)
+
+    decision_cmd.detail_decision(old, llm=True)
+
+    out = capsys.readouterr().out
+    assert "status=superseded" in out
+    assert f"superseded_by=ED-{new}" in out
+
+
+def test_decision_show_json_carries_superseded_by(isolated_env, capsys):
+    import json
+    pid = _seed_project()
+    old = _add_decision(pid, "old rule", status="superseded")
+    new = _add_decision(pid, "new rule", status="accepted")
+    _link_supersedes(new, old)
+
+    decision_cmd.detail_decision(old, as_json=True)
+
+    assert json.loads(capsys.readouterr().out)["superseded_by"] == [f"ED-{new}"]
+
+
+def test_decision_show_json_superseded_by_is_an_empty_list_not_null(
+    isolated_env, capsys
+):
+    import json
+    pid = _seed_project()
+    did = _add_decision(pid, "D", status="accepted")
+
+    decision_cmd.detail_decision(did, as_json=True)
+
+    assert json.loads(capsys.readouterr().out)["superseded_by"] == []
+
+
+def test_decision_list_annotates_the_superseded_row(seeded_project_at_cwd, capsys):
+    pid = _pid_at_cwd()
+    old = _add_decision(pid, "old rule", status="superseded")
+    new = _add_decision(pid, "new rule", status="accepted")
+    _link_supersedes(new, old)
+
+    decision_cmd.list_decisions(llm=True)
+
+    out = capsys.readouterr().out
+    assert f"superseded (by ED-{new})" in out
+
+
+@pytest.mark.parametrize("subcommand", ["supersede", "obsolete", "reinstate"])
+def test_decision_end_state_commands_registered(subcommand):
+    runner = CliRunner()
+    result = runner.invoke(main, ["decision", subcommand, "--help"])
+    assert result.exit_code == 0

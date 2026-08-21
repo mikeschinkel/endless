@@ -673,8 +673,17 @@ CREATE TABLE IF NOT EXISTS task_deps (
     UNIQUE(source_type, source_id, target_type, target_id, dep_type)
 );
 
--- Decisions (E-1378). Lifecycle: proposed (initial) -> accepted | rejected
--- (both terminal). status validation enforced in application code.
+-- Decisions (E-1378). Lifecycle: proposed (initial) -> accepted | rejected,
+-- and accepted -> superseded | obsolete (E-1920). status validation enforced in
+-- application code.
+--
+-- E-1920 split "stopped governing" out of "still current": an accepted decision
+-- that a newer one replaced is `superseded` (the replacement is named by a
+-- `supersedes` row in decision_relations), and one whose subject simply went
+-- away is `obsolete` (obsolete_reason says what went away). Both are reachable
+-- only from `accepted` — only an accepted decision governs, so only an accepted
+-- decision can stop governing — which is what makes `decision reinstate`
+-- unambiguous: there is exactly one status to go back to.
 CREATE TABLE IF NOT EXISTS decisions (
     id INTEGER PRIMARY KEY,
     project_id INTEGER NOT NULL,
@@ -686,6 +695,12 @@ CREATE TABLE IF NOT EXISTS decisions (
     origin_session_id INTEGER,
     notes TEXT,
     rejection_reason TEXT,
+    -- Why an accepted decision stopped applying, with no replacement (E-1920).
+    -- Separate from rejection_reason rather than a shared `end_reason`: the two
+    -- answer different questions ("why we said no" vs "what went away"), a row
+    -- can only be in one of the two states, and merging them would have meant
+    -- rewriting existing rejected rows for no gain.
+    obsolete_reason TEXT,
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
     updated_at TEXT NOT NULL DEFAULT '',
     FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,

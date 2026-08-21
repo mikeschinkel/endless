@@ -2981,13 +2981,58 @@ def decision_reconsider(item_ids):
         reconsider_decision(item_id)
 
 
+@decision_cmd.command("supersede")
+@click.argument("item_id", type=DECISION_ID)
+@click.option("--by", "by_id", type=DECISION_ID, required=True,
+              help="The decision that takes over (ED-NN)")
+def decision_supersede(item_id, by_id):
+    """Retire a decision in favor of a newer one (accepted -> superseded).
+
+    Records a `supersedes` relation naming the replacement, so the successor
+    is on the record and not just implied.
+    """
+    from endless.decision_cmd import supersede_decision
+    supersede_decision(item_id, by_id)
+
+
+@decision_cmd.command("obsolete")
+@click.argument("item_ids", type=DECISION_ID, nargs=-1, required=True)
+@click.option("--reason", required=True,
+              help="What went away that this decision governed (stored on the row)")
+def decision_obsolete(item_ids, reason):
+    """Retire a decision with no replacement (accepted -> obsolete).
+
+    For a decision that stopped applying because the code, feature or
+    constraint it governed is simply gone. If a newer decision took over
+    instead, use `decision supersede` so the successor is named.
+    """
+    from endless.decision_cmd import obsolete_decision
+    for item_id in item_ids:
+        obsolete_decision(item_id, reason)
+
+
+@decision_cmd.command("reinstate")
+@click.argument("item_ids", type=DECISION_ID, nargs=-1, required=True)
+def decision_reinstate(item_ids):
+    """Put a retired decision back in force (superseded|obsolete -> accepted).
+
+    Drops the `supersedes` relation and clears the stored obsolete reason.
+    For correcting the record; a decision rightly retired and genuinely back
+    in force is better recorded as a new decision.
+    """
+    from endless.decision_cmd import reinstate_decision
+    for item_id in item_ids:
+        reinstate_decision(item_id)
+
+
 @decision_cmd.command("link")
 @click.argument("source_id", type=DECISION_ID)
 @click.option("--to", "target", type=TASK_OR_DECISION_ID, required=True,
               help="Target ID (E-NN for a task, ED-NN for a decision)")
 @click.option("--type", "relation_type", required=True,
               help="Relation type — legal set depends on the pair "
-                   "(see 'Relation-type vocabulary by pair' in the plan)")
+                   "(decision→decision: supersedes, reverses, modifies, "
+                   "documents, relates_to)")
 def decision_link(source_id, target, relation_type):
     """Link a decision to a task or another decision."""
     from endless.decision_cmd import link_decision

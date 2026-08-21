@@ -50,9 +50,19 @@ def id_display(kind: str, item_id: int) -> str:
 # --type documents' reads "decision documents task"). Inverse views are a
 # read-time concern (in renderers), not an input-side concern.
 
+# `supersedes` (E-1920) sits alongside `reverses` and `modifies` rather than
+# reusing either, because the three say different things about the OLD
+# decision. `reverses`: the new one asserts the opposite. `modifies`: the old
+# one is partially in force still. `supersedes`: the old one no longer governs
+# at all, whether or not the new one contradicts it — a restatement for changed
+# circumstances supersedes without reversing. Only `supersedes` has a status to
+# match (`superseded`), and `decision supersede` is the verb that sets it;
+# linking alone never moves a status, exactly as `task link` never does.
+
 LEGAL_TYPES_BY_PAIR: dict[tuple[str, str], tuple[str, ...]] = {
     ("decision", "task"): ("documents", "cleans_up_by", "implemented_by", "relates_to"),
-    ("decision", "decision"): ("reverses", "modifies", "documents", "relates_to"),
+    ("decision", "decision"): ("supersedes", "reverses", "modifies", "documents",
+                               "relates_to"),
     ("task", "decision"): ("implements", "cleans_up", "documents", "relates_to"),
     # task → task uses CANONICAL_DEP_TYPES; the task dispatcher checks it
     # against the existing registry (it accepts inverse views too because
@@ -128,6 +138,9 @@ def list_decisions(
             )
         return
 
+    # One batched lookup for the whole page, not one per row.
+    superseders = superseded_by_map(r["id"] for r in rows)
+
     if as_json:
         import json
         out = [
@@ -135,6 +148,10 @@ def list_decisions(
                 "id": decision_id_display(row["id"]),
                 "title": row["title"],
                 "status": row["status"],
+                "superseded_by": [
+                    decision_id_display(i)
+                    for i in superseders.get(row["id"], ())
+                ],
                 "created": row["created_at"],
             }
             for row in rows
@@ -146,8 +163,9 @@ def list_decisions(
         click.echo(f"# {proj_name} decisions")
         for row in rows:
             prefix = f"[{row['project_name']}] " if show_all else ""
+            note = superseded_by_note(row["status"], superseders.get(row["id"]))
             click.echo(
-                f"{decision_id_display(row['id'])} {row['status']} "
+                f"{decision_id_display(row['id'])} {row['status']}{note} "
                 f"{prefix}{row['title']}"
             )
         return
@@ -157,9 +175,17 @@ def list_decisions(
     except OSError:
         term_width = 80
 
+    # The annotation widens the Status column, so it has to be resolved before
+    # widths are computed, not appended at render time.
+    status_cells = {
+        r["id"]: r["status"]
+        + superseded_by_note(r["status"], superseders.get(r["id"]))
+        for r in rows
+    }
+
     id_w = max(2, max(len(decision_id_display(r["id"])) for r in rows))
     date_w = max(7, max(len(_format_timestamp(r["created_at"])) for r in rows))
-    status_w = max(6, max(len(r["status"]) for r in rows))
+    status_w = max(6, max(len(status_cells[r["id"]]) for r in rows))
     gap = "  "
     fixed_width = id_w + date_w + status_w + len(gap) * 3
     if show_all:
@@ -190,7 +216,7 @@ def list_decisions(
     for row, title in zip(rows, display_titles):
         line = (
             f"{decision_id_display(row['id']):<{id_w}}{gap}"
-            f"{row['status']:<{status_w}}{gap}"
+            f"{status_cells[row['id']]:<{status_w}}{gap}"
             f"{_format_timestamp(row['created_at']):<{date_w}}"
         )
         if show_all:
@@ -262,7 +288,7 @@ def detail_decision(item_id: int, llm: bool = False, as_json: bool = False):
     """Show full detail for a decision."""
     row = db.query(
         "SELECT d.id, d.title, d.description, d.text, d.status, "
-        "d.origin_task_id, d.notes, d.rejection_reason, "
+        "d.origin_task_id, d.notes, d.rejection_reason, d.obsolete_reason, "
         "d.created_at, d.updated_at, p.name as project_name "
         "FROM decisions d JOIN projects p ON d.project_id = p.id "
         "WHERE d.id = ?",
@@ -274,6 +300,10 @@ def detail_decision(item_id: int, llm: bool = False, as_json: bool = False):
         )
     item = row[0]
     relations = _fetch_decision_relations(item_id)
+    # Named on its own line rather than left to the reader to spot among the
+    # links: "superseded" without the successor is the dead end E-1920 exists
+    # to close, so the one field that resolves it does not get buried.
+    superseders = superseded_by_map([item_id]).get(item_id, [])
 
     if as_json:
         import json
@@ -287,6 +317,8 @@ def detail_decision(item_id: int, llm: bool = False, as_json: bool = False):
                 if item["origin_task_id"] else None
             ),
             "rejection_reason": item["rejection_reason"] or None,
+            "obsolete_reason": item["obsolete_reason"] or None,
+            "superseded_by": [decision_id_display(i) for i in superseders],
             "description": item["description"] or None,
             "text": item["text"] or None,
             "notes": item["notes"] or None,
@@ -313,6 +345,13 @@ def detail_decision(item_id: int, llm: bool = False, as_json: bool = False):
             click.echo(f"origin_task={task_id_display(item['origin_task_id'])}")
         if item["rejection_reason"]:
             click.echo(f"rejection_reason={item['rejection_reason']}")
+        if item["obsolete_reason"]:
+            click.echo(f"obsolete_reason={item['obsolete_reason']}")
+        if superseders:
+            click.echo(
+                "superseded_by="
+                + ",".join(decision_id_display(i) for i in superseders)
+            )
         for rel in relations:
             arrow = "→" if rel["direction"] == "out" else "←"
             click.echo(
@@ -345,6 +384,13 @@ def detail_decision(item_id: int, llm: bool = False, as_json: bool = False):
         )
     if item["rejection_reason"]:
         click.echo(f"{label('Reason:')} {val(item['rejection_reason'])}")
+    if item["obsolete_reason"]:
+        click.echo(f"{label('Obsolete:')} {val(item['obsolete_reason'])}")
+    if superseders:
+        click.echo(
+            f"{label('Superseded:')} "
+            + val(", ".join(decision_id_display(i) for i in superseders))
+        )
     click.echo(
         f"{label('Created:')} {val(_format_timestamp(item['created_at']))}"
     )
@@ -780,10 +826,247 @@ def reconsider_decision(decision_id: int):
     elif cur_status == "rejected":
         unreject_decision(decision_id)
     else:
+        # E-1920's end states are deliberately NOT folded in here. Reconsider
+        # means "put it back on the table", and a retired decision has to
+        # regain force before it can be argued about again — otherwise
+        # reinstating a mis-aimed supersede would silently discard the accept
+        # it should return to.
+        hint = (
+            f" Use `endless decision reinstate "
+            f"{decision_id_display(decision_id)}` to put it back in force."
+            if cur_status in _END_STATUSES else ""
+        )
         raise click.ClickException(
             f"{decision_id_display(decision_id)} status is {cur_status!r}; "
             f"only 'accepted' or 'rejected' decisions can be reconsidered."
+            f"{hint}"
         )
+
+
+# End states: supersede / obsolete / reinstate (E-1920) -------------------
+#
+# A decision that stopped governing used to be inexpressible: the vocabulary
+# ended at accepted|rejected, so a rule overtaken years ago still read as
+# current, and nothing in the ledger could settle a dispute about it either
+# way. These two end states split the reason it stopped.
+#
+# Both are reachable only from `accepted`, which is the whole of their meaning:
+# only an accepted decision governs, so only an accepted decision can stop.
+# That also makes `reinstate` unambiguous — one destination, no stored prior
+# status — which is why these three verbs are not the E-1864 shape of one
+# reversal per forward transition.
+
+# The two end states, and the ONE status they return to. Kept as names rather
+# than inlined so a reader adding a third end state sees every place that has
+# to agree.
+_END_STATUSES = ("superseded", "obsolete")
+_GOVERNING_STATUS = "accepted"
+
+
+def superseded_by_map(decision_ids) -> dict[int, list[int]]:
+    """Map each id to the ids of the decisions that supersede it.
+
+    `old superseded by new` is stored active-voice as (source=new,
+    target=old, relation_type='supersedes'), so a decision's replacements are
+    the source_decision_ids of the `supersedes` rows pointing AT it.
+
+    Batched over the whole id set (mirroring task_cmd.replaced_by_map): this
+    feeds the list renderer, which would otherwise issue a query per row.
+    """
+    ids = list(decision_ids)
+    if not ids:
+        return {}
+    placeholders = ",".join("?" for _ in ids)
+    rows = db.query(
+        "SELECT target_id AS old_id, source_decision_id AS new_id "
+        "FROM decision_relations "
+        "WHERE target_kind = 'decision' AND relation_type = 'supersedes' "
+        f"AND target_id IN ({placeholders}) "
+        "ORDER BY source_decision_id",
+        tuple(ids),
+    )
+    out: dict[int, list[int]] = {}
+    for row in rows:
+        out.setdefault(row["old_id"], []).append(row["new_id"])
+    return out
+
+
+def superseded_by_note(status: str | None, ids: list[int] | None) -> str:
+    """The inline ' (by ED-NNN)' annotation for a status display, or ''.
+
+    Rendered ONLY alongside `superseded`, mirroring task_cmd.replaced_by_note:
+    that is the one status which reads as the end of the story while leaving
+    the reader unable to recover WHAT took over. Every other status either
+    names its own reason or has none to name, so annotating them would be
+    noise in a column that has to stay narrow.
+    """
+    if not ids or status != "superseded":
+        return ""
+    return " (by " + ", ".join(decision_id_display(i) for i in ids) + ")"
+
+
+def _require_governing(decision_id: int, row: dict, verb: str) -> None:
+    """Refuse an end-state transition on anything but `accepted`.
+
+    The message names the status found and why the transition does not apply
+    to it, because the three wrong statuses fail for three different reasons
+    and a bare "expected accepted" would leave the caller guessing which.
+    """
+    cur = row["status"]
+    if cur == _GOVERNING_STATUS:
+        return
+    disp = decision_id_display(decision_id)
+    if cur == "proposed":
+        why = (
+            f"it was never accepted, so it never governed anything. Accept it "
+            f"first, or `endless decision reject {disp} --reason ...` if it is "
+            f"being turned down."
+        )
+    elif cur == "rejected":
+        why = (
+            "it was rejected, so it never took effect — there is nothing to "
+            "retire."
+        )
+    elif cur in _END_STATUSES:
+        why = (
+            f"it is already {cur}. Run `endless decision reinstate {disp}` "
+            f"first if that end state is wrong."
+        )
+    else:
+        why = f"only {_GOVERNING_STATUS!r} decisions can be {verb}."
+    raise click.ClickException(f"{disp} is {cur!r} — cannot {verb} it: {why}")
+
+
+def supersede_decision(old_id: int, new_id: int):
+    """Mark old_id superseded by new_id: record the relation, set the status.
+
+    Two events, relation first, mirroring `task replace`. The relation is the
+    authoritative record of WHICH decision took over — a status alone cannot
+    carry a pointer, and "superseded" without a name is the same dead end as
+    "accepted" on something that stopped governing.
+    """
+    from endless.event_bridge import emit_event
+
+    if old_id == new_id:
+        raise click.ClickException("A decision cannot supersede itself.")
+
+    old_row = _fetch_decision_for_status_change(old_id)
+    new_row = _fetch_decision_for_status_change(new_id)
+    _require_governing(old_id, old_row, "supersede")
+
+    # The replacement need not be `accepted` yet — superseding on the strength
+    # of a still-proposed successor is ordinary, and gating it would force the
+    # two steps into an order the work does not have. It must not be finished
+    # with, though: pointing at a rejected or retired decision would leave the
+    # old one closed with a successor that never governs, which is strictly
+    # worse than leaving it accepted.
+    if new_row["status"] in ("rejected",) + _END_STATUSES:
+        raise click.ClickException(
+            f"{decision_id_display(new_id)} is {new_row['status']!r} — it "
+            f"cannot supersede anything, because it does not govern.\n"
+            f"Point {decision_id_display(old_id)} at a decision that is "
+            f"proposed or accepted."
+        )
+
+    try:
+        link_decision(new_id, "decision", old_id, "supersedes")
+    except click.ClickException as e:
+        if "already" in str(e).lower():
+            raise click.ClickException(
+                f"{decision_id_display(old_id)} is already superseded by "
+                f"{decision_id_display(new_id)}."
+            )
+        raise
+
+    emit_event(
+        kind="decision.superseded",
+        project=old_row["project_name"],
+        entity_type="decision",
+        entity_id=str(old_id),
+        payload={"by_superseding_id": new_id},
+    )
+    click.echo(
+        click.style("•", fg="cyan")
+        + f" Superseded {decision_id_display(old_id)} "
+        f"by {decision_id_display(new_id)} (accepted → superseded)"
+    )
+
+
+def obsolete_decision(decision_id: int, reason: str):
+    """Mark a decision obsolete (accepted → obsolete) with a stored reason.
+
+    `--reason` is required for the same reason `reject --reason` is: this is
+    the only field that distinguishes a rule deliberately retired from one
+    that quietly stopped being mentioned, and it is what a reader hitting the
+    decision later needs in order to stop re-litigating it.
+    """
+    from endless.event_bridge import emit_event
+
+    if not reason or not reason.strip():
+        raise click.ClickException("--reason is required and may not be empty.")
+
+    row = _fetch_decision_for_status_change(decision_id)
+    _require_governing(decision_id, row, "obsolete")
+
+    emit_event(
+        kind="decision.obsoleted",
+        project=row["project_name"],
+        entity_type="decision",
+        entity_id=str(decision_id),
+        payload={"reason": reason},
+    )
+    click.echo(
+        click.style("•", fg="cyan")
+        + f" Obsoleted {decision_id_display(decision_id)} "
+        f"(accepted → obsolete): {reason}"
+    )
+
+
+def reinstate_decision(decision_id: int):
+    """Put a retired decision back in force (superseded | obsolete → accepted).
+
+    Retires the `supersedes` relation on the way, mirroring how `unreject`
+    clears `rejection_reason`: a decision back in `accepted` has not been
+    superseded, and leaving the row would reproduce the exact contradiction
+    E-1920 set out to remove — a live decision carrying a successor. Both facts
+    stay recoverable from the ledger entries that recorded them.
+
+    For correcting the record — a mis-aimed supersede, a retirement that turned
+    out to be premature. A decision rightly retired and now genuinely back in
+    force is better recorded as a NEW decision, so the gap in which it did not
+    apply stays visible.
+    """
+    from endless.event_bridge import emit_event
+
+    row = _fetch_decision_for_status_change(decision_id)
+    cur_status = row["status"]
+    if cur_status not in _END_STATUSES:
+        hint = (
+            " Use `endless decision reconsider` to take an accepted or "
+            "rejected decision back to proposed."
+            if cur_status in ("accepted", "rejected") else ""
+        )
+        raise click.ClickException(
+            f"{decision_id_display(decision_id)} status is {cur_status!r}; "
+            f"only {' or '.join(repr(s) for s in _END_STATUSES)} decisions "
+            f"can be reinstated.{hint}"
+        )
+
+    for superseder_id in superseded_by_map([decision_id]).get(decision_id, ()):
+        unlink_decision(superseder_id, "decision", decision_id, "supersedes")
+
+    emit_event(
+        kind="decision.reinstated",
+        project=row["project_name"],
+        entity_type="decision",
+        entity_id=str(decision_id),
+        payload={},
+    )
+    click.echo(
+        click.style("•", fg="cyan")
+        + f" Reinstated {decision_id_display(decision_id)} "
+        f"({cur_status} → accepted)"
+    )
 
 
 # Link / Unlink (decision-sourced dispatcher) -----------------------------

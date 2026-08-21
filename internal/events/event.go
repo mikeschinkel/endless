@@ -278,6 +278,13 @@ const (
 // each forward transition distinct lets the executor guard on the status it
 // undoes (so undoing the wrong one errors instead of silently succeeding) and
 // keeps rejection_reason clearing on the unreject path where it belongs.
+//
+// E-1920 added the two END states, which are a different axis from accept /
+// reject: those settle whether a decision was ADOPTED, these record that an
+// adopted one STOPPED GOVERNING. Superseded names the decision that took over;
+// obsoleted names what went away. Both apply only to `accepted`, so their
+// single shared reversal (reinstated) has exactly one destination and needs no
+// stored prior status.
 const (
 	KindDecisionCreated       Kind = "decision.created"
 	KindDecisionFieldsUpdated Kind = "decision.fields_updated"
@@ -285,6 +292,9 @@ const (
 	KindDecisionRejected      Kind = "decision.rejected"
 	KindDecisionUnaccepted    Kind = "decision.unaccepted" // E-1864
 	KindDecisionUnrejected    Kind = "decision.unrejected" // E-1864
+	KindDecisionSuperseded    Kind = "decision.superseded" // E-1920
+	KindDecisionObsoleted     Kind = "decision.obsoleted"  // E-1920
+	KindDecisionReinstated    Kind = "decision.reinstated" // E-1920
 	KindDecisionDeleted       Kind = "decision.deleted"
 )
 
@@ -353,6 +363,9 @@ var ValidKinds = map[Kind]bool{
 	KindDecisionRejected:      true,
 	KindDecisionUnaccepted:    true,
 	KindDecisionUnrejected:    true,
+	KindDecisionSuperseded:    true,
+	KindDecisionObsoleted:     true,
+	KindDecisionReinstated:    true,
 	KindDecisionDeleted:       true,
 	// Decision relation (E-1378)
 	KindDecisionRelationCreated: true,

@@ -140,6 +140,29 @@ type DecisionUnacceptedPayload struct{}
 
 type DecisionUnrejectedPayload struct{}
 
+// End-state payloads (E-1920).
+//
+// DecisionSupersededPayload carries the replacement's id purely so the ledger
+// entry is self-describing — the authoritative link is the `supersedes` row in
+// decision_relations, emitted alongside as its own decision_relation.created
+// event (the same split `task replace` uses: relation first, then status).
+type DecisionSupersededPayload struct {
+	BySupersedingID int64 `json:"by_superseding_id"`
+}
+
+// DecisionObsoletedPayload's reason is required, not decorative: an accepted
+// decision governed something, and retiring it without saying what went away
+// leaves exactly the unanswerable "is this still in force?" that E-1920 exists
+// to close.
+type DecisionObsoletedPayload struct {
+	Reason string `json:"reason"`
+}
+
+// DecisionReinstatedPayload is empty for the same reason the E-1864 reversals
+// are: the destination is always 'accepted', and which end state is being
+// undone is recoverable from the row.
+type DecisionReinstatedPayload struct{}
+
 type DecisionDeletedPayload struct {
 	Title string `json:"title"`
 }
