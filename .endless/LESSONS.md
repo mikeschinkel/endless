@@ -2957,3 +2957,35 @@ commit message is for, and I had already written it there.
 Re-answering a question the user asked and I already answered, in the report,
 is the same error twice: it treats the report as a transcript of the session
 rather than a handoff to a person who lived through it.
+
+## A verify suite expires at its own land
+
+E-2029, 2026-08-21. Mike: "Given verify scripts are ONLY defined to be valid
+immediately before a land, why does a failing verify script on another task
+MATTER AT ALL?!? (AND WHY DID YOU EVEN RUN IT?!?!?)"
+
+I ran `tests/tasks/e-1573-verify.sh`, found 4 failures, diffed against main to
+prove they predated me, and filed E-2031 against them. All of that was wasted:
+a per-task verify suite is defined valid immediately before ITS OWN land and
+expires the moment that task lands. E-1573 landed months ago. Its failures are
+not a defect, not a regression, and not a signal — they are an expired artifact
+that no longer asserts anything about the tree.
+
+My change deleted a guide heading that suite's awk range referenced. That
+justified editing the range. It did not justify RUNNING the suite, and running
+it is what produced the phantom finding, the baseline diff, and a task on a
+233-item backlog that I then had to decline.
+
+The rule: touch an old verify suite only where my change breaks a reference in
+it. Do not execute it. The only suite whose result means anything this session
+is the one for the task I am landing.
+
+Two corollaries from the same exchange, both about telling the user things he
+did not need:
+
+- A dependency dropping out of `go.mod` when I delete its only consumer is
+  what `go mod tidy` does. It is arithmetic, not a scope decision, and framing
+  it as one manufactured a decision for him to make.
+- The session monitor already shows him filed tasks awaiting his call.
+  Reporting one duplicates a surface he is already looking at. Before writing
+  a line, check whether Endless already renders it.
