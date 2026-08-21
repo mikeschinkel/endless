@@ -1900,13 +1900,21 @@ def _apply_clear_flags(clear_fields, resolved):
               help="Task ID(s) that this new task cleans up after (repeatable)")
 @click.option("--cleaned-up-by", "cleaned_up_by_ids", type=TASK_ID, multiple=True,
               help="Task ID(s) that clean up after this new task (repeatable)")
+@click.option("--duplicates", "duplicates_ids", type=TASK_ID, multiple=True,
+              help="Task ID(s) this new task duplicates — same concern, already "
+                   "filed (repeatable)")
+@click.option("--replaces", "replaces_ids", type=TASK_ID, multiple=True,
+              help="Task ID(s) this new task supersedes (repeatable). Records the "
+                   "relation only; use `task replace <old> --by <new>` to also "
+                   "close the replaced task.")
 @click.option("--allow-path", "allow_paths", multiple=True,
               help="Regex matching an absolute path to permit in inline content "
                    "(repeatable; escape hatch for the path gate).")
 def task_add(title, description, description_file, text, text_file, analysis_text, analysis_file, phase, project, parent, after, task_type, status, tier, force,
              justification,
              blocks_ids, blocked_by_ids, relates_to_ids, implements_ids,
-             cleans_up_ids, cleaned_up_by_ids, allow_paths):
+             cleans_up_ids, cleaned_up_by_ids, duplicates_ids, replaces_ids,
+             allow_paths):
     """Add a task."""
     from endless.task_cmd import add_item, parse_tier, link_tasks, print_add_hints
     description = _resolve_content_flag(description, description_file, "description", allow_paths)
@@ -1931,6 +1939,10 @@ def task_add(title, description, description_file, text, text_file, analysis_tex
         link_tasks(new_id, tid, "cleans_up")
     for tid in cleaned_up_by_ids:
         link_tasks(new_id, tid, "cleaned_up_by")
+    for tid in duplicates_ids:
+        link_tasks(new_id, tid, "duplicates")
+    for tid in replaces_ids:
+        link_tasks(new_id, tid, "replaces")
     # E-1889: file-time hints, after the row and its relations exist. Advisory
     # only — never blocks the add, never raises.
     print_add_hints(new_id, cleans_up_ids)
@@ -1986,11 +1998,18 @@ def task_add(title, description, description_file, text, text_file, analysis_tex
                    "refuses an empty file, so this is the deliberate way to empty "
                    "description/text/analysis/outcome. Conflicts with the same "
                    "field's --<field>/--<field>-file.")
+@click.option("--duplicates", "duplicates_ids", type=TASK_ID, multiple=True,
+              help="Task ID(s) each named task duplicates — same concern, filed "
+                   "twice (repeatable)")
+@click.option("--replaces", "replaces_ids", type=TASK_ID, multiple=True,
+              help="Task ID(s) each named task supersedes (repeatable). Records "
+                   "the relation only; use `task replace <old> --by <new>` to also "
+                   "close the replaced task.")
 def task_update(item_ids, status, title, description, description_file, text, text_file, parent, phase, tier,
                 task_type, analysis_text, analysis_file, force, outcome, outcome_file, justification, allow_paths,
-                keep_status, clear_fields):
+                keep_status, clear_fields, duplicates_ids, replaces_ids):
     """Update fields on one or more tasks."""
-    from endless.task_cmd import update_plan, parse_tier
+    from endless.task_cmd import update_plan, parse_tier, link_tasks
     resolved = _apply_clear_flags(clear_fields, {
         "description": _resolve_content_flag(description, description_file, "description", allow_paths, clearable=True),
         "text": _resolve_content_flag(text, text_file, "text", allow_paths, clearable=True),
@@ -2002,14 +2021,28 @@ def task_update(item_ids, status, title, description, description_file, text, te
     analysis_text = resolved["analysis"]
     outcome = resolved["outcome"]
     tier_val = parse_tier(tier) if tier else None
+    # E-1185: relation flags are a change on their own. `update_plan` refuses an
+    # edit that names no field ("Nothing to update"), which is still right when
+    # nothing at all was passed — so it is skipped, not weakened, when the only
+    # flags given are relations.
+    edits_a_field = any(v is not None for v in (
+        status, title, description, text, parent, phase, tier, task_type,
+        analysis_text, outcome, justification,
+    ))
+    relations_only = not edits_a_field and (duplicates_ids or replaces_ids)
     for item_id in item_ids:
-        update_plan(item_id, status=status, title=title,
-                    description=description, text=text,
-                    parent_id=parent,
-                    phase=phase, tier=tier_val, task_type=task_type,
-                    analysis=analysis_text,
-                    outcome=outcome, force=force,
-                    justification=justification, keep_status=keep_status)
+        if not relations_only:
+            update_plan(item_id, status=status, title=title,
+                        description=description, text=text,
+                        parent_id=parent,
+                        phase=phase, tier=tier_val, task_type=task_type,
+                        analysis=analysis_text,
+                        outcome=outcome, force=force,
+                        justification=justification, keep_status=keep_status)
+        for tid in duplicates_ids:
+            link_tasks(item_id, tid, "duplicates")
+        for tid in replaces_ids:
+            link_tasks(item_id, tid, "replaces")
 
 
 @task_cmd.command("remove")
@@ -2749,13 +2782,21 @@ def epic_cmd():
               help="Task ID(s) that this new epic cleans up after (repeatable)")
 @click.option("--cleaned-up-by", "cleaned_up_by_ids", type=TASK_ID, multiple=True,
               help="Task ID(s) that clean up after this new epic (repeatable)")
+@click.option("--duplicates", "duplicates_ids", type=TASK_ID, multiple=True,
+              help="Task ID(s) this new epic duplicates — same concern, already "
+                   "filed (repeatable)")
+@click.option("--replaces", "replaces_ids", type=TASK_ID, multiple=True,
+              help="Task ID(s) this new epic supersedes (repeatable). Records the "
+                   "relation only; use `task replace <old> --by <new>` to also "
+                   "close the replaced task.")
 @click.option("--allow-path", "allow_paths", multiple=True,
               help="Regex matching an absolute path to permit in inline content "
                    "(repeatable; escape hatch for the path gate).")
 def epic_add(title, description, description_file, text, text_file, phase, project,
              parent, after, status, tier, force,
              blocks_ids, blocked_by_ids, relates_to_ids, implements_ids,
-             cleans_up_ids, cleaned_up_by_ids, allow_paths):
+             cleans_up_ids, cleaned_up_by_ids, duplicates_ids, replaces_ids,
+             allow_paths):
     """Add an epic (a task with type=epic)."""
     from endless.epic_cmd import add_epic
     from endless.task_cmd import parse_tier, link_tasks
@@ -2779,6 +2820,10 @@ def epic_add(title, description, description_file, text, text_file, phase, proje
         link_tasks(new_id, tid, "cleans_up")
     for tid in cleaned_up_by_ids:
         link_tasks(new_id, tid, "cleaned_up_by")
+    for tid in duplicates_ids:
+        link_tasks(new_id, tid, "duplicates")
+    for tid in replaces_ids:
+        link_tasks(new_id, tid, "replaces")
 
 
 @epic_cmd.command("list")

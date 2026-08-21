@@ -937,9 +937,12 @@ def _render_flat_table(rows):
     # cell — not the raw column value — is what the width is measured against.
     # Non-terminal rows get an empty note, which is why a default listing (no
     # terminal statuses in it) renders byte-identically to before.
-    replaced = replaced_by_map(r["id"] for r in rows)
+    ids = [r["id"] for r in rows]
+    replaced = replaced_by_map(ids)
+    duplicated = duplicates_map(ids)
     status_cells = [
-        r["status"] + replaced_by_note(r["status"], replaced.get(r["id"]))
+        r["status"] + status_notes(
+            r["status"], replaced.get(r["id"]), duplicated.get(r["id"]))
         for r in rows
     ]
 
@@ -1097,7 +1100,10 @@ def show_plan(
         return
 
     # E-1956: the supersession travels with the status in every output mode.
-    replaced = replaced_by_map(row["id"] for row in rows)
+    # E-1185: `duplicates` is the second relation with that property.
+    _ids = [row["id"] for row in rows]
+    replaced = replaced_by_map(_ids)
+    duplicated = duplicates_map(_ids)
 
     if as_json:
         import json
@@ -1110,9 +1116,13 @@ def show_plan(
                 # whenever it exists — the terminal-status gate the human and
                 # --llm views apply is a display rule, and a consumer is
                 # entitled to the raw fact. Always present (possibly empty) so
-                # an absent key never has to be read as "not replaced".
+                # an absent key never has to be read as "not replaced" /
+                # "not a duplicate" (E-1185 adds `duplicates` on the same rule).
                 "replaced_by": [
                     f"E-{i}" for i in replaced.get(row["id"], ())
+                ],
+                "duplicates": [
+                    f"E-{i}" for i in duplicated.get(row["id"], ())
                 ],
                 "tier": row["tier"],
                 "title": row["title"],
@@ -1133,15 +1143,19 @@ def show_plan(
             # key=value rather than the human view's parenthetical, so the line
             # stays parseable — but in the same position, right after the status
             # it qualifies.
-            note = replaced_by_note(row["status"], replaced.get(row["id"]))
             rb_str = (
                 " replaced_by=" + ",".join(
                     f"E-{i}" for i in replaced[row["id"]]
                 )
-            ) if note else ""
+            ) if replaced_by_note(row["status"], replaced.get(row["id"])) else ""
+            dup_str = (
+                " duplicates=" + ",".join(
+                    f"E-{i}" for i in duplicated[row["id"]]
+                )
+            ) if duplicates_note(row["status"], duplicated.get(row["id"])) else ""
             click.echo(
                 f"E-{row['id']} {row['phase']} "
-                f"{row['status']}{tier_str}{rb_str} {row['title']}"
+                f"{row['status']}{tier_str}{rb_str}{dup_str} {row['title']}"
             )
         return
 
@@ -4980,11 +4994,14 @@ def detail_item(
             "type": item["type"],
             "phase": item["phase"],
             "status": item["status"],
-            # E-1956: emitted ungated (a terminal status is a display rule; this
-            # is data) and always present, so an absent key never has to be read
-            # as "not replaced".
+            # E-1956/E-1185: emitted ungated (a terminal status is a display
+            # rule; this is data) and always present, so an absent key never has
+            # to be read as "not replaced" / "not a duplicate".
             "replaced_by": [
                 f"E-{i}" for i in replaced_by_map([item_id]).get(item_id, ())
+            ],
+            "duplicates": [
+                f"E-{i}" for i in duplicates_map([item_id]).get(item_id, ())
             ],
             "parent": f"E-{item['parent_id']}" if item["parent_id"] else None,
             "created": item["created_at"],
@@ -5052,8 +5069,12 @@ def detail_item(
         rb_str = (
             " replaced_by=" + ",".join(f"E-{i}" for i in replaced_ids)
         ) if replaced_by_note(item["status"], replaced_ids) else ""
+        duplicate_ids = duplicates_map([item_id]).get(item_id)
+        dup_str = (
+            " duplicates=" + ",".join(f"E-{i}" for i in duplicate_ids)
+        ) if duplicates_note(item["status"], duplicate_ids) else ""
         click.echo(f"type={item['type']} phase={item['phase']} "
-                    f"status={item['status']}{tier_str}{rb_str}")
+                    f"status={item['status']}{tier_str}{rb_str}{dup_str}")
         if item["parent_id"]:
             click.echo(f"parent=E-{item['parent_id']}")
         links = _flatten_relations(item_id)
@@ -5200,9 +5221,12 @@ def _render_detail_human(
     # E-1956: a terminal status reads as the end of the story, so when the task
     # was superseded that fact rides along with it rather than living only in
     # the 'This task:' block below. Dim: it annotates the status, it is not a
-    # second value competing with it.
-    status_note = replaced_by_note(
-        item["status"], replaced_by_map([item_id]).get(item_id)
+    # second value competing with it. E-1185 adds `duplicates` on the same rule —
+    # a task closed BECAUSE it duplicated another has exactly that problem.
+    status_note = status_notes(
+        item["status"],
+        replaced_by_map([item_id]).get(item_id),
+        duplicates_map([item_id]).get(item_id),
     )
     click.echo(
         f"{label('Status:')} {val(item['status'])}"
@@ -6833,8 +6857,8 @@ def replaced_by_map(item_ids) -> dict[int, list[int]]:
 
     `old replaced_by new` is stored active-voice as (source=new, target=old,
     dep_type='replaces'), so a task's replacements are the source_ids of the
-    'replaces' rows pointing AT it. Joined to live_tasks so a removed
-    replacement is never named.
+    'replaces' rows pointing AT it — the note lands on the TARGET. Joined to
+    live_tasks so a removed replacement is never named.
 
     Batched over the whole id set on purpose (E-1956): this feeds table
     renderers, which would otherwise issue one query per row.
@@ -6858,20 +6882,82 @@ def replaced_by_map(item_ids) -> dict[int, list[int]]:
     return out
 
 
-def replaced_by_note(status: str | None, ids: list[int] | None) -> str:
-    """The inline ' (replaced by E-NNN)' annotation for a status display, or ''.
+def duplicates_map(item_ids) -> dict[int, list[int]]:
+    """Map each id in `item_ids` to the ids of the tasks it duplicates.
+
+    E-1185. Mirror image of `replaced_by_map`, and deliberately so: both
+    annotate the task that gets CLOSED, but that task sits on the opposite end
+    of each relation. `dupe duplicates keeper` stores (source=dupe,
+    target=keeper) and it is the DUPE that is closed, so here the note lands on
+    the SOURCE and points at the target. Reading the two side by side, the
+    swapped columns look like a bug; they are the point — which is also why the
+    SQL is spelled out twice rather than built from a column name. The Go side
+    (`replacedByExpr` / `duplicatesExpr`) is two literal expressions for the
+    same reason.
+    """
+    ids = list(item_ids)
+    if not ids:
+        return {}
+    placeholders = ",".join("?" for _ in ids)
+    rows = db.query(
+        "SELECT td.source_id AS dupe_id, td.target_id AS kept_id "
+        "FROM   task_deps td "
+        "JOIN   live_tasks t ON t.id = td.target_id "
+        "WHERE  td.source_type = 'task' AND td.target_type = 'task' "
+        f"AND    td.dep_type = 'duplicates' AND td.source_id IN ({placeholders}) "
+        "ORDER BY td.target_id",
+        tuple(ids),
+    )
+    out: dict[int, list[int]] = {}
+    for row in rows:
+        out.setdefault(row["dupe_id"], []).append(row["kept_id"])
+    return out
+
+
+def _supersession_note(status: str | None, ids: list[int] | None, phrase: str) -> str:
+    """The inline ' (<phrase> E-NNN)' annotation for a status display, or ''.
 
     E-1956: rendered ONLY alongside a TERMINAL status. A terminal status is the
     one that reads as the end of the story — `obsolete` as "never happened",
     `assumed` as "done, nothing follows" — so that is exactly where dropping the
     supersession loses information a reader cannot recover from the row. An open
-    task's replaced_by is still carried by `task show`'s 'This task:' block, and
-    leaving it off the open rows keeps every default listing (which excludes
+    task's relations are still carried by `task show`'s 'This task:' block, and
+    leaving them off the open rows keeps every default listing (which excludes
     terminal statuses) rendering as it did before.
     """
     if not ids or status not in _RELATION_TERMINAL_STATUSES:
         return ""
-    return " (replaced by " + ", ".join(task_id_display(i) for i in ids) + ")"
+    return f" ({phrase} " + ", ".join(task_id_display(i) for i in ids) + ")"
+
+
+def replaced_by_note(status: str | None, ids: list[int] | None) -> str:
+    """The inline ' (replaced by E-NNN)' annotation for a status display, or ''."""
+    return _supersession_note(status, ids, "replaced by")
+
+
+def duplicates_note(status: str | None, ids: list[int] | None) -> str:
+    """The inline ' (duplicates E-NNN)' annotation for a status display, or ''.
+
+    E-1185: one token — `duplicates` — across the human, --llm and --json
+    renderings, as `replaced_by` has. It reads as a verb phrase with the row as
+    its subject: "E-986  obsolete (duplicates E-1086)".
+    """
+    return _supersession_note(status, ids, "duplicates")
+
+
+def status_notes(
+    status: str | None,
+    replaced_ids: list[int] | None = None,
+    duplicate_ids: list[int] | None = None,
+) -> str:
+    """Every inline annotation a status cell carries, in one string.
+
+    A task can be both superseded and a duplicate; the notes compose rather than
+    one winning. Ordered replaced-by first because that is the relation the
+    reader has been seeing since E-1956.
+    """
+    return (replaced_by_note(status, replaced_ids)
+            + duplicates_note(status, duplicate_ids))
 
 
 def _flatten_relations(item_id: int) -> list[dict]:

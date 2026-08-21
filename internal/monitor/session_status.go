@@ -69,6 +69,13 @@ type SessionStatusRow struct {
 	// and Hidden) because it is a property of the task alone: viewer-agnostic,
 	// no git, no session. Empty for the overwhelming majority of rows.
 	ReplacedBy []int64
+	// Duplicates holds the ids of the tasks this one was a redundant filing of
+	// (E-1185). Same rule as ReplacedBy — a task closed BECAUSE it duplicated
+	// another reads as abandoned when the row shows only ⇥ closed — but the
+	// OPPOSITE endpoint: `dupe duplicates keeper` is stored (source=dupe,
+	// target=keeper) and it is the dupe that gets closed, so these are the
+	// target_ids of rows pointing AWAY from this task.
+	Duplicates []int64
 }
 
 // replacedByExpr is the `enr`-CTE column that collects a task's replacements as
@@ -81,10 +88,21 @@ const replacedByExpr = `
       WHERE d.source_type = 'task' AND d.target_type = 'task'
         AND d.dep_type = 'replaces' AND d.target_id = b.id) AS replaced_by`
 
-// parseReplacedBy turns replacedByExpr's group_concat result into ids. A
-// malformed element is skipped rather than failing the whole view: this column
-// is an annotation, and no row set is worth losing over one unparseable id.
-func parseReplacedBy(s string) []int64 {
+// duplicatesExpr is replacedByExpr's mirror image: same shape, swapped columns,
+// because the task the annotation lands on sits on the other end of this
+// relation (see SessionStatusRow.Duplicates). Reading the two together, the
+// swap looks like a copy-paste slip; it is the point.
+const duplicatesExpr = `
+    (SELECT group_concat(d.target_id)
+       FROM task_deps d JOIN live_tasks kept ON kept.id = d.target_id
+      WHERE d.source_type = 'task' AND d.target_type = 'task'
+        AND d.dep_type = 'duplicates' AND d.source_id = b.id) AS duplicates`
+
+// parseRelationIDs turns a group_concat result from either expression above
+// into ids. A malformed element is skipped rather than failing the whole view:
+// these columns are annotations, and no row set is worth losing over one
+// unparseable id.
+func parseRelationIDs(s string) []int64 {
 	if s == "" {
 		return nil
 	}
@@ -317,12 +335,12 @@ enr AS (
          AND blk.status NOT IN (` + terminalStatusSet + `)) AS blocked_by_n,
     (SELECT count(*) FROM task_deps d
        WHERE d.source_type = 'task' AND d.source_id = b.id
-         AND d.dep_type = 'blocks') AS blocks_n,` + replacedByExpr + `
+         AND d.dep_type = 'blocks') AS blocks_n,` + replacedByExpr + `,` + duplicatesExpr + `
   FROM allbase b
 )
 SELECT id, project_id, title, status, phase, type_slug, has_text,
        is_focal, is_parent, is_from, in_flight, landed, blocked_by_n, blocks_n,
-       replaced_by
+       replaced_by, duplicates
   FROM enr
  WHERE (? = 1) OR is_focal OR is_parent OR is_from
        OR status NOT IN (` + terminalStatusSet + `)
@@ -345,15 +363,16 @@ func scanSessionStatusRows(rows *sql.Rows) ([]SessionStatusRow, error) {
 	var out []SessionStatusRow
 	for rows.Next() {
 		var r SessionStatusRow
-		var replaced sql.NullString
+		var replaced, duplicates sql.NullString
 		if err := rows.Scan(
 			&r.ID, &r.ProjectID, &r.Title, &r.Status, &r.Phase, &r.TypeSlug, &r.HasText,
 			&r.IsFocal, &r.IsParent, &r.IsFrom, &r.InFlight, &r.Landed, &r.BlockedByN, &r.BlocksN,
-			&replaced,
+			&replaced, &duplicates,
 		); err != nil {
 			return nil, err
 		}
-		r.ReplacedBy = parseReplacedBy(replaced.String)
+		r.ReplacedBy = parseRelationIDs(replaced.String)
+		r.Duplicates = parseRelationIDs(duplicates.String)
 		out = append(out, r)
 	}
 	if err := rows.Err(); err != nil {
@@ -421,12 +440,12 @@ enr AS (
          AND blk.status NOT IN (` + terminalStatusSet + `)) AS blocked_by_n,
     (SELECT count(*) FROM task_deps d
        WHERE d.source_type = 'task' AND d.source_id = b.id
-         AND d.dep_type = 'blocks') AS blocks_n,` + replacedByExpr + `
+         AND d.dep_type = 'blocks') AS blocks_n,` + replacedByExpr + `,` + duplicatesExpr + `
   FROM base b
 )
 SELECT id, project_id, title, status, phase, type_slug, has_text,
        is_focal, is_parent, is_from, in_flight, landed, blocked_by_n, blocks_n,
-       replaced_by
+       replaced_by, duplicates
   FROM enr
  WHERE (? = 1) OR status NOT IN (` + terminalStatusSet + `)
 `

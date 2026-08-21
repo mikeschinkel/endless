@@ -24,6 +24,16 @@
 #      with no exemption.
 #   F. The guide documents when to reach for it over its two near-neighbours.
 #
+# Second landing — being a relation type means being usable everywhere relation
+# types are used, so the first landing stopping where `replaces` stopped was the
+# wrong yardstick:
+#   H. `--duplicates` / `--replaces` on `task add`, `task update` and `epic add`
+#      (`task update` had no relation flags at all), recording the relation and
+#      NOT the status.
+#   I. The inline `(duplicates E-NNN)` note beside a terminal status, on every
+#      surface E-1956 gave `(replaced by E-NNN)` — including `session status`,
+#      which is Go.
+#
 # Run from anywhere inside the worktree:
 #   esu && ./tests/tasks/e-1185-verify.sh
 #
@@ -317,20 +327,146 @@ test_guide_documents_it() {
         "changes no status" "$guide"
 }
 
+# ─── H: the relation flags ───────────────────────────────────────────────────
+
+test_relation_flags() {
+    section "H. --duplicates / --replaces on add, update and epic add"
+
+    local out rc new_id
+
+    # `task add --duplicates`: the new task is the redundant filing.
+    out="$(E task add "File the same concern twice" --duplicates "E-$KEEPER" 2>&1)"; rc=$?
+    new_id="$(Q "SELECT id FROM tasks WHERE title='File the same concern twice'")"
+    assert_eq "'task add --duplicates' is accepted" "0" "$rc"
+    assert_eq "...linking the NEW task as the duplicate" \
+        "$new_id|$KEEPER" "$(dup_rows)"
+    clear_deps
+    W "DELETE FROM tasks WHERE id=$new_id"
+
+    # `task add --replaces`.
+    out="$(E task add "Supersede the earlier attempt" --replaces "E-$KEEPER" 2>&1)"; rc=$?
+    new_id="$(Q "SELECT id FROM tasks WHERE title='Supersede the earlier attempt'")"
+    assert_eq "'task add --replaces' is accepted" "0" "$rc"
+    assert_eq "...stored as a replaces row from the new task" \
+        "$new_id|$KEEPER" \
+        "$(Q "SELECT source_id || '|' || target_id FROM task_deps WHERE dep_type='replaces'")"
+    clear_deps
+    W "DELETE FROM tasks WHERE id=$new_id"
+
+    # `task update` had NO relation flags before this, and its "Nothing to
+    # update" refusal fires when no field is named — a relation flag has to
+    # count as the edit.
+    out="$(E task update "$DUPE" --duplicates "E-$KEEPER" 2>&1)"; rc=$?
+    assert_eq "'task update --duplicates' alone is accepted" "0" "$rc"
+    assert_not_contains "...not tripping the empty-edit refusal" "Nothing to update" "$out"
+    assert_eq "...and records the relation" "$DUPE|$KEEPER" "$(dup_rows)"
+    clear_deps
+
+    # ...but a bare `task update` must still be refused.
+    out="$(E task update "$DUPE" 2>&1)"; rc=$?
+    assert_eq "a bare 'task update' is still refused" "1" "$rc"
+    assert_contains "...with the unchanged message" "Nothing to update" "$out"
+
+    # Applied to every id named.
+    E task update "$DUPE" "$THIRD" --duplicates "E-$KEEPER" >/dev/null 2>&1
+    assert_eq "the relation is recorded from EACH named task" \
+        "$DUPE|$KEEPER
+$THIRD|$KEEPER" "$(dup_rows)"
+    clear_deps
+
+    # The trap: --replaces records the relation, it does not close anything.
+    # `task replace` is the status-bearing surface and the help text says so.
+    E task update "$THIRD" --replaces "E-$KEEPER" >/dev/null 2>&1
+    assert_eq "'--replaces' leaves the replaced task's status alone" \
+        "ready" "$(Q "SELECT status FROM tasks WHERE id=$KEEPER")"
+    assert_contains "...and the help says which command does close it" \
+        "task replace" "$(E task update --help 2>&1)"
+    clear_deps
+
+    # epic add carries the same vocabulary — a different flag set there is drift.
+    out="$(E epic add "Track the duplicated concern" --duplicates "E-$KEEPER" 2>&1)"; rc=$?
+    assert_eq "'epic add --duplicates' is accepted too" "0" "$rc"
+    new_id="$(Q "SELECT id FROM tasks WHERE title='Track the duplicated concern'")"
+    assert_eq "...with the same stored shape" "$new_id|$KEEPER" "$(dup_rows)"
+    clear_deps
+    W "DELETE FROM tasks WHERE id=$new_id"
+}
+
+# ─── I: the inline note ──────────────────────────────────────────────────────
+
+test_inline_note() {
+    section "I. The note rides with a terminal status, as E-1956 does for replaces"
+
+    W "UPDATE tasks SET status='obsolete' WHERE id=$DUPE"
+    E task link "$DUPE" --to "E-$KEEPER" --type duplicates >/dev/null 2>&1
+
+    local shown listed
+    shown="$(E task show "E-$DUPE" 2>&1)"
+    assert_contains "'task show' puts it on the Status line" \
+        "obsolete (duplicates E-$KEEPER)" "$shown"
+
+    # ...and never on the task that was KEPT — the note names where the work is.
+    assert_not_contains "the keeper's status line carries nothing" \
+        "duplicates E-" "$(E task show "E-$KEEPER" 2>&1 | grep '^Status:')"
+
+    listed="$(E task list --all 2>&1)"
+    assert_contains "'task list' carries it in the status column" \
+        "obsolete (duplicates E-$KEEPER)" "$listed"
+
+    assert_contains "--llm carries it as a parseable key" \
+        "duplicates=E-$KEEPER" "$(E task show "E-$DUPE" --llm 2>&1)"
+    assert_contains "...on the list line too" \
+        "duplicates=E-$KEEPER" "$(E task list --all --llm 2>&1)"
+
+    # --json is DATA: emitted even where the display gate would suppress it.
+    W "UPDATE tasks SET status='underway' WHERE id=$DUPE"
+    assert_not_contains "an OPEN status draws no note" \
+        "duplicates E-" "$(E task show "E-$DUPE" 2>&1)"
+    assert_contains "...but --json still carries the relation" \
+        "\"E-$KEEPER\"" "$(E task show "E-$DUPE" --json 2>&1 | tr -d ' \n' | grep -o '"duplicates":\[[^]]*\]')"
+    assert_contains "...and the key is present even when empty" \
+        '"duplicates": []' "$(E task show "E-$KEEPER" --json 2>&1)"
+
+    # The Go surface, driven headless. --task bypasses tmux/session resolution
+    # and reads the same DB the Python CLI above just wrote to.
+    W "UPDATE tasks SET status='obsolete' WHERE id=$DUPE"
+    local table json
+    table="$( cd "$REPO" && "$WT/bin/endless-go" session-status --task "$DUPE" --all --cols 200 2>&1 )"
+    assert_contains "'session status' draws the note on the row" \
+        "(duplicates E-$KEEPER)" "$table"
+
+    json="$( cd "$REPO" && "$WT/bin/endless-go" session-status --task "$DUPE" --all --json 2>&1 )"
+    assert_contains "...and --json carries it as data" "\"E-$KEEPER\"" \
+        "$(printf '%s' "$json" | tr -d ' \n' | grep -o '"duplicates":\["E-[0-9]*"\]')"
+    # Always present, never absent: a consumer must not have to read a missing
+    # key as "not a duplicate". The keeper holds no duplicates row at all.
+    json="$( cd "$REPO" && "$WT/bin/endless-go" session-status --task "$KEEPER" --all --json 2>&1 )"
+    assert_contains "...and the key is present even when empty" '"duplicates": []' "$json"
+
+    clear_deps
+    W "UPDATE tasks SET status='ready' WHERE id=$DUPE"
+}
+
 # ─── G: unit + regression suites ─────────────────────────────────────────────
 
 test_suites() {
     section "G. Python suites"
     local out rc
 
-    out=$(cd "$WT" && uv run pytest tests/test_relations.py -q 2>&1); rc=$?
-    if [[ $rc -eq 0 ]]; then report_pass "pytest test_relations passes"
-    else report_fail "pytest test_relations" "exit 0" "exit=$rc"$'\n'"$(printf '%s' "$out" | tail -25)"; fi
+    out=$(cd "$WT" && uv run pytest tests/test_relations.py tests/test_duplicates_inline.py -q 2>&1); rc=$?
+    if [[ $rc -eq 0 ]]; then report_pass "pytest relations + duplicates-inline suites pass"
+    else report_fail "pytest relations + duplicates-inline" "exit 0" "exit=$rc"$'\n'"$(printf '%s' "$out" | tail -25)"; fi
 
     # STORED_DEP_TYPES is parametrized over there, so a ninth type widens it.
-    out=$(cd "$WT" && uv run pytest tests/test_task_remove_relations.py tests/test_decision_cmd.py -q 2>&1); rc=$?
-    if [[ $rc -eq 0 ]]; then report_pass "pytest remove-relations + decision suites pass (no regression)"
-    else report_fail "pytest remove-relations + decision" "exit 0" "exit=$rc"$'\n'"$(printf '%s' "$out" | tail -25)"; fi
+    # test_replaced_by_inline is the no-regression check on E-1956, whose helpers
+    # were generalized to carry both relations.
+    out=$(cd "$WT" && uv run pytest tests/test_task_remove_relations.py tests/test_decision_cmd.py tests/test_replaced_by_inline.py -q 2>&1); rc=$?
+    if [[ $rc -eq 0 ]]; then report_pass "pytest remove-relations + decision + replaced-by suites pass (no regression)"
+    else report_fail "pytest remove-relations + decision + replaced-by" "exit 0" "exit=$rc"$'\n'"$(printf '%s' "$out" | tail -25)"; fi
+
+    out=$(cd "$WT" && go test ./internal/monitor/ ./internal/sessionstatuscmd/ 2>&1); rc=$?
+    if [[ $rc -eq 0 ]]; then report_pass "go test monitor + sessionstatuscmd pass (the session status column)"
+    else report_fail "go test monitor + sessionstatuscmd" "exit 0" "exit=$rc"$'\n'"$(printf '%s' "$out" | tail -25)"; fi
 }
 
 # ─── main ─────────────────────────────────────────────────────────────────────
@@ -359,6 +495,8 @@ main() {
     test_discoverable
     test_boundaries
     test_guide_documents_it
+    test_relation_flags
+    test_inline_note
     test_suites
 
     [[ -n "$TMP" ]] && rm -rf "$TMP"

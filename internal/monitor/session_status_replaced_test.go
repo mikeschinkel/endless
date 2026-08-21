@@ -163,13 +163,13 @@ func TestParseReplacedBy(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			got := parseReplacedBy(c.in)
+			got := parseRelationIDs(c.in)
 			if len(got) != len(c.want) {
-				t.Fatalf("parseReplacedBy(%q) = %v, want %v", c.in, got, c.want)
+				t.Fatalf("parseRelationIDs(%q) = %v, want %v", c.in, got, c.want)
 			}
 			for i := range got {
 				if got[i] != c.want[i] {
-					t.Fatalf("parseReplacedBy(%q) = %v, want %v", c.in, got, c.want)
+					t.Fatalf("parseRelationIDs(%q) = %v, want %v", c.in, got, c.want)
 				}
 			}
 		})

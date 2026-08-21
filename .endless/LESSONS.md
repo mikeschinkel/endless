@@ -2733,3 +2733,30 @@ thing and the product let me — which means the wrong thing was reachable.
 - **What went wrong**: I found a false sentence in the CLAUDE.md text E-2014 was applying ("Go owns all database access: reads through the `endless-go event` helpers") and asked Mike whether to keep or correct it. He had to stop and ask back: "when you ask if I wanted to correct it you mean correct the text in Claude vs. correct the code?" The question named the defect but never named the artifact the edit would land in.
 - **Why**: The finding was about a mismatch between prose and code, so *both* were live candidates for the fix, and I wrote the question from inside my own framing — I had already decided the answer was "edit the doc" and never said so. The option labels ("Correct it", "Keep the approved wording verbatim") described a verdict, not a target; only the option *descriptions* contained the replacement sentence, and a verdict is what gets read first.
 - **Rule**: When a question offers to fix a doc/code mismatch, the option label states which artifact changes — "reword CLAUDE.md", not "correct it". More generally: a decision question is under-specified until the label alone says what file or system the chosen answer modifies. Asking a good question about the wrong axis still costs a full round trip.
+
+### [2026-08-21] I used the neighbouring relation's gaps as the ceiling on scope (E-1185)
+
+E-1185 was "add the `duplicates`/`duplicated_by` relation type." I added it to the
+vocabulary tables, `task link`, and the guide — then deferred two things and told
+Mike why:
+
+- No `--duplicates` flag on `task add`, because `replaces` (the nearest analogue)
+  has no flag either.
+- No inline `(duplicate of E-NNN)` note in `task list` / `task show` / `session
+  status`, because `replaces` gets one via machinery that spans Python and Go, so
+  matching it "is real scope rather than a follow-on."
+
+Mike: "Given that E-1185's scope is to add `duplicate[s|d_by]`, why are
+changes/improvements to ensure duplicate is first class NOT in scope for E-1185?"
+
+Both deferrals used the same broken rule: I read the *existing* state of the
+nearest neighbour as the specification. But `replaces` having no `task add` flag
+is a gap in `replaces`, not a design I should copy — and where the neighbour DOES
+have the surface, matching it is the work, not an extension of it. "Add a relation
+type" means the type is usable everywhere relation types are used. A type that
+exists only in `task link` and the guide is half-added, and the half I skipped is
+the half a user meets first.
+
+Cost of effort was doing the deciding. A cross-language diff is bigger than a
+one-file diff, and I let that size talk me into calling it a follow-on. Scope is
+set by what makes the thing whole, not by how far the change reaches.

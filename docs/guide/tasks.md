@@ -100,8 +100,22 @@ endless task add "Title here" --type bugfix          # todo|bugfix|research|epic
 endless task add "Title here" --tier 1               # 1-4 or auto|quick|deep|discuss
 endless task add "Title here" --blocked-by E-100     # also: --blocks, --relates-to,
                                                      # --implements, --cleans-up,
-                                                     # --cleaned-up-by (all repeatable)
+                                                     # --cleaned-up-by, --duplicates,
+                                                     # --replaces (all repeatable)
 ```
+
+`--duplicates` and `--replaces` are also on **`task update`** — the only relation
+flags there, so an existing task can be marked without reaching for `task link`:
+
+```bash
+endless task update E-986 --duplicates E-1086        # applies to every id named
+endless task update E-9 --replaces E-5               # relation only — see below
+```
+
+Both record the relation and **nothing else**. `endless task replace <old> --by
+<new>` remains the surface that also closes the replaced task (and knows to hold
+a shipped status); `--replaces` deliberately does not, so it never closes
+something you only meant to link.
 
 To record a decision prompted by a task, use `endless decision add "..." --about <id>` — see `endless guide decisions`. (There is no `--decision` flag on `task add` or `task update`.)
 
@@ -595,7 +609,19 @@ the `obsolete` row in [Task statuses](index.md#task-statuses)).
 ```bash
 endless task link E-986 --to E-1086 --type duplicates    # E-986 is the redundant filing
 endless task link E-1086 --to E-986 --type duplicated_by # same row, written from the keeper's side
+endless task update E-986 --duplicates E-1086            # same fact, no --type to remember
 ```
+
+Once the redundant task **is** closed, the relation rides along with its status
+wherever the status is shown — `obsolete (duplicates E-1086)` in `task list`,
+`task show` and `session status`, and as a `duplicates` key in their `--llm` and
+`--json` modes. This is E-1956's rule for `replaces`, applied for the same
+reason: a terminal status reads as the end of the story, and `obsolete` alone
+says "never needed doing" rather than "already being done over there".
+
+The note appears **only** beside a terminal status, and only on the redundant
+task — never on the one that was kept. `--json` emits it either way, because
+JSON is data and a display rule has no business hiding a fact from a consumer.
 
 ---
 

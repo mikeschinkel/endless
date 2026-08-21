@@ -783,7 +783,7 @@ func renderTo(w io.Writer, rows []monitor.SessionStatusRow, focal int64, noTaskH
 		// past it: the row must still fit `cols`, and the note is the part that
 		// must survive — a title truncated a few glyphs earlier costs nothing,
 		// a wrapped row costs the whole table's alignment (E-1956).
-		note := replacedByNote(r)
+		note := statusNotes(r)
 		avail := titleBudget - runewidth.StringWidth(note)
 		if avail < minTitleBudget {
 			avail = minTitleBudget
@@ -872,11 +872,34 @@ func replacedByNote(r monitor.SessionStatusRow) string {
 	if len(r.ReplacedBy) == 0 || !isTerminal(r.Status) {
 		return ""
 	}
-	ids := make([]string, 0, len(r.ReplacedBy))
-	for _, id := range r.ReplacedBy {
-		ids = append(ids, "E-"+strconv.FormatInt(id, 10))
+	return relationNote(r.ReplacedBy, "replaced by")
+}
+
+// duplicatesNote is the inline ' (duplicates E-NNN)' suffix for a row, or ""
+// (E-1185). Same gate and same reason as replacedByNote: a row closed as
+// `obsolete` because it duplicated another task reads as abandoned without it.
+func duplicatesNote(r monitor.SessionStatusRow) string {
+	if len(r.Duplicates) == 0 || !isTerminal(r.Status) {
+		return ""
 	}
-	return "  (replaced by " + strings.Join(ids, ", ") + ")"
+	return relationNote(r.Duplicates, "duplicates")
+}
+
+// statusNotes is every inline annotation a row carries. A task can be both
+// superseded and a duplicate; the notes compose rather than one winning.
+func statusNotes(r monitor.SessionStatusRow) string {
+	return replacedByNote(r) + duplicatesNote(r)
+}
+
+// relationNote formats already-gated ids as the inline suffix. Only the
+// formatting is shared: the terminal-status gate stays spelled out in each note
+// above, where the rule it enforces is the thing a reader needs to see.
+func relationNote(ids []int64, phrase string) string {
+	out := make([]string, 0, len(ids))
+	for _, id := range ids {
+		out = append(out, "E-"+strconv.FormatInt(id, 10))
+	}
+	return "  (" + phrase + " " + strings.Join(out, ", ") + ")"
 }
 
 // hiddenField renders the ⊘ column for a row to width hw (0 = column absent,

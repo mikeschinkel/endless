@@ -53,6 +53,8 @@ type jsonRow struct {
 	// consumer is entitled to the raw relation. Always present (possibly empty)
 	// so an absent key never has to be read as "not replaced".
 	ReplacedBy []string `json:"replaced_by"`
+	// Duplicates is emitted on the same terms, for the same reason (E-1185).
+	Duplicates []string `json:"duplicates"`
 }
 
 // jsonFrame wraps the rows with the ids they were resolved against, so a
@@ -91,6 +93,10 @@ func renderJSON(w io.Writer, a anchor, all bool) error {
 		for _, id := range r.ReplacedBy {
 			replaced = append(replaced, "E-"+strconv.FormatInt(id, 10))
 		}
+		duplicates := make([]string, 0, len(r.Duplicates))
+		for _, id := range r.Duplicates {
+			duplicates = append(duplicates, "E-"+strconv.FormatInt(id, 10))
+		}
 		out.Rows = append(out.Rows, jsonRow{
 			ID:         r.ID,
 			ProjectID:  r.ProjectID,
@@ -111,6 +117,7 @@ func renderJSON(w io.Writer, a anchor, all bool) error {
 			BlockedByN: r.BlockedByN,
 			BlocksN:    r.BlocksN,
 			ReplacedBy: replaced,
+			Duplicates: duplicates,
 		})
 	}
 
