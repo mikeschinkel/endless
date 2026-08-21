@@ -1574,13 +1574,21 @@ def minimizer_show(variant_hash):
 @click.option("--task-type", default=None,
               help="Task-type bucket to reseed (default: untyped).")
 def minimizer_reseed(task_type):
-    """Adopt the shipped default prompt as champion, discarding what was tuned.
+    """Start over from the prompt Endless ships, throwing away the tuned one.
 
-    The prompt in force is a pointer into a content-addressed store, so editing
-    the shipped default changes only what a FRESH install starts from. Use this
-    when the shipped prompt was FIXED rather than merely improved — every
-    variant the loop generated descends from the old text and inherits its
-    flaw. `endless minimizer status` says when your champion has diverged.
+    The minimizer does not read its prompt from a file. Whichever version is in
+    use is stored in your database, and the loop replaces it with better ones it
+    writes itself. So upgrading Endless does NOT change the prompt you are
+    running — a new shipped prompt is only what a brand-new install begins with.
+
+    That is what you want while the shipped prompt is merely being improved on.
+    It is not what you want when the shipped prompt was BROKEN and has been
+    fixed, because every prompt the loop wrote was derived from the broken one
+    and carries the same fault. This command is how you take the fix.
+
+    It is deliberately manual: it discards everything the loop learned, which is
+    too much to lose on the strength of an upgrade. `endless minimizer status`
+    tells you when your prompt differs from the shipped one.
     """
     from endless.minimizer_cmd import reseed
     reseed(task_type)

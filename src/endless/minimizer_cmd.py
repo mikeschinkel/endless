@@ -99,8 +99,12 @@ def status() -> None:
         shipped = minimizer_optimizer.champion_diverges(c["task_type"])
         if shipped:
             click.echo(
-                f"    {c['task_type'] or '(untyped)':<12} differs from the shipped "
-                f"default ({shipped}) — `endless minimizer reseed` adopts it"
+                f"    {c['task_type'] or '(untyped)':<12} you are running a prompt "
+                "the loop tuned, not the one Endless ships"
+            )
+            click.echo(
+                f"    {'':<12} `endless minimizer reseed` starts over from the "
+                f"shipped one ({shipped})"
             )
 
     click.echo()
