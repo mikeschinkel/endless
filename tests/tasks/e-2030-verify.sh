@@ -77,6 +77,7 @@ TMP_DIR=""
 ENDLESS_BIN=""     # the venv's `endless`, run with cwd INSIDE a fixture project
 GATE_ON_DIR=""
 GATE_OFF_DIR=""
+GATE_LEGACY_DIR=""
 
 if [[ -t 1 ]]; then
     GREEN=$'\033[32m'; RED=$'\033[31m'; DIM=$'\033[2m'
@@ -188,15 +189,23 @@ guide_in() {
 
 # ─── setup ──────────────────────────────────────────────────────────────────
 
-# make_project DIR GATE — a directory that resolves as a project with the given
-# report_gate. Deliberately synthetic and outside the repo: Endless's own
-# checkout ships `"report_gate": false`, so testing the gate-ON branch here
-# requires a project that is not this one — which is also the PRODUCT case, a
-# project that is not Endless reading the same guide.
+# make_project DIR GATE [SPELLING] — a directory that resolves as a project with
+# the given gate. Deliberately synthetic and outside the repo: this checkout
+# now enables the minimizer (E-1975), so BOTH branches need a project that is
+# not this one — which is also the PRODUCT case, a project that is not Endless
+# reading the same guide.
+#
+# SPELLING picks the config shape: `minimizer` is E-1975's current one, `legacy`
+# is E-1953's `report_gate` key, which must keep working or a project that opted
+# out under the old name silently opts back in.
 make_project() {
-    local dir="$1" gate="$2"
+    local dir="$1" gate="$2" spelling="${3:-minimizer}"
     mkdir -p "${dir}/.endless" || return 1
-    printf '{"report_gate": %s}\n' "${gate}" > "${dir}/.endless/config.json"
+    if [[ "${spelling}" == "legacy" ]]; then
+        printf '{"report_gate": %s}\n' "${gate}" > "${dir}/.endless/config.json"
+    else
+        printf '{"minimizer": {"enabled": %s}}\n' "${gate}" > "${dir}/.endless/config.json"
+    fi
 }
 
 setup() {
@@ -240,8 +249,10 @@ setup() {
 
     GATE_ON_DIR="${TMP_DIR}/gate-on"
     GATE_OFF_DIR="${TMP_DIR}/gate-off"
-    make_project "${GATE_ON_DIR}"  true  || exit 2
-    make_project "${GATE_OFF_DIR}" false || exit 2
+    GATE_LEGACY_DIR="${TMP_DIR}/gate-off-legacy"
+    make_project "${GATE_ON_DIR}"     true  || exit 2
+    make_project "${GATE_OFF_DIR}"    false || exit 2
+    make_project "${GATE_LEGACY_DIR}" false legacy || exit 2
 }
 
 # ─── layer A: fail-fast — the guide follows the gate ────────────────────────
@@ -291,6 +302,31 @@ layer_a() {
     assert_contains "gate-on tasks: the four invariants survive" \
         "${on_tasks}" "survive byte for byte" || return 1
 
+    # Everything DOWNSTREAM of the channel goes with it. E-1975 shipped
+    # `endless minimizer` and `endless session turn`, both of which read
+    # artifacts only the channel produces; documenting them to a gate-off
+    # project is the same defect as step 7, one layer out.
+    local page rendered cmd
+    for page in tasks sessions; do
+        rendered=$(guide_in "${GATE_OFF_DIR}" "${page}")
+        for cmd in "endless minimizer" "endless session turn" "task report --raw"; do
+            assert_lacks "gate-off ${page}: teaches no \`${cmd}\`" \
+                "${rendered}" "${cmd}" || return 1
+        done
+    done
+
+    # ...and a conditional wrapped one section too wide would pass every check
+    # above by deleting what a gate-ON project needs.
+    rendered="$(guide_in "${GATE_ON_DIR}" tasks)$(guide_in "${GATE_ON_DIR}" sessions)"
+    for cmd in "endless minimizer" "endless session turn" "task report --raw"; do
+        assert_contains "gate-on guide keeps \`${cmd}\`" "${rendered}" "${cmd}" || return 1
+    done
+
+    # E-1975 renamed the config key. A project that opted out under E-1953's
+    # `report_gate` must stay opted out, or the rename silently re-enrolls it.
+    assert_lacks "legacy \`report_gate: false\` still turns the guide off" \
+        "$(guide_in "${GATE_LEGACY_DIR}")" "--draft-file" || return 1
+
     return 0
 }
 
@@ -338,6 +374,19 @@ layer_b() {
     assert_cmd "every guide condition is in cli.guide_conditions()" \
         uv run pytest tests/test_guide_conditionals.py -q
 
+    # `when:` on a COMMAND map file, not just a topic. E-1975's `minimizer` row
+    # is the case that forced this; `task report`'s own row is the one shipped
+    # here, so the mechanism is exercised by the task that built it.
+    local on_index off_index
+    on_index=$(guide_in "${GATE_ON_DIR}")
+    off_index=$(guide_in "${GATE_OFF_DIR}")
+    assert_contains "gate-on index: the \`task report\` command row is present" \
+        "${on_index}" '| `task report` |'
+    assert_lacks "gate-off index: the \`task report\` command row is gone" \
+        "${off_index}" '| `task report` |'
+    assert_lacks "gate-off index: the \`minimizer\` command row is gone" \
+        "${off_index}" '| `minimizer` |'
+
     # Marker leakage and table integrity, on the REAL pages under both gates.
     local page rendered bad=0
     for page in index tasks orchestration sessions decisions reference appendix-a; do
@@ -354,6 +403,28 @@ layer_b() {
         done
     done
     [[ "${bad}" -eq 0 ]] && report_pass "no template source reaches the reader (all pages, both gates)"
+
+    # A false condition that leaves a blank line inside a markdown table ends
+    # the table early. Both tables, both gates.
+    local gatedir label
+    for gatedir in "${GATE_ON_DIR}" "${GATE_OFF_DIR}"; do
+        label=$([[ "${gatedir}" == "${GATE_ON_DIR}" ]] && echo "gate-on" || echo "gate-off")
+        # A blank line ENDING a table is normal; one BETWEEN two rows is the
+        # break. So a blank is only a failure if another row follows it.
+        if guide_in "${gatedir}" | awk '
+            /^\| (Command|Topic) \|/ { intable = 1; pending = 0; next }
+            !intable                 { next }
+            /^\|/ && pending         { print "row after a blank line"; exit 1 }
+            /^\|/                    { next }
+            /^$/                     { pending = 1; next }
+                                     { intable = 0; pending = 0 }
+        ' | grep -q .; then
+            report_fail "${label}: both cross-reference tables stay contiguous" \
+                "no blank line between table rows" "a table was broken by a false condition"
+        else
+            report_pass "${label}: both cross-reference tables stay contiguous"
+        fi
+    done
 }
 
 # ─── layer C: the retired criteria ──────────────────────────────────────────

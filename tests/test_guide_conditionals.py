@@ -85,6 +85,17 @@ def test_no_markers_survive_rendering(path, gate):
     assert "{{" not in _render(path, report_gate=gate)
 
 
+# Commands that exist only because the report channel does. On a gate-off
+# project they have nothing to operate on: no draft is persisted, no prompt is
+# scored, no variant is promoted.
+CHANNEL_ONLY_COMMANDS = (
+    "--draft-file",            # `task report` itself
+    "endless minimizer",       # the autoresearch loop (E-1975)
+    "endless session turn",    # reads the raw draft behind a minimized reply
+    "task report --raw",
+)
+
+
 def test_gate_off_never_instructs_the_reader_to_run_task_report():
     """The defect E-2030 exists to close, stated as an assertion.
 
@@ -95,11 +106,36 @@ def test_gate_off_never_instructs_the_reader_to_run_task_report():
     """
     for path in GUIDE_FILES:
         rendered = _render(path, report_gate=False)
-        assert "--draft-file" not in rendered, \
-            f"{path.name}: gate-off guide still hands the reader an invocation"
         for phrase in ("run `endless task report", "then:\n\n```bash\nendless task report"):
             assert phrase not in rendered, \
                 f"{path.name}: gate-off guide still tells the reader to run the command"
+
+
+def test_gate_off_teaches_no_channel_only_command():
+    """Wider than the report channel: everything downstream of it goes too.
+
+    E-1975 shipped `endless minimizer` and `endless session turn`, both of which
+    read artifacts only the channel produces. A gate-off project's guide that
+    documents them is describing machinery that project switched off — the same
+    defect as step 7, one layer out.
+    """
+    for path in GUIDE_FILES:
+        rendered = _render(path, report_gate=False)
+        for command in CHANNEL_ONLY_COMMANDS:
+            assert command not in rendered, \
+                f"{path.name}: gate-off guide still teaches `{command}`"
+
+
+def test_gate_on_keeps_every_channel_only_command():
+    """The other half of told-iff-gated, and the guard against over-cutting.
+
+    A `{{if}}` wrapped one section too wide would pass the test above by
+    deleting documentation a gate-ON project needs.
+    """
+    rendered = "".join(_render(p, report_gate=True) for p in GUIDE_FILES)
+    for command in CHANNEL_ONLY_COMMANDS:
+        assert command in rendered, \
+            f"gate-on guide lost `{command}` — a conditional cut too wide"
 
 
 def test_the_two_branches_actually_differ():

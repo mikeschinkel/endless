@@ -538,7 +538,7 @@ vetoes and both must say yes.
 {{end}}
 ---
 
-## The minimizer's autoresearch loop (`endless minimizer`)
+{{if .report_gate}}## The minimizer's autoresearch loop (`endless minimizer`)
 
 The minimize prompt is not a constant. A background job scores every reported
 turn, generates challenger prompts, replays them against the champion over a
@@ -577,7 +577,7 @@ opted out under the old name stays opted out.
 
 ---
 
-## Removing and moving
+{{end}}## Removing and moving
 
 ```bash
 endless task remove <id>                             # warns if it has children
