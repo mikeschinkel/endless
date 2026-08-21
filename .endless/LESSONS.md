@@ -3056,3 +3056,18 @@ after parking the task behind another epic.
   `<root>/.endless/templates/<name>.local.tmpl` → `<name>.tmpl` → embedded, and
   materializes the embedded copy on first render so users can edit it. The embed
   is the fallback, not the source.
+## Verify scripts are pre-land gates, not artifacts to maintain (E-1975)
+
+I noticed `tests/tasks/e-1953-verify.sh` had gone hollow — it drives the hook
+from a bare shell, which E-1962 later made a silent no-op — and filed a task to
+re-arm it. Wrong on the premise. A verify script is valid only immediately
+before its own land, in its own worktree. A landed one is spent; nothing should
+ever run it again, so it cannot be broken and there is nothing to fix.
+
+I had read the rule as "don't edit a landed one to keep it green" and drew
+"broken, but not mine to fix" when the actual conclusion is "not broken, because
+it has no future." The rule is about the script's LIFETIME, not about who may
+edit it. Project-wide regression is `go build/vet/test ./...` plus `just test`.
+
+The finding was still worth acting on — for the script being written, which is
+about to run. Fix yours; ignore the landed ones.

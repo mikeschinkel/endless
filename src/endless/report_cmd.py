@@ -274,13 +274,29 @@ def _divider(label: str = "") -> str:
 
 
 def _preview(text: str, slot: str) -> str:
-    """The first few lines of a variant, with a pointer to the rest."""
+    """The first few lines of a variant, with a pointer to the rest.
+
+    Truncation may only ever drop PROSE. The invariants are about what reaches
+    the user — a table survives byte for byte, a command the user must run
+    always survives — so a presentation that cuts a fenced block in half or
+    elides a verify command breaks them exactly as badly as a minimizer that
+    rewrites one, and breaks them in the reply the user actually receives.
+
+    So: if what would be cut carries protected content, nothing is cut. On a
+    paired turn that means the user reads both variants in full, which is the
+    doubling the design already accepts as the price of the experiment — and a
+    price paid only on sampled turns, by a user who can switch pairing off.
+    """
+    from endless import minimizer_invariants
+
     lines = text.split("\n")
     if len(lines) <= _PREVIEW_LINES + 2:
         return text
+    cut = "\n".join(lines[_PREVIEW_LINES:])
+    if minimizer_invariants.has_protected_content(cut):
+        return text
     shown = "\n".join(lines[:_PREVIEW_LINES])
-    hidden = len(lines) - _PREVIEW_LINES
-    return f"{shown}\n… {hidden} more lines — `endless session turn {slot} -p`"
+    return f"{shown}\n… {len(lines) - _PREVIEW_LINES} more lines — `endless session turn {slot} -p`"
 
 
 def _pair_block(a: str, b: str, notice: str) -> str:

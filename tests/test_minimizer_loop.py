@@ -334,6 +334,37 @@ def test_a_long_option_is_previewed_not_duplicated_in_full():
     assert "short" in block
 
 
+def test_a_preview_never_cuts_protected_content():
+    """The failure E-1975's own verify suite caught in E-1975's own output.
+
+    A 12-line preview truncated a reply mid-fence, leaving an unterminated code
+    block and silently dropping the verify command underneath it. The invariants
+    are about what reaches the USER, so a presentation that elides a command
+    breaks them exactly as badly as a minimizer that rewrites one.
+    """
+    long_reply = "\n".join(
+        ["intro line"] * 10
+        + ["```go", "func main() {", "\tprintln(1)", "}", "```", ""]
+        + ["Verify with `just test`."]
+    )
+    block = report_cmd._pair_block(long_reply, "short", "")
+
+    assert "```go" in block
+    assert block.count("```") % 2 == 0, "the preview left an unterminated fence"
+    assert "Verify with `just test`." in block
+    assert "more lines" not in block, "it truncated despite protected content"
+
+
+def test_a_preview_still_truncates_plain_prose():
+    """The carve-out must not swallow the feature. A long prose reply — the
+    common case, and the one A/B's doubling actually hurts — still previews."""
+    long_reply = "\n".join(f"paragraph {i}, all prose, nothing to protect." for i in range(40))
+    block = report_cmd._pair_block(long_reply, "short", "")
+    assert "more lines" in block
+    assert "endless session turn A -p" in block
+    assert "paragraph 39" not in block
+
+
 def test_the_calibration_notice_rides_on_the_pair():
     """ED-1556: low agreement raises the sample rate and is announced IN BAND.
     In band means in the reply the user is already reading."""

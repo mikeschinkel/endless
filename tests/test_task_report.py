@@ -374,6 +374,27 @@ def test_rewriting_is_licensed_and_fabrication_is_not():
     assert "deleting, not rewriting" not in text
 
 
+def test_the_invariants_outrank_deduplication():
+    """The two objectives can contradict, and one has to win.
+
+    The dedup objective says anything the user already has is transcription and
+    goes. The invariants say a command, a table and a code block always survive.
+    A reply repeating a verify command sent two turns ago satisfies the first by
+    deleting the one thing the user cannot reconstruct.
+
+    Measured, not assumed: with recent replies in the fetched context and no
+    precedence stated, the minimizer dropped the table, the code block AND the
+    command together in 2 of 8 live runs. With it stated, 0 of 8.
+    """
+    text = report_prompts.DEFAULTS[report_prompts.MINIMIZE]
+    assert "OBJECTIVE TWO NEVER OUTRANKS THE INVARIANTS" in text
+    assert "outrank both objectives above" in text
+    assert "even when an earlier reply already carried it" in text
+    # And the delete list must scope itself to prose, or it re-opens the hole
+    # one section further down.
+    assert "PROSE restated from WHAT THE USER ALREADY HAS" in text
+
+
 def test_denylist_sits_under_a_generative_rule():
     """A phrase list alone never converges — ban 'load-bearing', get 'does the
     heavy lifting'. The list is anchors beneath a rule, not a substitute."""

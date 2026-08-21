@@ -189,3 +189,17 @@ def compression(raw: str, minimized: str) -> float:
     ratio = 1.0 - (len((minimized or "").strip()) / raw_len)
     ratio = max(0.0, ratio)
     return min(1.0, ratio / 0.6)
+
+
+def has_protected_content(text: str) -> bool:
+    """Whether `text` contains anything that must survive byte for byte.
+
+    Used by the A/B presentation, not by scoring, and that is the point: the
+    invariants are about what reaches the USER, so a presentation that elides a
+    command is exactly as broken as a minimizer that rewrites one. Truncating a
+    preview mid-fence produces an unterminated code block and silently drops the
+    command underneath it — which is how E-1975's own verify suite caught its own
+    output violating rules 2 and 3.
+    """
+    fences, tables = _blocks(text)
+    return bool(fences or tables or _commands(text))

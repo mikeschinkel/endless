@@ -212,6 +212,18 @@ arm_json() {
     fi
 }
 
+# Pin pairing OFF.
+#
+# Parts 2, 2b, 4 and 8 assert properties of the MINIMIZER; the paired
+# presentation is Part 5's subject and it arms its pairs directly, so it needs
+# no sampling. Leaving the rate live made those parts silently sometimes test
+# the presentation instead — which is how a preview truncating a fenced code
+# block first showed up as "the minimizer stopped preserving code blocks".
+pin_no_pairing() {
+    sql_write "INSERT INTO minimizer_state (key, value) VALUES ('ab_rate','0')
+               ON CONFLICT(key) DO UPDATE SET value='0'"
+}
+
 reset_turn() {
     sql_write "DELETE FROM session_gates"
     sql_write "UPDATE sessions SET report_bounces=0, report_exempt=0, report_runs=0"
@@ -353,6 +365,16 @@ test_objective() {
     # The protection the deleted sentence used to carry, restated positively.
     assert_file_contains "a requested discussion still survives at length" \
         "a long discussion is correct" "${src}"
+
+    # The two objectives can contradict: deduplication says anything the user
+    # already has goes, the invariants say a command always survives. Measured
+    # with recent replies in context and no precedence stated, the minimizer
+    # dropped the table, the code block and the command TOGETHER in 2 of 8 live
+    # runs; with it stated, 0 of 8.
+    assert_file_contains "the invariants outrank deduplication" \
+        "OBJECTIVE TWO NEVER OUTRANKS THE INVARIANTS" "${src}"
+    assert_file_contains "and the delete list scopes itself to prose" \
+        "PROSE restated from WHAT THE USER ALREADY HAS" "${src}"
 
     # The fourth input the dedup objective forced.
     local built
@@ -698,6 +720,7 @@ test_vocabulary() {
         report_fail "\$MORE / \$LESS move the sample rate" "two different rungs" \
             "up=${up} down=${down}"
     fi
+    pin_no_pairing
 }
 
 # ─── Part 7: session turn ───────────────────────────────────────────────────
@@ -987,6 +1010,7 @@ main() {
         exit 2
     fi
     export ENDLESS_SESSION_ID="${SESSION_EID}"
+    pin_no_pairing
 
     test_hook_is_live
     test_objective
