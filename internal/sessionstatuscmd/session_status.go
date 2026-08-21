@@ -859,47 +859,43 @@ func applyHiddenMode(rows []monitor.SessionStatusRow, hm hiddenMode) ([]monitor.
 // against it. Below this a title is all ellipsis and the row says nothing.
 const minTitleBudget = 10
 
-// replacedByNote is the inline ' (replaced by E-NNN)' suffix for a row, or ""
-// (E-1956).
+// relationNote is the inline '  (<phrase> E-NNN, E-MMM)' suffix a row carries
+// beside its status, or "".
 //
-// Gated on a TERMINAL status, matching the Python surfaces: that is where the
-// row otherwise reads as the end of the story — ⇥ closed on a superseded task
-// looks abandoned rather than handed on. An open task with a replaced_by keeps
-// its plain row; the fact is still in `task show`. Gating here also means the
-// DEFAULT view, which has no terminal rows in it at all, renders exactly as it
-// did before this existed.
-func replacedByNote(r monitor.SessionStatusRow) string {
-	if len(r.ReplacedBy) == 0 || !isTerminal(r.Status) {
+// The TERMINAL-status gate lives here, once, for every relation that uses this
+// shape (E-1956 for `replaced by`, E-1185 for `duplicates`). A terminal status
+// is where the row otherwise reads as the end of the story — ⇥ closed on a
+// superseded or duplicated task looks abandoned rather than handed on. An open
+// task keeps its plain row; the fact is still in `task show`. Gating also means
+// the DEFAULT view, which has no terminal rows in it at all, renders exactly as
+// it did before any of this existed.
+//
+// One gate, not one per note: two copies of a display rule are two things that
+// can drift, and a third relation added later would have to remember to bring
+// its own.
+func relationNote(ids []int64, status, phrase string) string {
+	if len(ids) == 0 || !isTerminal(status) {
 		return ""
 	}
-	return relationNote(r.ReplacedBy, "replaced by")
+	out := make([]string, 0, len(ids))
+	for _, id := range ids {
+		out = append(out, "E-"+strconv.FormatInt(id, 10))
+	}
+	return "  (" + phrase + " " + strings.Join(out, ", ") + ")"
 }
 
-// duplicatesNote is the inline ' (duplicates E-NNN)' suffix for a row, or ""
-// (E-1185). Same gate and same reason as replacedByNote: a row closed as
-// `obsolete` because it duplicated another task reads as abandoned without it.
+func replacedByNote(r monitor.SessionStatusRow) string {
+	return relationNote(r.ReplacedBy, r.Status, "replaced by")
+}
+
 func duplicatesNote(r monitor.SessionStatusRow) string {
-	if len(r.Duplicates) == 0 || !isTerminal(r.Status) {
-		return ""
-	}
-	return relationNote(r.Duplicates, "duplicates")
+	return relationNote(r.Duplicates, r.Status, "duplicates")
 }
 
 // statusNotes is every inline annotation a row carries. A task can be both
 // superseded and a duplicate; the notes compose rather than one winning.
 func statusNotes(r monitor.SessionStatusRow) string {
 	return replacedByNote(r) + duplicatesNote(r)
-}
-
-// relationNote formats already-gated ids as the inline suffix. Only the
-// formatting is shared: the terminal-status gate stays spelled out in each note
-// above, where the rule it enforces is the thing a reader needs to see.
-func relationNote(ids []int64, phrase string) string {
-	out := make([]string, 0, len(ids))
-	for _, id := range ids {
-		out = append(out, "E-"+strconv.FormatInt(id, 10))
-	}
-	return "  (" + phrase + " " + strings.Join(out, ", ") + ")"
 }
 
 // hiddenField renders the ⊘ column for a row to width hw (0 = column absent,

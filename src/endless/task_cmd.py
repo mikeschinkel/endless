@@ -6852,66 +6852,62 @@ def get_all_relations(item_id: int) -> dict[str, list]:
 _RELATION_TERMINAL_STATUSES = ("confirmed", "assumed", "completed", "declined", "obsolete")
 
 
+def _relation_map(item_ids, dep_type: str, note_col: str, other_col: str) -> dict[int, list[int]]:
+    """Map each id in `item_ids` to the ids on the far end of a `dep_type` row.
+
+    `note_col` is the task_deps column holding the task the annotation lands on;
+    `other_col` holds the task it points at. Joined to live_tasks so a removed
+    far end is never named.
+
+    Batched over the whole id set on purpose (E-1956): this feeds table
+    renderers, which would otherwise issue one query per row.
+
+    One query shape, parameterized, rather than one spelled-out copy per
+    relation: the two callers below differ ONLY in which column is which, so a
+    swap is the single mistake available here, and stating the columns as
+    arguments puts that swap where it can be read side by side instead of
+    diffed out of two near-identical blobs. Both column names are module-local
+    constants from the two call sites; nothing user-supplied reaches the SQL.
+    """
+    ids = list(item_ids)
+    if not ids:
+        return {}
+    placeholders = ",".join("?" for _ in ids)
+    rows = db.query(
+        f"SELECT td.{note_col} AS noted_id, td.{other_col} AS other_id "
+        "FROM   task_deps td "
+        f"JOIN   live_tasks t ON t.id = td.{other_col} "
+        "WHERE  td.source_type = 'task' AND td.target_type = 'task' "
+        f"AND    td.dep_type = ? AND td.{note_col} IN ({placeholders}) "
+        f"ORDER BY td.{other_col}",
+        (dep_type, *ids),
+    )
+    out: dict[int, list[int]] = {}
+    for row in rows:
+        out.setdefault(row["noted_id"], []).append(row["other_id"])
+    return out
+
+
 def replaced_by_map(item_ids) -> dict[int, list[int]]:
     """Map each id in `item_ids` to the ids of the tasks that replace it.
 
     `old replaced_by new` is stored active-voice as (source=new, target=old,
     dep_type='replaces'), so a task's replacements are the source_ids of the
-    'replaces' rows pointing AT it — the note lands on the TARGET. Joined to
-    live_tasks so a removed replacement is never named.
-
-    Batched over the whole id set on purpose (E-1956): this feeds table
-    renderers, which would otherwise issue one query per row.
+    'replaces' rows pointing AT it — the note lands on the TARGET.
     """
-    ids = list(item_ids)
-    if not ids:
-        return {}
-    placeholders = ",".join("?" for _ in ids)
-    rows = db.query(
-        "SELECT td.target_id AS old_id, td.source_id AS new_id "
-        "FROM   task_deps td "
-        "JOIN   live_tasks t ON t.id = td.source_id "
-        "WHERE  td.source_type = 'task' AND td.target_type = 'task' "
-        f"AND    td.dep_type = 'replaces' AND td.target_id IN ({placeholders}) "
-        "ORDER BY td.source_id",
-        tuple(ids),
-    )
-    out: dict[int, list[int]] = {}
-    for row in rows:
-        out.setdefault(row["old_id"], []).append(row["new_id"])
-    return out
+    return _relation_map(item_ids, "replaces", "target_id", "source_id")
 
 
 def duplicates_map(item_ids) -> dict[int, list[int]]:
     """Map each id in `item_ids` to the ids of the tasks it duplicates.
 
-    E-1185. Mirror image of `replaced_by_map`, and deliberately so: both
-    annotate the task that gets CLOSED, but that task sits on the opposite end
-    of each relation. `dupe duplicates keeper` stores (source=dupe,
-    target=keeper) and it is the DUPE that is closed, so here the note lands on
-    the SOURCE and points at the target. Reading the two side by side, the
-    swapped columns look like a bug; they are the point — which is also why the
-    SQL is spelled out twice rather than built from a column name. The Go side
-    (`replacedByExpr` / `duplicatesExpr`) is two literal expressions for the
-    same reason.
+    E-1185. The arguments are `replaced_by_map`'s, swapped, and that is the
+    whole difference: both annotate the task that gets CLOSED, but that task
+    sits on the opposite end of each relation. `dupe duplicates keeper` stores
+    (source=dupe, target=keeper) and it is the DUPE that is closed, so the note
+    lands on the SOURCE and points at the target.
     """
-    ids = list(item_ids)
-    if not ids:
-        return {}
-    placeholders = ",".join("?" for _ in ids)
-    rows = db.query(
-        "SELECT td.source_id AS dupe_id, td.target_id AS kept_id "
-        "FROM   task_deps td "
-        "JOIN   live_tasks t ON t.id = td.target_id "
-        "WHERE  td.source_type = 'task' AND td.target_type = 'task' "
-        f"AND    td.dep_type = 'duplicates' AND td.source_id IN ({placeholders}) "
-        "ORDER BY td.target_id",
-        tuple(ids),
-    )
-    out: dict[int, list[int]] = {}
-    for row in rows:
-        out.setdefault(row["dupe_id"], []).append(row["kept_id"])
-    return out
+    return _relation_map(item_ids, "duplicates", "source_id", "target_id")
 
 
 def _supersession_note(status: str | None, ids: list[int] | None, phrase: str) -> str:
