@@ -166,13 +166,28 @@ sql1() {
     sql "$1" | sed -n '3p' | sed 's/^ *//; s/ *$//'
 }
 
+# Drive the hook the way a real harness does.
+#
+# `hook claude` returns immediately — silently, exit 0, no stdout — on an agent
+# harness Endless does not support (E-1962). A bare shell is not one, so anything
+# impersonating a session has to export that session's environment or the entire
+# hook is a no-op and every assertion below it passes vacuously by expecting
+# silence and getting it.
+#
+# This is not hypothetical: without it the suite passes when run from inside a
+# Claude session (which exports the variable) and fails 16 assertions from a
+# plain terminal, which is where it is actually run.
+hook_env() {
+    env CLAUDE_CODE_ENTRYPOINT=cli ./bin/endless-go --config-dir "${SANDBOX_CFG}" "$@"
+}
+
 # Feed one Stop payload to the hook; echo its stdout (empty when the turn is
 # allowed to end). cwd decides whether the project has the gate on.
 stop_hook() {
     local cwd="$1" last_msg_json="$2" agent_id="${3:-}"
     printf '{"session_id":"%s","cwd":"%s","hook_event_name":"Stop","transcript_path":"","agent_id":"%s","last_assistant_message":%s}' \
         "${TEST_UUID}" "${cwd}" "${agent_id}" "${last_msg_json}" \
-        | go_sandbox hook claude 2>/dev/null
+        | hook_env hook claude 2>/dev/null
 }
 
 # Feed one UserPromptSubmit payload; echo the hook's stdout.
@@ -180,7 +195,7 @@ prompt_hook() {
     local prompt_json="$1"
     printf '{"session_id":"%s","cwd":"%s","hook_event_name":"UserPromptSubmit","transcript_path":"","prompt":%s}' \
         "${TEST_UUID}" "${REPO_ROOT}" "${prompt_json}" \
-        | go_sandbox hook claude 2>/dev/null
+        | hook_env hook claude 2>/dev/null
 }
 
 # Arm the gate with a checkpoint JSON document.
@@ -285,6 +300,29 @@ test_build_and_suites() {
         uv run pytest tests/test_minimizer_loop.py -q
     assert_succeeds "pytest the report command (plumbing, bypass, pairing, fail-closed)" \
         uv run pytest tests/test_task_report.py -q
+}
+
+# ─── Preflight: the hook is actually live ───────────────────────────────────
+
+# Half the assertions below expect the hook to be SILENT — a turn allowed to
+# end, a gate-off project, a subagent. Every one of them passes against a hook
+# that does nothing at all, so a dead hook does not fail this suite, it hollows
+# it out. This runs first and fails loudly instead.
+test_hook_is_live() {
+    section "Preflight — the hook responds"
+
+    reset_turn
+    local resp
+    resp=$(stop_hook "${REPO_ROOT}" '"a reply that never went through the minimizer"')
+    if [[ "${resp}" == *'"decision":"block"'* ]]; then
+        report_pass "the hook fires and the harness is recognized"
+        return
+    fi
+    report_fail "the hook fires and the harness is recognized" \
+        "a block response from a gate-on cwd with no checkpoint" \
+        "silence — `hook claude` no-ops on an unsupported harness (E-1962), so \
+every 'expect silence' assertion below would pass vacuously. Drive it with \
+CLAUDE_CODE_ENTRYPOINT=cli."
 }
 
 # ─── Part 1: the objective changed ──────────────────────────────────────────
@@ -950,6 +988,7 @@ main() {
     fi
     export ENDLESS_SESSION_ID="${SESSION_EID}"
 
+    test_hook_is_live
     test_objective
     test_minimizer_live
     test_dedup_live
