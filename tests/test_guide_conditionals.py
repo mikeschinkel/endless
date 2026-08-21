@@ -16,6 +16,7 @@ import json
 import re
 import shutil
 import subprocess
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -31,15 +32,45 @@ _ACTION_RE = re.compile(r"\{\{-?\s*(.*?)\s*-?\}\}")
 _CONDITION_RE = re.compile(r"^(?:if|else if)\s+\.(\w+)$")
 
 
+_BUILT_BIN: str | None = None
+
+
 def _go_bin() -> str:
-    """The endless-go the worktree built, or the one on PATH."""
-    local = Path(__file__).resolve().parent.parent / "bin" / "endless-go"
+    """The endless-go this repo built, or one built on demand.
+
+    Deliberately never skips. These tests are the guard that stops a later task
+    from dropping a `{{if .report_gate}}` wrapper while rewriting the section
+    around it — E-1975 rewrites exactly those sections — and a guard that
+    silently skips in a worktree where nobody ran `just build` is not a guard.
+    A few seconds of `go build` is the cheaper failure.
+    """
+    global _BUILT_BIN
+    root = Path(__file__).resolve().parent.parent
+    local = root / "bin" / "endless-go"
     if local.is_file():
         return str(local)
     found = shutil.which("endless-go")
-    if not found:
-        pytest.skip("endless-go not built and not on PATH")
-    return found
+    if found and _supports_render_file(found):
+        return found
+    if _BUILT_BIN is None:
+        target = Path(tempfile.mkdtemp(prefix="endless-guide-test-")) / "endless-go"
+        build = subprocess.run(
+            ["go", "build", "-o", str(target), "./cmd/endless-go"],
+            cwd=root, capture_output=True, text=True, check=False,
+        )
+        if build.returncode != 0:
+            pytest.fail(f"could not build endless-go for the guide tests:\n{build.stderr}")
+        _BUILT_BIN = str(target)
+    return _BUILT_BIN
+
+
+def _supports_render_file(binary: str) -> bool:
+    """Whether an installed endless-go is new enough to know `render --file`."""
+    result = subprocess.run(
+        [binary, "template", "render", "--file", "/nonexistent"],
+        input="{}", capture_output=True, text=True, check=False,
+    )
+    return "not defined: -file" not in (result.stderr or "")
 
 
 def _render(path: Path, **conditions: bool) -> str:
