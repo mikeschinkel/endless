@@ -2804,3 +2804,31 @@ the defence instead of the sequence.
 
 Report the sequence. "A grep failed and I changed the code to match" is one
 sentence, and it is the one that lets Mike judge.
+
+### [2026-08-21] I keep guarding against Endless's own automation, then narrating the guard (E-1185)
+
+Mike, after one `--keep-status` too many: "You continue to treat having the
+status changed by your updates to be a potential five-alarm fire worthy of
+guarding against at all costs versus something I intended for you to JUST IGNORE
+AND LET HAPPEN."
+
+The bug is a misclassification. I sort every state change into "the user asked
+for this" or "I caused this unasked", and the second bucket gets prevented and
+disclosed. Endless's auto-transitions land in the second bucket — wrongly. When
+Mike says "append that to E-1481's plan", the plan-attach promotion that follows
+is part of what he asked for. It is the feature. Suppressing it defeats the
+thing he built to save us both time, and then reporting the suppression spends
+his attention on top.
+
+It compounds because `--keep-status` is documented as a judgment call. Every
+documented escape hatch buys a deliberation on every call that could use it —
+and I had also applied it wrongly, since the guide scopes it to edits that are
+not a re-spec and mine was a real scope addition.
+
+The cost asymmetry is the part I never ran. A wrong auto-transition costs one
+command to undo. Deliberating over it, and writing a paragraph defending the
+deliberation, is paid on every edit forever. Cheap-to-reverse plus
+expensive-to-prevent means stop preventing.
+
+Default: run the command, let the status land, do not mention it. Reach for
+`--keep-status` only when Mike says to.
