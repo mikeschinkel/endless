@@ -451,26 +451,57 @@ handoff in the claiming session's own hook, so that one does follow the harness.
 
 ### Telling the minimizer how it did
 
-Four labels, recognized only as the **first token of a line** of your user's
-prompt. They attach to the preceding turn and form the eval corpus alongside the
-persisted (prompt, raw draft, minimized output) triple:
+Your user annotates a reply by writing a **`$TOKEN`** as the first token of a
+line, optionally scoped to a quoted span:
 
-| Signal   | Meaning                                              | Text |
-|----------|------------------------------------------------------|------|
-| `$CUT`   | it dropped something needed — show the raw            | required |
-| `$BLOAT` | still too long, or said things nobody asked for       | required |
-| `$WRONG` | off-target regardless of length                       | required |
-| `$GOOD`  | it worked                                             | optional |
+```
+$BLOAT "the whole second paragraph"
+$JARGON "load-bearing" and "at its core" — stop using these
+$GOOD
+```
 
-Text is **required** on the three complaints: a bare complaint gives the corpus
-nothing to learn from, so it is refused out loud rather than silently stored.
-`$GOOD` may stand alone, and it is not politeness — a corpus made only of
-complaints trains the minimizer toward verbosity, because every recorded failure
-is a cut the user resented.
+**The vocabulary is open.** Any word works; the four E-1953 shipped (`$CUT`,
+`$BLOAT`, `$WRONG`, `$GOOD`) are examples, not a list. A closed vocabulary is
+only worth its consistency if the user can recall it mid-complaint, and one they
+cannot recall produces no label at all — which is strictly worse, because label
+supply is upstream of everything else in the loop. Consistency is leaned on
+rather than enforced: when a new token clusters near one already in use, you will
+be asked in band whether the two mean the same thing. Ask your user; they may
+answer or ignore.
 
-The sigil is what buys immunity. `WRONG:` and `GOOD:` at line start are exactly
-what a user naturally types as a prose label; one character makes the signal
-unambiguous. `CUT the scope` does not fire.
+Every label attaches to the preceding turn's corpus row. A bare token is
+recorded, not refused — under a free vocabulary the word IS the account.
+
+The sigil is what buys immunity, and it is why the token must lead the line.
+`WRONG:` and `GOOD:` at line start are exactly what a user naturally types as a
+prose label; one character makes the signal unambiguous. `CUT the scope` does not
+fire, a fenced code block containing `$PATH` does not fire, and `$PATH=/usr/bin`
+does not fire.
+
+Labels do **not** score prompts. They calibrate the judge that does — see
+`endless minimizer status`.
+
+### When the output arrives as two options
+
+On a sampled fraction of turns `task report` emits **two** minimizations of your
+draft rather than one:
+
+```
+─[Option A of B]────────────────────────────────
+…
+─[Option B of B]────────────────────────────────
+…
+```
+
+Send it verbatim, exactly as you would send one. **You do not pick** — choosing
+one yourself destroys the comparison, which is the only place the loop gets a
+real counterfactual. Your user replies `$A` or `$B`, and may add a span:
+`$B "this sentence"` means "B wins, and that span is still bloat".
+
+Each option is previewed inline; either can be read in full with
+`endless session turn A -p` / `endless session turn B -p`. The pair also asks
+whether your user wants these more or less often (`$MORE` / `$LESS`) — that is
+the only control over the sample rate, and it is deliberately not a config knob.
 
 ### The `$FULL` escape hatch
 
@@ -478,8 +509,10 @@ When your user wants an answer that bypasses the minimizer entirely, they type
 **`$FULL`** as the first token of a line. That licenses **one** response,
 answered fully and unconstrained — it does not go through the minimizer at all.
 
-`$FULL` is a *directive*, not a label, so unlike the four above it may stand
-alone or carry the question with it: `$FULL why did the rebase conflict?`
+`$FULL` is a *directive*, not a label, so unlike a token it may stand alone or
+carry the question with it: `$FULL why did the rebase conflict?` The other
+directives are `$A` / `$B` (pick between paired options) and `$MORE` / `$LESS`
+(how often to see pairs).
 
 It is **not a mode switch**. The next turn returns to the default.
 {{else}}**This project has the report channel off** — `"report_gate": false` in
@@ -503,6 +536,45 @@ The channel also runs only under an agent harness Endless **supports** (E-1962)
 — today, Claude Code in a terminal, and nothing else. The two are independent
 vetoes and both must say yes.
 {{end}}
+---
+
+## The minimizer's autoresearch loop (`endless minimizer`)
+
+The minimize prompt is not a constant. A background job scores every reported
+turn, generates challenger prompts, replays them against the champion over a
+frozen slice of the corpus, and promotes the winner. Nobody approves a promotion
+— the user supplies ground truth in the flow of work (labels, and picks between
+paired options) and the loop improves itself around them.
+
+You will rarely type any of this. It matters to you for two reasons: the prompt
+your draft meets today may not be the one it met last week, and `--raw` is still
+the answer when something is missing.
+
+```bash
+endless minimizer status              # champions, sampling, judge calibration
+endless minimizer variants            # the prompt lineage; `*` is in force
+endless minimizer show <hash>         # one variant in full
+endless minimizer rollback            # undo a promotion — a pointer move
+```
+
+Three things are tuned jointly, per task type: the prompt text, a JSON **fetch
+policy** (what the minimizer is shown of what the user already has — their task
+plan, their session status, the replies they already read), and a **bypass
+threshold** below which a short draft skips the minimizer entirely.
+
+Promotion is decided by paired replay over a frozen corpus, never by a rolling
+average. Rolling metrics — `status` prints keep-ratio by draft size — are an
+alarm, not a verdict: a rolling mean improves whenever the work gets easier.
+
+Turn the loop off per project without turning the gate off:
+
+```json
+{"minimizer": {"enabled": true, "optimizer": false}}
+```
+
+`"report_gate": false` is still read as `{"enabled": false}` so a project that
+opted out under the old name stays opted out.
+
 ---
 
 ## Removing and moving

@@ -200,3 +200,25 @@ endless sql "SELECT id, session_id, active_task_id, headline, created_at
 ## Post-mortem
 
 If there was anything about your recording of this session which felt like there was no place to capture it, or if you had to capture it in a sub-optimal place, or if you have any other suggestions about how to improve process of recording session status then please add a task to review it. Add your suggestions to the tasks.analysis field via `endless task update <id> --analysis '<text>'` (or `--analysis-file <path>` for long content). And please also tell the user that you added the task.
+
+## Reading a session's raw draft: `endless session turn`
+
+Every reply that goes through the minimizer persists the draft it was minimized
+from. `endless session turn` prints that draft verbatim — no diff, no columns.
+Keep the minimized reply in the adjacent tmux pane and compare by eye.
+
+```bash
+endless session turn                 # the raw draft behind the last reply
+endless session turn 3               # three turns back
+endless session turn --session ES-1101
+endless session turn B -p            # option B of a paired minimization, in full
+```
+
+The argument counts **turns back**, 0-based: no argument is the most recent turn,
+`3` is three turns back. `A` and `B` instead address the two options of the most
+recent paired minimization.
+
+By default it reads the **sibling** Claude pane in your tmux window, not your
+own: the point is to review somebody else's reply. `task report --raw` cannot
+serve this — it resolves the calling session, so it can never reach another
+session's draft.

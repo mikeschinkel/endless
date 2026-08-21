@@ -209,13 +209,23 @@ def project_is_self_dev(project_path: Path) -> bool:
     return bool(cfg.get("self_dev", False))
 
 
-def project_report_gate(project_path: Path) -> bool:
-    """True if the minimizer's report channel is live for this project (E-1953).
+def project_minimizer_config(project_path: Path) -> dict[str, bool]:
+    """The project's minimizer switches (E-1953, reshaped by E-1975).
 
-    Mirrors monitor.ReportGateEnabled on the Go side, including the default:
-    absent file, absent key, or unreadable all mean ENABLED. Only an explicit
-    `"report_gate": false` turns it off, so a project that has never heard of
-    the setting still gets the channel.
+    Mirrors monitor.readMinimizer on the Go side, including the defaults and the
+    three accepted spellings:
+
+        "minimizer": {"enabled": true, "optimizer": false}   the current shape
+        "minimizer": false                                   both off
+        "report_gate": false                                 E-1953's name
+
+    Absent file, absent key, or unreadable all mean BOTH ON. Only an explicit
+    false turns either off, so a project that has never heard of the setting
+    still gets the channel and the loop behind it.
+
+    The old scalar is still read because the rename must not silently re-enable
+    a gate a project had switched off — a config change that turns enforcement
+    back on by doing nothing is the one migration failure the user cannot see.
 
     Read here so the spawn handoff can omit the reporting instructions entirely
     for a project that switched the channel off. Rendering them anyway would
@@ -223,13 +233,35 @@ def project_report_gate(project_path: Path) -> bool:
     enforces and nothing reads — pure overhead, and worse, an instruction the
     project has explicitly declined.
     """
+    default = {"enabled": True, "optimizer": True}
     cfg = project_config_read(project_path)
     if cfg is None:
-        return True
-    value = cfg.get("report_gate")
-    if value is None:
-        return True
-    return bool(value)
+        return default
+
+    value = cfg.get("minimizer")
+    if isinstance(value, bool):
+        return {"enabled": value, "optimizer": value}
+    if isinstance(value, dict):
+        out = dict(default)
+        for key in ("enabled", "optimizer"):
+            if isinstance(value.get(key), bool):
+                out[key] = value[key]
+        return out
+
+    legacy = cfg.get("report_gate")
+    if isinstance(legacy, bool):
+        return {"enabled": legacy, "optimizer": default["optimizer"]}
+    return default
+
+
+def project_report_gate(project_path: Path) -> bool:
+    """True if the minimizer's report channel is live for this project."""
+    return project_minimizer_config(project_path)["enabled"]
+
+
+def project_minimizer_optimizer(project_path: Path) -> bool:
+    """True if the autoresearch loop may tune this project's minimizer."""
+    return project_minimizer_config(project_path)["optimizer"]
 
 
 def project_config_write(project_path: Path, data: dict):

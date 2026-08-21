@@ -564,11 +564,56 @@ CREATE TABLE IF NOT EXISTS session_gates (
     user_prompt TEXT,
     task_id INTEGER REFERENCES tasks(id) ON DELETE SET NULL,
     label TEXT,
-    label_text TEXT
+    label_text TEXT,
+    -- 'relay' kind (E-1975): the rest of what a paired replay needs to re-run a
+    -- turn without re-fetching live state.
+    --
+    -- fetched_context is the JSON record of what the minimizer's fetch policy
+    -- ASKED FOR and what came back. It is what turns the corpus row from a
+    -- triple into a replayable unit: a tool-using minimizer is nondeterministic
+    -- in its INPUTS, so an A/B over a frozen corpus is meaningless unless replay
+    -- serves context from the record instead of re-fetching state that has since
+    -- moved. NOT BACKFILLABLE — rows written before E-1975 can never gain it.
+    --
+    -- variant_hash attributes the row to the exact (prompt, fetch policy, bypass
+    -- threshold) bundle that produced it, and task_type records which per-type
+    -- bucket that bundle was drawn from. Without both, a promotion cannot tell
+    -- which of its own outputs it is being judged on.
+    --
+    -- bypassed marks a draft that skipped the minimizer because it fell under
+    -- the variant's bypass threshold. The row is still corpus: "we let this one
+    -- through untouched" is exactly the evidence the threshold axis is tuned on.
+    --
+    -- pair_id / pair_slot group the two rows of an A/B presentation. pair_id is
+    -- the id of the A row (the A row points at itself), so a pair is one query.
+    -- picked records the user's `$A` / `$B` — the only real counterfactual in
+    -- the corpus, and the exact judgment promotion requires.
+    fetched_context TEXT,
+    variant_hash TEXT,
+    task_type TEXT,
+    bypassed INTEGER NOT NULL DEFAULT 0,
+    pair_id INTEGER,
+    pair_slot TEXT,
+    picked INTEGER NOT NULL DEFAULT 0,
+    -- What `task report` actually PRINTED, when that differs from this row's
+    -- sanctioned_text. On an A/B turn the two rows each hold their own variant
+    -- while the A row holds the combined presentation the agent owes the user,
+    -- so the Stop gate can accept ANY OF N sanctioned texts rather than exactly
+    -- one. NULL means "same as sanctioned_text", which is every ordinary turn.
+    --
+    -- Any-of-N is the only thing standing between the shipped shape and both
+    -- later ones (an AskUserQuestion preview where the agent sends the winner,
+    -- and a left/right TUI), so it is bought now while it is one comparison.
+    emitted_text TEXT
 );
 
 CREATE INDEX IF NOT EXISTS session_gates_open
     ON session_gates(session_id, kind_id) WHERE cleared_at IS NULL;
+
+-- The corpus scan the judge and the optimizer both start from: every relay row
+-- that carries a raw draft, newest first.
+CREATE INDEX IF NOT EXISTS session_gates_corpus
+    ON session_gates(kind_id, id) WHERE raw_draft IS NOT NULL;
 
 -- Nav via kinds (E-1682). SQL mirror of the NavVia Go enum (ED-1506:
 -- const-in-code is the source of truth, the table exists for FK enforcement
@@ -1089,3 +1134,146 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_errors_open_uniq
     ON errors(source, code, fingerprint) WHERE cleared_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_errors_open
     ON errors(cleared_at, severity);
+
+-- ─── The minimizer autoresearch loop (E-1975) ────────────────────────────────
+--
+-- Five tables behind one idea: the minimizer prompt is not a string someone
+-- edits, it is a POINTER into a content-addressed store, moved by evidence.
+--
+-- Rollback of a bad auto-promotion is therefore a pointer move, and that is what
+-- makes removing the user's approval step safe (ED-1556) rather than reckless.
+
+-- Free-form span-scoped labels (ED-1555). The user writes `$TOKEN "quoted span"`
+-- in the ordinary flow of a reply; each span becomes one row.
+--
+-- The token vocabulary is NOT constrained, and that is the design rather than a
+-- shortcut. A vocabulary the user cannot recall in the moment produces no label
+-- at all, and label supply is upstream of everything else in the loop — so
+-- consistency is leaned on (the loop asks, in band, whether a new token should
+-- merge with a neighbour) and never enforced. Synonym grouping is the judge's
+-- job. Drift becomes observable instead of silent.
+--
+-- span is NULL for an unscoped token ("$GOOD"), which is a verdict on the whole
+-- reply. note is whatever free text rode along with it.
+CREATE TABLE IF NOT EXISTS report_labels (
+    id         INTEGER PRIMARY KEY,
+    gate_id    INTEGER NOT NULL REFERENCES session_gates(id) ON DELETE CASCADE,
+    session_id INTEGER NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+    token      TEXT NOT NULL,
+    span       TEXT,
+    note       TEXT,
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_report_labels_gate ON report_labels(gate_id);
+CREATE INDEX IF NOT EXISTS idx_report_labels_token ON report_labels(token);
+
+-- The variant store. A variant is the whole tunable bundle — prompt text, fetch
+-- policy, bypass threshold — because the three axes interact: a prompt told to
+-- deduplicate against the task plan is only as good as a policy that fetches it.
+-- Tuning them separately would credit one axis for another's win.
+--
+-- Content-addressed, and deliberately NOT an embedded git repo. Every eval run
+-- has to reference its variant inside this store regardless, so adding git would
+-- create two identities for one object plus a sync problem. parent_hash supplies
+-- the only thing git was wanted for — lineage — and diffs are computed at read
+-- time.
+--
+-- task_type splits the space NOW rather than later: coordinating a follow-up
+-- task to split it costs the user more than carrying the column from the start.
+-- '' is the bucket for a turn with no claimed task.
+CREATE TABLE IF NOT EXISTS minimizer_variants (
+    hash             TEXT PRIMARY KEY,
+    task_type        TEXT NOT NULL DEFAULT '',
+    prompt_text      TEXT NOT NULL,
+    fetch_policy     TEXT NOT NULL,
+    bypass_threshold INTEGER NOT NULL,
+    parent_hash      TEXT,
+    origin           TEXT,
+    note             TEXT,
+    created_at       TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_minimizer_variants_type
+    ON minimizer_variants(task_type, created_at);
+
+-- The promotion pointer — one champion per task type. Promotion writes here and
+-- nowhere else, which is what makes rollback a single UPDATE.
+CREATE TABLE IF NOT EXISTS minimizer_champions (
+    task_type   TEXT PRIMARY KEY,
+    hash        TEXT NOT NULL REFERENCES minimizer_variants(hash),
+    promoted_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
+    promoted_by TEXT,
+    note        TEXT
+);
+
+-- One judgment of one corpus row.
+--
+-- The scores are kept apart on purpose: they are VETOES, not a weighted sum. A
+-- variant that buys compression at the cost of one invariant violation is not
+-- better, and an average is exactly the instrument that would say it was. So
+-- invariants_ok and invented gate, fidelity gates, and only then is compression
+-- maximized.
+--
+-- predicted_* are committed BEFORE the user reacts, and `blind` records whether
+-- that was actually true for this row (a sweep that judges an old row whose
+-- labels already landed is not a prediction). Only blind rows count toward the
+-- calibration number, which is the loop's honesty check on its own judge.
+CREATE TABLE IF NOT EXISTS report_judgments (
+    id               INTEGER PRIMARY KEY,
+    gate_id          INTEGER NOT NULL REFERENCES session_gates(id) ON DELETE CASCADE,
+    variant_hash     TEXT,
+    invariants_ok    INTEGER NOT NULL DEFAULT 1,
+    invariant_detail TEXT,
+    invented         INTEGER NOT NULL DEFAULT 0,
+    fidelity         INTEGER,
+    fidelity_detail  TEXT,
+    compression      REAL,
+    predicted_pick   TEXT,
+    predicted_flag   INTEGER,
+    actual_pick      TEXT,
+    actual_flag      INTEGER,
+    agreed           INTEGER,
+    blind            INTEGER NOT NULL DEFAULT 1,
+    judged_at        TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
+    UNIQUE (gate_id)
+);
+
+-- One paired-replay verdict: a challenger against the champion over a FROZEN
+-- corpus slice, item difficulty cancelled by pairing.
+--
+-- This table is the only thing allowed to gate a promotion. Rolling metrics over
+-- live traffic are monitoring — an alarm, confounded by corpus drift — and the
+-- distinction is not pedantry: a rolling mean improves when the work gets easier.
+-- corpus_ids records exactly which rows were replayed, so a verdict stays
+-- auditable after the corpus has grown past it.
+CREATE TABLE IF NOT EXISTS minimizer_evals (
+    id               INTEGER PRIMARY KEY,
+    task_type        TEXT NOT NULL,
+    challenger_hash  TEXT NOT NULL,
+    champion_hash    TEXT NOT NULL,
+    corpus_ids       TEXT NOT NULL,
+    wins             INTEGER NOT NULL DEFAULT 0,
+    losses           INTEGER NOT NULL DEFAULT 0,
+    ties             INTEGER NOT NULL DEFAULT 0,
+    vetoes           INTEGER NOT NULL DEFAULT 0,
+    promoted         INTEGER NOT NULL DEFAULT 0,
+    verdict          TEXT,
+    detail           TEXT,
+    created_at       TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_minimizer_evals_type
+    ON minimizer_evals(task_type, created_at);
+
+-- Loop scratch state: the A/B sample rate the user tunes in band, and the
+-- optimizer's last-round timestamp.
+--
+-- A key/value table rather than config keys, because none of this is
+-- configuration — it is state the loop moves in response to the user, and a
+-- config file the loop rewrites is a file the user can no longer trust they own.
+CREATE TABLE IF NOT EXISTS minimizer_state (
+    key        TEXT PRIMARY KEY,
+    value      TEXT NOT NULL,
+    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now'))
+);

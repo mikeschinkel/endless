@@ -212,23 +212,65 @@ func usage() {
 // subprocess of the agent and has no view of the conversation — asking it for
 // the prompt would mean asking the agent to retype what the user said, which is
 // a corpus of paraphrases rather than of prompts.
+// checkpointJSON is the wire shape `--json` accepts on stdin (E-1975).
+//
+// The plain-text form stayed: it is one string on stdin and it is what every
+// caller that only has one string should keep using. JSON exists because a
+// paired turn carries a list of variants plus the fetched-context record, and
+// squeezing that through flags would mean shell-escaping a JSON document into an
+// argv — the exact escaping failure `task report --draft-file` was shaped to
+// avoid.
+type checkpointJSON struct {
+	Emitted  string `json:"emitted"`
+	TaskType string `json:"task_type"`
+	Context  string `json:"context"`
+	Variants []struct {
+		Sanctioned  string `json:"sanctioned"`
+		Slot        string `json:"slot"`
+		VariantHash string `json:"variant_hash"`
+		Bypassed    bool   `json:"bypassed"`
+	} `json:"variants"`
+}
+
 func runRelayCheckpoint(args []string) error {
 	fs := flag.NewFlagSet("relay-checkpoint", flag.ContinueOnError)
 	sessionID := fs.Int64("session-id", 0, "sessions.id (integer PK) recording the checkpoint")
 	draftFile := fs.String("draft-file", "", "path to the raw draft this output was minimized from")
 	taskID := fs.Int64("task-id", 0, "task the report is attributed to (0 = none)")
+	asJSON := fs.Bool("json", false, "stdin is a checkpoint JSON document, not the sanctioned text")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if *sessionID == 0 {
 		return fmt.Errorf("--session-id is required")
 	}
-	sanctioned, err := io.ReadAll(os.Stdin)
+	stdin, err := io.ReadAll(os.Stdin)
 	if err != nil {
-		return fmt.Errorf("reading sanctioned text from stdin: %w", err)
+		return fmt.Errorf("reading checkpoint from stdin: %w", err)
 	}
 
-	cp := monitor.ReportCheckpoint{Sanctioned: string(sanctioned)}
+	var cp monitor.ReportCheckpoint
+	if *asJSON {
+		var doc checkpointJSON
+		if err = json.Unmarshal(stdin, &doc); err != nil {
+			return fmt.Errorf("parsing checkpoint json: %w", err)
+		}
+		cp.Emitted, cp.TaskType, cp.Context = doc.Emitted, doc.TaskType, doc.Context
+		for _, v := range doc.Variants {
+			cp.Variants = append(cp.Variants, monitor.ReportVariant{
+				Sanctioned:  v.Sanctioned,
+				Slot:        v.Slot,
+				VariantHash: v.VariantHash,
+				Bypassed:    v.Bypassed,
+			})
+		}
+		if len(cp.Variants) == 0 {
+			return fmt.Errorf("checkpoint json carries no variants")
+		}
+	} else {
+		cp.Variants = []monitor.ReportVariant{{Sanctioned: string(stdin)}}
+	}
+
 	if *draftFile != "" {
 		draft, rerr := os.ReadFile(*draftFile)
 		if rerr != nil {

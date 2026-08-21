@@ -1469,6 +1469,121 @@ def session_order(spec, as_json, session_id_override):
     impl(spec, as_json, session_id_override)
 
 
+@session_cmd.command("turn")
+@click.argument("target", required=False, default=None)
+@click.option("--session", "session_ref", default=None,
+              help="Read this session (ES-NNN / id / UUID prefix) instead of "
+                   "the sibling Claude pane in this tmux window.")
+@click.option("-p", "--paged", is_flag=True, help="Page the output through less.")
+def session_turn(target, session_ref, paged):
+    """Print a session's RAW draft for a turn — what it wrote before minimizing.
+
+    TARGET counts TURNS BACK, 0-based: no argument (or `0`) is the most recent
+    turn, `3` is three turns back. There is no diff and no column layout — keep
+    the minimized reply in the adjacent pane and compare by eye.
+
+    TARGET may instead be `A` or `B`, which prints that option of the most
+    recent paired minimization in full, rendered.
+
+    By default this reads the sibling Claude pane in your tmux window, because
+    the point is to review somebody else's reply. Pass --session to name one.
+
+    Examples:
+
+      \b
+      endless session turn            # the raw draft behind the last reply
+      endless session turn 3          # three turns back
+      endless session turn B -p       # option B in full, paged
+    """
+    from endless.session_turn_cmd import session_turn as impl
+    impl(target, session_ref, paged)
+
+
+@main.group("minimizer")
+def minimizer_cmd():
+    """Read and drive the minimizer's autoresearch loop (E-1975).
+
+    The loop runs itself — a background job judges every reported turn and
+    periodically replays a challenger prompt against the champion over a frozen
+    corpus, promoting by pointer when it wins. Nothing here has to be typed for
+    that to happen.
+
+    These verbs are for the two things automation cannot do: seeing what the
+    loop believes, and undoing a promotion you disagree with.
+    """
+    pass
+
+
+@minimizer_cmd.command("status")
+def minimizer_status():
+    """Show champions, sampling, judge calibration and keep-ratio by draft size."""
+    from endless.minimizer_cmd import status
+    status()
+
+
+@minimizer_cmd.command("run")
+@click.option("--limit", default=8, type=int, show_default=True,
+              help="Maximum turns to judge this tick.")
+def minimizer_run(limit):
+    """One loop tick: judge what is unjudged, then replay a round if one is due.
+
+    This is what the background job fires. Running it by hand is safe and
+    idempotent — the judge writes one row per turn under a unique constraint,
+    and the round claims its window through a persisted timestamp.
+    """
+    from endless.minimizer_cmd import run
+    run(limit)
+
+
+@minimizer_cmd.command("judge")
+@click.option("--limit", default=8, type=int, show_default=True,
+              help="Maximum turns to judge.")
+def minimizer_judge_cmd(limit):
+    """Score unjudged turns and close out predictions the user has answered."""
+    from endless.minimizer_cmd import judge
+    judge(limit)
+
+
+@minimizer_cmd.command("optimize")
+@click.option("--task-type", default=None,
+              help="Task-type bucket to run the round for (default: untyped).")
+def minimizer_optimize(task_type):
+    """Run one paired-replay round now instead of waiting for the tick."""
+    from endless.minimizer_cmd import optimize
+    optimize(task_type)
+
+
+@minimizer_cmd.command("variants")
+@click.option("--task-type", default=None, help="Only this task-type bucket.")
+@click.option("--limit", default=20, type=int, show_default=True)
+def minimizer_variants(task_type, limit):
+    """List prompt variants with their lineage; `*` marks the champion."""
+    from endless.minimizer_cmd import variants
+    variants(task_type, limit)
+
+
+@minimizer_cmd.command("show")
+@click.argument("variant_hash")
+def minimizer_show(variant_hash):
+    """Print one variant in full — prompt, fetch policy and bypass threshold."""
+    from endless.minimizer_cmd import show
+    show(variant_hash)
+
+
+@minimizer_cmd.command("rollback")
+@click.option("--task-type", default=None,
+              help="Task-type bucket to roll back (default: untyped).")
+def minimizer_rollback(task_type):
+    """Point a champion back at its parent — how an auto-promotion is undone.
+
+    Rollback is a pointer move, which is what makes promoting without asking you
+    safe rather than reckless: nothing was rewritten, so nothing has to be
+    reconstructed.
+    """
+    from endless.minimizer_cmd import rollback
+    rollback(task_type)
+
+
 @main.group("task")
 def task_cmd():
     """Manage project tasks."""
@@ -2303,6 +2418,22 @@ def task_report(item_id, draft_file, raw):
     You get ONE appeal per turn: re-run with a draft that argues for content the
     minimizer cut. The appeal is minimized too.
     """
+    # The report channel is an always-main operation, for the same reason the
+    # Stop hook that reads it is: `endless-go hook` calls PinMainDB
+    # unconditionally, so a checkpoint written anywhere else is one the gate can
+    # never see. Without this pin the two halves land on different databases
+    # inside a self-dev worktree — the command arms the sandbox, the gate looks
+    # in the real ledger, finds nothing, and blocks the turn as "never
+    # reported". Worse, the E-1429 gate would refuse the bare invocation that
+    # the SessionStart rule itself prints, so the instruction would be
+    # unrunnable in the one repo that develops it.
+    #
+    # An explicit --db still wins: DBAwareGroup sets RESOLVED_CONFIG_DIR before
+    # this body runs, making the pin a no-op. `--db sandbox` is how the E-1975
+    # verify script drives the whole channel against a throwaway DB, which is
+    # the only case that legitimately wants somewhere other than main.
+    from endless import config
+    config.default_db_to_main()
     from endless.report_cmd import report_item, show_raw
     if raw:
         if draft_file is not None:

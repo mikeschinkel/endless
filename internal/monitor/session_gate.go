@@ -144,32 +144,64 @@ const RelayBounceLimit = 2
 // same turn legitimately replaces the sanctioned text (that is the prescribed
 // way to add a note or question), and only the newest text can be owed.
 func SetRelayCheckpoint(sessionID int64, sanctioned string) error {
-	return SetReportCheckpoint(sessionID, ReportCheckpoint{Sanctioned: sanctioned})
+	return SetReportCheckpoint(sessionID, ReportCheckpoint{
+		Variants: []ReportVariant{{Sanctioned: sanctioned}},
+	})
+}
+
+// ReportVariant is one minimization of one draft: the text it produced, and the
+// variant bundle that produced it.
+//
+// Slot is "" for an ordinary turn and "A"/"B" on a paired one. Each variant gets
+// its OWN corpus row, because the judge scores a minimization, not a
+// presentation — scoring the combined A/B block would measure the experiment's
+// packaging rather than either prompt.
+type ReportVariant struct {
+	Sanctioned string // this variant's minimized output
+	Slot       string // "", "A" or "B"
+	VariantHash string
+	Bypassed   bool // fell under the variant's bypass threshold; never minimized
 }
 
 // ReportCheckpoint is one reported turn: the minimizer's output (which the
-// session now owes the user verbatim) plus the two other legs of the eval-corpus
-// triple. TaskID is optional — an id-less report is legitimate, so the row keys
-// on the session and the task is attribution only (E-1953).
+// session now owes the user verbatim) plus everything a paired replay needs to
+// re-run the turn later. TaskID is optional — an id-less report is legitimate,
+// so the row keys on the session and the task is attribution only (E-1953).
 type ReportCheckpoint struct {
-	Sanctioned string // the minimized output — the ONLY thing the agent may say
+	Variants   []ReportVariant
+	Emitted    string // what the command PRINTED, when it differs from a single variant
 	RawDraft   string // the agent's whole freeform draft, before minimization
 	UserPrompt string // the message that prompted the turn
-	TaskID     *int64
+	// Context is the JSON record of what the fetch policy asked for and what came
+	// back. Recording is not optional bookkeeping: a minimizer that fetches is
+	// nondeterministic in its INPUTS, so replay must serve context from here
+	// rather than re-fetch state that has since moved (E-1975).
+	Context  string
+	TaskType string
+	TaskID   *int64
 }
 
 // SetReportCheckpoint opens a relay checkpoint for the session, recording the
 // exact text the session owes the user as its final message alongside the raw
-// draft and prompting message it was minimized from.
+// draft, prompting message and fetched context it was minimized from.
 //
 // Superseding CLOSES the older row, it does not delete it. That is deliberate:
 // the corpus wants every draft the session produced this turn, including the one
 // the agent thought better of, because an agent that re-runs the minimizer is
 // itself a signal about the first output.
+//
+// A paired turn writes TWO rows and leaves only the FIRST open. Both are corpus;
+// only one can be the checkpoint, because "at most one open row per (session,
+// kind)" is what makes the Stop gate's lookup unambiguous. The B row is closed
+// immediately as 'relay_pair' and reached through pair_id, which is what lets
+// the gate accept any of N sanctioned texts without a second open row.
 func SetReportCheckpoint(sessionID int64, cp ReportCheckpoint) error {
 	db, err := DB()
 	if err != nil {
 		return err
+	}
+	if len(cp.Variants) == 0 {
+		return fmt.Errorf("report checkpoint for session %d carries no variants", sessionID)
 	}
 	now := time.Now().UTC().Format("2006-01-02T15:04:05")
 	if _, err = db.Exec(
@@ -179,25 +211,69 @@ func SetReportCheckpoint(sessionID int64, cp ReportCheckpoint) error {
 	); err != nil {
 		return fmt.Errorf("supersede open relay checkpoint for session %d: %w", sessionID, err)
 	}
-	if _, err = db.Exec(
-		`INSERT INTO session_gates
-		   (session_id, kind_id, sanctioned_text, raw_draft, user_prompt, task_id, bounces, triggered_at)
-		 VALUES (?, ?, ?, ?, ?, ?, 0, ?)`,
-		sessionID, int(gatekind.GateKindRelay), cp.Sanctioned,
-		nullString(cp.RawDraft), nullString(cp.UserPrompt), cp.TaskID, now,
-	); err != nil {
-		return fmt.Errorf("insert relay checkpoint for session %d: %w", sessionID, err)
+
+	var leadID int64
+	for i, v := range cp.Variants {
+		// Only the lead row stays open, and only it carries the emitted text —
+		// the gate reads one row and follows pair_id for the rest.
+		var closedAt, closedBy any
+		var emitted any
+		if i > 0 {
+			closedAt, closedBy = now, "relay_pair"
+		} else if cp.Emitted != "" && cp.Emitted != v.Sanctioned {
+			emitted = cp.Emitted
+		}
+		res, ierr := db.Exec(
+			`INSERT INTO session_gates
+			   (session_id, kind_id, sanctioned_text, emitted_text, raw_draft, user_prompt,
+			    task_id, task_type, fetched_context, variant_hash, pair_slot, bypassed,
+			    bounces, triggered_at, cleared_at, cleared_by)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)`,
+			sessionID, int(gatekind.GateKindRelay), v.Sanctioned, emitted,
+			nullString(cp.RawDraft), nullString(cp.UserPrompt), cp.TaskID,
+			nullString(cp.TaskType), nullString(cp.Context), nullString(v.VariantHash),
+			nullString(v.Slot), boolInt(v.Bypassed), now, closedAt, closedBy,
+		)
+		if ierr != nil {
+			return fmt.Errorf("insert relay checkpoint for session %d: %w", sessionID, ierr)
+		}
+		id, ierr := res.LastInsertId()
+		if ierr != nil {
+			return fmt.Errorf("relay checkpoint id for session %d: %w", sessionID, ierr)
+		}
+		if i == 0 {
+			leadID = id
+		}
 	}
+
+	if len(cp.Variants) > 1 {
+		if _, err = db.Exec(
+			`UPDATE session_gates SET pair_id=? WHERE id>=? AND session_id=? AND kind_id=?`,
+			leadID, leadID, sessionID, int(gatekind.GateKindRelay),
+		); err != nil {
+			return fmt.Errorf("group relay pair for session %d: %w", sessionID, err)
+		}
+	}
+
 	// Count the run against the turn's appeal budget. Incremented HERE rather
 	// than at the command's entry point so only a run that actually produced
 	// output spends the budget — a run that failed to reach the minimizer must
-	// not cost the agent its one appeal.
+	// not cost the agent its one appeal. A pair is ONE run: the doubling is the
+	// experiment's cost, not a second bite at the appeal.
 	if _, err = db.Exec(
 		`UPDATE sessions SET report_runs = report_runs + 1 WHERE id=?`, sessionID,
 	); err != nil {
 		return fmt.Errorf("count report run for session %d: %w", sessionID, err)
 	}
 	return nil
+}
+
+// boolInt maps a Go bool onto SQLite's 0/1.
+func boolInt(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
 }
 
 // nullString maps "" to a SQL NULL so an absent leg of the corpus triple is
@@ -265,29 +341,89 @@ func LabelLatestReport(sessionID int64, label, text string) (found bool, err err
 	return n > 0, nil
 }
 
-// PendingRelayCheckpoint returns the sanctioned text and bounce count of the
-// session's open relay checkpoint. found is false when the session owes no
-// report — the overwhelmingly common case, since a session only owes one
-// between running `task report` and ending that turn.
-func PendingRelayCheckpoint(sessionID int64) (sanctioned string, bounces int, found bool, err error) {
+// PendingRelayCheckpoint returns the text the session owes, and the bounce
+// count, for its open relay checkpoint. found is false when the session owes no
+// report — the overwhelmingly common case, since a session only owes one between
+// running `task report` and ending that turn.
+//
+// Owed is what the command PRINTED, which on a paired turn is the combined A/B
+// presentation rather than either variant.
+func PendingRelayCheckpoint(sessionID int64) (owed string, bounces int, found bool, err error) {
+	cp, bounces, found, err := PendingReportCheckpoint(sessionID)
+	if err != nil || !found {
+		return "", bounces, found, err
+	}
+	return cp.Owed, bounces, true, nil
+}
+
+// PendingCheckpoint is the Stop gate's view of one open checkpoint: the text the
+// agent owes verbatim, plus every OTHER text that is also an acceptable final
+// message.
+//
+// Accepted is any-of-N rather than exactly-one, and that is bought deliberately
+// rather than needed today. Under the shipped A/B shape the agent relays the
+// combined block, so Owed alone would do. It is the single blocker between that
+// shape and both later ones — an AskUserQuestion preview where the agent sends
+// the WINNING variant, and a left/right TUI — and paying for it now costs one
+// slice comparison instead of a schema change later.
+type PendingCheckpoint struct {
+	Owed     string
+	Accepted []string
+}
+
+// PendingReportCheckpoint returns the session's open checkpoint together with
+// its paired siblings.
+func PendingReportCheckpoint(sessionID int64) (cp PendingCheckpoint, bounces int, found bool, err error) {
 	db, err := DB()
 	if err != nil {
-		return "", 0, false, err
+		return cp, 0, false, err
 	}
-	var text sql.NullString
+	var id int64
+	var sanctioned, emitted sql.NullString
+	var pairID sql.NullInt64
 	err = db.QueryRow(
-		`SELECT sanctioned_text, bounces FROM session_gates
+		`SELECT id, sanctioned_text, emitted_text, pair_id, bounces FROM session_gates
 		 WHERE session_id=? AND kind_id=? AND cleared_at IS NULL
 		 ORDER BY id DESC LIMIT 1`,
 		sessionID, int(gatekind.GateKindRelay),
-	).Scan(&text, &bounces)
+	).Scan(&id, &sanctioned, &emitted, &pairID, &bounces)
 	if errors.Is(err, sql.ErrNoRows) {
-		return "", 0, false, nil
+		return cp, 0, false, nil
 	}
 	if err != nil {
-		return "", 0, false, fmt.Errorf("query pending relay checkpoint for session %d: %w", sessionID, err)
+		return cp, 0, false, fmt.Errorf("query pending relay checkpoint for session %d: %w", sessionID, err)
 	}
-	return text.String, bounces, true, nil
+
+	cp.Owed = sanctioned.String
+	if emitted.Valid && emitted.String != "" {
+		cp.Owed = emitted.String
+	}
+	cp.Accepted = []string{cp.Owed}
+	if sanctioned.Valid && sanctioned.String != cp.Owed {
+		cp.Accepted = append(cp.Accepted, sanctioned.String)
+	}
+	if !pairID.Valid {
+		return cp, bounces, true, nil
+	}
+
+	rows, err := db.Query(
+		`SELECT sanctioned_text FROM session_gates
+		 WHERE pair_id=? AND id<>? AND kind_id=? AND sanctioned_text IS NOT NULL
+		 ORDER BY id`,
+		pairID.Int64, id, int(gatekind.GateKindRelay),
+	)
+	if err != nil {
+		return cp, bounces, true, fmt.Errorf("query relay pair for session %d: %w", sessionID, err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var text string
+		if serr := rows.Scan(&text); serr != nil {
+			return cp, bounces, true, fmt.Errorf("scan relay pair for session %d: %w", sessionID, serr)
+		}
+		cp.Accepted = append(cp.Accepted, text)
+	}
+	return cp, bounces, true, rows.Err()
 }
 
 // ClearRelayCheckpoint closes the session's open relay checkpoint(s) with the

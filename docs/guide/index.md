@@ -183,12 +183,14 @@ listed separately. (Generated — do not hand-edit; run `/regenerate-guide`.)
 | `errors` | reference | Recorded errors: the session-status badge, showing and clearing them, and the ERR-NNNN catalog. |
 | `guide` | reference | The session guide; run `endless guide` for the index, `--list` for sections. |
 | `jobs` | reference | The fire-once background job runner: firing it, reading its schedule, clearing a job's backoff. |
+| `minimizer` | tasks | The minimizer's autoresearch loop — champions, variants, judge calibration, rollback. |
 | `note` | _(none yet)_ | project notes aren't covered by the guide yet. |
 | `notes` | _(none yet)_ | project notes aren't covered by the guide yet. |
 | `phrase` | _(none yet)_ | matchers (action regexes) config isn't covered by the guide yet. |
 | `plan` | tasks | 'plan' is the former name for 'task' (renamed); use 'task'. |
 | `project` | reference | Managing registered projects (register, list, status, set, rename, scan, discover, purge, unregister). |
 | `session` | sessions | Recording session status; discovery (who am I); reading status. |
+| `session turn` | sessions | Reading a session's raw draft, or one option of a paired minimization. |
 | `setup` | _(none yet)_ | hook/integration setup (claude-hook, prompt-hook, shell-helpers) isn't covered by the guide yet. |
 | `shell-init` | orchestration | Shell helpers (esu/eswt) to enter your task's worktree. |
 | `sql` | reference | Read-only SQL against the Endless DB. |

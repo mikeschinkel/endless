@@ -163,7 +163,7 @@ func claimHandoffVars(projectID, taskID int64) (map[string]any, error) {
 		// handoff, which stays harness-agnostic on purpose: `task spawn` opens a
 		// tmux window, so the session it describes is a terminal Claude Code one
 		// by construction, whatever harness ran the command.)
-		"report_gate": supportedAgent() && monitor.ReportGateEnabledForCwd(worktreePath, projectRoot),
+		"report_gate": supportedAgent() && monitor.MinimizerEnabledForCwd(worktreePath, projectRoot),
 	}, nil
 }
 

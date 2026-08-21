@@ -444,6 +444,10 @@ const reportChannelRule = "Report channel: every reply you send the user goes " 
 	"nothing after it.\n\n" +
 	"If it cuts something you needed, `endless task report --raw` prints your " +
 	"draft back unchanged; nothing is destroyed.\n\n" +
+	"Occasionally the output arrives as two labelled options rather than one " +
+	"reply. Send it verbatim exactly as before — the user picks, not you. " +
+	"Choosing one yourself destroys the comparison, which is the only place the " +
+	"minimizer gets a real counterfactual to learn from.\n\n" +
 	"A Stop hook enforces both halves: it blocks a final message that differs " +
 	"from the command's output, and it blocks a turn that never ran the command " +
 	"at all."
@@ -456,7 +460,7 @@ const reportChannelRule = "Report channel: every reply you send the user goes " 
 // not edit in the course of normal work, which rules out
 // `.claude/settings.json`.
 //
-// Resolution is nearest-config-wins from cwd (see ReportGateEnabledForCwd), so a
+// Resolution is nearest-config-wins from cwd (see MinimizerEnabledForCwd), so a
 // worktree's own branch state governs its sessions. That is what makes a branch
 // which is CHANGING the gate able to exempt itself before it lands.
 //
@@ -475,7 +479,7 @@ const reportChannelRule = "Report channel: every reply you send the user goes " 
 // rule, PostToolUse reinforcement, Stop gate) move together; gating one of them
 // would break the told-iff-gated invariant above.
 //
-// The two axes are independent and both must say yes: `report_gate` is the
+// The two axes are independent and both must say yes: `minimizer.enabled` is the
 // project's decision, supportedAgent is the product's. Making the harness axis
 // project-configurable is deliberately deferred to E-1505 (add support for
 // Claude Desktop) — there is no second supported harness to configure until
@@ -491,7 +495,7 @@ func reportChannelOn(projectID int64, isRegistered bool, cwd string) bool {
 	if err != nil || root == "" {
 		return false
 	}
-	return monitor.ReportGateEnabledForCwd(cwd, root)
+	return monitor.MinimizerEnabledForCwd(cwd, root)
 }
 
 func handleTaskContextInjection(projectID int64, isRegistered bool, payload claudePayload) error {

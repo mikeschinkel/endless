@@ -94,6 +94,41 @@ func normalizeRelayText(s string) string {
 // lines beyond the report") rather than a generic mismatch complaint — the agent
 // can see exactly how much it added, and so can the user.
 func relayVerdict(sanctioned, actual string) (extra int, ok bool) {
+	return relayVerdictAnyOf([]string{sanctioned}, actual)
+}
+
+// relayVerdictAnyOf is relayVerdict over a SET of acceptable texts: the turn may
+// end if the final message matches any one of them.
+//
+// A/B is why. On a paired turn the command emits both variants as one block, and
+// that block is what the agent owes — but the two later shapes this design
+// leaves room for (an AskUserQuestion preview, a left/right TUI) both have the
+// agent send the WINNING variant instead. Accepting any of N is the whole
+// difference between those shapes being a schema change and being a no-op, so it
+// is bought here while it costs one loop.
+//
+// When nothing matches, the reported `extra` is the SMALLEST divergence across
+// the set. Reporting the largest, or the first, would tell an agent that added
+// one line to variant B that it added forty — a bounce reason that misdescribes
+// the violation teaches the wrong correction.
+func relayVerdictAnyOf(accepted []string, actual string) (extra int, ok bool) {
+	if len(accepted) == 0 {
+		return 0, true
+	}
+	best := -1
+	for _, want := range accepted {
+		n, matched := relayVerdictOne(want, actual)
+		if matched {
+			return 0, true
+		}
+		if best < 0 || n < best {
+			best = n
+		}
+	}
+	return best, false
+}
+
+func relayVerdictOne(sanctioned, actual string) (extra int, ok bool) {
 	wantText := normalizeRelayText(sanctioned)
 	gotText := normalizeRelayText(actual)
 	if gotText == "" || gotText == wantText {
@@ -306,15 +341,16 @@ func enforceReportGate(projectID int64, isRegistered bool, payload claudePayload
 		return false, nil
 	}
 
-	sanctioned, bounces, found, err := monitor.PendingRelayCheckpoint(session.ID)
+	cp, bounces, found, err := monitor.PendingReportCheckpoint(session.ID)
 	if err != nil {
 		return false, err
 	}
 	if !found {
 		return enforceReportCalled(session.ID)
 	}
+	sanctioned := cp.Owed
 
-	extra, ok := relayVerdict(sanctioned, payload.LastAssistantMessage)
+	extra, ok := relayVerdictAnyOf(cp.Accepted, payload.LastAssistantMessage)
 	if ok {
 		_, cerr := monitor.ClearRelayCheckpoint(session.ID, "relay_complied")
 		return false, cerr

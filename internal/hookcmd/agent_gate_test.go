@@ -85,23 +85,23 @@ func TestReportChannelOn_ChecksTheHarness(t *testing.T) {
 	}
 }
 
-// TestReportChannelOn_AndsWithTheConfigKey pins that harness and `report_gate`
+// TestReportChannelOn_AndsWithTheConfigKey pins that harness and `minimizer.enabled`
 // are independent veto axes (E-1962) — the project's decision and the product's
 // must BOTH say yes.
 //
 // The direction this protects: a terminal session on a project carrying
-// `"report_gate": false` (Endless's own checkout, among others) must stay off.
+// `"minimizer": {"enabled": false}` must stay off.
 // An early `return true` on a supported harness would override the config key
 // and switch the gate back on in the one repo that deliberately opted out.
 func TestReportChannelOn_AndsWithTheConfigKey(t *testing.T) {
 	fn := funcBody(t, readSource(t, "claude.go"), "func reportChannelOn(")
 
-	if !strings.Contains(fn, "ReportGateEnabledForCwd") {
-		t.Error("reportChannelOn no longer consults the report_gate config key")
+	if !strings.Contains(fn, "MinimizerEnabledForCwd") {
+		t.Error("reportChannelOn no longer consults the minimizer config key")
 	}
 	if strings.Contains(fn, "return true") {
 		t.Errorf("reportChannelOn short-circuits to true; the harness must VETO, "+
-			"never override the project's report_gate key:\n%s", fn)
+			"never override the project's minimizer key:\n%s", fn)
 	}
 }
 
@@ -114,7 +114,7 @@ func TestReportChannelOn_AndsWithTheConfigKey(t *testing.T) {
 // path that opened this task.
 func TestClaimHandoff_ChecksTheHarness(t *testing.T) {
 	src := readSource(t, "claim_handoff.go")
-	if !strings.Contains(src, `supportedAgent() && monitor.ReportGateEnabledForCwd(`) {
+	if !strings.Contains(src, `supportedAgent() && monitor.MinimizerEnabledForCwd(`) {
 		t.Error("the claim handoff's report_gate var is not harness-gated; " +
 			"a Desktop session claiming a task would be handed the reporting contract")
 	}

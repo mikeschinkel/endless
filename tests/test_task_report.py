@@ -12,6 +12,7 @@ the six properties the plan names. No stubbed test substitutes for it, and one
 pretending to would be worse than none.
 """
 
+import json
 import subprocess
 from pathlib import Path
 
@@ -47,6 +48,22 @@ def _mock_model_raising(monkeypatch, exc):
 
 
 @pytest.fixture(autouse=True)
+def _no_ledger(monkeypatch):
+    """Default to an unreachable variant store: shipped prompt, no fetched
+    context, no challenger.
+
+    That is the DEGRADED path E-1975 built deliberately — the loop is an
+    improvement on a prompt that already works, so a ledger it cannot reach must
+    cost the user nothing beyond the improvement. Making it the default here
+    keeps every pre-existing plumbing test asserting plumbing, and gives the
+    loop's own behavior its own tests rather than smearing a DB dependency
+    across the file.
+    """
+    monkeypatch.setattr(report_cmd, "_plan", lambda *a, **k: (None, None, "", ""))
+    monkeypatch.setattr(report_cmd, "_task_type", lambda item_id: "")
+
+
+@pytest.fixture(autouse=True)
 def _no_session(monkeypatch):
     """Default to an unresolvable session: no persistence, no appeal counter.
 
@@ -58,7 +75,19 @@ def _no_session(monkeypatch):
     monkeypatch.setattr(report_cmd, "_session_id", lambda: None)
 
 
-def _draft(tmp_path, text="Here is the answer.\n") -> str:
+# Comfortably over the default bypass threshold (256 chars). A draft shorter
+# than that legitimately skips the minimizer under E-1975, so a short fixture
+# would make every test below assert the bypass path while claiming to test the
+# minimizer. The bypass gets its own tests further down.
+_LONG_DRAFT = (
+    "Here is the answer.\n\n"
+    + "The parser handles nested quotes by tracking depth on a stack. "
+    * 6
+    + "\n"
+)
+
+
+def _draft(tmp_path, text=_LONG_DRAFT) -> str:
     p = tmp_path / "draft.md"
     p.write_text(text)
     return str(p)
@@ -228,7 +257,9 @@ def test_checkpoint_carries_the_draft_and_task(tmp_path, monkeypatch):
     checkpoint = [c for c in calls if c[0][0] == "relay-checkpoint"]
     assert len(checkpoint) == 1
     args, stdin = checkpoint[0]
-    assert stdin == "minimized"
+    payload = json.loads(stdin)
+    assert payload["emitted"] == "minimized"
+    assert [v["sanctioned"] for v in payload["variants"]] == ["minimized"]
     assert "--draft-file" in args and draft in args
     assert "--task-id" in args and "1953" in args
 
@@ -312,13 +343,35 @@ def test_prompt_carries_the_invariants():
         assert want in text, want
 
 
-def test_objective_is_not_brevity():
-    """A pure minimizer guts a requested discussion. The distinction between
-    'delete what was not asked for' and 'make it short' is the whole job, so it
-    is stated as an explicit negation rather than left to be inferred."""
+def test_objective_is_deletion_then_deduplication():
+    """ED-1557 replaced a deletion-only objective with two ordered ones.
+
+    E-1953 stated the first as an explicit negation ("YOUR OBJECTIVE IS NOT TO
+    MAKE IT SHORT"), and that sentence is deliberately GONE — under a rewriting
+    objective it argued against the thing the prompt now asks for. What replaces
+    it is the same protection stated positively: a discussion the user asked for
+    survives at whatever length it takes.
+    """
     text = report_prompts.DEFAULTS[report_prompts.MINIMIZE]
-    assert "NOT TO MAKE IT SHORT" in text
-    assert "DELETE WHAT THE USER" in text
+    assert "NOT TO MAKE IT SHORT" not in text
+    assert "DELETE WHAT THE USER DID NOT ASK FOR" in text
+    assert "a long discussion is correct" in text
+    assert "DO NOT TELL THE USER WHAT THEY ALREADY HAVE" in text
+
+
+def test_rewriting_is_licensed_and_fabrication_is_not():
+    """The two halves of ED-1557 that must travel together.
+
+    Deletion-only was safe by construction: an editor that can only remove cannot
+    assert. Licensing a rewrite removes that guarantee, so the anti-fabrication
+    invariant is not a nicety — it is the thing that makes the licence
+    survivable, and dropping it would let the loop optimise toward fluent
+    fiction.
+    """
+    text = report_prompts.DEFAULTS[report_prompts.MINIMIZE]
+    assert "You may REWRITE, not only delete" in text
+    assert "NEVER INVENT" in text
+    assert "deleting, not rewriting" not in text
 
 
 def test_denylist_sits_under_a_generative_rule():
