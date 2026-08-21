@@ -199,7 +199,8 @@ listed separately. (Generated — do not hand-edit; run `/regenerate-guide`.)
 | `task claim` | orchestration | Claiming a task: creates the per-task worktree and binds your session. |
 | `task handoff` | orchestration | The generated handoff text for a spawned session. |
 | `task release` | orchestration | Releasing a task so another session can claim it. |
-| `task spawn` | orchestration | Spawning a session on a task: foreground/background, attach verbs, coordinator pattern. |
+{{if .report_gate}}| `task report` | tasks | The minimizer — write your whole draft, send its output verbatim, and the Stop hook that enforces both halves. |
+{{end}}| `task spawn` | orchestration | Spawning a session on a task: foreground/background, attach verbs, coordinator pattern. |
 | `task unsettled` | orchestration | Why a worktree hasn't settled — modified (commit or discard) vs unlanded (land). |
 | `tmux` | reference | Tmux status-line and popup integration. |
 | `triage` | tasks | Automatic routing of `untriaged` tasks by description sufficiency — the sweep, the file-time path, and the manual override. |

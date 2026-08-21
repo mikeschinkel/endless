@@ -122,6 +122,7 @@ class _Parsed:
     covers: str
     note: str
     gap: str
+    when: str = ""
 
 
 def _parse_entry(text: str) -> _Parsed:
@@ -137,7 +138,8 @@ def _parse_entry(text: str) -> _Parsed:
         k, v = line.split(":", 1)
         headers[k.strip().lower()] = v.strip()
     sections = [s.strip() for s in headers.get("section", "").split(",") if s.strip()]
-    return _Parsed(sections, headers.get("covers", ""), note, headers.get("gap", ""))
+    return _Parsed(sections, headers.get("covers", ""), note, headers.get("gap", ""),
+                   headers.get("when", ""))
 
 
 def _file_for(command_path: str) -> Path:
@@ -157,7 +159,7 @@ def load_map(command_path: str) -> MapEntry | None:
             p = _parse_entry(path.read_text())
             return MapEntry(
                 key=command_path, sections=p.sections, covers=p.covers,
-                note=p.note, gap=p.gap,
+                note=p.note, gap=p.gap, when=p.when,
                 inherited_from="" if ancestor == command_path else ancestor,
             )
         parts = parts[:-1]
@@ -299,19 +301,19 @@ def validate() -> Report:
 # index.md cross-reference block
 # ---------------------------------------------------------------------------
 
-def _wrap_conditional_rows(topics: list[MapEntry]) -> tuple[list[str], str]:
-    """Table rows for `topics`, with `when:` rows wrapped in a guide condition.
+def _wrap_conditional_rows(rows: list[tuple[str, str]]) -> tuple[list[str], str]:
+    """Wrap `(row, condition)` pairs so each row renders only under its condition.
 
-    Returns (rows, tail). `tail` is `"{{end}}"` when the last topic was
-    conditional and must be prefixed onto whatever line follows the table;
-    otherwise it is empty.
+    Returns (rows, tail). `tail` is `"{{end}}"` when the LAST row was conditional
+    and must be prefixed onto whatever line follows the table; otherwise empty.
 
-    A topic may carry `when: <condition>` naming a condition the guide renders
-    against (E-2030). The row is made CONDITIONAL rather than deleted, because
-    the answer differs per reading project: `$FULL` and the four labels are real
-    on a project running the report channel and inert on one that turned it off,
-    and a row pointing at a section the reader's own guide does not contain is a
-    dangling reference either way.
+    A map file — for a command or a topic — may carry `when: <condition>` naming
+    a condition the guide renders against (E-2030). The row is made CONDITIONAL
+    rather than deleted, because the answer differs per reading project: `$FULL`,
+    the four labels and `endless minimizer` are real on a project running the
+    report channel and inert on one that turned it off, and a row pointing at a
+    section the reader's own guide does not contain is a dangling reference
+    either way.
 
     Placement of the markers is the whole subtlety. `{{if .x}}row{{end}}` on its
     own line looks right and is wrong: the newline terminating that line sits
@@ -327,18 +329,18 @@ def _wrap_conditional_rows(topics: list[MapEntry]) -> tuple[list[str], str]:
     Consecutive rows sharing a condition open one `{{if}}` between them, so a run
     costs two markers rather than two per row.
     """
-    rows: list[str] = []
+    out: list[str] = []
     prev_when = ""
-    for t in topics:
+    for text, when in rows:
         prefix = ""
-        if t.when != prev_when:
+        if when != prev_when:
             if prev_when:
                 prefix += "{{end}}"
-            if t.when:
-                prefix += f"{{{{if .{t.when}}}}}"
-            prev_when = t.when
-        rows.append(prefix + f"| {t.key} | {', '.join(t.sections)} | {t.covers} |")
-    return rows, "{{end}}" if prev_when else ""
+            if when:
+                prefix += f"{{{{if .{when}}}}}"
+            prev_when = when
+        out.append(prefix + text)
+    return out, "{{end}}" if prev_when else ""
 
 
 def assemble_index_block() -> str:
@@ -348,16 +350,22 @@ def assemble_index_block() -> str:
     inherited subcommands would be repetitive), in command order, then topics.
     """
     present = _present_stems()
-    cmd_rows: list[str] = []
+    cmd_pairs: list[tuple[str, str]] = []
     for cmd in walk_commands():
         if command_path_to_filename(cmd) not in present:
             continue
         p = _parse_entry(_file_for(cmd).read_text())
         if p.gap and not p.sections:
-            cmd_rows.append(f"| `{cmd}` | _(none yet)_ | {p.gap} |")
+            row = f"| `{cmd}` | _(none yet)_ | {p.gap} |"
         else:
-            cmd_rows.append(f"| `{cmd}` | {', '.join(p.sections)} | {p.covers} |")
-    topic_rows, topic_tail = _wrap_conditional_rows(load_topics())
+            row = f"| `{cmd}` | {', '.join(p.sections)} | {p.covers} |"
+        cmd_pairs.append((row, p.when))
+    cmd_rows, cmd_tail = _wrap_conditional_rows(cmd_pairs)
+
+    topic_rows, topic_tail = _wrap_conditional_rows([
+        (f"| {t.key} | {', '.join(t.sections)} | {t.covers} |", t.when)
+        for t in load_topics()
+    ])
 
     body = [
         BEGIN_MARKER,
@@ -372,7 +380,7 @@ def assemble_index_block() -> str:
         "| Command | Section | Covers |",
         "|---|---|---|",
         *cmd_rows,
-        "",
+        cmd_tail,
         "### Topics",
         "",
         "| Topic | Section | Covers |",
