@@ -3150,3 +3150,22 @@ status, task/decision text). A prior chat reply is not that. The real defect was
 the rule's wording and a fetch source that fed prior replies in as duplication
 evidence; the precedence clause was a patch over a mis-statement. Before adding
 a tie-breaker between two rules, check whether one of them is simply wrong.
+
+## Assert against the assembled artifact, not the source that builds it (E-1975)
+
+A verify assertion grepped `report_prompts.py` for "chat is ephemeral". The
+phrase is there — split across two adjacent Python string literals, so the grep
+missed it while the pytest reading `DEFAULTS[MINIMIZE]` passed. Two tests, two
+different artifacts, opposite answers. The one that reaches the model is the
+assembled string; test that.
+
+## A prompt rule the model mostly obeys is not an enforced rule (E-1975)
+
+I stated the byte-exact invariants in the prompt and measured 2-4 of 10 runs
+violating them once rewriting was licensed. No wording moved it reliably.
+`minimizer_invariants.check` existed the whole time and was wired only into
+scoring, never into the live report path — so the design's own argument ("a
+self-scored compression target is legitimate BECAUSE invariants are enforced
+separately") was false in the shipped code. Check mechanically, retry once, fall
+back. And make the check mean what the rule says: it tested commands for
+ALTERATION only, so deleting one outright passed — which 4 of 10 runs did.

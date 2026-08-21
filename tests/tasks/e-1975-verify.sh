@@ -342,7 +342,18 @@ CLAUDE_CODE_ENTRYPOINT=cli."
 test_objective() {
     section "Part 1 — the minimizer's objective (ED-1557)"
 
-    local src="src/endless/report_prompts.py"
+    # Assert against the ASSEMBLED prompt, not the source file.
+    #
+    # The prompt is built from adjacent Python string literals, so a phrase can
+    # be split across two of them and a file grep misses text that is plainly
+    # there. That happened: "chat is ephemeral" failed here while the pytest
+    # checking DEFAULTS[MINIMIZE] passed, because they were reading different
+    # artifacts. The assembled string is the one that reaches the model.
+    local src="${TMP_DIR}/minimize-prompt.txt"
+    py "
+from endless import report_prompts as rp
+print(rp.DEFAULTS[rp.MINIMIZE])
+" > "${src}" 2>/dev/null
 
     # The two sentences the design named for deletion. Both argued for the OLD
     # objective, and leaving either in would have the prompt contradict itself.
