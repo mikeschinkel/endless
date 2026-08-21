@@ -119,7 +119,7 @@ func main() {
 	}
 
 	// E-1450/E-1429: PinMainDB for surfaces whose writes are real-world
-	// activity in the real ledger regardless of cwd or XDG_CONFIG_HOME
+	// activity in the main database regardless of cwd or XDG_CONFIG_HOME
 	// (hook-fired writes, tmux pane/task status). Pin pins the DB to main
 	// unconditionally and satisfies the worktree gate via dbPathOverride.
 	// Other subcommands stay on whatever --config-dir (or absence of one)
@@ -153,7 +153,7 @@ func main() {
 	// moment monitor itself reports a fault (E-1884) — so the DB accessor and the
 	// detail-log directory are injected here, once, for every subcommand. It must
 	// run AFTER the DB-context resolution above so a fault raised in a self-dev
-	// worktree lands in that worktree's sandbox rather than the real ledger.
+	// worktree lands in that worktree's sandbox rather than the main database.
 	// Both funcs are stored, not called, so this costs nothing in a process that
 	// never records a fault.
 	faults.Bind(monitor.DB, func() string {

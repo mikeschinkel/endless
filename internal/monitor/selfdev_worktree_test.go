@@ -9,7 +9,7 @@ import (
 // InSelfDevWorktree decides whether a surface that would otherwise pin the main
 // DB should instead honor the per-worktree sandbox (E-698). Getting it wrong in
 // either direction is costly: a false negative points candidate code at the
-// developer's real ledger, and a false positive points a normal session at a
+// developer's main database, and a false positive points a normal session at a
 // sandbox that has none of its data.
 
 // selfDevTree builds <root>/.endless/worktrees/e-<id>/ and writes the project's

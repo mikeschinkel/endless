@@ -80,7 +80,7 @@ AMENDABLE_COMMIT_SUBJECTS = (
 LAND_MAX_RETRIES = 8
 
 # E-1500: minimum stripped length for tasks.text (or a committed plan file)
-# to count as a viable plan. Empirically derived from the task ledger: every
+# to count as a viable plan. Empirically derived from the existing tasks: every
 # junk/placeholder plan is <=34 chars and every genuine plan is >=351 chars,
 # so 128 rejects all observed junk while accepting all observed real plans.
 PLAN_VIABILITY_MIN_CHARS = 128

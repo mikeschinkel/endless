@@ -110,7 +110,7 @@ func main() {
 		// and they are already invisible through live_tasks.
 		//
 		// Only session_tasks is swept. All four FK-free consumers were re-measured
-		// against the real ledger immediately before landing: 15 reattached rows in
+		// against the main database immediately before landing: 15 reattached rows in
 		// session_tasks (touches minutes-to-an-hour ahead of their task's creation,
 		// i.e. the previous occupant of a reused id), and ZERO in session_notices,
 		// session_hidden_tasks and task_landings. The same timestamp proof would

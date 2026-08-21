@@ -46,7 +46,7 @@ func TestScheduleLeaseExceedsWorstCase(t *testing.T) {
 }
 
 // TestChildEnvPinsConfigHome covers the wiring detail that would otherwise
-// silently triage the WRONG ledger: the Python CLI has no --config-dir, so
+// silently triage the WRONG database: the Python CLI has no --config-dir, so
 // XDG_CONFIG_HOME is the entire mechanism for telling the subprocess which
 // database to open.
 func TestChildEnvPinsConfigHome(t *testing.T) {

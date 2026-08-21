@@ -37,8 +37,8 @@ Rules only — no rationale, no history, no mechanism. Workflow belongs in
 
 - Never create a worktree by hand. `endless task claim` creates and wires yours.
 - `endless` commands in your worktree read and write a per-worktree sandbox
-  database, not the real ledger.
-- A command that must reach the real ledger takes `--db main`.
+  database, not the main database.
+- A command that must reach the main database takes `--db main`.
 
 ## Memory is OFF here
 

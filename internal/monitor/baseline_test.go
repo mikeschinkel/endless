@@ -97,7 +97,7 @@ func seedProject(t *testing.T, db *sql.DB, id int64, name, path string) int64 {
 // ProjectPath hands back, and what every path derived from a project row is
 // compared against. t.TempDir() alone is not that form on macOS, where it hands
 // back a path under /var, a symlink to /private/var, so a project seeded at it
-// is a row written the way a pre-E-2002 ledger holds one.
+// is a row written the way a pre-E-2002 database holds one.
 //
 // It is deliberately NOT the stored form: a temp dir is outside $HOME, so the
 // two coincide here anyway, and the home-relative case is exercised explicitly

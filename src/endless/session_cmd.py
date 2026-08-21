@@ -244,7 +244,7 @@ def _auto_task_for_taskless_session(target: dict) -> tuple[str, int]:
     if not rows:
         raise click.ClickException(
             f"session {eid}'s project (id {target.get('project_id')}) is not in "
-            f"the ledger, so there is nowhere to create a task for it.\n"
+            f"the database, so there is nowhere to create a task for it.\n"
             f"Resume it by hand, without a worktree:\n"
             f"    claude --resume {uuid}"
         )
@@ -534,7 +534,7 @@ def resume_session(
     to its session UUID and task worktree, cd's into the worktree, and execs
     `claude --resume <uuid>` — replacing this process so the resumed session
     takes over the current pane. This recovers sessions whose panes died in a
-    tmux crash: their transcripts and ledger rows survive the crash intact.
+    tmux crash: their transcripts and database rows survive the crash intact.
 
     `--review`/`--reopen` (E-1801) recover a session whose worktree was dropped
     after landing: `--review` rebuilds a detached, read-mostly inspection tree

@@ -13,7 +13,7 @@ import (
 )
 
 // triageTestDB opens an in-memory DB with the schema applied and two projects,
-// so the project filter and the ledger-wide sweep are both exercisable.
+// so the project filter and the database-wide sweep are both exercisable.
 func triageTestDB(t *testing.T) *sql.DB {
 	t.Helper()
 	db, err := sql.Open("sqlite", ":memory:")
@@ -113,7 +113,7 @@ func TestUntriagedTasks_ProjectFilter(t *testing.T) {
 		t.Fatalf("untriagedTasks(all): %v", err)
 	}
 	if len(all) != 2 {
-		t.Fatalf("ledger-wide sweep: got %d want 2", len(all))
+		t.Fatalf("database-wide sweep: got %d want 2", len(all))
 	}
 
 	only, err := untriagedTasks(db, "beta", 10)

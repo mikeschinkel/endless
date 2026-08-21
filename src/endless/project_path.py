@@ -24,7 +24,7 @@ The type is the signal: hold a `Path` and you may use it; hold a `str` from
 this module and you may only compare or store it.
 
 Home-relative since E-2011, for legibility — `endless sql` is a supported
-surface, and an ad-hoc query over the ledger reads better with
+surface, and an ad-hoc query over the database reads better with
 `~/Projects/acme` than with a column of identical 20-character prefixes. The
 byte saving is not the reason; it is under a kilobyte.
 

@@ -6,9 +6,9 @@
 // identically and rewrote the column to that form: absolute, symlinks
 // resolved. ED-1562 was then amended — the canonical form is home-relative,
 // `~/Projects/acme`, absolute only outside $HOME — because `endless sql` is a
-// supported surface and an ad-hoc query over the ledger is far easier to read
+// supported surface and an ad-hoc query over the database is far easier to read
 // without a column of identical home prefixes. This is the data half of that
-// re-pointing: a ledger repaired by E-2002 is now in the previous canonical
+// re-pointing: a database repaired by E-2002 is now in the previous canonical
 // form, and this brings it to the current one.
 //
 // The work is the same work, so the code is the same code: this calls

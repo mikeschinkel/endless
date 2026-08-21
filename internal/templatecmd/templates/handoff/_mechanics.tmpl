@@ -19,7 +19,7 @@
 */ -}}
 
 {{define "handoff_worktree" -}}
-Your worktree is: {{.worktree_path}} (branch {{.branch}}) — confirm with `pwd`. Don't edit the main checkout. The worktree routes DB access to a sandbox, so every `endless` command that must reach the real ledger takes `--db main`.
+Your worktree is: {{.worktree_path}} (branch {{.branch}}) — confirm with `pwd`. Don't edit the main checkout. The worktree routes DB access to a sandbox, so every `endless` command that must reach the main database takes `--db main`.
 {{- end}}
 
 {{define "handoff_focus" -}}

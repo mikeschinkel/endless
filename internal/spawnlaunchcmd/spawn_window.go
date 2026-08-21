@@ -110,9 +110,9 @@ func monitorCommand() []string {
 // worktree.
 //
 // The Python CLI routes its DB from cwd, and those two panes are observation
-// surfaces onto the real ledger rather than part of the branch's checkout. Run
+// surfaces onto the main database rather than part of the branch's checkout. Run
 // from inside a self_dev worktree, every ad-hoc `endless` command typed in the
-// shell pane needs an explicit `--db main` to reach that ledger. Claude's own
+// shell pane needs an explicit `--db main` to reach that database. Claude's own
 // pane keeps the worktree — that one IS the branch's work.
 //
 // The monitor pane follows the same rule for consistency, NOT because its view

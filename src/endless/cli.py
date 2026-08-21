@@ -299,7 +299,8 @@ AgentAwareGroup.group_class = AgentAwareGroup
 @click.group(
     cls=AgentAwareGroup,
     epilog="Inside a self-dev worktree, pass --db (accepted in any position): "
-    "--db main (the real ledger) or --db sandbox (this worktree's test DB). "
+    "--db main (the project's main database) or --db sandbox (this worktree's "
+    "sandbox database). "
     "Resolve paths with `endless db path --db=main|sandbox`.",
 )
 @click.version_option(__version__, prog_name="endless")
@@ -707,9 +708,9 @@ _endless_run() {
     # "$ENDLESS_SESSION_ID" would error there when the var is unset.
     #
     # Every endless call here passes --db main. esu/esp/esf only ever wrap
-    # 'session use/cd/forget', which operate on the real session ledger
+    # 'session use/cd/forget', which operate on the main database
     # (~/.config/endless), never a per-worktree sandbox. --db main is the
-    # default ledger anyway (a no-op for non-self-dev users), but it's
+    # default database anyway (a no-op for non-self-dev users), but it's
     # mandatory once cwd is a self-dev worktree: esu cd's us into the
     # session's worktree, so without it the self-dev --db gate rejects every
     # subsequent call (the lookup line gates first, then the fallback). It
@@ -1979,7 +1980,7 @@ def _absolute_path_tokens(content):
 def _builtin_allowed_dirs():
     """endless's own config + cache dirs — ALWAYS exempt from the path gate (both
     rules), no --allow-path needed. Docs and plans legitimately reference stable
-    endless-owned locations outside the project root (the ledger DB, sandbox
+    endless-owned locations outside the project root (the main database, sandbox
     caches — e.g. ~/.config/endless/endless.db, ~/.cache/endless/sandboxes/…).
 
     Resolved through endless's own config/cache-dir resolution so XDG_CONFIG_HOME /
@@ -1992,9 +1993,9 @@ def _builtin_allowed_dirs():
     from endless import config
     dirs = {
         config._config_root() / "endless",   # honors XDG_CONFIG_HOME
-        config.main_config_dir(),            # ~/.config/endless (real ledger)
+        config.main_config_dir(),            # ~/.config/endless (main database)
         config._cache_root() / "endless",    # honors XDG_CACHE_HOME
-        config.main_cache_dir(),             # ~/.cache/endless (real ledger)
+        config.main_cache_dir(),             # ~/.cache/endless (main database)
     }
     return [d.expanduser() for d in dirs]
 

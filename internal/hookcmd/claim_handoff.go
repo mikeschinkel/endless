@@ -19,7 +19,7 @@ import (
 // Claude process as its opening prompt. A session that instead runs
 // `endless task claim <id>` mid-flight receives none of it, and fills the gap by
 // inference — which is how one session ends up working two tasks, editing the
-// main checkout, or writing to the sandbox DB instead of the real ledger.
+// main checkout, or writing to the sandbox DB instead of the main database.
 //
 // The PostToolUse hook closes that gap: the Bash call that ran `task claim` is
 // itself the signal, so the claim handoff rides back on that tool result as

@@ -32,7 +32,7 @@
 // column" until this change is applied. Apply it at land (`endless worktree
 // land` runs `endless db apply-change`) BEFORE the new binary becomes the
 // deployed one via `just install`. Landing first is the normal order and leaves
-// no window; installing an unlanded build against the real ledger is what would
+// no window; installing an unlanded build against the main database is what would
 // open one. E-1818 already bars a worktree binary pinned onto a real DB from
 // applying schema.SQL at all, so a self-dev worktree cannot create the trigger
 // on the real DB ahead of this change — which is also why the land that ships

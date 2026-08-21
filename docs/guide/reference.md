@@ -154,7 +154,7 @@ Every code's cause and remedy is documented in `docs/errors.md`.
 
 `endless db backup` writes a timestamped copy to `<config dir>/backups/` (last
 60 kept) and prints the path it wrote. `just land` fires it before a schema
-change, so a backup of the real ledger almost always exists. Backups are
+change, so a backup of the main database almost always exists. Backups are
 throttled to one a minute — inside that window `db backup` writes nothing and
 says so, naming the existing backup rather than claiming a fresh one.
 `endless db restore` is the other half — the supported way to *use* one.
@@ -194,7 +194,7 @@ the sidecars is not tidiness — a stale `-journal` left beside a fresh database
 is the hot-journal failure all over again.
 
 Backups are validated before anything is touched: the file must open read-only,
-pass `integrity_check`, and actually be an Endless ledger. Nothing here goes
+pass `integrity_check`, and actually be an Endless database. Nothing here goes
 through the normal connection helper, which applies schema on connect — a
 restore that quietly migrated would defeat the point, since the usual reason to
 restore is that a migration ran when it should not have.

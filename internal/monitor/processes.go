@@ -177,7 +177,7 @@ func ProcessIDsForPanes(panes []string) ([]int64, error) {
 // this migration shipped without adoption on the theory that each session would
 // re-bind on its next hook. Only sessions that FIRE hooks do — an idle window
 // fires none, so in practice the whole board went unresolvable and stayed that
-// way. Measured on the real ledger: 63 of 64 bound sessions were sitting on
+// way. Measured on the main database: 63 of 64 bound sessions were sitting on
 // panes that were live on the running server at migration time.
 //
 // # Why this is an observation, not a guess

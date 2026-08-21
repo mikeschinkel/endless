@@ -325,8 +325,8 @@ DB_NOT_SELF_DEV_REFUSAL = (
 WORKTREE_DB_REFUSAL = (
     "running inside a self-dev worktree requires an explicit --db value "
     "(accepted in any position):\n\n"
-    "  --db main     the real ledger — managing the project\n"
-    "  --db sandbox  this worktree's throwaway test DB — testing endless itself\n\n"
+    "  --db main     the project's main database — managing the project\n"
+    "  --db sandbox  this worktree's sandbox database — testing endless itself\n\n"
     "Need paths? Run `endless db path --db=main|sandbox`."
 )
 
@@ -339,13 +339,13 @@ def _cache_root() -> Path:
 
 
 def main_config_dir() -> Path:
-    """The real ledger's config dir: ~/.config/endless, ignoring any injected
+    """The main database's config dir: ~/.config/endless, ignoring any injected
     XDG_CONFIG_HOME (the whole point of --db main is to escape the sandbox)."""
     return Path.home() / ".config" / "endless"
 
 
 def main_cache_dir() -> Path:
-    """The real ledger's cache dir: ~/.cache/endless, ignoring any injected
+    """The main database's cache dir: ~/.cache/endless, ignoring any injected
     XDG_CACHE_HOME (mirror of main_config_dir for the cache root; sandboxes live
     under here at ~/.cache/endless/sandboxes/<worktree>/)."""
     return Path.home() / ".cache" / "endless"

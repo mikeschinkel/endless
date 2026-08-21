@@ -23,7 +23,7 @@ func TestClassify(t *testing.T) {
 		// E-1845: `untriaged` is its own action. NOT actPlan (it carries no
 		// plan judgment yet) and — load-bearing — NOT actUnknown, which is the
 		// should-never-happen glyph and would otherwise land on the most common
-		// row in the ledger, since every new task starts untriaged.
+		// row in the database, since every new task starts untriaged.
 		{"untriaged is triage not plan", monitor.SessionStatusRow{Status: "untriaged"}, actTriage},
 		{"untriaged with plan text is still triage", monitor.SessionStatusRow{Status: "untriaged", HasText: true}, actTriage},
 		{"landed untriaged is landed", monitor.SessionStatusRow{Status: "untriaged", Landed: true}, actLanded},

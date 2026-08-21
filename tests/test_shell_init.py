@@ -63,7 +63,7 @@ def test_shell_init_endless_run_passes_db_main():
 
     esu cd's the user into the session's worktree; once cwd is a self-dev
     worktree, any bare 'endless' call hits the WORKTREE_DB_REFUSAL gate. The
-    session helpers only touch the real ledger, so --db main is both required
+    session helpers only touch the main database, so --db main is both required
     (to clear the gate) and correct. All three calls — the worktree lookup, the
     'uv run --directory' route, and the bare fallback — must pass it."""
     runner = CliRunner()

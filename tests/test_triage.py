@@ -215,7 +215,7 @@ def test_a_worktree_pinned_to_main_is_NOT_suppressed_by_itself(monkeypatch):
     `--db main` is NOT the hazard — it is how every agent session files, and the
     CLI spawned there is main's editable install. Suppressing on this alone was
     the reason automatic triage never fired in endless's own repo. The hazard is
-    candidate CODE against the real ledger, which is what the path check below
+    candidate CODE against the main database, which is what the path check below
     (and its own tests) catches."""
     monkeypatch.delenv(triage.NO_TRIAGE_ENV, raising=False)
     monkeypatch.setattr(config, "gated_worktree_root", lambda *_a, **_k: Path("/repo"))
@@ -306,7 +306,7 @@ def test_triage_module_holds_no_sqlite_knowledge():
 
 # --- E-1859 reopened: the five fixes ----------------------------------------
 
-def test_suppression_allows_a_landed_cli_against_the_real_ledger(monkeypatch):
+def test_suppression_allows_a_landed_cli_against_the_main_database(monkeypatch):
     """Fix 1. `--db main` from a worktree is how every agent files, and the CLI
     it spawns is main's editable install — landed code. Suppressing that was
     the reason automatic triage never fired in endless's own repo."""
@@ -317,8 +317,8 @@ def test_suppression_allows_a_landed_cli_against_the_real_ledger(monkeypatch):
     assert triage.inline_suppressed() == ""
 
 
-def test_suppression_blocks_a_candidate_cli_against_the_real_ledger(monkeypatch):
-    """Fix 1, the half that must stay: candidate code + real ledger is E-698's
+def test_suppression_blocks_a_candidate_cli_against_the_main_database(monkeypatch):
+    """Fix 1, the half that must stay: candidate code + main database is E-698's
     hazard, and path-gating keeps it caught if anyone runs `uv run endless`
     from a worktree."""
     monkeypatch.delenv(triage.NO_TRIAGE_ENV, raising=False)

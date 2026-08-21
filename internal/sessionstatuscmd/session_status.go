@@ -73,7 +73,7 @@ const (
 	actUnknown
 	// actDone: a terminal-status task (confirmed/assumed/declined/obsolete/
 	// completed) whose work never landed — E-1871. Before this it fell through
-	// classify()'s switch to actUnknown, so the most ordinary rows in the ledger
+	// classify()'s switch to actUnknown, so the most ordinary rows in the database
 	// wore ⁇, the should-never-happen glyph, and drowned out its diagnostic value
 	// (declined/obsolete never land, so they hit it ALWAYS). ⇥ (U+21E5 RIGHTWARDS
 	// ARROW TO BAR) reads as a terminus and measures single-width (asserted in
@@ -292,8 +292,8 @@ func Run(args []string) {
 		// resolved from main means nothing there. The worktree monitor rendered
 		// "no active task" for every pane.
 		//
-		// The guard that skip was protecting (candidate job code writing to the real
-		// ledger) belongs on the trigger, not on the DB context: jobs.RunDue
+		// The guard that skip was protecting (candidate job code writing to the main
+		// database) belongs on the trigger, not on the DB context: jobs.RunDue
 		// suppresses itself when it detects a self_dev worktree pinned to a real DB.
 		// That keeps the protection without costing a working dashboard.
 		//
@@ -1055,7 +1055,7 @@ func classify(r monitor.SessionStatusRow) action {
 	case "untriaged":
 		// E-1845. Load-bearing case: without it `untriaged` would fall through
 		// to actUnknown, painting ⁇ — the should-never-happen marker — on the
-		// most common row in the ledger, since every new task starts here. That
+		// most common row in the database, since every new task starts here. That
 		// is the bug E-1871 fixed for terminal statuses, and it would be worse
 		// this time. It is also NOT actPlan: an untriaged task has no judgment
 		// about it yet, so "needs a plan" would be a claim nobody has made.

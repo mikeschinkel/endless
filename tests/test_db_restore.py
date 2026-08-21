@@ -182,7 +182,7 @@ def test_check_backup_refuses_unusable_files(tmp_path, kind):
 
 
 def test_check_backup_refuses_a_foreign_sqlite_database(tmp_path):
-    """A SQLite file in the backups directory is not automatically a ledger."""
+    """A SQLite file in the backups directory is not automatically a database."""
     path = tmp_path / "someone-elses.db"
     conn = sqlite3.connect(str(path))
     conn.execute("CREATE TABLE unrelated (x INTEGER)")

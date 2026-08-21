@@ -106,7 +106,7 @@ def select_untriaged(
 ) -> list[dict]:
     """The triage queue: `untriaged` tasks, oldest first, capped at `limit`.
 
-    `project` None means every project — the ledger-wide sweep the background
+    `project` None means every project — the database-wide sweep the background
     job runs, which has a database but no cwd to resolve a project from.
     """
     args = ["session-query", "untriaged-tasks", "--limit", str(limit)]
@@ -454,13 +454,13 @@ def inline_suppressed() -> str:
     """Why automatic file-time triage must not fire here, or "" when it may.
 
     The hazard being guarded is E-698's, and it is a PAIR of conditions, not
-    one: CANDIDATE code writing the REAL ledger.
+    one: CANDIDATE code writing the MAIN database.
 
         binary     DB        verdict
         ---------  --------  ------------------------------
         candidate  sandbox   fine — this IS the test
-        candidate  real      forbidden — the E-698 hazard
-        landed     real      fine — this is triage
+        candidate  main      forbidden — the E-698 hazard
+        landed     main      fine — this is triage
 
     An earlier version suppressed on "self-dev worktree + --db main" alone,
     copying `internal/jobs.suppressedWithReason` without re-deriving it. That
@@ -485,7 +485,7 @@ def inline_suppressed() -> str:
     if os.environ.get(NO_TRIAGE_ENV):
         return f"{NO_TRIAGE_ENV} is set"
 
-    # Anything but the real ledger is a sandbox or a test DB: candidate code is
+    # Anything but the main database is a sandbox or a test DB: candidate code is
     # supposed to write those.
     if config.RESOLVED_CONFIG_DIR != config.main_config_dir():
         return ""
@@ -502,11 +502,11 @@ def inline_suppressed() -> str:
     try:
         Path(cli).resolve().relative_to(worktree)
     except ValueError:
-        # Landed CLI + real ledger — this is ordinary triage, the whole point.
+        # Landed CLI + main database — this is ordinary triage, the whole point.
         return ""
 
     return (
-        f"candidate CLI inside the worktree ({cli}) is pinned to the real ledger"
+        f"candidate CLI inside the worktree ({cli}) is pinned to the main database"
     )
 
 
@@ -653,7 +653,7 @@ def _cwd_project_name() -> str | None:
 
     Read from `<root>/.endless/config.json` — a file read, not a DB read, so
     the module's zero-SQLite property holds. None falls through to a
-    ledger-wide sweep, which is the right default for a cwd that belongs to no
+    database-wide sweep, which is the right default for a cwd that belongs to no
     project at all.
     """
     root = config.enclosing_project_root()

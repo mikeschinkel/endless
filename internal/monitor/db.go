@@ -52,7 +52,7 @@ var (
 	// override. Without this split a self-dev worktree's own dev session would
 	// have its session/pane-state writes routed to the sandbox (where the
 	// spawned task does not exist -> active_task_id FK-fails -> NULL -> status
-	// line shows "claim a task"), instead of the real ledger per E-1450 (E-1700).
+	// line shows "claim a task"), instead of the main database per E-1450 (E-1700).
 	dbContextFromFlag bool
 )
 
@@ -172,7 +172,7 @@ func setDetectedContextDir(dir string) {
 //   - DB-path only: ConfigDir() is left untouched, so config.json and logs
 //     keep following XDG_CONFIG_HOME (the worktree's sandbox). Only the DB
 //     itself moves to main, matching the E-1450 split — session/pane state is
-//     real-world activity and belongs in the real ledger.
+//     real-world activity and belongs in the main database.
 //
 // Used by the always-main infrastructure surfaces (`endless-go tmux`). Must
 // precede the first DB()/DBPath() use. The hook keeps
@@ -227,7 +227,7 @@ func dbContextExplicit() bool {
 // pinnedToForeignRealDB reports whether this process has been pinned onto the
 // real database at ~/.config/endless via ForceRealDB() (the Claude hook) or
 // PinMainDB() (`endless-go tmux`) — the automatic entry points that
-// redirect a sandbox/worktree-context binary's DATA writes onto the real ledger
+// redirect a sandbox/worktree-context binary's DATA writes onto the main database
 // (E-1450/E-1700). The pin is signalled by dbPathOverride != "".
 //
 // Invariant (E-1818): only a database's OWNING binary applies schema.SQL (DDL +
@@ -304,7 +304,7 @@ func candidateBuild() bool {
 	return strings.Contains(resolvedPath(exe), worktreePathMarker)
 }
 
-// realDBPath is the deployed installation's ledger, independent of any routing
+// realDBPath is the deployed installation's database, independent of any routing
 // in force. It hardcodes the same location PinMainDB does, so "the main database"
 // means one thing across both.
 func realDBPath() string {
@@ -319,8 +319,8 @@ func realDBPath() string {
 // database (PinMainDB / ForceRealDB), overriding any sandbox routing.
 //
 // Exported for the E-698 job runner, which must not execute jobs when a
-// self_dev worktree's candidate build is pointed at the developer's real
-// ledger. Combined with InSelfDevWorktree it names exactly that state; on its
+// self_dev worktree's candidate build is pointed at the developer's main
+// database. Combined with InSelfDevWorktree it names exactly that state; on its
 // own it is true for ordinary pinned surfaces (hook, tmux) in the main
 // checkout too, where running jobs is correct.
 func PinnedToRealDB() bool { return pinnedToForeignRealDB() }
@@ -410,7 +410,7 @@ func SelfDetectWorktreeSandbox() {
 	}
 	// setDetectedContextDir (not SetDBContextDir): a cwd-detected sandbox routes
 	// config/logs to the sandbox but must NOT suppress the hook/tmux main
-	// pin — session/pane state belongs in the real ledger (E-1450/E-1700).
+	// pin — session/pane state belongs in the main database (E-1450/E-1700).
 	setDetectedContextDir(sandboxDir)
 }
 

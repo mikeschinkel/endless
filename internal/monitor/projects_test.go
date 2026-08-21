@@ -237,7 +237,7 @@ func TestProjectIDForPath_UnresolvedRowStillMatches(t *testing.T) {
 	if err := os.Symlink(real, link); err != nil {
 		t.Fatalf("symlink: %v", err)
 	}
-	seedProject(t, db, 1, "acme", link) // stored unresolved, as a stale ledger holds it
+	seedProject(t, db, 1, "acme", link) // stored unresolved, as a stale database holds it
 
 	id, registered, err := ProjectIDForPath(real)
 	if err != nil {
@@ -281,7 +281,7 @@ func TestProjectIDForPath_UnresolvedRowsPickNearestProject(t *testing.T) {
 }
 
 // TestProjectIDForPath_DuplicateRowsPreferTheOlder pins what happens on a
-// ledger that ALREADY caught the bug: the genuine registration and the
+// database that ALREADY caught the bug: the genuine registration and the
 // auto-registered duplicate both denote the same directory. The lower id — the
 // row that existed first, i.e. the real one with the tasks — is the answer.
 func TestProjectIDForPath_DuplicateRowsPreferTheOlder(t *testing.T) {
@@ -584,7 +584,7 @@ func TestProjectPath_HomeRelativeRowComesBackResolved(t *testing.T) {
 // TestMatchProjectPath_FindsBothSpellings pins the fast path and the fallback
 // side by side: a row written the E-2011 way is matched on the indexed exact
 // compare, and a row still written the E-2002 way (absolute) is matched by the
-// resolved-form scan — so upgrading a ledger cannot spawn duplicates before the
+// resolved-form scan — so upgrading a database cannot spawn duplicates before the
 // change script runs.
 func TestMatchProjectPath_FindsBothSpellings(t *testing.T) {
 	db := withTestDB(t)
@@ -645,7 +645,7 @@ func projectPathOf(t *testing.T, db *sql.DB, id int64) string {
 	return path
 }
 
-// TestRepairProjectPaths_RewritesUnresolvedRow is the plain case: a ledger
+// TestRepairProjectPaths_RewritesUnresolvedRow is the plain case: a database
 // written before E-2002 holds the old spelling, and the repair replaces it with
 // the canonical one so the indexed lookup — not the fallback scan — matches.
 func TestRepairProjectPaths_RewritesUnresolvedRow(t *testing.T) {
@@ -668,7 +668,7 @@ func TestRepairProjectPaths_RewritesUnresolvedRow(t *testing.T) {
 }
 
 // TestRepairProjectPaths_RewritesAbsoluteRowHomeRelative is the E-2011 half:
-// a ledger already repaired by E-2002 holds the PREVIOUS canonical form, and
+// a database already repaired by E-2002 holds the PREVIOUS canonical form, and
 // the same function brings it to the current one. This is what
 // internal/schema/changes/e-2011-home-relative-project-paths.go runs.
 func TestRepairProjectPaths_RewritesAbsoluteRowHomeRelative(t *testing.T) {
@@ -799,7 +799,7 @@ func TestRepairProjectPaths_SurvivesAUniqueRefCollision(t *testing.T) {
 }
 
 // TestRepairProjectPaths_IsIdempotent pins the property that makes this safe to
-// re-run: a second pass over an already-canonical ledger changes nothing.
+// re-run: a second pass over an already-canonical database changes nothing.
 func TestRepairProjectPaths_IsIdempotent(t *testing.T) {
 	db := withTestDB(t)
 	real := tempProjectRoot(t)

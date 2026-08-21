@@ -398,7 +398,7 @@ const defaultUntriagedLimit = 10
 // runUntriagedTasks prints the triage queue (E-1859) as JSON — tasks in
 // `untriaged`, oldest first, capped by --limit. No --project means every
 // project: the background sweep runs from the job runner, which has a database
-// but no cwd, so ledger-wide is the only scope it can express. A human running
+// but no cwd, so database-wide is the only scope it can express. A human running
 // `endless triage run` inside a project passes --project.
 func runUntriagedTasks(args []string) error {
 	fs := flag.NewFlagSet("untriaged-tasks", flag.ContinueOnError)

@@ -38,7 +38,7 @@ func gitInit(t *testing.T) string {
 
 // TestProjectDirFor_Worktree is the case that matters: a spawned session works
 // in a per-task worktree, but the monitor and shell panes must start in the MAIN
-// checkout so endless routes them to the real ledger rather than the worktree
+// checkout so endless routes them to the main database rather than the worktree
 // sandbox.
 func TestProjectDirFor_Worktree(t *testing.T) {
 	main := gitInit(t)

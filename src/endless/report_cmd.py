@@ -28,7 +28,7 @@ Three properties follow from that and are not negotiable:
 
 WHAT E-1975 ADDED, and why the command grew four steps rather than one:
 
-  * The prompt in force is a VARIANT resolved from the ledger, not the shipped
+  * The prompt in force is a VARIANT resolved from the database, not the shipped
     default. The loop promotes by pointer, so the command has to read the
     pointer.
   * Before minimizing, the variant's FETCH POLICY pulls what the user already
@@ -453,7 +453,7 @@ def _produce(
 ) -> tuple[str, dict]:
     """Resolve the variant, fetch, minimize (once or twice) and build the output.
 
-    Degrades to the shipped default whenever the ledger is unreachable. That is
+    Degrades to the shipped default whenever the database is unreachable. That is
     the right failure: the loop is an improvement on a prompt that already works,
     so a broken loop must cost the user nothing beyond the improvement. Only the
     MODEL call fails closed here, because only that one can silently void the
@@ -512,7 +512,7 @@ def _produce(
 def _plan(task_type: str, item_id: int | None, session_id: int | None):
     """(variant, challenger_or_None, context_text, context_record).
 
-    Every failure here degrades rather than raises: no ledger means the shipped
+    Every failure here degrades rather than raises: no database means the shipped
     prompt with no fetched context, which is exactly E-1953's behavior.
     """
     try:

@@ -25,7 +25,7 @@ import (
 // per comparison.
 //
 // Stored home-relative for legibility: `endless sql` is a supported surface,
-// and an ad-hoc query over the ledger reads better with `~/Projects/acme` than
+// and an ad-hoc query over the database reads better with `~/Projects/acme` than
 // with a column of identical 20-character prefixes (E-2011). The byte saving is
 // not the reason; it is under a kilobyte.
 
@@ -172,7 +172,7 @@ func resolveAbs(p string) string {
 // holds; the fallback compares what the rows MEAN, so it still matches a row in
 // any older spelling — absolute since E-2011 re-pointed the canonical form,
 // unresolved since before E-2002. Each ticket's change script rewrites those
-// (see RepairProjectPaths), so on a repaired ledger the fallback never fires —
+// (see RepairProjectPaths), so on a repaired database the fallback never fires —
 // but a row can be written by hand, restored from an old backup, or created by
 // a DB that has not run the change yet, and a lookup that missed in those cases
 // would auto-register a duplicate all over again. Ordering by id makes the pick
@@ -283,8 +283,8 @@ type ProjectPathRepair struct {
 // internal/schema/changes/e-2011-home-relative-project-paths.go once E-2011
 // re-pointed the canonical form from absolute to home-relative. One function
 // serves both because "canonical" is defined in exactly one place —
-// StoredProjectPath — so a ledger that has run either change ends in whatever
-// spelling the current build calls canonical, and a ledger that runs both in
+// StoredProjectPath — so a database that has run either change ends in whatever
+// spelling the current build calls canonical, and a database that runs both in
 // sequence is not rewritten twice for nothing. It lives here rather than in
 // those scripts so it can be tested; it stays here forever because a migration
 // has to keep working on a DB that has never seen it.
@@ -308,7 +308,7 @@ type ProjectPathRepair struct {
 // (`PRAGMA foreign_key_list`) rather than listed here. A hardcoded list would
 // be correct on the day it was written and silently wrong the first time a
 // table gained a project_id, which is precisely the failure mode a repair
-// running unattended over someone's ledger must not have.
+// running unattended over someone's database must not have.
 func RepairProjectPaths(tx *sql.Tx) (ProjectPathRepair, error) {
 	var repair ProjectPathRepair
 

@@ -48,12 +48,12 @@ def _mock_model_raising(monkeypatch, exc):
 
 
 @pytest.fixture(autouse=True)
-def _no_ledger(monkeypatch):
+def _no_variant_store(monkeypatch):
     """Default to an unreachable variant store: shipped prompt, no fetched
     context, no challenger.
 
     That is the DEGRADED path E-1975 built deliberately — the loop is an
-    improvement on a prompt that already works, so a ledger it cannot reach must
+    improvement on a prompt that already works, so a database it cannot reach must
     cost the user nothing beyond the improvement. Making it the default here
     keeps every pre-existing plumbing test asserting plumbing, and gives the
     loop's own behavior its own tests rather than smearing a DB dependency

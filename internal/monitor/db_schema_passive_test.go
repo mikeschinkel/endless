@@ -197,7 +197,7 @@ func TestDBOwnerPathMigratesAndVerifies(t *testing.T) {
 // TestDBSchemaPassiveViaPinMainDB is the end-to-end form of the E-1818
 // regression: it takes the pin through the REAL entry point PinMainDB() with a
 // redirected HOME (so DBPath() resolves to $HOME/.config/endless/endless.db, the
-// real ledger location) and opens a fully schema'd DB whose task_types slug has
+// main database location) and opens a fully schema'd DB whose task_types slug has
 // been diverged from the running enum — the exact E-1659 scenario. Before the
 // fix the pinned open ran schema.SQL + VerifyIntegrity and fail-closed; after
 // it, the open succeeds and the drifted row is untouched.

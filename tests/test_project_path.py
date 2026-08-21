@@ -172,7 +172,7 @@ def test_match_finds_row_through_a_symlinked_path(isolated_env, tmp_path):
 
 
 def test_match_tolerates_a_row_stored_unresolved(isolated_env, tmp_path):
-    """The legacy-ledger case, and the reason E-2002 needs no data migration:
+    """The legacy-database case, and the reason E-2002 needs no data migration:
     normalization at the comparison boundary makes the stored spelling
     irrelevant."""
     real = (tmp_path / "acme").resolve()
@@ -187,7 +187,7 @@ def test_match_tolerates_a_row_stored_unresolved(isolated_env, tmp_path):
 def test_match_prefers_the_older_of_two_rows_for_one_directory(
     isolated_env, tmp_path,
 ):
-    """A ledger that already caught the bug holds the real registration AND the
+    """A database that already caught the bug holds the real registration AND the
     auto-registered duplicate. The lower id — the row with the tasks — wins."""
     real = (tmp_path / "acme").resolve()
     real.mkdir()
@@ -253,7 +253,7 @@ def test_register_stores_a_project_under_home_relative(
     isolated_env, temp_home,
 ):
     """The E-2011 write side, end to end through the real command: the column
-    holds `~/...`, which is the whole point — `endless sql` over the ledger is
+    holds `~/...`, which is the whole point — `endless sql` over the database is
     readable."""
     proj = temp_home / "Projects" / "acme"
     proj.mkdir(parents=True)
@@ -278,7 +278,7 @@ def test_match_finds_a_home_relative_row_from_an_absolute_path(
 
 
 def test_match_still_finds_a_row_left_absolute(isolated_env, temp_home):
-    """The upgrade path: a ledger repaired by E-2002 but not yet by E-2011
+    """The upgrade path: a database repaired by E-2002 but not yet by E-2011
     holds absolute rows, and they must keep matching — or the first event after
     the upgrade auto-registers a duplicate for every project."""
     proj = temp_home / "Projects" / "acme"

@@ -15,7 +15,7 @@ const noJobsEnv = "ENDLESS_NO_JOBS"
 //
 // The one state that matters is a self_dev WORKTREE pinned to a real database.
 // That combination means candidate, unreviewed job code is pointed at the
-// developer's actual task ledger — exactly the pollution the per-worktree
+// developer's actual database — exactly the pollution the per-worktree
 // sandbox (E-1281) exists to prevent — and, because E-1818 opens a pinned real
 // DB schema-passive, at a database that will not even have the runner's tables.
 //
@@ -52,7 +52,7 @@ func suppressedWithReason() (suppressed bool, reason string) {
 	if monitor.InSelfDevWorktree() && monitor.PinnedToRealDB() {
 		suppressed = true
 		reason = "self-dev worktree pinned to a real database " +
-			"(candidate code must not write the real ledger; " +
+			"(candidate code must not write the main database; " +
 			"pass --db sandbox to run jobs against this worktree's sandbox)"
 		goto end
 	}

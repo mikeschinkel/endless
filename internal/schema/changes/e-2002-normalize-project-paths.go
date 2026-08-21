@@ -4,7 +4,7 @@
 // duplicate rows the unresolved-path bug created.
 //
 // The code half of E-2002 made the Go hook and the Python CLI normalize a
-// project path the same way. This is the data half: a ledger written while they
+// project path the same way. This is the data half: a database written while they
 // disagreed holds rows in the old spelling, and — wherever the hook won the race
 // to a directory the CLI had already registered — a second, auto-registered row
 // for that same directory.

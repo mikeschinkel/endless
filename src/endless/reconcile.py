@@ -105,7 +105,7 @@ def repair_orphan_relations() -> int:
     `tasks` — but task ids are reused, so a later task taking the freed id
     silently inherited the dead relations and reported them as fact.
 
-    The `task remove` guard stops NEW orphans; this clears what the ledger
+    The `task remove` guard stops NEW orphans; this clears what the database
     already accumulated. Ordering hazard: this can only find orphans whose id is
     still FREE. An orphan whose id has since been reused is indistinguishable
     from a genuine relation and is not recoverable by query.

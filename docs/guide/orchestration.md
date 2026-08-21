@@ -57,11 +57,11 @@ checkout of a project whose `.endless/config.json` has `"self_dev": true`)
 must say which database every command operates on. There is no default — you
 pick per invocation:
 
-- `--db main` — the real ledger at `~/.config/endless/endless.db`. Use it for
+- `--db main` — the main database at `~/.config/endless/endless.db`. Use it for
   **managing the project**: filing tasks, claiming, status updates, ledger entries.
 - `--db sandbox` — this worktree's throwaway DB under
   `~/.cache/endless/sandboxes/worktree-e-NNN/`. Use it for **testing endless
-  itself** so experiments never touch the real ledger.
+  itself** so experiments never touch the main database.
 
 ```bash
 endless --db main task add "Fix the thing"     # before the command
@@ -286,7 +286,7 @@ Spawn runs in one of two places:
 
 The foreground window is built as three panes (E-1851): Claude on the **left** at half width and full height (focused when the window opens), `endless session monitor` **top-right**, and a bare `$SHELL` **bottom-right** for ad-hoc `endless` commands. The monitor resizes its own pane to the frame it is rendering on every repaint, capped at 80% of the window height, so the shell keeps the rest of the column; with no rows to show it holds a small fixed block rather than collapsing to a sliver. `--bg` (no window) and `--attach` are unaffected — neither builds a layout.
 
-**Pane working directories are not the same.** Claude's pane gets the task's **worktree** — that pane is the branch's work. The monitor and shell panes get the **project directory**, because the Python CLI routes its DB from cwd: run from inside a `self_dev` worktree, every ad-hoc `endless` command in the shell pane needs an explicit `--db main` to reach the real ledger. The monitor pane follows the same rule for consistency, though its own view no longer depends on it — `session-status` pins the main DB regardless of cwd (E-698), since session and pane state are machine-scoped rather than project-scoped. The trade-off is that `git`/`just` in the shell pane act on the main checkout, not on the task branch.
+**Pane working directories are not the same.** Claude's pane gets the task's **worktree** — that pane is the branch's work. The monitor and shell panes get the **project directory**, because the Python CLI routes its DB from cwd: run from inside a `self_dev` worktree, every ad-hoc `endless` command in the shell pane needs an explicit `--db main` to reach the main database. The monitor pane follows the same rule for consistency, though its own view no longer depends on it — `session-status` pins the main DB regardless of cwd (E-698), since session and pane state are machine-scoped rather than project-scoped. The trade-off is that `git`/`just` in the shell pane act on the main checkout, not on the task branch.
 
 Both **pre-claim** the task (status → `underway`, per-task worktree created) and run the same pre-flight refusals before launching, so the spawned session always lands in a fully-claimed state and never needs to run `endless task claim` itself.
 
@@ -510,7 +510,7 @@ How a task proves itself before it lands, and how a session hands that proof bac
 
 Every task carries **one verification suite** — a single, self-contained proof that the change does what it claims. Today that suite is realized as a bash script at `tests/tasks/e-<id>-verify.sh`. A good suite:
 
-- Builds its own isolated environment (temp `HOME`/`XDG`, a throwaway fixture dir) so it never touches your real config or the ledger.
+- Builds its own isolated environment (temp `HOME`/`XDG`, a throwaway fixture dir) so it never touches your real config or the main database.
 - Prints pass/fail per check, then a summary that ends in `ALL PASSED`.
 - Exits `0` when everything passes and non-zero on any failure.
 

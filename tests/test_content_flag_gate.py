@@ -105,7 +105,7 @@ def test_allow_path_exempts_rule1_whole_value_when_absolute():
 
 @pytest.mark.parametrize("value", [
     "~/.config/endless/endless.db",                          # Rule 1 whole value
-    "the ledger DB is at ~/.config/endless/endless.db here",  # Rule 2 in prose
+    "the main database is at ~/.config/endless/endless.db here",  # Rule 2 in prose
     "sandbox lives at ~/.cache/endless/sandboxes/e-1/endless",
 ])
 def test_builtin_config_cache_dirs_allowed_without_allow_path(value):

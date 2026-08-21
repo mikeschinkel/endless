@@ -1,4 +1,4 @@
-"""`endless db restore` — recover the ledger from a backup, safely. E-1942.
+"""`endless db restore` — recover the database from a backup, safely. E-1942.
 
 `endless db backup` has existed for a long time and `just land` calls it, so the
 safety net was half built: there was no supported way to USE a backup. Recovery
@@ -55,8 +55,8 @@ SIDECAR_SUFFIXES = ("-wal", "-shm", "-journal")
 # The first 16 bytes of any SQLite database file.
 SQLITE_MAGIC = b"SQLite format 3\x00"
 
-# Tables that make a file recognizably an Endless ledger rather than some other
-# SQLite database that happens to be lying in the backups directory.
+# Tables that make a file recognizably an Endless database rather than some
+# other SQLite database that happens to be lying in the backups directory.
 REQUIRED_TABLES = ("tasks", "projects")
 
 
@@ -356,7 +356,7 @@ def _copy_into_place(backup: Path, db_path: Path, mode: int | None) -> None:
     """Copy `backup` (and any sidecars it has) to `db_path`, atomically.
 
     Written to a temp name in the destination directory and renamed, so an
-    interrupted copy can never leave a half-written file where the ledger goes.
+    interrupted copy can never leave a half-written file where the database goes.
     """
     db_path.parent.mkdir(parents=True, exist_ok=True)
     for suffix in ("",) + SIDECAR_SUFFIXES:

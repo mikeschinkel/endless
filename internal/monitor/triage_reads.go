@@ -25,7 +25,7 @@ type UntriagedTask struct {
 	ID int64 `json:"id"`
 	// Project is the registered project NAME (not id): the Python caller
 	// passes it straight to `endless-go template render --project`, and the
-	// sweep is ledger-wide so it cannot assume a cwd-resolved project.
+	// sweep is database-wide so it cannot assume a cwd-resolved project.
 	Project string `json:"project"`
 	Title   string `json:"title"`
 }
@@ -110,7 +110,7 @@ const (
 // starve a task that has sat unrouted for a week.
 //
 // projectName empty means every project: the job runner has a database but no
-// cwd, so a ledger-wide sweep is the only scope it can express. A human
+// cwd, so a database-wide sweep is the only scope it can express. A human
 // running `endless triage run` inside a project passes the name.
 func UntriagedTasks(projectName string, limit int) ([]UntriagedTask, error) {
 	db, err := DB()
