@@ -113,6 +113,7 @@ class MapEntry:
     note: str = ""                 # optional command-specific note (commands only)
     gap: str = ""                  # set instead of section when no section fits yet
     inherited_from: str = ""       # ancestor command path the file came from
+    when: str = ""                 # guide condition gating the row (topics only)
 
 
 @dataclass
@@ -181,7 +182,9 @@ def load_topics() -> list[MapEntry]:
         if not topic:
             continue
         sections = [s.strip() for s in headers.get("section", "").split(",") if s.strip()]
-        entries.append(MapEntry(key=topic, sections=sections, covers=headers.get("covers", "")))
+        entries.append(MapEntry(key=topic, sections=sections,
+                                covers=headers.get("covers", ""),
+                                when=headers.get("when", "")))
     return entries
 
 
@@ -296,6 +299,48 @@ def validate() -> Report:
 # index.md cross-reference block
 # ---------------------------------------------------------------------------
 
+def _wrap_conditional_rows(topics: list[MapEntry]) -> tuple[list[str], str]:
+    """Table rows for `topics`, with `when:` rows wrapped in a guide condition.
+
+    Returns (rows, tail). `tail` is `"{{end}}"` when the last topic was
+    conditional and must be prefixed onto whatever line follows the table;
+    otherwise it is empty.
+
+    A topic may carry `when: <condition>` naming a condition the guide renders
+    against (E-2030). The row is made CONDITIONAL rather than deleted, because
+    the answer differs per reading project: `$FULL` and the four labels are real
+    on a project running the report channel and inert on one that turned it off,
+    and a row pointing at a section the reader's own guide does not contain is a
+    dangling reference either way.
+
+    Placement of the markers is the whole subtlety. `{{if .x}}row{{end}}` on its
+    own line looks right and is wrong: the newline terminating that line sits
+    OUTSIDE both actions, so a false condition still renders it — and a blank
+    line inside a markdown table ends the table early. Each marker therefore
+    attaches to the START of a line, so the newlines it governs fall inside it:
+
+        | uncond |
+        {{if .x}}| cond a |
+        | cond b |
+        {{end}}| uncond |
+
+    Consecutive rows sharing a condition open one `{{if}}` between them, so a run
+    costs two markers rather than two per row.
+    """
+    rows: list[str] = []
+    prev_when = ""
+    for t in topics:
+        prefix = ""
+        if t.when != prev_when:
+            if prev_when:
+                prefix += "{{end}}"
+            if t.when:
+                prefix += f"{{{{if .{t.when}}}}}"
+            prev_when = t.when
+        rows.append(prefix + f"| {t.key} | {', '.join(t.sections)} | {t.covers} |")
+    return rows, "{{end}}" if prev_when else ""
+
+
 def assemble_index_block() -> str:
     """Build the generated block (markers included) from the map files.
 
@@ -312,10 +357,7 @@ def assemble_index_block() -> str:
             cmd_rows.append(f"| `{cmd}` | _(none yet)_ | {p.gap} |")
         else:
             cmd_rows.append(f"| `{cmd}` | {', '.join(p.sections)} | {p.covers} |")
-    topic_rows = [
-        f"| {t.key} | {', '.join(t.sections)} | {t.covers} |"
-        for t in load_topics()
-    ]
+    topic_rows, topic_tail = _wrap_conditional_rows(load_topics())
 
     body = [
         BEGIN_MARKER,
@@ -336,7 +378,7 @@ def assemble_index_block() -> str:
         "| Topic | Section | Covers |",
         "|---|---|---|",
         *topic_rows,
-        END_MARKER,
+        topic_tail + END_MARKER,
     ]
     return "\n".join(body)
 

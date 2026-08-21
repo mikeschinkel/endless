@@ -616,7 +616,78 @@ def guide(section, list_sections):
             )
         target = guide_dir / f"{section}.md"
 
-    click.echo(target.read_text())
+    click.echo(render_guide_file(target), nl=False)
+
+
+def guide_conditions() -> dict[str, bool]:
+    """Every condition `docs/guide/*.md` may branch on, resolved for this cwd.
+
+    The registry, not just a vars payload: a guide file that branches on a name
+    absent from here renders its else-arm silently, so `{{if .report_gat}}` would
+    quietly turn the report channel off for every reader. A test walks the guide
+    and refuses any condition this function does not answer.
+
+    `report_gate` is resolved by the same `_report_gate_on` the spawn handoff and
+    the wind-down nudge use. A fourth reading of the config would be a fourth
+    thing to keep in step, and the told-iff-gated invariant only holds while
+    every emitter agrees.
+    """
+    from endless.task_cmd import _report_gate_on
+
+    return {"report_gate": _report_gate_on()}
+
+
+def render_guide_file(path: Path) -> str:
+    """Render one guide file, resolving its conditional sections (E-2030).
+
+    The guide used to be `cat`ed straight to stdout, which made every word of it
+    unconditional — including the report channel's instructions, which
+    `reportChannelOn` gates on the project's `report_gate`. A session on a
+    gate-off project was therefore told to use a channel that would not gate it,
+    the exact case that function's own comment forbids. Static text cannot
+    honour a per-project switch, so the guide is now a Go text/template.
+
+    Rendered through `endless-go template render --file` rather than a
+    conditional syntax invented here. Endless already has one templating
+    language and one set of `{{if .report_gate}}` branches (the handoff
+    templates); a second one, in Python, would be two dialects to learn and two
+    to keep in step. The `--file` mode exists because the guide lives in
+    `docs/guide/` where humans read it, outside the tree `template render`
+    resolves names in.
+
+    `report_gate` is resolved by the same `_report_gate_on` the spawn handoff
+    and the wind-down nudge use, not by a fourth reading of the config — the
+    told-iff-gated invariant only holds while every emitter agrees.
+
+    Fails loudly when the Go binary is unreachable or too old to know `--file`.
+    The alternative is printing the file raw, which shows a reader
+    `{{if .report_gate}}` and, worse, hands a gate-off session both branches at
+    once. The failure names the rebuild, because the way to reach it is to
+    upgrade the Python half without the Go half — `endless` and `endless-go` ship
+    together and a drifted pair says so in a flag error nobody can read.
+    """
+    import json
+    import subprocess
+
+    from endless.event_bridge import _resolve_endless_go
+
+    binary = _resolve_endless_go()
+    result = subprocess.run(
+        [binary, "template", "render", "--file", str(path)],
+        input=json.dumps(guide_conditions()),
+        capture_output=True, text=True, check=False,
+    )
+    if result.returncode != 0:
+        detail = (result.stderr or "").strip()
+        hint = ""
+        if "not defined: -file" in detail:
+            hint = ("\n\nThe endless-go on PATH predates `template render --file`, "
+                    "which the guide needs. Rebuild and reinstall: `just install`.")
+        raise click.ClickException(
+            f"Could not render the guide from {path}"
+            + (f": {detail}" if detail else ".") + hint
+        )
+    return result.stdout
 
 
 _SHELL_INIT_SNIPPET = """\
@@ -2214,18 +2285,14 @@ def task_assume(item_ids, cascade, outcome, outcome_file, allow_paths):
 def task_report(item_id, draft_file, raw):
     """Minimize your draft reply into the message you are allowed to send.
 
-    Write the reply you were about to send — in full, exactly as you drafted it,
-    tables and code blocks and all — to a file, then run this command with
-    --draft-file. An adversarial editor deletes what the user did not ask for,
-    and its output is your entire final message. Send it verbatim. A Stop hook
-    compares your final message against it and also blocks a turn that never ran
-    this command at all.
+    Write the reply you mean to send — exactly as you would send it, tables and
+    code blocks and all — to a file, then run this command with --draft-file. An
+    adversarial editor deletes what the user did not ask for, and its output is
+    your entire final message. Send it verbatim. A Stop hook compares your final
+    message against it and also blocks a turn that never ran this command at all.
 
-    Do NOT pre-summarize. The minimizer can only cut what it is given, so
-    trimming first replaces its judgment with yours — which is the failure this
-    command exists to fix. It is not a length limit either: the objective is to
-    delete what was not asked for, so a discussion the user asked for survives at
-    whatever length it takes.
+    It is not a length limit: the objective is to delete what was not asked for,
+    so a discussion the user asked for survives at whatever length it takes.
 
     Your draft is persisted. --raw prints it back unchanged, which is what makes
     an over-aggressive cut recoverable rather than lost.

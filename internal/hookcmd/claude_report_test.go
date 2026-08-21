@@ -101,14 +101,22 @@ func TestReportRelayResponse_Shape(t *testing.T) {
 // standard here would put the agent back in the seat the minimizer took.
 func TestReportChannelRule_StatesTheMechanicNotAStandard(t *testing.T) {
 	for _, want := range []string{
-		"--draft-file", "in full", "verbatim", "optional", "Do NOT pre-summarize", "--raw",
+		"--draft-file", "verbatim", "optional", "--raw",
 	} {
 		if !strings.Contains(reportChannelRule, want) {
 			t.Errorf("reportChannelRule missing %q:\n%s", want, reportChannelRule)
 		}
 	}
-	// The retired self-judgment standard, in the exact words it last used.
-	for _, unwanted := range []string{"cannot derive", "XOR", "append", "--json"} {
+	// The retired self-judgment standard, in the exact words it last used, plus
+	// the "do not pre-summarize" criteria E-2030 retired. Those told the agent
+	// to hand over bloat it had already recognized as bloat, on the reasoning
+	// that the minimizer should be the one to cut it. Which agent cuts does not
+	// matter — the outcome the user receives does — so the rule must not grow
+	// them back.
+	for _, unwanted := range []string{
+		"cannot derive", "XOR", "append", "--json",
+		"pre-summarize", "in full",
+	} {
 		if strings.Contains(reportChannelRule, unwanted) {
 			t.Errorf("reportChannelRule still asks the agent to judge its own output (%q):\n%s",
 				unwanted, reportChannelRule)

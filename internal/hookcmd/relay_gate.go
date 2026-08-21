@@ -144,20 +144,23 @@ func relayBlockReason(extra int, sanctioned string) string {
 // all. It is the bypass case, so it does not argue — it states the contract and
 // hands over the exact invocation.
 //
-// It asks for the draft the agent ALREADY wrote rather than for a summary. A
-// minimizer handed a pre-summarized draft is minimizing the wrong artifact, and
-// the restatement tax of composing one is the very failure that made the old
-// field-based command leak content into prose.
+// It asks for the draft the agent ALREADY wrote rather than for a summary. Not
+// because a shorter draft would be worse — E-2030 settled that an agent which
+// cuts its own output has achieved the objective — but because composing a
+// summary to satisfy the block is a second artifact, and the restatement tax of
+// producing one is the very failure that made the old field-based command leak
+// content into prose.
 func reportMissingReason() string {
 	return "BLOCKED: this turn has a reply but never ran `endless task report`.\n\n" +
 		"Every turn that speaks to the user goes through the minimizer. Do this:\n\n" +
-		"  1. Write the reply you were about to send — in full, exactly as you " +
-		"drafted it, no summarizing — to a file.\n" +
+		"  1. Write the reply you were about to send, exactly as you drafted " +
+		"it, to a file.\n" +
 		"  2. Run `endless task report [<task-id>] --draft-file <path>`. The task " +
 		"id is optional; omit it when nothing is claimed.\n" +
 		"  3. Send that command's output as your entire final message, verbatim.\n\n" +
-		"Do not hand-write a shortened reply to satisfy this. The minimizer decides " +
-		"what survives; your job is to give it everything you meant to say."
+		"Send the draft you already have rather than composing a new one for " +
+		"this block — a reply written to satisfy the gate is a different reply " +
+		"than the one the user was owed."
 }
 
 // relaySystemMessage is the user-visible half of the embellishment bounce. The

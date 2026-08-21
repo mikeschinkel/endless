@@ -82,17 +82,30 @@ func usage(w io.Writer) {
 	fmt.Fprintln(w, "Usage: endless-go template <command> [flags] [args]")
 	fmt.Fprintln(w, "Commands:")
 	fmt.Fprintln(w, "  render [--project <name>] <name>   read JSON vars on stdin, render template to stdout")
+	fmt.Fprintln(w, "  render --file <path>               render an arbitrary file as a template instead")
 }
 
 func runRender(args []string, stdin io.Reader, stdout io.Writer) error {
 	fs := flag.NewFlagSet("render", flag.ContinueOnError)
 	projectName := fs.String("project", "", "registered project name (overrides cwd-based resolution)")
+	filePath := fs.String("file", "", "render this file as a template instead of a named template")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	rest := fs.Args()
+
+	if *filePath != "" {
+		if len(rest) != 0 {
+			return errors.New("--file renders one file: pass no template name with it")
+		}
+		if *projectName != "" {
+			return errors.New("--file and --project are exclusive: --file names an exact file, so there is no override chain for --project to root")
+		}
+		return renderFile(*filePath, stdin, stdout)
+	}
+
 	if len(rest) != 1 {
-		return errors.New("usage: endless-go template render [--project <name>] <name>")
+		return errors.New("usage: endless-go template render [--project <name>] <name> | --file <path>")
 	}
 	name := normalizeName(rest[0])
 
@@ -126,6 +139,39 @@ func runRender(args []string, stdin io.Reader, stdout io.Writer) error {
 		return err
 	}
 
+	_, err = io.WriteString(stdout, out)
+	return err
+}
+
+// renderFile renders one file, by path, with stdin-supplied vars.
+//
+// Deliberately outside the .local.tmpl -> .tmpl -> embedded chain, and outside
+// materialization: the caller named an exact file, so there is nothing to look
+// up and nothing to fall back to. Overriding a path the caller already chose
+// would silently render something other than what they asked for; materializing
+// it would copy a file that already lives on disk.
+//
+// This is what lets content Endless does NOT embed be conditional on project
+// config. `endless guide` renders docs/guide/*.md through here so the report
+// channel's instructions appear only where `report_gate` will actually enforce
+// them (E-2030) -- a session must never be told to use a channel that will not
+// gate it. Those files stay in docs/ because humans read them there.
+//
+// No handoff partials are parsed into the set: `{{template "handoff_close" .}}`
+// is a handoff concern, and a file rendered by path is not a handoff.
+func renderFile(path string, stdin io.Reader, stdout io.Writer) error {
+	content, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("read template file %s: %w", path, err)
+	}
+	vars, err := decodeVars(stdin)
+	if err != nil {
+		return err
+	}
+	out, err := render(filepath.Base(path), string(content), nil, vars)
+	if err != nil {
+		return err
+	}
 	_, err = io.WriteString(stdout, out)
 	return err
 }

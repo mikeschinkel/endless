@@ -60,10 +60,12 @@ covers: Prefer one task over several - every filed task spends the user's review
 
 topic: $FULL
 section: tasks
+when: report_gate
 covers: The sigil licenses one response that bypasses the minimizer entirely, not a sticky mode.
 
 topic: $CUT / $BLOAT / $WRONG / $GOOD
 section: tasks
+when: report_gate
 covers: The four labels that annotate the preceding turn and build the minimizer's eval corpus.
 
 topic: --keep-status (edit the content, infer nothing)

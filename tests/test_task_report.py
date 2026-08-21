@@ -99,7 +99,7 @@ def test_empty_draft_is_rejected(tmp_path):
     p.write_text("   \n\n")
     with pytest.raises(click.ClickException) as e:
         report_cmd.report_item(1953, str(p))
-    assert "in full" in str(e.value)
+    assert "the whole reply, not an excerpt" in str(e.value)
 
 
 def test_draft_reaches_the_minimizer_whole(monkeypatch):

@@ -68,9 +68,9 @@ def _read_draft(path: str) -> str:
         raise click.ClickException(f"Cannot read draft file {p}: {e}")
     if not draft.strip():
         raise click.ClickException(
-            "The draft file is empty. Pass the reply you were about to send, in "
-            "full — the minimizer decides what survives, so there is nothing to "
-            "gain by trimming it first."
+            "The draft file is empty. Pass the reply you were about to send — "
+            "the whole reply, not an excerpt: the Stop gate compares your final "
+            "message against what this command returns."
         )
     return draft
 

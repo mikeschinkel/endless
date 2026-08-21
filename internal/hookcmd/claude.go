@@ -424,20 +424,24 @@ func runClaude(args []string) error {
 // rule no longer has to describe good output. It only has to get the draft to
 // the minimizer.
 //
-// Which is also why it says "write it in full, do not pre-summarize". An agent
-// that shortens before submitting has done the minimizer's job badly and
-// destroyed the evidence, and a short draft is exactly what an agent trying to
-// look compliant will produce.
+// It used to add "do not pre-summarize the draft", on the reasoning that an
+// agent which shortens before submitting has done the minimizer's job badly.
+// E-2030 removed that: which agent does the cutting does not matter, and an
+// agent that applies the standard itself has achieved the objective, not evaded
+// it. What matters is the OUTCOME the user receives. So the rule asks for the
+// reply the agent means to send and says nothing about how long it should be.
+//
+// "Exactly as you would send it" is not that instruction wearing a disguise. It
+// asks for the WHOLE reply rather than an excerpt, because the Stop gate
+// compares the final message against the minimized draft — a partial draft
+// produces a comparison against the wrong artifact.
 const reportChannelRule = "Report channel: every reply you send the user goes " +
-	"through `endless task report` first. Write your reply exactly as you mean " +
-	"to send it — in full, at whatever length the turn calls for, tables and " +
-	"code blocks and all — to a file, then run `endless task report [<task-id>] " +
-	"--draft-file <path>`. The task id is optional; omit it when you have " +
-	"nothing claimed. Send that command's output as your entire final message, " +
-	"verbatim: no preamble, no additions, nothing after it.\n\n" +
-	"Do NOT pre-summarize the draft. An adversarial minimizer decides what " +
-	"survives, and it can only cut what it is given — trimming first replaces " +
-	"its judgment with yours, which is the thing this channel exists to stop. " +
+	"through `endless task report` first. Write the reply you mean to send — " +
+	"exactly as you would send it, tables and code blocks and all — to a file, " +
+	"then run `endless task report [<task-id>] --draft-file <path>`. The task " +
+	"id is optional; omit it when you have nothing claimed. Send that command's " +
+	"output as your entire final message, verbatim: no preamble, no additions, " +
+	"nothing after it.\n\n" +
 	"If it cuts something you needed, `endless task report --raw` prints your " +
 	"draft back unchanged; nothing is destroyed.\n\n" +
 	"A Stop hook enforces both halves: it blocks a final message that differs " +

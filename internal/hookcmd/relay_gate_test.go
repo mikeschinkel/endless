@@ -271,11 +271,23 @@ func TestReportGateIsLive(t *testing.T) {
 // reason has to demand the draft the agent ALREADY wrote: an agent told merely
 // to "report" will compose a summary, which means the minimizer minimizes the
 // wrong artifact and the restatement tax that broke the old command is back.
+//
+// It asks for the EXISTING draft, not for a long one. E-2030 retired the "in
+// full / no summarizing" wording this used to pin: an agent that cut its own
+// output achieved the objective, so the bounce has no business demanding
+// length. What it still demands is that the artifact be the one already
+// written.
 func TestReportMissingReason_AsksForTheWholeDraft(t *testing.T) {
 	reason := reportMissingReason()
-	for _, want := range []string{"--draft-file", "in full", "no summarizing", "verbatim"} {
+	for _, want := range []string{"--draft-file", "exactly as you drafted", "verbatim"} {
 		if !strings.Contains(reason, want) {
 			t.Errorf("reportMissingReason missing %q:\n%s", want, reason)
+		}
+	}
+	for _, unwanted := range []string{"in full", "no summarizing"} {
+		if strings.Contains(reason, unwanted) {
+			t.Errorf("reportMissingReason grew back the retired %q criteria:\n%s",
+				unwanted, reason)
 		}
 	}
 	// The task id must be optional in the instruction, or an unclaimed session

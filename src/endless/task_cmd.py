@@ -3000,12 +3000,9 @@ def _maybe_emit_report_reminder(
             bold=True)
     )
     click.echo(
-        "  Write the reply you were about to send to a file — in full, no"
+        "  Write the reply you were about to send to a file, then send that"
     )
-    click.echo(
-        "  pre-summarizing — then send that command's output verbatim as your"
-    )
-    click.echo("  entire message.")
+    click.echo("  command's output verbatim as your entire message.")
 
 
 def complete_item(item_id: int, cascade: bool = False, outcome: str | None = None):

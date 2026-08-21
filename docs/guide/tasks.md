@@ -125,13 +125,14 @@ Use the task ID printed by `task add` **literally**. IDs advance globally across
 
 **Filing is one of four answers, not the default.** When you spot a bug, a rough edge, or an obvious cleanup while working a task, run these tests in order — the handoff every spawned session receives carries the same four:
 
-**1. Could it reasonably be done now, inside the work already underway?** Then do it. Note it in the commit message, and add a `discovery` note so your user learns the scope grew without having to read the diff:
+{{if .report_gate}}**1. Could it reasonably be done now, inside the work already underway?** Then do it. Note it in the commit message, and put it in your reply draft so your user learns the scope grew without having to read the diff:
 
 ```bash
 # Discoveries go in your reply draft; the minimizer decides what survives.
 endless task report <id> --draft-file <path>
 ```
-
+{{else}}**1. Could it reasonably be done now, inside the work already underway?** Then do it. Note it in the commit message, and say so in your reply so your user learns the scope grew without having to read the diff.
+{{end}}
 "Reasonably, inside the work already underway" is a real bound, not a license. A drive-by that is *unrelated* to what you are changing stays a separate task: fixing it inline inflates the diff your user reviews, couples two unrelated changes into one land, hides the change the task was actually about, and expands the blast radius of a revert.
 
 **2. Is it a bug in work THIS session landed?** Then reopen the task that shipped it — `endless task update E-<id> --status revisit` — and fix it there. A defect in your own landed work is that task done wrong, not a new task. See [Fix a bug in your own landed work](orchestration.md#fix-a-bug-in-your-own-landed-work).
@@ -369,9 +370,9 @@ process — what a test suite or a bulk import wants. An explicit
 
 ## Reporting to your user
 
-**Every reply you send your user goes through the minimizer first.** Write the
-reply exactly as you mean to send it — in full, at whatever length the turn
-calls for, tables and code blocks and all — to a file, then:
+{{if .report_gate}}**Every reply you send your user goes through the minimizer first.** Write the
+reply you mean to send — exactly as you would send it, tables and code blocks
+and all — to a file, then:
 
 ```bash
 endless task report [<id>] --draft-file <path>
@@ -397,17 +398,12 @@ decides what to volunteer — which means the agent is judging its own output in
 the same breath as writing it, and judging generously. An adversarial minimizer
 is a **second party**. That is the whole fix (E-1952, E-1953).
 
-### Do not pre-summarize
+### It is not a length limit
 
-The minimizer can only cut what it is given. Trimming first replaces its
-judgment with yours, which is the exact failure this command exists to remove —
-and it destroys the evidence, since the raw draft is what the eval corpus learns
-from.
-
-It is **not a length limit**. Its objective is to delete what your user did not
-ask for, not to make the reply short. A discussion your user asked for survives
-at whatever length it takes; a single question gets a single answer and nothing
-else, however well written.
+Its objective is to delete what your user did not ask for, not to make the
+reply short. A discussion your user asked for survives at whatever length it
+takes; a single question gets a single answer and nothing else, however well
+written.
 
 Four invariants are guaranteed: markdown tables survive byte for byte, fenced
 code blocks survive byte for byte, a command your user is meant to RUN always
@@ -486,7 +482,27 @@ answered fully and unconstrained — it does not go through the minimizer at all
 alone or carry the question with it: `$FULL why did the rebase conflict?`
 
 It is **not a mode switch**. The next turn returns to the default.
+{{else}}**This project has the report channel off** — `"report_gate": false` in
+`.endless/config.json`. There is no `endless task report` step here and no Stop
+hook holding your turn against one. Write your reply and send it.
 
+The command still runs if you invoke it — a gate-off project is opting out of
+enforcement, not banning the command — but nothing routes you to it and nothing
+reads what it returns, so nothing here sends you there.
+
+What your user is owed does not change. A command they have to RUN, a table, a
+fenced code block, and a direct answer to a direct question all have to reach
+them, whatever else you leave out.
+
+Turning the channel on is one key: drop `"report_gate": false` from
+`.endless/config.json`, or set it to `true`. It defaults **on**, and it
+deliberately does not live in `.claude/settings.json` — a gate an agent can
+switch off in the course of normal work is not a gate.
+
+The channel also runs only under an agent harness Endless **supports** (E-1962)
+— today, Claude Code in a terminal, and nothing else. The two are independent
+vetoes and both must say yes.
+{{end}}
 ---
 
 ## Removing and moving
