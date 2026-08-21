@@ -3026,3 +3026,33 @@ ask — do not offer to unclaim.
 
 Recorded from E-1920, where I offered `endless task release E-1920 --db main`
 after parking the task behind another epic.
+## E-2030 — five corrections from Mike (2026-08-21)
+
+- **"Do not pre-summarize" was freelanced.** A prior Claude session added those
+  criteria to `docs/guide/tasks.md` and the handoff templates. Mike did not
+  request them and would not have approved them had he noticed. Do not treat
+  shipped guide prose as settled design just because it is committed.
+
+- **Do not carry a dead premise forward.** I cited E-1952's failure — the agent
+  wrote the verify command in prose and told `task report` there was nothing to
+  report — as justification for an instruction in the CURRENT design. That
+  failure belonged to the two-channel design E-1953 replaced. Evidence that a
+  superseded implementation failed is not evidence that its replacement fails
+  the same way.
+
+- **Affecting agent behavior does not matter; the outcome presented to the user
+  is the only thing that matters.** I raised "pre-minimized drafts collapse the
+  optimizer's diff signal" as a cost to weigh. If the originating agent applies
+  the standard itself, the objective is achieved — which agent does the cutting
+  is irrelevant. Testing for malaria that makes people avoid malaria is a
+  success, not a measurement problem.
+
+- **Never name work by a filing session's analysis numbering.** I wrote "Part 2"
+  and "Part 3" for several turns without ever saying what they were parts of.
+  Name the thing.
+
+- **Be precise about mechanism before asserting a constraint.** I said
+  `templatecmd` "resolves templates by name out of its Go embed FS." It resolves
+  `<root>/.endless/templates/<name>.local.tmpl` → `<name>.tmpl` → embedded, and
+  materializes the embedded copy on first render so users can edit it. The embed
+  is the fallback, not the source.
