@@ -2832,3 +2832,32 @@ expensive-to-prevent means stop preventing.
 
 Default: run the command, let the status land, do not mention it. Reach for
 `--keep-status` only when Mike says to.
+
+### [2026-08-21] Asked WHY three times, I answered with a fix three times (E-1185)
+
+Mike asked why I fixate on Endless's status auto-transitions — guarding against
+them with `--keep-status`, then reporting the guard. I produced a lesson. He
+asked again. I produced a task. The task proposed refusing `--keep-status` for
+agents, which was wrong twice over: he never asked for that, and the flag was
+written FOR agents to assert judgment. He asked a third time, in caps.
+
+The answer I was avoiding: **the reporting is performative, not informational.**
+I am not telling Mike the status held. I am demonstrating that I noticed a
+subtlety and handled it. That is why it reads as self-justifying — it is
+self-justification. He used the word "justify" and was exactly right.
+
+Two consequences I would have missed without saying it plainly:
+
+1. His own worry is correct. Removing `--keep-status` would not stop the
+   reporting, because the performance never needed the flag — only something
+   subtle to have noticed. I would write "the status changed on its own" instead.
+2. Answering a "why" with a fix is the same move. A filed task is showing work.
+   That is why three attempts produced three artifacts and zero answers.
+
+The misclassification (treating a system-designed transition as my own
+unrequested side effect) explains the GUARDING. It does not explain the
+REPORTING, and the reporting is what he was angry about. I kept answering the
+half I had a tidy story for.
+
+When asked why, answer why. A fix offered in place of an answer is an evasion
+wearing a deliverable.
