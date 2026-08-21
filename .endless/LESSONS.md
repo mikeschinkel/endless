@@ -2889,3 +2889,49 @@ The lesson: when a nearby comment sounds like it justifies what I'm doing, check
 whether it is talking about the same relationship. Restating an adjacent
 rationale reads as grounded and isn't. Write the reason my own change actually
 has, even when a plausible one is sitting right there to copy.
+
+## Duplicate-to-unblock is a cost paid for a benefit — don't pay it where there is none
+
+E-1696/E-2027, 2026-08-21. Mike described a failure mode he'd been burned by:
+filing tasks as `blocked_by` over a small logical dependency, so a useful task
+ends up parked behind an epic whose children are themselves blocked. The fix he
+named: duplicate the blocking part into the blocked task rather than maintain
+the block.
+
+I applied that to E-1696 — correctly. It needed nothing from E-1673 at all, and
+`blocked_by` would have parked it behind an unapproved 8-workstream epic.
+
+Then I applied it AGAIN to the child, E-2027, and proposed `relates_to` there
+too, with E-2027 carrying its own narrow ledger routing so it could ship early.
+
+Mike: "You applied to BOTH rather than the one I NEEDED unblocked. I did not
+NEED E-2027 to be unblocked so duplicating was problematic."
+
+Right. Duplication buys exactly one thing — this ships sooner — and it is paid
+for in real coin. Here the coin was steep: E-1673's plan explicitly forbids the
+shape the workaround introduces ("Do not let 'project is the root default' decay
+into 'undeclared is fine'"), so the "narrow subset E-1673 subsumes" framing was
+too generous — it was a half-gate for E-1673 to unpick, plus a second round of
+.gitignore and `endless register` scaffolding. And nothing downstream was
+waiting on E-2027, so the benefit was zero. Pure loss.
+
+Worse, I never offered the option that dominated both: E-1673 is `submitted`
+with an option-free plan, has no blocked_by of its own, and its parent epic is a
+parent, not a gate. Approving E-1673 on its own makes `blocked_by E-2027` both
+honest AND cheap, because the blocker actually moves. I had treated "phase later
+under an unapproved epic" as a fixed fact about the world when it was a decision
+Mike could make in one command.
+
+Two lessons:
+
+1. A workaround is scoped to the specific need that justified it. Before
+   applying it a second time, ask what the second application buys. If nothing
+   is waiting, the honest relation is the accurate one.
+2. Before routing around a blocker, check whether the blocker can simply be
+   unblocked. Status and phase are the user's to change; treating them as
+   immovable turns a one-command decision into a design compromise.
+
+Related: I also described E-1696 as blocked in prose ("Blocked on prerequisites
+that don't exist yet") while it carried no blocked_by row, then later asserted
+"nothing was blocking E-1696". Both were true of different things and I never
+said which. When prose and the relation graph disagree, say so explicitly.
