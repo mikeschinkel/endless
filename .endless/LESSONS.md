@@ -3083,3 +3083,42 @@ Read the title as part of the spec, not as a label on the description. When a
 naming question comes up, check whether the title, description, or an existing
 sibling already fixes the vocabulary. Asking for a decision that is already
 recorded spends the user's attention to tell me something I could have read.
+
+## `.endless/LESSONS.md` means THIS worktree's, not the main checkout's (E-1920)
+
+Mike said "write to `.endless/LESSONS.md`, NOT
+`~/Projects/endless/.claude/LESSONS.md`". I resolved the relative path against
+the main checkout and wrote to `~/Projects/endless/.endless/LESSONS.md`. He
+meant `<worktree>/.endless/LESSONS.md` — the file in the checkout I am working
+in, which rides into main when the branch lands.
+
+The error was carrying a clause forward from the rule being replaced. The old
+`.claude/` rule said "the main checkout, always, even when you are in a
+worktree," because a worktree-local file would be destroyed on drop. The new
+location fixes that a different way — the file is version-controlled and lands
+— so the "always main" clause does not survive the move. I kept the half of the
+old rule that the new one exists to retire.
+
+When a rule's LOCATION changes, re-derive its qualifiers instead of porting
+them. And when a correction gives a relative path, it is relative to where I am
+working, not to wherever the previous version lived.
+
+## File the cause, not the first symptom that bit me (E-1920)
+
+I hit sandbox-routed `decision add` committing a doc mirror onto my task branch,
+and filed it as "stop decision add from committing a mirror." Mike: that is the
+symptom. The problem is that a `--db sandbox` write put files in the worktree at
+all — `--db sandbox` is supposed to mean the sandbox, for every artifact, not
+just the DB.
+
+The tell I ignored: I had ALREADY seen the general shape and did not look for
+it. E-1729 fixed exactly this bug for the event ledger — same command class,
+same "resolves a real project root and commits there regardless of the DB
+target," same fix shape (sandbox-local dir, no git commit). Had I searched the
+ledger for prior tasks in the class before filing, I would have found it in one
+query and written the general task.
+
+Before filing a defect: search for prior tasks on the same MECHANISM, not the
+same command. A fix that was applied at one call site instead of made a rule
+will be re-broken by the next feature, and the second occurrence is the
+evidence that the rule is what is missing.
