@@ -2935,3 +2935,25 @@ Related: I also described E-1696 as blocked in prose ("Blocked on prerequisites
 that don't exist yet") while it carried no blocked_by row, then later asserted
 "nothing was blocking E-1696". Both were true of different things and I never
 said which. When prose and the relation graph disagree, say so explicitly.
+## The report is not a place to prove the work happened
+
+E-2029, 2026-08-21. Mike: "That is a HUGE wall of text. What of that besides
+the verify script did I actually NEED to know?"
+
+I wrote a nine-paragraph report for a removal task. Only three things in it
+were his to act on: the verify command, that I had shrunk `go.mod` beyond the
+task's stated scope, and that I had filed a task awaiting his decision.
+Everything else — the verify suite's layer breakdown, the two verify suites I
+repaired, which tasks I marked obsolete, which historical files I deliberately
+left alone, and a re-explanation of the deprovisioning question he had already
+answered earlier in the same session — was me showing my work.
+
+The test for a line in a report is not "is this true and did I do it?" It is
+"does he have to DO something differently because of it?" Scope I widened on
+my own, a decision I am handing back, and the one command to verify: those
+pass. A faithful account of everything I touched does not — that is what the
+commit message is for, and I had already written it there.
+
+Re-answering a question the user asked and I already answered, in the report,
+is the same error twice: it treats the report as a transcript of the session
+rather than a handoff to a person who lived through it.
