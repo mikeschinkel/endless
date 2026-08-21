@@ -3011,3 +3011,18 @@ did not need:
 - The session monitor already shows him filed tasks awaiting his call.
   Reporting one duplicates a surface he is already looking at. Before writing
   a line, check whether Endless already renders it.
+
+## Never suggest `endless task release`
+
+Endless holds the invariant **one task = one tmux window = one Claude session**.
+`task release` breaks it by handing a claim back with no session to receive it,
+and there is an open task to remove the command outright. Suggesting it as a
+tidy-up for a claimed-but-deferred task is wrong twice: it recommends a doomed
+command, and it treats "give the task back" as an available move when it is not.
+
+A session that holds a claim has exactly two outs: **do the work**, or **be
+redirected by the user**. If a claimed task looks blocked, say what blocks it and
+ask — do not offer to unclaim.
+
+Recorded from E-1920, where I offered `endless task release E-1920 --db main`
+after parking the task behind another epic.
