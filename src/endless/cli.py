@@ -3038,60 +3038,6 @@ def epic_update(item_ids, status, title, description, description_file, text,
                     outcome=outcome, force=force)
 
 
-@main.group("channel")
-def channel_cmd():
-    """Inter-session messaging. Worker session beacons, human session connects."""
-    pass
-
-
-@channel_cmd.command("beacon")
-@click.option("--project", default=None,
-              help="Project name (default: detect from cwd)")
-def channel_beacon(project):
-    """Announce this session as available for messaging (run in worker session)."""
-    from endless.channel_cmd import beacon
-    beacon(project_name=project)
-
-
-@channel_cmd.command("connect")
-@click.argument("channel_id", default=None, required=False)
-def channel_connect(channel_id):
-    """Connect to a beaconing session (auto-finds if only one beacon)."""
-    from endless.channel_cmd import connect
-    connect(channel_id)
-
-
-@channel_cmd.command("send")
-@click.argument("message")
-def channel_send(message):
-    """Send a message to the connected session."""
-    from endless.channel_cmd import send
-    send(message)
-
-
-@channel_cmd.command("inbox")
-def channel_inbox():
-    """Show pending messages."""
-    from endless.channel_cmd import inbox
-    inbox()
-
-
-@channel_cmd.command("list")
-@click.option("--project", default=None,
-              help="Project name")
-def channel_list(project):
-    """List active beacons."""
-    from endless.channel_cmd import list_beacons
-    list_beacons(project_name=project)
-
-
-@channel_cmd.command("close")
-def channel_close():
-    """Close the active channel."""
-    from endless.channel_cmd import close
-    close()
-
-
 @main.group("worktree")
 def worktree_cmd():
     """Inspect git worktrees managed by endless (E-971 foundation, read-only)."""
@@ -3404,7 +3350,7 @@ def phrase_cmd():
 @click.argument("type_", metavar="TYPE")
 @click.argument("value")
 @click.option("--scope", default=None,
-              help="Optional scope qualifier (e.g., 'task', 'channel')")
+              help="Optional scope qualifier (e.g., 'task')")
 @click.option("--method", default=None,
               type=click.Choice(["exact", "substring", "regex"]),
               help="Match algorithm (default: regex)")
@@ -3546,20 +3492,6 @@ def setup_remove_claude_hook():
     """Remove the Claude Code hook."""
     from endless.setup import remove_claude_hook
     remove_claude_hook()
-
-
-@setup.command("channel-plugin")
-def setup_channel_plugin_cmd():
-    """Register the MCP channel plugin for inter-session messaging."""
-    from endless.setup import setup_channel_plugin
-    setup_channel_plugin()
-
-
-@setup.command("remove-channel-plugin")
-def setup_remove_channel_plugin_cmd():
-    """Remove the MCP channel plugin."""
-    from endless.setup import remove_channel_plugin
-    remove_channel_plugin()
 
 
 @setup.command("shell-helpers")

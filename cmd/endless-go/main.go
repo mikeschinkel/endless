@@ -7,7 +7,6 @@
 //
 //	endless-go event         emit|validate-db|rebuild-db|apply-change|backup|reap-worktrees
 //	endless-go hook          prompt|claude|codex
-//	endless-go channel       (MCP server; no verbs)
 //	endless-go sandbox       run|enter|init|bind|list|prune|destroy
 //	endless-go tmux          apply|status-line|active-id|show-menu
 //	endless-go session-query list-live|task-text|reopen-context
@@ -23,7 +22,7 @@
 // body):
 //
 //   - hook → ENDLESS_NO_HOOKS=true short-circuit (E-1470), then PinMainDB (E-1450/E-1429).
-//   - channel, tmux → PinMainDB (E-1429).
+//   - tmux → PinMainDB (E-1429).
 //   - session-status → PinMainDB on its normal path (it reads the live sessions
 //     table, which hook writes pin to main regardless of cwd), but with --task
 //     (headless/tests) it skips the pin and reads the resolved sandbox/
@@ -42,7 +41,6 @@ import (
 
 	_ "modernc.org/sqlite"
 
-	"github.com/mikeschinkel/endless/internal/channelcmd"
 	"github.com/mikeschinkel/endless/internal/errorscmd"
 	"github.com/mikeschinkel/endless/internal/eventcmd"
 	"github.com/mikeschinkel/endless/internal/faults"
@@ -73,7 +71,7 @@ func main() {
 	// the subcommand is identified after the flag has been removed —
 	// otherwise `endless-go --config-dir /path event emit ...` would
 	// mistake "--config-dir" for the subcommand. Safe to always call:
-	// when the flag is absent it is a no-op, and for hook/channel/tmux
+	// when the flag is absent it is a no-op, and for hook/tmux
 	// the PinMainDB override below still wins via dbPathOverride.
 	monitor.ConsumeDBContextFlag()
 
@@ -82,7 +80,7 @@ func main() {
 	// wrapper scripts (which set XDG_CONFIG_HOME and exec'd the worktree
 	// binary). No-op outside a self-dev worktree or when its sandbox doesn't
 	// exist; explicit --config-dir already won above and is left untouched.
-	// Runs before the PinMainDB switch so hook/channel/tmux still move the DB
+	// Runs before the PinMainDB switch so hook/tmux still move the DB
 	// to main while their config.json/logs follow the self-detected sandbox.
 	monitor.SelfDetectWorktreeSandbox()
 
@@ -121,26 +119,25 @@ func main() {
 
 	// E-1450/E-1429: PinMainDB for surfaces whose writes are real-world
 	// activity in the real ledger regardless of cwd or XDG_CONFIG_HOME
-	// (hook-fired writes, MCP channel state, tmux pane/task status).
-	// Pin pins the DB to main unconditionally and satisfies the
-	// worktree gate via dbPathOverride. Other subcommands stay on
-	// whatever --config-dir (or absence of one) ConsumeDBContextFlag
-	// already established above.
+	// (hook-fired writes, tmux pane/task status). Pin pins the DB to main
+	// unconditionally and satisfies the worktree gate via dbPathOverride.
+	// Other subcommands stay on whatever --config-dir (or absence of one)
+	// ConsumeDBContextFlag already established above.
 	switch sub {
-	case "hook", "channel", "tmux":
+	case "hook", "tmux":
 		// An explicit --config-dir wins over the main pin (E-1429: a
 		// per-invocation flag is trustworthy; the env-driven pin is the
 		// fallback). Production invokers of these binaries never pass
-		// --config-dir, so the pin still applies for real hook/channel/tmux
+		// --config-dir, so the pin still applies for real hook/tmux
 		// traffic; only tests and sandbox tooling (e.g. the E-1682 nav-trail
 		// verify driving `tmux record-nav` against a sandbox DB) flip this.
 		//
 		// `errors` MUST NOT be added here (tried and reverted under E-1950).
-		// These three are machine-invoked: a hook fires, tmux redraws, the
-		// channel server ticks. Nobody types them, so pinning main cannot
-		// surprise anyone. `errors` is typed by a human — and pinning it made
-		// `endless errors clear`, run from a worktree with no --db, silently
-		// dismiss incidents in the REAL record. PinMainDB satisfies
+		// These two are machine-invoked: a hook fires, tmux redraws. Nobody
+		// types them, so pinning main cannot surprise anyone. `errors` is
+		// typed by a human — and pinning it made `endless errors clear`, run
+		// from a worktree with no --db, silently dismiss incidents in the
+		// REAL record. PinMainDB satisfies
 		// dbContextExplicit(), so adding a user-facing verb here does not just
 		// choose a database: it switches off the E-1429 gate for that verb.
 		// The coherence problem that motivated it is solved by REQUIRING --db
@@ -176,8 +173,6 @@ func main() {
 		eventcmd.Run(rest)
 	case "hook":
 		hookcmd.Run(rest)
-	case "channel":
-		channelcmd.Run(rest)
 	case "sandbox":
 		sandboxcmd.Run(rest)
 	case "tmux":
@@ -240,7 +235,6 @@ func usage(w *os.File) {
 	fmt.Fprintln(w, "Subcommands:")
 	fmt.Fprintln(w, "  event          emit|validate-db|rebuild-db|apply-change|backup|reap-worktrees")
 	fmt.Fprintln(w, "  hook           prompt|claude|codex")
-	fmt.Fprintln(w, "  channel        MCP server for inter-session channels")
 	fmt.Fprintln(w, "  sandbox        run|enter|init|bind|list|prune|destroy")
 	fmt.Fprintln(w, "  tmux           apply|status-line|active-id|show-menu")
 	fmt.Fprintln(w, "  session-query  list-live|task-text|reopen-context")

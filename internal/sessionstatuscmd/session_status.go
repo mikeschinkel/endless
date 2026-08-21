@@ -297,7 +297,7 @@ func Run(args []string) {
 		// suppresses itself when it detects a self_dev worktree pinned to a real DB.
 		// That keeps the protection without costing a working dashboard.
 		//
-		// An explicit --config-dir still wins, matching main.go's hook/channel/tmux
+		// An explicit --config-dir still wins, matching main.go's hook/tmux
 		// pattern (E-1429: a per-invocation flag is trustworthy; the env-driven pin
 		// is the fallback). That preserves the seam the verify harnesses drive.
 		if !monitor.HasExplicitDBContext() {

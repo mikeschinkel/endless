@@ -234,11 +234,9 @@ def _migrate_v2(conn: sqlite3.Connection):
         conn.execute("DROP TABLE sessions")
     conn.commit()
 
-    # Step 2: Rename tables (E-742)
-    if _has_table(conn, "msg_queue") and not _has_table(conn, "messages"):
-        conn.execute("ALTER TABLE msg_queue RENAME TO messages")
-    if _has_table(conn, "msg_channels") and not _has_table(conn, "conversations"):
-        conn.execute("ALTER TABLE msg_channels RENAME TO conversations")
+    # Step 2: Rename tables (E-742). The msg_queue -> messages and
+    # msg_channels -> conversations renames went with the channel surface
+    # (E-2029); e-2029-drop-channel-tables.sql drops both names outright.
     if _has_table(conn, "ai_sessions") and not _has_table(conn, "sessions"):
         conn.execute("ALTER TABLE ai_sessions RENAME TO sessions")
     conn.commit()
@@ -249,16 +247,6 @@ def _migrate_v2(conn: sqlite3.Connection):
             conn.execute("ALTER TABLE sessions RENAME COLUMN active_goal_id TO active_task_id")
         if _has_column(conn, "sessions", "tmux_pane") and not _has_column(conn, "sessions", "process"):
             conn.execute("ALTER TABLE sessions RENAME COLUMN tmux_pane TO process")
-    if _has_table(conn, "conversations"):
-        if _has_column(conn, "conversations", "channel_id"):
-            conn.execute("ALTER TABLE conversations RENAME COLUMN channel_id TO conversation_id")
-        if _has_column(conn, "conversations", "pane_a"):
-            conn.execute("ALTER TABLE conversations RENAME COLUMN pane_a TO process_a")
-        if _has_column(conn, "conversations", "pane_b"):
-            conn.execute("ALTER TABLE conversations RENAME COLUMN pane_b TO process_b")
-    if _has_table(conn, "messages"):
-        if _has_column(conn, "messages", "channel_id"):
-            conn.execute("ALTER TABLE messages RENAME COLUMN channel_id TO conversation_id")
     conn.commit()
 
     # Steps 4-12: Table rebuild migrations — MOVED OUT

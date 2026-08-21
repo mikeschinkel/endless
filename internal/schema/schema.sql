@@ -682,40 +682,6 @@ CREATE TABLE IF NOT EXISTS activity (
     FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
 );
 
--- MCP channel plugin port registry
-CREATE TABLE IF NOT EXISTS channels (
-    process TEXT PRIMARY KEY,
-    port INTEGER NOT NULL,
-    pid INTEGER NOT NULL,
-    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now'))
-);
-
--- Messaging conversations between paired AI sessions
-CREATE TABLE IF NOT EXISTS conversations (
-    id INTEGER PRIMARY KEY,
-    conversation_id TEXT NOT NULL UNIQUE,
-    process_a TEXT NOT NULL,
-    process_b TEXT,
-    project_id INTEGER,
-    state TEXT NOT NULL DEFAULT 'beacon',
-    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
-    connected_at TEXT,
-    closed_at TEXT,
-    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL
-);
-
--- Message queue for inter-session messaging
-CREATE TABLE IF NOT EXISTS messages (
-    id INTEGER PRIMARY KEY,
-    conversation_id TEXT NOT NULL,
-    sender TEXT NOT NULL,
-    body TEXT NOT NULL,
-    status TEXT NOT NULL DEFAULT 'queued',
-    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
-    delivered_at TEXT,
-    FOREIGN KEY (conversation_id) REFERENCES conversations(conversation_id) ON DELETE CASCADE
-);
-
 -- Session conversation messages (captured from JSONL transcripts via hooks)
 CREATE TABLE IF NOT EXISTS session_messages (
     id INTEGER PRIMARY KEY,

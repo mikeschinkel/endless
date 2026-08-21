@@ -357,11 +357,13 @@ main() {
     GUIDE_INDEX=$(uv run endless guide --db main 2>&1)
     GUIDE_LIST=$(uv run endless guide --list --db main 2>&1)
 
-    # Slice the "Spawning another Claude session" section so content and id-free
-    # checks scope to the rewrite, not the whole page (which also covers
-    # worktrees/shell-helpers/channels).
+    # Slice from "Spawning another Claude session" to the end of the page so
+    # content and id-free checks scope to the rewrite, not the whole page
+    # (which also covers worktrees/shell-helpers). The slice ran to a trailing
+    # "## Inter-session channels" terminator until E-2029 removed that section;
+    # with it gone the section runs to EOF, which is the same text.
     SPAWN_SECTION=$(printf '%s\n' "${GUIDE_ORCH}" \
-        | awk '/^## Spawning another Claude session/{f=1} f{print} f&&/^## Inter-session channels/{exit}')
+        | awk '/^## Spawning another Claude session/{f=1} f{print}')
 
     # Slice the coordinator subsection for the six-mode check.
     COORDINATOR_SECTION=$(printf '%s\n' "${SPAWN_SECTION}" \

@@ -237,4 +237,4 @@ If you see "Endless: auto-record session activity" commits in `git log`, those a
 | `~/.config/endless/pre-restore/endless-<ts>.db` | The database a restore replaced, parked with its sidecars so the restore is reversible. Not rotated — delete by hand. |
 | `~/.config/endless/config.json`               | Per-machine Endless config (node_id, defaults).                          |
 | `~/.local/bin/endless`                        | Python CLI entry point (the `uv tool install -e .` shim; location follows `uv`). |
-| `/usr/local/bin/endless-go`                   | The Go binary — every Go entry point is a subcommand of it (`hook`, `event`, `tmux`, `sandbox`, `channel`, …). |
+| `/usr/local/bin/endless-go`                   | The Go binary — every Go entry point is a subcommand of it (`hook`, `event`, `tmux`, `sandbox`, …). |

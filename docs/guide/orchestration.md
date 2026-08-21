@@ -1,6 +1,6 @@
-# Orchestration: Worktrees, Shell Helpers, Spawning, Channels
+# Orchestration: Worktrees, Shell Helpers, Spawning
 
-How sessions are isolated, navigated, spawned, and how they talk to each other. Everything multi-session lives here.
+How sessions are isolated, navigated, spawned, and handed off. Everything multi-session lives here.
 
 ---
 
@@ -537,61 +537,3 @@ The point is that verification is *dense*: one line the user runs, one prose sen
 ### Forthcoming
 
 A declarative per-task manifest, the runner that consumes it, the runnability modes (how a suite declares what substrate it can run against), and the sandbox tier ladder are all in progress. Until they ship, realize the convention with the per-task script described above.
-
----
-
-## Inter-session channels
-
-### Why channels exist
-
-The most common motivating case: a session is working on Task A and discovers something that needs to be considered by another session currently working on Task B. Without channels, the user has to copy-paste from one Claude window to the other to relay the message. Channels eliminate that: Session A talks directly to Session B.
-
-Channels are for **live coordination between concurrent sessions** — typically a discovery, correction, or short-lived fact that one session can't easily file as durable state. **Reach for channels infrequently.** Most cross-session communication is better as a filed task or a recorded decision.
-
-### Basic flow
-
-```bash
-# Session A: advertise availability
-endless channel beacon
-
-# Session B: pair with the beacon
-endless channel connect                          # auto-detects if one beacon exists
-endless channel connect <channel_id>             # explicit ID if multiple beacons
-
-# Either side: send a message
-endless channel send "Found issue in calling-code area — heads up for E-845"
-
-# Either side: read incoming messages
-endless channel inbox
-
-# List active beacons for the project
-endless channel list
-
-# Tear down
-endless channel close
-```
-
-### How it works
-
-- One session calls `beacon` to register as available.
-- Another session calls `connect` to pair with it.
-- Messages are delivered via MCP notifications. The receiving session sees a channel event and runs `endless channel inbox` to read it.
-- Channels are project-scoped: `connect` with no argument finds the beacon for the current project.
-
-**Do not run `endless channel inbox` unprompted.** Only when a channel event is delivered, or your user asks.
-
-### When to reach for channels (and when not)
-
-**Reach for channels when:**
-
-- You discovered something while working on Task A that the *currently active* session on Task B needs to know now — before B's session finishes its current line of thought. (The original motivating case.)
-- Two sessions are working in tight tandem on related areas and need brief live coordination ("about to push a column rename — hold for 5 min").
-
-**Don't use channels for:**
-
-- Durable handoffs across sessions that aren't both alive simultaneously → file a task instead.
-- Decisions or rationale that should outlive the moment → record a decision (`endless guide decisions`).
-- Status that anyone in the project might need to know → update the task field directly.
-- Casual coordination that can wait until the next handoff → don't interrupt.
-
-Channels are for *live* coordination. Persistent state lives in the DB.

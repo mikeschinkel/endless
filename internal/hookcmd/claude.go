@@ -521,11 +521,10 @@ func composeSessionStartContext(taskListCtx string, channelOn bool) string {
 	return reportChannelRule + "\n\n" + taskListCtx
 }
 
-// handleUserPromptSubmit composes the per-prompt response. Two pieces,
-// any subset may be present:
+// handleUserPromptSubmit composes the per-prompt response. Pieces, any
+// subset of which may be present:
 //
-//  1. Pending inter-session message banner (existing fallback).
-//  2. Layer 1: first-time full task list (one-shot) OR per-prompt
+//  1. Layer 1: first-time full task list (one-shot) OR per-prompt
 //     "Active task: E-XXX — <title>." reminder.
 func handleUserPromptSubmit(projectID int64, payload claudePayload, sigilNotice string) error {
 	var parts []string
@@ -535,14 +534,6 @@ func handleUserPromptSubmit(projectID int64, payload claudePayload, sigilNotice 
 	// would skip it and the correction would be lost twice over.
 	if sigilNotice != "" {
 		parts = append(parts, sigilNotice)
-	}
-
-	// Pending inter-session messages
-	pane := os.Getenv("TMUX_PANE")
-	if port, _, _ := monitor.LookupChannelPort(pane); port == 0 {
-		if hasMsgs, err := monitor.HasPendingMessages(pane); err == nil && hasMsgs {
-			parts = append(parts, "You have pending inter-session messages. Run: endless channel inbox")
-		}
 	}
 
 	// Layer 1: full list on first injection, single-line reminder thereafter
@@ -844,11 +835,6 @@ const (
 	actionConfirm = "confirm"
 	actionChat    = "chat"
 	scopeTask     = "task"
-
-	actionBeacon  = "beacon"
-	actionConnect = "connect"
-	actionSend    = "send"
-	scopeChannel  = "channel"
 )
 
 func handlePreToolUse(projectID int64, isRegistered bool, payload claudePayload) error {
@@ -1119,16 +1105,6 @@ func handlePostToolUseSession(projectID int64, payload claudePayload) (string, e
 			return "", fmt.Errorf("starting chat session: %w", err)
 		}
 		return "", nil
-	}
-
-	// Detect: endless channel beacon/connect/send. last_activity was
-	// already refreshed by the per-event TouchSession in runClaude; this
-	// block is kept only to short-circuit so unrelated post-tool logic
-	// doesn't fire on a channel action.
-	for _, action := range []string{actionBeacon, actionConnect, actionSend} {
-		if re := matchers.ActionRegex(all, action, scopeChannel); re != nil && re.MatchString(input.Command) {
-			return "", nil
-		}
 	}
 
 	return "", nil

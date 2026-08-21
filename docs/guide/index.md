@@ -154,7 +154,7 @@ endless task show <id> --text --children --llm
 For details, run `endless guide <section>`:
 
 - **tasks** — task CRUD reference, field semantics (title/description/text/analysis/notes/outcome), and verbs.
-- **orchestration** — per-task worktrees, spawning sessions, inter-session channels, commit-to-main policy.
+- **orchestration** — per-task worktrees, spawning sessions, commit-to-main policy.
 - **decisions** — documenting decisions as first-class items, **including STRONG guidance about preference vs prohibition — read this**.
 - **sessions** — recording session status snapshots (`endless session snapshot add`), the `session_statuses` row shape, when to call it, and discovery patterns for "who am I."
 - **reference** — projects, SQL, snapshots, tmux integration, file layout.
@@ -174,7 +174,6 @@ listed separately. (Generated — do not hand-edit; run `/regenerate-guide`.)
 | Command | Section | Covers |
 |---|---|---|
 | `agents` | _(none yet)_ | the `endless agents` command (epic-scoped listing of working background agents) isn't covered by the guide yet. |
-| `channel` | orchestration | Inter-session channels: messaging between concurrent sessions. |
 | `db` | orchestration | Choosing the database (--db main/sandbox) in self-dev worktrees. |
 | `db restore` | reference | Recovering the ledger from a backup — holders, sidecars, WAL, and the reversible pre-restore copy. |
 | `decision` | decisions | Decisions as first-class items; preference vs prohibition (read this). |
@@ -189,7 +188,7 @@ listed separately. (Generated — do not hand-edit; run `/regenerate-guide`.)
 | `plan` | tasks | 'plan' is the former name for 'task' (renamed); use 'task'. |
 | `project` | reference | Managing registered projects (register, list, status, set, rename, scan, discover, purge, unregister). |
 | `session` | sessions | Recording session status; discovery (who am I); reading status. |
-| `setup` | _(none yet)_ | hook/integration setup (claude-hook, prompt-hook, channel-plugin) isn't covered by the guide yet. |
+| `setup` | _(none yet)_ | hook/integration setup (claude-hook, prompt-hook, shell-helpers) isn't covered by the guide yet. |
 | `shell-init` | orchestration | Shell helpers (esu/eswt) to enter your task's worktree. |
 | `sql` | reference | Read-only SQL against the Endless DB. |
 | `task` | tasks | Task CRUD, field semantics (title/description/text/analysis/notes/outcome), status transitions, relations. |

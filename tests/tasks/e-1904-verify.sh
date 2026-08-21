@@ -23,7 +23,10 @@
 #   3. channelcmd only exited on a signal or MCP session end, neither of which
 #      fires when its worktree is reaped. Four channel processes were found
 #      alive 18-24 days after their worktrees were removed, each pinning a
-#      sandbox open. A watchdog now exits the process when its worktree goes.
+#      sandbox open. A watchdog exited the process when its worktree went.
+#      E-2029 deleted the whole channel surface, watchdog included, so this
+#      suite no longer asserts defect 3 — there is no process left to strand.
+#      Defects 1 and 2 are unaffected and still covered below.
 #
 # THE REAP SAFETY PREDICATE (the load-bearing part)
 #   A sandbox OUTLIVES its worktree directory, so directory existence alone is
@@ -41,8 +44,8 @@
 #
 # Layers:
 #   A. FAIL-FAST unit tests — the guard's five protection conditions, its
-#      fail-closed behavior, classify()'s orphan transition, the reaper seam,
-#      and the channel watchdog. If these break, stop.
+#      fail-closed behavior, classify()'s orphan transition, and the reaper
+#      seam. If these break, stop.
 #   B. Guard semantics — a nil guard must preserve the conservative in-use
 #      fallback, and an ephemeral (random-hex) name must not be worktree-bound.
 #   C. Wiring — monitor.ReapSandbox is actually assigned in cmd/endless-go, and
@@ -143,7 +146,7 @@ setup() {
 
 layer_a() {
     section "A. Fail-fast unit tests"
-    note "the reap safety predicate and the three defect fixes"
+    note "the reap safety predicate and the two surviving defect fixes"
 
     assert_go_test "guard: all five protection conditions" \
         ./internal/sandboxcmd/ 'TestReapGuardProtectionConditions' || return 1
@@ -159,9 +162,6 @@ layer_a() {
 
     assert_go_test "reaper: a reaped worktree invokes the sandbox seam" \
         ./internal/monitor/ 'TestReapBoundSandbox' || return 1
-
-    assert_go_test "channel: watchdog exits when the worktree is removed" \
-        ./internal/channelcmd/ 'TestWatchWorktree' || return 1
 
     return 0
 }

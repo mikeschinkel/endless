@@ -48,7 +48,7 @@ var (
 	// per-invocation flag, or a test deliberately targeting a DB) from a
 	// cwd-self-detected sandbox (SelfDetectWorktreeSandbox). Both set
 	// dbContextDir so ConfigDir()/the E-1429 gate follow the same target, but
-	// only the explicit flag should suppress the hook/channel/tmux PinMainDB
+	// only the explicit flag should suppress the hook/tmux PinMainDB
 	// override. Without this split a self-dev worktree's own dev session would
 	// have its session/pane-state writes routed to the sandbox (where the
 	// spawned task does not exist -> active_task_id FK-fails -> NULL -> status
@@ -131,7 +131,7 @@ func ForceRealDB() {
 // otherwise PinMainDB use this to let an explicit per-invocation DB target win —
 // the E-1429 contract is that an explicit flag is trustworthy and beats the
 // env-driven main pin. Production invokers of the pinned binaries (tmux, the
-// Claude hook, the MCP channel) never pass --config-dir, so this stays false
+// Claude hook, tmux) never pass --config-dir, so this stays false
 // there and the main pin still applies — including for a self-dev worktree's own
 // dev session, whose sandbox is discovered from cwd (SelfDetectWorktreeSandbox),
 // not from a flag, so it must NOT suppress the pin (E-1700). Only tests / sandbox
@@ -142,7 +142,7 @@ func HasExplicitDBContext() bool {
 
 // SetDBContextDir records an EXPLICIT DB/config directory for this process,
 // satisfying the E-1429 self-dev-worktree gate and marking the context as
-// flag-provided so it beats the hook/channel/tmux main pin. Called by
+// flag-provided so it beats the hook/tmux main pin. Called by
 // ConsumeDBContextFlag when the Python CLI threads --config-dir to a Go
 // subprocess (and by tests that deliberately target a DB). Self-detection from
 // cwd uses setDetectedContextDir instead, which does NOT set the flag.
@@ -154,7 +154,7 @@ func SetDBContextDir(dir string) {
 // setDetectedContextDir records a cwd-self-detected sandbox as the config/DB
 // context WITHOUT marking it flag-explicit. It satisfies ConfigDir() and the
 // E-1429 gate the same way SetDBContextDir does, but leaves HasExplicitDBContext
-// false so the hook/channel/tmux PinMainDB override still moves the DB to main
+// false so the hook/tmux PinMainDB override still moves the DB to main
 // (E-1450/E-1700). Only SelfDetectWorktreeSandbox calls this.
 func setDetectedContextDir(dir string) {
 	dbContextDir = dir
@@ -166,16 +166,16 @@ func setDetectedContextDir(dir string) {
 // It differs from ForceRealDB in two ways that matter for binaries invoked
 // outside a Claude session's env injection:
 //   - Unconditional: ForceRealDB only redirects when IsSandboxActive() (i.e.
-//     XDG_CONFIG_HOME points into a sandbox). endless-tmux is invoked by tmux
-//     and endless-channel by the MCP host, where XDG may be unset; the
-//     conditional check would miss and the gate would refuse them.
+//     XDG_CONFIG_HOME points into a sandbox). `endless-go tmux` is invoked by
+//     tmux itself, where XDG may be unset; the conditional check would miss
+//     and the gate would refuse it.
 //   - DB-path only: ConfigDir() is left untouched, so config.json and logs
 //     keep following XDG_CONFIG_HOME (the worktree's sandbox). Only the DB
-//     itself moves to main, matching the E-1450 split — session/channel/pane
-//     state is real-world activity and belongs in the real ledger.
+//     itself moves to main, matching the E-1450 split — session/pane state is
+//     real-world activity and belongs in the real ledger.
 //
-// Used by the always-main infrastructure binaries (endless-channel,
-// endless-tmux). Must precede the first DB()/DBPath() use. The hook keeps
+// Used by the always-main infrastructure surfaces (`endless-go tmux`). Must
+// precede the first DB()/DBPath() use. The hook keeps
 // ForceRealDB(): its XDG is always the sandbox, so the conditional path
 // already lands on main.
 func PinMainDB() {
@@ -226,7 +226,7 @@ func dbContextExplicit() bool {
 
 // pinnedToForeignRealDB reports whether this process has been pinned onto the
 // real database at ~/.config/endless via ForceRealDB() (the Claude hook) or
-// PinMainDB() (endless-channel, endless-tmux) — the automatic entry points that
+// PinMainDB() (`endless-go tmux`) — the automatic entry points that
 // redirect a sandbox/worktree-context binary's DATA writes onto the real ledger
 // (E-1450/E-1700). The pin is signalled by dbPathOverride != "".
 //
@@ -253,7 +253,7 @@ func pinnedToForeignRealDB() bool {
 // Exported for the E-698 job runner, which must not execute jobs when a
 // self_dev worktree's candidate build is pointed at the developer's real
 // ledger. Combined with InSelfDevWorktree it names exactly that state; on its
-// own it is true for ordinary pinned surfaces (hook, channel, tmux) in the main
+// own it is true for ordinary pinned surfaces (hook, tmux) in the main
 // checkout too, where running jobs is correct.
 func PinnedToRealDB() bool { return pinnedToForeignRealDB() }
 
@@ -311,7 +311,7 @@ func worktreeDirName(dir string) string {
 // --config-dir flag does: per-invocation and tied to physical location, not a
 // sticky export that silently misroutes later commands. Explicit --config-dir
 // (ConsumeDBContextFlag) is consumed first and wins via the dbContextDir guard
-// below; the hook/channel/tmux PinMainDB override still moves the DB to main
+// below; the hook/tmux PinMainDB override still moves the DB to main
 // afterward, with ConfigDir() (config.json, logs) following the self-detected
 // sandbox per the E-1450 split.
 //
@@ -341,7 +341,7 @@ func SelfDetectWorktreeSandbox() {
 		return
 	}
 	// setDetectedContextDir (not SetDBContextDir): a cwd-detected sandbox routes
-	// config/logs to the sandbox but must NOT suppress the hook/channel/tmux main
+	// config/logs to the sandbox but must NOT suppress the hook/tmux main
 	// pin — session/pane state belongs in the real ledger (E-1450/E-1700).
 	setDetectedContextDir(sandboxDir)
 }

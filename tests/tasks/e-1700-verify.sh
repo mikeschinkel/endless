@@ -13,7 +13,7 @@
 #
 #   2. internal/monitor/db.go — the ROOT cause for self-dev spawns: a
 #      cwd-self-detected sandbox (SelfDetectWorktreeSandbox) no longer
-#      masquerades as an explicit --config-dir, so the hook/channel/tmux
+#      masquerades as an explicit --config-dir, so the hook/tmux
 #      PinMainDB override still routes session/pane-state writes to MAIN (where
 #      the spawned task exists) while config/logs follow the sandbox. Without
 #      this the bind hit the sandbox, where the task is absent, and FK-failed to

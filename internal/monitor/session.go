@@ -307,52 +307,6 @@ func GetPlanFilePath(sessionID string) string {
 	return *path
 }
 
-// RegisterChannelPort upserts the channel plugin's HTTP port in the channels table.
-// The process key is typically TMUX_PANE or another session-unique identifier.
-func RegisterChannelPort(process string, port, pid int) error {
-	db, err := DB()
-	if err != nil {
-		return err
-	}
-	now := time.Now().UTC().Format("2006-01-02T15:04:05")
-	_, err = db.Exec(
-		`INSERT INTO channels (process, port, pid, created_at)
-		 VALUES (?, ?, ?, ?)
-		 ON CONFLICT(process) DO UPDATE SET port=?, pid=?, created_at=?`,
-		process, port, pid, now,
-		port, pid, now,
-	)
-	return err
-}
-
-// UnregisterChannelPort removes a channel port entry.
-func UnregisterChannelPort(process string) error {
-	db, err := DB()
-	if err != nil {
-		return err
-	}
-	_, err = db.Exec("DELETE FROM channels WHERE process=?", process)
-	return err
-}
-
-// LookupChannelPort returns the HTTP port for a given process identifier.
-// Returns 0 if not found.
-func LookupChannelPort(process string) (int, int, error) {
-	db, err := DB()
-	if err != nil {
-		return 0, 0, err
-	}
-	var port, pid int
-	err = db.QueryRow(
-		"SELECT port, pid FROM channels WHERE process=?",
-		process,
-	).Scan(&port, &pid)
-	if err != nil {
-		return 0, 0, err
-	}
-	return port, pid, nil
-}
-
 // TouchSession is the per-event UPSERT helper. It records the session's
 // presence in the sessions table (creating the row if absent), refreshes
 // last_activity, and binds `process_id` when the pane can be given an identity

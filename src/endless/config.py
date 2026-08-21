@@ -421,7 +421,7 @@ def default_db_to_main():
     no explicit --db.
 
     The Python analogue of the Go-side PinMainDB (E-1450/E-1429) used by
-    hook/channel/tmux: some operations are inherently real/main regardless of
+    hook/tmux: some operations are inherently real/main regardless of
     caller routing — worktree land, schema apply-change, db backup. When run
     from a self-dev session whose XDG_CONFIG_HOME points at a per-worktree
     sandbox, the default config dir resolves to that sandbox, mis-targeting the

@@ -13,7 +13,7 @@
 #
 # THE BUG (E-1659 incident). A self-dev worktree's .claude/settings.json runs
 # <worktree>/bin/endless-go on every Claude tool event; the hook calls
-# ForceRealDB() (PinMainDB() for endless-channel/endless-tmux), which pins the
+# ForceRealDB() (PinMainDB() for `endless-go tmux`), which pins the
 # candidate binary onto ~/.config/endless/endless.db so its DATA writes land in
 # the real ledger. monitor.DB() then applied the candidate's embedded schema.SQL
 # + enum integrity gate to that real DB — so an unlanded binary migrated (and,

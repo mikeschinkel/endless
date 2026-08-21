@@ -233,7 +233,7 @@ func TestGuardWorktreeDBContext(t *testing.T) {
 		t.Chdir(newProject(t, true))
 		PinMainDB()
 		if err := guardWorktreeDBContext(); err != nil {
-			t.Fatalf("PinMainDB (hook/channel/tmux) should satisfy the gate: %v", err)
+			t.Fatalf("PinMainDB (hook/tmux) should satisfy the gate: %v", err)
 		}
 	})
 
@@ -336,7 +336,7 @@ func TestSelfDetectWorktreeSandbox(t *testing.T) {
 			t.Errorf("dbContextDir = %q, want %q", dbContextDir, sandboxDir)
 		}
 		// A cwd-detected sandbox must NOT count as an explicit flag context, so
-		// the hook/channel/tmux main pin still applies (E-1700). Otherwise a
+		// the hook/tmux main pin still applies (E-1700). Otherwise a
 		// self-dev dev session's session/pane-state writes land in the sandbox,
 		// where the spawned task doesn't exist (FK-fails) instead of main.
 		if HasExplicitDBContext() {
@@ -425,7 +425,7 @@ func TestSelfDetectVsExplicit_MainPinRouting(t *testing.T) {
 		return wt, sandboxDir
 	}
 
-	// applyGuard mirrors cmd/endless-go/main.go's hook/channel/tmux pin.
+	// applyGuard mirrors cmd/endless-go/main.go's hook/tmux pin.
 	applyGuard := func() {
 		if !HasExplicitDBContext() {
 			PinMainDB()

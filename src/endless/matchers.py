@@ -3,7 +3,7 @@
 Verbs were extracted from this module in E-1117. They live as their own
 top-level `verbs` array of objects (`{value, definition, ...}`); see verb_cmd.py.
 This module is now the home for non-verb pattern matchers (regex
-command-patterns, channel matchers).
+command-patterns).
 
 Two layers, merged additively at read time:
 
@@ -14,7 +14,7 @@ A matcher object:
 
     {
       "type":            <required, e.g. "start" | "complete" | "beacon" | ...>
-      "scope":           <optional, e.g. "task" | "channel">
+      "scope":           <optional, e.g. "task">
       "method":          <required, "exact" | "substring" | "regex">
       "match":           <required, list[str] for exact/substring, str for regex>
       "case_sensitive":  <optional bool, default false>
@@ -53,18 +53,6 @@ DEFAULT_MATCHERS: list[dict[str, Any]] = [
     {
         "type": "chat", "scope": "task", "method": "regex",
         "match": r"endless\s+task\s+chat",
-    },
-    {
-        "type": "beacon", "scope": "channel", "method": "regex",
-        "match": r"endless\s+channel\s+beacon",
-    },
-    {
-        "type": "connect", "scope": "channel", "method": "regex",
-        "match": r"endless\s+channel\s+connect\s+(\S+)",
-    },
-    {
-        "type": "send", "scope": "channel", "method": "regex",
-        "match": r"endless\s+channel\s+send",
     },
 ]
 

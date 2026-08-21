@@ -101,7 +101,7 @@ install mode="":
         # Main checkout, no explicit arg: the global install.
         just build
         # E-1367 cleanup: remove pre-consolidation per-binary symlinks. Idempotent.
-        rm -f /usr/local/bin/endless-serve /usr/local/bin/endless-hook /usr/local/bin/endless-channel /usr/local/bin/endless-event /usr/local/bin/endless-sandbox /usr/local/bin/endless-tmux /usr/local/bin/endless-session-query
+        rm -f /usr/local/bin/endless-serve /usr/local/bin/endless-hook /usr/local/bin/endless-event /usr/local/bin/endless-sandbox /usr/local/bin/endless-tmux /usr/local/bin/endless-session-query
         ln -sfn "$(pwd)/bin/endless-go" /usr/local/bin/endless-go
         uv tool install -e . --force
         exit 0
