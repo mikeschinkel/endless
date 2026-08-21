@@ -3122,3 +3122,31 @@ Before filing a defect: search for prior tasks on the same MECHANISM, not the
 same command. A fix that was applied at one call site instead of made a rule
 will be re-broken by the next feature, and the second occurrence is the
 evidence that the rule is what is missing.
+## Fix the artifact, don't explain it in chat (E-1975)
+
+Mike said ED-1574 was too dense to reason about. I answered by explaining it in
+chat. The point of a decision is that FUTURE readers can act on it; explaining
+it to the one person who can already ask me is the least durable place the
+explanation could go, and it leaves the artifact exactly as unreadable. When
+something written down is unclear, rewrite the thing. `endless decision update`
+exists (the whats-left skill's claim that there is no update verb is wrong).
+
+## "Ledger" means the db-ledger, never the SQLite database (E-1975)
+
+I used "the real ledger" throughout ED-1573, code comments and commit messages
+to mean ~/.config/endless/endless.db. In Endless the db-ledger
+(.endless/db-ledger/*.jsonl) is the durable record and the SQLite database is a
+rebuildable projection OF it. Conflating them is guaranteed to mislead. Say
+"the main database" / "the sandbox database" — the vocabulary `--db main` and
+`--db sandbox` already establish.
+
+## A rule that "competes" with another is usually just written wrong (E-1975)
+
+I found the minimizer deleting verify commands, diagnosed it as two competing
+rules (dedup vs invariants), and fixed it by declaring a precedence. Mike:
+they never competed — I had written the dedup rule as "cut what was already
+sent" when it should be "cut what the user will have to review ANYWAY" (session
+status, task/decision text). A prior chat reply is not that. The real defect was
+the rule's wording and a fetch source that fed prior replies in as duplication
+evidence; the precedence clause was a patch over a mis-statement. Before adding
+a tie-breaker between two rules, check whether one of them is simply wrong.
