@@ -467,13 +467,23 @@ test_minimizer_live() {
         'go test ./internal/parser/ -run TestNestedQuotes' "${out}"
 
     # 4. The direct answer to the direct question survives.
-    local answered=0
-    [[ "${out}" == *"yes"* || "${out}" == *"Yes"* ]] && answered=1
-    if [[ "${answered}" -eq 1 && "${out}" == *"stack"* ]]; then
+    #
+    # Keyed on the SUBSTANCE, not on the word "yes". The fixture asks whether
+    # the parser handles nested quotes; "The parser handles nested quotes
+    # correctly — it tracks depth on a stack" answers it completely and once
+    # failed this assertion for lacking three letters. A proxy that rejects a
+    # correct answer is worse than no assertion, because it sends the reader to
+    # rewrite a prompt that did its job.
+    local affirmed=0
+    if printf '%s' "${out}" \
+        | grep -qiE 'yes|correctly|does handle|handles nested quotes'; then
+        affirmed=1
+    fi
+    if [[ "${affirmed}" -eq 1 && "${out}" == *"stack"* ]]; then
         report_pass "the direct answer survives"
     else
         report_fail "the direct answer survives" \
-            "the yes/stack answer to the question asked" "${out:0:300}"
+            "an affirmative answer naming the stack" "${out:0:300}"
     fi
 
     # 5. The narration goes. These are the phrases the generative rule targets

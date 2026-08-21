@@ -1577,9 +1577,21 @@ def minimizer_reseed(task_type):
     """Start over from the prompt Endless ships, throwing away the tuned one.
 
     The minimizer does not read its prompt from a file. Whichever version is in
-    use is stored in your database, and the loop replaces it with better ones it
-    writes itself. So upgrading Endless does NOT change the prompt you are
-    running — a new shipped prompt is only what a brand-new install begins with.
+    use is stored in your database. Four things change it:
+
+    \b
+      - THE LOOP promoting a prompt it wrote itself, once that prompt has beaten
+        the current one over a frozen set of your past replies. This is the
+        usual way and it happens in the background; `endless minimizer status`
+        lists the recent ones.
+      - `endless minimizer rollback` — back to the one before.
+      - this command — back to the one Endless ships.
+      - a fresh install, which starts from the shipped one.
+    \b
+
+    Upgrading Endless is not on that list. A new shipped prompt is only what a
+    brand-new install begins with; yours keeps running whatever your database
+    says.
 
     That is what you want while the shipped prompt is merely being improved on.
     It is not what you want when the shipped prompt was BROKEN and has been

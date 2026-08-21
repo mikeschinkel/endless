@@ -3169,3 +3169,18 @@ self-scored compression target is legitimate BECAUSE invariants are enforced
 separately") was false in the shipped code. Check mechanically, retry once, fall
 back. And make the check mean what the rule says: it tested commands for
 ALTERATION only, so deleting one outright passed — which 4 of 10 runs did.
+
+## Say what DOES happen, not only what doesn't (E-1975)
+
+`minimizer reseed --help` led with "upgrading Endless does NOT change the prompt
+you are running". Mike: then what does? Text that only rules things out leaves
+the reader exactly where they started. The help now lists the four things that
+change it, and names which is the usual one.
+
+## A keyword proxy that rejects a correct answer is worse than no test (E-1975)
+
+The verify suite asserted "the direct answer survives" by grepping for "yes". A
+reply reading "The parser handles nested quotes correctly — it tracks depth on a
+stack" failed it. I had criticised exactly this proxy in my own measurement an
+hour earlier and left it in the shipped suite. A false failure sends the next
+reader to rewrite a prompt that did its job.
