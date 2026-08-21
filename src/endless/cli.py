@@ -1532,18 +1532,28 @@ def session_turn(target, session_ref, paged):
 
 @main.group("minimizer")
 def minimizer_cmd():
-    """Read and drive the minimizer's autoresearch loop (E-1975).
+    """Inspect and control the instruction the minimizer edits replies with.
 
-    The loop runs itself — a background job judges every reported turn and
-    periodically replays a challenger prompt against the champion over a frozen
-    corpus, promoting by pointer when it wins. Nothing here has to be typed for
-    that to happen.
+    `endless task report` shortens an agent's reply before you read it. To do
+    that it calls a model and hands it two things: the agent's full draft, and
+    an INSTRUCTION saying what to cut. That instruction lives in your database,
+    not in a file, and Endless keeps trying to improve it.
 
-    These verbs are for the two things automation cannot do: seeing what the
-    loop believes, and undoing a promotion you disagree with.
+    A background job runs every ten minutes. It scores shortenings that already
+    happened. Less often it asks a model to write a NEW instruction, tries it
+    against the one in use over drafts already stored, and switches to the new
+    one if it did better. None of that needs you.
+
+    \b
+    Two words the output uses:
+      variant   one instruction, stored with the settings that go with it
+      champion  the variant currently in use
+    \b
 
     Whether any of it runs is a per-project switch, `minimizer` in
     `.endless/config.json`. Its resolved value here is printed below.
+
+    These commands are for seeing what the job decided, and for overruling it.
     """
     pass
 
@@ -1557,7 +1567,12 @@ minimizer_cmd.governing_setting = help_settings.MINIMIZER
 
 @minimizer_cmd.command("status")
 def minimizer_status():
-    """Show champions, sampling, judge calibration and keep-ratio by draft size."""
+    """Show which instruction is in use, and how well it is doing.
+
+    Reports the variant in use per task type, how often you are shown two
+    versions of a reply to choose between, how often the scoring model predicted
+    your reaction correctly, and how much text is being cut at each draft size.
+    """
     from endless.minimizer_cmd import status
     status()
 

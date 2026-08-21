@@ -3,7 +3,7 @@
   "label": "Endless Project Tracker",
   "description": "Project awareness system",
   "language": "bash",
-  "status": "active",
+  "status": "unregistered",
   "dependencies": [],
   "documents": {
     "rules": []
