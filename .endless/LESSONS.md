@@ -3315,3 +3315,43 @@ The suite asserted this repo ships the minimizer ON and drove the hook from the
 repo root to get a live gate. E-2042 turned it off, and the suite broke for a
 reason that had nothing to do with the code under test. Build the fixtures the
 test needs; do not borrow the project's own configuration as one.
+
+### [2026-08-21] I took a comment as gospel again, one exchange after being told not to (E-1817)
+
+Mike had just corrected me: "accepted decisions should be the source, not code
+comments. Code comments should be viewed with suspicion." I updated ED-1564 and
+said I understood.
+
+Then I wrote that `blocked` is "intentionally absent" from the status diagram,
+and built a design recommendation on it — a `RenderInDiagram: false` field to
+preserve the deliberate omission. My only source was the diagram's own comment:
+"Blocking is a relation (blocked_by), not a state, so it is intentionally
+absent." Agent-written, unverified, and contradicted by the system around it:
+`blocked` is in the status vocabulary, 8 tasks hold it, and every one sampled
+ALSO carries the blocked_by relation.
+
+Mike: "I don't follow why it would be 'intentionally' absent?" Four minutes of
+checking gave the real answer — nobody decided; two mechanisms exist and
+disagree.
+
+The word "intentionally" in a comment is a claim about someone's reasoning, and
+it is the LEAST verifiable thing a comment can assert. Check it or do not repeat
+it.
+
+### [2026-08-21] Model the ambiguity, or resolve it? Resolve it (E-1817)
+
+I proposed encoding a contradiction as data — a flag saying "this status is
+deliberately not drawn" — and called it a win because it made an unwritten
+decision reviewable.
+
+Mike: "Why don't we instead just decide?"
+
+Adding a configuration knob to preserve both sides of a contradiction is not
+neutrality, it is permanent cost: every future reader must now understand the
+flag AND the disagreement it papers over. Filed ED-1572 instead. If accepted,
+the generator needs no flag and the guard needs no special case — the design
+gets SMALLER by deciding.
+
+Also: I proposed a hand-ordered table without checking `~/Projects/go-pkgs/`.
+`dtx.OrderedMap` was already there, and "Reuse before Creation" names that
+directory explicitly.
