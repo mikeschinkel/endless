@@ -1961,6 +1961,28 @@ guessed at and carried forward.
 Partly repairable: a later session-attributed `task update` attaches
 `touched_by`, but `created_by=system` is baked into the creation event.
 
+## 2026-08-16 — Don't carry forward a flag you can't justify (`--no-session`)
+
+I added `--no-session` to an `endless task add` early in a session, reasoning
+vaguely that running from the main checkout with `--db main` might "pollute
+session state." Then I copied it into every subsequent `task add`/`task update`
+for the rest of the conversation without ever re-examining it.
+
+It was the wrong flag: `--no-session` exists for cron and plain-shell scripts
+with no Claude session to attribute to. It suppressed the `surfaced`
+session_tasks row, so a task I filed never appeared in the user's
+`session status`. They spent real effort hunting a tmux/session binding bug
+that did not exist, because the flag fails silently.
+
+Pattern: a defensive flag added without a concrete reason is superstition, and
+habit-propagation across commands makes one unexamined choice into twenty. If I
+cannot state what a flag prevents, don't pass it.
+
+Second, smaller: I queried `session_tasks` immediately after a `task add` and
+saw no row, then announced my own explanation was wrong. Event execution is
+async — the row appeared moments later. Don't diagnose off a read that races a
+write.
+
 ## 2026-08-20 — Do not claim alignment between our vocabulary and an industry term without checking the term's actual definition against ours
 
 In E-1989's outcome I wrote "Endless's description/plan split already is SDD's
