@@ -37,7 +37,7 @@
 # PinMainDB (E-1450/E-1429) so hook-fired writes always hit the REAL DB
 # regardless of cwd. HasExplicitDBContext is the documented seam for exactly
 # this case — an explicit --config-dir beats the main pin, which is what lets a
-# test drive the hook against the sandbox instead of the user's real ledger.
+# test drive the hook against the sandbox instead of the user's main database.
 #
 # Why the GATE-ON cwd is the repo root and the FIXTURE is gate-off, the reverse
 # of E-1953: this repo now ships `"minimizer": {"enabled": true}`. E-1953's
@@ -354,7 +354,7 @@ test_objective() {
     # What replaces them.
     assert_file_contains "rewriting is licensed" "You may REWRITE, not only delete" "${src}"
     assert_file_contains "deduplication is the second objective" \
-        "DO NOT TELL THE USER WHAT THEY ALREADY HAVE" "${src}"
+        "DO NOT MAKE THE USER READ THE SAME THING TWICE" "${src}"
 
     # Deletion-only was safe by construction — an editor that can only remove
     # cannot assert. Licensing a rewrite removes that guarantee, so the
@@ -366,15 +366,31 @@ test_objective() {
     assert_file_contains "a requested discussion still survives at length" \
         "a long discussion is correct" "${src}"
 
-    # The two objectives can contradict: deduplication says anything the user
-    # already has goes, the invariants say a command always survives. Measured
-    # with recent replies in context and no precedence stated, the minimizer
-    # dropped the table, the code block and the command TOGETHER in 2 of 8 live
-    # runs; with it stated, 0 of 8.
-    assert_file_contains "the invariants outrank deduplication" \
-        "OBJECTIVE TWO NEVER OUTRANKS THE INVARIANTS" "${src}"
-    assert_file_contains "and the delete list scopes itself to prose" \
-        "PROSE restated from WHAT THE USER ALREADY HAS" "${src}"
+    # What the second objective is FOR. It targets material the user will open
+    # ANYWAY — session status, a task plan, a decision — because restating that
+    # here costs them a second reading of something they are going to read
+    # regardless. An earlier chat message is categorically not that.
+    #
+    # Written as "what you already sent", with prior replies fed in as evidence,
+    # it deleted the table, the code block and the verify command TOGETHER in 2
+    # of 8 live runs, leaving one sentence. That was never a clash with the
+    # invariants — it was one rule written wrong, and briefly patched by
+    # declaring a precedence over them. Both the mis-statement and the patch
+    # must stay gone.
+    assert_file_contains "deduplication targets what will be reviewed anyway" \
+        "review ANYWAY" "${src}"
+    assert_file_contains "and explicitly not the conversation so far" \
+        "chat is ephemeral" "${src}"
+    assert_file_not_contains "the mis-statement is gone" \
+        "the replies you already sent them" "${src}"
+    assert_file_not_contains "and so is the precedence patch over it" \
+        "OBJECTIVE TWO NEVER OUTRANKS" "${src}"
+
+    # Removed from the DECLARED source set, not merely from the default policy:
+    # the optimizer writes policies and can only pick from what is declared, so
+    # leaving it in would let the loop re-introduce the defect by itself.
+    assert_file_not_contains "prior replies are not a declared fetch source" \
+        "recent_replies" src/endless/minimizer_fetch.py
 
     # The fourth input the dedup objective forced.
     local built

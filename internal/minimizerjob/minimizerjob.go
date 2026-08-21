@@ -159,7 +159,7 @@ end:
 // environment is the whole mechanism. Endless's config dir is always
 // <XDG_CONFIG_HOME>/endless, so handing the child the PARENT of ConfigDir()
 // reproduces the resolution exactly, sandbox included. Without this, a self-dev
-// tick would tune the wrong ledger's minimizer.
+// tick would tune the wrong database's minimizer.
 func childEnv() (env []string) {
 	const key = "XDG_CONFIG_HOME"
 	value := filepath.Dir(monitor.ConfigDir())

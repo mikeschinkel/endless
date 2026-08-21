@@ -356,7 +356,7 @@ def test_objective_is_deletion_then_deduplication():
     assert "NOT TO MAKE IT SHORT" not in text
     assert "DELETE WHAT THE USER DID NOT ASK FOR" in text
     assert "a long discussion is correct" in text
-    assert "DO NOT TELL THE USER WHAT THEY ALREADY HAVE" in text
+    assert "DO NOT MAKE THE USER READ THE SAME THING TWICE" in text
 
 
 def test_rewriting_is_licensed_and_fabrication_is_not():
@@ -374,25 +374,46 @@ def test_rewriting_is_licensed_and_fabrication_is_not():
     assert "deleting, not rewriting" not in text
 
 
-def test_the_invariants_outrank_deduplication():
-    """The two objectives can contradict, and one has to win.
+def test_deduplication_targets_what_will_be_reviewed_anyway():
+    """What the second objective is FOR, and the thing it is not.
 
-    The dedup objective says anything the user already has is transcription and
-    goes. The invariants say a command, a table and a code block always survive.
-    A reply repeating a verify command sent two turns ago satisfies the first by
-    deleting the one thing the user cannot reconstruct.
+    The point is that the user should not read the same thing twice: session
+    status, a task plan, a decision are all material they will open anyway, so
+    restating it here buys them a second reading and nothing else.
 
-    Measured, not assumed: with recent replies in the fetched context and no
-    precedence stated, the minimizer dropped the table, the code block AND the
-    command together in 2 of 8 live runs. With it stated, 0 of 8.
+    An earlier chat message is categorically not that. Chat is ephemeral, the
+    user is reading the current reply, and nothing sends them back through the
+    transcript. Stating the rule as "what you already sent" instead — and
+    feeding prior replies in as evidence — deleted the table, the code block and
+    the verify command together in 2 of 8 live runs, leaving one sentence.
+
+    That was never two rules competing with the invariants. It was one rule
+    written wrong, and it was briefly "fixed" by declaring a precedence over the
+    invariants, which is the patch this test exists to keep out.
     """
     text = report_prompts.DEFAULTS[report_prompts.MINIMIZE]
-    assert "OBJECTIVE TWO NEVER OUTRANKS THE INVARIANTS" in text
-    assert "outrank both objectives above" in text
-    assert "even when an earlier reply already carried it" in text
-    # And the delete list must scope itself to prose, or it re-opens the hole
-    # one section further down.
-    assert "PROSE restated from WHAT THE USER ALREADY HAS" in text
+    assert "DO NOT MAKE THE USER READ THE SAME THING TWICE" in text
+    assert "review ANYWAY" in text
+    assert "chat is ephemeral" in text
+    # The mis-statement and its patch must both stay gone.
+    assert "the replies you already sent them" not in text
+    assert "OBJECTIVE TWO NEVER OUTRANKS" not in text
+    assert "outrank both objectives" not in text
+
+
+def test_prior_replies_are_not_a_fetch_source():
+    """Removed from the declared set, not merely from the default policy.
+
+    The optimizer writes fetch policies and can only choose from what is
+    declared, so leaving the source in place would let it re-introduce the
+    defect on its own.
+    """
+    from endless import minimizer_fetch
+    assert "recent_replies" not in minimizer_fetch.SOURCES
+    assert all(
+        f["source"] != "recent_replies"
+        for f in report_prompts.DEFAULT_FETCH_POLICY["fetches"]
+    )
 
 
 def test_denylist_sits_under_a_generative_rule():

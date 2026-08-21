@@ -95,6 +95,14 @@ def status() -> None:
             f"  {c['promoted_at']}  [{c['origin'] or '?'}]"
         )
 
+    for c in champs:
+        shipped = minimizer_optimizer.champion_diverges(c["task_type"])
+        if shipped:
+            click.echo(
+                f"    {c['task_type'] or '(untyped)':<12} differs from the shipped "
+                f"default ({shipped}) — `endless minimizer reseed` adopts it"
+            )
+
     click.echo()
     click.echo(click.style("  Sampling", bold=True))
     click.echo(f"    A/B rate: {minimizer_store.ab_rate():.0%}  (the user moves this with $MORE / $LESS)")
@@ -274,4 +282,13 @@ def rollback(task_type: str | None) -> None:
     ok, message = minimizer_optimizer.rollback(bucket)
     click.echo(message)
     if not ok:
+        raise SystemExit(1)
+
+
+def reseed(task_type: str | None) -> None:
+    """Adopt the current shipped default as champion."""
+    bucket = task_type if task_type is not None else minimizer_store.NO_TASK_TYPE
+    changed, message = minimizer_optimizer.reseed(bucket)
+    click.echo(message)
+    if not changed:
         raise SystemExit(1)

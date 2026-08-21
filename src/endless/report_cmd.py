@@ -59,7 +59,7 @@ import subprocess
 
 import click
 
-from endless import config, internal_claude, report_prompts
+from endless import config, internal_claude, minimizer_invariants, report_prompts
 
 # The minimizer's model and effort. Not tunable by config, on the same principle
 # as the old ceremony gate: the WORDING is the lever, because that is where the
@@ -110,6 +110,52 @@ def _read_draft(path: str) -> str:
 # --- the minimizer ----------------------------------------------------------
 
 def _minimize(draft: str, user_prompt: str, context: str, minimize_text: str) -> str:
+    """Minimize, then ENFORCE the byte-exact invariants mechanically.
+
+    The prompt states them and the model mostly obeys, which is not the same
+    thing. Measured over the fixture: 2 of 8 runs dropped the verify command or
+    mangled the fenced block, and no wording moved that reliably — once
+    rewriting is licensed (ED-1557) an editor CAN reformat a code block, where a
+    deleting one structurally could not.
+
+    So the invariants are checked here, deterministically, exactly as the design
+    intends: they are what makes a self-scored compression target a legitimate
+    variant to try, and that argument only holds if something outside the prompt
+    enforces them. One retry naming what broke, then the raw draft — a reply
+    that is too long costs the user a scroll, while one missing the command they
+    were told to run costs them something they cannot reconstruct.
+
+    The fallback is announced on stderr, never silently: an unminimized reply
+    that nobody knows is unminimized is how this contract rots.
+    """
+    out = _run_minimizer(draft, user_prompt, context, minimize_text)
+    ok, detail, _ = minimizer_invariants.check(draft, out)
+    if ok:
+        return out
+
+    retry = (
+        f"{minimize_text}\n\n"
+        "=== YOUR PREVIOUS ATTEMPT BROKE AN INVARIANT ===\n"
+        f"{detail}\n"
+        "Produce the reply again. Cut as hard as you like elsewhere, but this "
+        "content is reproduced byte for byte or removed whole — never altered, "
+        "never partially kept."
+    )
+    out = _run_minimizer(draft, user_prompt, context, retry)
+    ok, detail, _ = minimizer_invariants.check(draft, out)
+    if ok:
+        return out
+
+    click.echo(
+        "Endless: the minimizer broke a protected-content invariant twice "
+        f"({detail}); sending your draft unminimized rather than a reply with "
+        "mangled content. Nothing was lost.",
+        err=True,
+    )
+    return draft.strip()
+
+
+def _run_minimizer(draft: str, user_prompt: str, context: str, minimize_text: str) -> str:
     """Run the adversarial edit and return the text the agent must send.
 
     Fails CLOSED, and this is the one place in the reporting surface that does.

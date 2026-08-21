@@ -171,12 +171,26 @@ def test_an_altered_command_is_vetoed():
     assert any("command" in v for v in violations)
 
 
-def test_a_dropped_command_is_not_a_mechanical_violation():
-    """Whether a command SHOULD have survived is judgment and belongs to the
-    judge. Whether a surviving one is still the same command is arithmetic and
-    belongs here."""
+def test_a_dropped_command_is_a_violation():
+    """Invariant 3 says a command ALWAYS survives, and this is what enforces it.
+
+    Checking only for alteration let the model satisfy the rule by deleting the
+    command outright — measured over the fixture, 4 of 10 runs dropped the
+    verify command and passed the check. A table may be deleted whole; a command
+    may not, because it is the one thing the user cannot reconstruct.
+    """
     raw = "Verify with `just test`. Also, the parser is fine."
-    ok, detail, _ = minimizer_invariants.check(raw, "The parser is fine.")
+    ok, _, violations = minimizer_invariants.check(raw, "The parser is fine.")
+    assert not ok
+    assert any("dropped" in v for v in violations)
+
+
+def test_a_deleted_table_is_still_allowed():
+    """The asymmetry is deliberate: tables and fenced blocks may go whole, and
+    only a command may not. Cutting a table the user did not ask for is exactly
+    the edit this command exists to make."""
+    raw = "Intro.\n\n" + _TABLE
+    ok, detail, _ = minimizer_invariants.check(raw, "Intro.")
     assert ok, detail
 
 
@@ -216,7 +230,7 @@ def test_context_round_trips_from_the_record():
     record = json.dumps([
         {"source": "task_plan", "ok": True, "chars": 4, "text": "plan"},
         {"source": "session_status", "ok": False, "error": "boom"},
-        {"source": "recent_replies", "skipped": "no task claimed"},
+        {"source": "sibling_tasks", "skipped": "no task claimed"},
     ])
     rebuilt = minimizer_fetch.context_from_record(record)
     assert "### task_plan\nplan" in rebuilt

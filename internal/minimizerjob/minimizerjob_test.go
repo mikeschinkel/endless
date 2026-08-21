@@ -59,7 +59,7 @@ func TestIntervalIsPromptEnoughToStayBlind(t *testing.T) {
 }
 
 // TestChildEnvPinsConfigHome covers the wiring detail that would otherwise
-// silently tune the WRONG ledger's minimizer: the Python CLI has no
+// silently tune the WRONG database's minimizer: the Python CLI has no
 // --config-dir, so XDG_CONFIG_HOME is the entire mechanism for telling the
 // subprocess which database to open.
 func TestChildEnvPinsConfigHome(t *testing.T) {

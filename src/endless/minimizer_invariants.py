@@ -151,15 +151,24 @@ def check(raw: str, minimized: str) -> tuple[bool, str, list[str]]:
         if any(ln in minimized for ln in rows):
             violations.append(f"a table was partially reproduced: {_excerpt(block)}")
 
+    # A command is the one protected thing that must SURVIVE, not merely survive
+    # intact. Tables and fenced blocks may be deleted whole — a table the user
+    # did not ask for is a legitimate cut — but invariant 3 says a command the
+    # user is meant to run always survives, and it is the most expensive thing
+    # to lose because they cannot reconstruct it.
+    #
+    # This was checked for ALTERATION only, which let the model satisfy it by
+    # deleting the command outright: measured over the fixture, 4 of 10 runs
+    # dropped the verify command and passed. "Or delete it whole" is not an
+    # escape the invariant offers here.
     for cmd in _commands(raw):
         if cmd in minimized:
             continue
         head = cmd.split()[0]
-        # The head surviving without the whole command is the dangerous case: the
-        # user sees a command name and a plausible-looking invocation that is not
-        # the one they were given.
         if re.search(r"`[^`\n]*" + re.escape(head) + r"[^`\n]*`", minimized):
             violations.append(f"a command was altered: {_excerpt(cmd)}")
+        else:
+            violations.append(f"a command the user must run was dropped: {_excerpt(cmd)}")
 
     ok = not violations
     return ok, "; ".join(violations), violations

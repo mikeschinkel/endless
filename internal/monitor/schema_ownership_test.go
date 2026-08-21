@@ -2,7 +2,7 @@ package monitor
 
 import "testing"
 
-// TestForeignRealDB pins who may write SCHEMA to the real ledger (E-1818,
+// TestForeignRealDB pins who may write SCHEMA to the main database (E-1818,
 // reopened by E-1975).
 //
 // The invariant: an unlanded worktree build may write DATA to the real database
@@ -14,7 +14,7 @@ import "testing"
 // and `endless --db main <anything>` threads exactly that flag to every
 // endless-go shellout, so the hole was on the documented daily path rather than
 // in some corner. A branch that added a table to schema.sql created it in the
-// user's real database the first time an agent ran a routine command.
+// user's main database the first time an agent ran a routine command.
 func TestForeignRealDB(t *testing.T) {
 	const (
 		real      = "/Users/x/.config/endless/endless.db"
@@ -36,14 +36,14 @@ func TestForeignRealDB(t *testing.T) {
 		},
 		{
 			// The case E-1975 found. Explicit --config-dir, candidate binary,
-			// real ledger.
-			name: "candidate build pointed at the real ledger by an explicit flag",
+			// main database.
+			name: "candidate build pointed at the main database by an explicit flag",
 			exe:  candidate, dbPath: real, realPath: real, want: true,
 		},
 		{
 			// The deployed binary OWNS the schema. It has to keep applying it,
 			// or a landed change would never reach the database.
-			name: "deployed build on the real ledger still owns the schema",
+			name: "deployed build on the main database still owns the schema",
 			exe:  deployed, dbPath: real, realPath: real, want: false,
 		},
 		{

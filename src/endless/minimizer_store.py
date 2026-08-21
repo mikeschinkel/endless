@@ -1,6 +1,6 @@
 """The autoresearch loop's storage layer (E-1975).
 
-Every read and write the loop makes against the ledger lives here, so the judge,
+Every read and write the loop makes against the database lives here, so the judge,
 the optimizer and the report command share one definition of "the corpus", "the
 champion" and "a variant" rather than three that drift.
 

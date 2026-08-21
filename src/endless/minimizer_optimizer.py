@@ -421,3 +421,45 @@ def rollback(task_type: str) -> tuple[bool, str]:
     minimizer_store.promote(task_type, parent, by="rollback",
                             note=f"rolled back from {champ['hash']}")
     return True, f"champion for {task_type or '(untyped)'} rolled back to {parent}"
+
+
+def reseed(task_type: str) -> tuple[bool, str]:
+    """Promote a variant built from the CURRENT shipped defaults.
+
+    Without this a defect fix in the shipped prompt is undeliverable. The
+    champion is a pointer into a content-addressed store; editing
+    report_prompts.py changes what a FRESH install starts from and nothing else,
+    so any machine where the loop has already promoted once keeps running the
+    old text forever. That is correct while the seed is merely being improved on
+    — the loop's whole job is to beat it — and wrong the moment the seed is
+    found to be WRONG, because every descendant was generated from the flawed
+    text and inherits the flaw.
+
+    Deliberately manual. Auto-adopting a new seed would silently discard
+    everything the loop had learned, on nothing more than someone editing a
+    string; `minimizer status` reports the divergence instead, and a human
+    decides. Rollback still works afterwards: the reseeded variant records no
+    parent, so it is a floor rather than a link in the old lineage.
+    """
+    current = minimizer_store.champion(task_type)
+    fresh = minimizer_store.seed_variant(task_type)
+    if fresh["hash"] == current["hash"]:
+        return False, f"already running the shipped default ({fresh['hash']})"
+    minimizer_store.promote(
+        task_type, fresh["hash"], by="reseed",
+        note=f"adopted the shipped default, replacing {current['hash']}")
+    return True, f"{current['hash']} -> {fresh['hash']} (shipped default adopted)"
+
+
+def champion_diverges(task_type: str) -> str | None:
+    """The shipped default's hash when the champion is not it, else None.
+
+    Reported by `minimizer status` so a machine running a tuned prompt says so,
+    and so a shipped fix that has not been adopted is visible rather than silent.
+    """
+    shipped = minimizer_store.content_hash(
+        report_prompts.load_prompts()[report_prompts.MINIMIZE],
+        report_prompts.DEFAULT_FETCH_POLICY,
+        report_prompts.DEFAULT_BYPASS_THRESHOLD,
+    )
+    return None if minimizer_store.champion(task_type)["hash"] == shipped else shipped

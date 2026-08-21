@@ -255,21 +255,21 @@ func pinnedToForeignRealDB() bool {
 // process, a home directory, or a database.
 //
 // override != "" is E-1818's original case: ForceRealDB / PinMainDB moved this
-// process onto the real ledger, so it does not own the schema.
+// process onto the main database, so it does not own the schema.
 //
 // The second clause is E-1975's. An explicit --config-dir is trusted to ROUTE
 // this process (E-1429: a per-invocation flag beats the env), but routing and
 // OWNERSHIP are different questions, and conflating them punched a hole through
 // E-1818's invariant. `endless --db main <anything>` threads
-// --config-dir <real ledger> to every endless-go shellout; run from a worktree
+// --config-dir <main database> to every endless-go shellout; run from a worktree
 // that is the WORKTREE's binary — unlanded code — and because the explicit flag
 // left override empty this returned false, so monitor.DB() applied the branch's
 // schema.SQL to the user's real database. A branch that adds a table created it
-// in the real ledger the first time an agent ran a routine command, days before
+// in the main database the first time an agent ran a routine command, days before
 // the branch landed and whether or not it ever did.
 //
 // Ownership is decided by what the executable IS, not by how it was pointed: a
-// binary built inside a task worktree may write DATA to the real ledger
+// binary built inside a task worktree may write DATA to the main database
 // (session and pane state is real-world activity, per E-1450) and may never
 // migrate, reseed or fail-close it. The deployed binary is not a candidate, so
 // it still creates the schema after the branch lands — the table appears one
@@ -305,7 +305,7 @@ func candidateBuild() bool {
 }
 
 // realDBPath is the deployed installation's ledger, independent of any routing
-// in force. It hardcodes the same location PinMainDB does, so "the real ledger"
+// in force. It hardcodes the same location PinMainDB does, so "the main database"
 // means one thing across both.
 func realDBPath() string {
 	home, err := os.UserHomeDir()

@@ -1570,6 +1570,22 @@ def minimizer_show(variant_hash):
     show(variant_hash)
 
 
+@minimizer_cmd.command("reseed")
+@click.option("--task-type", default=None,
+              help="Task-type bucket to reseed (default: untyped).")
+def minimizer_reseed(task_type):
+    """Adopt the shipped default prompt as champion, discarding what was tuned.
+
+    The prompt in force is a pointer into a content-addressed store, so editing
+    the shipped default changes only what a FRESH install starts from. Use this
+    when the shipped prompt was FIXED rather than merely improved — every
+    variant the loop generated descends from the old text and inherits its
+    flaw. `endless minimizer status` says when your champion has diverged.
+    """
+    from endless.minimizer_cmd import reseed
+    reseed(task_type)
+
+
 @minimizer_cmd.command("rollback")
 @click.option("--task-type", default=None,
               help="Task-type bucket to roll back (default: untyped).")
@@ -2423,7 +2439,7 @@ def task_report(item_id, draft_file, raw):
     # unconditionally, so a checkpoint written anywhere else is one the gate can
     # never see. Without this pin the two halves land on different databases
     # inside a self-dev worktree — the command arms the sandbox, the gate looks
-    # in the real ledger, finds nothing, and blocks the turn as "never
+    # in the main database, finds nothing, and blocks the turn as "never
     # reported". Worse, the E-1429 gate would refuse the bare invocation that
     # the SessionStart rule itself prints, so the instruction would be
     # unrunnable in the one repo that develops it.

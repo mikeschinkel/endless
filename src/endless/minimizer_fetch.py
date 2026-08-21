@@ -140,35 +140,25 @@ def _fetch_session_status(task_id: int | None, session_id: int | None, spec: dic
     return _truncate("\n".join(parts))
 
 
-def _fetch_recent_replies(task_id: int | None, session_id: int | None, spec: dict) -> str:
-    """The last few replies this session already sent.
-
-    The most literal reading of "do not tell them what they already have": a
-    session that answered a question two turns ago and answers it again has
-    written the user a reply whose entire content they already read.
-    """
-    if not session_id:
-        return ""
-    limit = int(spec.get("limit", 3) or 3)
-    rows = db.query(
-        "SELECT sanctioned_text FROM session_gates "
-        "WHERE session_id = ? AND kind_id = 2 AND sanctioned_text IS NOT NULL "
-        "ORDER BY id DESC LIMIT ?",
-        (session_id, limit),
-    )
-    if not rows:
-        return ""
-    chunks = [f"--- reply {i + 1} turn(s) ago ---\n{r['sanctioned_text']}"
-              for i, r in enumerate(rows)]
-    return _truncate("\n\n".join(chunks))
-
-
+# There is deliberately NO source for the session's own earlier replies.
+#
+# One existed, and it was the defect. Deduplication targets material the user
+# will have to review ANYWAY — session status, a task plan, a decision — because
+# repeating that here costs them a second reading of something they are going to
+# open regardless. An earlier chat message is not that: chat is ephemeral, they
+# are reading the current reply, and nothing sends them back through the
+# transcript to reassemble it.
+#
+# Feeding prior replies in as duplication evidence deleted the table, the code
+# block and the verify command together in 2 of 8 live runs, leaving a single
+# sentence. Re-adding this source re-opens that, so it is absent rather than
+# merely left out of the default policy — the optimizer writes policies, and it
+# can only choose from what is declared here.
 SOURCES = {
     "task_plan": _fetch_task_plan,
     "task_analysis": _fetch_task_analysis,
     "sibling_tasks": _fetch_sibling_tasks,
     "session_status": _fetch_session_status,
-    "recent_replies": _fetch_recent_replies,
 }
 
 
