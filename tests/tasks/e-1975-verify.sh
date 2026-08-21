@@ -724,8 +724,25 @@ test_judge() {
     local gate_id
     gate_id=$(sql1 "SELECT id FROM session_gates ORDER BY id DESC LIMIT 1")
 
-    assert_succeeds "the judge sweep runs" \
-        env COLUMNS=200 uv run endless --db sandbox minimizer judge --limit 1
+    # The judge is a live model call, and it FAILS OPEN by design: an
+    # unreachable judge leaves the row unjudged for the next sweep rather than
+    # writing a fabricated score. That is correct behavior and it makes a
+    # single-shot assertion here flaky, so the sweep is retried before the
+    # absence of a row is called a defect — and if it still does not appear, the
+    # message says which of the two it was.
+    local attempt=0
+    while [[ "${attempt}" -lt 3 ]]; do
+        env COLUMNS=200 uv run endless --db sandbox minimizer judge --limit 1 >/dev/null 2>&1
+        [[ -n "$(sql1 "SELECT id FROM report_judgments WHERE gate_id=${gate_id}")" ]] && break
+        attempt=$((attempt + 1))
+    done
+    if [[ -z "$(sql1 "SELECT id FROM report_judgments WHERE gate_id=${gate_id}")" ]]; then
+        report_fail "the judge sweep scored the turn" \
+            "a judgment row after up to 3 sweeps" \
+            "none — the model call did not return; the loop failed open as designed"
+        return
+    fi
+    report_pass "the judge sweep scored the turn"
 
     local fidelity blind
     fidelity=$(sql1 "SELECT COALESCE(fidelity,-1) FROM report_judgments WHERE gate_id=${gate_id}")
@@ -743,6 +760,8 @@ test_judge() {
 
     # The user reacts. Now the prediction is scored.
     prompt_hook '"$BLOAT \"the middle section\""' >/dev/null
+    # Closing a prediction out is pure DB work (observe_reactions), so unlike
+    # the scoring above it cannot fail on a model call.
     assert_succeeds "the sweep closes the prediction out" \
         env COLUMNS=200 uv run endless --db sandbox minimizer judge --limit 1
     local agreed

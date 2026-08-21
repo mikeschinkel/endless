@@ -244,7 +244,75 @@ func dbContextExplicit() bool {
 // nor for an explicit --config-dir open (which sets dbContextDir, not
 // dbPathOverride) — so land-time `endless db apply-change` still migrates.
 func pinnedToForeignRealDB() bool {
-	return dbPathOverride != ""
+	exe, err := os.Executable()
+	if err != nil {
+		exe = ""
+	}
+	return foreignRealDB(dbPathOverride, resolvedPath(exe), DBPath(), realDBPath())
+}
+
+// foreignRealDB is the decision itself, pure so it can be proven without a
+// process, a home directory, or a database.
+//
+// override != "" is E-1818's original case: ForceRealDB / PinMainDB moved this
+// process onto the real ledger, so it does not own the schema.
+//
+// The second clause is E-1975's. An explicit --config-dir is trusted to ROUTE
+// this process (E-1429: a per-invocation flag beats the env), but routing and
+// OWNERSHIP are different questions, and conflating them punched a hole through
+// E-1818's invariant. `endless --db main <anything>` threads
+// --config-dir <real ledger> to every endless-go shellout; run from a worktree
+// that is the WORKTREE's binary — unlanded code — and because the explicit flag
+// left override empty this returned false, so monitor.DB() applied the branch's
+// schema.SQL to the user's real database. A branch that adds a table created it
+// in the real ledger the first time an agent ran a routine command, days before
+// the branch landed and whether or not it ever did.
+//
+// Ownership is decided by what the executable IS, not by how it was pointed: a
+// binary built inside a task worktree may write DATA to the real ledger
+// (session and pane state is real-world activity, per E-1450) and may never
+// migrate, reseed or fail-close it. The deployed binary is not a candidate, so
+// it still creates the schema after the branch lands — the table appears one
+// land later, which is exactly when it should.
+//
+// realPath == "" means the home directory could not be resolved. That falls
+// back to the override answer rather than guessing, because a wrong guess in
+// the permissive direction is the bug this exists to stop and a wrong guess in
+// the strict direction would leave a fresh install with no schema.
+func foreignRealDB(override, exePath, dbPath, realPath string) bool {
+	if override != "" {
+		return true
+	}
+	if realPath == "" || dbPath != realPath {
+		return false
+	}
+	return strings.Contains(exePath, worktreePathMarker)
+}
+
+// candidateBuild reports whether this executable was built inside a task
+// worktree, i.e. whether it is unlanded code.
+//
+// Keyed on the EXECUTABLE's path rather than cwd. cwd answers "where is the
+// user working", which is a different question and the wrong one: the global
+// binary invoked from inside a worktree is still the deployed build and owns
+// the schema, while the worktree's binary invoked from anywhere does not.
+func candidateBuild() bool {
+	exe, err := os.Executable()
+	if err != nil {
+		return false
+	}
+	return strings.Contains(resolvedPath(exe), worktreePathMarker)
+}
+
+// realDBPath is the deployed installation's ledger, independent of any routing
+// in force. It hardcodes the same location PinMainDB does, so "the real ledger"
+// means one thing across both.
+func realDBPath() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(home, ".config", "endless", "endless.db")
 }
 
 // PinnedToRealDB reports whether this process has been pinned onto a fixed real

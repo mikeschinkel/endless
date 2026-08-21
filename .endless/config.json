@@ -11,7 +11,7 @@
   "matchers": [],
   "self_dev": true,
   "minimizer": {
-    "enabled": false,
-    "optimizer": false
+    "enabled": true,
+    "optimizer": true
   }
 }

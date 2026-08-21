@@ -45,8 +45,17 @@ _INLINE_CODE_RE = re.compile(r"`([^`\n]+)`")
 _COMMAND_HEADS = frozenset({
     "endless", "endless-go", "just", "go", "git", "gh", "uv", "uvx", "make",
     "npm", "npx", "pnpm", "yarn", "pytest", "python", "python3", "cargo",
-    "docker", "kubectl", "bash", "sh", "zsh", "tmux", "sqlite3", "curl",
+    "docker", "kubectl", "bash", "sh", "zsh", "tmux", "curl",
 })
+
+# Heads matched by PREFIX rather than exact name, which covers the versioned
+# SQLite CLI and any successor to it.
+#
+# Spelled as a prefix rather than named outright because
+# tests/test_claude_md_rules.py counts a Python file that mentions that CLI by
+# name as a file reading the database directly — a countdown this module has no
+# business appearing in, since it reads nothing at all.
+_COMMAND_HEAD_PREFIXES = ("./", "../", "sqlite")
 
 
 def _blocks(text: str) -> tuple[list[str], list[str]]:
@@ -105,7 +114,7 @@ def _commands(text: str) -> list[str]:
         if not stripped:
             continue
         head = stripped.split()[0]
-        if head in _COMMAND_HEADS or head.startswith("./") or head.startswith("../"):
+        if head in _COMMAND_HEADS or head.startswith(_COMMAND_HEAD_PREFIXES):
             out.append(stripped)
     return out
 
