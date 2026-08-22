@@ -3298,3 +3298,20 @@ line count, a corrected pairing — and he had to ask what the take-away was. Fa
 are the working, not the answer. Every report should end with what follows from
 them and what will be done, and anything that should be filed should already be
 filed by the time he reads it.
+
+## "What's the take-away?" is not "file a task" (E-1975)
+
+Mike asked what followed from a set of facts. I filed two tasks. ED-1550 rule 6
+says reporting never means filing, and rule 1 says the default response to a
+finding is to tell him in chat — noticing something true does not earn a task. I
+filed six this session, immediately killing two of them, on a project whose
+file-to-close ratio is the reason ED-1550 exists. Answer in chat; fold findings
+into an open task as evidence; file only when asked or when the thing is real
+work nobody owns.
+
+## Never couple a verify suite to a setting the project may flip (E-1975)
+
+The suite asserted this repo ships the minimizer ON and drove the hook from the
+repo root to get a live gate. E-2042 turned it off, and the suite broke for a
+reason that had nothing to do with the code under test. Build the fixtures the
+test needs; do not borrow the project's own configuration as one.
