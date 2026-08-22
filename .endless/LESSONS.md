@@ -3197,3 +3197,58 @@ about the words inside one. Mike: what did it say before? and why are you even
 telling me? Flagging ordinary in-scope work costs the reader a paragraph and
 buries the changes that genuinely need his eye. Report a diff by showing the
 before and after, or don't report it.
+
+## Don't infer a storage limitation from a CLI flag's shape (E-1920)
+
+Asked where the raw draft lives, I read `--raw` in `cli.py`, saw `is_flag=True`
+with help text "this session's most recent raw draft", and told Mike "it stores
+only the most recent draft." Wrong, and wrong in the direction that matters: he
+could reasonably have concluded that cut content was being destroyed.
+
+`session_gates` retains EVERY draft — one row per turn with `raw_draft`, plus a
+dedicated `session_gates_corpus` index declared "newest first" specifically so
+the history can be scanned. The schema comment says it outright: "nothing it
+cuts is destroyed, only hidden." The command exposes one row; the store holds
+all of them.
+
+A flag's signature describes what the command SHOWS. It says nothing about what
+is KEPT. When the question is "is this recoverable," read the schema, not the
+CLI — and when the answer is "no," be especially sure, because that answer tells
+someone their data is gone.
+
+## Explaining a risk is not the same as demonstrating I found it (E-1920)
+
+Mike asked a plain question: could the minimizer's self-updating template bake
+in something like a task number and then misdirect later? The answer is one
+sentence — yes, because the examples we feed the variant generator are real
+reply snippets full of task ids, and the only check is that the blanks survive.
+
+I answered with `evidence()`, `lost`/`invented`/`redundant`, `_REQUIRED_
+PLACEHOLDERS`, `parent_hash` lineage, and a `replace`-vs-`str.format` aside, in
+one block. He said he could not follow it. He was right: I was showing the
+verification trail rather than the finding.
+
+The symbol names are how I CHECKED. They are not the answer, and they are not
+evidence he asked for. Lead with the plain sentence; keep the identifiers for
+when someone asks where it lives or doubts the claim.
+
+This is worse in a codebase I have been reading all session: everything is
+freshly loaded for me and reads as common ground, when for the person asking it
+is a wall of unfamiliar names.
+
+## File tasks INTO an epic, not at root (E-1920)
+
+I filed five tasks in one session and left every one of them parented at root.
+Mike had to ask for grouping. His reason is the one that matters: he is not
+going to act on them today, and an ungrouped task is one he has to rediscover
+by search months later — which is exactly the failure I hit twice this same
+session, missing E-1729 and E-1959 because nothing pointed at them.
+
+Filing is not finished when the row exists. Before filing, look for the epic
+that owns the area (`endless epic list`), and if several new tasks share one,
+that IS the epic. When none exists and two or more tasks want the same home,
+creating the epic is part of the filing, not extra work.
+
+Check where the PRECEDENT task sits — E-1662 was already under E-1667, which
+told me instantly where its sibling belonged. A related task's parent is the
+cheapest signal available and I did not look at it until asked.
