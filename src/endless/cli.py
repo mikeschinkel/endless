@@ -10,6 +10,7 @@ import click
 
 from endless import __version__
 from endless import agent_help
+from endless import help_settings
 from endless.agent_help import AgentHelpMixin
 from endless.statuses import TASK_STATUSES, TASK_STATUS_HELP
 
@@ -281,11 +282,40 @@ class DBAwareGroup(click.Group):
         return super().main(args=cleaned, **extra)
 
 
-class AgentAwareCommand(AgentHelpMixin, click.Command):
+class SettingAwareMixin:
+    """Append the live value of a setting that governs this command (E-2030).
+
+    Opt-in per command via `<cmd>.governing_setting = help_settings.MINIMIZER`.
+    Deliberately NOT the agent block's channel: that one renders only for an
+    agent, and a human reading `endless minimizer --help` on a project where the
+    loop is switched off needs to know that at least as much.
+
+    Runs after `super().format_help`, so the setting is the last thing on the
+    page rather than something to scroll past to reach the options.
+
+    Never raises into help rendering — an unreadable config degrades to no
+    section, exactly as a garbled map file degrades to no agent block.
+    """
+
+    def format_help(self, ctx, formatter):  # type: ignore[override]
+        super().format_help(ctx, formatter)
+        setting = getattr(self, "governing_setting", None)
+        if not setting:
+            return
+        try:
+            from endless import help_settings
+            block = help_settings.render(setting)
+        except Exception:
+            block = None
+        if block:
+            formatter.write("\n" + block + "\n")
+
+
+class AgentAwareCommand(AgentHelpMixin, SettingAwareMixin, click.Command):
     """Leaf command whose --help is augmented for agents (E-1502)."""
 
 
-class AgentAwareGroup(AgentHelpMixin, DBAwareGroup):
+class AgentAwareGroup(AgentHelpMixin, SettingAwareMixin, DBAwareGroup):
     """Group whose --help is augmented for agents, and whose children inherit
     the augmenting classes so one root `cls=` propagates across the whole tree."""
 
@@ -1511,8 +1541,18 @@ def minimizer_cmd():
 
     These verbs are for the two things automation cannot do: seeing what the
     loop believes, and undoing a promotion you disagree with.
+
+    Whether any of it runs is a per-project switch, `minimizer` in
+    `.endless/config.json`. Its resolved value here is printed below.
     """
     pass
+
+
+# The description above is faithful whether or not the loop is switched on here,
+# which is exactly the problem: a reader on a project that turned it off gets an
+# accurate account of machinery that is not running, with nothing on the page
+# saying so (E-2030). The setting block supplies that.
+minimizer_cmd.governing_setting = help_settings.MINIMIZER
 
 
 @minimizer_cmd.command("status")
@@ -2454,6 +2494,10 @@ def task_report(item_id, draft_file, raw):
 
     You get ONE appeal per turn: re-run with a draft that argues for content the
     minimizer cut. The appeal is minimized too.
+
+    Whether a Stop hook enforces any of this is the same per-project switch the
+    loop uses, `minimizer` in `.endless/config.json`. Its resolved value here is
+    printed below.
     """
     # The report channel is an always-main operation, for the same reason the
     # Stop hook that reads it is: `endless-go hook` calls PinMainDB
@@ -2485,6 +2529,12 @@ def task_report(item_id, draft_file, raw):
             "  Pass the whole thing — the minimizer decides what survives."
         )
     report_item(item_id, draft_file)
+
+
+# Same reason as `minimizer`: the reader typed this command, so it is described
+# in full — but where the channel is off, "a Stop hook compares your final
+# message against it" is not true, and only the setting block says so.
+task_report.governing_setting = help_settings.MINIMIZER
 
 
 @task_cmd.command("decline")

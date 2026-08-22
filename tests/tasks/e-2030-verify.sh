@@ -59,6 +59,8 @@
 #   B. The render mechanism — --file, the condition registry, marker-free
 #      output, table integrity.
 #   C. The retired criteria, at source and in the rendered handoff.
+#   C2. Command help — which is NOT gated, and says so with the live setting —
+#      plus the cwd resolution behind it, mirrored from the Go hook.
 #   D. Project-wide regression — build, vet, go test, Python suite, guide map.
 #
 # Output: pass/fail per check, then a summary. Exit 0 all-passed, 1 any failure,
@@ -460,6 +462,59 @@ layer_c() {
         "${rendered}" "no stray files"
 }
 
+# ─── layer C2: command help, and the resolution behind it ───────────────────
+
+layer_c2() {
+    section "C2. Command help names the switch and its live value"
+    note "and resolves it the way the Stop hook does, which is where the bug was"
+
+    # A worktree-shaped fixture whose branch config DISAGREES with its project
+    # root — the shape a self-dev branch takes when it enables the minimizer for
+    # itself, and the shape that exposed the divergence.
+    local proj="${TMP_DIR}/wt-proj"
+    local wt="${proj}/.endless/worktrees/e-9999"
+    mkdir -p "${wt}/.endless" || return 0
+    printf '{"name":"wt-proj","minimizer":{"enabled":false}}\n' > "${proj}/.endless/config.json"
+    printf '{"minimizer":{"enabled":true,"optimizer":true}}\n'  > "${wt}/.endless/config.json"
+
+    local from_wt from_root
+    from_wt=$(cd "${wt}"   && PATH="${TMP_DIR}/bin:${PATH}" "${ENDLESS_BIN}" minimizer --help 2>&1)
+    from_root=$(cd "${proj}" && PATH="${TMP_DIR}/bin:${PATH}" "${ENDLESS_BIN}" minimizer --help 2>&1)
+
+    # The help still DESCRIBES the loop wherever it is read — it is reached by
+    # typing the command, so hiding it would answer a direct question with
+    # silence. What changes is the setting reported beneath it.
+    assert_contains "gate-off: help still describes the loop" \
+        "${from_root}" "autoresearch loop"
+    assert_contains "gate-off: and says the channel is off here" \
+        "${from_root}" "minimizer.enabled    false"
+
+    # THE BUG: this used to read the project root, so a worktree that had
+    # switched the minimizer ON for itself was told it was off — while the Stop
+    # hook, walking up from cwd, held its turns against the channel.
+    assert_contains "worktree: help reports the worktree's own value" \
+        "${from_wt}" "minimizer.enabled    true"
+    assert_contains "worktree: and names the config that actually won" \
+        "${from_wt}" "worktrees/e-9999/.endless/config.json"
+
+    # Every Python emitter asks one helper, so the guide must agree with it.
+    assert_contains "worktree: the guide agrees with the hook" \
+        "$(cd "${wt}" && PATH="${TMP_DIR}/bin:${PATH}" "${ENDLESS_BIN}" guide 2>&1)" \
+        "--draft-file"
+    assert_lacks "project root: the guide agrees there too" \
+        "$(cd "${proj}" && PATH="${TMP_DIR}/bin:${PATH}" "${ENDLESS_BIN}" guide 2>&1)" \
+        "--draft-file"
+
+    # `task report --help` carries the same block: on a gate-off project its own
+    # "a Stop hook compares your final message against it" is not true.
+    assert_contains "task report --help carries the setting too" \
+        "$(cd "${proj}" && PATH="${TMP_DIR}/bin:${PATH}" "${ENDLESS_BIN}" task report --help 2>&1)" \
+        "minimizer.enabled    false"
+
+    assert_cmd "the Go/Python resolution parity tests" \
+        uv run pytest tests/test_minimizer_gate_cwd.py -q
+}
+
 # ─── layer D: project-wide regression ───────────────────────────────────────
 
 layer_d() {
@@ -493,6 +548,7 @@ main() {
     fi
     layer_b
     layer_c
+    layer_c2
     layer_d
 
     summary

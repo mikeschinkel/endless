@@ -254,6 +254,79 @@ def project_minimizer_config(project_path: Path) -> dict[str, bool]:
     return default
 
 
+def minimizer_config_declared(dir_path: Path) -> tuple[dict[str, bool], bool]:
+    """The switches declared AT dir_path, and whether it declared anything.
+
+    Python mirror of Go's `monitor.readMinimizer`. `declared` is false when the
+    file is absent, unreadable, malformed, or silent about the minimizer — which
+    is what lets a caller tell "this layer says nothing" apart from "this layer
+    says false" and fall through to the next one.
+    """
+    default = {"enabled": True, "optimizer": True}
+    try:
+        cfg = project_config_read(dir_path)
+    except (OSError, json.JSONDecodeError):
+        return default, False
+    if cfg is None:
+        return default, False
+
+    value = cfg.get("minimizer")
+    if isinstance(value, bool):
+        return {"enabled": value, "optimizer": value}, True
+    if isinstance(value, dict):
+        out = dict(default)
+        for key in ("enabled", "optimizer"):
+            if isinstance(value.get(key), bool):
+                out[key] = value[key]
+        return out, True
+    if value is not None:
+        return default, False
+
+    legacy = cfg.get("report_gate")
+    if isinstance(legacy, bool):
+        return {"enabled": legacy, "optimizer": default["optimizer"]}, True
+    return default, False
+
+
+def minimizer_config_for_cwd(
+    cwd: Path | None = None, project_root: Path | None = None,
+) -> dict[str, bool]:
+    """The switches governing a session working in `cwd` (E-2030).
+
+    Python mirror of Go's `monitor.MinimizerConfigForCwd`, and the mirror is the
+    point. `enclosing_project_root` deliberately maps a worktree back to the MAIN
+    checkout, so reading the switches from there gave a worktree the project's
+    answer while the Stop hook — which walks up from cwd — gave it the
+    worktree's. On a self-dev branch that had enabled the minimizer for itself
+    those disagreed, and the guide told the session the channel was off while the
+    hook held its turn against it. Told-iff-gated, violated from the gated side.
+
+    Precedence is nearest-wins, and only an explicit key counts: a worktree that
+    says nothing inherits the project's answer rather than resetting it to the
+    default, so deleting the key from a branch cannot silently re-enable a gate
+    the project had switched off.
+    """
+    start = Path.cwd() if cwd is None else cwd
+    if project_root is None:
+        project_root = enclosing_project_root(start)
+
+    for parent in [start] + list(start.parents):
+        cfg, declared = minimizer_config_declared(parent)
+        if declared:
+            return cfg
+        if project_root is not None and parent == project_root:
+            break
+
+    if project_root is None:
+        return {"enabled": True, "optimizer": True}
+    return minimizer_config_declared(project_root)[0]
+
+
+def report_gate_for_cwd(cwd: Path | None = None) -> bool:
+    """The enabled half of `minimizer_config_for_cwd` — what gate-side callers want."""
+    return minimizer_config_for_cwd(cwd)["enabled"]
+
+
 def project_report_gate(project_path: Path) -> bool:
     """True if the minimizer's report channel is live for this project."""
     return project_minimizer_config(project_path)["enabled"]

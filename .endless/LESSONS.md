@@ -3252,3 +3252,14 @@ creating the epic is part of the filing, not extra work.
 Check where the PRECEDENT task sits — E-1662 was already under E-1667, which
 told me instantly where its sibling belonged. A related task's parent is the
 cheapest signal available and I did not look at it until asked.
+## E-2030 — command help should name its governing setting (2026-08-21)
+
+Mike, on my proposal to leave `endless minimizer --help` ungated: the help
+should describe the command as it already does, AND mention the setting that
+governs it, AND show its current value — or say how to find it if showing it is
+not possible.
+
+The generalization: gating and disclosure are different answers. Hiding a
+description from someone who typed the command answers a direct question with
+silence. What that reader is owed is the switch, its resolved value here, and
+which file it came from.

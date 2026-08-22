@@ -5467,12 +5467,15 @@ def _report_gate_on() -> bool:
     than an opt-out. An emitter that silently dropped the instructions because
     a path lookup failed would leave sessions ungoverned in a project that
     wanted the gate — the failure direction that actually costs something.
+
+    Resolved from CWD, nearest-config-wins, because that is what the Stop hook
+    does (E-2030). This used to read `enclosing_project_root`, which maps a
+    worktree back to the main checkout — so a worktree that had switched the
+    minimizer on for itself was told the channel was off by every Python emitter
+    while the Go hook held its turns against it.
     """
     from endless import config
-    root = config.enclosing_project_root()
-    if root is None:
-        return True
-    return config.project_report_gate(root)
+    return config.report_gate_for_cwd()
 
 
 def show_handoff(item_id: int):
