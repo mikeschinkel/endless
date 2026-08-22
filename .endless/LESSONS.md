@@ -3290,3 +3290,11 @@ I described an open design problem in five clauses with no question mark and
 Mike could not follow it. A paragraph that merely gestures at a difficulty
 leaves the reader to reconstruct what is being asked. Write the numbered
 questions, then say which you think is the answer and what it costs.
+
+## End with the takeaway and the action, not the findings (E-1975)
+
+I answered three of Mike's questions with accurate facts — model assignments, a
+line count, a corrected pairing — and he had to ask what the take-away was. Facts
+are the working, not the answer. Every report should end with what follows from
+them and what will be done, and anything that should be filed should already be
+filed by the time he reads it.
