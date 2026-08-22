@@ -3184,3 +3184,16 @@ reply reading "The parser handles nested quotes correctly — it tracks depth on
 stack" failed it. I had criticised exactly this proxy in my own measurement an
 hour earlier and left it in the shipped suite. A false failure sends the next
 reader to rewrite a prompt that did its job.
+
+## Don't flag in-scope work as if it needed a defence (E-2037)
+
+CLAUDE.md said "not the real ledger" / "must reach the real ledger" where it
+meant the SQLite database — the exact conflation E-2037 existed to remove, in
+the same file whose next section calls the JSONL log the ledger. Fixing it was
+the task. I reported it anyway as a "judgment call", with the words "a
+substitution inside an existing rule" — a lawyerly hedge against CLAUDE.md's
+"do not add anything without permission", which is about adding rules, not
+about the words inside one. Mike: what did it say before? and why are you even
+telling me? Flagging ordinary in-scope work costs the reader a paragraph and
+buries the changes that genuinely need his eye. Report a diff by showing the
+before and after, or don't report it.
