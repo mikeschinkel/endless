@@ -3263,3 +3263,23 @@ The generalization: gating and disclosure are different answers. Hiding a
 description from someone who typed the command answers a direct question with
 silence. What that reader is owed is the switch, its resolved value here, and
 which file it came from.
+## Check whether the thing you are extending has been superseded (E-1975)
+
+I built the freeform $TOKEN mechanism from E-1975's analysis, written 2026-08-14.
+On 2026-08-16 Mike and another session had already concluded the whole channel
+should go: a sigil sits in the prompt, so the agent reads it and opines on it
+verbosely, which is the behaviour the minimizer exists to remove. Making the
+vocabulary freeform fixes recognition and leaves the opining untouched. That
+conversation produced E-1982, which links to E-1975 as "relates to" — I read
+E-1975's links at the start and did not open it.
+
+A task's analysis is a snapshot of the day it was written. Before implementing
+from one that is a week old, read what links to it.
+
+## Recover the record before accepting "we never wrote it down" (E-1975)
+
+Mike was certain a decision had been lost to a tmux crash. It had not: E-1982 was
+filed eight minutes after the conversation ended, and the full discussion was in
+~/.claude/projects/*/<uuid>.jsonl. Two greps found both. When someone says the
+record is missing, look — memory of what was decided is usually right and memory
+of whether it was recorded is usually wrong.
