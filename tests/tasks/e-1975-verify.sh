@@ -39,14 +39,12 @@
 # this case — an explicit --config-dir beats the main pin, which is what lets a
 # test drive the hook against the sandbox instead of the user's main database.
 #
-# Why the GATE-ON cwd is the repo root and the FIXTURE is gate-off, the reverse
-# of E-1953: this repo now ships `"minimizer": {"enabled": true}`. E-1953's
-# exemption — a session tuning the prompt must not be governed by the prompt it
-# edits — lapsed when tuning became automated, so the checkout that hosts the
-# loop is the one place it has to run. The throwaway gate-OFF directory under
-# the gitignored .endless/tmp/ proves the switch by exercising the REAL
-# nearest-config resolution rather than by editing the repo's config and hoping
-# the restore runs.
+# Why BOTH cwds are synthetic. E-1975 landed with this project's switch ON and
+# E-2042 reversed it: the minimizer is held off here until the pieces that make
+# it safe to leave enabled exist. So the suite builds a gate-ON and a gate-OFF
+# directory under the gitignored .endless/tmp/ and drives the hook from each,
+# which exercises the REAL nearest-config resolution and keeps the assertions
+# independent of whichever way the repo's own switch is currently set.
 #
 # Model: tests/tasks/e-1953-verify.sh.
 
@@ -73,6 +71,7 @@ TEST_UUID="e1975e1975-0000-4000-8000-000000000975"
 SANDBOX_CFG=""
 SESSION_EID=""
 OFF_DIR=""
+ON_DIR=""
 TMP_DIR=""
 REPO_ROOT=""
 FIXTURE="tests/fixtures/report-draft.md"
@@ -194,7 +193,7 @@ stop_hook() {
 prompt_hook() {
     local prompt_json="$1"
     printf '{"session_id":"%s","cwd":"%s","hook_event_name":"UserPromptSubmit","transcript_path":"","prompt":%s}' \
-        "${TEST_UUID}" "${REPO_ROOT}" "${prompt_json}" \
+        "${TEST_UUID}" "${ON_DIR}" "${prompt_json}" \
         | hook_env hook claude 2>/dev/null
 }
 
@@ -325,7 +324,7 @@ test_hook_is_live() {
 
     reset_turn
     local resp
-    resp=$(stop_hook "${REPO_ROOT}" '"a reply that never went through the minimizer"')
+    resp=$(stop_hook "${ON_DIR}" '"a reply that never went through the minimizer"')
     if [[ "${resp}" == *'"decision":"block"'* ]]; then
         report_pass "the hook fires and the harness is recognized"
         return
@@ -654,13 +653,13 @@ test_pairing() {
     for text in "COMBINED BLOCK" "reply A" "reply B"; do
         arm_json '{"emitted":"COMBINED BLOCK","variants":[{"sanctioned":"reply A","slot":"A"},{"sanctioned":"reply B","slot":"B"}]}' >/dev/null
         assert_eq "the gate accepts \"${text}\"" "" \
-            "$(stop_hook "${REPO_ROOT}" "\"${text}\"")"
+            "$(stop_hook "${ON_DIR}" "\"${text}\"")"
     done
 
     # And still catches the habit it exists to catch.
     arm_json '{"emitted":"COMBINED BLOCK","variants":[{"sanctioned":"reply A","slot":"A"},{"sanctioned":"reply B","slot":"B"}]}' >/dev/null
     local resp
-    resp=$(stop_hook "${REPO_ROOT}" '"reply B\n\nI also refactored three unrelated files."')
+    resp=$(stop_hook "${ON_DIR}" '"reply B\n\nI also refactored three unrelated files."')
     assert_str_contains "an embellished variant is still blocked" '"decision":"block"' "${resp}"
     # The bounce must quantify the SMALLEST divergence: telling an agent that
     # appended one line to the short option that it added forty teaches the
@@ -937,6 +936,51 @@ print(h)
     assert_str_contains "and marks which one is in force" "* = champion" "${variants}"
 }
 
+# ─── Part 9b: the help explains itself ──────────────────────────────────────
+
+# The help IS the product for these commands — nobody reads the source to find
+# out what `reseed` does. Every assertion here exists because a specific
+# sentence was unreadable and Mike said so.
+test_help_is_readable() {
+    section "Part 9b — the help answers the questions it raises"
+
+    local grp
+    grp=$(env COLUMNS=100 uv run endless --db sandbox minimizer --help 2>&1)
+
+    # It defines its own vocabulary. It used to say "a background job judges
+    # every reported turn and periodically replays a challenger prompt against
+    # the champion over a frozen corpus, promoting by pointer when it wins",
+    # which assumes the entire design it is describing.
+    assert_str_contains "the group help says what the instruction IS" \
+        "saying what to cut" "${grp}"
+    assert_str_contains "and defines 'variant' before other commands print it" \
+        "variant " "${grp}"
+    assert_str_contains "and defines 'champion'" "champion " "${grp}"
+    assert_str_not_contains "without leaning on 'frozen corpus'" \
+        "frozen corpus" "${grp}"
+    assert_str_not_contains "or 'promoting by pointer'" \
+        "promoting by pointer" "${grp}"
+
+    # E-2030 added the governing-setting paragraph. A rebase dropped it once;
+    # this keeps it from being dropped silently again.
+    assert_str_contains "E-2030's per-project switch paragraph survives" \
+        "per-project switch" "${grp}"
+
+    local rs
+    rs=$(env COLUMNS=100 uv run endless --db sandbox minimizer reseed --help 2>&1)
+
+    # It led with what does NOT change the prompt and never said what does,
+    # which leaves the reader where they started.
+    assert_str_contains "reseed help lists what DOES change the prompt" \
+        "Four things change it" "${rs}"
+    assert_str_contains "naming the background job as the usual one" \
+        "usual way" "${rs}"
+    assert_str_contains "naming rollback" "rollback" "${rs}"
+    assert_str_contains "and a fresh install" "fresh install" "${rs}"
+    assert_str_contains "and only then rules out an upgrade" \
+        "not on that list" "${rs}"
+}
+
 # ─── Part 10: the switches and the job ──────────────────────────────────────
 
 test_switches_and_job() {
@@ -945,8 +989,12 @@ test_switches_and_job() {
     # This repo now ships the gate ON. E-1953's exemption lapsed when tuning
     # became automated: the checkout that hosts the loop is the one place it has
     # to run.
-    assert_file_contains "this repo ships the minimizer enabled" \
-        '"enabled": true' .endless/config.json
+    # E-2042 holds this project's switch OFF until the pieces that make the
+    # minimizer safe to leave on exist. E-1975 landed it ON and that was
+    # reversed; the suite tracks the decision rather than the branch that made
+    # it, so both fixtures below are synthetic and neither is the repo.
+    assert_file_contains "this repo ships the minimizer disabled" \
+        '"enabled": false' .endless/config.json
     assert_file_not_contains "and no longer carries the retired scalar" \
         "report_gate" .endless/config.json
 
@@ -962,9 +1010,9 @@ test_switches_and_job() {
     # The same payload from the gate-ON repo root IS blocked — same session,
     # same message, only cwd differs, which isolates the switch as the cause.
     reset_turn
-    assert_str_contains "the same turn from the gate-on root is blocked" \
+    assert_str_contains "the same turn from a gate-on cwd is blocked" \
         '"decision":"block"' \
-        "$(stop_hook "${REPO_ROOT}" '"A long answer that never went through the minimizer."')"
+        "$(stop_hook "${ON_DIR}" '"A long answer that never went through the minimizer."')"
 
     # The old scalar still answers, or the rename would silently re-enable a
     # gate a project had switched off — the one migration failure the user
@@ -1028,14 +1076,18 @@ main() {
     # repo so project resolution still finds this project.
     TMP_DIR="${REPO_ROOT}/.endless/tmp/e-1975"
     OFF_DIR="${TMP_DIR}/gate-off"
+    ON_DIR="${TMP_DIR}/gate-on"
     trap cleanup EXIT
     mkdir -p "${OFF_DIR}/.endless"
     printf '{"minimizer": {"enabled": false}}\n' > "${OFF_DIR}/.endless/config.json"
+    mkdir -p "${ON_DIR}/.endless"
+    printf '{"minimizer": {"enabled": true}}\n' > "${ON_DIR}/.endless/config.json"
 
     printf '%sE-1975 verification%s\n' "${BOLD}" "${RESET}"
     printf '%s\n' "${UNDERLINE}"
     printf '  cwd:      %s\n' "${REPO_ROOT}"
     printf '  db:       sandbox (%s)\n' "${SANDBOX_CFG}"
+    printf '  gate on:  %s\n' "${ON_DIR}"
     printf '  gate off: %s\n' "${OFF_DIR}"
 
     test_build_and_suites
@@ -1060,6 +1112,7 @@ main() {
     test_session_turn
     test_judge
     test_promotion
+    test_help_is_readable
     test_switches_and_job
 
     summary
