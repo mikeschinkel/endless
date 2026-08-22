@@ -3283,3 +3283,10 @@ filed eight minutes after the conversation ended, and the full discussion was in
 ~/.claude/projects/*/<uuid>.jsonl. Two greps found both. When someone says the
 record is missing, look — memory of what was decided is usually right and memory
 of whether it was recorded is usually wrong.
+
+## If it is a question, write it as a question (E-1975)
+
+I described an open design problem in five clauses with no question mark and
+Mike could not follow it. A paragraph that merely gestures at a difficulty
+leaves the reader to reconstruct what is being asked. Write the numbered
+questions, then say which you think is the answer and what it costs.
