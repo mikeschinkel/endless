@@ -3355,3 +3355,7 @@ gets SMALLER by deciding.
 Also: I proposed a hand-ordered table without checking `~/Projects/go-pkgs/`.
 `dtx.OrderedMap` was already there, and "Reuse before Creation" names that
 directory explicitly.
+## 2026-08-23 — Verify the minimizer switch before using task report
+
+Mike disabled the minimizer near-term, but I kept routing replies through `endless task report` because an old hook message earlier in the session said it was required. Hook context from weeks ago does not survive config changes: check the `minimizer` value in `.endless/config.json` (the per-project switch) each time before assuming the Stop hook enforces it, and stop using the command the moment the switch is off.
+
