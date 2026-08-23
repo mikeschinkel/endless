@@ -3359,3 +3359,11 @@ directory explicitly.
 
 Mike disabled the minimizer near-term, but I kept routing replies through `endless task report` because an old hook message earlier in the session said it was required. Hook context from weeks ago does not survive config changes: check the `minimizer` value in `.endless/config.json` (the per-project switch) each time before assuming the Stop hook enforces it, and stop using the command the moment the switch is off.
 
+## 2026-08-23 — Check the [idle] marker before assuming another session is active
+
+I told Mike I would not edit E-2048 because 'that session owns the task text and my rewriting it could clobber their in-flight prep.' The task's own metadata said touched_by ... [idle] — no session was active. Read the liveness markers endless already prints instead of inventing coordination constraints from conversational phrasing ('another session is helping me'), and when the data is one query away, run the query rather than imagine the answer. Fabricated caution burdens Mike exactly like fabricated facts.
+
+## 2026-08-23 — 'route/routing' is a banned verb in this project
+
+It means at least three different things (which DATABASE, which FILES/commits, which BINARY — E-2048's axes) and forces mental translation. Name the mechanism directly in titles and prose: 'which ledger a write lands in', 'which DB a command reads', 'which binary runs'. My own E-1733 title used it and had to be retitled.
+
