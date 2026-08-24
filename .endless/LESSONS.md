@@ -3404,3 +3404,15 @@ I filed E-2049 with a solution in its title (write-lease) and later defended it 
 
 I told Mike E-1736 was 'unclaimed' from six-week-old context; it had been assumed since July 9. Task state mutates between turns — other sessions land, spawn, and re-triage constantly. Any sentence that states a task's status must be preceded by a live 'endless task show' in the same turn.
 
+
+## `tests/tasks/*-verify.sh` are task-scoped, not a regression suite (E-2051)
+
+I ran sibling verify scripts (e-1858, e-1870) as part of my project-wide
+regression sweep, found e-1870's happy-path numbering assertion failing on
+main, and filed it as a defect (E-2053, now declined). Mike: verify.sh scripts
+are NOT intended to be valid after the task lands.
+
+Each one proves one task's change at hand-off time. Once landed, the code and
+docs it pins move on and the script decays by design. The regression suite is
+`just test` / `just test-go` / `just build` / `just guide-check`. Run only my
+own task's verify script; a stale sibling is expected, not a finding.
