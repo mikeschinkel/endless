@@ -65,7 +65,7 @@ def test_nonzero_exit_propagates(monkeypatch):
 
 def test_none_id_resolves_active_task(monkeypatch):
     calls = _stub_run(monkeypatch, returncode=0)
-    monkeypatch.setattr(verify_cmd, "_current_session_active_task_id", lambda: 1758)
+    monkeypatch.setattr(verify_cmd, "_current_session_task_id", lambda: 1758)
     with pytest.raises(SystemExit):
         verify_cmd.run_verify(None, keep=False)
     assert calls == [["endless-go", "verify", "E-1758"]]
@@ -73,6 +73,6 @@ def test_none_id_resolves_active_task(monkeypatch):
 
 def test_none_id_no_active_task_raises(monkeypatch):
     _stub_run(monkeypatch)
-    monkeypatch.setattr(verify_cmd, "_current_session_active_task_id", lambda: None)
+    monkeypatch.setattr(verify_cmd, "_current_session_task_id", lambda: None)
     with pytest.raises(click.ClickException):
         verify_cmd.run_verify(None, keep=False)

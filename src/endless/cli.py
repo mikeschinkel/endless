@@ -2683,7 +2683,7 @@ def task_bind(item_id):
     """Bind this session to a task for status-bar display only.
 
     Unlike `claim`, `bind` does not change the task's status or create
-    a worktree — it just sets sessions.active_task_id so the second
+    a worktree — it just sets sessions.task_id so the second
     tmux status row shows this task. Use when the task is already in
     `assumed` / `confirmed` / `unverified` and you want the bar to keep
     showing it as context. Symmetric counterpart to `release`.

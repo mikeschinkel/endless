@@ -345,13 +345,20 @@ endless internal template render handoff/claim < vars.json
 {{end}}
 ### A session owns one task for its lifetime
 
-`sessions.active_task_id` is **write-once**: set when the session claims, then
-never cleared and never re-pointed. Work on a different task is a different
-session. The column is not bookkeeping — it is the only route back to a
-session's transcript, which is where the reasoning behind the work lives.
+`sessions.task_id` is **write-once**: set when the session claims, then never
+cleared and never re-pointed. Work on a different task is a different session.
+The column is not bookkeeping — it is the only route back to a session's
+transcript, which is where the reasoning behind the work lives.
 `endless session goto E-<id> --resume` resolves through it, and a session whose
 pointer was cleared reports as one that *never claimed a task*: the transcript
 survives, but nothing can find it.
+
+The rule is enforced in the database, not only in the verbs: a
+`BEFORE UPDATE OF task_id` trigger aborts any write that changes an already-set
+value, including a clear. The verbs refuse first and explain themselves, because
+a SQLite abort is not an answer you can act on — but the trigger is what catches
+a writer nobody enumerated, which is how the invariant was broken before it
+existed.
 
 Three consequences you will meet:
 

@@ -551,9 +551,9 @@ func handleUserPromptSubmit(projectID int64, payload claudePayload, sigilNotice 
 		}
 	} else {
 		if session, err := monitor.GetActiveSession(payload.SessionID); err == nil &&
-			session != nil && session.ActiveTaskID != nil {
-			if h, err := monitor.GetTaskHeadline(*session.ActiveTaskID); err == nil && h.Title != "" {
-				parts = append(parts, h.Render(*session.ActiveTaskID))
+			session != nil && session.TaskID != nil {
+			if h, err := monitor.GetTaskHeadline(*session.TaskID); err == nil && h.Title != "" {
+				parts = append(parts, h.Render(*session.TaskID))
 			}
 		}
 	}
@@ -967,7 +967,7 @@ func blockToolUse(message string) {
 // is not an action: it is declining to clear the gate, which leaves the session
 // blocked until the epic leaves `revisit` and the gate auto-clears. The verb
 // only ever existed to carry an unbind that ED-1560's write-once
-// `active_task_id` forbids.
+// `task_id` forbids.
 var revisitClearVerbRe = regexp.MustCompile(`(?i)\bendless\s+task\s+continue\b`)
 
 // enforceRevisitGate intercepts a session whose claimed task descends from an
@@ -1001,10 +1001,10 @@ func revisitGateDecision(payload claudePayload) (instruction string, block bool)
 	}
 
 	session, err := monitor.GetActiveSession(payload.SessionID)
-	if err != nil || session == nil || session.ActiveTaskID == nil {
+	if err != nil || session == nil || session.TaskID == nil {
 		return "", false
 	}
-	taskID := *session.ActiveTaskID
+	taskID := *session.TaskID
 
 	// Already gated: re-check the epic's status before blocking again, so a gate
 	// auto-clears the moment the epic leaves revisit.
@@ -1478,14 +1478,14 @@ func trySpawnBind(projectID int64, payload claudePayload) bool {
 func logSessionBind(sessionID string, snap monitor.SessionSnapshot, taskID int64, reason monitor.SessionLogReason, caller string) {
 	newTaskID := taskID
 	monitor.LogSessionTxn(monitor.SessionTxn{
-		SessionGUID:     sessionID,
-		ShortID:         snap.ShortID,
-		OldState:        snap.State,
-		NewState:        "working",
-		OldActiveTaskID: snap.ActiveTaskID,
-		NewActiveTaskID: &newTaskID,
-		Reason:          reason,
-		Caller:          caller,
+		SessionGUID: sessionID,
+		ShortID:     snap.ShortID,
+		OldState:    snap.State,
+		NewState:    "working",
+		OldTaskID:   snap.TaskID,
+		NewTaskID:   &newTaskID,
+		Reason:      reason,
+		Caller:      caller,
 	})
 }
 
@@ -1495,12 +1495,12 @@ func logSessionBind(sessionID string, snap monitor.SessionSnapshot, taskID int64
 // @endless_spawned_by while its @endless_task_id read races to empty (or
 // BindSessionToTask errors), leaving trySpawnBind a no-op. payload.CWD is the
 // worktree for a spawned worker, so this fallback binds reliably and closes the
-// gap where active_task_id stayed NULL and the status line showed "claim a task".
+// gap where task_id stayed NULL and the status line showed "claim a task".
 //
 // Skipped for Agent-tool subagents — they share the parent's cwd but represent
 // tool use, not user claim intent; binding them would create a phantom co-owner.
 // Skipped for background agents (E-1568): their dispatch row already carries
-// active_task_id/active_epic_id, and the tmux-oriented bind is meaningless for a
+// task_id/epic_id, and the tmux-oriented bind is meaningless for a
 // headless agent — decorateBgSession is their path. Bind only; task status is
 // unchanged.
 func maybeCwdBind(projectID int64, payload claudePayload, spawnBound bool) {
@@ -1527,16 +1527,16 @@ func autoBindFromCwd(projectID int64, payload claudePayload) {
 		return
 	}
 	// E-1856: the auto-bind is a fallback to fill an UNBOUND session's
-	// active_task_id from its cwd worktree — never a re-pointer. A resume
+	// task_id from its cwd worktree — never a re-pointer. A resume
 	// (`claude --resume`), /clear, or /compact fires SessionStart with the
 	// session's existing binding intact; when the resumed process's cwd is a
-	// DIFFERENT task's worktree, overwriting active_task_id would silently steal
+	// DIFFERENT task's worktree, overwriting task_id would silently steal
 	// the session away from the task it belongs to, leaving that task
 	// unreachable via `session goto`/`session resume`. Only bind when the
 	// session has no active task yet (the E-1291/E-1700 fallback case) or
 	// already points at this worktree's task (idempotent).
 	if session, err := monitor.GetActiveSession(payload.SessionID); err == nil &&
-		session != nil && session.ActiveTaskID != nil && *session.ActiveTaskID != taskID {
+		session != nil && session.TaskID != nil && *session.TaskID != taskID {
 		return
 	}
 	// E-1856: never bind into a worktree a LIVE sibling session already owns.
@@ -1544,7 +1544,7 @@ func autoBindFromCwd(projectID int64, payload claudePayload) {
 	// SessionStart, but the auto-bind must be correct in isolation rather than
 	// trusting that call order — otherwise any path that reaches it (or a future
 	// re-order) would silently make the incoming session a phantom co-owner of
-	// the task, stealing its active_task_id pointer.
+	// the task, stealing its task_id pointer.
 	if worktreeOwnedByLiveOther(projectRoot, payload.CWD, payload.SessionID) {
 		return
 	}
@@ -1608,8 +1608,8 @@ func resolveCwdTaskID(projectRoot, cwd string) int64 {
 func resolveParentTaskID(sessionID string) *int64 {
 	// Check session's active goal first
 	session, err := monitor.GetActiveSession(sessionID)
-	if err == nil && session != nil && session.ActiveTaskID != nil {
-		return session.ActiveTaskID
+	if err == nil && session != nil && session.TaskID != nil {
+		return session.TaskID
 	}
 	// Fall back to tmux window option
 	if id := tmuxTaskID(); id > 0 {
@@ -1819,14 +1819,14 @@ func enforceWorktreeGate(projectID int64, payload claudePayload) {
 			return
 		}
 		var redirectHint string
-		if session != nil && session.ActiveTaskID != nil {
-			if wp, _ := monitor.WorktreePathForTask(projectID, *session.ActiveTaskID); wp != "" {
+		if session != nil && session.TaskID != nil {
+			if wp, _ := monitor.WorktreePathForTask(projectID, *session.TaskID); wp != "" {
 				redirectHint = fmt.Sprintf(
 					"\n\nYour active task E-%d has a worktree at:\n  %s\n\n"+
 						"Run `cd %s` in a Bash call (the new cwd persists for\n"+
 						"subsequent Bash calls), and use absolute paths under\n"+
 						"that directory for Read/Write/Edit.",
-					*session.ActiveTaskID, wp, wp)
+					*session.TaskID, wp, wp)
 			}
 		}
 		blockToolUse("Edits in main are highly discouraged when using endless.\n\n" +
@@ -1864,17 +1864,17 @@ func enforceWorktreeGate(projectID int64, payload claudePayload) {
 	// (b) Task mismatch: worktree's identity (from path convention,
 	// E-1301) != session's active task.
 	worktreeTaskID := monitor.TaskIDFromWorktreePath(worktreePath)
-	if worktreeTaskID != "" && session != nil && session.ActiveTaskID != nil {
+	if worktreeTaskID != "" && session != nil && session.TaskID != nil {
 		worktreeTaskNum, parseErr := parseEndlessTaskID(worktreeTaskID)
-		if parseErr == nil && worktreeTaskNum != *session.ActiveTaskID {
+		if parseErr == nil && worktreeTaskNum != *session.TaskID {
 			blockToolUse(fmt.Sprintf(
 				"This worktree is bound to %s, but your active task is E-%d.\n\n"+
 					"Either switch tasks (no cd needed):\n"+
 					"  endless task claim E-%d\n\n"+
 					"Or move to the worktree for your active task:\n"+
 					"  endless worktree for-task E-%d",
-				worktreeTaskID, *session.ActiveTaskID,
-				worktreeTaskNum, *session.ActiveTaskID))
+				worktreeTaskID, *session.TaskID,
+				worktreeTaskNum, *session.TaskID))
 		}
 	}
 
@@ -1882,14 +1882,14 @@ func enforceWorktreeGate(projectID int64, payload claudePayload) {
 	// not in it. (e.g. `endless task claim E-BBB` ran from inside a
 	// session sitting in worktree A.) Layer F's redirection message
 	// will guide Claude proactively; here we just refuse.
-	if session != nil && session.ActiveTaskID != nil {
-		activeWP, _ := monitor.WorktreePathForTask(projectID, *session.ActiveTaskID)
+	if session != nil && session.TaskID != nil {
+		activeWP, _ := monitor.WorktreePathForTask(projectID, *session.TaskID)
 		if activeWP != "" && filepath.Clean(activeWP) != filepath.Clean(worktreePath) {
 			blockToolUse(fmt.Sprintf(
 				"Your active task E-%d is bound to a different worktree:\n  %s\n\n"+
 					"Use absolute paths under that directory for Read/Write/Edit,\n"+
 					"and run `cd %s` in a Bash call for shell commands.",
-				*session.ActiveTaskID, activeWP, activeWP))
+				*session.TaskID, activeWP, activeWP))
 		}
 	}
 }
@@ -1911,15 +1911,15 @@ func enforceWorktreeGate(projectID int64, payload claudePayload) {
 // owns.
 func enforceClaimedCwd(projectID int64, payload claudePayload) {
 	session, _ := monitor.GetActiveSession(payload.SessionID)
-	if session == nil || session.ActiveTaskID == nil {
+	if session == nil || session.TaskID == nil {
 		return
 	}
-	status, _ := monitor.GetTaskStatus(*session.ActiveTaskID)
+	status, _ := monitor.GetTaskStatus(*session.TaskID)
 	if status == "" || monitor.IsTerminalTaskStatus(status) {
 		// Not actively worked (e.g. display-only bind of a done task) — ignore.
 		return
 	}
-	worktreePath, _ := monitor.WorktreePathForTask(projectID, *session.ActiveTaskID)
+	worktreePath, _ := monitor.WorktreePathForTask(projectID, *session.TaskID)
 	if worktreePath == "" {
 		// No worktree to anchor cwd to (e.g. a not-yet-claimed task).
 		return
@@ -1933,7 +1933,7 @@ func enforceClaimedCwd(projectID int64, payload claudePayload) {
 		// cwd is already the worktree (or a descendant) — invariant holds.
 		return
 	}
-	blockToolUse(cdRedirect(*session.ActiveTaskID, worktreePath, payload.CWD))
+	blockToolUse(cdRedirect(*session.TaskID, worktreePath, payload.CWD))
 }
 
 // cdRedirect builds the E-1586 block message: cwd has drifted out of the

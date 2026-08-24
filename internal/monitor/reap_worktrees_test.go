@@ -393,11 +393,11 @@ func TestMaybeReapWorktree_UnmergedCommitsProtect(t *testing.T) {
 }
 
 // TestMaybeReapWorktree_ActiveSessionProtects: a non-ended session
-// pointing at the task via active_task_id blocks reap.
+// pointing at the task via task_id blocks reap.
 func TestMaybeReapWorktree_ActiveSessionProtects(t *testing.T) {
 	f := newReaperFixture(t, time.Now().Add(-30*24*time.Hour))
 	if _, err := f.db.Exec(
-		`INSERT INTO sessions (id, session_id, project_id, state, active_task_id)
+		`INSERT INTO sessions (id, session_id, project_id, state, task_id)
 		 VALUES (9, 'sess-9', 1, 'working', 42)`,
 	); err != nil {
 		t.Fatalf("seed active session: %v", err)
@@ -418,7 +418,7 @@ func TestMaybeReapWorktree_ActiveSessionProtects(t *testing.T) {
 func TestMaybeReapWorktree_EndedSessionDoesNotProtect(t *testing.T) {
 	f := newReaperFixture(t, time.Now().Add(-30*24*time.Hour))
 	if _, err := f.db.Exec(
-		`INSERT INTO sessions (id, session_id, project_id, state, active_task_id)
+		`INSERT INTO sessions (id, session_id, project_id, state, task_id)
 		 VALUES (9, 'sess-9', 1, 'ended', 42)`,
 	); err != nil {
 		t.Fatalf("seed ended session: %v", err)

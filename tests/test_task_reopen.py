@@ -28,13 +28,13 @@ def _insert_session(
     session_id: str,
     project_id: int,
     state: str = "working",
-    active_task_id: int | None = None,
+    task_id: int | None = None,
 ):
     db.execute(
         "INSERT INTO sessions (id, session_id, project_id, platform, state, "
-        "started_at, active_task_id) "
+        "started_at, task_id) "
         "VALUES (?, ?, ?, 'claude', ?, '2026-06-11T00:00:00', ?)",
-        (pk, session_id, project_id, state, active_task_id),
+        (pk, session_id, project_id, state, task_id),
     )
 
 
@@ -192,7 +192,7 @@ def test_reopen_keeps_the_session_binding(project_at_cwd):
     """E-1968: reopen changes task state and nothing else.
 
     It used to emit `task.released` for whichever session held the task,
-    clearing `active_task_id` with no mention in its output and a --help line
+    clearing `task_id` with no mention in its output and a --help line
     ("no session binding") that read as "does not create one". That pointer is
     the only route back to the session's transcript — E-1917's was lost this
     way a week after landing, after which both resume paths reported the
@@ -207,15 +207,15 @@ def test_reopen_keeps_the_session_binding(project_at_cwd):
     _insert_session(
         pk=400, session_id="s-400",
         project_id=project_at_cwd["project_id"],
-        active_task_id=1200,
+        task_id=1200,
     )
 
     reopen_item(1200)
 
     row = db.query(
-        "SELECT active_task_id FROM sessions WHERE id = 400",
+        "SELECT task_id FROM sessions WHERE id = 400",
     )[0]
-    assert row["active_task_id"] == 1200
+    assert row["task_id"] == 1200
     assert db.query(
         "SELECT status FROM tasks WHERE id = 1200"
     )[0]["status"] == "revisit"

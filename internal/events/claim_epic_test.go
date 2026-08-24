@@ -1,7 +1,7 @@
-// Tests for active_epic_id population on interactive task claim/release
-// (E-1624). execTaskClaimed must set sessions.active_epic_id to the nearest
+// Tests for epic_id population on interactive task claim/release
+// (E-1624). execTaskClaimed must set sessions.epic_id to the nearest
 // type='epic' ancestor of the claimed task (the task itself if it is an epic,
-// NULL if none), and execTaskReleased must clear it alongside active_task_id.
+// NULL if none), and execTaskReleased must clear it alongside task_id.
 package events
 
 import (
@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 
 	_ "modernc.org/sqlite"
@@ -92,11 +93,11 @@ func releaseEvent(t *testing.T, taskID, sessionID int64) *Event {
 	}
 }
 
-// sessionActive reads a session's active_task_id and active_epic_id.
+// sessionActive reads a session's task_id and epic_id.
 func sessionActive(t *testing.T, db *sql.DB, sessionID int64) (taskID, epicID sql.NullInt64) {
 	t.Helper()
 	if err := db.QueryRow(
-		"SELECT active_task_id, active_epic_id FROM sessions WHERE id = ?", sessionID,
+		"SELECT task_id, epic_id FROM sessions WHERE id = ?", sessionID,
 	).Scan(&taskID, &epicID); err != nil {
 		t.Fatalf("read session %d: %v", sessionID, err)
 	}
@@ -104,7 +105,7 @@ func sessionActive(t *testing.T, db *sql.DB, sessionID int64) (taskID, epicID sq
 }
 
 // TestClaim_ChildOfEpicSetsEpicID: claiming a child of an epic sets
-// active_epic_id to the epic and active_task_id to the child.
+// epic_id to the epic and task_id to the child.
 func TestClaim_ChildOfEpicSetsEpicID(t *testing.T) {
 	db := newClaimTestDB(t)
 	seedClaimSession(t, db, 42)
@@ -117,10 +118,10 @@ func TestClaim_ChildOfEpicSetsEpicID(t *testing.T) {
 
 	taskID, epicID := sessionActive(t, db, 42)
 	if !taskID.Valid || taskID.Int64 != 100 {
-		t.Errorf("active_task_id = %v, want 100", taskID)
+		t.Errorf("task_id = %v, want 100", taskID)
 	}
 	if !epicID.Valid || epicID.Int64 != 1 {
-		t.Errorf("active_epic_id = %v, want 1 (epic ancestor)", epicID)
+		t.Errorf("epic_id = %v, want 1 (epic ancestor)", epicID)
 	}
 }
 
@@ -139,12 +140,12 @@ func TestClaim_NestedChildResolvesNearestEpic(t *testing.T) {
 
 	_, epicID := sessionActive(t, db, 42)
 	if !epicID.Valid || epicID.Int64 != 2 {
-		t.Errorf("active_epic_id = %v, want 2 (nearest epic ancestor)", epicID)
+		t.Errorf("epic_id = %v, want 2 (nearest epic ancestor)", epicID)
 	}
 }
 
 // TestClaim_StandaloneTaskClearsEpicID: claiming a task with no epic ancestor
-// leaves active_epic_id NULL.
+// leaves epic_id NULL.
 func TestClaim_StandaloneTaskNullEpicID(t *testing.T) {
 	db := newClaimTestDB(t)
 	seedClaimSession(t, db, 42)
@@ -156,15 +157,15 @@ func TestClaim_StandaloneTaskNullEpicID(t *testing.T) {
 
 	taskID, epicID := sessionActive(t, db, 42)
 	if !taskID.Valid || taskID.Int64 != 100 {
-		t.Errorf("active_task_id = %v, want 100", taskID)
+		t.Errorf("task_id = %v, want 100", taskID)
 	}
 	if epicID.Valid {
-		t.Errorf("active_epic_id = %v, want NULL (no epic ancestor)", epicID)
+		t.Errorf("epic_id = %v, want NULL (no epic ancestor)", epicID)
 	}
 }
 
 // TestClaim_EpicDirectlyResolvesToSelf: claiming an epic directly sets
-// active_epic_id to the epic's own id (depth-0 inclusion).
+// epic_id to the epic's own id (depth-0 inclusion).
 func TestClaim_EpicDirectlyResolvesToSelf(t *testing.T) {
 	db := newClaimTestDB(t)
 	seedClaimSession(t, db, 42)
@@ -176,16 +177,27 @@ func TestClaim_EpicDirectlyResolvesToSelf(t *testing.T) {
 
 	taskID, epicID := sessionActive(t, db, 42)
 	if !taskID.Valid || taskID.Int64 != 1 {
-		t.Errorf("active_task_id = %v, want 1", taskID)
+		t.Errorf("task_id = %v, want 1", taskID)
 	}
 	if !epicID.Valid || epicID.Int64 != 1 {
-		t.Errorf("active_epic_id = %v, want 1 (epic resolves to self)", epicID)
+		t.Errorf("epic_id = %v, want 1 (epic resolves to self)", epicID)
 	}
 }
 
-// TestClaim_ClearsStaleEpicFromPriorClaim: a second claim of a standalone task
-// clears the active_epic_id left by a prior epic-descendant claim.
-func TestClaim_ClearsStaleEpicFromPriorClaim(t *testing.T) {
+// TestClaim_RefusesRepointingABoundSession replaces the former
+// TestClaim_ClearsStaleEpicFromPriorClaim.
+//
+// That test claimed an epic child and then a standalone task on the SAME
+// session, to prove the second claim cleared the stale epic_id. Under ED-1560
+// (enforced by E-1969's write-once trigger) a session never holds a second task,
+// so the state it described is unreachable and the clearing it pinned can never
+// run. What replaces it is the refusal itself: the second claim aborts, and
+// BOTH columns keep the first claim's values — a half-applied re-claim that left
+// the task behind but moved the epic would be worse than either outcome.
+//
+// The "standalone task leaves epic_id NULL" half is still covered, on a fresh
+// session, by TestClaim_StandaloneTaskLeavesEpicNull above.
+func TestClaim_RefusesRepointingABoundSession(t *testing.T) {
 	db := newClaimTestDB(t)
 	seedClaimSession(t, db, 42)
 	seedTask(t, db, 1, nil, int(tasktype.TaskTypeEpic), "underway")
@@ -196,19 +208,49 @@ func TestClaim_ClearsStaleEpicFromPriorClaim(t *testing.T) {
 		t.Fatalf("claim epic child: %v", err)
 	}
 	if _, epicID := sessionActive(t, db, 42); !epicID.Valid || epicID.Int64 != 1 {
-		t.Fatalf("setup: active_epic_id = %v, want 1", epicID)
+		t.Fatalf("setup: epic_id = %v, want 1", epicID)
 	}
 
-	// Claim a standalone task — the stale epic id must be cleared.
-	if _, err := execTaskClaimed(db, claimEvent(t, 200, 42)); err != nil {
-		t.Fatalf("claim standalone: %v", err)
+	_, err := execTaskClaimed(db, claimEvent(t, 200, 42))
+	if err == nil {
+		t.Fatal("claiming a second task succeeded, want write-once abort")
 	}
+	if !strings.Contains(err.Error(), "write-once") {
+		t.Errorf("error = %v, want it to name the write-once constraint", err)
+	}
+
 	taskID, epicID := sessionActive(t, db, 42)
-	if !taskID.Valid || taskID.Int64 != 200 {
-		t.Errorf("active_task_id = %v, want 200", taskID)
+	if !taskID.Valid || taskID.Int64 != 100 {
+		t.Errorf("task_id = %v, want 100 (refused claim must not move it)", taskID)
 	}
-	if epicID.Valid {
-		t.Errorf("active_epic_id = %v, want NULL after re-claim of standalone", epicID)
+	if !epicID.Valid || epicID.Int64 != 1 {
+		t.Errorf("epic_id = %v, want 1 (refused claim must not move it either)", epicID)
+	}
+}
+
+// TestClaim_ReaffirmingTheSameTaskIsAllowed: write-once forbids a CHANGE, not a
+// repeat. The claim executor is idempotent — a re-emitted task.claimed, or the
+// hook's defense-in-depth re-bind, names the value already there and passes the
+// trigger's `NEW.task_id IS NOT OLD.task_id` test.
+func TestClaim_ReaffirmingTheSameTaskIsAllowed(t *testing.T) {
+	db := newClaimTestDB(t)
+	seedClaimSession(t, db, 42)
+	seedTask(t, db, 1, nil, int(tasktype.TaskTypeEpic), "underway")
+	seedTask(t, db, 100, ptr(1), int(tasktype.TaskTypeTask), "ready")
+
+	if _, err := execTaskClaimed(db, claimEvent(t, 100, 42)); err != nil {
+		t.Fatalf("claim: %v", err)
+	}
+	if _, err := execTaskClaimed(db, claimEvent(t, 100, 42)); err != nil {
+		t.Fatalf("re-claim of the same task: %v", err)
+	}
+
+	taskID, epicID := sessionActive(t, db, 42)
+	if !taskID.Valid || taskID.Int64 != 100 {
+		t.Errorf("task_id = %v, want 100", taskID)
+	}
+	if !epicID.Valid || epicID.Int64 != 1 {
+		t.Errorf("epic_id = %v, want 1", epicID)
 	}
 }
 
@@ -240,7 +282,7 @@ func TestClaim_RevivesEndedSession(t *testing.T) {
 		t.Errorf("state = %q, want needs_input (bind didn't revive ended row)", state)
 	}
 	if taskID, _ := sessionActive(t, db, 42); !taskID.Valid || taskID.Int64 != 100 {
-		t.Errorf("active_task_id = %v, want 100", taskID)
+		t.Errorf("task_id = %v, want 100", taskID)
 	}
 }
 
@@ -266,9 +308,17 @@ func TestClaim_PreservesLiveSessionState(t *testing.T) {
 	}
 }
 
-// TestRelease_ClearsBothTaskAndEpic: releasing an epic-descendant claim NULLs
-// both active_task_id and active_epic_id.
-func TestRelease_ClearsBothTaskAndEpic(t *testing.T) {
+// TestRelease_IsRefusedByWriteOnce replaces the former
+// TestRelease_ClearsBothTaskAndEpic (and TestRelease_LogsClear, folded in here).
+//
+// Release used to NULL both columns. ED-1560 makes sessions.task_id write-once —
+// never cleared, not just never repointed — so the release executor now aborts
+// on contact. That is not a regression to route around: E-1968 left it no live
+// producer, and it survives only to replay historical ledger entries. The
+// projector has no case for task.claimed/task.released either, so `rebuild-db`
+// never reaches it. This pins the abort, that the binding survives it, and that
+// nothing is written to the diagnostic log for a release that did not happen.
+func TestRelease_IsRefusedByWriteOnce(t *testing.T) {
 	db := newClaimTestDB(t)
 	seedClaimSession(t, db, 42)
 	seedTask(t, db, 1, nil, int(tasktype.TaskTypeEpic), "underway")
@@ -277,16 +327,26 @@ func TestRelease_ClearsBothTaskAndEpic(t *testing.T) {
 	if _, err := execTaskClaimed(db, claimEvent(t, 100, 42)); err != nil {
 		t.Fatalf("claim: %v", err)
 	}
-	if _, err := execTaskReleased(db, releaseEvent(t, 100, 42)); err != nil {
-		t.Fatalf("release: %v", err)
+	_, err := execTaskReleased(db, releaseEvent(t, 100, 42))
+	if err == nil {
+		t.Fatal("release succeeded, want write-once abort")
+	}
+	if !strings.Contains(err.Error(), "write-once") {
+		t.Errorf("error = %v, want it to name the write-once constraint", err)
 	}
 
 	taskID, epicID := sessionActive(t, db, 42)
-	if taskID.Valid {
-		t.Errorf("active_task_id = %v, want NULL after release", taskID)
+	if !taskID.Valid || taskID.Int64 != 100 {
+		t.Errorf("task_id = %v, want 100 (refused release must not clear it)", taskID)
 	}
-	if epicID.Valid {
-		t.Errorf("active_epic_id = %v, want NULL after release", epicID)
+	if !epicID.Valid || epicID.Int64 != 1 {
+		t.Errorf("epic_id = %v, want 1 (refused release must not clear it either)", epicID)
+	}
+
+	for _, e := range readDiagLog(t) {
+		if e["reason"] == "release" {
+			t.Errorf("diagnostic log has a release line for a release that aborted: %v", e)
+		}
 	}
 }
 
@@ -314,10 +374,19 @@ func readDiagLog(t *testing.T) []map[string]any {
 	return out
 }
 
-// TestClaim_LogsActiveTaskRebind (E-1857): the claim executor records the
-// active_task_id transition in the diagnostic log — the trail a silent rebind
-// would otherwise leave nowhere.
-func TestClaim_LogsActiveTaskRebind(t *testing.T) {
+// TestClaim_LogsBinding (E-1857, narrowed by E-1969): the claim executor records
+// the task_id transition in the diagnostic log.
+//
+// It used to pin the 100 -> 200 REBIND line, which write-once now makes
+// unreachable — so what is pinned is the transition that still happens: the
+// first bind, NULL -> 100. The JSON keys are `old_task_id` / `new_task_id`
+// (E-1969 renamed them from `old_active_task_id` / `new_active_task_id` with the
+// column; older lines in an existing log keep the old spelling, and nothing
+// reconciles that because nothing parses this file).
+//
+// The refused second claim writes NO line, which is the property worth having:
+// the log records what the database did, and the database did nothing.
+func TestClaim_LogsBinding(t *testing.T) {
 	db := newClaimTestDB(t)
 	seedClaimSession(t, db, 42)
 	seedTask(t, db, 100, nil, int(tasktype.TaskTypeTask), "ready")
@@ -326,58 +395,26 @@ func TestClaim_LogsActiveTaskRebind(t *testing.T) {
 	if _, err := execTaskClaimed(db, claimEvent(t, 100, 42)); err != nil {
 		t.Fatalf("claim 100: %v", err)
 	}
-	if _, err := execTaskClaimed(db, claimEvent(t, 200, 42)); err != nil {
-		t.Fatalf("claim 200: %v", err)
+	if _, err := execTaskClaimed(db, claimEvent(t, 200, 42)); err == nil {
+		t.Fatal("claim 200 succeeded, want write-once abort")
 	}
 
 	entries := readDiagLog(t)
-	if len(entries) != 2 {
-		t.Fatalf("diag entries = %d, want 2", len(entries))
+	if len(entries) != 1 {
+		t.Fatalf("diag entries = %d, want 1 (the refused claim must log nothing): %v",
+			len(entries), entries)
 	}
-	// The rebind (100 -> 200) is the diagnostically critical line.
-	rebind := entries[1]
-	if rebind["reason"] != "claim-event" {
-		t.Errorf("reason = %v, want claim-event", rebind["reason"])
+	bind := entries[0]
+	if bind["reason"] != "claim-event" {
+		t.Errorf("reason = %v, want claim-event", bind["reason"])
 	}
-	if rebind["old_active_task_id"] != float64(100) {
-		t.Errorf("old_active_task_id = %v, want 100", rebind["old_active_task_id"])
+	if _, present := bind["old_task_id"]; present {
+		t.Errorf("old_task_id present = %v, want omitted (was NULL)", bind["old_task_id"])
 	}
-	if rebind["new_active_task_id"] != float64(200) {
-		t.Errorf("new_active_task_id = %v, want 200", rebind["new_active_task_id"])
+	if bind["new_task_id"] != float64(100) {
+		t.Errorf("new_task_id = %v, want 100", bind["new_task_id"])
 	}
-	if rebind["session_id"] != "sess-42" {
-		t.Errorf("session_id = %v, want sess-42", rebind["session_id"])
-	}
-}
-
-// TestRelease_LogsClear (E-1857): the release executor records the active_task_id
-// being NULLed.
-func TestRelease_LogsClear(t *testing.T) {
-	db := newClaimTestDB(t)
-	seedClaimSession(t, db, 42)
-	seedTask(t, db, 100, nil, int(tasktype.TaskTypeTask), "ready")
-
-	if _, err := execTaskClaimed(db, claimEvent(t, 100, 42)); err != nil {
-		t.Fatalf("claim: %v", err)
-	}
-	if _, err := execTaskReleased(db, releaseEvent(t, 100, 42)); err != nil {
-		t.Fatalf("release: %v", err)
-	}
-
-	entries := readDiagLog(t)
-	var rel map[string]any
-	for _, e := range entries {
-		if e["reason"] == "release" {
-			rel = e
-		}
-	}
-	if rel == nil {
-		t.Fatalf("no release line; entries=%v", entries)
-	}
-	if rel["old_active_task_id"] != float64(100) {
-		t.Errorf("old_active_task_id = %v, want 100", rel["old_active_task_id"])
-	}
-	if _, present := rel["new_active_task_id"]; present {
-		t.Errorf("new_active_task_id present = %v, want omitted (NULL)", rel["new_active_task_id"])
+	if bind["session_id"] != "sess-42" {
+		t.Errorf("session_id = %v, want sess-42", bind["session_id"])
 	}
 }

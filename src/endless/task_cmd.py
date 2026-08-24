@@ -3417,7 +3417,7 @@ def _eswt_defined_in_user_shell() -> bool:
         return False
 
 
-def _current_session_active_task_id() -> int | None:
+def _current_session_task_id() -> int | None:
     """The active task id of the current Endless session, if any.
 
     Fills the spawn handoff's "Spawning session: E-NNNN" origin line (E-1469).
@@ -3428,12 +3428,12 @@ def _current_session_active_task_id() -> int | None:
     if eid is None:
         return None
     rows = db.query(
-        "SELECT active_task_id FROM sessions WHERE id = ?",
+        "SELECT task_id FROM sessions WHERE id = ?",
         (eid,),
     )
-    if not rows or rows[0]["active_task_id"] is None:
+    if not rows or rows[0]["task_id"] is None:
         return None
-    return rows[0]["active_task_id"]
+    return rows[0]["task_id"]
 
 
 def _current_endless_session_id() -> int | None:
@@ -3772,7 +3772,7 @@ def _check_task_ownership(item_id: int, current_eid: int | None) -> bool:
 
     rows = db.query(
         "SELECT id AS eid FROM sessions "
-        "WHERE active_task_id = ? AND state != 'ended'",
+        "WHERE task_id = ? AND state != 'ended'",
         (item_id,),
     )
     if not rows:
@@ -4114,7 +4114,7 @@ def claim_item(item_id: int, force: bool = False):
 def bind_item(item_id: int) -> None:
     """Bind a Claude session to a task for status-bar display only.
 
-    Sets the session's `active_task_id` so the second tmux status row shows
+    Sets the session's `task_id` so the second tmux status row shows
     this task. Unlike `claim_item`, bind does NOT change the task's status and
     does NOT create a worktree.
 
@@ -4128,7 +4128,7 @@ def bind_item(item_id: int) -> None:
     Refuses when no session resolves — bind without a session is
     meaningless (nothing for the status bar to display).
 
-    FIRST-SET-ONLY (E-1968, per ED-1560). `sessions.active_task_id` is
+    FIRST-SET-ONLY (E-1968, per ED-1560). `sessions.task_id` is
     write-once: bind may fill a session that holds no task, but it may not move
     a session from one task to another. A session owns exactly one task for its
     lifetime; work on a different task is a different session. The refusal is
@@ -4166,10 +4166,10 @@ def bind_item(item_id: int) -> None:
         )
 
     held = db.query(
-        "SELECT active_task_id FROM sessions WHERE id = ?",
+        "SELECT task_id FROM sessions WHERE id = ?",
         (target_session,),
     )
-    already = held[0]["active_task_id"] if held else None
+    already = held[0]["task_id"] if held else None
     if already is not None and already != item_id:
         raise click.ClickException(
             f"Session {target_session} already holds E-{already}, and a "
@@ -4205,7 +4205,7 @@ def bind_item(item_id: int) -> None:
 # E-1968 / ED-1560: `task release` is DISABLED, not deleted. Disabled
 # 2026-08-15.
 #
-# Release's defining act is clearing `sessions.active_task_id`, and that column
+# Release's defining act is clearing `sessions.task_id`, and that column
 # is write-once — set at claim, never cleared and never repointed. Clearing to
 # NULL and then setting a new value is reassignment through the back door, so
 # release cannot survive as a workflow. E-1969 enforces this with a BEFORE
@@ -4296,12 +4296,12 @@ def _reopen_task_core(item_id: int) -> tuple[str, str, bool]:
     result line.
 
     E-1968: this used to emit `task.released` for whichever session held the
-    task, clearing `sessions.active_task_id` as a silent side effect. Under
+    task, clearing `sessions.task_id` as a silent side effect. Under
     ED-1560 that column is write-once — set at claim, never cleared and never
     repointed — so the binding now survives a reopen untouched. The loss it
     caused was real: E-1917's reopen cleared its binding a week after landing,
     after which both resume paths reported the session had never claimed a task
-    (`active_task_id` alone cannot tell *released* from *never claimed*).
+    (`task_id` alone cannot tell *released* from *never claimed*).
 
     Returns (prev_status, new_status, text_present).
     """
@@ -5471,7 +5471,7 @@ def _lookup_bg_short_id(task_id: int) -> str | None:
     """
     rows = db.query(
         "SELECT short_id FROM sessions "
-        "WHERE active_task_id = ? "
+        "WHERE task_id = ? "
         "AND kind_id = (SELECT id FROM session_kinds WHERE slug = 'background') "
         "AND state = 'working' "
         "ORDER BY id DESC LIMIT 1",
@@ -6701,7 +6701,7 @@ def _session_touches(item_id: int) -> list[dict]:
         "       r.slug        AS rel_slug, "
         "       r.label       AS rel_label, "
         "       s.state       AS state, "
-        "       s.active_task_id AS active_task_id "
+        "       s.task_id AS task_id "
         "FROM session_tasks st "
         "LEFT JOIN session_task_relations r ON r.id = st.relation_id "
         "LEFT JOIN sessions s ON s.id = st.session_id "
@@ -6717,7 +6717,7 @@ def _session_touches(item_id: int) -> list[dict]:
             "rel_slug": row["rel_slug"],
             "rel_label": row["rel_label"] or _UNCLASSIFIED_TOUCH_LABEL,
             "state": row["state"] or _MISSING_SESSION_STATE,
-            "active_task_id": row["active_task_id"],
+            "task_id": row["task_id"],
         }
         for row in rows
     ]
@@ -6743,8 +6743,8 @@ def _session_ref(touch: dict) -> str:
     """A touch's identity as one token pair: 'ES-1020 (E-1865)' — the session and
     the task it is currently active on, or bare 'ES-1020' when it has none."""
     ref = session_id_display(touch["session_id"])
-    if touch["active_task_id"]:
-        ref += f" ({task_id_display(touch['active_task_id'])})"
+    if touch["task_id"]:
+        ref += f" ({task_id_display(touch['task_id'])})"
     return ref
 
 
@@ -6756,8 +6756,8 @@ def _session_json(touch: dict) -> dict:
         "session": session_id_display(touch["session_id"]),
         "relation": touch["rel_slug"],
         "active_task": (
-            task_id_display(touch["active_task_id"])
-            if touch["active_task_id"] else None
+            task_id_display(touch["task_id"])
+            if touch["task_id"] else None
         ),
         "state": touch["state"],
         "touched_at": touch["last_touch"],

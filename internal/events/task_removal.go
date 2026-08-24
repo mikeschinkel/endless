@@ -118,18 +118,21 @@ func applyTaskRemoval(db dbQuerier, ids []int64) error {
 		return fmt.Errorf("events: mark tasks removed: %w", err)
 	}
 
-	// Was ON DELETE SET NULL on both columns. A live session pointing at a
-	// removed task is state that lies, and E-1856 shows active_task_id drift is
-	// not hypothetical.
+	// sessions.task_id is NOT cleared here. It was ON DELETE SET NULL under hard
+	// delete, and E-1929 carried that forward as an explicit UPDATE — but ED-1560
+	// makes the column write-once (set at claim, never cleared, never repointed),
+	// enforced by the sessions_task_id_write_once trigger, so this clear would
+	// now abort the whole removal. Nor is it needed: retention leaves the task
+	// row in place, so a session that claimed a removed task still resolves to a
+	// real row that reads `removed`. Do not reinstate it.
+	//
+	// session_statuses.task_id is different and still cleared: a status snapshot
+	// is not an ownership record, carries no trigger, and its FK was likewise
+	// ON DELETE SET NULL.
 	if _, err := db.Exec(
-		"UPDATE sessions SET active_task_id = NULL WHERE active_task_id IN "+in, args...,
+		"UPDATE session_statuses SET task_id = NULL WHERE task_id IN "+in, args...,
 	); err != nil {
-		return fmt.Errorf("events: clear sessions.active_task_id: %w", err)
-	}
-	if _, err := db.Exec(
-		"UPDATE session_statuses SET active_task_id = NULL WHERE active_task_id IN "+in, args...,
-	); err != nil {
-		return fmt.Errorf("events: clear session_statuses.active_task_id: %w", err)
+		return fmt.Errorf("events: clear session_statuses.task_id: %w", err)
 	}
 
 	// Undelivered mail about a removed task is dead: filtering it on read would

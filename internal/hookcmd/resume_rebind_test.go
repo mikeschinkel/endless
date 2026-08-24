@@ -46,17 +46,17 @@ func seedWorktree(t *testing.T, projectRoot string, taskID int) string {
 
 // TestAutoBindFromCwd_ResumeDoesNotRebindDifferentTask reproduces the E-1856
 // incident: a resume (`claude --resume <uuid>`) fires SessionStart with the
-// session's existing active_task_id intact, but its cwd is a DIFFERENT task's
+// session's existing task_id intact, but its cwd is a DIFFERENT task's
 // worktree. The pre-fix cwd auto-bind derives the task id from the cwd directory
-// name and unconditionally overwrites active_task_id, silently repointing the
+// name and unconditionally overwrites task_id, silently repointing the
 // session away from the task it belongs to — making it unreachable via
 // `session goto`/`session resume` for that task.
 //
 // The auto-bind is a fallback to fill an UNBOUND session from its cwd, never a
 // re-pointer. So a session already bound to task 1835 whose cwd is task 1832's
-// worktree must keep active_task_id = 1835.
+// worktree must keep task_id = 1835.
 //
-// Against the pre-fix code this fails: active_task_id comes back 1832.
+// Against the pre-fix code this fails: task_id comes back 1832.
 func TestAutoBindFromCwd_ResumeDoesNotRebindDifferentTask(t *testing.T) {
 	db := newBindTestDB(t)
 
@@ -86,17 +86,17 @@ func TestAutoBindFromCwd_ResumeDoesNotRebindDifferentTask(t *testing.T) {
 	// No spawn marker on a resume, so spawnBound is false and the cwd path runs.
 	maybeCwdBind(1, payload, false)
 
-	var activeTaskID *int64
+	var taskID *int64
 	if err := db.QueryRow(
-		"SELECT active_task_id FROM sessions WHERE session_id='sess-997'",
-	).Scan(&activeTaskID); err != nil {
+		"SELECT task_id FROM sessions WHERE session_id='sess-997'",
+	).Scan(&taskID); err != nil {
 		t.Fatalf("read session row: %v", err)
 	}
-	if activeTaskID == nil {
-		t.Fatal("active_task_id became NULL — should have kept 1835")
+	if taskID == nil {
+		t.Fatal("task_id became NULL — should have kept 1835")
 	}
-	if *activeTaskID != 1835 {
-		t.Fatalf("active_task_id = %d, want 1835 (resume silently rebound to the cwd worktree's task — E-1856 bug)", *activeTaskID)
+	if *taskID != 1835 {
+		t.Fatalf("task_id = %d, want 1835 (resume silently rebound to the cwd worktree's task — E-1856 bug)", *taskID)
 	}
 }
 
@@ -152,13 +152,13 @@ func TestSessionStart_LiveOwnedWorktreeRefusesAndDoesNotBind(t *testing.T) {
 	}
 	maybeCwdBind(1, payload, false)
 
-	var activeTaskID *int64
+	var taskID *int64
 	if err := db.QueryRow(
-		"SELECT active_task_id FROM sessions WHERE session_id='sess-intruder'",
-	).Scan(&activeTaskID); err != nil {
+		"SELECT task_id FROM sessions WHERE session_id='sess-intruder'",
+	).Scan(&taskID); err != nil {
 		t.Fatalf("read session row: %v", err)
 	}
-	if activeTaskID != nil {
-		t.Fatalf("active_task_id = %d, want NULL — the intruder must not co-own a live-owned task (E-1856)", *activeTaskID)
+	if taskID != nil {
+		t.Fatalf("task_id = %d, want NULL — the intruder must not co-own a live-owned task (E-1856)", *taskID)
 	}
 }

@@ -22,7 +22,7 @@ func snTask(t *testing.T, db *sql.DB, id, projectID int64, status, phase, text s
 	}
 }
 
-// snSession inserts a session with an explicit id and active_task_id so the
+// snSession inserts a session with an explicit id and task_id so the
 // row-set membership (sessions on the focal task) and in_flight decoration can
 // be driven directly.
 func snSession(t *testing.T, db *sql.DB, id, projectID, activeTask int64, state string) {
@@ -32,7 +32,7 @@ func snSession(t *testing.T, db *sql.DB, id, projectID, activeTask int64, state 
 		at = activeTask
 	}
 	if _, err := db.Exec(
-		`INSERT INTO sessions (id, session_id, project_id, platform, state, active_task_id, kind_id, started_at, last_activity)
+		`INSERT INTO sessions (id, session_id, project_id, platform, state, task_id, kind_id, started_at, last_activity)
 		 VALUES (?, NULL, ?, 'claude', ?, ?, 1, '2026-06-20T00:00:00', '2026-06-20T00:00:00')`,
 		id, projectID, state, at,
 	); err != nil {
@@ -373,7 +373,7 @@ func TestSessionStatusRows_LandedColumn(t *testing.T) {
 }
 
 // TestSessionStatusRowsForSession_NoGoalSurfacesWork drives the E-1802 no-goal
-// view: a session with a NULL active_task_id still lists the tasks it filed
+// view: a session with a NULL task_id still lists the tasks it filed
 // (surfaced=2) and touched (revisited=3), while the goal-relation row (1) is
 // excluded (that path is the focal view's) and a terminal row is omitted unless
 // includeAll. Decorations that need a focal (is_focal/is_parent/is_from) are all
@@ -389,7 +389,7 @@ func TestSessionStatusRowsForSession_NoGoalSurfacesWork(t *testing.T) {
 	snTask(t, db, doneTouched, 1, "confirmed", "now", "")
 	snTask(t, db, blocker, 1, "underway", "now", "") // open blocker of `revisited`
 
-	// The emitting session (id=963) has NO claimed goal (active_task_id NULL).
+	// The emitting session (id=963) has NO claimed goal (task_id NULL).
 	snSession(t, db, 963, 1, 0, "working")
 	snSessionTaskRel(t, db, 963, surfaced, 2)    // filed this session
 	snSessionTaskRel(t, db, 963, revisited, 3)   // touched this session
@@ -461,7 +461,7 @@ func TestRepro_E1698_UnrelatedFocalFallback(t *testing.T) {
 	// An unrelated live session on task 700, bound to a DIFFERENT pane.
 	snTask(t, db, 700, 1, "underway", "now", "")
 	if _, err := db.Exec(
-		`INSERT INTO sessions (session_id, project_id, platform, state, process_id, active_task_id, last_activity)
+		`INSERT INTO sessions (session_id, project_id, platform, state, process_id, task_id, last_activity)
 		 VALUES (NULL, 1, 'claude', 'working', ?, 700, '2026-06-20T00:00:00')`, mustSeedPane(t, db, TestServerUUID, "%888")); err != nil {
 		t.Fatalf("seed unrelated session: %v", err)
 	}
@@ -486,7 +486,7 @@ func TestResolveSessionStatusFocal_ActivePaneResolves(t *testing.T) {
 	seedProject(t, db, 1, "p1", "/p1")
 	snTask(t, db, 810, 1, "underway", "now", "")
 	if _, err := db.Exec(
-		`INSERT INTO sessions (session_id, project_id, platform, state, process_id, active_task_id, last_activity)
+		`INSERT INTO sessions (session_id, project_id, platform, state, process_id, task_id, last_activity)
 		 VALUES (NULL, 1, 'claude', 'working', ?, 810, '2026-06-20T00:00:00')`, mustSeedPane(t, db, TestServerUUID, fakePane)); err != nil {
 		t.Fatalf("seed session: %v", err)
 	}
@@ -504,7 +504,7 @@ func TestResolveSessionStatusFocal_ActivePaneResolves(t *testing.T) {
 }
 
 // TestResolveSessionStatusFocal_SessionNoTaskResolvesNoTaskKind pins that a
-// session present in the pane but with NULL active_task_id yields no focal and
+// session present in the pane but with NULL task_id yields no focal and
 // the PaneStatusNoTask kind — the "claim a task" case, mirroring the status bar.
 func TestResolveSessionStatusFocal_SessionNoTaskResolvesNoTaskKind(t *testing.T) {
 	db := withTestDB(t)

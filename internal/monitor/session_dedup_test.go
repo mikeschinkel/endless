@@ -8,7 +8,7 @@ import (
 	"github.com/mikeschinkel/endless/internal/sessionkind"
 )
 
-// liveCountForTask returns how many non-ended rows reference active_task_id.
+// liveCountForTask returns how many non-ended rows reference task_id.
 func liveCountForTask(t *testing.T, taskID int64) int {
 	t.Helper()
 	db, err := DB()
@@ -17,7 +17,7 @@ func liveCountForTask(t *testing.T, taskID int64) int {
 	}
 	var n int
 	if err = db.QueryRow(
-		"SELECT count(*) FROM sessions WHERE active_task_id=? AND state != 'ended'",
+		"SELECT count(*) FROM sessions WHERE task_id=? AND state != 'ended'",
 		taskID,
 	).Scan(&n); err != nil {
 		t.Fatalf("count live for task %d: %v", taskID, err)
@@ -89,7 +89,7 @@ func TestBindSessionToTask_RepeatedLaunchesStayAtOneLiveRow(t *testing.T) {
 
 // TestBindSessionToTask_DoesNotEndBackgroundAgentSameTask guards the one row the
 // fallback must never touch: a background agent (kind_id = background) carries a
-// task's active_task_id with no pane, exactly matching the paneless predicate.
+// task's task_id with no pane, exactly matching the paneless predicate.
 // Excluding it by kind is what keeps a foreground bind from killing a live bg
 // agent working the same task.
 func TestBindSessionToTask_DoesNotEndBackgroundAgentSameTask(t *testing.T) {
@@ -100,7 +100,7 @@ func TestBindSessionToTask_DoesNotEndBackgroundAgentSameTask(t *testing.T) {
 
 	now := time.Now().UTC().Format("2006-01-02T15:04:05")
 	if _, err := db.Exec(
-		`INSERT INTO sessions (session_id, project_id, platform, state, active_task_id, kind_id, started_at, last_activity)
+		`INSERT INTO sessions (session_id, project_id, platform, state, task_id, kind_id, started_at, last_activity)
 		 VALUES ('uuid-bg', 1, 'claude', 'working', 42, ?, ?, ?)`,
 		int64(sessionkind.SessionKindBackground), now, now,
 	); err != nil {
@@ -131,7 +131,7 @@ func TestBindSessionToTask_DoesNotEndPanedRowSameTask(t *testing.T) {
 		t.Fatalf("seed pane binding: %v", err)
 	}
 	if _, err := db.Exec(
-		`INSERT INTO sessions (session_id, project_id, platform, state, active_task_id, process_id, kind_id, started_at, last_activity)
+		`INSERT INTO sessions (session_id, project_id, platform, state, task_id, process_id, kind_id, started_at, last_activity)
 		 VALUES ('uuid-paned', 1, 'claude', 'working', 42, ?, ?, ?, ?)`,
 		panedProcess, int64(sessionkind.SessionKindTmux), now, now,
 	); err != nil {

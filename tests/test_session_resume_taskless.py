@@ -41,7 +41,7 @@ def _taskless(**over) -> dict:
     base = {
         "endless_id": 963,
         "session_id": "uuid-963",
-        "active_task_id": None,
+        "task_id": None,
         "worktree_path": "",
         "state": "idle",
         "project_id": 1,
@@ -89,7 +89,7 @@ def test_taskless_session_gets_a_claimed_task_and_worktree(
     assert label == "E-1970"
     assert eid == 963
     assert decision["created_task"] is True
-    assert decision["active_task_id"] == 1970
+    assert decision["task_id"] == 1970
     assert decision["recovered"] is False
 
     # The title is the pinned placeholder, and the task is created in the
@@ -169,7 +169,7 @@ def test_task_bearing_session_creates_nothing(monkeypatch, stub_create, tmp_path
     wt.mkdir()
     monkeypatch.setattr(
         session_cmd, "_resume_target",
-        lambda ref: _taskless(active_task_id=10, worktree_path=str(wt)),
+        lambda ref: _taskless(task_id=10, worktree_path=str(wt)),
     )
     decision: dict = {}
     _, got_wt, label, _ = session_cmd._resolve_resume("ES-963", decision_out=decision)

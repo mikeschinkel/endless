@@ -39,7 +39,7 @@ def _add_bg_agent(
     kind_id = 2 if kind == "background" else 1
     cur = db.execute(
         "INSERT INTO sessions "
-        "(project_id, platform, state, active_task_id, active_epic_id, kind_id, short_id, started_at, last_activity) "
+        "(project_id, platform, state, task_id, epic_id, kind_id, short_id, started_at, last_activity) "
         "VALUES (?, 'claude', ?, ?, ?, ?, ?, ?, ?)",
         (project_id, state, task_id, epic_id, kind_id, short_id, started, started),
     )

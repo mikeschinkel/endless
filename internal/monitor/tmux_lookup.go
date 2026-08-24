@@ -15,23 +15,23 @@ import (
 // Tier is a *int64 because `tasks.tier` is nullable; nil means
 // "not set", which the renderer skips so the row doesn't show "tier: ".
 //
-// ActiveEpicID is the session's active_epic_id (E-1571): nil for a non-epic
+// EpicID is the session's epic_id (E-1571): nil for a non-epic
 // session, the epic task id otherwise. The renderer compares it against TaskID
 // to pick the [E-NNNN] / [E-EEEE] / [E-EEEE:E-CCCC] prefix shape.
 type ActiveTaskInfo struct {
-	TaskID       int64
-	Title        string
-	Status       string
-	Type         string
-	Phase        string
-	Tier         *int64
-	ProjectName  string
-	ActiveEpicID *int64
+	TaskID      int64
+	Title       string
+	Status      string
+	Type        string
+	Phase       string
+	Tier        *int64
+	ProjectName string
+	EpicID      *int64
 }
 
 // ErrNoActiveTask is returned when no working session, in either the
 // requested pane or anywhere else in the same tmux window, has a
-// non-NULL active_task_id. Callers should render an empty/placeholder
+// non-NULL task_id. Callers should render an empty/placeholder
 // status line rather than treat this as a fatal error.
 var ErrNoActiveTask = errors.New("no active task for this tmux context")
 
@@ -41,9 +41,9 @@ var ErrNoActiveTask = errors.New("no active task for this tmux context")
 //
 // Lookup order:
 //  1. Pane-specific: an Endless session whose process column matches
-//     this exact pane and whose active_task_id is non-NULL.
+//     this exact pane and whose task_id is non-NULL.
 //  2. Window-scoped fallback: any pane in the same tmux WINDOW has an
-//     Endless session with a non-NULL active_task_id. Most recent
+//     Endless session with a non-NULL task_id. Most recent
 //     last_activity wins.
 //
 // The fallback exists because tmux's #() substitution runs in the
@@ -97,13 +97,13 @@ func queryActiveTaskForPanes(db *sql.DB, panes []string) (*ActiveTaskInfo, error
 	//
 	// state != 'ended' is still required, for the unrelated case of a session
 	// that ended cleanly in a pane still open and rebound to a new session.
-	q := `SELECT t.id, t.title, t.status, COALESCE(tt.slug, ''), t.phase, t.tier, COALESCE(p.name, ''), s.active_epic_id
+	q := `SELECT t.id, t.title, t.status, COALESCE(tt.slug, ''), t.phase, t.tier, COALESCE(p.name, ''), s.epic_id
 	      FROM sessions s
-	      JOIN live_tasks t ON t.id = s.active_task_id
+	      JOIN live_tasks t ON t.id = s.task_id
 	      LEFT JOIN projects p ON p.id = t.project_id
 	      LEFT JOIN task_types tt ON tt.id = t.type_id
 	      WHERE s.process_id IN (` + placeholders + `)
-	        AND s.active_task_id IS NOT NULL
+	        AND s.task_id IS NOT NULL
 	        AND s.state != 'ended'
 	      ORDER BY s.last_activity DESC
 	      LIMIT 1`
@@ -111,7 +111,7 @@ func queryActiveTaskForPanes(db *sql.DB, panes []string) (*ActiveTaskInfo, error
 	var info ActiveTaskInfo
 	err = db.QueryRow(q, args...).Scan(
 		&info.TaskID, &info.Title, &info.Status,
-		&info.Type, &info.Phase, &info.Tier, &info.ProjectName, &info.ActiveEpicID,
+		&info.Type, &info.Phase, &info.Tier, &info.ProjectName, &info.EpicID,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNoActiveTask
@@ -155,10 +155,10 @@ const (
 	// Render the dim placeholder dot.
 	PaneStatusNone PaneStatusKind = iota
 	// PaneStatusActive — a window pane has an Endless session with a
-	// non-NULL active_task_id. The Task field is populated.
+	// non-NULL task_id. The Task field is populated.
 	PaneStatusActive
 	// PaneStatusNoTask — a window pane has an Endless session, but no
-	// session has active_task_id set. Hint the user to `task claim`.
+	// session has task_id set. Hint the user to `task claim`.
 	PaneStatusNoTask
 	// PaneStatusClaudeNoSession — the focused pane is running Claude,
 	// but no Endless session has been registered for any pane in this
@@ -236,7 +236,7 @@ func GetPaneStatus(tmuxPane string) (*PaneStatus, error) {
 }
 
 // anySessionForPanes returns true when at least one Endless session row
-// exists for any of the given pane IDs, regardless of active_task_id.
+// exists for any of the given pane IDs, regardless of task_id.
 // Used to distinguish "session exists but no task" from "no session at
 // all" — the two states drive different hint text.
 func anySessionForPanes(panes []string) (bool, error) {
@@ -335,7 +335,7 @@ func paneIsRunningShell(tmuxPane string) (isShell, known bool) {
 // list the session's own surfaced/revisited rows (E-1802). Resolution mirrors
 // the focal path (GetActiveTaskForPane): the pane's own live session first, then
 // any live session in the same tmux WINDOW (most-recent last_activity). Unlike
-// the focal path it does NOT require active_task_id — an unclaimed session still
+// the focal path it does NOT require task_id — an unclaimed session still
 // has surfaced/revisited work to show. Returns 0 (no error) when not in tmux
 // (pane == "") or no live session is found.
 func ResolveSessionStatusSession(pane string) (int64, error) {

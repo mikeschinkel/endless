@@ -17,12 +17,12 @@ import pytest
 from endless import db, session_cmd
 
 
-def _insert_session(*, pk, session_id, project_id, active_task_id=None):
+def _insert_session(*, pk, session_id, project_id, task_id=None):
     db.execute(
         "INSERT INTO sessions (id, session_id, project_id, platform, state, "
-        "started_at, active_task_id) "
+        "started_at, task_id) "
         "VALUES (?, ?, ?, 'claude', 'working', '2026-08-15T00:00:00', ?)",
-        (pk, session_id, project_id, active_task_id),
+        (pk, session_id, project_id, task_id),
     )
 
 
@@ -47,7 +47,7 @@ def pane_holding(monkeypatch, project_id):
     """Make the current pane resolve to a session bound to E-1958."""
     _insert_task(pk=1958, project_id=project_id)
     _insert_session(pk=70, session_id="s-70", project_id=project_id,
-                    active_task_id=1958)
+                    task_id=1958)
     monkeypatch.setattr(
         "endless.task_cmd._current_endless_session_id", lambda: 70,
     )

@@ -58,7 +58,7 @@ def test_pause_verb_is_gone():
     """E-1968 removed `task pause`. Pausing on the epic-revisit gate is
     declining to clear it — the gate keeps blocking, and auto-clears when the
     epic leaves `revisit`. The verb only existed to carry a release of the
-    session's task, which ED-1560's write-once `active_task_id` forbids.
+    session's task, which ED-1560's write-once `task_id` forbids.
     """
     import endless.task_cmd as task_cmd
     from endless.cli import task_cmd as task_group

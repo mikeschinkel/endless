@@ -146,7 +146,7 @@ func reapBoundSandbox(worktreeName string) {
 //     — is older than cutoff. session_tasks.updated_at is upserted by every
 //     task.* event from a session actor, so claim / status flip / decision /
 //     etc. all advance it (see internal/events/session_tasks.go).
-//  3. No active (state != 'ended') session has active_task_id pointing at
+//  3. No active (state != 'ended') session has task_id pointing at
 //     the task.
 //  4. The worktree's branch has no commits not yet on main
 //     (`git -C <wt> rev-list main..HEAD --count` == 0).
@@ -203,7 +203,7 @@ func maybeReapWorktree(db *sql.DB, projectRoot, dir string, taskID int64, cutoff
 
 	var activeSessions int
 	err = db.QueryRow(
-		`SELECT count(*) FROM sessions WHERE active_task_id = ? AND state != 'ended'`,
+		`SELECT count(*) FROM sessions WHERE task_id = ? AND state != 'ended'`,
 		taskID,
 	).Scan(&activeSessions)
 	if err != nil {

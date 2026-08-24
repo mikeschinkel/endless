@@ -16,7 +16,7 @@ type LiveSession struct {
 	ProjectID        int64   `json:"project_id"`
 	Platform         string  `json:"platform"`
 	State            string  `json:"state"`
-	ActiveTaskID     *int64  `json:"active_task_id"`
+	TaskID           *int64  `json:"task_id"`
 	Process          string  `json:"process"`
 	PaneID           *string `json:"pane_id"`
 	StartedAt        string  `json:"started_at"`
@@ -60,7 +60,7 @@ func ListLiveSessions(projectID int64) ([]LiveSession, error) {
 	}
 	rows, err := db.Query(
 		`SELECT s.session_id, s.id, COALESCE(s.project_id, 0), s.platform, s.state,
-		        s.active_task_id, COALESCE(p.address, ''),
+		        s.task_id, COALESCE(p.address, ''),
 		        COALESCE(s.started_at, ''), COALESCE(s.last_activity, ''),
 		        COALESCE(s.summary, ''), sl.liveness
 		 FROM sessions s
@@ -81,7 +81,7 @@ func ListLiveSessions(projectID int64) ([]LiveSession, error) {
 		var s LiveSession
 		if err := rows.Scan(
 			&s.SessionID, &s.EndlessSessionID, &s.ProjectID, &s.Platform, &s.State,
-			&s.ActiveTaskID, &s.Process, &s.StartedAt, &s.LastActivity, &s.Summary,
+			&s.TaskID, &s.Process, &s.StartedAt, &s.LastActivity, &s.Summary,
 			&s.Liveness,
 		); err != nil {
 			return nil, fmt.Errorf("scan live session: %w", err)

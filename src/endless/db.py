@@ -249,7 +249,12 @@ def _migrate_v2(conn: sqlite3.Connection):
         conn.execute("ALTER TABLE ai_sessions RENAME TO sessions")
     conn.commit()
 
-    # Step 3: Rename columns (E-743)
+    # Step 3: Rename columns (E-743). Left at the name E-743 produced: this is
+    # one link of a chain, not a declaration of the current shape. E-1969 renamed
+    # active_task_id -> task_id, and its change file
+    # (internal/schema/changes/e-1969-rename-sessions-task-id.go) picks up from
+    # here, so rewriting this step's target would break the chain rather than
+    # shorten it.
     if _has_table(conn, "sessions"):
         if _has_column(conn, "sessions", "active_goal_id") and not _has_column(conn, "sessions", "active_task_id"):
             conn.execute("ALTER TABLE sessions RENAME COLUMN active_goal_id TO active_task_id")
@@ -314,7 +319,7 @@ def _migrate_v2(conn: sqlite3.Connection):
                     CHECK (platform IN ('claude', 'codex')),
                 state TEXT NOT NULL DEFAULT 'working'
                     CHECK (state IN ('working', 'idle', 'needs_input', 'ended')),
-                active_task_id INTEGER,
+                task_id INTEGER,
                 plan_file_path TEXT,
                 process TEXT,
                 started_at TEXT NOT NULL
@@ -322,7 +327,7 @@ def _migrate_v2(conn: sqlite3.Connection):
                 last_activity TEXT,
                 UNIQUE (session_id),
                 FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL,
-                FOREIGN KEY (active_task_id) REFERENCES tasks(id) ON DELETE SET NULL
+                FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE SET NULL
             );
         """)
         conn.commit()

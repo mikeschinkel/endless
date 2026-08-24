@@ -916,27 +916,27 @@ func execTaskClaimed(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 		return nil, fmt.Errorf("events: unmarshal task.claimed payload: %w", err)
 	}
 	taskID := evt.Entity.ID
-	// Also resolve and store active_epic_id: the nearest type='epic' ancestor of
+	// Also resolve and store epic_id: the nearest type='epic' ancestor of
 	// the claimed task (the task itself if it is an epic, NULL if no epic
 	// ancestor). E-1571 deferred this coordinator-side write; without it an
-	// interactive session's active_epic_id stays NULL, so the status-line epic
+	// interactive session's epic_id stays NULL, so the status-line epic
 	// prefix and `endless agents` auto-resolve never fire. The correlated
 	// subquery mirrors monitor.nearestEpicAncestor's recursive CTE, keeping the
 	// write a single atomic statement rather than exporting the helper. A NULL
 	// result also clears any stale epic id left from a prior claim.
 	// Snapshot the session's pre-write state (within this tx) so the
-	// machine-local diagnostic log can record the active_task_id transition —
+	// machine-local diagnostic log can record the task_id transition —
 	// the single-pointer rebind that otherwise leaves no trail.
 	snap := monitor.SnapshotSessionByID(db, p.SessionID)
 	res, err := db.Exec(
 		`UPDATE sessions
-		    SET active_task_id = ?,
+		    SET task_id = ?,
 		        -- Revive an 'ended' row on bind (E-1686), mirroring TouchSession's
 		        -- revival: binding a task to a session is proof it's alive, so
 		        -- task bind must not silently land on (and report success against)
 		        -- an invisible dead row. CASE keeps live states authoritative.
 		        state = CASE WHEN state = 'ended' THEN 'needs_input' ELSE state END,
-		        active_epic_id = (
+		        epic_id = (
 		          WITH RECURSIVE ancestry(id, parent_id, type_id, depth) AS (
 		            SELECT id, parent_id, type_id, 0 FROM tasks WHERE id = ?
 		            UNION ALL
@@ -1021,11 +1021,11 @@ func execTaskReleased(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 		return nil, fmt.Errorf("events: unmarshal task.released payload: %w", err)
 	}
 	taskID := evt.Entity.ID
-	// Clear active_epic_id alongside active_task_id so a released coordinator
+	// Clear epic_id alongside task_id so a released coordinator
 	// session does not keep a stale epic prefix / auto-resolve target.
 	snap := monitor.SnapshotSessionByID(db, p.SessionID)
 	res, err := db.Exec(
-		"UPDATE sessions SET active_task_id = NULL, active_epic_id = NULL WHERE id = ? AND active_task_id = ?",
+		"UPDATE sessions SET task_id = NULL, epic_id = NULL WHERE id = ? AND task_id = ?",
 		p.SessionID, taskID,
 	)
 	if err != nil {
@@ -1055,33 +1055,33 @@ func logSessionClaim(res sql.Result, snap monitor.SessionSnapshot, taskID string
 	}
 	newTaskID := mustParseInt64(taskID)
 	monitor.LogSessionTxn(monitor.SessionTxn{
-		SessionGUID:     snap.SessionGUID,
-		ShortID:         snap.ShortID,
-		OldState:        snap.State,
-		NewState:        newState,
-		OldActiveTaskID: snap.ActiveTaskID,
-		NewActiveTaskID: &newTaskID,
-		Reason:          monitor.SessionLogClaimEvent,
-		Caller:          "events.execTaskClaimed",
+		SessionGUID: snap.SessionGUID,
+		ShortID:     snap.ShortID,
+		OldState:    snap.State,
+		NewState:    newState,
+		OldTaskID:   snap.TaskID,
+		NewTaskID:   &newTaskID,
+		Reason:      monitor.SessionLogClaimEvent,
+		Caller:      "events.execTaskClaimed",
 	})
 }
 
 // logSessionRelease records the release UPDATE in the machine-local diagnostic
 // log (E-1857). Skipped when the UPDATE matched no row (the session was not
-// bound to this task). new_active_task_id is nil: release NULLs active_task_id.
+// bound to this task). new_task_id is nil: release NULLs task_id.
 func logSessionRelease(res sql.Result, snap monitor.SessionSnapshot) {
 	if n, err := res.RowsAffected(); err != nil || n == 0 {
 		return
 	}
 	monitor.LogSessionTxn(monitor.SessionTxn{
-		SessionGUID:     snap.SessionGUID,
-		ShortID:         snap.ShortID,
-		OldState:        snap.State,
-		NewState:        snap.State, // release does not change state
-		OldActiveTaskID: snap.ActiveTaskID,
-		NewActiveTaskID: nil,
-		Reason:          monitor.SessionLogRelease,
-		Caller:          "events.execTaskReleased",
+		SessionGUID: snap.SessionGUID,
+		ShortID:     snap.ShortID,
+		OldState:    snap.State,
+		NewState:    snap.State, // release does not change state
+		OldTaskID:   snap.TaskID,
+		NewTaskID:   nil,
+		Reason:      monitor.SessionLogRelease,
+		Caller:      "events.execTaskReleased",
 	})
 }
 

@@ -285,7 +285,7 @@ func Run(args []string) {
 		// command resolves the sandbox there and one rule beats a per-command
 		// exception. That broke the view outright: sessions and tasks are read by a
 		// single-database JOIN (monitor.queryActiveTaskForPanes:
-		// `FROM sessions s JOIN live_tasks t ON t.id = s.active_task_id`), so pane
+		// `FROM sessions s JOIN live_tasks t ON t.id = s.task_id`), so pane
 		// resolution IS a task read and cannot be split across two databases. Worse,
 		// sandbox task ids are a separate universe — sandboxcmd.seedFromWorktree
 		// copies one project row and one session row and NO tasks — so a task id

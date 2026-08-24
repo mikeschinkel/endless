@@ -10,7 +10,7 @@ import (
 
 // BgAgent is one row in the `endless agents` listing (E-1621): a working
 // background-agent session, intended for JSON serialization to the Python CLI.
-// TaskID is the agent's active_task_id (the task it was dispatched on); Title is
+// TaskID is the agent's task_id (the task it was dispatched on); Title is
 // that task's title (empty when the task row is gone). ShortID is the dispatch
 // handle from `claude --bg` (empty until/unless set).
 type BgAgent struct {
@@ -26,18 +26,18 @@ type BgAgent struct {
 // filter uses the typed sessionkind constant (not a hardcoded 2), matching
 // CountActiveBgAgents, so it stays stable against any seed-id change.
 const bgAgentQuery = `
-	SELECT s.id, COALESCE(s.short_id, ''), s.active_task_id,
+	SELECT s.id, COALESCE(s.short_id, ''), s.task_id,
 	       COALESCE(t.title, ''), COALESCE(s.started_at, '')
 	  FROM sessions s
-	  LEFT JOIN live_tasks t ON t.id = s.active_task_id
+	  LEFT JOIN live_tasks t ON t.id = s.task_id
 	 WHERE s.kind_id = ? AND s.state = 'working' AND `
 
 // ListBgAgentsForEpic returns the working background-agent sessions whose
-// active_epic_id matches epicID, oldest-first by start time. This is the
+// epic_id matches epicID, oldest-first by start time. This is the
 // epic-scoped default path of `endless agents`.
 func ListBgAgentsForEpic(epicID int64) ([]BgAgent, error) {
 	return queryBgAgents(
-		bgAgentQuery+`s.active_epic_id = ? ORDER BY s.started_at`,
+		bgAgentQuery+`s.epic_id = ? ORDER BY s.started_at`,
 		int64(sessionkind.SessionKindBackground), epicID,
 	)
 }
@@ -77,12 +77,12 @@ func queryBgAgents(query string, args ...any) ([]BgAgent, error) {
 	return out, nil
 }
 
-// SessionActiveEpic returns the active_epic_id of sessionID — the epic the
+// SessionActiveEpic returns the epic_id of sessionID — the epic the
 // caller's session is working under — or nil when it is NULL or no such session
 // row exists. `endless agents` uses this to auto-resolve the epic to scope by
 // when neither --epic nor --all is given (E-1621).
 //
-// Note: a non-background (tmux/coordinator) session only carries active_epic_id
+// Note: a non-background (tmux/coordinator) session only carries epic_id
 // once the claim flow records it (E-1624); until that lands, this returns nil
 // for interactive callers and the command falls back to its guidance error.
 func SessionActiveEpic(sessionID int64) (*int64, error) {
@@ -92,7 +92,7 @@ func SessionActiveEpic(sessionID int64) (*int64, error) {
 	}
 	var epicID *int64
 	err = db.QueryRow(
-		"SELECT active_epic_id FROM sessions WHERE id = ?", sessionID,
+		"SELECT epic_id FROM sessions WHERE id = ?", sessionID,
 	).Scan(&epicID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil

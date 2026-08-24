@@ -6,7 +6,7 @@
 // - One `tasks` column carries all task elements; disposition (resolved/
 //   pending/blocked/unverified) is derived at render time from each task's
 //   status attribute, removing the redundant 4-column shape.
-// - `active_task_id` resolved from sessions at INSERT time; not in
+// - `task_id` resolved from sessions at INSERT time; not in
 //   payload (Go-side concern).
 // - `summary` carries structured `<layer name="..." files="...">purpose
 //   </layer>` children that render as a 3-column markdown table.
@@ -72,9 +72,9 @@ func execSessionStatusRecorded(db dbQuerier, evt *Event) (*ExecuteResult, error)
 	// E-1314: pull the session's currently bound task at the moment of
 	// the status row, so SQL joins to tasks can find this row without an
 	// extra subquery against sessions.
-	activeTaskID, err := sessionActiveTaskID(db, sessionID)
+	taskID, err := sessionTaskID(db, sessionID)
 	if err != nil {
-		return nil, fmt.Errorf("events: lookup session active_task_id: %w", err)
+		return nil, fmt.Errorf("events: lookup session task_id: %w", err)
 	}
 
 	if dup, err := isDuplicateOfLatest(db, sessionID, &p); err != nil {
@@ -89,10 +89,10 @@ func execSessionStatusRecorded(db dbQuerier, evt *Event) (*ExecuteResult, error)
 
 	res, err := db.Exec(
 		`INSERT INTO session_statuses
-		 (session_id, active_task_id, headline, tasks, decisions,
+		 (session_id, task_id, headline, tasks, decisions,
 		  commits, memory, summary, notes)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		sessionID, activeTaskID,
+		sessionID, taskID,
 		p.Headline, p.Tasks, p.Decisions, p.Commits, p.Memory, p.Summary, p.Notes,
 	)
 	if err != nil {
@@ -176,13 +176,13 @@ func liveSessionByProcessTx(db dbQuerier, process string) (int64, error) {
 	return id, err
 }
 
-// sessionActiveTaskID returns the session's currently bound task id, or
+// sessionTaskID returns the session's currently bound task id, or
 // nil if no task is bound. Wrapped in *int64 so the INSERT can pass it
 // straight through to the nullable column.
-func sessionActiveTaskID(db dbQuerier, sessionID int64) (*int64, error) {
+func sessionTaskID(db dbQuerier, sessionID int64) (*int64, error) {
 	var atid *int64
 	err := db.QueryRow(
-		`SELECT active_task_id FROM sessions WHERE id = ?`,
+		`SELECT task_id FROM sessions WHERE id = ?`,
 		sessionID,
 	).Scan(&atid)
 	if err != nil {
@@ -271,10 +271,10 @@ func renderSessionStatusMarkdown(p *SessionStatusRecordedPayload) string {
 func renderTasksGrouped(b *strings.Builder, body string) {
 	body = strings.TrimSpace(body)
 	buckets := map[string][]string{
-		"Resolved": nil,
-		"Pending":  nil,
-		"Blocked":  nil,
-		"Unverified":   nil,
+		"Resolved":   nil,
+		"Pending":    nil,
+		"Blocked":    nil,
+		"Unverified": nil,
 	}
 	if body != "" {
 		for _, elem := range splitElements(body, "task") {

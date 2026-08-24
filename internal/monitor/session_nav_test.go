@@ -7,7 +7,7 @@ import (
 	"github.com/mikeschinkel/endless/internal/navvia"
 )
 
-// seedNavTask inserts a minimal task so a session's active_task_id FK resolves.
+// seedNavTask inserts a minimal task so a session's task_id FK resolves.
 func seedNavTask(t *testing.T, db *sql.DB, id, projectID int64, title string) {
 	t.Helper()
 	if _, err := db.Exec(
@@ -27,7 +27,7 @@ func seedNavSession(t *testing.T, db *sql.DB, sessionID string, projectID int64,
 		task = taskID
 	}
 	res, err := db.Exec(
-		`INSERT INTO sessions (session_id, project_id, platform, state, active_task_id, process_id, last_activity, summary)
+		`INSERT INTO sessions (session_id, project_id, platform, state, task_id, process_id, last_activity, summary)
 		 VALUES (?, ?, 'claude', 'working', ?, ?, '2026-06-29T00:00:00', ?)`,
 		sessionID, projectID, task, mustSeedPane(t, db, TestServerUUID, pane), summary)
 	if err != nil {

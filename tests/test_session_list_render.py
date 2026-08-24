@@ -32,11 +32,11 @@ def _task(task_id, project_id, title):
     )
 
 
-def _session(session_id, project_id, state, active_task_id=None, messages=1):
+def _session(session_id, project_id, state, task_id=None, messages=1):
     db.execute(
         "INSERT INTO sessions (id, session_id, project_id, state, kind_id, "
-        "active_task_id) VALUES (?, ?, ?, ?, 1, ?)",
-        (session_id, f"uuid-{session_id}", project_id, state, active_task_id),
+        "task_id) VALUES (?, ?, ?, ?, 1, ?)",
+        (session_id, f"uuid-{session_id}", project_id, state, task_id),
     )
     for n in range(messages):
         db.execute(

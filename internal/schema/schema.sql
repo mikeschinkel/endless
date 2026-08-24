@@ -152,12 +152,18 @@ CREATE UNIQUE INDEX IF NOT EXISTS processes_identity
 
 -- AI coding sessions
 --
--- active_epic_id (E-1571): nullable FK to tasks(id). When the session is
--- working under an epic, this holds the epic's task id while active_task_id
--- tracks the specific child the user is viewing. NULL for non-epic sessions.
--- The window-name renderer reads both: active_epic_id IS NULL -> [E-<task>];
--- equal to active_task_id -> [E-<epic>] (viewing the epic itself); different
--- -> [E-<epic>:E-<child>].
+-- task_id (E-1571 as active_task_id, renamed E-1969): the ONE task this session
+-- owns. Named without an `active_` qualifier because there is no inactive task
+-- to distinguish it from — a session holds at most one task for its lifetime.
+-- Write-once per ED-1560; see the trigger below the table.
+--
+-- epic_id (E-1571 as active_epic_id, renamed E-1969): nullable FK to tasks(id).
+-- When the session is working under an epic, this holds the epic's task id while
+-- task_id tracks the specific child the user is viewing. NULL for non-epic
+-- sessions. The window-name renderer reads both: epic_id IS NULL -> [E-<task>];
+-- equal to task_id -> [E-<epic>] (viewing the epic itself); different
+-- -> [E-<epic>:E-<child>]. It renamed in step with task_id rather than keeping
+-- `active_` for a pair that would then disagree with itself.
 --
 -- kind_id (E-1571): FK to session_kinds. 'tmux' rows are pane-bound (process_id
 -- points at the `processes` row identifying the pane AND the server that issued
@@ -192,8 +198,8 @@ CREATE TABLE IF NOT EXISTS sessions (
     project_id INTEGER,
     platform TEXT NOT NULL DEFAULT 'claude',
     state TEXT NOT NULL DEFAULT 'working',
-    active_task_id INTEGER,
-    active_epic_id INTEGER,
+    task_id INTEGER,
+    epic_id INTEGER,
     kind_id INTEGER NOT NULL DEFAULT 1,
     plan_file_path TEXT,
     process_id INTEGER,
@@ -221,11 +227,51 @@ CREATE TABLE IF NOT EXISTS sessions (
     UNIQUE (session_id),
     UNIQUE (short_id),
     FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL,
-    FOREIGN KEY (active_task_id) REFERENCES tasks(id) ON DELETE SET NULL,
-    FOREIGN KEY (active_epic_id) REFERENCES tasks(id) ON DELETE SET NULL,
+    FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE SET NULL,
+    FOREIGN KEY (epic_id) REFERENCES tasks(id) ON DELETE SET NULL,
     FOREIGN KEY (kind_id) REFERENCES session_kinds(id),
     FOREIGN KEY (process_id) REFERENCES processes(id)
 );
+
+-- sessions.task_id is write-once (ED-1560, enforced by E-1969): NULL -> one
+-- value, then never again. Not cleared, not repointed. A session owns exactly
+-- one task for its lifetime; work on a different task is a different session.
+--
+-- A trigger rather than an audit of the writers, because the writers are the
+-- problem: ES-1067 held 1953 -> 1973 -> 1959 -> 1973 -> 1953 in one lifetime,
+-- and the fourth of those five assignments has no identified source in the code.
+-- The trigger names it the next time it fires.
+--
+-- Re-affirming the SAME value is allowed (`IS NOT OLD.task_id`), so an idempotent
+-- re-claim and autoBindFromCwd's re-affirmation both pass. Clearing to NULL is
+-- NOT allowed: E-1917's binding survived its land intact and was then cleared a
+-- week later, after which both resume paths reported "never claimed a task".
+-- That is the incident this refuses.
+--
+-- Consequences that are deliberate, not oversights:
+--   - internal/events/task_removal.go does not clear sessions.task_id. See the
+--     note there.
+--   - execTaskReleased (internal/events/executor.go) would abort if it ever ran.
+--     E-1968/ED-1560 left it no live producer; it survives only to replay
+--     historical ledger entries, and `rebuild-db` does not replay session binds
+--     at all (the projector has no case for task.claimed/task.released), so a
+--     rebuild never reaches it.
+--
+-- Only the trigger constrains future writes. Rows already reassigned stay as
+-- they are — there is no migration.
+--
+-- Stated here so a FRESH database gets it too, not only a migrated one (ED-1472:
+-- the two shapes must not drift). e-1969's change file has to DROP it, rename,
+-- and re-CREATE it, because SQLite re-parses every trigger on a table during
+-- ALTER TABLE ... RENAME COLUMN and a trigger naming a column that does not
+-- exist yet aborts the rename.
+
+CREATE TRIGGER IF NOT EXISTS sessions_task_id_write_once
+BEFORE UPDATE OF task_id ON sessions
+WHEN OLD.task_id IS NOT NULL AND NEW.task_id IS NOT OLD.task_id
+BEGIN
+    SELECT RAISE(ABORT, 'sessions.task_id is write-once');
+END;
 
 -- E-1530's two `sessions_null_process_on_end_*` triggers were REMOVED by E-1898,
 -- and the change file drops them from existing databases.
@@ -880,11 +926,14 @@ END;
 
 -- Session status snapshots (E-1312 / E-1314). Latest row by created_at is the
 -- current status. `tasks` holds all <task> elements; `summary` holds <layer>
--- children; active_task_id joins to tasks.id.
+-- children; task_id joins to tasks.id (active_task_id until E-1969, renamed
+-- with sessions.task_id so the two tables do not disagree about the name of
+-- the same thing). Unlike sessions.task_id this is NOT write-once: a status
+-- snapshot records involvement at a moment, not ownership.
 CREATE TABLE IF NOT EXISTS session_statuses (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     session_id INTEGER,
-    active_task_id INTEGER,
+    task_id INTEGER,
     created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
     headline TEXT,
     summary TEXT,
@@ -893,7 +942,7 @@ CREATE TABLE IF NOT EXISTS session_statuses (
     commits TEXT,
     memory TEXT,
     notes TEXT,
-    FOREIGN KEY (active_task_id) REFERENCES tasks(id) ON DELETE SET NULL
+    FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE SET NULL
 );
 CREATE INDEX IF NOT EXISTS session_statuses_session_recent_idx
     ON session_statuses (session_id, created_at DESC);

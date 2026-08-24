@@ -31,7 +31,7 @@ import (
 type ResumeTarget struct {
 	EndlessID    int64  `json:"endless_id"`
 	SessionID    string `json:"session_id"`
-	ActiveTaskID *int64 `json:"active_task_id"`
+	TaskID       *int64 `json:"task_id"`
 	WorktreePath string `json:"worktree_path"`
 	State        string `json:"state"`
 	ProjectID    int64  `json:"project_id"`
@@ -42,7 +42,7 @@ type ResumeTarget struct {
 	LandedSHA    string `json:"landed_sha,omitempty"`
 }
 
-const resumeSelect = `SELECT id, session_id, COALESCE(project_id, 0), active_task_id, COALESCE(state, '')
+const resumeSelect = `SELECT id, session_id, COALESCE(project_id, 0), task_id, COALESCE(state, '')
 	FROM sessions`
 
 // ResolveResumeTarget resolves a task or session reference to the session
@@ -127,7 +127,7 @@ func ResolveResumeTarget(ref string) (ResumeTarget, error) {
 
 func resumeByTask(db *sql.DB, taskID int64) (ResumeTarget, bool, error) {
 	row := db.QueryRow(resumeSelect+
-		` WHERE active_task_id = ? AND session_id IS NOT NULL
+		` WHERE task_id = ? AND session_id IS NOT NULL
 		  ORDER BY last_activity DESC LIMIT 1`, taskID)
 	return scanResume(row)
 }
@@ -223,7 +223,7 @@ func buildResumeTarget(r resumeRow) (ResumeTarget, error) {
 	}
 	if r.activeTask.Valid {
 		v := r.activeTask.Int64
-		t.ActiveTaskID = &v
+		t.TaskID = &v
 		wt, err := WorktreePathForTask(r.projectID, v)
 		if err != nil {
 			return ResumeTarget{}, err

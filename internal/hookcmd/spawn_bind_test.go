@@ -42,11 +42,11 @@ func TestTrySpawnBind_RaceReturnsFalse(t *testing.T) {
 // @endless_spawned_by marker but the @endless_task_id read races to empty, so the
 // spawn-marker bind no-ops. The cwd fallback — now gated on !spawnBound rather
 // than "no spawn marker" — must still bind the session to the task its worktree
-// path encodes, so active_task_id is set (not NULL) and the status line shows
+// path encodes, so task_id is set (not NULL) and the status line shows
 // the task instead of "claim a task".
 //
 // Against the pre-fix gate (tmuxSpawnedBy() == "") the same assertion fails:
-// the fallback is skipped and active_task_id stays NULL.
+// the fallback is skipped and task_id stays NULL.
 func TestSessionStartBind_CwdFallbackOnSpawnMarkerRace(t *testing.T) {
 	// Fresh file-backed DB with the real schema, injected into the
 	// monitor.DB() singleton via the exported test seam (E-1506).
@@ -88,7 +88,7 @@ func TestSessionStartBind_CwdFallbackOnSpawnMarkerRace(t *testing.T) {
 
 	// Seed the NULL-task session row the way production does: TouchSession runs
 	// at the top of runClaude before the bind decision. This makes the pre-fix
-	// symptom the real one (active_task_id NULL on an existing row), not a
+	// symptom the real one (task_id NULL on an existing row), not a
 	// missing row.
 	if err = monitor.TouchSession(payload.SessionID, "claude", "", 1); err != nil {
 		t.Fatalf("TouchSession: %v", err)
@@ -101,16 +101,16 @@ func TestSessionStartBind_CwdFallbackOnSpawnMarkerRace(t *testing.T) {
 	spawnBound := trySpawnBind(1, payload)
 	maybeCwdBind(1, payload, spawnBound)
 
-	var activeTaskID *int64
+	var taskID *int64
 	if err = db.QueryRow(
-		"SELECT active_task_id FROM sessions WHERE session_id='sess-845'",
-	).Scan(&activeTaskID); err != nil {
+		"SELECT task_id FROM sessions WHERE session_id='sess-845'",
+	).Scan(&taskID); err != nil {
 		t.Fatalf("read session row: %v", err)
 	}
-	if activeTaskID == nil {
-		t.Fatal("active_task_id is NULL — spawned session lost its task (E-1700 bug reproduced)")
+	if taskID == nil {
+		t.Fatal("task_id is NULL — spawned session lost its task (E-1700 bug reproduced)")
 	}
-	if *activeTaskID != 1699 {
-		t.Fatalf("active_task_id = %d, want 1699", *activeTaskID)
+	if *taskID != 1699 {
+		t.Fatalf("task_id = %d, want 1699", *taskID)
 	}
 }

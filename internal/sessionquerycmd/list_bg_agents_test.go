@@ -14,7 +14,7 @@ import (
 )
 
 // bgAgentSeed is one sessions row for the list-bg-agents tests. epicID/taskID
-// are pointers so a row can leave active_epic_id / active_task_id NULL.
+// are pointers so a row can leave epic_id / task_id NULL.
 type bgAgentSeed struct {
 	sessionID string
 	shortID   string
@@ -46,7 +46,7 @@ func seedBgAgentsDB(t *testing.T, cfgDir, projectPath string, rows []bgAgentSeed
 	); err != nil {
 		t.Fatalf("seed project: %v", err)
 	}
-	// Tasks referenced by active_epic_id / active_task_id: two epics and a few
+	// Tasks referenced by epic_id / task_id: two epics and a few
 	// children, so the title join has something to return and FKs resolve.
 	for _, ts := range []struct {
 		id    int64
@@ -71,7 +71,7 @@ func seedBgAgentsDB(t *testing.T, cfgDir, projectPath string, rows []bgAgentSeed
 		}
 		if _, err := db.Exec(
 			`INSERT INTO sessions
-			   (session_id, project_id, platform, state, active_task_id, active_epic_id,
+			   (session_id, project_id, platform, state, task_id, epic_id,
 			    kind_id, short_id, started_at, last_activity)
 			 VALUES (?, 1, 'claude', ?, ?, ?, ?, ?, ?, ?)`,
 			r.sessionID, r.state, r.taskID, r.epicID, r.kindID, shortID,
@@ -104,8 +104,8 @@ const (
 
 // fixtureRows is the shared session mix: two working bg agents under epic 100,
 // one under epic 200, an ended bg agent under 100, a tmux session under 100, a
-// coordinator (tmux) session whose active_epic_id is 100, and a coordinator
-// with NULL active_epic_id.
+// coordinator (tmux) session whose epic_id is 100, and a coordinator
+// with NULL epic_id.
 func fixtureRows() []bgAgentSeed {
 	return []bgAgentSeed{
 		{"bg-1", "aaa11111", "working", kindBg, i64(100), i64(101), "2026-06-23T10:00:00"},
@@ -155,7 +155,7 @@ func TestListBgAgents_ByEpic(t *testing.T) {
 }
 
 // TestListBgAgents_BySession: --session-id auto-resolves the caller's
-// active_epic_id, then filters as --epic-id would.
+// epic_id, then filters as --epic-id would.
 func TestListBgAgents_BySession(t *testing.T) {
 	cfgDir := t.TempDir()
 	seedBgAgentsDB(t, cfgDir, t.TempDir(), fixtureRows())
@@ -179,7 +179,7 @@ func TestListBgAgents_BySession(t *testing.T) {
 	}
 }
 
-// TestListBgAgents_BySession_NoEpic: a caller whose active_epic_id is NULL
+// TestListBgAgents_BySession_NoEpic: a caller whose epic_id is NULL
 // yields epic_id null and an empty list (Python renders the guidance error).
 func TestListBgAgents_BySession_NoEpic(t *testing.T) {
 	cfgDir := t.TempDir()

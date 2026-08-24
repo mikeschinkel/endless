@@ -114,7 +114,7 @@ def _resume_target(ref: str) -> dict:
     """Resolve a task/session ref to its resume target via Go (per E-1486).
 
     Returns the JSON dict from `endless-go session-query resume-target`:
-    endless_id, session_id (Claude UUID), active_task_id, worktree_path, state.
+    endless_id, session_id (Claude UUID), task_id, worktree_path, state.
     """
     import shutil
     import subprocess
@@ -224,7 +224,7 @@ def _auto_task_for_taskless_session(target: dict) -> tuple[str, int]:
     a task-less session is doing so *because* they do not know what it was
     about). So: create the task, claim it, resume into its worktree.
 
-    Idempotency needs no bookkeeping — claiming sets `sessions.active_task_id`,
+    Idempotency needs no bookkeeping — claiming sets `sessions.task_id`,
     so the next resume of this session takes the ordinary task path and mints
     nothing. tests/tasks/e-1918-verify.sh asserts that rather than trusting it.
 
@@ -300,7 +300,7 @@ def _resume_decision(
             "endless_id": eid,
             "worktree": worktree,
             "label": label,
-            "active_task_id": task,
+            "task_id": task,
         })
         decision_out.update(fields)
         decision_out.setdefault("recovered", False)
@@ -341,7 +341,7 @@ def _resolve_resume(
     uuid = target.get("session_id") or ""
     worktree = target.get("worktree_path") or ""
     eid = target.get("endless_id")
-    task = target.get("active_task_id")
+    task = target.get("task_id")
     label = f"E-{task}" if task else f"session {eid}"
 
     # E-1889: refuse `--reopen` on a decision-bearing status before anything
@@ -485,7 +485,7 @@ def _recover_dropped_worktree(
     """
     from endless.worktree_cmd import recreate_dropped_worktree, _project_root
 
-    task_id = int(target["active_task_id"])
+    task_id = int(target["task_id"])
     task_type = target.get("task_type") or ""
     task_status = target.get("task_status") or ""
     title = target.get("task_title") or "task"
@@ -547,10 +547,10 @@ def _current_pane_task() -> tuple[int, int] | None:
         return None
     if eid is None:
         return None
-    rows = db.query("SELECT active_task_id FROM sessions WHERE id = ?", (eid,))
-    if not rows or rows[0]["active_task_id"] is None:
+    rows = db.query("SELECT task_id FROM sessions WHERE id = ?", (eid,))
+    if not rows or rows[0]["task_id"] is None:
         return None
-    return eid, int(rows[0]["active_task_id"])
+    return eid, int(rows[0]["task_id"])
 
 
 def resume_session(
@@ -915,7 +915,7 @@ def list_sessions(
         # and empty sessions it already reveals — same kind of noise, same
         # switch. They stay fully addressable by id in the meantime (`session
         # show`, `session goto`), so nothing becomes unreachable.
-        where += " AND s.active_task_id IS NOT NULL"
+        where += " AND s.task_id IS NOT NULL"
 
         if not show_empty:
             # Filter out empty sessions
@@ -955,13 +955,13 @@ def list_sessions(
 
     rows = db.query(
         f"SELECT s.id, s.session_id, s.state, s.summary, "
-        f"s.started_at, s.last_activity, s.hidden, s.active_task_id, "
+        f"s.started_at, s.last_activity, s.hidden, s.task_id, "
         f"COALESCE(t.title, '') as task_title, "
         f"COALESCE(p.name, '') as project_name, "
         f"(SELECT count(*) FROM session_messages m WHERE m.session_id = s.session_id) as msg_count "
         f"FROM sessions s "
         f"LEFT JOIN projects p ON s.project_id = p.id "
-        f"LEFT JOIN live_tasks t ON t.id = s.active_task_id "
+        f"LEFT JOIN live_tasks t ON t.id = s.task_id "
         f"{where} "
         f"ORDER BY {order} "
         f"LIMIT ?",
@@ -986,7 +986,7 @@ def list_sessions(
                 "session_id": r["session_id"][:12],
                 "project": r["project_name"],
                 "state": r["state"],
-                "task_id": r["active_task_id"],
+                "task_id": r["task_id"],
                 "messages": r["msg_count"],
                 "summary": r["summary"] or "",
                 "started": r["started_at"],
@@ -1026,7 +1026,7 @@ def list_sessions(
     click.echo(click.style(heading, bold=True))
 
     def task_cell(row) -> str:
-        return f"E-{row['active_task_id']}" if row["active_task_id"] else ""
+        return f"E-{row['task_id']}" if row["task_id"] else ""
 
     gap = "  "
     id_w = max(4, max(len(str(r["id"])) for r in rows))
@@ -1366,7 +1366,7 @@ def _live_sessions(project_root: Path, harness: str = "claude") -> list[dict]:
     Each dict carries the fields the rest of this module expects from a
     companion record — endless_session_id, harness_session_id, harness,
     pane_id, cwd, worktree_path, started_at — plus richer DB fields
-    (state, active_task_id, last_activity, summary). The `pid` field of
+    (state, task_id, last_activity, summary). The `pid` field of
     the old companion record is intentionally absent: liveness is decided
     Go-side, which filters out both ended rows and sessions whose pane was
     observably absent from a tmux server it actually reached (E-1898). A
@@ -1410,10 +1410,10 @@ def _live_sessions(project_root: Path, harness: str = "claude") -> list[dict]:
             "harness": r.get("platform"),
             "pane_id": pane_id or "",
             "cwd": pane_cwds.get(pane_id or "", ""),
-            "worktree_path": _worktree_path_for_task(project_root, r.get("active_task_id")),
+            "worktree_path": _worktree_path_for_task(project_root, r.get("task_id")),
             "started_at": r.get("started_at") or "",
             "state": r.get("state"),
-            "active_task_id": r.get("active_task_id"),
+            "task_id": r.get("task_id"),
             "last_activity": r.get("last_activity") or "",
             "summary": r.get("summary") or "",
         })
@@ -1756,7 +1756,7 @@ def session_show_resolve(session_ref: str | None, as_json: bool = False) -> None
 
     eid = c.get("endless_session_id")
     rows = db.query(
-        "SELECT s.state, s.started_at, s.last_activity, s.summary, s.active_task_id, "
+        "SELECT s.state, s.started_at, s.last_activity, s.summary, s.task_id, "
         "COALESCE(p.name, '') AS project_name, "
         "(SELECT count(*) FROM session_messages m WHERE m.session_id = s.session_id) AS msg_count "
         "FROM sessions s "
@@ -1770,10 +1770,10 @@ def session_show_resolve(session_ref: str | None, as_json: bool = False) -> None
     r = rows[0]
 
     task_info = None
-    if r["active_task_id"]:
+    if r["task_id"]:
         t = db.query(
             "SELECT id, title, status FROM live_tasks WHERE id = ?",
-            (r["active_task_id"],),
+            (r["task_id"],),
         )
         if t:
             task_info = t[0]
@@ -2148,7 +2148,7 @@ def _goto_task(task_id: int, live: list[dict]) -> tuple[str, str]:
     """
     from endless.task_cmd import task_id_display
     disp = task_id_display(task_id)
-    cands = [c for c in live if c.get("active_task_id") == task_id]
+    cands = [c for c in live if c.get("task_id") == task_id]
     cands.sort(key=lambda c: c.get("last_activity") or "", reverse=True)
     for c in cands:
         pane = c.get("pane_id") or ""
@@ -2208,7 +2208,7 @@ def _resolve_goto_target(ref: str, live: list[dict]) -> tuple[str, str]:
     if raw.isdigit():
         n = int(raw)
         sess_matches = [c for c in live if c.get("endless_session_id") == n]
-        task_matches = [c for c in live if c.get("active_task_id") == n]
+        task_matches = [c for c in live if c.get("task_id") == n]
         if sess_matches and task_matches:
             click.echo(
                 f"'{raw}' is ambiguous: it matches both session {n} and the "
@@ -2270,7 +2270,7 @@ def _apply_revisit_intent(ref: str, revisit: bool, no_revisit: bool) -> None:
     target = _try_resume_target(ref)
     if target is None:
         return
-    task = target.get("active_task_id")
+    task = target.get("task_id")
     status = target.get("task_status") or ""
     if task is None:
         return

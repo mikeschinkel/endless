@@ -159,7 +159,7 @@ const terminalStatusSet = "'confirmed','assumed','declined','obsolete','complete
 // most-recent fallbacks (E-1465 / ED-1523): the machine-wide one returned an
 // UNRELATED task for a pane with nothing of its own, and the status line — which
 // has no such fallback — already proves the hint-based behavior is correct
-// (E-1698). Both claim and bind write the session's active_task_id, so bound
+// (E-1698). Both claim and bind write the session's task_id, so bound
 // windows still resolve via the pane-scoped path with no window-option fallback.
 func ResolveSessionStatusFocal(tmuxPane string) (int64, PaneStatusKind, error) {
 	ps, err := GetPaneStatus(tmuxPane)
@@ -213,7 +213,7 @@ func tmuxWindowOption(pane, name string) string {
 // and E-1691:
 //
 //   - every task touched (via session_tasks) by ANY live-or-dead session whose
-//     active_task_id = focal (cross-project; robust to duplicate session rows),
+//     task_id = focal (cross-project; robust to duplicate session rows),
 //   - ∪ the focal task itself,
 //   - ∪ the focal's real task-tree parent (tasks.parent_id) — the ↑ parent row,
 //   - ∪ the spawning session's active task — the ↩ from row (session lineage),
@@ -252,14 +252,14 @@ func SessionStatusRows(focal, parentSession int64, includeAll bool) ([]SessionSt
 WITH RECURSIVE
 ftask(tid) AS (SELECT ?),
 -- sfoc.stid = the SPAWNING session's active task (session lineage → ↩ from).
-sfoc(stid) AS (SELECT active_task_id FROM sessions WHERE id = ?),
+sfoc(stid) AS (SELECT task_id FROM sessions WHERE id = ?),
 -- rpar.rpid = the focal's real task-tree parent (tasks.parent_id → ↑ parent).
 rpar(rpid) AS (SELECT parent_id FROM live_tasks WHERE id = (SELECT tid FROM ftask)),
 base AS (
   SELECT t.id, t.project_id, t.title, t.status, t.phase, t.text, t.type_id
     FROM session_tasks st JOIN live_tasks t ON t.id = st.task_id
    WHERE st.session_id IN (
-     SELECT id FROM sessions WHERE active_task_id = (SELECT tid FROM ftask)
+     SELECT id FROM sessions WHERE task_id = (SELECT tid FROM ftask)
    )
   UNION
   SELECT t.id, t.project_id, t.title, t.status, t.phase, t.text, t.type_id
@@ -339,7 +339,7 @@ enr AS (
     COALESCE(b.id = (SELECT stid FROM sfoc), 0) AND b.id <> (SELECT tid FROM ftask) AS is_from,
     (EXISTS(
        SELECT 1 FROM sessions s
-        WHERE s.state != 'ended' AND s.active_task_id = b.id
+        WHERE s.state != 'ended' AND s.task_id = b.id
      ) AND b.id <> (SELECT tid FROM ftask)) AS in_flight,
     -- E-1693: the task's work has already merged (>=1 task_landings row). A
     -- landed non-terminal task stays visible (it still passes the terminal-status
@@ -402,7 +402,7 @@ func scanSessionStatusRows(rows *sql.Rows) ([]SessionStatusRow, error) {
 // in session_tasks for session `sessionID` — the tasks this session filed
 // (relation surfaced=2) or touched-but-did-not-claim (revisited=3). It is the
 // no-goal companion to SessionStatusRows: when a session has no claimed task
-// (active_task_id NULL) the focal-anchored projection surfaces nothing, so
+// (task_id NULL) the focal-anchored projection surfaces nothing, so
 // `session status` would hide the session's own work entirely (E-1802). This
 // reads the already-recorded rows directly off the session and enriches them
 // with the same decoration/count columns the focal view uses.
@@ -453,7 +453,7 @@ enr AS (
     0 AS is_from,
     EXISTS(
        SELECT 1 FROM sessions s
-        WHERE s.state != 'ended' AND s.active_task_id = b.id
+        WHERE s.state != 'ended' AND s.task_id = b.id
      ) AS in_flight,
     EXISTS(SELECT 1 FROM task_landings tl WHERE tl.task_id = b.id) AS landed,
     (SELECT count(*) FROM task_deps d JOIN live_tasks blk ON blk.id = d.source_id
@@ -543,7 +543,7 @@ SELECT d.target_id, d.source_id
 
 // SessionStatusDoOrder returns the per-session implementation order (E-1683's
 // session_tasks.do_order) for the candidate `ids`, scoped to sessions whose
-// active_task_id = focal — the same union scope SessionStatusRows uses. Only
+// task_id = focal — the same union scope SessionStatusRows uses. Only
 // non-null do_order rows are returned; a task absent from the map has no
 // explicit order. When non-empty, this OVERRIDES the DAG-derived order in
 // `session status --tree`.
@@ -559,7 +559,7 @@ func SessionStatusDoOrder(focal int64, ids []int64) (map[int64]int64, error) {
 	q := `
 SELECT st.task_id, st.do_order
   FROM session_tasks st JOIN sessions s ON s.id = st.session_id
- WHERE s.active_task_id = ?
+ WHERE s.task_id = ?
    AND st.do_order IS NOT NULL
    AND st.task_id IN (` + ph + `)`
 	rows, err := db.Query(q, append([]any{focal}, args...)...)

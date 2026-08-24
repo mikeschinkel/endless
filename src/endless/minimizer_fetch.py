@@ -116,7 +116,7 @@ def _fetch_session_status(task_id: int | None, session_id: int | None, spec: dic
     if not session_id:
         return ""
     rows = db.query(
-        "SELECT s.id, s.state, s.active_task_id, s.summary, "
+        "SELECT s.id, s.state, s.task_id, s.summary, "
         "       COALESCE(p.name,'') AS project "
         "FROM sessions s LEFT JOIN projects p ON p.id = s.project_id "
         "WHERE s.id = ?",
@@ -126,10 +126,10 @@ def _fetch_session_status(task_id: int | None, session_id: int | None, spec: dic
         return ""
     s = rows[0]
     parts = [f"session ES-{s['id']} [{s['state']}] project={s['project']}"]
-    if s["active_task_id"]:
+    if s["task_id"]:
         t = db.query(
             "SELECT id, title, status, phase FROM live_tasks WHERE id = ?",
-            (s["active_task_id"],),
+            (s["task_id"],),
         )
         if t:
             parts.append(

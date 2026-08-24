@@ -161,18 +161,18 @@ func blockersSegment(taskID int64) string {
 // the status line and menu header, encoding the session's epic context
 // (E-1571):
 //
-//   - ActiveEpicID nil                  → "E-<task>"          (no epic context)
-//   - ActiveEpicID == TaskID            → "E-<epic>"          (viewing the epic itself)
-//   - ActiveEpicID != TaskID            → "E-<epic>:E-<task>" (viewing a child of the epic)
+//   - EpicID nil                  → "E-<task>"          (no epic context)
+//   - EpicID == TaskID            → "E-<epic>"          (viewing the epic itself)
+//   - EpicID != TaskID            → "E-<epic>:E-<task>" (viewing a child of the epic)
 //
-// TaskID is the session's active_task_id (the item currently in view); when an
+// TaskID is the session's task_id (the item currently in view); when an
 // epic is active and a child is in view, the epic id leads and the child
 // trails.
 func taskIDPrefix(info *monitor.ActiveTaskInfo) string {
-	if info.ActiveEpicID == nil || *info.ActiveEpicID == info.TaskID {
+	if info.EpicID == nil || *info.EpicID == info.TaskID {
 		return fmt.Sprintf("E-%d", info.TaskID)
 	}
-	return fmt.Sprintf("E-%d:E-%d", *info.ActiveEpicID, info.TaskID)
+	return fmt.Sprintf("E-%d:E-%d", *info.EpicID, info.TaskID)
 }
 
 // tierString formats the nullable tier integer for display, returning

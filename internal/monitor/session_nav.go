@@ -137,8 +137,8 @@ func ListNavTrail(client string, limit int) ([]NavEdge, error) {
 	}
 
 	q := `SELECT n.id, n.client, vk.slug, n.created_at,
-	             n.from_session_id, n.from_pane, fs.active_task_id, COALESCE(fs.summary, ''),
-	             n.to_session_id, n.to_pane, ts.active_task_id, COALESCE(ts.summary, '')
+	             n.from_session_id, n.from_pane, fs.task_id, COALESCE(fs.summary, ''),
+	             n.to_session_id, n.to_pane, ts.task_id, COALESCE(ts.summary, '')
 	      FROM session_navigations n
 	      JOIN nav_via_kinds vk ON vk.id = n.via_id
 	      LEFT JOIN sessions fs ON fs.id = n.from_session_id

@@ -33,7 +33,7 @@ func readLogEntries(t *testing.T) []map[string]any {
 }
 
 // seedProjectTask inserts project 1 and a task so a session row's project_id /
-// active_task_id foreign keys resolve.
+// task_id foreign keys resolve.
 func seedProjectTask(t *testing.T, taskID int64) {
 	t.Helper()
 	db, err := DB()
@@ -50,16 +50,16 @@ func seedProjectTask(t *testing.T, taskID int64) {
 }
 
 // seedSession inserts one session row for snapshot/transition tests.
-func seedSession(t *testing.T, guid, short, state string, activeTaskID any) {
+func seedSession(t *testing.T, guid, short, state string, taskID any) {
 	t.Helper()
 	db, err := DB()
 	if err != nil {
 		t.Fatalf("DB: %v", err)
 	}
 	if _, err := db.Exec(
-		`INSERT INTO sessions (session_id, short_id, project_id, state, active_task_id, kind_id)
+		`INSERT INTO sessions (session_id, short_id, project_id, state, task_id, kind_id)
 		 VALUES (?, ?, 1, ?, ?, 1)`,
-		guid, short, state, activeTaskID,
+		guid, short, state, taskID,
 	); err != nil {
 		t.Fatalf("seed session: %v", err)
 	}
@@ -73,14 +73,14 @@ func TestLogSessionTxn_WritesJSONLine(t *testing.T) {
 	old := int64(1835)
 	nw := int64(1832)
 	LogSessionTxn(SessionTxn{
-		SessionGUID:     "guid-A",
-		ShortID:         "abc123",
-		OldState:        "working",
-		NewState:        "working",
-		OldActiveTaskID: &old,
-		NewActiveTaskID: &nw,
-		Reason:          SessionLogCwdBind,
-		Caller:          "test",
+		SessionGUID: "guid-A",
+		ShortID:     "abc123",
+		OldState:    "working",
+		NewState:    "working",
+		OldTaskID:   &old,
+		NewTaskID:   &nw,
+		Reason:      SessionLogCwdBind,
+		Caller:      "test",
 	})
 
 	entries := readLogEntries(t)
@@ -94,11 +94,11 @@ func TestLogSessionTxn_WritesJSONLine(t *testing.T) {
 	if e["reason"] != "cwd-bind" {
 		t.Errorf("reason = %v, want cwd-bind", e["reason"])
 	}
-	if e["old_active_task_id"] != float64(1835) {
-		t.Errorf("old_active_task_id = %v, want 1835", e["old_active_task_id"])
+	if e["old_task_id"] != float64(1835) {
+		t.Errorf("old_task_id = %v, want 1835", e["old_task_id"])
 	}
-	if e["new_active_task_id"] != float64(1832) {
-		t.Errorf("new_active_task_id = %v, want 1832", e["new_active_task_id"])
+	if e["new_task_id"] != float64(1832) {
+		t.Errorf("new_task_id = %v, want 1832", e["new_task_id"])
 	}
 	if e["ts"] == "" || e["ts"] == nil {
 		t.Errorf("ts missing")
@@ -106,7 +106,7 @@ func TestLogSessionTxn_WritesJSONLine(t *testing.T) {
 }
 
 // TestSnapshotSession_CapturesOldState confirms the pre-write read returns the
-// session's current state and active_task_id.
+// session's current state and task_id.
 func TestSnapshotSession_CapturesOldState(t *testing.T) {
 	withTestDB(t)
 	seedProjectTask(t, 77)
@@ -122,8 +122,8 @@ func TestSnapshotSession_CapturesOldState(t *testing.T) {
 	if snap.ShortID != "short-B" {
 		t.Errorf("ShortID = %q, want short-B", snap.ShortID)
 	}
-	if snap.ActiveTaskID == nil || *snap.ActiveTaskID != 77 {
-		t.Errorf("ActiveTaskID = %v, want 77", snap.ActiveTaskID)
+	if snap.TaskID == nil || *snap.TaskID != 77 {
+		t.Errorf("TaskID = %v, want 77", snap.TaskID)
 	}
 }
 
@@ -135,8 +135,8 @@ func TestSnapshotSession_MissingRow(t *testing.T) {
 	if snap.Found {
 		t.Errorf("Found = true, want false")
 	}
-	if snap.ActiveTaskID != nil {
-		t.Errorf("ActiveTaskID = %v, want nil", snap.ActiveTaskID)
+	if snap.TaskID != nil {
+		t.Errorf("TaskID = %v, want nil", snap.TaskID)
 	}
 }
 

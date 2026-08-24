@@ -165,7 +165,7 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "  trail [--client <name>] [--limit N]")
 	fmt.Fprintln(os.Stderr, "                                    JSON array of navigation edges newest-first (no --client = all clients)")
 	fmt.Fprintln(os.Stderr, "  resume-target --ref <ES-session-id|task-id|session-id|uuid>")
-	fmt.Fprintln(os.Stderr, "                                    JSON {endless_id, session_id, active_task_id, worktree_path, state,")
+	fmt.Fprintln(os.Stderr, "                                    JSON {endless_id, session_id, task_id, worktree_path, state,")
 	fmt.Fprintln(os.Stderr, "                                    project_id, project_path, task_type, task_status, task_title, landed_sha}")
 	fmt.Fprintln(os.Stderr, "                                    to relaunch (or recover) a lost session; ES-<n> is session-explicit")
 	fmt.Fprintln(os.Stderr, "  task-report --id <task-id>        JSON {task_id, status, type, landed, successors[]} of a task's computed report facts (E-1771)")
@@ -855,8 +855,8 @@ type bgAgentList struct {
 
 // runListBgAgents lists working background-agent sessions for `endless agents`.
 // Exactly one of --session-id / --epic-id / --all selects the scope:
-//   - --epic-id <id>   : agents whose active_epic_id = id.
-//   - --session-id <id>: resolve the caller's active_epic_id, then as above;
+//   - --epic-id <id>   : agents whose epic_id = id.
+//   - --session-id <id>: resolve the caller's epic_id, then as above;
 //     a NULL epic returns {scope:"epic", epic_id:null, agents:[]}.
 //   - --all            : every working bg agent in --project-root's project.
 //

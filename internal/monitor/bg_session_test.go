@@ -20,7 +20,7 @@ func seedTypedTask(t *testing.T, db *sql.DB, id, projectID int64, typeID int64, 
 func bgRow(t *testing.T, db *sql.DB, id int64) (sessionID sql.NullString, shortID sql.NullString, kindID int64, activeTask sql.NullInt64, activeEpic sql.NullInt64) {
 	t.Helper()
 	err := db.QueryRow(
-		"SELECT session_id, short_id, kind_id, active_task_id, active_epic_id FROM sessions WHERE id=?", id,
+		"SELECT session_id, short_id, kind_id, task_id, epic_id FROM sessions WHERE id=?", id,
 	).Scan(&sessionID, &shortID, &kindID, &activeTask, &activeEpic)
 	if err != nil {
 		t.Fatalf("read session id=%d: %v", id, err)
@@ -49,10 +49,10 @@ func TestRecordBgAgentSession_NoEpicAncestor(t *testing.T) {
 		t.Errorf("kind_id = %d, want 2 (background)", kind)
 	}
 	if task.Int64 != 10 {
-		t.Errorf("active_task_id = %d, want 10", task.Int64)
+		t.Errorf("task_id = %d, want 10", task.Int64)
 	}
 	if epic.Valid {
-		t.Errorf("active_epic_id = %d, want NULL (no epic ancestor)", epic.Int64)
+		t.Errorf("epic_id = %d, want NULL (no epic ancestor)", epic.Int64)
 	}
 }
 
@@ -72,7 +72,7 @@ func TestRecordBgAgentSession_ResolvesEpicAncestor(t *testing.T) {
 	}
 	_, _, _, _, epic := bgRow(t, db, id)
 	if !epic.Valid || epic.Int64 != 100 {
-		t.Errorf("active_epic_id = %v, want 100 (nearest epic ancestor)", epic)
+		t.Errorf("epic_id = %v, want 100 (nearest epic ancestor)", epic)
 	}
 }
 
@@ -87,10 +87,10 @@ func TestRecordBgAgentSession_DispatchEpicItself(t *testing.T) {
 	}
 	_, _, _, task, epic := bgRow(t, db, id)
 	if task.Int64 != 200 {
-		t.Errorf("active_task_id = %d, want 200", task.Int64)
+		t.Errorf("task_id = %d, want 200", task.Int64)
 	}
 	if !epic.Valid || epic.Int64 != 200 {
-		t.Errorf("active_epic_id = %v, want 200 (the epic is its own nearest epic ancestor)", epic)
+		t.Errorf("epic_id = %v, want 200 (the epic is its own nearest epic ancestor)", epic)
 	}
 }
 

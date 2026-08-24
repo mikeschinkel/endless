@@ -20,7 +20,7 @@ func insertResumeSession(t *testing.T, db *sql.DB, projectID int64, taskID *int6
 		uuidArg = *uuid
 	}
 	res, err := db.Exec(
-		`INSERT INTO sessions (session_id, project_id, platform, state, active_task_id, started_at, last_activity)
+		`INSERT INTO sessions (session_id, project_id, platform, state, task_id, started_at, last_activity)
 		 VALUES (?, ?, 'claude', 'ended', ?, ?, ?)`,
 		uuidArg, projectID, taskArg, lastActivity, lastActivity,
 	)
@@ -54,8 +54,8 @@ func TestResolveResumeTarget_TaskFirstPicksMostRecent(t *testing.T) {
 		if got.EndlessID != newID || got.SessionID != "new-uuid-2222" {
 			t.Errorf("ref %q → id %d/%q, want %d/new-uuid-2222", ref, got.EndlessID, got.SessionID, newID)
 		}
-		if got.ActiveTaskID == nil || *got.ActiveTaskID != 10 {
-			t.Errorf("ref %q → active_task_id %v, want 10", ref, got.ActiveTaskID)
+		if got.TaskID == nil || *got.TaskID != 10 {
+			t.Errorf("ref %q → task_id %v, want 10", ref, got.TaskID)
 		}
 	}
 }
@@ -65,7 +65,7 @@ func TestResolveResumeTarget_TaskWithoutUUIDNotResumable(t *testing.T) {
 	seedProject(t, db, 1, "p1", "/p1")
 	seedTask(t, db, 10, 1, "t10", "underway")
 
-	// A dispatched-but-never-started bg agent: active_task_id set, UUID NULL.
+	// A dispatched-but-never-started bg agent: task_id set, UUID NULL.
 	insertResumeSession(t, db, 1, ptrInt64(10), nil, "2026-06-20T00:00:00")
 
 	_, err := ResolveResumeTarget("E-10")
@@ -88,8 +88,8 @@ func TestResolveResumeTarget_BareIntFallsBackToSessionID(t *testing.T) {
 	if got.EndlessID != sid || got.SessionID != "loose-uuid-3333" {
 		t.Errorf("got %d/%q, want %d/loose-uuid-3333", got.EndlessID, got.SessionID, sid)
 	}
-	if got.ActiveTaskID != nil {
-		t.Errorf("active_task_id = %v, want nil", got.ActiveTaskID)
+	if got.TaskID != nil {
+		t.Errorf("task_id = %v, want nil", got.TaskID)
 	}
 }
 
@@ -164,8 +164,8 @@ func TestResolveResumeTarget_CarriesProjectOnTaskLessSession(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ResolveResumeTarget: %v", err)
 	}
-	if got.ActiveTaskID != nil {
-		t.Fatalf("active_task_id = %v, want nil (the task-less branch)", got.ActiveTaskID)
+	if got.TaskID != nil {
+		t.Fatalf("task_id = %v, want nil (the task-less branch)", got.TaskID)
 	}
 	if got.ProjectID != 7 {
 		t.Errorf("project_id = %d, want 7", got.ProjectID)

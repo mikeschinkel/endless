@@ -1,6 +1,6 @@
 """Tests for `endless task release` (E-1243, disabled by E-1968).
 
-E-1968 disabled the verb under ED-1560's write-once `sessions.active_task_id`:
+E-1968 disabled the verb under ED-1560's write-once `sessions.task_id`:
 a session's task is set at claim and never cleared or repointed, so a verb whose
 defining act is the clear cannot survive as a workflow. The command and its CLI
 wiring are kept deliberately, as a tombstone that answers with the invariant and
@@ -27,13 +27,13 @@ def _insert_session(
     session_id: str,
     project_id: int,
     state: str = "working",
-    active_task_id: int | None = None,
+    task_id: int | None = None,
 ):
     db.execute(
         "INSERT INTO sessions (id, session_id, project_id, platform, state, "
-        "started_at, active_task_id) "
+        "started_at, task_id) "
         "VALUES (?, ?, ?, 'claude', ?, '2026-05-11T00:00:00', ?)",
-        (pk, session_id, project_id, state, active_task_id),
+        (pk, session_id, project_id, state, task_id),
     )
 
 
@@ -91,7 +91,7 @@ def test_release_leaves_the_binding_intact(project_at_cwd):
     _insert_task(pk=800, project_id=project_at_cwd["project_id"])
     _insert_session(
         pk=900, session_id="s-900",
-        project_id=project_at_cwd["project_id"], active_task_id=800,
+        project_id=project_at_cwd["project_id"], task_id=800,
     )
 
     with patch("endless.task_cmd._current_endless_session_id", return_value=900), \
@@ -101,8 +101,8 @@ def test_release_leaves_the_binding_intact(project_at_cwd):
 
     assert not emit.called
     assert db.query(
-        "SELECT active_task_id FROM sessions WHERE id = 900"
-    )[0]["active_task_id"] == 800
+        "SELECT task_id FROM sessions WHERE id = 900"
+    )[0]["task_id"] == 800
 
 
 def test_release_command_is_still_wired():

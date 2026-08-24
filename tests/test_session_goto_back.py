@@ -97,7 +97,7 @@ def goto_env(registered_project, monkeypatch, stage_live_session):
 
 def test_goto_by_task_id(goto_env, capsys):
     stage, make = goto_env
-    stage(endless_session_id=10, pane_id="%10", active_task_id=1465)
+    stage(endless_session_id=10, pane_id="%10", task_id=1465)
     ft = make({"%10", "%1"}, current_pane="%1")
 
     session_cmd.session_goto("E-1465")
@@ -113,7 +113,7 @@ def test_goto_sets_via_goto_marker(goto_env):
     """goto tags the focus change for the nav-trail recorder (E-1682): the
     one-shot @endless_nav_via marker is set to 'goto' before the switch."""
     stage, make = goto_env
-    stage(endless_session_id=10, pane_id="%10", active_task_id=1465)
+    stage(endless_session_id=10, pane_id="%10", task_id=1465)
     ft = make({"%10", "%1"}, current_pane="%1")
 
     session_cmd.session_goto("E-1465")
@@ -124,7 +124,7 @@ def test_goto_sets_via_goto_marker(goto_env):
 
 def test_goto_by_session_id(goto_env, capsys):
     stage, make = goto_env
-    stage(endless_session_id=10, pane_id="%10", active_task_id=None)
+    stage(endless_session_id=10, pane_id="%10", task_id=None)
     ft = make({"%10", "%2"}, current_pane="%2")
 
     session_cmd.session_goto("10")
@@ -146,7 +146,7 @@ def test_goto_by_uuid_prefix(goto_env):
 def test_goto_pushes_session_token_when_source_is_tracked(goto_env):
     stage, make = goto_env
     stage(endless_session_id=5, pane_id="%5")  # the source pane's session
-    stage(endless_session_id=10, pane_id="%10", active_task_id=1465)
+    stage(endless_session_id=10, pane_id="%10", task_id=1465)
     ft = make({"%5", "%10"}, current_pane="%5")
 
     session_cmd.session_goto("E-1465")
@@ -159,7 +159,7 @@ def test_goto_pushes_session_token_when_source_is_tracked(goto_env):
 def test_goto_ambiguous_bare_number(goto_env, capsys):
     stage, make = goto_env
     stage(endless_session_id=5, pane_id="%5")               # session 5
-    stage(endless_session_id=9, pane_id="%9", active_task_id=5)  # task 5
+    stage(endless_session_id=9, pane_id="%9", task_id=5)  # task 5
     ft = make({"%5", "%9", "%cur"}, current_pane="%cur")
 
     with pytest.raises(SystemExit) as exc:
@@ -174,7 +174,7 @@ def test_goto_ambiguous_bare_number(goto_env, capsys):
 
 def test_goto_no_live_session_for_task(goto_env, capsys):
     stage, make = goto_env
-    stage(endless_session_id=10, pane_id="%10", active_task_id=999)
+    stage(endless_session_id=10, pane_id="%10", task_id=999)
     ft = make({"%10", "%cur"}, current_pane="%cur")
 
     with pytest.raises(SystemExit) as exc:
@@ -214,7 +214,7 @@ def _stage_resumable(monkeypatch, worktree, uuid="uuid-abc123",
     """Patch _resume_target + _require_claude so a resume resolves cleanly to a
     real on-disk worktree, without needing endless-go or a live `claude`."""
     monkeypatch.setattr(session_cmd, "_resume_target", lambda ref: {
-        "endless_id": eid, "session_id": uuid, "active_task_id": task,
+        "endless_id": eid, "session_id": uuid, "task_id": task,
         "worktree_path": str(worktree), "state": "ended",
     })
     monkeypatch.setattr(session_cmd, "_require_claude", lambda: "/usr/bin/claude")
@@ -225,7 +225,7 @@ def test_goto_resume_opens_new_window_when_not_live(
 ):
     stage, make = goto_env
     # A live session on a DIFFERENT task, so E-1748 has no live pane.
-    stage(endless_session_id=10, pane_id="%10", active_task_id=1465)
+    stage(endless_session_id=10, pane_id="%10", task_id=1465)
     ft = make({"%10", "%cur"}, current_pane="%cur")
     _stage_resumable(monkeypatch, registered_project)
 
@@ -244,7 +244,7 @@ def test_goto_resume_opens_new_window_when_not_live(
 
 def test_goto_resume_noop_when_live(goto_env, monkeypatch):
     stage, make = goto_env
-    stage(endless_session_id=10, pane_id="%10", active_task_id=1465)
+    stage(endless_session_id=10, pane_id="%10", task_id=1465)
     ft = make({"%10", "%cur"}, current_pane="%cur")
 
     def _no_resume(ref):
@@ -262,7 +262,7 @@ def test_goto_not_live_error_names_resume_when_resumable(
     goto_env, registered_project, monkeypatch, capsys
 ):
     stage, make = goto_env
-    stage(endless_session_id=10, pane_id="%10", active_task_id=1465)
+    stage(endless_session_id=10, pane_id="%10", task_id=1465)
     make({"%10", "%cur"}, current_pane="%cur")
     _stage_resumable(monkeypatch, registered_project)
 
@@ -278,7 +278,7 @@ def test_goto_not_live_error_keeps_list_hint_when_unknown(
     goto_env, monkeypatch, capsys
 ):
     stage, make = goto_env
-    stage(endless_session_id=10, pane_id="%10", active_task_id=1465)
+    stage(endless_session_id=10, pane_id="%10", task_id=1465)
     make({"%10", "%cur"}, current_pane="%cur")
 
     def _unknown(ref):
@@ -310,7 +310,7 @@ def test_try_resume_target_reports_known_vs_unknown(monkeypatch):
 
 def test_back_pops_pushed_raw_pane(goto_env):
     stage, make = goto_env
-    stage(endless_session_id=10, pane_id="%10", active_task_id=1465)
+    stage(endless_session_id=10, pane_id="%10", task_id=1465)
     ft = make({"%10", "%1"}, current_pane="%1")
 
     session_cmd.session_goto("E-1465")   # pushes "%1", switches to %10
@@ -325,7 +325,7 @@ def test_back_resolves_session_token_to_current_pane(goto_env):
     that moved to a new pane still works (the spawner-restart case)."""
     stage, make = goto_env
     src = stage(endless_session_id=5, pane_id="%5")
-    stage(endless_session_id=10, pane_id="%10", active_task_id=1465)
+    stage(endless_session_id=10, pane_id="%10", task_id=1465)
     ft = make({"%5", "%10"}, current_pane="%5")
 
     session_cmd.session_goto("E-1465")   # pushes session token "5"
@@ -397,7 +397,7 @@ def _stage_settled(monkeypatch, worktree, status, task=1748, eid=1748):
     emitter captured so a test can assert on the transition (or its absence)."""
     emitted: list[tuple] = []
     monkeypatch.setattr(session_cmd, "_resume_target", lambda ref: {
-        "endless_id": eid, "session_id": "uuid-settled", "active_task_id": task,
+        "endless_id": eid, "session_id": "uuid-settled", "task_id": task,
         "worktree_path": str(worktree), "state": "ended",
         "task_status": status, "task_title": "settled task",
     })
@@ -417,7 +417,7 @@ def test_goto_resume_settled_requires_an_explicit_intent(
     import click
 
     stage, make = goto_env
-    stage(endless_session_id=10, pane_id="%10", active_task_id=1465)
+    stage(endless_session_id=10, pane_id="%10", task_id=1465)
     ft = make({"%10", "%cur"}, current_pane="%cur")
     emitted = _stage_settled(monkeypatch, registered_project, status)
 
@@ -436,7 +436,7 @@ def test_goto_resume_revisit_flips_status_and_opens(
     goto_env, registered_project, monkeypatch,
 ):
     stage, make = goto_env
-    stage(endless_session_id=10, pane_id="%10", active_task_id=1465)
+    stage(endless_session_id=10, pane_id="%10", task_id=1465)
     ft = make({"%10", "%cur"}, current_pane="%cur")
     emitted = _stage_settled(monkeypatch, registered_project, "assumed")
 
@@ -457,7 +457,7 @@ def test_goto_resume_no_revisit_opens_without_touching_status(
     goto_env, registered_project, monkeypatch,
 ):
     stage, make = goto_env
-    stage(endless_session_id=10, pane_id="%10", active_task_id=1465)
+    stage(endless_session_id=10, pane_id="%10", task_id=1465)
     ft = make({"%10", "%cur"}, current_pane="%cur")
     emitted = _stage_settled(monkeypatch, registered_project, "confirmed")
 
@@ -476,7 +476,7 @@ def test_goto_resume_unsettled_needs_no_flag(
     """Nothing about an in-flight or not-yet-started task is ambiguous, so the
     gate must not fire on it — the flags would be friction with no question."""
     stage, make = goto_env
-    stage(endless_session_id=10, pane_id="%10", active_task_id=1465)
+    stage(endless_session_id=10, pane_id="%10", task_id=1465)
     ft = make({"%10", "%cur"}, current_pane="%cur")
     emitted = _stage_settled(monkeypatch, registered_project, status)
 
@@ -495,7 +495,7 @@ def test_goto_resume_revisit_refuses_a_decision(
     import click
 
     stage, make = goto_env
-    stage(endless_session_id=10, pane_id="%10", active_task_id=1465)
+    stage(endless_session_id=10, pane_id="%10", task_id=1465)
     ft = make({"%10", "%cur"}, current_pane="%cur")
     emitted = _stage_settled(monkeypatch, registered_project, status)
 
@@ -515,7 +515,7 @@ def test_goto_resume_revisit_and_no_revisit_are_mutually_exclusive(
     import click
 
     stage, make = goto_env
-    stage(endless_session_id=10, pane_id="%10", active_task_id=1465)
+    stage(endless_session_id=10, pane_id="%10", task_id=1465)
     make({"%10", "%cur"}, current_pane="%cur")
     _stage_settled(monkeypatch, registered_project, "assumed")
 
@@ -533,7 +533,7 @@ def test_revisit_flags_require_resume(goto_env, kwargs):
     import click
 
     stage, make = goto_env
-    stage(endless_session_id=10, pane_id="%10", active_task_id=1465)
+    stage(endless_session_id=10, pane_id="%10", task_id=1465)
     make({"%10", "%cur"}, current_pane="%cur")
 
     with pytest.raises(click.ClickException) as exc:

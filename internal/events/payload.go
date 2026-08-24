@@ -303,8 +303,8 @@ type NoteResolvedPayload struct{}
 // (resolved/pending/blocked/unverified) into a single `tasks` column.
 // Disposition is derived at render time from each task's `status`
 // attribute, removing redundant information. Added `summary` (structured
-// per-layer implementation breakdown); `active_task_id` is populated by
-// the Go handler from the resolved session's sessions.active_task_id at
+// per-layer implementation breakdown); `task_id` is populated by
+// the Go handler from the resolved session's sessions.task_id at
 // insert time — not carried in the payload.
 type SessionStatusRecordedPayload struct {
 	Process   string `json:"process"` // tmux pane id (or other process identifier)

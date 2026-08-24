@@ -29,12 +29,12 @@ def _add_task(title: str, status: str = "ready") -> int:
 
 
 def _add_session(
-    session_id: int, state: str = "idle", active_task_id: int | None = None
+    session_id: int, state: str = "idle", task_id: int | None = None
 ) -> int:
     db.execute(
-        "INSERT INTO sessions (id, session_id, project_id, state, active_task_id, "
+        "INSERT INTO sessions (id, session_id, project_id, state, task_id, "
         "started_at) VALUES (?, ?, 1, ?, ?, datetime('now'))",
-        (session_id, f"uuid-{session_id}", state, active_task_id),
+        (session_id, f"uuid-{session_id}", state, task_id),
     )
     return session_id
 
@@ -83,7 +83,7 @@ def test_session_id_display_uses_two_letter_prefix():
 def test_created_line_names_the_surfacing_session(seeded_project_at_cwd):
     tid = _add_task("Target")
     other = _add_task("The session's active task")
-    _add_session(1020, state="idle", active_task_id=other)
+    _add_session(1020, state="idle", task_id=other)
     _touch(1020, tid, _SURFACED, "2026-08-04T04:38:51")
 
     out = _show(tid, "--no-color")
@@ -93,7 +93,7 @@ def test_created_line_names_the_surfacing_session(seeded_project_at_cwd):
 def test_created_line_omits_creator_without_a_surfaced_row(seeded_project_at_cwd):
     """A revisit is not a creation, so the Created: line stays as it was."""
     tid = _add_task("Target")
-    _add_session(1020, active_task_id=None)
+    _add_session(1020, task_id=None)
     _touch(1020, tid, _REVISITED, "2026-08-04T04:38:51")
 
     out = _show(tid, "--no-color")
@@ -144,8 +144,8 @@ def test_touched_by_lists_every_session_with_relation_and_state(
     tid = _add_task("Target")
     a = _add_task("A")
     b = _add_task("B")
-    _add_session(994, state="idle", active_task_id=a)
-    _add_session(996, state="working", active_task_id=b)
+    _add_session(994, state="idle", task_id=a)
+    _add_session(996, state="working", task_id=b)
     _touch(994, tid, _SURFACED, "2026-08-01T00:00:00")
     _touch(996, tid, _REVISITED, "2026-08-02T00:00:00")
 
@@ -180,7 +180,7 @@ def test_touched_by_omits_parens_when_session_has_no_active_task(
     seeded_project_at_cwd,
 ):
     tid = _add_task("Target")
-    _add_session(696, state="ended", active_task_id=None)
+    _add_session(696, state="ended", task_id=None)
     _touch(696, tid, _GOAL, "2026-01-01T00:00:00")
 
     out = _show(tid, "--no-color")
@@ -256,8 +256,8 @@ def test_touched_by_follows_this_task(seeded_project_at_cwd):
 def test_json_reports_created_by_and_touched_by(seeded_project_at_cwd):
     tid = _add_task("Target")
     a = _add_task("A")
-    _add_session(994, state="idle", active_task_id=a)
-    _add_session(996, state="working", active_task_id=None)
+    _add_session(994, state="idle", task_id=a)
+    _add_session(996, state="working", task_id=None)
     _touch(994, tid, _SURFACED, "2026-08-01T00:00:00")
     _touch(996, tid, _REVISITED, "2026-08-02T00:00:00")
 
@@ -283,7 +283,7 @@ def test_json_created_by_is_null_without_a_creator(seeded_project_at_cwd):
 def test_llm_reports_created_by_and_touched_by(seeded_project_at_cwd):
     tid = _add_task("Target")
     a = _add_task("A")
-    _add_session(994, state="idle", active_task_id=a)
+    _add_session(994, state="idle", task_id=a)
     _touch(994, tid, _SURFACED, "2026-08-01T00:00:00")
 
     out = _show(tid, "--llm")
@@ -303,10 +303,10 @@ def test_llm_omits_both_lines_when_untouched(seeded_project_at_cwd):
 # --------------------------------------------------------------------------
 
 
-def _live(session_id: int, active_task_id: int | None, pane: str) -> dict:
+def _live(session_id: int, task_id: int | None, pane: str) -> dict:
     return {
         "endless_session_id": session_id,
-        "active_task_id": active_task_id,
+        "task_id": task_id,
         "pane_id": pane,
         "harness_session_id": f"uuid-{session_id}",
         "last_activity": "2026-08-04T00:00:00",

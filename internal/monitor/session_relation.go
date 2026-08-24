@@ -6,7 +6,7 @@ package monitor
 // E-1914's hides are.
 //
 // Annotation rather than a query column, for a reason specific to this view: the
-// focal path unions rows from EVERY session whose active_task_id is the focal
+// focal path unions rows from EVERY session whose task_id is the focal
 // task. A relation selected in that query would be whichever session's row the
 // join happened to reach, reported to you as your own classification. Reading it
 // for one named viewer is the only way the answer is well-defined.

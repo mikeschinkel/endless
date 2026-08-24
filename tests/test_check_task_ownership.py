@@ -52,7 +52,7 @@ def _seed_session(task_id: int, *, pane: str, state: str = "working") -> int:
     process_id = cur.lastrowid
     cur = db.execute(
         "INSERT INTO sessions (session_id, project_id, platform, state, process_id, "
-        "active_task_id, last_activity) "
+        "task_id, last_activity) "
         "VALUES (?, 1, 'claude', ?, ?, ?, '2026-07-29T00:00:00')",
         (f"sess-{pane}", state, process_id, task_id),
     )

@@ -25,7 +25,7 @@ def _seed_bg_session(task_id: int, short_id: str, state: str = "working") -> Non
     """Insert a background (kind_id=2) sessions row bound to a task."""
     db.execute(
         "INSERT INTO sessions "
-        "(session_id, platform, state, active_task_id, kind_id, short_id, "
+        "(session_id, platform, state, task_id, kind_id, short_id, "
         " started_at, last_activity) "
         "VALUES (NULL, 'claude', ?, ?, 2, ?, "
         " '2026-06-19T00:00:00', '2026-06-19T00:00:00')",

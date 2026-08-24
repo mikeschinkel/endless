@@ -109,7 +109,7 @@ func TestRevisitGateDecision_Lifecycle(t *testing.T) {
 	exec("INSERT INTO projects (id, name, path) VALUES (1, 'p', '/p')")
 	exec("INSERT INTO tasks (id, project_id, title, status, type_id) VALUES (10, 1, 'epic', 'revisit', 4)")
 	exec("INSERT INTO tasks (id, project_id, parent_id, title, status, type_id) VALUES (11, 1, 10, 'child', 'ready', 1)")
-	exec(`INSERT INTO sessions (id, session_id, project_id, platform, state, active_task_id, started_at, last_activity)
+	exec(`INSERT INTO sessions (id, session_id, project_id, platform, state, task_id, started_at, last_activity)
 	      VALUES (1, 'sess-1', 1, 'claude', 'working', 11, '2026-06-20T00:00:00', '2026-06-20T00:00:00')`)
 
 	read := claudePayload{EventName: "PreToolUse", ToolName: "Read", SessionID: "sess-1"}
@@ -155,9 +155,15 @@ func TestRevisitGateDecision_Lifecycle(t *testing.T) {
 		t.Errorf("cleared_by = %q, want revisit_resolved", by)
 	}
 
-	// 5. No active task -> never blocks.
-	exec("UPDATE sessions SET active_task_id=NULL WHERE id=1")
-	if _, block := revisitGateDecision(read); block {
+	// 5. No active task -> never blocks. A SECOND, unbound session rather than
+	// clearing session 1's task_id: sessions.task_id is write-once (ED-1560,
+	// E-1969), so the clear this step used to do now aborts — and "a session
+	// with no task" is a session that never claimed one, which is what this
+	// seeds.
+	exec(`INSERT INTO sessions (id, session_id, project_id, platform, state, started_at, last_activity)
+	      VALUES (2, 'sess-2', 1, 'claude', 'working', '2026-06-20T00:00:00', '2026-06-20T00:00:00')`)
+	unbound := claudePayload{EventName: "PreToolUse", ToolName: "Read", SessionID: "sess-2"}
+	if _, block := revisitGateDecision(unbound); block {
 		t.Errorf("session with no active task: block=true, want false")
 	}
 }

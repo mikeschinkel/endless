@@ -208,7 +208,7 @@ func seedPaneSession(t *testing.T, db *sql.DB, sessionID string, processID int64
 		activeTask = taskID
 	}
 	if _, err := db.Exec(
-		`INSERT INTO sessions (session_id, project_id, platform, state, process_id, active_task_id, last_activity)
+		`INSERT INTO sessions (session_id, project_id, platform, state, process_id, task_id, last_activity)
 		 VALUES (?, 1, 'claude', ?, ?, ?, ?)`,
 		sessionID, state, processID, activeTask, lastActivity,
 	); err != nil {

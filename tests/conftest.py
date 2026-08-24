@@ -285,7 +285,7 @@ def stage_live_session(monkeypatch):
             "worktree_path": "",
             "started_at": "2026-04-29T03:51:23Z",
             "state": "working",
-            "active_task_id": None,
+            "task_id": None,
             "last_activity": "2026-04-29T05:00:00",
             "summary": "",
         }

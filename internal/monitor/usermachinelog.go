@@ -15,10 +15,10 @@ import (
 // routing, hook skips. It is purely observational: it is NOT the shareable
 // ledger and NOT a write-ahead log. Nothing here is ever replayed into the
 // DB or shared with other developers. It exists so that an incident in
-// machine-local state (a session's active_task_id being silently rebound,
+// machine-local state (a session's task_id being silently rebound,
 // say) leaves a trail to inspect after the fact — sessions are intentionally
 // not journaled, so without this log a single-pointer field like
-// active_task_id has no history.
+// task_id has no history.
 //
 // Every write is best-effort: a logging failure must NEVER block a hook or a
 // session write, so all errors here are swallowed.
@@ -51,18 +51,18 @@ const (
 // machine-local concern over time without changing readers. Struct (not a
 // map) so field order and shape are stable.
 type sessionLogEntry struct {
-	Kind            string `json:"kind"` // always "session" for now
-	TS              string `json:"ts"`
-	SessionID       string `json:"session_id,omitempty"` // session GUID
-	ShortID         string `json:"short_id,omitempty"`
-	OldState        string `json:"old_state,omitempty"`
-	NewState        string `json:"new_state,omitempty"`
-	OldActiveTaskID *int64 `json:"old_active_task_id,omitempty"`
-	NewActiveTaskID *int64 `json:"new_active_task_id,omitempty"`
-	Reason          string `json:"reason"`
-	Cwd             string `json:"cwd,omitempty"`
-	TmuxPane        string `json:"tmux_pane,omitempty"`
-	Caller          string `json:"caller,omitempty"`
+	Kind      string `json:"kind"` // always "session" for now
+	TS        string `json:"ts"`
+	SessionID string `json:"session_id,omitempty"` // session GUID
+	ShortID   string `json:"short_id,omitempty"`
+	OldState  string `json:"old_state,omitempty"`
+	NewState  string `json:"new_state,omitempty"`
+	OldTaskID *int64 `json:"old_task_id,omitempty"`
+	NewTaskID *int64 `json:"new_task_id,omitempty"`
+	Reason    string `json:"reason"`
+	Cwd       string `json:"cwd,omitempty"`
+	TmuxPane  string `json:"tmux_pane,omitempty"`
+	Caller    string `json:"caller,omitempty"`
 }
 
 // SessionTxn is one session-state transition to record. The caller supplies the
@@ -70,25 +70,25 @@ type sessionLogEntry struct {
 // and the new side; LogSessionTxn fills in ts, cwd, and tmux_pane from the
 // current process.
 type SessionTxn struct {
-	SessionGUID     string
-	ShortID         string
-	OldState        string
-	NewState        string
-	OldActiveTaskID *int64
-	NewActiveTaskID *int64
-	Reason          SessionLogReason
-	Caller          string
+	SessionGUID string
+	ShortID     string
+	OldState    string
+	NewState    string
+	OldTaskID   *int64
+	NewTaskID   *int64
+	Reason      SessionLogReason
+	Caller      string
 }
 
 // SessionSnapshot is a session's pre-write state, captured for the log's "old"
 // side. Found is false when no row matched (e.g. a first-time bind that INSERTs);
 // its zero fields then correctly represent "no prior state".
 type SessionSnapshot struct {
-	SessionGUID  string
-	ShortID      string
-	State        string
-	ActiveTaskID *int64
-	Found        bool
+	SessionGUID string
+	ShortID     string
+	State       string
+	TaskID      *int64
+	Found       bool
 }
 
 // RowQuerier is the read surface shared by *sql.DB and *sql.Tx. The events
@@ -108,7 +108,7 @@ func SnapshotSession(sessionID string) SessionSnapshot {
 	}
 	return scanSnapshot(
 		db.QueryRow(
-			"SELECT session_id, short_id, state, active_task_id FROM sessions WHERE session_id=?",
+			"SELECT session_id, short_id, state, task_id FROM sessions WHERE session_id=?",
 			sessionID,
 		),
 	)
@@ -120,7 +120,7 @@ func SnapshotSession(sessionID string) SessionSnapshot {
 func SnapshotSessionByID(q RowQuerier, id int64) SessionSnapshot {
 	return scanSnapshot(
 		q.QueryRow(
-			"SELECT session_id, short_id, state, active_task_id FROM sessions WHERE id=?",
+			"SELECT session_id, short_id, state, task_id FROM sessions WHERE id=?",
 			id,
 		),
 	)
@@ -146,7 +146,7 @@ func scanSnapshot(row scanner) SessionSnapshot {
 	}
 	if activeTask.Valid {
 		v := activeTask.Int64
-		snap.ActiveTaskID = &v
+		snap.TaskID = &v
 	}
 	return snap
 }
@@ -156,18 +156,18 @@ func scanSnapshot(row scanner) SessionSnapshot {
 // block the session write it is documenting.
 func LogSessionTxn(t SessionTxn) {
 	appendUserMachineLog(sessionLogEntry{
-		Kind:            "session",
-		TS:              time.Now().UTC().Format(time.RFC3339),
-		SessionID:       t.SessionGUID,
-		ShortID:         t.ShortID,
-		OldState:        t.OldState,
-		NewState:        t.NewState,
-		OldActiveTaskID: t.OldActiveTaskID,
-		NewActiveTaskID: t.NewActiveTaskID,
-		Reason:          string(t.Reason),
-		Cwd:             currentCwd(),
-		TmuxPane:        os.Getenv("TMUX_PANE"),
-		Caller:          t.Caller,
+		Kind:      "session",
+		TS:        time.Now().UTC().Format(time.RFC3339),
+		SessionID: t.SessionGUID,
+		ShortID:   t.ShortID,
+		OldState:  t.OldState,
+		NewState:  t.NewState,
+		OldTaskID: t.OldTaskID,
+		NewTaskID: t.NewTaskID,
+		Reason:    string(t.Reason),
+		Cwd:       currentCwd(),
+		TmuxPane:  os.Getenv("TMUX_PANE"),
+		Caller:    t.Caller,
 	})
 }
 

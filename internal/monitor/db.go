@@ -51,7 +51,7 @@ var (
 	// only the explicit flag should suppress the hook/tmux PinMainDB
 	// override. Without this split a self-dev worktree's own dev session would
 	// have its session/pane-state writes routed to the sandbox (where the
-	// spawned task does not exist -> active_task_id FK-fails -> NULL -> status
+	// spawned task does not exist -> task_id FK-fails -> NULL -> status
 	// line shows "claim a task"), instead of the main database per E-1450 (E-1700).
 	dbContextFromFlag bool
 )

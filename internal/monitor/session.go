@@ -14,15 +14,15 @@ import (
 
 // SessionInfo represents an active AI coding session.
 //
-// ActiveEpicID is the epic task id when the session works under an epic (and
-// ActiveTaskID tracks the viewed child); nil otherwise. Kind discriminates a
+// EpicID is the epic task id when the session works under an epic (and
+// TaskID tracks the viewed child); nil otherwise. Kind discriminates a
 // pane-bound 'tmux' session from a headless 'background' agent (E-1571).
 type SessionInfo struct {
 	ID           int64
 	SessionID    string
 	ProjectID    int64
-	ActiveTaskID *int64
-	ActiveEpicID *int64
+	TaskID       *int64
+	EpicID       *int64
 	Kind         sessionkind.SessionKind
 	State        string
 	LastActivity string
@@ -30,7 +30,7 @@ type SessionInfo struct {
 }
 
 // BindSessionToTask creates or updates a session row and points its
-// active_task_id at taskID. Does NOT change task status — the caller
+// task_id at taskID. Does NOT change task status — the caller
 // (typically the Python claim_item via emitted events, or the spawn
 // pre-claim flow) owns that. Used by SessionStart's spawn-marker
 // auto-bind (claude.go) where the status was already flipped by spawn
@@ -55,10 +55,10 @@ func BindSessionToTask(sessionID string, projectID int64, taskID int64) error {
 	// protection needed: the reaper that used to destroy the value this defends
 	// is gone (E-1898), so there is always something left to preserve.
 	_, err = tx.Exec(
-		`INSERT INTO sessions (session_id, project_id, platform, state, active_task_id, process_id, started_at, last_activity)
+		`INSERT INTO sessions (session_id, project_id, platform, state, task_id, process_id, started_at, last_activity)
 		 VALUES (?, ?, 'claude', 'working', ?, ?, ?, ?)
 		 ON CONFLICT(session_id) DO UPDATE SET
-		   state='working', active_task_id=?, last_activity=?, project_id=?,
+		   state='working', task_id=?, last_activity=?, project_id=?,
 		   process_id=COALESCE(?, sessions.process_id)`,
 		sessionID, projectID, taskID, processID, now, now,
 		taskID, now, projectID, processID,
@@ -76,10 +76,10 @@ func BindSessionToTask(sessionID string, projectID int64, taskID int64) error {
 	// has no pane: Endless permits only one live foreground session per task
 	// (worktree locks), so any such row is stale. Scoped to kind_id = tmux —
 	// background agents (kind_id = background) legitimately carry the task's
-	// active_task_id with no pane and are decorated via their own path, so they
+	// task_id with no pane and are decorated via their own path, so they
 	// must never be ended here. Paneless is the only fallback case; rows that
 	// hold a real pane are left to TouchSession's pane-collision path.
-	dedupWhere := `active_task_id = ?
+	dedupWhere := `task_id = ?
 		   AND session_id != ?
 		   AND process_id IS NULL
 		   AND kind_id = ?
@@ -88,7 +88,7 @@ func BindSessionToTask(sessionID string, projectID int64, taskID int64) error {
 
 	// Capture the rows about to be ended (within the tx, before the write) so the
 	// diagnostic log can name each silently-deduped session. This is exactly the
-	// kind of machine-local event a single active_task_id pointer would otherwise
+	// kind of machine-local event a single task_id pointer would otherwise
 	// erase.
 	deduped := collectDedupTargets(tx, dedupWhere, dedupArgs)
 
@@ -104,14 +104,14 @@ func BindSessionToTask(sessionID string, projectID int64, taskID int64) error {
 
 	for _, d := range deduped {
 		LogSessionTxn(SessionTxn{
-			SessionGUID:     d.SessionGUID,
-			ShortID:         d.ShortID,
-			OldState:        d.State,
-			NewState:        "ended",
-			OldActiveTaskID: d.ActiveTaskID,
-			NewActiveTaskID: d.ActiveTaskID, // dedup ends the row; active_task_id is unchanged
-			Reason:          SessionLogDedup,
-			Caller:          "monitor.BindSessionToTask",
+			SessionGUID: d.SessionGUID,
+			ShortID:     d.ShortID,
+			OldState:    d.State,
+			NewState:    "ended",
+			OldTaskID:   d.TaskID,
+			NewTaskID:   d.TaskID, // dedup ends the row; task_id is unchanged
+			Reason:      SessionLogDedup,
+			Caller:      "monitor.BindSessionToTask",
 		})
 	}
 	return nil
@@ -122,7 +122,7 @@ func BindSessionToTask(sessionID string, projectID int64, taskID int64) error {
 // no rows (the dedup still proceeds; only the log line is lost).
 func collectDedupTargets(tx *sql.Tx, where string, args []any) []SessionSnapshot {
 	rows, err := tx.Query(
-		`SELECT session_id, short_id, state, active_task_id FROM sessions WHERE `+where,
+		`SELECT session_id, short_id, state, task_id FROM sessions WHERE `+where,
 		args...,
 	)
 	if err != nil {
@@ -176,14 +176,14 @@ func StartWorkSession(sessionID string, projectID int64, taskID int64) error {
 	}
 	newTaskID := taskID
 	LogSessionTxn(SessionTxn{
-		SessionGUID:     sessionID,
-		ShortID:         snap.ShortID,
-		OldState:        snap.State,
-		NewState:        "working", // BindSessionToTask sets state='working'
-		OldActiveTaskID: snap.ActiveTaskID,
-		NewActiveTaskID: &newTaskID,
-		Reason:          SessionLogClaimEvent,
-		Caller:          "monitor.StartWorkSession",
+		SessionGUID: sessionID,
+		ShortID:     snap.ShortID,
+		OldState:    snap.State,
+		NewState:    "working", // BindSessionToTask sets state='working'
+		OldTaskID:   snap.TaskID,
+		NewTaskID:   &newTaskID,
+		Reason:      SessionLogClaimEvent,
+		Caller:      "monitor.StartWorkSession",
 	})
 	db, err := DB()
 	if err != nil {
@@ -219,7 +219,7 @@ func StartWorkSession(sessionID string, projectID int64, taskID int64) error {
 
 // StartChatSession creates a working session with no task (chat-only).
 //
-// E-1968 / ED-1560: the ON CONFLICT branch no longer sets active_task_id=NULL.
+// E-1968 / ED-1560: the ON CONFLICT branch no longer sets task_id=NULL.
 // `task chat` on an already-known session id used to unbind whatever task that
 // session held, which is the write-once column being cleared by a verb that has
 // nothing to say about task ownership. A session that already holds a task is
@@ -234,7 +234,7 @@ func StartChatSession(sessionID string, projectID int64) error {
 	processID := currentPaneProcessID()
 
 	_, err = db.Exec(
-		`INSERT INTO sessions (session_id, project_id, platform, state, active_task_id, process_id, started_at, last_activity)
+		`INSERT INTO sessions (session_id, project_id, platform, state, task_id, process_id, started_at, last_activity)
 		 VALUES (?, ?, 'claude', 'working', NULL, ?, ?, ?)
 		 ON CONFLICT(session_id) DO UPDATE SET
 		   state='working', last_activity=?,
@@ -274,10 +274,10 @@ func GetActiveSession(sessionID string) (*SessionInfo, error) {
 	var s SessionInfo
 	var kindID int64
 	err = db.QueryRow(
-		`SELECT id, session_id, COALESCE(project_id,0), active_task_id, active_epic_id, kind_id, state, COALESCE(last_activity,''), COALESCE(started_at,'')
+		`SELECT id, session_id, COALESCE(project_id,0), task_id, epic_id, kind_id, state, COALESCE(last_activity,''), COALESCE(started_at,'')
 		 FROM sessions WHERE session_id=?`,
 		sessionID,
-	).Scan(&s.ID, &s.SessionID, &s.ProjectID, &s.ActiveTaskID, &s.ActiveEpicID, &kindID, &s.State, &s.LastActivity, &s.StartedAt)
+	).Scan(&s.ID, &s.SessionID, &s.ProjectID, &s.TaskID, &s.EpicID, &kindID, &s.State, &s.LastActivity, &s.StartedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -442,7 +442,7 @@ func EnsureClaudeSessionID(sessionID, process string, projectID int64) (int64, e
 //     UPDATEs it later via DecorateBgSession, keyed by
 //     short_id.
 //   - kind_id = 2        — background.
-//   - active_epic_id     — nearest type='epic' ancestor of taskID (NULL if none).
+//   - epic_id     — nearest type='epic' ancestor of taskID (NULL if none).
 //   - process NULL       — bg agents have no tmux pane.
 //
 // project_id and the epic ancestor are resolved here in Go (not Python) to
@@ -473,7 +473,7 @@ func RecordBgAgentSession(taskID int64, shortID string) (int64, error) {
 	now := time.Now().UTC().Format("2006-01-02T15:04:05")
 	res, err := db.Exec(
 		`INSERT INTO sessions
-		   (session_id, project_id, platform, state, active_task_id, active_epic_id, kind_id, short_id, started_at, last_activity)
+		   (session_id, project_id, platform, state, task_id, epic_id, kind_id, short_id, started_at, last_activity)
 		 VALUES (NULL, ?, 'claude', 'working', ?, ?, ?, ?, ?, ?)`,
 		projectID, taskID, epicID, int64(sessionkind.SessionKindBackground), shortID, now, now,
 	)
@@ -575,7 +575,7 @@ func DecorateBgSession(shortID, sessionID string) (int64, error) {
 
 // CompleteTask marks a task as confirmed and idles the session.
 //
-// E-1968 / ED-1560: it no longer clears active_task_id. The session that
+// E-1968 / ED-1560: it no longer clears task_id. The session that
 // confirmed the task is still the session that WORKED it, and that pointer is
 // the only way back to its transcript — `session goto E-<id> --resume` resolves
 // through it. Clearing it on completion made a finished task's session
@@ -629,14 +629,14 @@ func IdleSession(sessionID string) error {
 	}
 	if snap.Found { // only record a transition that actually had a prior row
 		LogSessionTxn(SessionTxn{
-			SessionGUID:     sessionID,
-			ShortID:         snap.ShortID,
-			OldState:        snap.State,
-			NewState:        "idle",
-			OldActiveTaskID: snap.ActiveTaskID,
-			NewActiveTaskID: snap.ActiveTaskID, // idle does not change active_task_id
-			Reason:          SessionLogIdle,
-			Caller:          "monitor.IdleSession",
+			SessionGUID: sessionID,
+			ShortID:     snap.ShortID,
+			OldState:    snap.State,
+			NewState:    "idle",
+			OldTaskID:   snap.TaskID,
+			NewTaskID:   snap.TaskID, // idle does not change task_id
+			Reason:      SessionLogIdle,
+			Caller:      "monitor.IdleSession",
 		})
 	}
 	return nil
@@ -668,14 +668,14 @@ func EndSession(sessionID string) error {
 	}
 	if snap.Found { // only record a transition that actually had a prior row
 		LogSessionTxn(SessionTxn{
-			SessionGUID:     sessionID,
-			ShortID:         snap.ShortID,
-			OldState:        snap.State,
-			NewState:        "ended",
-			OldActiveTaskID: snap.ActiveTaskID,
-			NewActiveTaskID: snap.ActiveTaskID, // end does not change active_task_id
-			Reason:          SessionLogEnd,
-			Caller:          "monitor.EndSession",
+			SessionGUID: sessionID,
+			ShortID:     snap.ShortID,
+			OldState:    snap.State,
+			NewState:    "ended",
+			OldTaskID:   snap.TaskID,
+			NewTaskID:   snap.TaskID, // end does not change task_id
+			Reason:      SessionLogEnd,
+			Caller:      "monitor.EndSession",
 		})
 	}
 	return nil

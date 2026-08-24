@@ -15,7 +15,7 @@ const fakePane = "%999991"
 const fakePane2 = "%999992"
 
 // TestGetActiveTaskForPane_DirectMatch pins the primary lookup: a sessions
-// row whose process equals the pane id and whose active_task_id is set
+// row whose process equals the pane id and whose task_id is set
 // returns the joined task info.
 func TestGetActiveTaskForPane_DirectMatch(t *testing.T) {
 	db := withTestDB(t)
@@ -27,7 +27,7 @@ func TestGetActiveTaskForPane_DirectMatch(t *testing.T) {
 		t.Fatalf("seed task: %v", err)
 	}
 	if _, err := db.Exec(
-		`INSERT INTO sessions (session_id, project_id, platform, state, process_id, active_task_id, last_activity)
+		`INSERT INTO sessions (session_id, project_id, platform, state, process_id, task_id, last_activity)
 		 VALUES (?, ?, 'claude', 'working', ?, ?, '2026-05-20T00:00:00')`,
 		"sess-A", 1, mustSeedPane(t, db, TestServerUUID, fakePane), 55); err != nil {
 		t.Fatalf("seed session: %v", err)
@@ -75,7 +75,7 @@ func TestGetActiveTaskForPane_NoMatchReturnsErrNoActiveTask(t *testing.T) {
 }
 
 // TestGetActiveTaskForPane_SkipsNullActiveTask pins that a session row
-// with NULL active_task_id is not selected — only sessions with a bound
+// with NULL task_id is not selected — only sessions with a bound
 // task are eligible, even if process matches exactly.
 func TestGetActiveTaskForPane_SkipsNullActiveTask(t *testing.T) {
 	db := withTestDB(t)
@@ -88,7 +88,7 @@ func TestGetActiveTaskForPane_SkipsNullActiveTask(t *testing.T) {
 
 	_, err := GetActiveTaskForPane(fakePane)
 	if !errors.Is(err, ErrNoActiveTask) {
-		t.Errorf("NULL active_task_id: got %v, want ErrNoActiveTask", err)
+		t.Errorf("NULL task_id: got %v, want ErrNoActiveTask", err)
 	}
 }
 
@@ -119,7 +119,7 @@ func TestGetPaneStatus_ActiveTaskReturnsActiveKind(t *testing.T) {
 		t.Fatalf("seed task: %v", err)
 	}
 	if _, err := db.Exec(
-		`INSERT INTO sessions (session_id, project_id, platform, state, process_id, active_task_id, last_activity)
+		`INSERT INTO sessions (session_id, project_id, platform, state, process_id, task_id, last_activity)
 		 VALUES (?, ?, 'claude', 'working', ?, ?, '2026-05-20T00:00:00')`, "sess-A", 1, mustSeedPane(t, db, TestServerUUID, fakePane), 66); err != nil {
 		t.Fatalf("seed session: %v", err)
 	}
@@ -141,7 +141,7 @@ func TestGetPaneStatus_ActiveTaskReturnsActiveKind(t *testing.T) {
 
 // TestGetPaneStatus_SessionWithoutTaskReturnsNoTaskKind pins the
 // "session exists but no active task" branch: a sessions row with NULL
-// active_task_id for the given pane drives the "claim a task" hint.
+// task_id for the given pane drives the "claim a task" hint.
 func TestGetPaneStatus_SessionWithoutTaskReturnsNoTaskKind(t *testing.T) {
 	db := withTestDB(t)
 	seedProject(t, db, 1, "acme", "/tmp/acme")

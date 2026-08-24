@@ -8,7 +8,7 @@ The session-status subsystem turns "what are you working on right now" from chat
 
 Each row in `session_statuses` is a snapshot of one session's reported state at one moment:
 
-- `active_task_id` — populated automatically by the handler from `sessions.active_task_id` at insert time; makes joins to `tasks` trivial.
+- `task_id` — populated automatically by the handler from `sessions.task_id` at insert time; makes joins to `tasks` trivial. (Both columns were `active_task_id` until E-1969; a session holds one task, so there was no inactive one to distinguish it from.)
 - `headline` — one-line summary of what just changed.
 - `tasks` — every task the session is touching (resolved / pending / blocked / unverified, all in one column post-E-1318; the renderer derives the disposition bucket from each task's status).
 - `decisions` — design choices, framings, insights too lightweight to be `endless decision add` items but worth capturing.
@@ -179,7 +179,7 @@ endless session snapshot list [--session N] [--task E-NNN] [--limit N]
 Until then, read directly via `endless sql`:
 
 ```bash
-endless sql "SELECT id, session_id, active_task_id, headline, created_at
+endless sql "SELECT id, session_id, task_id, headline, created_at
              FROM session_statuses ORDER BY id DESC LIMIT 5"
 ```
 
@@ -193,7 +193,7 @@ endless sql "SELECT id, session_id, active_task_id, headline, created_at
 
 ## Don't
 
-- Don't write directly to `session_statuses` via `endless sql --write` once the CLI is in place. The CLI handles dedup, child-table insertion, and active_task_id resolution; raw SQL writes bypass all three.
+- Don't write directly to `session_statuses` via `endless sql --write` once the CLI is in place. The CLI handles dedup, child-table insertion, and task_id resolution; raw SQL writes bypass all three.
 - Don't include `endless task assume <id> --outcome` content in the headline — outcomes belong on the task itself, not on session-status snapshots.
 - Don't try to encode "this task is filed by this session" in the parent row's columns — use the `filed="true"` attribute on the relevant `<task>` element. The renderer marks filed tasks visually.
 

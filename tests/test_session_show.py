@@ -17,13 +17,13 @@ def _insert_session(
     summary: str = "test summary",
     started_at: str = "2026-04-29T03:51:23",
     last_activity: str = "2026-04-29T05:00:00",
-    active_task_id: int | None = None,
+    task_id: int | None = None,
 ):
     db.execute(
         "INSERT INTO sessions (id, session_id, project_id, platform, state, summary, "
-        "started_at, last_activity, active_task_id) "
+        "started_at, last_activity, task_id) "
         "VALUES (?, ?, ?, 'claude', ?, ?, ?, ?, ?)",
-        (pk, session_id, project_id, state, summary, started_at, last_activity, active_task_id),
+        (pk, session_id, project_id, state, summary, started_at, last_activity, task_id),
     )
 
 
@@ -66,7 +66,7 @@ def test_show_explicit_id(project_with_session, capsys):
 def test_show_with_active_task(project_with_session, capsys):
     _, sessions_dir, pid, stage = project_with_session
     _insert_task(pk=999, project_id=pid, title="Wire up backfill", status="underway")
-    db.execute("UPDATE sessions SET active_task_id = 999 WHERE id = 247")
+    db.execute("UPDATE sessions SET task_id = 999 WHERE id = 247")
     stage()
 
     session_cmd.session_show_resolve("247")

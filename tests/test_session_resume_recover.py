@@ -63,7 +63,7 @@ def _target(**over):
     base = {
         "endless_id": 99,
         "session_id": "uuid-xyz",
-        "active_task_id": 10,
+        "task_id": 10,
         "worktree_path": "",  # dropped
         "state": "ended",
         "task_type": "todo",
@@ -267,7 +267,7 @@ def test_dry_run_on_plain_path_prints_and_skips_exec(
     decision = json.loads(capsys.readouterr().out)
     assert decision["uuid"] == "uuid-xyz"
     assert decision["endless_id"] == 99
-    assert decision["active_task_id"] == 10
+    assert decision["task_id"] == 10
     assert decision["worktree"] == str(wt)
     assert decision["recovered"] is False
     assert decision["created_task"] is False

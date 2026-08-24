@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -27,14 +28,14 @@ func init() {
 // task-bound lifecycle helpers mutate. `process` is now the pane ADDRESS read
 // back through sessions.process_id -> processes (E-1898), so these assertions
 // still read as "which pane is this session on".
-func sessionLifecycleRow(t *testing.T, db *sql.DB, sessionID string) (state string, activeTaskID *int64, process string) {
+func sessionLifecycleRow(t *testing.T, db *sql.DB, sessionID string) (state string, taskID *int64, process string) {
 	t.Helper()
 	err := db.QueryRow(
-		`SELECT s.state, s.active_task_id, COALESCE(p.address, '')
+		`SELECT s.state, s.task_id, COALESCE(p.address, '')
 		 FROM sessions s LEFT JOIN processes p ON p.id = s.process_id
 		 WHERE s.session_id=?`,
 		sessionID,
-	).Scan(&state, &activeTaskID, &process)
+	).Scan(&state, &taskID, &process)
 	if err != nil {
 		t.Fatalf("read session %q: %v", sessionID, err)
 	}
@@ -66,7 +67,7 @@ func taskStatus(t *testing.T, db *sql.DB, taskID int64) string {
 
 // TestBindSessionToTask_InsertCreatesWorking pins the INSERT branch: a
 // first bind for an unknown session creates the row with state='working',
-// points active_task_id at taskID, and captures TMUX_PANE into process.
+// points task_id at taskID, and captures TMUX_PANE into process.
 func TestBindSessionToTask_InsertCreatesWorking(t *testing.T) {
 	db := withTestDB(t)
 	seedProject(t, db, 1, "proj-test-1", "/tmp/proj-test-1")
@@ -76,12 +77,12 @@ func TestBindSessionToTask_InsertCreatesWorking(t *testing.T) {
 	if err := BindSessionToTask("sess-A", 1, 42); err != nil {
 		t.Fatalf("BindSessionToTask: %v", err)
 	}
-	state, activeTaskID, process := sessionLifecycleRow(t, db, "sess-A")
+	state, taskID, process := sessionLifecycleRow(t, db, "sess-A")
 	if state != "working" {
 		t.Errorf("state = %q, want working", state)
 	}
-	if activeTaskID == nil || *activeTaskID != 42 {
-		t.Errorf("active_task_id = %v, want 42", activeTaskID)
+	if taskID == nil || *taskID != 42 {
+		t.Errorf("task_id = %v, want 42", taskID)
 	}
 	if process != "%5" {
 		t.Errorf("process = %q, want %%5", process)
@@ -89,13 +90,18 @@ func TestBindSessionToTask_InsertCreatesWorking(t *testing.T) {
 }
 
 // TestBindSessionToTask_UpsertOverridesPriorState pins the UPDATE branch:
-// re-binding an existing session forces state back to 'working' and
-// repoints active_task_id, even if the prior row was in another state.
+// re-binding an existing session forces state back to 'working', even if the
+// prior row was in another state.
+//
+// The re-bind names the SAME task it already holds. It used to repoint to a
+// second one, which E-1969's write-once trigger now aborts — see
+// TestBindSessionToTask_RefusesRepoint below, which pins that refusal. State
+// revival and task repointing were never the same behavior; only the trigger
+// made that visible.
 func TestBindSessionToTask_UpsertOverridesPriorState(t *testing.T) {
 	db := withTestDB(t)
 	seedProject(t, db, 1, "proj-test-1", "/tmp/proj-test-1")
 	seedTask(t, db, 100, 1, "first task", "ready")
-	seedTask(t, db, 200, 1, "second task", "ready")
 	t.Setenv("TMUX_PANE", "%5")
 
 	if err := BindSessionToTask("sess-A", 1, 100); err != nil {
@@ -108,15 +114,43 @@ func TestBindSessionToTask_UpsertOverridesPriorState(t *testing.T) {
 	); err != nil {
 		t.Fatalf("force idle: %v", err)
 	}
-	if err := BindSessionToTask("sess-A", 1, 200); err != nil {
+	if err := BindSessionToTask("sess-A", 1, 100); err != nil {
 		t.Fatalf("bind 2: %v", err)
 	}
-	state, activeTaskID, _ := sessionLifecycleRow(t, db, "sess-A")
+	state, taskID, _ := sessionLifecycleRow(t, db, "sess-A")
 	if state != "working" {
 		t.Errorf("state = %q, want working (re-bind didn't lift idle)", state)
 	}
-	if activeTaskID == nil || *activeTaskID != 200 {
-		t.Errorf("active_task_id = %v, want 200", activeTaskID)
+	if taskID == nil || *taskID != 100 {
+		t.Errorf("task_id = %v, want 100", taskID)
+	}
+}
+
+// TestBindSessionToTask_RefusesRepoint pins ED-1560 at the lowest write path:
+// sessions.task_id is write-once, so binding an already-bound session to a
+// DIFFERENT task fails and leaves the original binding intact. This is the write
+// nobody enumerated — the Python verb refuses first (E-1968), but the trigger is
+// what catches a caller that does not.
+func TestBindSessionToTask_RefusesRepoint(t *testing.T) {
+	db := withTestDB(t)
+	seedProject(t, db, 1, "proj-test-1", "/tmp/proj-test-1")
+	seedTask(t, db, 100, 1, "first task", "ready")
+	seedTask(t, db, 200, 1, "second task", "ready")
+	t.Setenv("TMUX_PANE", "%5")
+
+	if err := BindSessionToTask("sess-A", 1, 100); err != nil {
+		t.Fatalf("bind 1: %v", err)
+	}
+	err := BindSessionToTask("sess-A", 1, 200)
+	if err == nil {
+		t.Fatal("re-bind to a different task succeeded, want write-once abort")
+	}
+	if !strings.Contains(err.Error(), "write-once") {
+		t.Errorf("error = %v, want it to name the write-once constraint", err)
+	}
+	_, taskID, _ := sessionLifecycleRow(t, db, "sess-A")
+	if taskID == nil || *taskID != 100 {
+		t.Errorf("task_id = %v, want 100 (the refused bind must not have moved it)", taskID)
 	}
 }
 
@@ -204,7 +238,7 @@ func TestStartWorkSession_DoesNotDemoteIneligibleStatus(t *testing.T) {
 }
 
 // TestStartChatSession_InsertWithNullTask pins the chat-only shape: a
-// fresh session lands in working state with active_task_id=NULL.
+// fresh session lands in working state with task_id=NULL.
 func TestStartChatSession_InsertWithNullTask(t *testing.T) {
 	db := withTestDB(t)
 	seedProject(t, db, 1, "proj-test-1", "/tmp/proj-test-1")
@@ -213,12 +247,12 @@ func TestStartChatSession_InsertWithNullTask(t *testing.T) {
 	if err := StartChatSession("sess-A", 1); err != nil {
 		t.Fatalf("StartChatSession: %v", err)
 	}
-	state, activeTaskID, process := sessionLifecycleRow(t, db, "sess-A")
+	state, taskID, process := sessionLifecycleRow(t, db, "sess-A")
 	if state != "working" {
 		t.Errorf("state = %q, want working", state)
 	}
-	if activeTaskID != nil {
-		t.Errorf("active_task_id = %v, want NULL", *activeTaskID)
+	if taskID != nil {
+		t.Errorf("task_id = %v, want NULL", *taskID)
 	}
 	if process != "%5" {
 		t.Errorf("process = %q, want %%5", process)
@@ -242,12 +276,12 @@ func TestStartChatSession_UpsertKeepsActiveTask(t *testing.T) {
 	if err := StartChatSession("sess-A", 1); err != nil {
 		t.Fatalf("StartChatSession: %v", err)
 	}
-	state, activeTaskID, _ := sessionLifecycleRow(t, db, "sess-A")
+	state, taskID, _ := sessionLifecycleRow(t, db, "sess-A")
 	if state != "working" {
 		t.Errorf("state = %q, want working", state)
 	}
-	if activeTaskID == nil || *activeTaskID != 42 {
-		t.Errorf("active_task_id = %v, want 42 (chat takeover must not unbind)", activeTaskID)
+	if taskID == nil || *taskID != 42 {
+		t.Errorf("task_id = %v, want 42 (chat takeover must not unbind)", taskID)
 	}
 }
 
@@ -315,8 +349,8 @@ func TestGetActiveSession_ReturnsRow(t *testing.T) {
 	if s.State != "working" {
 		t.Errorf("State = %q, want working", s.State)
 	}
-	if s.ActiveTaskID == nil || *s.ActiveTaskID != 42 {
-		t.Errorf("ActiveTaskID = %v, want 42", s.ActiveTaskID)
+	if s.TaskID == nil || *s.TaskID != 42 {
+		t.Errorf("TaskID = %v, want 42", s.TaskID)
 	}
 }
 
@@ -377,7 +411,7 @@ func TestGetPlanFilePath_MissingSessionReturnsEmpty(t *testing.T) {
 // TestCompleteTask_FlipsTaskAndIdlesSession pins the two-step write: the task
 // moves to 'confirmed' and the session goes state='idle'. Per E-1968 /
 // ED-1560 the binding SURVIVES — the session that confirmed the task is the
-// session that worked it, and active_task_id is the only route back to its
+// session that worked it, and task_id is the only route back to its
 // transcript (`session goto E-<id> --resume` resolves through it).
 func TestCompleteTask_FlipsTaskAndIdlesSession(t *testing.T) {
 	db := withTestDB(t)
@@ -394,12 +428,12 @@ func TestCompleteTask_FlipsTaskAndIdlesSession(t *testing.T) {
 	if got := taskStatus(t, db, 42); got != "confirmed" {
 		t.Errorf("task status = %q, want confirmed", got)
 	}
-	state, activeTaskID, _ := sessionLifecycleRow(t, db, "sess-A")
+	state, taskID, _ := sessionLifecycleRow(t, db, "sess-A")
 	if state != "idle" {
 		t.Errorf("session state = %q, want idle", state)
 	}
-	if activeTaskID == nil || *activeTaskID != 42 {
-		t.Errorf("active_task_id = %v, want 42 (completion must not unbind)", activeTaskID)
+	if taskID == nil || *taskID != 42 {
+		t.Errorf("task_id = %v, want 42 (completion must not unbind)", taskID)
 	}
 }
 
@@ -440,15 +474,15 @@ func TestIdleSession_FlipsState(t *testing.T) {
 	if err := IdleSession("sess-A"); err != nil {
 		t.Fatalf("IdleSession: %v", err)
 	}
-	state, activeTaskID, _ := sessionLifecycleRow(t, db, "sess-A")
+	state, taskID, _ := sessionLifecycleRow(t, db, "sess-A")
 	if state != "idle" {
 		t.Errorf("state = %q, want idle", state)
 	}
-	// active_task_id is intentionally preserved across idle — only
+	// task_id is intentionally preserved across idle — only
 	// CompleteTask clears it. Pin that here so a future change has to
 	// justify breaking the contract.
-	if activeTaskID == nil || *activeTaskID != 42 {
-		t.Errorf("active_task_id = %v, want 42 (idle should not clear)", activeTaskID)
+	if taskID == nil || *taskID != 42 {
+		t.Errorf("task_id = %v, want 42 (idle should not clear)", taskID)
 	}
 }
 

@@ -6,7 +6,7 @@ import (
 	"github.com/mikeschinkel/endless/internal/sessionkind"
 )
 
-// TestFocusedBgAgent picks the live background session whose active_task_id
+// TestFocusedBgAgent picks the live background session whose task_id
 // matches the child the coordinator is currently viewing (E-1552 derivation).
 // It must ignore: bg agents on other children, the coordinator itself, tmux
 // (foreground) rows on the same child, and ended bg rows.
@@ -20,7 +20,7 @@ func TestFocusedBgAgent(t *testing.T) {
 	insert := func(sid string, state string, taskID, kindID int64) {
 		t.Helper()
 		if _, err := db.Exec(
-			`INSERT INTO sessions (session_id, project_id, platform, state, active_task_id, active_epic_id, kind_id, last_activity)
+			`INSERT INTO sessions (session_id, project_id, platform, state, task_id, epic_id, kind_id, last_activity)
 			 VALUES (?, 1, 'claude', ?, ?, ?, ?, '2026-06-16T00:00:00')`,
 			sid, state, taskID, epicID, kindID,
 		); err != nil {
@@ -66,7 +66,7 @@ func TestFocusedBgAgent_NoMatch(t *testing.T) {
 	childA := seedTask(t, db, 201, 1, "child-A", "underway")
 
 	if _, err := db.Exec(
-		`INSERT INTO sessions (session_id, project_id, platform, state, active_task_id, kind_id, last_activity)
+		`INSERT INTO sessions (session_id, project_id, platform, state, task_id, kind_id, last_activity)
 		 VALUES ('coord', 1, 'claude', 'working', ?, ?, '2026-06-16T00:00:00')`,
 		childA, int64(sessionkind.SessionKindTmux),
 	); err != nil {

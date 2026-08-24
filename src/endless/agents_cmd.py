@@ -11,7 +11,7 @@ table. Scope resolution:
   - ``--epic E-NNNN`` → list agents under that epic.
   - ``--all``        → list every working bg agent in the current project.
   - neither          → auto-resolve the epic from the caller's session
-                       (``sessions.active_epic_id``); error with guidance when
+                       (``sessions.epic_id``); error with guidance when
                        no session or no active epic resolves.
 """
 

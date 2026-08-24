@@ -18,7 +18,7 @@ import subprocess
 import click
 
 from endless.event_bridge import _resolve_endless_go
-from endless.task_cmd import _current_session_active_task_id
+from endless.task_cmd import _current_session_task_id
 
 
 def run_verify(item_id: int | None, keep: bool) -> None:
@@ -30,7 +30,7 @@ def run_verify(item_id: int | None, keep: bool) -> None:
     """
     resolved = item_id
     if resolved is None:
-        resolved = _current_session_active_task_id()
+        resolved = _current_session_task_id()
     if resolved is None:
         raise click.ClickException(
             "no task id given and no active task for this session; "

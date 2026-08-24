@@ -89,11 +89,11 @@ func TestFormat_OmitsEmptyFields(t *testing.T) {
 				TaskID: 7, ProjectName: "proj", Type: "todo",
 				Phase: "now", Tier: nil, Status: "ready",
 			},
-			wantParts:    []string{"[E-7]", "proj", "todo", "now", "ready"},
+			wantParts:      []string{"[E-7]", "proj", "todo", "now", "ready"},
 			wantSeparators: 4, // proj, todo, now, ready → 4 " · " separators (no tier)
 		},
 		{
-			name: "blank project + type + phase omitted",
+			name:           "blank project + type + phase omitted",
 			info:           &monitor.ActiveTaskInfo{TaskID: 9, Status: "ready"},
 			wantParts:      []string{"[E-9]", "ready"},
 			wantSeparators: 1, // only status
@@ -157,17 +157,17 @@ func TestTaskIDPrefix(t *testing.T) {
 	}{
 		{
 			name: "no epic context",
-			info: &monitor.ActiveTaskInfo{TaskID: 42, ActiveEpicID: nil},
+			info: &monitor.ActiveTaskInfo{TaskID: 42, EpicID: nil},
 			want: "E-42",
 		},
 		{
 			name: "viewing the epic itself",
-			info: &monitor.ActiveTaskInfo{TaskID: 100, ActiveEpicID: &epic},
+			info: &monitor.ActiveTaskInfo{TaskID: 100, EpicID: &epic},
 			want: "E-100",
 		},
 		{
 			name: "viewing a child of the epic",
-			info: &monitor.ActiveTaskInfo{TaskID: 137, ActiveEpicID: &epic},
+			info: &monitor.ActiveTaskInfo{TaskID: 137, EpicID: &epic},
 			want: "E-100:E-137",
 		},
 	}
