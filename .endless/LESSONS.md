@@ -3367,3 +3367,32 @@ I told Mike I would not edit E-2048 because 'that session owns the task text and
 
 It means at least three different things (which DATABASE, which FILES/commits, which BINARY — E-2048's axes) and forces mental translation. Name the mechanism directly in titles and prose: 'which ledger a write lands in', 'which DB a command reads', 'which binary runs'. My own E-1733 title used it and had to be retitled.
 
+
+### [2026-08-24] I proposed code complexity to paper over a data-integrity problem (E-1817)
+
+I found 8 tasks with `status=blocked` while the system also has a `blocked_by`
+relation, and concluded the design was ambiguous. From that I proposed (a) a
+`RenderInDiagram: false` flag on the status table, and then (b) a decision
+(ED-1572) to settle which mechanism wins.
+
+Mike rejected ED-1572: "We don't need this; it was motivated by finding old
+'blocking' values in the status field that were never cleaned up but should have
+been. We don't need a decision, we need to clean up the data."
+
+He was right and the evidence was already in my hand: all 8 are old tasks whose
+`data.sql` rows show `needs_plan`, changed to `blocked` before blocking became a
+relation. Not a live contradiction — an unfinished migration. Nothing today
+writes `status=blocked`.
+
+Two separate errors, and the second is the worse one:
+
+1. I read stale data as evidence of a live design disagreement. Check WHEN the
+   rows were written before concluding the system disagrees with itself.
+2. I reached for a code knob, then a decision, when the fix was eight UPDATEs.
+   A flag to accommodate bad data makes the bad data permanent and taxes every
+   future reader. Correct the data; the code needs nothing.
+
+Mike's earlier framing applies directly: "You proposed a code complexity
+solution to paper over a data integrity problem due to lack of prior data clean
+up." Before designing around an anomaly, ask whether it is simply wrong and
+fixable.
