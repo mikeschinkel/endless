@@ -143,9 +143,11 @@ Endless auto-commits a fixed, narrow set of its own files — and none of them i
 |------------------------------------------------------|----------------------------------------------------|
 | `.endless/verbs.jsonl`                               | endless, on `worktree land`                        |
 | `.endless/db-ledger/*.jsonl`                         | endless, on the main checkout, via the event hook  |
-| `.endless/LESSONS.md`                                | endless, on `worktree land` (if the project keeps one) |
+| `.endless/LESSONS.md`                                | endless, on the main checkout, at write time       |
 | `.endless/plans/E-<id>.md`                           | endless, when it writes the plan into the worktree |
 | **everything else — source, docs, tests, config**    | **you, with `git commit`**                          |
+
+Two of those never wait for `land`: a ledger entry is committed by the event hook as it is written, and a lesson is committed by `endless lesson write` as it is written. Both land on the main checkout, in a single-file commit, from wherever you ran the command — which is why recording a correction does not oblige you to re-land a task that was already finished.
 
 The two exclusions in the `git add` above are not cosmetic. Ledger entries are recorded **on the main checkout only**; a ledger commit that rides a task branch into `main` would rebase a branch-authored segment into shared database history, so `land` refuses outright (`the branch has N commits modifying the database ledger`). A blanket `git add -A` in a worktree the event hook has written to is the usual way that happens. Leave both paths alone and let endless commit them.
 

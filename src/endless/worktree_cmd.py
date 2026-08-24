@@ -46,16 +46,18 @@ from endless.project_path import resolved
 COMPANION_FILENAME = ".endless/worktree.json"
 LOCK_FILENAME = ".endless/worktree.lock"
 
-# Auto-committed file globs per E-987 (locked), modified by E-1141 and E-2051:
-# verbs.jsonl is in (ambient agent-driven churn); config.json is out
-# (deliberate human/agent edits whose attribution the user controls).
-# LESSONS.md — the corrections log, where a project keeps one — joined in
-# E-2051 for the same reason as verbs.jsonl: sessions append to the MAIN
-# checkout's copy and never commit it, so land's sweep is what records it.
-# A project with no such file simply never matches the glob.
+# Auto-committed file globs per E-987 (locked), modified by E-1141: verbs.jsonl
+# is in (ambient agent-driven churn); config.json is out (deliberate
+# human/agent edits whose attribution the user controls).
 # Land treats these as endless-managed: modified state in any of these does
 # not block land; instead, land auto-commits them as a separate commit
 # before the worktree's commits.
+#
+# .endless/LESSONS.md was here between E-2051 and E-2055 and is deliberately
+# NOT any more. `endless lesson write` commits the corrections log on the main
+# checkout at write time (lesson_cmd.py), so land has nothing left to sweep and
+# a modified LESSONS.md inside a WORKTREE is what it now looks like: ordinary
+# user work, to be committed on the task branch like any other edit.
 #
 # Mirrors internal/monitor.AutoManagedStatusGlobs (E-1758) — keep the two in
 # sync. That Go definition is the one `endless worktree check` / `session
@@ -64,7 +66,6 @@ LOCK_FILENAME = ".endless/worktree.lock"
 AUTO_COMMIT_GLOBS = (
     ".endless/db-ledger/*.jsonl",
     ".endless/verbs.jsonl",
-    ".endless/LESSONS.md",
 )
 
 # E-1736: the DB ledger directory, as a git pathspec. A commit under here

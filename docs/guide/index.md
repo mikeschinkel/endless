@@ -184,6 +184,7 @@ listed separately. (Generated — do not hand-edit; run `/regenerate-guide`.)
 | `errors` | reference | Recorded errors: the session-status badge, showing and clearing them, and the ERR-NNNN catalog. |
 | `guide` | reference | The session guide; run `endless guide` for the index, `--list` for sections. |
 | `jobs` | reference | The fire-once background job runner: firing it, reading its schedule, clearing a job's backoff. |
+| `lesson` | orchestration | Recording a correction: written and committed on the main checkout, never on your branch. |
 {{if .report_gate}}| `minimizer` | tasks | The minimizer's autoresearch loop — champions, variants, judge calibration, rollback. |
 {{end}}| `note` | _(none yet)_ | project notes aren't covered by the guide yet. |
 | `notes` | _(none yet)_ | project notes aren't covered by the guide yet. |

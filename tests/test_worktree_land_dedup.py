@@ -2,7 +2,7 @@
 verbs.jsonl dedup at land.
 
 Two surfaces:
-- AUTO_COMMIT_GLOBS registry: verbs.jsonl and LESSONS.md in, config.json out
+- AUTO_COMMIT_GLOBS registry: verbs.jsonl in, config.json and LESSONS.md out
   (E-1141 + E-1268 + E-2051).
 - _dedup_worktree_verbs_against_main: bundles worktree verb additions into
   a single commit on the worktree's branch, deduped against main's verbs.
@@ -94,15 +94,16 @@ def test_auto_commit_globs_excludes_config():
     assert not any(fnmatch.fnmatch(".endless/config.json", p) for p in AUTO_COMMIT_GLOBS)
 
 
-def test_auto_commit_globs_includes_lessons_md():
-    """E-2051: the corrections log follows the verbs.jsonl model — sessions
-    append to the MAIN checkout's copy and never commit it, so land's sweep is
-    the only thing that records it."""
-    assert any(fnmatch.fnmatch(".endless/LESSONS.md", p) for p in AUTO_COMMIT_GLOBS)
+def test_auto_commit_globs_excludes_lessons_md():
+    """E-2055 retires E-2051's entry: `endless lesson write` commits the
+    corrections log on the main checkout at write time, so land has nothing to
+    sweep. A modified LESSONS.md inside a WORKTREE is therefore ordinary user
+    work again, and must partition as such."""
+    assert not any(fnmatch.fnmatch(".endless/LESSONS.md", p) for p in AUTO_COMMIT_GLOBS)
 
 
 def test_is_auto_commit_path_lessons_md():
-    assert _is_auto_commit_path(".endless/LESSONS.md") is True
+    assert _is_auto_commit_path(".endless/LESSONS.md") is False
 
 
 def test_is_auto_commit_path_verbs_jsonl():

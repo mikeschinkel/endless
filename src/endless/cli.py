@@ -3723,6 +3723,38 @@ def verb_remove(value, machine_only):
     remove_verb(value, machine_only)
 
 
+@main.group("lesson")
+def lesson_cmd():
+    """Record corrections in the project's lessons log."""
+    pass
+
+
+@lesson_cmd.command("write")
+@click.argument("summary")
+@click.option("--text", default=None,
+              help="The lesson itself — what went wrong, why, and the rule "
+                   "that replaces it (inline)")
+@click.option("--text-file", default=None,
+              help="Load the lesson from a file")
+@click.option("--allow-path", "allow_paths", multiple=True,
+              help="Regex matching an absolute path to permit in inline content "
+                   "(repeatable; escape hatch for the path gate).")
+def lesson_write(summary, text, text_file, allow_paths):
+    """Append a lesson to the project's log and commit it on main.
+
+    SUMMARY is the scannable one-liner; it becomes the commit subject
+    `Endless: record lesson (<summary>)`, which is capped at 60 characters.
+    The detail goes in --text and becomes the commit body.
+
+    The append lands in <project>/.endless/LESSONS.md on the MAIN checkout —
+    never a worktree copy — and is committed there in the same step, so
+    recording a correction never waits on `worktree land`.
+    """
+    from endless.lesson_cmd import write_lesson
+    text = _resolve_content_flag(text, text_file, "text", allow_paths)
+    write_lesson(summary, text)
+
+
 @main.group("phrase")
 def phrase_cmd():
     """Manage matchers (action regexes) in config files."""

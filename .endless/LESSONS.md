@@ -1,38 +1,45 @@
 # Lessons Learned
 
 A **write-only** capture log, for Mike's periodic review. After ANY correction
-from the user, add an entry at the end.
+from the user, record it with:
+
+```
+endless lesson write "<one-line summary>" --text "<the lesson>"
+```
+
+That command is the ONLY way an entry gets here. It appends to the MAIN
+checkout's copy of this file and commits that one path there in the same step,
+so recording a correction never waits on `endless worktree land` and never
+dirties a worktree. Do not append by hand, do not edit a worktree's copy, and
+do not commit this file yourself. (E-2055.)
 
 **Do NOT read this file** at session start or during a session, and do not act
 on its contents. It is not context — a session that quietly compensates for a
 bad behavior hides the defect that should have been fixed in the product. That
 is the whole reason memory is off in this project; reading this file back would
-reinstate the loop by other means. See "Corrections go to LESSONS.md" in
-`CLAUDE.md`.
+reinstate the loop by other means. See "Memory is OFF here" in `CLAUDE.md`.
 
-**Write to your own worktree's copy** and commit it on your task branch, like
-any other work. Never append to the main checkout's copy from a worktree: it is
-tracked, so that leaves an uncommitted change in a checkout you are not working
-in, belonging to no branch and no task. A session working directly in main with
-no claimed task appends here.
-
-Concurrent appends take care of themselves: `.gitattributes` gives this file
-`merge=union`, as `.endless/verbs.jsonl` has had since E-1268, so two branches
-each adding an entry are concatenated rather than conflicting. Union's weak spot
-is a same-line edit — two branches rewriting the same header line both survive,
-silently — so if you are changing the header rather than appending, check what
-landed. (E-2000.)
+The summary is capped by the commit subject it becomes,
+`Endless: record lesson (<summary>)`, at 60 characters total. Keep the
+explanation in `--text`; it becomes the commit body and the entry's detail.
 
 ## Format
 
-Each entry should follow this pattern:
+`endless lesson write` renders each entry as:
 
 ```
-### [Date] Short description
+### [Date] One-line summary
+<--text, verbatim>
+- **Project**: <derived from the project you ran it in>
+```
+
+Entries below predate the command and vary; the `--text` body of a new one is
+free-form Markdown, and the shape worth writing is still:
+
+```
 - **What went wrong**: Brief description of the mistake
 - **Why**: Root cause
 - **Rule**: What to do instead (actionable, specific)
-- **Project**: Which project this came up in (if relevant)
 ```
 
 ---

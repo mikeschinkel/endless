@@ -30,8 +30,8 @@ import re
 from pathlib import Path
 from typing import Any
 
-from endless import config
-from endless.project_path import resolved
+from endless import config, main_commit
+from endless.project_path import project_root
 
 
 # Default matchers seeded into the machine config on first run if no
@@ -98,16 +98,10 @@ def project_verbs_path() -> Path | None:
     E-1268: file is JSONL (line-per-entry) with `merge=union` in
     .gitattributes so concurrent appends merge cleanly.
     """
-    try:
-        from endless.task_cmd import _resolve_project
-        from endless import db
-        project_id, _ = _resolve_project(None)
-        row = db.query("SELECT path FROM projects WHERE id = ? LIMIT 1", (project_id,))
-    except Exception:
+    root = project_root()
+    if root is None:
         return None
-    if not row:
-        return None
-    return resolved(row[0]["path"]) / ".endless" / "verbs.jsonl"
+    return root / ".endless" / "verbs.jsonl"
 
 
 def machine_verbs_path() -> Path:
@@ -873,75 +867,22 @@ def _add_verb_to_file(path: Path, entry: dict) -> bool:
     return True
 
 
-# Git env vars that override `git -C <path>` for repo resolution.
-# Stripped from `_commit_project_verbs`'s subprocess env so a stray
-# GIT_DIR in the caller chain can't silently redirect the commit to a
-# linked worktree's gitdir (E-1309). Mirrors gitRedirectVars in
-# internal/events/commit.go.
-_GIT_REDIRECT_VARS = (
-    "GIT_DIR",
-    "GIT_WORK_TREE",
-    "GIT_INDEX_FILE",
-    "GIT_OBJECT_DIRECTORY",
-    "GIT_COMMON_DIR",
-    "GIT_NAMESPACE",
-    "GIT_ALTERNATE_OBJECT_DIRECTORIES",
-)
-
-
-def _sanitized_git_env() -> dict:
-    """Return os.environ minus git-locating vars (E-1309)."""
-    import os
-    env = dict(os.environ)
-    for k in _GIT_REDIRECT_VARS:
-        env.pop(k, None)
-    return env
-
-
 def _commit_project_verbs(verb_value: str) -> None:
     """Commit just .endless/verbs.jsonl on main (E-1208).
 
-    Two-step: `git add <path>` then `git commit -o <path>`. The add is needed
-    because a brand-new file (first verb ever registered, or fresh clone)
-    isn't yet known to git; `commit -o` alone would fail with a pathspec
-    error. The `-o` flag then ensures only that one path is committed,
-    leaving the rest of main's index/working tree exactly as it was. Other
-    modifications on main (staged or unstaged for other paths) are preserved.
-
-    The subprocess env is sanitized of GIT_DIR and siblings (E-1309) so
-    `git -C <main_root>` cannot be overridden by an inherited env var
-    pointing at a linked worktree's gitdir.
-
-    Raises RuntimeError on subprocess failure. The file write that preceded
-    this call is not rolled back; the caller surfaces the failure but the
-    verb is still persisted in the file.
+    The commit mechanics — single-path add + `commit -o`, git-locating env vars
+    stripped — live in `main_commit` (E-2055), shared with the lessons log.
+    Raises RuntimeError on git failure; the file write that preceded this call
+    is not rolled back.
     """
-    import subprocess
     project_vp = project_verbs_path()
     if project_vp is None:
         raise RuntimeError("no registered project; cannot commit verbs.jsonl")
-    main_root = project_vp.parent.parent
-    rel_path = ".endless/verbs.jsonl"
-    msg = f"Endless: register verb '{verb_value}'"
-    env = _sanitized_git_env()
-    add_res = subprocess.run(
-        ["git", "-C", str(main_root), "add", "--", rel_path],
-        capture_output=True, text=True, env=env,
+    main_commit.commit_path(
+        project_vp.parent.parent,
+        ".endless/verbs.jsonl",
+        f"Endless: register verb '{verb_value}'",
     )
-    if add_res.returncode != 0:
-        raise RuntimeError(
-            f"git add failed for {rel_path}: "
-            f"{(add_res.stderr or add_res.stdout or '').strip()}"
-        )
-    res = subprocess.run(
-        ["git", "-C", str(main_root), "commit", "-o", rel_path, "-m", msg],
-        capture_output=True, text=True, env=env,
-    )
-    if res.returncode != 0:
-        raise RuntimeError(
-            f"git commit failed for {rel_path}: "
-            f"{(res.stderr or res.stdout or '').strip()}"
-        )
 
 
 def remove_verb(*, value: str, machine_only: bool = False) -> tuple[int, int]:

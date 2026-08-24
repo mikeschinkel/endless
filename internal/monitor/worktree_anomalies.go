@@ -34,10 +34,14 @@ import (
 // (The companion .endless/worktree.json/.lock are gitignored and
 // .claude/settings.json is skip-worktree'd, so none of those ever surface in
 // `git status`; only these globs can.)
+//
+// .endless/LESSONS.md was listed here between E-2051 and E-2055 and is
+// deliberately not any more: `endless lesson write` commits the corrections log
+// on the main checkout at write time, so a modified copy inside a WORKTREE is
+// ordinary user work and SHOULD read as an anomaly.
 var AutoManagedStatusGlobs = []string{
 	".endless/db-ledger/*.jsonl",
 	".endless/verbs.jsonl",
-	".endless/LESSONS.md",
 }
 
 // AnomalyKind is the closed set of worktree anomaly categories. Not DB-backed

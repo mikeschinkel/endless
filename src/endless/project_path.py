@@ -158,3 +158,43 @@ def project_name_for_cwd(cwd: Path | str) -> str | None:
         "SELECT name FROM projects WHERE path = ?", (stored_path,)
     )
     return rows[0]["name"] if rows else None
+
+
+def project_root(*, strict: bool = False) -> Path | None:
+    """The registered project's main-checkout root for cwd, resolved, else None.
+
+    The one answer to "where does an endless-managed file that belongs to the
+    PROJECT (not to this worktree) get written?" — the registry row's path,
+    never a cwd walk-up, so a caller inside `.endless/worktrees/e-NNNN/` still
+    resolves to main. Used by `matchers.project_verbs_path` (E-1208) and by
+    `endless lesson write` (E-2055); both write a single file on main and
+    commit it there at write time.
+
+    Callers must treat None as "not a project" rather than falling back to cwd,
+    which is how a worktree-local copy of an endless-managed file gets created
+    by accident.
+
+    `strict` picks which of two contracts the caller wants for the failure:
+
+    - the default swallows everything and answers None. Right for a write that
+      DEGRADES when there is no project — a verb add still writes the machine
+      layer — and only there, because it also swallows genuinely actionable
+      failures (`--db` unset inside a self-dev worktree, a name with no row)
+      whose messages the caller would then have to invent worse versions of.
+    - `strict=True` lets those ClickExceptions through with their own wording,
+      and answers None only when resolution genuinely found no project. Right
+      for a write with nowhere else to go.
+    """
+    try:
+        from endless.task_cmd import _resolve_project
+        project_id, _ = _resolve_project(None)
+        row = db.query(
+            "SELECT path FROM projects WHERE id = ? LIMIT 1", (project_id,)
+        )
+    except Exception:
+        if strict:
+            raise
+        return None
+    if not row:
+        return None
+    return resolved(row[0]["path"])

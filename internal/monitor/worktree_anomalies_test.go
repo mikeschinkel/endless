@@ -172,9 +172,6 @@ func TestIsAutoManagedPath(t *testing.T) {
 	managed := []string{
 		".endless/db-ledger/2026-07.jsonl",
 		".endless/verbs.jsonl",
-		// E-2051: the corrections log is written on the main checkout and
-		// swept by land, exactly like verbs.jsonl.
-		".endless/LESSONS.md",
 	}
 	for _, p := range managed {
 		if !isAutoManagedPath(p) {
@@ -189,6 +186,10 @@ func TestIsAutoManagedPath(t *testing.T) {
 		".endless/plans/E-1.md",
 		".claude/settings.json",
 		".endless/verbs.json",
+		// E-2055: `endless lesson write` commits the corrections log on the
+		// main checkout as it writes, so land never sweeps it and a modified
+		// copy inside a worktree is user work, not ambient churn.
+		".endless/LESSONS.md",
 	}
 	for _, p := range unmanaged {
 		if isAutoManagedPath(p) {
