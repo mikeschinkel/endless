@@ -3396,3 +3396,11 @@ Mike's earlier framing applies directly: "You proposed a code complexity
 solution to paper over a data integrity problem due to lack of prior data clean
 up." Before designing around an anomaly, ask whether it is simply wrong and
 fixable.
+## 2026-08-24 — When a consolidation review owns an area, feed it problems, not solution-tasks
+
+I filed E-2049 with a solution in its title (write-lease) and later defended it as 'still valid' instead of proposing the area's consolidation review (E-2048) take it over. A review that exists to reconcile conflicting piecemeal solutions owns ALL solution choices in its area: new findings go to its question list; existing solution-shaped tasks get 'task replace <old> --by <review>' (evidence survives in the obsoleted task's fields). Title tasks by the problem, not the remedy.
+
+## 2026-08-24 — Re-query status before asserting it, even mid-conversation
+
+I told Mike E-1736 was 'unclaimed' from six-week-old context; it had been assumed since July 9. Task state mutates between turns — other sessions land, spawn, and re-triage constantly. Any sentence that states a task's status must be preceded by a live 'endless task show' in the same turn.
+
