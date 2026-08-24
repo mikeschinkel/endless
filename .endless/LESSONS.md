@@ -3502,3 +3502,12 @@ CAUSED by unfinished mechanism. When he says he is trying to rein in work in
 progress, the responsive move is to finish or delete something, not to design
 something. Prefer the option that adds zero new surface, and say plainly when
 the honest answer is "nothing new is needed here."
+
+## One task per session — do not offer to claim the next one (E-2051)
+
+I finished E-2051, filed E-2055 out of it, and offered to claim E-2055. Mike:
+that would violate the one-endless-task-per-Claude-session invariant.
+
+A session holds exactly one task, start to finish. Filing follow-up work does
+not transfer the session to it. The correct close is to hand the new task back
+as ready for a fresh session, never to volunteer for it.
