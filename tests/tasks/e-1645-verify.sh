@@ -1,26 +1,6 @@
 #!/usr/bin/env bash
 #
-# ┌────────────────────────────────────────────────────────────────────────────┐
-# │ SUPERSEDED BY E-1968 — this suite no longer runs.                          │
-# │                                                                            │
-# │ E-1968 retired `task spawn --reopen` outright, along with --new-session,   │
-# │ --print-decision, the reopen-context resolver                              │
-# │ (internal/events/reopen_context.go), the `session-query reopen-context`    │
-# │ subcommand, and the respawn handoff template. Every layer below drives one │
-# │ of those, so there is nothing left for it to assert.                       │
-# │                                                                            │
-# │ Why the feature went: spawning a FRESH session on reopened work threw away │
-# │ the session that did it — the only place its reasoning lives — and handed  │
-# │ the new one a rendered summary instead. Reopening now resumes that          │
-# │ session's actual transcript:                                               │
-# │                                                                            │
-# │     endless session goto E-<id> --resume --revisit                         │
-# │                                                                            │
-# │ Kept, not deleted: this is the record of what E-1645 verified when it      │
-# │ landed. Its successor is tests/tasks/e-1968-verify.sh.                     │
-# └────────────────────────────────────────────────────────────────────────────┘
-#
-# ORIGINAL HEADER — confirms `endless task spawn --reopen` does the
+# E-1645 verification script — confirms `endless task spawn --reopen` does the
 # right thing: a liveness guard that navigates to a live owner instead of
 # double-spawning, an inherited-session resolver that skips sub-10s ghosts, a
 # predicted restore_case (reused vs rebuilt-off-main), and a read-only
@@ -395,17 +375,6 @@ main() {
     test_liveness_guard
 
     summary
-}
-
-# E-1968: refuse to run rather than report failures against a feature that was
-# deliberately removed. Exits 0 so a caller sweeping tests/tasks/ is not told
-# something is broken — nothing is; this suite's subject is gone. See the banner
-# at the top of this file.
-main() {
-    printf 'E-1645 verification is SUPERSEDED by E-1968 — `task spawn --reopen`\n'
-    printf 'and its resolver were retired. Nothing to verify here.\n'
-    printf 'Successor suite: ./tests/tasks/e-1968-verify.sh\n'
-    exit 0
 }
 
 main "$@"

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # E-1542 verification script — pause-on-revisit hook + `endless task
-# continue` verb (E-1968 retired its `task pause` counterpart).
+# continue` / `endless task pause` verbs.
 #
 # Run from anywhere inside the worktree:
 #   ./tests/tasks/e-1542-verify.sh
@@ -170,7 +170,7 @@ test_schema() {
 # ─── verb end-to-end (continue / pause / friendly no-op) ────────────────────
 
 test_verbs_e2e() {
-    section "Verbs E2E — continue / no-pending / pause-is-gone (real CLI -> Go -> sandbox)"
+    section "Verbs E2E — continue / pause / no-pending (real CLI -> Go -> sandbox)"
 
     local sid=990542 epicn pid
     epicn=$(add_task_get_id "Build e-1542 verify epic" --type epic) || return
@@ -195,20 +195,15 @@ test_verbs_e2e() {
     assert_eq "continue does NOT release the task" "${epicn}" \
         "$(sql_read "SELECT COALESCE(active_task_id,'') FROM sessions WHERE id=${sid}")"
 
-    # 3. E-1968 RETIRED `endless task pause`. Pausing on this gate is declining
-    # to clear it: the block stays, and it auto-clears when the epic leaves
-    # `revisit`. The verb existed only to carry a release of the session's task,
-    # which ED-1560's write-once `active_task_id` forbids. What used to be
-    # checked here — "pause clears the gate AND releases" — is now the thing
-    # that must NOT be possible.
+    # 3. open gate + bound task -> pause clears it (revisit_pause) AND releases.
     seed_gate "${sid}" "${epicn}"
     sql_write "UPDATE sessions SET active_task_id=${epicn} WHERE id=${sid}"
-    assert_contains "task pause is gone (E-1968)" \
-        "No such command" endless task pause
-    assert_eq "the gate is still open — declining to clear IS the pause" "1" \
-        "$(open_gates "${sid}")"
-    assert_eq "and the session still holds its task" "${epicn}" \
-        "$(sql_read "SELECT COALESCE(active_task_id,'') FROM sessions WHERE id=${sid}")"
+    assert_contains "pause clears the gate" \
+        "pausing until the strategy is re-set" endless task pause
+    assert_eq "no open gate after pause" "0" "$(open_gates "${sid}")"
+    assert_eq "cleared_by=revisit_pause" "revisit_pause" "$(last_cleared_by "${sid}")"
+    assert_eq "pause releases the task (active_task_id NULL)" "NULL" \
+        "$(sql_read "SELECT COALESCE(active_task_id,'NULL') FROM sessions WHERE id=${sid}")"
 
     unset ENDLESS_SESSION_ID
 

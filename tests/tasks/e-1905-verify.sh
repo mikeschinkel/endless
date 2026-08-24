@@ -184,23 +184,20 @@ run_unit_layer() {
 # ─── layer B — reopen-context ranking after losing the signal ───────────────
 
 run_reopen_layer() {
-    section "B — reopen-context ranking (SUPERSEDED by E-1968)"
-    note "E-1968 deleted the resolver this layer ranked; only the premise survives"
+    section "B — reopen-context ranking (the one intended behavior change)"
+    note "E-1645's evidence test lost a disjunct; these pin what survived"
 
-    # E-1968 retired `task spawn --reopen`, and with it the whole reopen-context
-    # resolver (internal/events/reopen_context.go, its tests, and the
-    # `session-query reopen-context` subcommand). Reopening now resumes the
-    # prior session's actual transcript via `session goto --resume --revisit`,
-    # so there is no "which prior ended session should we inherit" question left
-    # to rank.
-    #
-    # The three TestReopenContext_* assertions that stood here were NOT left in
-    # place: `go test -run` exits 0 when no test matches, so they would have
-    # gone on reporting green while measuring nothing at all — worse than a
-    # failure, which at least tells you something changed.
-    report_pass "reopen-context ranking retired with \`spawn --reopen\` (E-1968)"
-
-    # This one survives: it is about ended sessions generally, not the resolver.
+    assert_succeeds "ghosts: a >=10s session still beats a sub-10s ghost" \
+        go test ./internal/events/ -count=1 \
+            -run 'TestReopenContext_PrefersRealOverGhost'
+    assert_succeeds "ghosts: evidence-free rows now tie-break on recency, not duration" \
+        go test ./internal/events/ -count=1 \
+            -run 'TestReopenContext_GhostsTieBreakOnRecency'
+    assert_succeeds "reopen-context otherwise unchanged (no-sessions, snapshot render)" \
+        go test ./internal/events/ -count=1 \
+            -run 'TestReopenContext_NoEndedSessions|TestReopenContext_RendersSnapshot'
+    # Why losing transcript_path costs so little: the OTHER non-span disjunct
+    # was already unreachable here.
     assert_succeeds "premise: E-1530 triggers make process unreachable on ended rows" \
         go test ./internal/events/ -count=1 \
             -run 'TestEndedSessionProcessIsAlwaysNull'
