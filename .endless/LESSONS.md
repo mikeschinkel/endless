@@ -3603,3 +3603,9 @@ instead of writing the comment that will later be read as the decision.
 - **Why**: I treated the ambiguity as settled by my first reading and never checked the result against the plain meaning of the word. A summary that cannot hold one sentence is not a summary; the absurdity was visible before any code was written.
 - **Rule**: when a reading of a requirement produces a result that contradicts the plain meaning of the word it implements, that is evidence the reading is wrong. Re-read or ask before building. Do not ship the absurd reading and flag it in the handoff.
 - **Project**: endless
+
+### [2026-08-24] do not pay a cost to preserve a capability without grepping for its consumers first
+- **What went wrong**: I spent 11 of a 60-character commit subject on an 'Endless(lesson):' vendor prefix, justifying it as preserving the ability to run git log --grep on a leading 'Endless'. The only two references to that grep anywhere in the codebase were comments I had written myself in the same task. Nothing matches on the prefix: the sole programmatic subject test is an exact compare against one literal string, for the ledger amend path.
+- **Why**: I took the capability from the guide's prose and from my own freshly-written comments instead of checking the code for consumers. A justification I authored in the same change is not evidence.
+- **Rule**: before paying a real, measurable cost to preserve a capability, grep for what actually uses it. If the only references are ones you just wrote, the capability does not exist and the cost buys nothing.
+- **Project**: endless
