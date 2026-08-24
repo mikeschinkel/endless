@@ -3511,3 +3511,36 @@ that would violate the one-endless-task-per-Claude-session invariant.
 A session holds exactly one task, start to finish. Filing follow-up work does
 not transfer the session to it. The correct close is to hand the new task back
 as ready for a fresh session, never to volunteer for it.
+
+## 2026-08-24 — E-2048 (ES-1134): corrections from Mike on the fan-out/fan-in discussion
+
+- **Answer the use-case described, not the adjacent one I know more about.** Mike
+  asked how to mark a non-Endless project as ignored — `~/Projects/foo/.endless-ignore`
+  or `~/Projects/foo/.endless/IGNORE`. I answered about detecting a git *worktree*
+  via `.git` being a file. Different problem entirely.
+- **Fan-out/fan-in is a concept, not a feature.** Do not respond to a general
+  shape with "there isn't one X, there are three." He was naming a pattern, not
+  requesting a specific mechanism.
+- **`task spawn --bg` is deprecated.** Stop citing it.
+- **A prior exemption does not settle a new use-case.** I cited Endless's earlier
+  ruling that subagents are inside a session rather than peers to it, as if that
+  answered whether subagents fit *this* use-case. When Mike raises a new
+  use-case, reason about it fresh.
+- **Do not talk about agent runs as if they were deterministic.** I claimed three
+  agents reading the same repo produce "three reads with the same blind spots."
+  They don't.
+- **Do not invent a constraint and then argue against it.** I wrote "three agents
+  given the same research prompt." He never said the prompts would be the same.
+- **Harness-specific features are fine when they add value.** Do not list
+  "Claude-Code-only" as an automatic Con. And "only in Claude Code" is not "only
+  on Mike's machine" — the handoff template can branch on harness capability and
+  give different instructions where the capability is absent.
+- **A configurable budget is a control, not a drawback.** Don't file it as a Con.
+- **Don't couple what he wants now with what he wants planned for later.** He
+  asked for an adversarial review of E-2048 *and* a plan for fan-out/fan-in.
+  Proposing the review be delivered *via* the fan-out machinery delays the thing
+  he wants first.
+- **Explain options well enough to be evaluated.** "Emits a script from a
+  template," "Endless owns the shape," and "opt-in behind an explicit user
+  keyword" were unintelligible shorthand. If an option needs a paragraph, write
+  the paragraph.
