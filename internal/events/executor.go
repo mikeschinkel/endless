@@ -1006,6 +1006,15 @@ func execTaskLanded(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 	return &ExecuteResult{}, nil
 }
 
+// execTaskReleased clears a session's task binding.
+//
+// E-1968 / ED-1560 left NO live producer of `task.released`: `task reopen`
+// stopped emitting it, and `task release` is disabled. This executor stays
+// anyway because the ledger is the durable record and the database is a
+// rebuildable projection of it — historical `task.released` entries must still
+// replay to reproduce the state they produced. Do not treat it as a supported
+// path for new writes. (E-1969's write-once trigger has to exempt or migrate
+// these historical entries, or a rebuild will abort on the first one.)
 func execTaskReleased(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 	var p TaskReleasedPayload
 	if err := json.Unmarshal(evt.Payload, &p); err != nil {

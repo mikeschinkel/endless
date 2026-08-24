@@ -341,6 +341,34 @@ endless internal template render handoff/claim < vars.json
 {{if .report_gate}}Every handoff's closing `Final message` line follows one discipline: **write the reply you mean to send, and let the minimizer cut it** (E-1953). For git state it defers to `endless worktree check`, which prints one line per genuine anomaly and stays silent when the worktree is clean — so a spawned session puts whatever that command prints into its draft and otherwise says nothing about git (a branch ahead of main and the absence of stray files are not anomalies). Beyond git it surfaces state outside endless (CI, services) only when actually in play, plus the how-to-test. Recaps of status, phase and relationships, and confirmations that a problem does not exist, are what the minimizer deletes — a second party applying that judgment is the whole point.
 {{else}}Every handoff's closing `Final message` line follows one discipline: **say what your user has to act on, and nothing they did not ask for**. For git state it defers to `endless worktree check`, which prints one line per genuine anomaly and stays silent when the worktree is clean — so a spawned session relays whatever that command prints and otherwise says nothing about git (a branch ahead of main and the absence of stray files are not anomalies). Beyond git it surfaces state outside endless (CI, services) only when actually in play, plus the how-to-test. It does not recap task status, phase or relationships, and does not confirm that a problem does not exist. Where `report_gate` is off there is no second party to apply that judgment, so the handoff states it outright rather than leaving it to be cut.
 {{end}}
+### A session owns one task for its lifetime
+
+`sessions.active_task_id` is **write-once**: set when the session claims, then
+never cleared and never re-pointed. Work on a different task is a different
+session. The column is not bookkeeping — it is the only route back to a
+session's transcript, which is where the reasoning behind the work lives.
+`endless session goto E-<id> --resume` resolves through it, and a session whose
+pointer was cleared reports as one that *never claimed a task*: the transcript
+survives, but nothing can find it.
+
+Three consequences you will meet:
+
+- **`endless task release` is disabled.** Clearing the pointer and then setting
+  a new one is a re-point through the back door. The command still exists and
+  answers with the invariant rather than vanishing. To stop working a task and
+  leave it for someone else, hand it back by status —
+  `endless task update <id> --status revisit` — which leaves your session
+  reachable.
+- **`endless task bind` is first-set-only.** It may fill a session that holds no
+  task. It may not move a bound one; it refuses and names what the session
+  already holds.
+- **`endless task reopen` leaves the binding alone.** It changes task state and
+  nothing else, so the session that did the work stays reachable afterwards.
+
+The same rule governs the two places that used to clear the pointer implicitly:
+confirming a task now idles the session without unbinding it, and
+`endless task chat` no longer unbinds a session that already holds a task.
+
 ### `endless task spawn`
 
 ```bash
@@ -350,14 +378,17 @@ endless task spawn <id> --attach <id>             # open a tmux window onto an a
 endless task spawn <id> --permission-mode plan    # override the spawned session's permission mode (default: auto)
 endless task spawn <id> --model <model>           # pass a --model through to the spawned claude (optional)
 endless task spawn <id> --worktree <path>         # cd to <path> instead of the spawn-created worktree
-endless task spawn <id> --reopen                  # reopen a terminal-status task before spawning
 endless task spawn <id> --force                   # allow spawn on a done-ish task (demotes status)
 ```
+
+`--reopen` is retired. Reopening settled work in a *fresh* session threw away
+the session that did it — the only place its reasoning lives. Reopen in that
+session instead: `endless session goto <id> --resume --revisit`.
 
 Foreground flow:
 
 1. Validates tmux is running (fails otherwise).
-2. Refuses if the task is in a done-ish status (`unverified`/`confirmed`/`declined`/`obsolete`/`assumed`/`completed`) without `--force` or `--reopen`, or if another live session already owns the task.
+2. Refuses if the task is in a done-ish status (`unverified`/`confirmed`/`declined`/`obsolete`/`assumed`/`completed`) without `--force`, or if another live session already owns the task. On the reopenable subset (`assumed`/`confirmed`/`completed`) the refusal routes to `session goto <id> --resume --revisit` rather than offering `--force`, because a second session on settled work is rarely what you want.
 3. **Pre-claims the task**: flips status to `underway` (emitting `task.status_changed`) and creates the per-task worktree at `.endless/worktrees/e-<id>/`.
 4. Renders the handoff from the template and writes it to a temp file.
 5. Launches Claude as the tmux window's *command* through the `endless-go spawn-window` launcher: the launcher creates a window named `<project>_<slug>[E-NNNN]` at the spawn-created worktree (or `--worktree <path>`), sets the window variables `@endless_spawned_by`, `@endless_task_id`, `@endless_project_id` in-process **before** exec, then execs `claude --permission-mode auto` with the handoff as its positional prompt argument. The handoff text never touches a command line or the session environment, and there is no send-keys, no readiness sleep, and no plan-mode step.
@@ -381,7 +412,8 @@ endless task update E-<id> --status revisit    # the task that shipped the bug
 `revisit` is where reopened landed work belongs — the status means "needs
 re-evaluation before it can proceed", which covers both a plan that no longer
 holds and work that shipped and turned out wrong. `task reopen E-<id>` and
-`task spawn E-<id> --reopen` land there too, so all three routes agree.
+`session goto E-<id> --resume --revisit` land there too, so all three routes
+agree.
 
 Why this over filing a new task: a filed task is a standing claim on your
 user's attention. It gets read, re-read, and triaged past on every pass through
@@ -396,7 +428,7 @@ usually still has one:
 
 ```bash
 endless worktree for-task <id>                 # path, if it still exists
-endless task spawn <id> --reopen               # reopen + get a session into it
+endless session goto E-<id> --resume --revisit # reopen + resume the session that did the work
 endless session resume <ref> --reopen          # worktree was reaped: rebuild it
 ```
 

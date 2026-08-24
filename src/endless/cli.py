@@ -1162,7 +1162,17 @@ def session_cd(session_ref, show_all, target):
     help="If the target isn't live, resume it in a NEW tmux window and focus "
          "it, instead of erroring. No-op when the target is already live.",
 )
-def session_goto(target_ref, resume):
+@click.option(
+    "--revisit", is_flag=True,
+    help="With --resume, on a confirmed/assumed/completed target: flip the "
+         "task to `revisit` and open the session to continue work.",
+)
+@click.option(
+    "--no-revisit", "no_revisit", is_flag=True,
+    help="With --resume, on a confirmed/assumed/completed target: open the "
+         "session to read it back; leave the task's status alone.",
+)
+def session_goto(target_ref, resume, revisit, no_revisit):
     """Switch tmux focus to a task's or session's pane, with a back-stack.
 
     <target_ref> is a task id (E-NNNN or NNNN) or a session id (ES-NNNN, a bare
@@ -1176,9 +1186,14 @@ def session_goto(target_ref, resume):
     With --resume, a target that has no live pane is relaunched in a new tmux
     window and focused (instead of erroring) — unlike `session resume`, which
     clobbers the current pane.
+
+    Resuming settled work (confirmed/assumed/completed) requires saying which
+    you mean: --revisit reopens the task and continues; --no-revisit reads the
+    session back without touching its status.
     """
     from endless.session_cmd import session_goto as run_goto
-    run_goto(target_ref, resume=resume)
+    run_goto(target_ref, resume=resume, revisit=revisit,
+             no_revisit=no_revisit)
 
 
 @session_cmd.command("resume")
@@ -1210,7 +1225,12 @@ def session_goto(target_ref, resume):
     # hidden so only one name is advertised.
     "--print-decision", is_flag=True, hidden=True,
 )
-def session_resume(ref, review, reopen, dry_run, print_decision):
+@click.option(
+    "--force", is_flag=True,
+    help="Replace this pane even though the session in it is working a task. "
+         "Required whenever that is the case — the exec destroys it.",
+)
+def session_resume(ref, review, reopen, dry_run, print_decision, force):
     """Relaunch a lost Claude session in the CURRENT tmux pane.
 
     REF is a task id (E-NNNN, as shown on the tmux tab), a session id
@@ -1228,10 +1248,14 @@ def session_resume(ref, review, reopen, dry_run, print_decision):
 
     When the worktree was dropped after landing, `--review`/`--reopen` rebuild
     it from the surviving transcript so no git ref need be typed.
+
+    This replaces the pane it runs in. When that pane already holds a session
+    working a task, it refuses without --force and points at
+    `session goto <ref> --resume`, which opens a new window instead.
     """
     from endless.session_cmd import resume_session
     resume_session(ref, review=review, reopen=reopen,
-                   dry_run=dry_run or print_decision)
+                   dry_run=dry_run or print_decision, force=force)
 
 
 @session_cmd.command("back")
@@ -2640,16 +2664,17 @@ def task_release(item_id, ignore_missing):
 
 @task_cmd.command("continue")
 def task_continue():
-    """Resume under the current plan, clearing a pending epic-revisit prompt."""
+    """Clear a pending epic-revisit prompt and carry on under the current plan.
+
+    The only way out of the gate the hook opens when an ancestor epic goes to
+    `revisit`: until the gate is cleared, every tool call in this session is
+    blocked. To pause instead, run nothing — leaving the gate open IS pausing,
+    and it clears itself once the epic leaves `revisit` (E-1968 removed
+    `task pause`, whose only distinguishing act was an unbind the
+    one-session-one-task invariant forbids).
+    """
     from endless.task_cmd import continue_item
     continue_item()
-
-
-@task_cmd.command("pause")
-def task_pause():
-    """Pause for an epic-revisit prompt: clear it and release the active task."""
-    from endless.task_cmd import pause_item
-    pause_item()
 
 
 @task_cmd.command("bind")
@@ -2734,10 +2759,16 @@ def task_handoff(item_id):
               help="Allow spawn on a task in a done-ish status "
                    "(unverified/confirmed/declined/obsolete/assumed/completed); "
                    "demotes it back to underway. Mirrors `claim --force`.")
-@click.option("--reopen", is_flag=True,
-              help="Reopen an assumed/confirmed/completed target before "
-                   "spawning (status → revisit). Use for handoff to a "
-                   "fresh session; mutually exclusive with --force.")
+# E-1968 retired --reopen. Its only capability the navigation verbs lacked was
+# changing task status, and `session goto --resume --revisit` now provides that
+# on the verb that already resumes the session which did the work — a strictly
+# better outcome than spawning a fresh session with a rendered summary of it.
+# Kept hidden and refusing (the `task start` precedent) so muscle memory gets an
+# answer rather than "no such option". --new-session and --print-decision were
+# --reopen-only modifiers; they stay accepted-and-hidden purely so a combined
+# invocation reaches the --reopen message instead of a click parse error.
+@click.option("--reopen", is_flag=True, hidden=True)
+@click.option("--print-decision", is_flag=True, hidden=True)
 @click.option("--bg", is_flag=True,
               help="Dispatch the agent headless via `claude --bg --name "
                    "E-<id>` instead of a tmux window. No tmux required; the "
@@ -2748,31 +2779,35 @@ def task_handoff(item_id):
                    "background agent (via `claude attach`). Does NOT dispatch; "
                    "requires an existing --bg agent. Mutually exclusive with "
                    "--bg. Detaching leaves the agent running.")
-@click.option("--new-session", is_flag=True,
-              help="With --reopen: start a fresh session instead of inheriting "
-                   "the most-applicable prior ended session's restore context. "
-                   "The worktree is still reused if present (rebuilt off main "
-                   "only if reaped). Does NOT bypass a live owner.")
-@click.option("--print-decision", is_flag=True,
-              help="With --reopen: print the resolved reopen decision (navigate "
-                   "vs spawn, restore_case, inherit-session vs new-session, "
-                   "worktree path) and exit. Read-only — no status flip, no "
-                   "worktree creation, no launch.")
+@click.option("--new-session", is_flag=True, hidden=True)
 def task_spawn(item_id, project, permission_mode, model, session_name,
-               worktree, force, reopen, bg, attach, new_session,
-               print_decision):
+               worktree, force, reopen, print_decision, bg, attach,
+               new_session):
     """Spawn Claude working on a task — a tmux window, or headless with --bg.
 
     Foreground spawns launch Claude as the tmux window's command and deliver the
     handoff (generated from the template — no stored prompt) as claude's
     positional prompt argument. Spawned sessions default to --permission-mode
     auto.
+
+    Spawn always starts a NEW session. To pick up work a prior session already
+    did, resume that session instead: `endless session goto <ref> --resume`.
     """
+    if reopen or new_session or print_decision:
+        raise click.ClickException(
+            "`task spawn --reopen` is retired (E-1968). Spawning a fresh "
+            "session on reopened work threw away the session that did it.\n"
+            "Reopen and continue in that session instead:\n"
+            f"    endless session goto E-{item_id} --resume --revisit\n"
+            "  (--no-revisit instead, to read it back without reopening the "
+            "task.)\n"
+            "--new-session and --print-decision went with it; they only ever "
+            "modified --reopen."
+        )
     from endless.task_cmd import spawn_plan
     spawn_plan(item_id, project_name=project,
-               worktree=worktree, force=force, reopen=reopen, bg=bg,
-               attach=attach, new_session=new_session,
-               print_decision=print_decision,
+               worktree=worktree, force=force, bg=bg,
+               attach=attach,
                permission_mode=permission_mode, model=model,
                name=session_name)
 
@@ -2800,9 +2835,12 @@ def task_reopen(item_id):
 
     Flips assumed/confirmed/completed → revisit — the status for work
     whose prior judgment no longer holds, whether that is a stale plan or
-    something that shipped and turned out wrong. Metadata-only: no
-    worktree creation, no session binding. Caller chooses the next step
-    (spawn, claim, or hand-back).
+    something that shipped and turned out wrong.
+
+    Task state only. It creates no worktree, and it LEAVES ANY EXISTING
+    session→task binding INTACT: the session that worked the task is still
+    reachable with `endless session goto E-<id> --resume` afterwards. Pick the
+    work back up with that (add --revisit to reopen and continue in one step).
     """
     from endless.task_cmd import reopen_item
     reopen_item(item_id)

@@ -1,2 +1,2 @@
 section: orchestration
-covers: Releasing a task so another session can claim it.
+covers: Why releasing a task is disabled — a session owns one task for its lifetime.

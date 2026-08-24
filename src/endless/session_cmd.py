@@ -168,6 +168,11 @@ def _require_claude() -> str:
 # unverified) and still-open (untriaged/unplanned/submitted/ready/revisit)
 # tasks keep their status; the worktree is just restored under them.
 #
+# E-1968 gave this set a second job: it is also the set on which `session goto
+# --resume` demands an explicit `--revisit` / `--no-revisit`. That is the same
+# judgment read two ways — "settled work, where reopening is a real decision" —
+# so the two surfaces share one definition rather than drifting apart.
+#
 # E-1889 narrowed this to task_cmd's `_REOPENABLE_TERMINAL_STATUSES`.
 # `declined`/`obsolete` used to be in the set, which made `--reopen` the one
 # path that silently revived a deliberate decision not to do the work — the
@@ -178,9 +183,9 @@ _REOPEN_TO_REVISIT: frozenset[str] = frozenset({
     "confirmed", "assumed", "completed",
 })
 
-# Statuses `--reopen` refuses outright: a decision was made not to do the work,
-# so resuming into it must be a deliberate act rather than a side effect of
-# recovering a worktree.
+# Statuses `--reopen` and `--revisit` refuse outright: a decision was made not to
+# do the work, so resuming into it must be a deliberate act rather than a side
+# effect of recovering a worktree or navigating to a session.
 _REOPEN_REFUSED: frozenset[str] = frozenset({"declined", "obsolete"})
 
 
@@ -432,17 +437,19 @@ def _resolve_recovery_base(
     )
 
 
-def _emit_recovery_status_change(
+def _emit_task_status_change(
     task_id: int,
     title: str,
     old_status: str,
     new_status: str,
     session_id,
 ) -> None:
-    """Emit the `--reopen` status transition, attributed to the reopened
-    session (E-1801). Attributing to the resumed session (not the current pane)
-    keeps the transition correct even when `session resume` runs from a plain
-    recovery shell that has no Claude session of its own.
+    """Emit a task status transition on behalf of a session being resumed.
+
+    Shared by `session resume --reopen` (E-1801) and `session goto --resume
+    --revisit` (E-1968). Attributing to the RESUMED session rather than the
+    current pane keeps the transition correct even when the resume runs from a
+    plain recovery shell that has no Claude session of its own.
     """
     from endless.event_bridge import emit_event
     from endless.task_cmd import _resolve_project, _emit_field_changes
@@ -504,7 +511,7 @@ def _recover_dropped_worktree(
     status_to = None
     if intent == "reopen" and task_status in _REOPEN_TO_REVISIT:
         status_to = "revisit"
-        _emit_recovery_status_change(
+        _emit_task_status_change(
             task_id, title, task_status, status_to,
             session_id=target.get("endless_id"),
         )
@@ -522,11 +529,36 @@ def _recover_dropped_worktree(
     return str(worktree)
 
 
+def _current_pane_task() -> tuple[int, int] | None:
+    """(endless_session_id, task_id) for the session running in THIS pane, or
+    None when this pane has no session or its session holds no task.
+
+    Backs `session resume`'s clobber gate (E-1968). Best-effort by design: the
+    gate exists to stop an accidental replacement of live work, so a pane whose
+    session cannot be resolved is treated as empty rather than blocking a
+    legitimate recovery from a plain shell — which is exactly where `session
+    resume` is most often run.
+    """
+    from endless.task_cmd import _current_endless_session_id
+
+    try:
+        eid = _current_endless_session_id()
+    except Exception:
+        return None
+    if eid is None:
+        return None
+    rows = db.query("SELECT active_task_id FROM sessions WHERE id = ?", (eid,))
+    if not rows or rows[0]["active_task_id"] is None:
+        return None
+    return eid, int(rows[0]["active_task_id"])
+
+
 def resume_session(
     ref: str,
     review: str | None = None,
     reopen: str | None = None,
     dry_run: bool = False,
+    force: bool = False,
 ) -> None:
     """Relaunch a lost Claude session in the current tmux pane.
 
@@ -552,11 +584,32 @@ def resume_session(
 
     To resume a non-live target in a NEW window instead of clobbering the
     current pane, use `session goto <ref> --resume` (E-1797).
+
+    `--force` (E-1968) is required when the pane this runs in already holds a
+    session working a task: the exec replaces that session, and doing it to live
+    work should be a decision, not a side effect. `--dry-run` never needs it —
+    it does not reach the exec.
     """
     if review is not None and reopen is not None:
         raise click.ClickException(
             "--review and --reopen are mutually exclusive."
         )
+
+    # E-1968: refuse to clobber a pane that holds live work. Checked BEFORE
+    # `_resolve_resume`, which can mint a container task and a worktree — a
+    # refusal must not leave those behind. Skipped for --dry-run, which stops
+    # short of the exec and so replaces nothing.
+    if not force and not dry_run:
+        held = _current_pane_task()
+        if held is not None:
+            _eid, held_task = held
+            raise click.ClickException(
+                f"This pane is working E-{held_task}. `session resume` execs "
+                f"in place, so it would replace that session.\n"
+                f"  Open the target in a NEW window instead:\n"
+                f"      endless session goto {ref} --resume\n"
+                f"  Or pass --force to replace this pane."
+            )
     intent = "review" if review is not None else "reopen" if reopen is not None else None
     override = review if review is not None else reopen
 
@@ -2192,14 +2245,80 @@ def _spawner_pane(live: list[dict]) -> tuple[str, str] | None:
     return resolved, f"spawning session {val} (pane {resolved})"
 
 
-def _resume_new_window_pane(ref: str) -> tuple[str, str]:
+def _apply_revisit_intent(ref: str, revisit: bool, no_revisit: bool) -> None:
+    """Gate and apply `session goto --resume`'s `--revisit` / `--no-revisit`.
+
+    A target whose task is `confirmed` / `assumed` / `completed` is settled
+    work. Reopening the session that did it is ambiguous — you might be picking
+    the work back up, or you might just be reading it back — and the two mean
+    opposite things for the task's status. So E-1968 makes the caller say which:
+
+      --revisit      flip the task to `revisit` and open the session to continue
+      --no-revisit   open the session read-only; leave the status alone
+
+    Neither flag is required (or does anything) for a task in any other status:
+    nothing about `underway`, `unverified`, `revisit` or the pre-work statuses
+    is ambiguous. `declined` / `obsolete` refuse `--revisit` outright, matching
+    `session resume --reopen` — reviving a deliberate decision not to do the
+    work is an explicit act, not a navigation side effect.
+    """
+    if revisit and no_revisit:
+        raise click.ClickException(
+            "--revisit and --no-revisit are mutually exclusive: one reopens "
+            "the task, the other leaves its status alone. Pick one."
+        )
+    target = _try_resume_target(ref)
+    if target is None:
+        return
+    task = target.get("active_task_id")
+    status = target.get("task_status") or ""
+    if task is None:
+        return
+
+    if revisit and status in _REOPEN_REFUSED:
+        raise click.ClickException(
+            f"E-{task} is '{status}' — a deliberate decision, not dormant "
+            f"work.\n"
+            f"Reviving it is an explicit act:\n"
+            f"    endless task update E-{task} --status revisit\n"
+            f"Then go there with --no-revisit."
+        )
+
+    if status not in _REOPEN_TO_REVISIT:
+        return
+
+    if not revisit and not no_revisit:
+        raise click.ClickException(
+            f"E-{task} is '{status}'. Say what you intend:\n"
+            f"  --revisit      reopen it and continue work\n"
+            f"  --no-revisit   just read the session; leave the status alone"
+        )
+    if no_revisit:
+        return
+
+    # Flipped BEFORE the window opens. If tmux then fails, the task is left in
+    # `revisit` — which is right: --revisit is a declaration that this work is
+    # being reopened, and that is true whether or not the window came up.
+    _emit_task_status_change(
+        int(task), target.get("task_title") or "task", status, "revisit",
+        session_id=target.get("endless_id"),
+    )
+
+
+def _resume_new_window_pane(
+    ref: str, revisit: bool = False, no_revisit: bool = False,
+) -> tuple[str, str]:
     """Open a NEW tmux window running `claude --resume <uuid>` in the target's
     worktree (detached, so the caller's own push+switch does the focusing and the
     nav-trail records a single via=goto move) and return (pane, label). Backs
     `session goto --resume` for a non-live target (E-1797). Raises
     click.ClickException if the ref isn't resumable, SystemExit(1) on tmux failure.
+
+    The `--revisit` / `--no-revisit` gate runs FIRST (E-1968), so a target that
+    needs an explicit intent is refused before any window is opened.
     """
     import shlex
+    _apply_revisit_intent(ref, revisit, no_revisit)
     uuid, worktree, rlabel, _eid = _resolve_resume(ref)
     claude = _require_claude()
     cmd = f"{shlex.quote(claude)} --resume {shlex.quote(uuid)}"
@@ -2231,7 +2350,12 @@ def _fail_not_live(nl: _GotoNotLive) -> None:
     raise SystemExit(1)
 
 
-def session_goto(target_ref: str, resume: bool = False) -> None:
+def session_goto(
+    target_ref: str,
+    resume: bool = False,
+    revisit: bool = False,
+    no_revisit: bool = False,
+) -> None:
     """Switch tmux focus to a task's or session's pane, pushing the current pane
     onto the back-stack. See the module section header (E-1681).
 
@@ -2239,7 +2363,22 @@ def session_goto(target_ref: str, resume: bool = False) -> None:
     is relaunched in a new tmux window and focused instead of erroring — the
     manual find-in-DB/open-window/resume dance, automated (E-1797). When the
     target IS live, `--resume` is a no-op and this behaves like plain goto.
+
+    `revisit` / `no_revisit` (E-1968) say what a resume of settled work is FOR;
+    see `_apply_revisit_intent`. They belong to the resume path, so like
+    `--resume` itself they do nothing when the target is already live — a live
+    session's task status is that session's business, not a navigator's.
     """
+    if revisit and not resume:
+        raise click.ClickException(
+            "--revisit applies only with --resume (it says what reopening the "
+            "target session is for). A live target is just focused."
+        )
+    if no_revisit and not resume:
+        raise click.ClickException(
+            "--no-revisit applies only with --resume (it says what reopening "
+            "the target session is for). A live target is just focused."
+        )
     if not _in_tmux():
         click.echo(
             "session goto requires tmux (no $TMUX in this environment).",
@@ -2252,7 +2391,9 @@ def session_goto(target_ref: str, resume: bool = False) -> None:
     except _GotoNotLive as nl:
         if not resume:
             _fail_not_live(nl)
-        target_pane, label = _resume_new_window_pane(nl.ref)
+        target_pane, label = _resume_new_window_pane(
+            nl.ref, revisit=revisit, no_revisit=no_revisit,
+        )
 
     key = _backstack_key()
     token = _current_pane_token(live)

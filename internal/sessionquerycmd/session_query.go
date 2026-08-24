@@ -13,7 +13,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/mikeschinkel/endless/internal/events"
 	"github.com/mikeschinkel/endless/internal/gatekind"
 	"github.com/mikeschinkel/endless/internal/monitor"
 	_ "modernc.org/sqlite"
@@ -66,11 +65,6 @@ func Run(args []string) {
 		}
 	case "gate-clear":
 		if err := runGateClear(args[1:]); err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
-		}
-	case "reopen-context":
-		if err := runReopenContext(args[1:]); err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
@@ -162,7 +156,6 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "                                    JSON {scope, epic_id, agents} of working bg agents (E-1621)")
 	fmt.Fprintln(os.Stderr, "  gate-clear --session-id <id> --kind <slug> --cleared-by <reason>")
 	fmt.Fprintln(os.Stderr, "                                    clear the session's open gate of the kind; prints rows cleared")
-	fmt.Fprintln(os.Stderr, "  reopen-context --task-id <id>     JSON {inherited_session_id, prior_outcome, last_status_snapshot} for a reopen")
 	fmt.Fprintln(os.Stderr, "  worktree-anomalies --worktree-path <path> [--project-root <path>]")
 	fmt.Fprintln(os.Stderr, "                                    terse line per genuine handoff anomaly; nothing when clean")
 	fmt.Fprintln(os.Stderr, "                                    exit 0 clean, 1 anomalies present, 2 on error")
@@ -534,32 +527,10 @@ func runTrail(args []string) error {
 	return json.NewEncoder(os.Stdout).Encode(edges)
 }
 
-// runReopenContext prints the read-only restore context for `task spawn
-// --reopen` as JSON: the most-applicable prior ended session to inherit (0 if
-// none), the task's outcome, and the inherited session's latest status snapshot
-// rendered as markdown. The Python reopen path feeds these into the respawn
-// handoff without a Python DB read (E-894 / E-1486). The ghost-skip pick lives
-// in events.ResolveReopenContext.
-func runReopenContext(args []string) error {
-	fs := flag.NewFlagSet("reopen-context", flag.ContinueOnError)
-	taskID := fs.Int64("task-id", 0, "task id being reopened")
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-	if *taskID == 0 {
-		return fmt.Errorf("--task-id is required")
-	}
-	ctx, err := events.ResolveReopenContext(*taskID)
-	if err != nil {
-		return fmt.Errorf("reopen-context for E-%d: %w", *taskID, err)
-	}
-	return json.NewEncoder(os.Stdout).Encode(ctx)
-}
-
 // runGateClear closes the session's open gate of the given kind, recording the
 // cleared_by reason, and prints how many open rows were cleared (0 = nothing was
-// pending). It backs the `endless task continue` / `endless task pause` verbs so
-// the Python side clears a gate without a Python DB write (E-1486 / E-1542).
+// pending). It backs the `endless task continue` verb so the Python side clears
+// a gate without a Python DB write (E-1486 / E-1542).
 // --session-id is the integer sessions.id PK (the Python resolver supplies it).
 func runGateClear(args []string) error {
 	fs := flag.NewFlagSet("gate-clear", flag.ContinueOnError)

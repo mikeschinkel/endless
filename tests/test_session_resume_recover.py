@@ -55,7 +55,7 @@ def stub_recovery(monkeypatch, tmp_path):
         worktree_cmd, "_git_run",
         lambda *a, **k: _Res(0 if calls["rev_parse_ok"] else 1),
     )
-    monkeypatch.setattr(session_cmd, "_emit_recovery_status_change", fake_status)
+    monkeypatch.setattr(session_cmd, "_emit_task_status_change", fake_status)
     return calls
 
 

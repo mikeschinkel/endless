@@ -51,8 +51,7 @@ type TaskRef struct {
 
 // BuildTaskReportFacts computes the report facts for a task against the global
 // monitor DB. It is the exported entry point for the session-query handler;
-// taskReportFacts is the db-taking core split out for tests (mirroring the
-// reopen-context pattern).
+// taskReportFacts is the db-taking core split out for tests.
 func BuildTaskReportFacts(taskID int64) (TaskReportFacts, error) {
 	db, err := DB()
 	if err != nil {

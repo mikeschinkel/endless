@@ -1,10 +1,10 @@
-"""Tests for `endless task continue` / `endless task pause` (E-1542).
+"""Tests for `endless task continue` (E-1542, as amended by E-1968).
 
-The verbs clear the session's open revisit gate by shelling out to
+The verb clears the session's open revisit gate by shelling out to
 `endless-go session-query gate-clear` (the direct-write Go helper — no Python
 DB write, per E-1486). These tests mock that subprocess and the session
-resolver, so they assert the verb wiring, the friendly no-pending message, and
-that `pause` releases the active task only when a gate was actually cleared.
+resolver, so they assert the verb wiring and the friendly no-pending message.
+E-1968 removed its counterpart `task pause`; the last test pins that removal.
 The DB-backed end-to-end behavior is covered by tests/tasks/e-1542-verify.sh
 and the Go tests in internal/{monitor,hookcmd}.
 """
@@ -54,27 +54,18 @@ def test_continue_clears_gate(capsys):
     assert args[args.index("--kind") + 1] == "revisit"
 
 
-def test_pause_no_open_gate_does_not_release(capsys):
-    from endless.task_cmd import pause_item
-    with patch("endless.task_cmd._current_endless_session_id", return_value=7), \
-         patch("subprocess.run", return_value=_fake_run(stdout="0")), \
-         patch("endless.task_cmd.release_item") as release:
-        pause_item()
-    out = capsys.readouterr().out
-    assert "No pending revisit prompt" in out
-    release.assert_not_called()
+def test_pause_verb_is_gone():
+    """E-1968 removed `task pause`. Pausing on the epic-revisit gate is
+    declining to clear it — the gate keeps blocking, and auto-clears when the
+    epic leaves `revisit`. The verb only existed to carry a release of the
+    session's task, which ED-1560's write-once `active_task_id` forbids.
+    """
+    import endless.task_cmd as task_cmd
+    from endless.cli import task_cmd as task_group
 
-
-def test_pause_clears_gate_and_releases(capsys):
-    from endless.task_cmd import pause_item
-    with patch("endless.task_cmd._current_endless_session_id", return_value=7), \
-         patch("subprocess.run", return_value=_fake_run(stdout="1")) as run, \
-         patch("endless.task_cmd.release_item") as release:
-        pause_item()
-    out = capsys.readouterr().out
-    assert "pausing until the strategy is re-set" in out
-    release.assert_called_once_with(None)
-    assert args_cleared_by(run) == "revisit_pause"
+    assert not hasattr(task_cmd, "pause_item")
+    assert "pause" not in task_group.commands
+    assert "continue" in task_group.commands
 
 
 def test_gate_clear_helper_raises_on_failure():
@@ -86,7 +77,3 @@ def test_gate_clear_helper_raises_on_failure():
     assert "gate-clear failed" in str(exc.value)
     assert "boom" in str(exc.value)
 
-
-def args_cleared_by(run_mock) -> str:
-    args = run_mock.call_args[0][0]
-    return args[args.index("--cleared-by") + 1]

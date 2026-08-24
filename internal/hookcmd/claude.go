@@ -958,19 +958,26 @@ func blockToolUse(message string) {
 	os.Exit(2)
 }
 
-// revisitClearVerbRe matches the user's revisit gate-clearing commands so they
-// are never blocked by the gate itself (E-1542): `endless task continue` /
-// `endless task pause`, including path- or wrapper-prefixed forms such as
-// `uv run endless task continue` or `/usr/local/bin/endless task pause`.
-var revisitClearVerbRe = regexp.MustCompile(`(?i)\bendless\s+task\s+(?:continue|pause)\b`)
+// revisitClearVerbRe matches the user's revisit gate-clearing command so it is
+// never blocked by the gate itself (E-1542): `endless task continue`,
+// including path- or wrapper-prefixed forms such as `uv run endless task
+// continue` or `/usr/local/bin/endless task continue`.
+//
+// E-1968 dropped `task pause` from the alternation along with the verb. Pausing
+// is not an action: it is declining to clear the gate, which leaves the session
+// blocked until the epic leaves `revisit` and the gate auto-clears. The verb
+// only ever existed to carry an unbind that ED-1560's write-once
+// `active_task_id` forbids.
+var revisitClearVerbRe = regexp.MustCompile(`(?i)\bendless\s+task\s+continue\b`)
 
 // enforceRevisitGate intercepts a session whose claimed task descends from an
 // epic currently in status='revisit' (E-1542). On the session's next tool call
 // (any tool kind) it blocks and instructs Claude to surface an AskUserQuestion:
-// continue under the current plan, or pause until the strategy is re-set. The
-// user's answer runs `endless task continue` / `endless task pause`, which clear
-// the gate. No-op when the session has no resolvable active task, and never
-// blocks the gate-clearing commands themselves.
+// continue under the current plan, or stop and wait for the strategy to be
+// re-set. Only "continue" has a verb — `endless task continue` clears the gate;
+// stopping means running nothing, and the gate auto-clears when the epic leaves
+// `revisit`. No-op when the session has no resolvable active task, and never
+// blocks the gate-clearing command itself.
 func enforceRevisitGate(payload claudePayload) {
 	if instruction, block := revisitGateDecision(payload); block {
 		blockToolUseWithRevisitPrompt(instruction)
@@ -1028,8 +1035,11 @@ func revisitPromptInstruction(taskID, epicID int64) string {
 			"status=revisit. The strategy under which this task was planned is being "+
 			"reconsidered. Surface this to the user as an AskUserQuestion with two options:\n\n"+
 			"  - Continue under the current plan (then call `endless task continue`)\n"+
-			"  - Pause until the strategy is re-set (then call `endless task pause`)",
-		taskID, epicID,
+			"  - Stop working and wait for the strategy to be re-set\n\n"+
+			"If the user picks the second option, run NO command: leaving this gate open "+
+			"IS the pause. Stop calling tools, say you are paused on E-%d, and wait. The "+
+			"gate clears itself the moment the epic leaves revisit.",
+		taskID, epicID, taskID,
 	)
 }
 

@@ -1,15 +1,17 @@
-"""Tests for `endless task reopen` and `task spawn --reopen` (E-1555, E-1889).
+"""Tests for `endless task reopen` (E-1555, E-1889, E-1968).
 
-Exercises reopen semantics from the E-1555 plan, as amended by E-1889:
+Exercises reopen semantics from the E-1555 plan, as amended by E-1889 and
+E-1968:
   - Reopen flips assumed/confirmed/completed → revisit, whatever the plan
     text says. Text presence survives only as the message suffix.
   - Reopen refuses on declined/obsolete (steers to `task update --status`).
   - Reopen refuses on non-terminal statuses.
-  - Reopen releases lingering session bindings to the task.
-  - `task spawn --reopen` enforces explicit intent: errors on non-terminal
-    targets, errors when both --reopen and --force are passed.
-  - `task spawn` (no flag) on a reopenable terminal target points the user
-    at --reopen in the error message.
+  - Reopen LEAVES an existing session→task binding alone (E-1968). It used to
+    clear it silently; ED-1560 makes that column write-once.
+  - `task spawn --reopen` is retired (E-1968) and refuses with a pointer at
+    `session goto --resume --revisit`.
+  - `task spawn` (no flag) on a reopenable terminal target points at that same
+    route rather than at a reopen-then-spawn dance.
 """
 
 from unittest.mock import patch
@@ -186,7 +188,16 @@ def test_reopen_unknown_id_errors(project_at_cwd):
     assert "No task found" in str(exc.value)
 
 
-def test_reopen_clears_lingering_session_binding(project_at_cwd):
+def test_reopen_keeps_the_session_binding(project_at_cwd):
+    """E-1968: reopen changes task state and nothing else.
+
+    It used to emit `task.released` for whichever session held the task,
+    clearing `active_task_id` with no mention in its output and a --help line
+    ("no session binding") that read as "does not create one". That pointer is
+    the only route back to the session's transcript — E-1917's was lost this
+    way a week after landing, after which both resume paths reported the
+    session had never claimed a task.
+    """
     from endless.task_cmd import reopen_item
 
     _insert_task(
@@ -204,7 +215,10 @@ def test_reopen_clears_lingering_session_binding(project_at_cwd):
     row = db.query(
         "SELECT active_task_id FROM sessions WHERE id = 400",
     )[0]
-    assert row["active_task_id"] is None
+    assert row["active_task_id"] == 1200
+    assert db.query(
+        "SELECT status FROM tasks WHERE id = 1200"
+    )[0]["status"] == "revisit"
 
 
 def test_reopen_does_not_create_worktree(project_at_cwd):
@@ -222,62 +236,46 @@ def test_reopen_does_not_create_worktree(project_at_cwd):
     assert not wt_mock.called
 
 
-# ---------- spawn --reopen ----------
+# ---------- spawn --reopen is retired (E-1968) ----------
 
 
-def test_spawn_reopen_and_force_mutually_exclusive(project_at_cwd):
+@pytest.mark.parametrize("flag", ["reopen", "new_session", "print_decision"])
+def test_spawn_reopen_flags_are_retired_and_point_at_the_route(flag):
+    """The flag still parses, and answers with where the capability went.
+
+    Kept hidden-and-refusing (the `task start` precedent) rather than deleted so
+    muscle memory gets a route instead of a click parse error. --new-session and
+    --print-decision were --reopen-only modifiers and go with it.
+    """
+    from click.testing import CliRunner
+    from endless.cli import task_cmd as task_group
+
+    result = CliRunner().invoke(
+        task_group, ["spawn", "E-1400", f"--{flag.replace('_', '-')}"]
+    )
+    assert result.exit_code != 0
+    assert "retired" in result.output
+    assert "endless session goto E-1400 --resume --revisit" in result.output
+
+
+def test_spawn_plan_no_longer_accepts_reopen_kwargs():
+    """The retirement reaches the callable, not just the CLI surface."""
+    import inspect
     from endless.task_cmd import spawn_plan
 
-    _insert_task(
-        pk=1400, project_id=project_at_cwd["project_id"],
-        status="assumed", text="plan",
-    )
-
-    with pytest.raises(click.ClickException) as exc:
-        spawn_plan(1400, reopen=True, force=True)
-    assert "mutually exclusive" in str(exc.value)
+    params = inspect.signature(spawn_plan).parameters
+    for gone in ("reopen", "new_session", "print_decision"):
+        assert gone not in params
 
 
-@pytest.mark.parametrize("status", ["ready", "unplanned", "underway",
-                                    "unverified", "blocked", "revisit"])
-def test_spawn_reopen_refuses_non_terminal(project_at_cwd, monkeypatch, status):
-    """--reopen on non-terminal status errors with 'not terminal'."""
-    from endless.task_cmd import spawn_plan
+def test_spawn_no_flag_terminal_target_routes_to_the_session(project_at_cwd, monkeypatch):
+    """E-1968 §6: `task spawn E-X` on assumed/confirmed/completed no longer
+    offers `task reopen E-X` first.
 
-    monkeypatch.setenv("TMUX", "fake")
-
-    _insert_task(
-        pk=1500, project_id=project_at_cwd["project_id"],
-        status=status, text="plan",
-    )
-
-    with pytest.raises(click.ClickException) as exc:
-        spawn_plan(1500, reopen=True)
-    msg = str(exc.value)
-    assert "--reopen passed" in msg
-    assert "not terminal" in msg
-
-
-@pytest.mark.parametrize("status", ["declined", "obsolete"])
-def test_spawn_reopen_refuses_declined_obsolete(project_at_cwd, monkeypatch, status):
-    from endless.task_cmd import spawn_plan
-
-    monkeypatch.setenv("TMUX", "fake")
-
-    _insert_task(
-        pk=1510, project_id=project_at_cwd["project_id"],
-        status=status, text="plan",
-    )
-
-    with pytest.raises(click.ClickException) as exc:
-        spawn_plan(1510, reopen=True)
-    msg = str(exc.value)
-    assert f"is '{status}'" in msg
-    assert "task update" in msg
-
-
-def test_spawn_no_flag_terminal_target_points_at_reopen(project_at_cwd, monkeypatch):
-    """`task spawn E-X` (no flag) on assumed/confirmed/completed cites --reopen."""
+    That route was the trap: reopen moves the task to `revisit`, which is
+    OUTSIDE _CLAIM_REQUIRES_FORCE, so the follow-up plain spawn proceeded with
+    no prompt at all — the message walked the user around its own guard.
+    """
     from endless.task_cmd import spawn_plan
 
     monkeypatch.setenv("TMUX", "fake")
@@ -291,8 +289,9 @@ def test_spawn_no_flag_terminal_target_points_at_reopen(project_at_cwd, monkeypa
         spawn_plan(1600)
     msg = str(exc.value)
     assert "assumed" in msg
-    assert "--reopen" in msg
-    assert "endless task reopen" in msg
+    assert "endless session goto E-1600 --resume --revisit" in msg
+    assert "--reopen" not in msg
+    assert "endless task reopen" not in msg
 
 
 # ---------- the background-session gate is unaffected by the revisit target ----
@@ -374,4 +373,4 @@ def test_spawn_no_flag_unverified_keeps_force_error(project_at_cwd, monkeypatch)
     msg = str(exc.value)
     assert "unverified" in msg
     assert "--force" in msg
-    assert "--reopen" not in msg
+    assert "--revisit" not in msg

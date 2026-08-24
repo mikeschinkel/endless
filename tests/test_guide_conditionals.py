@@ -210,7 +210,6 @@ def test_retired_pre_summarize_criteria_stay_gone():
         *GUIDE_FILES,
         root / "internal" / "hookcmd" / "claude.go",
         root / "internal" / "templatecmd" / "templates" / "handoff" / "_close.tmpl",
-        root / "internal" / "templatecmd" / "templates" / "handoff" / "respawn.md.tmpl",
         root / "src" / "endless" / "cli.py",
         root / "src" / "endless" / "task_cmd.py",
         root / "src" / "endless" / "report_cmd.py",

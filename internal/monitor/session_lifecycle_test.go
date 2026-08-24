@@ -225,10 +225,12 @@ func TestStartChatSession_InsertWithNullTask(t *testing.T) {
 	}
 }
 
-// TestStartChatSession_UpsertClearsActiveTask pins the documented
-// chat-takeover semantics: starting a chat on a session that was
-// previously bound to a task drops the active_task_id back to NULL.
-func TestStartChatSession_UpsertClearsActiveTask(t *testing.T) {
+// TestStartChatSession_UpsertKeepsActiveTask pins E-1968 / ED-1560: starting a
+// chat on a session already bound to a task must NOT drop the binding. The
+// column is write-once, and `task chat` has nothing to say about who owns a
+// task — clearing it here made the session that worked the task unreachable by
+// task ref. The session still flips to 'working'; only the unbind is gone.
+func TestStartChatSession_UpsertKeepsActiveTask(t *testing.T) {
 	db := withTestDB(t)
 	seedProject(t, db, 1, "proj-test-1", "/tmp/proj-test-1")
 	seedTask(t, db, 42, 1, "test task", "ready")
@@ -244,8 +246,8 @@ func TestStartChatSession_UpsertClearsActiveTask(t *testing.T) {
 	if state != "working" {
 		t.Errorf("state = %q, want working", state)
 	}
-	if activeTaskID != nil {
-		t.Errorf("active_task_id = %v, want NULL (chat takeover didn't clear)", *activeTaskID)
+	if activeTaskID == nil || *activeTaskID != 42 {
+		t.Errorf("active_task_id = %v, want 42 (chat takeover must not unbind)", activeTaskID)
 	}
 }
 
@@ -372,10 +374,12 @@ func TestGetPlanFilePath_MissingSessionReturnsEmpty(t *testing.T) {
 	}
 }
 
-// TestCompleteTask_FlipsTaskAndClearsActive pins the two-step write:
-// the task moves to 'confirmed' and the session's active_task_id is
-// cleared back to NULL with state='idle'.
-func TestCompleteTask_FlipsTaskAndClearsActive(t *testing.T) {
+// TestCompleteTask_FlipsTaskAndIdlesSession pins the two-step write: the task
+// moves to 'confirmed' and the session goes state='idle'. Per E-1968 /
+// ED-1560 the binding SURVIVES — the session that confirmed the task is the
+// session that worked it, and active_task_id is the only route back to its
+// transcript (`session goto E-<id> --resume` resolves through it).
+func TestCompleteTask_FlipsTaskAndIdlesSession(t *testing.T) {
 	db := withTestDB(t)
 	seedProject(t, db, 1, "proj-test-1", "/tmp/proj-test-1")
 	seedTask(t, db, 42, 1, "test task", "ready")
@@ -394,8 +398,8 @@ func TestCompleteTask_FlipsTaskAndClearsActive(t *testing.T) {
 	if state != "idle" {
 		t.Errorf("session state = %q, want idle", state)
 	}
-	if activeTaskID != nil {
-		t.Errorf("active_task_id = %v, want NULL", *activeTaskID)
+	if activeTaskID == nil || *activeTaskID != 42 {
+		t.Errorf("active_task_id = %v, want 42 (completion must not unbind)", activeTaskID)
 	}
 }
 

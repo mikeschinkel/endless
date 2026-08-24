@@ -9,7 +9,7 @@
 //	endless-go hook          prompt|claude|codex
 //	endless-go sandbox       run|enter|init|bind|list|prune|destroy
 //	endless-go tmux          apply|status-line|active-id|show-menu
-//	endless-go session-query list-live|task-text|reopen-context
+//	endless-go session-query list-live|task-text|resume-target
 //	endless-go session-status  (renders the per-session status view; --monitor loops it)
 //	endless-go spawn-window  (the multiplexer seam: creates the tmux window that launches Claude on a task)
 //	endless-go spawn-launch  (internal: sets @endless_* window options, then execs claude inside the window)
@@ -238,7 +238,7 @@ func usage(w *os.File) {
 	fmt.Fprintln(w, "  hook           prompt|claude|codex")
 	fmt.Fprintln(w, "  sandbox        run|enter|init|bind|list|prune|destroy")
 	fmt.Fprintln(w, "  tmux           apply|status-line|active-id|show-menu")
-	fmt.Fprintln(w, "  session-query  list-live|task-text|reopen-context")
+	fmt.Fprintln(w, "  session-query  list-live|task-text|resume-target")
 	fmt.Fprintln(w, "  session-status render the per-session status view (--monitor loops it)")
 	fmt.Fprintln(w, "  spawn-window   create the tmux window that launches Claude on a task")
 	fmt.Fprintln(w, "  spawn-launch   (internal) set window options and exec claude inside the window")

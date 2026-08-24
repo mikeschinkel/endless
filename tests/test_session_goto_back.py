@@ -382,3 +382,160 @@ def test_back_outside_tmux(goto_env, monkeypatch, capsys):
         session_cmd.session_back()
     assert exc.value.code == 1
     assert "requires tmux" in capsys.readouterr().err
+
+
+# ─── --revisit / --no-revisit (E-1968) ────────────────────────────────────────
+#
+# `session goto <ref> --resume` on settled work is ambiguous: picking the work
+# back up and reading it back mean opposite things for the task's status. The
+# flags make the caller say which. They are the route `task spawn --reopen` was
+# retired in favour of, so they carry that capability's weight.
+
+
+def _stage_settled(monkeypatch, worktree, status, task=1748, eid=1748):
+    """A resumable target whose task carries `status`, with the status-change
+    emitter captured so a test can assert on the transition (or its absence)."""
+    emitted: list[tuple] = []
+    monkeypatch.setattr(session_cmd, "_resume_target", lambda ref: {
+        "endless_id": eid, "session_id": "uuid-settled", "active_task_id": task,
+        "worktree_path": str(worktree), "state": "ended",
+        "task_status": status, "task_title": "settled task",
+    })
+    monkeypatch.setattr(session_cmd, "_require_claude", lambda: "/usr/bin/claude")
+    monkeypatch.setattr(
+        session_cmd, "_emit_task_status_change",
+        lambda *a, **kw: emitted.append((a, kw)),
+    )
+    return emitted
+
+
+@pytest.mark.parametrize("status", ["confirmed", "assumed", "completed"])
+def test_goto_resume_settled_requires_an_explicit_intent(
+    goto_env, registered_project, monkeypatch, status,
+):
+    """Neither flag → refuse, naming both and what each does."""
+    import click
+
+    stage, make = goto_env
+    stage(endless_session_id=10, pane_id="%10", active_task_id=1465)
+    ft = make({"%10", "%cur"}, current_pane="%cur")
+    emitted = _stage_settled(monkeypatch, registered_project, status)
+
+    with pytest.raises(click.ClickException) as exc:
+        session_cmd.session_goto("E-1748", resume=True)
+
+    msg = str(exc.value)
+    assert f"is '{status}'" in msg
+    assert "--revisit" in msg and "--no-revisit" in msg
+    # A refusal opens no window and changes no status.
+    assert ft.new_windows == []
+    assert emitted == []
+
+
+def test_goto_resume_revisit_flips_status_and_opens(
+    goto_env, registered_project, monkeypatch,
+):
+    stage, make = goto_env
+    stage(endless_session_id=10, pane_id="%10", active_task_id=1465)
+    ft = make({"%10", "%cur"}, current_pane="%cur")
+    emitted = _stage_settled(monkeypatch, registered_project, "assumed")
+
+    session_cmd.session_goto("E-1748", resume=True, revisit=True)
+
+    assert len(emitted) == 1
+    args, kwargs = emitted[0]
+    assert args[0] == 1748              # task id
+    assert args[2] == "assumed"         # from
+    assert args[3] == "revisit"         # to
+    # Attributed to the RESUMED session, not the pane running the command.
+    assert kwargs["session_id"] == 1748
+    assert len(ft.new_windows) == 1
+    assert ft.switched == ["%new1"]
+
+
+def test_goto_resume_no_revisit_opens_without_touching_status(
+    goto_env, registered_project, monkeypatch,
+):
+    stage, make = goto_env
+    stage(endless_session_id=10, pane_id="%10", active_task_id=1465)
+    ft = make({"%10", "%cur"}, current_pane="%cur")
+    emitted = _stage_settled(monkeypatch, registered_project, "confirmed")
+
+    session_cmd.session_goto("E-1748", resume=True, no_revisit=True)
+
+    assert emitted == []
+    assert len(ft.new_windows) == 1
+    assert ft.switched == ["%new1"]
+
+
+@pytest.mark.parametrize("status", ["underway", "unverified", "revisit",
+                                    "ready", "unplanned"])
+def test_goto_resume_unsettled_needs_no_flag(
+    goto_env, registered_project, monkeypatch, status,
+):
+    """Nothing about an in-flight or not-yet-started task is ambiguous, so the
+    gate must not fire on it — the flags would be friction with no question."""
+    stage, make = goto_env
+    stage(endless_session_id=10, pane_id="%10", active_task_id=1465)
+    ft = make({"%10", "%cur"}, current_pane="%cur")
+    emitted = _stage_settled(monkeypatch, registered_project, status)
+
+    session_cmd.session_goto("E-1748", resume=True)
+
+    assert emitted == []
+    assert len(ft.new_windows) == 1
+
+
+@pytest.mark.parametrize("status", ["declined", "obsolete"])
+def test_goto_resume_revisit_refuses_a_decision(
+    goto_env, registered_project, monkeypatch, status,
+):
+    """Matches `session resume --reopen`: reviving a deliberate decision not to
+    do the work is an explicit act, not a navigation side effect."""
+    import click
+
+    stage, make = goto_env
+    stage(endless_session_id=10, pane_id="%10", active_task_id=1465)
+    ft = make({"%10", "%cur"}, current_pane="%cur")
+    emitted = _stage_settled(monkeypatch, registered_project, status)
+
+    with pytest.raises(click.ClickException) as exc:
+        session_cmd.session_goto("E-1748", resume=True, revisit=True)
+
+    msg = str(exc.value)
+    assert f"is '{status}'" in msg
+    assert "task update E-1748 --status revisit" in msg
+    assert ft.new_windows == []
+    assert emitted == []
+
+
+def test_goto_resume_revisit_and_no_revisit_are_mutually_exclusive(
+    goto_env, registered_project, monkeypatch,
+):
+    import click
+
+    stage, make = goto_env
+    stage(endless_session_id=10, pane_id="%10", active_task_id=1465)
+    make({"%10", "%cur"}, current_pane="%cur")
+    _stage_settled(monkeypatch, registered_project, "assumed")
+
+    with pytest.raises(click.ClickException) as exc:
+        session_cmd.session_goto(
+            "E-1748", resume=True, revisit=True, no_revisit=True,
+        )
+    assert "mutually exclusive" in str(exc.value)
+
+
+@pytest.mark.parametrize("kwargs", [{"revisit": True}, {"no_revisit": True}])
+def test_revisit_flags_require_resume(goto_env, kwargs):
+    """Plain goto is a focus change; a live target's status is its own session's
+    business, so the flags must not silently do nothing."""
+    import click
+
+    stage, make = goto_env
+    stage(endless_session_id=10, pane_id="%10", active_task_id=1465)
+    make({"%10", "%cur"}, current_pane="%cur")
+
+    with pytest.raises(click.ClickException) as exc:
+        session_cmd.session_goto("E-1465", **kwargs)
+    assert "only with --resume" in str(exc.value)

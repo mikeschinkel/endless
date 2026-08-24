@@ -142,9 +142,10 @@ endless decision add "Statement of the decision" --about <current_id>
 # Mark for replanning
 endless task update <id> --status revisit
 
-# Hand off to another session
-endless task release <id>                        # then the other session: task claim <id>
-endless task spawn <id>                          # or spawn a fresh Claude session
+# Hand off to another session — a session owns ONE task for its lifetime, so
+# handing off means a new session, never re-pointing yours.
+endless task update <id> --status revisit        # hand the task back, then: task claim <id>
+endless task spawn <id>                          # or spawn a fresh Claude session on it now
 
 # Read a task you didn't claim — no claim needed for reads
 endless task show <id> --text --children --llm
@@ -198,7 +199,7 @@ listed separately. (Generated — do not hand-edit; run `/regenerate-guide`.)
 | `task attach` | orchestration | Attaching to a running background agent (replaces the current process; refuses inside a Claude session without --force). |
 | `task claim` | orchestration | Claiming a task: creates the per-task worktree and binds your session. |
 | `task handoff` | orchestration | The generated handoff text for a spawned session. |
-| `task release` | orchestration | Releasing a task so another session can claim it. |
+| `task release` | orchestration | Why releasing a task is disabled — a session owns one task for its lifetime. |
 {{if .report_gate}}| `task report` | tasks | The minimizer — write your whole draft, send its output verbatim, and the Stop hook that enforces both halves. |
 {{end}}| `task spawn` | orchestration | Spawning a session on a task: foreground/background, attach verbs, coordinator pattern. |
 | `task unsettled` | orchestration | Why a worktree hasn't settled — modified (commit or discard) vs unlanded (land). |

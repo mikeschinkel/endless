@@ -4114,9 +4114,9 @@ def claim_item(item_id: int, force: bool = False):
 def bind_item(item_id: int) -> None:
     """Bind a Claude session to a task for status-bar display only.
 
-    Symmetric counterpart to `release_item`: bind sets the session's
-    active_task_id, release clears it. Unlike `claim_item`, bind does
-    NOT change the task's status and does NOT create a worktree.
+    Sets the session's `active_task_id` so the second tmux status row shows
+    this task. Unlike `claim_item`, bind does NOT change the task's status and
+    does NOT create a worktree.
 
     Use when the task is already in `assumed` / `confirmed` / `unverified`
     and the user wants the status row to keep showing it as context.
@@ -4127,6 +4127,13 @@ def bind_item(item_id: int) -> None:
     direct / single-sibling auto-pick / on-a-tty multi-sibling prompt.
     Refuses when no session resolves — bind without a session is
     meaningless (nothing for the status bar to display).
+
+    FIRST-SET-ONLY (E-1968, per ED-1560). `sessions.active_task_id` is
+    write-once: bind may fill a session that holds no task, but it may not move
+    a session from one task to another. A session owns exactly one task for its
+    lifetime; work on a different task is a different session. The refusal is
+    here rather than only at the DB because E-1969's write-once trigger raises
+    a SQLite abort, which is not an answer a user can act on.
 
     Emits a `task.claimed` event (the existing event added in E-1242);
     the Go executor performs the sessions DB write.
@@ -4158,6 +4165,26 @@ def bind_item(item_id: int) -> None:
             "status bar to read from."
         )
 
+    held = db.query(
+        "SELECT active_task_id FROM sessions WHERE id = ?",
+        (target_session,),
+    )
+    already = held[0]["active_task_id"] if held else None
+    if already is not None and already != item_id:
+        raise click.ClickException(
+            f"Session {target_session} already holds E-{already}, and a "
+            f"session's task is set once and never moved.\n"
+            f"To work E-{item_id}, use a different session:\n"
+            f"    endless task spawn E-{item_id}"
+        )
+    if already == item_id:
+        click.echo(
+            click.style("•", fg="cyan")
+            + f" E-{item_id} is already bound to session {target_session} "
+              f"(task status unchanged: {current_status})"
+        )
+        return
+
     emit_event(
         kind="task.claimed",
         project=proj_name,
@@ -4175,102 +4202,40 @@ def bind_item(item_id: int) -> None:
     )
 
 
+# E-1968 / ED-1560: `task release` is DISABLED, not deleted. Disabled
+# 2026-08-15.
+#
+# Release's defining act is clearing `sessions.active_task_id`, and that column
+# is write-once — set at claim, never cleared and never repointed. Clearing to
+# NULL and then setting a new value is reassignment through the back door, so
+# release cannot survive as a workflow. E-1969 enforces this with a BEFORE
+# UPDATE trigger that aborts on any change to a non-NULL task_id; without this
+# refusal the verb would fail at the DB with a SQLite abort instead of an
+# answer.
+#
+# The command and its CLI wiring are deliberately kept as a tombstone.
+# RE-ENABLING MEANS DELETING THIS REFUSAL AND RESTORING THE BODY (see
+# `git show` on the E-1968 commit) — do that only if a real use-case appears
+# that the one-session-one-task invariant cannot serve. If none has appeared
+# after several months, delete the verb, this function, and its CLI command
+# outright.
 def release_item(item_id: int | None, ignore_missing: bool = False) -> None:
-    """Release a session's claim on a task.
+    """Refuse: releasing a session's task is forbidden by the invariant.
 
-    Two modes:
-      - Bare `release` (item_id is None): release whatever task the current
-        session is bound to. Requires resolving the current session id;
-        errors with a pointer to the explicit-ID form if it can't.
-      - `release E-NNN` (item_id given): clear the binding for whichever
-        session owns E-NNN, regardless of who's asking. If a *different*
-        live session owns it, refuse (preserves E-1203's exclusive-ownership
-        invariant). If the binding is stale (DB row exists but no live
-        companion), auto-clear and report. If no session has E-NNN bound:
-        error UNLESS ignore_missing then info.
-
-    Leaves tasks.status unchanged and leaves the worktree intact. Emits
-    a `task.released` event whose Go executor clears the binding.
+    Kept as a tombstone so the verb answers instead of vanishing. See the
+    comment above for the re-enabling criterion.
     """
-    from endless.event_bridge import emit_event
-    from endless.session_cmd import _live_sessions, _project_root_for_cwd
-
-    current_eid = _current_endless_session_id()
-
-    if item_id is None:
-        if current_eid is None:
-            raise click.ClickException(
-                "Cannot resolve current session id "
-                "(set ENDLESS_SESSION_ID or run inside a tmux pane with a "
-                "known companion file).\n"
-                "To release a specific task, pass its ID: "
-                "endless task release E-NNN"
-            )
-        rows = db.query(
-            "SELECT active_task_id FROM sessions WHERE id = ?",
-            (current_eid,),
-        )
-        if not rows or rows[0]["active_task_id"] is None:
-            click.echo("No task currently claimed by this session.")
-            return
-        target_id = rows[0]["active_task_id"]
-        target_session = current_eid
-    else:
-        rows = db.query(
-            "SELECT id FROM sessions "
-            "WHERE active_task_id = ? AND state != 'ended'",
-            (item_id,),
-        )
-        if not rows:
-            msg = f"E-{item_id} is not currently claimed by any session."
-            if ignore_missing:
-                click.echo(msg)
-                return
-            raise click.ClickException(msg)
-
-        owning_session = rows[0]["id"]
-        if owning_session != current_eid:
-            project_root = _project_root_for_cwd()
-            live = _live_sessions(project_root)
-            live_match = next(
-                (
-                    c for c in live
-                    if c.get("endless_session_id") == owning_session
-                ),
-                None,
-            )
-            if live_match is not None:
-                pane = live_match.get("pane_id") or "?"
-                raise click.ClickException(
-                    f"E-{item_id} is held by session {owning_session} "
-                    f"(live; tmux pane {pane}).\n"
-                    "Refusing to release another live session's claim."
-                )
-            click.echo(
-                click.style("•", fg="cyan")
-                + f" clearing stale binding for E-{item_id} "
-                f"(session {owning_session} is no longer alive)"
-            )
-
-        target_id = item_id
-        target_session = owning_session
-
-    _, proj_name = _resolve_project(None)
-    emit_event(
-        kind="task.released",
-        project=proj_name,
-        entity_type="task",
-        entity_id=str(target_id),
-        payload={"session_id": target_session},
-        # E-1401: release_item resolved target_session above (either
-        # current session releasing its own claim, or owner of E-NNN
-        # when a specific id was passed); pass it explicitly so
-        # emit_event doesn't re-resolve via the live resolver.
-        session_id=str(target_session),
-    )
-    click.echo(
-        click.style("•", fg="cyan")
-        + f" released claim on E-{target_id} (session {target_session})"
+    raise click.ClickException(
+        "`endless task release` is deliberately disabled.\n"
+        "A session's task is set once at claim and never cleared or "
+        "moved — one session, one task, for the session's lifetime. "
+        "Releasing would leave the task unowned while the session that "
+        "worked it is still the only place its transcript lives.\n"
+        "  To stop working and leave the task for someone else, hand it "
+        "back by status:\n"
+        "      endless task update E-<id> --status revisit\n"
+        "  To work something else, start a session for it:\n"
+        "      endless task spawn E-<other>"
     )
 
 
@@ -4324,30 +4289,19 @@ def continue_item() -> None:
     )
 
 
-def pause_item() -> None:
-    """Pause until the strategy is re-set: clear the prompt and release the task.
-
-    Clears the session's open revisit gate (cleared_by='revisit_pause') and
-    then releases the session's claim on its active task (worktree stays
-    intact, per release semantics). No-op with a friendly message when no
-    revisit prompt is pending.
-    """
-    if not _clear_revisit_gate("revisit_pause"):
-        click.echo("No pending revisit prompt for this session.")
-        return
-    click.echo(
-        click.style("•", fg="cyan")
-        + " pausing until the strategy is re-set; revisit prompt cleared"
-    )
-    release_item(None)
-
-
 def _reopen_task_core(item_id: int) -> tuple[str, str, bool]:
     """Reopen a terminal-status task back to `revisit`.
 
-    Shared core for the `task reopen` verb and `task spawn --reopen` flag.
-    Validates eligibility, releases any lingering session→task binding,
-    and emits `task.status_changed`. Caller renders the result line.
+    Validates eligibility and emits `task.status_changed`. Caller renders the
+    result line.
+
+    E-1968: this used to emit `task.released` for whichever session held the
+    task, clearing `sessions.active_task_id` as a silent side effect. Under
+    ED-1560 that column is write-once — set at claim, never cleared and never
+    repointed — so the binding now survives a reopen untouched. The loss it
+    caused was real: E-1917's reopen cleared its binding a week after landing,
+    after which both resume paths reported the session had never claimed a task
+    (`active_task_id` alone cannot tell *released* from *never claimed*).
 
     Returns (prev_status, new_status, text_present).
     """
@@ -4395,23 +4349,6 @@ def _reopen_task_core(item_id: int) -> tuple[str, str, bool]:
 
     _, proj_name = _resolve_project(None)
 
-    # Clear any lingering session→task binding before flipping status.
-    # Rare for terminal tasks (worktree land releases), but the plan calls
-    # for it explicitly so retrospective queries see a clean handoff.
-    bound_sessions = db.query(
-        "SELECT id AS eid FROM sessions WHERE active_task_id = ?",
-        (item_id,),
-    )
-    for s in bound_sessions:
-        emit_event(
-            kind="task.released",
-            project=proj_name,
-            entity_type="task",
-            entity_id=str(item_id),
-            payload={"session_id": s["eid"]},
-            session_id=str(s["eid"]),
-        )
-
     emit_event(
         kind="task.status_changed",
         project=proj_name,
@@ -4437,9 +4374,10 @@ def _reopen_task_core(item_id: int) -> tuple[str, str, bool]:
 def reopen_item(item_id: int) -> None:
     """Flip a terminal-status task back to `revisit`.
 
-    Standalone verb: no worktree side effects, no session binding. Caller
-    decides next step (spawn, claim, or hand-back). For spawn-with-reopen
-    in one shot, use `endless task spawn <id> --reopen`.
+    Task state only: it changes the status and nothing else. No worktree is
+    created or touched, and an existing session→task binding is left exactly
+    as it was — the session that worked the task stays reachable by
+    `endless session goto E-<id> --resume` afterwards (E-1968).
     """
     _reopen_task_core(item_id)
 
@@ -5371,11 +5309,7 @@ def render_handoff(spawned_id: int, title: str,
                    branch: str | None = None,
                    task_type: str | None = None,
                    parent_id: int | None = None,
-                   bg: bool = False,
-                   respawn: bool = False,
-                   restore_case: str | None = None,
-                   prior_outcome: str | None = None,
-                   last_status_snapshot: str | None = None) -> str:
+                   bg: bool = False) -> str:
     """Render the spawn handoff for a task by invoking `endless-go template render`.
 
     The handoff is mostly boilerplate (orient, read the guide + plan, default
@@ -5395,15 +5329,11 @@ def render_handoff(spawned_id: int, title: str,
     task to `unverified`, and stop (the user attaches later via
     `claude attach <short_id>`).
 
-    `respawn=True` (E-1647) renders the flat, type-agnostic `handoff/respawn`
-    template used when a task is *reopened*. The four per-type templates are
-    initial-spawn instructions that drive toward an end-state; a reopened
-    session has no defined end-state yet, so it gets a distinct interrogative
-    handoff. The reopen path (E-1645) supplies three extra vars carried as
-    read-only restore context: `restore_case`
-    (`reused` | `rebuilt-off-main` | `recovered-post-drop`), the task's
-    `prior_outcome`, and `last_status_snapshot` (rendered markdown of the
-    latest `session_statuses` row). Any may be empty.
+    E-1968 removed the `respawn=True` variant along with `task spawn --reopen`.
+    It rendered a distinct interrogative handoff for a task being reopened into
+    a FRESH session, summarizing the prior session's outcome and last status
+    snapshot. Reopening now resumes the prior session's actual transcript
+    (`session goto <ref> --resume --revisit`), which needs no summary of itself.
     """
     import json
     import subprocess
@@ -5436,11 +5366,7 @@ def render_handoff(spawned_id: int, title: str,
         # model round trip that nothing enforces and nothing reads.
         "report_gate": _report_gate_on(),
     }
-    if respawn:
-        vars_payload["restore_case"] = restore_case or "reused"
-        vars_payload["prior_outcome"] = prior_outcome or ""
-        vars_payload["last_status_snapshot"] = last_status_snapshot or ""
-    template_name = "handoff/respawn" if respawn else f"handoff/{effective_type}"
+    template_name = f"handoff/{effective_type}"
     binary = _resolve_endless_go()
     result = subprocess.run(
         [binary, "template", "render", template_name],
@@ -5554,198 +5480,9 @@ def _lookup_bg_short_id(task_id: int) -> str | None:
     return rows[0]["short_id"] if rows else None
 
 
-def _resolve_live_owner(item_id: int) -> dict | None:
-    """Return navigation info for a live session that owns the task, or None.
-
-    The reopen path navigates to an existing live owner instead of double-
-    spawning (E-1645). A DB row with `state != 'ended'` is only treated as a
-    live owner if it also appears in the actually-live set (tmux/process check
-    via `_live_sessions`) — a stale `working` row left by a ghost (E-1640) is
-    NOT a live owner and the caller proceeds to spawn.
-
-    Returns `{"eid": int, "target": "fg", "pane_id": "%NN"}` for a foreground
-    (tmux-pane) owner, `{"eid": int, "target": "bg"}` for a background agent, or
-    None when no session is genuinely live for the task.
-    """
-    rows = db.query(
-        "SELECT id AS eid FROM sessions "
-        "WHERE active_task_id = ? AND state != 'ended'",
-        (item_id,),
-    )
-    if not rows:
-        return None
-
-    from endless.session_cmd import _live_sessions, _project_root_for_cwd
-    live = _live_sessions(_project_root_for_cwd())
-    live_by_eid = {
-        c["endless_session_id"]: c
-        for c in live
-        if isinstance(c.get("endless_session_id"), int)
-    }
-    for r in rows:
-        comp = live_by_eid.get(r["eid"])
-        if comp is None:
-            continue
-        pane = comp.get("pane_id") or ""
-        if pane:
-            return {"eid": r["eid"], "target": "fg", "pane_id": pane}
-        return {"eid": r["eid"], "target": "bg"}
-    return None
-
-
-def _fetch_reopen_context(item_id: int) -> dict:
-    """Fetch the read-only restore context for a reopen via the Go resolver.
-
-    Shells out to `endless-go session-query reopen-context` so the inherited-
-    session pick and the snapshot render happen Go-side (no Python DB read —
-    E-894 / E-1486). Returns a dict with keys `inherited_session_id` (int, 0 =
-    none), `prior_outcome` (str), `last_status_snapshot` (str). On any failure
-    the context degrades to empty rather than aborting the reopen — a missing
-    snapshot is cosmetic, not load-bearing.
-    """
-    import json
-    import subprocess
-    from endless import config
-    from endless.event_bridge import _resolve_endless_go
-
-    empty = {
-        "inherited_session_id": 0,
-        "prior_outcome": "",
-        "last_status_snapshot": "",
-    }
-    try:
-        binary = _resolve_endless_go()
-        result = subprocess.run(
-            [binary, *config.go_db_context_args(),
-             "session-query", "reopen-context", "--task-id", str(item_id)],
-            capture_output=True, text=True,
-        )
-    except OSError as e:
-        click.echo(f"  warning: reopen-context lookup failed: {e}", err=True)
-        return empty
-    if result.returncode != 0:
-        click.echo(
-            "  warning: reopen-context lookup failed: "
-            f"{(result.stderr or result.stdout).strip()}",
-            err=True,
-        )
-        return empty
-    try:
-        data = json.loads(result.stdout)
-    except json.JSONDecodeError:
-        return empty
-    return {
-        "inherited_session_id": int(data.get("inherited_session_id") or 0),
-        "prior_outcome": data.get("prior_outcome") or "",
-        "last_status_snapshot": data.get("last_status_snapshot") or "",
-    }
-
-
-def _resolve_reopen_decision(item_id: int, new_session: bool) -> dict:
-    """Compute the reopen decision for a task — READ-ONLY (no mutations).
-
-    Both the `--print-decision` seam and the live spawn path call this so the
-    printed decision matches what actually happens. It performs only reads: the
-    liveness lookup and the Go reopen-context resolver. It does NOT flip status,
-    create a worktree, or launch anything.
-
-    Returns a dict:
-      - `kind`: "navigate" (a live owner exists) or "spawn".
-      - `navigate`: the `_resolve_live_owner` dict, or None.
-      - `restore_case`: predicted "reused" (canonical worktree present) or
-        "rebuilt-off-main" (reaped — will be recreated off main).
-      - `worktree_path`: the canonical worktree path (str).
-      - `session_mode`: "new-session" or "inherit".
-      - `inherit_session_id`: int | None (None for new-session / no prior).
-      - `prior_outcome`, `last_status_snapshot`: read-only restore context.
-    """
-    from endless.worktree_cmd import _project_root
-
-    nav = _resolve_live_owner(item_id)
-    if nav is not None:
-        return {"kind": "navigate", "navigate": nav}
-
-    wt_dir = _project_root() / ".endless" / "worktrees" / f"e-{item_id}"
-    restore_case = "reused" if wt_dir.exists() else "rebuilt-off-main"
-
-    ctx = _fetch_reopen_context(item_id)
-    if new_session:
-        session_mode = "new-session"
-        inherit_session_id = None
-        last_status_snapshot = ""
-    else:
-        inherit_session_id = ctx["inherited_session_id"] or None
-        session_mode = "inherit"
-        last_status_snapshot = ctx["last_status_snapshot"]
-
-    return {
-        "kind": "spawn",
-        "navigate": None,
-        "restore_case": restore_case,
-        "worktree_path": str(wt_dir),
-        "session_mode": session_mode,
-        "inherit_session_id": inherit_session_id,
-        "prior_outcome": ctx["prior_outcome"],
-        "last_status_snapshot": last_status_snapshot,
-    }
-
-
-def _print_reopen_decision(item_id: int, decision: dict) -> None:
-    """Print a reopen decision in a stable, greppable form (the seam output)."""
-    if decision["kind"] == "navigate":
-        nav = decision["navigate"]
-        if nav["target"] == "fg":
-            click.echo(
-                f"reopen decision for {task_id_display(item_id)}: navigate "
-                f"(foreground) — tmux switch-client -t {nav['pane_id']}"
-            )
-        else:
-            click.echo(
-                f"reopen decision for {task_id_display(item_id)}: navigate "
-                f"(background) — attach with: endless task attach "
-                f"{task_id_display(item_id)}"
-            )
-        return
-    if decision["session_mode"] == "new-session":
-        session_line = "session: new-session"
-    else:
-        sid = decision["inherit_session_id"]
-        session_line = (
-            f"session: inherit-session={sid}" if sid
-            else "session: inherit (no prior session)"
-        )
-    click.echo(f"reopen decision for {task_id_display(item_id)}: spawn")
-    click.echo(f"  restore_case={decision['restore_case']}")
-    click.echo(f"  {session_line}")
-    click.echo(f"  worktree={decision['worktree_path']}")
-
-
-def _navigate_to_live_owner(nav: dict) -> None:
-    """Switch to a live foreground owner's pane (E-1645).
-
-    Foreground: `tmux switch-client -t <pane>` — works across tmux clients
-    (unlike `select-window`). Background: nothing to do here; the printed
-    `endless task attach` line is the user's action.
-    """
-    import subprocess
-
-    if nav["target"] != "fg":
-        return
-    pane = nav["pane_id"]
-    if not os.environ.get("TMUX"):
-        click.echo(
-            f"  (not in a tmux client — switch manually: "
-            f"tmux switch-client -t {pane})",
-            err=True,
-        )
-        return
-    subprocess.run(["tmux", "switch-client", "-t", pane], check=False)
-
-
 def spawn_plan(item_id: int, project_name: str | None = None,
                worktree: str | None = None, force: bool = False,
-               reopen: bool = False, bg: bool = False, attach: bool = False,
-               new_session: bool = False, print_decision: bool = False,
+               bg: bool = False, attach: bool = False,
                permission_mode: str = "auto", model: str | None = None,
                name: str | None = None):
     """Spawn a new tmux window with Claude working on a task's prompt.
@@ -5756,11 +5493,6 @@ def spawn_plan(item_id: int, project_name: str | None = None,
     `@endless_spawned_by` from the new tmux window and records the
     session→task binding via `BindSessionToTask` (no redundant status
     flip). See E-1274.
-
-    `reopen=True` (E-1555) reopens an `assumed`/`confirmed`/`completed`
-    target as a pre-step (status → `revisit`, per E-1889) before proceeding
-    with spawn. Errors on non-terminal or decision-bearing
-    (`declined`/`obsolete`) statuses.
 
     The foreground path launches Claude as the tmux window's *command* via the
     `endless-go spawn-window` launcher (E-1705): the handoff is delivered as
@@ -5791,26 +5523,6 @@ def spawn_plan(item_id: int, project_name: str | None = None,
             "background agent, --attach opens a window onto an existing one. "
             "To do both, run `endless task spawn --bg` then "
             "`endless task spawn --attach`."
-        )
-
-    if reopen and force:
-        raise click.ClickException(
-            "--reopen and --force are mutually exclusive: --reopen sets "
-            "status to revisit (handoff intent), --force demotes "
-            "to underway (self-pickup intent). Pick one."
-        )
-
-    # --new-session and --print-decision are reopen-path modifiers (E-1645):
-    # session inheritance and the decision seam only exist for a reopen.
-    if new_session and not reopen:
-        raise click.ClickException(
-            "--new-session only applies with --reopen (it opts out of "
-            "inheriting the prior session's restore context)."
-        )
-    if print_decision and not reopen:
-        raise click.ClickException(
-            "--print-decision only applies with --reopen (it prints the "
-            "resolved reopen decision without spawning)."
         )
 
     # tmux is the delivery surface for the foreground path only; a `--bg`
@@ -5896,67 +5608,23 @@ def spawn_plan(item_id: int, project_name: str | None = None,
     else:
         cd_target = None  # default below to the spawn-created worktree
 
-    # E-1645: reopen path — liveness guard (navigate instead of double-spawn),
-    # the read-only decision seam, then the E-1555 reopen pre-step. reopen_render
-    # carries the respawn-handoff restore context (stays None for a non-reopen
-    # spawn, which keeps the per-type initial-spawn handoff).
-    reopen_render: dict | None = None
-    if reopen:
-        # Liveness guard FIRST, before any mutation: if a session is genuinely
-        # live for the task, navigate to it rather than spawn a duplicate.
-        # --new-session does NOT bypass a live owner.
-        decision = _resolve_reopen_decision(item_id, new_session=new_session)
-        if decision["kind"] == "navigate":
-            _print_reopen_decision(item_id, decision)
-            if not print_decision:
-                _navigate_to_live_owner(decision["navigate"])
-            return
-
-        # No live owner: the reopen is only valid from a terminal status.
-        if current_status not in _REOPENABLE_TERMINAL_STATUSES:
-            if current_status in ("declined", "obsolete"):
-                raise click.ClickException(
-                    f"E-{item_id} is '{current_status}'; reverse that "
-                    f"decision explicitly via `endless task update "
-                    f"E-{item_id} --status <status>` (and supply "
-                    f"`--reason` if reopening a declined task)."
-                )
-            raise click.ClickException(
-                f"--reopen passed but E-{item_id} is '{current_status}', "
-                f"not terminal (reopen targets "
-                f"{', '.join(sorted(_REOPENABLE_TERMINAL_STATUSES))})."
-            )
-
-        # Read-only seam: print the resolved decision and stop. No status flip,
-        # no worktree creation, no launch.
-        if print_decision:
-            _print_reopen_decision(item_id, decision)
-            return
-
-        # Carry the read-only restore context into the respawn handoff; the
-        # actual restore_case is finalized from `created` after the worktree
-        # is ensured below.
-        reopen_render = {
-            "prior_outcome": decision["prior_outcome"],
-            "last_status_snapshot": decision["last_status_snapshot"],
-        }
-
-        # Reopen pre-step: flip terminal → revisit, release any lingering
-        # session binding, emit audit event.
-        _reopen_task_core(item_id)
-        # _perform_claim_work below sees the post-reopen status and
-        # promotes revisit → underway on its own.
-        current_status = db.query(
-            "SELECT status FROM live_tasks WHERE id = ?", (item_id,),
-        )[0]["status"]
-
     # Mirror claim's done-ish-status gate
-    elif not force and current_status in _CLAIM_REQUIRES_FORCE:
+    if not force and current_status in _CLAIM_REQUIRES_FORCE:
         if current_status in _REOPENABLE_TERMINAL_STATUSES:
+            # E-1968 rewrote this. It used to offer two routes, and both were
+            # wrong: `--reopen` is retired, and `task reopen E-NNNN` first was
+            # always the worse of the two — it moves the task to `revisit`,
+            # outside _CLAIM_REQUIRES_FORCE, so the follow-up plain spawn
+            # proceeds with no prompt at all. The message routed the user into
+            # the trap it had just warned them about. The right move on settled
+            # work is to pick up the session that did it, not to start a second
+            # one that cannot see its reasoning.
             raise click.ClickException(
-                f"E-{item_id} is '{current_status}'; pass --reopen to "
-                f"reopen-and-spawn, or run `endless task reopen "
-                f"E-{item_id}` first."
+                f"E-{item_id} is '{current_status}' — settled work. Pick it "
+                f"back up in the session that did it:\n"
+                f"    endless session goto E-{item_id} --resume --revisit\n"
+                f"  (--no-revisit instead, to read it back without reopening "
+                f"the task.)"
             )
         raise click.ClickException(
             f"E-{item_id} is in status '{current_status}'; spawning "
@@ -5970,8 +5638,7 @@ def spawn_plan(item_id: int, project_name: str | None = None,
     # ownership for the spawning session. The reopen path already ran its own
     # liveness guard above (it navigates instead of raising), so this
     # raise-on-conflict check is for the non-reopen spawn only.
-    if not reopen:
-        _check_task_ownership(item_id, current_eid=None)
+    _check_task_ownership(item_id, current_eid=None)
 
     # Pre-claim: emit status_changed, create worktree. No session binding
     # yet — Claude hasn't started. SessionStart's @endless_spawned_by
@@ -5984,13 +5651,6 @@ def spawn_plan(item_id: int, project_name: str | None = None,
         target_session=None,
         proj_name=proj_name,
     )
-
-    # E-1645: finalize the actual restore case from whether the worktree was
-    # freshly created (reaped → rebuilt off main) or reused as-is.
-    if reopen_render is not None:
-        reopen_render["restore_case"] = (
-            "reused" if not created else "rebuilt-off-main"
-        )
 
     if cd_target is None:
         cd_target = str(wt_path)
@@ -6007,7 +5667,6 @@ def spawn_plan(item_id: int, project_name: str | None = None,
             task_type=item["type_slug"] or None,
             parent_id=item["parent_id"],
             worktree_override=worktree is not None,
-            reopen_render=reopen_render,
         )
         return
 
@@ -6031,10 +5690,6 @@ def spawn_plan(item_id: int, project_name: str | None = None,
         branch=_branch_for_worktree(cd_target),
         task_type=item["type_slug"] or None,
         parent_id=item["parent_id"],
-        respawn=reopen_render is not None,
-        restore_case=(reopen_render or {}).get("restore_case"),
-        prior_outcome=(reopen_render or {}).get("prior_outcome"),
-        last_status_snapshot=(reopen_render or {}).get("last_status_snapshot"),
     )
     handoff_file = tempfile.NamedTemporaryFile(
         mode="w", suffix=".md", prefix="endless-handoff-",
@@ -6154,7 +5809,7 @@ def _bg_throttle_warn(item_id: int) -> None:
 def _spawn_bg_dispatch(item_id: int, title: str, cd_target: str,
                        task_type: str | None, parent_id: int | None,
                        worktree_override: bool,
-                       reopen_render: dict | None = None):
+                       ):
     """Dispatch a background agent for an already-pre-claimed task (E-1568).
 
     Renders the bg handoff variant, launches `claude --bg --name <label>` with
@@ -6180,10 +5835,6 @@ def _spawn_bg_dispatch(item_id: int, title: str, cd_target: str,
         task_type=task_type,
         parent_id=parent_id,
         bg=True,
-        respawn=reopen_render is not None,
-        restore_case=(reopen_render or {}).get("restore_case"),
-        prior_outcome=(reopen_render or {}).get("prior_outcome"),
-        last_status_snapshot=(reopen_render or {}).get("last_status_snapshot"),
     )
 
     # E-1572: soft throttle warning. Count the bg agents already `working` for

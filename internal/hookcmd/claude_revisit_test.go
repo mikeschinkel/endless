@@ -22,14 +22,17 @@ func TestRevisitClearVerbRe(t *testing.T) {
 		match bool
 	}{
 		{"continue plain", "endless task continue", true},
-		{"pause plain", "endless task pause", true},
 		{"wrapper prefix", "uv run endless task continue", true},
-		{"absolute path prefix", "/usr/local/bin/endless task pause", true},
+		{"absolute path prefix", "/usr/local/bin/endless task continue", true},
 		{"extra whitespace", "endless   task    continue", true},
 
 		{"unrelated task verb", "endless task claim E-5", false},
 		{"git continue", "git rebase --continue", false},
 		{"not endless", "task continue", false},
+		// E-1968 retired `task pause`. Pausing is declining to clear the gate,
+		// so there is no pause command to exempt — and a stray one must not be
+		// exempted, or a session could slip past a gate it never answered.
+		{"retired pause verb", "endless task pause", false},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -41,16 +44,20 @@ func TestRevisitClearVerbRe(t *testing.T) {
 }
 
 // TestRevisitPromptInstruction confirms the instruction names both tasks and
-// routes Claude to an AskUserQuestion with the two clearing verbs.
+// routes Claude to an AskUserQuestion with the one clearing verb — and, per
+// E-1968, tells it that the other option runs NO command.
 func TestRevisitPromptInstruction(t *testing.T) {
 	msg := revisitPromptInstruction(42, 7)
 	for _, want := range []string{
 		"E-42", "E-7", "revisit", "AskUserQuestion",
-		"endless task continue", "endless task pause",
+		"endless task continue", "run NO command",
 	} {
 		if !strings.Contains(msg, want) {
 			t.Errorf("instruction missing %q:\n%s", want, msg)
 		}
+	}
+	if strings.Contains(msg, "endless task pause") {
+		t.Errorf("instruction still offers the retired `task pause` verb:\n%s", msg)
 	}
 }
 

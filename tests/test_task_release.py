@@ -1,11 +1,16 @@
-"""Tests for `endless task release` (E-1243).
+"""Tests for `endless task release` (E-1243, disabled by E-1968).
 
-Exercises release_item across the four scenarios from E-1243:
-  - Bare release with current session bound to a task
-  - Bare release when current session has no claim
-  - release E-NNN when no session has it (with and without --ignore-missing)
-  - release E-NNN when a stale (no-live-companion) session has it
-  - release E-NNN when a different LIVE session has it (refuse)
+E-1968 disabled the verb under ED-1560's write-once `sessions.active_task_id`:
+a session's task is set at claim and never cleared or repointed, so a verb whose
+defining act is the clear cannot survive as a workflow. The command and its CLI
+wiring are kept deliberately, as a tombstone that answers with the invariant and
+a route, rather than vanishing into "no such command".
+
+These tests pin the tombstone: it refuses, it refuses on every argument shape,
+it names the routes, and it performs no write on the way out. The four E-1243
+scenarios it used to exercise (bare release, no-claim, stale binding, live other
+owner) are gone with the behavior they covered — see `git show` on the E-1968
+commit for the body they tested.
 """
 
 from unittest.mock import patch
@@ -51,87 +56,58 @@ def project_at_cwd(seeded_project_at_cwd):
     }
 
 
-def test_release_bare_no_current_session_errors_with_pointer():
+@pytest.mark.parametrize(
+    "args, kwargs",
+    [
+        ((None,), {}),                       # bare `task release`
+        ((500,), {}),                        # `task release E-500`
+        ((500,), {"ignore_missing": True}),  # --ignore-missing is no escape
+    ],
+)
+def test_release_refuses_on_every_argument_shape(args, kwargs):
     from endless.task_cmd import release_item
-    with patch("endless.task_cmd._current_endless_session_id", return_value=None):
-        with pytest.raises(click.ClickException) as exc:
-            release_item(None)
-    assert "endless task release E-NNN" in str(exc.value)
+
+    with pytest.raises(click.ClickException) as exc:
+        release_item(*args, **kwargs)
+    assert "deliberately disabled" in str(exc.value)
 
 
-def test_release_bare_current_session_has_no_claim(project_at_cwd, capsys):
+def test_release_refusal_names_the_invariant_and_both_routes():
     from endless.task_cmd import release_item
-    _insert_session(pk=100, session_id="s-100", project_id=project_at_cwd["project_id"])
 
-    with patch("endless.task_cmd._current_endless_session_id", return_value=100):
+    with pytest.raises(click.ClickException) as exc:
         release_item(None)
-
-    captured = capsys.readouterr()
-    assert "No task currently claimed" in captured.out
-
-
-def test_release_id_no_session_has_it_errors_by_default(project_at_cwd):
-    from endless.task_cmd import release_item
-    _insert_task(pk=500, project_id=project_at_cwd["project_id"])
-
-    with patch("endless.task_cmd._current_endless_session_id", return_value=None):
-        with pytest.raises(click.ClickException) as exc:
-            release_item(500)
-    assert "E-500 is not currently claimed" in str(exc.value)
-
-
-def test_release_id_no_session_has_it_with_ignore_missing(project_at_cwd, capsys):
-    from endless.task_cmd import release_item
-    _insert_task(pk=501, project_id=project_at_cwd["project_id"])
-
-    with patch("endless.task_cmd._current_endless_session_id", return_value=None):
-        release_item(501, ignore_missing=True)
-
-    captured = capsys.readouterr()
-    assert "E-501 is not currently claimed" in captured.out
-
-
-def test_release_id_held_by_live_other_session_refuses(project_at_cwd, stage_live_session):
-    """Refuse when a DIFFERENT live session has the task bound."""
-    from endless.task_cmd import release_item
-    _insert_task(pk=600, project_id=project_at_cwd["project_id"])
-    _insert_session(
-        pk=200, session_id="s-200", project_id=project_at_cwd["project_id"],
-        active_task_id=600,
-    )
-    stage_live_session(
-        endless_session_id=200,
-        harness_session_id="s-200-uuid",
-        pane_id="%200",
-    )
-
-    with patch("endless.task_cmd._current_endless_session_id", return_value=None):
-        with pytest.raises(click.ClickException) as exc:
-            release_item(600)
     msg = str(exc.value)
-    assert "E-600 is held by session 200" in msg
-    assert "live" in msg
-    # DB binding unchanged
-    row = db.query("SELECT active_task_id FROM sessions WHERE id = 200")[0]
-    assert row["active_task_id"] == 600
+    assert "one session, one task" in msg.lower()
+    # Hand the task back by status, or start a session for different work.
+    assert "--status revisit" in msg
+    assert "task spawn" in msg
 
 
-def test_release_id_stale_binding_auto_clears(project_at_cwd, capsys, stage_live_session):
-    """No live companion → binding is stale → clear it with a notice."""
+def test_release_leaves_the_binding_intact(project_at_cwd):
+    """The refusal is a refusal: no event, no write, binding untouched."""
     from endless.task_cmd import release_item
-    _insert_task(pk=700, project_id=project_at_cwd["project_id"])
+
+    _insert_task(pk=800, project_id=project_at_cwd["project_id"])
     _insert_session(
-        pk=300, session_id="s-300", project_id=project_at_cwd["project_id"],
-        active_task_id=700,
+        pk=900, session_id="s-900",
+        project_id=project_at_cwd["project_id"], active_task_id=800,
     )
-    # NOTE: stage_live_session fixture is taken to activate the _live_sessions
-    # patch; nothing is staged so the patched _live_sessions returns [],
-    # mirroring the no-live-companion / stale-binding scenario.
 
-    with patch("endless.task_cmd._current_endless_session_id", return_value=None):
-        release_item(700)
+    with patch("endless.task_cmd._current_endless_session_id", return_value=900), \
+         patch("endless.event_bridge.emit_event") as emit:
+        with pytest.raises(click.ClickException):
+            release_item(None)
 
-    captured = capsys.readouterr()
-    assert "clearing stale binding for E-700" in captured.out
-    assert "session 300 is no longer alive" in captured.out
-    assert "released claim on E-700" in captured.out
+    assert not emit.called
+    assert db.query(
+        "SELECT active_task_id FROM sessions WHERE id = 900"
+    )[0]["active_task_id"] == 800
+
+
+def test_release_command_is_still_wired():
+    """Kept as a tombstone, not deleted — `task release` must still resolve to
+    a command so the user gets the invariant, not "no such command"."""
+    from endless.cli import task_cmd as task_group
+
+    assert "release" in task_group.commands

@@ -197,10 +197,12 @@ func StartWorkSession(sessionID string, projectID int64, taskID int64) error {
 		// someone was actively on it.
 		//
 		// E-1889: `revisit` joins it for the same reason. Every reopen route
-		// now lands `revisit`, so `task spawn --reopen` would otherwise bind a
-		// session to a task still reading as not-started. This is the claim
+		// now lands `revisit`, so a reopened task would otherwise bind a
+		// session while still reading as not-started. This is the claim
 		// path only — the background-session gate (task_cmd's `ready`-only
-		// check) is separate and unchanged.
+		// check) is separate and unchanged. (E-1968 retired the route that
+		// motivated this, `task spawn --reopen`; the promotion still matters
+		// for `task claim` on a task reopened any other way.)
 		//
 		// changed_by_session (E-1917): this UPDATE does not go through the
 		// event executor, so it stamps its own actor. Without it the claim would
@@ -216,6 +218,12 @@ func StartWorkSession(sessionID string, projectID int64, taskID int64) error {
 }
 
 // StartChatSession creates a working session with no task (chat-only).
+//
+// E-1968 / ED-1560: the ON CONFLICT branch no longer sets active_task_id=NULL.
+// `task chat` on an already-known session id used to unbind whatever task that
+// session held, which is the write-once column being cleared by a verb that has
+// nothing to say about task ownership. A session that already holds a task is
+// not chat-only; the INSERT branch still binds NULL for a genuinely new one.
 func StartChatSession(sessionID string, projectID int64) error {
 	db, err := DB()
 	if err != nil {
@@ -229,7 +237,7 @@ func StartChatSession(sessionID string, projectID int64) error {
 		`INSERT INTO sessions (session_id, project_id, platform, state, active_task_id, process_id, started_at, last_activity)
 		 VALUES (?, ?, 'claude', 'working', NULL, ?, ?, ?)
 		 ON CONFLICT(session_id) DO UPDATE SET
-		   state='working', active_task_id=NULL, last_activity=?,
+		   state='working', last_activity=?,
 		   process_id=COALESCE(?, sessions.process_id)`,
 		sessionID, projectID, processID, now, now,
 		now, processID,
@@ -565,7 +573,14 @@ func DecorateBgSession(shortID, sessionID string) (int64, error) {
 	return res.RowsAffected()
 }
 
-// CompleteTask marks a task as confirmed and clears the session's active task.
+// CompleteTask marks a task as confirmed and idles the session.
+//
+// E-1968 / ED-1560: it no longer clears active_task_id. The session that
+// confirmed the task is still the session that WORKED it, and that pointer is
+// the only way back to its transcript — `session goto E-<id> --resume` resolves
+// through it. Clearing it on completion made a finished task's session
+// unfindable by task ref, and reported it as one that never claimed a task.
+// The column is write-once: set at claim, never cleared, never repointed.
 func CompleteTask(sessionID string, taskID int64) error {
 	db, err := DB()
 	if err != nil {
@@ -588,9 +603,9 @@ func CompleteTask(sessionID string, taskID int64) error {
 		return err
 	}
 
-	// Clear active task, set state to idle
+	// Idle the session; the task binding stays (see the doc comment).
 	_, err = db.Exec(
-		"UPDATE sessions SET active_task_id=NULL, state='idle', last_activity=? WHERE session_id=?",
+		"UPDATE sessions SET state='idle', last_activity=? WHERE session_id=?",
 		now, sessionID,
 	)
 	return err

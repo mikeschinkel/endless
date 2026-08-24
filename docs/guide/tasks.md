@@ -279,7 +279,7 @@ endless task update <id> --clear description --clear text
 endless task submit <id>                             # agent: unplanned/revisit → submitted (spec-complete, awaiting approval)
 endless task approve <id>                            # human: submitted → ready (background sessions refused)
 endless task claim <id>                              # ready → underway + create worktree
-endless task release [<id>]                          # release current session's claim
+endless task update <id> --status revisit            # hand the task back (see `task release`: disabled)
 endless task update <id> --status unverified             # work done, awaiting verification
 endless task confirm <id> --outcome "..."            # user-only — sessions do not self-confirm
 endless task confirm <id> --cascade --outcome "..."  # confirm a task and descendants
