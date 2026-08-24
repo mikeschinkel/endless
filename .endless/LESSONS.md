@@ -3416,3 +3416,63 @@ Each one proves one task's change at hand-off time. Once landed, the code and
 docs it pins move on and the script decays by design. The regression suite is
 `just test` / `just test-go` / `just build` / `just guide-check`. Run only my
 own task's verify script; a stale sibling is expected, not a finding.
+
+## 2026-08-24 — Answer the concept that was asked, not the tool inventory
+
+Mike asked whether research tasks should incorporate fan-out/fan-in. I replied
+with a three-column table of *mechanisms* (subagents / Workflow / spawn --bg).
+"Fan-out, fan-in is a CONCEPT, NOT a feature <Sheesh>." A design question about
+a pattern is not answered by enumerating which shipped surfaces implement it.
+Start from what the pattern must accomplish; pick mechanisms after, and only if
+asked.
+
+## 2026-08-24 — A prior exemption is not an argument about a new use-case
+
+I cited endless's existing decision to exempt Agent-tool subagents from hooks
+and handoffs (relay_gate.go:294) as if it settled whether subagents suit
+research fan-out. Mike: "prior exemption is IRRELEVANT when I am discussing a
+new use-case." Precedent constrains consistency, not suitability. Do not
+present a past scoping decision as a finding about a question nobody had asked
+when it was made.
+
+## 2026-08-24 — Do not invent a premise and then rebut it
+
+I wrote "three agents given the same research prompt produce correlated
+results." Mike never said the prompts would be the same — differentiating the
+researchers was the whole point of his design. Rebutting a weaker design than
+the one proposed wastes the turn and reads as not having listened. Quote what
+he actually specified before arguing against it.
+
+## 2026-08-24 — "Same blind spots" overstates; the real claim is correlation
+
+I said three agents on one repo produce "three reads with the same blind spots,"
+which implies deterministic agents. Mike: "Are you now saying that running
+agents is deterministic?" They are correlated, not identical — same model, same
+priors, overlapping retrieval. Correlation is the real risk and it is fixable by
+separating evidence bases; determinism is a false claim that discredits the
+point it was meant to support.
+
+## 2026-08-24 — Harness-specific features are fine when they add value
+
+I listed "only works in Claude Code" as a disqualifier for the Workflow
+mechanism, and worse, said it would work "on your machine and nowhere else" —
+Workflow ships to every Claude Code user, not just Mike's machine. Mike: "There
+is no problem with harness-specific features WHEN THEY ADD VALUE." The handoff
+template can branch on capability and offer different instructions where the
+surface is absent. Also: a session-configurable agent budget is a control, not
+a con — I listed it as a drawback with no reasoning.
+
+## 2026-08-24 — `endless task spawn --bg` is deprecated; stop recommending it
+
+I proposed `spawn --bg` twice as the endless-native fan-out. It is deprecated.
+`src/endless/cli.py:2741` and `endless guide orchestration` both still document
+it as current with no deprecation marker, which is how I got it wrong — but
+re-reading stale docs is not an excuse for recommending a dead flag.
+
+## 2026-08-24 — Do not couple independent asks into one longer path
+
+Mike wanted an adversarial review of E-2048's outcome so he could get started on
+its goal. I proposed running that review *as* a fan-out, adding in-process work
+before he could begin. He named the cost directly. When two things are
+separable and one unblocks him, ship that one first and keep the other as its
+own plan.
