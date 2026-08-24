@@ -3609,3 +3609,9 @@ instead of writing the comment that will later be read as the decision.
 - **Why**: I took the capability from the guide's prose and from my own freshly-written comments instead of checking the code for consumers. A justification I authored in the same change is not evidence.
 - **Rule**: before paying a real, measurable cost to preserve a capability, grep for what actually uses it. If the only references are ones you just wrote, the capability does not exist and the cost buys nothing.
 - **Project**: endless
+
+### [2026-08-24] do not surface a finding until something real hits it; a test I invented failing is not evidence
+- **What went wrong**: While building E-2055 I wrote a test asserting that 'endless lesson write' works from a subdirectory. It failed. I reported that as a discovered gap, raised it again in the handoff, and then put 'decide whether to file it' on Mike's whats-left todo list. Across three turns of his attention he had to ask twice what the actual use-case was. There was none: nothing I ran needed it, and I had no reason to think anything would. Mike: 'yet another waste of my time.'
+- **Why**: I treated a failing assertion as a finding without checking whether any real caller reaches that path. The scenario existed only because I invented it, and I never asked myself who hits it before spending someone else's attention on it.
+- **Rule**: before reporting a finding - and especially before putting it on the user's list - name the concrete caller or workflow that hits it. If the only thing that hits it is a test you wrote, delete the test and say nothing. A self-manufactured failure is not a discovery, and escalating one repeatedly is worse than missing it.
+- **Project**: endless
