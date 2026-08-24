@@ -3476,3 +3476,29 @@ its goal. I proposed running that review *as* a fan-out, adding in-process work
 before he could begin. He named the cost directly. When two things are
 separable and one unblocks him, ship that one first and keep the other as its
 own plan.
+
+## 2026-08-24 — Never run `endless task release`; it violates ED-1560
+
+I ran `task release E-2054` to park a task, and it NULLed session 1136's
+`sessions.active_task_id`. ED-1560 (accepted) makes that column write-once: set
+at claim, never cleared, never repointed — a session owns exactly one task for
+its lifetime, and work on a different task is a different session. The
+write-once trigger that would have refused me is E-1969, still unlanded
+(E-1967 `unplanned`, E-1968/E-1969 `submitted`), so the command succeeded
+silently. `endless guide` still teaches `task release` under "Hand off to
+another session," and the CLI still ships it. Following the docs is not a
+defense: check the accepted decisions before running any verb that moves a
+session's ownership.
+
+To park a task, touch only the TASK — `--phase maybe`, `--status <pre-work>`.
+Never touch the claim. The binding is supposed to outlive the work.
+
+## 2026-08-24 — "Rein it in" means less machinery, not better machinery
+
+Mike parked E-2054 saying each task he works grows complexity exponentially and
+problems multiply out of tasks that never finish. My whole prior turn proposed
+new mechanism (fan-out, evidence bundles, critic passes) in answer to a problem
+CAUSED by unfinished mechanism. When he says he is trying to rein in work in
+progress, the responsive move is to finish or delete something, not to design
+something. Prefer the option that adds zero new surface, and say plainly when
+the honest answer is "nothing new is needed here."
