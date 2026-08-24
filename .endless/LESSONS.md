@@ -3576,3 +3576,15 @@ Rules for next time:
 Related standing rule (`endless guide orchestration`): "A verify suite is a
 land-time gate, not a standing regression suite." I had read that section and
 still did this.
+
+## Don't freelance behavior changes nobody asked for (E-1969, 2026-08-24)
+
+E-1929 added `UPDATE sessions SET active_task_id = NULL` to `applyTaskRemoval`,
+justified in a code comment as "a live session pointing at a removed task is a
+lie." Mike never asked for it. It survived a land, acquired an authoritative
+comment, and then collided with ED-1560's write-once rule — a later task had to
+stop and get a design ruling on a fork that should never have existed.
+
+An unrequested behavior change does not become requirement by landing. When a
+change makes a state cleanup look obviously right, that is exactly when to ask
+instead of writing the comment that will later be read as the decision.
