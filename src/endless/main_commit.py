@@ -6,8 +6,7 @@ committed there in the same step, so it never waits on a land and never dirties
 a worktree. `.endless/verbs.jsonl` established the pattern (E-1208);
 `.endless/LESSONS.md` joined it (E-2055). Sanctioned by ED-1199's global-config
 exception to the no-direct-commits-to-main rule — the commit is single-file and
-its subject starts with `Endless`, so it is distinguishable at a glance from
-session work and separable with `git log --grep '^Endless'`.
+carries no task id, so it is distinguishable at a glance from session work.
 
 Deliberately knows nothing about which file it is committing: it takes the main
 root, the repo-relative path, and the message. No database, no config, no

@@ -414,11 +414,11 @@ else
 fi
 
 subject=$(git -C "${proj}" log -1 --format=%s)
-if [[ "${subject}" == "Endless(lesson): verify scripts are task-scoped" ]]; then
+if [[ "${subject}" == "lesson: verify scripts are task-scoped" ]]; then
     report_pass "commit subject: ${subject}"
 else
     report_fail "commit subject" \
-        "Endless(lesson): verify scripts are task-scoped" "${subject}"
+        "lesson: verify scripts are task-scoped" "${subject}"
 fi
 
 if (( ${#subject} <= 60 )); then
@@ -427,13 +427,13 @@ else
     report_fail "commit subject within 60 characters" "<= 60" "${#subject}"
 fi
 
-# The marker every endless-authored commit carries, so `git log --grep '^Endless'`
-# still separates endless's commits from session work (guide: orchestration).
-if git -C "${proj}" log --grep '^Endless' --format=%s | grep -qF -- "${subject}"; then
-    report_pass "the subject keeps the ^Endless marker"
+# What actually separates endless's commits from session work: no task id. A
+# vendor prefix was tried and dropped — nothing matches on one, and it cost 11
+# of the subject's 60 characters.
+if [[ ! "${subject}" =~ ^E-[0-9]+: ]]; then
+    report_pass "the subject carries no task id, so it reads as endless's own"
 else
-    report_fail "the subject keeps the ^Endless marker" \
-        "matched by git log --grep '^Endless'" "not matched"
+    report_fail "the subject carries no task id" "no 'E-<id>:' prefix" "${subject}"
 fi
 
 if git -C "${proj}" log -1 --format=%b | grep -qF -- "one verify script per task"; then

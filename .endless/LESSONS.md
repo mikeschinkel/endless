@@ -20,8 +20,8 @@ is the whole reason memory is off in this project; reading this file back would
 reinstate the loop by other means. See "Memory is OFF here" in `CLAUDE.md`.
 
 The summary is the lesson's one-line rule, capped at 384 characters and written
-here verbatim. The commit subject is derived from it — `Endless(lesson): ...`,
-truncated to 60 characters — so a long summary costs nothing but an ellipsis in
+here verbatim. The commit subject is derived from it — `lesson: ...`, truncated
+to 60 characters — so a long summary costs nothing but an ellipsis in
 `git log --oneline`. Keep the explanation in `--text`: it has no cap, and it
 becomes both the commit body and the entry's detail.
 

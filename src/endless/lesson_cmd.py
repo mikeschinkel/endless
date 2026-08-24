@@ -50,14 +50,16 @@ SUMMARY_LIMIT = 384
 
 # The subject is `git log --oneline`'s surface, and history is the thing the cap
 # exists to keep scannable. Shaped per Conventional Commits v1.0.0 —
-# `<type>(<scope>): <description>` with the detail in the body — using `Endless`
-# as the type so the marker that separates endless's own commits from session
-# work (see the auto-commit table in `endless guide orchestration`) survives the
-# change and `git log --grep '^Endless'` still finds them all.
+# `<type>[optional scope]: <description>` with the detail in the body.
 #
-# A prefix this short is the point: the wordier `Endless: record lesson (...)`
-# form left 35 characters for the description, which is not a summary.
-SUBJECT_PREFIX = "Endless(lesson): "
+# The type is a bare `lesson`, with no `Endless` marker in front of it. Nothing
+# in the codebase matches on such a prefix: the only programmatic subject test
+# is an exact compare against `Endless: record ledger entry`
+# (worktree_cmd.AMENDABLE_COMMIT_SUBJECTS / events.LedgerCommitSubject), and a
+# vendor prefix would spend 11 of the 60 characters buying a scannability the
+# Conventional-Commits type already provides. Every character not spent here is
+# a character of the actual lesson.
+SUBJECT_PREFIX = "lesson: "
 SUBJECT_LIMIT = 60
 SUBJECT_ROOM = SUBJECT_LIMIT - len(SUBJECT_PREFIX)
 

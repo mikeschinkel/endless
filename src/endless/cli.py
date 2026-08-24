@@ -3744,9 +3744,9 @@ def lesson_write(summary, text, text_file, allow_paths):
 
     SUMMARY is the lesson's one-line rule, up to 384 characters. It is written
     to the log verbatim, and a Conventional-Commits-shaped subject
-    `Endless(lesson): <summary>` is derived from it — truncated with an
-    ellipsis if the summary does not fit inside 60 characters. The detail goes
-    in --text, has no cap, and becomes the commit body.
+    `lesson: <summary>` is derived from it — truncated with an ellipsis if the
+    summary does not fit inside 60 characters. The detail goes in --text, has
+    no cap, and becomes the commit body.
 
     The append lands in <project>/.endless/LESSONS.md on the MAIN checkout —
     never a worktree copy — and is committed there in the same step, so

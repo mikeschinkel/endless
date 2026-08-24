@@ -58,7 +58,7 @@ def test_write_creates_the_log_and_commits_it(git_project_at_cwd):
     assert "- **Project**: test" in body, "project is derived, not retyped"
 
     assert _git(["log", "-1", "--format=%s"], cwd=git_project_at_cwd) == (
-        "Endless(lesson): reused the canonical resolver"
+        "lesson: reused the canonical resolver"
     )
     assert LESSON_TEXT in _git(["log", "-1", "--format=%b"], cwd=git_project_at_cwd)
     assert _git(["show", "--name-only", "--format=", "HEAD"],
@@ -97,7 +97,7 @@ def test_write_from_a_worktree_targets_the_main_checkout(git_project_at_cwd, mon
         git_project_at_cwd / ".endless" / "LESSONS.md"
     ).read_text()
     assert _git(["log", "-1", "--format=%s"], cwd=git_project_at_cwd).startswith(
-        "Endless(lesson): "
+        "lesson: "
     )
     # The branch is untouched — no commit, no dirt.
     assert _git(["status", "--porcelain"], cwd=wt) == ""
@@ -191,7 +191,7 @@ def test_commit_failure_keeps_the_append(git_project_at_cwd, monkeypatch):
 def test_subject_uses_a_short_summary_whole():
     summary = "verify scripts are task-scoped"
     subject = lesson_cmd._subject_for(summary)
-    assert subject == f"Endless(lesson): {summary}"
+    assert subject == f"lesson: {summary}"
     assert len(subject) <= lesson_cmd.SUBJECT_LIMIT
 
 
@@ -208,11 +208,11 @@ def test_subject_truncates_a_long_summary_at_a_word_boundary():
     subject = lesson_cmd._subject_for(summary)
     assert len(subject) <= lesson_cmd.SUBJECT_LIMIT
     assert subject.endswith("\u2026")
-    assert subject.startswith("Endless(lesson): do not assert provenance")
+    assert subject.startswith("lesson: do not assert provenance")
     # Backed up to a boundary rather than cutting mid-word.
     assert not subject.removesuffix("\u2026").endswith(" ")
     assert summary.startswith(
-        subject.removeprefix("Endless(lesson): ").removesuffix("\u2026")
+        subject.removeprefix("lesson: ").removesuffix("\u2026")
     )
 
 
