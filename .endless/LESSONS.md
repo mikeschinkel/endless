@@ -19,9 +19,11 @@ bad behavior hides the defect that should have been fixed in the product. That
 is the whole reason memory is off in this project; reading this file back would
 reinstate the loop by other means. See "Memory is OFF here" in `CLAUDE.md`.
 
-The summary is capped by the commit subject it becomes,
-`Endless: record lesson (<summary>)`, at 60 characters total. Keep the
-explanation in `--text`; it becomes the commit body and the entry's detail.
+The summary is the lesson's one-line rule, capped at 384 characters and written
+here verbatim. The commit subject is derived from it — `Endless(lesson): ...`,
+truncated to 60 characters — so a long summary costs nothing but an ellipsis in
+`git log --oneline`. Keep the explanation in `--text`: it has no cap, and it
+becomes both the commit body and the entry's detail.
 
 ## Format
 

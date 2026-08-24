@@ -39,14 +39,31 @@ from endless.project_path import project_name_for_cwd, project_root
 # docstring and CLAUDE.md's "Memory is OFF here".
 LESSONS_REL_PATH = ".endless/LESSONS.md"
 
-# The commit subject is capped, not the summary: the subject is what
-# `git log --oneline` shows, and a project's history is the surface the cap
-# exists to keep scannable. The summary's own budget is whatever the prefix
-# leaves, computed below rather than written down twice.
-SUBJECT_PREFIX = "Endless: record lesson ("
-SUBJECT_SUFFIX = ")"
+# The summary and the commit subject are capped SEPARATELY, and the subject is
+# derived from the summary rather than equal to it.
+#
+# The summary is the lesson's one-line rule — what E-2056's `summary` column
+# holds and what a rendered memory index would show. 384 characters is about
+# three lines of prose: enough for a rule with its condition, short enough that
+# it cannot quietly absorb the narrative that belongs in --text.
+SUMMARY_LIMIT = 384
+
+# The subject is `git log --oneline`'s surface, and history is the thing the cap
+# exists to keep scannable. Shaped per Conventional Commits v1.0.0 —
+# `<type>(<scope>): <description>` with the detail in the body — using `Endless`
+# as the type so the marker that separates endless's own commits from session
+# work (see the auto-commit table in `endless guide orchestration`) survives the
+# change and `git log --grep '^Endless'` still finds them all.
+#
+# A prefix this short is the point: the wordier `Endless: record lesson (...)`
+# form left 35 characters for the description, which is not a summary.
+SUBJECT_PREFIX = "Endless(lesson): "
 SUBJECT_LIMIT = 60
-SUMMARY_LIMIT = SUBJECT_LIMIT - len(SUBJECT_PREFIX) - len(SUBJECT_SUFFIX)
+SUBJECT_ROOM = SUBJECT_LIMIT - len(SUBJECT_PREFIX)
+
+# An ellipsis this close to the end of a word is worth backing up to the word
+# boundary for; further back and the truncation loses more than it tidies.
+_WORD_BOUNDARY_FLOOR = SUBJECT_ROOM * 3 // 4
 
 # Written once, when a project records its first lesson. Says what the file is
 # and how entries get here; it does NOT tell a reader whether to read it back.
@@ -75,7 +92,21 @@ dirties a worktree.
 
 
 def _subject_for(summary: str) -> str:
-    return f"{SUBJECT_PREFIX}{summary}{SUBJECT_SUFFIX}"
+    """The commit subject for a lesson: prefix + as much summary as fits.
+
+    A summary within the remaining room is used whole — the common case, and
+    the one where history reads exactly as authored. A longer one is cut to fit
+    and marked with an ellipsis, backing up to a word boundary when that costs
+    little. Only the subject is ever truncated; the file and the commit body
+    keep the summary verbatim.
+    """
+    if len(summary) <= SUBJECT_ROOM:
+        return SUBJECT_PREFIX + summary
+    cut = summary[:SUBJECT_ROOM - 1]
+    space = cut.rfind(" ")
+    if space >= _WORD_BOUNDARY_FLOOR:
+        cut = cut[:space]
+    return SUBJECT_PREFIX + cut.rstrip() + "\u2026"
 
 
 def _render_entry(summary: str, text: str, project: str | None, today: str) -> str:
@@ -103,17 +134,14 @@ def write_lesson(summary: str, text: str | None) -> None:
     if not summary:
         raise click.ClickException("A lesson needs a one-line summary.")
 
-    subject = _subject_for(summary)
-    if len(subject) > SUBJECT_LIMIT:
+    if len(summary) > SUMMARY_LIMIT:
         raise click.ClickException(
-            f"Summary is too long: the commit subject would be {len(subject)} "
-            f"characters, over the {SUBJECT_LIMIT} limit.\n"
-            f"  Subject: {subject}\n"
-            f"  Budget:  {SUMMARY_LIMIT} characters for the summary; yours is "
-            f"{len(summary)}.\n"
-            f"  The summary is the scannable one-liner; put the explanation in "
-            f"--text."
+            f"Summary is too long: {len(summary)} characters, over the "
+            f"{SUMMARY_LIMIT} limit.\n"
+            f"  The summary is the lesson's one-line rule. At this length it is "
+            f"the lesson — move the explanation into --text, which has no cap."
         )
+    subject = _subject_for(summary)
 
     if not text or not text.strip():
         raise click.ClickException(

@@ -58,7 +58,7 @@ def test_write_creates_the_log_and_commits_it(git_project_at_cwd):
     assert "- **Project**: test" in body, "project is derived, not retyped"
 
     assert _git(["log", "-1", "--format=%s"], cwd=git_project_at_cwd) == (
-        "Endless: record lesson (reused the canonical resolver)"
+        "Endless(lesson): reused the canonical resolver"
     )
     assert LESSON_TEXT in _git(["log", "-1", "--format=%b"], cwd=git_project_at_cwd)
     assert _git(["show", "--name-only", "--format=", "HEAD"],
@@ -97,7 +97,7 @@ def test_write_from_a_worktree_targets_the_main_checkout(git_project_at_cwd, mon
         git_project_at_cwd / ".endless" / "LESSONS.md"
     ).read_text()
     assert _git(["log", "-1", "--format=%s"], cwd=git_project_at_cwd).startswith(
-        "Endless: record lesson"
+        "Endless(lesson): "
     )
     # The branch is untouched — no commit, no dirt.
     assert _git(["status", "--porcelain"], cwd=wt) == ""
@@ -118,21 +118,26 @@ def test_write_preserves_unrelated_dirt_on_main(git_project_at_cwd):
 
 # --- refusals --------------------------------------------------------------
 
-def test_summary_over_the_subject_budget_is_refused(git_project_at_cwd):
+def test_summary_over_its_own_cap_is_refused(git_project_at_cwd):
     too_long = "x" * (lesson_cmd.SUMMARY_LIMIT + 1)
     with pytest.raises(click.ClickException) as exc:
         lesson_cmd.write_lesson(too_long, LESSON_TEXT)
     msg = exc.value.message
-    assert str(lesson_cmd.SUBJECT_LIMIT) in msg
-    assert str(lesson_cmd.SUMMARY_LIMIT) in msg, "the message names the budget"
+    assert str(lesson_cmd.SUMMARY_LIMIT) in msg, "the message names the cap"
+    assert "--text" in msg, "and where the overflow belongs"
     assert not (git_project_at_cwd / ".endless" / "LESSONS.md").exists()
 
 
-def test_summary_exactly_at_the_budget_is_accepted(git_project_at_cwd):
+def test_summary_exactly_at_its_cap_is_accepted(git_project_at_cwd):
+    """384 characters is far past what a subject holds — the point of the split
+    is that the file keeps the summary whole and only the subject truncates."""
     at_limit = "y" * lesson_cmd.SUMMARY_LIMIT
     lesson_cmd.write_lesson(at_limit, LESSON_TEXT)
+
+    assert at_limit in (git_project_at_cwd / ".endless" / "LESSONS.md").read_text()
     subject = _git(["log", "-1", "--format=%s"], cwd=git_project_at_cwd)
     assert len(subject) == lesson_cmd.SUBJECT_LIMIT
+    assert subject.endswith("\u2026")
 
 
 def test_blank_summary_is_refused(git_project_at_cwd):
@@ -179,6 +184,44 @@ def test_commit_failure_keeps_the_append(git_project_at_cwd, monkeypatch):
 
     log = git_project_at_cwd / ".endless" / "LESSONS.md"
     assert log.exists() and "commit will fail" in log.read_text()
+
+
+# --- the derived commit subject --------------------------------------------
+
+def test_subject_uses_a_short_summary_whole():
+    summary = "verify scripts are task-scoped"
+    subject = lesson_cmd._subject_for(summary)
+    assert subject == f"Endless(lesson): {summary}"
+    assert len(subject) <= lesson_cmd.SUBJECT_LIMIT
+
+
+def test_subject_at_the_exact_room_is_not_truncated():
+    summary = "z" * lesson_cmd.SUBJECT_ROOM
+    subject = lesson_cmd._subject_for(summary)
+    assert len(subject) == lesson_cmd.SUBJECT_LIMIT
+    assert "\u2026" not in subject
+
+
+def test_subject_truncates_a_long_summary_at_a_word_boundary():
+    summary = ("do not assert provenance without checking git log first; "
+               "a wrong attribution costs more than the check")
+    subject = lesson_cmd._subject_for(summary)
+    assert len(subject) <= lesson_cmd.SUBJECT_LIMIT
+    assert subject.endswith("\u2026")
+    assert subject.startswith("Endless(lesson): do not assert provenance")
+    # Backed up to a boundary rather than cutting mid-word.
+    assert not subject.removesuffix("\u2026").endswith(" ")
+    assert summary.startswith(
+        subject.removeprefix("Endless(lesson): ").removesuffix("\u2026")
+    )
+
+
+def test_subject_cuts_mid_token_when_no_boundary_is_near():
+    """One long unbroken token has no boundary worth backing up to; the cut
+    still has to respect the cap rather than overflow it."""
+    subject = lesson_cmd._subject_for("q" * 200)
+    assert len(subject) == lesson_cmd.SUBJECT_LIMIT
+    assert subject.endswith("\u2026")
 
 
 # --- the rendered entry ----------------------------------------------------

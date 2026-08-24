@@ -16,7 +16,7 @@
 # What it proves:
 #   1. FAIL-FAST unit gate: the Go + Python unit suites this task owns pass.
 #   2. The command exists and its help states the contract (main checkout,
-#      write-time commit, 60-char subject).
+#      384-char summary, derived 60-char subject).
 #   3. Both auto-commit mirrors have DROPPED ".endless/LESSONS.md", still carry
 #      the live entries, and agree entry-for-entry — a one-sided edit would make
 #      `worktree check` and `land` disagree about what is user work.
@@ -35,7 +35,9 @@
 #         clean, and preserves unrelated dirt;
 #      c. run from a WORKTREE of that project, it still writes main's copy and
 #         leaves the task branch untouched — the pain this task closes;
-#      d. an over-long summary is refused before anything is written.
+#      d. a summary longer than a subject holds is written whole and only the
+#         SUBJECT truncates; over its own 384-char cap it is refused outright,
+#         before anything is written.
 #
 # Exit 0 on all-passed, 1 on any failure, 2 on setup error.
 
@@ -132,7 +134,8 @@ while IFS='|' read -r needle label; do
 done <<'EOF'
 MAIN checkout —|names the main checkout as the target
 never a worktree copy|forbids the worktree copy
-60 characters|states the subject cap
+384 characters|states the summary cap
+60 characters|states the derived subject cap
 --text|names the flag the detail goes in
 EOF
 
@@ -411,17 +414,26 @@ else
 fi
 
 subject=$(git -C "${proj}" log -1 --format=%s)
-if [[ "${subject}" == "Endless: record lesson (verify scripts are task-scoped)" ]]; then
+if [[ "${subject}" == "Endless(lesson): verify scripts are task-scoped" ]]; then
     report_pass "commit subject: ${subject}"
 else
     report_fail "commit subject" \
-        "Endless: record lesson (verify scripts are task-scoped)" "${subject}"
+        "Endless(lesson): verify scripts are task-scoped" "${subject}"
 fi
 
 if (( ${#subject} <= 60 )); then
     report_pass "commit subject is within 60 characters (${#subject})"
 else
     report_fail "commit subject within 60 characters" "<= 60" "${#subject}"
+fi
+
+# The marker every endless-authored commit carries, so `git log --grep '^Endless'`
+# still separates endless's commits from session work (guide: orchestration).
+if git -C "${proj}" log --grep '^Endless' --format=%s | grep -qF -- "${subject}"; then
+    report_pass "the subject keeps the ^Endless marker"
+else
+    report_fail "the subject keeps the ^Endless marker" \
+        "matched by git log --grep '^Endless'" "not matched"
 fi
 
 if git -C "${proj}" log -1 --format=%b | grep -qF -- "one verify script per task"; then
@@ -495,28 +507,54 @@ else
         "$(git -C "${wt_dir}" status --porcelain)"
 fi
 
-# 7d — the refusal fires before anything is written.
+# 7d — a summary far longer than a subject holds is NOT refused: it is written
+# whole and the subject truncates. This is the behaviour the 384/60 split exists
+# for, so it is worth proving end to end and not only in the unit suite.
 entries_before=$(grep -c '^### ' "${log_file}")
-long_summary="a summary long enough that the rendered commit subject overflows"
-if el "${proj}" lesson write "${long_summary}" --text "detail" \
+mid_summary="do not assert provenance without checking git log first; a plausible-sounding attribution that turns out to be wrong costs more than the thirty seconds the check takes"
+if el "${proj}" lesson write "${mid_summary}" --text "- **Rule**: check first" \
+        >/tmp/e2055-mid.log 2>&1; then
+    report_pass "a summary longer than the subject is accepted, not refused"
+else
+    report_fail "a long summary is accepted" "exit 0" "$(tail -3 /tmp/e2055-mid.log)"
+fi
+
+if grep -qF -- "${mid_summary}" "${log_file}"; then
+    report_pass "the long summary is written to the log verbatim"
+else
+    report_fail "the long summary is written verbatim" "the full text" "absent or cut"
+fi
+
+mid_subject=$(git -C "${proj}" log -1 --format=%s)
+if (( ${#mid_subject} <= 60 )) && [[ "${mid_subject}" == *"…" ]]; then
+    report_pass "the subject truncated to fit: ${mid_subject}"
+else
+    report_fail "the subject truncated to fit" "<= 60 chars ending in an ellipsis" \
+        "${#mid_subject} chars: ${mid_subject}"
+fi
+
+# 7e — over its OWN cap, the refusal fires before anything is written.
+entries_now=$(grep -c '^### ' "${log_file}")
+over_cap=$(printf 'x%.0s' $(seq 1 385))
+if el "${proj}" lesson write "${over_cap}" --text "detail" \
         >/tmp/e2055-long.log 2>&1; then
-    report_fail "an over-long summary is refused" "non-zero exit" "exit 0"
+    report_fail "a summary over 384 characters is refused" "non-zero exit" "exit 0"
 else
-    report_pass "an over-long summary is refused"
+    report_pass "a summary over 384 characters is refused"
 fi
 
-if grep -qF -- "60" /tmp/e2055-long.log && grep -qiF -- "budget" /tmp/e2055-long.log; then
-    report_pass "the refusal names the limit and the remaining budget"
+if grep -qF -- "384" /tmp/e2055-long.log && grep -qF -- "--text" /tmp/e2055-long.log; then
+    report_pass "the refusal names the cap and where the overflow belongs"
 else
-    report_fail "the refusal names the limit and the budget" \
-        "'60' and 'Budget' in the message" "$(head -2 /tmp/e2055-long.log)"
+    report_fail "the refusal names the cap and where the overflow belongs" \
+        "'384' and '--text' in the message" "$(head -2 /tmp/e2055-long.log)"
 fi
 
-if [[ "$(grep -c '^### ' "${log_file}")" == "${entries_before}" ]]; then
+if [[ "$(grep -c '^### ' "${log_file}")" == "${entries_now}" ]]; then
     report_pass "the refused write left the log untouched"
 else
     report_fail "the refused write left the log untouched" \
-        "${entries_before} entries" "$(grep -c '^### ' "${log_file}")"
+        "${entries_now} entries" "$(grep -c '^### ' "${log_file}")"
 fi
 
 # ── summary ─────────────────────────────────────────────────────────────────
