@@ -143,6 +143,7 @@ Endless auto-commits a fixed, narrow set of its own files — and none of them i
 |------------------------------------------------------|----------------------------------------------------|
 | `.endless/verbs.jsonl`                               | endless, on `worktree land`                        |
 | `.endless/db-ledger/*.jsonl`                         | endless, on the main checkout, via the event hook  |
+| `.endless/LESSONS.md`                                | endless, on `worktree land` (if the project keeps one) |
 | `.endless/plans/E-<id>.md`                           | endless, when it writes the plan into the worktree |
 | **everything else — source, docs, tests, config**    | **you, with `git commit`**                          |
 

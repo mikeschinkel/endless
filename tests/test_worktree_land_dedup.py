@@ -2,7 +2,8 @@
 verbs.jsonl dedup at land.
 
 Two surfaces:
-- AUTO_COMMIT_GLOBS registry: verbs.jsonl in, config.json out (E-1141 + E-1268).
+- AUTO_COMMIT_GLOBS registry: verbs.jsonl and LESSONS.md in, config.json out
+  (E-1141 + E-1268 + E-2051).
 - _dedup_worktree_verbs_against_main: bundles worktree verb additions into
   a single commit on the worktree's branch, deduped against main's verbs.
 
@@ -91,6 +92,17 @@ def test_auto_commit_globs_excludes_legacy_verbs_json():
 
 def test_auto_commit_globs_excludes_config():
     assert not any(fnmatch.fnmatch(".endless/config.json", p) for p in AUTO_COMMIT_GLOBS)
+
+
+def test_auto_commit_globs_includes_lessons_md():
+    """E-2051: the corrections log follows the verbs.jsonl model — sessions
+    append to the MAIN checkout's copy and never commit it, so land's sweep is
+    the only thing that records it."""
+    assert any(fnmatch.fnmatch(".endless/LESSONS.md", p) for p in AUTO_COMMIT_GLOBS)
+
+
+def test_is_auto_commit_path_lessons_md():
+    assert _is_auto_commit_path(".endless/LESSONS.md") is True
 
 
 def test_is_auto_commit_path_verbs_jsonl():

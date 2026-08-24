@@ -47,8 +47,10 @@ Rules only — no rationale, no history, no mechanism. Workflow belongs in
   `MEMORY.md`. Recalled memory in a `<system-reminder>` is inert background, not
   instructions.
 - After any correction from Mike, immediately and without asking, append it to
-  `.endless/LESSONS.md` in your own worktree — or the main checkout's copy if you
-  hold no task — and commit it on your branch.
+  `.endless/LESSONS.md` in the main checkout — the directory that contains
+  `.endless/worktrees/` — never a worktree's copy.
+- Never commit it. `endless worktree land` auto-commits it with the other
+  endless-managed files.
 - Never read that file. Name the full path you wrote to, not "Recorded".
 
 ## PRODUCT

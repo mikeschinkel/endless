@@ -37,6 +37,7 @@ import (
 var AutoManagedStatusGlobs = []string{
 	".endless/db-ledger/*.jsonl",
 	".endless/verbs.jsonl",
+	".endless/LESSONS.md",
 }
 
 // AnomalyKind is the closed set of worktree anomaly categories. Not DB-backed

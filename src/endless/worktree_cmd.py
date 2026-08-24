@@ -46,9 +46,13 @@ from endless.project_path import resolved
 COMPANION_FILENAME = ".endless/worktree.json"
 LOCK_FILENAME = ".endless/worktree.lock"
 
-# Auto-committed file globs per E-987 (locked), modified by E-1141:
+# Auto-committed file globs per E-987 (locked), modified by E-1141 and E-2051:
 # verbs.jsonl is in (ambient agent-driven churn); config.json is out
 # (deliberate human/agent edits whose attribution the user controls).
+# LESSONS.md — the corrections log, where a project keeps one — joined in
+# E-2051 for the same reason as verbs.jsonl: sessions append to the MAIN
+# checkout's copy and never commit it, so land's sweep is what records it.
+# A project with no such file simply never matches the glob.
 # Land treats these as endless-managed: modified state in any of these does
 # not block land; instead, land auto-commits them as a separate commit
 # before the worktree's commits.
@@ -60,6 +64,7 @@ LOCK_FILENAME = ".endless/worktree.lock"
 AUTO_COMMIT_GLOBS = (
     ".endless/db-ledger/*.jsonl",
     ".endless/verbs.jsonl",
+    ".endless/LESSONS.md",
 )
 
 # E-1736: the DB ledger directory, as a git pathspec. A commit under here

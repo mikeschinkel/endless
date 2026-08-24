@@ -172,6 +172,9 @@ func TestIsAutoManagedPath(t *testing.T) {
 	managed := []string{
 		".endless/db-ledger/2026-07.jsonl",
 		".endless/verbs.jsonl",
+		// E-2051: the corrections log is written on the main checkout and
+		// swept by land, exactly like verbs.jsonl.
+		".endless/LESSONS.md",
 	}
 	for _, p := range managed {
 		if !isAutoManagedPath(p) {
