@@ -3544,3 +3544,35 @@ as ready for a fresh session, never to volunteer for it.
   template," "Endless owns the shape," and "opt-in behind an explicit user
   keyword" were unintelligible shorthand. If an option needs a paragraph, write
   the paragraph.
+
+## Verify scripts are point-in-time artifacts — never update a landed task's suite
+
+**2026-08-24, E-1968.** My change retired `task spawn --reopen` and `task
+pause`, which invalidated checks in `tests/tasks/e-1542-verify.sh`,
+`e-1645-verify.sh` and `e-1905-verify.sh`. I edited all three to match the new
+behavior. Wrong.
+
+**A verify script is only valid at the moment its own task landed.** It is the
+record of what that task verified, then. A later task invalidating it is
+EXPECTED and FINE — it is not breakage, not debt, and not mine to repair.
+Editing it destroys the record and replaces it with a claim about code that task
+never saw.
+
+This holds even when the stale check is *worse than red*: e-1905's layer B would
+have reported green against deleted tests (`go test -run` exits 0 when nothing
+matches). I used that as justification to "fix" it. It is not a justification —
+nobody is treating a landed task's suite as a standing regression gate, which is
+exactly why it may rot.
+
+Rules for next time:
+- Never touch `tests/tasks/e-<other-id>-verify.sh`. Only ever author or extend
+  the suite for the task I am actually working.
+- Do not file a task to repair a stale check in a landed suite either. A verify
+  script drifting out of date is not a defect; filing it spends the user's
+  attention on a non-problem.
+- If it seems worth MENTIONING that a prior suite no longer applies, that is a
+  sentence in the reply — not an edit, and not a filing.
+
+Related standing rule (`endless guide orchestration`): "A verify suite is a
+land-time gate, not a standing regression suite." I had read that section and
+still did this.
