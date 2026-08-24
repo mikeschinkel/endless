@@ -3597,3 +3597,9 @@ stop and get a design ruling on a fork that should never have existed.
 An unrequested behavior change does not become requirement by landing. When a
 change makes a state cleanup look obviously right, that is exactly when to ask
 instead of writing the comment that will later be read as the decision.
+
+### [2026-08-24] an absurd result from a requirement reading is evidence the reading is wrong, not a constraint to ship
+- **What went wrong**: E-2055's plan said the commit subject should summarize the lesson in 60 characters or less. I read 'summary' as the text that becomes the subject, so the wrapper 'Endless: record lesson (...)' left 35 characters, and I shipped a 35-character cap on a field I was calling a summary. Mike: 'I am at a loss where you came up with 35.'
+- **Why**: I treated the ambiguity as settled by my first reading and never checked the result against the plain meaning of the word. A summary that cannot hold one sentence is not a summary; the absurdity was visible before any code was written.
+- **Rule**: when a reading of a requirement produces a result that contradicts the plain meaning of the word it implements, that is evidence the reading is wrong. Re-read or ask before building. Do not ship the absurd reading and flag it in the handoff.
+- **Project**: endless
