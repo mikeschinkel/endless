@@ -3679,3 +3679,9 @@ The rule: when the answer to a design question is 'the code does X', that is the
 
 Corollary from case 4: 'we could change it' is not the same as 'we should'. The reason not to freeze that particular option was not that the code overwrites it — it was that the value is a harness-issued handle, and E-2063's central finding is that reaching for a runtime handle as a durable identity is the error itself. Getting to the right answer required the right reason, and the current-behavior answer was not it.
 - **Project**: endless
+
+### [2026-08-24] A diagnostic is looking, not work to file — investigate it inline and report the finding in chat
+I found evidence that verbs.jsonl and a ledger shard reached land uncommitted three times after the write-time-commit tasks shipped, then offered to FILE a task to diagnose why. Mike: 'Can you not just do the diagnostic yourself? (See ED-1550)'
+
+ED-1550 is explicit — filing is the exception, and the default response to a finding is to tell the user in chat. A diagnostic is not deliverable work; it is reading code and history I already have open. Filing one converts ten minutes of looking into a backlog item someone must later re-read, re-scope and close. Investigate first, then report; file only if the FIX is real work and nothing open owns it.
+- **Project**: endless
