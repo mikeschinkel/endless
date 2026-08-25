@@ -3664,3 +3664,18 @@ act differently knowing it. Otherwise the work speaks and I say nothing.
 
 Related failure in the same session: answering "is X blocked?" with an essay.
 Terser is not a style preference here — length itself is the cost.
+
+### [2026-08-24] Current behavior is a choice, not a constraint — say 'today it does X' and ask whether X should change, instead of reasoning as though X is fixed
+Four times in one session I treated the existing code as a boundary condition:
+
+1. I inherited e-1929's comment that the schema-migration window 'is never entered in practice' and repeated its reasoning in my own change file. It was false, and E-1969's land proved it.
+2. I asserted E-1969 was 'the first schema change to RENAME rather than ADD' without checking. E-1659 and E-1898 both renamed.
+3. I quoted a code comment listing 'resume, respawn, aborted spawn, /clear' as fresh-UUID launches. E-2063 MEASURED it: resume preserves the id, compaction preserves it, only a clear rotates. The comment is wrong about resume and I passed it on as fact.
+4. Mike asked why a tmux window option could not record the session durably. I answered that setTmuxSessionUUID overwrites it on every event — describing current behavior as if it settled the question. He had to point out that code can be changed.
+
+The pattern is one habit: reading the codebase as a description of what is possible rather than a record of what was decided. It makes me argue against changes that are the entire point of the task, and it launders unverified comments into fresh assertions.
+
+The rule: when the answer to a design question is 'the code does X', that is the START of the answer. Say 'today it does X, because of Y' and then say whether Y still holds. If Y is a comment rather than a measurement, say so — a comment is a claim from the moment it was written, not evidence about now.
+
+Corollary from case 4: 'we could change it' is not the same as 'we should'. The reason not to freeze that particular option was not that the code overwrites it — it was that the value is a harness-issued handle, and E-2063's central finding is that reaching for a runtime handle as a durable identity is the error itself. Getting to the right answer required the right reason, and the current-behavior answer was not it.
+- **Project**: endless
