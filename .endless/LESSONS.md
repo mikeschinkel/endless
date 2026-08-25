@@ -3835,3 +3835,17 @@ A clean test run is the precondition for handing off at all, not news. A decisio
 
 The test for every line in a handoff: does this change what Mike does next? If tests pass, say nothing about tests. If I did what we agreed, say nothing about the agreement. Report only deviations, live problems, and things he must decide. Silence is the correct report for everything that went as expected — the same rule the spawn instructions already state for 'endless worktree check'.
 - **Project**: endless
+
+### [2026-08-25] ED-1550: raise findings in chat and ask — filing is the exception, and check main's HEAD before calling anything a regression
+In E-1891 I filed E-2068 and E-2069 without asking. Mike: 'are you familiar with ED-1550? You should have ASKED first.'
+
+ED-1550 rule 1: filing is the exception; the default response to a finding is to TELL THE USER IN CHAT. Noticing something true does not earn a task. Rule 5: a request to file is not unlimited. My spawn instructions said 'file it and confirm before implementing' — I read that as 'file, then confirm.' It means ask first. A filed task is a standing claim on attention whether or not it survives triage.
+
+Both filings were also wrong on the merits, in the same way:
+
+E-2068 (two disagreeing blocker sets) — Mike: 'task next is effectively a dead command. We should probably remove it. That makes E-2068 moot, and means you could have resolved the issue in 1891 had you asked.' Asking would have collapsed a filed task into a two-line edit in the work already underway.
+
+E-2069 ('task list stopped showing supersessions') was a request to REVERT E-2064, which Mike asked for and which landed thirty minutes earlier. I 'verified' it against my worktree branch's parent commit — which predates E-2064 — saw the old behavior there, and concluded regression. A worktree branches at a point in time; its parent is not current main. Before calling anything a regression, diff against main's HEAD and search for an owning task on the subject (ED-1550 rule 4). Had I run 'endless task recent --db main' I would have seen E-2064 by title.
+
+The stale assertion I had 'unmasked' in tests/tasks/e-1956-verify.sh was not evidence of a bug — it was E-2064 superseding the check and not updating it.
+- **Project**: endless
