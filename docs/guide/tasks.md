@@ -79,11 +79,14 @@ Reach for `--llm` whenever you're parsing output yourself — it's token-efficie
 
   ```
   Touched by:
+  - Claimed:     ES-1046 (E-1859) [ended]
   - Revisited:   ES-996 (E-1833) [idle]
   - Surfaced:    ES-994 (E-1829) [idle]
   ```
 
-  The leading relation says how the task entered that session's scope — **Goal** (the session claimed it), **Surfaced** (created it), **Revisited** (touched it without claiming), or **Touched** for a historical row recorded before the vocabulary existed. The parenthesized id is the task that session is active on *now*; `[state]` is the session's state, or `gone` when the session row itself no longer exists.
+  The leading relation says how the task entered that session's scope — **Claimed** (the session claimed it), **Surfaced** (created it), **Revisited** (touched it without claiming), or **Touched** for a historical row recorded before the vocabulary existed. The parenthesized id is the task that session is bound to *now*; `[state]` is the session's state, or `gone` when the session row itself no longer exists.
+
+  **Claimed** is read off `sessions.task_id`, the write-once ownership record (ED-1560), not off the touch — so a session that filed a task and later claimed it reads `Claimed`, not the `Surfaced` its touch row was stamped with, and a session that claimed the task without ever recording a touch is listed too. That is the same column `task spawn` refuses on, so this block and that refusal cannot disagree.
 
 Sessions render as **`ES-NNNN`** and tasks as `E-NNNN` — separate id spaces that would otherwise be indistinguishable side by side. Feed an `ES-NNNN` straight to `endless session goto ES-1020` to jump there. `--json` reports the same facts as `created_by` / `touched_by`; `--llm` as `created_by=` / `touched_by=` lines.
 

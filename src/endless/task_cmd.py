@@ -3822,6 +3822,91 @@ _REOPENABLE_TERMINAL_STATUSES: frozenset[str] = frozenset({
 })
 
 
+def _task_claimants(item_id: int) -> list[dict]:
+    """Every session that ever claimed `item_id`, most recently active first.
+
+    Reads `sessions.task_id`, which per ED-1560 is write-once — set at claim,
+    never cleared, never repointed — and so is the DURABLE record of who owned
+    the task. Deliberately unfiltered by `state`: an `ended` session is the whole
+    point, because the session that worked a task is almost never still live by
+    the time someone tries to spawn onto it again. The column carries no UNIQUE
+    constraint, so several sessions may share a value and all of them are
+    returned.
+
+    NOT `session_tasks`. That table records INVOLVEMENT — how a task first
+    entered a session's scope — so a session that merely read the task is in it
+    and a session that claimed a task it had already filed still reads
+    `surfaced`. Involvement is not ownership and cannot stand in for it.
+
+    Ordered to match monitor.resumeByTask (`ORDER BY last_activity DESC`), which
+    is what `session goto <task> --resume` resolves through, so the session this
+    refusal names is the session that command lands in.
+    """
+    return db.query(
+        "SELECT id AS eid FROM sessions WHERE task_id = ? "
+        "ORDER BY last_activity DESC, id DESC",
+        (item_id,),
+    )
+
+
+def _check_prior_claim(item_id: int, current_status: str) -> None:
+    """Refuse a spawn onto a task some session already claimed (E-1967).
+
+    The companion to `_check_task_ownership`, which runs first and covers the
+    narrower case: a session holding the task RIGHT NOW. This one covers the case
+    that missed, which is the defect — the prior session is usually `ended`, so
+    the live check saw a free task and let a second session start over without
+    the first one's reasoning.
+
+    There is no escape hatch and none left to offer: `--force` governs the status
+    demotion, not this; `--new-session` was dropped by E-1968; and `task release`
+    is disabled, so a claim is not something anyone can undo. Working a task a
+    prior session claimed means resuming that session.
+
+    No exclusion for the spawning session, matching `_check_task_ownership`'s
+    `current_eid=None`: spawn never claims ownership for the spawner. Under
+    ED-1560 a session holds one task for its lifetime, so a session spawning onto
+    a DIFFERENT task cannot itself be the target's claimant. Re-claiming your own
+    task is legitimate, but that belongs to `claim`, not here.
+    """
+    claimants = _task_claimants(item_id)
+    if not claimants:
+        return
+
+    most_recent = session_id_display(claimants[0]["eid"])
+    task_ref = task_id_display(item_id)
+
+    # `--revisit` / `--no-revisit` are E-1968's flags on `session goto`, and they
+    # are accepted only when the task is settled. Rendering them unconditionally
+    # would teach a flag the very next command rejects. Reached with a settled
+    # status only via `--force`, which skips the settled-status gate above but
+    # not this one.
+    settled = current_status in _REOPENABLE_TERMINAL_STATUSES
+    revisit = " --revisit" if settled else ""
+
+    lines = [
+        f"{task_ref} was claimed by session {most_recent}. "
+        f"Pick the work back up there:",
+        f"    endless session goto {task_ref} --resume{revisit}",
+    ]
+    if settled:
+        lines.append(
+            "  (--no-revisit instead, to read it back without reopening "
+            "the task.)"
+        )
+    if len(claimants) > 1:
+        others = ", ".join(
+            session_id_display(c["eid"]) for c in claimants[1:]
+        )
+        lines.append(f"  Earlier claimants: {others}")
+    lines.append("")
+    lines.append(
+        f"Spawning a second session on it would start over without "
+        f"{most_recent}'s reasoning, which is only in that session."
+    )
+    raise click.ClickException("\n".join(lines))
+
+
 # E-1845: statuses from which a material description edit resets a task to
 # `untriaged`. These are exactly the pre-work states — no implementation has
 # started, so re-deciding what the task IS costs nothing but a second look.
@@ -5640,6 +5725,11 @@ def spawn_plan(item_id: int, project_name: str | None = None,
     # raise-on-conflict check is for the non-reopen spawn only.
     _check_task_ownership(item_id, current_eid=None)
 
+    # Then refuse if any session EVER claimed it, live or not (E-1967). Order
+    # matters: the live check above owns the "someone is working this right now"
+    # case and says so more specifically, so it runs first.
+    _check_prior_claim(item_id, current_status)
+
     # Pre-claim: emit status_changed, create worktree. No session binding
     # yet — Claude hasn't started. SessionStart's @endless_spawned_by
     # path will record the binding once the new session is up.
@@ -6681,41 +6771,95 @@ _MISSING_SESSION_STATE = "gone"
 _FINISHED_SESSION_STATES = ("ended", _MISSING_SESSION_STATE)
 
 
+# The relation a session holding `sessions.task_id = <this task>` renders as,
+# whatever `session_tasks` recorded for the pair (E-1967). `sessions.task_id` is
+# the OWNERSHIP record — write-once per ED-1560, never cleared — while
+# `session_tasks` records INVOLVEMENT: how the task first entered the session's
+# scope. The two answer different questions, and only the first one answers
+# "who claimed this", which is what the `task spawn` guard refuses on.
+_CLAIMED_SLUG = "claimed"
+_CLAIMED_LABEL = "Claimed"
+
+
 def _session_touches(item_id: int) -> list[dict]:
     """Every session that touched this task, most-recent touch first (E-1866).
 
-    One row per session_tasks entry, carrying the session id, how the task
-    entered that session's scope (goal / surfaced / revisited, per ED-1497), the
-    session's current active task, and its state. Ordered by touch recency
-    because the block exists for navigation — the session worth jumping to is
-    almost always the one that touched the task last — which is deliberately
-    *not* the id-ascending order of the 'This task:' relations block.
+    One row per session, carrying the session id, how the task entered that
+    session's scope (claimed / surfaced / revisited, per ED-1497), the session's
+    current task, and its state. Ordered by touch recency because the block
+    exists for navigation — the session worth jumping to is almost always the one
+    that touched the task last — which is deliberately *not* the id-ascending
+    order of the 'This task:' relations block.
 
-    LEFT JOINs throughout: relation_id is NULL for pre-E-1462 rows, and the
-    sessions row may be gone entirely (session_tasks has no FK by design).
+    Two sources, unioned (E-1967):
+
+      - `session_tasks`, one row per (session, task) touch. LEFT JOINs
+        throughout: relation_id is NULL for pre-E-1462 rows, and the sessions row
+        may be gone entirely (session_tasks has no FK by design).
+      - `sessions` itself, for every session bound to this task that has NO
+        session_tasks row. That is not a rare corner: the touch is recorded from
+        the event's ACTOR, so a claim driven from a plain shell — actor kind
+        `cli`, no session id — binds the session without recording a touch. 149
+        such bindings exist in this project's own database. Reading only
+        session_tasks is what made "which sessions claimed this" unanswerable.
+
+    A session bound to this task renders `Claimed:` either way, overriding
+    whatever session_tasks says for the pair. `relation_id` is upgrade-only
+    (E-1696) but never revised downward or re-stamped, so a session that filed a
+    task in 2026-08 and claimed it in 2026-09 still reads `Surfaced` on the row
+    written at filing time. `sessions.task_id` is the record that cannot lie, and
+    reading the label off it is what makes this block agree with the `task spawn`
+    guard by construction — both consult the same column.
+
+    `touch_slug` preserves the raw session_tasks relation underneath the
+    override, because the Created: line is derived from a `surfaced` touch and a
+    session that surfaced a task and then claimed it must not lose its credit for
+    filing it.
     """
     rows = db.query(
-        "SELECT st.session_id AS session_id, "
-        "       st.created_at AS first_touch, "
-        "       st.updated_at AS last_touch, "
-        "       r.slug        AS rel_slug, "
-        "       r.label       AS rel_label, "
-        "       s.state       AS state, "
-        "       s.task_id AS task_id "
-        "FROM session_tasks st "
-        "LEFT JOIN session_task_relations r ON r.id = st.relation_id "
-        "LEFT JOIN sessions s ON s.id = st.session_id "
-        "WHERE st.task_id = ? "
-        "ORDER BY st.updated_at DESC, st.session_id DESC",
-        (item_id,),
+        "SELECT * FROM ("
+        "  SELECT st.session_id AS session_id, "
+        "         st.created_at AS first_touch, "
+        "         st.updated_at AS last_touch, "
+        "         r.slug        AS rel_slug, "
+        "         r.label       AS rel_label, "
+        "         s.state       AS state, "
+        "         s.task_id     AS task_id "
+        "  FROM session_tasks st "
+        "  LEFT JOIN session_task_relations r ON r.id = st.relation_id "
+        "  LEFT JOIN sessions s ON s.id = st.session_id "
+        "  WHERE st.task_id = ? "
+        "  UNION ALL "
+        "  SELECT s.id AS session_id, "
+        "         s.started_at AS first_touch, "
+        "         COALESCE(s.last_activity, s.started_at) AS last_touch, "
+        "         NULL AS rel_slug, "
+        "         NULL AS rel_label, "
+        "         s.state AS state, "
+        "         s.task_id AS task_id "
+        "  FROM sessions s "
+        "  WHERE s.task_id = ? "
+        "    AND NOT EXISTS (SELECT 1 FROM session_tasks st2 "
+        "                    WHERE st2.session_id = s.id "
+        "                      AND st2.task_id = s.task_id) "
+        ") ORDER BY last_touch DESC, session_id DESC",
+        (item_id, item_id),
     )
     return [
         {
             "session_id": row["session_id"],
             "first_touch": row["first_touch"],
             "last_touch": row["last_touch"],
-            "rel_slug": row["rel_slug"],
-            "rel_label": row["rel_label"] or _UNCLASSIFIED_TOUCH_LABEL,
+            # The displayed relation: ownership overrides involvement.
+            "rel_slug": (
+                _CLAIMED_SLUG if row["task_id"] == item_id else row["rel_slug"]
+            ),
+            "rel_label": (
+                _CLAIMED_LABEL if row["task_id"] == item_id
+                else (row["rel_label"] or _UNCLASSIFIED_TOUCH_LABEL)
+            ),
+            # The raw session_tasks relation, unoverridden — see the docstring.
+            "touch_slug": row["rel_slug"],
             "state": row["state"] or _MISSING_SESSION_STATE,
             "task_id": row["task_id"],
         }
@@ -6727,13 +6871,19 @@ def _creating_session(touches: list[dict]) -> dict | None:
     """The touch that created the task, or None (E-1866).
 
     A task created inside a session gets a `surfaced` session_tasks row (per
-    ED-1497 the relation is set once, at capture time, so a later claim or edit
-    never overwrites it). Absent for a task filed outside any session and for
-    pre-E-1462 rows, whose relation is NULL — in both cases the Created: line
-    stays as it was. The earliest touch wins if more than one session ever
-    surfaced the task (an import replayed in a second session).
+    ED-1497 the relation is stamped at capture time; E-1696 made it upgrade-only,
+    so a later claim or edit still never rewrites it downward). Absent for a task
+    filed outside any session and for pre-E-1462 rows, whose relation is NULL —
+    in both cases the Created: line stays as it was. The earliest touch wins if
+    more than one session ever surfaced the task (an import replayed in a second
+    session).
+
+    Reads `touch_slug`, the RAW session_tasks relation, not the displayed one:
+    E-1967 renders a session bound to the task as `Claimed:` regardless, and
+    keying off that would strip a session of the credit for filing the task it
+    went on to claim.
     """
-    surfaced = [t for t in touches if t["rel_slug"] == "surfaced"]
+    surfaced = [t for t in touches if t["touch_slug"] == "surfaced"]
     if not surfaced:
         return None
     return min(surfaced, key=lambda t: t["first_touch"] or "")
@@ -6770,7 +6920,8 @@ def _echo_touched_by_section(touches: list[dict], min_width: int = 0) -> bool:
     heading, then one '- '-bulleted row per session, '- <Relation>:  ES-NNN
     (E-NNN) [state]'. The relation carries how the task entered that session's
     scope, the ES-NNN id feeds `session goto` directly, and the parenthesized
-    task is what the session is active on now. Emits nothing and returns False
+    task is what the session is bound to now. A session bound to THIS task reads
+    `Claimed:` (E-1967) — see _session_touches. Emits nothing and returns False
     when no session ever touched the task."""
     if not touches:
         return False

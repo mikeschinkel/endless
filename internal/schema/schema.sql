@@ -950,25 +950,40 @@ CREATE INDEX IF NOT EXISTS session_statuses_session_recent_idx
 -- Session-task relations (E-1462). SQL mirror of the sessiontaskrelation.Relation
 -- Go enum (ED-1506: const-in-code is the source of truth, the table exists for FK
 -- enforcement and queryability). Classifies HOW a task entered a session's scope:
--- goal (the claimed task), surfaced (created during the session), revisited
--- (pre-existing, touched but not claimed). The startup integrity check fails
--- closed on drift between this table and sessiontaskrelation.All(). Adding a
--- value = add an enum constant + add a seed row here. Seeds are idempotent.
+-- claimed (the session claimed it), surfaced (created during the session),
+-- revisited (pre-existing, touched but not claimed). The startup integrity check
+-- fails closed on drift between this table and sessiontaskrelation.All(). Adding
+-- a value = add an enum constant + add a seed row here.
+--
+-- RENAMING a value = edit the slug/label here; the upsert below reconciles it
+-- (the E-1659 pattern already used by task_types and session_kinds above). The
+-- enum is the source of truth, so the seed rewrites every existing row's
+-- slug/label to it on connect — INSERT OR IGNORE could only insert new ids, so
+-- a populated DB seeded under an old name would keep it and trip
+-- VerifyIntegrity. Because schema.SQL runs before the integrity check in
+-- monitor.DB(), a rename self-heals with no change file. Safe because E-1818
+-- opens a non-owned real DB schema-passive, so an unlanded binary can never
+-- apply this reconcile to a DB it does not own.
+--
+-- E-1967 renamed id 1 from `goal`/`Goal` to `claimed`/`Claimed`. That is a
+-- label change, not a data migration: relation ids are what session_tasks
+-- persists, and id 1 keeps every row it had.
 CREATE TABLE IF NOT EXISTS session_task_relations (
     id    INTEGER PRIMARY KEY,
     slug  TEXT UNIQUE NOT NULL,
     label TEXT NOT NULL
 );
 
-INSERT OR IGNORE INTO session_task_relations (id, slug, label) VALUES
-    (1, 'goal',       'Goal'),
+INSERT INTO session_task_relations (id, slug, label) VALUES
+    (1, 'claimed',    'Claimed'),
     (2, 'surfaced',   'Surfaced'),
     (3, 'revisited',  'Revisited'),
     -- E-1696. Ids are APPENDED, never renumbered: they are persisted in
     -- session_tasks.relation_id, so inserting in the middle would reclassify
     -- live rows. Prominence order is Relation.Rank() in Go, not the id.
     (4, 'referenced', 'Referenced'),
-    (5, 'queued',     'Queued');
+    (5, 'queued',     'Queued')
+ON CONFLICT(id) DO UPDATE SET slug = excluded.slug, label = excluded.label;
 
 -- Which sessions touched which tasks (E-1322). Query-speed projection of the
 -- events ledger. No FKs on session_id/task_id by design: rows must outlive their

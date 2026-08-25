@@ -40,7 +40,7 @@ def _add_session(
 
 
 # Relation ids mirror session_task_relations' seeded rows (ED-1497).
-_GOAL, _SURFACED, _REVISITED = 1, 2, 3
+_CLAIMED, _SURFACED, _REVISITED = 1, 2, 3
 
 
 def _touch(session_id: int, task_id: int, relation: int | None, when: str) -> None:
@@ -176,15 +176,99 @@ def test_touched_by_labels_a_null_relation_as_touched(seeded_project_at_cwd):
     assert "- Touched:  ES-696 [ended]" in out
 
 
-def test_touched_by_omits_parens_when_session_has_no_active_task(
+def test_touched_by_omits_parens_when_session_has_no_bound_task(
     seeded_project_at_cwd,
 ):
+    """A `claimed` session_tasks row whose session no longer points at the task
+    keeps its stored label — the Claimed: override reads `sessions.task_id`, and
+    this session has none."""
     tid = _add_task("Target")
     _add_session(696, state="ended", task_id=None)
-    _touch(696, tid, _GOAL, "2026-01-01T00:00:00")
+    _touch(696, tid, _CLAIMED, "2026-01-01T00:00:00")
 
     out = _show(tid, "--no-color")
-    assert "- Goal:  ES-696 [ended]" in out
+    assert "- Claimed:  ES-696 [ended]" in out
+
+
+# --------------------------------------------------------------------------
+# Claimed: is rendered from `sessions`, not from `session_tasks` (E-1967)
+# --------------------------------------------------------------------------
+
+
+def test_claimant_renders_claimed_over_a_surfaced_row(seeded_project_at_cwd):
+    """`session_tasks.relation_id` is stamped at first touch and only ever
+    upgraded, so a session that FILED a task and later claimed it kept reading
+    `Surfaced` forever. Ownership lives in `sessions.task_id`; the label follows
+    it."""
+    tid = _add_task("Target")
+    _add_session(1046, state="ended", task_id=tid)
+    _touch(1046, tid, _SURFACED, "2026-08-01T00:00:00")
+
+    out = _show(tid, "--no-color")
+    assert f"- Claimed:  ES-1046 (E-{tid}) [ended]" in out
+    assert "Surfaced" not in out
+
+
+def test_claimant_renders_claimed_over_a_revisited_row(seeded_project_at_cwd):
+    """The E-1859 case: the claiming session was recorded `Revisited`, which is
+    what made "which sessions claimed this" unanswerable."""
+    tid = _add_task("Target")
+    _add_session(1046, state="ended", task_id=tid)
+    _touch(1046, tid, _REVISITED, "2026-08-01T00:00:00")
+
+    out = _show(tid, "--no-color")
+    assert f"- Claimed:  ES-1046 (E-{tid}) [ended]" in out
+
+
+def test_claimant_with_no_session_tasks_row_is_still_listed(
+    seeded_project_at_cwd,
+):
+    """The touch is recorded from the event's ACTOR, so a claim driven from a
+    plain shell binds the session and records no touch at all. Reading only
+    `session_tasks` would leave that claimant invisible here while the spawn
+    guard refuses in its name."""
+    tid = _add_task("Target")
+    _add_session(1046, state="ended", task_id=tid)
+
+    out = _show(tid, "--no-color")
+    assert f"- Claimed:  ES-1046 (E-{tid}) [ended]" in out
+
+
+def test_a_claim_does_not_cost_the_session_credit_for_filing(
+    seeded_project_at_cwd,
+):
+    """Created: is derived from the `surfaced` touch, so the Claimed: override
+    must not erase the raw relation underneath it."""
+    tid = _add_task("Target")
+    _add_session(1046, state="ended", task_id=tid)
+    _touch(1046, tid, _SURFACED, "2026-08-01T00:00:00")
+
+    out = _show(tid, "--no-color")
+    assert f"by ES-1046 (E-{tid})" in out
+    assert "- Claimed:" in out
+
+
+def test_non_claimants_keep_their_own_labels(seeded_project_at_cwd):
+    tid = _add_task("Target")
+    other = _add_task("Another task")
+    _add_session(1046, state="ended", task_id=tid)
+    _add_session(994, state="idle", task_id=other)
+    _touch(1046, tid, _REVISITED, "2026-08-02T00:00:00")
+    _touch(994, tid, _REVISITED, "2026-08-01T00:00:00")
+
+    out = _show(tid, "--no-color")
+    assert "- Claimed:    ES-1046" in out
+    assert f"- Revisited:  ES-994 (E-{other}) [idle]" in out
+
+
+def test_json_and_llm_carry_the_claimed_relation(seeded_project_at_cwd):
+    tid = _add_task("Target")
+    _add_session(1046, state="ended", task_id=tid)
+    _touch(1046, tid, _REVISITED, "2026-08-01T00:00:00")
+
+    payload = json.loads(_show(tid, "--json"))
+    assert [t["relation"] for t in payload["touched_by"]] == ["claimed"]
+    assert f"touched_by=claimed ES-1046 (E-{tid}) [ended]" in _show(tid, "--llm")
 
 
 def test_touched_by_survives_a_deleted_session(seeded_project_at_cwd):

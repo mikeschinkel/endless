@@ -25,7 +25,7 @@ This module performs no DB access. Both verbs emit an event
 endless-go event -> events.Execute, per the "DB access in Go" policy. The
 Go executors own validation: unknown task ids are rejected there, the
 upgrade-only relation ladder decides what `add` actually stores, and
-`remove` refuses the session's own goal task.
+`remove` refuses the session's own claimed task.
 """
 
 import os

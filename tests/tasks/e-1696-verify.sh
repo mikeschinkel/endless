@@ -54,7 +54,7 @@ QUEUED_GLYPH="⊕"
 REFERENCED_GLYPH="·"
 
 # relation_id values (internal/schema/schema.sql, mirroring the Go enum).
-REL_GOAL=1
+REL_CLAIMED=1   # renamed from `goal` by E-1967
 REL_SURFACED=2
 REL_REVISITED=3
 REL_REFERENCED=4
@@ -285,15 +285,15 @@ test_upgrade_ladder() {
     assert_eq "referenced upgrades to queued" \
         "queued" "$(relation_of "${sess}" "${weak}")"
 
-    # goal → queued is a DOWNGRADE and must be refused. Under E-1462's set-once
-    # rule this direction was safe by accident; under the ladder it is safe by
-    # rule, and this is the check that tells the two apart.
-    seed_session_task "${sess}" "${strong}" "${REL_GOAL}"
+    # claimed → queued is a DOWNGRADE and must be refused. Under E-1462's
+    # set-once rule this direction was safe by accident; under the ladder it is
+    # safe by rule, and this is the check that tells the two apart.
+    seed_session_task "${sess}" "${strong}" "${REL_CLAIMED}"
     local out
     out=$(endless session task add "E-${strong}" --session-id "${sess}" 2>&1)
-    assert_eq "goal is never demoted by an add" \
-        "goal" "$(relation_of "${sess}" "${strong}")"
-    assert_contains "the no-op names the goal" "goal" "${out}"
+    assert_eq "a claim is never demoted by an add" \
+        "claimed" "$(relation_of "${sess}" "${strong}")"
+    assert_contains "the no-op names the claim" "already claimed" "${out}"
 
     # A pre-E-1462 NULL row must be healed by the next capture, not stranded.
     local historical
@@ -339,13 +339,13 @@ test_add_and_remove() {
         "${doomed}" "$(go_session_status --session "${sess}")"
 
     # Refusals and reported no-ops.
-    local goal_task
-    goal_task=$(num_id "$(add_task_get_id 'Verify e1696 the session goal')")
-    seed_session_task "${sess}" "${goal_task}" "${REL_GOAL}"
-    assert_cmd_fails "remove refuses the session's own goal" \
-        endless session task remove "E-${goal_task}" --session-id "${sess}"
-    assert_eq "the refused goal row survives" \
-        "goal" "$(relation_of "${sess}" "${goal_task}")"
+    local claimed_task
+    claimed_task=$(num_id "$(add_task_get_id 'Verify e1696 the session claim')")
+    seed_session_task "${sess}" "${claimed_task}" "${REL_CLAIMED}"
+    assert_cmd_fails "remove refuses the session's own claimed task" \
+        endless session task remove "E-${claimed_task}" --session-id "${sess}"
+    assert_eq "the refused claimed row survives" \
+        "claimed" "$(relation_of "${sess}" "${claimed_task}")"
 
     assert_cmd_fails "add rejects an id naming no task" \
         endless session task add "E-99999999" --session-id "${sess}"

@@ -57,7 +57,7 @@ func isReferenced(r monitor.SessionStatusRow) bool {
 }
 
 // prominence ranks a row for the equal-action tiebreak: 0 for decided work
-// (goal, queued), 1 for everything else.
+// (claimed, queued), 1 for everything else.
 //
 // "Everything else" deliberately includes rows with NO relation at all — the
 // read-time children, dependents and upstream blockers, which have no
@@ -69,7 +69,7 @@ func isReferenced(r monitor.SessionStatusRow) bool {
 // referenced never reaches this function: it is sunk by the primary sort key.
 func prominence(r monitor.SessionStatusRow) int {
 	switch r.Relation {
-	case sessiontaskrelation.RelationGoal, sessiontaskrelation.RelationQueued:
+	case sessiontaskrelation.RelationClaimed, sessiontaskrelation.RelationQueued:
 		return 0
 	default:
 		return 1

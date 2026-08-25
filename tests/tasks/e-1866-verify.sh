@@ -155,7 +155,7 @@ INSERT INTO tasks (id, project_id, title, status, type_id, phase, created_at, up
 INSERT INTO sessions (id, session_id, project_id, state, active_task_id, started_at) VALUES
   (${S_CREATOR},   'e1866-probe-${S_CREATOR}',   ${PROJ}, 'idle',    ${CREATOR_TASK}, '2026-08-04T04:00:00'),
   (${S_REVISITOR}, 'e1866-probe-${S_REVISITOR}', ${PROJ}, 'working', NULL,            '2026-08-04T04:00:00');
--- relation ids mirror session_task_relations: 1=goal 2=surfaced 3=revisited.
+-- relation ids mirror session_task_relations: 1=claimed 2=surfaced 3=revisited.
 -- The ${S_GONE} row has NO sessions row on purpose: session_tasks carries no FK
 -- so a touch outlives its session, and NULL relation_id is a pre-E-1462 row.
 INSERT INTO session_tasks (session_id, task_id, relation_id, created_at, updated_at) VALUES

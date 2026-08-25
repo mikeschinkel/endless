@@ -430,19 +430,20 @@ func SessionStatusRowsForSession(sessionID int64, includeAll bool) ([]SessionSta
 		allFlag = 1
 	}
 
-	// Every relation EXCEPT goal (1). Goal is excluded because a goal-bearing
-	// session resolves via SessionStatusRows, so a goal row reaching here would
-	// mean the anchor already took the other path. queued (5) and referenced (4)
-	// are included on their merits: `session task add` promotes work the session
-	// has decided on but not touched, and that is precisely the case this no-goal
-	// view exists to show. The set is built from the enum rather than written as
-	// a literal so adding a relation cannot silently omit it here (E-1696).
+	// Every relation EXCEPT claimed (1). It is excluded because a session that
+	// claimed a task resolves via SessionStatusRows, so a claimed row reaching
+	// here would mean the anchor already took the other path. queued (5) and
+	// referenced (4) are included on their merits: `session task add` promotes
+	// work the session has decided on but not touched, and that is precisely the
+	// case this unclaimed view exists to show. The set is built from the enum
+	// rather than written as a literal so adding a relation cannot silently omit
+	// it here (E-1696).
 	q := `
 WITH base AS (
   SELECT t.id, t.project_id, t.title, t.status, t.phase, t.text, t.type_id
     FROM session_tasks st JOIN live_tasks t ON t.id = st.task_id
    WHERE st.session_id = ?
-     AND st.relation_id IN (` + nonGoalRelationIDs + `)
+     AND st.relation_id IN (` + nonClaimedRelationIDs + `)
 ),
 enr AS (
   SELECT b.id, b.project_id, b.title, b.status, b.phase,

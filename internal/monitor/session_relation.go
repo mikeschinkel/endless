@@ -1,7 +1,7 @@
 package monitor
 
 // Per-session task relation (E-1696). How a task entered ONE session's scope —
-// goal, queued, surfaced, revisited or referenced — read off that session's own
+// claimed, queued, surfaced, revisited or referenced — read off that session's own
 // session_tasks row and layered onto the viewer-agnostic row set, exactly as
 // E-1914's hides are.
 //
@@ -18,21 +18,21 @@ import (
 	"github.com/mikeschinkel/endless/internal/sessiontaskrelation"
 )
 
-// nonGoalRelationIDs is the SQL id list for every relation EXCEPT goal, built
+// nonClaimedRelationIDs is the SQL id list for every relation EXCEPT claimed, built
 // from the Go enum so a newly added relation is included automatically. Used by
-// SessionStatusRowsForSession, the no-goal view: goal rows are excluded there
-// because a goal-bearing session resolves through the focal path instead.
+// SessionStatusRowsForSession, the no-goal view: claimed rows are excluded there
+// because a session that claimed a task resolves through the focal path instead.
 //
 // Derived rather than written as a literal because the previous literal — the
 // `IN (2, 3)` this replaced — silently meant "surfaced and revisited ONLY", so
 // adding `queued` would have left `session task add` promoting tasks into a view
 // that refused to show them.
-var nonGoalRelationIDs = buildNonGoalRelationIDs()
+var nonClaimedRelationIDs = buildNonClaimedRelationIDs()
 
-func buildNonGoalRelationIDs() string {
+func buildNonClaimedRelationIDs() string {
 	var ids []string
 	for _, rel := range sessiontaskrelation.All() {
-		if rel == sessiontaskrelation.RelationGoal {
+		if rel == sessiontaskrelation.RelationClaimed {
 			continue
 		}
 		ids = append(ids, strconv.Itoa(int(rel)))

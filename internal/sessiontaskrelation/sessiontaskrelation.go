@@ -6,7 +6,7 @@
 //
 // Relation classifies HOW a task entered a session's scope, captured by the
 // task-mutation executors (E-1462) and by the session-task verbs (E-1696):
-//   - goal:       the session's claimed task (task.claimed)
+//   - claimed:    the session's claimed task (task.claimed)
 //   - surfaced:   created during the session (task.created / task.imported)
 //   - queued:     explicitly promoted to session work (`session task add`)
 //   - revisited:  a pre-existing task the session touched but did not claim
@@ -15,6 +15,12 @@
 //     produces it yet (that gate needs the gitignored machine-user ledger E-1673
 //     routes to, so it ships separately). Defined here now so the precedence
 //     ladder and the display tier land against a stable enum.
+//
+// RENAMING a value = edit the slug/label here and in the schema.sql seed, which
+// upserts the change onto existing rows on connect (the E-1659 pattern). Ids are
+// persisted, slugs are not, so a rename is a label change and never a data
+// migration. E-1967 renamed id 1 from `goal`/`Goal` to `claimed`/`Claimed`:
+// "Goal:" cannot be reasoned about, "Claimed:" says what happened.
 //
 // Adding a value = add an enum constant here + add a seed row in
 // internal/schema/schema.sql + add a row in the per-ticket migration that
@@ -31,7 +37,7 @@ import (
 type Relation int
 
 const (
-	RelationGoal      Relation = 1
+	RelationClaimed   Relation = 1
 	RelationSurfaced  Relation = 2
 	RelationRevisited Relation = 3
 	// RelationReferenced and RelationQueued are APPENDED (E-1696), never
@@ -45,8 +51,8 @@ const (
 // String returns the lowercase machine slug (matches session_task_relations.slug).
 func (r Relation) String() string {
 	switch r {
-	case RelationGoal:
-		return "goal"
+	case RelationClaimed:
+		return "claimed"
 	case RelationSurfaced:
 		return "surfaced"
 	case RelationRevisited:
@@ -63,8 +69,8 @@ func (r Relation) String() string {
 // Label returns the human display string (matches session_task_relations.label).
 func (r Relation) Label() string {
 	switch r {
-	case RelationGoal:
-		return "Goal"
+	case RelationClaimed:
+		return "Claimed"
 	case RelationSurfaced:
 		return "Surfaced"
 	case RelationRevisited:
@@ -82,8 +88,8 @@ func (r Relation) Label() string {
 // error for unknown slugs.
 func Parse(s string) (Relation, error) {
 	switch s {
-	case "goal":
-		return RelationGoal, nil
+	case "claimed":
+		return RelationClaimed, nil
 	case "surfaced":
 		return RelationSurfaced, nil
 	case "revisited":
@@ -95,7 +101,7 @@ func Parse(s string) (Relation, error) {
 	default:
 		return 0, fmt.Errorf(
 			"sessiontaskrelation: invalid relation %q "+
-				"(valid: goal, surfaced, queued, revisited, referenced)", s,
+				"(valid: claimed, surfaced, queued, revisited, referenced)", s,
 		)
 	}
 }
@@ -110,13 +116,13 @@ func Validate(s string) error {
 // callers that need to enumerate the enum.
 func All() []Relation {
 	return []Relation{
-		RelationGoal, RelationSurfaced, RelationRevisited,
+		RelationClaimed, RelationSurfaced, RelationRevisited,
 		RelationReferenced, RelationQueued,
 	}
 }
 
 // Rank orders the relations from strongest claim on the session to weakest:
-// goal < queued < surfaced < revisited < referenced. LOWER rank = STRONGER.
+// claimed < queued < surfaced < revisited < referenced. LOWER rank = STRONGER.
 //
 // One ladder serves two jobs, deliberately, because they are the same judgment:
 //
@@ -125,12 +131,12 @@ func All() []Relation {
 //     This replaced E-1462's set-once rule, which was correct only while
 //     `referenced` did not exist: the documented happy path is `task show <id>`
 //     THEN `task claim <id>`, so under set-once the read gate would stamp every
-//     session's own goal task `referenced` forever. Set-once also had the
+//     session's own claimed task `referenced` forever. Set-once also had the
 //     inverse bug already — claim-then-edit was fine, but create-then-claim
-//     left a session's goal reading `surfaced`.
+//     left a session's claimed task reading `surfaced`.
 //
 //  2. DISPLAY TIER (E-1462's Extension). `session status` ranks equally
-//     actionable rows by this order, so decided work (goal/queued) sits above
+//     actionable rows by this order, so decided work (claimed/queued) sits above
 //     incidental work (surfaced/revisited) and read-only relevance
 //     (`referenced`) sinks to the bottom.
 //
@@ -139,7 +145,7 @@ func All() []Relation {
 // outranking real work.
 func (r Relation) Rank() int {
 	switch r {
-	case RelationGoal:
+	case RelationClaimed:
 		return 0
 	case RelationQueued:
 		return 1

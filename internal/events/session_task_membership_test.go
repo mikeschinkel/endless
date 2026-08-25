@@ -85,16 +85,16 @@ func TestSessionTasksQueued_AddsAndPromotes(t *testing.T) {
 	}
 }
 
-// TestSessionTasksQueued_LeavesGoalAlone pins that queuing the session's own
+// TestSessionTasksQueued_LeavesClaimedAlone pins that queuing the session's own
 // claimed task does not demote it. The upgrade-only ladder is what enforces
 // this, so the executor needs no special case — but the behavior is load-bearing
-// and would be invisible until someone lost a goal classification.
-func TestSessionTasksQueued_LeavesGoalAlone(t *testing.T) {
+// and would be invisible until someone lost a `claimed` classification.
+func TestSessionTasksQueued_LeavesClaimedAlone(t *testing.T) {
 	db := newSessionTasksTestDB(t)
 	seedSession(t, db, 42)
 	seedLiveTask(t, db, 100)
-	if err := upsertSessionTask(db, "42", 100, sessiontaskrelation.RelationGoal); err != nil {
-		t.Fatalf("seed goal: %v", err)
+	if err := upsertSessionTask(db, "42", 100, sessiontaskrelation.RelationClaimed); err != nil {
+		t.Fatalf("seed claim: %v", err)
 	}
 
 	res, err := dispatch(db, membershipEvent(
@@ -103,10 +103,10 @@ func TestSessionTasksQueued_LeavesGoalAlone(t *testing.T) {
 	if err != nil {
 		t.Fatalf("dispatch queued: %v", err)
 	}
-	if got := sessionTaskRelation(t, db, 42, 100); got != "goal" {
-		t.Errorf("goal was demoted: relation = %q, want goal", got)
+	if got := sessionTaskRelation(t, db, 42, 100); got != "claimed" {
+		t.Errorf("claim was demoted: relation = %q, want claimed", got)
 	}
-	if res == nil || !strings.Contains(res.Markdown, "already this session's goal") {
+	if res == nil || !strings.Contains(res.Markdown, "already claimed by this session") {
 		t.Errorf("expected the no-op to be reported, got %q", markdownOf(res))
 	}
 }
@@ -170,18 +170,18 @@ func TestSessionTasksRemoved_DropsRowAndHide(t *testing.T) {
 	}
 }
 
-// TestSessionTasksRemoved_RefusesGoal pins the refusal AND its atomicity: naming
-// the goal fails the whole call, so `session task remove E-100 E-101` cannot
-// half-succeed. The goal row is not a false positive — the session claimed that
+// TestSessionTasksRemoved_RefusesClaimed pins the refusal AND its atomicity: naming
+// the claimed task fails the whole call, so `session task remove E-100 E-101` cannot
+// half-succeed. The claimed row is not a false positive — the session claimed that
 // task — and the next task event would recreate it anyway.
-func TestSessionTasksRemoved_RefusesGoal(t *testing.T) {
+func TestSessionTasksRemoved_RefusesClaimed(t *testing.T) {
 	db := newSessionTasksTestDB(t)
 	seedSession(t, db, 42)
 	for _, id := range []int64{100, 101} {
 		seedLiveTask(t, db, id)
 	}
-	if err := upsertSessionTask(db, "42", 100, sessiontaskrelation.RelationGoal); err != nil {
-		t.Fatalf("seed goal: %v", err)
+	if err := upsertSessionTask(db, "42", 100, sessiontaskrelation.RelationClaimed); err != nil {
+		t.Fatalf("seed claim: %v", err)
 	}
 	if err := upsertSessionTask(db, "42", 101, sessiontaskrelation.RelationRevisited); err != nil {
 		t.Fatalf("seed revisited: %v", err)
@@ -194,7 +194,7 @@ func TestSessionTasksRemoved_RefusesGoal(t *testing.T) {
 		t.Fatalf("expected a refusal naming E-100, got %v", err)
 	}
 	if !hasSessionTask(t, db, 42, 101) {
-		t.Error("the non-goal row was removed despite the call failing")
+		t.Error("the unclaimed row was removed despite the call failing")
 	}
 }
 

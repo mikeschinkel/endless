@@ -182,7 +182,7 @@ func taskClaimedEvent(t *testing.T, taskID int64, actor Actor) *Event {
 
 // TestSessionTasks_RelationClassification verifies that the relation_id column
 // is set from the triggering event kind at capture time (E-1462): task.created
-// → surfaced, task.claimed → goal, an incidental task.fields_updated → revisited.
+// → surfaced, task.claimed → claimed, an incidental task.fields_updated → revisited.
 func TestSessionTasks_RelationClassification(t *testing.T) {
 	db := newSessionTasksTestDB(t)
 	actor := Actor{Kind: ActorSession, ID: "s1", SessionID: "42"}
@@ -197,8 +197,8 @@ func TestSessionTasks_RelationClassification(t *testing.T) {
 	if _, err := dispatch(db, taskClaimedEvent(t, 101, actor), nil); err != nil {
 		t.Fatalf("dispatch claim: %v", err)
 	}
-	if got := sessionTaskRelation(t, db, 42, 101); got != "goal" {
-		t.Errorf("claimed task: relation = %q, want goal", got)
+	if got := sessionTaskRelation(t, db, 42, 101); got != "claimed" {
+		t.Errorf("claimed task: relation = %q, want claimed", got)
 	}
 
 	if _, err := dispatch(db, taskFieldsUpdatedEvent(t, 102, actor), nil); err != nil {
@@ -231,12 +231,12 @@ func TestSessionTasks_RelationNeverDowngrades(t *testing.T) {
 // TestSessionTasks_RelationUpgrades is the half E-1696 ADDS: a stronger later
 // capture replaces a weaker stored relation. This is the bug set-once had.
 //
-// The load-bearing case is referenced→goal. `endless guide`'s happy path is
+// The load-bearing case is referenced→claimed. `endless guide`'s happy path is
 // `task show <id>` THEN `task claim <id>`, so under set-once the read gate would
-// pin every session's own goal task at `referenced` forever — the read arrives
-// first and the claim could never correct it. surfaced→goal is the same defect
+// pin every session's own claimed task at `referenced` forever — the read arrives
+// first and the claim could never correct it. surfaced→claimed is the same defect
 // set-once already shipped with: a task filed and then claimed in one session
-// read `surfaced`, not `goal`.
+// read `surfaced`, not `claimed`.
 //
 // upsertSessionTask is called directly for the `referenced` rows because no
 // emitter produces that relation yet (the read gate ships with the machine-user
@@ -245,7 +245,7 @@ func TestSessionTasks_RelationUpgrades(t *testing.T) {
 	db := newSessionTasksTestDB(t)
 	actor := Actor{Kind: ActorSession, ID: "s1", SessionID: "42"}
 
-	// referenced → goal (the read-before-claim happy path).
+	// referenced → claimed (the read-before-claim happy path).
 	if err := upsertSessionTask(db, "42", 100, sessiontaskrelation.RelationReferenced); err != nil {
 		t.Fatalf("seed referenced: %v", err)
 	}
@@ -255,8 +255,8 @@ func TestSessionTasks_RelationUpgrades(t *testing.T) {
 	if _, err := dispatch(db, taskClaimedEvent(t, 100, actor), nil); err != nil {
 		t.Fatalf("dispatch claim: %v", err)
 	}
-	if got := sessionTaskRelation(t, db, 42, 100); got != "goal" {
-		t.Errorf("read-then-claim: relation = %q, want goal", got)
+	if got := sessionTaskRelation(t, db, 42, 100); got != "claimed" {
+		t.Errorf("read-then-claim: relation = %q, want claimed", got)
 	}
 
 	// referenced → revisited (a read the session later acts on).
@@ -270,15 +270,15 @@ func TestSessionTasks_RelationUpgrades(t *testing.T) {
 		t.Errorf("read-then-edit: relation = %q, want revisited", got)
 	}
 
-	// surfaced → goal (file it, then claim it).
+	// surfaced → claimed (file it, then claim it).
 	if _, err := dispatch(db, taskCreatedEvent(t, 102, actor), nil); err != nil {
 		t.Fatalf("dispatch create: %v", err)
 	}
 	if _, err := dispatch(db, taskClaimedEvent(t, 102, actor), nil); err != nil {
 		t.Fatalf("dispatch claim: %v", err)
 	}
-	if got := sessionTaskRelation(t, db, 42, 102); got != "goal" {
-		t.Errorf("create-then-claim: relation = %q, want goal", got)
+	if got := sessionTaskRelation(t, db, 42, 102); got != "claimed" {
+		t.Errorf("create-then-claim: relation = %q, want claimed", got)
 	}
 }
 

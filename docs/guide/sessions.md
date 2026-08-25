@@ -142,10 +142,10 @@ Capture is automatic: Endless records a row for every task your session claims, 
 
 | Relation     | How the task got here                                    |
 |--------------|----------------------------------------------------------|
-| `goal`       | you claimed it                                           |
+| `claimed`    | you claimed it                                           |
 | `queued`     | you added it with `session task add` — decided work      |
 | `surfaced`   | you filed it during this session                         |
-| `revisited`  | you edited it, but it isn't your goal                    |
+| `revisited`  | you edited it, but you didn't claim it                   |
 | `referenced` | you only read it (reserved; no capture emits it yet)     |
 
 Two verbs cover what automation can't reach:
@@ -155,12 +155,12 @@ endless session task add E-1832 E-1902   # decided work you haven't touched yet
 endless session task remove E-1832       # a capture that shouldn't have happened
 ```
 
-- **`add`** enrolls a task as `queued`. Nothing has happened to it, so no automatic capture would ever record it — this is the only way it gets on your list. Promotion is upgrade-only: a task you merely read or edited is strengthened, and your own claimed task stays `goal` (reported, not an error).
-- **`remove`** deletes the association — the touch, its relation, and its `session order` position — so `task show`'s "Touched by:" stops reporting it, and any hide on the same pair is cleared with it. There is no undo beyond touching the task again. Refused on your own goal task; release the task instead.
+- **`add`** enrolls a task as `queued`. Nothing has happened to it, so no automatic capture would ever record it — this is the only way it gets on your list. Promotion is upgrade-only: a task you merely read or edited is strengthened, and your own claimed task stays `claimed` (reported, not an error).
+- **`remove`** deletes the association — the touch, its relation, and its `session order` position — so `task show`'s "Touched by:" stops reporting it, and any hide on the same pair is cleared with it. There is no undo beyond touching the task again. Refused on your own claimed task: a claim cannot be dropped.
 
 **`remove` is not the inverse of `hide --task`**, and the difference is the whole point: hide suppresses a row while *keeping* the association, so the touch that really happened stays on the record. Hide is for a capture that is real but noisy; remove is for one that was simply wrong.
 
-`session status` tiers rows by relation. Decided work (`goal` / `queued`, marked ⊕) leads among equally actionable rows; `referenced` rows (marked ·) sink below everything and render dimmed, so reads can never crowd out work. Relation never outranks actionability, though — a `queued` task parked in `later` still sits below the task you're actually working.
+`session status` tiers rows by relation. Decided work (`claimed` / `queued`, marked ⊕) leads among equally actionable rows; `referenced` rows (marked ·) sink below everything and render dimmed, so reads can never crowd out work. Relation never outranks actionability, though — a `queued` task parked in `later` still sits below the task you're actually working.
 
 ## Interactive, user-run session commands
 

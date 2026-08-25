@@ -105,7 +105,7 @@ def test_add_promotes_a_weaker_existing_relation():
     assert rows[0]["n"] == 1
 
 
-def test_add_leaves_the_session_goal_alone():
+def test_add_leaves_the_session_claim_alone():
     """Queuing your own claimed task is redundant, not wrong — the ladder
     refuses the downgrade and the CLI reports it rather than erroring."""
     _seed()
@@ -118,8 +118,8 @@ def test_add_leaves_the_session_goal_alone():
 
     result = _run("session", "task", "add", "E-500")
     assert result.exit_code == 0, result.output
-    assert _relation(500) == "goal"
-    assert "goal" in result.output
+    assert _relation(500) == "claimed"
+    assert "already claimed by this session" in result.output
 
 
 def test_add_rejects_an_unknown_task():
@@ -180,7 +180,7 @@ def test_remove_clears_a_hide_on_the_same_pair():
     ) == []
 
 
-def test_remove_refuses_the_session_goal():
+def test_remove_refuses_the_session_claim():
     """Not a false positive by construction: the session claimed that task."""
     _seed()
     db.execute(
@@ -192,7 +192,7 @@ def test_remove_refuses_the_session_goal():
 
     result = _run("session", "task", "remove", "E-500")
     assert result.exit_code != 0
-    assert _relation(500) == "goal"
+    assert _relation(500) == "claimed"
 
 
 def test_remove_of_an_untouched_task_is_a_reported_no_op():

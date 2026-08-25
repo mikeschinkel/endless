@@ -1425,7 +1425,7 @@ def session_task_cmd():
 
     `session_tasks` capture is otherwise automatic: the event executors record
     a row for every task a session claims, files or edits, classified by how it
-    entered scope (goal / surfaced / revisited). These verbs cover the two
+    entered scope (claimed / surfaced / revisited). These verbs cover the two
     cases automation cannot reach — work you have decided on but not yet
     touched, and a capture that should not have happened.
 
@@ -1455,7 +1455,7 @@ def session_task_add(task_refs, session_id_override):
 
     Promotion is upgrade-only: queuing a task this session merely read or
     edited strengthens its relation, and queuing your own claimed task leaves
-    it as the goal (reported, not an error). Adding the same task twice is a
+    it as `claimed` (reported, not an error). Adding the same task twice is a
     no-op.
 
     Example:
@@ -1483,8 +1483,9 @@ def session_task_remove(task_refs, session_id_override):
     real but noisy, remove is for one that was simply wrong. There is no undo
     beyond touching the task again.
 
-    Refused on this session's own goal task — release the task instead. Naming
-    a task this session never touched is a reported no-op, not an error.
+    Refused on this session's own claimed task: a claim cannot be dropped
+    (ED-1560). Naming a task this session never touched is a reported no-op,
+    not an error.
 
     Example:
 

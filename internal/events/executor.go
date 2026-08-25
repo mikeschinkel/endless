@@ -956,8 +956,8 @@ func execTaskClaimed(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 	}
 	logSessionClaim(res, snap, taskID)
 	if shouldRecordSessionTouch(evt) {
-		// Claimed → the session's goal task.
-		if err := upsertSessionTask(db, evt.Actor.SessionID, mustParseInt64(evt.Entity.ID), sessiontaskrelation.RelationGoal); err != nil {
+		// Claimed → the session's claimed task.
+		if err := upsertSessionTask(db, evt.Actor.SessionID, mustParseInt64(evt.Entity.ID), sessiontaskrelation.RelationClaimed); err != nil {
 			return nil, fmt.Errorf("events: %w", err)
 		}
 	}
@@ -996,9 +996,9 @@ func execTaskLanded(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 		return nil, fmt.Errorf("events: insert task_landing: %w", err)
 	}
 	if shouldRecordSessionTouch(evt) {
-		// Landing is a touch; goal is set only by the claim event, so a land
+		// Landing is a touch; `claimed` is set only by the claim event, so a land
 		// that did not claim in-session counts as a revisit (set-once leaves a
-		// prior goal/surfaced classification intact).
+		// prior claimed/surfaced classification intact).
 		if err := upsertSessionTask(db, evt.Actor.SessionID, taskID, sessiontaskrelation.RelationRevisited); err != nil {
 			return nil, fmt.Errorf("events: %w", err)
 		}
@@ -1009,12 +1009,19 @@ func execTaskLanded(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 // execTaskReleased clears a session's task binding.
 //
 // E-1968 / ED-1560 left NO live producer of `task.released`: `task reopen`
-// stopped emitting it, and `task release` is disabled. This executor stays
-// anyway because the ledger is the durable record and the database is a
-// rebuildable projection of it — historical `task.released` entries must still
-// replay to reproduce the state they produced. Do not treat it as a supported
-// path for new writes. (E-1969's write-once trigger has to exempt or migrate
-// these historical entries, or a rebuild will abort on the first one.)
+// stopped emitting it, and `task release` is disabled. Do not treat it as a
+// supported path for new writes.
+//
+// It is also unreachable for historical ones, and the reason is worth stating
+// because an earlier revision of this comment got it backwards. `sessions` is
+// machine-local runtime state, NOT a projection of the ledger: projector.go has
+// cases for task and decision events only, and none for `task.claimed` or
+// `task.released`. A `rebuild-db` therefore never replays a session bind or
+// release, never reaches this executor, and never meets E-1969's write-once
+// trigger here. Nothing had to be exempted or migrated for that trigger to
+// land, and E-1967 restores the bindings these releases destroyed without any
+// fear that a rebuild will destroy them again. The function survives as the
+// executor for a kind the dispatcher still routes, not as a replay path.
 func execTaskReleased(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 	var p TaskReleasedPayload
 	if err := json.Unmarshal(evt.Payload, &p); err != nil {
@@ -1144,7 +1151,7 @@ func execTaskDepDeleted(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 
 // recordDepTouch enrolls both relation endpoints in session_tasks as
 // 'revisited' when the actor carries a session. session_tasks is set-once per
-// relation strength, so a task already enrolled as goal/surfaced keeps its
+// relation strength, so a task already enrolled as claimed/surfaced keeps its
 // stronger classification (upsertSessionTask handles that).
 func recordDepTouch(db dbQuerier, evt *Event, sourceID, targetID int64) error {
 	if !shouldRecordSessionTouch(evt) {

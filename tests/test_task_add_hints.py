@@ -231,7 +231,7 @@ def test_root_cause_ignores_non_surfaced_touches(project, capsys):
     db.execute(
         "INSERT INTO session_tasks (session_id, task_id, created_at, "
         "updated_at, relation_id) VALUES (1, 2230, '2026-08-01T00:00:00', "
-        "'2026-08-01T00:00:00', 1)"  # 1 = 'goal'
+        "'2026-08-01T00:00:00', 1)"  # 1 = 'claimed'
     )
     _insert_surfaced(1, 2231)
 

@@ -12,7 +12,7 @@ import (
 
 func TestParse_AcceptsKnownSlugs(t *testing.T) {
 	cases := map[string]sessiontaskrelation.Relation{
-		"goal":       sessiontaskrelation.RelationGoal,
+		"claimed":    sessiontaskrelation.RelationClaimed,
 		"surfaced":   sessiontaskrelation.RelationSurfaced,
 		"revisited":  sessiontaskrelation.RelationRevisited,
 		"referenced": sessiontaskrelation.RelationReferenced,
@@ -31,7 +31,7 @@ func TestParse_AcceptsKnownSlugs(t *testing.T) {
 }
 
 func TestParse_RejectsUnknown(t *testing.T) {
-	for _, slug := range []string{"", "Goal", "GOAL", "Referenced", "QUEUED", "read"} {
+	for _, slug := range []string{"", "goal", "Claimed", "CLAIMED", "Referenced", "QUEUED", "read"} {
 		_, err := sessiontaskrelation.Parse(slug)
 		if err == nil {
 			t.Errorf("Parse(%q) accepted invalid value", slug)
@@ -79,7 +79,7 @@ func newSeededDB(t *testing.T) *sql.DB {
 func seedAll(t *testing.T, db *sql.DB) {
 	t.Helper()
 	if _, err := db.Exec(`INSERT INTO session_task_relations (id, slug, label) VALUES
-		(1, 'goal', 'Goal'), (2, 'surfaced', 'Surfaced'), (3, 'revisited', 'Revisited'),
+		(1, 'claimed', 'Claimed'), (2, 'surfaced', 'Surfaced'), (3, 'revisited', 'Revisited'),
 		(4, 'referenced', 'Referenced'), (5, 'queued', 'Queued')`); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
@@ -103,7 +103,7 @@ func TestVerifyIntegrity_MissingEnumRow(t *testing.T) {
 
 func TestVerifyIntegrity_SlugMismatch(t *testing.T) {
 	db := newSeededDB(t)
-	if _, err := db.Exec(`INSERT INTO session_task_relations VALUES (1, 'wrong', 'Goal'), (2, 'surfaced', 'Surfaced'), (3, 'revisited', 'Revisited'), (4, 'referenced', 'Referenced'), (5, 'queued', 'Queued')`); err != nil {
+	if _, err := db.Exec(`INSERT INTO session_task_relations VALUES (1, 'wrong', 'Claimed'), (2, 'surfaced', 'Surfaced'), (3, 'revisited', 'Revisited'), (4, 'referenced', 'Referenced'), (5, 'queued', 'Queued')`); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 	err := sessiontaskrelation.VerifyIntegrity(db)
@@ -114,7 +114,7 @@ func TestVerifyIntegrity_SlugMismatch(t *testing.T) {
 
 func TestVerifyIntegrity_LabelMismatch(t *testing.T) {
 	db := newSeededDB(t)
-	if _, err := db.Exec(`INSERT INTO session_task_relations VALUES (1, 'goal', 'Wrong'), (2, 'surfaced', 'Surfaced'), (3, 'revisited', 'Revisited'), (4, 'referenced', 'Referenced'), (5, 'queued', 'Queued')`); err != nil {
+	if _, err := db.Exec(`INSERT INTO session_task_relations VALUES (1, 'claimed', 'Wrong'), (2, 'surfaced', 'Surfaced'), (3, 'revisited', 'Revisited'), (4, 'referenced', 'Referenced'), (5, 'queued', 'Queued')`); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 	err := sessiontaskrelation.VerifyIntegrity(db)
@@ -135,7 +135,7 @@ func TestVerifyIntegrity_UnknownTableRow(t *testing.T) {
 	}
 }
 
-// TestRank_IsStrictTotalOrder pins the ladder E-1696 introduced: goal < queued <
+// TestRank_IsStrictTotalOrder pins the ladder E-1696 introduced: claimed < queued <
 // surfaced < revisited < referenced, with no two relations sharing a rank.
 //
 // Ties are the failure this guards. Rank drives BOTH the upsert's upgrade test
@@ -144,7 +144,7 @@ func TestVerifyIntegrity_UnknownTableRow(t *testing.T) {
 // sticks) while looking perfectly correct in every single-relation test.
 func TestRank_IsStrictTotalOrder(t *testing.T) {
 	want := []sessiontaskrelation.Relation{
-		sessiontaskrelation.RelationGoal,
+		sessiontaskrelation.RelationClaimed,
 		sessiontaskrelation.RelationQueued,
 		sessiontaskrelation.RelationSurfaced,
 		sessiontaskrelation.RelationRevisited,

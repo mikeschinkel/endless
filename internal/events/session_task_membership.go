@@ -39,9 +39,9 @@ import (
 //
 //   - Queuing a task already captured as `referenced`, `revisited` or `surfaced`
 //     upgrades it — `queued` outranks all three.
-//   - Queuing the session's OWN goal leaves it `goal`; the ladder refuses the
-//     downgrade. That is reported as a no-op rather than an error, because
-//     asking to work on what you already claimed is redundant, not wrong.
+//   - Queuing the session's OWN claimed task leaves it `claimed`; the ladder
+//     refuses the downgrade. That is reported as a no-op rather than an error,
+//     because asking to work on what you already claimed is redundant, not wrong.
 //
 // An id naming no live task is a hard error for the whole call (the open
 // transaction rolls back): it is a typo, and silently queuing nothing would hide
@@ -55,7 +55,7 @@ func execSessionTasksQueued(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 		return nil, err
 	}
 
-	var queued, alreadyGoal []int64
+	var queued, alreadyClaimed []int64
 	for _, taskID := range taskIDs {
 		// Read the stored relation BEFORE the upsert so the report can tell
 		// "promoted" from "left alone". The ladder decides the outcome either
@@ -64,8 +64,8 @@ func execSessionTasksQueued(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 		if err != nil {
 			return nil, err
 		}
-		if prior == sessiontaskrelation.RelationGoal {
-			alreadyGoal = append(alreadyGoal, taskID)
+		if prior == sessiontaskrelation.RelationClaimed {
+			alreadyClaimed = append(alreadyClaimed, taskID)
 			continue
 		}
 		if err := upsertSessionTask(
@@ -77,17 +77,19 @@ func execSessionTasksQueued(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 		queued = append(queued, taskID)
 	}
 
-	return &ExecuteResult{Markdown: renderQueued(queued, alreadyGoal)}, nil
+	return &ExecuteResult{Markdown: renderQueued(queued, alreadyClaimed)}, nil
 }
 
 // execSessionTasksRemoved handles KindSessionTasksRemoved: drop each named
 // task's session_tasks row for the emitting session.
 //
-// Removing the session's own GOAL is refused outright. The goal row is not a
-// false positive by construction — the session claimed that task — and the next
-// task event would recreate it anyway, so accepting the request would be a lie
-// about what happened. Refusing the whole call (rather than skipping the id)
-// keeps `session task remove E-1 E-2` from half-succeeding.
+// Removing the session's own CLAIMED task is refused outright. That row is not
+// a false positive by construction — the session claimed that task — and the
+// next task event would recreate it anyway, so accepting the request would be a
+// lie about what happened. Refusing the whole call (rather than skipping the id)
+// keeps `session task remove E-1 E-2` from half-succeeding. There is no escape
+// hatch and none to offer: ED-1560 makes sessions.task_id write-once and E-1968
+// disabled `task release`, so a claim is not something a session can undo.
 //
 // Removing a task the session never touched is a NO-OP, not an error, matching
 // `session unhide --task`. It is reported so a typo still surfaces, but it does
@@ -107,24 +109,24 @@ func execSessionTasksRemoved(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 		return nil, err
 	}
 
-	// Reject the whole call before mutating anything if any id is the goal.
-	var goals []string
+	// Reject the whole call before mutating anything if any id is claimed.
+	var claimed []string
 	for _, taskID := range taskIDs {
 		rel, err := sessionTaskRelationOf(db, sessionID, taskID)
 		if err != nil {
 			return nil, err
 		}
-		if rel == sessiontaskrelation.RelationGoal {
-			goals = append(goals, fmt.Sprintf("E-%d", taskID))
+		if rel == sessiontaskrelation.RelationClaimed {
+			claimed = append(claimed, fmt.Sprintf("E-%d", taskID))
 		}
 	}
-	if len(goals) > 0 {
-		sort.Strings(goals)
+	if len(claimed) > 0 {
+		sort.Strings(claimed)
 		return nil, fmt.Errorf(
-			"events: session_tasks.removed refuses this session's goal task(s): %s "+
-				"(release the task to drop the goal, or `session hide --task` to "+
-				"suppress it from the listing)",
-			strings.Join(goals, ", "),
+			"events: session_tasks.removed refuses this session's claimed task(s): %s "+
+				"(a claim cannot be dropped; `session hide --task` suppresses it "+
+				"from the listing)",
+			strings.Join(claimed, ", "),
 		)
 	}
 
@@ -248,13 +250,13 @@ func sessionTaskRelationOf(db dbQuerier, sessionID, taskID int64) (sessiontaskre
 }
 
 // renderQueued formats the `session task add` result for chat.
-func renderQueued(queued, alreadyGoal []int64) string {
+func renderQueued(queued, alreadyClaimed []int64) string {
 	var b strings.Builder
 	if len(queued) > 0 {
 		fmt.Fprintf(&b, "Queued %s for this session.\n", taskList(queued))
 	}
-	if len(alreadyGoal) > 0 {
-		fmt.Fprintf(&b, "%s already this session's goal — left as is.\n", taskList(alreadyGoal))
+	if len(alreadyClaimed) > 0 {
+		fmt.Fprintf(&b, "%s already claimed by this session — left as is.\n", taskList(alreadyClaimed))
 	}
 	return b.String()
 }
