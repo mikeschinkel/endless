@@ -3746,3 +3746,9 @@ While rebasing a stale worktree I hit a conflict on a db-ledger segment and stop
 
 Rule: when a ledger commit conflicts, establish whether its entries already exist on the target (byte-exact line match across the whole segment family, since segment splits relocate lines between files). If every entry is present, skipping is zero-loss. Only entries absent from the target are a real discard.
 - **Project**: endless
+
+### [2026-08-25] Say 'I inferred' vs 'I diagnosed' — never present a stale plan's premise as a finding
+I told Mike a writer bug was leaving endless-managed files uncommitted, and offered to file a task for it. Pressed on whether I had diagnosed it or still needed to, the honest answer was neither: I had inherited the claim from E-1272's stale plan and treated its falsification ('the auto-commit step still fires') as evidence of a defect. It was not. The step was original designed behavior from E-971; it firing is the feature working.
+
+Rule: before reporting a finding, name its provenance to myself — observed, inferred, or inherited from a document. Only 'observed' earns the word 'found' or 'diagnosed'. An inference gets stated as one, with the observation that prompted it. And per ED-1550, a finding's default destination is chat, not a new task; I proposed filing reflexively and called it cheap, which it is not.
+- **Project**: endless
