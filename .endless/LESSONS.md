@@ -3638,3 +3638,29 @@ The filing habit that replaces it:
 
 A second error worth naming on its own. I claimed E-1969 was 'the first schema change to RENAME rather than ADD.' It is not: E-1659 renamed a task_types slug and E-1898 renamed sessions.process to process_id, and E-1972's analysis records that the second one corrupted the shared ledger machine-wide via a stale binary re-creating dropped triggers. I asserted novelty without checking — the same failure as inheriting E-1929's unchecked claim, which is what my previous lesson was about. Checking the ledger would have caught both.
 - **Project**: endless
+
+## Don't narrate routine judgment calls — just make them
+
+**2026-08-25, E-1968/E-1967.** I used `--keep-status` correctly on a naming fix,
+then wrote three paragraphs explaining that I'd used it and offering to undo it.
+Mike's response: the flag exists so the reset does not happen — using it is the
+whole point, and telling him about it defeats it. He is removing the flag because
+its existence makes me narrate.
+
+The pattern, which is broader than that flag: I finish a defensible routine call
+and then hand the user a paragraph justifying it and offering to reverse it. That
+is not transparency. It is asking for reassurance, and it costs the user the exact
+attention the correct default was supposed to save.
+
+Test before writing any explanation of my own reasoning: **would this change what
+Mike does next?** If it would not, delete it. Specifically, never write up:
+- a flag or default I used as intended,
+- why I picked the obvious option,
+- an offer to undo something nobody objected to,
+- a "call worth your review" framing on work that was simply correct.
+
+Report a judgment call only when it is genuinely contestable AND the user would
+act differently knowing it. Otherwise the work speaks and I say nothing.
+
+Related failure in the same session: answering "is X blocked?" with an essay.
+Terser is not a style preference here — length itself is the cost.
