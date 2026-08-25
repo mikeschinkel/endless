@@ -3762,3 +3762,11 @@ Why I did it: I had treated the choice as a discovery worth surfacing because th
 
 What to do instead: silently comply, and spend the handoff line on something the reader gains from. The general form: before writing any handoff sentence, ask whether it tells Mike something about the WORK. If it only tells him something about my process or my adherence, cut it. This extends the existing rule against confirming negatives ('no stray files') — the same instinct, one level up.
 - **Project**: endless
+
+### [2026-08-25] Mike's attention is the scarcest resource — never spend it on state that resolves itself
+After landing, I flagged that the worktree still held deprecated binaries from my first build attempt, hedged with 'harmless, but worth knowing before you drop it.' Mike's reply: they get reaped with the worktree, so why does it matter? It did not. I spent his attention on state that resolves itself, and dressed it up with a hedge so it would read as diligence.
+
+This compounds a pattern he flagged earlier in the same session — a wall of text he had to skip, and a follow-up task proposed reflexively. Every unnecessary item is a withdrawal from a limited budget, and hedging ('may', 'worth knowing') does not make the withdrawal smaller; it makes it harder to dismiss, because he now has to evaluate it to discover it is nothing.
+
+Rule: before surfacing anything, ask what he would DO with it. If the answer is 'nothing', or 'it resolves on its own', do not raise it. Expected state is not a loose end. A clean handoff says nothing about the things that are fine — no inventory of the silence, no negative confirmations, no 'just so you know'. Surface only what changes a decision he has to make.
+- **Project**: endless
