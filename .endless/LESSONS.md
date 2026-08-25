@@ -3752,3 +3752,13 @@ I told Mike a writer bug was leaving endless-managed files uncommitted, and offe
 
 Rule: before reporting a finding, name its provenance to myself — observed, inferred, or inherited from a document. Only 'observed' earns the word 'found' or 'diagnosed'. An inference gets stated as one, with the observation that prompted it. And per ED-1550, a finding's default destination is chat, not a new task; I proposed filing reflexively and called it cheap, which it is not.
 - **Project**: endless
+
+### [2026-08-25] Following a rule is not a deliverable — do not narrate compliance
+Mike's correction on E-2064: I ended the handoff with a paragraph flagging that I had left E-1956's and E-1185's landed verify suites untouched, 'per endless guide orchestration'. Leaving them alone was correct. Saying so was not.
+
+The rule: obeying a standing instruction is the baseline, not news. Do not report it, do not cite the guide section that told me, do not frame it as a judgment call I made on Mike's behalf. A handoff reports what I BUILT and what a reader could not otherwise know — not which rules I managed to follow while building it.
+
+Why I did it: I had treated the choice as a discovery worth surfacing because the guide's wording ('flag it to Mike') seemed to ask for it. It does not. That phrasing covers a case where a neighbouring behaviour might actually be BROKEN by my change and needs coverage — a fact about the code. 'I did not edit files I am not allowed to edit' is a fact about me.
+
+What to do instead: silently comply, and spend the handoff line on something the reader gains from. The general form: before writing any handoff sentence, ask whether it tells Mike something about the WORK. If it only tells him something about my process or my adherence, cut it. This extends the existing rule against confirming negatives ('no stray files') — the same instinct, one level up.
+- **Project**: endless
