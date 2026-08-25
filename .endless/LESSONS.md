@@ -3827,3 +3827,11 @@ E-1914's hidden-task view "never hides silently" and carries a
 equivalent, so the cap lives in my pipe instead of in the tool, where it could
 announce itself.
 - **Project**: endless
+
+### [2026-08-25] Report only what changes Mike's next decision — never a clean regression or a decision already made together
+Handing off E-1891 I led with 'regression is clean' and 'went with option B as we discussed.' Mike: 'If Regression is clean WHY DO I NEED TO KNOW IT?!? If you went with Option B AS WE DISCUSSED, WHY DO I NEED TO KNOW IT?!?'
+
+A clean test run is the precondition for handing off at all, not news. A decision we reached together earlier in the same session is his own words read back to him. Both are me showing my work, which costs him reading time and buys him nothing.
+
+The test for every line in a handoff: does this change what Mike does next? If tests pass, say nothing about tests. If I did what we agreed, say nothing about the agreement. Report only deviations, live problems, and things he must decide. Silence is the correct report for everything that went as expected — the same rule the spawn instructions already state for 'endless worktree check'.
+- **Project**: endless
