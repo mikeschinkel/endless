@@ -3740,3 +3740,9 @@ So: state the OBSERVATION as evidence ('E-2029 dropped the channel tables, so ch
   cover that behaviour in my own tests, or flag it to Mike. Never borrow their
   script.
 - **Project**: endless
+
+### [2026-08-25] A ledger is equivalent when it produces the same projection, not when the files are byte-identical
+While rebasing a stale worktree I hit a conflict on a db-ledger segment and stopped to ask whether skipping a redundant 'Endless: record ledger entry' commit violated the never-discard-an-auto-record-commit rule. Mike's answer: the ledger's value is the projection it produces, so if main already holds those entries the commit is a duplicate delivery, not a unique carrier. The rule protects entries, not commit objects.
+
+Rule: when a ledger commit conflicts, establish whether its entries already exist on the target (byte-exact line match across the whole segment family, since segment splits relocate lines between files). If every entry is present, skipping is zero-loss. Only entries absent from the target are a real discard.
+- **Project**: endless
