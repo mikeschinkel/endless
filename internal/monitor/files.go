@@ -3,6 +3,7 @@ package monitor
 import (
 	"database/sql"
 	"fmt"
+	"github.com/mikeschinkel/endless/internal/taskstatus"
 )
 
 // GetTaskTitle returns the title of the given task, or empty string if not found.
@@ -46,9 +47,5 @@ func GetTaskStatus(taskID int64) (string, error) {
 // blocker-filter set in tmux_lookup.go). The E-1586 cwd gate ignores them so a
 // display-only bind of a done task, or a landed/retained worktree, never trips.
 func IsTerminalTaskStatus(status string) bool {
-	switch status {
-	case "confirmed", "assumed", "declined", "obsolete", "completed":
-		return true
-	}
-	return false
+	return taskstatus.Has(taskstatus.Terminal, status)
 }

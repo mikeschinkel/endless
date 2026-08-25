@@ -22,6 +22,7 @@ import (
 
 	"github.com/mikeschinkel/endless/internal/monitor"
 	"github.com/mikeschinkel/endless/internal/processkind"
+	"github.com/mikeschinkel/endless/internal/taskstatus"
 )
 
 // sessionIDSentinelPrefix marks a payload `process` field that already
@@ -312,18 +313,20 @@ func renderTasksGrouped(b *strings.Builder, body string) {
 	}
 }
 
-// statusToDisposition maps a task status to the bucket the renderer
-// places it in. Unknown statuses fall into "Pending" so they surface.
+// statusToDisposition maps a task status to the bucket the renderer places it
+// in. Unknown statuses fall into "Pending" so they surface.
+//
+// The four buckets partition the vocabulary, and taskstatus asserts that
+// (E-1891): a status in none of them would land in Pending by accident rather
+// than by decision, which is how the fallthrough would hide an omission.
 func statusToDisposition(status string) string {
-	switch status {
-	case "confirmed", "assumed", "completed", "obsolete", "declined":
+	switch {
+	case taskstatus.Has(taskstatus.Terminal, status):
 		return "Resolved"
-	case "blocked":
+	case status == taskstatus.Blocked:
 		return "Blocked"
-	case "unverified":
+	case status == taskstatus.Unverified:
 		return "Unverified"
-	case "untriaged", "unplanned", "submitted", "ready", "underway", "revisit":
-		return "Pending"
 	default:
 		return "Pending"
 	}

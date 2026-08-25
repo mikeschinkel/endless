@@ -31,6 +31,7 @@ import (
 	"github.com/mikeschinkel/endless/internal/jobs"
 	"github.com/mikeschinkel/endless/internal/monitor"
 	"github.com/mikeschinkel/endless/internal/sessiontaskrelation"
+	"github.com/mikeschinkel/endless/internal/taskstatus"
 )
 
 // fallbackCols is used when the terminal width can't be detected (output not a
@@ -1214,12 +1215,12 @@ func blockSegWidth(bw int) int {
 	}
 }
 
+// isTerminal reports whether a status is a terminus rather than a verb — the
+// rows classify() routes to actDone (⇥ closed). Delegated to taskstatus so it
+// cannot drift from monitor.IsTerminalTaskStatus, which answers the same
+// question for the cwd gate (E-1891).
 func isTerminal(status string) bool {
-	switch status {
-	case "confirmed", "assumed", "declined", "obsolete", "completed":
-		return true
-	}
-	return false
+	return taskstatus.Has(taskstatus.Terminal, status)
 }
 
 func detectCols(override int) int {

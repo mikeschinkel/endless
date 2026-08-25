@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/mikeschinkel/endless/internal/monitor"
+	"github.com/mikeschinkel/endless/internal/taskstatus"
 	"github.com/mikeschinkel/endless/internal/templatecmd"
 )
 
@@ -45,22 +46,21 @@ var handoffTypes = map[string]bool{
 	"brainstorm": true,
 }
 
-// terminalChildStatuses collapse into one `terminal` bucket in the children-state
-// breakdown, mirroring Python's `_TERMINAL_STATUSES` (E-1567).
-var terminalChildStatuses = map[string]bool{
-	"confirmed": true,
-	"assumed":   true,
-	"completed": true,
-	"declined":  true,
-	"obsolete":  true,
-}
+// terminalBucket is the name of the collapsed bucket every terminal status
+// folds into in the children-state breakdown (E-1567). It is a bucket label,
+// not a status, which is why it is not in taskstatus: the display order there
+// covers the non-terminal statuses and this is appended after them.
+const terminalBucket = "terminal"
 
-// childrenStateOrder is the display order of the children-state buckets:
-// lifecycle progression of the in-flight statuses, then the collapsed terminal
-// bucket. Mirrors Python's `_CHILDREN_STATE_ORDER`.
-var childrenStateOrder = []string{
-	"untriaged", "unplanned", "ready", "underway",
-	"blocked", "revisit", "unverified", "terminal",
+// childrenStateBuckets is the display order of the children-state breakdown:
+// the non-terminal statuses in lifecycle progression, then the collapsed
+// terminal bucket. Derived from taskstatus rather than hand-listed (E-1891) —
+// this list previously omitted `submitted`, which pushed a submitted child into
+// the out-of-order `extras` tail below. taskstatus asserts that
+// ChildrenStateOrder and Terminal partition the vocabulary, so every status now
+// has exactly one bucket and the "(N total)" suffix reconciles by construction.
+func childrenStateBuckets() []string {
+	return append(taskstatus.Get(taskstatus.ChildrenStateOrder), terminalBucket)
 }
 
 // claimHandoffContext renders the claim handoff for a task just claimed into a
@@ -201,8 +201,8 @@ func childrenBreakdown(db *sql.DB, taskID int64) (int, string, error) {
 		}
 		total += n
 		bucket := status
-		if terminalChildStatuses[bucket] {
-			bucket = "terminal"
+		if taskstatus.Has(taskstatus.Terminal, bucket) {
+			bucket = terminalBucket
 		}
 		counts[bucket] += n
 	}
@@ -215,7 +215,7 @@ func childrenBreakdown(db *sql.DB, taskID int64) (int, string, error) {
 
 	var parts []string
 	seen := map[string]bool{}
-	for _, bucket := range childrenStateOrder {
+	for _, bucket := range childrenStateBuckets() {
 		if counts[bucket] > 0 {
 			parts = append(parts, fmt.Sprintf("%d %s", counts[bucket], bucket))
 			seen[bucket] = true

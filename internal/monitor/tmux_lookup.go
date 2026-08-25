@@ -3,6 +3,7 @@ package monitor
 import (
 	"database/sql"
 	"errors"
+	"github.com/mikeschinkel/endless/internal/taskstatus"
 	"os/exec"
 	"strings"
 )
@@ -421,7 +422,7 @@ func GetActiveBlockers(taskID int64) ([]int64, error) {
 		    AND td.target_id = ?
 		    AND td.source_type = 'task'
 		    AND td.dep_type = 'blocks'
-		    AND t.status NOT IN ('confirmed', 'assumed', 'declined', 'obsolete')
+		    AND t.status NOT IN (`+taskstatus.SQLList(taskstatus.Unblocking)+`)
 		  ORDER BY t.id ASC
 		  LIMIT 3`,
 		taskID,

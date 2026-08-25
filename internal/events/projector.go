@@ -9,6 +9,7 @@ import (
 
 	"github.com/mikeschinkel/endless/internal/kairos"
 	"github.com/mikeschinkel/endless/internal/schema"
+	"github.com/mikeschinkel/endless/internal/taskstatus"
 	"github.com/mikeschinkel/endless/internal/tasktype"
 	_ "modernc.org/sqlite"
 )
@@ -253,7 +254,7 @@ func replayTaskStatusChanged(db *sql.DB, evt *Event, result *ProjectResult) erro
 
 	var completedAt *string
 	tier := 0
-	if p.NewStatus == "confirmed" || p.NewStatus == "completed" {
+	if taskstatus.Has(taskstatus.SetsCompletedAt, p.NewStatus) {
 		ts := kairosToISO(evt.TS)
 		completedAt = &ts
 	}
@@ -385,17 +386,15 @@ func replayTaskFieldsUpdated(db *sql.DB, evt *Event, result *ProjectResult) erro
 
 	if status, ok := p.Fields["status"]; ok {
 		statusStr := fmt.Sprintf("%v", status)
-		terminalStatuses := map[string]bool{
-			"unverified": true, "confirmed": true, "assumed": true,
-			"completed": true, "declined": true, "obsolete": true,
-		}
-		if terminalStatuses[statusStr] {
+		// Mirrors execTaskFieldsUpdated exactly — projection(ledger) must equal
+		// the live DB, so the two read the same groups (E-1891).
+		if taskstatus.Has(taskstatus.Settled, statusStr) {
 			if _, tierSet := p.Fields["tier"]; !tierSet {
 				setClauses = append(setClauses, "tier = ?")
 				args = append(args, 0)
 			}
 		}
-		if statusStr == "confirmed" || statusStr == "completed" {
+		if taskstatus.Has(taskstatus.SetsCompletedAt, statusStr) {
 			setClauses = append(setClauses, "completed_at = ?")
 			args = append(args, kairosToISO(evt.TS))
 		} else {

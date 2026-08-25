@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+
+	"github.com/mikeschinkel/endless/internal/taskstatus"
 )
 
 // Task represents a task item from the DB.
@@ -29,8 +31,8 @@ func GetActiveTasks(projectID int64) ([]Task, error) {
 	rows, err := db.Query(
 		"SELECT id, phase, description, status "+
 			"FROM live_tasks "+
-			"WHERE project_id = ? AND status IN ('underway', 'untriaged', 'unplanned', 'submitted', 'ready') "+
-			"ORDER BY CASE status WHEN 'underway' THEN 0 ELSE 1 END, sort_order",
+			"WHERE project_id = ? AND status IN ("+taskstatus.SQLList(taskstatus.Open)+") "+
+			"ORDER BY CASE status WHEN '"+taskstatus.Underway+"' THEN 0 ELSE 1 END, sort_order",
 		projectID,
 	)
 	if err != nil {
@@ -66,7 +68,7 @@ func FormatTasks(projectName string, items []Task) string {
 
 	var inProgress, available []Task
 	for _, item := range items {
-		if item.Status == "underway" {
+		if item.Status == taskstatus.Underway {
 			inProgress = append(inProgress, item)
 		} else {
 			available = append(available, item)

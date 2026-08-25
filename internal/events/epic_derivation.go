@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 
+	"github.com/mikeschinkel/endless/internal/taskstatus"
 	"github.com/mikeschinkel/endless/internal/tasktype"
 )
 
@@ -31,26 +32,6 @@ type DerivedEmitter func(epicID int64, oldStatus, newStatus string) error
 // already prevented at write time by execTaskMoved's ancestor-loop check; the
 // cap is cheap insurance against a malformed tree (E-1541 §6).
 const maxAncestorDepth = 32
-
-// stickyOverrideStatuses block derivation: while an epic sits in one of these,
-// recompute reads its state and does nothing. The override must be cleared
-// (manually set to a derivable status) before derivation resumes (E-1541 §1).
-var stickyOverrideStatuses = map[string]bool{
-	"revisit":  true,
-	"declined": true,
-	"obsolete": true,
-	"blocked":  true,
-}
-
-// terminalChildStatuses are the statuses that count as "done" when deciding
-// whether all of an epic's children are terminal (E-1541 §1).
-var terminalChildStatuses = map[string]bool{
-	"completed": true,
-	"confirmed": true,
-	"assumed":   true,
-	"declined":  true,
-	"obsolete":  true,
-}
 
 // recomputeEpicStatus re-derives the status of every epic at or above each
 // parentID — the parents whose child set or whose child's status just changed —
@@ -127,7 +108,10 @@ func deriveOneEpic(db dbQuerier, emit DerivedEmitter, epicID int64) error {
 	).Scan(&current); err != nil {
 		return fmt.Errorf("events: read epic %d status: %w", epicID, err)
 	}
-	if stickyOverrideStatuses[current] {
+	// While an epic sits in a sticky-override status, derivation reads its
+	// state and does nothing; the override must be cleared manually before
+	// derivation resumes (E-1541 §1).
+	if taskstatus.Has(taskstatus.StickyOverride, current) {
 		return nil
 	}
 
@@ -140,7 +124,7 @@ func deriveOneEpic(db dbQuerier, emit DerivedEmitter, epicID int64) error {
 	}
 
 	var completedAt any
-	if target == "completed" {
+	if target == taskstatus.Completed {
 		completedAt = now()
 	}
 	if _, err := db.Exec(
@@ -161,9 +145,26 @@ func deriveOneEpic(db dbQuerier, emit DerivedEmitter, epicID int64) error {
 // deriveTargetStatus computes the rule from E-1541 §1 against an epic's direct
 // children. The bool is false (and the string empty) when no derivation applies:
 // the epic has zero children, or children exist but none fall in a derivable
-// bucket (e.g. all in unverified/blocked, which is neither underway/ready/
-// unplanned/untriaged nor fully terminal). In that case the epic is left
-// unchanged.
+// bucket (e.g. all in unverified/blocked, which is on the precedence ladder
+// nowhere and is not fully terminal). In that case the epic is left unchanged.
+//
+// E-1891: the LADDER — the ordering that must be revisited whenever a status is
+// added — is taskstatus.DerivationPrecedence, walked here highest-precedence
+// first. The rungs, in order and with the reason each is a rung:
+//
+//	underway   a child is being worked, so the epic is
+//	ready      a child is approved to work
+//	submitted  a child is spec-complete pending approval: more advanced than
+//	           unplanned, not yet approved-to-work
+//	unplanned  a child still needs design work
+//	untriaged  E-1845 — the lowest rung. A child nobody has looked at yet keeps
+//	           the epic honest about having unrouted work under it. Without this
+//	           rung an epic whose only children are freshly filed would match
+//	           nothing and be left unchanged — and since `untriaged` is the
+//	           default status, that would be the common path, not an edge case.
+//
+// Previously the same ladder was a switch of five hand-ordered bools; the
+// category-4 miss it invites is exactly what E-1845 nearly shipped.
 func deriveTargetStatus(db dbQuerier, epicID int64) (string, bool, error) {
 	rows, err := db.Query("SELECT status FROM live_tasks WHERE parent_id = ?", epicID)
 	if err != nil {
@@ -172,13 +173,12 @@ func deriveTargetStatus(db dbQuerier, epicID int64) (string, bool, error) {
 	defer rows.Close()
 
 	var (
-		hasChild      bool
-		anyInProgress bool
-		anyReady      bool
-		anySubmitted  bool
-		anyNeedsPlan  bool
-		anyUntriaged  bool
-		allTerminal   = true
+		hasChild    bool
+		allTerminal = true
+		// best is the rank of the highest-precedence child status seen so far;
+		// len(ladder) means "no child sits on the ladder at all".
+		ladder = taskstatus.Get(taskstatus.DerivationPrecedence)
+		best   = len(ladder)
 	)
 	for rows.Next() {
 		var s string
@@ -186,19 +186,10 @@ func deriveTargetStatus(db dbQuerier, epicID int64) (string, bool, error) {
 			return "", false, fmt.Errorf("events: scan child status: %w", err)
 		}
 		hasChild = true
-		switch s {
-		case "underway":
-			anyInProgress = true
-		case "ready":
-			anyReady = true
-		case "submitted":
-			anySubmitted = true
-		case "unplanned":
-			anyNeedsPlan = true
-		case "untriaged":
-			anyUntriaged = true
+		if rank := taskstatus.Rank(taskstatus.DerivationPrecedence, s); rank != taskstatus.NoRank && rank < best {
+			best = rank
 		}
-		if !terminalChildStatuses[s] {
+		if !taskstatus.Has(taskstatus.Terminal, s) {
 			allTerminal = false
 		}
 	}
@@ -209,26 +200,10 @@ func deriveTargetStatus(db dbQuerier, epicID int64) (string, bool, error) {
 	switch {
 	case !hasChild:
 		return "", false, nil
-	case anyInProgress:
-		return "underway", true, nil
-	case anyReady:
-		return "ready", true, nil
-	case anySubmitted:
-		// A child is spec-complete pending human approval (and none is ready/
-		// underway). The epic itself reads as awaiting approval — more advanced
-		// than unplanned, not yet approved-to-work.
-		return "submitted", true, nil
-	case anyNeedsPlan:
-		return "unplanned", true, nil
-	case anyUntriaged:
-		// E-1845: the lowest rung. A child nobody has looked at yet keeps the
-		// epic honest about having unrouted work under it. Without this case an
-		// epic whose only children are freshly filed would match no bucket and
-		// be left unchanged — and since `untriaged` is now the default status,
-		// that would be the common path, not an edge case.
-		return "untriaged", true, nil
+	case best < len(ladder):
+		return ladder[best], true, nil
 	case allTerminal:
-		return "completed", true, nil
+		return taskstatus.Completed, true, nil
 	default:
 		return "", false, nil
 	}

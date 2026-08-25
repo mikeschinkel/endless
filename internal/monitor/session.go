@@ -9,6 +9,7 @@ import (
 	"github.com/mikeschinkel/endless/internal/agentenv"
 	"github.com/mikeschinkel/endless/internal/config"
 	"github.com/mikeschinkel/endless/internal/sessionkind"
+	"github.com/mikeschinkel/endless/internal/taskstatus"
 	"github.com/mikeschinkel/go-dt"
 )
 
@@ -211,7 +212,7 @@ func StartWorkSession(sessionID string, projectID int64, taskID int64) error {
 		// actually running this process — see stampableSession (E-2006).
 		"UPDATE tasks SET status='underway', "+
 			"changed_by_session=(SELECT id FROM sessions WHERE session_id=?) "+
-			"WHERE id=? AND status IN ('untriaged','unplanned','ready','blocked','revisit')",
+			"WHERE id=? AND status IN ("+taskstatus.SQLList(taskstatus.ClaimPromotes)+")",
 		stampableSession(sessionID), taskID,
 	)
 	return err

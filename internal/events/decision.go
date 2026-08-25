@@ -448,6 +448,12 @@ func execDecisionRelationDeleted(db dbQuerier, evt *Event) (*ExecuteResult, erro
 // new 3-state lifecycle. Mirrors the SQL mapping in
 // internal/schema/changes/e-1378-extract-decisions.sql so replay and
 // change-file produce the same projection.
+//
+// E-1891 deliberately did NOT route these through internal/taskstatus. This
+// reads a FROZEN historical vocabulary — whatever those rows said when the
+// change file ran — and must keep answering the same way forever. Pointing it
+// at the live registry would make a future status silently change how old
+// decisions project.
 func mapLegacyDecisionStatus(legacy string) string {
 	switch legacy {
 	case "confirmed", "completed", "assumed":

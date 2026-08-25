@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/mikeschinkel/endless/internal/sessiontaskrelation"
+	"github.com/mikeschinkel/endless/internal/taskstatus"
 )
 
 // SessionStatusRow is one task row in the per-session "what's next" view
@@ -134,11 +135,15 @@ func parseRelationIDs(s string) []int64 {
 	return out
 }
 
-// terminalStatusSet is the canonical "done-work" status set: these unblock
-// dependents (see `endless guide tasks`) and are omitted from the session-status
-// view unless they are the focal/parent row or --all is passed. Kept in sync
-// with the prototype spec (~/.config/endless/session-status.sql).
-const terminalStatusSet = "'confirmed','assumed','declined','obsolete','completed'"
+// terminalStatusSet is the canonical "done-work" status set, rendered for the
+// SQL IN clauses below: these are omitted from the session-status view unless
+// they are the focal/parent row or --all is passed. Kept in sync with the
+// prototype spec (~/.config/endless/session-status.sql).
+//
+// E-1891: a status list inside a SQL string literal is invisible to every tool,
+// which is why these rot longest — taskstatus.SQLList renders it from the one
+// registry instead. Computed at init, not per query.
+var terminalStatusSet = taskstatus.SQLList(taskstatus.Terminal)
 
 // ResolveSessionStatusFocal resolves the focal task for the session-status/monitor
 // view through the SAME pane-scoped path the tmux status line uses (GetPaneStatus),

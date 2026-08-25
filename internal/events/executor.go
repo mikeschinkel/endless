@@ -10,6 +10,7 @@ import (
 
 	"github.com/mikeschinkel/endless/internal/monitor"
 	"github.com/mikeschinkel/endless/internal/sessiontaskrelation"
+	"github.com/mikeschinkel/endless/internal/taskstatus"
 	"github.com/mikeschinkel/endless/internal/tasktype"
 )
 
@@ -369,17 +370,19 @@ func now() string {
 }
 
 // isPreJudgmentStatus reports whether a status means "nobody has decided this
-// task is spec-complete yet" — the two states from which attaching a plan is
-// what makes it spec-complete, so the plan-attach auto-move to `submitted`
-// applies.
+// task is spec-complete yet" — the states from which attaching a plan is what
+// makes it spec-complete, so the plan-attach auto-move to `submitted` applies.
 //
 // `untriaged` (E-1845) is the status `task add` now defaults to; `unplanned` is
 // where triage sends a task that needs design work. Attaching a plan answers the
 // open question in both cases, so both promote. Every other status either
 // already carries a judgment (submitted/ready and beyond) or is a deliberate
 // decision (declined/obsolete) that a plan attachment must not silently undo.
+//
+// The membership lives in taskstatus.PreJudgment (E-1891); this stays a named
+// predicate because it reads as one at both call sites below.
 func isPreJudgmentStatus(status string) bool {
-	return status == "untriaged" || status == "unplanned"
+	return taskstatus.Has(taskstatus.PreJudgment, status)
 }
 
 func execTaskCreated(db dbQuerier, evt *Event, emit DerivedEmitter) (*ExecuteResult, error) {
@@ -530,7 +533,7 @@ func execTaskStatusChanged(db dbQuerier, evt *Event, emit DerivedEmitter) (*Exec
 
 	var completedAt *string
 	tier := 0
-	if p.NewStatus == "confirmed" || p.NewStatus == "completed" {
+	if taskstatus.Has(taskstatus.SetsCompletedAt, p.NewStatus) {
 		ts := now()
 		completedAt = &ts
 	}
@@ -718,17 +721,16 @@ func execTaskFieldsUpdated(db dbQuerier, evt *Event, emit DerivedEmitter) (*Exec
 
 	if status, ok := p.Fields["status"]; ok {
 		statusStr := fmt.Sprintf("%v", status)
-		terminalStatuses := map[string]bool{
-			"unverified": true, "confirmed": true, "assumed": true,
-			"completed": true, "declined": true, "obsolete": true,
-		}
-		if terminalStatuses[statusStr] {
+		// Settled = the work is over one way or another, shipped or abandoned,
+		// so a priority tier no longer means anything (E-1891 relocated this
+		// set; it is unchanged).
+		if taskstatus.Has(taskstatus.Settled, statusStr) {
 			if _, tierSet := p.Fields["tier"]; !tierSet {
 				setClauses = append(setClauses, "tier = ?")
 				args = append(args, 0)
 			}
 		}
-		if statusStr == "confirmed" || statusStr == "completed" {
+		if taskstatus.Has(taskstatus.SetsCompletedAt, statusStr) {
 			setClauses = append(setClauses, "completed_at = ?")
 			args = append(args, now())
 		} else {
