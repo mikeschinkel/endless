@@ -570,12 +570,22 @@ func runValidateDB(args []string) {
 func runRebuildDB(args []string) {
 	fs := flag.NewFlagSet("rebuild-db", flag.ExitOnError)
 	projectRoot := fs.String("project-root", "", "Project root directory")
-	confirm := fs.Bool("confirm", false, "Actually replace the tasks table (without this, just shows what would happen)")
+	confirm := fs.Bool("confirm", false, "DISABLED (E-2062): refuses and reports what replacing the tasks table would destroy")
 	fs.Parse(args)
 
 	if *projectRoot == "" {
 		fmt.Fprintf(os.Stderr, "endless-go event: error: --project-root is required\n")
 		os.Exit(1)
+	}
+
+	// E-2062: refuse --confirm here, before the projection is built and before
+	// any transaction opens, so the refusal costs nothing and can leave nothing
+	// behind. Everything below this line — the replay, the ATTACH, the DELETE —
+	// is dry-run-only until E-799 makes the copy-back whole. The reasoning,
+	// including why relaxing the schema to make this work is the wrong order,
+	// is at the top of rebuild_guard.go. Does not return.
+	if *confirm {
+		refuseRebuildDBConfirm()
 	}
 
 	tempPath, projResult, err := events.ProjectToTempDB(ledgerRoot(*projectRoot))
@@ -591,7 +601,10 @@ func runRebuildDB(args []string) {
 	}
 
 	if !*confirm {
-		fmt.Println("\nDry run. Use --confirm to replace the tasks table.")
+		// The only path this command has. --confirm never reaches here: the
+		// E-2062 guard above exits before the projection is built, so the banner
+		// no longer advertises a flag that refuses.
+		fmt.Println("\nDry run — this command is read-only. --confirm is disabled (E-2062).")
 		os.Remove(tempPath)
 		return
 	}

@@ -5,14 +5,17 @@
 //     writes an epic.status_derived ledger entry and updates the parent epic.
 //     This is the path the --db sandbox cannot exercise (sandbox routing
 //     bypasses the ledger writer + auto-commit), so it needs a real git repo.
-//   - the projector replay path (replayEpicStatusDerived): a rebuild-db replays
-//     a recorded epic.status_derived entry and reproduces the epic's status.
+//   - the projector replay path (replayEpicStatusDerived): projecting the ledger
+//     replays a recorded epic.status_derived entry and reproduces the epic's
+//     status. Read off the projection itself: the copy-back that used to carry
+//     it is refused since E-2062 and was never what the claim was about.
 package eventcmd
 
 import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
 	"testing"
 
@@ -152,58 +155,48 @@ func TestEpicDerivation_EmitWritesLedgerAndUpdatesEpic(t *testing.T) {
 	}
 }
 
-// TestEpicDerivation_RebuildReplaysDerivedEvent drives the projector replay path:
-// a ledger holding an epic + child create plus a recorded epic.status_derived
-// rebuilds an epic whose status is the derived value, with no recompute.
-func TestEpicDerivation_RebuildReplaysDerivedEvent(t *testing.T) {
-	cfgDir := t.TempDir()
+// TestEpicDerivation_ProjectionReplaysDerivedEvent drives the projector replay
+// path: a ledger holding an epic + child create plus a recorded
+// epic.status_derived projects to an epic whose status is the derived value,
+// with no recompute.
+//
+// It reads the PROJECTION directly rather than going through
+// `rebuild-db --confirm`, which is refused since E-2062. That is not a
+// workaround — it is what this test always meant. The claim is about the
+// projector; routing it through the copy-back only added the destructive half
+// of a command whose destructive half is the thing under refusal.
+func TestEpicDerivation_ProjectionReplaysDerivedEvent(t *testing.T) {
 	projectRoot := t.TempDir()
-	dbPath := initSchemaDB(t, cfgDir)
 
 	const projectName = "proj-epic-rebuild"
 	const epicID int64 = 800
 	const childID int64 = 801
-
-	// Seed only the project row so rebuild-db's DELETE-by-name has a target.
-	db, err := sql.Open("sqlite", dbPath)
-	if err != nil {
-		t.Fatalf("open db: %v", err)
-	}
-	if _, err := db.Exec(
-		"INSERT INTO projects (id, name, path) VALUES (1, ?, ?)",
-		projectName, "/tmp/"+projectName,
-	); err != nil {
-		db.Close()
-		t.Fatalf("seed project: %v", err)
-	}
-	db.Close()
 
 	clock := kairos.NewClock(0xa7f3)
 	writeLedgerEvent(t, projectRoot, makeEpicCreatedEvent(t, clock, projectName, epicID, nil))
 	writeLedgerEvent(t, projectRoot, makeTaskCreatedChildEvent(t, clock, projectName, childID, epicID))
 	writeLedgerEvent(t, projectRoot, makeEpicStatusDerivedEvent(t, clock, projectName, epicID, "unplanned", "underway"))
 
-	bin := endlessGoBin(t)
-	cmd := exec.Command(bin, "--config-dir", cfgDir,
-		"event", "rebuild-db",
-		"--project-root", projectRoot,
-		"--confirm",
-	)
-	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("rebuild-db failed: %v\n%s", err, out)
+	tempPath, projResult, err := events.ProjectToTempDB(projectRoot)
+	if err != nil {
+		t.Fatalf("project ledger: %v", err)
+	}
+	defer os.Remove(tempPath)
+	if len(projResult.Errors) > 0 {
+		t.Errorf("projection reported errors: %v", projResult.Errors)
 	}
 
-	db2, err := sql.Open("sqlite", dbPath)
+	db, err := sql.Open("sqlite", tempPath)
 	if err != nil {
-		t.Fatalf("reopen db: %v", err)
+		t.Fatalf("open projection: %v", err)
 	}
-	defer db2.Close()
+	defer db.Close()
 	var epicStatus string
-	if err := db2.QueryRow("SELECT status FROM tasks WHERE id = ?", epicID).Scan(&epicStatus); err != nil {
-		t.Fatalf("read rebuilt epic: %v", err)
+	if err := db.QueryRow("SELECT status FROM tasks WHERE id = ?", epicID).Scan(&epicStatus); err != nil {
+		t.Fatalf("read projected epic: %v", err)
 	}
 	if epicStatus != "underway" {
-		t.Errorf("rebuilt epic status = %q, want underway (from replayed derived event)", epicStatus)
+		t.Errorf("projected epic status = %q, want underway (from replayed derived event)", epicStatus)
 	}
 }
 

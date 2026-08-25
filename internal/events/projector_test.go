@@ -381,3 +381,72 @@ func TestProjectToTempDB_TaskBulkClearedRetainsRowsAndIDFloor(t *testing.T) {
 			"(a lower value means the cleared ids were re-freed)", got)
 	}
 }
+
+// TestProjectToTempDB_StatusChangeCarriesOutcome pins the round trip E-787
+// asked for: a task declined with a reason must come back out of the ledger
+// with that reason intact, because `outcome` is the only record of WHY a task
+// was declined and it exists nowhere but the event.
+//
+// Asserted against the projection, which is where the claim lives. It used to
+// be asserted by running `endless-go event rebuild-db --confirm` from
+// tests/test_outcome.py and reading the outcome back out of the real database —
+// a test that needed a built binary, wrote to a database, and made a projector
+// claim through a copy-back that is refused since E-2062 and that never touched
+// `outcome` on its own account.
+func TestProjectToTempDB_StatusChangeCarriesOutcome(t *testing.T) {
+	dir := t.TempDir()
+
+	w, err := events.NewWriter(dir, "beef")
+	if err != nil {
+		t.Fatalf("NewWriter: %v", err)
+	}
+
+	const taskID = "909"
+	appendTaskCreated(t, w, "proj-outcome", taskID, "5WYM00000001", "Sample")
+
+	declinePayload, err := json.Marshal(events.TaskStatusChangedPayload{
+		OldStatus: "unplanned",
+		NewStatus: "declined",
+		Outcome:   "round-trip reason",
+	})
+	if err != nil {
+		t.Fatalf("marshal status payload: %v", err)
+	}
+	appendEvent(t, w, events.Event{
+		V:       events.Version,
+		TS:      "5WYM00000002",
+		Kind:    events.KindTaskStatusChanged,
+		Project: "proj-outcome",
+		Entity:  events.EntityRef{Type: events.EntityTask, ID: taskID},
+		Actor:   events.Actor{Kind: events.ActorCLI, ID: "tester"},
+		Payload: declinePayload,
+	})
+
+	tempPath, result, err := events.ProjectToTempDB(dir)
+	if err != nil {
+		t.Fatalf("ProjectToTempDB: %v", err)
+	}
+	t.Cleanup(func() { os.Remove(tempPath) })
+	if len(result.Errors) > 0 {
+		t.Errorf("projection reported errors: %v", result.Errors)
+	}
+
+	db, err := sql.Open("sqlite", tempPath)
+	if err != nil {
+		t.Fatalf("open temp db: %v", err)
+	}
+	defer db.Close()
+
+	var status, outcome string
+	if err := db.QueryRow(
+		"SELECT status, COALESCE(outcome,'') FROM tasks WHERE id = ?", 909,
+	).Scan(&status, &outcome); err != nil {
+		t.Fatalf("query projected task: %v", err)
+	}
+	if status != "declined" {
+		t.Errorf("projected status = %q, want declined", status)
+	}
+	if outcome != "round-trip reason" {
+		t.Errorf("projected outcome = %q, want %q", outcome, "round-trip reason")
+	}
+}

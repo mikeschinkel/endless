@@ -332,11 +332,88 @@ func TestEventRebuildDB_DryRunReportsProjectedCounts(t *testing.T) {
 	}
 }
 
-// TestEventRebuildDB_ConfirmReplacesTasksTable pins the destructive
-// path: with --confirm, the projected tasks land in the current DB's
-// tasks table. The pre-existing project row stays; only its tasks are
-// replaced.
-func TestEventRebuildDB_ConfirmReplacesTasksTable(t *testing.T) {
+// seedRebuildLossFixture builds the state a `rebuild-db --confirm` would
+// destroy: a project, a task, a session BOUND to that task (the binding
+// ED-1560 says is write-once), a landing row, a gate hanging off the task as
+// its epic, and a judgment plus a label hanging off that gate.
+//
+// The gate's children are the point of the fixture. They are reached on the
+// SECOND cascade hop — tasks -> session_gates -> report_judgments/report_labels
+// — so a guard that walked only the direct children of `tasks` would report
+// them as zero while the DELETE still took them.
+func seedRebuildLossFixture(t *testing.T, dbPath, projectName string, taskID int64) {
+	t.Helper()
+	db, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		t.Fatalf("open db for seed: %v", err)
+	}
+	defer db.Close()
+
+	stmts := []struct {
+		q    string
+		args []any
+	}{
+		{"INSERT INTO projects (id, name, path) VALUES (1, ?, ?)",
+			[]any{projectName, "/tmp/" + projectName}},
+		{`INSERT INTO tasks (id, project_id, title, phase, status, type_id, sort_order)
+		  VALUES (?, 1, 'bound task', 'now', 'ready', 1, 10)`, []any{taskID}},
+		{`INSERT INTO sessions (id, session_id, project_id, task_id)
+		  VALUES (1, 'ES-TEST-1', 1, ?)`, []any{taskID}},
+		{`INSERT INTO task_landings (id, task_id, session_id, merge_commit_sha)
+		  VALUES (1, ?, 1, 'deadbeef')`, []any{taskID}},
+		{`INSERT INTO session_gates (id, session_id, kind_id, epic_id)
+		  VALUES (1, 1, 1, ?)`, []any{taskID}},
+		{`INSERT INTO report_judgments (id, gate_id) VALUES (1, 1)`, nil},
+		{`INSERT INTO report_labels (id, gate_id, session_id, token)
+		  VALUES (1, 1, 1, '$GOOD')`, nil},
+	}
+	for _, s := range stmts {
+		if _, err := db.Exec(s.q, s.args...); err != nil {
+			t.Fatalf("seed %q: %v", s.q, err)
+		}
+	}
+}
+
+// rebuildLossCounts snapshots exactly the numbers the refusal claims are at
+// risk, so a test can assert the refusal wrote NOTHING by comparing the map
+// before and after.
+func rebuildLossCounts(t *testing.T, dbPath string) map[string]int64 {
+	t.Helper()
+	db, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		t.Fatalf("open db for counts: %v", err)
+	}
+	defer db.Close()
+
+	queries := map[string]string{
+		"tasks":            "SELECT count(*) FROM tasks",
+		"task_landings":    "SELECT count(*) FROM task_landings",
+		"session_gates":    "SELECT count(*) FROM session_gates",
+		"report_judgments": "SELECT count(*) FROM report_judgments",
+		"report_labels":    "SELECT count(*) FROM report_labels",
+		"session_bindings": "SELECT count(*) FROM sessions WHERE task_id IS NOT NULL",
+	}
+	got := make(map[string]int64, len(queries))
+	for name, q := range queries {
+		var n int64
+		if err := db.QueryRow(q).Scan(&n); err != nil {
+			t.Fatalf("count %s: %v", name, err)
+		}
+		got[name] = n
+	}
+	return got
+}
+
+// TestEventRebuildDB_ConfirmRefusesAndDestroysNothing pins E-2062: --confirm is
+// refused deliberately, it names what it would have destroyed with counts read
+// from the live database, and it leaves every one of those counts untouched.
+//
+// This test replaces one that pinned the opposite contract ("--confirm replaces
+// the tasks table"). That path was never reachable on a real database — the
+// write-once trigger aborted it — and making it reachable would have destroyed
+// the four tables seeded here. The refusal is the contract now; repairing the
+// rebuild is E-799.
+func TestEventRebuildDB_ConfirmRefusesAndDestroysNothing(t *testing.T) {
 	cfgDir := t.TempDir()
 	projectRoot := t.TempDir()
 	dbPath := initSchemaDB(t, cfgDir)
@@ -344,24 +421,15 @@ func TestEventRebuildDB_ConfirmReplacesTasksTable(t *testing.T) {
 	const projectName = "proj-rebuild-confirm"
 	const taskID int64 = 9001
 
-	// Seed the project row in current DB so the DELETE-by-name in
-	// rebuild-db has a project to target. We don't seed the task — the
-	// rebuild is what should insert it.
-	db, err := sql.Open("sqlite", dbPath)
-	if err != nil {
-		t.Fatalf("open db: %v", err)
-	}
-	if _, err := db.Exec(
-		"INSERT INTO projects (id, name, path) VALUES (1, ?, ?)",
-		projectName, "/tmp/"+projectName,
-	); err != nil {
-		db.Close()
-		t.Fatalf("seed project: %v", err)
-	}
-	db.Close()
+	seedRebuildLossFixture(t, dbPath, projectName, taskID)
 
-	evt := makeTaskCreatedEvent(t, projectName, taskID, "confirm path task")
-	writeLedgerEvent(t, projectRoot, evt)
+	// A projected task that does NOT exist live. If the guard ever leaks, this
+	// id appears in tasks and the assertion below catches it.
+	const projectedTaskID int64 = 9002
+	writeLedgerEvent(t, projectRoot,
+		makeTaskCreatedEvent(t, projectName, projectedTaskID, "confirm path task"))
+
+	before := rebuildLossCounts(t, dbPath)
 
 	bin := endlessGoBin(t)
 	cmd := exec.Command(bin, "--config-dir", cfgDir,
@@ -370,24 +438,141 @@ func TestEventRebuildDB_ConfirmReplacesTasksTable(t *testing.T) {
 		"--confirm",
 	)
 	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("rebuild-db --confirm failed: %v\nout: %s", err, out)
+	if err == nil {
+		t.Fatalf("rebuild-db --confirm exited 0; want a refusal\nout: %s", out)
 	}
-	if !bytes.Contains(out, []byte("Rebuilt: tasks table replaced")) {
-		t.Errorf("expected 'Rebuilt: tasks table replaced' line, got: %s", out)
+
+	for _, want := range []string{
+		"rebuild-db --confirm is disabled",
+		"1 task_landings rows",
+		"1 session_gates rows",
+		"and 1 report_judgments, 1 report_labels",
+		"1 sessions bindings",
+		"task_deps",
+		"E-799",
+		"ED-1560",
+	} {
+		if !bytes.Contains(out, []byte(want)) {
+			t.Errorf("refusal does not mention %q; got:\n%s", want, out)
+		}
 	}
-	// Confirm the projected task is now in the current DB.
-	db2, err := sql.Open("sqlite", dbPath)
+
+	// The projection must never have been built: the guard runs before it.
+	if bytes.Contains(out, []byte("Projection:")) {
+		t.Errorf("refusal built the projection first; want it refused up front:\n%s", out)
+	}
+
+	after := rebuildLossCounts(t, dbPath)
+	for name, wantN := range before {
+		if after[name] != wantN {
+			t.Errorf("%s count changed across the refusal: %d -> %d", name, wantN, after[name])
+		}
+	}
+
+	db, err := sql.Open("sqlite", dbPath)
 	if err != nil {
 		t.Fatalf("reopen db: %v", err)
 	}
-	defer db2.Close()
+	defer db.Close()
 	var n int
-	if err := db2.QueryRow("SELECT count(*) FROM tasks WHERE id = ?", taskID).Scan(&n); err != nil {
-		t.Fatalf("count tasks: %v", err)
+	if err := db.QueryRow("SELECT count(*) FROM tasks WHERE id = ?", projectedTaskID).Scan(&n); err != nil {
+		t.Fatalf("count projected task: %v", err)
 	}
-	if n != 1 {
-		t.Errorf("expected 1 row for projected task id %d, got %d", taskID, n)
+	if n != 0 {
+		t.Errorf("projected task %d was inserted; the refusal must write nothing", projectedTaskID)
+	}
+	var boundTask sql.NullInt64
+	if err := db.QueryRow("SELECT task_id FROM sessions WHERE id = 1").Scan(&boundTask); err != nil {
+		t.Fatalf("read session binding: %v", err)
+	}
+	if !boundTask.Valid || boundTask.Int64 != taskID {
+		t.Errorf("sessions.task_id = %v, want %d — ED-1560 says it is never cleared",
+			boundTask, taskID)
+	}
+}
+
+// TestEventRebuildDB_ConfirmRefusesWithNoBoundSession covers the case the
+// accidental fuse MISSES entirely. The write-once trigger aborts only when some
+// session is bound to a task; a project with landings and gates but no live
+// binding would sail straight through the DELETE and lose them silently. The
+// guard is about what the command would destroy, not about whether the trigger
+// happens to catch it.
+func TestEventRebuildDB_ConfirmRefusesWithNoBoundSession(t *testing.T) {
+	cfgDir := t.TempDir()
+	projectRoot := t.TempDir()
+	dbPath := initSchemaDB(t, cfgDir)
+
+	const projectName = "proj-rebuild-unbound"
+	const taskID int64 = 9101
+
+	seedTaskRow(t, dbPath, projectName, taskID, "unbound task")
+
+	db, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		t.Fatalf("open db for seed: %v", err)
+	}
+	if _, err := db.Exec(
+		`INSERT INTO task_landings (id, task_id, merge_commit_sha) VALUES (1, ?, 'cafe')`,
+		taskID,
+	); err != nil {
+		db.Close()
+		t.Fatalf("seed landing: %v", err)
+	}
+	db.Close()
+
+	writeLedgerEvent(t, projectRoot,
+		makeTaskCreatedEvent(t, projectName, taskID, "unbound task"))
+
+	bin := endlessGoBin(t)
+	cmd := exec.Command(bin, "--config-dir", cfgDir,
+		"event", "rebuild-db",
+		"--project-root", projectRoot,
+		"--confirm",
+	)
+	out, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("rebuild-db --confirm exited 0 on an unbound project; want a refusal\nout: %s", out)
+	}
+	if !bytes.Contains(out, []byte("rebuild-db --confirm is disabled")) {
+		t.Errorf("expected the refusal, got:\n%s", out)
+	}
+	if !bytes.Contains(out, []byte("0 sessions bindings")) {
+		t.Errorf("expected the binding count to read 0, got:\n%s", out)
+	}
+	if !bytes.Contains(out, []byte("1 task_landings rows")) {
+		t.Errorf("expected the landing that would have been lost, got:\n%s", out)
+	}
+
+	after := rebuildLossCounts(t, dbPath)
+	if after["task_landings"] != 1 {
+		t.Errorf("task_landings = %d after the refusal, want 1", after["task_landings"])
+	}
+}
+
+// TestEventRebuildDB_ConfirmRefusesBeforeReadingTheLedger proves the guard runs
+// FIRST. With no ledger at all the projection fails loudly ("no events found"),
+// so seeing the refusal instead — and not that error — is direct evidence that
+// nothing ran before it.
+func TestEventRebuildDB_ConfirmRefusesBeforeReadingTheLedger(t *testing.T) {
+	cfgDir := t.TempDir()
+	projectRoot := t.TempDir()
+	initSchemaDB(t, cfgDir)
+
+	bin := endlessGoBin(t)
+	cmd := exec.Command(bin, "--config-dir", cfgDir,
+		"event", "rebuild-db",
+		"--project-root", projectRoot,
+		"--confirm",
+	)
+	out, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("rebuild-db --confirm exited 0 with no ledger; want a refusal\nout: %s", out)
+	}
+	if !bytes.Contains(out, []byte("rebuild-db --confirm is disabled")) {
+		t.Errorf("expected the refusal, got:\n%s", out)
+	}
+	if bytes.Contains(out, []byte("no events found")) {
+		t.Errorf("the projector ran before the guard; want the guard first:\n%s", out)
 	}
 }
 

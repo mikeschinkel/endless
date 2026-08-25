@@ -1,8 +1,6 @@
 """Tests for the outcome field and task decline verb (E-787)."""
 
 import json
-import subprocess
-from pathlib import Path
 
 import click
 import pytest
@@ -359,35 +357,19 @@ def test_event_log_records_outcome(seeded_project_at_cwd):
     assert found, "decline event with outcome not found in event log"
 
 
-# ─── rebuild-db round-trip ────────────────────────────────────────────────────
-
-
-def test_rebuild_db_preserves_outcome(seeded_project_at_cwd):
-    tid = _add_task("Sample")
-    task_cmd.decline_item(tid, reason="round-trip reason")
-
-    # Confirm initial state
-    status, outcome = _status_outcome(tid)
-    assert status == "declined"
-    assert outcome == "round-trip reason"
-
-    # Run `endless-go event rebuild-db` against this project root.
-    # Subprocess inherits XDG_CONFIG_HOME from conftest, so it resolves to the
-    # same isolated DB. --confirm actually replaces the tasks table.
-    binary = Path(__file__).resolve().parent.parent / "bin" / "endless-go"
-    if not binary.exists():
-        pytest.skip(f"endless-go binary not built at {binary}; run `just build` first")
-
-    result = subprocess.run(
-        [str(binary), "event", "rebuild-db",
-         "--project-root", str(seeded_project_at_cwd),
-         "--confirm"],
-        capture_output=True, text=True,
-    )
-    assert result.returncode == 0, f"rebuild-db failed: {result.stderr}"
-
-    # Force a fresh DB connection so we see the rebuilt table
-    db._conn = None
-    status, outcome = _status_outcome(tid)
-    assert status == "declined"
-    assert outcome == "round-trip reason"
+# ─── ledger round-trip ────────────────────────────────────────────────────────
+#
+# test_rebuild_db_preserves_outcome lived here: it declined a task, ran
+# `endless-go event rebuild-db --confirm`, and read the outcome back out of the
+# real database. E-2062 refuses that flag deliberately — its copy-back destroys
+# four tables it cannot restore — and the claim never needed it. The two halves
+# it was making are covered where each one lives:
+#
+#   - the decline EMITS the outcome:
+#     test_event_log_records_outcome, immediately above.
+#   - replaying that event REPRODUCES the outcome:
+#     internal/events/projector_test.go,
+#     TestProjectToTempDB_StatusChangeCarriesOutcome.
+#
+# That pair asserts the round trip with no built binary, no database write, and
+# no dependence on a command that is disabled.
