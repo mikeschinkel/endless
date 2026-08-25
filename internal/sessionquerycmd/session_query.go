@@ -845,7 +845,7 @@ func runEnsureClaudeID(args []string) error {
 
 // bgAgentList is the JSON contract for `list-bg-agents` (E-1621). Scope is
 // "epic" (filtered by EpicID) or "all" (the project-scoped --all path). EpicID
-// is null when scope is "all", or when a --session-id caller has no active epic
+// is null when scope is "all", or when a --session-id caller has no epic
 // to resolve — the Python side renders the latter as a guidance error.
 type bgAgentList struct {
 	Scope  string            `json:"scope"`
@@ -864,7 +864,7 @@ type bgAgentList struct {
 // returned JSON as a plain-text table.
 func runListBgAgents(args []string) error {
 	fs := flag.NewFlagSet("list-bg-agents", flag.ContinueOnError)
-	sessionID := fs.Int64("session-id", 0, "caller's sessions.id; auto-resolves the active epic")
+	sessionID := fs.Int64("session-id", 0, "caller's sessions.id; auto-resolves the session's epic")
 	epicID := fs.Int64("epic-id", 0, "epic task id to scope by (overrides auto-resolve)")
 	all := fs.Bool("all", false, "drop the epic filter; list all bg agents in --project-root's project")
 	projectRoot := fs.String("project-root", "", "absolute path of the project root (required with --all)")
@@ -903,7 +903,7 @@ func runListBgAgents(args []string) error {
 
 	resolved := epicID
 	if *sessionID != 0 {
-		ep, err := monitor.SessionActiveEpic(*sessionID)
+		ep, err := monitor.SessionEpic(*sessionID)
 		if err != nil {
 			return err
 		}

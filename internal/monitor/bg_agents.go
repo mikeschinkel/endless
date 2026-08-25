@@ -77,7 +77,7 @@ func queryBgAgents(query string, args ...any) ([]BgAgent, error) {
 	return out, nil
 }
 
-// SessionActiveEpic returns the epic_id of sessionID — the epic the
+// SessionEpic returns the epic_id of sessionID — the epic the
 // caller's session is working under — or nil when it is NULL or no such session
 // row exists. `endless agents` uses this to auto-resolve the epic to scope by
 // when neither --epic nor --all is given (E-1621).
@@ -85,7 +85,7 @@ func queryBgAgents(query string, args ...any) ([]BgAgent, error) {
 // Note: a non-background (tmux/coordinator) session only carries epic_id
 // once the claim flow records it (E-1624); until that lands, this returns nil
 // for interactive callers and the command falls back to its guidance error.
-func SessionActiveEpic(sessionID int64) (*int64, error) {
+func SessionEpic(sessionID int64) (*int64, error) {
 	db, err := DB()
 	if err != nil {
 		return nil, err
@@ -98,7 +98,7 @@ func SessionActiveEpic(sessionID int64) (*int64, error) {
 		return nil, nil
 	}
 	if err != nil {
-		return nil, fmt.Errorf("resolve active epic for session %d: %w", sessionID, err)
+		return nil, fmt.Errorf("resolve epic for session %d: %w", sessionID, err)
 	}
 	return epicID, nil
 }

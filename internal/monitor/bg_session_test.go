@@ -17,11 +17,11 @@ func seedTypedTask(t *testing.T, db *sql.DB, id, projectID int64, typeID int64, 
 	}
 }
 
-func bgRow(t *testing.T, db *sql.DB, id int64) (sessionID sql.NullString, shortID sql.NullString, kindID int64, activeTask sql.NullInt64, activeEpic sql.NullInt64) {
+func bgRow(t *testing.T, db *sql.DB, id int64) (sessionID sql.NullString, shortID sql.NullString, kindID int64, taskID sql.NullInt64, epicID sql.NullInt64) {
 	t.Helper()
 	err := db.QueryRow(
 		"SELECT session_id, short_id, kind_id, task_id, epic_id FROM sessions WHERE id=?", id,
-	).Scan(&sessionID, &shortID, &kindID, &activeTask, &activeEpic)
+	).Scan(&sessionID, &shortID, &kindID, &taskID, &epicID)
 	if err != nil {
 		t.Fatalf("read session id=%d: %v", id, err)
 	}

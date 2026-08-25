@@ -88,7 +88,7 @@ def test_show_json_output(project_with_session, capsys):
     assert data["project"] == "my-project"
     assert data["state"] == "idle"
     assert data["worktree_path"] == "/some/worktree"
-    assert data["active_task"] is None
+    assert data["task"] is None
 
 
 def test_show_summary_flattened(project_with_session, capsys):

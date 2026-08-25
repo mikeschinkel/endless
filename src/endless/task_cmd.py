@@ -6755,7 +6755,7 @@ def _session_json(touch: dict) -> dict:
     return {
         "session": session_id_display(touch["session_id"]),
         "relation": touch["rel_slug"],
-        "active_task": (
+        "task": (
             task_id_display(touch["task_id"])
             if touch["task_id"] else None
         ),

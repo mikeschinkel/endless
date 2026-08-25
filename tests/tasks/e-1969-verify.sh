@@ -10,11 +10,20 @@
 #   0. This task's unit suites, FAIL-FAST. The rename touches nearly every Go
 #      and Python path that reads a session, so if `go test ./internal/...` or
 #      pytest is red, nothing below is measuring what it claims to.
-#   A. The old spellings are gone from live code. The only files allowed to
+#   A. The old spellings are gone from live code — both the column names and
+#      the `active_`-qualified Go identifiers and JSON keys that mirrored them
+#      (ActiveTaskInfo, ErrNoActiveTask, GetActiveTaskForPane, SessionActiveEpic,
+#      the `active_task` key in two --json payloads). The only files allowed to
 #      still say `active_task_id` are the ones that MUST: historical schema
 #      changes (they reproduce the schema as it stood at their point in
 #      history), db.py's E-743 migration step (one link of a chain), and prose
 #      that names the old name to explain the new one.
+#
+#      Two `active` names survive on purpose and are pinned as such below:
+#      `monitor.GetActiveTasks` (a project's OPEN tasks — a different sense of
+#      the word) and `PaneStatusActive` (the status bar having something live to
+#      show). `tmux active-id` also stays: it is a subcommand string baked into
+#      tmux config that `tmux apply` already generated.
 #   B. A FRESH database — built from schema.sql, the way every new install, the
 #      sandbox and every test DB is built — has the new columns and the
 #      write-once trigger. Migrated and fresh must not drift (ED-1472).
@@ -219,6 +228,25 @@ test_old_names_gone() {
             | grep -v '^internal/events/claim_epic_test.go' \
             || true)"
     assert_eq "no stray old spellings in Go/Python/SQL" "" "$hits"
+
+    # The identifiers that mirrored the column, swept in the same change.
+    local ids
+    ids="$(cd "$WT" && grep -rn 'ActiveTaskInfo\|ErrNoActiveTask\|GetActiveTaskForPane\|queryActiveTaskForPanes\|SessionActiveEpic\|activeTaskID\|activeEpicID\|"active_task"' \
+              --include='*.go' --include='*.py' internal/ src/ tests/ cmd/ 2>/dev/null || true)"
+    assert_eq "no stray active_-qualified identifiers or JSON keys" "" "$ids"
+
+    # The two senses of `active` that are NOT this column, pinned so a future
+    # sweep does not "finish the job" and take them with it.
+    local kept
+    kept="$(cd "$WT" && grep -c 'func GetActiveTasks' internal/monitor/task.go)"
+    assert_eq "monitor.GetActiveTasks (a project's OPEN tasks) is untouched" "1" "$kept"
+    kept="$(cd "$WT" && grep -c 'PaneStatusActive' internal/monitor/tmux_lookup.go)"
+    if [[ "$kept" -gt 0 ]]; then
+        report_pass "PaneStatusActive (the bar has something to show) is untouched"
+    else
+        report_fail "PaneStatusActive (the bar has something to show) is untouched" \
+            "at least one PaneStatusActive" "$kept"
+    fi
 
     # And the historical files that DO keep it are keeping it on purpose — a
     # future rename sweep that "cleans them up" would break the migration chain,
@@ -439,7 +467,8 @@ test_readers() {
     assert_contains "\`session show\` names the held task" "E-$T_HELD" "$out"
 
     out="$(E session show "ES-$S_HELD" --json)"
-    assert_contains "\`session show --json\` carries it too" "$T_HELD" "$out"
+    assert_contains "\`session show --json\` carries it under the \`task\` key" '"task":' "$out"
+    assert_contains "...with the held task's id" "$T_HELD" "$out"
 
     # --all: a session with no messages is omitted from the default listing.
     out="$(E session list --all --json)"
@@ -452,7 +481,7 @@ test_readers() {
     E sql "INSERT INTO session_tasks (session_id, task_id, created_at, updated_at, relation_id)
              VALUES ($S_HELD, $T_HELD, '2026-08-01T00:00:00', '2026-08-01T00:00:00', 1)" --write >/dev/null 2>&1
     out="$(E task show "E-$T_HELD")"
-    assert_contains "\`task show\` names the session's active task on its touch row" \
+    assert_contains "\`task show\` names the task the session holds, on its touch row" \
         "ES-$S_HELD (E-$T_HELD)" "$out"
 }
 

@@ -194,7 +194,7 @@ const (
 // list body; unlike the bar's versions these are plain text, not tmux #[...]
 // format strings.
 const (
-	hintClaimBind = "  no active task — claim or bind one:  endless task claim <id>  /  endless task bind <id>"
+	hintClaimBind = "  no task — claim or bind one:  endless task claim <id>  /  endless task bind <id>"
 	hintNoSession = "  no Endless session — register it:  endless setup claude-hook"
 )
 
@@ -284,13 +284,13 @@ func Run(args []string) {
 		// E-698 briefly skipped the pin in a worktree, reasoning that every other
 		// command resolves the sandbox there and one rule beats a per-command
 		// exception. That broke the view outright: sessions and tasks are read by a
-		// single-database JOIN (monitor.queryActiveTaskForPanes:
+		// single-database JOIN (monitor.queryTaskForPanes:
 		// `FROM sessions s JOIN live_tasks t ON t.id = s.task_id`), so pane
 		// resolution IS a task read and cannot be split across two databases. Worse,
 		// sandbox task ids are a separate universe — sandboxcmd.seedFromWorktree
 		// copies one project row and one session row and NO tasks — so a task id
 		// resolved from main means nothing there. The worktree monitor rendered
-		// "no active task" for every pane.
+		// "no task" for every pane.
 		//
 		// The guard that skip was protecting (candidate job code writing to the main
 		// database) belongs on the trigger, not on the DB context: jobs.RunDue

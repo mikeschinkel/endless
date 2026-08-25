@@ -93,8 +93,8 @@ func releaseEvent(t *testing.T, taskID, sessionID int64) *Event {
 	}
 }
 
-// sessionActive reads a session's task_id and epic_id.
-func sessionActive(t *testing.T, db *sql.DB, sessionID int64) (taskID, epicID sql.NullInt64) {
+// sessionBinding reads a session's task_id and epic_id.
+func sessionBinding(t *testing.T, db *sql.DB, sessionID int64) (taskID, epicID sql.NullInt64) {
 	t.Helper()
 	if err := db.QueryRow(
 		"SELECT task_id, epic_id FROM sessions WHERE id = ?", sessionID,
@@ -116,7 +116,7 @@ func TestClaim_ChildOfEpicSetsEpicID(t *testing.T) {
 		t.Fatalf("execTaskClaimed: %v", err)
 	}
 
-	taskID, epicID := sessionActive(t, db, 42)
+	taskID, epicID := sessionBinding(t, db, 42)
 	if !taskID.Valid || taskID.Int64 != 100 {
 		t.Errorf("task_id = %v, want 100", taskID)
 	}
@@ -138,7 +138,7 @@ func TestClaim_NestedChildResolvesNearestEpic(t *testing.T) {
 		t.Fatalf("execTaskClaimed: %v", err)
 	}
 
-	_, epicID := sessionActive(t, db, 42)
+	_, epicID := sessionBinding(t, db, 42)
 	if !epicID.Valid || epicID.Int64 != 2 {
 		t.Errorf("epic_id = %v, want 2 (nearest epic ancestor)", epicID)
 	}
@@ -155,7 +155,7 @@ func TestClaim_StandaloneTaskNullEpicID(t *testing.T) {
 		t.Fatalf("execTaskClaimed: %v", err)
 	}
 
-	taskID, epicID := sessionActive(t, db, 42)
+	taskID, epicID := sessionBinding(t, db, 42)
 	if !taskID.Valid || taskID.Int64 != 100 {
 		t.Errorf("task_id = %v, want 100", taskID)
 	}
@@ -175,7 +175,7 @@ func TestClaim_EpicDirectlyResolvesToSelf(t *testing.T) {
 		t.Fatalf("execTaskClaimed: %v", err)
 	}
 
-	taskID, epicID := sessionActive(t, db, 42)
+	taskID, epicID := sessionBinding(t, db, 42)
 	if !taskID.Valid || taskID.Int64 != 1 {
 		t.Errorf("task_id = %v, want 1", taskID)
 	}
@@ -207,7 +207,7 @@ func TestClaim_RefusesRepointingABoundSession(t *testing.T) {
 	if _, err := execTaskClaimed(db, claimEvent(t, 100, 42)); err != nil {
 		t.Fatalf("claim epic child: %v", err)
 	}
-	if _, epicID := sessionActive(t, db, 42); !epicID.Valid || epicID.Int64 != 1 {
+	if _, epicID := sessionBinding(t, db, 42); !epicID.Valid || epicID.Int64 != 1 {
 		t.Fatalf("setup: epic_id = %v, want 1", epicID)
 	}
 
@@ -219,7 +219,7 @@ func TestClaim_RefusesRepointingABoundSession(t *testing.T) {
 		t.Errorf("error = %v, want it to name the write-once constraint", err)
 	}
 
-	taskID, epicID := sessionActive(t, db, 42)
+	taskID, epicID := sessionBinding(t, db, 42)
 	if !taskID.Valid || taskID.Int64 != 100 {
 		t.Errorf("task_id = %v, want 100 (refused claim must not move it)", taskID)
 	}
@@ -245,7 +245,7 @@ func TestClaim_ReaffirmingTheSameTaskIsAllowed(t *testing.T) {
 		t.Fatalf("re-claim of the same task: %v", err)
 	}
 
-	taskID, epicID := sessionActive(t, db, 42)
+	taskID, epicID := sessionBinding(t, db, 42)
 	if !taskID.Valid || taskID.Int64 != 100 {
 		t.Errorf("task_id = %v, want 100", taskID)
 	}
@@ -281,7 +281,7 @@ func TestClaim_RevivesEndedSession(t *testing.T) {
 	if state != "needs_input" {
 		t.Errorf("state = %q, want needs_input (bind didn't revive ended row)", state)
 	}
-	if taskID, _ := sessionActive(t, db, 42); !taskID.Valid || taskID.Int64 != 100 {
+	if taskID, _ := sessionBinding(t, db, 42); !taskID.Valid || taskID.Int64 != 100 {
 		t.Errorf("task_id = %v, want 100", taskID)
 	}
 }
@@ -335,7 +335,7 @@ func TestRelease_IsRefusedByWriteOnce(t *testing.T) {
 		t.Errorf("error = %v, want it to name the write-once constraint", err)
 	}
 
-	taskID, epicID := sessionActive(t, db, 42)
+	taskID, epicID := sessionBinding(t, db, 42)
 	if !taskID.Valid || taskID.Int64 != 100 {
 		t.Errorf("task_id = %v, want 100 (refused release must not clear it)", taskID)
 	}

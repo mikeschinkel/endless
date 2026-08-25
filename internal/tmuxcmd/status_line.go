@@ -99,7 +99,7 @@ func runStatusLine(args []string) {
 //
 // The trailing blockers segment is appended only when the task has at
 // least one active blocker; absence is the unblocked signal (E-1550).
-func format(info *monitor.ActiveTaskInfo) string {
+func format(info *monitor.TaskInfo) string {
 	out := fmt.Sprintf("#[fg=colour226,bold][%s]#[default]", taskIDPrefix(info))
 	for _, field := range []string{
 		info.ProjectName,
@@ -168,7 +168,7 @@ func blockersSegment(taskID int64) string {
 // TaskID is the session's task_id (the item currently in view); when an
 // epic is active and a child is in view, the epic id leads and the child
 // trails.
-func taskIDPrefix(info *monitor.ActiveTaskInfo) string {
+func taskIDPrefix(info *monitor.TaskInfo) string {
 	if info.EpicID == nil || *info.EpicID == info.TaskID {
 		return fmt.Sprintf("E-%d", info.TaskID)
 	}
@@ -186,7 +186,7 @@ func tierString(tier *int64) string {
 }
 
 // hintNoTask is shown when the pane (or its window) has an Endless
-// session but no active task. Inherits the theme's status-style fg
+// session that holds no task. Inherits the theme's status-style fg
 // (readable on the user's background) with italics for emphasis.
 func hintNoTask() string {
 	return "#[italics]claim a task ▸  endless task claim <id>#[default]"

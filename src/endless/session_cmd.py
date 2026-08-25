@@ -1793,7 +1793,7 @@ def session_show_resolve(session_ref: str | None, as_json: bool = False) -> None
             "pane_id": c.get("pane_id") or None,
             "cwd": c.get("cwd"),
             "worktree_path": c.get("worktree_path") or None,
-            "active_task": (
+            "task": (
                 {"id": task_info["id"], "title": task_info["title"], "status": task_info["status"]}
                 if task_info else None
             ),

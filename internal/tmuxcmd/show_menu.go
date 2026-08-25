@@ -42,8 +42,8 @@ func runShowMenu(args []string) {
 		pane = os.Getenv("TMUX_PANE")
 	}
 
-	info, err := monitor.GetActiveTaskForPane(pane)
-	if err != nil && !errors.Is(err, monitor.ErrNoActiveTask) {
+	info, err := monitor.GetTaskForPane(pane)
+	if err != nil && !errors.Is(err, monitor.ErrNoTask) {
 		fmt.Fprintf(os.Stderr, "endless-tmux show-menu: %v\n", err)
 		os.Exit(1)
 	}
@@ -66,9 +66,9 @@ func runShowMenu(args []string) {
 }
 
 // buildMenuTitle returns the centered title with the resolved task ID
-// embedded. When no active task exists, the title is just "Endless"
+// embedded. When the session holds no task, the title is just "Endless"
 // (the menu still opens so the user can refresh, etc.).
-func buildMenuTitle(info *monitor.ActiveTaskInfo) string {
+func buildMenuTitle(info *monitor.TaskInfo) string {
 	if info == nil {
 		return "#[align=centre]Endless"
 	}
@@ -78,11 +78,11 @@ func buildMenuTitle(info *monitor.ActiveTaskInfo) string {
 // buildMenuItems returns the menu items for the current task. When no
 // task is active, the task-dependent items are dimmed (prefixed with
 // "-" per tmux's display-menu convention).
-func buildMenuItems(binPath string, info *monitor.ActiveTaskInfo) []menuItem {
+func buildMenuItems(binPath string, info *monitor.TaskInfo) []menuItem {
 	// active-id call is preserved so item commands resolve at click
 	// time too — that way, if the user claimed a different task
 	// between opening the menu and selecting an item, the item still
-	// targets the latest active task.
+	// targets the session's latest task.
 	taskRef := fmt.Sprintf("$(%s tmux active-id --pane=#{pane_id})", binPath)
 
 	items := []menuItem{
@@ -97,7 +97,7 @@ func buildMenuItems(binPath string, info *monitor.ActiveTaskInfo) []menuItem {
 		rowToggleItem(),
 	}
 
-	// Dim task-dependent items when there is no active task.
+	// Dim task-dependent items when the session holds no task.
 	if info == nil {
 		for i := range items {
 			switch items[i].Label {

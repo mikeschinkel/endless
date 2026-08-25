@@ -156,7 +156,7 @@ func resumeByUUID(db *sql.DB, ref string) (ResumeTarget, error) {
 	var raws []resumeRow
 	for rows.Next() {
 		var r resumeRow
-		if err := rows.Scan(&r.id, &r.sessionID, &r.projectID, &r.activeTask, &r.state); err != nil {
+		if err := rows.Scan(&r.id, &r.sessionID, &r.projectID, &r.taskID, &r.state); err != nil {
 			rows.Close()
 			return ResumeTarget{}, fmt.Errorf("scan session: %w", err)
 		}
@@ -185,7 +185,7 @@ func resumeByUUID(db *sql.DB, ref string) (ResumeTarget, error) {
 type resumeRow struct {
 	id, projectID int64
 	sessionID     sql.NullString
-	activeTask    sql.NullInt64
+	taskID        sql.NullInt64
 	state         string
 }
 
@@ -194,7 +194,7 @@ type resumeRow struct {
 // releases the connection once Scan returns.
 func scanResume(row *sql.Row) (ResumeTarget, bool, error) {
 	var r resumeRow
-	err := row.Scan(&r.id, &r.sessionID, &r.projectID, &r.activeTask, &r.state)
+	err := row.Scan(&r.id, &r.sessionID, &r.projectID, &r.taskID, &r.state)
 	if err == sql.ErrNoRows {
 		return ResumeTarget{}, false, nil
 	}
@@ -221,8 +221,8 @@ func buildResumeTarget(r resumeRow) (ResumeTarget, error) {
 			t.ProjectPath = path
 		}
 	}
-	if r.activeTask.Valid {
-		v := r.activeTask.Int64
+	if r.taskID.Valid {
+		v := r.taskID.Int64
 		t.TaskID = &v
 		wt, err := WorktreePathForTask(r.projectID, v)
 		if err != nil {

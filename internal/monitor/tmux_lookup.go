@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-// ActiveTaskInfo is the read-only projection used by the tmux status
+// TaskInfo is the read-only projection used by the tmux status
 // line and menu: enough to render the second status row
 // ("[E-NNNN] · project · type · phase · tier · status") plus the title
 // for popup display.
@@ -18,7 +18,7 @@ import (
 // EpicID is the session's epic_id (E-1571): nil for a non-epic
 // session, the epic task id otherwise. The renderer compares it against TaskID
 // to pick the [E-NNNN] / [E-EEEE] / [E-EEEE:E-CCCC] prefix shape.
-type ActiveTaskInfo struct {
+type TaskInfo struct {
 	TaskID      int64
 	Title       string
 	Status      string
@@ -29,14 +29,14 @@ type ActiveTaskInfo struct {
 	EpicID      *int64
 }
 
-// ErrNoActiveTask is returned when no working session, in either the
+// ErrNoTask is returned when no working session, in either the
 // requested pane or anywhere else in the same tmux window, has a
 // non-NULL task_id. Callers should render an empty/placeholder
 // status line rather than treat this as a fatal error.
-var ErrNoActiveTask = errors.New("no active task for this tmux context")
+var ErrNoTask = errors.New("no task for this tmux context")
 
-// GetActiveTaskForPane resolves a tmux pane identifier (the value tmux
-// passes in $TMUX_PANE, stored in sessions.process) to the active task
+// GetTaskForPane resolves a tmux pane identifier (the value tmux
+// passes in $TMUX_PANE, stored in sessions.process) to the task
 // the user should see in the status line.
 //
 // Lookup order:
@@ -53,10 +53,10 @@ var ErrNoActiveTask = errors.New("no active task for this tmux context")
 // tmux session) ensures different windows show different tasks when
 // the user has multiple Claude sessions across windows.
 //
-// Returns ErrNoActiveTask when both lookups come up empty.
-func GetActiveTaskForPane(tmuxPane string) (*ActiveTaskInfo, error) {
+// Returns ErrNoTask when both lookups come up empty.
+func GetTaskForPane(tmuxPane string) (*TaskInfo, error) {
 	if tmuxPane == "" {
-		return nil, ErrNoActiveTask
+		return nil, ErrNoTask
 	}
 
 	db, err := DB()
@@ -64,26 +64,26 @@ func GetActiveTaskForPane(tmuxPane string) (*ActiveTaskInfo, error) {
 		return nil, err
 	}
 
-	if info, err := queryActiveTaskForPanes(db, []string{tmuxPane}); err == nil {
+	if info, err := queryTaskForPanes(db, []string{tmuxPane}); err == nil {
 		return info, nil
-	} else if !errors.Is(err, ErrNoActiveTask) {
+	} else if !errors.Is(err, ErrNoTask) {
 		return nil, err
 	}
 
 	panes, err := listPanesInSameWindow(tmuxPane)
 	if err != nil || len(panes) == 0 {
-		return nil, ErrNoActiveTask
+		return nil, ErrNoTask
 	}
-	return queryActiveTaskForPanes(db, panes)
+	return queryTaskForPanes(db, panes)
 }
 
-func queryActiveTaskForPanes(db *sql.DB, panes []string) (*ActiveTaskInfo, error) {
+func queryTaskForPanes(db *sql.DB, panes []string) (*TaskInfo, error) {
 	ids, err := ProcessIDsForPanes(panes)
 	if err != nil {
 		return nil, err
 	}
 	if len(ids) == 0 {
-		return nil, ErrNoActiveTask
+		return nil, ErrNoTask
 	}
 
 	placeholders, args := processIDArgs(ids)
@@ -108,13 +108,13 @@ func queryActiveTaskForPanes(db *sql.DB, panes []string) (*ActiveTaskInfo, error
 	      ORDER BY s.last_activity DESC
 	      LIMIT 1`
 
-	var info ActiveTaskInfo
+	var info TaskInfo
 	err = db.QueryRow(q, args...).Scan(
 		&info.TaskID, &info.Title, &info.Status,
 		&info.Type, &info.Phase, &info.Tier, &info.ProjectName, &info.EpicID,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil, ErrNoActiveTask
+		return nil, ErrNoTask
 	}
 	if err != nil {
 		return nil, err
@@ -171,13 +171,15 @@ const (
 // content. Task is populated only when Kind == PaneStatusActive.
 type PaneStatus struct {
 	Kind PaneStatusKind
-	Task *ActiveTaskInfo
+	Task *TaskInfo
 }
 
-// GetPaneStatus is the higher-level companion to GetActiveTaskForPane.
-// Beyond "find an active task," it classifies what the bar should show:
+// GetPaneStatus is the higher-level companion to GetTaskForPane.
+// Beyond "find the task," it classifies what the bar should show:
 //
-//  1. PaneStatusActive — there's an active task; render it.
+//  1. PaneStatusActive — the session holds a task; render it. (The kind
+//     keeps its `Active` name: it is about the STATUS BAR having something
+//     live to show, not about one of several tasks being the active one.)
 //  2. PaneStatusNoTask — a session exists in this window but no task
 //     is claimed; render a "claim a task" hint.
 //  3. PaneStatusClaudeNoSession — the focused pane is running Claude
@@ -194,13 +196,13 @@ func GetPaneStatus(tmuxPane string) (*PaneStatus, error) {
 		return &PaneStatus{Kind: PaneStatusNone}, nil
 	}
 
-	if info, err := GetActiveTaskForPane(tmuxPane); err == nil {
+	if info, err := GetTaskForPane(tmuxPane); err == nil {
 		return &PaneStatus{Kind: PaneStatusActive, Task: info}, nil
-	} else if !errors.Is(err, ErrNoActiveTask) {
+	} else if !errors.Is(err, ErrNoTask) {
 		return nil, err
 	}
 
-	// No active task. Determine which hint (if any) to show.
+	// The session holds no task. Determine which hint (if any) to show.
 	panes, err := listPanesInSameWindow(tmuxPane)
 	if err != nil {
 		panes = []string{tmuxPane}
@@ -333,7 +335,7 @@ func paneIsRunningShell(tmuxPane string) (isShell, known bool) {
 // ResolveSessionStatusSession returns the emitting session's integer id for the
 // given tmux pane, used by `session status` when NO goal is claimed so it can
 // list the session's own surfaced/revisited rows (E-1802). Resolution mirrors
-// the focal path (GetActiveTaskForPane): the pane's own live session first, then
+// the focal path (GetTaskForPane): the pane's own live session first, then
 // any live session in the same tmux WINDOW (most-recent last_activity). Unlike
 // the focal path it does NOT require task_id — an unclaimed session still
 // has surfaced/revisited work to show. Returns 0 (no error) when not in tmux

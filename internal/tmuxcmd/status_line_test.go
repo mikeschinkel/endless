@@ -69,14 +69,14 @@ func TestFormat_OmitsEmptyFields(t *testing.T) {
 	tier := int64(3)
 	tests := []struct {
 		name           string
-		info           *monitor.ActiveTaskInfo
+		info           *monitor.TaskInfo
 		wantParts      []string
 		notWant        []string
 		wantSeparators int // -1 to skip the check
 	}{
 		{
 			name: "all fields present",
-			info: &monitor.ActiveTaskInfo{
+			info: &monitor.TaskInfo{
 				TaskID: 42, ProjectName: "proj", Type: "todo",
 				Phase: "now", Tier: &tier, Status: "underway",
 			},
@@ -85,7 +85,7 @@ func TestFormat_OmitsEmptyFields(t *testing.T) {
 		},
 		{
 			name: "tier nil drops the t-segment",
-			info: &monitor.ActiveTaskInfo{
+			info: &monitor.TaskInfo{
 				TaskID: 7, ProjectName: "proj", Type: "todo",
 				Phase: "now", Tier: nil, Status: "ready",
 			},
@@ -94,7 +94,7 @@ func TestFormat_OmitsEmptyFields(t *testing.T) {
 		},
 		{
 			name:           "blank project + type + phase omitted",
-			info:           &monitor.ActiveTaskInfo{TaskID: 9, Status: "ready"},
+			info:           &monitor.TaskInfo{TaskID: 9, Status: "ready"},
 			wantParts:      []string{"[E-9]", "ready"},
 			wantSeparators: 1, // only status
 		},
@@ -152,22 +152,22 @@ func TestTaskIDPrefix(t *testing.T) {
 	epic := int64(100)
 	tests := []struct {
 		name string
-		info *monitor.ActiveTaskInfo
+		info *monitor.TaskInfo
 		want string
 	}{
 		{
 			name: "no epic context",
-			info: &monitor.ActiveTaskInfo{TaskID: 42, EpicID: nil},
+			info: &monitor.TaskInfo{TaskID: 42, EpicID: nil},
 			want: "E-42",
 		},
 		{
 			name: "viewing the epic itself",
-			info: &monitor.ActiveTaskInfo{TaskID: 100, EpicID: &epic},
+			info: &monitor.TaskInfo{TaskID: 100, EpicID: &epic},
 			want: "E-100",
 		},
 		{
 			name: "viewing a child of the epic",
-			info: &monitor.ActiveTaskInfo{TaskID: 137, EpicID: &epic},
+			info: &monitor.TaskInfo{TaskID: 137, EpicID: &epic},
 			want: "E-100:E-137",
 		},
 	}
@@ -350,7 +350,7 @@ func TestFormat_AppendsBlockersSegment(t *testing.T) {
 	seedTaskWithStatus(t, db, 7, "ready")
 	seedBlocks(t, db, 7, 100)
 
-	info := &monitor.ActiveTaskInfo{
+	info := &monitor.TaskInfo{
 		TaskID: 100, ProjectName: "p", Type: "todo",
 		Phase: "now", Status: "underway",
 	}
@@ -373,7 +373,7 @@ func TestFormat_OmitsBlockersSegmentWhenEmpty(t *testing.T) {
 	}
 	seedTaskWithStatus(t, db, 100, "underway")
 
-	info := &monitor.ActiveTaskInfo{
+	info := &monitor.TaskInfo{
 		TaskID: 100, ProjectName: "p", Type: "todo",
 		Phase: "now", Status: "underway",
 	}

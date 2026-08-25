@@ -11,8 +11,8 @@ import (
 	"github.com/mikeschinkel/endless/internal/monitor"
 )
 
-// runActiveID prints `E-NNNN` for the active task of the current pane's
-// session, or nothing (exit 1) if no active task. Used by menu items so
+// runActiveID prints `E-NNNN` for the task held by the current pane's
+// session, or nothing (exit 1) if it holds none. Used by menu items so
 // they can pipe the ID into other commands without paying Python startup.
 //
 // Not advertised in the top-level usage — it's plumbing for the menus,
@@ -29,9 +29,9 @@ func runActiveID(args []string) {
 	if pane == "" {
 		pane = os.Getenv("TMUX_PANE")
 	}
-	info, err := monitor.GetActiveTaskForPane(pane)
+	info, err := monitor.GetTaskForPane(pane)
 	if err != nil {
-		if errors.Is(err, monitor.ErrNoActiveTask) {
+		if errors.Is(err, monitor.ErrNoTask) {
 			os.Exit(1)
 		}
 		fmt.Fprintf(os.Stderr, "endless-tmux active-id: %v\n", err)

@@ -24,11 +24,11 @@ import (
 // moved. What is new is that a binding now SURVIVES the session ending, which
 // the old tests asserted the opposite of.
 
-// TestGetActiveTaskForPane_SkipsEndedRows keeps the original E-1530 guarantee
+// TestGetTaskForPane_SkipsEndedRows keeps the original E-1530 guarantee
 // for the case identity does not cover: the same session identity ending and a
 // new one starting in the same pane on the SAME server. Both rows share a
 // process_id, so only `state != 'ended'` separates them.
-func TestGetActiveTaskForPane_SkipsEndedRows(t *testing.T) {
+func TestGetTaskForPane_SkipsEndedRows(t *testing.T) {
 	db := withTestDB(t)
 	seedProject(t, db, 1, "acme", "/tmp/acme")
 	seedGhostTask(t, db, 111, "ghost task")
@@ -41,19 +41,19 @@ func TestGetActiveTaskForPane_SkipsEndedRows(t *testing.T) {
 	seedPaneSession(t, db, "sess-ghost", pid, "ended", 111, "2026-05-21T00:00:00")
 	seedPaneSession(t, db, "sess-live", pid, "working", 222, "2026-05-20T00:00:00")
 
-	info, err := GetActiveTaskForPane(fakePane)
+	info, err := GetTaskForPane(fakePane)
 	if err != nil {
-		t.Fatalf("GetActiveTaskForPane: %v", err)
+		t.Fatalf("GetTaskForPane: %v", err)
 	}
 	if info.TaskID != 222 {
 		t.Errorf("TaskID = %d, want 222 (live), got the ghost row", info.TaskID)
 	}
 }
 
-// TestGetActiveTaskForPane_GhostOnlyReturnsNoTask is the standalone version:
-// with ONLY an ended row on the pane, the lookup surfaces ErrNoActiveTask
+// TestGetTaskForPane_GhostOnlyReturnsNoTask is the standalone version:
+// with ONLY an ended row on the pane, the lookup surfaces ErrNoTask
 // rather than the stale task.
-func TestGetActiveTaskForPane_GhostOnlyReturnsNoTask(t *testing.T) {
+func TestGetTaskForPane_GhostOnlyReturnsNoTask(t *testing.T) {
 	db := withTestDB(t)
 	seedProject(t, db, 1, "acme", "/tmp/acme")
 	seedGhostTask(t, db, 333, "ghost only")
@@ -61,13 +61,13 @@ func TestGetActiveTaskForPane_GhostOnlyReturnsNoTask(t *testing.T) {
 	pid := mustSeedPane(t, db, TestServerUUID, fakePane)
 	seedPaneSession(t, db, "sess-ghost-only", pid, "ended", 333, "2026-05-21T00:00:00")
 
-	_, err := GetActiveTaskForPane(fakePane)
-	if !errors.Is(err, ErrNoActiveTask) {
-		t.Errorf("ghost-only: got %v, want ErrNoActiveTask", err)
+	_, err := GetTaskForPane(fakePane)
+	if !errors.Is(err, ErrNoTask) {
+		t.Errorf("ghost-only: got %v, want ErrNoTask", err)
 	}
 }
 
-// TestGetActiveTaskForPane_ReusedPaneOnNewServerIsDifferentIdentity is the
+// TestGetTaskForPane_ReusedPaneOnNewServerIsDifferentIdentity is the
 // STRUCTURAL replacement for everything E-1530 had to do defensively.
 //
 // Same pane string, two tmux servers. The prior server's session is left fully
@@ -75,7 +75,7 @@ func TestGetActiveTaskForPane_GhostOnlyReturnsNoTask(t *testing.T) {
 // lookup is the worst case: a live-looking row whose pane id matches. It must
 // still be invisible from the current server, purely because its processes row
 // is a different identity.
-func TestGetActiveTaskForPane_ReusedPaneOnNewServerIsDifferentIdentity(t *testing.T) {
+func TestGetTaskForPane_ReusedPaneOnNewServerIsDifferentIdentity(t *testing.T) {
 	db := withTestDB(t)
 	seedProject(t, db, 1, "acme", "/tmp/acme")
 	seedGhostTask(t, db, 444, "previous server's task")
@@ -92,9 +92,9 @@ func TestGetActiveTaskForPane_ReusedPaneOnNewServerIsDifferentIdentity(t *testin
 	seedPaneSession(t, db, "sess-old-server", oldPID, "working", 444, "2026-05-21T00:00:00")
 	seedPaneSession(t, db, "sess-this-server", newPID, "working", 555, "2026-05-20T00:00:00")
 
-	info, err := GetActiveTaskForPane(fakePane)
+	info, err := GetTaskForPane(fakePane)
 	if err != nil {
-		t.Fatalf("GetActiveTaskForPane: %v", err)
+		t.Fatalf("GetTaskForPane: %v", err)
 	}
 	if info.TaskID != 555 {
 		t.Errorf("TaskID = %d, want 555; the previous server's binding won the lookup", info.TaskID)
@@ -200,17 +200,17 @@ func mustSeedPane(t *testing.T, db *sql.DB, serverUUID, pane string) int64 {
 }
 
 // seedPaneSession inserts a sessions row bound to processID. taskID 0 means
-// "no active task" (stored NULL).
+// "holds no task" (stored NULL).
 func seedPaneSession(t *testing.T, db *sql.DB, sessionID string, processID int64, state string, taskID int64, lastActivity string) {
 	t.Helper()
-	var activeTask any
+	var taskVal any
 	if taskID != 0 {
-		activeTask = taskID
+		taskVal = taskID
 	}
 	if _, err := db.Exec(
 		`INSERT INTO sessions (session_id, project_id, platform, state, process_id, task_id, last_activity)
 		 VALUES (?, 1, 'claude', ?, ?, ?, ?)`,
-		sessionID, state, processID, activeTask, lastActivity,
+		sessionID, state, processID, taskVal, lastActivity,
 	); err != nil {
 		t.Fatalf("seed session %q: %v", sessionID, err)
 	}

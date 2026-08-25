@@ -134,8 +134,8 @@ type scanner interface {
 
 func scanSnapshot(row scanner) SessionSnapshot {
 	var guid, short, state sql.NullString
-	var activeTask sql.NullInt64
-	if err := row.Scan(&guid, &short, &state, &activeTask); err != nil {
+	var taskID sql.NullInt64
+	if err := row.Scan(&guid, &short, &state, &taskID); err != nil {
 		return SessionSnapshot{}
 	}
 	snap := SessionSnapshot{
@@ -144,8 +144,8 @@ func scanSnapshot(row scanner) SessionSnapshot {
 		State:       state.String,
 		Found:       true,
 	}
-	if activeTask.Valid {
-		v := activeTask.Int64
+	if taskID.Valid {
+		v := taskID.Int64
 		snap.TaskID = &v
 	}
 	return snap

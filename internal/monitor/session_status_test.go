@@ -25,11 +25,11 @@ func snTask(t *testing.T, db *sql.DB, id, projectID int64, status, phase, text s
 // snSession inserts a session with an explicit id and task_id so the
 // row-set membership (sessions on the focal task) and in_flight decoration can
 // be driven directly.
-func snSession(t *testing.T, db *sql.DB, id, projectID, activeTask int64, state string) {
+func snSession(t *testing.T, db *sql.DB, id, projectID, taskID int64, state string) {
 	t.Helper()
 	var at any
-	if activeTask != 0 {
-		at = activeTask
+	if taskID != 0 {
+		at = taskID
 	}
 	if _, err := db.Exec(
 		`INSERT INTO sessions (id, session_id, project_id, platform, state, task_id, kind_id, started_at, last_activity)

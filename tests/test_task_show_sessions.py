@@ -265,12 +265,12 @@ def test_json_reports_created_by_and_touched_by(seeded_project_at_cwd):
     assert payload["created_by"] == {
         "session": "ES-994",
         "relation": "surfaced",
-        "active_task": f"E-{a}",
+        "task": f"E-{a}",
         "state": "idle",
         "touched_at": "2026-08-01T00:00:00",
     }
     assert [t["session"] for t in payload["touched_by"]] == ["ES-996", "ES-994"]
-    assert payload["touched_by"][0]["active_task"] is None
+    assert payload["touched_by"][0]["task"] is None
 
 
 def test_json_created_by_is_null_without_a_creator(seeded_project_at_cwd):

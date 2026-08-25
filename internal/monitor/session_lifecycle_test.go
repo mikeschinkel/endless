@@ -259,12 +259,12 @@ func TestStartChatSession_InsertWithNullTask(t *testing.T) {
 	}
 }
 
-// TestStartChatSession_UpsertKeepsActiveTask pins E-1968 / ED-1560: starting a
+// TestStartChatSession_UpsertKeepsTaskID pins E-1968 / ED-1560: starting a
 // chat on a session already bound to a task must NOT drop the binding. The
 // column is write-once, and `task chat` has nothing to say about who owns a
 // task — clearing it here made the session that worked the task unreachable by
 // task ref. The session still flips to 'working'; only the unbind is gone.
-func TestStartChatSession_UpsertKeepsActiveTask(t *testing.T) {
+func TestStartChatSession_UpsertKeepsTaskID(t *testing.T) {
 	db := withTestDB(t)
 	seedProject(t, db, 1, "proj-test-1", "/tmp/proj-test-1")
 	seedTask(t, db, 42, 1, "test task", "ready")

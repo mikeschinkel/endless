@@ -14,10 +14,10 @@ import (
 const fakePane = "%999991"
 const fakePane2 = "%999992"
 
-// TestGetActiveTaskForPane_DirectMatch pins the primary lookup: a sessions
+// TestGetTaskForPane_DirectMatch pins the primary lookup: a sessions
 // row whose process equals the pane id and whose task_id is set
 // returns the joined task info.
-func TestGetActiveTaskForPane_DirectMatch(t *testing.T) {
+func TestGetTaskForPane_DirectMatch(t *testing.T) {
 	db := withTestDB(t)
 	seedProject(t, db, 1, "acme", "/tmp/acme")
 	if _, err := db.Exec(
@@ -33,9 +33,9 @@ func TestGetActiveTaskForPane_DirectMatch(t *testing.T) {
 		t.Fatalf("seed session: %v", err)
 	}
 
-	info, err := GetActiveTaskForPane(fakePane)
+	info, err := GetTaskForPane(fakePane)
 	if err != nil {
-		t.Fatalf("GetActiveTaskForPane: %v", err)
+		t.Fatalf("GetTaskForPane: %v", err)
 	}
 	if info.TaskID != 55 {
 		t.Errorf("TaskID = %d, want 55", info.TaskID)
@@ -51,33 +51,33 @@ func TestGetActiveTaskForPane_DirectMatch(t *testing.T) {
 	}
 }
 
-// TestGetActiveTaskForPane_EmptyPaneReturnsErrNoActiveTask pins the empty
+// TestGetTaskForPane_EmptyPaneReturnsErrNoTask pins the empty
 // input branch: callers without a pane id (non-tmux contexts) get
-// ErrNoActiveTask before any DB or tmux work happens.
-func TestGetActiveTaskForPane_EmptyPaneReturnsErrNoActiveTask(t *testing.T) {
+// ErrNoTask before any DB or tmux work happens.
+func TestGetTaskForPane_EmptyPaneReturnsErrNoTask(t *testing.T) {
 	withTestDB(t)
-	_, err := GetActiveTaskForPane("")
-	if !errors.Is(err, ErrNoActiveTask) {
-		t.Errorf("empty pane: got %v, want ErrNoActiveTask", err)
+	_, err := GetTaskForPane("")
+	if !errors.Is(err, ErrNoTask) {
+		t.Errorf("empty pane: got %v, want ErrNoTask", err)
 	}
 }
 
-// TestGetActiveTaskForPane_NoMatchReturnsErrNoActiveTask pins the no-row
+// TestGetTaskForPane_NoMatchReturnsErrNoTask pins the no-row
 // case: a pane id with no matching session (and a tmux list-panes that
-// fails for the synthetic id) surfaces ErrNoActiveTask, not an internal
+// fails for the synthetic id) surfaces ErrNoTask, not an internal
 // error.
-func TestGetActiveTaskForPane_NoMatchReturnsErrNoActiveTask(t *testing.T) {
+func TestGetTaskForPane_NoMatchReturnsErrNoTask(t *testing.T) {
 	withTestDB(t)
-	_, err := GetActiveTaskForPane(fakePane)
-	if !errors.Is(err, ErrNoActiveTask) {
-		t.Errorf("unknown pane: got %v, want ErrNoActiveTask", err)
+	_, err := GetTaskForPane(fakePane)
+	if !errors.Is(err, ErrNoTask) {
+		t.Errorf("unknown pane: got %v, want ErrNoTask", err)
 	}
 }
 
-// TestGetActiveTaskForPane_SkipsNullActiveTask pins that a session row
+// TestGetTaskForPane_SkipsNullTaskID pins that a session row
 // with NULL task_id is not selected — only sessions with a bound
 // task are eligible, even if process matches exactly.
-func TestGetActiveTaskForPane_SkipsNullActiveTask(t *testing.T) {
+func TestGetTaskForPane_SkipsNullTaskID(t *testing.T) {
 	db := withTestDB(t)
 	seedProject(t, db, 1, "acme", "/tmp/acme")
 	if _, err := db.Exec(
@@ -86,9 +86,9 @@ func TestGetActiveTaskForPane_SkipsNullActiveTask(t *testing.T) {
 		t.Fatalf("seed session: %v", err)
 	}
 
-	_, err := GetActiveTaskForPane(fakePane)
-	if !errors.Is(err, ErrNoActiveTask) {
-		t.Errorf("NULL task_id: got %v, want ErrNoActiveTask", err)
+	_, err := GetTaskForPane(fakePane)
+	if !errors.Is(err, ErrNoTask) {
+		t.Errorf("NULL task_id: got %v, want ErrNoTask", err)
 	}
 }
 
@@ -106,10 +106,10 @@ func TestGetPaneStatus_EmptyPaneReturnsNone(t *testing.T) {
 	}
 }
 
-// TestGetPaneStatus_ActiveTaskReturnsActiveKind pins the happy path: a
+// TestGetPaneStatus_TaskReturnsActiveKind pins the happy path: a
 // bound session in the pane produces PaneStatusActive with the task info
 // populated.
-func TestGetPaneStatus_ActiveTaskReturnsActiveKind(t *testing.T) {
+func TestGetPaneStatus_TaskReturnsActiveKind(t *testing.T) {
 	db := withTestDB(t)
 	seedProject(t, db, 1, "acme", "/tmp/acme")
 	if _, err := db.Exec(

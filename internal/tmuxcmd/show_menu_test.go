@@ -15,17 +15,17 @@ func TestBuildMenuTitle_IncludesTaskIDOrFallsBack(t *testing.T) {
 	if got := buildMenuTitle(nil); !strings.Contains(got, "Endless") || strings.Contains(got, "E-") {
 		t.Errorf("nil info title = %q, want plain Endless with no task ref", got)
 	}
-	info := &monitor.ActiveTaskInfo{TaskID: 42}
+	info := &monitor.TaskInfo{TaskID: 42}
 	if got := buildMenuTitle(info); !strings.Contains(got, "[E-42]") {
 		t.Errorf("active title = %q, missing [E-42]", got)
 	}
 }
 
-// TestBuildMenuItems_NoActiveTaskDimsTaskItems pins the dim-when-no-task
+// TestBuildMenuItems_NoTaskDimsTaskItems pins the dim-when-no-task
 // rule: items whose actions depend on a current task ("Task Details",
 // "Mark unverified") are prefixed with "-" to gray them out, while
 // task-independent items (Refresh, row toggle) are left unchanged.
-func TestBuildMenuItems_NoActiveTaskDimsTaskItems(t *testing.T) {
+func TestBuildMenuItems_NoTaskDimsTaskItems(t *testing.T) {
 	got := buildMenuItems("/usr/local/bin/endless-go", nil)
 	wantDimmed := map[string]bool{"-Task Details": false, "-Mark unverified": false}
 	for _, it := range got {
@@ -44,11 +44,11 @@ func TestBuildMenuItems_NoActiveTaskDimsTaskItems(t *testing.T) {
 	}
 }
 
-// TestBuildMenuItems_ActiveTaskUndimmed pins the active-task case:
+// TestBuildMenuItems_TaskUndimmed pins the active-task case:
 // task-dependent items keep their original labels (no leading "-") and
 // the action strings embed the active-id resolution call.
-func TestBuildMenuItems_ActiveTaskUndimmed(t *testing.T) {
-	info := &monitor.ActiveTaskInfo{TaskID: 99}
+func TestBuildMenuItems_TaskUndimmed(t *testing.T) {
+	info := &monitor.TaskInfo{TaskID: 99}
 	got := buildMenuItems("/usr/local/bin/endless-go", info)
 	seenDetails := false
 	for _, it := range got {
