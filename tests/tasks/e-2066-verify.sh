@@ -286,13 +286,33 @@ inject_and_check() {
         >/tmp/e2066-inject.log 2>&1 && guard_passed=1
     cp "${TMP_E2066}/backup" "${file}" || setup_error "could not restore ${file}"
 
-    if [[ "${mode}" == "bites" && "${guard_passed}" == "0" ]] \
-       || [[ "${mode}" == "tolerates" && "${guard_passed}" == "1" ]]; then
-        report_pass "${label}"
+    if [[ "${mode}" == "tolerates" ]]; then
+        if [[ "${guard_passed}" == "1" ]]; then
+            report_pass "${label}"
+        else
+            report_fail "${label}" "the guard to pass" "it failed"
+        fi
+        return 0
+    fi
+
+    if [[ "${guard_passed}" == "1" ]]; then
+        report_fail "${label}" "the guard to fail" "it passed"
+        return 0
+    fi
+
+    # Failing is half of it. The failure is also the only moment a future
+    # session is guaranteed to be thinking about this rule, so it has to TEACH
+    # the rule — a bare list of offending ids says nothing about the band or
+    # what to do with a citation.
+    if grep -qF -- "reserved DOCUMENTATION-EXAMPLE band" /tmp/e2066-inject.log \
+       && grep -qF -- "Trailing citation" /tmp/e2066-inject.log \
+       && grep -qF -- "state the fact plainly" /tmp/e2066-inject.log \
+       && grep -qF -- "renumber it into the band" /tmp/e2066-inject.log; then
+        report_pass "${label}, and the failure states the band and all three fixes"
     else
-        report_fail "${label}" \
-            "the guard to $([[ ${mode} == bites ]] && echo fail || echo pass)" \
-            "it $([[ ${guard_passed} == 1 ]] && echo passed || echo failed)"
+        report_fail "${label}, and the failure states the band and all three fixes" \
+            "the band and the delete/restate/renumber guidance in the message" \
+            "$(grep -c . /tmp/e2066-inject.log) lines, rule text absent"
     fi
 }
 

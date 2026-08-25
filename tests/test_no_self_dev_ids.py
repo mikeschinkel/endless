@@ -30,6 +30,28 @@ EXAMPLE_ID_MAX = 199
 
 _ID = re.compile(r"\b(?:E|ES|ED)-(\d+)")
 
+#: Appended to every failure. The moment this guard fires is the only moment a
+#: session is guaranteed to be thinking about the rule, so the rule is stated
+#: here rather than left in a docstring nobody opens.
+_RULE = f"""
+
+  Ids 1-{EXAMPLE_ID_MAX} are the reserved DOCUMENTATION-EXAMPLE band. An id above
+  that reads as a citation into the ledger Endless itself is developed against
+  — which a user running Endless on their own project cannot open.
+
+  Fix one of three ways:
+    - Trailing citation ("Set the order (E-1683).") — delete the parenthetical.
+    - The id standing in for a fact ("Per ED-1540, unsettled means ...",
+      "enforced since E-1950") — state the fact plainly instead. If the
+      sentence needs the id to make sense, it is describing Endless's own
+      development, not the tool's behaviour, and belongs in the ledger.
+    - A hypothetical EXAMPLE — renumber it into the band (E-101, ES-102,
+      ED-103) or use the E-NNNN placeholder.
+
+  Source-code comments are exempt: they carry self-dev provenance and no user
+  sees them. This guard reads help text, guide pages and runtime strings only.
+"""
+
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _GUIDE_DIR = _REPO_ROOT / "docs" / "guide"
 _SRC_DIR = _REPO_ROOT / "src" / "endless"
@@ -91,7 +113,7 @@ def test_help_tree_carries_no_self_dev_ids():
         walked += 1
         bad += _report(invocation, help_text)
     assert walked > 100, f"the walk only reached {walked} commands — did it stop early?"
-    assert not bad, "task ids in --help output:\n" + "\n".join(bad)
+    assert not bad, "task ids in --help output:\n" + "\n".join(bad) + _RULE
 
 
 def test_guide_carries_no_self_dev_ids():
@@ -101,7 +123,7 @@ def test_guide_carries_no_self_dev_ids():
     bad = []
     for page in pages:
         bad += _report(page.relative_to(_REPO_ROOT), page.read_text())
-    assert not bad, "task ids in the guide:\n" + "\n".join(bad)
+    assert not bad, "task ids in the guide:\n" + "\n".join(bad) + _RULE
 
 
 def test_runtime_strings_carry_no_self_dev_ids():
@@ -114,7 +136,7 @@ def test_runtime_strings_carry_no_self_dev_ids():
             for offender in _offenders(node.value):
                 bad.append(f"  {rel}:{node.lineno}: {offender} :: "
                            f"{node.value.strip()[:100]}")
-    assert not bad, "task ids in runtime strings:\n" + "\n".join(bad)
+    assert not bad, "task ids in runtime strings:\n" + "\n".join(bad) + _RULE
 
 
 @pytest.mark.parametrize("text,expected", [
