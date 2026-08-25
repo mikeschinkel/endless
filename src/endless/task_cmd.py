@@ -933,22 +933,16 @@ def _render_flat_table(rows):
         and any(r["tier"] is not None for r in rows)
     )
 
-    # E-1956: a terminal status carries its supersession inline, so the Status
-    # cell — not the raw column value — is what the width is measured against.
-    # Non-terminal rows get an empty note, which is why a default listing (no
-    # terminal statuses in it) renders byte-identically to before.
-    ids = [r["id"] for r in rows]
-    replaced = replaced_by_map(ids)
-    duplicated = duplicates_map(ids)
-    status_cells = [
-        r["status"] + status_notes(
-            r["status"], replaced.get(r["id"]), duplicated.get(r["id"]))
-        for r in rows
-    ]
-
+    # E-2064: the Status cell is the BARE status here. The supersession notes
+    # (E-1956 `replaced by`, E-1185 `duplicates`) belong to `task show`, which
+    # has one status and unlimited width. A table has many rows sharing one
+    # column, so the longest cell — 'obsolete (replaced by E-1367)', roughly
+    # three times a bare status — is charged to every row's title. A handful of
+    # annotated rows cannot cost the whole table its titles for a fact any
+    # reader recovers by opening the task.
     id_w = max(2, max(len(task_id_display(r["id"])) for r in rows))
     ph_w = max(5, max(len(r["phase"]) for r in rows))
-    st_w = max(6, max(len(s) for s in status_cells))
+    st_w = max(6, max(len(r["status"]) for r in rows))
     ti_w = max(4, max(
         (len(_TIER_LABELS.get(r["tier"], "-")) if r["tier"] is not None else 1)
         for r in rows
@@ -976,11 +970,11 @@ def _render_flat_table(rows):
     click.echo(header)
     click.echo(sep)
 
-    for row, title, status_cell in zip(rows, display_titles, status_cells):
+    for row, title in zip(rows, display_titles):
         line = (
             f"{task_id_display(row['id']):<{id_w}}{gap}"
             f"{row['phase']:<{ph_w}}{gap}"
-            f"{status_cell:<{st_w}}"
+            f"{row['status']:<{st_w}}"
         )
         if has_tier:
             tier_val = row["tier"]
@@ -1099,11 +1093,13 @@ def show_plan(
             )
         return
 
-    # E-1956: the supersession travels with the status in every output mode.
-    # E-1185: `duplicates` is the second relation with that property.
+    # E-1956: the supersession travels with the status. E-1185: `duplicates` is
+    # the second relation with that property. E-2064 narrows "every output mode"
+    # to these two: the human table below renders the bare status, so it must
+    # not pay for two queries it never reads.
     _ids = [row["id"] for row in rows]
-    replaced = replaced_by_map(_ids)
-    duplicated = duplicates_map(_ids)
+    replaced = replaced_by_map(_ids) if (as_json or llm) else {}
+    duplicated = duplicates_map(_ids) if (as_json or llm) else {}
 
     if as_json:
         import json

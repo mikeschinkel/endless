@@ -5,7 +5,9 @@ as "never happened", and nothing on a status display said otherwise:
 
 1. The supersession renders inline with a TERMINAL status wherever status is
    shown (`task show`, `task list`, and their --llm/--json modes; the Go
-   `session status` side is covered by the Go tests).
+   `session status` side is covered by the Go tests). E-2064 later pulled it
+   back out of the human TABLES — see tests/test_status_column_width.py — so
+   `task list`'s human assertion here is now the negative one.
 2. `obsolete` is refused on work that already shipped, pointing at
    `task replace`, which records the relation and keeps the earned status.
 3. The task-status vocabulary lives in ONE list (`endless.statuses`), which is
@@ -155,13 +157,15 @@ def test_task_show_json_always_carries_the_key(seeded_project_at_cwd, capsys):
     assert json.loads(capsys.readouterr().out)["replaced_by"] == []
 
 
-def test_task_list_widens_the_status_column_for_the_note(
-    seeded_project_at_cwd, capsys
-):
+def test_task_list_renders_the_bare_status(seeded_project_at_cwd, capsys):
+    """E-2064 reversed E-1956 here: the table's Status column is shared by every
+    row, so one annotated cell was charging every title for a fact that is one
+    `task show` away. The row still appears — only the note is gone."""
     old, new = _superseded_pair()
     task_cmd.show_plan(show_all=True)
     out = capsys.readouterr().out
-    assert f"assumed (replaced by E-{new})" in out
+    assert f"E-{old}" in out
+    assert "replaced by" not in out
 
 
 def test_task_list_default_view_is_unchanged(seeded_project_at_cwd, capsys):

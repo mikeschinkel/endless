@@ -124,7 +124,7 @@ endless decision supersede <id> --by <new_id>    # accepted → superseded (name
 endless decision obsolete <id> --reason "..."    # accepted → obsolete (says what went away)
 ```
 
-- **`superseded`** — a newer decision took over. The successor is recorded as a `supersedes` relation, so `decision show` and `decision list` can name it. Use this whenever there IS a replacement, even one that refines rather than contradicts.
+- **`superseded`** — a newer decision took over. The successor is recorded as a `supersedes` relation, so `decision show` names it inline (`superseded (by ED-1575)`) and `decision list --llm` / `--json` carry it. The human `decision list` table renders the bare status: one shared Status column across every row cannot be sized by a handful of annotated cells. Use this whenever there IS a replacement, even one that refines rather than contradicts.
 - **`obsolete`** — it stopped applying and nothing replaced it, because the code, feature or constraint it governed is simply gone. `--reason` is required: it is the only thing distinguishing a rule you retired deliberately from one that quietly stopped being mentioned.
 
 Both apply **only to `accepted` decisions**, and that restriction is the point: only an accepted decision ever governed, so only an accepted decision can stop. A `proposed` decision that turned out not to matter was never in force — reject it, or leave it. A `rejected` one never took effect and has nothing to retire.

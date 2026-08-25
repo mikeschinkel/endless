@@ -323,11 +323,18 @@ endless task replace <old> --by <new>       # relation recorded; shipped status 
 ```
 
 `task replace` keeps a shipped task's status exactly as it stands (an unshipped
-one still defaults to `obsolete`) and records `replaced_by`. Every surface that
-shows a **terminal** status then shows the supersession alongside it —
-`assumed (replaced by E-1953)` in `task show` and `task list`, and appended to
-the row in `session status`. So a superseded task reads as *handed on*, not
-*abandoned*, without anyone having to go looking for its relations.
+one still defaults to `obsolete`) and records `replaced_by`. A **terminal**
+status then shows the supersession alongside it — `assumed (replaced by E-1953)`
+on `task show`'s `Status:` line, appended to the row in `session status`, and as
+a `replaced_by` key in the `--llm` and `--json` modes of both. So a superseded
+task reads as *handed on*, not *abandoned*, without anyone having to go looking
+for its relations.
+
+The human **tables** are the exception: `task list`, `task recent`,
+`task search`, `task next`, `task active` and `task show --children` render the
+bare status. They share one Status column across every row, so annotating a
+handful of cells sized the column for all of them and took the difference out of
+every title — a real cost for a fact one `task show` away.
 
 The refusal is keyed to the task's **current** status. Work that shipped and was
 later reopened to `revisit` is genuinely back in play, so closing it as
@@ -719,11 +726,12 @@ endless task update E-986 --duplicates E-1086            # same fact, no --type 
 ```
 
 Once the redundant task **is** closed, the relation rides along with its status
-wherever the status is shown — `obsolete (duplicates E-1086)` in `task list`,
-`task show` and `session status`, and as a `duplicates` key in their `--llm` and
-`--json` modes. This is E-1956's rule for `replaces`, applied for the same
-reason: a terminal status reads as the end of the story, and `obsolete` alone
-says "never needed doing" rather than "already being done over there".
+— `obsolete (duplicates E-1086)` in `task show` and `session status`, and as a
+`duplicates` key in their `--llm` and `--json` modes. This is E-1956's rule for
+`replaces`, applied for the same reason: a terminal status reads as the end of
+the story, and `obsolete` alone says "never needed doing" rather than "already
+being done over there". It follows that rule's exception too: the human tables
+render the bare status, for the column-width reason given above.
 
 The note appears **only** beside a terminal status, and only on the redundant
 task — never on the one that was kept. `--json` emits it either way, because

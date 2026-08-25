@@ -138,8 +138,12 @@ def list_decisions(
             )
         return
 
-    # One batched lookup for the whole page, not one per row.
-    superseders = superseded_by_map(r["id"] for r in rows)
+    # One batched lookup for the whole page, not one per row — and only for the
+    # two modes that still carry the supersession: since E-2064 the human table
+    # renders the bare status, so it must not pay for a query it never reads.
+    superseders = (
+        superseded_by_map(r["id"] for r in rows) if (as_json or llm) else {}
+    )
 
     if as_json:
         import json
@@ -175,17 +179,15 @@ def list_decisions(
     except OSError:
         term_width = 80
 
-    # The annotation widens the Status column, so it has to be resolved before
-    # widths are computed, not appended at render time.
-    status_cells = {
-        r["id"]: r["status"]
-        + superseded_by_note(r["status"], superseders.get(r["id"]))
-        for r in rows
-    }
-
+    # E-2064: the Status cell is the BARE status here. The ' (by ED-NNN)'
+    # annotation belongs to `decision show`, which has one status and unlimited
+    # width. A table has many rows sharing one column, so the longest cell is
+    # charged to every row's title — a handful of superseded rows cannot cost
+    # the whole table its titles for a fact any reader recovers by opening the
+    # decision.
     id_w = max(2, max(len(decision_id_display(r["id"])) for r in rows))
     date_w = max(7, max(len(_format_timestamp(r["created_at"])) for r in rows))
-    status_w = max(6, max(len(status_cells[r["id"]]) for r in rows))
+    status_w = max(6, max(len(r["status"]) for r in rows))
     gap = "  "
     fixed_width = id_w + date_w + status_w + len(gap) * 3
     if show_all:
@@ -216,7 +218,7 @@ def list_decisions(
     for row, title in zip(rows, display_titles):
         line = (
             f"{decision_id_display(row['id']):<{id_w}}{gap}"
-            f"{status_cells[row['id']]:<{status_w}}{gap}"
+            f"{row['status']:<{status_w}}{gap}"
             f"{_format_timestamp(row['created_at']):<{date_w}}"
         )
         if show_all:

@@ -9,7 +9,9 @@ That was the wrong yardstick. Two gaps close here:
 2. The inline `(duplicates E-NNN)` note beside a TERMINAL status, on every
    surface that already carries `(replaced by E-NNN)` from E-1956 — `task show`
    and `task list`, human/--llm/--json. The Go `session status` side is covered
-   by the Go tests.
+   by the Go tests. E-2064 later pulled it back out of the human TABLES — see
+   tests/test_status_column_width.py — so `task list`'s human assertion here is
+   now the negative one.
 
 The recurring trap, and what most of these tests exist to catch: the two
 relations annotate OPPOSITE endpoints. `replaces` notes the target (`new
@@ -181,12 +183,14 @@ def test_task_show_json_always_carries_the_key(seeded_project_at_cwd, capsys):
     assert json.loads(capsys.readouterr().out)["duplicates"] == []
 
 
-def test_task_list_widens_the_status_column_for_the_note(
-    seeded_project_at_cwd, capsys
-):
+def test_task_list_renders_the_bare_status(seeded_project_at_cwd, capsys):
+    """E-2064: the shared Status column carries the bare status. The sibling
+    assertion in test_replaced_by_inline.py covers the other relation."""
     dupe, keeper = _duplicate_pair()
     task_cmd.show_plan(show_all=True)
-    assert f"obsolete (duplicates E-{keeper})" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert f"E-{dupe}" in out
+    assert "(duplicates" not in out
 
 
 def test_task_list_default_view_is_unchanged(seeded_project_at_cwd, capsys):
