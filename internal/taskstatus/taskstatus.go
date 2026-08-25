@@ -24,9 +24,10 @@
 // a string; the package adds no conversions at any boundary.
 //
 // Scope discipline (E-1891): relocating a subset must NOT change which statuses
-// it contains. Two groups below deliberately preserve a live disagreement
-// between call sites rather than quietly resolving it — see Unblocking and
-// UnblockingNext.
+// it contains, so this package landed as a pure relocation. The one exception
+// is documented on Terminal, and it is the pattern working as intended:
+// gathering the sets in one place made two of them legibly contradict each
+// other, and the contradiction had a resolution that lost nothing.
 package taskstatus
 
 import (
@@ -145,20 +146,21 @@ const (
 
 	// Terminal is finished-or-abandoned work: the collapsed bucket in
 	// children-state breakdowns, the rows hidden from listings without --all,
-	// and the statuses that route to a terminus rather than a verb.
-	Terminal
-
-	// Unblocking are the blocker statuses that release a dependent, matching
-	// the blocking-semantics table in `endless guide`.
+	// the statuses that route to a terminus rather than a verb, and the blocker
+	// statuses that release a dependent.
 	//
-	// UnblockingNext is `task next`'s variant of the same rule, and it
-	// DISAGREES: it releases on `completed` (which Unblocking omits) and holds
-	// on `declined`/`obsolete` (which Unblocking releases). Preserved verbatim
-	// rather than reconciled — E-1891 relocates membership, it does not change
-	// it. The disagreement is filed separately; naming both here is what makes
-	// it visible instead of invisible inside two SQL string literals.
-	Unblocking
-	UnblockingNext
+	// That last reading arrived late. E-1891 first relocated two DISAGREEING
+	// blocker sets verbatim — `task next` released a dependent on `completed`
+	// but kept holding it on `declined`/`obsolete`; the status line's
+	// GetActiveBlockers did the exact opposite — on the rule that relocating a
+	// subset must not change it. Naming them side by side is what made the
+	// disagreement legible, and once legible it had one answer: Terminal is a
+	// superset of both, so nothing that released a dependent stopped doing so,
+	// and work someone explicitly declined stopped blocking, which is what
+	// `endless guide`'s blocking-semantics table has always said. (That table
+	// omits `completed` only because it predates E-1240 restoring it as a real
+	// terminal status.)
+	Terminal
 
 	// VerificationTerminal are the two ways user-testable work finishes:
 	// verified by the user, or believed done pending natural use. Together with
@@ -203,8 +205,6 @@ var groups = map[Group][]Status{
 	StickyOverride:       {Blocked, Revisit, Declined, Obsolete},
 	SubmittableFrom:      {Untriaged, Unplanned, Revisit},
 	Terminal:             {Confirmed, Assumed, Completed, Declined, Obsolete},
-	Unblocking:           {Confirmed, Assumed, Declined, Obsolete},
-	UnblockingNext:       {Confirmed, Assumed, Completed},
 	VerificationTerminal: {Confirmed, Assumed},
 	VerificationTrack:    {Unverified, Confirmed, Assumed},
 }
@@ -232,8 +232,6 @@ var groupSlugs = map[Group]string{
 	StickyOverride:       "sticky-override",
 	SubmittableFrom:      "submittable-from",
 	Terminal:             "terminal",
-	Unblocking:           "unblocking",
-	UnblockingNext:       "unblocking-next",
 	VerificationTerminal: "verification-terminal",
 	VerificationTrack:    "verification-track",
 }

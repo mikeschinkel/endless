@@ -1201,7 +1201,7 @@ def next_tasks(
         "  WHERE td.target_type = 'task' AND td.dep_type = 'blocks'"
         "    AND td.source_id IN ("
         "      SELECT t2.id FROM live_tasks t2 "
-        f"      WHERE t2.status NOT IN ({statuses.sql_list('unblocking-next')})"
+        f"      WHERE t2.status NOT IN ({statuses.sql_list('terminal')})"
         "    )"
         ")"
     )

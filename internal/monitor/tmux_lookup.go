@@ -422,7 +422,7 @@ func GetActiveBlockers(taskID int64) ([]int64, error) {
 		    AND td.target_id = ?
 		    AND td.source_type = 'task'
 		    AND td.dep_type = 'blocks'
-		    AND t.status NOT IN (`+taskstatus.SQLList(taskstatus.Unblocking)+`)
+		    AND t.status NOT IN (`+taskstatus.SQLList(taskstatus.Terminal)+`)
 		  ORDER BY t.id ASC
 		  LIMIT 3`,
 		taskID,

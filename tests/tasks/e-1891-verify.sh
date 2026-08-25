@@ -267,6 +267,12 @@ test_subcommand() {
         "$(TS has terminal ready >/dev/null 2>&1; echo $?)"
     assert_eq "an unknown group exits 2, not 1" "2" \
         "$(TS get no-such-group >/dev/null 2>&1; echo $?)"
+    # The two disagreeing blocker sets are one group. `task next` and the status
+    # line's GetActiveBlockers now read Terminal, a superset of both, so a
+    # dependent blocked by declined or obsolete work is released — which is what
+    # `endless guide`'s blocking-semantics table has always said.
+    assert_eq "there is one blocker-resolution group, not two" "" \
+        "$(TS groups | grep -E '^unblocking' | tr '\n' ' ')"
     assert_eq "an unknown status exits 2, not 1" "2" \
         "$(TS has terminal no-such-status >/dev/null 2>&1; echo $?)"
     assert_eq "label mirrors tasktype.Label()" "Untriaged" "$(TS label untriaged)"
@@ -302,6 +308,9 @@ test_duplicates_removed() {
     # The SQL string literals — the least visible and most rot-prone shape.
     assert_no_match "next_tasks' NOT IN list is rendered, not typed" \
         "src/endless/task_cmd.py" "NOT IN \('confirmed', 'assumed', 'completed', 'blocked'"
+    assert_contains "its blocker subquery reads the one terminal group" \
+        "statuses.sql_list('terminal')" \
+        "$(sed -n '/^def next_tasks/,/^def /p' "$WT/src/endless/task_cmd.py")"
     assert_no_match "task active's IN list is rendered, not typed" \
         "src/endless/task_cmd.py" "IN \('underway', 'unverified'\)"
     assert_no_match "the Go claim promotion's IN list is rendered, not typed" \

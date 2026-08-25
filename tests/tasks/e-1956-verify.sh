@@ -299,9 +299,15 @@ e task show E-1 --llm 2>/dev/null | grep -q "status=assumed replaced_by=E-2" \
     || fail "task show --llm lacks the supersession on the status line"
 pass "task show --llm: 'status=assumed replaced_by=E-2'"
 
+# E-2064 confined the annotation to the detail view: in a tabular listing the
+# Status column widens to fit its longest value, so every row paid the width of
+# 'obsolete (replaced by E-1367)' so that a handful could carry an annotation
+# already discoverable by opening the task. This check is inverted from what
+# E-1956 shipped, on purpose — E-2064 is the newer decision.
 e task list --all 2>/dev/null | grep -q "assumed (replaced by E-2)" \
-    || fail "task list's Status column lacks the supersession"
-pass "task list: the Status column carries it"
+    && fail "task list's Status column carries the supersession again" \
+            "E-2064 confined it to the detail view; a tabular column must show the bare status"
+pass "task list: the Status column stays bare (E-2064)"
 
 e task list --all --llm 2>/dev/null | grep -q "assumed replaced_by=E-2" \
     || fail "task list --llm lacks the supersession"

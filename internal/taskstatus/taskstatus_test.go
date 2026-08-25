@@ -340,8 +340,6 @@ func TestGroupMembershipIsPinned(t *testing.T) {
 		"sticky-override":        {"blocked", "revisit", "declined", "obsolete"},
 		"submittable-from":       {"untriaged", "unplanned", "revisit"},
 		"terminal":               {"confirmed", "assumed", "completed", "declined", "obsolete"},
-		"unblocking":             {"confirmed", "assumed", "declined", "obsolete"},
-		"unblocking-next":        {"confirmed", "assumed", "completed"},
 		"verification-terminal":  {"confirmed", "assumed"},
 		"verification-track":     {"unverified", "confirmed", "assumed"},
 	}
