@@ -3719,3 +3719,24 @@ The failure mode is subtle because the narrowing was CORRECT at the time — the
 
 So: state the OBSERVATION as evidence ('E-2029 dropped the channel tables, so check whether E-912's conversation/message half still applies'), never as a scope decision. Invariants and rationale are durable; an inventory of what currently exists is not.
 - **Project**: endless
+
+### [2026-08-25] A verify script is owned by its task's session — never run one you do not own
+- **Rule**: `tests/tasks/e-NNNN-verify.sh` belongs to the session working
+  E-NNNN. Do not modify it, and do not RUN it, from any other task's session.
+  A verify script is valid only just before ITS task lands; running it outside
+  that window produces a result nobody asked for and nobody owns.
+- **What I did**: while working E-2062 I ran another task's verify script twice
+  — because E-2062 changed `rebuild-db` and that script also drives
+  `rebuild-db` — then reported its passing result in my handoff. I never edited
+  the file, but running it was already the violation.
+- **Why it is wrong even when it passes**: the script's pass/fail is that
+  task's evidence for that task's land decision, gathered at the moment its own
+  session chose. Reporting it from another session's handoff attributes a
+  verdict to work that was not being verified, and a red result would have read
+  as my regression rather than theirs.
+- **What to do instead**: regression evidence for my task is the project-wide
+  suites — `just test`, `just test-go`, build, lint — plus MY task's own verify
+  script. If I believe my change could break a neighbouring task's behaviour,
+  cover that behaviour in my own tests, or flag it to Mike. Never borrow their
+  script.
+- **Project**: endless
