@@ -3792,3 +3792,38 @@ The lesson immediately above ("Choose a task's parent for discoverability, not t
 
 And the meta-lesson: never pass prose containing backticks through a double-quoted shell argument. Endless prose is full of backticked command names, so this will recur. Use single quotes, or write the text to a file under .endless/tmp and pass --text-file.
 - **Project**: endless
+
+### [2026-08-25] Never truncate a search whose purpose is to prove something does not exist
+Twice in one session I missed an existing task because I piped a search through
+`head -N`, and both times the row I needed sorted last:
+
+- `head -30` over rebuild/ledger tasks ordered by id ASC hid E-1935, an epic
+  that already owned the work I then filed three tasks under.
+- `head -24` over research/brainstorm titles ordered by id ASC hid E-1535 and
+  E-1663, so I told Mike a design question was settled when an existing task
+  contradicted it.
+
+The failure mode is that `head` is SILENT. Nothing in the output says rows were
+dropped, so a truncated search is indistinguishable from an exhaustive one, and
+"no existing task" is asserted from evidence that never existed.
+
+Rules, in order of how much they cost:
+
+1. When the question is "does a task for this already exist" — ED-1550 rule 4 —
+   never truncate. That is precisely the search where one missed row IS the
+   whole failure. Widen the WHERE clause instead of narrowing the output.
+2. Count before listing. `SELECT count(*)` costs one line and tells you whether
+   what you are about to read is the whole set.
+3. If output must be bounded, ORDER BY id DESC, not ASC. Recency is the
+   relevance signal (same insight as the parent-choice lesson: recently filed
+   work gets attention, old work does not), so ascending order truncates away
+   exactly the rows most likely to matter.
+4. Prefer a narrower query to a truncated one. `WHERE id > 1700` is honest about
+   what it excluded; `head -24` is not.
+
+Product note, not a rule for me: Endless already has the right idiom for this.
+E-1914's hidden-task view "never hides silently" and carries a
+"... N hidden (--show-hidden)" footer. The list verbs and `endless sql` have no
+equivalent, so the cap lives in my pipe instead of in the tool, where it could
+announce itself.
+- **Project**: endless
