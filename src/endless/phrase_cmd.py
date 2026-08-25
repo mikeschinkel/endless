@@ -57,7 +57,7 @@ def add_phrase(
     _validate_scope(scope)
     if type_ == "verb":
         raise click.ClickException(
-            "verbs are managed via 'endless verb add' (E-1117), not 'phrase add verb'"
+            "verbs are managed via 'endless verb add', not 'phrase add verb'"
         )
     if method is None:
         method = _default_method(type_)

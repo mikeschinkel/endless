@@ -36,7 +36,7 @@ endless task list --all                              # include done items
 endless task list --status ready                     # filter
 endless task list --status unplanned,ready          # comma-separated
 endless task list --phase now
-endless task list --parent E-799
+endless task list --parent E-101
 endless task list --parent none                      # roots only
 endless task list --related-to <id> --rel-type blocks
 endless task list --sort status                      # id, status, phase, tier, created, title
@@ -89,21 +89,21 @@ nothing to resolve. `endless tmux task` is an alias for it.
 
 `task show` traces a task back to the sessions that shaped it, so a task doubles as a navigational hub for jumping between them:
 
-- The **`Created:`** line names the session that filed the task and the task that session was active on — `Created:  2026-08-04 4:38 am by ES-1020 (E-1865)`. Absent when the task was filed outside any session.
+- The **`Created:`** line names the session that filed the task and the task that session was active on — `Created:  2026-08-04 4:38 am by ES-101 (E-102)`. Absent when the task was filed outside any session.
 - The **`Touched by:`** block is the session-side peer of `This task:`, one row per session that ever touched the task, **most recent touch first**:
 
   ```
   Touched by:
-  - Claimed:     ES-1046 (E-1859) [ended]
-  - Revisited:   ES-996 (E-1833) [idle]
-  - Surfaced:    ES-994 (E-1829) [idle]
+  - Claimed:     ES-101 (E-102) [ended]
+  - Revisited:   ES-102 (E-103) [idle]
+  - Surfaced:    ES-103 (E-104) [idle]
   ```
 
   The leading relation says how the task entered that session's scope — **Claimed** (the session claimed it), **Surfaced** (created it), **Revisited** (touched it without claiming), or **Touched** for a historical row recorded before the vocabulary existed. The parenthesized id is the task that session is bound to *now*; `[state]` is the session's state, or `gone` when the session row itself no longer exists.
 
-  **Claimed** is read off `sessions.task_id`, the write-once ownership record (ED-1560), not off the touch — so a session that filed a task and later claimed it reads `Claimed`, not the `Surfaced` its touch row was stamped with, and a session that claimed the task without ever recording a touch is listed too. That is the same column `task spawn` refuses on, so this block and that refusal cannot disagree.
+  **Claimed** is read off `sessions.task_id`, the write-once ownership record, not off the touch — so a session that filed a task and later claimed it reads `Claimed`, not the `Surfaced` its touch row was stamped with, and a session that claimed the task without ever recording a touch is listed too. That is the same column `task spawn` refuses on, so this block and that refusal cannot disagree.
 
-Sessions render as **`ES-NNNN`** and tasks as `E-NNNN` — separate id spaces that would otherwise be indistinguishable side by side. Feed an `ES-NNNN` straight to `endless session goto ES-1020` to jump there. `--json` reports the same facts as `created_by` / `touched_by`; `--llm` as `created_by=` / `touched_by=` lines.
+Sessions render as **`ES-NNNN`** and tasks as `E-NNNN` — separate id spaces that would otherwise be indistinguishable side by side. Feed an `ES-NNNN` straight to `endless session goto ES-101` to jump there. `--json` reports the same facts as `created_by` / `touched_by`; `--llm` as `created_by=` / `touched_by=` lines.
 
 ---
 
@@ -126,7 +126,7 @@ endless task add "Title here" --blocked-by E-100     # also: --blocks, --relates
 flags there, so an existing task can be marked without reaching for `task link`:
 
 ```bash
-endless task update E-986 --duplicates E-1086        # applies to every id named
+endless task update E-101 --duplicates E-102         # applies to every id named
 endless task update E-9 --replaces E-5               # relation only — see below
 ```
 
@@ -324,7 +324,7 @@ endless task replace <old> --by <new>       # relation recorded; shipped status 
 
 `task replace` keeps a shipped task's status exactly as it stands (an unshipped
 one still defaults to `obsolete`) and records `replaced_by`. A **terminal**
-status then shows the supersession alongside it — `assumed (replaced by E-1953)`
+status then shows the supersession alongside it — `assumed (replaced by E-101)`
 on `task show`'s `Status:` line, appended to the row in `session status`, and as
 a `replaced_by` key in the `--llm` and `--json` modes of both. So a superseded
 task reads as *handed on*, not *abandoned*, without anyone having to go looking
@@ -421,7 +421,7 @@ in prose and then told `task report` there was nothing to report.
 Every variant of that design fails identically, because in all of them the agent
 decides what to volunteer — which means the agent is judging its own output in
 the same breath as writing it, and judging generously. An adversarial minimizer
-is a **second party**. That is the whole fix (E-1952, E-1953).
+is a **second party**. That is the whole fix.
 
 ### It is not a length limit
 
@@ -462,8 +462,8 @@ Switch it off per project with `"report_gate": false` in `.endless/config.json`.
 It defaults **on**, and it deliberately does not live in `.claude/settings.json`
 — a gate an agent can switch off in the course of normal work is not a gate.
 
-The channel runs only under an agent harness Endless **supports** (E-1962) —
-today, Claude Code in a terminal, and nothing else. A session in the Claude Code
+The channel runs only under an agent harness Endless **supports** — today,
+Claude Code in a terminal, and nothing else. A session in the Claude Code
 Desktop app, an IDE extension, or any other host is neither told to use the
 channel nor gated by it, whatever `report_gate` says: the two are independent
 vetoes and both must say yes. It is an allow-list, so a harness nobody has seen
@@ -485,7 +485,7 @@ $JARGON "load-bearing" and "at its core" — stop using these
 $GOOD
 ```
 
-**The vocabulary is open.** Any word works; the four E-1953 shipped (`$CUT`,
+**The vocabulary is open.** Any word works; the four that ship (`$CUT`,
 `$BLOAT`, `$WRONG`, `$GOOD`) are examples, not a list. A closed vocabulary is
 only worth its consistency if the user can recall it mid-complaint, and one they
 cannot recall produces no label at all — which is strictly worse, because label
@@ -557,9 +557,9 @@ Turning the channel on is one key: drop `"report_gate": false` from
 deliberately does not live in `.claude/settings.json` — a gate an agent can
 switch off in the course of normal work is not a gate.
 
-The channel also runs only under an agent harness Endless **supports** (E-1962)
-— today, Claude Code in a terminal, and nothing else. The two are independent
-vetoes and both must say yes.
+The channel also runs only under an agent harness Endless **supports** — today,
+Claude Code in a terminal, and nothing else. The two are independent vetoes and
+both must say yes.
 {{end}}
 ---
 
@@ -614,9 +614,9 @@ endless task move --children-of <id> --root
 endless task clear <id> --<field>                    # clear a single field
 ```
 
-**`remove` does not delete the row — it marks it removed** (E-1929, implementing
-ED-1547). The id is therefore never re-minted: the allocator counts past every
-removed task, so an id that was used once is used once forever.
+**`remove` does not delete the row — it marks it removed.** The id is therefore
+never re-minted: the allocator counts past every removed task, so an id that was
+used once is used once forever.
 
 That matters because several tables deliberately outlive their task and carry no
 foreign key on it — `session_tasks`, `session_notices`, `task_landings`. While
@@ -635,18 +635,18 @@ What you see:
   stays), and any session pointing at it has its active task cleared. Landing
   history survives — it is audit data, and the retained row is what explains it.
 
-**`remove` refuses while the task still has relations** (E-1915). Relation rows
+**`remove` refuses while the task still has relations.** Relation rows
 carry no foreign key on their task endpoint, so they survive the removal. The
 refusal names the exact `unlink` command that clears each one:
 
 ```
-E-1914 has 2 relation(s).
+E-101 has 2 relation(s).
 Removing would orphan them — relation rows survive a task delete, and
 task ids are reused, so a later task inheriting one of these ids would
 inherit its relations too. Unlink them first:
 
-    endless task unlink E-1914 --to E-1911 --type cleans_up
-    endless decision unlink ED-42 --to E-1914 --type documents
+    endless task unlink E-101 --to E-102 --type cleans_up
+    endless decision unlink ED-42 --to E-101 --type documents
 ```
 
 Deny rather than cascade: a severed relation cannot be reconstructed, and a
@@ -656,7 +656,7 @@ one step; `--cascade` is about children and only widens which tasks get checked
 (the whole descendant set, so removing a parent cannot bypass the guard).
 
 The same guard applies to **`task import --replace`** and
-**`task import-json --clear`** (E-1927), which remove tasks by source file
+**`task import-json --clear`**, which remove tasks by source file
 rather than by id. An imported task that has since been linked to is no longer
 disposable just because the file regenerated it — clear the relation, or
 re-import without the flag. Bulk clear retains its rows too: one rule, no second
@@ -720,16 +720,16 @@ already shipped the relation *is* the record, exactly as with `replaces` (see
 the `obsolete` row in [Task statuses](index.md#task-statuses)).
 
 ```bash
-endless task link E-986 --to E-1086 --type duplicates    # E-986 is the redundant filing
-endless task link E-1086 --to E-986 --type duplicated_by # same row, written from the keeper's side
-endless task update E-986 --duplicates E-1086            # same fact, no --type to remember
+endless task link E-101 --to E-102 --type duplicates     # E-101 is the redundant filing
+endless task link E-102 --to E-101 --type duplicated_by  # same row, written from the keeper's side
+endless task update E-101 --duplicates E-102             # same fact, no --type to remember
 ```
 
 Once the redundant task **is** closed, the relation rides along with its status
-— `obsolete (duplicates E-1086)` in `task show` and `session status`, and as a
-`duplicates` key in their `--llm` and `--json` modes. This is E-1956's rule for
-`replaces`, applied for the same reason: a terminal status reads as the end of
-the story, and `obsolete` alone says "never needed doing" rather than "already
+— `obsolete (duplicates E-102)` in `task show` and `session status`, and as a
+`duplicates` key in their `--llm` and `--json` modes. This is the same rule
+`replaces` follows, applied for the same reason: a terminal status reads as the
+end of the story, and `obsolete` alone says "never needed doing" rather than "already
 being done over there". It follows that rule's exception too: the human tables
 render the bare status, for the column-width reason given above.
 

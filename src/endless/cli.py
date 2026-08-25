@@ -732,7 +732,7 @@ _SHELL_INIT_SNIPPET = """\
 # the bare 'endless' on PATH. The lookup costs ~one subprocess per helper
 # call (≈100ms), which we accept to keep ENDLESS_WORKTREE_PATH out of the
 # exported environment — env vars are visible/inheritable forever, latency
-# is invisible. (E-1164.)
+# is invisible.
 _endless_run() {
     # ${VAR:-} expansion keeps us safe under 'set -u' (nounset) — bare
     # "$ENDLESS_SESSION_ID" would error there when the var is unset.
@@ -744,7 +744,7 @@ _endless_run() {
     # mandatory once cwd is a self-dev worktree: esu cd's us into the
     # session's worktree, so without it the self-dev --db gate rejects every
     # subsequent call (the lookup line gates first, then the fallback). It
-    # never re-execs — only --db sandbox triggers the worktree re-exec. (E-1591.)
+    # never re-execs — only --db sandbox triggers the worktree re-exec.
     if [ -n "${ENDLESS_SESSION_ID:-}" ]; then
         local wt
         wt="$(endless --db main session cd --target worktree "$ENDLESS_SESSION_ID" 2>/dev/null)"
@@ -813,7 +813,7 @@ esm() {
 #   eeh --detail   → include every occurrence's full capture
 #   eeh --all      → include already-cleared errors
 # Exists because the badge has one row to spend and `endless errors show`
-# does not fit beside the incident text it would be explaining (E-1950).
+# does not fit beside the incident text it would be explaining.
 # No session guard: errors are machine-local, not session-scoped.
 eeh() {
     _endless_run errors show "$@"
@@ -920,7 +920,7 @@ def shell_init():
     rc file directly (or, for bash, your ~/.bashrc).
 
     Because that eval runs on EVERY shell launch, this command is exempt from
-    the unsupported-harness refusal (HARNESS_EXEMPT_SUBCOMMANDS, E-1997) — the
+    the unsupported-harness refusal (HARNESS_EXEMPT_SUBCOMMANDS) — the
     banner would otherwise be written to the stderr of every shell the harness
     spawns. The helpers it prints all call `endless`, so an unsupported harness
     still gets the banner the moment one is actually used.
@@ -1111,8 +1111,7 @@ def session_use(session_ref):
 
     Other session fields (harness, project root, worktree path, etc.)
     are looked up on demand via 'endless session show $ENDLESS_SESSION_ID
-    --json' so they're never stale (E-1038 supersedes E-1014's original
-    five-var contract).
+    --json' so they're never stale.
     """
     from endless.session_cmd import session_use_resolve
     session_use_resolve(session_ref)
@@ -1379,9 +1378,9 @@ def session_unhide(session_ids, task_refs):
 
 @session_cmd.group("snapshot")
 def session_snapshot_cmd():
-    """Record and query session status snapshots (E-1312).
+    """Record and query session status snapshots.
 
-    The verb is `snapshot` (renamed from `session status`, E-1688) so that
+    The verb is `snapshot` (renamed from `session status`) so that
     `session status` names the live work-state view. The recorded artifact is
     still a session-status snapshot; only the command word changed.
     """
@@ -1408,9 +1407,9 @@ def session_snapshot_add(input_file, session_id_override):
       \b
       endless session snapshot add <<'EOF'
       <session-status>
-        <headline>E-1312 v1 landed.</headline>
+        <headline>E-101 v1 landed.</headline>
         <resolved>
-          <task id="E-1312" status="unverified">CLI + Go handler + tests</task>
+          <task id="E-101" status="unverified">CLI + Go handler + tests</task>
         </resolved>
       </session-status>
       EOF
@@ -1421,7 +1420,7 @@ def session_snapshot_add(input_file, session_id_override):
 
 @session_cmd.group("task")
 def session_task_cmd():
-    """Correct which tasks this session's list holds (E-1696).
+    """Correct which tasks this session's list holds.
 
     `session_tasks` capture is otherwise automatic: the event executors record
     a row for every task a session claims, files or edits, classified by how it
@@ -1483,9 +1482,8 @@ def session_task_remove(task_refs, session_id_override):
     real but noisy, remove is for one that was simply wrong. There is no undo
     beyond touching the task again.
 
-    Refused on this session's own claimed task: a claim cannot be dropped
-    (ED-1560). Naming a task this session never touched is a reported no-op,
-    not an error.
+    Refused on this session's own claimed task: a claim cannot be dropped.
+    Naming a task this session never touched is a reported no-op, not an error.
 
     Example:
 
@@ -1507,7 +1505,7 @@ def session_task_remove(task_refs, session_id_override):
                    "resolving the current session (test fixtures / "
                    "non-tmux callers).")
 def session_order(spec, as_json, session_id_override):
-    """Set this session's task implementation order (E-1683).
+    """Set this session's task implementation order.
 
     SPEC is a compact sequence where whitespace advances the order and `|`
     groups tasks at the same order (parallelizable). Order is stored per
@@ -1753,7 +1751,7 @@ def task_import(file, from_claude, json_file, project, replace, parent):
 @click.option("--tier", default=None,
               help="Filter by tier (1-4 or auto/quick/deep/discuss)")
 @click.option("--parent", "parent_id", default=None,
-              help="Filter to children of this task (e.g. E-799), or 'none' for root tasks")
+              help="Filter to children of this task (e.g. E-101), or 'none' for root tasks")
 @click.option("--related-to", "--relates-to", "related_to_id", type=TASK_ID, default=None,
               help="Filter to tasks related to this task ID")
 @click.option("--rel-type", "rel_type", default=None,
@@ -1762,7 +1760,7 @@ def task_import(file, from_claude, json_file, project, replace, parent):
               type=click.Choice(["id", "status", "phase", "tier", "created", "title"]),
               help="Sort by column (default: id)")
 @click.option("--removed", "removed_only", is_flag=True,
-              help="List REMOVED tasks instead of live ones (E-1929)")
+              help="List REMOVED tasks instead of live ones")
 @click.option("--llm", is_flag=True,
               help="Token-efficient output for LLMs")
 @click.option("--json", "as_json", is_flag=True,
@@ -1838,7 +1836,7 @@ task_cmd.add_command(task_show, name="detail")
               type=click.Choice(["urgent", "now", "next", "later", "maybe"]),
               help="Filter by phase")
 @click.option("--parent", "parent_id", default=None,
-              help="Filter to children of this task (e.g. E-799), or 'none' for root tasks")
+              help="Filter to children of this task (e.g. E-101), or 'none' for root tasks")
 @click.pass_context
 def task_next(ctx, project, show_all, limit, llm, as_json, tier, phase, parent_id):
     """Show top actionable tasks, ranked by priority."""
@@ -1877,7 +1875,7 @@ def task_next_revise(file_path, project, as_json):
 @click.option("--json", "as_json", is_flag=True,
               help="JSON output")
 @click.option("--parent", "parent_id", default=None,
-              help="Filter to children of this task (e.g. E-799), or 'none' for root tasks")
+              help="Filter to children of this task (e.g. E-101), or 'none' for root tasks")
 def task_active(project, show_all, llm, as_json, parent_id):
     """Show underway and unverified tasks."""
     from endless.task_cmd import active_tasks, parse_parent_filter
@@ -1922,7 +1920,7 @@ def task_id_cmd(ctx, pane):
 @click.option("--json", "as_json", is_flag=True,
               help="JSON output")
 @click.option("--parent", "parent_id", default=None,
-              help="Filter to children of this task (e.g. E-799), or 'none' for root tasks")
+              help="Filter to children of this task (e.g. E-101), or 'none' for root tasks")
 def task_recent(project, show_all, limit, llm, as_json, parent_id):
     """Show most recently updated tasks."""
     from endless.task_cmd import recent_tasks, parse_parent_filter
@@ -1984,9 +1982,9 @@ def task_unsettled(item_id, project, show_all, include_settled, limit, llm, as_j
     enough that it should be asked for, not stumbled into.
 
     This is the explanation behind the ◆ marker in `session status`: it reads the
-    same probe, so the two can never disagree. Per ED-1540, unsettled means
-    modified (uncommitted changes) OR unlanded (commits not in main) — the fix
-    differs, which is why the marker alone is not enough.
+    same probe, so the two can never disagree. Unsettled means modified
+    (uncommitted changes) OR unlanded (commits not in main) — the fix differs,
+    which is why the marker alone is not enough.
     """
     if item_id is not None and show_all:
         raise click.UsageError("pass a task id or --all, not both.")
@@ -2016,7 +2014,7 @@ def task_unsettled(item_id, project, show_all, include_settled, limit, llm, as_j
               type=click.Choice(["urgent", "now", "next", "later", "maybe"]),
               help="Filter by phase")
 @click.option("--parent", "parent_id", default=None,
-              help="Filter to children of this task (e.g. E-799), or 'none' for root tasks")
+              help="Filter to children of this task (e.g. E-101), or 'none' for root tasks")
 @click.option("--text", "search_text", is_flag=True,
               help="Also search in text field")
 @click.option("--limit", default=20, type=int,
@@ -2373,7 +2371,7 @@ def task_add(title, description, description_file, text, text_file, analysis_tex
               help="Tier (0=n/a, 1-4 or auto/quick/deep/discuss, none=clear)")
 @click.option("--type", "task_type", default=None,
               type=click.Choice(["todo", "bugfix", "research", "epic", "brainstorm"]),
-              help="Task type — closes the prior gap that forced direct SQL writes (E-1329)")
+              help="Task type")
 @click.option("--analysis", "analysis_text", default=None,
               help="Analysis content (inline)")
 @click.option("--analysis-file", default=None,
@@ -2694,9 +2692,9 @@ def task_continue():
     The only way out of the gate the hook opens when an ancestor epic goes to
     `revisit`: until the gate is cleared, every tool call in this session is
     blocked. To pause instead, run nothing — leaving the gate open IS pausing,
-    and it clears itself once the epic leaves `revisit` (E-1968 removed
-    `task pause`, whose only distinguishing act was an unbind the
-    one-session-one-task invariant forbids).
+    and it clears itself once the epic leaves `revisit`. There is no `task
+    pause`: its only distinguishing act would be an unbind, which the
+    one-session-one-task invariant forbids.
     """
     from endless.task_cmd import continue_item
     continue_item()
@@ -2720,7 +2718,7 @@ def task_bind(item_id):
 @task_cmd.command("start", hidden=True)
 @click.argument("item_id", type=TASK_ID, required=False, default=None)
 def task_start_deprecated(item_id):
-    """Deprecated stub for `task claim` (E-1232 rename).
+    """Deprecated stub for `task claim`, the verb that replaced it.
 
     Refuses to execute — prints the rename note and exits non-zero so the
     caller (agent or human) switches to the new verb instead of being
@@ -2820,7 +2818,7 @@ def task_spawn(item_id, project, permission_mode, model, session_name,
     """
     if reopen or new_session or print_decision:
         raise click.ClickException(
-            "`task spawn --reopen` is retired (E-1968). Spawning a fresh "
+            "`task spawn --reopen` is retired. Spawning a fresh "
             "session on reopened work threw away the session that did it.\n"
             "Reopen and continue in that session instead:\n"
             f"    endless session goto E-{item_id} --resume --revisit\n"
@@ -2949,7 +2947,7 @@ def task_replace(item_id, replacement_id, new_status, outcome, outcome_file, all
     """Mark a task as replaced by another task, recording a replaced_by relation.
 
     The replaced task's status defaults to 'obsolete', but work that already
-    shipped keeps the status it earned (E-1956) — see --status.
+    shipped keeps the status it earned — see --status.
     """
     from endless.task_cmd import replace_task
     outcome = _resolve_content_flag(outcome, outcome_file, "outcome", allow_paths)
@@ -3324,7 +3322,7 @@ def epic_add(title, description, description_file, text, text_file, phase, proje
 @click.option("--tier", default=None,
               help="Filter by tier (1-4 or auto/quick/deep/discuss)")
 @click.option("--parent", "parent_id", default=None,
-              help="Filter to children of this task (e.g. E-799), or 'none' for root tasks")
+              help="Filter to children of this task (e.g. E-101), or 'none' for root tasks")
 @click.option("--sort", default=None,
               type=click.Choice(["id", "status", "phase", "tier", "created", "title"]),
               help="Sort by column (default: id)")
@@ -3448,7 +3446,7 @@ def epic_update(item_ids, status, title, description, description_file, text,
 
 @main.group("worktree")
 def worktree_cmd():
-    """Inspect git worktrees managed by endless (E-971 foundation, read-only)."""
+    """Inspect git worktrees managed by endless (read-only)."""
     pass
 
 
@@ -3494,7 +3492,7 @@ def worktree_for_task(task_id, as_json):
 @click.option("--dry-run", is_flag=True,
               help="Show what would happen without making changes")
 @click.option("--record-only", is_flag=True,
-              help="Record a landing that already happened (no git). Requires --sha. (E-1719)")
+              help="Record a landing that already happened (no git). Requires --sha.")
 @click.option("--sha", default=None,
               help="Merge commit SHA for --record-only.")
 @click.option("--branch", default=None,
@@ -3502,7 +3500,7 @@ def worktree_for_task(task_id, as_json):
 @click.option("--at", default=None,
               help="Landing timestamp (RFC3339) for --record-only; default: the --sha commit date.")
 def worktree_land(task_id, dry_run, record_only, sha, branch, at):
-    """Auto-commit endless-managed modifications, rebase, ff-merge, remove worktree (E-987)."""
+    """Auto-commit endless-managed modifications, rebase, ff-merge, remove worktree."""
     from endless.worktree_cmd import land_worktree
     land_worktree(task_id, dry_run, record_only=record_only, sha=sha, branch=branch, at=at)
 
@@ -3519,7 +3517,7 @@ def worktree_drop(name_or_path, force):
 
 @worktree_cmd.command("reap")
 def worktree_reap():
-    """Sweep stale landed worktrees (E-1337).
+    """Sweep stale landed worktrees.
 
     Removes worktree directories whose owning task has at least one row
     in task_landings older than worktree_ttl (.endless/config.json,
@@ -3537,7 +3535,7 @@ def worktree_check():
     Prints one terse line per real anomaly (uncommitted user files,
     detached/wrong branch, a prunable/locked checkout) and nothing when clean.
     Exit 0 clean, 1 anomalies present, 2 on error. Run it at session handoff:
-    empty output means there is genuinely nothing git-side to narrate (E-1758).
+    empty output means there is genuinely nothing git-side to narrate.
     """
     from endless.worktree_cmd import check_worktree
     check_worktree()
@@ -3545,7 +3543,7 @@ def worktree_check():
 
 @main.group("jobs")
 def jobs_cmd():
-    """Inspect and drive the fire-once background job runner (E-698)."""
+    """Inspect and drive the fire-once background job runner."""
     pass
 
 
@@ -3584,7 +3582,7 @@ def jobs_retry(name):
 
 @main.group("triage")
 def triage_cmd():
-    """Route untriaged tasks by judging description sufficiency (E-1859)."""
+    """Route untriaged tasks by judging description sufficiency."""
     pass
 
 
@@ -3630,7 +3628,7 @@ def triage_run(task_ref, limit, project, all_projects, dry_run):
 
 @main.group("errors")
 def errors_cmd():
-    """Inspect and clear recorded errors (E-698)."""
+    """Inspect and clear recorded errors."""
     pass
 
 
@@ -3672,9 +3670,9 @@ def errors_record(code, summary, source, detail, fingerprint):
 
     Hidden because it is an internal bridge, not a verb a person needs: the
     detached `endless triage run` child uses it to put a failed triage on the
-    session-status badge, since Python cannot write the fault store directly
-    (E-1486). Shipped rather than Go-only so it is reachable from the CLI a
-    user actually types (E-1950).
+    session-status badge, since Python cannot write the fault store directly.
+    Shipped rather than Go-only so it is reachable from the CLI a user
+    actually types.
     """
     from endless.jobs_cmd import errors_record as impl
     impl(code, summary, source, detail, fingerprint)
@@ -3702,7 +3700,7 @@ def errors_raise(severity, summary, source, repeat):
 
     Nothing is wrong when one appears. It exists so the session-status badge,
     this listing and the detail log can be exercised on demand instead of only
-    when something genuinely breaks (E-1950).
+    when something genuinely breaks.
 
     It records through the same path a real fault takes, so what you get is
     shaped exactly like the real thing; only the code marks it synthetic
@@ -4117,7 +4115,7 @@ def db_path():
     """Print the absolute path to the database selected by the global --db.
 
     For SQL-client debugging or scripting, and referenced by the --db gate's
-    refusal message. Uses the single global --db (E-1476): run
+    refusal message. Uses the single global --db: run
     `endless db path --db=main` or `endless db path --db=sandbox`. Resolving
     --db=sandbox requires running from inside a self-dev worktree (the global
     --db handler errors otherwise). This command does not open the DB, so it is
@@ -4144,7 +4142,7 @@ def internal_cmd():
 
 @internal_cmd.group("template")
 def internal_template_cmd():
-    """Render templates via the embedded Go renderer (E-1565)."""
+    """Render templates via the embedded Go renderer."""
     pass
 
 

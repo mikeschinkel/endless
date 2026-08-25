@@ -37,7 +37,7 @@ endless sql "SELECT id, title FROM live_tasks WHERE phase='now' AND status='read
 endless sql "SELECT * FROM live_tasks WHERE id = 1248" --tsv
 ```
 
-**Query `live_tasks`, not `tasks`** (E-1929). A removed task keeps its row —
+**Query `live_tasks`, not `tasks`.** A removed task keeps its row —
 that is how its id is prevented from ever being re-minted — so raw `tasks`
 includes removed work and any count off it is wrong. `live_tasks` is the same
 columns filtered to `removed = 0`. Read raw `tasks` only when you specifically
@@ -119,7 +119,7 @@ endless errors codes                   # the documented catalog
 endless errors raise                   # record a SYNTHETIC fault, to see the surface work
 ```
 
-**Seeing it work without waiting for a failure.** `errors raise` records a real incident carrying a synthetic code (ERR-0006 warning / ERR-0007 error), through the same path a genuine fault takes — same upsert, same fingerprinting, same detail line. It exists because the one view whose job is reporting trouble was otherwise the hardest view to inspect (E-1950).
+**Seeing it work without waiting for a failure.** `errors raise` records a real incident carrying a synthetic code (ERR-0006 warning / ERR-0007 error), through the same path a genuine fault takes — same upsert, same fingerprinting, same detail line. It exists because the one view whose job is reporting trouble was otherwise the hardest view to inspect.
 
 ```bash
 endless errors raise --severity error   # exercise the red styling and max-severity precedence
@@ -128,7 +128,7 @@ endless session status                  # the badge, at your terminal's real wid
 endless errors clear <id>               # put it back
 ```
 
-**Which database the error record lives in.** Inside a self-dev worktree, every `errors` and `jobs` verb **requires an explicit `--db main|sandbox`** and refuses without one (E-1429, enforced for these verbs since E-1950). They are not pinned to a database on your behalf: the badge reads main, a worktree's own routing points at its sandbox, and silently choosing either one for you is exactly how `errors clear` ends up dismissing incidents in the wrong record.
+**Which database the error record lives in.** Inside a self-dev worktree, every `errors` and `jobs` verb **requires an explicit `--db main|sandbox`** and refuses without one. They are not pinned to a database on your behalf: the badge reads main, a worktree's own routing points at its sandbox, and silently choosing either one for you is exactly how `errors clear` ends up dismissing incidents in the wrong record.
 
 ```bash
 endless errors show --db main       # the record the session-status badge counts
@@ -142,7 +142,7 @@ The badge is one row: severity chip, the latest incident, and `Run eeh` right-al
 Three behaviors are worth knowing before you rely on this:
 
 - **Clearing never deletes.** A recurrence after clearing opens a *new* error beside the cleared one, so a problem that came back is visibly distinct from one that never left.
-- **An error never leaves the badge on its own; a stale warning does.** Errors stay until a human dismisses them, even if the job has since been succeeding — an intermittent fault that healed itself out of view would never get fixed. A *warning* stops being badged once an hour of **active** time has passed since it last occurred (E-1950); it is neither cleared nor deleted, and `errors show` still lists it. The hour is measured in time the user was actually at the machine — idle stretches don't count — so a warning cannot expire overnight without ever having been seen.
+- **An error never leaves the badge on its own; a stale warning does.** Errors stay until a human dismisses them, even if the job has since been succeeding — an intermittent fault that healed itself out of view would never get fixed. A *warning* stops being badged once an hour of **active** time has passed since it last occurred; it is neither cleared nor deleted, and `errors show` still lists it. The hour is measured in time the user was actually at the machine — idle stretches don't count — so a warning cannot expire overnight without ever having been seen.
 - **Clearing is not retrying.** `errors clear` means "I have seen this"; making a backed-off job due again is `jobs retry`. They are separate verbs so that tidying your error list cannot silently re-arm a job that is still broken.
 
 The database stores only the index — code, source, summary, counts. Each occurrence's full capture goes to `<config-dir>/log/errors.jsonl` and comes back through `--detail`, so the table stays bounded by how many *distinct* things are wrong rather than how often they happen. That file is machine-local: it is not the db-ledger, it is never replayed into the database, and errors emit no ledger events.

@@ -34,7 +34,7 @@ def run_verify(item_id: int | None, keep: bool) -> None:
     if resolved is None:
         raise click.ClickException(
             "no task id given and no active task for this session; "
-            "pass an explicit task id, e.g. `endless task verify E-1234`."
+            "pass an explicit task id, e.g. `endless task verify E-101`."
         )
 
     task_id = f"E-{resolved}"

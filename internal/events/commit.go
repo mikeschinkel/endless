@@ -171,7 +171,7 @@ func ensureMainCheckout(projectRoot string, paths []string) error {
 		return fmt.Errorf(
 			"refusing auto-commit: projectRoot %q resolves to a linked worktree "+
 				"(git-dir=%q, common-dir=%q, paths=%v). Auto-commits must land on "+
-				"main, not on a task branch. See E-1309.",
+				"main, not on a task branch.",
 			projectRoot, gd, cd, paths,
 		)
 	}

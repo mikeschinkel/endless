@@ -86,14 +86,14 @@ endless worktree for-task <id>              # resolve a task ID to its path
 
 ### Why a worktree is unsettled (`task unsettled`)
 
-`session status` marks a row with **◆** when its worktree is *unsettled*. Per ED-1540 that is a union of two sub-states which need **opposite fixes**, so the marker alone doesn't tell you what to do:
+`session status` marks a row with **◆** when its worktree is *unsettled*. That is a union of two sub-states which need **opposite fixes**, so the marker alone doesn't tell you what to do:
 
 | Sub-state    | Meaning                                | Fix                        |
 |--------------|----------------------------------------|----------------------------|
 | `modified`   | Uncommitted working-tree changes       | Commit or discard          |
 | `unlanded`   | Commits on the branch not yet on `main`| `endless worktree land <id>` |
 
-Because ◆ means *there is still something to do here*, an unsettled row is never rendered dim — not when its status is terminal (`confirmed`/`assumed`/`completed`), not when its phase is `later`/`maybe`. Dim reads as "done, ignore me", which is precisely the wrong signal for a worktree still awaiting a land (E-1707).
+Because ◆ means *there is still something to do here*, an unsettled row is never rendered dim — not when its status is terminal (`confirmed`/`assumed`/`completed`), not when its phase is `later`/`maybe`. Dim reads as "done, ignore me", which is precisely the wrong signal for a worktree still awaiting a land.
 
 `task unsettled` expands the marker:
 
@@ -128,12 +128,12 @@ git commit -m "E-<id>: what changed"
 **Form: `E-<id>: <verb-first summary>`.** The task id that owns the change, a colon, then what the commit does — imperative mood, lower-case after the colon, no trailing period, one line:
 
 ```
-E-1871: route closed tasks to ⇥ instead of ⁇ in session status
-E-1866: show session provenance on `task show`
-E-1870: add the missing commit-your-work step to the guide
+E-101: route closed tasks to ⇥ instead of ⁇ in session status
+E-102: show session provenance on `task show`
+E-103: add the missing commit-your-work step to the guide
 ```
 
-Your commits ride into `main` on `worktree land`, so the subject line is what `main`'s history says about the task forever. The id prefix is the load-bearing part: it makes every landed change traceable back to the task that justified it (`git log --grep 'E-1871'`), which is the whole point of tracking intent. Endless's own auto-commits never carry a task id — they use subjects of their own (`Endless: record ledger entry`, `lesson: <summary>`) — so yours and its are distinguishable at a glance in `git log --oneline`.
+Your commits ride into `main` on `worktree land`, so the subject line is what `main`'s history says about the task forever. The id prefix is the load-bearing part: it makes every landed change traceable back to the task that justified it (`git log --grep 'E-101'`), which is the whole point of tracking intent. Endless's own auto-commits never carry a task id — they use subjects of their own (`Endless: record ledger entry`, `lesson: <summary>`) — so yours and its are distinguishable at a glance in `git log --oneline`.
 
 One task's work is normally one commit; split into several only when the steps are independently reviewable, and prefix each with the same id.
 
@@ -185,7 +185,7 @@ endless worktree land <id> --dry-run        # preview without making changes
 1. Auto-commits endless-managed modifications (verbs.jsonl, ledger entries) — these auto-commit to main as global-config artifacts.
 2. Rebases the task branch onto current `main`.
 3. Fast-forwards `main` to the rebased tip.
-4. Records the landing (`task.landed`). **The worktree directory and its branch stay put** — `land` never removes them. A separate reaper sweep (`worktree reap`, E-1337) deletes a landed worktree once it is older than `worktree_ttl` (`.endless/config.json`, default 14d) and no live process holds a cwd inside it. Retention is what makes re-landing work: commit a follow-up on the same branch and land again, and the dir and branch are reused.
+4. Records the landing (`task.landed`). **The worktree directory and its branch stay put** — `land` never removes them. A separate reaper sweep (`worktree reap`) deletes a landed worktree once it is older than `worktree_ttl` (`.endless/config.json`, default 14d) and no live process holds a cwd inside it. Retention is what makes re-landing work: commit a follow-up on the same branch and land again, and the dir and branch are reused.
 
 **Do not merge to main any other way.** `worktree land` is the single sanctioned path. The exception is global-config artifacts (verbs.jsonl, db-ledger entries) which auto-commit to main directly.
 
@@ -287,9 +287,9 @@ Spawn runs in one of two places:
 - **Foreground** (`endless task spawn <id>`) — a new tmux window, Claude visible and interactive.
 - **Background** (`endless task spawn <id> --bg`) — a headless agent under Anthropic's supervisor process, no terminal attached.
 
-The foreground window is built as three panes (E-1851): Claude on the **left** at half width and full height (focused when the window opens), `endless session monitor` **top-right**, and a bare `$SHELL` **bottom-right** for ad-hoc `endless` commands. The monitor resizes its own pane to the frame it is rendering on every repaint, capped at 80% of the window height, so the shell keeps the rest of the column; with no rows to show it holds a small fixed block rather than collapsing to a sliver. `--bg` (no window) and `--attach` are unaffected — neither builds a layout.
+The foreground window is built as three panes: Claude on the **left** at half width and full height (focused when the window opens), `endless session monitor` **top-right**, and a bare `$SHELL` **bottom-right** for ad-hoc `endless` commands. The monitor resizes its own pane to the frame it is rendering on every repaint, capped at 80% of the window height, so the shell keeps the rest of the column; with no rows to show it holds a small fixed block rather than collapsing to a sliver. `--bg` (no window) and `--attach` are unaffected — neither builds a layout.
 
-**Pane working directories are not the same.** Claude's pane gets the task's **worktree** — that pane is the branch's work. The monitor and shell panes get the **project directory**, because the Python CLI routes its DB from cwd: run from inside a `self_dev` worktree, every ad-hoc `endless` command in the shell pane needs an explicit `--db main` to reach the main database. The monitor pane follows the same rule for consistency, though its own view no longer depends on it — `session-status` pins the main DB regardless of cwd (E-698), since session and pane state are machine-scoped rather than project-scoped. The trade-off is that `git`/`just` in the shell pane act on the main checkout, not on the task branch.
+**Pane working directories are not the same.** Claude's pane gets the task's **worktree** — that pane is the branch's work. The monitor and shell panes get the **project directory**, because the Python CLI routes its DB from cwd: run from inside a `self_dev` worktree, every ad-hoc `endless` command in the shell pane needs an explicit `--db main` to reach the main database. The monitor pane follows the same rule for consistency, though its own view no longer depends on it — `session-status` pins the main DB regardless of cwd, since session and pane state are machine-scoped rather than project-scoped. The trade-off is that `git`/`just` in the shell pane act on the main checkout, not on the task branch.
 
 Both **pre-claim** the task (status → `underway`, per-task worktree created) and run the same pre-flight refusals before launching, so the spawned session always lands in a fully-claimed state and never needs to run `endless task claim` itself.
 
@@ -340,7 +340,7 @@ Inspect it the same way as any other template:
 endless internal template render handoff/claim < vars.json
 ```
 
-{{if .report_gate}}Every handoff's closing `Final message` line follows one discipline: **write the reply you mean to send, and let the minimizer cut it** (E-1953). For git state it defers to `endless worktree check`, which prints one line per genuine anomaly and stays silent when the worktree is clean — so a spawned session puts whatever that command prints into its draft and otherwise says nothing about git (a branch ahead of main and the absence of stray files are not anomalies). Beyond git it surfaces state outside endless (CI, services) only when actually in play, plus the how-to-test. Recaps of status, phase and relationships, and confirmations that a problem does not exist, are what the minimizer deletes — a second party applying that judgment is the whole point.
+{{if .report_gate}}Every handoff's closing `Final message` line follows one discipline: **write the reply you mean to send, and let the minimizer cut it**. For git state it defers to `endless worktree check`, which prints one line per genuine anomaly and stays silent when the worktree is clean — so a spawned session puts whatever that command prints into its draft and otherwise says nothing about git (a branch ahead of main and the absence of stray files are not anomalies). Beyond git it surfaces state outside endless (CI, services) only when actually in play, plus the how-to-test. Recaps of status, phase and relationships, and confirmations that a problem does not exist, are what the minimizer deletes — a second party applying that judgment is the whole point.
 {{else}}Every handoff's closing `Final message` line follows one discipline: **say what your user has to act on, and nothing they did not ask for**. For git state it defers to `endless worktree check`, which prints one line per genuine anomaly and stays silent when the worktree is clean — so a spawned session relays whatever that command prints and otherwise says nothing about git (a branch ahead of main and the absence of stray files are not anomalies). Beyond git it surfaces state outside endless (CI, services) only when actually in play, plus the how-to-test. It does not recap task status, phase or relationships, and does not confirm that a problem does not exist. Where `report_gate` is off there is no second party to apply that judgment, so the handoff states it outright rather than leaving it to be cut.
 {{end}}
 ### A session owns one task for its lifetime
@@ -398,7 +398,7 @@ Foreground flow:
 
 1. Validates tmux is running (fails otherwise).
 2. Refuses if the task is in a done-ish status (`unverified`/`confirmed`/`declined`/`obsolete`/`assumed`/`completed`) without `--force`, or if another live session already owns the task. On the reopenable subset (`assumed`/`confirmed`/`completed`) the refusal routes to `session goto <id> --resume --revisit` rather than offering `--force`, because a second session on settled work is rarely what you want.
-2. Refuses if **any** session ever claimed the task — live or long since ended (E-1967). Ownership is read off `sessions.task_id`, which is write-once (ED-1560), so the record survives the claiming session's death. The refusal names that session and routes to `endless session goto <id> --resume`; with several claimants it names the most recent and lists the rest. There is **no** override: `--force` governs only the status demotion, and a claim cannot be released. To work a task a prior session claimed, resume that session — starting a second one throws away the reasoning that only exists there.
+2. Refuses if **any** session ever claimed the task — live or long since ended. Ownership is read off `sessions.task_id`, which is write-once, so the record survives the claiming session's death. The refusal names that session and routes to `endless session goto <id> --resume`; with several claimants it names the most recent and lists the rest. There is **no** override: `--force` governs only the status demotion, and a claim cannot be released. To work a task a prior session claimed, resume that session — starting a second one throws away the reasoning that only exists there.
 3. **Pre-claims the task**: flips status to `underway` (emitting `task.status_changed`) and creates the per-task worktree at `.endless/worktrees/e-<id>/`.
 4. Renders the handoff from the template and writes it to a temp file.
 5. Launches Claude as the tmux window's *command* through the `endless-go spawn-window` launcher: the launcher creates a window named `<project>_<slug>[E-NNNN]` at the spawn-created worktree (or `--worktree <path>`), sets the window variables `@endless_spawned_by`, `@endless_task_id`, `@endless_project_id` in-process **before** exec, then execs `claude --permission-mode auto` with the handoff as its positional prompt argument. The handoff text never touches a command line or the session environment, and there is no send-keys, no readiness sleep, and no plan-mode step.

@@ -82,7 +82,7 @@ func ResolveResumeTarget(ref string) (ResumeTarget, error) {
 		if convErr != nil {
 			return ResumeTarget{}, fmt.Errorf(
 				"%q is not a session reference: ES- takes an integer session id "+
-					"(e.g. ES-963)", ref)
+					"(e.g. ES-101)", ref)
 		}
 		t, found, err := resumeBySessionID(db, n)
 		if err != nil {

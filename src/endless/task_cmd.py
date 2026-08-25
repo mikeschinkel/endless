@@ -151,7 +151,7 @@ def parse_parent_filter(value: str) -> int:
         return int(s)
     except ValueError:
         raise click.ClickException(
-            f"Invalid parent '{value}'. Expected 'none' or a task ID (e.g. E-799)"
+            f"Invalid parent '{value}'. Expected 'none' or a task ID (e.g. E-101)"
         )
 
 

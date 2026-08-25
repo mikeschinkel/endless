@@ -8,9 +8,9 @@ The session-status subsystem turns "what are you working on right now" from chat
 
 Each row in `session_statuses` is a snapshot of one session's reported state at one moment:
 
-- `task_id` — populated automatically by the handler from `sessions.task_id` at insert time; makes joins to `tasks` trivial. (Both columns were `active_task_id` until E-1969; a session holds one task, so there was no inactive one to distinguish it from.)
+- `task_id` — populated automatically by the handler from `sessions.task_id` at insert time; makes joins to `tasks` trivial. (A session holds one task, so there is no inactive one to distinguish it from.)
 - `headline` — one-line summary of what just changed.
-- `tasks` — every task the session is touching (resolved / pending / blocked / unverified, all in one column post-E-1318; the renderer derives the disposition bucket from each task's status).
+- `tasks` — every task the session is touching (resolved / pending / blocked / unverified, all in one column; the renderer derives the disposition bucket from each task's status).
 - `decisions` — design choices, framings, insights too lightweight to be `endless decision add` items but worth capturing.
 - `commits` — commit SHAs of work that didn't land via a task (manual hygiene, ledger splits, etc.).
 - `memory` — entries created or modified in `~/.claude/projects/.../memory/`.
@@ -21,7 +21,7 @@ Latest row by `created_at` is the current status. Older rows are history — use
 
 ## Recording a snapshot: `endless session snapshot add`
 
-> The verb is `snapshot` (renamed from `session status`, E-1688) so `session status` can name the live work-state view. The recorded artifact is still a session-status snapshot.
+> The verb is `snapshot` (renamed from `session status`) so `session status` can name the live work-state view. The recorded artifact is still a session-status snapshot.
 
 ```bash
 endless session snapshot add <<'XML'
@@ -29,10 +29,10 @@ endless session snapshot add <<'XML'
   <headline>One-line summary of what just changed.</headline>
 
   <tasks>
-    <task id="E-1208" status="confirmed">verbs.jsonl write-time commit</task>
-    <task id="E-1314" status="unverified" filed="true">consolidate task disposition cols</task>
+    <task id="E-101" status="confirmed">short title of the finished work</task>
+    <task id="E-102" status="unverified" filed="true">something you filed and started</task>
     <task id="E-NNNN" status="blocked">waiting on the user's review</task>
-    <task id="E-1302" status="unplanned">endless task id CLI</task>
+    <task id="E-103" status="unplanned">something that still needs a plan</task>
   </tasks>
 
   <decisions>
@@ -122,10 +122,10 @@ Three read-only commands for self-orientation and for coordinating with sibling 
 A long-running session accumulates task rows it no longer cares about. `endless session hide --task <id>` (repeatable) drops them from **your** `session status` / `session monitor` view:
 
 ```bash
-endless session hide --task E-1832 --task E-1902   # quiet two rows
+endless session hide --task E-101 --task E-102   # quiet two rows
 endless session status                             # … 2 hidden (--show-hidden)
 endless session status --only-hidden               # what did I hide?
-endless session unhide --task E-1832               # put one back
+endless session unhide --task E-101               # put one back
 ```
 
 Three things this is deliberately **not**:
@@ -134,7 +134,7 @@ Three things this is deliberately **not**:
 - It never expires. No status transition un-hides a row, `unverified` included; only `session unhide --task` does.
 - It never hides silently. Whenever anything is suppressed the view carries a `… N hidden (--show-hidden)` footer, in `session monitor` too. `--show-hidden` renders everything with hidden rows marked ⊘; `--only-hidden` renders just the hidden set, which is how you find ids to unhide without having recorded them.
 
-Pass a session reference (`endless session hide ES-1041 --task E-1832`) to hide for a session other than your own. Note that bare `session hide <ids...>` — no `--task` — is a different command: it hides whole SESSIONS from `session list`.
+Pass a session reference (`endless session hide ES-101 --task E-101`) to hide for a session other than your own. Note that bare `session hide <ids...>` — no `--task` — is a different command: it hides whole SESSIONS from `session list`.
 
 ### Correcting what your session's list holds
 
@@ -151,8 +151,8 @@ Capture is automatic: Endless records a row for every task your session claims, 
 Two verbs cover what automation can't reach:
 
 ```bash
-endless session task add E-1832 E-1902   # decided work you haven't touched yet
-endless session task remove E-1832       # a capture that shouldn't have happened
+endless session task add E-101 E-102   # decided work you haven't touched yet
+endless session task remove E-101      # a capture that shouldn't have happened
 ```
 
 - **`add`** enrolls a task as `queued`. Nothing has happened to it, so no automatic capture would ever record it — this is the only way it gets on your list. Promotion is upgrade-only: a task you merely read or edited is strengthened, and your own claimed task stays `claimed` (reported, not an error).
@@ -168,7 +168,7 @@ The `session` group also carries commands a human runs interactively — session
 
 ## Reading snapshots
 
-Read commands are tracked under E-1319 (blocked by E-1318). Once shipped:
+Read commands are not implemented yet. Once shipped:
 
 ```bash
 endless session snapshot latest [--session N]    # latest row for a session (defaults to current pane)
@@ -189,7 +189,7 @@ endless sql "SELECT id, session_id, task_id, headline, created_at
 - **Validation error** (bad task id, unknown element, missing required attribute) → `click.ClickException`; nothing inserted.
 - **Empty `TMUX_PANE`** → Go handler returns "no live session for process ''" error.
 - **Identical to the latest row** → dedup-skip; row count unchanged; chat still gets the markdown echo.
-- **In-transaction lookups must use the dbQuerier** — calling `monitor.GetX` from inside an Execute handler deadlocks (single sqlite connection). E-1315 fixed this for the session-status handler; if you add a new event kind that needs session lookup, use the in-tx variant pattern.
+- **In-transaction lookups must use the dbQuerier** — calling `monitor.GetX` from inside an Execute handler deadlocks (single sqlite connection). The session-status handler already does this; if you add a new event kind that needs session lookup, use the in-tx variant pattern.
 
 ## Don't
 
@@ -210,7 +210,7 @@ Keep the minimized reply in the adjacent tmux pane and compare by eye.
 ```bash
 endless session turn                 # the raw draft behind the last reply
 endless session turn 3               # three turns back
-endless session turn --session ES-1101
+endless session turn --session ES-101
 endless session turn B -p            # option B of a paired minimization, in full
 ```
 

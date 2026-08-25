@@ -640,7 +640,7 @@ def add_match_value(
     """
     if type_ == "verb":
         raise ValueError(
-            "verbs are no longer matchers; use add_verb() (E-1117)"
+            "verbs are no longer matchers; use add_verb()"
         )
     matcher_template = {
         "type": type_,

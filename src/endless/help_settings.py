@@ -116,7 +116,7 @@ def _source(root: Path, start: Path) -> str:
         if isinstance(cfg.get("minimizer"), (bool, dict)):
             return f'Set by "minimizer" in {path}.'
         if isinstance(cfg.get("report_gate"), bool):
-            return (f'Set by "report_gate" in {path} — E-1953\'s name for '
+            return (f'Set by "report_gate" in {path} — the earlier name for '
                     f'"minimizer.enabled", still honored.')
         if parent == root:
             break
