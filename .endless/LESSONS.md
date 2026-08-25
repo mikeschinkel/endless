@@ -3770,3 +3770,15 @@ This compounds a pattern he flagged earlier in the same session — a wall of te
 
 Rule: before surfacing anything, ask what he would DO with it. If the answer is 'nothing', or 'it resolves on its own', do not raise it. Expected state is not a loose end. A clean handoff says nothing about the things that are fine — no inventory of the silence, no negative confirmations, no 'just so you know'. Surface only what changes a decision he has to make.
 - **Project**: endless
+
+### [2026-08-25] Choose a task's parent for discoverability, not taxonomic correctness
+I nested E-1935 (Aug, 'make db-ledger rebuild trustworthy') under E-799 (Apr, 'migrate to event-sourced architecture') because containment ran that way: E-1935's goal IS E-799's Stage 2 acceptance criterion. Mike had asked for the inverse and I did it the other way with a one-line justification.
+
+He corrected it with a reason I did not have: recently filed tasks get far more attention than months-old ones, so nesting the new epic under the old one BURIES it. There is no UI yet that surfaces priority independently of recency, so the tree IS the priority signal.
+
+The general rule: a parent choice is a visibility decision before it is a classification decision. Ask which node someone will actually land on, and put the live work at or near that node. Taxonomic purity that hides live work is a worse answer than an imperfect hierarchy that surfaces it.
+
+Two mechanical notes from the same episode:
+-  has no way to CLEAR a parent. Setting the child's parent without clearing the old parent's produced a cycle (799 -> 1935 -> 799), which a recursive CTE walks forever. Use , then set the other side.
+- Verify an inversion by walking the tree afterward, not by reading back the single row you wrote. The row I checked looked right; the cycle was in the row I had not touched.
+- **Project**: endless
