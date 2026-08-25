@@ -3782,3 +3782,13 @@ Two mechanical notes from the same episode:
 -  has no way to CLEAR a parent. Setting the child's parent without clearing the old parent's produced a cycle (799 -> 1935 -> 799), which a recursive CTE walks forever. Use , then set the other side.
 - Verify an inversion by walking the tree afterward, not by reading back the single row you wrote. The row I checked looked right; the cycle was in the row I had not touched.
 - **Project**: endless
+
+### [2026-08-25] Correction to the previous lesson: two lines lost to shell substitution
+The lesson immediately above ("Choose a task's parent for discoverability, not taxonomic correctness") was written with a bash heredoc-free double-quoted string, so its two backticked command names were evaluated as command substitution and vanished, leaving "(eval): command not found: task" noise instead of the text. The substance of that lesson stands; its final two bullets did not survive. They were:
+
+1. `task update --parent` has NO way to clear a parent. Setting the child side without clearing the old parent produced a cycle, 799 -> 1935 -> 799, which a recursive CTE walks forever. Use `task move <id> --root` first, then set the other side.
+
+2. Verify a re-parenting by WALKING the tree afterward, not by reading back the single row you wrote. The row I checked looked correct; the cycle lived in the row I had not touched.
+
+And the meta-lesson: never pass prose containing backticks through a double-quoted shell argument. Endless prose is full of backticked command names, so this will recur. Use single quotes, or write the text to a file under .endless/tmp and pass --text-file.
+- **Project**: endless
