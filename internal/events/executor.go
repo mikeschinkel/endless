@@ -685,6 +685,15 @@ func execTaskFieldsUpdated(db dbQuerier, evt *Event, emit DerivedEmitter) (*Exec
 		if err := ValidateMaybeParentless(effPhase, effParent); err != nil {
 			return nil, err
 		}
+		// E-2067: `task update --parent` writes the same column `task move`
+		// does, so it runs the same ancestor walk. Only when this update
+		// actually touches parent_id — a phase-only edit cannot introduce a
+		// cycle, and must not be blocked by one the row already has.
+		if parentSet {
+			if err := ValidateNoParentCycle(db, mustParseInt64(taskID), effParent); err != nil {
+				return nil, err
+			}
+		}
 	}
 
 	// Attaching a non-empty plan (--text) to a pre-judgment task moves it to
@@ -791,20 +800,11 @@ func execTaskMoved(db dbQuerier, evt *Event, emit DerivedEmitter) (*ExecuteResul
 			return nil, err
 		}
 
-		current := *p.NewParentID
-		for {
-			var parentID sql.NullInt64
-			err := db.QueryRow("SELECT parent_id FROM tasks WHERE id = ?", current).Scan(&parentID)
-			if err != nil {
-				break
-			}
-			if !parentID.Valid {
-				break
-			}
-			if parentID.Int64 == mustParseInt64(taskID) {
-				return nil, fmt.Errorf("events: circular reference: task %s is an ancestor of target parent %d", taskID, *p.NewParentID)
-			}
-			current = parentID.Int64
+		// E-2067: the ancestor walk lives in ValidateNoParentCycle so that
+		// task.fields_updated — the other writer of tasks.parent_id — runs
+		// the identical guard.
+		if err := ValidateNoParentCycle(db, mustParseInt64(taskID), p.NewParentID); err != nil {
+			return nil, err
 		}
 	}
 
