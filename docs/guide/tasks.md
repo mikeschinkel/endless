@@ -61,6 +61,7 @@ endless task next --phase now
 endless task next --llm
 
 # Other reads
+endless task id                                      # the task THIS session is on
 endless task recent                                  # recently updated
 endless task active                                  # underway + unverified
 endless task search "query"                          # ID, title, description
@@ -69,6 +70,20 @@ endless task handoff <id>                            # render the spawn handoff
 ```
 
 Reach for `--llm` whenever you're parsing output yourself — it's token-efficient.
+
+`endless task id` is the one read that takes no id: it prints the task **your
+own session** is on, as a single bare `E-NNNN` line, so a shell, a recipe or an
+agent can compose it instead of asking you to retype an id you already claimed:
+
+```bash
+endless task show "$(endless task id)"
+endless task update "$(endless task id)" --status unverified
+```
+
+It exits 1 with the reason on stderr when the session holds no task, so
+`endless task id || ...` scripts cleanly. The binding is the one the tmux status
+row reads — keyed by the pane the session runs in, so outside tmux there is
+nothing to resolve. `endless tmux task` is an alias for it.
 
 ### Session provenance: who filed this, and who else worked it
 

@@ -76,6 +76,7 @@ Endless ships a tmux integration that puts the active task ID, project, and stat
 ```bash
 endless tmux apply              # configure the running tmux server (ephemeral)
 endless tmux status-line        # the runtime printer tmux calls per refresh
+endless tmux task               # the task ID on that row — alias of `endless task id`
 ```
 
 After `apply`, your tmux session shows a second status row like `[E-NNNN] · <project> · underway`.

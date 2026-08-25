@@ -1886,6 +1886,30 @@ def task_active(project, show_all, llm, as_json, parent_id):
                  llm=llm, as_json=as_json, parent_id=parent_val)
 
 
+@task_cmd.command("id")
+@click.option("--pane", default=None,
+              help="Resolve for this tmux pane instead of $TMUX_PANE.")
+@click.pass_context
+def task_id_cmd(ctx, pane):
+    """Print the task this session is on — one bare `E-NNNN` line.
+
+    Reads the same database binding the tmux status row shows, so it
+    answers "which task am I on?" for a shell, a recipe, or an agent
+    without anyone having to remember:
+
+        endless task show "$(endless task id)"
+
+    Exits 1 with a diagnostic on stderr — never on stdout — when the
+    session holds no task, so `endless task id || ...` scripts cleanly.
+    The binding is keyed by the tmux pane the session runs in; outside
+    tmux there is nothing to resolve.
+
+    `endless tmux task` is an alias for this command.
+    """
+    from endless.tmux_cmd import run_active_id
+    run_active_id(pane, ctx.command_path)
+
+
 @task_cmd.command("recent")
 @click.option("--project", default=None,
               help="Project name (default: detect from cwd)")
@@ -3994,6 +4018,13 @@ def tmux_init(hotkey, status_interval):
     """
     from endless.tmux_cmd import run_init
     run_init(hotkey, status_interval)
+
+
+# `tmux task` is an alias for `task id` — the same command object, so the two
+# spellings are provably identical. `task id` is the primary form (it is a
+# question about your task, not about tmux); this one exists for whoever
+# reaches for the tmux surface first. E-1302.
+tmux_cmd.add_command(task_id_cmd, name="task")
 
 
 @main.group("db")

@@ -99,7 +99,7 @@ If you're producing a chat table that maps to `tasks` / `decisions` / `commits` 
 
 Sessions are bound to tmux panes via the `sessions.process` column (named "process" for harness-agnosticism; today it holds tmux pane IDs like `%124`).
 
-If you need your session's id outside the `session snapshot add` flow, the canonical Go-side helper is `monitor.GetLiveSessionByProcess(process string)`. From the CLI, `endless-tmux active-id` returns the active task ID for the current pane (same DB binding the tmux status row reads).
+If you need your session's id outside the `session snapshot add` flow, the canonical Go-side helper is `monitor.GetLiveSessionByProcess(process string)`. From the CLI, `endless task id` prints the active **task** ID for the current pane — one bare `E-NNNN` line, exit 1 when there is none (same DB binding the tmux status row reads; `endless tmux task` is an alias).
 
 Direct SQL lookup pattern (filter `state != 'ended'` to skip dead sessions in the same pane):
 
