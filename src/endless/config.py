@@ -609,6 +609,31 @@ def resolution_cwd() -> Path:
     return common_dir_abs.parent
 
 
+def worktree_endless_go(cwd: Path | None = None) -> Path | None:
+    """Path to <worktree>/bin/endless-go when cwd is inside a self-dev
+    worktree, else None. Does not check existence.
+
+    The unconditional form: it asks only "am I in a self-dev worktree", with no
+    opinion about which database is in play. Two callers want different gates on
+    top of it, so the path itself is computed once here.
+
+    E-1891 added the second caller (`endless.statuses`) and with it the reason
+    this is separate from resolved_worktree_endless_go below: that one cannot
+    answer before the global --db flag has been parsed, and the status
+    vocabulary is needed at cli.py IMPORT time, which is earlier than that. The
+    looser gate is right for a caller that touches no database — the worktree's
+    Python is already what runs here, so the worktree's Go is the coherent
+    partner for a pure lookup.
+    """
+    dir_name = worktree_dir_name(cwd)
+    if dir_name is None:
+        return None
+    root = gated_worktree_root(cwd)
+    if root is None:
+        return None
+    return root / ".endless" / "worktrees" / dir_name / "bin" / "endless-go"
+
+
 def resolved_worktree_endless_go(cwd: Path | None = None) -> Path | None:
     """Path to <worktree>/bin/endless-go when --db sandbox is the active DB
     context AND cwd is inside a self-dev worktree, else None.
@@ -617,6 +642,11 @@ def resolved_worktree_endless_go(cwd: Path | None = None) -> Path | None:
     the worktree's schema.sql) over the PATH-resolved global. The global
     symlink points at main's binary, so additive schema in this branch is
     silently absent unless the worktree binary is used.
+
+    The --db sandbox gate is load-bearing HERE and deliberately absent from
+    worktree_endless_go above: this path opens a database, so using the
+    worktree binary against the MAIN database would reintroduce the exact
+    schema-baseline mismatch the routing exists to prevent.
 
     Does not check existence — callers handle the missing-binary case
     explicitly and surface a loud error naming the bad state (E-1510).
@@ -631,10 +661,7 @@ def resolved_worktree_endless_go(cwd: Path | None = None) -> Path | None:
     # external override) keeps the PATH-resolved global.
     if RESOLVED_CONFIG_DIR != sandbox_config_dir(dir_name):
         return None
-    root = gated_worktree_root(cwd)
-    if root is None:
-        return None
-    return root / ".endless" / "worktrees" / dir_name / "bin" / "endless-go"
+    return worktree_endless_go(cwd)
 
 
 def worktree_python_reexec_target(

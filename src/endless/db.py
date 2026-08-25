@@ -8,7 +8,7 @@ from typing import NamedTuple
 
 import click
 
-from endless import config
+from endless import config, statuses
 from endless.config import ensure_config_dir
 
 _conn: sqlite3.Connection | None = None
@@ -290,7 +290,8 @@ def _migrate_v2(conn: sqlite3.Connection):
     if _has_table(conn, "tasks"):
         conn.execute(
             "UPDATE tasks SET completed_at = NULL "
-            "WHERE completed_at IS NOT NULL AND status NOT IN ('confirmed', 'completed')"
+            "WHERE completed_at IS NOT NULL AND status NOT IN "
+            f"({statuses.sql_list('sets-completed-at')})"
         )
         conn.execute(
             "UPDATE tasks SET status = 'ready' "
@@ -303,7 +304,7 @@ def _migrate_v2(conn: sqlite3.Connection):
         conn.execute(
             "UPDATE tasks SET tier = 0 "
             "WHERE tier IS NOT NULL AND tier != 0 "
-            "AND status IN ('unverified', 'confirmed', 'assumed', 'completed', 'declined', 'obsolete')"
+            f"AND status IN ({statuses.sql_list('settled')})"
         )
         conn.commit()
 

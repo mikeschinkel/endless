@@ -130,6 +130,19 @@ func TestSettledIsTerminalPlusUnverified(t *testing.T) {
 	}
 }
 
+// TestVerificationTrackIsItsTerminalsPlusUnverified pins the one other
+// definitional relationship between groups: the verification track is the two
+// ways user-testable work finishes, plus the gate they pass through.
+func TestVerificationTrackIsItsTerminalsPlusUnverified(t *testing.T) {
+	want := append(taskstatus.Get(taskstatus.VerificationTerminal), taskstatus.Unverified)
+	got := taskstatus.Get(taskstatus.VerificationTrack)
+	sort.Strings(want)
+	sort.Strings(got)
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("VerificationTrack = %v, want VerificationTerminal+unverified = %v", got, want)
+	}
+}
+
 // TestEveryStatusHasLabelAndGlyph pins that adding a status forces both display
 // forms, so a renderer never draws an empty cell.
 func TestEveryStatusHasLabelAndGlyph(t *testing.T) {
@@ -329,6 +342,7 @@ func TestGroupMembershipIsPinned(t *testing.T) {
 		"terminal":               {"confirmed", "assumed", "completed", "declined", "obsolete"},
 		"unblocking":             {"confirmed", "assumed", "declined", "obsolete"},
 		"unblocking-next":        {"confirmed", "assumed", "completed"},
+		"verification-terminal":  {"confirmed", "assumed"},
 		"verification-track":     {"unverified", "confirmed", "assumed"},
 	}
 	for _, g := range taskstatus.AllGroups() {

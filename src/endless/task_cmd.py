@@ -15,6 +15,7 @@ import click
 from tabulate import tabulate
 
 from endless import db, config
+from endless import statuses
 from endless.statuses import TASK_STATUSES
 from endless.project_path import project_name_for_cwd, resolved
 
@@ -1032,7 +1033,7 @@ def show_plan(
         where += f" AND pi.status IN ({placeholders})"
         params.extend(status_filter)
     elif not show_all:
-        where += " AND pi.status NOT IN ('confirmed', 'assumed', 'completed', 'declined', 'obsolete')"
+        where += f" AND pi.status NOT IN ({statuses.sql_list('terminal')})"
     if phase_filter:
         where += " AND pi.phase = ?"
         params.append(phase_filter)
@@ -1193,14 +1194,14 @@ def next_tasks(
     # up item. It surfaces in `session status` (as ◌ triage) instead, which is
     # where the routing decision belongs.
     where = (
-        "WHERE t.status NOT IN ('confirmed', 'assumed', 'completed', 'blocked', 'declined', 'obsolete', 'underway', 'unverified', 'submitted', 'untriaged') "
+        f"WHERE t.status NOT IN ({statuses.sql_list('not-actionable')}) "
         "AND (SELECT count(*) FROM live_tasks c WHERE c.parent_id = t.id) = 0 "
         "AND t.id NOT IN ("
         "  SELECT td.target_id FROM task_deps td"
         "  WHERE td.target_type = 'task' AND td.dep_type = 'blocks'"
         "    AND td.source_id IN ("
         "      SELECT t2.id FROM live_tasks t2 "
-        "      WHERE t2.status NOT IN ('confirmed', 'assumed', 'completed')"
+        f"      WHERE t2.status NOT IN ({statuses.sql_list('unblocking-next')})"
         "    )"
         ")"
     )
@@ -1388,6 +1389,19 @@ def revise_next_list(
         click.echo(f"Revised: {len(lanes)} lane(s), {item_count} item(s).")
 
 
+def _active_status_ranking() -> str:
+    """The `WHEN <status> THEN <n>` body ordering the `task active` listing.
+
+    Derived from taskstatus' ordered `active` group (E-1891) so the sort order
+    and the WHERE clause above it can never name different statuses — they used
+    to be two hand-written lists inside the same query.
+    """
+    return " ".join(
+        f"WHEN '{status}' THEN {rank}"
+        for rank, status in enumerate(statuses.get("active"))
+    )
+
+
 def active_tasks(
     project_name: str | None = None,
     show_all: bool = False,
@@ -1396,7 +1410,7 @@ def active_tasks(
     parent_id: int | None = None,
 ):
     """Show tasks that are underway or awaiting verification."""
-    where = "WHERE t.status IN ('underway', 'unverified')"
+    where = f"WHERE t.status IN ({statuses.sql_list('active')})"
     params: list = []
 
     if parent_id is not None:
@@ -1422,8 +1436,7 @@ def active_tasks(
         f"JOIN projects p ON t.project_id = p.id "
         f"{where} "
         f"ORDER BY "
-        f"  CASE t.status "
-        f"    WHEN 'underway' THEN 0 WHEN 'unverified' THEN 1 END, "
+        f"  CASE t.status {_active_status_ranking()} END, "
         f"  t.updated_at DESC",
         tuple(params),
     )
@@ -2318,14 +2331,17 @@ def _hint_backlog_pressure(item_id: int) -> list[str]:
     )
     if not row:
         return []
+    # "Open" here means pre-judgment: nobody has decided what these are yet,
+    # which is exactly what makes them a standing cost on every pass.
     count = db.scalar(
         "SELECT count(*) FROM live_tasks WHERE project_id = ? "
-        "AND status IN ('untriaged', 'unplanned')",
+        f"AND status IN ({statuses.sql_list('pre-judgment')})",
         (row[0]["pid"],),
     ) or 0
     return [
         f"{row[0]['name']} now carries {count} open task"
-        f"{'' if count == 1 else 's'} (untriaged/unplanned). Each one is read "
+        f"{'' if count == 1 else 's'} "
+        f"({'/'.join(statuses.get('pre-judgment'))}). Each one is read "
         f"and triaged past on every pass through the backlog."
     ]
 
@@ -2820,13 +2836,15 @@ def _require_outcome_for_completed(
 # types and are deliberately absent here. This Python table is the single
 # type→status policy gate (ED-1506 keeps the Go executor mechanical); E-1543's
 # epic-only super-gate will later extend the 'epic' entry.
+# E-1891: the type→policy mapping stays here (it is about types, not statuses);
+# only the status set moves out, as taskstatus' `verification-track` group.
 _TYPE_FORBIDDEN_STATUSES = {
-    "research":   ("unverified", "assumed", "confirmed"),
-    "epic":       ("unverified", "assumed", "confirmed"),
+    "research":   statuses.get("verification-track"),
+    "epic":       statuses.get("verification-track"),
     # E-1657/ED-1516: brainstorm's deliverable is the synthesis (information,
     # not testable behavior), so like research it terminates via 'completed
     # --outcome' and never goes through user-testable verification.
-    "brainstorm": ("unverified", "assumed", "confirmed"),
+    "brainstorm": statuses.get("verification-track"),
 }
 
 
@@ -2842,20 +2860,20 @@ def _require_status_allowed_for_type(status: str | None, task_type: str | None):
         raise click.ClickException(
             f"Task type {task_type!r} cannot be set to status {status!r}. "
             f"{task_type} tasks terminate via 'completed' (with --outcome) and "
-            f"never use 'unverified'/'assumed'/'confirmed'. Use --status completed, "
-            f"or change the task type."
+            f"never use {'/'.join(repr(s) for s in forbidden)}. "
+            f"Use --status completed, or change the task type."
         )
 
 
 # E-1956: the statuses that mean the task's work SHIPPED — it reached the
 # verification gate or passed it. `obsolete` is refused on these.
 #
-# Deliberately NOT the terminal set (_RELATION_TERMINAL_STATUSES): `declined`
+# Deliberately NOT the terminal set (_TERMINAL_STATUSES): `declined`
 # and `obsolete` are terminal but never shipped, and 'unverified' ships without
 # being terminal. And deliberately CURRENT status only, not "ever reached" — a
 # task that shipped and was later reopened to `revisit` is genuinely back in
 # play, and re-closing it as obsolete is a legitimate call.
-_SHIPPED_STATUSES = ("unverified", "confirmed", "assumed", "completed")
+_SHIPPED_STATUSES = statuses.get("shipped")
 
 
 def _refuse_obsolete_on_shipped_work(
@@ -2903,7 +2921,7 @@ def _refuse_cascade_across_typed_descendants(item_id: int, status: str):
     """E-1577: when --cascade would set 'assumed'/'confirmed' on a subtree,
     refuse loudly if any descendant is research/epic. Naming offenders
     matches the 'loud failure on invalid state' rule."""
-    if status not in ("assumed", "confirmed"):
+    if status not in statuses.get("verification-terminal"):
         return
     offenders = db.query(
         "WITH RECURSIVE tree(id) AS ("
@@ -3270,7 +3288,7 @@ def _current_session_is_background() -> bool:
 # important: it is the permanent human override for a triage call you disagree
 # with, and the route that still works when the triager is unreachable (it
 # fails open, leaving the task here). Never scaffolding to remove.
-_SUBMITTABLE_FROM = ("untriaged", "unplanned", "revisit")
+_SUBMITTABLE_FROM = statuses.get("submittable-from")
 
 
 def submit_item(item_id: int):
@@ -3802,9 +3820,9 @@ def _check_task_ownership(item_id: int, current_eid: int | None) -> bool:
     return owned_by_current
 
 
-_CLAIM_REQUIRES_FORCE: frozenset[str] = frozenset({
-    "unverified", "confirmed", "declined", "obsolete", "assumed", "completed",
-})
+# E-1891: `settled` — the work is over one way or another, shipped or
+# abandoned. The same group gates the tier clear in the Go executor.
+_CLAIM_REQUIRES_FORCE: frozenset[str] = frozenset(statuses.get("settled"))
 
 
 # E-1555: statuses a task can be reopened from. `declined`/`obsolete` carry an
@@ -3813,9 +3831,7 @@ _CLAIM_REQUIRES_FORCE: frozenset[str] = frozenset({
 # not a generic reopen. `unverified` is not terminal: it's "implementation done,
 # trust pending" — reopening it would discard pending verification rather
 # than reactivate completed work.
-_REOPENABLE_TERMINAL_STATUSES: frozenset[str] = frozenset({
-    "assumed", "confirmed", "completed",
-})
+_REOPENABLE_TERMINAL_STATUSES: frozenset[str] = frozenset(statuses.get("reopenable"))
 
 
 def _task_claimants(item_id: int) -> list[dict]:
@@ -3912,20 +3928,17 @@ def _check_prior_claim(item_id: int, current_status: str) -> None:
 # inherit it. `underway` is deliberately EXCLUDED: a live session is mid-flight
 # and a description tweak must not yank the task out from under it. So are
 # `unverified` and every terminal status, where re-triage means nothing.
-_DESCRIPTION_RESET_FROM: frozenset[str] = frozenset({
-    "untriaged", "unplanned", "submitted", "ready", "revisit",
-})
+_DESCRIPTION_RESET_FROM: frozenset[str] = frozenset(
+    statuses.get("description-reset-from")
+)
 
 
 # The statuses that mean "nobody has decided this task is spec-complete yet" —
 # the ones from which attaching a plan promotes to `submitted`. The promotion
-# itself lives in the Go executor; this is a mirror of its source set
-# (`isPreJudgmentStatus`, internal/events/executor.go), needed so `--keep-status`
-# can tell whether the promotion is about to fire. tests/tasks/e-1913-verify.sh
-# asserts the two stay in sync.
-_PRE_JUDGMENT_STATUSES: frozenset[str] = frozenset({
-    "untriaged", "unplanned",
-})
+# itself lives in the Go executor; this reads the same group the executor's
+# `isPreJudgmentStatus` reads (E-1891), so it can no longer be a mirror that
+# drifts — `--keep-status` needs to know whether the promotion is about to fire.
+_PRE_JUDGMENT_STATUSES: frozenset[str] = frozenset(statuses.get("pre-judgment"))
 
 
 def _perform_claim_work(
@@ -5327,29 +5340,28 @@ def _branch_for_worktree(wt_path) -> str | None:
 
 _HANDOFF_TYPES = frozenset({"todo", "bugfix", "research", "epic", "brainstorm"})
 
-# Terminal statuses collapse into a single "terminal" bucket in the
-# children-state breakdown (E-1567). Covers every status a finished child
-# can hold: todo/bugfix land on confirmed/assumed, research/epic land on
-# completed (E-1577/E-1537 §3), and obsolete/declined are universal
-# terminals.
-_TERMINAL_STATUSES = frozenset(
-    {"confirmed", "assumed", "completed", "declined", "obsolete"}
-)
+# The collapsed bucket every terminal status folds into in the children-state
+# breakdown (E-1567): todo/bugfix land on confirmed/assumed, research/epic on
+# completed (E-1577/E-1537 §3), and obsolete/declined are universal terminals.
+# A bucket label, not a status — which is why it is appended below rather than
+# living in the registry.
+_TERMINAL_BUCKET = "terminal"
 
-# Display order for the children-state breakdown: lifecycle progression of
-# the in-flight statuses, then the collapsed terminal bucket last. Every
-# valid task status maps to one of these buckets so no child is silently
-# dropped and the "(N total)" suffix always reconciles with the child count.
-_CHILDREN_STATE_ORDER = (
-    "untriaged",
-    "unplanned",
-    "ready",
-    "underway",
-    "blocked",
-    "revisit",
-    "unverified",
-    "terminal",
-)
+# Finished-or-abandoned work. One set, two readers: the children-state
+# breakdown collapses these into _TERMINAL_BUCKET, and relation rows colour
+# them green (E-1477). E-1891 collapsed the second reader's byte-identical
+# copy — `_RELATION_TERMINAL_STATUSES` — into this name.
+_TERMINAL_STATUSES = frozenset(statuses.get("terminal"))
+
+# Display order for the children-state breakdown: the non-terminal statuses in
+# lifecycle progression, then the collapsed terminal bucket last.
+#
+# E-1891: derived, not typed. This tuple used to omit `submitted`, so a
+# submitted child was counted in the "(N total)" suffix but rendered no bucket —
+# the breakdown silently failed to reconcile, contradicting this very comment.
+# taskstatus asserts that `children-state-order` and `terminal` partition the
+# vocabulary, so every status now has exactly one bucket by construction.
+_CHILDREN_STATE_ORDER = statuses.get("children-state-order") + (_TERMINAL_BUCKET,)
 
 
 def _children_state(parent_id: int) -> str:
@@ -5373,7 +5385,7 @@ def _children_state(parent_id: int) -> str:
         status = row["status"]
         n = row["n"]
         total += n
-        bucket = "terminal" if status in _TERMINAL_STATUSES else status
+        bucket = _TERMINAL_BUCKET if status in _TERMINAL_STATUSES else status
         counts[bucket] = counts.get(bucket, 0) + n
     if total == 0:
         return "no children yet"
@@ -6039,7 +6051,7 @@ def search_tasks(
         where += f" AND t.status IN ({placeholders})"
         params.extend(status_filter)
     elif not show_all:
-        where += " AND t.status NOT IN ('confirmed', 'assumed', 'completed', 'declined', 'obsolete')"
+        where += f" AND t.status NOT IN ({statuses.sql_list('terminal')})"
     if phase_filter:
         where += " AND t.phase = ?"
         params.append(phase_filter)
@@ -6585,8 +6597,6 @@ def get_all_relations(item_id: int) -> dict[str, list]:
     return ordered
 
 
-# Statuses that count as "done" for relation-row coloring (E-1477).
-_RELATION_TERMINAL_STATUSES = ("confirmed", "assumed", "completed", "declined", "obsolete")
 
 
 def _relation_map(item_ids, dep_type: str, note_col: str, other_col: str) -> dict[int, list[int]]:
@@ -6658,7 +6668,7 @@ def _supersession_note(status: str | None, ids: list[int] | None, phrase: str) -
     leaving them off the open rows keeps every default listing (which excludes
     terminal statuses) rendering as it did before.
     """
-    if not ids or status not in _RELATION_TERMINAL_STATUSES:
+    if not ids or status not in _TERMINAL_STATUSES:
         return ""
     return f" ({phrase} " + ", ".join(task_id_display(i) for i in ids) + ")"
 
@@ -6743,7 +6753,7 @@ def _echo_links_section(
     width = max(_bullet_label_width(r["rel_label"] for r in links), min_width)
     click.echo(click.style("This task:", fg="cyan"))
     for r in links:
-        color = "green" if r["status"] in _RELATION_TERMINAL_STATUSES else "yellow"
+        color = "green" if r["status"] in _TERMINAL_STATUSES else "yellow"
         label = (r["rel_label"] + ":").ljust(width)
         click.echo(
             f"- {label}{task_id_display(r['id'])} "

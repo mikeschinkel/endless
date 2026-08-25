@@ -107,8 +107,12 @@ section "2. One status vocabulary"
 [[ -f "${STATUSES}" ]] || fail "${STATUSES} is gone" "the four copies would drift again"
 
 # The two the help had dropped. This is the reported defect, asserted directly.
+# E-1891 moved the vocabulary itself into Go and made statuses.py a pass-through
+# client, so this asks the registry rather than grepping the Python file — the
+# literals it used to grep for are gone on purpose.
 for s in submitted completed; do
-    grep -q "\"${s}\"" "${STATUSES}" || fail "${STATUSES} omits '${s}'"
+    ./bin/endless-go task-status has all "${s}" \
+        || fail "the vocabulary omits '${s}'"
 done
 pass "the shared vocabulary carries 'submitted' and 'completed'"
 
@@ -147,18 +151,30 @@ pass "task update --help advertises all 13 statuses"
 section "3. The supersession renders with terminal statuses only"
 
 grep -q 'def replaced_by_note' "${TASK_CMD}" || fail "replaced_by_note is gone"
-grep -q 'status not in _RELATION_TERMINAL_STATUSES' "${TASK_CMD}" \
+# E-1891 collapsed `_RELATION_TERMINAL_STATUSES` into `_TERMINAL_STATUSES` —
+# they were byte-identical five-status lists under two names, both asking "is
+# this task finished or abandoned". The gate is unchanged; only the name is.
+grep -q 'status not in _TERMINAL_STATUSES' "${TASK_CMD}" \
     || fail "the Python note is no longer gated on a terminal status" \
             "ungating it would change every default listing's Status column"
 pass "the Python note is gated on a terminal status"
 
-grep -q '!isTerminal(r.Status)' internal/sessionstatuscmd/session_status.go \
+# E-1185 moved the gate out of replacedByNote/duplicatesNote and back into the
+# one relationNote both call — the copies existed only so this line kept
+# matching, which is the wrong reason to shape code. The assertion follows the
+# gate rather than the other way round. (E-1891 then pointed isTerminal itself
+# at the taskstatus registry; the gate is unchanged.)
+grep -q 'if len(ids) == 0 || !isTerminal(status) {' internal/sessionstatuscmd/session_status.go \
     || fail "the Go note is no longer gated on a terminal status"
 pass "the Go note is gated on a terminal status"
 
 # Batched, not per-row: this feeds table renderers.
 grep -q 'def replaced_by_map' "${TASK_CMD}" || fail "replaced_by_map is gone"
-grep -q 'JOIN   live_tasks t ON t.id = td.source_id' "${TASK_CMD}" \
+# Same E-1185 refactor as the gate above: replaced_by_map and duplicates_map
+# collapsed into one parameterized _relation_map, so the join is spelled with
+# the column as an argument. The invariant is unchanged — the far end is joined
+# to live_tasks, so a removed replacement is never named as a live successor.
+grep -q 'JOIN   live_tasks t ON t.id = td.{other_col}' "${TASK_CMD}" \
     || fail "replaced_by_map no longer joins live_tasks" \
             "a removed replacement would be named as a live successor"
 pass "the lookup is batched and skips removed replacements"
@@ -177,7 +193,13 @@ pass "both session-status queries share one column expression and one scanner"
 # ── 4. the obsolete guard ───────────────────────────────────────────────────
 section "4. The obsolete guard on shipped work"
 
-grep -q '_SHIPPED_STATUSES = ("unverified", "confirmed", "assumed", "completed")' "${TASK_CMD}" \
+# E-1891 moved this set into internal/taskstatus as the `shipped` group, so the
+# membership is asserted by asking the registry rather than by grepping for the
+# literal. The claim is unchanged: current-status-only, over exactly these four.
+grep -q '_SHIPPED_STATUSES = statuses.get("shipped")' "${TASK_CMD}" \
+    || fail "the shipped-status set is no longer read from the registry"
+[[ "$(./bin/endless-go task-status get shipped | tr '\n' ' ')" \
+    == "unverified confirmed assumed completed " ]] \
     || fail "the shipped-status set changed" \
             "the guard's scope is current-status-only over exactly these four"
 pass "the shipped-status set is the four current statuses"

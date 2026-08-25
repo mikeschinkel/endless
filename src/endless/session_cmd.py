@@ -7,7 +7,7 @@ from pathlib import Path
 
 import click
 
-from endless import db
+from endless import db, statuses
 from endless.project_path import match_project_path, resolved
 
 
@@ -179,14 +179,15 @@ def _require_claude() -> str:
 # other two reopen routes have always refused them. Reviving one is now an
 # explicit act (`task update --status revisit`), and `_resolve_resume` refuses
 # loudly with that route named.
-_REOPEN_TO_REVISIT: frozenset[str] = frozenset({
-    "confirmed", "assumed", "completed",
-})
+# E-1891: shares one definition with task_cmd's `_REOPENABLE_TERMINAL_STATUSES`
+# by reading the same `reopenable` group, which is what E-1889 said it wanted —
+# "the same judgment read two ways" was still two hand-maintained copies.
+_REOPEN_TO_REVISIT: frozenset[str] = frozenset(statuses.get("reopenable"))
 
 # Statuses `--reopen` and `--revisit` refuse outright: a decision was made not to
 # do the work, so resuming into it must be a deliberate act rather than a side
 # effect of recovering a worktree or navigating to a session.
-_REOPEN_REFUSED: frozenset[str] = frozenset({"declined", "obsolete"})
+_REOPEN_REFUSED: frozenset[str] = frozenset(statuses.get("reopen-refused"))
 
 
 def _taskless_resume_description(eid: int) -> str:

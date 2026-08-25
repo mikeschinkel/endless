@@ -12,6 +12,7 @@ from endless import __version__
 from endless import agent_help
 from endless import help_settings
 from endless.agent_help import AgentHelpMixin
+from endless import statuses
 from endless.statuses import TASK_STATUSES, TASK_STATUS_HELP
 
 # Subcommands that are safe to run inside an `endless-go sandbox` subshell
@@ -2665,8 +2666,8 @@ def task_complete_cmd(item_ids, outcome, outcome_file, allow_paths):
 @task_cmd.command("claim")
 @click.argument("item_id", type=TASK_ID)
 @click.option("--force", is_flag=True,
-              help="Re-claim even when the task is in a done-ish status "
-                   "(unverified, confirmed, declined, obsolete, assumed) — "
+              help="Re-claim even when the task is in a settled status "
+                   f"({', '.join(statuses.get('settled'))}) — "
                    "demotes it back to underway.")
 def task_claim(item_id, force):
     """Claim ownership of a task for this session."""
@@ -2779,8 +2780,8 @@ def task_handoff(item_id):
                    "directory, so a worktree-local hook override (see "
                    "'just claude-settings-init') applies.")
 @click.option("--force", is_flag=True,
-              help="Allow spawn on a task in a done-ish status "
-                   "(unverified/confirmed/declined/obsolete/assumed/completed); "
+              help="Allow spawn on a task in a settled status "
+                   f"({'/'.join(statuses.get('settled'))}); "
                    "demotes it back to underway. Mirrors `claim --force`.")
 # E-1968 retired --reopen. Its only capability the navigation verbs lacked was
 # changing task status, and `session goto --resume --revisit` now provides that
@@ -2930,10 +2931,11 @@ def task_block(item_id, blocker_id):
 @click.option("--by", "replacement_id", type=TASK_ID, required=True,
               help="Task ID that replaces this task")
 @click.option("--status", "new_status", default=None,
-              type=click.Choice(["obsolete", "declined", "confirmed", "assumed", "completed"]),
+              type=click.Choice(statuses.get("terminal")),
               help="Status to set on the replaced task. Default: 'obsolete', "
-                   "except on work that already shipped (unverified/confirmed/"
-                   "assumed/completed), which keeps the status it earned — "
+                   "except on work that already shipped "
+                   f"({'/'.join(statuses.get('shipped'))}), which keeps the "
+                   "status it earned — "
                    "the supersession is the relation, not a status that reads "
                    "as 'never happened'.")
 @click.option("--outcome", default=None,

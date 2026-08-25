@@ -340,15 +340,20 @@ test_docs() {
     assert_contains "'endless guide tasks' renders the section" \
         "suppresses all four" "$(E guide tasks 2>&1)"
 
-    # The fix reads the executor's promotion-source set from Python. The two
-    # definitions are separate declarations in separate languages; if one gains
-    # a status and the other does not, --keep-status silently leaks again.
-    assert_contains "Python names exactly the pre-judgment pair" \
-        '"untriaged", "unplanned",' \
-        "$(grep -A2 '_PRE_JUDGMENT_STATUSES: frozenset' "$WT/src/endless/task_cmd.py")"
-    assert_contains "Go names exactly the same pair" \
-        'return status == "untriaged" || status == "unplanned"' \
+    # The fix needs Python to know the executor's promotion-source set. When
+    # this suite was written those were two declarations in two languages that
+    # had to be kept equal by hand — if one gained a status and the other did
+    # not, --keep-status silently leaked again. E-1891 made them one group read
+    # twice, so the check is no longer "do the two lists match" but "does each
+    # side still read the registry".
+    assert_contains "Python reads the pre-judgment group" \
+        'frozenset(statuses.get("pre-judgment"))' \
+        "$(cat "$WT/src/endless/task_cmd.py")"
+    assert_contains "Go reads the same group" \
+        'taskstatus.Has(taskstatus.PreJudgment, status)' \
         "$(cat "$WT/internal/events/executor.go")"
+    assert_eq "and that group is still exactly the pair" "untriaged unplanned" \
+        "$("$WT/bin/endless-go" task-status get pre-judgment | tr '\n' ' ' | sed 's/ $//')"
 }
 
 # ─── section F: project-wide regression ──────────────────────────────────────

@@ -160,6 +160,11 @@ const (
 	Unblocking
 	UnblockingNext
 
+	// VerificationTerminal are the two ways user-testable work finishes:
+	// verified by the user, or believed done pending natural use. Together with
+	// `unverified` they are VerificationTrack, which the tests assert.
+	VerificationTerminal
+
 	// VerificationTrack are the statuses that only user-testable work reaches.
 	// research/epic/brainstorm tasks are refused them — they terminate via
 	// `completed --outcome` instead.
@@ -200,6 +205,7 @@ var groups = map[Group][]Status{
 	Terminal:             {Confirmed, Assumed, Completed, Declined, Obsolete},
 	Unblocking:           {Confirmed, Assumed, Declined, Obsolete},
 	UnblockingNext:       {Confirmed, Assumed, Completed},
+	VerificationTerminal: {Confirmed, Assumed},
 	VerificationTrack:    {Unverified, Confirmed, Assumed},
 }
 
@@ -228,6 +234,7 @@ var groupSlugs = map[Group]string{
 	Terminal:             "terminal",
 	Unblocking:           "unblocking",
 	UnblockingNext:       "unblocking-next",
+	VerificationTerminal: "verification-terminal",
 	VerificationTrack:    "verification-track",
 }
 

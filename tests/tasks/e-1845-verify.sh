@@ -402,22 +402,39 @@ test_docs() {
 
 test_registrations() {
     section "I. 'untriaged' is a first-class status across the surfaces"
-    assert_contains "TASK_STATUSES lists it first (upstream of unplanned)" \
-        '"untriaged", "unplanned"' \
-        "$(grep -A2 'TASK_STATUSES = ' "$WT/src/endless/cli.py")"
-    assert_contains "update --status accepts it" '"untriaged", "unplanned"' \
-        "$(grep -A2 'valid = ("untriaged"' "$WT/src/endless/task_cmd.py")"
-    assert_contains "_SUBMITTABLE_FROM accepts it" \
-        '_SUBMITTABLE_FROM = ("untriaged", "unplanned", "revisit")' \
-        "$(cat "$WT/src/endless/task_cmd.py")"
+    # Rewritten by E-1891, which gave status an owning Go package. These
+    # registration sites were hand-maintained literals when this suite was
+    # written; several had already moved under E-1956. They are now rows in one
+    # registry, so the checks ask that registry instead of grepping for the
+    # literal that used to sit at each site — which is the outcome E-1845 wanted
+    # and could not have.
+    local ts="$WT/bin/endless-go task-status"
+
+    assert_eq "the vocabulary lists it first (upstream of unplanned)" \
+        "untriaged unplanned" \
+        "$($ts get all | head -2 | tr '\n' ' ' | sed 's/ $//')"
+    assert_eq "'submittable-from' accepts it (the manual route out)" "0" \
+        "$($ts has submittable-from untriaged >/dev/null 2>&1; echo $?)"
+    assert_eq "'pre-judgment' accepts it (plan-attach promotes)" "0" \
+        "$($ts has pre-judgment untriaged >/dev/null 2>&1; echo $?)"
+    assert_eq "'not-actionable' excludes it from 'task next'" "0" \
+        "$($ts has not-actionable untriaged >/dev/null 2>&1; echo $?)"
+    assert_eq "'children-state-order' gives it a bucket" "0" \
+        "$($ts has children-state-order untriaged >/dev/null 2>&1; echo $?)"
+    assert_eq "'derivation-precedence' gives it a rung" "4" \
+        "$($ts rank derivation-precedence untriaged)"
+
     # The web dashboard's status-update handler was a registration site too;
     # E-1939 excised the dashboard, so that assertion went with it.
-    assert_contains "session snapshot validation accepts it" \
-        '"untriaged"' "$(cat "$WT/src/endless/session_status_cmd.py")"
+    assert_contains "session snapshot validation reads the shared vocabulary" \
+        '_VALID_STATUSES = frozenset(TASK_STATUSES)' \
+        "$(cat "$WT/src/endless/session_status_cmd.py")"
 
     # A claim must promote it, or the task reads untouched while worked on.
-    assert_contains "claim promotes untriaged → underway" \
-        "'untriaged','unplanned','ready','blocked'" \
+    assert_eq "claim promotes untriaged → underway" "0" \
+        "$($ts has claim-promotes untriaged >/dev/null 2>&1; echo $?)"
+    assert_contains "the claim SQL reads that group, not a literal" \
+        "taskstatus.SQLList(taskstatus.ClaimPromotes)" \
         "$(cat "$WT/internal/monitor/session.go")"
 }
 

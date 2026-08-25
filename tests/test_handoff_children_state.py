@@ -100,6 +100,36 @@ def test_children_state_includes_blocked_and_revisit_buckets():
     )
 
 
+def test_children_state_renders_a_submitted_bucket():
+    """E-1891 symptom 2. `submitted` was missing from `_CHILDREN_STATE_ORDER`,
+    so a submitted child was counted in the "(N total)" suffix but rendered no
+    bucket — the breakdown silently failed to reconcile, contradicting the
+    tuple's own docstring. The order is now derived from taskstatus, which
+    asserts that `children-state-order` and `terminal` partition the vocabulary,
+    so no status can go bucketless again."""
+    _seed(3006, ["submitted"])
+    assert _children_state(3006) == "1 submitted (1 total)"
+
+
+def test_children_state_reconciles_for_every_status():
+    """The general form of the bug above: whatever the vocabulary is, one child
+    per status must produce buckets summing to the total. This walks the
+    registry rather than a hand-listed set, so a status added tomorrow is
+    covered here the moment it exists."""
+    from endless import statuses
+
+    vocabulary = statuses.TASK_STATUSES
+    _seed(3007, list(vocabulary))
+    rendered = _children_state(3007)
+
+    counts, total = rendered.rsplit(" (", 1)
+    assert total == f"{len(vocabulary)} total)"
+    bucketed = sum(int(part.split()[0]) for part in counts.split(", "))
+    assert bucketed == len(vocabulary), (
+        f"{rendered} — buckets sum to {bucketed}, not {len(vocabulary)}"
+    )
+
+
 # --- epic render: breakdown line + operational-mode block ------------------
 
 
