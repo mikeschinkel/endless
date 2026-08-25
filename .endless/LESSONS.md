@@ -3709,3 +3709,13 @@ And a diagnostic worth keeping: when a reviewer asks what a word means, check wh
 - **Why it matters**: The proposed fix was actively harmful. `confirmed` is not in `stickyOverrideStatuses` (only revisit/declined/obsolete/blocked are), so hand-setting an epic to `confirmed` gets recomputed away on the next child mutation — it looks like a fix and silently isn't.
 - **Generalize**: When a row looks wrong, ask what writes it before asking what it should say. Mike's pushback was the check I skipped.
 - **Project**: endless
+
+### [2026-08-25] When consolidating tasks that will not be implemented soon, do not fix their scope
+While merging E-910/911/912 I asserted the merged task 'should be sessions + projects + notes only', because E-2029 had dropped the channel tables that E-912 named.
+
+Mike corrected it: the merge task is to merge whatever is appropriate, and the IMPLEMENTOR decides that and gets the user to approve. There is no good reason to stake the ground for future consumption when the ground may move significantly before the task is revisited.
+
+The failure mode is subtle because the narrowing was CORRECT at the time — the channel tables really are gone. But a task parked in 'next' or 'later' is read months later, and a scope decision baked into it then reads as settled rather than as a snapshot. It quietly forecloses on a judgment the implementor is better placed to make with fresh evidence.
+
+So: state the OBSERVATION as evidence ('E-2029 dropped the channel tables, so check whether E-912's conversation/message half still applies'), never as a scope decision. Invariants and rationale are durable; an inventory of what currently exists is not.
+- **Project**: endless
