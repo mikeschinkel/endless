@@ -3615,3 +3615,13 @@ instead of writing the comment that will later be read as the decision.
 - **Why**: I treated a failing assertion as a finding without checking whether any real caller reaches that path. The scenario existed only because I invented it, and I never asked myself who hits it before spending someone else's attention on it.
 - **Rule**: before reporting a finding - and especially before putting it on the user's list - name the concrete caller or workflow that hits it. If the only thing that hits it is a test you wrote, delete the test and say nothing. A self-manufactured failure is not a discovery, and escalating one repeatedly is worse than missing it.
 - **Project**: endless
+
+### [2026-08-24] A schema change that RENAMES or DROPS breaks the installed binary until land refreshes it — say so at handoff, and never inherit a prior change's claim that the window is never entered
+E-1969 renamed sessions.active_task_id. The land succeeded, but a Claude hook fired inside the window between `apply-change` (which migrates the DB) and the Justfile's closing `just build` (which refreshes the global binary), so the stale binary met the new DB and logged 50 'no such column: active_task_id' lines from the worktree reaper. Harmless — the reads fail open and self-heal — but it read as a failed land to the person running it.
+
+Two misses, one rule each.
+
+1. I reported the regression as clean and handed over one verify command without flagging that this is the first change to RENAME rather than ADD a column. Additive changes are invisible to old code; renames and drops are not. When a change makes existing code incompatible with the migrated DB, the handoff has to say what the land will look like, not only that the tests pass.
+
+2. E-1929's change file asserts the migration window 'is never entered in practice.' I quoted that ordering story in my own change file and inherited the claim without testing it. It was false: the Claude hooks call ReapWorktreesForProject from five places and one of them fired mid-land. A prior task's parenthetical about what never happens is a hypothesis, not a finding — check it when your change is the one that would make it matter.
+- **Project**: endless
