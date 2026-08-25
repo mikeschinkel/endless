@@ -3685,3 +3685,20 @@ I found evidence that verbs.jsonl and a ledger shard reached land uncommitted th
 
 ED-1550 is explicit — filing is the exception, and the default response to a finding is to tell the user in chat. A diagnostic is not deliverable work; it is reading code and history I already have open. Filing one converts ten minutes of looking into a backlog item someone must later re-read, re-scope and close. Investigate first, then report; file only if the FIX is real work and nothing open owns it.
 - **Project**: endless
+
+### [2026-08-25] Define a term the first time you use it in durable content, or use the precise name instead — three times in one session I shipped jargon Mike had to ask me to explain
+In one session Mike had to ask what I meant by 'fork', 'consume', and 'marker' — all three in task analysis text, all three avoidable.
+
+- 'fork' meant an unmade either/or decision. The word already means git fork and fork(2) in this codebase. 'The choice' would have been exact.
+- 'consume' meant make-one-shot. It was also load-bearing for a proposal that turned out to be wrong, so the vague word hid the bad idea inside it: had I written 'unset the tmux window option after the first bind', Mike would have rejected it a turn earlier, because the wrongness is visible in the plain phrasing and invisible in the jargon.
+- 'marker' meant an @endless_* tmux window option. That one I inherited from the task's existing analysis and used without ever defining it, which is worse: borrowed jargon feels established and gets no scrutiny.
+
+He also had to ask what a 'value session' was, because I wrote 'it destroys a value session status's focal-task fallback depends on'. There is no such thing as a value session; the sentence needed 'a value THAT session status depends on'. A missing relative pronoun turned a noun phrase into a fake compound noun.
+
+Two rules.
+
+1. Prefer the precise name over the shorthand. 'tmux window option' is three words longer than 'marker' and cannot be misread. In ledger content the cost of length is nothing and the cost of ambiguity is permanent — E-2048 had to be run as an entire research task because one word meant three mechanisms.
+2. If a shorthand genuinely earns its place, define it at first use in that document. Not in chat, in the document — the analysis outlives the conversation that produced it.
+
+And a diagnostic worth keeping: when a reviewer asks what a word means, check whether the idea underneath it is also wrong. Twice out of three here, it was.
+- **Project**: endless
