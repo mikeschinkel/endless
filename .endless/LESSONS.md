@@ -3625,3 +3625,16 @@ Two misses, one rule each.
 
 2. E-1929's change file asserts the migration window 'is never entered in practice.' I quoted that ordering story in my own change file and inherited the claim without testing it. It was false: the Claude hooks call ReapWorktreesForProject from five places and one of them fired mid-land. A prior task's parenthetical about what never happens is a hypothesis, not a finding — check it when your change is the one that would make it matter.
 - **Project**: endless
+
+### [2026-08-24] Before filing, search the ledger for a task that already owns the area — and when one exists, contribute EVIDENCE to it rather than a second task carrying your own solution
+E-1969's land surfaced a stale-binary-meets-migrated-DB failure and I filed E-2061 for it, with three candidate fixes. I had not searched. E-1972 already owns that area — 'Decide how Claude hooks should choose between main's and a worktree's endless-go', underway, with Mike's chosen shape already written down and a session holding it. E-2050's own description says in as many words that the which-BINARY question is E-1972 and not that epic.
+
+So E-2061 was the exact pattern Mike is fighting: a session hits a problem, files a task, and ships a competing solution into an area that already has an owner mid-deliberation. Three sessions in one day did this badly enough that E-2048 had to be run as a whole research task just to reconcile the wreckage. Adding to it while its cleanup is still landing is worse than not filing at all.
+
+The filing habit that replaces it:
+1. Search first — task list, titles, and the epics' descriptions, which routinely say which task owns which axis.
+2. If an owner exists, add evidence and constraints to it. Evidence is always welcome; a solution is not, because the owner may already have one.
+3. Only file when nothing owns the area — and say in the description what you searched and did not find, so the next session can check your work instead of repeating it.
+
+A second error worth naming on its own. I claimed E-1969 was 'the first schema change to RENAME rather than ADD.' It is not: E-1659 renamed a task_types slug and E-1898 renamed sessions.process to process_id, and E-1972's analysis records that the second one corrupted the shared ledger machine-wide via a stale binary re-creating dropped triggers. I asserted novelty without checking — the same failure as inheriting E-1929's unchecked claim, which is what my previous lesson was about. Checking the ledger would have caught both.
+- **Project**: endless
