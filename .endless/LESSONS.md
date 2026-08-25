@@ -3702,3 +3702,10 @@ Two rules.
 
 And a diagnostic worth keeping: when a reviewer asks what a word means, check whether the idea underneath it is also wrong. Twice out of three here, it was.
 - **Project**: endless
+
+### [2026-08-25] A surprising status may be derived, not stale — check the task type before calling it wrong
+- **Rule**: Before declaring a task's status wrong, check its `type`. An epic's status is a pure function of its children (internal/events/epic_derivation.go); calling it 'stale' or 'misleading' is a claim about a computation, and needs the derivation rule checked, not just the row read.
+- **What happened**: I reported E-971 (`ready`) as 'the single most misleading row in the tree' and proposed confirming or obsoleting it. E-971 is `type=epic`. Its ledger shows a deliberate retype to epic in 2026-07 with a written justification, followed by `epic.status_derived {underway -> ready}`. The status is computed and correct: E-1190 is `ready` and nothing is `underway`. No human left it stale.
+- **Why it matters**: The proposed fix was actively harmful. `confirmed` is not in `stickyOverrideStatuses` (only revisit/declined/obsolete/blocked are), so hand-setting an epic to `confirmed` gets recomputed away on the next child mutation — it looks like a fix and silently isn't.
+- **Generalize**: When a row looks wrong, ask what writes it before asking what it should say. Mike's pushback was the check I skipped.
+- **Project**: endless
