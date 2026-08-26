@@ -4304,3 +4304,13 @@ worktree as spent, finished, purposeless, or safe to remove. When work is
 landed, say what landed and stop; worktree lifecycle belongs to the spawning
 session and to Endless's own reaper.
 - **Project**: endless
+
+### [2026-08-26] When an FK's referent changes, the column name changes with it — ask about the pair
+I asked Mike a binary question: should session_messages.session_id point at session_instances.id or at claude_cli_sessions.uuid? He answered that the premise was wrong — if the FK targets session_instances, the COLUMN MUST BE RENAMED. A column named session_id holding a session_instances.id is a lie in the schema, and no amount of comment explains it away.
+
+The malformed shape: I held one half of a two-part fact constant (the name) and offered a choice about the other half (the target), because only the target had come up in the plan I was reading. A foreign key is a (name, referent) pair. Changing the referent without the name produces a schema that misdescribes itself, which is exactly the defect a normalized design exists to prevent.
+
+Generalize: whenever I present a choice, check whether anything I am holding fixed is actually implied by the options. If option B forces a change I did not mention, the question is not binary and I have hidden work from the person deciding.
+
+Naming convention in this schema, verified: FK columns are the SINGULAR table name plus _id, optionally with a role prefix — session_id->sessions, task_id->tasks, process_id->processes, project_next_lane_id->project_next_lanes, origin_session_id->sessions, from_session_id/to_session_id->sessions. Some abbreviate to the distinguishing last word when the prefix is redundant in context — gate_id->session_gates, kind_id->gate_kinds, type_id->task_types, relation_id->session_task_relations. No FK column anywhere in the schema is plural.
+- **Project**: endless
