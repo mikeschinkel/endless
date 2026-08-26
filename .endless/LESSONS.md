@@ -4021,3 +4021,33 @@ I read ED-1550's 'shipped work is never reopened to extend it' as covering E-207
   imperative as though you were about to run it yourself with no further
   thought. The ones you would have paused at are the ones to rewrite.
 - **Project**: endless
+
+### [2026-08-25] A check that cannot separate the safe case from the unsafe one is worse than no check
+- **What happened**: told not to overwrite a user-customizable file, I replaced
+  the bad instruction with a *check* — diff the materialized template against the
+  embedded one, refresh it if identical, leave it if not. Mike: "How can the app
+  tell if it is 'an untouched materialization'? ... If it matches the current
+  template, there is no reason to overwrite it, no?" The check does not
+  distinguish what I claimed. Nothing records which embedded version a copy was
+  materialized from, so "differs from embedded" conflates *the user edited it*
+  with *Endless changed the template since*. And the one decidable case — matches
+  current — is exactly the case with nothing to do. My version only appeared to
+  work because it read the pre-edit text out of git in Endless's own repo; after
+  the commit the same command answers backwards.
+- **Rule**: before proposing a check, name the states it must separate and prove
+  the signal differs across them. A test whose output is the same in the safe and
+  the unsafe case is worse than no test — it converts "I do not know" into a
+  confident branch, and the branch that runs is the destructive one.
+- **Rule**: when the states are genuinely indistinguishable, the answer is do
+  nothing and report. Do not manufacture a heuristic to avoid saying "this cannot
+  be determined."
+- **The pattern to watch**: being told not to do X and responding with
+  "conditionally do X." Twice now the correction was about restraint and my next
+  move was a cleverer version of the same action. If the objection was that an
+  action is unsafe, the fix is usually to drop the action, not to gate it.
+- **Domain fact**: a file materialized into `.endless/templates/` carries no
+  provenance. Any future feature that wants to refresh one has to record the
+  source version at materialization time first. That is the hard general problem
+  Mike named; do not solve it inside an unrelated task and do not file instances
+  of it.
+- **Project**: endless
