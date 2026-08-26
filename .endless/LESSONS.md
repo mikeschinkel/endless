@@ -4051,3 +4051,21 @@ I read ED-1550's 'shipped work is never reopened to extend it' as covering E-207
   Mike named; do not solve it inside an unrelated task and do not file instances
   of it.
 - **Project**: endless
+
+### [2026-08-25] When Mike closes a topic it is closed — explaining why it is out of scope is still working on it
+- **What happened**: Mike said the materialized-template staleness was a hard
+  general problem not to be solved in E-2073. I then wrote three more revisions
+  that each engaged with it — an overwrite instruction, a diff-based check, then
+  a page explaining why no check exists — and kept restating it in chat. He had
+  to say it a second time.
+- **Rule**: when Mike closes a topic, it is closed. Not "closed but worth one
+  more paragraph of analysis," not "closed, so here is why it is closed." The
+  correct next artifact contains one line about it, or none.
+- **The tell**: writing about why something is out of scope is still working on
+  it. Word count on a closed topic is the measure, regardless of how the words
+  are framed.
+- **What it cost**: E-2073's plan carried a 33-line section reasoning about a
+  problem it must not touch. A spawned session reading it would have spent
+  context on it and might have tried. The section is now one line: edit the
+  embedded templates, do not write to the templates directory.
+- **Project**: endless
