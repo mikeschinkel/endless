@@ -4144,3 +4144,7 @@ It got worse from there. The script reported 11 pre-existing failures, and I sta
 
 The rule: run MY task's verify script and the project-wide regression (`just test`, `just test-go`, lint, build). Never another task's. If I think my change might affect another task's assertions, the project-wide regression will say so, or the owner will — it is not mine to go probe.
 - **Project**: endless
+
+### [2026-08-25] Hand off the verify command and stop; the reasoning is in the commit
+I closed E-2074 with five paragraphs of findings — the summary/auto-hide split, the legacy_alter_table pragma, two removed gates, two files I chose not to touch, a CLI guard false positive. Mike's response: 'Wall of text. TL;DR. Did I NEED to know any of that?' No. He needed the one verify command and, at most, one line about a behavior change he might disagree with. Everything else was me showing my work. The commit message already held all of it, which is exactly where a reader goes when they want it — a handoff that repeats the commit body is the same content billed twice, once when he cannot skip it. Rule: the final message is the verify command, a one-line regression result, and only a decision he might reverse. Design notes go in the commit and the code comments. If something genuinely needs his judgment, ask it as a question, not as a paragraph he has to mine for the question. Length is not thoroughness; it is unfinished editing.
+- **Project**: endless
