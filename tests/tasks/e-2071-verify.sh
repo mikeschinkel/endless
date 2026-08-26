@@ -14,9 +14,21 @@
 #
 # After: one shared cap (src/endless/rowcap.py) owned by the tool and announced
 # by it, in the idiom `session status` already used for hidden rows (E-1914):
-# "… N more rows (--no-limit)". Nine listing surfaces adopt it. Machine formats
-# stay uncapped, because a payload nothing can read a footer out of would be
-# worse truncated than the original defect.
+# "… N more rows (--no-limit)". SIXTEEN listing surfaces adopt it. Machine
+# formats stay uncapped, because a payload nothing can read a footer out of
+# would be worse truncated than the original defect.
+#
+# Two ways the cap is applied, and the split is about query cost:
+#   - Renderer-side, on the full result set (task/decision/epic, project,
+#     worktree, verb, phrase, trail). The remainder is arithmetic.
+#   - SQL-side probe window plus a COUNT (session list/search/history), where
+#     fetching everything is the expensive part: session_messages runs to tens
+#     of thousands of rows carrying full text, and `session list` pays a
+#     per-row subquery.
+#
+# `jobs list` is deliberately NOT capped: it renders wholly inside the Go binary
+# from a compile-time registry of two jobs, so there is no Python row list to cap
+# and nothing that grows with use.
 #
 # Run from inside the worktree (esu puts you there):
 #   esu && ./tests/tasks/e-2071-verify.sh
@@ -35,13 +47,19 @@
 #      result piped through `head` carries no trace of what it lost, while the
 #      capped render does. This is the original false negative, reproduced.
 #   5. --no-limit and --limit N both work, on every surface, and are refused
-#      together. `--limit 0` is refused with a pointer to the flag meant.
+#      together. `--limit 0` is refused with a pointer to the flag meant. Every
+#      surface carries both flags — including the eight whose rows this fixture
+#      cannot seed, where wiring is the whole risk.
 #   6. MACHINE formats stay whole and stay parseable: --json and --tsv are
 #      uncapped by default, and under an explicit --limit the footer goes to
 #      stderr so the payload still parses.
 #   7. Nothing legal became collateral damage: a result that FITS prints no
 #      footer (including an exact-fit 20), an empty result is unchanged, and
 #      the surfaces that already capped still cap.
+#   8. The probe-window path is honest: `session history`'s footer names the
+#      remainder from a COUNT, not from the probe row, and it prints where the
+#      missing messages WOULD be — above the render in newest-first order,
+#      below it under --sort asc.
 #
 # Exit 0 on all-passed, 1 on any failure, 2 on setup error.
 
@@ -134,14 +152,46 @@ else
         "6 rowcap.resolve_cap calls (list/search/next/recent/landed/unsettled)" "${n}"
 fi
 
-for src in "${DECISION_SRC}" "${CLI_SRC}"; do
-    if grep -q 'rowcap.resolve_cap' "${src}"; then
-        report_pass "$(basename "${src}") routes through rowcap"
+# Every module holding a capped renderer. A surface wired at the CLI but not in
+# its renderer would take the flags and ignore them.
+for src in decision_cmd session_cmd worktree_cmd verb_cmd phrase_cmd list_cmd cli; do
+    f="${WT}/src/endless/${src}.py"
+    if grep -q 'rowcap.resolve_cap' "${f}"; then
+        report_pass "${src}.py routes through rowcap"
     else
-        report_fail "$(basename "${src}") routes through rowcap" \
+        report_fail "${src}.py routes through rowcap" \
             "a rowcap.resolve_cap call" "absent"
     fi
 done
+
+# The session listings keep their cap in SQL, so they MUST use the probe window
+# — a bare LIMIT cap cannot tell the footer how many rows it skipped.
+probes=$(grep -c 'rowcap.probe_limit' "${WT}/src/endless/session_cmd.py")
+if [[ "${probes}" == "3" ]]; then
+    report_pass "session_cmd.py probes one past the cap in all three SQL listings"
+else
+    report_fail "session_cmd.py probes one past the cap in all three SQL listings" \
+        "3 rowcap.probe_limit calls (list/search/history)" "${probes}"
+fi
+
+# ...and each must pass a counted total, or the footer would read "1 more row"
+# no matter how much was really left.
+totals=$(grep -c 'rowcap.cap_rows(rows, cap, ' "${WT}/src/endless/session_cmd.py")
+if [[ "${totals}" == "3" ]]; then
+    report_pass "each SQL-capped listing feeds cap_rows a counted total"
+else
+    report_fail "each SQL-capped listing feeds cap_rows a counted total" \
+        "3 cap_rows calls carrying a total" "${totals}"
+fi
+
+# The Go side had to grow an unlimited mode for `session trail`, because the
+# Python viewer owns the cap and needs every row to count an exact remainder.
+if grep -q 'if limit == 0 {' "${WT}/internal/monitor/session_nav.go"; then
+    report_pass "ListNavTrail returns every row on a negative limit"
+else
+    report_fail "ListNavTrail returns every row on a negative limit" \
+        "the limit == 0 default guard (negative means unlimited)" "absent"
+fi
 
 # The private notice E-1865 wrote for one command. Generalising it away is the
 # point; if it came back, the idiom re-forked.
@@ -218,7 +268,7 @@ e() {
     E_ERR=$(<"${TMP_E2071}/stderr")
 }
 
-# The nine surfaces, as the argv each needs to render rows.
+# The task-tree surfaces, as the argv each needs to render rows.
 LISTINGS=(
     "task list --project capdemo"
     "task search widget --project capdemo"
@@ -228,6 +278,20 @@ LISTINGS=(
     "task unsettled --all --project capdemo"
     "epic list --project capdemo"
     "decision list --project capdemo"
+)
+# The rest. This fixture cannot seed their rows (sessions, worktrees on disk,
+# config layers), so they are swept for FLAG WIRING — which is the whole risk in
+# a rollout that touches one command at a time. Their behaviour is covered by
+# tests/test_rowcap.py and by the real-data smoke above.
+OTHER_LISTINGS=(
+    "session list"
+    "session search widget"
+    "session history"
+    "session trail"
+    "worktree list"
+    "verb list"
+    "phrase list"
+    "project list"
 )
 # The four that render plain task rows, so one fixture drives them all.
 TASK_LISTINGS=(
@@ -370,7 +434,7 @@ done
 
 # Every surface must carry BOTH flags — the failure mode most likely to ship is
 # one command wired and the next one not.
-for argv in "${LISTINGS[@]}"; do
+for argv in "${LISTINGS[@]}" "${OTHER_LISTINGS[@]}"; do
     label="endless ${argv%% --project*}"
     e ${argv} --help
     if grep -q -- "--no-limit" <<<"${E_OUT}" && grep -q -- "--limit" <<<"${E_OUT}"; then
@@ -509,6 +573,73 @@ if (( E_RC == 0 )) && ! grep -qF -- "more rows" <<<"${E_OUT}" \
 else
     report_fail "an empty result is unchanged" \
         "the no-matches message and no footer" "rc=${E_RC}: ${E_OUT}"
+fi
+
+# ── 8. the probe-window path ────────────────────────────────────────────────
+# The session listings keep their cap in SQL, so they fetch cap+1 rows and count
+# separately. Two things can go wrong there and nowhere else: the footer can
+# report the probe row ("1 more") instead of the counted remainder, and it can
+# print at the wrong end of a render whose order was reversed for reading.
+section "8. session history: a probe window, counted honestly"
+
+# 60 messages on one session, seeded with plain SQL.
+sqlite3 "${FIXTURE_DB}" \
+    "INSERT INTO sessions (id,session_id,project_id,state,started_at)
+     VALUES (1,'e2071-fixture-session',1,'idle',datetime('2026-01-01 00:00:00'));" \
+    >/dev/null 2>&1 || setup_error "could not seed the session"
+msgs=""
+for ((i = 1; i <= 60; i++)); do
+    msgs+="INSERT INTO session_messages (session_id,role,content,created_at)
+           VALUES ('e2071-fixture-session','user','message ${i}',
+                   datetime('2026-01-01 00:00:00','+${i} minutes'));"
+done
+sqlite3 "${FIXTURE_DB}" "${msgs}" >/dev/null 2>&1 \
+    || setup_error "could not seed the messages"
+
+e session history 1
+if grep -qF -- "40 more rows (--no-limit)" <<<"${E_OUT}"; then
+    report_pass "the footer names the COUNTED remainder (40), not the probe row"
+else
+    report_fail "the footer names the counted remainder" \
+        "'… 40 more rows (--no-limit)' — not '1 more row'" "${E_OUT}"
+fi
+
+# Newest-first takes the last 20 and displays them oldest-first, so what is
+# missing is OLDER than everything on screen: above the first line.
+first=$(grep -n -- "more rows (--no-limit)" <<<"${E_OUT}" | head -1 | cut -d: -f1)
+if [[ "${first}" == "1" ]]; then
+    report_pass "newest-first: the footer prints above the render, where the gap is"
+else
+    report_fail "newest-first: the footer prints above the render" \
+        "the footer on line 1" "line ${first:-absent}"
+fi
+
+# --sort asc starts at the beginning, so the TAIL is what is missing.
+e session history 1 --sort asc
+lines=$(grep -c . <<<"${E_OUT}")
+last=$(grep -n -- "more rows (--no-limit)" <<<"${E_OUT}" | tail -1 | cut -d: -f1)
+if [[ -n "${last}" ]] && (( last > lines / 2 )); then
+    report_pass "--sort asc: the footer moves to the bottom, where the gap is"
+else
+    report_fail "--sort asc: the footer moves to the bottom" \
+        "a footer in the lower half of the render" "line ${last:-absent} of ${lines}"
+fi
+
+e session history 1 --no-limit
+rendered=$(grep -c "^User: message" <<<"${E_OUT}")
+if [[ "${rendered}" == "60" ]] && ! grep -qF -- "more rows" <<<"${E_OUT}"; then
+    report_pass "--no-limit renders all 60 with no footer"
+else
+    report_fail "--no-limit renders all 60 with no footer" "60 messages, no footer" \
+        "${rendered} messages"
+fi
+
+e session history 1 --json
+n=$("${PY}" -c 'import json,sys; print(len(json.load(sys.stdin)))' <<<"${E_OUT}" 2>&1)
+if [[ "${n}" == "60" ]]; then
+    report_pass "session history --json: uncapped (60) and parses"
+else
+    report_fail "session history --json: uncapped and parses" "60" "${n}"
 fi
 
 # ── summary ─────────────────────────────────────────────────────────────────

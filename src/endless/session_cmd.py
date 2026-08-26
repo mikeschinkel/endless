@@ -7,7 +7,7 @@ from pathlib import Path
 
 import click
 
-from endless import db, statuses
+from endless import db, rowcap, statuses
 from endless.project_path import match_project_path, resolved
 
 
@@ -640,7 +640,8 @@ def show_history(
     session_value: str | None,
     show_tools: str | None = None,
     show_timestamps: bool = False,
-    limit: int = 20,
+    limit: int | None = None,
+    no_limit: bool = False,
     sort_asc: bool = False,
     as_json: bool = False,
 ):
@@ -649,7 +650,13 @@ def show_history(
     With no session_value, defaults to the current session via companion file
     auto-resolution (E-992): in tmux, the sole sibling Claude pane in the
     current window; outside tmux, an explicit id is required.
+
+    Unlike the task listings, the cap stays in SQL here (E-2071): a session's
+    messages run to tens of thousands of rows carrying full message text, so
+    fetching them all to count them is the expensive part. The query takes a
+    probe window and a COUNT supplies the exact remainder.
     """
+    cap = rowcap.resolve_cap(limit, no_limit, machine=as_json)
     if session_value is None:
         project_root = _project_root_for_cwd()
         live = _live_sessions(project_root)
@@ -666,13 +673,19 @@ def show_history(
         where += " AND role != 'tool_use'"
 
     order = "ASC" if sort_asc else "DESC"
+    probe = rowcap.probe_limit(cap)
     rows = db.query(
         f"SELECT id, role, content, tool_name, created_at "
         f"FROM session_messages {where} "
         f"ORDER BY created_at {order}, id {order} "
-        f"LIMIT ?",
-        tuple(params + [limit]),
+        + ("LIMIT ?" if probe is not None else ""),
+        tuple(params + ([probe] if probe is not None else [])),
     )
+    hidden = 0
+    if cap is not None and len(rows) > cap:
+        total = db.scalar(
+            f"SELECT count(*) FROM session_messages {where}", tuple(params)) or 0
+        rows, hidden = rowcap.cap_rows(rows, cap, total)
 
     if not rows:
         click.echo(
@@ -694,11 +707,20 @@ def show_history(
             for r in rows
         ]
         click.echo(json.dumps(out, indent=2))
+        rowcap.echo_footer(hidden, llm=True, err=True)
         return
 
     # If reverse chron, reverse for display so newest is at bottom (natural reading)
     if not sort_asc:
         rows = list(reversed(rows))
+
+    # The footer goes where the missing messages WOULD be. Default order takes
+    # the newest N and displays them oldest-first, so what was dropped is older
+    # than everything on screen — above the first line, not below the last.
+    # Under --sort asc the window starts at the beginning and the tail is what
+    # is missing, so the footer moves to the bottom.
+    if not sort_asc:
+        rowcap.echo_footer(hidden)
 
     for row in rows:
         role = row["role"]
@@ -743,6 +765,9 @@ def show_history(
                 click.echo(line)
 
         click.echo()
+
+    if sort_asc:
+        rowcap.echo_footer(hidden)
 
 
 def session_status_resolve(
@@ -870,10 +895,18 @@ def list_sessions(
     show_empty: bool = False,
     state_filter: str | None = None,
     sort_by: str | None = None,
-    limit: int = 20,
+    limit: int | None = None,
+    no_limit: bool = False,
     as_json: bool = False,
 ):
-    """List recent sessions, defaulting to the project enclosing cwd (E-1914)."""
+    """List recent sessions, defaulting to the project enclosing cwd (E-1914).
+
+    The cap stays in SQL (E-2071): each row pays a correlated subquery counting
+    that session's messages, so fetching every session to count them is the
+    expensive part. The total this view already computed for its heading doubles
+    as the footer's exact remainder.
+    """
+    cap = rowcap.resolve_cap(limit, no_limit, machine=as_json)
     # Not a precedence rule: naming a project and asking for all of them are
     # contradictory requests, and silently honoring one would answer a question
     # the user did not ask.
@@ -952,7 +985,9 @@ def list_sessions(
     # Default sort: state priority (working first, ended last), then recency
     order = sort_map.get(sort_by, sort_map["state"])
 
-    params.append(limit)
+    probe = rowcap.probe_limit(cap)
+    if probe is not None:
+        params.append(probe)
 
     rows = db.query(
         f"SELECT s.id, s.session_id, s.state, s.summary, "
@@ -965,7 +1000,7 @@ def list_sessions(
         f"LEFT JOIN live_tasks t ON t.id = s.task_id "
         f"{where} "
         f"ORDER BY {order} "
-        f"LIMIT ?",
+        + ("LIMIT ?" if probe is not None else ""),
         tuple(params),
     )
 
@@ -974,6 +1009,17 @@ def list_sessions(
             click.style("•", fg="cyan") + " No sessions found"
         )
         return
+
+    # Counted before the split so the heading and the footer agree, and with the
+    # probe row excluded from the params it was appended to.
+    count_params = tuple(params[:-1]) if probe is not None else tuple(params)
+    total_count = db.scalar(
+        f"SELECT count(*) FROM sessions s "
+        f"LEFT JOIN projects p ON s.project_id = p.id "
+        f"{where}",
+        count_params,
+    ) or 0
+    rows, hidden = rowcap.cap_rows(rows, cap, total_count)
 
     if as_json:
         import json
@@ -995,20 +1041,13 @@ def list_sessions(
             for r in rows
         ]
         click.echo(json.dumps(out, indent=2))
+        rowcap.echo_footer(hidden, llm=True, err=True)
         return
 
     try:
         term_width = os.get_terminal_size().columns
     except OSError:
         term_width = 120
-
-    # Get total count for header
-    total_count = db.scalar(
-        f"SELECT count(*) FROM sessions s "
-        f"LEFT JOIN projects p ON s.project_id = p.id "
-        f"{where}",
-        tuple(params[:-1]),  # exclude limit param
-    ) or 0
 
     # The Project column exists only when the output actually spans more than one
     # project; for the single-project case the project name is stated once, in the
@@ -1060,6 +1099,7 @@ def list_sessions(
         cells += [f"{task_cell(row):<{task_w}}", f"{row['msg_count']:>{msg_w}}"]
         click.echo(gap.join(cells) + gap + title)
 
+    rowcap.echo_footer(hidden)
     click.echo()
     click.echo(click.style(SESSION_STATE_LEGEND, dim=True))
     click.echo()
@@ -1068,10 +1108,17 @@ def list_sessions(
 def search_sessions(
     query: str,
     project_name: str | None = None,
-    limit: int = 20,
+    limit: int | None = None,
+    no_limit: bool = False,
     as_json: bool = False,
 ):
-    """Search across all session messages using FTS5."""
+    """Search across all session messages using FTS5.
+
+    Same reasoning as `show_history` (E-2071): the corpus is every message ever
+    recorded, so the cap stays in SQL and a COUNT over the same MATCH supplies
+    the exact remainder for the footer.
+    """
+    cap = rowcap.resolve_cap(limit, no_limit, machine=as_json)
     where = ""
     params: list = []
 
@@ -1085,7 +1132,9 @@ def search_sessions(
         )
         params.append(project_name)
 
-    params.append(limit)
+    probe = rowcap.probe_limit(cap)
+    if probe is not None:
+        params.append(probe)
 
     rows = db.query(
         f"SELECT sm.id, sm.session_id, sm.role, sm.content, sm.created_at, "
@@ -1096,7 +1145,7 @@ def search_sessions(
         f"LEFT JOIN projects p ON s.project_id = p.id "
         f"WHERE session_messages_fts MATCH ? {where} "
         f"ORDER BY sm.created_at DESC "
-        f"LIMIT ?",
+        + ("LIMIT ?" if probe is not None else ""),
         tuple([query] + params),
     )
 
@@ -1106,6 +1155,21 @@ def search_sessions(
             + f" No messages matching '{query}'"
         )
         return
+
+    # The COUNT runs ONLY when the probe row proved there is more to count. An
+    # FTS count over the whole message corpus is not free, and a search that fit
+    # inside the cap already knows its own total.
+    total = len(rows)
+    hidden = 0
+    if cap is not None and len(rows) > cap:
+        count_params = params[:-1] if probe is not None else params
+        total = db.scalar(
+            f"SELECT count(*) FROM session_messages_fts fts "
+            f"JOIN session_messages sm ON sm.id = fts.rowid "
+            f"WHERE session_messages_fts MATCH ? {where}",
+            tuple([query] + count_params),
+        ) or len(rows)
+        rows, hidden = rowcap.cap_rows(rows, cap, total)
 
     if as_json:
         import json
@@ -1120,6 +1184,7 @@ def search_sessions(
             for r in rows
         ]
         click.echo(json.dumps(out, indent=2))
+        rowcap.echo_footer(hidden, llm=True, err=True)
         return
 
     click.echo()
@@ -1156,8 +1221,11 @@ def search_sessions(
                 + meta
             )
 
+    rowcap.echo_footer(hidden)
     click.echo()
-    click.echo(click.style(f"{len(rows)} match(es)", dim=True))
+    # `total`, not len(rows): a count that reports the height of the render is
+    # the sentence E-2071 was filed against.
+    click.echo(click.style(f"{total} match(es)", dim=True))
 
 
 def hide_sessions(session_values: list[str]):
@@ -2476,21 +2544,28 @@ def _nav_endpoint_label(session_id, task_id, pane: str | None) -> str:
     return "—"
 
 
-def session_trail(show_all: bool = False, limit: int = 50) -> None:
+def session_trail(show_all: bool = False, limit: int | None = None,
+                  no_limit: bool = False) -> None:
     """Print the durable session-navigation trail, newest-first (E-1682).
 
     Each edge shows `from → to` (session id + task id, or raw pane), the `via`
     tag (manual / goto), and a relative time. Defaults to the current tmux
     client; --all lists every client's moves. The DB read goes through
     `endless-go session-query trail` (no Python DB read, per E-1486).
+
+    The Go side is asked for EVERY edge (`--limit -1`) and the cap is applied
+    here (E-2071), because the footer names an exact remainder and the query
+    that stopped at the cap could not supply one. The trail is a table of tmux
+    moves, so reading all of it costs little.
     """
     import subprocess
 
     from endless import config
     from endless.task_cmd import _format_relative
 
+    cap = rowcap.resolve_cap(limit, no_limit)
     cmd = ["endless-go", *config.go_db_context_args(),
-           "session-query", "trail", "--limit", str(limit)]
+           "session-query", "trail", "--limit", "-1"]
     if not show_all:
         client = _resolve_client_name()
         # An unresolved client (not attached to a tmux client) scopes to the
@@ -2519,6 +2594,8 @@ def session_trail(show_all: bool = False, limit: int = 50) -> None:
             click.echo("Try `endless session trail --all`.", err=True)
         return
 
+    edges, hidden = rowcap.cap_rows(edges, cap)
+
     for e in edges:
         frm = _nav_endpoint_label(
             e.get("from_session_id"), e.get("from_task_id"), e.get("from_pane"))
@@ -2531,3 +2608,5 @@ def session_trail(show_all: bool = False, limit: int = 50) -> None:
         summary = (e.get("to_summary") or "").strip()
         if summary:
             click.echo(f"    {summary[:100]}")
+
+    rowcap.echo_footer(hidden)

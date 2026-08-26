@@ -73,10 +73,13 @@ Reach for `--llm` whenever you're parsing output yourself — it's token-efficie
 
 ### Every listing stops at 20 rows and says so
 
-`task list`, `task search`, `task next`, `task recent`, `task landed`,
-`task unsettled`, `epic list`, `decision list` and `endless sql` render at most
-20 rows. When there are more, the last line says how many were left out and how
-to see them:
+Every listing surface in Endless renders at most 20 rows — the task tree
+(`task list`, `task search`, `task next`, `task recent`, `task landed`,
+`task unsettled`, `epic list`, `decision list`), the sessions
+(`session list`, `session search`, `session history`, `session trail`), the
+registries (`project list`, `worktree list`, `verb list`, `phrase list`) and the
+raw hatch (`endless sql`). When there are more, the last line says how many were
+left out and how to see them:
 
 ```
 … 1340 more rows (--no-limit)
@@ -93,6 +96,12 @@ to see them:
 - `--json` and `--tsv` are **uncapped**, because a program parsing them has no
   footer to read. An explicit `--limit` still caps them, and then the footer goes
   to stderr so the payload stays parseable.
+- The footer prints where the missing rows *would be*. `session history` shows
+  the newest messages oldest-first, so its footer is above the first line, not
+  below the last; under `--sort asc` it moves to the bottom.
+
+The one uncapped listing is `jobs list`: it renders inside the Go binary from a
+compile-time registry, so it cannot grow with use.
 
 `endless task id` is the one read that takes no id: it prints the task **your
 own session** is on, as a single bare `E-NNNN` line, so a shell, a recipe or an

@@ -10,6 +10,7 @@ import json
 import click
 
 from endless import matchers
+from endless import rowcap
 
 
 def add_verb(value: str, definition: str | None, machine_only: bool) -> None:
@@ -48,7 +49,9 @@ def add_verb(value: str, definition: str | None, machine_only: bool) -> None:
     )
 
 
-def list_verbs(as_json: bool) -> None:
+def list_verbs(as_json: bool, limit: int | None = None,
+               no_limit: bool = False) -> None:
+    cap = rowcap.resolve_cap(limit, no_limit, machine=as_json)
     verbs = matchers.load_all_verbs()
     if as_json:
         click.echo(json.dumps(verbs, indent=2))
@@ -56,6 +59,7 @@ def list_verbs(as_json: bool) -> None:
     if not verbs:
         click.echo("No verbs registered.")
         return
+    verbs, hidden = rowcap.cap_rows(verbs, cap)
     width = max((len(v.get("value", "")) for v in verbs), default=10)
     click.echo(f"{'Verb':<{width}}  Definition")
     click.echo("-" * width + "  " + "-" * 50)
@@ -63,6 +67,8 @@ def list_verbs(as_json: bool) -> None:
         value = v.get("value", "")
         defn = v.get("definition", "")
         click.echo(f"{value:<{width}}  {defn}")
+
+    rowcap.echo_footer(hidden)
 
 
 def remove_verb(value: str, machine_only: bool) -> None:

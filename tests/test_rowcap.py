@@ -43,6 +43,24 @@ ALL_LISTINGS = TASK_LISTINGS + [
     ["task", "unsettled", "--all"],
 ]
 
+# Surfaces whose rows are not tasks, so the shared fixture cannot drive their
+# content — they are covered for FLAG WIRING only, which is the failure mode a
+# per-command rollout actually has. `jobs list` is absent on purpose: it renders
+# wholly inside the Go binary from a compile-time registry of two jobs, so there
+# is no Python row list to cap and nothing that grows.
+OTHER_LISTINGS = [
+    ["session", "list"],
+    ["session", "search", "widget"],
+    ["session", "history"],
+    ["session", "trail"],
+    ["worktree", "list"],
+    ["verb", "list"],
+    ["phrase", "list"],
+    ["project", "list"],
+]
+
+FLAGGED_LISTINGS = ALL_LISTINGS + OTHER_LISTINGS
+
 # Appended by the runners, not written into the literals above, so the
 # parametrize ids stay readable.
 PROJECT = ["--project", "my-project"]
@@ -151,21 +169,21 @@ def test_cap_rows_does_not_footer_an_exact_fit():
 
 # ---- every listing surface carries both flags ------------------------------
 
-@pytest.mark.parametrize("argv", ALL_LISTINGS, ids=lambda a: " ".join(a))
+@pytest.mark.parametrize("argv", FLAGGED_LISTINGS, ids=lambda a: " ".join(a))
 def test_every_listing_offers_no_limit(argv):
     result = _run(argv + ["--help"])
     assert result.exit_code == 0
     assert "--no-limit" in result.output
 
 
-@pytest.mark.parametrize("argv", ALL_LISTINGS, ids=lambda a: " ".join(a))
+@pytest.mark.parametrize("argv", FLAGGED_LISTINGS, ids=lambda a: " ".join(a))
 def test_every_listing_offers_limit(argv):
     result = _run(argv + ["--help"])
     assert result.exit_code == 0
     assert "--limit" in result.output
 
 
-@pytest.mark.parametrize("argv", ALL_LISTINGS, ids=lambda a: " ".join(a))
+@pytest.mark.parametrize("argv", FLAGGED_LISTINGS, ids=lambda a: " ".join(a))
 def test_every_listing_refuses_both_flags_together(argv):
     result = _run(argv + ["--limit", "5", "--no-limit"])
     assert result.exit_code != 0

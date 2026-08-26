@@ -70,19 +70,39 @@ def resolve_cap(
     return DEFAULT_ROW_CAP
 
 
-def cap_rows(rows, cap: int | None):
+def cap_rows(rows, cap: int | None, total: int | None = None):
     """Split `rows` at `cap`, returning (shown, hidden_count).
 
-    `cap` of None is uncapped. The caller holds the FULL result set — the cap is
-    applied here, in the renderer, not pushed into SQL — because the footer has
-    to name an exact remainder, and a query that stopped at the cap cannot say
-    how many rows it did not fetch. These are local SQLite reads over a table
-    measured in thousands of rows, so fetching the tail costs less than the
-    second COUNT query the alternative would need.
+    `cap` of None is uncapped.
+
+    Two ways to arrive here, and the choice is about what the query costs:
+
+    - The caller holds the FULL result set and passes no `total`. The remainder
+      is arithmetic. This is right for the task/decision listings, which read a
+      few thousand narrow rows out of local SQLite — cheaper than the second
+      COUNT query the alternative needs.
+    - The caller fetched only a `probe_limit(cap)` window and passes the `total`
+      it counted separately. This is right when fetching everything is the
+      expensive part: session messages run to tens of thousands of rows carrying
+      full text, and `session list` pays a per-row subquery. Without `total` the
+      remainder would read as 1 no matter how much was really left.
     """
     if cap is None or len(rows) <= cap:
         return rows, 0
-    return rows[:cap], len(rows) - cap
+    shown = rows[:cap]
+    return shown, (total - cap) if total is not None else (len(rows) - cap)
+
+
+def probe_limit(cap: int | None) -> int | None:
+    """The SQL LIMIT for a capped query: one row past the cap, or None.
+
+    The extra row is the overflow probe. Fetching exactly `cap` rows tells you
+    nothing about whether a `cap + 1`-th exists, so a query that stopped at the
+    cap cannot know whether to print a footer at all — and asking the database
+    "is there more?" is what the `+ 1` answers for free. Pair it with a COUNT
+    when you need the exact remainder, and pass that COUNT to `cap_rows`.
+    """
+    return None if cap is None else cap + 1
 
 
 def footer(hidden: int, *, llm: bool = False) -> str:

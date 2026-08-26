@@ -444,10 +444,12 @@ def rename(old_name, new_name, path):
               type=click.Choice(["active", "paused", "archived", "idea"]),
               help="Filter by status")
 @click.option("--group", is_flag=True, help="Group by group name")
-def list_cmd(status, group):
+@rowcap.limit_options
+def list_cmd(status, group, limit, no_limit):
     """List registered projects."""
     from endless.list_cmd import list_projects
-    list_projects(status_filter=status, group=group)
+    list_projects(status_filter=status, group=group,
+                  limit=limit, no_limit=no_limit)
 
 
 @project_cmd.command("status")
@@ -967,13 +969,13 @@ def session_show(session_ref, as_json):
               help="Include full tool call content")
 @click.option("--timestamps", is_flag=True,
               help="Show timestamps on each message")
-@click.option("--limit", default=20, type=int,
-              help="Max messages (default: 20)")
 @click.option("--sort", "sort_order", default="desc",
               type=click.Choice(["asc", "desc"]),
               help="Sort order (default: desc, newest first)")
 @click.option("--json", "as_json", is_flag=True, help="JSON output")
-def session_history(session_id, show_tools, timestamps, limit, sort_order, as_json):
+@rowcap.limit_options
+def session_history(session_id, show_tools, timestamps, limit, sort_order, as_json,
+                    no_limit):
     """Show conversation history for a session.
 
     With no arg, defaults to the current session (same auto-resolution as
@@ -981,7 +983,7 @@ def session_history(session_id, show_tools, timestamps, limit, sort_order, as_js
     """
     from endless.session_cmd import show_history
     show_history(session_id, show_tools=show_tools,
-                 show_timestamps=timestamps, limit=limit,
+                 show_timestamps=timestamps, limit=limit, no_limit=no_limit,
                  sort_asc=(sort_order == "asc"), as_json=as_json)
 
 
@@ -1066,11 +1068,10 @@ def session_monitor(show_all, tree, show_hidden, only_hidden):
               help="Show only hidden sessions")
 @click.option("--empty", "show_empty", is_flag=True,
               help="Include empty/short sessions (<=2 messages)")
-@click.option("--limit", default=20, type=int,
-              help="Max sessions (default: 20)")
 @click.option("--json", "as_json", is_flag=True, help="JSON output")
+@rowcap.limit_options
 def session_list(project, all_projects, state, sort_by, show_all, show_hidden,
-                 show_empty, limit, as_json):
+                 show_empty, limit, as_json, no_limit):
     """List recent sessions in the current project.
 
     One row per session: its id, a one-column state glyph (legend below the
@@ -1091,19 +1092,19 @@ def session_list(project, all_projects, state, sort_by, show_all, show_hidden,
                   show_all=show_all,
                   show_hidden=show_hidden, show_empty=show_empty,
                   state_filter=state, sort_by=sort_by,
-                  limit=limit, as_json=as_json)
+                  limit=limit, no_limit=no_limit, as_json=as_json)
 
 
 @session_cmd.command("search")
 @click.argument("query")
 @click.option("--project", default=None, help="Filter by project")
-@click.option("--limit", default=20, type=int,
-              help="Max results (default: 20)")
 @click.option("--json", "as_json", is_flag=True, help="JSON output")
-def session_search(query, project, limit, as_json):
+@rowcap.limit_options
+def session_search(query, project, limit, as_json, no_limit):
     """Search across all session messages."""
     from endless.session_cmd import search_sessions
-    search_sessions(query, project_name=project, limit=limit, as_json=as_json)
+    search_sessions(query, project_name=project, limit=limit, no_limit=no_limit,
+                    as_json=as_json)
 
 
 @session_cmd.command("use")
@@ -1283,9 +1284,8 @@ def session_back():
 @session_cmd.command("trail")
 @click.option("--all", "show_all", is_flag=True,
               help="Show every tmux client's moves, not just this one.")
-@click.option("--limit", default=50, show_default=True,
-              help="Max number of edges to show.")
-def session_trail(show_all, limit):
+@rowcap.limit_options
+def session_trail(show_all, limit, no_limit):
     """Show the durable session-navigation trail (manual moves + goto).
 
     Lists recent focus changes between Claude sessions/panes, newest-first:
@@ -1294,7 +1294,7 @@ def session_trail(show_all, limit):
     lists every client. Recorded by a tmux focus-change hook (see `goto`).
     """
     from endless.session_cmd import session_trail as run_trail
-    run_trail(show_all=show_all, limit=limit)
+    run_trail(show_all=show_all, limit=limit, no_limit=no_limit)
 
 
 @session_cmd.command("id")
@@ -3479,10 +3479,11 @@ def worktree_cmd():
               type=click.Choice(["main", "active", "foreign"]),
               help="Filter by lifecycle state")
 @click.option("--json", "as_json", is_flag=True, help="JSON output")
-def worktree_list(state_filter, as_json):
+@rowcap.limit_options
+def worktree_list(state_filter, as_json, limit, no_limit):
     """List worktrees for the current project."""
     from endless.worktree_cmd import list_worktrees
-    list_worktrees(state_filter, as_json)
+    list_worktrees(state_filter, as_json, limit=limit, no_limit=no_limit)
 
 
 @worktree_cmd.command("current")
@@ -3754,10 +3755,11 @@ def verb_add(value, definition, machine_only):
 
 @verb_cmd.command("list")
 @click.option("--json", "as_json", is_flag=True, help="JSON output")
-def verb_list(as_json):
+@rowcap.limit_options
+def verb_list(as_json, limit, no_limit):
     """List registered verbs from project + machine layers."""
     from endless.verb_cmd import list_verbs
-    list_verbs(as_json)
+    list_verbs(as_json, limit=limit, no_limit=no_limit)
 
 
 @verb_cmd.command("remove")
@@ -3836,10 +3838,12 @@ def phrase_add(type_, value, scope, method, case_sensitive, machine_only):
 @click.option("--all", "show_disabled", is_flag=True,
               help="Include disabled matchers")
 @click.option("--json", "as_json", is_flag=True, help="JSON output")
-def phrase_list(type_filter, scope_filter, show_disabled, as_json):
+@rowcap.limit_options
+def phrase_list(type_filter, scope_filter, show_disabled, as_json, limit, no_limit):
     """List matchers from project + machine config layers, merged."""
     from endless.phrase_cmd import list_phrases
-    list_phrases(type_filter, scope_filter, show_disabled, as_json)
+    list_phrases(type_filter, scope_filter, show_disabled, as_json,
+                 limit=limit, no_limit=no_limit)
 
 
 @phrase_cmd.command("disable")

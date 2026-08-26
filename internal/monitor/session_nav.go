@@ -126,9 +126,14 @@ type NavEdge struct {
 // endpoint sessions so the viewer can label each edge with its active task and
 // summary (E-1682). When client is non-empty the result is scoped to that tmux
 // client; an empty client returns every client's edges (the `--all` surface).
-// limit caps the row count (<= 0 falls back to a sane default).
+// limit caps the row count: a positive value is the cap, 0 falls back to a sane
+// default, and a NEGATIVE value returns every row. The negative case exists for
+// E-2071: the Python viewer owns the cap and its announcing footer, and a footer
+// has to name an exact remainder — which it cannot do if the query it rendered
+// had already stopped counting. Zero keeps its old meaning so no existing caller
+// changes behaviour.
 func ListNavTrail(client string, limit int) ([]NavEdge, error) {
-	if limit <= 0 {
+	if limit == 0 {
 		limit = 50
 	}
 	db, err := DB()
@@ -148,8 +153,11 @@ func ListNavTrail(client string, limit int) ([]NavEdge, error) {
 		q += " WHERE n.client = ?"
 		args = append(args, client)
 	}
-	q += " ORDER BY n.id DESC LIMIT ?"
-	args = append(args, limit)
+	q += " ORDER BY n.id DESC"
+	if limit > 0 {
+		q += " LIMIT ?"
+		args = append(args, limit)
+	}
 
 	rows, err := db.Query(q, args...)
 	if err != nil {

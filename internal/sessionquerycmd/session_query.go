@@ -516,7 +516,7 @@ func runResumeTarget(args []string) error {
 func runTrail(args []string) error {
 	fs := flag.NewFlagSet("trail", flag.ContinueOnError)
 	client := fs.String("client", "", "tmux client_name to scope to (empty = all clients)")
-	limit := fs.Int("limit", 50, "max rows to return")
+	limit := fs.Int("limit", 50, "max rows to return (negative returns every row)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}

@@ -4,6 +4,7 @@ import click
 from tabulate import tabulate
 
 from endless import db
+from endless import rowcap
 from endless.project_path import stored
 
 STATUS_COLORS = {
@@ -14,7 +15,9 @@ STATUS_COLORS = {
 }
 
 
-def list_projects(status_filter: str | None = None, group: bool = False):
+def list_projects(status_filter: str | None = None, group: bool = False,
+                  limit: int | None = None, no_limit: bool = False):
+    cap = rowcap.resolve_cap(limit, no_limit)
     from endless.reconcile import reconcile
     reconcile()
 
@@ -50,6 +53,11 @@ def list_projects(status_filter: str | None = None, group: bool = False):
                 + " to add one."
             )
         return
+
+    # Counted before the split: the tally below reports how many projects are
+    # registered, and the footer says how many of them are off-screen.
+    total = len(rows)
+    rows, hidden = rowcap.cap_rows(rows, cap)
 
     current_group = None
     table_rows = []
@@ -99,8 +107,9 @@ def list_projects(status_filter: str | None = None, group: bool = False):
     if table_rows:
         _print_table(table_rows)
 
+    rowcap.echo_footer(hidden)
     click.echo()
-    click.echo(click.style(f"{len(rows)} project(s)", dim=True))
+    click.echo(click.style(f"{total} project(s)", dim=True))
 
 
 def _print_table(rows: list[list]):

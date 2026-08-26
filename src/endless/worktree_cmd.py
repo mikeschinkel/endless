@@ -39,6 +39,7 @@ from pathlib import Path
 
 import click
 
+from endless import rowcap
 from endless.task_cmd import _display_path, _resolve_project, recover_task_text
 from endless.project_path import resolved
 
@@ -407,8 +408,10 @@ def _enriched_list(project_root: Path) -> list[dict]:
 
 # --- CLI command implementations -------------------------------------------
 
-def list_worktrees(state_filter: str | None, as_json: bool) -> None:
+def list_worktrees(state_filter: str | None, as_json: bool,
+                   limit: int | None = None, no_limit: bool = False) -> None:
     """List worktrees for the current project."""
+    cap = rowcap.resolve_cap(limit, no_limit, machine=as_json)
     root = _project_root()
     rows = _enriched_list(root)
     if state_filter:
@@ -421,6 +424,8 @@ def list_worktrees(state_filter: str | None, as_json: bool) -> None:
     if not rows:
         click.echo("No worktrees match.")
         return
+
+    rows, hidden = rowcap.cap_rows(rows, cap)
 
     click.echo(f"{'State':<8}  {'Branch':<40}  {'Task':<8}  Path")
     click.echo("-" * 8 + "  " + "-" * 40 + "  " + "-" * 8 + "  " + "-" * 40)
@@ -437,6 +442,8 @@ def list_worktrees(state_filter: str | None, as_json: bool) -> None:
         if len(path) > 60:
             path = "…" + path[-59:]
         click.echo(f"{r['state']:<8}  {branch:<40}  {task:<8}  {path}")
+
+    rowcap.echo_footer(hidden)
 
 
 def worktree_root_for_cwd() -> Path | None:

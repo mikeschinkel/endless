@@ -11,6 +11,7 @@ import re
 import click
 
 from endless import matchers
+from endless import rowcap
 
 
 VALID_METHODS = ("exact", "substring", "regex")
@@ -102,7 +103,10 @@ def list_phrases(
     scope_filter: str | None,
     show_disabled: bool,
     as_json: bool,
+    limit: int | None = None,
+    no_limit: bool = False,
 ) -> None:
+    cap = rowcap.resolve_cap(limit, no_limit, machine=as_json)
     all_matchers = matchers.load_all_matchers()
 
     rows = []
@@ -122,6 +126,8 @@ def list_phrases(
     if not rows:
         click.echo("No matchers match.")
         return
+
+    rows, hidden = rowcap.cap_rows(rows, cap)
 
     click.echo(
         f"{'Type':<10}  {'Scope':<8}  {'Method':<10}  {'CS':<3}  {'On':<3}  Match"
@@ -144,6 +150,8 @@ def list_phrases(
             f"{m.get('type', ''):<10}  {(m.get('scope') or '-'):<8}  "
             f"{m.get('method', ''):<10}  {cs:<3}  {on:<3}  {preview}"
         )
+
+    rowcap.echo_footer(hidden)
 
 
 def _describe(type_, value, scope, method, case_sensitive):
