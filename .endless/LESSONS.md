@@ -3988,3 +3988,36 @@ I read ED-1550's 'shipped work is never reopened to extend it' as covering E-207
 - **The right shape**: where a write might land on user content, make the instruction distinguish rather than assume. Compare the file against the version it was materialized from — identical means untouched and safe to refresh, any difference means customized, so stop and report which file diverged.
 - **Generalize**: when reviewing your own plan before attaching it, read every imperative as though you were about to run it yourself with no further thought. The ones you would have paused at are the ones to rewrite.
 - **Project**: endless
+
+### [2026-08-25] Apply the no-destructive-action rule to instructions you WRITE, not only to commands you run
+- **Re-record.** The entry immediately above this one is the same lesson with
+  holes in it: I passed the text through a double-quoted shell argument, zsh
+  evaluated the backticked code spans as command substitutions, and the terms
+  they named were replaced with nothing. Read this one; that one is corrupt.
+  **Rule from that, too**: pass lesson and outcome text via `--text-file` with a
+  quoted heredoc, never as an inline double-quoted shell argument, whenever it
+  contains backticks, `$`, or `!`.
+- **What happened**: an hour after destroying a worktree and recording lessons
+  about destructive actions, I wrote "it must be updated too" into E-2073's plan
+  about a materialized template — a file that exists so a user can customize it.
+  Mike: "So you chose to implement overwriting changes a user made?" The rule I
+  had just written down did not fire, because I was not running a command; I was
+  authoring an instruction for someone else to run.
+- **Rule**: a plan step is an action. Every restraint that governs what you do
+  governs what you tell another session to do, and it governs harder — a plan is
+  executed by someone with less context, who will read "must be updated too" as
+  settled and not re-derive whether it is safe.
+- **Rule**: a file that exists so a user can edit it is never yours to overwrite.
+  In Endless that is anything materialized into `.endless/templates/` (E-1565):
+  `<name>.tmpl` is the user's committed, customizable copy and
+  `<name>.local.tmpl` is their private one, which the renderer itself never
+  writes.
+- **The right shape**: where a write might land on user content, make the
+  instruction distinguish rather than assume. Compare the file against the
+  version it was materialized from — identical means untouched and safe to
+  refresh, any difference means customized, so stop and report which file
+  diverged.
+- **Generalize**: when reviewing your own plan before attaching it, read every
+  imperative as though you were about to run it yourself with no further
+  thought. The ones you would have paused at are the ones to rewrite.
+- **Project**: endless
