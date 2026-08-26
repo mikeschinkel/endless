@@ -237,3 +237,23 @@ def test_field_wise_fall_through_keeps_default_category(seeded_project_at_cwd):
     assert matchers.verb_categories("audit") == frozenset({"investigation"})
     # The project layer's definition still wins field-wise.
     assert matchers.get_verb_definition("audit") == "a project-specific redefinition"
+
+
+# ─── lead-verb extraction (punctuation / case) via the gate ──────────────────
+
+
+def test_gate_lead_verb_strips_punctuation(seeded_project_at_cwd):
+    """The lead verb is parsed with surrounding punctuation stripped, so a
+    trailing colon on the first word still resolves the category."""
+    # 'Audit:' -> 'audit' (investigation) is accepted under research.
+    task_cmd._require_verb_category_for_type("Audit: the ledger", "research")
+    # ...and refused under todo, proving the verb (not the punctuation) was read.
+    with pytest.raises(click.ClickException):
+        task_cmd._require_verb_category_for_type("Audit: the ledger", "todo")
+
+
+def test_gate_lead_verb_case_insensitive(seeded_project_at_cwd):
+    """A capitalized lead verb resolves the same category."""
+    task_cmd._require_verb_category_for_type("RESEARCH the cache layer", "research")
+    with pytest.raises(click.ClickException):
+        task_cmd._require_verb_category_for_type("RESEARCH the cache layer", "todo")

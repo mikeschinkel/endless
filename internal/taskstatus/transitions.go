@@ -131,7 +131,11 @@ type Transition struct {
 // the CLI boundary with a message that names the remedy.
 var implementation = []tasktype.TaskType{tasktype.TaskTypeTask, tasktype.TaskTypeBug}
 
-// review and direct split the findings lane by type (E-2016).
+// review and direct split the FINDINGS lane by type (E-2016). The findings lane
+// is for work whose deliverable IS an outcome text; the verification lane
+// (unverified → confirmed/assumed, restricted to `implementation`) is its
+// complement for work whose deliverable is testable behavior. Every type
+// finishes via exactly one of the two — TestEveryTypeFinishesViaExactlyOneLane.
 //
 // `review` is the two types whose deliverable is a written outcome that nobody
 // downstream catches wrong: research and brainstorm. They route through
@@ -139,18 +143,21 @@ var implementation = []tasktype.TaskType{tasktype.TaskTypeTask, tasktype.TaskTyp
 // a research task whose outcome changed materially through five rounds of the
 // owner's correction AFTER the session had marked it completed.
 //
-// `direct` is the complement, still reaching `completed` in one step. The lane
-// itself was never type-restricted and still is not: `completed` is gated on
-// the title's lead verb being a completable one, so an audit typed `todo`
-// finishes here too. What E-2016 adds is not a restriction on who may use the
-// lane, but a gate partway along it for the two types that have no other.
+// `direct` reaches `completed` in one step, and is now epic-only. Epic status is
+// DERIVED from children (E-1541) and written directly, so an epic does not
+// travel this table in practice; the edge exists so the invariant test sees a
+// route to `completed` for it.
 //
-// They must stay complements. TestFindingsLaneCoversEveryType asserts it —
-// a type in neither could not reach `completed` at all, and a type in both
-// could skip the gate by taking the direct edge.
+// E-1658 removed `todo`/`bugfix` from `direct`. The lane used to be verb-gated
+// so "an audit typed `todo`" could finish here, but E-1658 gates a task's type
+// against its title verb's CATEGORY at creation: a `todo` can no longer carry an
+// investigation verb, so an implementation type has no findings deliverable and
+// terminates via the verification lane, never `completed`. That makes
+// completed-eligibility a TYPE rule rather than a verb one — the verb is a
+// creation-time nudge, not a status gate.
 var (
 	review = []tasktype.TaskType{tasktype.TaskTypeResearch, tasktype.TaskTypeBrainstorm}
-	direct = []tasktype.TaskType{tasktype.TaskTypeTask, tasktype.TaskTypeBug, tasktype.TaskTypeEpic}
+	direct = []tasktype.TaskType{tasktype.TaskTypeEpic}
 )
 
 // transitionGroup is one readable band of the table. The bands, in order, ARE

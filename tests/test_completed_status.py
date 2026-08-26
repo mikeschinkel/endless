@@ -1,16 +1,19 @@
 """Tests for the `completed` status (E-1240).
 
-`completed` is the third terminal status, alongside `confirmed` (behavior
-verified) and `assumed` (behavior believed correct, awaiting promotion).
-Gated by:
+`completed` is a findings-lane terminal, alongside `confirmed` (behavior
+verified) and `assumed` (behavior believed correct, awaiting promotion). Gated
+by:
 
-  1. The 'investigation' category on the task title's lead verb (E-1658, which
-     recast E-1240's boolean `completable` flag as a verb `category`; epics and
-     brainstorms are exempt — ED-1511 / E-1657)
+  1. A TYPE rule (E-1658): only findings types — research, brainstorm, epic —
+     reach `completed`; implementation types (todo, bugfix) finish via the
+     verification lane and are refused it. This replaced E-1240's verb-gate,
+     which put a verb check in charge of a status invariant. Enforced on BOTH the
+     `task update --status` path (the Go transition table) and the `task
+     complete` path (mark_completed_item's type gate, since that path bypasses
+     the table).
   2. A required `--outcome` for `research`/`brainstorm` tasks, whose deliverable
-     IS the outcome text (ED-1520 — keyed on TYPE, not the `completed` status;
-     supersedes E-1240's status coupling). The dedicated `task complete` CLI
-     command still requires `--outcome` for any type at the Click layer.
+     IS the outcome text (ED-1520 — keyed on TYPE). The dedicated `task complete`
+     CLI command still requires `--outcome` for any type at the Click layer.
 """
 
 import click
@@ -80,35 +83,40 @@ def test_verb_categories_unknown_defaults_to_action(seeded_project_at_cwd):
 # ─── mark_completed_item direct ───────────────────────────────────────────────
 
 
-def test_completed_with_audit_verb_succeeds(seeded_project_at_cwd):
-    tid = _add_task("Audit E-1219 for foo")
+def test_completed_research_type_succeeds(seeded_project_at_cwd):
+    """E-1658: `completed` is a findings-lane terminal — a research task reaches
+    it. (`task complete` bypasses the Go transition table, so the type gate in
+    mark_completed_item is what admits it.)"""
+    tid = _add_task("Audit E-1219 for foo", type_id=_RESEARCH)
     task_cmd.mark_completed_item(tid, outcome="findings: bug in X line 42")
     status, outcome = _status_outcome(tid)
     assert status == "completed"
     assert outcome == "findings: bug in X line 42"
 
 
-def test_completed_with_research_verb_succeeds(seeded_project_at_cwd):
-    tid = _add_task("Research bubble tea component patterns")
+def test_completed_brainstorm_type_succeeds(seeded_project_at_cwd):
+    tid = _add_task("Explore bubble tea component patterns", type_id=_BRAINSTORM)
     task_cmd.mark_completed_item(tid, outcome="see report")
     status, _ = _status_outcome(tid)
     assert status == "completed"
 
 
-def test_completed_rejects_implementation_verb(seeded_project_at_cwd):
-    tid = _add_task("Add new feature X")
+def test_completed_rejects_todo_type(seeded_project_at_cwd):
+    """E-1658: completed-eligibility is a TYPE rule now. An implementation type
+    (todo) is refused `completed` — it finishes via confirmed/assumed — even via
+    the `task complete` path that bypasses the Go transition table."""
+    tid = _add_task("Add new feature X", type_id=1)  # todo
     with pytest.raises(click.ClickException) as exc:
         task_cmd.mark_completed_item(tid, outcome="done")
     msg = str(exc.value.message).lower()
-    assert "valid final status" in msg
-    assert "'confirmed' or 'assumed'" in msg
+    assert "cannot be set to status 'completed'" in msg
 
 
-def test_completed_rejects_fix_verb(seeded_project_at_cwd):
-    tid = _add_task("Fix bug in parser")
+def test_completed_rejects_bugfix_type(seeded_project_at_cwd):
+    tid = _add_task("Fix bug in parser", type_id=2)  # bugfix
     with pytest.raises(click.ClickException) as exc:
         task_cmd.mark_completed_item(tid, outcome="fixed")
-    assert "valid final status" in str(exc.value.message).lower()
+    assert "cannot be set to status 'completed'" in str(exc.value.message).lower()
 
 
 def test_completed_requires_non_blank_outcome(seeded_project_at_cwd):
@@ -126,17 +134,6 @@ def test_completed_requires_non_whitespace_outcome(seeded_project_at_cwd):
     assert "outcome is required" in str(exc.value.message).lower()
 
 
-def test_completed_plain_task_no_longer_requires_outcome(seeded_project_at_cwd):
-    """ED-1520: a plain `task` (not research/brainstorm) completing via the
-    helper is NOT forced to carry an outcome — the requirement moved to type.
-    (The dedicated `task complete` CLI command still demands one; this is the
-    direct/`update --status completed` path.)"""
-    tid = _add_task("Audit something", type_id=1)
-    task_cmd.mark_completed_item(tid, outcome="")
-    status, _ = _status_outcome(tid)
-    assert status == "completed"
-
-
 def test_completed_brainstorm_requires_outcome(seeded_project_at_cwd):
     """ED-1520: brainstorm is a deliverable type, so completing one without an
     outcome is refused (verb gate is exempt for brainstorm, so the outcome gate
@@ -148,7 +145,7 @@ def test_completed_brainstorm_requires_outcome(seeded_project_at_cwd):
 
 
 def test_completed_idempotent_when_already_completed(seeded_project_at_cwd):
-    tid = _add_task("Audit X", status="underway")
+    tid = _add_task("Audit X", status="underway", type_id=_RESEARCH)
     task_cmd.mark_completed_item(tid, outcome="first findings")
     # Second call short-circuits without erroring
     task_cmd.mark_completed_item(tid, outcome="ignored")
@@ -160,8 +157,11 @@ def test_completed_idempotent_when_already_completed(seeded_project_at_cwd):
 # ─── update_plan with status=completed ────────────────────────────────────────
 
 
-def test_update_status_completed_with_investigation_verb_succeeds(seeded_project_at_cwd):
-    tid = _add_task("Review the auth middleware")
+def test_update_status_completed_research_succeeds(seeded_project_at_cwd):
+    # Research reaches `completed` via the review track (unreviewed → completed);
+    # update_plan goes through the Go transition table, so seed at `unreviewed`
+    # to take the legal edge.
+    tid = _add_task("Review the auth middleware", status="unreviewed", type_id=_RESEARCH)
     task_cmd.update_plan(tid, status="completed", outcome="middleware is sound; no changes needed")
     status, outcome = _status_outcome(tid)
     assert status == "completed"
@@ -176,11 +176,11 @@ def test_update_status_completed_requires_outcome(seeded_project_at_cwd):
     assert "outcome is required" in str(exc.value.message).lower()
 
 
-def test_update_status_completed_rejects_action_verb(seeded_project_at_cwd):
-    tid = _add_task("Implement caching layer")
+def test_update_status_completed_rejects_todo_type(seeded_project_at_cwd):
+    tid = _add_task("Implement caching layer", type_id=1)  # todo
     with pytest.raises(click.ClickException) as exc:
         task_cmd.update_plan(tid, status="completed", outcome="done")
-    assert "valid final status" in str(exc.value.message).lower()
+    assert "cannot be set to status 'completed'" in str(exc.value.message).lower()
 
 
 def test_update_status_completed_uses_new_title_if_provided(seeded_project_at_cwd):
@@ -204,17 +204,17 @@ def test_update_status_completed_uses_new_title_if_provided(seeded_project_at_cw
     assert status == "completed"
 
 
-# ─── ED-1511 / E-1617: epics are exempt from the verb-completability gate ──────
+# ─── epics reach `completed` regardless of title verb (E-1658: type rule) ─────
 
 _EPIC = 4  # task_types seed: 4 = epic
 _RESEARCH = 3  # task_types seed: 3 = research
 _BRAINSTORM = 5  # task_types seed: 5 = brainstorm
 
 
-def test_completed_epic_exempt_from_verb_gate_via_mark(seeded_project_at_cwd):
-    """An epic titled with an implementation verb ('implement') must still
-    complete — its deliverable IS the outcome text, and the type gate already
-    forces epics to terminate via 'completed'. Pre-fix this deadlocked."""
+def test_completed_epic_via_mark(seeded_project_at_cwd):
+    """An epic titled with an implementation verb still completes — completed
+    eligibility is a TYPE rule (E-1658), and epic is a findings type; the title
+    verb is irrelevant to status."""
     tid = _add_task("Implement the foo subsystem", type_id=_EPIC)
     task_cmd.mark_completed_item(tid, outcome="shipped via children E-a, E-b")
     status, outcome = _status_outcome(tid)
@@ -222,7 +222,7 @@ def test_completed_epic_exempt_from_verb_gate_via_mark(seeded_project_at_cwd):
     assert outcome == "shipped via children E-a, E-b"
 
 
-def test_completed_epic_exempt_from_verb_gate_via_update(seeded_project_at_cwd):
+def test_completed_epic_via_update(seeded_project_at_cwd):
     tid = _add_task("Implement the bar subsystem", type_id=_EPIC)
     task_cmd.update_plan(tid, status="completed", outcome="coordination summary")
     status, _ = _status_outcome(tid)
@@ -240,13 +240,14 @@ def test_completed_epic_no_longer_requires_outcome(seeded_project_at_cwd):
     assert status == "completed"
 
 
-def test_completed_non_epic_still_gated_by_verb(seeded_project_at_cwd):
-    """Regression guard: the exemption must not widen to non-epic types. A
-    plain task with the same implementation-verb title is still rejected."""
-    tid = _add_task("Implement the foo subsystem", type_id=1)
+def test_completed_todo_refused_even_with_findings_title(seeded_project_at_cwd):
+    """Regression guard: the epic/findings eligibility must not widen to
+    implementation types. A todo is refused `completed` regardless of its title —
+    it is a TYPE rule, not a verb one."""
+    tid = _add_task("Audit the foo subsystem", type_id=1)  # todo, findings-ish title
     with pytest.raises(click.ClickException) as exc:
         task_cmd.mark_completed_item(tid, outcome="done")
-    assert "valid final status" in str(exc.value.message).lower()
+    assert "cannot be set to status 'completed'" in str(exc.value.message).lower()
 
 
 # ─── E-1577: completed accepts existing DB outcome (merge) ────────────────────
@@ -299,15 +300,15 @@ def test_update_status_unreviewed_refused_when_outcome_empty(seeded_project_at_c
 
 
 def test_cli_task_complete_requires_outcome_flag(seeded_project_at_cwd):
-    tid = _add_task("Audit E-1219")
+    tid = _add_task("Audit E-1219", type_id=_RESEARCH)
     runner = CliRunner()
     result = runner.invoke(main, ["task", "complete", f"E-{tid}"])
     assert result.exit_code != 0
     assert "outcome" in result.output.lower()
 
 
-def test_cli_task_complete_succeeds_for_audit(seeded_project_at_cwd):
-    tid = _add_task("Audit E-1219")
+def test_cli_task_complete_succeeds_for_research(seeded_project_at_cwd):
+    tid = _add_task("Audit E-1219", type_id=_RESEARCH)
     runner = CliRunner()
     result = runner.invoke(main, [
         "task", "complete", f"E-{tid}",
@@ -319,31 +320,12 @@ def test_cli_task_complete_succeeds_for_audit(seeded_project_at_cwd):
     assert outcome == "findings: X is broken"
 
 
-def test_cli_task_complete_rejects_implementation_verb(seeded_project_at_cwd):
-    tid = _add_task("Add new feature")
+def test_cli_task_complete_rejects_todo_type(seeded_project_at_cwd):
+    tid = _add_task("Add new feature", type_id=1)  # todo
     runner = CliRunner()
     result = runner.invoke(main, [
         "task", "complete", f"E-{tid}",
         "--outcome", "trying to sneak through",
     ])
     assert result.exit_code != 0
-    assert "valid final status" in result.output.lower()
-
-
-# ─── lead-verb extraction edge cases ──────────────────────────────────────────
-
-
-def test_lead_verb_strips_punctuation(seeded_project_at_cwd):
-    """Title with trailing colon on the lead word still matches."""
-    tid = _add_task("Audit: E-1219 for foo")
-    task_cmd.mark_completed_item(tid, outcome="findings")
-    status, _ = _status_outcome(tid)
-    assert status == "completed"
-
-
-def test_lead_verb_case_insensitive(seeded_project_at_cwd):
-    """Capitalized title verb still matches."""
-    tid = _add_task("RESEARCH the cache layer")
-    task_cmd.mark_completed_item(tid, outcome="report attached")
-    status, _ = _status_outcome(tid)
-    assert status == "completed"
+    assert "cannot be set to status 'completed'" in result.output.lower()

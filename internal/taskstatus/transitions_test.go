@@ -269,34 +269,48 @@ func TestReviewGateIsMandatoryForFindingsTypes(t *testing.T) {
 }
 
 // TestReviewGateRefusesImplementationTypes pins the inverse half. todo and
-// bugfix are gated by `unverified`; routing them through a second gate would
-// say the two lanes are one.
+// bugfix live wholly in the verification lane (gated by `unverified`); the
+// findings lane — `unreviewed` AND `completed` — is not theirs. E-1658 removed
+// their direct route to `completed`: an implementation type has no findings
+// deliverable, so completed-eligibility is a type rule, not a verb one.
 func TestReviewGateRefusesImplementationTypes(t *testing.T) {
 	for _, tt := range []tasktype.TaskType{tasktype.TaskTypeTask, tasktype.TaskTypeBug} {
 		if taskstatus.TransitionAllowed(taskstatus.Underway, taskstatus.Unreviewed, tt) {
 			t.Errorf("a %s task may reach `unreviewed`, but it is gated by `unverified`", tt)
 		}
-		if !taskstatus.TransitionAllowed(taskstatus.Underway, taskstatus.Completed, tt) {
-			t.Errorf("a %s task lost its direct route to `completed`", tt)
+		if taskstatus.TransitionAllowed(taskstatus.Underway, taskstatus.Completed, tt) {
+			t.Errorf("a %s task may reach `completed`, but implementation types terminate via the verification lane", tt)
 		}
 	}
 }
 
-// TestFindingsLaneCoversEveryType is the invariant the `review`/`direct` split
-// rests on. A type in neither set could not reach `completed` at all; a type in
-// both could skip the gate by taking the direct edge. Enumerating tasktype.All
-// is what makes a NEW task type fail here rather than silently inherit whichever
-// half someone edited last.
-func TestFindingsLaneCoversEveryType(t *testing.T) {
+// TestEveryTypeFinishesViaExactlyOneLane is the invariant the two lanes rest on.
+// Every type finishes via EITHER the verification lane (→ unverified →
+// confirmed/assumed, for work whose deliverable is testable behavior) OR the
+// findings lane (→ completed, for work whose deliverable is an outcome text) —
+// never both, never neither. Within the findings lane a type must not reach
+// `completed` both through the `unreviewed` gate and around it.
+//
+// E-1658 corrected the prior invariant (TestFindingsLaneCoversEveryType), which
+// required EVERY type to reach `completed`. Implementation types (todo/bugfix)
+// legitimately cannot — completed-eligibility is now a type rule, and forcing an
+// implementation type to have a route to `completed` was the bug. Enumerating
+// tasktype.All is what makes a NEW task type fail here rather than silently
+// inherit whichever lane someone edited last.
+func TestEveryTypeFinishesViaExactlyOneLane(t *testing.T) {
 	for _, tt := range tasktype.All() {
+		verification := taskstatus.TransitionAllowed(taskstatus.Underway, taskstatus.Unverified, tt)
 		viaGate := taskstatus.TransitionAllowed(taskstatus.Underway, taskstatus.Unreviewed, tt) &&
 			taskstatus.TransitionAllowed(taskstatus.Unreviewed, taskstatus.Completed, tt)
 		direct := taskstatus.TransitionAllowed(taskstatus.Underway, taskstatus.Completed, tt)
+		findings := viaGate || direct
 		switch {
 		case viaGate && direct:
 			t.Errorf("a %s task can reach `completed` both through the gate and around it", tt)
-		case !viaGate && !direct:
-			t.Errorf("a %s task has no route to `completed` at all", tt)
+		case verification && findings:
+			t.Errorf("a %s task can finish via both the verification and findings lanes", tt)
+		case !verification && !findings:
+			t.Errorf("a %s task can finish via neither lane — it would never reach a terminal", tt)
 		}
 	}
 }

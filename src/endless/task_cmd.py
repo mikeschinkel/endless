@@ -2872,33 +2872,15 @@ def _require_verb_category_for_type(title: str | None, task_type: str | None):
     )
 
 
-def _require_investigation_verb_for_completed(
-    status: str | None,
-    title: str | None,
-    task_type: str | None = None,
-):
-    """`completed` is the terminal for investigation deliverables, so it is gated
-    (E-1240, recast onto E-1658's category model) to tasks whose title lead verb
-    carries the 'investigation' category — audits, research, reviews, decisions.
-    Implementation (action-verb) tasks stay on the
-    `unverified`/`confirmed`/`assumed` track.
-
-    ED-1511 / E-1657: epics and brainstorms are exempt. Their TYPE already
-    signals an information deliverable (an epic's coordination summary of what
-    shipped in its children; a brainstorm's synthesis) and the type gate forces
-    them to terminate via `completed`, so applying the verb gate would only
-    deadlock an implementation-verb-titled one."""
-    if status != "completed":
-        return
-    if task_type in ("epic", "brainstorm"):
-        return
-    from endless.matchers import verb_categories
-    verb = _lead_verb(title)
-    if "investigation" not in verb_categories(verb):
-        raise click.ClickException(
-            "'completed' isn't a valid final status for this task. "
-            "Implementation tasks finish as 'confirmed' or 'assumed'."
-        )
+# E-1658: `completed` eligibility is a TYPE rule, not a verb one. Implementation
+# types (todo/bugfix) have no findings deliverable and terminate via the
+# verification lane (unverified → confirmed/assumed); research/brainstorm reach
+# `completed` via the review lane (unreviewed → completed); epic self-completes.
+# The Go transition table (internal/taskstatus/transitions.go) is the source that
+# refuses todo/bugfix → completed. The former verb-gate
+# (_require_investigation_verb_for_completed, E-1240) is gone: gating a status on
+# the title verb put a nice-to-have (verb sensibility) in charge of a
+# non-negotiable invariant (which statuses a type may hold).
 
 
 # Types whose deliverable IS the outcome text, so completing one requires
@@ -2961,6 +2943,15 @@ def _require_outcome_for_completed(
 # bugfix is gated by `unverified`, and routing it through a second gate would
 # say the two lanes are one. Both directions are now refused, so the tracks are
 # fully separated rather than half.
+# The FINDINGS lane's statuses — its gate (`unreviewed`) AND its terminal
+# (`completed`). The Go review-track group carries only the gate, so `completed`
+# is added here to complete the lane, symmetric to verification-track (which
+# already carries its gate `unverified` plus its terminals confirmed/assumed).
+# E-1658: this is the type rule that refuses `todo`/`bugfix` → `completed` on the
+# `task complete` path (mark_completed_item), which bypasses the Go transition
+# table — transitions.go governs only `task update --status`.
+_FINDINGS_LANE = (*statuses.get("review-track"), "completed")
+
 _TYPE_FORBIDDEN_STATUSES = {
     "research":   statuses.get("verification-track"),
     "epic":       statuses.get("verification-track"),
@@ -2968,8 +2959,10 @@ _TYPE_FORBIDDEN_STATUSES = {
     # not testable behavior), so like research it terminates via 'completed
     # --outcome' and never goes through user-testable verification.
     "brainstorm": statuses.get("verification-track"),
-    "todo":       statuses.get("review-track"),
-    "bugfix":     statuses.get("review-track"),
+    # E-1658: implementation types finish via the verification lane and are
+    # refused the whole findings lane, `completed` included.
+    "todo":       _FINDINGS_LANE,
+    "bugfix":     _FINDINGS_LANE,
 }
 
 
@@ -2978,9 +2971,9 @@ def _require_status_allowed_for_type(status: str | None, task_type: str | None):
 
     Two directions, one table. research/epic/brainstorm reject
     'unverified'/'assumed'/'confirmed' — they terminate via 'completed' (per
-    E-1537 §3) and never go through verification. todo/bugfix reject
-    'unreviewed' — that gate is for work whose deliverable is an outcome
-    someone must read, and implementation work is gated by 'unverified'.
+    E-1537 §3) and never go through verification. todo/bugfix reject the whole
+    findings lane — both 'unreviewed' and 'completed' (E-1658) — because their
+    deliverable is testable behavior, gated by 'unverified'.
 
     This is a type-correctness invariant, not a soft policy: the fix for a
     rejected flip is to change the task type, not to override the gate (so
@@ -2990,10 +2983,11 @@ def _require_status_allowed_for_type(status: str | None, task_type: str | None):
         return
     # Both refusals name the remedy, and the remedy differs by direction: a
     # findings type is being pushed into the verification lane and belongs at
-    # 'completed'; an implementation type is being pushed into the review lane
-    # and belongs at 'unverified'. Telling either one to "use --status
-    # completed" would be wrong half the time.
-    if status in statuses.get("review-track"):
+    # 'completed'; an implementation type is being pushed into the findings lane
+    # (its gate 'unreviewed' or its terminal 'completed') and belongs at
+    # 'unverified'. Telling either one to "use --status completed" would be wrong
+    # half the time.
+    if status in _FINDINGS_LANE:
         raise click.ClickException(
             f"Task type {task_type!r} cannot be set to status {status!r}. "
             f"{status!r} is for research and brainstorm work, whose deliverable "
@@ -3295,13 +3289,15 @@ def assume_item(item_id: int, cascade: bool = False, outcome: str | None = None)
 
 
 def mark_completed_item(item_id: int, outcome: str):
-    """E-1240: Mark a findings-as-deliverable task as `completed`.
+    """Mark a findings-as-deliverable task as `completed`.
 
-    Gated by `--outcome` (required) and by the 'investigation' category on the
-    task title's lead verb (E-1658). Distinct from `confirmed`
-    (behavior verified) and `assumed` (behavior believed correct,
-    awaiting promotion). Use for Audit/Research/Investigate/Review-style
-    tasks whose deliverable is the outcome text itself."""
+    Gated by `--outcome` (required) and by the type rule (E-1658):
+    `completed` is a findings-lane terminal, so only research/brainstorm/epic
+    reach it — implementation types (todo/bugfix) are refused here and finish via
+    `confirmed`/`assumed`. This path (`task complete`) bypasses the Go transition
+    table, so the type gate is enforced explicitly below. Distinct from
+    `confirmed` (behavior verified) and `assumed` (behavior believed correct,
+    awaiting promotion)."""
     from endless.event_bridge import emit_event
 
     row = db.query(
@@ -3316,9 +3312,9 @@ def mark_completed_item(item_id: int, outcome: str):
         )
 
     _require_outcome_for_completed("completed", row[0]["type"], outcome)
-    _require_investigation_verb_for_completed(
-        "completed", row[0]["title"], row[0]["type"]
-    )
+    # E-1658: `task complete` bypasses the Go transition table, so enforce the
+    # type→status rule here — todo/bugfix have no findings deliverable.
+    _require_status_allowed_for_type("completed", row[0]["type"])
 
     if row[0]["status"] == "completed":
         click.echo(
@@ -4653,18 +4649,13 @@ def update_plan(
                 f"Invalid status '{status}'. "
                 f"Valid: {', '.join(TASK_STATUSES)}"
             )
-        # E-1240/E-1658: gate `completed` on an investigation lead verb. Use the
-        # incoming title if provided (the title is being changed in the
-        # same call), else the existing title on the row.
-        effective_title = title if title is not None else row[0]["title"]
         # Use the incoming task_type if --type is also being set in this
         # update, else the existing type on the row.
         effective_type = task_type if task_type is not None else row[0]["type"]
-        _require_investigation_verb_for_completed(
-            status, effective_title, effective_type
-        )
-        # E-1577/E-1579: research/epic tasks reject 'unverified'/'assumed'/
-        # 'confirmed'; their only type-specific terminal is 'completed'.
+        # E-1577/E-1579/E-1658: type→status validity. research/epic reject
+        # 'unverified'/'assumed'/'confirmed'; todo/bugfix reject the review lane.
+        # The Go transition table refuses todo/bugfix → completed (E-1658); a
+        # `completed` flip on an implementation type is caught there.
         _require_status_allowed_for_type(status, effective_type)
         # E-1956: `obsolete` is refused on work that already shipped — the fact
         # to record there is a replaced_by relation, not a status that reads as

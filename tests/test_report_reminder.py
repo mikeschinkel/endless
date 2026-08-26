@@ -107,13 +107,17 @@ def test_update_to_assumed_fires(seeded_project_at_cwd, capsys):
 
 
 def test_mark_completed_item_fires(seeded_project_at_cwd, capsys):
-    tid = _add_task("Audit the auth module", status="underway")
+    # E-1658: `completed` is a findings-type terminal; use research (todo/bugfix
+    # no longer reach completed). `task complete` bypasses the Go table.
+    tid = _add_task("Audit the auth module", status="underway", type_id=3)
     task_cmd.mark_completed_item(tid, outcome="findings: none material")
     assert _fired(capsys)
 
 
 def test_update_to_completed_fires(seeded_project_at_cwd, capsys):
-    tid = _add_task("Review the middleware", status="underway")
+    # Research reaches completed via the review track; seed at unreviewed so
+    # update_plan takes the legal unreviewed→completed edge.
+    tid = _add_task("Review the middleware", status="unreviewed", type_id=3)
     task_cmd.update_plan(tid, status="completed", outcome="sound; no changes")
     assert _fired(capsys)
 

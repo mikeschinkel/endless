@@ -164,10 +164,6 @@ test_gate_wiring() {
         src/endless/task_cmd.py "_require_verb_category_for_type(title, task_type)"
     assert_present "gate also wired into update_plan (closes the flip bypass)" \
         src/endless/task_cmd.py "_require_verb_category_for_type(effective_title, effective_type)"
-    assert_present "completed gate recast onto category" \
-        src/endless/task_cmd.py "def _require_investigation_verb_for_completed("
-    assert_absent_in "old completable completed-gate removed" \
-        src/endless/task_cmd.py "_require_completable_verb_for_completed"
     # epic must NOT be an accepts key (exempt = absent).
     assert_absent_in "epic is exempt (absent from accepts map)" \
         src/endless/task_cmd.py '"epic":       frozenset('
@@ -176,6 +172,33 @@ test_gate_wiring() {
         src/endless/cli.py 'type=click.Choice(["action", "investigation"]),'
     assert_present "verb list shows a Category column" \
         src/endless/verb_cmd.py "'Category'"
+}
+
+test_completed_type_rule() {
+    section "Completed — a TYPE rule, not a verb gate (E-1658)"
+    # The E-1240 verb-gate is gone: no function, no call sites.
+    assert_absent_in "verb-gate function removed" \
+        src/endless/task_cmd.py "def _require_investigation_verb_for_completed"
+    assert_absent_in "old completable completed-gate name gone" \
+        src/endless/task_cmd.py "_require_completable_verb_for_completed"
+    # Go transition table is the source: only epic reaches completed directly.
+    assert_present "Go direct→completed lane is epic-only" \
+        internal/taskstatus/transitions.go "direct = []tasktype.TaskType{tasktype.TaskTypeEpic}"
+    assert_absent_in "todo/bugfix dropped from the direct→completed lane" \
+        internal/taskstatus/transitions.go "TaskTypeTask, tasktype.TaskTypeBug, tasktype.TaskTypeEpic}"
+    # Python type rule forbids todo/bugfix the whole findings lane, and enforces
+    # it on the task-complete path (which bypasses the Go table).
+    assert_present "findings lane = review-track + completed" \
+        src/endless/task_cmd.py '_FINDINGS_LANE = (*statuses.get("review-track"), "completed")'
+    assert_present "todo forbidden the findings lane" \
+        src/endless/task_cmd.py '"todo":       _FINDINGS_LANE,'
+    assert_present "task complete path enforces the type gate" \
+        src/endless/task_cmd.py '_require_status_allowed_for_type("completed", row[0]["type"])'
+    # Lifecycle diagram regenerated + in sync (pre-land gate).
+    assert_present "diagram shows completed reachable only by epic (direct)" \
+        docs/status-lifecycle.mmd "underway --> completed: agent delivers the findings as an outcome (epic)"
+    assert_cmd "lifecycle diagram is in sync with the Go table" \
+        env PATH="${PWD}/bin:${PATH}" just lifecycle-check
 }
 
 test_resolver_fix() {
@@ -264,6 +287,7 @@ main() {
     test_build
     test_schema_migration
     test_gate_wiring
+    test_completed_type_rule
     test_resolver_fix
     test_gate_behavior
     test_rebuild_db

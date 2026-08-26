@@ -107,8 +107,8 @@ stateDiagram-v2
     underway --> unreviewed: agent delivers the findings as an outcome (research/brainstorm)
     ready --> unreviewed: agent delivers the findings as an outcome (research/brainstorm)
     unreviewed --> completed: user reads the outcome and accepts it (research/brainstorm)
-    underway --> completed: agent delivers the findings as an outcome (todo/bugfix/epic)
-    ready --> completed: agent delivers the findings as an outcome (todo/bugfix/epic)
+    underway --> completed: agent delivers the findings as an outcome (epic)
+    ready --> completed: agent delivers the findings as an outcome (epic)
 
     %% Reopening — the work is not settled after all
     untriaged --> revisit: agent reopens — needs re-evaluation
