@@ -4225,3 +4225,11 @@ report the pointer to Mike and let him route it. Writing durable state into a
 third task's plan about a fourth task's file is the worst version of this -
 prefer saying nothing to leaving instructions in someone else's record.
 - **Project**: endless
+
+### [2026-08-26] Search for an existing task before filing a new one
+I filed E-2079 for the verbs.jsonl shadowing bug. E-1658 already covered it, and Mike had to obsolete mine. I never looked — I went straight from 'I found something' to 'endless task add'.
+
+Endless has `endless task search <query>` and it costs one command. The global rule already says 'Reuse before Creation: search before writing new functionality', and a task IS a work product; filing a duplicate creates cleanup for Mike and splits the record of one problem across two IDs.
+
+Before `task add`: search the backlog for the thing I am about to file, using the words someone else would have used for it — not my phrasing of today's symptom. For this one, 'verbs' or 'completable' would have found E-1658 immediately. If a task exists, UPDATE it: add what I learned as analysis, link it, and say so. File new only when the search comes back empty.
+- **Project**: endless
