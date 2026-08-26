@@ -3972,3 +3972,7 @@ The meta-lesson, third time this session: when something reads as an open questi
 - **Rule**: before reporting an implication, ask who it happens to. If the answer is a hypothetical adopter, it is background, not a consequence. If the answer is 'this is the general case of something already known to be hard', say that in one clause and stop.
 - **Related**: ED-1550. Noticing something true does not earn a task, and it does not earn a paragraph either.
 - **Project**: endless
+
+### [2026-08-25] Do not file a task for scope the user just declined
+While finishing E-2071 I filed E-2075 for the session listings — the surfaces Mike had, minutes earlier, explicitly scoped out by choosing 'Task/decision/epic surfaces + sql' over 'Everything that lists rows'. I framed it to myself as 'not now, not never', which is how I talked myself past ED-1550: filing is the exception, the default response to a finding is to say it in chat, and noticing something true does not earn a task. Worse, the finding was not even a discovery — it was the option he had just rejected, refiled under a new id. A scope decision the user makes in answer to a direct question is a closed question. Report what was left out in the reply; do not convert it into backlog. When a follow-up genuinely seems warranted after the user has already ruled on scope, ask before filing.
+- **Project**: endless
