@@ -274,32 +274,26 @@ test_db_routing() {
         return
     fi
 
-    local src
-    src=$(uv run endless db path --db sandbox 2>/dev/null | tail -1)
-    if [[ -z "${src}" || ! -f "${src}" ]]; then
-        report_skip "same dir + same task, two DBs, two answers" \
-            "no sandbox DB; run \`just dev-sandbox-init\`"
-        return
-    fi
-
-    # Two config dirs seeded from one VACUUM'd copy of the sandbox schema+rows:
-    # identical in every way except the session row inserted into A.
+    # Both DBs are built from internal/schema/schema.sql — the canonical schema
+    # this build embeds — NOT copied from the worktree sandbox. A sandbox is
+    # created once and can sit on an older schema vintage than the code under
+    # test (this worktree's still carries the pre-E-1969 `active_task_id`), so
+    # seeding from it makes this part fail for a reason that has nothing to do
+    # with the guard.
     local cfg_a="${SCRATCH}/cfg-a" cfg_b="${SCRATCH}/cfg-b"
     mkdir -p "${cfg_a}" "${cfg_b}"
-    if ! sqlite3 "${src}" "VACUUM INTO '${cfg_a}/endless.db'" 2>/dev/null; then
-        report_skip "same dir + same task, two DBs, two answers" "cannot copy the sandbox DB"
+    if ! sqlite3 "${cfg_a}/endless.db" < internal/schema/schema.sql >/dev/null 2>&1; then
+        report_skip "same dir + same task, two DBs, two answers" "cannot apply schema.sql"
         return
     fi
     cp "${cfg_a}/endless.db" "${cfg_b}/endless.db"
 
     # A synthetic task id, and no tasks row to go with it: the guard COUNTS
-    # session rows, so what it needs is a row bound to the id, not a task. That
-    # also keeps this part working against an empty sandbox. sqlite3 leaves
-    # foreign_keys OFF unless asked, so the bare insert stands.
+    # session rows, so what it needs is a row bound to the id, not a task.
+    # sqlite3 leaves foreign_keys OFF unless asked, so the bare insert stands.
     local task=999947
     if ! sqlite3 "${cfg_a}/endless.db" \
-        "DELETE FROM sessions;
-         INSERT INTO sessions (session_id, platform, state, task_id,
+        "INSERT INTO sessions (session_id, platform, state, task_id,
                                started_at, last_activity)
          VALUES ('e1947-probe', 'claude', 'working', ${task},
                  datetime('now'), datetime('now'))" 2>/dev/null
@@ -307,7 +301,6 @@ test_db_routing() {
         report_skip "same dir + same task, two DBs, two answers" "cannot seed the session row"
         return
     fi
-    sqlite3 "${cfg_b}/endless.db" "DELETE FROM sessions" 2>/dev/null
 
     # Same IDLE directory, same task id — only the database differs.
     local rc
