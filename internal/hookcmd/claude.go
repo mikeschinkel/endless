@@ -244,17 +244,6 @@ func runClaude(args []string) error {
 		}
 	}
 
-	// Background-agent decoration (E-1568). A bg agent dispatched by
-	// `task spawn --bg` has a sessions row inserted at dispatch with
-	// session_id NULL + short_id (kind_id=2); its real UUID first appears
-	// here. Attach the UUID to that row BEFORE TouchSession runs — TouchSession
-	// keys on session_id and would otherwise INSERT a second, duplicate row
-	// (the dispatch row's session_id is still NULL, so no conflict catches it).
-	// Best-effort: a no-match (race: hook fired before the dispatch INSERT
-	// committed, or a stray CLAUDE_JOB_DIR per research §7 issue #59848) just
-	// falls through to the normal new-row path.
-	decorateBgSession(payload)
-
 	// Per-event session UPSERT (E-1426). Records process + last_activity
 	// and creates the row if absent. Runs on every event so a NULL/stale
 	// `process` self-heals within one tool call (E-1408 / E-1422), and a
@@ -791,11 +780,6 @@ func handlePostToolUse(projectID int64, isRegistered bool, payload claudePayload
 		return nil
 	}
 
-	// Record which plan file this session is editing (used by ExitPlanMode)
-	if err := monitor.SetPlanFilePath(payload.SessionID, input.FilePath); err != nil {
-		return fmt.Errorf("setting plan file path: %w", err)
-	}
-
 	// NOTE: Auto-import disabled. Sessions should use `endless task update <id> --text <file>`
 	// to save task text, and `endless task add` to create child items explicitly.
 	// Auto-import created duplicate items at the wrong granularity (every bullet became a task item).
@@ -1128,43 +1112,52 @@ func handlePostToolUseSession(projectID int64, payload claudePayload) (string, e
 	return "", nil
 }
 
-func handleExitPlanMode(projectID int64, payload claudePayload) error {
-	// Use the plan file path recorded during PostToolUse/Write
-	planFile := monitor.GetPlanFilePath(payload.SessionID)
-
-	// Fall back to most recently modified plan file if not recorded
-	if planFile == "" {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return nil
+// latestPlanFile returns the most recently modified *.md under ~/.claude/plans,
+// or "" when the directory is unreadable or holds no plan. Claude writes the
+// accepted plan there, so the newest entry is the one ExitPlanMode just fired
+// for.
+func latestPlanFile() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	entries, err := os.ReadDir(filepath.Join(home, ".claude", "plans"))
+	if err != nil {
+		return ""
+	}
+	var newest string
+	var newestTime int64
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".md") {
+			continue
 		}
-		plansDir := filepath.Join(home, ".claude", "plans")
-		entries, err := os.ReadDir(plansDir)
+		info, err := e.Info()
 		if err != nil {
-			return nil
+			continue
 		}
-		var newestTime int64
-		for _, e := range entries {
-			if e.IsDir() || !strings.HasSuffix(e.Name(), ".md") {
-				continue
-			}
-			info, err := e.Info()
-			if err != nil {
-				continue
-			}
-			if info.ModTime().Unix() > newestTime {
-				newestTime = info.ModTime().Unix()
-				planFile = filepath.Join(plansDir, e.Name())
-			}
+		if info.ModTime().Unix() > newestTime {
+			newestTime = info.ModTime().Unix()
+			newest = filepath.Join(home, ".claude", "plans", e.Name())
 		}
 	}
+	return newest
+}
 
-	if planFile == "" {
+func handleExitPlanMode(projectID int64, payload claudePayload) error {
+	// The most recently modified file in ~/.claude/plans is the plan just
+	// accepted. E-2074 removed sessions.plan_file_path, which used to be
+	// consulted first: it was written at PostToolUse/Write and read only here,
+	// and the mtime scan below was already the fallback for every session that
+	// reached ExitPlanMode without having written through the Write tool. With
+	// auto-import disabled (see below) neither branch consumed the path for
+	// anything but this presence test, so the column bought a write on every
+	// plan-file Write and answered a question the directory already answers.
+	if latestPlanFile() == "" {
 		return nil
 	}
 
-	// NOTE: Auto-import disabled. The plan file path is still tracked so sessions
-	// can reference it with `endless task update <id> --text <plan-file>`.
+	// NOTE: Auto-import disabled. Sessions save plan text explicitly with
+	// `endless task update <id> --text <plan-file>`.
 	// See PostToolUse/Write handler for rationale.
 
 	items, err := monitor.GetActiveTasks(projectID)
@@ -1400,36 +1393,6 @@ func setTmuxSessionUUID(sessionID string) {
 	).Run()
 }
 
-// decorateBgSession attaches this session's real UUID to a background agent's
-// dispatch row (E-1568). A bg agent launched by `claude --bg` runs with
-// CLAUDE_JOB_DIR=~/.claude/jobs/<short_id> (research §6); the basename is the
-// short_id used as the dispatch handle. monitor.DecorateBgSession UPDATEs the
-// matching kind_id=2 row (session_id IS NULL) with payload.SessionID. This must
-// run before TouchSession so the row is keyed by its real UUID before any
-// generic upsert can insert a duplicate. Best-effort: only acts on SessionStart
-// (the one event where the UUID first appears for an undecorated row); a no-
-// match or error just logs and lets the normal session-tracking path proceed.
-func decorateBgSession(payload claudePayload) {
-	if payload.EventName != "SessionStart" {
-		return
-	}
-	jobDir := os.Getenv("CLAUDE_JOB_DIR")
-	if jobDir == "" {
-		return
-	}
-	short := filepath.Base(jobDir)
-	rows, err := monitor.DecorateBgSession(short, payload.SessionID)
-	if err != nil {
-		log.Printf("bg-decorate: short_id %s: %v", short, err)
-		return
-	}
-	if rows == 0 {
-		log.Printf("bg-decorate: no undecorated bg row for short_id %s (falling through to normal tracking)", short)
-		return
-	}
-	log.Printf("bg-decorate: bound session %s to dispatch row short_id %s", payload.SessionID, short)
-}
-
 // tmuxSpawnedBy reads @endless_spawned_by from the current tmux window.
 // Set only by `endless task spawn` (carries the spawning session's id or
 // a `pid-<n>` fallback for non-Claude spawners). Empty string means this
@@ -1479,7 +1442,6 @@ func logSessionBind(sessionID string, snap monitor.SessionSnapshot, taskID int64
 	newTaskID := taskID
 	monitor.LogSessionTxn(monitor.SessionTxn{
 		SessionGUID: sessionID,
-		ShortID:     snap.ShortID,
 		OldState:    snap.State,
 		NewState:    "working",
 		OldTaskID:   snap.TaskID,

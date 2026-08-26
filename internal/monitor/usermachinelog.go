@@ -54,7 +54,6 @@ type sessionLogEntry struct {
 	Kind      string `json:"kind"` // always "session" for now
 	TS        string `json:"ts"`
 	SessionID string `json:"session_id,omitempty"` // session GUID
-	ShortID   string `json:"short_id,omitempty"`
 	OldState  string `json:"old_state,omitempty"`
 	NewState  string `json:"new_state,omitempty"`
 	OldTaskID *int64 `json:"old_task_id,omitempty"`
@@ -71,7 +70,6 @@ type sessionLogEntry struct {
 // current process.
 type SessionTxn struct {
 	SessionGUID string
-	ShortID     string
 	OldState    string
 	NewState    string
 	OldTaskID   *int64
@@ -85,7 +83,6 @@ type SessionTxn struct {
 // its zero fields then correctly represent "no prior state".
 type SessionSnapshot struct {
 	SessionGUID string
-	ShortID     string
 	State       string
 	TaskID      *int64
 	Found       bool
@@ -108,7 +105,7 @@ func SnapshotSession(sessionID string) SessionSnapshot {
 	}
 	return scanSnapshot(
 		db.QueryRow(
-			"SELECT session_id, short_id, state, task_id FROM sessions WHERE session_id=?",
+			"SELECT session_id, state, task_id FROM sessions WHERE session_id=?",
 			sessionID,
 		),
 	)
@@ -120,7 +117,7 @@ func SnapshotSession(sessionID string) SessionSnapshot {
 func SnapshotSessionByID(q RowQuerier, id int64) SessionSnapshot {
 	return scanSnapshot(
 		q.QueryRow(
-			"SELECT session_id, short_id, state, task_id FROM sessions WHERE id=?",
+			"SELECT session_id, state, task_id FROM sessions WHERE id=?",
 			id,
 		),
 	)
@@ -133,14 +130,13 @@ type scanner interface {
 }
 
 func scanSnapshot(row scanner) SessionSnapshot {
-	var guid, short, state sql.NullString
+	var guid, state sql.NullString
 	var taskID sql.NullInt64
-	if err := row.Scan(&guid, &short, &state, &taskID); err != nil {
+	if err := row.Scan(&guid, &state, &taskID); err != nil {
 		return SessionSnapshot{}
 	}
 	snap := SessionSnapshot{
 		SessionGUID: guid.String,
-		ShortID:     short.String,
 		State:       state.String,
 		Found:       true,
 	}
@@ -159,7 +155,6 @@ func LogSessionTxn(t SessionTxn) {
 		Kind:      "session",
 		TS:        time.Now().UTC().Format(time.RFC3339),
 		SessionID: t.SessionGUID,
-		ShortID:   t.ShortID,
 		OldState:  t.OldState,
 		NewState:  t.NewState,
 		OldTaskID: t.OldTaskID,

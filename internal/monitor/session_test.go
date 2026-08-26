@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"testing"
 
-	"github.com/mikeschinkel/endless/internal/sessionkind"
 )
 
 // freshSessionsDB returns a DB with schema.sql applied, seeded with project
@@ -278,31 +277,30 @@ func TestTouchSession_RejectsEmptyPlatform(t *testing.T) {
 	}
 }
 
-// TestGetActiveSession_RoundTripsKindAndEpic pins the E-1571 columns through
-// the GetActiveSession read path: a background-agent row with epic_id
-// set round-trips to EpicID + Kind=background, and a default foreground
-// row reports Kind=tmux with a nil EpicID.
-func TestGetActiveSession_RoundTripsKindAndEpic(t *testing.T) {
+// TestGetActiveSession_RoundTripsEpic pins epic_id through the GetActiveSession
+// read path: a row carrying an epic round-trips to EpicID alongside TaskID, and
+// a row without one reports nil rather than zero.
+//
+// Named RoundTripsKindAndEpic until E-2074, when sessions.kind_id and the
+// SessionKind enum went with background agents. Epic context is the half that
+// survived — a session still works a child under an epic.
+func TestGetActiveSession_RoundTripsEpic(t *testing.T) {
 	db := withTestDB(t)
 	seedProject(t, db, 1, "proj-test-1", "/tmp/proj-test-1")
 	epicID := seedTask(t, db, 100, 1, "epic", "underway")
 	childID := seedTask(t, db, 137, 1, "child", "underway")
 
-	// Background agent: process NULL, kind_id=background, epic + child set.
 	if _, err := db.Exec(
-		`INSERT INTO sessions (session_id, project_id, platform, state, task_id, epic_id, kind_id, last_activity)
-		 VALUES ('bg-1', 1, 'claude', 'working', ?, ?, ?, '2026-06-16T00:00:00')`,
-		childID, epicID, int64(sessionkind.SessionKindBackground),
+		`INSERT INTO sessions (session_id, project_id, platform, state, task_id, epic_id, last_activity)
+		 VALUES ('epic-1', 1, 'claude', 'working', ?, ?, '2026-06-16T00:00:00')`,
+		childID, epicID,
 	); err != nil {
-		t.Fatalf("seed bg session: %v", err)
+		t.Fatalf("seed epic session: %v", err)
 	}
 
-	got, err := GetActiveSession("bg-1")
+	got, err := GetActiveSession("epic-1")
 	if err != nil {
-		t.Fatalf("GetActiveSession(bg-1): %v", err)
-	}
-	if got.Kind != sessionkind.SessionKindBackground {
-		t.Errorf("Kind = %v, want background", got.Kind)
+		t.Fatalf("GetActiveSession(epic-1): %v", err)
 	}
 	if got.EpicID == nil || *got.EpicID != epicID {
 		t.Errorf("EpicID = %v, want %d", got.EpicID, epicID)
@@ -311,23 +309,20 @@ func TestGetActiveSession_RoundTripsKindAndEpic(t *testing.T) {
 		t.Errorf("TaskID = %v, want %d", got.TaskID, childID)
 	}
 
-	// Foreground default row: kind defaults to tmux, no epic context.
+	// A row with no epic context: EpicID must be nil, not 0.
 	if _, err := db.Exec(
 		`INSERT INTO sessions (session_id, project_id, platform, state, task_id, last_activity)
-		 VALUES ('fg-1', 1, 'claude', 'working', ?, '2026-06-16T00:00:00')`,
+		 VALUES ('plain-1', 1, 'claude', 'working', ?, '2026-06-16T00:00:00')`,
 		childID,
 	); err != nil {
-		t.Fatalf("seed fg session: %v", err)
+		t.Fatalf("seed plain session: %v", err)
 	}
-	fg, err := GetActiveSession("fg-1")
+	plain, err := GetActiveSession("plain-1")
 	if err != nil {
-		t.Fatalf("GetActiveSession(fg-1): %v", err)
+		t.Fatalf("GetActiveSession(plain-1): %v", err)
 	}
-	if fg.Kind != sessionkind.SessionKindTmux {
-		t.Errorf("default Kind = %v, want tmux", fg.Kind)
-	}
-	if fg.EpicID != nil {
-		t.Errorf("default EpicID = %v, want nil", fg.EpicID)
+	if plain.EpicID != nil {
+		t.Errorf("default EpicID = %v, want nil", plain.EpicID)
 	}
 }
 

@@ -2,13 +2,11 @@ package monitor
 
 import (
 	"database/sql"
-	"errors"
 	"fmt"
 	"time"
 
 	"github.com/mikeschinkel/endless/internal/agentenv"
 	"github.com/mikeschinkel/endless/internal/config"
-	"github.com/mikeschinkel/endless/internal/sessionkind"
 	"github.com/mikeschinkel/endless/internal/taskstatus"
 	"github.com/mikeschinkel/go-dt"
 )
@@ -16,15 +14,13 @@ import (
 // SessionInfo represents an active AI coding session.
 //
 // EpicID is the epic task id when the session works under an epic (and
-// TaskID tracks the viewed child); nil otherwise. Kind discriminates a
-// pane-bound 'tmux' session from a headless 'background' agent (E-1571).
+// TaskID tracks the viewed child); nil otherwise.
 type SessionInfo struct {
 	ID           int64
 	SessionID    string
 	ProjectID    int64
 	TaskID       *int64
 	EpicID       *int64
-	Kind         sessionkind.SessionKind
 	State        string
 	LastActivity string
 	StartedAt    string
@@ -73,19 +69,21 @@ func BindSessionToTask(sessionID string, projectID int64, taskID int64) error {
 	// and is inert when TMUX_PANE is empty, so every fresh-UUID launch (resume,
 	// respawn, aborted spawn, /clear) would otherwise leave the prior non-ended
 	// row for this task lingering as a duplicate. Now that this session is bound
-	// to the task, end any OTHER non-ended foreground row for the same task that
-	// has no pane: Endless permits only one live foreground session per task
-	// (worktree locks), so any such row is stale. Scoped to kind_id = tmux —
-	// background agents (kind_id = background) legitimately carry the task's
-	// task_id with no pane and are decorated via their own path, so they
-	// must never be ended here. Paneless is the only fallback case; rows that
-	// hold a real pane are left to TouchSession's pane-collision path.
+	// to the task, end any OTHER non-ended row for the same task that has no
+	// pane: Endless permits only one live session per task (worktree locks), so
+	// any such row is stale. Paneless is the only fallback case; rows that hold
+	// a real pane are left to TouchSession's pane-collision path.
+	//
+	// E-2074 dropped the `AND kind_id = tmux` scope this carried. It existed to
+	// spare background-agent rows, which legitimately held a task_id with no
+	// pane and were decorated by their own path. Background agents are gone, so
+	// every paneless row reaching here is the stale foreground row the sweep was
+	// always meant to end.
 	dedupWhere := `task_id = ?
 		   AND session_id != ?
 		   AND process_id IS NULL
-		   AND kind_id = ?
 		   AND state != 'ended'`
-	dedupArgs := []any{taskID, sessionID, int64(sessionkind.SessionKindTmux)}
+	dedupArgs := []any{taskID, sessionID}
 
 	// Capture the rows about to be ended (within the tx, before the write) so the
 	// diagnostic log can name each silently-deduped session. This is exactly the
@@ -106,7 +104,6 @@ func BindSessionToTask(sessionID string, projectID int64, taskID int64) error {
 	for _, d := range deduped {
 		LogSessionTxn(SessionTxn{
 			SessionGUID: d.SessionGUID,
-			ShortID:     d.ShortID,
 			OldState:    d.State,
 			NewState:    "ended",
 			OldTaskID:   d.TaskID,
@@ -123,7 +120,7 @@ func BindSessionToTask(sessionID string, projectID int64, taskID int64) error {
 // no rows (the dedup still proceeds; only the log line is lost).
 func collectDedupTargets(tx *sql.Tx, where string, args []any) []SessionSnapshot {
 	rows, err := tx.Query(
-		`SELECT session_id, short_id, state, task_id FROM sessions WHERE `+where,
+		`SELECT session_id, state, task_id FROM sessions WHERE `+where,
 		args...,
 	)
 	if err != nil {
@@ -178,7 +175,6 @@ func StartWorkSession(sessionID string, projectID int64, taskID int64) error {
 	newTaskID := taskID
 	LogSessionTxn(SessionTxn{
 		SessionGUID: sessionID,
-		ShortID:     snap.ShortID,
 		OldState:    snap.State,
 		NewState:    "working", // BindSessionToTask sets state='working'
 		OldTaskID:   snap.TaskID,
@@ -273,47 +269,15 @@ func GetActiveSession(sessionID string) (*SessionInfo, error) {
 	}
 
 	var s SessionInfo
-	var kindID int64
 	err = db.QueryRow(
-		`SELECT id, session_id, COALESCE(project_id,0), task_id, epic_id, kind_id, state, COALESCE(last_activity,''), COALESCE(started_at,'')
+		`SELECT id, session_id, COALESCE(project_id,0), task_id, epic_id, state, COALESCE(last_activity,''), COALESCE(started_at,'')
 		 FROM sessions WHERE session_id=?`,
 		sessionID,
-	).Scan(&s.ID, &s.SessionID, &s.ProjectID, &s.TaskID, &s.EpicID, &kindID, &s.State, &s.LastActivity, &s.StartedAt)
+	).Scan(&s.ID, &s.SessionID, &s.ProjectID, &s.TaskID, &s.EpicID, &s.State, &s.LastActivity, &s.StartedAt)
 	if err != nil {
 		return nil, err
 	}
-	s.Kind = sessionkind.SessionKind(kindID)
 	return &s, nil
-}
-
-// SetPlanFilePath records which plan file this session is editing.
-func SetPlanFilePath(sessionID, filePath string) error {
-	db, err := DB()
-	if err != nil {
-		return err
-	}
-	_, err = db.Exec(
-		"UPDATE sessions SET plan_file_path=? WHERE session_id=?",
-		filePath, sessionID,
-	)
-	return err
-}
-
-// GetPlanFilePath returns the plan file path for a session, if set.
-func GetPlanFilePath(sessionID string) string {
-	db, err := DB()
-	if err != nil {
-		return ""
-	}
-	var path *string
-	err = db.QueryRow(
-		"SELECT plan_file_path FROM sessions WHERE session_id=?",
-		sessionID,
-	).Scan(&path)
-	if err != nil || path == nil {
-		return ""
-	}
-	return *path
 }
 
 // TouchSession is the per-event UPSERT helper. It records the session's
@@ -435,145 +399,6 @@ func EnsureClaudeSessionID(sessionID, process string, projectID int64) (int64, e
 	return id, nil
 }
 
-// RecordBgAgentSession inserts the dispatch-time row for a background agent
-// (E-1568). The Python `task spawn --bg` flow calls this (via the
-// `session-query record-bg-agent` helper) right after `claude --bg` returns a
-// short id but before the bg agent's SessionStart hook fires. The row carries:
-//   - session_id NULL    — the real UUID does not exist yet; SessionStart
-//     UPDATEs it later via DecorateBgSession, keyed by
-//     short_id.
-//   - kind_id = 2        — background.
-//   - epic_id     — nearest type='epic' ancestor of taskID (NULL if none).
-//   - process NULL       — bg agents have no tmux pane.
-//
-// project_id and the epic ancestor are resolved here in Go (not Python) to
-// avoid a new Python DB read (E-1486). Returns the inserted sessions.id.
-func RecordBgAgentSession(taskID int64, shortID string) (int64, error) {
-	if shortID == "" {
-		return 0, fmt.Errorf("record bg agent session: short_id required")
-	}
-	db, err := DB()
-	if err != nil {
-		return 0, err
-	}
-
-	// project_id is nullable on both tasks and sessions; a nil pointer inserts
-	// NULL rather than 0 (which would be a dangling FK to projects).
-	var projectID *int64
-	if err = db.QueryRow(
-		"SELECT project_id FROM live_tasks WHERE id=?", taskID,
-	).Scan(&projectID); err != nil {
-		return 0, fmt.Errorf("resolve project for E-%d: %w", taskID, err)
-	}
-
-	epicID, err := nearestEpicAncestor(db, taskID)
-	if err != nil {
-		return 0, err
-	}
-
-	now := time.Now().UTC().Format("2006-01-02T15:04:05")
-	res, err := db.Exec(
-		`INSERT INTO sessions
-		   (session_id, project_id, platform, state, task_id, epic_id, kind_id, short_id, started_at, last_activity)
-		 VALUES (NULL, ?, 'claude', 'working', ?, ?, ?, ?, ?, ?)`,
-		projectID, taskID, epicID, int64(sessionkind.SessionKindBackground), shortID, now, now,
-	)
-	if err != nil {
-		return 0, fmt.Errorf("insert bg agent session for E-%d: %w", taskID, err)
-	}
-	return res.LastInsertId()
-}
-
-// CountActiveBgAgents returns how many background-agent sessions are currently
-// `working` for taskID's project (E-1572). The `task spawn --bg` soft-throttle
-// warning calls this before dispatch to tell the coordinator how many bg slots
-// the project is already burning; it never blocks. Scope is per project — bg
-// agents in unrelated projects do not count toward this project's budget.
-//
-// project_id is resolved Go-side from the task (mirroring RecordBgAgentSession)
-// so the Python flow needs no DB read (E-1486). The just-dispatched agent is not
-// yet recorded when this runs, so the count reflects only pre-existing agents.
-// The kind filter uses the typed sessionkind constant (not a hardcoded integer),
-// keeping it stable against any seed-id change.
-func CountActiveBgAgents(taskID int64) (int64, error) {
-	db, err := DB()
-	if err != nil {
-		return 0, err
-	}
-	// tasks.project_id is NOT NULL (schema), so a plain scan is safe.
-	var projectID int64
-	if err = db.QueryRow(
-		"SELECT project_id FROM live_tasks WHERE id=?", taskID,
-	).Scan(&projectID); err != nil {
-		return 0, fmt.Errorf("resolve project for E-%d: %w", taskID, err)
-	}
-	var n int64
-	if err = db.QueryRow(
-		`SELECT count(*) FROM sessions
-		 WHERE kind_id = ? AND state = 'working' AND project_id = ?`,
-		int64(sessionkind.SessionKindBackground), projectID,
-	).Scan(&n); err != nil {
-		return 0, fmt.Errorf("count active bg agents for E-%d: %w", taskID, err)
-	}
-	return n, nil
-}
-
-// nearestEpicAncestor walks up tasks.parent_id from taskID and returns the id
-// of the nearest ancestor whose type is 'epic', or nil if none. taskID itself
-// is included in the walk (depth 0), so dispatching an epic task directly
-// returns its own id.
-func nearestEpicAncestor(db *sql.DB, taskID int64) (*int64, error) {
-	const q = `
-		WITH RECURSIVE ancestry(id, parent_id, type_id, depth) AS (
-			SELECT id, parent_id, type_id, 0 FROM live_tasks WHERE id = ?
-			UNION ALL
-			SELECT t.id, t.parent_id, t.type_id, a.depth + 1
-			FROM live_tasks t JOIN ancestry a ON t.id = a.parent_id
-		)
-		SELECT a.id
-		FROM ancestry a
-		JOIN task_types tt ON tt.id = a.type_id
-		WHERE tt.slug = 'epic'
-		ORDER BY a.depth
-		LIMIT 1`
-	var epicID int64
-	err := db.QueryRow(q, taskID).Scan(&epicID)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, fmt.Errorf("resolve epic ancestor for E-%d: %w", taskID, err)
-	}
-	return &epicID, nil
-}
-
-// DecorateBgSession attaches the real session UUID to a background agent's
-// dispatch row once its SessionStart hook fires (E-1568). The row was inserted
-// by RecordBgAgentSession with session_id NULL and a short_id; this UPDATEs
-// session_id (and bumps last_activity), keyed by short_id and scoped to
-// still-undecorated background rows. Returns the number of rows affected — 0
-// means no matching dispatch row, so the caller falls through to the normal
-// new-row path defensively.
-func DecorateBgSession(shortID, sessionID string) (int64, error) {
-	if shortID == "" || sessionID == "" {
-		return 0, fmt.Errorf("decorate bg session: short_id and session_id required")
-	}
-	db, err := DB()
-	if err != nil {
-		return 0, err
-	}
-	now := time.Now().UTC().Format("2006-01-02T15:04:05")
-	res, err := db.Exec(
-		`UPDATE sessions SET session_id=?, last_activity=?
-		 WHERE short_id=? AND kind_id=? AND session_id IS NULL`,
-		sessionID, now, shortID, int64(sessionkind.SessionKindBackground),
-	)
-	if err != nil {
-		return 0, fmt.Errorf("decorate bg session %s: %w", shortID, err)
-	}
-	return res.RowsAffected()
-}
-
 // CompleteTask marks a task as confirmed and idles the session.
 //
 // E-1968 / ED-1560: it no longer clears task_id. The session that
@@ -631,7 +456,6 @@ func IdleSession(sessionID string) error {
 	if snap.Found { // only record a transition that actually had a prior row
 		LogSessionTxn(SessionTxn{
 			SessionGUID: sessionID,
-			ShortID:     snap.ShortID,
 			OldState:    snap.State,
 			NewState:    "idle",
 			OldTaskID:   snap.TaskID,
@@ -670,7 +494,6 @@ func EndSession(sessionID string) error {
 	if snap.Found { // only record a transition that actually had a prior row
 		LogSessionTxn(SessionTxn{
 			SessionGUID: sessionID,
-			ShortID:     snap.ShortID,
 			OldState:    snap.State,
 			NewState:    "ended",
 			OldTaskID:   snap.TaskID,

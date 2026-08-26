@@ -34,8 +34,8 @@ def _task(task_id, project_id, title):
 
 def _session(session_id, project_id, state, task_id=None, messages=1):
     db.execute(
-        "INSERT INTO sessions (id, session_id, project_id, state, kind_id, "
-        "task_id) VALUES (?, ?, ?, ?, 1, ?)",
+        "INSERT INTO sessions (id, session_id, project_id, state, "
+        "task_id) VALUES (?, ?, ?, ?, ?)",
         (session_id, f"uuid-{session_id}", project_id, state, task_id),
     )
     for n in range(messages):
@@ -75,13 +75,14 @@ def one_project():
 
 
 def test_task_id_and_title_replace_the_summary(one_project):
-    db.execute("UPDATE sessions SET summary = 'a discussion recap' WHERE id = 982")
-
+    """The listing identifies a session by the task it holds, not by a recap of
+    its discussion. E-1914 made that swap; E-2074 dropped the summary column
+    outright, so there is no longer a column to seed — only the absence of the
+    old heading to pin."""
     result = _run("session", "list", "--project", "probe")
 
     assert result.exit_code == 0, result.output
     assert "Summary" not in result.output
-    assert "a discussion recap" not in result.output
     assert "E-1596" in result.output
     assert "Fix worktree bootstrap fallback" in result.output
 
@@ -138,15 +139,20 @@ def test_session_without_an_active_task_is_omitted_by_default(one_project):
 def test_list_survives_a_row_with_invalid_utf8(one_project):
     """A byte-truncated string left by a long-dead writer must not take down the
     whole command. CAST(x'..' AS TEXT) stores the half-encoded codepoint as TEXT,
-    exactly as the damaged production row holds it."""
-    db.execute("UPDATE sessions SET summary = CAST(x'496ee2' AS TEXT) WHERE id = 982")
+    exactly as the damaged production row holds it.
+
+    The carrier was the sessions summary column until E-2074 dropped it. The
+    lenient text_factory this pins is set on the CONNECTION, not per column, so
+    any rendered TEXT proves it — tasks.title is the one `session list` puts on
+    screen."""
+    db.execute("UPDATE tasks SET title = CAST(x'496ee2' AS TEXT) WHERE id = 1596")
 
     result = _run("session", "list", "--project", "probe")
 
     assert result.exit_code == 0, result.output
-    assert "Fix worktree bootstrap fallback" in result.output
+    assert "E-1596" in result.output
     # The damage is marked, not silently dropped.
-    assert db.query("SELECT summary FROM sessions WHERE id = 982")[0]["summary"] == "In�"
+    assert db.query("SELECT title FROM tasks WHERE id = 1596")[0]["title"] == "In�"
 
 
 # --- project scoping --------------------------------------------------------
@@ -230,4 +236,4 @@ def test_json_gains_task_id_and_keeps_the_raw_state(one_project):
     # No icon substitution in JSON: consumers must not have to learn the glyphs.
     assert rows[963]["state"] == "needs_input"
     # Shape is otherwise unchanged.
-    assert "summary" in rows[982] and "messages" in rows[982]
+    assert "messages" in rows[982]

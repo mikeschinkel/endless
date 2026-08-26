@@ -143,7 +143,7 @@ test_no_regression() {
 
     assert_cmd "internal/events full suite passes" \
         go test -count=1 "${EVENTS_PKG}"
-    assert_cmd "internal/monitor full suite passes (nearestEpicAncestor)" \
+    assert_cmd "internal/monitor full suite passes (epic resolution)" \
         go test -count=1 "${MONITOR_PKG}"
 }
 

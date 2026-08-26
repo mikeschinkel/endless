@@ -115,16 +115,14 @@ type NavEdge struct {
 	FromSessionID *int64  `json:"from_session_id"`
 	FromPane      *string `json:"from_pane"`
 	FromTaskID    *int64  `json:"from_task_id"`
-	FromSummary   string  `json:"from_summary"`
 	ToSessionID   *int64  `json:"to_session_id"`
 	ToPane        string  `json:"to_pane"`
 	ToTaskID      *int64  `json:"to_task_id"`
-	ToSummary     string  `json:"to_summary"`
 }
 
 // ListNavTrail returns navigation-trail rows newest-first, joined to the
-// endpoint sessions so the viewer can label each edge with its active task and
-// summary (E-1682). When client is non-empty the result is scoped to that tmux
+// endpoint sessions so the viewer can label each edge with its active task
+// (E-1682). When client is non-empty the result is scoped to that tmux
 // client; an empty client returns every client's edges (the `--all` surface).
 // limit caps the row count: a positive value is the cap, 0 falls back to a sane
 // default, and a NEGATIVE value returns every row. The negative case exists for
@@ -142,8 +140,8 @@ func ListNavTrail(client string, limit int) ([]NavEdge, error) {
 	}
 
 	q := `SELECT n.id, n.client, vk.slug, n.created_at,
-	             n.from_session_id, n.from_pane, fs.task_id, COALESCE(fs.summary, ''),
-	             n.to_session_id, n.to_pane, ts.task_id, COALESCE(ts.summary, '')
+	             n.from_session_id, n.from_pane, fs.task_id,
+	             n.to_session_id, n.to_pane, ts.task_id
 	      FROM session_navigations n
 	      JOIN nav_via_kinds vk ON vk.id = n.via_id
 	      LEFT JOIN sessions fs ON fs.id = n.from_session_id
@@ -170,8 +168,8 @@ func ListNavTrail(client string, limit int) ([]NavEdge, error) {
 		var e NavEdge
 		if err := rows.Scan(
 			&e.ID, &e.Client, &e.Via, &e.CreatedAt,
-			&e.FromSessionID, &e.FromPane, &e.FromTaskID, &e.FromSummary,
-			&e.ToSessionID, &e.ToPane, &e.ToTaskID, &e.ToSummary,
+			&e.FromSessionID, &e.FromPane, &e.FromTaskID,
+			&e.ToSessionID, &e.ToPane, &e.ToTaskID,
 		); err != nil {
 			return nil, fmt.Errorf("scan nav edge: %w", err)
 		}

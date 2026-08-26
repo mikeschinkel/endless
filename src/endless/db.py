@@ -46,10 +46,12 @@ def get_db() -> sqlite3.Connection:
     #
     # SQLite does not validate what it stores, so a writer that truncated a
     # string by BYTE length could leave a half-encoded codepoint behind. The
-    # known instance is sessions.summary, written by the recap generator removed
-    # in E-1906 — inert historical damage no current code can add to, but present
-    # in every long-lived DB and enough to crash `session list` and `session show`
-    # on the one row that has it.
+    # known instance was sessions.summary, written by the recap generator
+    # removed in E-1906 (the column itself went in E-2074) — inert historical
+    # damage no current code could add to, but present in every long-lived DB
+    # and enough to crash `session list` and `session show` on the one row that
+    # had it. The lenient decode stays: session_messages.content and the task
+    # doc columns are TEXT written by the same class of writer.
     #
     # Applied at the connection, not per query, because the failure mode belongs
     # to reading TEXT at all: fixing it per-column is whack-a-mole against data
@@ -321,7 +323,6 @@ def _migrate_v2(conn: sqlite3.Connection):
                 state TEXT NOT NULL DEFAULT 'working'
                     CHECK (state IN ('working', 'idle', 'needs_input', 'ended')),
                 task_id INTEGER,
-                plan_file_path TEXT,
                 process TEXT,
                 started_at TEXT NOT NULL
                     DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
@@ -381,9 +382,10 @@ def _migrate_v3(conn: sqlite3.Connection):
         # re-add it: this migration runs on every Python-side connect, so an
         # ADD COLUMN here would silently resurrect the column right after the
         # land-time change file drops it.
-        if "summary" not in cols:
-            conn.execute("ALTER TABLE sessions ADD COLUMN summary TEXT")
-            conn.commit()
+        # summary was here until E-2074 dropped the column, for the same
+        # reason transcript_path's ALTER is gone above: this migrator runs on
+        # every Python-side connect, so re-adding it would resurrect the column
+        # right after the land-time change file drops it.
         if "hidden" not in cols:
             conn.execute("ALTER TABLE sessions ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0")
             conn.commit()
@@ -391,7 +393,8 @@ def _migrate_v3(conn: sqlite3.Connection):
         # machinery, removed in E-1906. Their ALTERs are gone rather than
         # merely unused: this migrator can still run on a pre-v6 DB, and
         # re-adding the columns there would silently undo the drop that
-        # e-1906-drop-sessions-recap-columns.sql applies at land time.
+        # e-1906-drop-sessions-recap-columns.sql applies at land time. The
+        # same holds for summary above (E-2074).
 
 
 def _migrate_v5(conn: sqlite3.Connection):

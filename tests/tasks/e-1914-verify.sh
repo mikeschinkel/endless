@@ -489,14 +489,19 @@ test_taskless_and_bad_utf8() {
     # recap generator) must not take the whole command down. CAST(x'..' AS TEXT)
     # stores the half-encoded codepoint as TEXT, exactly as the damaged
     # production row holds it.
-    E sql "UPDATE sessions SET summary = CAST(x'496ee2' AS TEXT) WHERE id = $S1" --write >/dev/null 2>&1
+    #
+    # The carrier was sessions.summary until E-2074 dropped that column. The
+    # lenient decode this pins is set on the CONNECTION, not per column, so any
+    # TEXT column the queries SELECT proves it — last_activity is read by both
+    # `session list` and `session show` and asserted on by neither.
+    E sql "UPDATE sessions SET last_activity = CAST(x'496ee2' AS TEXT) WHERE id = $S1" --write >/dev/null 2>&1
     local out rc
     out="$(E session list --project probe 2>&1)"; rc=$?
     assert_eq "session list survives a row with invalid UTF-8" "0" "$rc"
     assert_contains "...and still renders that row" "Focal goal task" "$out"
     out="$(E session show "$S1" 2>&1)"; rc=$?
     assert_eq "session show survives it too (the fix is connection-wide)" "0" "$rc"
-    E sql "UPDATE sessions SET summary = NULL WHERE id = $S1" --write >/dev/null 2>&1
+    E sql "UPDATE sessions SET last_activity = NULL WHERE id = $S1" --write >/dev/null 2>&1
 }
 
 # ─── section J: unit + regression suites ─────────────────────────────────────

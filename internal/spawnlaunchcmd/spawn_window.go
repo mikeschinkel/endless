@@ -11,15 +11,14 @@ import (
 
 // runSpawnWindow is the outer orchestrator — the only spawn verb Python calls.
 //
-// Normal mode: write a JSON launch-spec file, then create a tmux window whose
-// command is `<self> spawn-launch --spec <spec-path>`. The only data on the
-// command line is the binary, the verb, and one shell-safe temp path. Returns
-// once the window exists (tmux new-window is synchronous but does not wait for
-// the window command).
+// Write a JSON launch-spec file, then create a tmux window whose command is
+// `<self> spawn-launch --spec <spec-path>`. The only data on the command line
+// is the binary, the verb, and one shell-safe temp path. Returns once the
+// window exists (tmux new-window is synchronous but does not wait for the
+// window command).
 //
-// Attach mode (--attach): create a tmux window running `<claude-bin> attach
-// <short-id>` and set @endless_attached_short_id as a diagnostic (its race is
-// harmless — nothing keys off it). No spec file, no handoff.
+// E-2074 removed the --attach mode, which opened a window onto a live
+// background agent; background agents no longer exist.
 func runSpawnWindow(args []string) {
 	fs := flag.NewFlagSet("spawn-window", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
@@ -34,8 +33,6 @@ func runSpawnWindow(args []string) {
 		spawnedBy  = fs.String("spawned-by", "", "Spawner id for @endless_spawned_by")
 		windowName = fs.String("window-name", "", "tmux window name")
 		cwd        = fs.String("cwd", "", "Working directory for the window")
-		attach     = fs.Bool("attach", false, "Open a window onto an existing bg agent")
-		shortID    = fs.String("short-id", "", "With --attach: the bg agent short id")
 	)
 	if err := fs.Parse(args); err != nil {
 		os.Exit(2)
@@ -43,11 +40,6 @@ func runSpawnWindow(args []string) {
 
 	if *windowName == "" {
 		fail("spawn-window: --window-name is required")
-	}
-
-	if *attach {
-		runAttachWindow(*claudeBin, *shortID, *windowName, *cwd)
-		return
 	}
 
 	if *claudeBin == "" {
@@ -217,24 +209,6 @@ func buildSpawnLayout(windowName, cwd string) {
 	if err = runTmux(selectPaneArgs(claudePane)...); err != nil {
 		fmt.Fprintf(os.Stderr, "spawn-window: layout: focus claude: %v\n", err)
 	}
-}
-
-// runAttachWindow opens a tmux window running `claude attach <short-id>` onto an
-// already-live background agent, then records the diagnostic short-id option.
-func runAttachWindow(claudeBin, shortID, windowName, cwd string) {
-	if claudeBin == "" {
-		fail("spawn-window --attach: --claude-bin is required")
-	}
-	if shortID == "" {
-		fail("spawn-window --attach: --short-id is required")
-	}
-	attachCmd := []string{claudeBin, "attach", shortID}
-	if err := runTmux(newWindowArgs(cwd, windowName, attachCmd)...); err != nil {
-		fail("spawn-window --attach: %v", err)
-	}
-	// Diagnostic only; not load-bearing for the attach. A failure here (or a
-	// race against the window's own startup) must not fail the attach.
-	_ = runTmux(setOptionArgs(windowName, "@endless_attached_short_id", shortID)...)
 }
 
 func fail(format string, a ...any) {

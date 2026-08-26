@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mikeschinkel/endless/internal/sessionkind"
 )
 
 // liveCountForTask returns how many non-ended rows reference task_id.
@@ -87,12 +86,17 @@ func TestBindSessionToTask_RepeatedLaunchesStayAtOneLiveRow(t *testing.T) {
 	}
 }
 
-// TestBindSessionToTask_DoesNotEndBackgroundAgentSameTask guards the one row the
-// fallback must never touch: a background agent (kind_id = background) carries a
-// task's task_id with no pane, exactly matching the paneless predicate.
-// Excluding it by kind is what keeps a foreground bind from killing a live bg
-// agent working the same task.
-func TestBindSessionToTask_DoesNotEndBackgroundAgentSameTask(t *testing.T) {
+// TestBindSessionToTask_EndsEveryPanelessRowSameTask is the INVERSE of the test
+// that stood here, and the behavior change is deliberate.
+//
+// It was DoesNotEndBackgroundAgentSameTask: the dedup carried an
+// `AND kind_id = tmux` scope so a foreground bind could not end a live
+// background agent working the same task, which legitimately held that task_id
+// with no pane. E-2074 removed background agents and that scope with them, so
+// there is no longer a paneless row the sweep must spare — every one it finds
+// is the stale foreground row it was always meant to end. This pins that the
+// exemption is really gone rather than merely unexercised.
+func TestBindSessionToTask_EndsEveryPanelessRowSameTask(t *testing.T) {
 	db := withTestDB(t)
 	seedProject(t, db, 1, "p", "/tmp/p")
 	seedTask(t, db, 42, 1, "task", "underway")
@@ -100,19 +104,19 @@ func TestBindSessionToTask_DoesNotEndBackgroundAgentSameTask(t *testing.T) {
 
 	now := time.Now().UTC().Format("2006-01-02T15:04:05")
 	if _, err := db.Exec(
-		`INSERT INTO sessions (session_id, project_id, platform, state, task_id, kind_id, started_at, last_activity)
-		 VALUES ('uuid-bg', 1, 'claude', 'working', 42, ?, ?, ?)`,
-		int64(sessionkind.SessionKindBackground), now, now,
+		`INSERT INTO sessions (session_id, project_id, platform, state, task_id, started_at, last_activity)
+		 VALUES ('uuid-paneless', 1, 'claude', 'working', 42, ?, ?)`,
+		now, now,
 	); err != nil {
-		t.Fatalf("seed bg agent: %v", err)
+		t.Fatalf("seed paneless row: %v", err)
 	}
 
 	if err := BindSessionToTask("uuid-fg", 1, 42); err != nil {
 		t.Fatalf("bind fg: %v", err)
 	}
 
-	if state, _, _ := sessionRow(t, db, "uuid-bg"); state != "working" {
-		t.Errorf("bg agent state = %q, want working (must not be ended)", state)
+	if state, _, _ := sessionRow(t, db, "uuid-paneless"); state != "ended" {
+		t.Errorf("paneless row state = %q, want ended", state)
 	}
 }
 
@@ -131,9 +135,9 @@ func TestBindSessionToTask_DoesNotEndPanedRowSameTask(t *testing.T) {
 		t.Fatalf("seed pane binding: %v", err)
 	}
 	if _, err := db.Exec(
-		`INSERT INTO sessions (session_id, project_id, platform, state, task_id, process_id, kind_id, started_at, last_activity)
-		 VALUES ('uuid-paned', 1, 'claude', 'working', 42, ?, ?, ?, ?)`,
-		panedProcess, int64(sessionkind.SessionKindTmux), now, now,
+		`INSERT INTO sessions (session_id, project_id, platform, state, task_id, process_id, started_at, last_activity)
+		 VALUES ('uuid-paned', 1, 'claude', 'working', 42, ?, ?, ?)`,
+		panedProcess, now, now,
 	); err != nil {
 		t.Fatalf("seed paned row: %v", err)
 	}

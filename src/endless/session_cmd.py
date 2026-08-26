@@ -72,7 +72,7 @@ def _resolve_session(value: str) -> dict:
     try:
         int_id = int(value)
         row = db.query(
-            "SELECT id, session_id, project_id, state, summary, "
+            "SELECT id, session_id, project_id, state, "
             "started_at, last_activity, hidden "
             "FROM sessions WHERE id = ?",
             (int_id,),
@@ -84,7 +84,7 @@ def _resolve_session(value: str) -> dict:
 
     # Try exact UUID match
     row = db.query(
-        "SELECT id, session_id, project_id, state, summary, "
+        "SELECT id, session_id, project_id, state, "
         "started_at, last_activity, hidden "
         "FROM sessions WHERE session_id = ?",
         (value,),
@@ -94,7 +94,7 @@ def _resolve_session(value: str) -> dict:
 
     # Try UUID prefix match
     row = db.query(
-        "SELECT id, session_id, project_id, state, summary, "
+        "SELECT id, session_id, project_id, state, "
         "started_at, last_activity, hidden "
         "FROM sessions WHERE session_id LIKE ?",
         (value + "%",),
@@ -969,10 +969,11 @@ def list_sessions(
                 " OR m.content LIKE 'Write a one-line summary of this conversation%')"
                 " ORDER BY m.created_at ASC LIMIT 1)"
             )
-            # Exclude error/login sessions
-            where += (
-                " AND (s.summary IS NULL OR s.summary NOT LIKE 'Not logged in%')"
-            )
+            # Exclude error/login sessions. This used to read s.summary; the
+            # column went in E-2074, but the flag it set alongside itself did
+            # not — monitor.hideIfErrorGreeting still marks such a row hidden,
+            # and `hidden` is already excluded above unless --all. So the filter
+            # is not lost, it moved to the column that always carried it.
 
     sort_map = {
         "id": "s.id DESC",
@@ -990,7 +991,7 @@ def list_sessions(
         params.append(probe)
 
     rows = db.query(
-        f"SELECT s.id, s.session_id, s.state, s.summary, "
+        f"SELECT s.id, s.session_id, s.state, "
         f"s.started_at, s.last_activity, s.hidden, s.task_id, "
         f"COALESCE(t.title, '') as task_title, "
         f"COALESCE(p.name, '') as project_name, "
@@ -1035,7 +1036,6 @@ def list_sessions(
                 "state": r["state"],
                 "task_id": r["task_id"],
                 "messages": r["msg_count"],
-                "summary": r["summary"] or "",
                 "started": r["started_at"],
             }
             for r in rows
@@ -1435,7 +1435,7 @@ def _live_sessions(project_root: Path, harness: str = "claude") -> list[dict]:
     Each dict carries the fields the rest of this module expects from a
     companion record — endless_session_id, harness_session_id, harness,
     pane_id, cwd, worktree_path, started_at — plus richer DB fields
-    (state, task_id, last_activity, summary). The `pid` field of
+    (state, task_id, last_activity). The `pid` field of
     the old companion record is intentionally absent: liveness is decided
     Go-side, which filters out both ended rows and sessions whose pane was
     observably absent from a tmux server it actually reached (E-1898). A
@@ -1484,7 +1484,6 @@ def _live_sessions(project_root: Path, harness: str = "claude") -> list[dict]:
             "state": r.get("state"),
             "task_id": r.get("task_id"),
             "last_activity": r.get("last_activity") or "",
-            "summary": r.get("summary") or "",
         })
     return live
 
@@ -1825,7 +1824,7 @@ def session_show_resolve(session_ref: str | None, as_json: bool = False) -> None
 
     eid = c.get("endless_session_id")
     rows = db.query(
-        "SELECT s.state, s.started_at, s.last_activity, s.summary, s.task_id, "
+        "SELECT s.state, s.started_at, s.last_activity, s.task_id, "
         "COALESCE(p.name, '') AS project_name, "
         "(SELECT count(*) FROM session_messages m WHERE m.session_id = s.session_id) AS msg_count "
         "FROM sessions s "
@@ -1847,7 +1846,6 @@ def session_show_resolve(session_ref: str | None, as_json: bool = False) -> None
         if t:
             task_info = t[0]
 
-    summary = " ".join((r["summary"] or "").split())
 
     if as_json:
         out = {
@@ -1866,7 +1864,6 @@ def session_show_resolve(session_ref: str | None, as_json: bool = False) -> None
                 {"id": task_info["id"], "title": task_info["title"], "status": task_info["status"]}
                 if task_info else None
             ),
-            "summary": summary,
         }
         click.echo(json_mod.dumps(out, indent=2))
         return
@@ -1890,9 +1887,6 @@ def session_show_resolve(session_ref: str | None, as_json: bool = False) -> None
         )
     else:
         click.echo("  Active task:   (none)")
-    if summary:
-        click.echo()
-        click.echo(f"  Summary: {summary}")
     click.echo()
 
 
@@ -2605,8 +2599,5 @@ def session_trail(show_all: bool = False, limit: int | None = None,
         when = _format_relative(e.get("created_at"))
         prefix = f"[{e.get('client')}] " if show_all else ""
         click.echo(f"• {prefix}{frm} → {to}  ({via}, {when})")
-        summary = (e.get("to_summary") or "").strip()
-        if summary:
-            click.echo(f"    {summary[:100]}")
 
     rowcap.echo_footer(hidden)

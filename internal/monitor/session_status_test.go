@@ -32,8 +32,8 @@ func snSession(t *testing.T, db *sql.DB, id, projectID, taskID int64, state stri
 		at = taskID
 	}
 	if _, err := db.Exec(
-		`INSERT INTO sessions (id, session_id, project_id, platform, state, task_id, kind_id, started_at, last_activity)
-		 VALUES (?, NULL, ?, 'claude', ?, ?, 1, '2026-06-20T00:00:00', '2026-06-20T00:00:00')`,
+		`INSERT INTO sessions (id, session_id, project_id, platform, state, task_id, started_at, last_activity)
+		 VALUES (?, NULL, ?, 'claude', ?, ?, '2026-06-20T00:00:00', '2026-06-20T00:00:00')`,
 		id, projectID, state, at,
 	); err != nil {
 		t.Fatalf("snSession id=%d: %v", id, err)

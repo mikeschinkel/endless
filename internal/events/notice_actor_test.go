@@ -40,8 +40,8 @@ func seedHeldTask(t *testing.T, db *sql.DB, taskID, sessionID int64) {
 		t.Fatalf("seed task: %v", err)
 	}
 	if _, err := db.Exec(
-		`INSERT INTO sessions (id, session_id, project_id, platform, state, task_id, kind_id, started_at, last_activity)
-		 VALUES (?, ?, 1, 'claude', 'working', ?, 1, '2026-08-20T00:00:00', '2026-08-20T00:00:00')`,
+		`INSERT INTO sessions (id, session_id, project_id, platform, state, task_id, started_at, last_activity)
+		 VALUES (?, ?, 1, 'claude', 'working', ?, '2026-08-20T00:00:00', '2026-08-20T00:00:00')`,
 		sessionID, "sess-notice-actor", taskID,
 	); err != nil {
 		t.Fatalf("seed session: %v", err)
@@ -138,8 +138,8 @@ func TestStampTaskActor_AgentEditStillNotifiesOtherHolders(t *testing.T) {
 	db := withExecutorDB(t)
 	seedHeldTask(t, db, 702, 9102)
 	if _, err := db.Exec(
-		`INSERT INTO sessions (id, session_id, project_id, platform, state, task_id, kind_id, started_at, last_activity)
-		 VALUES (9103, 'sess-other', 1, 'claude', 'working', 702, 1, '2026-08-20T00:00:00', '2026-08-20T00:00:00')`,
+		`INSERT INTO sessions (id, session_id, project_id, platform, state, task_id, started_at, last_activity)
+		 VALUES (9103, 'sess-other', 1, 'claude', 'working', 702, '2026-08-20T00:00:00', '2026-08-20T00:00:00')`,
 	); err != nil {
 		t.Fatalf("seed second session: %v", err)
 	}

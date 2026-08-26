@@ -2,7 +2,7 @@
 // human labels and semantic glyphs, and — the point of the package — every
 // curated GROUPING of statuses the system reasons about.
 //
-// It is the status counterpart to tasktype/sessionkind/sessiontaskrelation, the
+// It is the status counterpart to tasktype/sessiontaskrelation, the
 // other closed vocabularies that already have an owning package. Status was the
 // one that never got it (E-1891): it lived as bare string literals across
 // roughly twenty sites in two languages, in four shapes — copies of the whole

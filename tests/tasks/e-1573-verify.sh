@@ -1,14 +1,17 @@
 #!/usr/bin/env bash
 #
 # E-1573 verification script — confirms the orchestration guide's spawn
-# write-up was rewritten to cover the shipped spawn/coordinator/bg-dispatch
-# patterns: foreground vs background dispatch, per-type handoff variants, the
-# --bg flow, both attach verbs, the epic coordinator pattern with its six
-# children-state modes, the soft throttle warning, the bg-agent session
-# lifecycle, and handoff-template customization. Also confirms the stale
-# single-file handoff reference is gone, the guide-map cross-reference lists
-# the new verbs, the map stays valid, and the focused guide-map unit test
+# write-up was rewritten to cover the shipped spawn/coordinator patterns:
+# per-type handoff variants, the epic coordinator pattern with its six
+# children-state modes, and handoff-template customization. Also confirms the
+# stale single-file handoff reference is gone, the guide-map cross-reference
+# lists the new verbs, the map stays valid, and the focused guide-map unit test
 # still passes.
+#
+# E-2074 removed four of the sections this originally covered — background
+# dispatch, both attach verbs, the soft throttle warning, and the background
+# session lifecycle — along with the feature itself, and their checks went with
+# them.
 #
 # Run from anywhere inside the worktree:
 #   ./tests/tasks/e-1573-verify.sh
@@ -159,35 +162,25 @@ assert_exit_zero() {
 test_subsections_render() {
     section "1 — 'guide orchestration' renders the rewritten spawn subsections"
 
-    assert_haystack_contains "Foreground vs background subsection" \
-        "${GUIDE_ORCH}" "Foreground vs background"
     assert_haystack_contains "Per-type handoff variants subsection" \
         "${GUIDE_ORCH}" "Per-type handoff variants"
-    assert_haystack_contains "Background-agent dispatch subsection" \
-        "${GUIDE_ORCH}" "Background-agent dispatch"
-    assert_haystack_contains "Attach verbs subsection" \
-        "${GUIDE_ORCH}" "Attach verbs"
     assert_haystack_contains "Coordinator pattern for epics subsection" \
         "${GUIDE_ORCH}" "Coordinator pattern for epics"
-    assert_haystack_contains "Throttle warning subsection" \
-        "${GUIDE_ORCH}" "Throttle warning"
-    assert_haystack_contains "Session lifecycle subsection" \
-        "${GUIDE_ORCH}" "Session lifecycle (background agents)"
     assert_haystack_contains "Customizing handoff templates subsection" \
         "${GUIDE_ORCH}" "Customizing handoff templates"
-}
 
-# ─── 2: foreground vs background distinction ─────────────────────────────────
-
-test_foreground_vs_background() {
-    section "2 — foreground vs background dispatch is spelled out"
-
-    assert_haystack_contains "background runs under the Anthropic supervisor" \
-        "${SPAWN_SECTION}" "Anthropic supervisor"
-    assert_haystack_contains "bg dies on machine shutdown / claude stop" \
-        "${SPAWN_SECTION}" '`claude stop`'
-    assert_haystack_contains "--bg flow invokes the CLI background mode" \
-        "${SPAWN_SECTION}" "spawn <id> --bg"
+    # E-2074 removed four subsections with the feature they documented:
+    # "Foreground vs background", "Background-agent dispatch", "Attach verbs",
+    # "Throttle warning" and "Session lifecycle (background agents)". Asserting
+    # their ABSENCE keeps this suite honest — a guide that re-grows them is
+    # advertising a feature the CLI no longer has.
+    local gone
+    for gone in "Foreground vs background" "Background-agent dispatch" \
+                "Attach verbs" "Throttle warning" \
+                "Session lifecycle (background agents)"; do
+        assert_haystack_lacks "the '${gone}' subsection is gone" \
+            "${GUIDE_ORCH}" "${gone}"
+    done
 }
 
 # ─── 3: per-type handoff variants + fallback ─────────────────────────────────
@@ -203,21 +196,6 @@ test_per_type_variants() {
         "${SPAWN_SECTION}" 'falls back to the `task` variant'
     assert_haystack_contains "templates referenced by per-type path" \
         "${SPAWN_SECTION}" "handoff/<type>.md.tmpl"
-}
-
-# ─── 4: attach verbs + in-session safeguard ──────────────────────────────────
-
-test_attach_verbs() {
-    section "4 — both attach verbs documented, with the in-session safeguard"
-
-    assert_haystack_contains "spawn --attach opens a new tmux window" \
-        "${SPAWN_SECTION}" "endless task spawn --attach"
-    assert_haystack_contains "task attach replaces the current process" \
-        "${SPAWN_SECTION}" "endless task attach"
-    assert_haystack_contains "safeguard names process replacement" \
-        "${SPAWN_SECTION}" "replaces the current process"
-    assert_haystack_contains "detaching leaves the agent running" \
-        "${SPAWN_SECTION}" "Detaching"
 }
 
 # ─── 5: coordinator pattern names all six children-state modes ────────────────
@@ -241,32 +219,7 @@ test_coordinator_modes() {
         "${COORDINATOR_SECTION}" "Mixed"
 }
 
-# ─── 6: throttle warning is soft + config-keyed ──────────────────────────────
 
-test_throttle_warning() {
-    section "6 — throttle warning is soft, config-keyed, non-blocking"
-
-    assert_haystack_contains "config key named" \
-        "${SPAWN_SECTION}" "bg_throttle_warn"
-    assert_haystack_contains "warning never blocks" \
-        "${SPAWN_SECTION}" "never blocks"
-    assert_haystack_contains "sweet-spot guidance" \
-        "${SPAWN_SECTION}" "3–5 parallel agents"
-}
-
-# ─── 7: session lifecycle — survives / dies ──────────────────────────────────
-
-test_session_lifecycle() {
-    section "7 — bg session lifecycle: survives vs dies, no recovery commands"
-
-    assert_haystack_contains "survives machine sleep (versioned)" \
-        "${SPAWN_SECTION}" "v2.1.142+"
-    assert_haystack_contains "stops after ~1h idle when unattached" \
-        "${SPAWN_SECTION}" "idle"
-    # Recovery verbs are filed but unshipped — they must NOT appear.
-    assert_haystack_lacks "no unshipped recovery command (respawn)" \
-        "${SPAWN_SECTION}" "claude respawn"
-}
 
 # ─── 8: handoff-template customization / override mechanism ───────────────────
 
@@ -299,15 +252,13 @@ test_no_task_ids() {
         "${SPAWN_SECTION}"
 }
 
-# ─── 11: cross-reference index lists the spawn/attach verbs ───────────────────
+# ─── 11: cross-reference index lists the spawn verb ───────────────────────────
 
 test_index_rows() {
-    section "11 — 'guide' index lists task spawn and task attach (orchestration)"
+    section "11 — 'guide' index lists task spawn (orchestration)"
 
     assert_haystack_contains "task spawn maps to orchestration" \
         "${GUIDE_INDEX}" 'task spawn` | orchestration'
-    assert_haystack_contains "task attach maps to orchestration" \
-        "${GUIDE_INDEX}" 'task attach` | orchestration'
 }
 
 # ─── 12: slug set unchanged — orchestration still a section ───────────────────
@@ -367,15 +318,11 @@ main() {
 
     # Slice the coordinator subsection for the six-mode check.
     COORDINATOR_SECTION=$(printf '%s\n' "${SPAWN_SECTION}" \
-        | awk '/^### Coordinator pattern for epics/{f=1} f{print} f&&/^### Throttle warning/{exit}')
+        | awk '/^### Coordinator pattern for epics/{f=1} f{print} f&&/^### Customizing handoff templates/{exit}')
 
     test_subsections_render
-    test_foreground_vs_background
     test_per_type_variants
-    test_attach_verbs
     test_coordinator_modes
-    test_throttle_warning
-    test_session_lifecycle
     test_template_customization
     test_stale_reference_gone
     test_no_task_ids

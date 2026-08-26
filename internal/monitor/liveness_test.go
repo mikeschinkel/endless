@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/mikeschinkel/endless/internal/processkind"
-	"github.com/mikeschinkel/endless/internal/sessionkind"
 )
 
 // The E-1898 liveness contract.
@@ -20,16 +19,16 @@ import (
 
 // seedLivenessSession inserts a session bound to processID (0 = unbound) and
 // returns its sessions.id.
-func seedLivenessSession(t *testing.T, db *sql.DB, sessionID string, processID int64, kind sessionkind.SessionKind) int64 {
+func seedLivenessSession(t *testing.T, db *sql.DB, sessionID string, processID int64) int64 {
 	t.Helper()
 	var pid any
 	if processID != 0 {
 		pid = processID
 	}
 	res, err := db.Exec(
-		`INSERT INTO sessions (session_id, project_id, platform, state, process_id, kind_id, last_activity)
-		 VALUES (?, 1, 'claude', 'working', ?, ?, '2026-08-09T00:00:00')`,
-		sessionID, pid, int64(kind),
+		`INSERT INTO sessions (session_id, project_id, platform, state, process_id, last_activity)
+		 VALUES (?, 1, 'claude', 'working', ?, '2026-08-09T00:00:00')`,
+		sessionID, pid,
 	)
 	if err != nil {
 		t.Fatalf("seed session %q: %v", sessionID, err)
@@ -93,7 +92,7 @@ func TestLiveness_TruthTable(t *testing.T) {
 			if tc.server != "" {
 				pid = mustSeedPane(t, db, tc.server, tc.address)
 			}
-			id := seedLivenessSession(t, db, "sess-"+tc.name, pid, sessionkind.SessionKindTmux)
+			id := seedLivenessSession(t, db, "sess-"+tc.name, pid)
 
 			if err := RefreshLiveness(); err != nil {
 				t.Fatalf("RefreshLiveness: %v", err)
@@ -109,16 +108,21 @@ func TestLiveness_TruthTable(t *testing.T) {
 	}
 }
 
-// TestLiveness_BackgroundAgentIsUnboundNotDead pins the case D5 of the previous
-// plan got wrong. A background agent has process_id NULL BY DESIGN
-// (RecordBgAgentSession), so any rule that reads "no binding" as "pane gone"
-// condemns every bg agent in the project.
-func TestLiveness_BackgroundAgentIsUnboundNotDead(t *testing.T) {
+// TestLiveness_PanelessSessionIsUnboundNotDead pins the case D5 of the previous
+// plan got wrong: a session with process_id NULL has no binding to judge, and a
+// rule that reads "no binding" as "pane gone" condemns it on no evidence.
+//
+// The original name was BackgroundAgentIsUnboundNotDead — background agents had
+// process_id NULL by design, so they were the population this protected. E-2074
+// removed them, and the invariant outlived them: a row is paneless in the gap
+// before its first hook records a process, and after E-1898 a migration-backfilled
+// binding can be NULL too. "Unprovable" must never collapse to "dead".
+func TestLiveness_PanelessSessionIsUnboundNotDead(t *testing.T) {
 	db := withTestDB(t)
 	seedProject(t, db, 1, "acme", "/tmp/acme")
 	defer SetTestTmuxObservation("srv", map[string]string{"%1": "2.1.220"})()
 
-	id := seedLivenessSession(t, db, "sess-bg", 0, sessionkind.SessionKindBackground)
+	id := seedLivenessSession(t, db, "sess-unbound", 0)
 
 	if err := RefreshLiveness(); err != nil {
 		t.Fatalf("RefreshLiveness: %v", err)
@@ -128,10 +132,10 @@ func TestLiveness_BackgroundAgentIsUnboundNotDead(t *testing.T) {
 		t.Fatalf("SessionLiveness: %v", err)
 	}
 	if got != LivenessUnbound {
-		t.Errorf("background agent liveness = %q, want %q", got, LivenessUnbound)
+		t.Errorf("paneless session liveness = %q, want %q", got, LivenessUnbound)
 	}
 	if got.IsGone() {
-		t.Error("background agent read as gone; every bg agent would be treated as dead")
+		t.Error("paneless session read as gone; every unbound row would be treated as dead")
 	}
 }
 
@@ -149,7 +153,7 @@ func TestLiveness_ShellPaneStaysLive(t *testing.T) {
 	defer SetTestTmuxObservation("srv", map[string]string{"%7": "zsh"})()
 
 	pid := mustSeedPane(t, db, "srv", "%7")
-	id := seedLivenessSession(t, db, "sess-suspended", pid, sessionkind.SessionKindTmux)
+	id := seedLivenessSession(t, db, "sess-suspended", pid)
 
 	if err := RefreshLiveness(); err != nil {
 		t.Fatalf("RefreshLiveness: %v", err)
@@ -178,7 +182,7 @@ func TestLiveness_UnreachableTmuxCondemnsNothing(t *testing.T) {
 	ids := make([]int64, 0, 8)
 	for i, pane := range []string{"%1", "%2", "%3", "%4", "%5", "%6", "%7", "%8"} {
 		pid := mustSeedPane(t, db, "srv", pane)
-		ids = append(ids, seedLivenessSession(t, db, "sess-"+pane+string(rune('a'+i)), pid, sessionkind.SessionKindTmux))
+		ids = append(ids, seedLivenessSession(t, db, "sess-"+pane+string(rune('a'+i)), pid))
 	}
 
 	before := snapshotSessionsTable(t, db)
@@ -328,7 +332,7 @@ func TestLiveness_NoTmuxBinaryIsUnknownNotDead(t *testing.T) {
 	seedProject(t, db, 1, "acme", "/tmp/acme")
 
 	pid := mustSeedPane(t, db, "srv", "%1")
-	id := seedLivenessSession(t, db, "sess-notmux", pid, sessionkind.SessionKindTmux)
+	id := seedLivenessSession(t, db, "sess-notmux", pid)
 
 	if err := RefreshLiveness(); err != nil {
 		t.Fatalf("RefreshLiveness: %v", err)
@@ -358,7 +362,7 @@ func seedNullServerBinding(t *testing.T, db *sql.DB, sessionID, address string) 
 	if err != nil {
 		t.Fatalf("seed null-server binding %q: %v", address, err)
 	}
-	return seedLivenessSession(t, db, sessionID, pid, sessionkind.SessionKindTmux)
+	return seedLivenessSession(t, db, sessionID, pid)
 }
 
 // TestAdoptPaneBindings_AttributesLivePanes is the core case: a backfilled
@@ -422,7 +426,7 @@ func TestAdoptPaneBindings_RefusesAmbiguousAddress(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reuse binding: %v", err)
 	}
-	b := seedLivenessSession(t, db, "sess-b", pid, sessionkind.SessionKindTmux)
+	b := seedLivenessSession(t, db, "sess-b", pid)
 
 	tx, err := db.Begin()
 	if err != nil {
@@ -460,7 +464,7 @@ func TestAdoptPaneBindings_PreservesSharedHistoryRow(t *testing.T) {
 	}
 	// An ended session from some earlier server, plus the current occupant.
 	seedPaneSession(t, db, "sess-ancient", shared, "ended", 0, "2026-01-01T00:00:00")
-	current := seedLivenessSession(t, db, "sess-current", shared, sessionkind.SessionKindTmux)
+	current := seedLivenessSession(t, db, "sess-current", shared)
 
 	tx, err := db.Begin()
 	if err != nil {
@@ -565,7 +569,7 @@ func TestLiveness_DuplicatePaneYieldsOneRow(t *testing.T) {
 	}
 
 	pid := mustSeedPane(t, db, "srv", "%1")
-	id := seedLivenessSession(t, db, "sess-linked", pid, sessionkind.SessionKindTmux)
+	id := seedLivenessSession(t, db, "sess-linked", pid)
 
 	if _, err := db.Exec(
 		`INSERT OR IGNORE INTO observed_servers (kind_id, server_uuid) VALUES (?, ?)`,
@@ -618,7 +622,7 @@ func TestLiveness_DuplicateServerYieldsOneRow(t *testing.T) {
 	}
 
 	pid := mustSeedPane(t, db, "srv", "%2")
-	id := seedLivenessSession(t, db, "sess-dupsrv", pid, sessionkind.SessionKindTmux)
+	id := seedLivenessSession(t, db, "sess-dupsrv", pid)
 
 	for i := 0; i < 3; i++ {
 		if _, err := db.Exec(

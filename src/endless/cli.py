@@ -504,22 +504,6 @@ for _old_name in ("init", "register", "unregister", "purge", "set", "rename",
         _make_moved_stub(_old_name))
 
 
-@main.command("agents")
-@click.option("--epic", "epic_id", type=TASK_ID, default=None,
-              help="List agents under this epic (E-NNNN); overrides auto-resolve")
-@click.option("--all", "show_all", is_flag=True,
-              help="List all working bg agents in the project (drop the epic filter)")
-def agents(epic_id, show_all):
-    """List working background agents scoped to the active epic.
-
-    With no flag, auto-resolves the epic from your current session. Use --epic
-    E-NNNN to target a specific epic, or --all to list every working background
-    agent in the current project.
-    """
-    from endless.agents_cmd import list_agents
-    list_agents(epic_id=epic_id, show_all=show_all)
-
-
 def _refuse_unsupported_agent(ctx) -> None:
     """Refuse to run under an unsupported agent harness (E-1962).
 
@@ -2811,23 +2795,19 @@ def task_handoff(item_id):
 # invocation reaches the --reopen message instead of a click parse error.
 @click.option("--reopen", is_flag=True, hidden=True)
 @click.option("--print-decision", is_flag=True, hidden=True)
-@click.option("--bg", is_flag=True,
-              help="Dispatch the agent headless via `claude --bg --name "
-                   "E-<id>` instead of a tmux window. No tmux required; the "
-                   "agent runs in the background and is reachable with "
-                   "`claude attach <short-id>`.")
-@click.option("--attach", is_flag=True,
-              help="Open a NEW tmux window onto the task's already-live "
-                   "background agent (via `claude attach`). Does NOT dispatch; "
-                   "requires an existing --bg agent. Mutually exclusive with "
-                   "--bg. Detaching leaves the agent running.")
+# --bg dispatched the agent headless via `claude --bg`, and --attach opened a
+# tmux window onto one. E-2074 removed background agents outright; both flags
+# stay accepted-and-hidden, refusing with an explanation, for the same reason
+# --reopen does above — muscle memory deserves an answer, not a parse error.
+@click.option("--bg", is_flag=True, hidden=True)
+@click.option("--attach", is_flag=True, hidden=True)
 @click.option("--new-session", is_flag=True, hidden=True)
 def task_spawn(item_id, project, permission_mode, model, session_name,
                worktree, force, reopen, print_decision, bg, attach,
                new_session):
-    """Spawn Claude working on a task — a tmux window, or headless with --bg.
+    """Spawn Claude working on a task in a new tmux window.
 
-    Foreground spawns launch Claude as the tmux window's command and deliver the
+    Spawns launch Claude as the tmux window's command and deliver the
     handoff (generated from the template — no stored prompt) as claude's
     positional prompt argument. Spawned sessions default to --permission-mode
     auto.
@@ -2846,28 +2826,19 @@ def task_spawn(item_id, project, permission_mode, model, session_name,
             "--new-session and --print-decision went with it; they only ever "
             "modified --reopen."
         )
+    if bg or attach:
+        raise click.ClickException(
+            "`task spawn --bg` and `--attach` are retired: Endless no longer "
+            "supports background agents. They never became as reliable as "
+            "tmux-hosted sessions, and every surface that read them is gone.\n"
+            "Spawn a tmux-hosted session instead:\n"
+            f"    endless task spawn E-{item_id}"
+        )
     from endless.task_cmd import spawn_plan
     spawn_plan(item_id, project_name=project,
-               worktree=worktree, force=force, bg=bg,
-               attach=attach,
+               worktree=worktree, force=force,
                permission_mode=permission_mode, model=model,
                name=session_name)
-
-
-@task_cmd.command("attach")
-@click.argument("item_id", type=TASK_ID)
-@click.option("--force", is_flag=True,
-              help="Proceed even when run inside a Claude session "
-                   "(CLAUDECODE=1). The exec replaces the current process, so "
-                   "this kills the calling coordinator/session.")
-def task_attach(item_id, force):
-    """Drop the current shell into a task's running background agent.
-
-    Execs `claude attach <short-id>` in place — the calling process is replaced.
-    Run from a fresh shell. Detaching leaves the background agent running.
-    """
-    from endless.task_cmd import task_attach_impl
-    task_attach_impl(item_id, force=force)
 
 
 @task_cmd.command("reopen")

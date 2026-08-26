@@ -50,16 +50,16 @@ func seedProjectTask(t *testing.T, taskID int64) {
 }
 
 // seedSession inserts one session row for snapshot/transition tests.
-func seedSession(t *testing.T, guid, short, state string, taskID any) {
+func seedSession(t *testing.T, guid, state string, taskID any) {
 	t.Helper()
 	db, err := DB()
 	if err != nil {
 		t.Fatalf("DB: %v", err)
 	}
 	if _, err := db.Exec(
-		`INSERT INTO sessions (session_id, short_id, project_id, state, task_id, kind_id)
-		 VALUES (?, ?, 1, ?, ?, 1)`,
-		guid, short, state, taskID,
+		`INSERT INTO sessions (session_id, project_id, state, task_id)
+		 VALUES (?, 1, ?, ?)`,
+		guid, state, taskID,
 	); err != nil {
 		t.Fatalf("seed session: %v", err)
 	}
@@ -74,7 +74,6 @@ func TestLogSessionTxn_WritesJSONLine(t *testing.T) {
 	nw := int64(1832)
 	LogSessionTxn(SessionTxn{
 		SessionGUID: "guid-A",
-		ShortID:     "abc123",
 		OldState:    "working",
 		NewState:    "working",
 		OldTaskID:   &old,
@@ -110,7 +109,7 @@ func TestLogSessionTxn_WritesJSONLine(t *testing.T) {
 func TestSnapshotSession_CapturesOldState(t *testing.T) {
 	withTestDB(t)
 	seedProjectTask(t, 77)
-	seedSession(t, "guid-B", "short-B", "idle", int64(77))
+	seedSession(t, "guid-B", "idle", int64(77))
 
 	snap := SnapshotSession("guid-B")
 	if !snap.Found {
@@ -118,9 +117,6 @@ func TestSnapshotSession_CapturesOldState(t *testing.T) {
 	}
 	if snap.State != "idle" {
 		t.Errorf("State = %q, want idle", snap.State)
-	}
-	if snap.ShortID != "short-B" {
-		t.Errorf("ShortID = %q, want short-B", snap.ShortID)
 	}
 	if snap.TaskID == nil || *snap.TaskID != 77 {
 		t.Errorf("TaskID = %v, want 77", snap.TaskID)
@@ -144,7 +140,7 @@ func TestSnapshotSession_MissingRow(t *testing.T) {
 func TestIdleSession_LogsTransition(t *testing.T) {
 	withTestDB(t)
 	seedProjectTask(t, 5)
-	seedSession(t, "guid-C", "short-C", "working", int64(5))
+	seedSession(t, "guid-C", "working", int64(5))
 
 	if err := IdleSession("guid-C"); err != nil {
 		t.Fatalf("IdleSession: %v", err)
@@ -166,7 +162,7 @@ func TestIdleSession_LogsTransition(t *testing.T) {
 func TestEndSession_LogsTransition(t *testing.T) {
 	withTestDB(t)
 	seedProjectTask(t, 9)
-	seedSession(t, "guid-D", "short-D", "idle", int64(9))
+	seedSession(t, "guid-D", "idle", int64(9))
 
 	if err := EndSession("guid-D"); err != nil {
 		t.Fatalf("EndSession: %v", err)
@@ -190,8 +186,8 @@ func TestBindSessionToTask_LogsDedup(t *testing.T) {
 	); err != nil {
 		t.Fatalf("seed task: %v", err)
 	}
-	// A stale paneless tmux row already bound to task 42.
-	seedSession(t, "uuid-old", "short-old", "working", int64(42))
+	// A stale paneless row already bound to task 42.
+	seedSession(t, "uuid-old", "working", int64(42))
 
 	// A fresh session binds to the same task; the dedup ends uuid-old.
 	if err := BindSessionToTask("uuid-new", 1, 42); err != nil {

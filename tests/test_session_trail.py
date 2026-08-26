@@ -2,7 +2,7 @@
 
 The DB read happens Go-side (`endless-go session-query trail`); these tests mock
 that subprocess and assert the Python viewer's rendering: newest-first order,
-the via tag, task labels, summary, and the empty state.
+the via tag, task labels, and the empty state.
 """
 
 import json
@@ -47,9 +47,7 @@ def _edge(**kw):
         "id": 1, "client": "/dev/ttys001", "via": "manual",
         "created_at": "2026-06-29T00:00:00",
         "from_session_id": None, "from_pane": None, "from_task_id": None,
-        "from_summary": "",
         "to_session_id": None, "to_pane": None, "to_task_id": None,
-        "to_summary": "",
     }
     base.update(kw)
     return base
@@ -60,7 +58,6 @@ def test_trail_renders_newest_first_with_via_and_task_label(fake_trail, capsys):
     # The Go reader returns newest-first; the viewer prints in that order.
     set_edges([
         _edge(id=2, via="goto", to_session_id=10, to_task_id=1465,
-              to_summary="latest work",
               from_session_id=5, from_task_id=1400),
         _edge(id=1, via="manual", to_session_id=5, to_task_id=1400),
     ])
@@ -78,8 +75,9 @@ def test_trail_renders_newest_first_with_via_and_task_label(fake_trail, capsys):
     # Oldest (manual, E-1400) second.
     assert "manual" in lines[1]
     assert "E-1400" in lines[1]
-    # Summary is rendered under the newest edge.
-    assert "latest work" in out
+    # E-2074 dropped the per-edge summary line with sessions.summary; an edge
+    # is now exactly one line.
+    assert len(out.strip().splitlines()) == 2
 
 
 def test_trail_untracked_pane_endpoint(fake_trail, capsys):

@@ -6,9 +6,8 @@
 //
 //	spawn-window  Outer orchestrator (the only verb Python calls). Writes a
 //	              JSON launch-spec file, then creates the tmux window whose
-//	              command is `endless-go spawn-launch --spec <path>`. In attach
-//	              mode it instead runs `claude attach <short-id>` as the window
-//	              command. Returns once the window exists.
+//	              command is `endless-go spawn-launch --spec <path>`. Returns
+//	              once the window exists.
 //	spawn-launch  Inner — runs inside the freshly created window. Sets the
 //	              @endless_* window options (BEFORE exec, so SessionStart's
 //	              option reads never race), reads+deletes the handoff and spec

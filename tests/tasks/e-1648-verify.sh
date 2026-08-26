@@ -110,11 +110,13 @@ setup_fixture() {
 
     E project register "$REPO" --name probe --label Probe --desc d --lang Go --status active >/dev/null 2>&1
 
-    # Seed a background-kind session (session_kinds seeds slug 'background' = id 2).
-    E sql "INSERT INTO sessions (id, session_id, project_id, kind_id, state) VALUES (9001,'bg-probe',1,2,'working')" --write >/dev/null 2>&1
+    # Seed a working session. This seeded a background-KIND row until E-2074
+    # dropped sessions.kind_id with background agents; nothing in this suite
+    # ever asserted on the kind, only that a session exists.
+    E sql "INSERT INTO sessions (id, session_id, project_id, state) VALUES (9001,'probe-session',1,'working')" --write >/dev/null 2>&1
 
     [[ "$(E sql 'SELECT count(*) FROM projects' --tsv 2>/dev/null)" == "1" ]] || return 1
-    [[ "$(E sql 'SELECT kind_id FROM sessions WHERE id=9001' --tsv 2>/dev/null)" == "2" ]] || return 1
+    [[ "$(E sql 'SELECT state FROM sessions WHERE id=9001' --tsv 2>/dev/null)" == "working" ]] || return 1
     return 0
 }
 

@@ -19,17 +19,17 @@ func seedNavTask(t *testing.T, db *sql.DB, id, projectID int64, title string) {
 }
 
 // seedNavSession inserts a live session bound to a pane, with an optional active
-// task and summary, returning the new sessions.id.
-func seedNavSession(t *testing.T, db *sql.DB, sessionID string, projectID int64, pane string, taskID int64, summary string) int64 {
+// task, returning the new sessions.id.
+func seedNavSession(t *testing.T, db *sql.DB, sessionID string, projectID int64, pane string, taskID int64) int64 {
 	t.Helper()
 	var task any
 	if taskID != 0 {
 		task = taskID
 	}
 	res, err := db.Exec(
-		`INSERT INTO sessions (session_id, project_id, platform, state, task_id, process_id, last_activity, summary)
-		 VALUES (?, ?, 'claude', 'working', ?, ?, '2026-06-29T00:00:00', ?)`,
-		sessionID, projectID, task, mustSeedPane(t, db, TestServerUUID, pane), summary)
+		`INSERT INTO sessions (session_id, project_id, platform, state, task_id, process_id, last_activity)
+		 VALUES (?, ?, 'claude', 'working', ?, ?, '2026-06-29T00:00:00')`,
+		sessionID, projectID, task, mustSeedPane(t, db, TestServerUUID, pane))
 	if err != nil {
 		t.Fatalf("seed session %q: %v", sessionID, err)
 	}
@@ -49,8 +49,8 @@ func TestRecordNav_ResolvesEndpointsChainsAndTags(t *testing.T) {
 	seedProject(t, db, 1, "proj", "/tmp/proj")
 	seedNavTask(t, db, 100, 1, "Task 100")
 	seedNavTask(t, db, 200, 1, "Task 200")
-	s1 := seedNavSession(t, db, "uuid-1", 1, "%1", 100, "working on 100")
-	s2 := seedNavSession(t, db, "uuid-2", 1, "%2", 200, "working on 200")
+	s1 := seedNavSession(t, db, "uuid-1", 1, "%1", 100)
+	s2 := seedNavSession(t, db, "uuid-2", 1, "%2", 200)
 
 	// First move: source is NULL (no prior row for this client).
 	id1, err := RecordNav("client-a", "%1", navvia.NavViaManual)
@@ -126,7 +126,7 @@ func TestRecordNav_ResolvesEndpointsChainsAndTags(t *testing.T) {
 func TestRecordNav_NoOpOnSamePane(t *testing.T) {
 	db := withTestDB(t)
 	seedProject(t, db, 1, "proj", "/tmp/proj")
-	seedNavSession(t, db, "uuid-1", 1, "%1", 0, "")
+	seedNavSession(t, db, "uuid-1", 1, "%1", 0)
 
 	if _, err := RecordNav("client-a", "%1", navvia.NavViaManual); err != nil {
 		t.Fatalf("RecordNav first: %v", err)
@@ -180,13 +180,13 @@ func TestRecordNav_UntrackedDestination(t *testing.T) {
 }
 
 // TestListNavTrail_NewestFirstAndScoping confirms the reader orders newest-first,
-// joins endpoint task ids + summary, and scopes by client (empty = all).
+// joins endpoint task ids, and scopes by client (empty = all).
 func TestListNavTrail_NewestFirstAndScoping(t *testing.T) {
 	db := withTestDB(t)
 	seedProject(t, db, 1, "proj", "/tmp/proj")
 	seedNavTask(t, db, 100, 1, "Task 100")
-	seedNavSession(t, db, "uuid-1", 1, "%1", 100, "summary for 100")
-	seedNavSession(t, db, "uuid-2", 1, "%2", 0, "")
+	seedNavSession(t, db, "uuid-1", 1, "%1", 100)
+	seedNavSession(t, db, "uuid-2", 1, "%2", 0)
 
 	if _, err := RecordNav("client-a", "%1", navvia.NavViaManual); err != nil {
 		t.Fatalf("nav a1: %v", err)
@@ -212,12 +212,9 @@ func TestListNavTrail_NewestFirstAndScoping(t *testing.T) {
 	if scoped[1].ToPane != "%1" || scoped[1].Via != "manual" {
 		t.Errorf("oldest edge = (%q,%q); want (%%1,manual)", scoped[1].ToPane, scoped[1].Via)
 	}
-	// The %1 destination carries task 100 + its summary.
+	// The %1 destination carries task 100.
 	if scoped[1].ToTaskID == nil || *scoped[1].ToTaskID != 100 {
 		t.Errorf("to_task_id = %v; want 100", scoped[1].ToTaskID)
-	}
-	if scoped[1].ToSummary != "summary for 100" {
-		t.Errorf("to_summary = %q; want %q", scoped[1].ToSummary, "summary for 100")
 	}
 
 	all, err := ListNavTrail("", 50)

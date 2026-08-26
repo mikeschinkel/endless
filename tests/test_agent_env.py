@@ -197,11 +197,12 @@ def test_the_third_spelling_is_gone():
     caller. Re-adding a module-level harness predicate here is how the codebase
     grows a second answer to a question that has one.
 
-    Scoped to harness IDENTITY. task_cmd still reads CLAUDECODE in two places
-    that ask something else: `_current_endless_session_id()` pairs it with
-    CLAUDE_CODE_SESSION_ID to resolve WHICH session this is (E-1455), and
-    `task_attach_impl` uses it to refuse an exec that would kill the caller's
-    own Claude process (E-1570). Neither asks which harness is running.
+    Scoped to harness IDENTITY. task_cmd still reads CLAUDECODE where it asks
+    something else: `_current_endless_session_id()` pairs it with
+    CLAUDE_CODE_SESSION_ID to resolve WHICH session this is (E-1455), which is
+    not a question about which harness is running. (A second such reader, the
+    task-attach verb, used it to refuse an exec that would kill the caller's own
+    Claude process; it went with background agents in E-2074.)
     """
     from endless import agent_help
     assert not hasattr(agent_help, "is_claude_code_agent")

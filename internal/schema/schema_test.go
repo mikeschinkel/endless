@@ -34,7 +34,7 @@ func TestSchema_ReconcilesRenamedEnumRows(t *testing.T) {
 	// Simulate a DB populated under the pre-rename names / a drifted mirror.
 	mustExec(t, db, `UPDATE task_types SET slug='task', label='Task' WHERE id=1`)
 	mustExec(t, db, `UPDATE task_types SET slug='bug',  label='Bug'  WHERE id=2`)
-	mustExec(t, db, `UPDATE session_kinds SET slug='stale', label='Stale' WHERE id=1`)
+	mustExec(t, db, `UPDATE process_kinds SET slug='stale', label='Stale' WHERE id=1`)
 
 	// Second connect: the upsert seeds must reconcile the stale rows.
 	if _, err := db.Exec(schema.SQL); err != nil {
@@ -43,11 +43,11 @@ func TestSchema_ReconcilesRenamedEnumRows(t *testing.T) {
 
 	assertRow(t, db, "task_types", 1, "todo", "Todo")
 	assertRow(t, db, "task_types", 2, "bugfix", "Bugfix")
-	assertRow(t, db, "session_kinds", 1, "tmux", "Tmux")
+	assertRow(t, db, "process_kinds", 1, "tmux", "Tmux pane")
 
 	// The reconcile must UPDATE in place, never insert duplicates.
 	assertCount(t, db, "task_types", 5)
-	assertCount(t, db, "session_kinds", 2)
+	assertCount(t, db, "process_kinds", 2)
 }
 
 // TestSchema_AppliesToDBPredatingItsNewestColumn pins the ordering constraint

@@ -64,31 +64,9 @@ CREATE TABLE IF NOT EXISTS notes (
     FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
 );
 
--- Session kinds (E-1571). SQL mirror of the SessionKind Go enum (ED-1506:
--- const-in-code is the source of truth, table exists for FK enforcement and
--- queryability). The startup integrity check fails closed on drift between
--- this table and the sessionkind.All() enum. Adding a value = add an enum
--- constant + add a seed row here. RENAMING a value = edit slug/label here; the
--- upsert below reconciles existing rows to the enum on connect (E-1659 pattern,
--- mirroring task_types): INSERT OR IGNORE could only add new ids, never correct
--- a renamed row. Runs before the integrity check in monitor.DB(), so a rename
--- self-heals with no change-file; safe because E-1818 opens a non-owned real DB
--- schema-passive.
-CREATE TABLE IF NOT EXISTS session_kinds (
-    id    INTEGER PRIMARY KEY,
-    slug  TEXT UNIQUE NOT NULL,
-    label TEXT NOT NULL
-);
-
-INSERT INTO session_kinds (id, slug, label) VALUES
-    (1, 'tmux',       'Tmux'),
-    (2, 'background', 'Background')
-ON CONFLICT(id) DO UPDATE SET slug = excluded.slug, label = excluded.label;
-
--- Process kinds (E-1898). SQL mirror of the ProcessKind Go enum, same ED-1506
--- rule as session_kinds above: const-in-code is the source of truth, this table
--- exists for FK enforcement and queryability, and the upsert reconciles a
--- rename on connect.
+-- Process kinds (E-1898). SQL mirror of the ProcessKind Go enum, per ED-1506:
+-- const-in-code is the source of truth, this table exists for FK enforcement
+-- and queryability, and the upsert reconciles a rename on connect.
 CREATE TABLE IF NOT EXISTS process_kinds (
     id    INTEGER PRIMARY KEY,
     slug  TEXT UNIQUE NOT NULL,
@@ -144,9 +122,9 @@ CREATE TABLE IF NOT EXISTS processes (
 -- retroactively). ifnull() collapses those to a single '' key so the constraint
 -- actually binds. Deterministic builtin, so it is legal in an index.
 --
--- Safe to state standalone (cf. the sessions.short_id note below): the whole
--- table is new in E-1898, so the CREATE TABLE above really does run on old DBs
--- rather than no-opping, and the columns this references always exist by now.
+-- Safe to state standalone: the whole table is new in E-1898, so the CREATE
+-- TABLE above really does run on old DBs rather than no-opping, and the
+-- columns this references always exist by now.
 CREATE UNIQUE INDEX IF NOT EXISTS processes_identity
     ON processes (kind_id, ifnull(server_uuid, ''), address);
 
@@ -165,33 +143,21 @@ CREATE UNIQUE INDEX IF NOT EXISTS processes_identity
 -- -> [E-<epic>:E-<child>]. It renamed in step with task_id rather than keeping
 -- `active_` for a pair that would then disagree with itself.
 --
--- kind_id (E-1571): FK to session_kinds. 'tmux' rows are pane-bound (process_id
--- points at the `processes` row identifying the pane AND the server that issued
--- it); 'background' rows are headless agents that legitimately leave process_id
--- NULL. Defaults to 1 (tmux) for every existing and foreground-spawned row.
--- A NULL process_id reads as liveness 'unbound', never 'dead' (E-1898).
+-- session_id: nullable, and stays nullable after E-2074. It was relaxed by
+-- E-1568 so a background agent could be recorded at dispatch before its UUID
+-- existed; background agents are gone, but E-2063 is about to reuse the same
+-- nullability for harness instances, so re-tightening it here would be churn.
+-- UNIQUE treats multiple NULLs as distinct.
 --
--- session_id (E-1568): nullable. Background agents (kind_id=2) are dispatched
--- with session_id NULL because `claude --bg` returns only the short_id at
--- dispatch; the real UUID arrives later when the bg agent's SessionStart hook
--- fires and UPDATEs this column (keyed by short_id). UNIQUE treats multiple
--- NULLs as distinct, so concurrent pending bg rows coexist.
---
--- short_id (E-1568): harness-agnostic dispatch handle. For Claude it is the
--- ~8-hex id from `claude --bg` stdout (`claude attach <short_id>`); future
--- harnesses reuse the column with their own format. The discriminator for
--- interpreting it is the existing `platform` column. The UNIQUE (short_id)
--- constraint enforces uniqueness on non-NULL handles while allowing many NULLs
--- (every tmux/foreground row leaves it NULL): SQLite treats each NULL as
--- distinct for UNIQUE. It is an inline table constraint rather than a separate
--- `CREATE UNIQUE INDEX ... WHERE short_id IS NOT NULL` ON PURPOSE — schema.sql
--- is re-applied on every monitor.DB() connection, including against a
--- pre-E-1568 DB (e.g. inside `endless db apply-change` before the e-1568 change
--- file has rebuilt the table). A standalone index statement referencing
--- short_id would error there ("no such column") because the CREATE TABLE IF NOT
--- EXISTS above no-ops on the existing old table. An inline constraint lives
--- entirely inside that skipped CREATE TABLE, so schema.sql stays a clean no-op
--- on old DBs and the change file installs the real constraint at land time.
+-- E-2074 dropped four columns that had outlived their reasons: kind_id and
+-- short_id (the tmux/background discriminator and the `claude --bg` dispatch
+-- handle — both existed only to serve background agents, removed with them),
+-- summary (a 200-char slice of the first assistant response, superseded by the
+-- on-demand recap of E-1925; the error-greeting auto-hide it also performed
+-- lives on in monitor.hideIfErrorGreeting), and plan_file_path (written at
+-- PostToolUse/Write, read only by ExitPlanMode, which already had an mtime scan
+-- covering every session that never wrote through the Write tool). The
+-- session_kinds table and the sessionkind Go enum went with kind_id.
 CREATE TABLE IF NOT EXISTS sessions (
     id INTEGER PRIMARY KEY,
     session_id TEXT,
@@ -200,15 +166,11 @@ CREATE TABLE IF NOT EXISTS sessions (
     state TEXT NOT NULL DEFAULT 'working',
     task_id INTEGER,
     epic_id INTEGER,
-    kind_id INTEGER NOT NULL DEFAULT 1,
-    plan_file_path TEXT,
     process_id INTEGER,
     started_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
     last_activity TEXT,
     transcript_offset INTEGER NOT NULL DEFAULT 0,
-    summary TEXT,
     hidden INTEGER NOT NULL DEFAULT 0,
-    short_id TEXT,
     -- Per-turn report state (E-1953). All four are reset when the user speaks
     -- again, because a turn is exactly the span between two user prompts.
     -- last_user_prompt is staged at UserPromptSubmit so `task report` — a
@@ -225,11 +187,9 @@ CREATE TABLE IF NOT EXISTS sessions (
     report_exempt INTEGER NOT NULL DEFAULT 0,
     report_runs INTEGER NOT NULL DEFAULT 0,
     UNIQUE (session_id),
-    UNIQUE (short_id),
     FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL,
     FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE SET NULL,
     FOREIGN KEY (epic_id) REFERENCES tasks(id) ON DELETE SET NULL,
-    FOREIGN KEY (kind_id) REFERENCES session_kinds(id),
     FOREIGN KEY (process_id) REFERENCES processes(id)
 );
 
@@ -956,7 +916,7 @@ CREATE INDEX IF NOT EXISTS session_statuses_session_recent_idx
 -- a value = add an enum constant + add a seed row here.
 --
 -- RENAMING a value = edit the slug/label here; the upsert below reconciles it
--- (the E-1659 pattern already used by task_types and session_kinds above). The
+-- (the E-1659 pattern already used by task_types and process_kinds above). The
 -- enum is the source of truth, so the seed rewrites every existing row's
 -- slug/label to it on connect — INSERT OR IGNORE could only insert new ids, so
 -- a populated DB seeded under an old name would keep it and trip

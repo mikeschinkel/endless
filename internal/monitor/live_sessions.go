@@ -21,10 +21,9 @@ type LiveSession struct {
 	PaneID           *string `json:"pane_id"`
 	StartedAt        string  `json:"started_at"`
 	LastActivity     string  `json:"last_activity"`
-	Summary          string  `json:"summary"`
 	// Liveness is the observed run state (E-1898): "live" (pane present on a
 	// server we reached), "unknown" (server unreachable — no opinion), or
-	// "unbound" (no pane binding at all, e.g. a background agent). "dead" never
+	// "unbound" (no pane binding at all). "dead" never
 	// appears: ListLiveSessions filters those out. Exposed so a caller can tell
 	// a proven-live owner from one we merely could not disprove, rather than
 	// inferring it from the row's presence.
@@ -62,7 +61,7 @@ func ListLiveSessions(projectID int64) ([]LiveSession, error) {
 		`SELECT s.session_id, s.id, COALESCE(s.project_id, 0), s.platform, s.state,
 		        s.task_id, COALESCE(p.address, ''),
 		        COALESCE(s.started_at, ''), COALESCE(s.last_activity, ''),
-		        COALESCE(s.summary, ''), sl.liveness
+		        sl.liveness
 		 FROM sessions s
 		 LEFT JOIN processes p ON p.id = s.process_id
 		 JOIN session_liveness sl ON sl.session_id = s.id
@@ -81,7 +80,7 @@ func ListLiveSessions(projectID int64) ([]LiveSession, error) {
 		var s LiveSession
 		if err := rows.Scan(
 			&s.SessionID, &s.EndlessSessionID, &s.ProjectID, &s.Platform, &s.State,
-			&s.TaskID, &s.Process, &s.StartedAt, &s.LastActivity, &s.Summary,
+			&s.TaskID, &s.Process, &s.StartedAt, &s.LastActivity,
 			&s.Liveness,
 		); err != nil {
 			return nil, fmt.Errorf("scan live session: %w", err)

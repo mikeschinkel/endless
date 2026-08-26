@@ -369,49 +369,6 @@ func TestGetActiveSession_MissingReturnsError(t *testing.T) {
 	}
 }
 
-// TestPlanFilePath_RoundTrip pins the SetPlanFilePath / GetPlanFilePath
-// pair: the value written is the value read.
-func TestPlanFilePath_RoundTrip(t *testing.T) {
-	db := withTestDB(t)
-	seedProject(t, db, 1, "proj-test-1", "/tmp/proj-test-1")
-	if err := InitSession("sess-A", 1); err != nil {
-		t.Fatalf("init: %v", err)
-	}
-
-	want := "/tmp/plan.md"
-	if err := SetPlanFilePath("sess-A", want); err != nil {
-		t.Fatalf("SetPlanFilePath: %v", err)
-	}
-	if got := GetPlanFilePath("sess-A"); got != want {
-		t.Errorf("GetPlanFilePath = %q, want %q", got, want)
-	}
-}
-
-// TestGetPlanFilePath_UnsetReturnsEmpty pins the documented contract:
-// an unset (NULL) plan_file_path is reported as "" so callers don't
-// need to distinguish absent from empty.
-func TestGetPlanFilePath_UnsetReturnsEmpty(t *testing.T) {
-	db := withTestDB(t)
-	seedProject(t, db, 1, "proj-test-1", "/tmp/proj-test-1")
-	if err := InitSession("sess-A", 1); err != nil {
-		t.Fatalf("init: %v", err)
-	}
-
-	if got := GetPlanFilePath("sess-A"); got != "" {
-		t.Errorf("unset GetPlanFilePath = %q, want \"\"", got)
-	}
-}
-
-// TestGetPlanFilePath_MissingSessionReturnsEmpty pins the swallowed-
-// error branch: unknown sessions return "" rather than surfacing the
-// sql.ErrNoRows up the stack.
-func TestGetPlanFilePath_MissingSessionReturnsEmpty(t *testing.T) {
-	withTestDB(t)
-	if got := GetPlanFilePath("missing"); got != "" {
-		t.Errorf("missing GetPlanFilePath = %q, want \"\"", got)
-	}
-}
-
 // TestCompleteTask_FlipsTaskAndIdlesSession pins the two-step write: the task
 // moves to 'confirmed' and the session goes state='idle'. Per E-1968 /
 // ED-1560 the binding SURVIVES — the session that confirmed the task is the

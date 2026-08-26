@@ -231,13 +231,15 @@ test_self_heal() {
         "ON CONFLICT(id) DO UPDATE SET slug = excluded.slug, label = excluded.label"
     assert_absent_in "task_types seed is no longer INSERT OR IGNORE" \
         internal/schema/schema.sql "INSERT OR IGNORE INTO task_types"
-    assert_absent_in "session_kinds seed is no longer INSERT OR IGNORE" \
-        internal/schema/schema.sql "INSERT OR IGNORE INTO session_kinds"
+    assert_absent_in "process_kinds seed is no longer INSERT OR IGNORE" \
+        internal/schema/schema.sql "INSERT OR IGNORE INTO process_kinds"
     # No per-rename change-file: Option 1 removed the need for one.
     assert_no_file "no E-1659 migration change-file" \
         internal/schema/changes/e-1659-rename-task-todo-bug-bugfix.sql
     # Hermetic proof: re-applying schema.SQL reconciles stale task_types /
-    # session_kinds rows to the current enum values, in place, no duplicates.
+    # process_kinds rows to the current enum values, in place, no duplicates.
+    # (This read session_kinds until E-2074 dropped that table with background
+    # agents; process_kinds is the same ED-1506 mirror pattern.)
     assert_cmd "schema self-heal test passes (reconcile renamed rows)" \
         go test -count=1 ./internal/schema/...
 }

@@ -160,55 +160,42 @@ def test_render_handoff_unknown_type_falls_back_to_task():
     assert "--status unverified" in out
 
 
-def test_render_handoff_bg_variant_omits_tmux_return():
-    """E-1568: the bg variant drops every tmux-specific return instruction a
-    headless agent cannot execute, and tells it to stop when done."""
-    out = render_handoff(
-        spawned_id=1568,
-        title="Add --bg to spawn",
-        task_type="todo",
-        bg=True,
-    )
-    # No tmux return lines.
-    assert "tmux switch-client" not in out
-    assert "tmux move-window" not in out
-    # bg-specific framing.
-    assert "headless background agent" in out
-    assert "claude attach" in out
-    # Core workflow rules still present.
-    assert "E-1568" in out
-    assert "STOP and ask" in out
-    assert "--status unverified" in out
-    # The "(with the return line above)" parenthetical is gone for bg.
-    assert "return line above" not in out
+def test_render_handoff_omits_tmux_return():
+    """E-1770: the handoff carries no tmux return line.
 
-
-def test_render_handoff_fg_omits_tmux_return():
-    """E-1770: the foreground handoff no longer carries any tmux return line."""
+    This replaces THREE tests. Two of them (bg_variant_omits_tmux_return,
+    bg_variant_all_types) pinned the `bg=True` variant E-1568 added for headless
+    agents; E-2074 removed background agents and the `bg` var with them, so
+    there is one variant left to check.
+    """
     out = render_handoff(
         spawned_id=1568,
         title="t",
         task_type="todo",
-        bg=False,
     )
     assert "tmux switch-client" not in out
     assert "tmux move-window" not in out
     assert "spawning session's task" not in out
+    # E-2074: no handoff may mention background agents any more.
     assert "headless background agent" not in out
+    assert "claude attach" not in out
+    # Core workflow rules still present.
+    assert "E-1568" in out
+    assert "STOP and ask" in out
+    assert "--status unverified" in out
 
 
 @pytest.mark.parametrize("ttype", ["task", "bug", "research", "epic"])
-def test_render_handoff_bg_variant_all_types(ttype):
-    """Every per-type template has a working bg branch."""
+def test_render_handoff_all_types_omit_tmux_return(ttype):
+    """Every per-type template renders, and none carries a tmux return line."""
     out = render_handoff(
         spawned_id=2500,
         title="x",
         task_type=ttype,
-        bg=True,
     )
     assert "tmux switch-client" not in out
     assert "tmux move-window" not in out
-    assert "headless background agent" in out
+    assert "headless background agent" not in out
 
 
 @pytest.mark.parametrize("count", [0, 3])

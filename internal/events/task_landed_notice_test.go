@@ -27,8 +27,8 @@ func seedLandingSession(t *testing.T, db *sql.DB, sessionID int64, state string)
 	t.Helper()
 	if _, err := db.Exec(
 		`INSERT INTO sessions (id, session_id, project_id, platform, state,
-		                       task_id, kind_id, started_at, last_activity)
-		 VALUES (?, ?, 1, 'claude', ?, 1337, 1,
+		                       task_id, started_at, last_activity)
+		 VALUES (?, ?, 1, 'claude', ?, 1337,
 		         '2026-08-20T00:00:00', '2026-08-20T00:00:00')`,
 		sessionID, "sess-landing-"+strconv.FormatInt(sessionID, 10), state,
 	); err != nil {

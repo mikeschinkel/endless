@@ -286,26 +286,13 @@ session that hasn't `/cd`'d into its worktree is refused tool use until it does.
 
 `endless task spawn <id>` dispatches a fresh Claude session onto a target task and pastes a **generated handoff** as its opening input. Use it to delegate independent work without context-switching your own session.
 
-Spawn runs in one of two places:
+Spawn opens a new tmux window with Claude visible and interactive. tmux is the only delivery surface — Endless does not dispatch headless background agents.
 
-- **Foreground** (`endless task spawn <id>`) — a new tmux window, Claude visible and interactive.
-- **Background** (`endless task spawn <id> --bg`) — a headless agent under Anthropic's supervisor process, no terminal attached.
-
-The foreground window is built as three panes: Claude on the **left** at half width and full height (focused when the window opens), `endless session monitor` **top-right**, and a bare `$SHELL` **bottom-right** for ad-hoc `endless` commands. The monitor resizes its own pane to the frame it is rendering on every repaint, capped at 80% of the window height, so the shell keeps the rest of the column; with no rows to show it holds a small fixed block rather than collapsing to a sliver. `--bg` (no window) and `--attach` are unaffected — neither builds a layout.
+The window is built as three panes: Claude on the **left** at half width and full height (focused when the window opens), `endless session monitor` **top-right**, and a bare `$SHELL` **bottom-right** for ad-hoc `endless` commands. The monitor resizes its own pane to the frame it is rendering on every repaint, capped at 80% of the window height, so the shell keeps the rest of the column; with no rows to show it holds a small fixed block rather than collapsing to a sliver.
 
 **Pane working directories are not the same.** Claude's pane gets the task's **worktree** — that pane is the branch's work. The monitor and shell panes get the **project directory**, because the Python CLI routes its DB from cwd: run from inside a `self_dev` worktree, every ad-hoc `endless` command in the shell pane needs an explicit `--db main` to reach the main database. The monitor pane follows the same rule for consistency, though its own view no longer depends on it — `session-status` pins the main DB regardless of cwd, since session and pane state are machine-scoped rather than project-scoped. The trade-off is that `git`/`just` in the shell pane act on the main checkout, not on the task branch.
 
-Both **pre-claim** the task (status → `underway`, per-task worktree created) and run the same pre-flight refusals before launching, so the spawned session always lands in a fully-claimed state and never needs to run `endless task claim` itself.
-
-### Foreground vs background
-
-|                  | Foreground (`spawn`)                       | Background (`spawn --bg`)                              |
-|------------------|--------------------------------------------|-------------------------------------------------------|
-| Where it runs    | new tmux window                            | Anthropic supervisor (no terminal)                    |
-| When to use      | the work needs eyes; pairs well with `/plan` mode | a dispatched child of an epic you'll review later |
-| Survives         | terminal close (tmux server keeps it)      | terminal close, machine sleep, tmux server crash      |
-| Dies on          | tmux server kill, machine shutdown         | machine shutdown, `claude stop`, ~1h idle (unpinned)  |
-| Promote to focus | (already focused)                          | `endless task spawn --attach <id>` or `endless task attach <id>` |
+Spawn **pre-claims** the task (status → `underway`, per-task worktree created) and runs its pre-flight refusals before launching, so the spawned session always lands in a fully-claimed state and never needs to run `endless task claim` itself.
 
 ### Per-type handoff variants
 
@@ -385,9 +372,7 @@ confirming a task now idles the session without unbinding it, and
 ### `endless task spawn`
 
 ```bash
-endless task spawn <id>                           # foreground: new tmux window
-endless task spawn <id> --bg                      # background: headless supervised agent
-endless task spawn <id> --attach <id>             # open a tmux window onto an already-running bg agent
+endless task spawn <id>                           # new tmux window
 endless task spawn <id> --permission-mode plan    # override the spawned session's permission mode (default: auto)
 endless task spawn <id> --model <model>           # pass a --model through to the spawned claude (optional)
 endless task spawn <id> --worktree <path>         # cd to <path> instead of the spawn-created worktree
@@ -463,37 +448,9 @@ made yet. When in doubt, ask — the cost of asking is one message, and the cost
 of guessing wrong is either a stranded task or a reopened one that never should
 have been.
 
-### Background-agent dispatch (`--bg`)
-
-`--bg` dispatches a detached, supervised agent instead of opening a window — no tmux required. The flow:
-
-1. Pre-claims the task (same status flip + worktree creation as foreground).
-2. Renders the handoff for the task's type.
-3. Launches a headless Claude agent named `E-<id>` with the handoff as its opening input (via the Anthropic CLI's background mode — see `claude --help`).
-4. Captures the short dispatch id the CLI prints.
-5. Writes a `sessions` row marked as a background kind (an FK to the `session_kinds` table), recording the short id and the task's nearest epic ancestor for coordinator visibility. The session UUID is filled in later when the agent's `SessionStart` hook fires.
-
-`spawn --bg` returns immediately; the agent runs on its own. To watch or steer it afterward, use an attach verb below.
-
-### Attach verbs
-
-Two ways to bring a running background agent into a terminal:
-
-```bash
-endless task spawn --attach <id>      # open a NEW tmux window running `claude attach <short-id>`
-endless task attach <id>              # replace the CURRENT process with `claude attach <short-id>`
-```
-
-- **`spawn --attach <id>`** opens a fresh tmux window onto the agent. It does not dispatch (it requires an existing `--bg` agent) and is mutually exclusive with `--bg`. The agent keeps running when you close or detach the window.
-- **`task attach <id>`** execs `claude attach` *in place*, replacing the current process. Because that destroys whatever is running in the current terminal, it **refuses to run from inside a Claude session** unless you pass `--force`:
-
-  > You are inside a Claude session. `endless task attach` replaces the current process; you will lose this session. Re-run with --force to proceed, or open a fresh terminal.
-
-Detaching from an attached agent (`←`, `Ctrl+Z`, or `/exit`) leaves it running in the background — attaching and detaching never stop the agent.
-
 ### Coordinator pattern for epics
 
-Spawning a task whose type is `epic` opens a foreground window for a **coordinator**. The coordinator does **not** implement the epic's work directly — its job is to drive the epic's children through `unplanned` → `ready` → `underway` → `unverified`, dispatching child sessions (often with `spawn --bg`) and reviewing them.
+Spawning a task whose type is `epic` opens a foreground window for a **coordinator**. The coordinator does **not** implement the epic's work directly — its job is to drive the epic's children through `unplanned` → `ready` → `underway` → `unverified`, dispatching child sessions and reviewing them.
 
 The epic handoff injects a breakdown of the children's current states and names the operational mode that breakdown implies:
 
@@ -507,24 +464,6 @@ The epic handoff injects a breakdown of the children's current states and names 
 | Mixed                 | surface the breakdown and ask what to do next         |
 
 (Terminal = `confirmed`/`assumed`/`completed`/`declined`/`obsolete`, collapsed into one bucket.)
-
-### Throttle warning
-
-When you dispatch a background agent and the project already has several active, spawn prints a **soft warning to stderr** — it never blocks. The threshold is `bg_throttle_warn` in the project's `.endless/config.json` (default `3`; set to `0` or negative to disable). The warning notes that each bg agent consumes a parallel-execution slot and that the community-observed sweet spot is 3–5 parallel agents.
-
-### Session lifecycle (background agents)
-
-A background agent is hosted by Anthropic's supervisor, independent of your terminal and tmux. It **survives**:
-
-- closing the terminal or shell that spawned it,
-- a tmux server crash,
-- the machine sleeping (Claude Code v2.1.142+ resumes on wake instead of treating the gap as idle).
-
-It **dies / stops** on:
-
-- machine shutdown,
-- `claude stop`,
-- roughly an hour idle while unattached (pinned sessions are exempt).
 
 ### Customizing handoff templates
 

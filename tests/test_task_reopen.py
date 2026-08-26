@@ -297,44 +297,17 @@ def test_spawn_no_flag_terminal_target_routes_to_the_session(project_at_cwd, mon
 # ---------- the background-session gate is unaffected by the revisit target ----
 
 
-def test_background_session_cannot_claim_a_reopened_task(project_at_cwd):
-    """E-1889 put `revisit` in the claim-promotion set, which is the *hook*
-    path. The background-session gate is a separate check and must still
-    refuse anything that is not human-approved `ready` work — otherwise a
-    reopen would become a way to hand unapproved work to a background loop.
+def test_any_session_can_claim_a_reopened_task(project_at_cwd):
+    """E-1889 put `revisit` in the claim-promotion set, so a reopened task is
+    claimable rather than a dead end.
+
+    This replaces a PAIR of tests. The other pinned a second gate: a
+    `kind=background` session was refused anything that was not human-approved
+    `ready` work, so a reopen could not hand unapproved work to an unattended
+    loop. E-2074 removed background agents, and with them the only session kind
+    that gate could ever fire on — there is no unattended claimer left to
+    refuse. What remains is this: `revisit` is claimable.
     """
-    from endless.task_cmd import claim_item, reopen_item
-
-    _insert_task(
-        pk=1700, project_id=project_at_cwd["project_id"],
-        status="confirmed", text="plan",
-    )
-    reopen_item(1700)
-    assert db.query(
-        "SELECT status FROM tasks WHERE id = 1700"
-    )[0]["status"] == "revisit"
-
-    _insert_session(
-        pk=500, session_id="s-500", project_id=project_at_cwd["project_id"],
-    )
-
-    with patch("endless.task_cmd._resolve_session_id_with_prompt",
-               return_value=500), \
-         patch("endless.task_cmd._session_is_background", return_value=True):
-        with pytest.raises(click.ClickException) as exc:
-            claim_item(1700)
-
-    msg = str(exc.value)
-    assert "background session may only claim 'ready' work" in msg
-    assert "'revisit'" in msg
-    assert db.query(
-        "SELECT status FROM tasks WHERE id = 1700"
-    )[0]["status"] == "revisit"
-
-
-def test_foreground_session_can_claim_a_reopened_task(project_at_cwd):
-    """The counterpart: an ordinary session picks the reopened task straight
-    up — `revisit` is not a dead end."""
     from endless.task_cmd import claim_item, reopen_item
 
     _insert_task(
@@ -342,14 +315,16 @@ def test_foreground_session_can_claim_a_reopened_task(project_at_cwd):
         status="assumed", text="plan",
     )
     reopen_item(1710)
+    assert db.query(
+        "SELECT status FROM tasks WHERE id = 1710"
+    )[0]["status"] == "revisit"
 
     _insert_session(
         pk=510, session_id="s-510", project_id=project_at_cwd["project_id"],
     )
 
     with patch("endless.task_cmd._resolve_session_id_with_prompt",
-               return_value=510), \
-         patch("endless.task_cmd._session_is_background", return_value=False):
+               return_value=510):
         claim_item(1710)
 
     assert db.query(

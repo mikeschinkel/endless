@@ -415,3 +415,61 @@ func TestSessionsHasNoTranscriptPathColumn(t *testing.T) {
 		t.Errorf("sessions still declares the dropped column: count = %d, want 0 (E-1905)", n)
 	}
 }
+
+// TestParseTranscript_HidesErrorGreetingSession is E-2074's overreach guard,
+// and the reason the removal of sessions.summary is not simply a deletion.
+//
+// setSummaryIfEmpty did TWO things with the first assistant response: it stored
+// a 200-character slice as sessions.summary, and — for a response opening
+// "Not logged in" or "Error:" — it set hidden=1, keeping a session that never
+// held a conversation out of every listing (E-867). Only the first was dead.
+// The second is real behavior with no other implementation, so it survives as
+// hideIfErrorGreeting, and this drives ParseTranscript end-to-end to prove it.
+func TestParseTranscript_HidesErrorGreetingSession(t *testing.T) {
+	dir := t.TempDir()
+	cases := []struct {
+		name       string
+		firstReply string
+		wantHidden int
+	}{
+		{"login error", "Not logged in. Run /login to continue.", 1},
+		{"generic error", "Error: could not reach the API.", 1},
+		{"leading blank lines", "\n\n  Not logged in.", 1},
+		{"ordinary work", "Sure — I will start by reading the plan.", 0},
+		// The prefixes are anchored, not searched: a real reply that merely
+		// MENTIONS an error must not vanish from the roster.
+		{"mentions an error mid-sentence", "The build failed with Error: boom", 0},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			db := withTestDB(t)
+			sid := "sess-" + tc.name
+			seedTranscriptSession(t, db, sid)
+
+			path := filepath.Join(dir, tc.name+".jsonl")
+			writeTranscript(t, path, []map[string]any{
+				userStringEntry("u1", sid, "hi"),
+				assistantTextEntry("a1", sid, tc.firstReply),
+			})
+			if err := ParseTranscript(sid, path); err != nil {
+				t.Fatalf("ParseTranscript: %v", err)
+			}
+
+			var hidden int
+			if err := db.QueryRow(
+				"SELECT hidden FROM sessions WHERE session_id = ?", sid,
+			).Scan(&hidden); err != nil {
+				t.Fatalf("read hidden: %v", err)
+			}
+			if hidden != tc.wantHidden {
+				t.Errorf("hidden = %d, want %d (first reply: %q)",
+					hidden, tc.wantHidden, tc.firstReply)
+			}
+			// The messages themselves are still recorded either way — hiding a
+			// session from the roster is not the same as discarding it.
+			if got := countMessages(t, db, sid); got != 2 {
+				t.Errorf("messages = %d, want 2", got)
+			}
+		})
+	}
+}

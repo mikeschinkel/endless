@@ -962,11 +962,12 @@ func execTaskClaimed(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 	// Also resolve and store epic_id: the nearest type='epic' ancestor of
 	// the claimed task (the task itself if it is an epic, NULL if no epic
 	// ancestor). E-1571 deferred this coordinator-side write; without it an
-	// interactive session's epic_id stays NULL, so the status-line epic
-	// prefix and `endless agents` auto-resolve never fire. The correlated
-	// subquery mirrors monitor.nearestEpicAncestor's recursive CTE, keeping the
-	// write a single atomic statement rather than exporting the helper. A NULL
-	// result also clears any stale epic id left from a prior claim.
+	// interactive session's epic_id stays NULL and the status-line epic prefix
+	// never fires. The correlated subquery walks tasks.parent_id upward as a
+	// single atomic statement. A NULL result also clears any stale epic id left
+	// from a prior claim. (E-2074 removed monitor.nearestEpicAncestor, the
+	// background-agent-side twin this once mirrored; this is now the only
+	// epic-ancestor resolver.)
 	// Snapshot the session's pre-write state (within this tx) so the
 	// machine-local diagnostic log can record the task_id transition —
 	// the single-pointer rebind that otherwise leaves no trail.
@@ -1106,7 +1107,6 @@ func logSessionClaim(res sql.Result, snap monitor.SessionSnapshot, taskID string
 	newTaskID := mustParseInt64(taskID)
 	monitor.LogSessionTxn(monitor.SessionTxn{
 		SessionGUID: snap.SessionGUID,
-		ShortID:     snap.ShortID,
 		OldState:    snap.State,
 		NewState:    newState,
 		OldTaskID:   snap.TaskID,
@@ -1125,7 +1125,6 @@ func logSessionRelease(res sql.Result, snap monitor.SessionSnapshot) {
 	}
 	monitor.LogSessionTxn(monitor.SessionTxn{
 		SessionGUID: snap.SessionGUID,
-		ShortID:     snap.ShortID,
 		OldState:    snap.State,
 		NewState:    snap.State, // release does not change state
 		OldTaskID:   snap.TaskID,

@@ -58,7 +58,6 @@ ENDLESS_GO=""
 DBP=""          # sandbox endless.db path
 CFG=""          # dir containing the sandbox endless.db (for --config-dir)
 PROJ_ID=""      # a project id in the sandbox
-BG_KIND=""      # session_kinds.id for slug 'background'
 CLEANUP_DIRS=() # canonical worktree dirs to rmdir on exit
 
 # ─── output ─────────────────────────────────────────────────────────────────
@@ -158,15 +157,20 @@ seed_ended_session() {
     printf '%s' "${sid}"
 }
 
-# seed_working_session TASKID KIND_ID PROCESS — insert a live (working) session
-# bound to the task. PROCESS empty for a background agent, '%NNN' for a tmux pane.
+# seed_working_session TASKID PROCESS — insert a live (working) session bound to
+# the task. PROCESS empty for a paneless row, '%NNN' for a tmux pane.
+#
+# Took a KIND_ID argument until E-2074 dropped sessions.kind_id with background
+# agents. NOTE this suite is stale for reasons that predate that: it drives
+# `task spawn --reopen --print-decision`, retired by E-1968, and seeds
+# `active_task_id`/`process`, renamed by E-1969/E-1898.
 seed_working_session() {
-    local tid="$1" kind="$2" process="$3" sname="e1645v-work-${1}-${3:-bg}" out
+    local tid="$1" process="$2" sname="e1645v-work-${1}-${2:-bg}" out
     local proc_sql="NULL"
     [[ -n "${process}" ]] && proc_sql="'${process}'"
     out=$(sqlite3 "${DBP}" \
-        "INSERT INTO sessions (session_id, project_id, state, active_task_id, kind_id, process, started_at) \
-         VALUES ('${sname}', ${PROJ_ID}, 'working', ${tid}, ${kind}, ${proc_sql}, '2026-06-25T00:00:00');" 2>&1) \
+        "INSERT INTO sessions (session_id, project_id, state, active_task_id, process, started_at) \
+         VALUES ('${sname}', ${PROJ_ID}, 'working', ${tid}, ${proc_sql}, '2026-06-25T00:00:00');" 2>&1) \
         || setup_die "seed working session for E-${tid}: ${out}"
 }
 
@@ -284,7 +288,7 @@ test_liveness_guard() {
 
     local tid out
     tid=$(seed_task "Verify background liveness navigate")
-    seed_working_session "${tid}" "${BG_KIND}" ""
+    seed_working_session "${tid}" ""
     out=$(run_endless task spawn "E-${tid}" --reopen --print-decision --db sandbox 2>&1)
     assert_contains "live background owner → navigate (background) / attach" \
         "navigate (background)" "${out}"
@@ -293,7 +297,7 @@ test_liveness_guard() {
     # DECISION is asserted; the real switch-client is the manual check above.
     local tid2 out2
     tid2=$(seed_task "Verify foreground liveness navigate decision")
-    seed_working_session "${tid2}" "1" "%999"
+    seed_working_session "${tid2}" "%999"
     out2=$(run_endless task spawn "E-${tid2}" --reopen --print-decision --db sandbox 2>&1)
     assert_contains "live foreground owner → navigate (foreground) / switch-client" \
         "navigate (foreground)" "${out2}"
@@ -354,9 +358,6 @@ main() {
     PROJ_ID=$(sqlite3 "${DBP}" "SELECT id FROM projects ORDER BY id LIMIT 1;" 2>&1) \
         || setup_die "read project id: ${PROJ_ID}"
     [[ -n "${PROJ_ID}" ]] || setup_die "no project registered in the sandbox DB"
-    BG_KIND=$(sqlite3 "${DBP}" "SELECT id FROM session_kinds WHERE slug='background';" 2>&1) \
-        || setup_die "read background session_kind id: ${BG_KIND}"
-    [[ -n "${BG_KIND}" ]] || setup_die "session_kinds has no 'background' row"
 
     trap cleanup EXIT
 

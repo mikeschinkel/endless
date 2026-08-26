@@ -260,11 +260,15 @@ def test_a_task_scoped_source_is_skipped_without_a_task():
 def test_the_policy_budget_is_enforced():
     """A policy that pulls 40k characters buys a better dedup at a latency the
     user feels on every turn, so the ceiling is part of the tunable policy."""
+    # The oversized field was sessions.summary until E-2074 dropped the column.
+    # Any rendered field proves the ceiling; the project name is the one
+    # session_status always emits.
     db.execute(
-        "INSERT INTO projects (id, name, path) VALUES (1, 'p', '/tmp/p')")
+        "INSERT INTO projects (id, name, path) VALUES (1, ?, '/tmp/p')",
+        ("x" * 5000,))
     db.execute(
-        "INSERT INTO sessions (id, session_id, project_id, state, summary) "
-        "VALUES (7, 'uuid-7', 1, 'active', ?)", ("x" * 5000,))
+        "INSERT INTO sessions (id, session_id, project_id, state) "
+        "VALUES (7, 'uuid-7', 1, 'active')")
 
     _, record = minimizer_fetch.run_policy(
         {"fetches": [{"source": "session_status", "when": "always"}], "max_chars": 50},

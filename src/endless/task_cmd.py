@@ -434,11 +434,13 @@ def session_id_display(session_id: int) -> str:
 
 
 def _hierarchical_label_prefix(item_id: int, parent_id: int | None) -> str:
-    """Hierarchical id prefix for bg-agent labels (E-1620).
+    """Hierarchical id prefix for a handoff's task line (E-1620).
 
     A task with a parent renders `E-<parent>/E-<id>`; a root task (standalone
     or epic) renders the bare `E-<id>`. The rule keys solely on parent
-    presence, regardless of the parent's type.
+    presence, regardless of the parent's type. Introduced to label background
+    agents in Agent View; it outlived them (E-2074) because every handoff
+    opens with the same line.
     """
     if parent_id:
         return f"{task_id_display(parent_id)}/{task_id_display(item_id)}"
@@ -3313,30 +3315,6 @@ def decline_item(item_id: int, reason: str):
     _emit_field_changes(item_id, row[0]["title"], changes)
 
 
-def _session_is_background(session_id: int | None) -> bool:
-    """True when the given session is of kind `background`.
-
-    Used to gate the human approval verb and non-`ready` pickup: a
-    background loop must not approve its own work or claim work that a
-    human has not approved. Returns False when session_id is None (no
-    resolvable session → not provably background).
-    """
-    if session_id is None:
-        return False
-    rows = db.query(
-        "SELECT 1 FROM sessions "
-        "WHERE id = ? "
-        "AND kind_id = (SELECT id FROM session_kinds WHERE slug = 'background')",
-        (session_id,),
-    )
-    return bool(rows)
-
-
-def _current_session_is_background() -> bool:
-    """True when the session running this command is of kind `background`."""
-    return _session_is_background(_current_endless_session_id())
-
-
 # Statuses a task may be `submit`ted from: pre-approval design states.
 #
 # E-1845: `untriaged` is included so the new default status is not a dead end.
@@ -3403,19 +3381,12 @@ def submit_item(item_id: int):
 def approve_item(item_id: int):
     """Approve a `submitted` task → `ready` (the human approval gate).
 
-    `ready` now provably means human-approved, so background loops may pick
-    up only `ready` work. A `kind=background` session is refused here: it
-    cannot approve its own work. (A tmux-driven agent running approve stays a
-    convention — the system can't distinguish human from agent in a pane.)
+    Approval being a human act stays a CONVENTION, not an enforced gate. It was
+    enforced against `kind=background` sessions only, and E-2074 removed that
+    kind along with background agents — leaving nothing the system can tell
+    apart, since it cannot distinguish a human from an agent in a tmux pane.
     """
     from endless.event_bridge import emit_event
-
-    if _current_session_is_background():
-        raise click.ClickException(
-            "A background session cannot approve a task. Approval is the "
-            "human gate that promotes a task to 'ready'; run it from an "
-            "interactive session."
-        )
 
     row = db.query(
         "SELECT id, COALESCE(title, description) as title, status FROM live_tasks "
@@ -4188,18 +4159,11 @@ def claim_item(item_id: int, force: bool = False):
             )
         # --force with no resolvable session: claim without a binding.
 
-    # A background session may only pick up human-approved (`ready`) work.
-    # `ready` provably means approved (unplanned → submitted → approve → ready),
-    # so a background loop must not claim tasks still pending approval.
-    if (
-        current_status != "ready"
-        and _session_is_background(target_session)
-    ):
-        raise click.ClickException(
-            f"A background session may only claim 'ready' work; this task is "
-            f"'{current_status}'. It must be approved (reach 'ready') before a "
-            "background session can pick it up."
-        )
+    # E-2074 removed the "a background session may only claim `ready` work"
+    # refusal that stood here. It gated on sessions.kind_id = background, and
+    # background agents are gone, so no session could ever trip it again. The
+    # rule it enforced — an unattended loop must not pick up work a human has
+    # not approved — has no unattended loop left to bind.
 
     if _check_task_ownership(item_id, target_session):
         from endless.worktree_cmd import create_task_worktree, _project_root
@@ -5457,8 +5421,7 @@ def render_handoff(spawned_id: int, title: str,
                    worktree_path: str | None = None,
                    branch: str | None = None,
                    task_type: str | None = None,
-                   parent_id: int | None = None,
-                   bg: bool = False) -> str:
+                   parent_id: int | None = None) -> str:
     """Render the spawn handoff for a task by invoking `endless-go template render`.
 
     The handoff is mostly boilerplate (orient, read the guide + plan, default
@@ -5473,10 +5436,9 @@ def render_handoff(spawned_id: int, title: str,
     count is universal — per E-1552, every variant includes a conditional
     line naming the count when nonzero.
 
-    `bg=True` (E-1568) renders the background-agent variant of each template:
-    a headless `claude --bg` agent tells the agent to do the work, flip the
-    task to `unverified`, and stop (the user attaches later via
-    `claude attach <short_id>`).
+    E-2074 removed the `bg=True` variant along with background agents. It
+    rendered a headless-agent preamble telling the agent to work the task, flip
+    it to `unverified`, and stop, since nobody was watching the window.
 
     E-1968 removed the `respawn=True` variant along with `task spawn --reopen`.
     It rendered a distinct interrogative handoff for a task being reopened into
@@ -5508,7 +5470,6 @@ def render_handoff(spawned_id: int, title: str,
         "branch": branch or "<task branch>",
         "child_count": child_count,
         "children_state": _children_state(spawned_id),
-        "bg": bg,
         # E-1953: whether this project runs the minimizer's report channel. A
         # project that switched it off must not be handed the reporting
         # instructions at all — they would cost every spawned session a per-turn
@@ -5600,8 +5561,7 @@ def _claude_binary() -> str:
     """Resolve the `claude` binary path, avoiding shell function wrappers.
 
     Prefers `~/.local/bin/claude` if present (the canonical install location),
-    else falls back to `claude` on PATH. Shared by the foreground spawn flow,
-    the `--bg` dispatch flow, and the attach verbs (E-1570).
+    else falls back to `claude` on PATH. Used by the spawn flow.
     """
     claude_bin = os.path.expanduser("~/.local/bin/claude")
     if not os.path.exists(claude_bin):
@@ -5609,29 +5569,8 @@ def _claude_binary() -> str:
     return claude_bin
 
 
-def _lookup_bg_short_id(task_id: int) -> str | None:
-    """Return the short id of the live background agent for a task, or None.
-
-    Single source of truth for both attach verbs (E-1570). Matches the row
-    written by `--bg` dispatch: a `working` session of kind `background`
-    bound to this task. The `session_kinds` subselect keeps the lookup
-    resolving even if the seed row id ever changes. ORDER BY id DESC LIMIT 1
-    returns the most recent dispatch if more than one exists.
-    """
-    rows = db.query(
-        "SELECT short_id FROM sessions "
-        "WHERE task_id = ? "
-        "AND kind_id = (SELECT id FROM session_kinds WHERE slug = 'background') "
-        "AND state = 'working' "
-        "ORDER BY id DESC LIMIT 1",
-        (task_id,),
-    )
-    return rows[0]["short_id"] if rows else None
-
-
 def spawn_plan(item_id: int, project_name: str | None = None,
                worktree: str | None = None, force: bool = False,
-               bg: bool = False, attach: bool = False,
                permission_mode: str = "auto", model: str | None = None,
                name: str | None = None):
     """Spawn a new tmux window with Claude working on a task's prompt.
@@ -5650,40 +5589,24 @@ def spawn_plan(item_id: int, project_name: str | None = None,
     `model`/`name` are optional claude pass-throughs). There is no plan-mode step
     — a positional prompt leaves no interactive turn to type a slash-command into.
 
-    `bg=True` (E-1568) dispatches the agent headless via `claude --bg --name
-    E-<id>` instead of a tmux window. No tmux is required; the same done-ish
-    gate, pre-claim, and worktree creation run first. The dispatch row is
-    written with session_id NULL + the short id parsed from `claude --bg`
-    stdout; the agent's SessionStart hook fills in the real UUID later.
-
-    `attach=True` (E-1570) is a view modifier, not a dispatcher: it opens a NEW
-    tmux window running `claude attach <short-id>` against the task's already
-    live background agent. It requires a `--bg` row to exist (does NOT dispatch)
-    and is mutually exclusive with `--bg`. Detaching the attached window leaves
-    the background agent running.
+    E-2074 removed the `bg` and `attach` parameters with background agents.
+    `bg` dispatched headless via `claude --bg` instead of opening a window;
+    `attach` opened a window onto an already-live one. tmux is now the only
+    delivery surface, so its presence is required unconditionally below.
     """
     import shutil
     import subprocess
     import tempfile
 
-    if attach and bg:
+    # tmux is the only delivery surface (E-2074 removed the headless path), so
+    # the requirement is unconditional.
+    if not shutil.which("tmux"):
+        raise click.ClickException("tmux is not installed")
+    if not os.environ.get("TMUX"):
         raise click.ClickException(
-            "--attach and --bg are mutually exclusive: --bg dispatches a new "
-            "background agent, --attach opens a window onto an existing one. "
-            "To do both, run `endless task spawn --bg` then "
-            "`endless task spawn --attach`."
+            "Not in a tmux session. "
+            "endless spawn requires tmux."
         )
-
-    # tmux is the delivery surface for the foreground path only; a `--bg`
-    # agent is headless, so the tmux requirement is bypassed for it.
-    if not bg:
-        if not shutil.which("tmux"):
-            raise click.ClickException("tmux is not installed")
-        if not os.environ.get("TMUX"):
-            raise click.ClickException(
-                "Not in a tmux session. "
-                "endless spawn requires tmux."
-            )
 
     # Get the plan item
     row = db.query(
@@ -5704,44 +5627,6 @@ def spawn_plan(item_id: int, project_name: str | None = None,
 
     title = item["title"]
     current_status = item["status"]
-
-    # E-1570: --attach is a view modifier. It opens a NEW tmux window onto the
-    # task's already-live background agent (via `claude attach`); it does NOT
-    # pre-claim, dispatch, or render a handoff. Branch here, after the task
-    # lookup (needed for the window name) and the tmux gate above.
-    if attach:
-        short_id = _lookup_bg_short_id(item_id)
-        if not short_id:
-            raise click.ClickException(
-                f"{task_id_display(item_id)} has no live bg agent. Dispatch "
-                f"with `endless task spawn --bg {task_id_display(item_id)}` "
-                f"first."
-            )
-        window_name = _spawn_window_name(
-            item["project_name"], title, item_id,
-        )
-        # Open the attach window via the endless-go launcher (E-1705): it runs
-        # `claude attach <short-id>` as the window command and records the
-        # diagnostic @endless_attached_short_id option — no send-keys.
-        from endless.event_bridge import _resolve_endless_go
-        binary = _resolve_endless_go()
-        subprocess.run(
-            [binary, "spawn-window", "--attach",
-             "--short-id", short_id,
-             "--claude-bin", _claude_binary(),
-             "--window-name", window_name,
-             "--cwd", os.getcwd()],
-            check=True,
-        )
-        click.echo(
-            click.style("•", fg="cyan")
-            + f" Attached window '{window_name}' to bg agent "
-            + click.style(f"{task_id_display(item_id)}: {title}", bold=True)
-            + f" ({short_id})"
-        )
-        click.echo(f"  Switch to it: tmux select-window -t {window_name}")
-        click.echo("  Detach (leaves the agent running): ← or Ctrl+Z")
-        return
 
     # --worktree overrides the cd target so the spawned session reads
     # .claude/settings.json from the worktree (worktree-local hook override
@@ -5809,21 +5694,6 @@ def spawn_plan(item_id: int, project_name: str | None = None,
     if cd_target is None:
         cd_target = str(wt_path)
 
-    # E-1568: background dispatch. Diverges from the tmux flow entirely — no
-    # window, no send-keys, no plan-mode paste. Render the bg handoff variant,
-    # launch `claude --bg --name E-<id>` with the handoff as positional argv,
-    # parse the short id from stdout, and record the dispatch row.
-    if bg:
-        _spawn_bg_dispatch(
-            item_id=item_id,
-            title=title,
-            cd_target=cd_target,
-            task_type=item["type_slug"] or None,
-            parent_id=item["parent_id"],
-            worktree_override=worktree is not None,
-        )
-        return
-
     # Spawner identity for the @endless_spawned_by marker. Prefer the
     # current Endless session id; fall back to a pid-prefixed value so
     # non-Claude spawners (CLI from a plain shell) still set a non-empty
@@ -5888,200 +5758,6 @@ def spawn_plan(item_id: int, project_name: str | None = None,
     click.echo(
         f"  Switch to it: tmux select-window -t {window_name}"
     )
-
-
-# First stdout line of `claude --bg`:  "backgrounded · <short-id> · <name>"
-# (`·` is U+00B7; no ANSI codes per docs/research-2026-06-12-claude-background-
-# agents.md §2). The short id is the dispatch handle used by `claude attach`.
-_BG_SHORT_ID_RE = re.compile(r"^backgrounded\s+·\s+([0-9a-f]+)\s+·\s+", re.M)
-
-
-def _parse_bg_short_id(stdout: str) -> str | None:
-    """Extract the dispatch short id from `claude --bg` stdout, or None."""
-    m = _BG_SHORT_ID_RE.search(stdout)
-    return m.group(1) if m else None
-
-
-# E-1572: default soft-throttle threshold. Warn once the project already has
-# this many bg agents `working`. Configurable per project via
-# .endless/config.json:bg_throttle_warn; set to 0 (or any value <= 0) to disable.
-_BG_THROTTLE_DEFAULT = 3
-
-
-def _bg_throttle_warn(item_id: int) -> None:
-    """Emit a soft throttle warning to stderr if the project already has at
-    least `bg_throttle_warn` background agents `working` (E-1572).
-
-    Advisory only: never blocks dispatch and never raises on its own failure —
-    a config or count hiccup must not abort the spawn. Reads the threshold from
-    the project config (default 3; <= 0 disables) and the live count from the
-    `session-query count-bg-agents` Go helper (no Python DB read, per E-1486).
-    """
-    import subprocess
-    from endless.event_bridge import _resolve_endless_go
-
-    cfg = config.project_config_read(config.resolution_cwd()) or {}
-    try:
-        threshold = int(cfg.get("bg_throttle_warn", _BG_THROTTLE_DEFAULT))
-    except (TypeError, ValueError):
-        threshold = _BG_THROTTLE_DEFAULT
-    if threshold <= 0:
-        return
-
-    binary = _resolve_endless_go()
-    res = subprocess.run(
-        [binary, *config.go_db_context_args(),
-         "session-query", "count-bg-agents", "--task-id", str(item_id)],
-        capture_output=True, text=True,
-    )
-    if res.returncode != 0:
-        return
-    try:
-        active = int(res.stdout.strip())
-    except ValueError:
-        return
-    if active < threshold:
-        return
-
-    click.echo(
-        f"warning: {active} bg agents already active for this project "
-        f"(threshold: {threshold}).",
-        err=True,
-    )
-    click.echo(
-        "  Each bg agent consumes a parallel-execution slot; quota burns "
-        "~linearly.",
-        err=True,
-    )
-    click.echo(
-        "  Community-observed sweet spot is 3–5 parallel agents. (Configure "
-        "via .endless/config.json:bg_throttle_warn.)",
-        err=True,
-    )
-
-
-def _spawn_bg_dispatch(item_id: int, title: str, cd_target: str,
-                       task_type: str | None, parent_id: int | None,
-                       worktree_override: bool,
-                       ):
-    """Dispatch a background agent for an already-pre-claimed task (E-1568).
-
-    Renders the bg handoff variant, launches `claude --bg --name <label>` with
-    the handoff as a positional argv (well under ARG_MAX), parses the short id
-    from stdout, and records the dispatch sessions row (session_id NULL +
-    short_id, kind background) via the `session-query record-bg-agent` Go
-    helper. The agent's SessionStart hook attaches the real UUID later.
-
-    The `--name` label carries the hierarchical task context (E-1620):
-    `E-<parent>/E-<id>: <title>` for a parented task, `E-<id>: <title>` for a
-    root, so Agent View rows self-identify by task and parent.
-    """
-    import subprocess
-    from endless import config
-    from endless.event_bridge import _resolve_endless_go
-
-    label = f"{_hierarchical_label_prefix(item_id, parent_id)}: {title}"
-
-    handoff_text = render_handoff(
-        item_id, title,
-        worktree_path=cd_target,
-        branch=_branch_for_worktree(cd_target),
-        task_type=task_type,
-        parent_id=parent_id,
-        bg=True,
-    )
-
-    # E-1572: soft throttle warning. Count the bg agents already `working` for
-    # this project; if the count meets the configured threshold, warn (to
-    # stderr — keeps stdout clean for short-id parsing by any caller) but do
-    # NOT block. The coordinator decides whether one more is worth it.
-    _bg_throttle_warn(item_id)
-
-    claude_bin = _claude_binary()
-
-    try:
-        result = subprocess.run(
-            [claude_bin, "--bg", "--name", label, handoff_text],
-            cwd=cd_target, capture_output=True, text=True,
-        )
-    except FileNotFoundError as e:
-        raise click.ClickException(f"claude not found: {e}")
-    if result.returncode != 0:
-        raise click.ClickException(
-            f"claude --bg failed (exit {result.returncode}):\n"
-            f"{result.stderr.strip() or result.stdout.strip()}"
-        )
-
-    short_id = _parse_bg_short_id(result.stdout)
-    if not short_id:
-        # Never proceed with a missing handle — the dispatch row would be
-        # un-attachable and un-decoratable.
-        raise click.ClickException(
-            "could not parse the dispatch short id from `claude --bg` stdout:\n"
-            f"{result.stdout.strip()}"
-        )
-
-    # Write the dispatch row Go-side (resolves project_id + epic ancestor;
-    # no Python DB read, per E-1486).
-    binary = _resolve_endless_go()
-    rec = subprocess.run(
-        [binary, *config.go_db_context_args(),
-         "session-query", "record-bg-agent",
-         "--task-id", str(item_id), "--short-id", short_id],
-        capture_output=True, text=True,
-    )
-    if rec.returncode != 0:
-        raise click.ClickException(
-            f"recording bg-agent session failed: {rec.stderr.strip()}"
-        )
-
-    click.echo(
-        click.style("•", fg="cyan")
-        + " Backgrounded "
-        + click.style(label, bold=True)
-        + f" as {short_id}"
-    )
-    if worktree_override:
-        click.echo(f"  cwd: {cd_target}")
-    click.echo(f"  Attach: claude attach {short_id}")
-
-
-def task_attach_impl(item_id: int, force: bool = False):
-    """Replace the current process with `claude attach` for a task's bg agent.
-
-    The `attach` verb (E-1570) is meant to be run from a fresh shell: it execs
-    `claude attach <short-id>` in place, so the calling process is GONE on
-    success (no return). Detaching the attached view leaves the bg agent
-    running.
-
-    Refuses (unless --force) when run inside a Claude session
-    (`CLAUDECODE == "1"`), because the exec would replace — and thus kill — the
-    caller's own Claude/coordinator process.
-
-    Go-port note: this becomes `exec.LookPath("claude")` +
-    `syscall.Exec(path, ["claude", "attach", short_id], os.Environ())`; POSIX
-    execve semantics are identical, only PATH lookup becomes explicit.
-    """
-    short_id = _lookup_bg_short_id(item_id)
-    if not short_id:
-        raise click.ClickException(
-            f"{task_id_display(item_id)} has no live bg agent."
-        )
-
-    if os.environ.get("CLAUDECODE") == "1" and not force:
-        click.echo(
-            click.style(
-                "You are inside a Claude session. `endless task attach` "
-                "replaces the current process; you will lose this session.\n"
-                "Re-run with --force to proceed, or open a fresh terminal.",
-                fg="red",
-            ),
-            err=True,
-        )
-        raise SystemExit(1)
-
-    # Replaces this process; nothing after this line runs on success.
-    os.execvp("claude", ["claude", "attach", short_id])
 
 
 def search_tasks(

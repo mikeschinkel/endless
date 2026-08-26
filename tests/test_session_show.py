@@ -14,16 +14,15 @@ def _insert_session(
     session_id: str,
     project_id: int,
     state: str = "idle",
-    summary: str = "test summary",
     started_at: str = "2026-04-29T03:51:23",
     last_activity: str = "2026-04-29T05:00:00",
     task_id: int | None = None,
 ):
     db.execute(
-        "INSERT INTO sessions (id, session_id, project_id, platform, state, summary, "
+        "INSERT INTO sessions (id, session_id, project_id, platform, state, "
         "started_at, last_activity, task_id) "
-        "VALUES (?, ?, ?, 'claude', ?, ?, ?, ?, ?)",
-        (pk, session_id, project_id, state, summary, started_at, last_activity, task_id),
+        "VALUES (?, ?, ?, 'claude', ?, ?, ?, ?)",
+        (pk, session_id, project_id, state, started_at, last_activity, task_id),
     )
 
 
@@ -89,19 +88,6 @@ def test_show_json_output(project_with_session, capsys):
     assert data["state"] == "idle"
     assert data["worktree_path"] == "/some/worktree"
     assert data["task"] is None
-
-
-def test_show_summary_flattened(project_with_session, capsys):
-    _, sessions_dir, _, stage = project_with_session
-    db.execute(
-        "UPDATE sessions SET summary = ? WHERE id = 247",
-        ("Line one.\n\nLine two with    multiple   spaces.\nLine three.",),
-    )
-    stage()
-
-    session_cmd.session_show_resolve("247")
-    out = capsys.readouterr().out
-    assert "Line one. Line two with multiple spaces. Line three." in out
 
 
 def test_show_no_match(project_with_session, capsys):

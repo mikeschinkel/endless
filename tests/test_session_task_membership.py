@@ -38,8 +38,8 @@ def _seed(task_ids=(500, 501)):
             (task_id, project_id, f"task {task_id}"),
         )
     db.execute(
-        "INSERT INTO sessions (id, session_id, project_id, state, kind_id) "
-        "VALUES (?, ?, ?, 'working', 1)",
+        "INSERT INTO sessions (id, session_id, project_id, state) "
+        "VALUES (?, ?, ?, 'working')",
         (SESSION_ID, f"uuid-{SESSION_ID}", project_id),
     )
 
@@ -211,8 +211,8 @@ def test_remove_is_scoped_to_one_session():
     other = 9102
     project_id = db.query("SELECT id FROM projects")[0]["id"]
     db.execute(
-        "INSERT INTO sessions (id, session_id, project_id, state, kind_id) "
-        "VALUES (?, ?, ?, 'working', 1)",
+        "INSERT INTO sessions (id, session_id, project_id, state) "
+        "VALUES (?, ?, ?, 'working')",
         (other, f"uuid-{other}", project_id),
     )
     for session_id in (SESSION_ID, other):

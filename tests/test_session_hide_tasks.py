@@ -28,8 +28,8 @@ def _seed(session_ids=(9001,), task_ids=(500, 501)):
         )
     for session_id in session_ids:
         db.execute(
-            "INSERT INTO sessions (id, session_id, project_id, state, kind_id) "
-            "VALUES (?, ?, 1, 'working', 1)",
+            "INSERT INTO sessions (id, session_id, project_id, state) "
+            "VALUES (?, ?, 1, 'working')",
             (session_id, f"uuid-{session_id}"),
         )
 

@@ -115,7 +115,7 @@ func TestRender_FullVars_ContainsExpectedSubstitutions(t *testing.T) {
 // partial (E-1759): every handoff type invokes `endless worktree check`
 // instead of enumerating report categories, forbids confirming the negative,
 // drops the retired "dangling tags"/"landed-vs-worktree delta" phrasing, and
-// (E-1770) never emits the tmux return line for either bg or non-bg. The
+// (E-1770) never emits the tmux return line. The
 // type-specific deliverable prefix must survive the refactor. It also asserts
 // the final-message verification discipline: the verify handoffs (todo, bugfix)
 // carry the one-command contract, while the information-deliverable handoffs
@@ -143,16 +143,18 @@ func TestRender_HandoffClose_ExceptionRule(t *testing.T) {
 		{"research", "say where the findings live", "there is nothing to verify"},
 		{"brainstorm", "say where the synthesis lives", "there is nothing to verify"},
 	}
+	// E-2074 dropped the bg=true half of this matrix along with background
+	// agents. Every type used to render twice — once plain, once with the
+	// headless-agent preamble and closing note — and the `bg` var no longer
+	// exists in any template.
 	for _, c := range cases {
-		for _, bg := range []bool{false, true} {
-			name := fmt.Sprintf("%s/bg=%v", c.typ, bg)
-			t.Run(name, func(t *testing.T) {
+		{
+			t.Run(c.typ, func(t *testing.T) {
 				root := projectFixture(t)
-				vars := fmt.Sprintf(
-					`{"spawned_id":1,"label_prefix":"E-1","title":"T",`+
-						`"worktree_path":"/w",`+
-						`"branch":"b","child_count":0,"children_state":"none",`+
-						`"report_gate":true,"bg":%v}`, bg)
+				vars := `{"spawned_id":1,"label_prefix":"E-1","title":"T",` +
+					`"worktree_path":"/w",` +
+					`"branch":"b","child_count":0,"children_state":"none",` +
+					`"report_gate":true}`
 				out, errOut, err := runRenderInProject(t, root, "handoff/"+c.typ, vars)
 				if err != nil {
 					t.Fatalf("render: %v\nstderr: %s", err, errOut)
@@ -193,9 +195,11 @@ func TestRender_HandoffClose_ExceptionRule(t *testing.T) {
 				if strings.Contains(out, returnLine) {
 					t.Errorf("output should omit the tmux return line (E-1770):\n%s", out)
 				}
-				// bg output ends the message with the background-agent note.
-				if bg && !strings.Contains(out, "You're a background agent") {
-					t.Errorf("bg output missing background-agent note:\n%s", out)
+				// E-2074: no variant may mention background agents any more.
+				for _, gone := range []string{"background agent", "claude attach"} {
+					if strings.Contains(out, gone) {
+						t.Errorf("output still mentions %q (E-2074 removed background agents)\n%s", gone, out)
+					}
 				}
 			})
 		}
@@ -214,7 +218,7 @@ func TestRender_Brainstorm_InterviewModeFraming(t *testing.T) {
 	root := projectFixture(t)
 	vars := `{"spawned_id":1,"label_prefix":"E-1","title":"T",` +
 		`"worktree_path":"/w","branch":"b","child_count":0,` +
-		`"children_state":"none","bg":false}`
+		`"children_state":"none"}`
 	out, errOut, err := runRenderInProject(t, root, "handoff/brainstorm", vars)
 	if err != nil {
 		t.Fatalf("render: %v\nstderr: %s", err, errOut)
@@ -681,7 +685,7 @@ func TestRender_HandoffClose_OmitsReportingWhenGateOff(t *testing.T) {
 			root := projectFixture(t)
 			vars := `{"spawned_id":1,"label_prefix":"E-1","title":"T",` +
 				`"worktree_path":"/w","branch":"b","child_count":0,` +
-				`"children_state":"none","report_gate":false,"bg":false}`
+				`"children_state":"none","report_gate":false}`
 			out, errOut, err := runRenderInProject(t, root, "handoff/"+typ, vars)
 			if err != nil {
 				t.Fatalf("render: %v\nstderr: %s", err, errOut)

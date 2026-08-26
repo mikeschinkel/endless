@@ -1,9 +1,6 @@
 You're a worktree-bound Claude Code session spawned to coordinate this epic end to end:
 
 - {{.label_prefix}}: {{.title}}.
-{{if .bg}}
-You're a headless background agent — coordinate the epic and stop when done. The user follows your progress with `claude attach`.
-{{end}}
 {{template "handoff_worktree" .}} The spawning session owns landing.
 
 {{template "handoff_deliverable" .}}1. Run `endless guide` to learn the Endless workflow.

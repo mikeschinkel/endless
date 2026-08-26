@@ -251,7 +251,6 @@ listed separately. (Generated — do not hand-edit; run `/regenerate-guide`.)
 
 | Command | Section | Covers |
 |---|---|---|
-| `agents` | _(none yet)_ | the `endless agents` command (epic-scoped listing of working background agents) isn't covered by the guide yet. |
 | `db` | orchestration | Choosing the database (--db main/sandbox) in self-dev worktrees. |
 | `db restore` | reference | Recovering the database from a backup — holders, sidecars, WAL, and the reversible pre-restore copy. |
 | `decision` | decisions | Decisions as first-class items; preference vs prohibition (read this). |
@@ -273,7 +272,6 @@ listed separately. (Generated — do not hand-edit; run `/regenerate-guide`.)
 | `shell-init` | orchestration | Shell helpers (esu/eswt) to enter your task's worktree. |
 | `sql` | reference | Read-only SQL against the Endless DB. |
 | `task` | tasks | Task CRUD, field semantics (title/description/text/analysis/notes/outcome), status transitions, relations. |
-| `task attach` | orchestration | Attaching to a running background agent (replaces the current process; refuses inside a Claude session without --force). |
 | `task claim` | orchestration | Claiming a task: creates the per-task worktree and binds your session. |
 | `task handoff` | orchestration | The generated handoff text for a spawned session. |
 | `task release` | orchestration | Why releasing a task is disabled — a session owns one task for its lifetime. |

@@ -49,7 +49,7 @@ cd "${WT}" || exit 2
 SCHEMA_SQL="${WT}/internal/schema/schema.sql"
 EXEC_SRC="${WT}/internal/events/executor.go"
 GUARD_SRC="${WT}/internal/events/parent_cycle.go"
-SESSION_SRC="${WT}/internal/monitor/session.go"
+SESSION_SRC="${WT}/internal/monitor/session_gate.go"
 
 PASS_COUNT=0
 FAIL_COUNT=0
@@ -370,10 +370,16 @@ fi
 
 # ── 7. what the guard is protecting, demonstrated ───────────────────────────
 # Everything above tests the refusal. This tests the CLAIM behind it, by running
-# the ancestor CTE from internal/monitor/session.go (nearestEpicAncestor —
-# UNION ALL, no depth cap, ORDER BY depth so SQLite must materialise the whole
-# thing) against a table that has a cycle in it. Bounded with LIMIT so the
-# demonstration cannot hang the suite: reaching the bound IS the finding.
+# the ancestor CTE from internal/monitor/session_gate.go (UNION ALL, no depth
+# cap, so SQLite must materialise the whole thing) against a table that has a
+# cycle in it. Bounded with LIMIT so the demonstration cannot hang the suite:
+# reaching the bound IS the finding.
+#
+# The probed file was internal/monitor/session.go until E-2074, which deleted
+# nearestEpicAncestor along with the background-agent dispatch that was its only
+# caller. The same unbounded ancestry walk lives on in session_gate.go — and in
+# internal/events/executor.go — so the claim is unchanged; only the specimen
+# moved.
 section "7. What a cycle does to the queries that walk the tree"
 
 ANCESTRY_CTE="WITH RECURSIVE ancestry(id, parent_id, depth) AS (
@@ -383,10 +389,10 @@ ANCESTRY_CTE="WITH RECURSIVE ancestry(id, parent_id, depth) AS (
 ) SELECT count(*) FROM (SELECT id FROM ancestry LIMIT 5000);"
 
 if ! grep -q 'JOIN ancestry a ON t.id = a.parent_id' "${SESSION_SRC}"; then
-    report_fail "the demonstrated query still matches session.go" \
-        "the nearestEpicAncestor ancestry join" "session.go has changed shape"
+    report_fail "the demonstrated query still matches the source" \
+        "an unbounded ancestry join" "session_gate.go has changed shape"
 else
-    report_pass "the demonstrated query still matches nearestEpicAncestor in session.go"
+    report_pass "the demonstrated query still matches the ancestry walk in session_gate.go"
 fi
 
 cfg=$(new_fixture harm "190:0 191:190") || setup_error "could not build the harm fixture"

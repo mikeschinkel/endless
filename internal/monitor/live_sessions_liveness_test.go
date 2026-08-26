@@ -3,7 +3,6 @@ package monitor
 import (
 	"testing"
 
-	"github.com/mikeschinkel/endless/internal/sessionkind"
 )
 
 // ListLiveSessions is where the dead-pane reaper's job went, and it is the read
@@ -22,8 +21,8 @@ func TestListLiveSessions_OmitsObservablyDead(t *testing.T) {
 
 	livePID := mustSeedPane(t, db, "srv", "%1")
 	deadPID := mustSeedPane(t, db, "srv", "%404")
-	seedLivenessSession(t, db, "sess-live", livePID, sessionkind.SessionKindTmux)
-	seedLivenessSession(t, db, "sess-dead", deadPID, sessionkind.SessionKindTmux)
+	seedLivenessSession(t, db, "sess-live", livePID)
+	seedLivenessSession(t, db, "sess-dead", deadPID)
 
 	before := snapshotSessionsTable(t, db)
 
@@ -63,7 +62,7 @@ func TestListLiveSessions_KeepsUnknownOwners(t *testing.T) {
 	defer SetTestTmuxObservation("", nil)() // nothing reachable
 
 	pid := mustSeedPane(t, db, "srv", "%1")
-	seedLivenessSession(t, db, "sess-unprovable", pid, sessionkind.SessionKindTmux)
+	seedLivenessSession(t, db, "sess-unprovable", pid)
 
 	got, err := ListLiveSessions(1)
 	if err != nil {
@@ -77,21 +76,23 @@ func TestListLiveSessions_KeepsUnknownOwners(t *testing.T) {
 	}
 }
 
-// TestListLiveSessions_KeepsBackgroundAgents pins that a headless agent, which
-// has no pane by construction, is still an owner.
-func TestListLiveSessions_KeepsBackgroundAgents(t *testing.T) {
+// TestListLiveSessions_KeepsPanelessSessions pins that a session with no pane
+// binding is still listed as an owner. Named for background agents until
+// E-2074 removed them; the population is now any row whose process_id is NULL
+// — before its first hook lands one, or after an E-1898 backfill left it NULL.
+func TestListLiveSessions_KeepsPanelessSessions(t *testing.T) {
 	db := withTestDB(t)
 	seedProject(t, db, 1, "acme", "/tmp/acme")
 	defer SetTestTmuxObservation("srv", map[string]string{"%1": "2.1.220"})()
 
-	seedLivenessSession(t, db, "sess-bg", 0, sessionkind.SessionKindBackground)
+	seedLivenessSession(t, db, "sess-unbound", 0)
 
 	got, err := ListLiveSessions(1)
 	if err != nil {
 		t.Fatalf("ListLiveSessions: %v", err)
 	}
 	if len(got) != 1 {
-		t.Fatalf("listed %d sessions, want 1 — a bg agent has no pane and is still live", len(got))
+		t.Fatalf("listed %d sessions, want 1 — a paneless row is still live", len(got))
 	}
 	if got[0].Liveness != string(LivenessUnbound) {
 		t.Errorf("liveness = %q, want %q", got[0].Liveness, LivenessUnbound)

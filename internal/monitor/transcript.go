@@ -116,9 +116,9 @@ func ParseTranscript(sessionID, transcriptPath string) error {
 			// Insert text blocks as assistant message
 			if texts != "" {
 				insertMessage(db, sessionID, "assistant", texts, "", tl.UUID, tl.Timestamp)
-				// Set summary from first assistant response
+				// Judge the first assistant response only (E-2074).
 				if !summarySet {
-					setSummaryIfEmpty(db, sessionID, texts)
+					hideIfErrorGreeting(db, sessionID, texts)
 					summarySet = true
 				}
 			}
@@ -254,46 +254,24 @@ func setTranscriptOffset(db *sql.DB, sessionID string, offset int64) {
 	)
 }
 
-func setSummaryIfEmpty(db *sql.DB, sessionID, text string) {
-	// Only set if summary is currently empty
-	var current sql.NullString
-	err := db.QueryRow(
-		"SELECT summary FROM sessions WHERE session_id = ?",
-		sessionID,
-	).Scan(&current)
-	if err != nil || (current.Valid && current.String != "") {
+// hideIfErrorGreeting hides a session whose FIRST assistant response is a
+// harness error rather than real work. A response opening with "Not logged in"
+// or "Error:" means no conversation happened, and such rows would otherwise
+// clutter every session listing (E-867).
+//
+// E-2074 split this out of setSummaryIfEmpty, which derived a 200-character
+// sessions.summary from the same text and hid the session as a side effect of
+// storing it. The column is gone — E-1925 replaces it with an on-demand recap —
+// but the hide it carried is real behavior, so only the summary half was
+// dropped. Idempotent: re-hiding an already-hidden row is a no-op, so a
+// re-parse of the same transcript is safe.
+func hideIfErrorGreeting(db *sql.DB, sessionID, text string) {
+	greeting := strings.TrimSpace(text)
+	if !strings.HasPrefix(greeting, "Not logged in") &&
+		!strings.HasPrefix(greeting, "Error:") {
 		return
 	}
-
-	// Extract first 1-2 sentences as summary
-	summary := text
-	if len(summary) > 200 {
-		// Find sentence boundary
-		cutoff := 200
-		for i := cutoff; i > 100; i-- {
-			if summary[i] == '.' || summary[i] == '!' || summary[i] == '?' {
-				cutoff = i + 1
-				break
-			}
-		}
-		summary = summary[:cutoff]
-	}
-	summary = strings.TrimSpace(summary)
-
-	// Auto-hide sessions with error summaries
-	if strings.HasPrefix(summary, "Not logged in") ||
-		strings.HasPrefix(summary, "Error:") {
-		db.Exec(
-			"UPDATE sessions SET summary = ?, hidden = 1 WHERE session_id = ?",
-			summary, sessionID,
-		)
-		return
-	}
-
-	db.Exec(
-		"UPDATE sessions SET summary = ? WHERE session_id = ? AND (summary IS NULL OR summary = '')",
-		summary, sessionID,
-	)
+	db.Exec("UPDATE sessions SET hidden = 1 WHERE session_id = ?", sessionID)
 }
 
 func insertMessage(db *sql.DB, sessionID, role, content, toolName, uuid, timestamp string) {
