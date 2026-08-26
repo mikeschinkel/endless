@@ -4385,3 +4385,17 @@ Three different tasks, three different sessions, same defect: a verify script dr
 
 The rule that would have stopped all four: a verify script may not write to any state that outlives it. If exercising a path requires writing to the project's real database, do not exercise that path — assert the wiring from source and cover the logic in a unit test. And whatever a fixture does create, it deletes before it exits, in a trap, so a failed run cleans up too.
 - **Project**: endless
+
+### [2026-08-26] A verify script runs ONCE, just before land, and never again
+A tests/tasks/e-NNNN-verify.sh is not a regression suite. It runs one time, immediately before its task lands, and is never run again — not by CI, not by a later session, not by the author revisiting the work.
+
+Three things I got wrong by not knowing this:
+
+1. I treated the session rows other verify scripts had left in the main database as an ongoing leak, and started auditing seventeen scripts for whether they clean up after themselves. Wrong question. Each of those scripts ran once, at its own land; the residue is a handful of rows total, not a growing one. There was no fleet-wide defect to fix and I was about to manufacture work.
+
+2. My own pollution did not come from the script being badly behaved on a single run. It came from ME running it dozens of times while developing it. Iterating on a verify script against the real database is the thing that accumulates, and the design assumes exactly one run.
+
+3. Earlier in the same session I ran another task's verify script — e-1947-verify.sh — twice, to check that my rewrite of a partial it pins had not broken it. There is already a lesson saying never to do that. A neighbouring task's suite is not a regression check I am entitled to run; if I need to know my change did not break their pinned string, assert it in MY suite, which is what I eventually did.
+
+The shape of the mistake in all three: I assumed a file that looks like a test suite behaves like one. Here, 'verify' names a one-shot gate at a specific moment in a task's life, and its cost model — what it may write, how often it runs, who may run it — follows from that, not from what tests usually do.
+- **Project**: endless
