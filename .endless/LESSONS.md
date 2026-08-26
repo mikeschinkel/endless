@@ -4148,3 +4148,25 @@ The rule: run MY task's verify script and the project-wide regression (`just tes
 ### [2026-08-25] Hand off the verify command and stop; the reasoning is in the commit
 I closed E-2074 with five paragraphs of findings — the summary/auto-hide split, the legacy_alter_table pragma, two removed gates, two files I chose not to touch, a CLI guard false positive. Mike's response: 'Wall of text. TL;DR. Did I NEED to know any of that?' No. He needed the one verify command and, at most, one line about a behavior change he might disagree with. Everything else was me showing my work. The commit message already held all of it, which is exactly where a reader goes when they want it — a handoff that repeats the commit body is the same content billed twice, once when he cannot skip it. Rule: the final message is the verify command, a one-line regression result, and only a decision he might reverse. Design notes go in the commit and the code comments. If something genuinely needs his judgment, ask it as a question, not as a paragraph he has to mine for the question. Length is not thoroughness; it is unfinished editing.
 - **Project**: endless
+
+### [2026-08-25] A stale session row is a record, not a live thing to end
+Two sessions read as pane %422 and blocked esu. I proposed ending the older row
+(976, last active three weeks earlier) via the SessionEnd hook, and framed it to
+Mike as "shall I end ghost session 976". He corrected me: there are two session
+ROWS and there should be one; 976 is not a Claude session or a tmux window, so
+there is nothing to end.
+
+He is right, and the error was not just wording. Firing SessionEnd at that row
+would simulate a lifecycle event on something with no lifecycle left, mutating
+accurate history — 976 truthfully records a session that ran on an August %422 —
+to paper over a defect that lives entirely in the reader. Neither row was wrong.
+The bug was that _resolve_companion compares bare pane ADDRESS strings while the
+writer records identity as (server_uuid, address), so two different panes read as
+one.
+
+The habit to break: when a query returns state I did not expect, I reach for a
+write that makes the symptom go away. Ask first whether the DATA is wrong or the
+READ is. If the rows are each individually true, the fix is never a write. And
+watch the language — calling a row a "ghost session" I can "end" already smuggled
+in the wrong model before I proposed anything.
+- **Project**: endless
