@@ -4170,3 +4170,11 @@ READ is. If the rows are each individually true, the fix is never a write. And
 watch the language — calling a row a "ghost session" I can "end" already smuggled
 in the wrong model before I proposed anything.
 - **Project**: endless
+
+### [2026-08-26] State ordering invariants by column, not by direction
+When writing an invariant about ordering, name the COLUMN that may (or may not) drive the decision, and say what the decision is. Do not state it as a direction.
+
+I wrote 'sessions may be ordered by recency; instances never are' for the E-2063 plan. The real constraint from the analysis is that last_event_at must never SELECT which instance to resume — recency and relevance diverge exactly when the stakes are highest, so recency is shown as a column and never acted on. But 'instances are never ordered by recency' also forbids first_seen_at DESC, which is just newest-first presentation and is legitimate for some listings.
+
+Banning a direction bans use-cases the reasoning never considered. Say 'last_event_at is displayed, never a selection key' and 'the instance ordinal is computed first_seen_at ASC so it is stable' — then any listing is free to present in whichever direction it wants.
+- **Project**: endless
