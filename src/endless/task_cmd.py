@@ -2866,6 +2866,16 @@ def _require_completable_verb_for_completed(
 _OUTCOME_REQUIRED_TYPES = ("research", "brainstorm")
 
 
+# E-2016 put `unreviewed` in front of `completed` for these same two types, and
+# `unreviewed` means "outcome written, awaiting the owner's read". That is the
+# step where the deliverable now actually arrives, so it is where the
+# requirement has to bite: an `unreviewed` task with no outcome hands the owner
+# an empty gate to sign off on, which is a worse failure than the one E-2016
+# set out to fix. `completed` keeps the check too — a task can still arrive
+# there directly on a type not routed through the gate.
+_OUTCOME_REQUIRED_STATUSES = ("completed", "unreviewed")
+
+
 def _require_outcome_for_completed(
     status: str | None,
     task_type: str | None,
@@ -2874,12 +2884,16 @@ def _require_outcome_for_completed(
     """ED-1520: completing a research/brainstorm task requires --outcome — the
     outcome IS the deliverable for those types. Keyed on type, not the
     'completed' status. Decline's own reason requirement is separate
-    (`_require_outcome_for_declined`, ED-1022)."""
-    if (status == "completed"
+    (`_require_outcome_for_declined`, ED-1022).
+
+    E-2016: also required at `unreviewed`, which is where the outcome is
+    written for those types."""
+    if (status in _OUTCOME_REQUIRED_STATUSES
             and (task_type or "") in _OUTCOME_REQUIRED_TYPES
             and not (outcome and outcome.strip())):
+        verb = "completing" if status == "completed" else "submitting"
         raise click.ClickException(
-            f"An outcome is required when completing a {task_type} task — "
+            f"An outcome is required when {verb} a {task_type} task — "
             "the outcome IS the deliverable. Use --outcome (or --outcome-file) "
             "to provide it."
         )
@@ -2896,6 +2910,13 @@ def _require_outcome_for_completed(
 # epic-only super-gate will later extend the 'epic' entry.
 # E-1891: the type→policy mapping stays here (it is about types, not statuses);
 # only the status set moves out, as taskstatus' `verification-track` group.
+# E-2016 adds the inverse half. The gate above only ever pointed one way —
+# findings types refused the verification lane — which left the review lane
+# open to everyone. `unreviewed` means "the outcome is written, awaiting the
+# owner's read", and that is not a state implementation work has: a todo or a
+# bugfix is gated by `unverified`, and routing it through a second gate would
+# say the two lanes are one. Both directions are now refused, so the tracks are
+# fully separated rather than half.
 _TYPE_FORBIDDEN_STATUSES = {
     "research":   statuses.get("verification-track"),
     "epic":       statuses.get("verification-track"),
@@ -2903,24 +2924,45 @@ _TYPE_FORBIDDEN_STATUSES = {
     # not testable behavior), so like research it terminates via 'completed
     # --outcome' and never goes through user-testable verification.
     "brainstorm": statuses.get("verification-track"),
+    "todo":       statuses.get("review-track"),
+    "bugfix":     statuses.get("review-track"),
 }
 
 
 def _require_status_allowed_for_type(status: str | None, task_type: str | None):
-    """E-1577/E-1579: reject type-inappropriate statuses up front. research and
-    epic tasks reject 'unverified'/'assumed'/'confirmed' — they terminate via
-    'completed' (per E-1537 §3) and never go through verification. This is a
-    type-correctness invariant, not a soft policy: the fix for a rejected flip
-    is to change the task type, not to override the gate (so there is no
-    --force bypass, matching E-1577's hard gate)."""
+    """E-1577/E-1579/E-2016: reject type-inappropriate statuses up front.
+
+    Two directions, one table. research/epic/brainstorm reject
+    'unverified'/'assumed'/'confirmed' — they terminate via 'completed' (per
+    E-1537 §3) and never go through verification. todo/bugfix reject
+    'unreviewed' — that gate is for work whose deliverable is an outcome
+    someone must read, and implementation work is gated by 'unverified'.
+
+    This is a type-correctness invariant, not a soft policy: the fix for a
+    rejected flip is to change the task type, not to override the gate (so
+    there is no --force bypass, matching E-1577's hard gate)."""
     forbidden = _TYPE_FORBIDDEN_STATUSES.get(task_type or "")
-    if forbidden and status in forbidden:
+    if not forbidden or status not in forbidden:
+        return
+    # Both refusals name the remedy, and the remedy differs by direction: a
+    # findings type is being pushed into the verification lane and belongs at
+    # 'completed'; an implementation type is being pushed into the review lane
+    # and belongs at 'unverified'. Telling either one to "use --status
+    # completed" would be wrong half the time.
+    if status in statuses.get("review-track"):
         raise click.ClickException(
             f"Task type {task_type!r} cannot be set to status {status!r}. "
-            f"{task_type} tasks terminate via 'completed' (with --outcome) and "
-            f"never use {'/'.join(repr(s) for s in forbidden)}. "
-            f"Use --status completed, or change the task type."
+            f"{status!r} is for research and brainstorm work, whose deliverable "
+            f"is an outcome someone has to read; {task_type} tasks are gated by "
+            f"'unverified' instead. "
+            f"Use --status unverified, or change the task type."
         )
+    raise click.ClickException(
+        f"Task type {task_type!r} cannot be set to status {status!r}. "
+        f"{task_type} tasks terminate via 'completed' (with --outcome) and "
+        f"never use {'/'.join(repr(s) for s in forbidden)}. "
+        f"Use --status completed, or change the task type."
+    )
 
 
 # E-1956: the statuses that mean the task's work SHIPPED — it reached the

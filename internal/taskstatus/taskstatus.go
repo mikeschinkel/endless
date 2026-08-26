@@ -42,8 +42,12 @@ import (
 type Status = string
 
 // The closed vocabulary, in lifecycle order — the pre-work statuses, then the
-// in-flight ones, then the terminals, then `revisit` and the two abandonment
-// states.
+// two sign-off gates, then the terminals, then `revisit` and the two
+// abandonment states.
+//
+// The gates are one per lane and they are siblings, which is why they sit
+// adjacent: `unverified` asks "does it work", `unreviewed` asks "has the owner
+// read it" (E-2016). Neither is terminal, and both hold a dependent.
 //
 // `blocked` is NOT here (E-2018). It was a status once, and a handful of rows
 // still carried it, but blockedness is the `blocked_by` relation and always
@@ -61,6 +65,7 @@ const (
 	Ready      Status = "ready"
 	Underway   Status = "underway"
 	Unverified Status = "unverified"
+	Unreviewed Status = "unreviewed"
 	Confirmed  Status = "confirmed"
 	Assumed    Status = "assumed"
 	Completed  Status = "completed"
@@ -178,6 +183,18 @@ const (
 	// research/epic/brainstorm tasks are refused them — they terminate via
 	// `completed --outcome` instead.
 	VerificationTrack
+
+	// ReviewTrack is VerificationTrack's counterpart: the statuses only
+	// findings work reaches, which todo and bugfix tasks are refused (E-2016).
+	//
+	// One member, and that asymmetry is real rather than an oversight.
+	// `unverified` has two terminals of its own because verification has two
+	// outcomes worth distinguishing — verified, or believed-done pending use.
+	// Review has one: the owner read the outcome and accepted it, which is
+	// `completed`. And `completed` cannot join this group, because it is NOT
+	// exclusive to findings work — a todo-typed audit finishes there too, on
+	// the strength of its title's lead verb rather than its type.
+	ReviewTrack
 )
 
 // groups is the ONE map. Every grouping in the system is a row here, so adding
@@ -189,26 +206,27 @@ const (
 var groups = map[Group][]Status{
 	All: {
 		Untriaged, Unplanned, Submitted, Ready, Underway,
-		Unverified, Confirmed, Assumed, Completed,
+		Unverified, Unreviewed, Confirmed, Assumed, Completed,
 		Revisit, Declined, Obsolete,
 	},
 	Actionable:    {Unplanned, Ready, Revisit},
-	NotActionable: {Untriaged, Submitted, Underway, Unverified, Confirmed, Assumed, Completed, Declined, Obsolete},
-	Active:        {Underway, Unverified},
+	NotActionable: {Untriaged, Submitted, Underway, Unverified, Unreviewed, Confirmed, Assumed, Completed, Declined, Obsolete},
+	Active:        {Underway, Unverified, Unreviewed},
 	ClaimPromotes: {Untriaged, Unplanned, Ready, Revisit},
 	Open:          {Untriaged, Unplanned, Submitted, Ready, Underway},
 	ChildrenStateOrder: {
-		Untriaged, Unplanned, Submitted, Ready, Underway, Revisit, Unverified,
+		Untriaged, Unplanned, Submitted, Ready, Underway, Revisit, Unverified, Unreviewed,
 	},
 	DerivationPrecedence: {Underway, Ready, Submitted, Unplanned, Untriaged},
 	DescriptionResetFrom: {Untriaged, Unplanned, Submitted, Ready, Revisit},
 	PreJudgment:          {Untriaged, Unplanned},
 	ReopenRefused:        {Declined, Obsolete},
 	Reopenable:           {Confirmed, Assumed, Completed},
+	ReviewTrack:          {Unreviewed},
 	SessionPending:       {Untriaged, Unplanned, Submitted, Ready, Underway, Revisit},
 	SetsCompletedAt:      {Confirmed, Completed},
-	Settled:              {Unverified, Confirmed, Assumed, Completed, Declined, Obsolete},
-	Shipped:              {Unverified, Confirmed, Assumed, Completed},
+	Settled:              {Unverified, Unreviewed, Confirmed, Assumed, Completed, Declined, Obsolete},
+	Shipped:              {Unverified, Unreviewed, Confirmed, Assumed, Completed},
 	StickyOverride:       {Revisit, Declined, Obsolete},
 	SubmittableFrom:      {Untriaged, Unplanned, Revisit},
 	Terminal:             {Confirmed, Assumed, Completed, Declined, Obsolete},
@@ -232,6 +250,7 @@ var groupSlugs = map[Group]string{
 	PreJudgment:          "pre-judgment",
 	ReopenRefused:        "reopen-refused",
 	Reopenable:           "reopenable",
+	ReviewTrack:          "review-track",
 	SessionPending:       "session-pending",
 	SetsCompletedAt:      "sets-completed-at",
 	Settled:              "settled",
@@ -251,6 +270,7 @@ var labels = map[Status]string{
 	Ready:      "Ready",
 	Underway:   "Underway",
 	Unverified: "Unverified",
+	Unreviewed: "Unreviewed",
 	Confirmed:  "Confirmed",
 	Assumed:    "Assumed",
 	Completed:  "Completed",
@@ -269,6 +289,10 @@ var labels = map[Status]string{
 // mean review-this and verify-this. The remaining three follow the same logic:
 // ✔ is the heavier check for verified-done against ✓ for believed-done, and
 // ⊘/⊗ read as "chose not to" / "made irrelevant".
+//
+// ☐ (unreviewed) is the deliberate pair to ☑ (unverified): the same box, not
+// yet ticked. The two gates are siblings — one asks "does it work", the other
+// "has the owner read it" — and the glyphs say so at a glance (E-2016).
 var glyphs = map[Status]string{
 	Untriaged:  "◌",
 	Unplanned:  "○",
@@ -276,6 +300,7 @@ var glyphs = map[Status]string{
 	Ready:      "●",
 	Underway:   "◉",
 	Unverified: "☑",
+	Unreviewed: "☐",
 	Confirmed:  "✔",
 	Assumed:    "✓",
 	Completed:  "◆",

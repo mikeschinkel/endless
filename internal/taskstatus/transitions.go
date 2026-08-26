@@ -131,6 +131,28 @@ type Transition struct {
 // the CLI boundary with a message that names the remedy.
 var implementation = []tasktype.TaskType{tasktype.TaskTypeTask, tasktype.TaskTypeBug}
 
+// review and direct split the findings lane by type (E-2016).
+//
+// `review` is the two types whose deliverable is a written outcome that nobody
+// downstream catches wrong: research and brainstorm. They route through
+// `unreviewed`, so a self-declared finish is not the last word. E-1817 is why —
+// a research task whose outcome changed materially through five rounds of the
+// owner's correction AFTER the session had marked it completed.
+//
+// `direct` is the complement, still reaching `completed` in one step. The lane
+// itself was never type-restricted and still is not: `completed` is gated on
+// the title's lead verb being a completable one, so an audit typed `todo`
+// finishes here too. What E-2016 adds is not a restriction on who may use the
+// lane, but a gate partway along it for the two types that have no other.
+//
+// They must stay complements. TestFindingsLaneCoversEveryType asserts it —
+// a type in neither could not reach `completed` at all, and a type in both
+// could skip the gate by taking the direct edge.
+var (
+	review = []tasktype.TaskType{tasktype.TaskTypeResearch, tasktype.TaskTypeBrainstorm}
+	direct = []tasktype.TaskType{tasktype.TaskTypeTask, tasktype.TaskTypeBug, tasktype.TaskTypeEpic}
+)
+
 // transitionGroup is one readable band of the table. The bands, in order, ARE
 // the reading order of the generated diagram — entry, happy path, reopening,
 // terminal — and each renders as a `%%` comment above its edges, which is what
@@ -213,14 +235,21 @@ var transitionGroups = []transitionGroup{
 		},
 	},
 	{
-		// Not type-restricted: `completed` is gated on the title's lead verb
-		// being a completable one, not on the task's type, so an audit or a
-		// review typed `todo` finishes here too. Reachable from `ready` as well
-		// as `underway` because findings work needs no worktree to produce.
+		// Reachable from `ready` as well as `underway` because findings work
+		// needs no worktree to produce.
+		//
+		// The split is E-2016: research and brainstorm stop at `unreviewed`
+		// first, every other type still reaches `completed` in one step. Note
+		// that the agent delivers the outcome and the USER accepts it — the
+		// actor change across the gate IS the gate, exactly as `unverified` →
+		// `confirmed` works one lane over.
 		Name: "Findings lane — work whose deliverable IS the outcome text",
 		Transitions: []Transition{
-			{From: Underway, To: Completed, Actor: ActorAgent, Label: "delivers the findings as an outcome"},
-			{From: Ready, To: Completed, Actor: ActorAgent, Label: "delivers the findings as an outcome"},
+			{From: Underway, To: Unreviewed, Actor: ActorAgent, Types: review, Label: "delivers the findings as an outcome"},
+			{From: Ready, To: Unreviewed, Actor: ActorAgent, Types: review, Label: "delivers the findings as an outcome"},
+			{From: Unreviewed, To: Completed, Actor: ActorUser, Types: review, Label: "reads the outcome and accepts it"},
+			{From: Underway, To: Completed, Actor: ActorAgent, Types: direct, Label: "delivers the findings as an outcome"},
+			{From: Ready, To: Completed, Actor: ActorAgent, Types: direct, Label: "delivers the findings as an outcome"},
 		},
 	},
 	{
@@ -232,6 +261,7 @@ var transitionGroups = []transitionGroup{
 			{From: Ready, To: Revisit, Actor: ActorAgent, Label: "reopens — needs re-evaluation"},
 			{From: Underway, To: Revisit, Actor: ActorSession, Label: "hands the task back"},
 			{From: Unverified, To: Revisit, Actor: ActorUser, Label: "reopens — verification failed"},
+			{From: Unreviewed, To: Revisit, Actor: ActorUser, Label: "reopens — the outcome needs more work"},
 			{From: Confirmed, To: Revisit, Actor: ActorUser, Label: "reopens — shipped work found wrong"},
 			{From: Assumed, To: Revisit, Actor: ActorUser, Label: "reopens — shipped work found wrong"},
 			{From: Completed, To: Revisit, Actor: ActorUser, Label: "reopens — shipped work found wrong"},
@@ -251,6 +281,7 @@ var transitionGroups = []transitionGroup{
 			{From: Underway, To: Declined, Actor: ActorUser, Label: "declines"},
 			{From: Revisit, To: Declined, Actor: ActorUser, Label: "declines"},
 			{From: Unverified, To: Declined, Actor: ActorUser, Label: "declines — the shipped work is not being kept"},
+			{From: Unreviewed, To: Declined, Actor: ActorUser, Label: "declines — the shipped work is not being kept"},
 			{From: Confirmed, To: Declined, Actor: ActorUser, Label: "declines — the shipped work is not being kept"},
 			{From: Assumed, To: Declined, Actor: ActorUser, Label: "declines — the shipped work is not being kept"},
 			{From: Completed, To: Declined, Actor: ActorUser, Label: "declines — the shipped work is not being kept"},

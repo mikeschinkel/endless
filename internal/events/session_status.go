@@ -257,14 +257,20 @@ func renderSessionStatusMarkdown(p *SessionStatusRecordedPayload) string {
 	return b.String()
 }
 
-// renderTasksGrouped walks the flat <task> list and emits 3 sections
-// (Resolved / Pending / Unverified), with each task placed by a
+// renderTasksGrouped walks the flat <task> list and emits 4 sections
+// (Resolved / Pending / Unverified / Unreviewed), with each task placed by a
 // status→disposition mapping. Sections with no tasks render `(empty)`.
 //
 // Status → disposition mapping:
-//   - resolved: confirmed, assumed, completed, obsolete, declined
-//   - pending:  untriaged, unplanned, submitted, ready, underway, revisit
-//   - unverified:   unverified
+//   - resolved:   confirmed, assumed, completed, obsolete, declined
+//   - pending:    untriaged, unplanned, submitted, ready, underway, revisit
+//   - unverified: unverified
+//   - unreviewed: unreviewed
+//
+// The last two are siblings — work its author has finished, waiting on someone
+// else — but they ask different questions ("does it work" against "has the
+// owner read it") and they get one bucket each, named for the status it holds
+// (E-2016). Sharing a bucket would have needed a heading that names neither.
 //
 // There is no Blocked bucket: `blocked` left the status vocabulary in E-2018,
 // and blockedness was never a status to bucket on — it is the `blocked_by`
@@ -278,6 +284,7 @@ func renderTasksGrouped(b *strings.Builder, body string) {
 		"Resolved":   nil,
 		"Pending":    nil,
 		"Unverified": nil,
+		"Unreviewed": nil,
 	}
 	if body != "" {
 		for _, elem := range splitElements(body, "task") {
@@ -287,7 +294,7 @@ func renderTasksGrouped(b *strings.Builder, body string) {
 			)
 		}
 	}
-	for _, heading := range []string{"Resolved", "Pending", "Unverified"} {
+	for _, heading := range []string{"Resolved", "Pending", "Unverified", "Unreviewed"} {
 		b.WriteString("## ")
 		b.WriteString(heading)
 		b.WriteString("\n")
@@ -318,7 +325,7 @@ func renderTasksGrouped(b *strings.Builder, body string) {
 // statusToDisposition maps a task status to the bucket the renderer places it
 // in. Unknown statuses fall into "Pending" so they surface.
 //
-// The three buckets partition the vocabulary, and taskstatus asserts that
+// The four buckets partition the vocabulary, and taskstatus asserts that
 // (E-1891): a status in none of them would land in Pending by accident rather
 // than by decision, which is how the fallthrough would hide an omission.
 func statusToDisposition(status string) string {
@@ -327,6 +334,8 @@ func statusToDisposition(status string) string {
 		return "Resolved"
 	case status == taskstatus.Unverified:
 		return "Unverified"
+	case status == taskstatus.Unreviewed:
+		return "Unreviewed"
 	default:
 		return "Pending"
 	}

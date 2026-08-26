@@ -105,29 +105,68 @@ func TestChildrenStateOrderPartitionsAll(t *testing.T) {
 }
 
 // TestSessionDispositionsPartitionAll pins the session-status task rollup: its
-// three buckets are Terminal, `unverified` and SessionPending. A status in none
-// of them would fall through to Pending by accident rather than by decision.
+// four buckets are Terminal, `unverified`, `unreviewed` and SessionPending. A
+// status in none of them would fall through to Pending by accident rather than
+// by decision.
 //
-// It was four buckets until E-2018 removed `blocked` from the vocabulary; the
-// bucket keyed on it went with it.
+// The count has moved twice. It was four buckets until E-2018 removed `blocked`
+// from the vocabulary; the bucket keyed on it went with it. E-2016 brings it
+// back to four with `unreviewed`, which gets its own bucket rather than sharing
+// `unverified`'s — they are siblings but they ask different questions, and one
+// heading naming both would name neither.
 func TestSessionDispositionsPartitionAll(t *testing.T) {
 	partition(t, "session dispositions",
 		taskstatus.Get(taskstatus.Terminal),
 		[]string{taskstatus.Unverified},
+		[]string{taskstatus.Unreviewed},
 		taskstatus.Get(taskstatus.SessionPending),
 	)
 }
 
-// TestSettledIsTerminalPlusUnverified pins the one relationship between groups
+// TestSettledIsTerminalPlusTheGates pins the one relationship between groups
 // that is definitional rather than coincidental: settled work is terminal work
-// plus work awaiting verification.
-func TestSettledIsTerminalPlusUnverified(t *testing.T) {
-	want := append(taskstatus.Get(taskstatus.Terminal), taskstatus.Unverified)
+// plus work waiting on somebody's sign-off. E-2016 added the second gate, so
+// what was "plus unverified" is now "plus both gates".
+func TestSettledIsTerminalPlusTheGates(t *testing.T) {
+	want := append(taskstatus.Get(taskstatus.Terminal),
+		taskstatus.Unverified, taskstatus.Unreviewed)
 	got := taskstatus.Get(taskstatus.Settled)
 	sort.Strings(want)
 	sort.Strings(got)
 	if !reflect.DeepEqual(got, want) {
-		t.Errorf("Settled = %v, want Terminal+unverified = %v", got, want)
+		t.Errorf("Settled = %v, want Terminal+unverified+unreviewed = %v", got, want)
+	}
+}
+
+// TestShippedIsSettledMinusTheAbandonments pins the other side of the same
+// coin. `unreviewed` is Shipped — the work HAPPENED, which is what makes
+// `obsolete` ("it never needed doing") a lie about it, exactly as E-1956
+// reasoned for `unverified`.
+func TestShippedIsSettledMinusTheAbandonments(t *testing.T) {
+	abandoned := map[string]bool{taskstatus.Declined: true, taskstatus.Obsolete: true}
+	var want []string
+	for _, s := range taskstatus.Get(taskstatus.Settled) {
+		if !abandoned[s] {
+			want = append(want, s)
+		}
+	}
+	got := taskstatus.Get(taskstatus.Shipped)
+	sort.Strings(want)
+	sort.Strings(got)
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("Shipped = %v, want Settled minus declined/obsolete = %v", got, want)
+	}
+}
+
+// TestTheTwoLanesAreDisjoint pins that the verification lane and the review
+// lane share no status. They are the two ways work finishes, and a status in
+// both would mean a task could be gated twice or skip a gate depending on
+// which membership a caller happened to test (E-2016).
+func TestTheTwoLanesAreDisjoint(t *testing.T) {
+	for _, s := range taskstatus.Get(taskstatus.ReviewTrack) {
+		if taskstatus.Has(taskstatus.VerificationTrack, s) {
+			t.Errorf("status %q is in both the review and verification tracks", s)
+		}
 	}
 }
 
@@ -322,22 +361,23 @@ func TestParseGroupRejectsUnknown(t *testing.T) {
 // fails here.
 func TestGroupMembershipIsPinned(t *testing.T) {
 	want := map[string][]string{
-		"all":                    {"untriaged", "unplanned", "submitted", "ready", "underway", "unverified", "confirmed", "assumed", "completed", "revisit", "declined", "obsolete"},
+		"all":                    {"untriaged", "unplanned", "submitted", "ready", "underway", "unverified", "unreviewed", "confirmed", "assumed", "completed", "revisit", "declined", "obsolete"},
 		"actionable":             {"unplanned", "ready", "revisit"},
-		"not-actionable":         {"untriaged", "submitted", "underway", "unverified", "confirmed", "assumed", "completed", "declined", "obsolete"},
-		"active":                 {"underway", "unverified"},
+		"not-actionable":         {"untriaged", "submitted", "underway", "unverified", "unreviewed", "confirmed", "assumed", "completed", "declined", "obsolete"},
+		"active":                 {"underway", "unverified", "unreviewed"},
 		"claim-promotes":         {"untriaged", "unplanned", "ready", "revisit"},
 		"open":                   {"untriaged", "unplanned", "submitted", "ready", "underway"},
-		"children-state-order":   {"untriaged", "unplanned", "submitted", "ready", "underway", "revisit", "unverified"},
+		"children-state-order":   {"untriaged", "unplanned", "submitted", "ready", "underway", "revisit", "unverified", "unreviewed"},
 		"derivation-precedence":  {"underway", "ready", "submitted", "unplanned", "untriaged"},
 		"description-reset-from": {"untriaged", "unplanned", "submitted", "ready", "revisit"},
 		"pre-judgment":           {"untriaged", "unplanned"},
 		"reopen-refused":         {"declined", "obsolete"},
 		"reopenable":             {"confirmed", "assumed", "completed"},
+		"review-track":           {"unreviewed"},
 		"session-pending":        {"untriaged", "unplanned", "submitted", "ready", "underway", "revisit"},
 		"sets-completed-at":      {"confirmed", "completed"},
-		"settled":                {"unverified", "confirmed", "assumed", "completed", "declined", "obsolete"},
-		"shipped":                {"unverified", "confirmed", "assumed", "completed"},
+		"settled":                {"unverified", "unreviewed", "confirmed", "assumed", "completed", "declined", "obsolete"},
+		"shipped":                {"unverified", "unreviewed", "confirmed", "assumed", "completed"},
 		"sticky-override":        {"revisit", "declined", "obsolete"},
 		"submittable-from":       {"untriaged", "unplanned", "revisit"},
 		"terminal":               {"confirmed", "assumed", "completed", "declined", "obsolete"},

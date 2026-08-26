@@ -321,12 +321,45 @@ def test_update_task_to_research_then_existing_status_change(
 
 
 def test_research_completed_still_allowed(seeded_project_at_cwd):
-    """Bug 1's gate refuses assumed/confirmed but allows completed."""
+    """Bug 1's gate refuses assumed/confirmed but allows completed.
+
+    E-2016 put `unreviewed` in front of `completed` for research, so reaching
+    the terminal is now two steps. That the terminal is still REACHABLE is what
+    this test is about, and it still is.
+    """
     epic = _add_task("Anchor epic", status="underway", task_type="epic")
     tid = _add_task("Research bubble tea", task_type="research", parent_id=epic)
-    task_cmd.update_plan(tid, status="completed", outcome="findings text")
+    task_cmd.update_plan(tid, status="unreviewed", outcome="findings text")
+    task_cmd.update_plan(tid, status="completed")
     row = db.query("SELECT status FROM tasks WHERE id = ?", (tid,))
     assert row[0]["status"] == "completed"
+
+
+def test_research_cannot_skip_the_review_gate(seeded_project_at_cwd):
+    """E-2016: a research task may not declare its own outcome finished.
+
+    This is the defect that filed the task. E-1817's outcome went through five
+    rounds of Mike's correction AFTER the session marked it completed, and
+    nothing in the system had asked him first.
+    """
+    epic = _add_task("Anchor epic", status="underway", task_type="epic")
+    tid = _add_task("Research bubble tea", task_type="research", parent_id=epic)
+    with pytest.raises(click.ClickException) as exc:
+        task_cmd.update_plan(tid, status="completed", outcome="findings text")
+    assert "unreviewed" in str(exc.value)
+    row = db.query("SELECT status FROM tasks WHERE id = ?", (tid,))
+    assert row[0]["status"] != "completed"
+
+
+def test_todo_is_refused_the_review_gate(seeded_project_at_cwd):
+    """E-2016's inverse half: implementation work is gated by `unverified`."""
+    tid = _add_task("Plain task")
+    with pytest.raises(click.ClickException) as exc:
+        task_cmd.update_plan(tid, status="unreviewed")
+    msg = str(exc.value)
+    assert "unreviewed" in msg
+    # The refusal must name the remedy for THIS direction, not the other one.
+    assert "unverified" in msg
 
 
 def test_research_declined_and_obsolete_still_allowed(seeded_project_at_cwd):

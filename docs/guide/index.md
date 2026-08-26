@@ -105,8 +105,11 @@ stateDiagram-v2
     underway --> assumed: agent believes done, verify on use (todo/bugfix)
 
     %% Findings lane — work whose deliverable IS the outcome text
-    underway --> completed: agent delivers the findings as an outcome
-    ready --> completed: agent delivers the findings as an outcome
+    underway --> unreviewed: agent delivers the findings as an outcome (research/brainstorm)
+    ready --> unreviewed: agent delivers the findings as an outcome (research/brainstorm)
+    unreviewed --> completed: user reads the outcome and accepts it (research/brainstorm)
+    underway --> completed: agent delivers the findings as an outcome (todo/bugfix/epic)
+    ready --> completed: agent delivers the findings as an outcome (todo/bugfix/epic)
 
     %% Reopening — the work is not settled after all
     untriaged --> revisit: agent reopens — needs re-evaluation
@@ -115,6 +118,7 @@ stateDiagram-v2
     ready --> revisit: agent reopens — needs re-evaluation
     underway --> revisit: session hands the task back
     unverified --> revisit: user reopens — verification failed
+    unreviewed --> revisit: user reopens — the outcome needs more work
     confirmed --> revisit: user reopens — shipped work found wrong
     assumed --> revisit: user reopens — shipped work found wrong
     completed --> revisit: user reopens — shipped work found wrong
@@ -127,6 +131,7 @@ stateDiagram-v2
     underway --> declined: user declines
     revisit --> declined: user declines
     unverified --> declined: user declines — the shipped work is not being kept
+    unreviewed --> declined: user declines — the shipped work is not being kept
     confirmed --> declined: user declines — the shipped work is not being kept
     assumed --> declined: user declines — the shipped work is not being kept
     completed --> declined: user declines — the shipped work is not being kept
@@ -161,6 +166,7 @@ stateDiagram-v2
 | `ready`       | Approved to implement. `ready` provably means human-approved, so background sessions may pick up only `ready` work. |
 | `underway` | A session has claimed the task and is working on it. Set automatically by `task claim`.                        |
 | `unverified`      | Implementation done, awaiting verification. **Still blocks dependents.**                                       |
+| `unreviewed`  | Research/brainstorm outcome written, awaiting the owner's read — the review lane's counterpart to `unverified`. Those two types reach `completed` only through it, so a session cannot declare its own findings finished. **Still blocks dependents**, and more sharply than `unverified`: the deliverable is information other tasks consume. Refused on `todo`/`bugfix`, which are gated by `unverified` instead. |
 | `confirmed`   | Verified and done. **Unblocks dependents.** Only the user confirms.                                            |
 | `assumed`     | Believed complete, will verify when used naturally. **Unblocks dependents.**                                   |
 | `revisit`     | Needs re-evaluation before it can proceed — either a partial plan that no longer holds, or work that shipped and turned out wrong. Reopening your own landed work lands here. |

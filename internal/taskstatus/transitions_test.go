@@ -232,13 +232,71 @@ func TestTypeRestrictedLaneRefusesTheOtherTypes(t *testing.T) {
 		if taskstatus.TransitionAllowed(taskstatus.Underway, taskstatus.Unverified, tt) {
 			t.Errorf("a %s task may reach `unverified`, but it never goes through user verification", tt)
 		}
-		if !taskstatus.TransitionAllowed(taskstatus.Underway, taskstatus.Completed, tt) {
-			t.Errorf("a %s task cannot reach `completed`, which is its only way to finish", tt)
-		}
 	}
 	for _, tt := range []tasktype.TaskType{tasktype.TaskTypeTask, tasktype.TaskTypeBug} {
 		if !taskstatus.TransitionAllowed(taskstatus.Underway, taskstatus.Unverified, tt) {
 			t.Errorf("a %s task cannot report implementation done", tt)
+		}
+	}
+}
+
+// TestReviewGateIsMandatoryForFindingsTypes is the whole point of E-2016.
+// research and brainstorm reach `completed` only THROUGH `unreviewed`; the
+// direct edge that used to exist is gone for them, which is what stops a
+// session declaring its own outcome finished.
+func TestReviewGateIsMandatoryForFindingsTypes(t *testing.T) {
+	for _, tt := range []tasktype.TaskType{tasktype.TaskTypeResearch, tasktype.TaskTypeBrainstorm} {
+		if taskstatus.TransitionAllowed(taskstatus.Underway, taskstatus.Completed, tt) {
+			t.Errorf("a %s task can still jump straight to `completed`, skipping the review gate", tt)
+		}
+		if taskstatus.TransitionAllowed(taskstatus.Ready, taskstatus.Completed, tt) {
+			t.Errorf("a %s task can still jump from `ready` to `completed`, skipping the review gate", tt)
+		}
+		for _, from := range []string{taskstatus.Underway, taskstatus.Ready} {
+			if !taskstatus.TransitionAllowed(from, taskstatus.Unreviewed, tt) {
+				t.Errorf("a %s task cannot reach `unreviewed` from %q", tt, from)
+			}
+		}
+		if !taskstatus.TransitionAllowed(taskstatus.Unreviewed, taskstatus.Completed, tt) {
+			t.Errorf("a %s task cannot leave `unreviewed` for `completed`", tt)
+		}
+		// The gate has to be escapable downward too, or a wrong outcome is
+		// stuck: E-1817 took five rounds of correction.
+		if !taskstatus.TransitionAllowed(taskstatus.Unreviewed, taskstatus.Revisit, tt) {
+			t.Errorf("a %s task cannot be sent back from `unreviewed` — a wrong outcome would be stranded", tt)
+		}
+	}
+}
+
+// TestReviewGateRefusesImplementationTypes pins the inverse half. todo and
+// bugfix are gated by `unverified`; routing them through a second gate would
+// say the two lanes are one.
+func TestReviewGateRefusesImplementationTypes(t *testing.T) {
+	for _, tt := range []tasktype.TaskType{tasktype.TaskTypeTask, tasktype.TaskTypeBug} {
+		if taskstatus.TransitionAllowed(taskstatus.Underway, taskstatus.Unreviewed, tt) {
+			t.Errorf("a %s task may reach `unreviewed`, but it is gated by `unverified`", tt)
+		}
+		if !taskstatus.TransitionAllowed(taskstatus.Underway, taskstatus.Completed, tt) {
+			t.Errorf("a %s task lost its direct route to `completed`", tt)
+		}
+	}
+}
+
+// TestFindingsLaneCoversEveryType is the invariant the `review`/`direct` split
+// rests on. A type in neither set could not reach `completed` at all; a type in
+// both could skip the gate by taking the direct edge. Enumerating tasktype.All
+// is what makes a NEW task type fail here rather than silently inherit whichever
+// half someone edited last.
+func TestFindingsLaneCoversEveryType(t *testing.T) {
+	for _, tt := range tasktype.All() {
+		viaGate := taskstatus.TransitionAllowed(taskstatus.Underway, taskstatus.Unreviewed, tt) &&
+			taskstatus.TransitionAllowed(taskstatus.Unreviewed, taskstatus.Completed, tt)
+		direct := taskstatus.TransitionAllowed(taskstatus.Underway, taskstatus.Completed, tt)
+		switch {
+		case viaGate && direct:
+			t.Errorf("a %s task can reach `completed` both through the gate and around it", tt)
+		case !viaGate && !direct:
+			t.Errorf("a %s task has no route to `completed` at all", tt)
 		}
 	}
 }

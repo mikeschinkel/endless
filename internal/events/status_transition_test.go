@@ -360,17 +360,49 @@ func TestTheHappyPathRunsUnimpeded(t *testing.T) {
 }
 
 // TestFindingsPathRunsUnimpeded is the other lane: research work terminates via
-// `completed` and never enters verification.
+// `completed` and never enters verification. E-2016 put `unreviewed` in the
+// path — the outcome is written, then the owner reads it — so the walk is one
+// step longer than it was.
 func TestFindingsPathRunsUnimpeded(t *testing.T) {
 	db := newDerivationDB(t)
 	seedTask(t, db, 130, nil, int(tasktype.TaskTypeResearch), taskstatus.Untriaged)
 	seedHolderSession(t, db, 907, 130)
 
 	for _, status := range []string{
-		taskstatus.Submitted, taskstatus.Ready, taskstatus.Underway, taskstatus.Completed,
+		taskstatus.Submitted, taskstatus.Ready, taskstatus.Underway,
+		taskstatus.Unreviewed, taskstatus.Completed,
 	} {
 		if _, err := execTaskFieldsUpdated(db, statusUpdate(t, 130, status, "907"), nil); err != nil {
 			t.Fatalf("the findings path stalled at %q: %v", status, err)
 		}
+	}
+}
+
+// TestFindingsPathCannotSkipTheReviewGate is E-2016's guard at the executor,
+// where the reported defect actually lands: a session that marks its own
+// research outcome `completed` is refused, and told where to go instead.
+func TestFindingsPathCannotSkipTheReviewGate(t *testing.T) {
+	db := newDerivationDB(t)
+	seedTask(t, db, 131, nil, int(tasktype.TaskTypeResearch), taskstatus.Untriaged)
+	seedHolderSession(t, db, 908, 131)
+
+	for _, status := range []string{
+		taskstatus.Submitted, taskstatus.Ready, taskstatus.Underway,
+	} {
+		if _, err := execTaskFieldsUpdated(db, statusUpdate(t, 131, status, "908"), nil); err != nil {
+			t.Fatalf("setup stalled at %q: %v", status, err)
+		}
+	}
+
+	_, err := execTaskFieldsUpdated(db, statusUpdate(t, 131, taskstatus.Completed, "908"), nil)
+	if err == nil {
+		t.Fatal("a research task went straight to `completed`, skipping the review gate")
+	}
+	// The refusal has to name the route, or the session has no next move.
+	if !strings.Contains(err.Error(), taskstatus.Unreviewed) {
+		t.Errorf("refusal does not name `unreviewed` as the way forward: %v", err)
+	}
+	if got, _ := taskStatus(t, db, 131); got != taskstatus.Underway {
+		t.Errorf("status = %q after a refused change, want it left at %q", got, taskstatus.Underway)
 	}
 }

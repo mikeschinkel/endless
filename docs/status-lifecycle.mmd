@@ -62,8 +62,11 @@ stateDiagram-v2
     underway --> assumed: agent believes done, verify on use (todo/bugfix)
 
     %% Findings lane — work whose deliverable IS the outcome text
-    underway --> completed: agent delivers the findings as an outcome
-    ready --> completed: agent delivers the findings as an outcome
+    underway --> unreviewed: agent delivers the findings as an outcome (research/brainstorm)
+    ready --> unreviewed: agent delivers the findings as an outcome (research/brainstorm)
+    unreviewed --> completed: user reads the outcome and accepts it (research/brainstorm)
+    underway --> completed: agent delivers the findings as an outcome (todo/bugfix/epic)
+    ready --> completed: agent delivers the findings as an outcome (todo/bugfix/epic)
 
     %% Reopening — the work is not settled after all
     untriaged --> revisit: agent reopens — needs re-evaluation
@@ -72,6 +75,7 @@ stateDiagram-v2
     ready --> revisit: agent reopens — needs re-evaluation
     underway --> revisit: session hands the task back
     unverified --> revisit: user reopens — verification failed
+    unreviewed --> revisit: user reopens — the outcome needs more work
     confirmed --> revisit: user reopens — shipped work found wrong
     assumed --> revisit: user reopens — shipped work found wrong
     completed --> revisit: user reopens — shipped work found wrong
@@ -84,6 +88,7 @@ stateDiagram-v2
     underway --> declined: user declines
     revisit --> declined: user declines
     unverified --> declined: user declines — the shipped work is not being kept
+    unreviewed --> declined: user declines — the shipped work is not being kept
     confirmed --> declined: user declines — the shipped work is not being kept
     assumed --> declined: user declines — the shipped work is not being kept
     completed --> declined: user declines — the shipped work is not being kept

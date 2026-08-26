@@ -63,7 +63,7 @@ endless task next --llm
 # Other reads
 endless task id                                      # the task THIS session is on
 endless task recent                                  # recently updated
-endless task active                                  # underway + unverified
+endless task active                                  # underway + unverified + unreviewed
 endless task search "query"                          # ID, title, description
 endless task search "query" --text                   # also search text field
 endless task handoff <id>                            # render the spawn handoff
@@ -331,6 +331,7 @@ endless task approve <id>                            # human: submitted → read
 endless task claim <id>                              # ready → underway + create worktree
 endless task update <id> --status revisit            # hand the task back (see `task release`: disabled)
 endless task update <id> --status unverified             # work done, awaiting verification
+endless task update <id> --status unreviewed --outcome "..."   # research/brainstorm: outcome written, awaiting the owner's read
 endless task confirm <id> --outcome "..."            # user-only — sessions do not self-confirm
 endless task confirm <id> --cascade --outcome "..."  # confirm a task and descendants
 endless task assume <id> --outcome "..."             # believed complete, can't verify
@@ -343,7 +344,7 @@ Found a bug in work you already landed? Reopen that task (`--status revisit`) in
 ### Superseded work is `replaced_by`, never `obsolete`
 
 **`obsolete` is refused on a task that already shipped** — one that is
-`unverified`, `confirmed`, `assumed`, or `completed`. `obsolete` means *made
+`unverified`, `unreviewed`, `confirmed`, `assumed`, or `completed`. `obsolete` means *made
 irrelevant by other changes*, and it reads as **never happened**, which is
 simply false of work that ran and merged. Setting it would also throw away the
 one fact worth keeping: that the work was *superseded*.

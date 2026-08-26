@@ -244,7 +244,9 @@ def test_update_status_completed_satisfied_by_existing_db_outcome(seeded_project
     requirement is actually in play (ED-1520)."""
     tid = _add_task("Audit X", type_id=_RESEARCH)
     task_cmd.update_plan(tid, outcome="findings drafted")  # standalone
-    # Now flip status without re-passing --outcome
+    # Now flip status without re-passing --outcome. E-2016 routes research
+    # through `unreviewed` on the way, and neither hop re-passes the outcome.
+    task_cmd.update_plan(tid, status="unreviewed")
     task_cmd.update_plan(tid, status="completed")
     status, outcome = _status_outcome(tid)
     assert status == "completed"
@@ -254,6 +256,7 @@ def test_update_status_completed_satisfied_by_existing_db_outcome(seeded_project
 def test_update_status_completed_new_outcome_overrides_existing(seeded_project_at_cwd):
     tid = _add_task("Audit X", type_id=_RESEARCH)
     task_cmd.update_plan(tid, outcome="old draft")
+    task_cmd.update_plan(tid, status="unreviewed")
     task_cmd.update_plan(tid, status="completed", outcome="final findings")
     status, outcome = _status_outcome(tid)
     assert status == "completed"
@@ -266,6 +269,15 @@ def test_update_status_completed_still_refused_when_both_empty(seeded_project_at
     tid = _add_task("Audit X", type_id=_RESEARCH)  # no outcome ever set
     with pytest.raises(click.ClickException) as exc:
         task_cmd.update_plan(tid, status="completed")
+    assert "outcome is required" in str(exc.value.message).lower()
+
+
+def test_update_status_unreviewed_refused_when_outcome_empty(seeded_project_at_cwd):
+    """E-2016: the review gate is where the outcome now arrives, so entering it
+    empty is refused. Otherwise the owner is handed nothing to read."""
+    tid = _add_task("Audit X", type_id=_RESEARCH)  # no outcome ever set
+    with pytest.raises(click.ClickException) as exc:
+        task_cmd.update_plan(tid, status="unreviewed")
     assert "outcome is required" in str(exc.value.message).lower()
 
 
