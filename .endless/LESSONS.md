@@ -4399,3 +4399,13 @@ Three things I got wrong by not knowing this:
 
 The shape of the mistake in all three: I assumed a file that looks like a test suite behaves like one. Here, 'verify' names a one-shot gate at a specific moment in a task's life, and its cost model — what it may write, how often it runs, who may run it — follows from that, not from what tests usually do.
 - **Project**: endless
+
+### [2026-08-26] Answer the question asked; do not append findings Mike did not ask for
+Mike asked one question: what percentage of the backups directory those three files were. The answer is one number. I gave the number and then appended two unsolicited findings — that there were five such backups rather than three, and that 4.3 GiB of routine backups going back weeks appear unpruned. He knew both. Neither was asked for.
+
+This is a pattern across this session, not a one-off. Asked to verify a settings file, I also volunteered that Stop had the wrong async flag. Asked whether to run a repair script, I also critiqued its success probe and its backup footprint. Each addition was true, and each one made him read past what he wanted to find something he did not ask for. Volume is not thoroughness; it is a tax on the reader.
+
+The line: a finding earns a place in the reply only when it changes what Mike would DO about the thing he asked about. 'You have 60 unpruned backups' does not change the percentage he asked for. If something genuinely blocks the work — a gate that cannot fire, a database that refuses writes — that belongs in the reply because it changes the next action. An observation that is merely true belongs nowhere.
+
+Especially do not append findings to a question that has a one-line factual answer. The shorter the question, the more clearly it defines the scope of the answer.
+- **Project**: endless
