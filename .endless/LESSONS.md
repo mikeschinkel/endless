@@ -4318,3 +4318,7 @@ Naming convention in this schema, verified: FK columns are the SINGULAR table na
 ### [2026-08-26] Third-person 'Mike' in plan/ledger text is agent-authored, not Mike's words
 When plan or ledger text refers to "Mike" in the third person (e.g. "Mike has not chosen; do not assume"), it was written BY an agent/session annotating the plan — not by Mike, who does not write about himself in the third person. Never quote such text back to him as "you wrote…". Attribute it to the plan or the prior session. Only first- or second-person statements Mike makes in chat are his direct words.
 - **Project**: endless
+
+### [2026-08-26] Reserve 'path' for filesystem/URL paths only, never for a code route or decision alternative
+Reserve the word "path" for a filesystem path or a URL path only. Do not use it for other concepts — e.g. a code/resolution route, a control-flow branch, or a decision alternative. Name those literally instead: "resolver", "the function that resolves verbs", "code route", "branch", "option". Using "path" loosely collides with the term's real meaning and muddies technical discussion.
+- **Project**: endless
