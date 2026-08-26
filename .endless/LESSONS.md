@@ -4334,3 +4334,15 @@ Two things follow, and they are the fix:
 
 E-2073: the sweep for the old 'land`/`drop` without asking' wording passed 56/56 in the worktree, then reported tests/tasks/e-2073-verify.sh against itself the moment the file was tracked.
 - **Project**: endless
+
+### [2026-08-26] Check main before implementing a plan that names files and line numbers
+A plan is a snapshot of the tree at planning time. E-2073's plan named six template files, each with a line number, and prescribed the same substitution in all six. Between the plan being written and me implementing it, E-1947 landed on main and extracted those six duplicated lines into ONE shared partial. I implemented the plan literally against my stale base, produced six edits, and every one of them conflicted at land.
+
+The plan even had the right instinct — it told me to check `_mechanics.tmpl` for a copy of the sentence before finishing. I checked, at my base, and correctly found nothing. The answer had changed on main, not in my worktree.
+
+The habit: before starting work whose plan names specific files, run `git log --oneline <merge-base>..main -- <those paths>`. It costs one command. If main has moved under the plan, rebase FIRST and re-read the plan against the current structure — the plan describes the outcome wanted, not the edit that produces it, and an outdated plan can prescribe an edit that is now the wrong shape entirely.
+
+Landing late is not the same as landing safely: a conflict at land is a conflict you could have seen at minute one, and by then you have written and tested the wrong shape.
+
+The resolution here was strictly better than the plan: the six duplicated edits collapsed to one edit in the shared partial, and the guard survived only because it asserted the RENDERED output rather than the file bytes — a test that grepped the six template files would have had to be rewritten too.
+- **Project**: endless
