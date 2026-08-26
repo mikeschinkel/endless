@@ -71,6 +71,29 @@ endless task handoff <id>                            # render the spawn handoff
 
 Reach for `--llm` whenever you're parsing output yourself — it's token-efficient.
 
+### Every listing stops at 20 rows and says so
+
+`task list`, `task search`, `task next`, `task recent`, `task landed`,
+`task unsettled`, `epic list`, `decision list` and `endless sql` render at most
+20 rows. When there are more, the last line says how many were left out and how
+to see them:
+
+```
+… 1340 more rows (--no-limit)
+```
+
+- `--limit N` picks a different cap; `--no-limit` removes it. The two together
+  are refused, and `--limit 0` is refused with a pointer to `--no-limit`.
+- The count under a table (`35 match(es)`, `35 item(s)`) is the size of the
+  **result**, not the height of the table. Those two numbers differing is the
+  cap, working.
+- **Do not pipe a listing to `head`.** That is what the cap replaces: `head` is
+  silent, so a truncated result is indistinguishable from a complete one — which
+  is how two searches once returned false "no existing task" answers.
+- `--json` and `--tsv` are **uncapped**, because a program parsing them has no
+  footer to read. An explicit `--limit` still caps them, and then the footer goes
+  to stderr so the payload stays parseable.
+
 `endless task id` is the one read that takes no id: it prints the task **your
 own session** is on, as a single bare `E-NNNN` line, so a shell, a recipe or an
 agent can compose it instead of asking you to retype an id you already claimed:

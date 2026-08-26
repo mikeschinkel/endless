@@ -16,6 +16,7 @@ from pathlib import Path
 import click
 
 from endless import db
+from endless import rowcap
 from endless.project_path import resolved
 from endless.task_cmd import (
     _display_path,
@@ -95,8 +96,11 @@ def list_decisions(
     sort_by: str | None = None,
     llm: bool = False,
     as_json: bool = False,
+    limit: int | None = None,
+    no_limit: bool = False,
 ):
     """List decisions for a project (or all projects with --all)."""
+    cap = rowcap.resolve_cap(limit, no_limit, machine=as_json)
     where = "WHERE 1=1"
     params: list = []
     if not show_all:
@@ -138,6 +142,8 @@ def list_decisions(
             )
         return
 
+    rows, hidden = rowcap.cap_rows(rows, cap)
+
     # One batched lookup for the whole page, not one per row — and only for the
     # two modes that still carry the supersession: since E-2064 the human table
     # renders the bare status, so it must not pay for a query it never reads.
@@ -161,6 +167,7 @@ def list_decisions(
             for row in rows
         ]
         click.echo(json.dumps(out, indent=2))
+        rowcap.echo_footer(hidden, llm=True, err=True)
         return
 
     if llm:
@@ -172,6 +179,7 @@ def list_decisions(
                 f"{decision_id_display(row['id'])} {row['status']}{note} "
                 f"{prefix}{row['title']}"
             )
+        rowcap.echo_footer(hidden, llm=True)
         return
 
     try:
@@ -225,6 +233,7 @@ def list_decisions(
             line += f"{gap}{row['project_name']:<{proj_w}}"
         line += f"{gap}{title}"
         click.echo(line)
+    rowcap.echo_footer(hidden)
 
 
 # Show --------------------------------------------------------------------

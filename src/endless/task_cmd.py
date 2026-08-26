@@ -15,6 +15,7 @@ import click
 from tabulate import tabulate
 
 from endless import db, config
+from endless import rowcap
 from endless import statuses
 from endless.statuses import TASK_STATUSES
 from endless.project_path import project_name_for_cwd, resolved
@@ -999,6 +1000,8 @@ def show_plan(
     as_json: bool = False,
     type_filter: str | None = None,
     removed_only: bool = False,
+    limit: int | None = None,
+    no_limit: bool = False,
 ):
     """Show tasks for a project as a flat sorted table.
 
@@ -1012,7 +1015,12 @@ def show_plan(
     terminal-status exclusion — a removed task keeps whatever status it had, and
     "show me what was removed" should not silently drop the obsolete ones. An
     explicit --status still narrows it.
+
+    The row cap (E-2071) is applied AFTER the query, not pushed into it, so the
+    footer can name an exact remainder and the confirmed tally below stays a
+    tally of the whole set rather than of the rendered page.
     """
+    cap = rowcap.resolve_cap(limit, no_limit, machine=as_json)
     project_id, proj_name = _resolve_project(project_name)
 
     # Reads go through live_tasks so removed rows can never leak into a listing.
@@ -1098,6 +1106,13 @@ def show_plan(
     # the second relation with that property. E-2064 narrows "every output mode"
     # to these two: the human table below renders the bare status, so it must
     # not pay for two queries it never reads.
+
+    # Both tallies are taken BEFORE the cap: the summary line reports the whole
+    # result set, and the footer says how much of it is off-screen.
+    total = len(rows)
+    confirmed = sum(1 for r in rows if r["status"] == "confirmed")
+    rows, hidden = rowcap.cap_rows(rows, cap)
+
     _ids = [row["id"] for row in rows]
     replaced = replaced_by_map(_ids) if (as_json or llm) else {}
     duplicated = duplicates_map(_ids) if (as_json or llm) else {}
@@ -1130,6 +1145,7 @@ def show_plan(
             for row in rows
         ]
         click.echo(json.dumps(out, indent=2))
+        rowcap.echo_footer(hidden, llm=True, err=True)
         return
 
     if llm:
@@ -1154,6 +1170,7 @@ def show_plan(
                 f"E-{row['id']} {row['phase']} "
                 f"{row['status']}{tier_str}{rb_str}{dup_str} {row['title']}"
             )
+        rowcap.echo_footer(hidden, llm=True)
         return
 
     # Header
@@ -1167,10 +1184,12 @@ def show_plan(
     )
 
     _render_flat_table(rows)
+    rowcap.echo_footer(hidden)
 
     click.echo()
-    total = len(rows)
-    confirmed = sum(1 for r in rows if r["status"] == "confirmed")
+    # The tally counts the WHOLE result set, not the rendered page — with the
+    # footer above it, "20 of 1360" is legible; two numbers that both say 20
+    # are the silence this task removed.
     click.echo(click.style(
         f"{total} item(s)"
         + (f", {confirmed} confirmed" if confirmed else ""),
@@ -1181,7 +1200,8 @@ def show_plan(
 def next_tasks(
     project_name: str | None = None,
     show_all: bool = False,
-    limit: int = 10,
+    limit: int | None = None,
+    no_limit: bool = False,
     llm: bool = False,
     as_json: bool = False,
     tier: int | None = None,
@@ -1189,6 +1209,7 @@ def next_tasks(
     parent_id: int | None = None,
 ):
     """Show top actionable leaf tasks, ranked by priority."""
+    cap = rowcap.resolve_cap(limit, no_limit, machine=as_json)
     # E-1845: `untriaged` is excluded — a task nobody has looked at yet is not
     # actionable work, and offering it here would present it as a ready-to-pick-
     # up item. It surfaces in `session status` (as ◌ triage) instead, which is
@@ -1236,8 +1257,6 @@ def next_tasks(
         where += " AND t.project_id = ?"
         params.append(project_id)
 
-    params.append(limit)
-
     rows = db.query(
         f"SELECT t.id, t.phase, COALESCE(t.title, t.description) as title, "
         f"t.status, t.tier, p.name as project_name "
@@ -1252,8 +1271,7 @@ def next_tasks(
         f"    WHEN 'ready' THEN 0 WHEN 'unplanned' THEN 1 "
         f"    WHEN 'revisit' THEN 2 ELSE 3 END, "
         f"  CASE WHEN t.tier IS NULL THEN 99 ELSE t.tier END, "
-        f"  t.updated_at DESC "
-        f"LIMIT ?",
+        f"  t.updated_at DESC",
         tuple(params),
     )
 
@@ -1268,6 +1286,10 @@ def next_tasks(
             )
         return
 
+    # Capped before grouping: the ordering that ranks these rows is global, so
+    # the cap has to bite on the ranked list, not on each project's slice of it.
+    rows, hidden = rowcap.cap_rows(rows, cap)
+
     if as_json:
         import json
         out = [
@@ -1281,6 +1303,7 @@ def next_tasks(
             for row in rows
         ]
         click.echo(json.dumps(out, indent=2))
+        rowcap.echo_footer(hidden, llm=True, err=True)
         return
 
     # Group by project
@@ -1300,6 +1323,7 @@ def next_tasks(
             click.echo()
             click.echo(click.style(f"Next up ({proj}):", bold=True))
             _render_flat_table(items)
+    rowcap.echo_footer(hidden, llm=llm)
     if not llm:
         click.echo()
 
@@ -1492,12 +1516,14 @@ def active_tasks(
 def recent_tasks(
     project_name: str | None = None,
     show_all: bool = False,
-    limit: int = 10,
+    limit: int | None = None,
+    no_limit: bool = False,
     llm: bool = False,
     as_json: bool = False,
     parent_id: int | None = None,
 ):
     """Show most recently updated tasks."""
+    cap = rowcap.resolve_cap(limit, no_limit, machine=as_json)
     where = "WHERE 1=1"
     params: list = []
 
@@ -1517,16 +1543,13 @@ def recent_tasks(
         where += " AND t.project_id = ?"
         params.append(project_id)
 
-    params.append(limit)
-
     rows = db.query(
         f"SELECT t.id, t.phase, COALESCE(t.title, t.description) as title, "
         f"t.status, t.tier, p.name as project_name "
         f"FROM live_tasks t "
         f"JOIN projects p ON t.project_id = p.id "
         f"{where} "
-        f"ORDER BY t.updated_at DESC "
-        f"LIMIT ?",
+        f"ORDER BY t.updated_at DESC",
         tuple(params),
     )
 
@@ -1541,6 +1564,10 @@ def recent_tasks(
             )
         return
 
+    # Capped before grouping: the ordering that ranks these rows is global, so
+    # the cap has to bite on the ranked list, not on each project's slice of it.
+    rows, hidden = rowcap.cap_rows(rows, cap)
+
     if as_json:
         import json
         out = [
@@ -1554,6 +1581,7 @@ def recent_tasks(
             for row in rows
         ]
         click.echo(json.dumps(out, indent=2))
+        rowcap.echo_footer(hidden, llm=True, err=True)
         return
 
     # Group by project
@@ -1573,6 +1601,7 @@ def recent_tasks(
             click.echo()
             click.echo(click.style(f"Recent ({proj}):", bold=True))
             _render_flat_table(items)
+    rowcap.echo_footer(hidden, llm=llm)
     if not llm:
         click.echo()
 
@@ -1616,11 +1645,13 @@ def _render_landed_table(rows):
 def landed_list(
     project_name: str | None = None,
     show_all: bool = False,
-    limit: int = 20,
+    limit: int | None = None,
+    no_limit: bool = False,
     llm: bool = False,
     as_json: bool = False,
 ):
     """List tasks that have landed at least once, most-recent landing first (E-1478)."""
+    cap = rowcap.resolve_cap(limit, no_limit, machine=as_json)
     where = "WHERE 1=1"
     params: list = []
 
@@ -1633,8 +1664,6 @@ def landed_list(
         where += " AND t.project_id = ?"
         params.append(project_id)
 
-    params.append(limit)
-
     rows = db.query(
         f"SELECT t.id, t.phase, COALESCE(t.title, t.description) AS title, "
         f"t.status, t.tier, p.name AS project_name, "
@@ -1644,8 +1673,7 @@ def landed_list(
         f"JOIN projects p ON t.project_id = p.id "
         f"{where} "
         f"GROUP BY t.id "
-        f"ORDER BY last_landed DESC "
-        f"LIMIT ?",
+        f"ORDER BY last_landed DESC",
         tuple(params),
     )
 
@@ -1657,6 +1685,8 @@ def landed_list(
         else:
             click.echo(click.style("•", fg="cyan") + " No landed tasks")
         return
+
+    rows, hidden = rowcap.cap_rows(rows, cap)
 
     if as_json:
         import json
@@ -1673,6 +1703,7 @@ def landed_list(
             for r in rows
         ]
         click.echo(json.dumps(out, indent=2))
+        rowcap.echo_footer(hidden, llm=True, err=True)
         return
 
     # Group by project
@@ -1693,6 +1724,7 @@ def landed_list(
             click.echo()
             click.echo(click.style(f"Landed ({proj}):", bold=True))
             _render_landed_table(items)
+    rowcap.echo_footer(hidden, llm=llm)
     if not llm:
         click.echo()
 
@@ -1861,7 +1893,8 @@ def _unsettled_rows(project_id: int, root: Path) -> list[dict]:
 
 def unsettled_list(
     project_name: str | None = None,
-    limit: int = 20,
+    limit: int | None = None,
+    no_limit: bool = False,
     include_settled: bool = False,
     llm: bool = False,
     as_json: bool = False,
@@ -1874,6 +1907,7 @@ def unsettled_list(
     `include_settled` additionally lists the settled worktrees, so the command
     can answer "is anything outstanding?" with a complete picture, not silence.
     """
+    cap = rowcap.resolve_cap(limit, no_limit, machine=as_json)
     project_id, proj_name = _resolve_project(project_name)
     from endless.worktree_cmd import _project_root
     root = _project_root()
@@ -1885,7 +1919,7 @@ def unsettled_list(
     # the most work sort to the top, and ties fall back to task id.
     rows.sort(key=lambda r: (
         -(r["probe"]["modified"] + r["probe"]["unlanded"]), r["id"]))
-    shown = rows[:limit]
+    shown, hidden = rowcap.cap_rows(rows, cap)
 
     if as_json:
         import json
@@ -1900,6 +1934,7 @@ def unsettled_list(
             }
             for r in shown
         ], indent=2))
+        rowcap.echo_footer(hidden, llm=True, err=True)
         return
 
     if not shown:
@@ -1915,7 +1950,7 @@ def unsettled_list(
         for r in shown:
             click.echo(f"{task_id_display(r['id'])} {r['probe']['reason']} "
                        f"{r['status']} {r['title']}")
-        _echo_unsettled_truncation(len(rows), len(shown), llm=True)
+        rowcap.echo_footer(hidden, llm=True)
         return
 
     click.echo()
@@ -1934,7 +1969,7 @@ def unsettled_list(
             f"{click.style(reason, fg=_unsettled_color(r['probe']))}  "
             f"{title}"
         )
-    _echo_unsettled_truncation(len(rows), len(shown), llm=False)
+    rowcap.echo_footer(hidden)
     click.echo()
     click.echo(click.style("  ", fg="cyan") +
                f"Detail for one: endless task unsettled <id>")
@@ -1968,17 +2003,6 @@ def _echo_probe_errors(probe: dict) -> None:
         click.echo(click.style(
             f"  Note: {label} failed ({msg}); the ◆ marker treats a git error "
             f"as settled, so this verdict may under-report.", fg="red"))
-
-
-def _echo_unsettled_truncation(total: int, shown: int, llm: bool) -> None:
-    """Say what --limit hid, so a truncated list is never mistaken for the whole."""
-    if total <= shown:
-        return
-    hidden = total - shown
-    if llm:
-        click.echo(f"# {hidden} more (raise --limit)")
-    else:
-        click.echo(f"  … {hidden} more (raise --limit to see {total})")
 
 
 def unsettled_item(item_id: int, llm: bool = False, as_json: bool = False):
@@ -6036,11 +6060,19 @@ def search_tasks(
     phase_filter: str | None = None,
     parent_id: int | None = None,
     search_text: bool = False,
-    limit: int = 20,
+    limit: int | None = None,
+    no_limit: bool = False,
     llm: bool = False,
     as_json: bool = False,
 ):
-    """Search tasks by query string across ID, title, and description."""
+    """Search tasks by query string across ID, title, and description.
+
+    The cap is applied to the fetched rows rather than pushed into SQL (E-2071):
+    a `LIMIT 20` query cannot tell you it matched 60, and "20 match(es)" under a
+    silently truncated table is the exact sentence that produced two false
+    "no existing task" conclusions.
+    """
+    cap = rowcap.resolve_cap(limit, no_limit, machine=as_json)
     project_id, proj_name = _resolve_project(project_name)
 
     where = "WHERE t.project_id = ?"
@@ -6088,14 +6120,12 @@ def search_tasks(
     where += " AND (" + " OR ".join(search_clauses) + ")"
     params.extend(search_params)
 
-    params.append(limit)
     rows = db.query(
         f"SELECT t.id, t.phase, COALESCE(t.title, t.description) as title, "
         f"t.status "
         f"FROM live_tasks t "
         f"{where} "
-        f"ORDER BY t.updated_at DESC "
-        f"LIMIT ?",
+        f"ORDER BY t.updated_at DESC",
         tuple(params),
     )
 
@@ -6112,6 +6142,9 @@ def search_tasks(
             )
         return
 
+    total = len(rows)
+    rows, hidden = rowcap.cap_rows(rows, cap)
+
     if as_json:
         import json
         out = [
@@ -6124,6 +6157,7 @@ def search_tasks(
             for row in rows
         ]
         click.echo(json.dumps(out, indent=2))
+        rowcap.echo_footer(hidden, llm=True, err=True)
         return
 
     if llm:
@@ -6133,6 +6167,7 @@ def search_tasks(
                 f"E-{row['id']} {row['phase']} "
                 f"{row['status']} {row['title']}"
             )
+        rowcap.echo_footer(hidden, llm=True)
         return
 
     click.echo()
@@ -6140,8 +6175,11 @@ def search_tasks(
         click.style(f"Search results for '{query}' ({proj_name}):", bold=True)
     )
     _render_flat_table(rows)
+    rowcap.echo_footer(hidden)
     click.echo()
-    click.echo(click.style(f"{len(rows)} match(es)", dim=True))
+    # `total`, not len(rows): the count under a capped table has to be the count
+    # of MATCHES, or the reader learns only how tall the table is.
+    click.echo(click.style(f"{total} match(es)", dim=True))
 
 
 def move_task(

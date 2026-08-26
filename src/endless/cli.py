@@ -11,6 +11,7 @@ import click
 from endless import __version__
 from endless import agent_help
 from endless import help_settings
+from endless import rowcap
 from endless.agent_help import AgentHelpMixin
 from endless import statuses
 from endless.statuses import TASK_STATUSES, TASK_STATUS_HELP
@@ -852,16 +853,22 @@ def _is_read_only_sql(sql: str) -> bool:
                    "Default is read-only — only SELECT/WITH/EXPLAIN are accepted.")
 @click.option("--tsv", is_flag=True,
               help="Tab-separated output (no header). Useful for piping.")
-def sql_query(query, write, tsv):
+@rowcap.limit_options
+def sql_query(query, write, tsv, limit, no_limit):
     """Run a SQL query against the Endless DB.
 
     Resolves the DB path internally (no need to know where it lives).
     Read-only by default — pass --write for mutations. Replaces the
     agent instinct to reach for sqlite3 against speculative paths
     under .endless/, which silently creates ghost DB files.
+
+    The table render stops at --limit rows and says how many it dropped;
+    --tsv is a machine format and is uncapped unless you pass --limit.
     """
     from endless import db
     import sqlite3
+
+    cap = rowcap.resolve_cap(limit, no_limit, machine=tsv)
 
     if not write and not _is_read_only_sql(query):
         raise click.ClickException(
@@ -889,18 +896,21 @@ def sql_query(query, write, tsv):
         if write:
             click.echo(f"OK ({cursor.rowcount} rows affected)")
         return
+    shown, hidden = rowcap.cap_rows(rows, cap)
     if tsv:
         if not headers:
-            for r in rows:
+            for r in shown:
                 click.echo("\t".join(str(c) for c in r))
-            return
-        for r in rows:
-            click.echo("\t".join(str(r[h]) for h in headers))
+        else:
+            for r in shown:
+                click.echo("\t".join(str(r[h]) for h in headers))
+        rowcap.echo_footer(hidden, llm=True, err=True)
         return
 
     from tabulate import tabulate
-    table = [[r[h] for h in headers] for r in rows]
+    table = [[r[h] for h in headers] for r in shown]
     click.echo(tabulate(table, headers=headers, tablefmt="simple"))
+    rowcap.echo_footer(hidden)
 
 
 @main.command("shell-init")
@@ -1766,9 +1776,14 @@ def task_import(file, from_claude, json_file, project, replace, parent):
               help="Token-efficient output for LLMs")
 @click.option("--json", "as_json", is_flag=True,
               help="JSON output")
+@rowcap.limit_options
 def task_list(project, show_all, status, phase, tier, parent_id, related_to_id, rel_type,
-              sort, removed_only, llm, as_json):
-    """List tasks for a project."""
+              sort, removed_only, llm, as_json, limit, no_limit):
+    """List tasks for a project.
+
+    Stops at --limit rows and says how many it left out; --no-limit renders
+    every one. --json is uncapped unless you ask for a limit.
+    """
     from endless.task_cmd import show_plan, parse_tier_filter, parse_parent_filter
     tier_val = parse_tier_filter(tier) if tier else None
     parent_val = parse_parent_filter(parent_id) if parent_id else None
@@ -1776,7 +1791,8 @@ def task_list(project, show_all, status, phase, tier, parent_id, related_to_id, 
               status_filter=status, phase_filter=phase,
               tier_filter=tier_val, parent_id=parent_val,
               related_to_id=related_to_id, rel_type=rel_type,
-              sort_by=sort, removed_only=removed_only, llm=llm, as_json=as_json)
+              sort_by=sort, removed_only=removed_only, llm=llm, as_json=as_json,
+              limit=limit, no_limit=no_limit)
 
 
 @task_cmd.command("show")
@@ -1825,8 +1841,6 @@ task_cmd.add_command(task_show, name="detail")
               help="Project name (default: detect from cwd)")
 @click.option("--all", "show_all", is_flag=True,
               help="Show tasks from all projects")
-@click.option("--limit", default=10, type=int,
-              help="Max items to show (default: 10)")
 @click.option("--llm", is_flag=True,
               help="Token-efficient output for LLMs")
 @click.option("--json", "as_json", is_flag=True,
@@ -1838,8 +1852,10 @@ task_cmd.add_command(task_show, name="detail")
               help="Filter by phase")
 @click.option("--parent", "parent_id", default=None,
               help="Filter to children of this task (e.g. E-101), or 'none' for root tasks")
+@rowcap.limit_options
 @click.pass_context
-def task_next(ctx, project, show_all, limit, llm, as_json, tier, phase, parent_id):
+def task_next(ctx, project, show_all, limit, llm, as_json, tier, phase, parent_id,
+              no_limit):
     """Show top actionable tasks, ranked by priority."""
     # `next` is a group so it can host `revise` (and future `move`/`briefing`),
     # but bare `endless task next` keeps its heuristic-list behavior.
@@ -1849,8 +1865,8 @@ def task_next(ctx, project, show_all, limit, llm, as_json, tier, phase, parent_i
     tier_val = parse_tier_filter(tier) if tier else None
     parent_val = parse_parent_filter(parent_id) if parent_id else None
     next_tasks(project_name=project, show_all=show_all,
-               limit=limit, llm=llm, as_json=as_json, tier=tier_val,
-               phase_filter=phase, parent_id=parent_val)
+               limit=limit, no_limit=no_limit, llm=llm, as_json=as_json,
+               tier=tier_val, phase_filter=phase, parent_id=parent_val)
 
 
 @task_next.command("revise")
@@ -1914,20 +1930,20 @@ def task_id_cmd(ctx, pane):
               help="Project name (default: detect from cwd)")
 @click.option("--all", "show_all", is_flag=True,
               help="Show tasks from all projects")
-@click.option("--limit", default=10, type=int,
-              help="Max items to show (default: 10)")
 @click.option("--llm", is_flag=True,
               help="Token-efficient output for LLMs")
 @click.option("--json", "as_json", is_flag=True,
               help="JSON output")
 @click.option("--parent", "parent_id", default=None,
               help="Filter to children of this task (e.g. E-101), or 'none' for root tasks")
-def task_recent(project, show_all, limit, llm, as_json, parent_id):
+@rowcap.limit_options
+def task_recent(project, show_all, limit, llm, as_json, parent_id, no_limit):
     """Show most recently updated tasks."""
     from endless.task_cmd import recent_tasks, parse_parent_filter
     parent_val = parse_parent_filter(parent_id) if parent_id else None
     recent_tasks(project_name=project, show_all=show_all,
-                 limit=limit, llm=llm, as_json=as_json, parent_id=parent_val)
+                 limit=limit, no_limit=no_limit, llm=llm, as_json=as_json,
+                 parent_id=parent_val)
 
 
 @task_cmd.command("landed")
@@ -1936,13 +1952,12 @@ def task_recent(project, show_all, limit, llm, as_json, parent_id):
               help="Project name (default: detect from cwd)")
 @click.option("--all", "show_all", is_flag=True,
               help="Show tasks from all projects")
-@click.option("--limit", default=20, type=int,
-              help="Max items to show in the list (default: 20)")
 @click.option("--llm", is_flag=True,
               help="Token-efficient output for LLMs")
 @click.option("--json", "as_json", is_flag=True,
               help="JSON output")
-def task_landed(item_id, project, show_all, limit, llm, as_json):
+@rowcap.limit_options
+def task_landed(item_id, project, show_all, limit, llm, as_json, no_limit):
     """List landed tasks, or show one task's landing history.
 
     Bare `task landed` lists tasks that have landed at least once, most
@@ -1954,7 +1969,7 @@ def task_landed(item_id, project, show_all, limit, llm, as_json):
         landed_item(item_id, llm=llm, as_json=as_json)
     else:
         landed_list(project_name=project, show_all=show_all,
-                    limit=limit, llm=llm, as_json=as_json)
+                    limit=limit, no_limit=no_limit, llm=llm, as_json=as_json)
 
 
 @task_cmd.command("unsettled")
@@ -1965,13 +1980,13 @@ def task_landed(item_id, project, show_all, limit, llm, as_json):
               help="Survey every task worktree in the project")
 @click.option("--include-settled", is_flag=True,
               help="With --all, also list settled worktrees")
-@click.option("--limit", default=20, type=int,
-              help="Max items to show in the list (default: 20)")
 @click.option("--llm", is_flag=True,
               help="Token-efficient output for LLMs")
 @click.option("--json", "as_json", is_flag=True,
               help="JSON output")
-def task_unsettled(item_id, project, show_all, include_settled, limit, llm, as_json):
+@rowcap.limit_options
+def task_unsettled(item_id, project, show_all, include_settled, limit, llm, as_json,
+                   no_limit):
     """Explain why a task's worktree is unsettled (modified vs unlanded).
 
     `task unsettled <id>` shows the full breakdown for one task — which files
@@ -1998,7 +2013,7 @@ def task_unsettled(item_id, project, show_all, include_settled, limit, llm, as_j
     if item_id is not None:
         unsettled_item(item_id, llm=llm, as_json=as_json)
     else:
-        unsettled_list(project_name=project, limit=limit,
+        unsettled_list(project_name=project, limit=limit, no_limit=no_limit,
                        include_settled=include_settled, llm=llm, as_json=as_json)
 
 
@@ -2018,22 +2033,25 @@ def task_unsettled(item_id, project, show_all, include_settled, limit, llm, as_j
               help="Filter to children of this task (e.g. E-101), or 'none' for root tasks")
 @click.option("--text", "search_text", is_flag=True,
               help="Also search in text field")
-@click.option("--limit", default=20, type=int,
-              help="Max results (default: 20)")
 @click.option("--llm", is_flag=True,
               help="Token-efficient output for LLMs")
 @click.option("--json", "as_json", is_flag=True,
               help="JSON output")
+@rowcap.limit_options
 def task_search(query, project, show_all, status, phase, parent_id,
-                search_text, limit, llm, as_json):
-    """Search tasks by query string."""
+                search_text, limit, llm, as_json, no_limit):
+    """Search tasks by query string.
+
+    The count under the table is the number of MATCHES, not the number of rows
+    rendered; when those differ a footer names the gap and --no-limit closes it.
+    """
     from endless.task_cmd import search_tasks, parse_parent_filter
     parent_val = parse_parent_filter(parent_id) if parent_id else None
     search_tasks(query, project_name=project, show_all=show_all,
                  status_filter=status, phase_filter=phase,
                  parent_id=parent_val,
                  search_text=search_text,
-                 limit=limit, llm=llm, as_json=as_json)
+                 limit=limit, no_limit=no_limit, llm=llm, as_json=as_json)
 
 
 # ─── inline-content path gate (E-1744) ───────────────────────────────────────
@@ -3022,11 +3040,13 @@ def decision_cmd():
               help="Token-efficient output for LLMs")
 @click.option("--json", "as_json", is_flag=True,
               help="JSON output")
-def decision_list(project, show_all, sort, llm, as_json):
+@rowcap.limit_options
+def decision_list(project, show_all, sort, llm, as_json, limit, no_limit):
     """List decisions for a project."""
     from endless.decision_cmd import list_decisions
     list_decisions(project_name=project, show_all=show_all,
-                   sort_by=sort, llm=llm, as_json=as_json)
+                   sort_by=sort, llm=llm, as_json=as_json,
+                   limit=limit, no_limit=no_limit)
 
 
 @decision_cmd.command("add")
@@ -3332,8 +3352,9 @@ def epic_add(title, description, description_file, text, text_file, phase, proje
               help="Token-efficient output for LLMs")
 @click.option("--json", "as_json", is_flag=True,
               help="JSON output")
+@rowcap.limit_options
 def epic_list(project, show_all, status, phase, tier, parent_id, sort,
-              llm, as_json):
+              llm, as_json, limit, no_limit):
     """List epics for a project."""
     from endless.epic_cmd import list_epics
     from endless.task_cmd import parse_tier_filter, parse_parent_filter
@@ -3342,7 +3363,8 @@ def epic_list(project, show_all, status, phase, tier, parent_id, sort,
     list_epics(project_name=project, show_all=show_all,
                status_filter=status, phase_filter=phase,
                tier_filter=tier_val, parent_id=parent_val,
-               sort_by=sort, llm=llm, as_json=as_json)
+               sort_by=sort, llm=llm, as_json=as_json,
+               limit=limit, no_limit=no_limit)
 
 
 @epic_cmd.command("show")

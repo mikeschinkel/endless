@@ -53,6 +53,8 @@ def list_epics(
     sort_by: str | None = None,
     llm: bool = False,
     as_json: bool = False,
+    limit: int | None = None,
+    no_limit: bool = False,
 ):
     """List epic-typed tasks (wraps show_plan with type_filter='epic')."""
     task_cmd.show_plan(
@@ -66,6 +68,8 @@ def list_epics(
         llm=llm,
         as_json=as_json,
         type_filter="epic",
+        limit=limit,
+        no_limit=no_limit,
     )
 
 

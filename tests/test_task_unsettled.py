@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from endless import db, task_cmd
+from endless import db, rowcap, task_cmd
 
 
 def _project_id() -> int:
@@ -276,7 +276,11 @@ def test_list_limit_reports_what_it_hid(registered_project, stub_rows, capsys):
     ])
     task_cmd.unsettled_list(project_name="my-project", limit=2)
     out = capsys.readouterr().out
-    assert "3 more" in out and "5" in out
+    # E-2071 replaced this command's private notice with the shared rowcap
+    # footer, which names the dropped count and the flag that reveals them --
+    # the session-status shape. The grand total is no longer restated: it is
+    # two rendered rows plus three dropped, right above the line.
+    assert "3 more rows (--no-limit)" in out
 
 
 def test_list_json_is_a_flat_array(registered_project, stub_rows, capsys):
@@ -313,13 +317,16 @@ def test_cli_rejects_id_and_all_together():
 
 
 # ---- truncation notice ------------------------------------------------------
+# E-2071 replaced this command's private truncation notice with the shared
+# rowcap footer, so these assert the shared behaviour through the same call the
+# renderer now makes.
 
 def test_truncation_notice_states_the_hidden_count(capsys):
-    task_cmd._echo_unsettled_truncation(total=57, shown=20, llm=False)
+    rowcap.echo_footer(57 - 20)
     out = capsys.readouterr().out
-    assert "37 more" in out and "57" in out
+    assert "37 more" in out and "--no-limit" in out
 
 
 def test_truncation_notice_silent_when_nothing_hidden(capsys):
-    task_cmd._echo_unsettled_truncation(total=3, shown=3, llm=False)
+    rowcap.echo_footer(0)
     assert capsys.readouterr().out == ""
