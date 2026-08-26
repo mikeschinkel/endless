@@ -453,13 +453,16 @@ fi
 # invoke cases. What a matcher test cannot see is whether the gate is CALLED,
 # and from where; that is what this section asserts.
 #
-# It is asserted from source rather than by running the hook. Driving the real
-# binary was tried and abandoned: `endless-go hook` pins the MAIN database
-# regardless of XDG_CONFIG_HOME, so every invocation writes there — a hook run
-# from a fixture directory auto-registers that directory as a project. A verify
-# script cannot exercise this path without polluting the database it is meant to
-# leave alone. (It also cannot currently pass: see the note at the end of this
-# section.)
+# Two ways, because they prove different things. The SOURCE assertions below
+# pin where the gate sits — ahead of the registration early-return, inside the
+# Bash branch — which a live run cannot distinguish. Section 7b then drives the
+# real hook binary end to end.
+#
+# 7b runs from the WORKTREE, not a fixture directory, and reuses one fixed
+# session id. `endless-go hook` pins the MAIN database regardless of
+# XDG_CONFIG_HOME, so a run from an unregistered fixture path auto-registers it
+# as a project — this script creates one self-identifying session row and
+# nothing else.
 section "7. The tool-layer gate is wired into PreToolUse"
 
 HOOK_SRC="${WT}/internal/hookcmd/claude.go"
@@ -527,6 +530,80 @@ if grep -qF 'rebase main' <<<"${refusal}" && grep -qF 'reset --hard main' <<<"${
 else
     report_fail "the refusal points at fixing the branch in place" \
         "the rebase/reset alternative in the message" "absent"
+fi
+
+# ── 7b. the same gate, driven end to end ────────────────────────────────────
+# Exit 2 with a message on stderr is how Claude Code is told "blocked". Anything
+# that stops the hook before it reaches the gate reads identically to a gate
+# that did not fire, so a benign command has to pass cleanly first.
+section "7b. The gate, end to end through the hook binary"
+
+HOOK_BIN="${WT}/bin/endless-go"
+go build -o "${HOOK_BIN}" "${WT}/cmd/endless-go" >/tmp/e2073-hookbuild.log 2>&1 \
+    || setup_error "could not build ${HOOK_BIN} (see /tmp/e2073-hookbuild.log)"
+
+# hook <command> — one Bash payload, from the worktree, as Claude Code sends it.
+hook() {
+    local payload
+    payload=$("${PY_BIN}" -c '
+import json,sys
+print(json.dumps({"session_id":"e2073-verify","cwd":sys.argv[1],
+                  "hook_event_name":"PreToolUse","tool_name":"Bash",
+                  "tool_input":{"command":sys.argv[2]}}))' "${WT}" "$1")
+    H_OUT=$(printf '%s' "${payload}" | "${HOOK_BIN}" hook claude 2>&1)
+    H_RC=$?
+}
+
+hook "endless worktree list"
+if (( H_RC != 0 )); then
+    # Environmental, not a verdict on the gate — so it is announced loudly and
+    # skipped rather than counted as a failure the reader would go debug.
+    printf '  %s! SKIPPED%s — the hook cannot run here, so 7b cannot judge the gate\n' \
+        "${RED}" "${RESET}"
+    printf '      %s%s%s\n' "${DIM}" "${H_OUT}" "${RESET}"
+    printf '      %sSection 7 above still covers the wiring, and\n' "${DIM}"
+    printf '      TestWorktreeRemovalRes covers the matcher.%s\n' "${RESET}"
+else
+    report_pass "hook health probe (a benign command passes cleanly)"
+
+    while IFS='|' read -r label cmd; do
+        [[ -z "${label}" ]] && continue
+        hook "${cmd}"
+        if (( H_RC == 2 )) && grep -qF "refusing to remove a worktree" <<<"${H_OUT}"; then
+            report_pass "REFUSED: ${label}"
+        else
+            report_fail "REFUSED: ${label}" "exit 2 + the refusal" "rc=${H_RC}: ${H_OUT}"
+        fi
+    done <<'ROUTES'
+endless worktree drop|endless worktree drop E-1
+endless worktree reap|endless worktree reap
+git worktree remove|git worktree remove .endless/worktrees/e-1
+git worktree prune|git worktree prune
+rm -r the directory|rm -rf .endless/worktrees/e-1
+after a separator|cd /tmp && endless worktree drop E-1
+wrapper-prefixed|uv run endless worktree drop E-1
+with --force|endless worktree drop E-1 --force
+ROUTES
+
+    # A gate that fires on ordinary work gets routed around. The mention cases
+    # are not hypothetical: this rule is documented in the templates, the guide
+    # and THIS script, all of which quote the commands in order to forbid them.
+    while IFS='|' read -r label cmd; do
+        [[ -z "${label}" ]] && continue
+        hook "${cmd}"
+        if (( H_RC == 0 )); then
+            report_pass "ALLOWED: ${label}"
+        else
+            report_fail "ALLOWED: ${label}" "exit 0" "rc=${H_RC}: ${H_OUT}"
+        fi
+    done <<'ALLOWED'
+land retains, so it is not removal|endless worktree land E-1
+the read-only surface|endless worktree list
+creating a worktree|git worktree add -b task/9-x .endless/worktrees/e-9 main
+deleting INSIDE a worktree|rm -rf .endless/worktrees/e-1/bin
+quoting the command in prose|echo 'never run endless worktree drop'
+naming it in a commit message|git commit -m "block endless worktree drop"
+ALLOWED
 fi
 
 # ── 8. the gate reaches every machine, not just this one ────────────────────
