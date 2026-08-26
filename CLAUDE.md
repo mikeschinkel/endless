@@ -9,12 +9,14 @@ Rules only — no rationale, no history, no mechanism. Workflow belongs in
 
 ## The ledger is durable state
 
-- `.endless/db-ledger/*.jsonl` and `.endless/verbs.jsonl` are the permanent
-  record of all task state. The SQLite database is a rebuildable projection of
-  them.
-- Never hand-edit them. Never revert or discard an "Endless: auto-record session
-  activity" commit. Never gitignore `.endless/`.
+- `.endless/db-ledger/*.jsonl` is the permanent record of all task state; the
+  SQLite database is a rebuildable projection of it.
+- Never hand-edit the db-ledger. Never revert or discard an "Endless:
+  auto-record session activity" commit. Never gitignore `.endless/`.
 - Change task state only through `endless` commands.
+- `.endless/verbs.jsonl` is a convenience cache, not durable state:
+  hand-editing it is fine. Commit the edit to main directly — it is global
+  config, not worktree-scoped.
 
 ## Python and Go
 
