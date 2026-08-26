@@ -28,7 +28,7 @@ covers: cd into your worktree and export ENDLESS_SESSION_ID.
 
 topic: blocking semantics
 section: tasks
-covers: How unverified/confirmed/assumed affect whether a blocker is still active.
+covers: How unverified/unreviewed/confirmed/assumed/completed affect whether a blocker is still active.
 
 topic: verbs
 section: tasks

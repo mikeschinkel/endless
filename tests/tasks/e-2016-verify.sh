@@ -384,6 +384,40 @@ test_diagram_is_current() {
         "unreviewed --> completed: user" "$(cat "$mmd")"
     assert_contains "and the type restriction is rendered, not implied" \
         "(research/brainstorm)" "$(cat "$mmd")"
+
+    out=$(cd "$WT" && just guide-check 2>&1); rc=$?
+    if [[ $rc -eq 0 ]]; then
+        report_pass "the generated guide cross-reference is current"
+    else
+        report_fail "just guide-check" "exit 0" "exit=$rc"$'\n'"$out"
+    fi
+}
+
+# ─── section H2: the guide documents it ──────────────────────────────────────
+
+test_guide_documents_it() {
+    section "H2. The guide documents the status a reader will hit"
+    # A status nobody can read about is a status nobody uses correctly. The
+    # table is hand-written (only the diagram above it is generated), so
+    # nothing else would catch its absence.
+    local idx tasks
+    idx="$(cat "$WT/docs/guide/index.md")"
+    tasks="$(cat "$WT/docs/guide/tasks.md")"
+
+    assert_contains "the status table has a row for it" '| `unreviewed`' "$idx"
+    # `completed` is the status `unreviewed` leads to, and the table had no row
+    # for it at all — a gap this task's own edit made newly visible.
+    assert_contains "and a row for \`completed\`, which it leads to" '| `completed`' "$idx"
+    assert_contains "blocking semantics say it still blocks" \
+        'B in `unreviewed` → A is **still blocked**' "$idx"
+    assert_contains "the happy path names it for findings work" "status unreviewed" "$idx"
+    assert_contains "and tells an agent not to self-complete findings work" \
+        "Don't mark research or brainstorm items \`completed\`" "$idx"
+    assert_contains "task active's comment lists all three" \
+        "underway + unverified + unreviewed" "$idx"
+    assert_contains "the tasks guide shows the command" "--status unreviewed" "$tasks"
+    assert_contains "and counts it as shipped for the obsolete refusal" \
+        '`unverified`, `unreviewed`, `confirmed`' "$tasks"
 }
 
 # ─── section I: regression ───────────────────────────────────────────────────
@@ -437,6 +471,7 @@ main() {
     test_registry
     test_blocks_dependents
     test_diagram_is_current
+    test_guide_documents_it
     test_regression
 
     [[ -n "$TMP" ]] && rm -rf "$TMP"

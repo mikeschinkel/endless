@@ -10,7 +10,7 @@ Each row in `session_statuses` is a snapshot of one session's reported state at 
 
 - `task_id` — populated automatically by the handler from `sessions.task_id` at insert time; makes joins to `tasks` trivial. (A session holds one task, so there is no inactive one to distinguish it from.)
 - `headline` — one-line summary of what just changed.
-- `tasks` — every task the session is touching (resolved / pending / unverified, all in one column; the renderer derives the disposition bucket from each task's status).
+- `tasks` — every task the session is touching (resolved / pending / unverified / unreviewed, all in one column; the renderer derives the disposition bucket from each task's status).
 - `decisions` — design choices, framings, insights too lightweight to be `endless decision add` items but worth capturing.
 - `commits` — commit SHAs of work that didn't land via a task (manual hygiene, ledger splits, etc.).
 - `memory` — entries created or modified in `~/.claude/projects/.../memory/`.

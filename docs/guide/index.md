@@ -29,10 +29,10 @@ When your user gives you a task ID:
 4. Do the work in the worktree.
 5. **Commit your work on the task branch** — `git commit -m "E-<id>: what changed"` from inside the worktree. Endless does not do this for you: it auto-commits only its own files (`verbs.jsonl`, ledger entries, the plan mirror), so uncommitted source makes `worktree land` refuse and leaves your changes stranded. For the exact `git add` (which paths to *exclude*), see **Committing your work** in `endless guide orchestration`.
 6. When implementation is complete:
-   - `endless task update <id> --status unverified`, **and**
+   - `endless task update <id> --status unverified` — or, for a **research or brainstorm** task, `endless task update <id> --status unreviewed --outcome "..."`, since those deliver an outcome to be read rather than behavior to be tested, **and**
    - In your reply to the user, include **how to test**: the specific commands, files, or UI actions that verify the change. Don't just say "ready" — say "ready; verify by running X then checking Y." The user shouldn't have to ask.
 7. Report completion to your user{{if .report_gate}} with the task ID. Write the reply you mean to send to a file, run `endless task report <id> --draft-file <path>`, and send that command's output verbatim as your entire message — an adversarial minimizer edits your indulgent "showing your work" replies down to just what the user needs, and a Stop hook enforces both halves. See **Reporting to your user** in `endless guide tasks`.{{else}}.{{end}}
-8. **Do not mark `confirmed` yourself.** Only your user does that, after verifying. 
+8. **Do not mark `confirmed` yourself.** Only your user does that, after verifying. **Do not mark a research or brainstorm task `completed` yourself** either — leave it at `unreviewed` for your user to read.
 
 When implementation is verified **and your user has told you to land it** — never on your own initiative; see **Landing the work** in `endless guide orchestration` — land the work with `endless worktree land <id>` (auto-commits endless-managed files — **not yours; see step 5** — rebases onto main, fast-forwards, then retains the worktree and its branch; they're cleaned up automatically after a grace period rather than removed immediately).
 
@@ -168,9 +168,10 @@ stateDiagram-v2
 | `unreviewed`  | Research/brainstorm outcome written, awaiting the owner's read — the review lane's counterpart to `unverified`. Those two types reach `completed` only through it, so a session cannot declare its own findings finished. **Still blocks dependents**, and more sharply than `unverified`: the deliverable is information other tasks consume. Refused on `todo`/`bugfix`, which are gated by `unverified` instead. |
 | `confirmed`   | Verified and done. **Unblocks dependents.** Only the user confirms.                                            |
 | `assumed`     | Believed complete, will verify when used naturally. **Unblocks dependents.**                                   |
+| `completed`   | Findings work is done and accepted — the terminal of the review lane, as `confirmed`/`assumed` are of the verification lane. **Unblocks dependents.** Research and brainstorm reach it only through `unreviewed`, and only with an outcome; other types reach it directly, gated on the title's lead verb being a completable one (`audit`, `review`, `investigate`, …), which is what keeps implementation work on the `unverified` track. |
 | `revisit`     | Needs re-evaluation before it can proceed — either a partial plan that no longer holds, or work that shipped and turned out wrong. Reopening your own landed work lands here. |
 | `declined`    | Active decision not to do this. Requires `--reason`.                                                           |
-| `obsolete`    | Made irrelevant by other changes — it never needed doing. **Refused on work that already shipped** (`unverified`/`confirmed`/`assumed`/`completed`): that work happened, and if something superseded it the fact to record is a `replaced_by` relation. Use `task replace <old> --by <new>`. |
+| `obsolete`    | Made irrelevant by other changes — it never needed doing. **Refused on work that already shipped** (`unverified`/`unreviewed`/`confirmed`/`assumed`/`completed`): that work happened, and if something superseded it the fact to record is a `replaced_by` relation. Use `task replace <old> --by <new>`. |
 
 The agent sets `submitted` (via `task submit`, or by attaching a plan); a human sets `ready` (via `task approve`) — the two-step gate that makes `ready` mean "approved," not merely "planned."
 
@@ -201,17 +202,18 @@ Don't conflate blocked ("will do when X resolves") with `maybe` ("might do at al
 When task A is blocked by task B (`endless task block A --by B`):
 
 - B in `unverified` → A is **still blocked**. Unverified means "not yet trusted."
-- B in `confirmed` or `assumed` → A is **unblocked**.
+- B in `unreviewed` → A is **still blocked**, and this is the sharper case: B's deliverable is information A would consume, and nobody has read it yet.
+- B in `confirmed`, `assumed` or `completed` → A is **unblocked**.
 - B in `declined` or `obsolete` → A is **unblocked**.
 
-In `task show`, blocking relations appear in the **This task:** section, where each row opens with a directional phrase that names what the current task does: a `Blocked by:` row points to a task that blocks this one, a `Blocks:` row points to a task this one blocks, each tagged with the related task's `[status]` — which tells you whether a blocker is still active (e.g. `unverified`) or resolved (`confirmed`/`assumed`).
+In `task show`, blocking relations appear in the **This task:** section, where each row opens with a directional phrase that names what the current task does: a `Blocked by:` row points to a task that blocks this one, a `Blocks:` row points to a task this one blocks, each tagged with the related task's `[status]` — which tells you whether a blocker is still active (e.g. `unverified`, `unreviewed`) or resolved (`confirmed`/`assumed`/`completed`).
 
 ## Common patterns
 
 ```bash
 # Find work
 endless task next                                # actionable tasks, ranked
-endless task active                              # underway + unverified
+endless task active                              # underway + unverified + unreviewed
 endless task recent                              # recently updated
 
 # Record a new task discovered during work — use the literal ID printed
@@ -299,7 +301,7 @@ listed separately. (Generated — do not hand-edit; run `/regenerate-guide`.)
 | the handoff (generated, not authored) | orchestration | Spawned sessions get a rendered handoff; agents never write it. |
 | worktree DB sandbox (--db main vs sandbox) | orchestration | Self-dev DB routing and the --db choice. |
 | shell helpers (esu / eswt) | orchestration | cd into your worktree and export ENDLESS_SESSION_ID. |
-| blocking semantics | tasks | How unverified/confirmed/assumed affect whether a blocker is still active. |
+| blocking semantics | tasks | How unverified/unreviewed/confirmed/assumed/completed affect whether a blocker is still active. |
 | verbs | tasks | The registered action words that can begin a task title. |
 | research-task field model | tasks | For a research task, text = the request, outcome = the deliverable. |
 | per-task verification suite | orchestration | One suite per task and the one-command verify handoff (tests/tasks/e-*-verify.sh). |
@@ -315,6 +317,7 @@ listed separately. (Generated — do not hand-edit; run `/regenerate-guide`.)
 ## Important notes (always relevant)
 
 - **Don't mark items `confirmed`.** Set them to `unverified` and let your user confirm — or `assume` if you can't easily verify.
+- **Don't mark research or brainstorm items `completed`.** Set them to `unreviewed` with `--outcome` and let your user read the outcome first. A self-declared finish is not the last word on work whose deliverable is information.
 - **Always claim before writing code.** Even when enforcement is off, claiming registers your session and creates the worktree.
 - **Use the worktree.** Don't make project changes in the `main` checkout's working tree.
 - **Use `--llm` for agent-friendly output.** `task list --llm`, `task show --llm`, `task next --llm`, etc.
