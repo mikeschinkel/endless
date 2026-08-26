@@ -44,9 +44,21 @@ Stay focused on E-{{.spawned_id}} — one session, one task. {{if eq .task_type 
   session RECOMMENDED dropping a worktree whose history had merely diverged.
   Emits one paragraph with no leading marker, so it drops into a numbered item,
   a bullet, or mid-sentence unchanged.
+
+  E-2073 split the two verbs. One sentence governing both put a precondition —
+  have I been asked? — in front of a destructive act, and the asking is where it
+  failed: on 2026-08-25 two sessions ten minutes apart destroyed worktrees, and
+  neither OVERRODE the rule. Both concluded conversational text had satisfied
+  the precondition. One caused real damage. `land` keeps "without asking"
+  because it is the normal end of a task and the spawning session owns the
+  timing. Removal gets NEVER, with nothing left to evaluate.
+
+  It names three commands because it has to name the OUTCOME: `drop`, `reap`
+  and `git worktree remove` all reach the same destroyed worktree, so a
+  drop-only prohibition is honoured by reaching for the next route down.
 */ -}}
 {{define "handoff_land_drop" -}}
-Don't run `endless worktree land`/`drop` without asking, and never OFFER to drop one — retention is the design, and worktree lifecycle belongs to the spawning session. If a branch's history has diverged from main, the fix is `git rebase main` or `git reset --hard main` **in place**; `drop` deletes the directory a live session is sitting in, and is only for abandoning the work itself.
+Don't run `endless worktree land` without asking. NEVER remove a worktree, and never OFFER to — not `endless worktree drop`, not `endless worktree reap`, not `git worktree remove`. Retention is the design, and worktree lifecycle belongs to the spawning session, which owns removal. If a branch's history has diverged from main, the fix is `git rebase main` or `git reset --hard main` **in place**; removal deletes the directory a live session is sitting in, and is only for abandoning the work itself. If removal looks warranted, say so once and stop.
 {{- end}}
 
 {{define "handoff_deliverable" -}}

@@ -218,3 +218,73 @@ func TestRender_Claim_EpicCarriesChildrenState(t *testing.T) {
 		t.Errorf("todo claim handoff should not carry the epic children breakdown\n--- output ---\n%s", out)
 	}
 }
+
+// TestRender_Handoff_WorktreeRemovalIsCategorical pins the rule E-2073 exists
+// to make unconditional. The old wording — "Don't run `endless worktree
+// land`/`drop` without asking" — put a precondition in front of a destructive
+// act, and on 2026-08-25 two sessions in ten minutes decided conversational
+// text had satisfied it. Landing keeps "ask first" because it is how a task
+// normally ends; removal gets no precondition to mis-evaluate.
+//
+// The assertions run against RENDERED output, for both the spawn wrappers and
+// the claim wrapper, so a future template that grows its own copy of the rule
+// is covered without anyone remembering to add it here — and so that moving the
+// rule between a wrapper and a partial, which E-1947 did, is invisible to the
+// guard. The three commands are named individually because a `drop`-only
+// prohibition is satisfiable by reaching for `git worktree remove` — the rule
+// has to name the outcome.
+func TestRender_Handoff_WorktreeRemovalIsCategorical(t *testing.T) {
+	// Matched against whitespace-flattened output, so an expectation is the
+	// sentence a session reads rather than one template's line breaks.
+	wants := []string{
+		"NEVER remove a worktree",
+		"endless worktree drop",
+		"endless worktree reap",
+		"git worktree remove",
+		"endless worktree land` without asking",
+		// Who to send it to instead, so a session that thinks removal is
+		// warranted has somewhere to put that.
+		"belongs to the spawning session, which owns removal",
+		"If removal looks warranted, say so once and stop.",
+		// E-1947's guidance, which shares this partial: the answer to a
+		// diverged branch is a rebase or reset IN PLACE, never a removal.
+		"the fix is `git rebase main` or `git reset --hard main` **in place**",
+	}
+	// The precondition form, in both the numbered and the inline phrasing.
+	const forbidden = "land`/`drop` without asking"
+
+	for _, typ := range handoffTypes {
+		t.Run(typ, func(t *testing.T) {
+			root := projectFixture(t)
+			vars := handoffVarsForType(typ)
+
+			renders := map[string]string{}
+			for _, name := range []string{"handoff/" + typ, "handoff/claim"} {
+				out, errOut, err := runRenderInProject(t, root, name, vars)
+				if err != nil {
+					t.Fatalf("render %s: %v\nstderr: %s", name, err, errOut)
+				}
+				renders[name] = flattenWhitespace(out)
+			}
+
+			for name, out := range renders {
+				for _, w := range wants {
+					if !strings.Contains(out, w) {
+						t.Errorf("%s missing %q\n--- output ---\n%s", name, w, out)
+					}
+				}
+				if strings.Contains(out, forbidden) {
+					t.Errorf("%s still carries the precondition form %q\n--- output ---\n%s",
+						name, forbidden, out)
+				}
+			}
+		})
+	}
+}
+
+// flattenWhitespace collapses every run of whitespace to a single space so an
+// expectation can be written as the sentence a session reads, independent of
+// where a template happens to wrap it.
+func flattenWhitespace(s string) string {
+	return strings.Join(strings.Fields(s), " ")
+}
