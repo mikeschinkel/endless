@@ -4368,3 +4368,20 @@ Two defects in one verify script, both mine, both caught by Mike running it inst
 
 The generalisable test for both: ask what the check would print if the mechanism were completely absent. If the answer is 'the same thing', it is not a check. And ask what the script leaves behind. If the answer is anything at all in a shared database, it is not a verify script.
 - **Project**: endless
+
+### [2026-08-26] endless sql --write removes junk rows; 'no clean way' was me not looking
+Asked how to remove two junk session rows I had created, I said there was no clean way — no delete verb existed, so I offered hide instead. Wrong: `endless sql --write "DELETE FROM sessions WHERE id IN (...)"` is a shipped, sanctioned surface. I had conflated two different rules. The db-ledger under .endless/db-ledger/ is durable state and must never be hand-edited; the SQLite database is a REBUILDABLE PROJECTION of it, and CLAUDE.md says so in the same breath. Task state changes go through `endless` commands because they are events; a stray session row from a test fixture is not task state and not an event.
+
+Before reporting that something cannot be done, check the tool's own surface for it. `endless sql --help` names --write in one line.
+
+The bigger half. Mike pulled the list of what agents have left in his sessions table:
+
+  892  e1202-verify
+  1008-1018  e2e-1857-probe* (six rows, PID-suffixed, so a new pair per run)
+  1156 e2073-check
+  1157 e2073-verify
+
+Three different tasks, three different sessions, same defect: a verify script drove a binary that writes to the main database, and left its fixtures behind. The e2e-1857 ones are worse than mine — the names carry PIDs, so they accumulate on every single run rather than being reused. This is not a mistake I made once; it is what verify scripts here keep doing, and mine was the third instance.
+
+The rule that would have stopped all four: a verify script may not write to any state that outlives it. If exercising a path requires writing to the project's real database, do not exercise that path — assert the wiring from source and cover the logic in a unit test. And whatever a fixture does create, it deletes before it exits, in a trap, so a failed run cleans up too.
+- **Project**: endless
