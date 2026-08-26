@@ -403,6 +403,40 @@ def _repair_hook_async_flags(settings: dict) -> list[str]:
     return repaired
 
 
+def _repair_missing_hook_events(settings: dict, hook_bin: str) -> list[str]:
+    """Add endless-go entries for hooked events that have none.
+
+    `_repair_hook_async_flags` fixes the flag on an entry that already exists; it
+    cannot help an event that was never installed. `_has_endless_hook` returns
+    True on finding endless-go under ANY event, so `setup_claude_hook` early-
+    returns and a machine whose install predates an event never gains it — the
+    hook reports itself correctly set up while the event silently does nothing.
+
+    That is not hypothetical: PreToolUse carries every blocking gate Endless has
+    (the worktree-removal refusal, the commit-on-main refusal, the cwd gate, the
+    revisit gate, the sqlite refusal). On a machine missing that one event, all
+    of them are inert, and nothing anywhere says so.
+
+    Mutates `settings` in place and returns the event names it added, so it is
+    idempotent and safe to call on every setup run.
+    """
+    repaired: list[str] = []
+    hooks = settings.setdefault("hooks", {})
+    for event in CLAUDE_HOOK_EVENTS:
+        entries = hooks.setdefault(event, [])
+        if any(
+            "endless-go" in h.get("command", "")
+            for entry in entries
+            for h in entry.get("hooks", [])
+        ):
+            continue
+        # Appended, never prepended: a foreign hook already registered for this
+        # event keeps its position and still runs.
+        entries.append(_make_hook_entry(hook_bin, event not in SYNC_EVENTS))
+        repaired.append(event)
+    return repaired
+
+
 def setup_claude_hook():
     hook_bin = _find_endless_hook()
     if not hook_bin:
@@ -423,14 +457,22 @@ def setup_claude_hook():
             + " Claude hook is already installed in "
             + click.style(str(CLAUDE_SETTINGS_PATH), bold=True)
         )
+        added = _repair_missing_hook_events(settings, hook_bin)
         repaired = _repair_hook_async_flags(settings)
-        if repaired:
+        if added or repaired:
             _save_claude_settings(settings)
-            click.echo(
-                click.style("•", fg="yellow")
-                + " Repaired sync/async flag for: "
-                + click.style(", ".join(sorted(set(repaired))), bold=True)
-            )
+            if added:
+                click.echo(
+                    click.style("•", fg="yellow")
+                    + " Added missing hook event(s): "
+                    + click.style(", ".join(sorted(set(added))), bold=True)
+                )
+            if repaired:
+                click.echo(
+                    click.style("•", fg="yellow")
+                    + " Repaired sync/async flag for: "
+                    + click.style(", ".join(sorted(set(repaired))), bold=True)
+                )
             click.echo(
                 "  Restart any running Claude sessions for this to take effect."
             )

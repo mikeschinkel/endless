@@ -242,10 +242,15 @@ func TestRender_Handoff_WorktreeRemovalIsCategorical(t *testing.T) {
 		"endless worktree reap",
 		"git worktree remove",
 		"endless worktree land` without asking",
-		// Who to send it to instead, so a session that thinks removal is
-		// warranted has somewhere to put that.
-		"belongs to the spawning session, which owns removal",
+		// Who does it instead, so a session that thinks removal is warranted
+		// has somewhere to put that. E-2073 moved this off the spawning
+		// session and onto the person running the session, because the hook
+		// fires on any Claude session's Bash tool.
+		"removal is not an agent's to perform",
+		"the person running this session does it themselves",
 		"If removal looks warranted, say so once and stop.",
+		// The prose describes a gate now, not an appeal to restraint.
+		"A PreToolUse hook refuses all four",
 		// E-1947's guidance, which shares this partial: the answer to a
 		// diverged branch is a rebase or reset IN PLACE, never a removal.
 		"the fix is `git rebase main` or `git reset --hard main` **in place**",

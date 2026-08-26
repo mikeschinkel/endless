@@ -53,12 +53,19 @@ Stay focused on E-{{.spawned_id}} — one session, one task. {{if eq .task_type 
   because it is the normal end of a task and the spawning session owns the
   timing. Removal gets NEVER, with nothing left to evaluate.
 
-  It names three commands because it has to name the OUTCOME: `drop`, `reap`
-  and `git worktree remove` all reach the same destroyed worktree, so a
+  It names four commands because it has to name the OUTCOME: `drop`, `reap`,
+  `git worktree remove` and `rm -r` all reach the same destroyed worktree, so a
   drop-only prohibition is honoured by reaching for the next route down.
+
+  E-2073 also stopped relying on the prose alone. blockWorktreeRemovalIfApplicable
+  in internal/hookcmd/claude.go refuses all four routes at the tool layer, with no
+  bypass, so the paragraph now describes a gate rather than asking for restraint.
+  That is why it no longer says worktree lifecycle belongs to the SPAWNING
+  session: the hook fires on any Claude session's Bash tool, so no agent removes
+  a worktree, and the person running the session does it in their own shell.
 */ -}}
 {{define "handoff_land_drop" -}}
-Don't run `endless worktree land` without asking. NEVER remove a worktree, and never OFFER to — not `endless worktree drop`, not `endless worktree reap`, not `git worktree remove`. Retention is the design, and worktree lifecycle belongs to the spawning session, which owns removal. If a branch's history has diverged from main, the fix is `git rebase main` or `git reset --hard main` **in place**; removal deletes the directory a live session is sitting in, and is only for abandoning the work itself. If removal looks warranted, say so once and stop.
+Don't run `endless worktree land` without asking. NEVER remove a worktree, and never OFFER to — not `endless worktree drop`, not `endless worktree reap`, not `git worktree remove`, not `rm -r` on the directory. A PreToolUse hook refuses all four, so this is not a rule you can decide has been waived; removal is not an agent's to perform, and the person running this session does it themselves if it ever comes to that. Retention is the design. If a branch's history has diverged from main, the fix is `git rebase main` or `git reset --hard main` **in place**; removal deletes the directory a live session is sitting in, and is only for abandoning the work itself. If removal looks warranted, say so once and stop.
 {{- end}}
 
 {{define "handoff_deliverable" -}}

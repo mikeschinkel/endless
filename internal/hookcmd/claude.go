@@ -835,6 +835,14 @@ func handlePreToolUse(projectID int64, isRegistered bool, payload claudePayload)
 	// and the recovery cost (ghost DB files blocking worktree-land) is real.
 	if payload.ToolName == "Bash" {
 		blockSqliteAgainstEndlessIfApplicable(payload)
+
+		// Worktree removal is refused regardless of registration, and ahead of
+		// every other gate. The routes it matches are path- and verb-specific
+		// rather than project-state-specific, and a session whose project
+		// failed to resolve is if anything MORE likely to reach for a removal,
+		// not less. Placed first among the Bash gates because it is the only
+		// unconditional one — nothing below it can change the answer.
+		blockWorktreeRemovalIfApplicable(payload)
 	}
 
 	// No enforcement for unregistered/anonymous projects
@@ -1190,6 +1198,104 @@ var planFileRe = regexp.MustCompile(`(^|/)\.endless/plans/E-\d+\.md$`)
 // pattern is a path component (avoids false-positive on names like
 // my.endless/x). Case-insensitive (?i) catches uppercase variants.
 var sqliteEndlessRe = regexp.MustCompile(`(?i)sqlite3[^|;&]*[ /]\.endless/`)
+
+// cmdPos anchors a match to a COMMAND position: the start of the command, or
+// just after a pipeline separator or newline, followed by any run of characters
+// that contains no quote and no further separator.
+//
+// The quote exclusion is what makes the difference between INVOKING a removal
+// and MENTIONING one. Reaching a verb inside `echo '... endless worktree drop'`
+// requires crossing the opening quote, so it does not match; reaching it in
+// `cd /tmp && endless worktree drop E-7` does not, so it does. It also admits
+// wrapper prefixes for free — `uv run endless …`, `/usr/local/bin/endless …`,
+// `./bin/endless-go …` — without enumerating wrappers.
+//
+// This matters more here than anywhere else in this file: the handoff templates,
+// the guide and this task's own verify script all QUOTE these commands in order
+// to forbid them. A gate that blocked the writing of its own documentation would
+// be discovered on its first day and routed around thereafter.
+const cmdPos = `(?:^|[;&|\n])[^'"|;&\n]*`
+
+// worktreeRemovalRes are the routes to a removed worktree. They are matched as
+// a set rather than one command because the rule has to name the OUTCOME: a
+// prohibition on `drop` alone is honoured by a session that reaches for `reap`,
+// or for `git worktree remove`, or for `rm -rf` — and the worktree is just as
+// gone. Whichever route the session picks, the recovery cost is the same.
+//
+// `\b` after the verb, not `($|\s)`, so a trailing flag or id still matches.
+var worktreeRemovalRes = []*regexp.Regexp{
+	// `endless worktree drop|reap`, and the endless-go spelling.
+	regexp.MustCompile(`(?i)` + cmdPos + `\bendless(-go)?\s+worktree\s+(drop|reap)\b`),
+	// `git worktree remove`, including `git -C <path> worktree remove`.
+	// `prune` is here too: it deletes the admin state that makes a worktree
+	// recoverable after its directory is gone.
+	regexp.MustCompile(`(?i)` + cmdPos + `\bgit\s+(-C\s+\S+\s+)?worktree\s+(remove|prune)\b`),
+	// `rm -r` of a worktree DIRECTORY. The path must end at the worktree
+	// segment — `.endless/worktrees/e-123` or with a trailing slash, but not
+	// `.endless/worktrees/e-123/build`. Deleting something inside a worktree is
+	// ordinary work; a false block there would train the session to route
+	// around the gate, which is the one failure this must not have.
+	regexp.MustCompile(`(?i)` + cmdPos + `\brm\s+[^'"|;&\n]*-[a-z]*r[a-z]*\s[^'"|;&\n]*\.endless/worktrees/[^\s/'"|;&]+/?(?:$|[\s'"|;&])`),
+}
+
+// blockWorktreeRemovalIfApplicable refuses any Bash call that would remove a
+// worktree. Unlike every other gate here it is CATEGORICAL: it does not consult
+// cwd, task state, or registration, and it names no bypass.
+//
+// That is the whole point. The rule used to live only in the handoff prose, as
+// "don't run `endless worktree land`/`drop` without asking" — a precondition the
+// session had to evaluate. On 2026-08-25 two sessions ten minutes apart removed
+// worktrees. Neither OVERRODE the rule; both concluded that something said in
+// conversation had satisfied the precondition. One caused real damage. A gate
+// with a bypass would reproduce exactly that: a session that can talk itself
+// into "I was asked" can equally talk itself into "this is the case the bypass
+// is for".
+//
+// The capability is not lost, only moved off the agent's tool path. Hooks fire
+// on a Claude session's Bash tool, so the person running the session removes a
+// worktree by typing it in their own shell, and the reaper reclaims stale ones
+// as an endless subprocess this hook never sees. Retention is the design; the
+// cost of an agent that cannot remove a worktree is a worktree that outlives
+// its usefulness for a while, against a defect whose recovery cost is real.
+//
+// Deliberately NOT scoped to worktree-bound sessions. A session in the main
+// checkout removing someone else's worktree does the same damage, and "am I the
+// spawning session?" is one more precondition to mis-evaluate.
+func blockWorktreeRemovalIfApplicable(payload claudePayload) {
+	var input toolInputBash
+	if err := json.Unmarshal(payload.ToolInput, &input); err != nil {
+		return
+	}
+	matched := false
+	for _, re := range worktreeRemovalRes {
+		if re.MatchString(input.Command) {
+			matched = true
+			break
+		}
+	}
+	if !matched {
+		return
+	}
+	blockToolUse(`BLOCKED: refusing to remove a worktree.
+
+Removing a worktree is not something an agent session does — not ` +
+		"`endless worktree drop`" + `, not ` + "`endless worktree reap`" + `, not
+` + "`git worktree remove`" + `, not ` + "`rm -r`" + ` on the directory.
+
+Retention is the design. Landing keeps the worktree and its branch, so a
+reopened task still has one, and stale worktrees are reclaimed automatically
+after a grace period. A retained worktree is recovery state, not leftover mess.
+
+If a branch's history has diverged from main, fix the BRANCH in place:
+
+  git -C <worktree> rebase main          # replay the branch on current main
+  git -C <worktree> reset --hard main    # discard its commits, keep the worktree
+
+Both leave the directory — and whoever is working in it — intact.
+
+If removal genuinely looks warranted, say so once and stop. Whoever is running
+this session removes it themselves; there is no flag here that lets you do it.`)
+}
 
 // blockSqliteAgainstEndlessIfApplicable refuses Bash calls that invoke
 // sqlite3 against any path inside a .endless/ directory. Such paths

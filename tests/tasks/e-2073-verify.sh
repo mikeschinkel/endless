@@ -109,11 +109,22 @@ flatten() { tr -s '[:space:]' ' '; }
 # ── 1. fail-fast unit gate ──────────────────────────────────────────────────
 section "1. Unit gate (fail-fast)"
 
-if go test "${WT}/internal/templatecmd/" >/tmp/e2073-gotest.log 2>&1; then
-    report_pass "go test ./internal/templatecmd/ (incl. the new categorical-rule test)"
+for pkg in internal/templatecmd internal/hookcmd; do
+    if go test "${WT}/${pkg}/" >"/tmp/e2073-gotest-$(basename ${pkg}).log" 2>&1; then
+        report_pass "go test ./${pkg}/"
+    else
+        report_fail "go test ./${pkg}/" "pass" \
+            "failed — see /tmp/e2073-gotest-$(basename ${pkg}).log"
+        printf '\n%sFAIL-FAST: unit gate red; later assertions suppressed.%s\n' "${RED}" "${RESET}"
+        exit 1
+    fi
+done
+
+if uv run --project "${WT}" pytest "${WT}/tests/test_setup_hook_missing_events.py" \
+        "${WT}/tests/test_setup_hook_sync.py" -q >/tmp/e2073-pytest.log 2>&1; then
+    report_pass "pytest (hook installer: missing events + sync flags)"
 else
-    report_fail "go test ./internal/templatecmd/" "pass" \
-        "failed — see /tmp/e2073-gotest.log"
+    report_fail "pytest (hook installer)" "pass" "failed — see /tmp/e2073-pytest.log"
     printf '\n%sFAIL-FAST: unit gate red; later assertions suppressed.%s\n' "${RED}" "${RESET}"
     exit 1
 fi
@@ -138,6 +149,28 @@ TMP_E2073=$(mktemp -d "${TMPDIR:-/tmp}/e2073.XXXXXX") || setup_error "mktemp fai
 BIN="${TMP_E2073}/endless-go"
 go build -o "${BIN}" "${WT}/cmd/endless-go" >/tmp/e2073-build.log 2>&1 \
     || setup_error "could not build endless-go (see /tmp/e2073-build.log)"
+
+# Used to compose hook payloads in section 7; resolved once.
+PY_BIN=$(command -v python3) || setup_error "python3 is required"
+command -v sqlite3 >/dev/null || setup_error "sqlite3 is required"
+
+# The hook is exercised in an ISOLATED environment, never against the real
+# database or this worktree (E-1734's isolate-hook-verification rule). Three
+# separate reasons, each of which broke a naive version of section 7:
+#   - the binary DEFERS to <worktree>/bin/endless-go when cwd is inside a
+#     self_dev worktree, and the re-exec does not carry stdin, so the payload
+#     is lost and the hook allows;
+#   - the hook touches its session row before dispatching, so a sandbox DB
+#     whose schema has drifted fails the run before the gate is ever reached —
+#     a red section 7 that says nothing about the gate;
+#   - and a hook run is a WRITE. Pointing it at the real database to test a
+#     refusal would be testing it by polluting it.
+HOOK_HOME="${TMP_E2073}/hookhome"
+HOOK_PROJ="${TMP_E2073}/hookproj"
+mkdir -p "${HOOK_HOME}/endless" "${HOOK_PROJ}/.endless" \
+    || setup_error "mkdir failed"
+sqlite3 "${HOOK_HOME}/endless/endless.db" < "${WT}/internal/schema/schema.sql" \
+    >/dev/null 2>&1 || setup_error "could not apply the schema to the fixture DB"
 
 # Rendering MATERIALIZES the embedded template into <root>/.endless/templates/,
 # so the fixture project lives outside this repo — rendering from the worktree
@@ -273,7 +306,7 @@ fi
 for typ in "${TYPES[@]}"; do
     for name in "handoff/${typ}" "handoff/claim"; do
         out=$(render "${name}" "${typ}")
-        if grep -qF 'belongs to the spawning session, which owns removal' <<<"${out}" \
+        if grep -qF "removal is not an agent's to perform" <<<"${out}" \
                 && grep -qF 'If removal looks warranted, say so once and stop.' <<<"${out}"; then
             report_pass "${name} (task_type=${typ}): says who owns removal, and what to do instead"
         else
@@ -365,6 +398,9 @@ section "6. Only the record and the guards still quote it"
 GUARDS=(
     "internal/templatecmd/claim_handoff_test.go"
     "tests/tasks/e-2073-verify.sh"
+    # The gate's own doc comment quotes the sentence it exists to replace —
+    # that is the rationale for why it has no bypass, and it belongs there.
+    "internal/hookcmd/claude.go"
 )
 
 excludes=(':!.endless/LESSONS.md' ':!.endless/plans/' ':!.endless/db-ledger/')
@@ -406,6 +442,126 @@ if [[ -e "${WT}/.endless/templates" ]]; then
         "absent" "present — it would shadow the embedded templates"
 else
     report_pass "the worktree has no .endless/templates override"
+fi
+
+# ── 7. the gate is wired where it has to be ─────────────────────────────────
+# Sections 2-6 are about PROSE. This is the half that does not depend on a
+# session choosing to honour it.
+#
+# The matcher itself is proven by TestWorktreeRemovalRes in the fail-fast gate
+# above — 20 blocked routes and 20 allowed commands, including the mention-vs-
+# invoke cases. What a matcher test cannot see is whether the gate is CALLED,
+# and from where; that is what this section asserts.
+#
+# It is asserted from source rather than by running the hook. Driving the real
+# binary was tried and abandoned: `endless-go hook` pins the MAIN database
+# regardless of XDG_CONFIG_HOME, so every invocation writes there — a hook run
+# from a fixture directory auto-registers that directory as a project. A verify
+# script cannot exercise this path without polluting the database it is meant to
+# leave alone. (It also cannot currently pass: see the note at the end of this
+# section.)
+section "7. The tool-layer gate is wired into PreToolUse"
+
+HOOK_SRC="${WT}/internal/hookcmd/claude.go"
+[[ -f "${HOOK_SRC}" ]] || setup_error "missing ${HOOK_SRC}"
+
+if grep -q 'func blockWorktreeRemovalIfApplicable' "${HOOK_SRC}"; then
+    report_pass "blockWorktreeRemovalIfApplicable exists"
+else
+    report_fail "blockWorktreeRemovalIfApplicable exists" "the gate function" "absent"
+fi
+
+# Everything about placement is a property of handlePreToolUse's BODY, so read
+# that function once. Grepping the whole file finds `if !isRegistered` in other
+# functions and compares against the wrong line.
+BODY="${TMP_E2073}/handlePreToolUse.go"
+sed -n '/^func handlePreToolUse(/,/^}/p' "${HOOK_SRC}" > "${BODY}"
+[[ -s "${BODY}" ]] || setup_error "could not extract handlePreToolUse from ${HOOK_SRC}"
+
+# Order is the property under test. The gate must be called BEFORE the
+# `if !isRegistered { return nil }` early-return, or a session in an
+# unregistered or failed-to-resolve project — if anything MORE likely to reach
+# for a removal — walks straight past it.
+call_line=$(grep -n 'blockWorktreeRemovalIfApplicable(payload)' "${BODY}" | head -1 | cut -d: -f1)
+guard_line=$(grep -n 'if !isRegistered {' "${BODY}" | head -1 | cut -d: -f1)
+if [[ -n "${call_line}" && -n "${guard_line}" ]] && (( call_line < guard_line )); then
+    report_pass "the gate runs before the registration early-return (line ${call_line} < ${guard_line})"
+else
+    report_fail "the gate runs before the registration early-return" \
+        "the call above the !isRegistered guard" \
+        "call=${call_line:-absent} guard=${guard_line:-absent}"
+fi
+
+# It must be reached only for Bash. The nearest enclosing tool-name test above
+# the call is the one that governs it — found by walking back up the body
+# rather than with a fixed -B window, which a comment block would break.
+bash_line=$(grep -n 'payload.ToolName == "Bash"' "${BODY}" | cut -d: -f1 \
+                | awk -v c="${call_line}" '$1 < c' | tail -1)
+if [[ -n "${bash_line}" ]]; then
+    report_pass "the gate is reached from the Bash branch (line ${bash_line})"
+else
+    report_fail "the gate is reached from the Bash branch" \
+        'a payload.ToolName == "Bash" test above the call' "none above line ${call_line:-?}"
+fi
+if sed -n "/func blockWorktreeRemovalIfApplicable/,/^}/p" "${HOOK_SRC}" \
+        | grep -q 'blockToolUse('; then
+    report_pass "the gate refuses via blockToolUse (stderr + exit 2)"
+else
+    report_fail "the gate refuses via blockToolUse" "a blockToolUse call" "absent"
+fi
+
+# No bypass, deliberately. A session that talked itself into "I was asked" would
+# equally talk itself into "this is the case the flag is for".
+if sed -n "/func blockWorktreeRemovalIfApplicable/,/^}/p" "${HOOK_SRC}" \
+        | grep -qiE '\-\-no-verify|ENDLESS_[A-Z_]*(FORCE|ALLOW|SKIP)|bypass' ; then
+    report_fail "the gate names no bypass" "no escape hatch" "one is offered"
+else
+    report_pass "the gate names no bypass"
+fi
+
+# The refusal has to say what to do INSTEAD, or it is a wall rather than a
+# signpost — and "fix the branch in place" is the answer it must give.
+refusal=$(sed -n "/func blockWorktreeRemovalIfApplicable/,/^}/p" "${HOOK_SRC}")
+if grep -qF 'rebase main' <<<"${refusal}" && grep -qF 'reset --hard main' <<<"${refusal}"; then
+    report_pass "the refusal points at fixing the branch in place"
+else
+    report_fail "the refusal points at fixing the branch in place" \
+        "the rebase/reset alternative in the message" "absent"
+fi
+
+# ── 8. the gate reaches every machine, not just this one ────────────────────
+# A gate installed under an event the machine does not hook is not a gate. The
+# hook is registered once per machine in ~/.claude/settings.json, and
+# `setup_claude_hook` early-returns as soon as it finds endless-go under ANY
+# event — so a machine whose install predates an event never gains it, while
+# the command reports itself correctly set up.
+section "8. A missing hook event repairs itself"
+
+SETUP_SRC="${WT}/src/endless/setup.py"
+[[ -f "${SETUP_SRC}" ]] || setup_error "missing ${SETUP_SRC}"
+
+if grep -q 'def _repair_missing_hook_events' "${SETUP_SRC}"; then
+    report_pass "_repair_missing_hook_events exists"
+else
+    report_fail "_repair_missing_hook_events exists" "the repair function" "absent"
+fi
+
+# It must be CALLED from the already-installed branch — the branch that returns
+# early — or it can never fix the case it was written for.
+if sed -n '/if _has_endless_hook(settings):/,/^    # Show what/p' "${SETUP_SRC}" \
+        | grep -q '_repair_missing_hook_events(settings, hook_bin)'; then
+    report_pass "it runs on the already-installed path (the one that early-returns)"
+else
+    report_fail "it runs on the already-installed path" \
+        "a call inside the _has_endless_hook branch" "absent"
+fi
+
+if grep -q '"PreToolUse"' "${SETUP_SRC}" \
+        && sed -n '/^SYNC_EVENTS/p' "${SETUP_SRC}" | grep -q 'PreToolUse'; then
+    report_pass "PreToolUse is hooked, and synchronous (async cannot block)"
+else
+    report_fail "PreToolUse is hooked and synchronous" \
+        "PreToolUse in CLAUDE_HOOK_EVENTS and SYNC_EVENTS" "missing from one"
 fi
 
 # ── summary ─────────────────────────────────────────────────────────────────
