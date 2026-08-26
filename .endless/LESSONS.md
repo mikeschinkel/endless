@@ -3869,3 +3869,34 @@ Cost: a false alarm presented as a caveat the user had to spend a turn refuting 
 
 Rule: before asserting that code reads a particular field, grep for that field in that file. If I have not read the specific line, say 'I have not verified' or verify first. Never infer a consumer from a name.
 - **Project**: endless
+
+### [2026-08-25] A tool that dies at startup instead of degrading usually did the work at import time
+When E-1891 landed the status registry, every `endless` command run from a
+worktree branched before it died outright — not degraded, died — with "could not
+read the task status vocabulary". My diagnosis was that the worktree's stale
+`endless-go` lacked the new `task-status` subcommand, and that rebuilding would
+not help because the branch has none of E-1891's Go code. Both true, and both
+incomplete.
+
+The part I missed, relayed back from the session that fixed it: the reason it was
+FATAL rather than degraded is an ordering problem inside `cli.py`. The registry
+is imported at MODULE level (line 16, `from endless.statuses import
+TASK_STATUSES, TASK_STATUS_HELP`), while the re-exec that would have routed into
+the worktree's own Python lives in a function body around line 228. Import time
+beats call time, so the branch's Python never got the chance to run — it was not
+that the routing chose wrong, it is that the routing had not happened yet.
+
+Generalize it: when a tool dies at STARTUP rather than failing the specific
+operation, suspect work done at import time, ahead of whatever routing,
+version-negotiation or re-exec logic was supposed to prevent exactly that
+failure. "Why did this not degrade?" is a different question from "why did this
+fail", and the answer is usually a module-level side effect.
+
+And the narrower rule for this codebase: anything that shells out to
+`endless-go` must not run at import time in `cli.py`, because the binary it
+shells out to is precisely what may be stale.
+
+Also worth carrying: a stale worktree binary is not always the worktree's problem
+to fix. Once the resolver routes past it, no rebuild is needed at all — the
+right fix was upstream, not in every branched worktree.
+- **Project**: endless
