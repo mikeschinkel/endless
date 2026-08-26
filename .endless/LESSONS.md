@@ -4314,3 +4314,7 @@ Generalize: whenever I present a choice, check whether anything I am holding fix
 
 Naming convention in this schema, verified: FK columns are the SINGULAR table name plus _id, optionally with a role prefix — session_id->sessions, task_id->tasks, process_id->processes, project_next_lane_id->project_next_lanes, origin_session_id->sessions, from_session_id/to_session_id->sessions. Some abbreviate to the distinguishing last word when the prefix is redundant in context — gate_id->session_gates, kind_id->gate_kinds, type_id->task_types, relation_id->session_task_relations. No FK column anywhere in the schema is plural.
 - **Project**: endless
+
+### [2026-08-26] Third-person 'Mike' in plan/ledger text is agent-authored, not Mike's words
+When plan or ledger text refers to "Mike" in the third person (e.g. "Mike has not chosen; do not assume"), it was written BY an agent/session annotating the plan — not by Mike, who does not write about himself in the third person. Never quote such text back to him as "you wrote…". Attribute it to the plan or the prior session. Only first- or second-person statements Mike makes in chat are his direct words.
+- **Project**: endless
