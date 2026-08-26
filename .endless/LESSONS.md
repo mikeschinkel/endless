@@ -4346,3 +4346,15 @@ Landing late is not the same as landing safely: a conflict at land is a conflict
 
 The resolution here was strictly better than the plan: the six duplicated edits collapsed to one edit in the shared partial, and the guard survived only because it asserted the RENDERED output rather than the file bytes — a test that grepped the six template files would have had to be rewritten too.
 - **Project**: endless
+
+### [2026-08-26] The durable fix belongs in the task that found it, not in a new grain of sand
+E-2073 replaced a prose rule that two sessions had ignored with a better-worded prose rule. The actual fix — a PreToolUse hook that blocks worktree removal at the tool layer — I left unbuilt, because the plan's 'Out of scope' section said so, and then I put 'decide whether to file it' on Mike's to-do list.
+
+Two errors, and the second is worse.
+
+1. A plan's 'out of scope, Mike's call whether to file' note is not authority to skip the durable fix. My handoff's own rule is 'could it reasonably be done now, inside the work already underway? Do it.' A hook that makes the rule unbreakable is not a separate feature from a task whose entire subject is that the rule gets broken — it IS the fix, and the prose is the workaround. Shipping the workaround and filing the fix is backwards.
+
+2. Handing Mike `endless task add ...` as a to-do is the exact behaviour ED-1550 exists to stop: agents filing faster than they close, 391 filed against 264 closed over sixty days. A to-do that says 'decide whether to file a task' is a grain of sand that costs him a decision and produces nothing. ED-1550 also grants the exemption I should have used: 'Work still live in the session that landed it is exempt' from the never-reopen rule. I landed E-2073 in this session; it was mine to reopen and extend, not his to triage.
+
+The test before deferring anything to a new task: is the deferred thing the actual fix, and is the session that would file it still live? If both, reopen (`endless task update E-NNN --status revisit --db main`) and build it there.
+- **Project**: endless
