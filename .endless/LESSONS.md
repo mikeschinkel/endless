@@ -4322,3 +4322,15 @@ When plan or ledger text refers to "Mike" in the third person (e.g. "Mike has no
 ### [2026-08-26] Reserve 'path' for filesystem/URL paths only, never for a code route or decision alternative
 Reserve the word "path" for a filesystem path or a URL path only. Do not use it for other concepts — e.g. a code/resolution route, a control-flow branch, or a decision alternative. Name those literally instead: "resolver", "the function that resolves verbs", "code route", "branch", "option". Using "path" loosely collides with the term's real meaning and muddies technical discussion.
 - **Project**: endless
+
+### [2026-08-26] A git-grep sweep in a verify script is blind to the script until it is committed
+A verify script that sweeps the repo with `git grep` for 'nothing else still says X' will pass every pre-commit run and fail the first post-commit run. `git grep` searches TRACKED files only, so while the script is untracked it is invisible to its own sweep — and the script is exactly the file most likely to contain X, because a guard has to quote the string it forbids in order to detect it.
+
+Two things follow, and they are the fix:
+
+1. Every guard that quotes the forbidden string — the test that asserts it is absent, and the verify script whose grep pattern IS that string — must be excluded from the sweep AND positively asserted to still contain it. A guard that quietly stopped quoting the string would go on passing while detecting nothing, which is the same silent failure the sweep exists to prevent.
+
+2. A verify script is not verified until it has been run once from a COMMITTED state. Any check that consults git (`git grep`, `git ls-files`, `git diff`, `git status`) sees a different repository before and after the commit. Running it only from the dirty working tree tests a configuration the reviewer will never be in.
+
+E-2073: the sweep for the old 'land`/`drop` without asking' wording passed 56/56 in the worktree, then reported tests/tasks/e-2073-verify.sh against itself the moment the file was tracked.
+- **Project**: endless
