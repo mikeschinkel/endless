@@ -187,3 +187,53 @@ def test_update_flip_dual_verb_todo_to_brainstorm_allowed(seeded_project_at_cwd)
         (tid,),
     )
     assert row[0]["t"] == "brainstorm"
+
+
+# ─── E-2079: fresh-project resolver shadow (absorbed into E-1658) ─────────────
+
+
+def _write_project_verbs(proj_dir, *entries: str) -> None:
+    vfile = proj_dir / ".endless" / "verbs.jsonl"
+    vfile.parent.mkdir(parents=True, exist_ok=True)
+    vfile.write_text("".join(e if e.endswith("\n") else e + "\n" for e in entries))
+
+
+def test_fresh_project_single_verb_does_not_shadow_default_categories(seeded_project_at_cwd):
+    """E-2079: a fresh project whose .endless/verbs.jsonl holds ONE
+    auto-registered verb must not shadow the DEFAULT_VERBS categories. Before the
+    resolver fix, `_resolved_verbs()` returned the first non-empty source, so the
+    one-entry project file hid all defaults and every verb resolved to 'action'."""
+    _write_project_verbs(
+        seeded_project_at_cwd,
+        '{"value": "anchor", "definition": "to fix in place"}',
+    )
+    # Investigation defaults still resolve to investigation (not shadowed).
+    assert matchers.verb_categories("research") == frozenset({"investigation"})
+    assert matchers.verb_categories("audit") == frozenset({"investigation"})
+    # The lone project verb (no category) resolves to the action default.
+    assert matchers.verb_categories("anchor") == frozenset({"action"})
+
+
+def test_fresh_project_research_title_accepted_under_research_type(seeded_project_at_cwd):
+    """E-2079 front-door lockout: with a one-entry project verbs.jsonl, the
+    creation gate must ACCEPT an investigation-led title under --type research
+    (pre-fix it was refused with the false message 'research is an action verb')."""
+    _write_project_verbs(
+        seeded_project_at_cwd,
+        '{"value": "anchor", "definition": "to fix in place"}',
+    )
+    # No raise == accepted.
+    task_cmd._require_verb_category_for_type("Research how sessions expire", "research")
+
+
+def test_field_wise_fall_through_keeps_default_category(seeded_project_at_cwd):
+    """Field-wise merge: a default verb re-registered category-less into the
+    project (just {value, definition}) still inherits its DEFAULT category from
+    a lower layer rather than being cemented as 'action'."""
+    _write_project_verbs(
+        seeded_project_at_cwd,
+        '{"value": "audit", "definition": "a project-specific redefinition"}',
+    )
+    assert matchers.verb_categories("audit") == frozenset({"investigation"})
+    # The project layer's definition still wins field-wise.
+    assert matchers.get_verb_definition("audit") == "a project-specific redefinition"

@@ -3718,7 +3718,7 @@ def verb_cmd():
               help="Short 'to ___' definition (required, e.g., 'to deliberate over')")
 @click.option("--category", "category", multiple=True,
               type=click.Choice(["action", "investigation"]),
-              help="Verb category, repeatable (E-1658). 'action' verbs lead "
+              help="Verb category, repeatable. 'action' verbs lead "
                    "changed-behavior/artifact work (todo/bugfix); 'investigation' "
                    "verbs lead findings/decision work (research/brainstorm). Pass "
                    "both for a genuine dual. Omit ⇒ 'action'.")

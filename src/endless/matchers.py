@@ -197,20 +197,49 @@ def _save_verbs_list(path: Path, verbs: list[dict]) -> None:
 
 
 def _resolved_verbs() -> list[dict]:
-    """Resolve the active verbs list: project > machine > defaults.
+    """The single verb-resolution route (E-2079): project + machine +
+    `DEFAULT_VERBS`, layered with FIELD-WISE fall-through per value
+    (case-insensitive). Each field is taken from the highest-priority layer that
+    specifies it, so a verb auto-registered into a project as `{value,
+    definition}` still inherits its `category` (and any other field) from a lower
+    layer rather than shadowing it.
 
-    Returns the first source that exists and parses to a list. Used by the
-    `completed`-status gate (E-1240) and any future verb-property lookups.
+    Replaces the former first-non-empty-source behavior, under which a fresh
+    project's single auto-registered verb shadowed all `DEFAULT_VERBS` — which,
+    once the type gate moved to creation time, turned into a front-door lockout
+    (`task add 'Research …' --type research` refused because 'research' resolved
+    to no category). All readers (`get_verbs`, `get_verb_definition`,
+    `verb_categories`, `load_all_verbs`) share this one route, so existence,
+    definition, and category can never disagree about which layer wins.
+
+    Triggers migration + default seeding via `load_all_matchers`, matching the
+    former `load_all_verbs`.
     """
+    load_all_matchers()
+    layers: list[list[dict]] = []
     proj_path = project_verbs_path()
     if proj_path is not None:
-        verbs = _load_verbs_list(proj_path)
-        if verbs:
-            return verbs
-    machine_verbs = _load_verbs_list(machine_verbs_path())
-    if machine_verbs:
-        return machine_verbs
-    return DEFAULT_VERBS
+        layers.append(_load_verbs_list(proj_path))
+    layers.append(_load_verbs_list(machine_verbs_path()))
+    layers.append(DEFAULT_VERBS)
+
+    order: list[str] = []
+    merged: dict[str, dict] = {}
+    for layer in layers:                     # high → low priority
+        for entry in layer:
+            if not isinstance(entry, dict):
+                continue
+            value = entry.get("value")
+            if not isinstance(value, str):
+                continue
+            key = value.lower()
+            if key not in merged:
+                order.append(key)
+                merged[key] = dict(entry)
+            else:
+                for field, val in entry.items():
+                    merged[key].setdefault(field, val)   # lower layer fills gaps
+    return [merged[key] for key in order]
 
 
 # The two verb categories (E-1658). A verb's `category` field is a subset of
@@ -226,13 +255,14 @@ DEFAULT_VERB_CATEGORY: frozenset[str] = frozenset({"action"})
 
 
 def verb_categories(verb: str) -> frozenset[str]:
-    """Return the category set for `verb` from the resolved verbs list
-    (project > machine > defaults), matched case-insensitively.
+    """Return the category set for `verb`, resolved through the single layered
+    route (`_resolved_verbs`: project + machine + defaults, field-wise), matched
+    case-insensitively.
 
-    A verb with no `category` field — or an unknown/empty verb — defaults to
-    {"action"}. A bare string category is accepted as a one-element set.
-    Unrecognized tokens are dropped; if that leaves the set empty it falls back
-    to the default so a malformed entry never yields an un-typed verb.
+    A verb with no `category` field in any layer — or an unknown/empty verb —
+    defaults to {"action"}. A bare string category is accepted as a one-element
+    set. Unrecognized tokens are dropped; if that leaves the set empty it falls
+    back to the default so a malformed entry never yields an un-typed verb.
     """
     if not verb:
         return DEFAULT_VERB_CATEGORY
@@ -573,28 +603,13 @@ def load_all_matchers() -> list[dict]:
 # --- Lookup helpers consumed by validate_title, hooks, etc. ----------------
 
 def load_all_verbs() -> list[dict]:
-    """Project + machine verbs merged additively, deduplicated by value.
-
-    Project entries take precedence on conflict (same value, different
-    definition). Triggers migration + default seeding via load_all_matchers.
-    Reads from .endless/verbs.jsonl (project) and ~/.config/endless/verbs.jsonl
-    (machine) per E-1124 (JSONL per E-1268).
+    """All active verbs, resolved once through the single layered route
+    (project + machine + `DEFAULT_VERBS`, field-wise fall-through). Public alias
+    for `_resolved_verbs` (E-2079 unified the two former resolution routes so
+    `verb list`, existence, definition, and category all agree). E-1124 layer
+    files; JSONL per E-1268.
     """
-    load_all_matchers()
-    project = _load_verbs_list(project_verbs_path()) if project_verbs_path() else []
-    machine = _load_verbs_list(machine_verbs_path())
-
-    seen: set[str] = set()
-    out: list[dict] = []
-    for v in project + machine:
-        if not isinstance(v, dict):
-            continue
-        value = v.get("value")
-        if not isinstance(value, str) or value in seen:
-            continue
-        seen.add(value)
-        out.append(v)
-    return out
+    return _resolved_verbs()
 
 
 def get_verbs() -> set[str]:

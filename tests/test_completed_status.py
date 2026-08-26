@@ -189,7 +189,10 @@ def test_update_status_completed_uses_new_title_if_provided(seeded_project_at_cw
     (which accepts investigation verbs) so both the old and new titles clear the
     E-1658 category gate; the point under test is which title the *completed*-gate
     reads. The grandfathered action-verb title is seeded via direct INSERT."""
-    tid = _add_task("Implement X", type_id=_RESEARCH)  # action verb, fails completed-gate as-is
+    # Seed at 'unreviewed' — the legal predecessor of 'completed' for a research
+    # task on the review track (underway→unreviewed→completed); a direct
+    # underway→completed edge does not exist for research.
+    tid = _add_task("Implement X", type_id=_RESEARCH, status="unreviewed")  # action verb
     # Rename to an investigation verb and complete in one shot — the new title wins.
     task_cmd.update_plan(
         tid,

@@ -178,6 +178,27 @@ test_gate_wiring() {
         src/endless/verb_cmd.py "'Category'"
 }
 
+test_resolver_fix() {
+    section "Resolver — layered field-wise verb resolution (E-2079, absorbed)"
+    # _resolved_verbs() must LAYER project+machine+DEFAULT_VERBS with field-wise
+    # fall-through, not return the first non-empty source (which let a fresh
+    # project's single auto-registered verb shadow all defaults → a front-door
+    # lockout once the gate moved to creation time).
+    assert_present "resolver appends DEFAULT_VERBS as a bottom layer" \
+        src/endless/matchers.py "layers.append(DEFAULT_VERBS)"
+    assert_present "resolver merges field-wise (lower layer fills gaps)" \
+        src/endless/matchers.py "merged[key].setdefault(field, val)"
+    assert_absent_in "resolver no longer returns the first non-empty source" \
+        src/endless/matchers.py "    machine_verbs = _load_verbs_list(machine_verbs_path())"
+    # Both former routes now share one resolver (unified).
+    assert_present "load_all_verbs delegates to the single resolver" \
+        src/endless/matchers.py "    return _resolved_verbs()"
+    # verbs.jsonl fully migrated — no completable field survives (incl. the
+    # 'draft' verb main registered after the branch diverged).
+    assert_absent_in "verbs.jsonl has no completable remnant (draft migrated)" \
+        .endless/verbs.jsonl 'completable'
+}
+
 test_gate_behavior() {
     section "Behavior — gate + recast completed status (hermetic, DEFAULT_VERBS)"
     # These pytest modules exercise the REAL add_item / update_plan / gate code:
@@ -186,7 +207,10 @@ test_gate_behavior() {
     #   - epic accepted with any verb (gate skipped)
     #   - error names the verb, its category, and the type's accepted categories
     #   - the rewritten completable→category completed-gate tests pass
-    assert_cmd "creation-gate tests pass (refuse/accept/dual/epic/error naming)" \
+    #   - E-2079: a fresh project with one auto-registered verb still resolves
+    #     investigation defaults, so `Research … --type research` is accepted;
+    #     field-wise fall-through keeps a re-registered default's category
+    assert_cmd "creation-gate tests pass (refuse/accept/dual/epic/error naming/E-2079)" \
         env PATH="${PWD}/bin:${PATH}" uv run pytest tests/test_verb_category_gate.py -q
     assert_cmd "completed-status tests pass (recast onto category)" \
         env PATH="${PWD}/bin:${PATH}" uv run pytest tests/test_completed_status.py -q
@@ -240,6 +264,7 @@ main() {
     test_build
     test_schema_migration
     test_gate_wiring
+    test_resolver_fix
     test_gate_behavior
     test_rebuild_db
     test_suites
