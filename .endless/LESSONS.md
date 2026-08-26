@@ -3964,3 +3964,11 @@ The meta-lesson, third time this session: when something reads as an open questi
 - **The tell**: any imperative in a plan addressed at deciding rather than doing — 'decide whether', 'determine if', 'confirm with Mike', 'discuss at plan time' in a plan that is already the plan.
 - **Boundary**: a plan may absolutely say 'STOP and ask' about something that can only be known DURING the work. What it may not do is defer something already knowable when the plan was written.
 - **Project**: endless
+
+### [2026-08-25] Endless has no users yet, so there are no PRODUCT consequences to report — and an instance of a hard general problem is not a finding
+- **Fact to hold**: Endless has no users besides Mike. A sentence beginning 'an adopting project would...' describes nobody. PRODUCT is a lens for how software will behave for someone else — it is not a licence to narrate hypothetical user harm as though it were live impact.
+- **What happened**: I wrote that an adopting project which had already materialized a handoff template would keep the old rule through an upgrade, and presented it as a PRODUCT consequence needing a decision. Mike: 'there ARE no other users (yet) so there are currently NO PRODUCT consequences.'
+- **The second half**: he also named what the observation actually was — one instance of a much broader, HARD problem (materialized copies of shipped files going stale on upgrade). An instance of a known hard problem is not a new finding. Do not describe it as one, do not scope it into the task at hand, and do not file it; adding instances to the backlog is how a hard problem becomes twenty tickets and still no answer.
+- **Rule**: before reporting an implication, ask who it happens to. If the answer is a hypothetical adopter, it is background, not a consequence. If the answer is 'this is the general case of something already known to be hard', say that in one clause and stop.
+- **Related**: ED-1550. Noticing something true does not earn a task, and it does not earn a paragraph either.
+- **Project**: endless
