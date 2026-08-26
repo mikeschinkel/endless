@@ -4134,3 +4134,13 @@ relevant, READ it; never execute it.
 Their living under tests/ makes them look like a suite. They are not, and that
 resemblance is the trap I keep walking into.
 - **Project**: endless
+
+### [2026-08-25] Never run another task's verify script
+While working E-2016 I ran `tests/tasks/e-1252-verify.sh` — a Tier-0 verify suite belonging to a different task and a different session. Mike caught it and was rightly furious.
+
+Why I did it: I was about to rename a user-visible heading in session_status.go, noticed e-1252's script greps that file for the old string, and ran the whole suite to see whether I would break it. That is a question I invented. Each task's verify script is that task's owner's instrument; running it from my session burns minutes (it shells out to `go test ./internal/...` and `pytest tests/`), and it hands me a failure report about work I have no standing to judge.
+
+It got worse from there. The script reported 11 pre-existing failures, and I started (a) planning to file a task about them and (b) treating 'e-1252 is already broken' as license to break it further. Both are downstream of collecting data I had no business collecting.
+
+The rule: run MY task's verify script and the project-wide regression (`just test`, `just test-go`, lint, build). Never another task's. If I think my change might affect another task's assertions, the project-wide regression will say so, or the owner will — it is not mine to go probe.
+- **Project**: endless
