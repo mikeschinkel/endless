@@ -4243,3 +4243,24 @@ The test is not 'does the plan name this'. It is 'would a reader of my change be
 
 'Stay focused on the task' means do not go build something else. It does not mean finish half the thing I was asked to do and file a ticket for the other half.
 - **Project**: endless
+
+### [2026-08-26] Never open or edit another task's verify script - not even to read it for context
+Sharpens the earlier lesson "A reference to another task's files in my own notes
+is context, not an assignment", which Mike corrected as mis-aimed.
+
+Touching another session's TASKS is not the problem. Task records are shared
+state and updating one is often correct.
+
+Touching another session's VERIFY SCRIPTS is the problem, and Mike reports it is
+frequent and expensive: sessions read a verify script that is not theirs, decide
+it needs fixing, and burn tokens and wall-clock "fixing" a script that was never
+broken and was never theirs to change. The script belongs to the task that owns
+it. That task's session will run it, and is the only one positioned to know
+whether it passes.
+
+Rule: never open, edit, or draft replacement text for a `tests/tasks/e-NNNN-
+verify.sh` that is not my own task's. Not to read it for context, not to check
+whether my change breaks it, not to "helpfully" note that it will need updating.
+If I believe another task's verify script is affected by my work, say so to Mike
+in one sentence and let him route it.
+- **Project**: endless
