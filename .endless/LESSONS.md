@@ -4233,3 +4233,13 @@ Endless has `endless task search <query>` and it costs one command. The global r
 
 Before `task add`: search the backlog for the thing I am about to file, using the words someone else would have used for it — not my phrasing of today's symptom. For this one, 'verbs' or 'completable' would have found E-1658 immediately. If a task exists, UPDATE it: add what I learned as analysis, link it, and say so. File new only when the search comes back empty.
 - **Project**: endless
+
+### [2026-08-26] Do not hide behind scope when the intent is obvious
+I edited the guide's status table to add `unreviewed`, noticed the table had no row for `completed` at all, and left it — then told Mike I 'didn't want to widen scope without asking'. He called it what it was: pedantry about the letter of the plan at the expense of its intent.
+
+The intent of E-2016 was that the status table document the lifecycle correctly. I was already IN that table, editing that column, for exactly that reason. A missing row two lines away is not a scope question — it is the same job, and leaving it meant shipping a table I had just read and knew was wrong.
+
+The test is not 'does the plan name this'. It is 'would a reader of my change be surprised I left it'. A one-line doc gap inside the file I am already editing, in service of the same goal, gets fixed and mentioned in the commit. Real scope creep is a DIFFERENT goal, a different file, or work that needs its own decision — none of which described this.
+
+'Stay focused on the task' means do not go build something else. It does not mean finish half the thing I was asked to do and file a ticket for the other half.
+- **Project**: endless
