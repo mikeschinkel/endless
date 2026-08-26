@@ -4095,3 +4095,7 @@ I read ED-1550's 'shipped work is never reopened to extend it' as covering E-207
   later command. When the first one is justified by an assumption, verify the
   assumption then, because nothing downstream will ever surface it as wrong.
 - **Project**: endless
+
+### [2026-08-25] Fold discovered scope into the open task; do not file a sibling for it
+I found that E-2074 could not drop sessions.short_id/kind_id without first deleting all background-agent code, and Mike confirmed the excision. I then filed a NEW task (E-2076) for the background-agent removal and planned to implement it under E-2074. That was wrong twice over. ED-1550 says filing is the exception, several symptoms of one cause are one task, and the default response to a finding is to tell the user in chat. The removal was not a sibling of E-2074 — it WAS E-2074's cause, and E-2074 was open and mine. The right move was to widen E-2074: rewrite its description and title to cover the excision, and say so in chat. Filing a task I intended to implement immediately on the same branch created a second record of one piece of work and grew a backlog that already carries 230 open tasks. Rule: when scope I discover belongs to the task I already hold, edit that task. File only when the work will NOT be done here. A material description edit is safe from 'underway' — the untriaged reset deliberately never fires from a status a live session holds.
+- **Project**: endless
