@@ -52,22 +52,49 @@ class StatusVocabularyError(click.ClickException):
     """
 
 
-def _binary() -> str:
-    """The endless-go to ask.
+# The resolved binary, memoized for the process. Resolution can cost a probe
+# (see _resolve_binary), and every wrapper call would otherwise pay it. This
+# caches WHICH BINARY to ask, never what it answered — the vocabulary itself is
+# always fetched live, which is the property that keeps this a client instead of
+# a second registry.
+_BINARY: str | None = None
+
+
+def _knows_task_status(binary: str) -> bool:
+    """Whether `binary` is new enough to have the `task-status` subcommand."""
+    return subprocess.run(
+        [binary, "task-status", "groups"], capture_output=True, text=True,
+    ).returncode == 0
+
+
+def _resolve_binary() -> str:
+    """Pick the endless-go to ask.
 
     Prefers the worktree's own build when running inside a self-dev worktree:
     the worktree's Python is already what executes there, so the worktree's Go
-    is its coherent partner. Without this, a self-dev session would read the
-    status vocabulary from main's binary while running branch source that may
-    have changed it — and, more immediately, could not run at all while the
-    branch that ADDS `task-status` is still unlanded.
+    is its coherent partner. It is also what lets the branch that ADDS
+    `task-status` run before it lands.
+
+    But only if that build can actually answer. A worktree branched before
+    `task-status` landed has a binary that cannot, and rebuilding it does not
+    help — the branch has no `task-status` code to build. Preferring it anyway
+    is how E-1891 briefly bricked every `endless` command in every worktree
+    older than itself, fatally rather than degraded. Falling back to the
+    PATH-resolved global is always safe here: `endless` and `endless-go` ship
+    together, so a global new enough to serve the Python asking this question is
+    the same install.
+
+    The probe costs one extra spawn, and only inside a self-dev worktree —
+    outside one there is no worktree candidate to test. That is the right place
+    for the cost to land.
 
     No --db gate, unlike event_bridge's resolver: this opens no database, so
     there is no schema baseline to mismatch.
     """
     worktree_bin = config.worktree_endless_go()
     if worktree_bin is not None and worktree_bin.is_file():
-        return str(worktree_bin)
+        if _knows_task_status(str(worktree_bin)):
+            return str(worktree_bin)
     found = shutil.which("endless-go")
     if found is None:
         raise StatusVocabularyError(
@@ -77,6 +104,14 @@ def _binary() -> str:
             "`just install`."
         )
     return found
+
+
+def _binary() -> str:
+    """The endless-go to ask, resolved once per process."""
+    global _BINARY
+    if _BINARY is None:
+        _BINARY = _resolve_binary()
+    return _BINARY
 
 
 def _run(*args: str, allow_false: bool = False) -> tuple[str, int]:

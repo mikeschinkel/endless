@@ -176,6 +176,18 @@ test_units() {
             "exit=$rc"$'\n'"$(printf '%s' "$out" | tail -25)"
     fi
 
+    # Named explicitly, not just swept up by the file above: this is the
+    # regression that made E-1891 fatal inside every worktree branched before
+    # it. If someone deletes the test, the suite must notice.
+    out=$(cd "$WT" && uv run pytest tests/test_status_registry_client.py -q \
+        -k "too_old or when_it_can_answer or memoized" 2>&1); rc=$?
+    if [[ $rc -eq 0 && "$out" == *"3 passed"* ]]; then
+        report_pass "the stale-worktree-binary fallback is covered by name"
+    else
+        report_fail "stale-worktree-binary regression tests" "3 passed, exit 0" \
+            "exit=$rc"$'\n'"$(printf '%s' "$out" | tail -15)"
+    fi
+
     if [[ "${FAIL_COUNT}" -gt 0 ]]; then
         printf '\n  %sABORTING%s — unit tests failed; skipping end-to-end checks.\n' \
             "${RED}${BOLD}" "${RESET}"
@@ -414,6 +426,9 @@ test_fails_closed() {
 
     out=$( cd "$TMP" && PATH="$stale:$PATH" uv run --project "$WT" endless --help 2>&1 )
     assert_contains "it names the command that failed" "task-status get all" "$out"
+    assert_contains "the resolver falls back before giving up" \
+        "_knows_task_status(str(worktree_bin))" \
+        "$(cat "$WT/src/endless/statuses.py")"
     assert_contains "it names the remedy" "just install" "$out"
     assert_not_contains "and does not traceback" "Traceback" "$out"
 }

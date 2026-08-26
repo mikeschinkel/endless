@@ -149,6 +149,7 @@ def test_missing_endless_go_fails_closed_with_an_actionable_message(monkeypatch)
     duplicate this module deletes — so it says so and stops."""
     monkeypatch.setattr(config, "worktree_endless_go", lambda *a, **k: None)
     monkeypatch.setattr(statuses.shutil, "which", lambda _: None)
+    monkeypatch.setattr(statuses, "_BINARY", None)
     with pytest.raises(statuses.StatusVocabularyError) as exc:
         statuses.get("all")
     message = str(exc.value)
@@ -165,6 +166,7 @@ def test_stale_endless_go_names_the_command_that_failed(monkeypatch, tmp_path):
     fake.chmod(0o755)
     monkeypatch.setattr(config, "worktree_endless_go", lambda *a, **k: None)
     monkeypatch.setattr(statuses.shutil, "which", lambda _: str(fake))
+    monkeypatch.setattr(statuses, "_BINARY", None)
     with pytest.raises(statuses.StatusVocabularyError) as exc:
         statuses.get("all")
     message = str(exc.value)
@@ -185,16 +187,71 @@ def test_prefers_the_worktree_binary_over_path(monkeypatch, tmp_path):
     worktree_bin.write_text("#!/bin/sh\nexit 0\n")
     worktree_bin.chmod(0o755)
     monkeypatch.setattr(config, "worktree_endless_go", lambda *a, **k: worktree_bin)
+    monkeypatch.setattr(statuses, "_BINARY", None)
     monkeypatch.setattr(statuses.shutil, "which", lambda _: "/usr/local/bin/endless-go")
-    assert statuses._binary() == str(worktree_bin)
+    assert statuses._resolve_binary() == str(worktree_bin)
+
+
+def test_falls_back_to_path_when_the_worktree_binary_is_too_old(monkeypatch, tmp_path):
+    """The regression that made E-1891 briefly unlandable-in-practice.
+
+    A worktree branched BEFORE `task-status` landed has a bin/endless-go that
+    cannot answer, and rebuilding it does not help — that branch has no
+    `task-status` code to build. Preferring it anyway made every `endless`
+    command inside such a worktree fail fatally, including `--help`.
+
+    It bit worse than it looks because cli.py imports this module at line 15 but
+    only re-execs into the worktree's OWN Python much later: main's Python asked
+    the stale worktree binary before it could hand off to the branch's Python,
+    which does not need the subcommand at all.
+    """
+    stale = tmp_path / "endless-go"
+    stale.write_text(
+        '#!/bin/sh\necho \'endless-go: unknown subcommand "task-status"\' >&2\nexit 2\n'
+    )
+    stale.chmod(0o755)
+    monkeypatch.setattr(config, "worktree_endless_go", lambda *a, **k: stale)
+    monkeypatch.setattr(statuses, "_BINARY", None)
+    monkeypatch.setattr(statuses.shutil, "which", lambda _: "/usr/local/bin/endless-go")
+    assert statuses._resolve_binary() == "/usr/local/bin/endless-go"
+
+
+def test_prefers_the_worktree_binary_when_it_can_answer(monkeypatch, tmp_path):
+    """The fallback must not defeat the preference: a worktree build that DOES
+    know `task-status` still wins, which is what lets the branch adding a group
+    exercise it before landing."""
+    good = tmp_path / "endless-go"
+    good.write_text("#!/bin/sh\nexit 0\n")
+    good.chmod(0o755)
+    monkeypatch.setattr(config, "worktree_endless_go", lambda *a, **k: good)
+    monkeypatch.setattr(statuses, "_BINARY", None)
+    monkeypatch.setattr(statuses.shutil, "which", lambda _: "/usr/local/bin/endless-go")
+    assert statuses._resolve_binary() == str(good)
+
+
+def test_resolution_is_memoized_but_the_vocabulary_is_not(monkeypatch):
+    """The probe costs a spawn, so the chosen BINARY is remembered. What it
+    answered never is — caching the vocabulary is how this would stop being a
+    client and start being a second registry."""
+    monkeypatch.setattr(statuses, "_BINARY", "/sentinel/endless-go")
+    monkeypatch.setattr(config, "worktree_endless_go", lambda *a, **k: None)
+    monkeypatch.setattr(statuses.shutil, "which", lambda _: None)
+    assert statuses._binary() == "/sentinel/endless-go"
+
+    import inspect
+    for name in ("get", "has", "sql_list", "rank", "label", "glyph", "groups"):
+        body = inspect.getsource(getattr(statuses, name))
+        assert "_run(" in body, f"{name} does not shell out"
+        assert "cache" not in body.lower(), f"{name} looks like it caches"
 
 
 def test_falls_back_to_path_when_the_worktree_binary_is_absent(monkeypatch, tmp_path):
     """Outside a worktree, and inside one that has not been built yet, PATH is
     the answer — not an error."""
     monkeypatch.setattr(config, "worktree_endless_go", lambda *a, **k: tmp_path / "nope")
+    monkeypatch.setattr(statuses, "_BINARY", None)
     monkeypatch.setattr(statuses.shutil, "which", lambda _: "/usr/local/bin/endless-go")
-    assert statuses._binary() == "/usr/local/bin/endless-go"
+    assert statuses._resolve_binary() == "/usr/local/bin/endless-go"
 
 
 def test_resolution_ignores_the_db_context(monkeypatch, tmp_path):
@@ -206,4 +263,5 @@ def test_resolution_ignores_the_db_context(monkeypatch, tmp_path):
     worktree_bin.chmod(0o755)
     monkeypatch.setattr(config, "worktree_endless_go", lambda *a, **k: worktree_bin)
     monkeypatch.setattr(config, "RESOLVED_CONFIG_DIR", None)
-    assert statuses._binary() == str(worktree_bin)
+    monkeypatch.setattr(statuses, "_BINARY", None)
+    assert statuses._resolve_binary() == str(worktree_bin)
