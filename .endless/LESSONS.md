@@ -4264,3 +4264,15 @@ whether my change breaks it, not to "helpfully" note that it will need updating.
 If I believe another task's verify script is affected by my work, say so to Mike
 in one sentence and let him route it.
 - **Project**: endless
+
+### [2026-08-26] Never tell Mike something is not deprecated — the decision record outranks the code
+Mike asked whether $FULL was one of the deprecated dollar-sign tokens. I answered '$FULL is not deprecated' from reading internal/hookcmd/sigils.go, whose comments describe ED-1555's open vocabulary as current. ED-1575 reverses ED-1555 and retires the sigils outright, including $FULL. The code was stale; the decision was not.
+
+Two failures, and the first is the one that matters.
+
+1. AUTHORITY. Mike decides deprecation. When he says something is deprecated, that IS the fact — he is not reporting on the codebase, he is telling me what he decided. Contradicting him about his own decision is arrogant and it wasted a turn on a fight I could not win. If his premise seems to disagree with the code, the code is behind, or I am reading the wrong thing. Say 'let me check the decision record', never 'that is not deprecated'.
+
+2. MECHANISM. Source comments are an artifact of a decision at the time they were written. They lag. A decision can be reversed and leave every comment in place. Before asserting anything about what is current design, read the decision — 'endless decision show ED-NNNN --db main' — and follow the reverses/superseded links. A comment citing ED-1555 is evidence that ED-1555 existed, not that it still holds.
+
+Also: my worktree binary was stale and 'endless decision show' failed with a task-status vocabulary error, which is what sent me to the source in the first place. When a tool fails, fix the tool (git rebase main; just build) and re-run it. Do not substitute a worse source and present its answer with the same confidence.
+- **Project**: endless
