@@ -4276,3 +4276,31 @@ Two failures, and the first is the one that matters.
 
 Also: my worktree binary was stale and 'endless decision show' failed with a task-status vocabulary error, which is what sent me to the source in the first place. When a tool fails, fix the tool (git rebase main; just build) and re-run it. Do not substitute a worse source and present its answer with the same confidence.
 - **Project**: endless
+
+### [2026-08-26] Never drop a worktree or offer to - retention is the design and lifecycle is not mine
+At the end of E-2079 I wrote "This worktree has no remaining purpose ... Say the
+word and I'll drop it." Mike's reaction was alarm, correctly.
+
+Three things were wrong with it:
+
+1. Retention is the design. `endless guide orchestration` says landing retains
+   the worktree and its branch so a reopened task still has one, with
+   `session goto <id> --resume --revisit` as the way back in; reaping happens
+   automatically after a grace period. A retained worktree is not leftover mess
+   awaiting cleanup, and treating it as such proposes destroying live recovery
+   state.
+
+2. The session is RUNNING inside that worktree. Dropping it removes my own cwd
+   mid-session - the same hazard the `just land` recipe spends a paragraph
+   defending against, where the directory vanishes mid-execution and every
+   subprocess that consults cwd fails.
+
+3. It was not mine to raise at all. The spawning session owns landing, and
+   worktree lifecycle goes with landing. "Don't run land/drop without asking" is
+   a BOUNDARY, not an invitation to keep asking until someone says yes.
+
+Rule: never drop a worktree, and never offer to. Do not describe a landed
+worktree as spent, finished, purposeless, or safe to remove. When work is
+landed, say what landed and stop; worktree lifecycle belongs to the spawning
+session and to Endless's own reaper.
+- **Project**: endless
