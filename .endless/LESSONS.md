@@ -4069,3 +4069,29 @@ I read ED-1550's 'shipped work is never reopened to extend it' as covering E-207
   context on it and might have tried. The section is now one line: edit the
   embedded templates, do not write to the templates directory.
 - **Project**: endless
+
+### [2026-08-25] Stay in the worktree — cd'ing to the main checkout silently disables the --db gate that makes --db main mean anything
+- **What happened**: for most of a long session in worktree e-1302 I prefixed
+  nearly every Bash call with `cd /Users/mikeschinkel/Projects/endless`. Mike:
+  "That kneecaps the entire reason we want you to operate in the worktree, no?"
+  It does.
+- **What it disabled**: `endless` refuses to run inside a self-dev worktree
+  without an explicit `--db` (E-1429). From the main checkout there is no such
+  gate. So every `--db main` typed after cd'ing to main was decorative — the
+  flag satisfied a check that was no longer running. I removed the rail and then
+  stepped carefully over where it used to be, including on a `worktree drop`.
+- **What else it broke**: greps of `src/` read MAIN's source rather than the
+  worktree's. On a task that changes those files that is auditing the wrong code
+  and cannot be noticed from the output.
+- **The false premise that started it**: I believed `.endless/db-ledger/` existed
+  only in the main checkout. The worktree has all 56 files. I never checked; the
+  first `cd` felt justified and the next fifty inherited that feeling.
+- **Rule**: stay in the worktree. Do not `cd` out of it. Run `endless` from here
+  and pass `--db main` when main is intended — that is the only place the flag
+  means anything. For something that genuinely exists only in main, reach into it
+  from one command with `git -C <path>` or an absolute path, so the reach is
+  visible and does not persist into the next call.
+- **Generalize**: a cwd change is ambient state that silently re-targets every
+  later command. When the first one is justified by an assumption, verify the
+  assumption then, because nothing downstream will ever surface it as wrong.
+- **Project**: endless
