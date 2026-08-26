@@ -3927,3 +3927,18 @@ Flagging an open question is only worth doing when I genuinely cannot resolve it
 
 Same instinct as the ED-1550 lesson: my default should be to CLOSE — resolve, decide, fold in — not to open, file, or defer.
 - **Project**: endless
+
+### [2026-08-25] Correction to the previous lesson: when I surface an open question, ASK it — do not narrate it and stall, and do not silently decide it either
+I wrote a lesson saying my default should be to CLOSE open questions rather than defer. Mike corrected that: 'Your default should be to ASK, not to close OR defer. What you did was NOT ASK and stall after you mentioned it, requiring me to say ADDRESS THE OPEN QUESTION, DAMMIT!'
+
+So the previous lesson over-rotated. The failure was never that I declined to decide. It was that I RAISED the question in a report and then parked it — surfacing it without putting it to him. That forced a second round trip and made him chase me for a decision he was already willing to make.
+
+Three behaviours, only one correct:
+  - raise it and stall  <- what I did, always wrong
+  - decide it silently  <- what my previous lesson prescribed, also wrong
+  - ASK it              <- correct
+
+If a question is worth mentioning at all, it is worth asking properly in the same turn — AskUserQuestion with real options, or a direct question, not a line in a status report. If it is not worth asking, it is not worth mentioning; resolve it and move on. What I must never do is put it in front of him and then wait to be told to proceed.
+
+(He added that in this instance I had picked the approach he would have chosen. The outcome was fine; the process cost him two exchanges and his patience where one question would have done.)
+- **Project**: endless
