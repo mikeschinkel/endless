@@ -4178,3 +4178,22 @@ I wrote 'sessions may be ordered by recency; instances never are' for the E-2063
 
 Banning a direction bans use-cases the reasoning never considered. Say 'last_event_at is displayed, never a selection key' and 'the instance ordinal is computed first_seen_at ASC so it is stable' — then any listing is free to present in whichever direction it wants.
 - **Project**: endless
+
+### [2026-08-26] Never cd to the main checkout from a worktree; git worktrees already share refs and objects
+While working E-2079 from its worktree I repeatedly ran `cd` to the main
+checkout inside compound Bash calls, in order to read files from other
+branches. That was wrong on the facts: a git worktree shares the ref store and
+object database with the main checkout, so `git show <branch>:<path>` and
+`git log main..<branch>` read any branch from inside the worktree with no `cd`
+at all.
+
+The harness printed "Shell cwd was reset to ..." after every one of those calls
+and I did not read it as the correction it was.
+
+The risk is not the read. It is that a `cd` to main followed by any write lands
+in the main checkout, which the project rules forbid outright. Mike reports
+another session caused many problems doing the same thing.
+
+Rule: never `cd` out of the worktree. Use absolute paths for files, and reach
+other branches through git's ref syntax rather than by changing directory.
+- **Project**: endless
