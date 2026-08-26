@@ -3857,3 +3857,15 @@ The stale assertion I had 'unmasked' in tests/tasks/e-1956-verify.sh was not evi
 - **Boundary**: this is not license to act broadly. It applies where the check is already done, the action is reversible or trivially re-creatable, and it is inside the work underway. Structural choices — a task's type, a tree's shape, anything outward-facing — still go to Mike.
 - **Related**: same family as ED-1550. Closing is work; surfacing something as a decision is the expensive default.
 - **Project**: endless
+
+### [2026-08-25] Read the code before asserting how a mechanism works — never infer behavior from an adjacent field's name
+Correction: 'are you SURE that the reaper reads created_at? It should NOT; it should read a field containing last touched, not created at.'
+
+I warned that the worktree companion's fabricated created_at mattered because 'the reaper's TTL reads it.' It does not. Verified after being challenged: created_at appears nowhere in internal/monitor/reap_worktrees.go. The reaper reads task_landings.landed_at from the database, and per its own doc comment uses MAX(landed_at, session_tasks.updated_at) — last-touched values, exactly as Mike said it should. The companion's created_at has a single reader: 'worktree show', which prints it as a display line.
+
+Pattern: I had read the reaper's criteria earlier in the session and knew it used landed_at. When I later recreated the companion and saw a created_at field, I connected 'reaper TTL' to 'the timestamp in front of me' without re-checking. Adjacency plus a plausible-sounding name substituted for reading the code.
+
+Cost: a false alarm presented as a caveat the user had to spend a turn refuting — worse than silence, because a confident warning invites action.
+
+Rule: before asserting that code reads a particular field, grep for that field in that file. If I have not read the specific line, say 'I have not verified' or verify first. Never infer a consumer from a name.
+- **Project**: endless
