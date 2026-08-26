@@ -3849,3 +3849,11 @@ E-2069 ('task list stopped showing supersessions') was a request to REVERT E-206
 
 The stale assertion I had 'unmasked' in tests/tasks/e-1956-verify.sh was not evidence of a bug — it was E-2064 superseding the check and not updating it.
 - **Project**: endless
+
+### [2026-08-25] If you can do it, do it — do not report a cleanup back as a decision for Mike
+- **Rule**: When the check you just ran proves an action is safe and in scope, take it. Reporting it instead converts your finished work into a decision Mike now has to make, which is worse than not having looked.
+- **What happened**: I verified worktree e-1272 was clean and 0 commits ahead of main, then wrote 'so it can be dropped' in the handoff. Mike: 'Then it can be reaped, no? If it can be reaped, YOU DON'T NEED TO TELL ME ABOUT IT.'
+- **The tell**: a sentence of the form 'X is safe to do' with no follow-up command. If the safety claim is sound the action follows from it; if it is not sound, the sentence should not have been written either.
+- **Boundary**: this is not license to act broadly. It applies where the check is already done, the action is reversible or trivially re-creatable, and it is inside the work underway. Structural choices — a task's type, a tree's shape, anything outward-facing — still go to Mike.
+- **Related**: same family as ED-1550. Closing is work; surfacing something as a decision is the expensive default.
+- **Project**: endless
