@@ -4358,3 +4358,13 @@ Two errors, and the second is worse.
 
 The test before deferring anything to a new task: is the deferred thing the actual fix, and is the session that would file it still live? If both, reopen (`endless task update E-NNN --status revisit --db main`) and build it there.
 - **Project**: endless
+
+### [2026-08-26] A verify script must not write to shared state, and a health probe that cannot fail proves nothing
+Two defects in one verify script, both mine, both caught by Mike running it instead of me.
+
+1. IT POLLUTED THE MAIN DATABASE. Section 7b drove the real hook binary end to end. `endless-go hook` pins the MAIN database regardless of XDG_CONFIG_HOME, so every invocation writes a session row there. I knew that, said so in the commit message, and shipped it anyway on the theory that one self-identifying row was harmless. It was not: the rows made `esu` ambiguous — 'Multiple sibling Claude panes in this window' — and blocked Mike from entering his own worktree. A test that mutates the project's durable state is not a test, it is a side effect with assertions attached. If the only way to exercise a path is to write to shared state, do not exercise it: assert the wiring from source and cover the logic in a unit test.
+
+2. THE HEALTH PROBE WAS A FALSE NEGATIVE — the exact bug I had just criticized in someone else's script an hour earlier. Mine ran one benign command and required exit 0. But `ENDLESS_NO_HOOKS=true` makes the hook exit 0 for EVERYTHING, so the probe passed while the gate was entirely disabled, and the suite reported eight route failures instead of 'the hook is switched off here'. A probe must be a POSITIVE control: it has to assert something that is FALSE when the mechanism is broken. 'Nothing errored' is not evidence a gate fired.
+
+The generalisable test for both: ask what the check would print if the mechanism were completely absent. If the answer is 'the same thing', it is not a check. And ask what the script leaves behind. If the answer is anything at all in a shared database, it is not a verify script.
+- **Project**: endless
