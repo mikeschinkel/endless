@@ -3956,3 +3956,11 @@ Concretely: the E-2018 lifecycle table gives blocked no edges. Blockedness is th
 
 The meta-lesson, third time this session: when something reads as an open question, check whether it is already decided somewhere before putting it to Mike. Asking him to re-decide settled things is more expensive than deciding wrong.
 - **Project**: endless
+
+### [2026-08-25] A plan with an open question in it is an unfinished plan — ask Mike before it ships, never punt the decision downstream
+- **Rule**: A plan must contain decisions, not questions. If authoring one surfaces something you cannot settle from the code, the task or a decision record, ASK — before the plan is attached and the task is marked ready. Writing 'decide whether X is acceptable' into the plan hands your open question to a spawned session that has less context than you do, and gets it answered by whoever reads it first.
+- **What happened**: I wrote 'Decide whether that is acceptable (say so in the outcome) or whether it needs its own task' into E-2073's plan, then told Mike in chat that I had 'flagged it for a decision rather than solving'. He: 'Wrong. You should ASK rather than leave open questions in a plan.'
+- **The self-deception**: flagging felt like restraint — not over-reaching, leaving the call to the human. It is the opposite. The call still gets made, just by a session downstream with worse information, and Mike never sees the moment it happens.
+- **The tell**: any imperative in a plan addressed at deciding rather than doing — 'decide whether', 'determine if', 'confirm with Mike', 'discuss at plan time' in a plan that is already the plan.
+- **Boundary**: a plan may absolutely say 'STOP and ask' about something that can only be known DURING the work. What it may not do is defer something already knowable when the plan was written.
+- **Project**: endless
