@@ -696,11 +696,17 @@ func runWorktreeAnomalies(args []string) int {
 // runWorktreeUnsettled emits the unsettled breakdown for each worktree path
 // given as a positional argument, as a JSON array in the same order (E-1865).
 //
-// Path-based and DB-free for the same reason worktree-anomalies is (E-1766): in
-// a self-dev worktree a DB lookup routes to the per-worktree sandbox, which
-// lacks the task row. The Python caller already resolves task → worktree path,
-// and passes every path in ONE invocation so the list view costs a single
-// subprocess rather than one per worktree.
+// Path-based for the same reason worktree-anomalies is (E-1766): in a self-dev
+// worktree a DB lookup routes to the per-worktree sandbox, which lacks the task
+// row. The Python caller already resolves task → worktree path, and passes
+// every path in ONE invocation so the list view costs a single subprocess
+// rather than one per worktree.
+//
+// E-1940 added a best-effort landings lookup underneath, keyed off the `e-NNNN`
+// directory name. It does not make the command DB-dependent: a miss credits no
+// landing and the verdict falls back to pure git. To make the lookup HIT, pass
+// the same `--config-dir` the caller's own database context resolved to — which
+// is what endless.task_cmd._unsettled_probe threads through.
 //
 // Always exits 0 when it ran: "settled" is a legitimate answer, not a failure,
 // and the caller reads the verdict from the JSON rather than the exit code.
@@ -739,14 +745,26 @@ type worktreeUnsettledJSON struct {
 	AutoManaged   []string `json:"auto_managed_files"`
 	UnlandedCount int      `json:"unlanded_count"`
 	UnlandedLog   []string `json:"unlanded_log"`
-	StatusErr     string   `json:"status_error,omitempty"`
-	RevListErr    string   `json:"rev_list_error,omitempty"`
+	// Undetermined and its reason are the E-1940 addition: a probe that could
+	// not run is now its own answer, distinct from both settled and unsettled,
+	// and Unsettled is true alongside it so the row still gets marked.
+	Undetermined       bool   `json:"undetermined"`
+	UndeterminedReason string `json:"undetermined_reason"`
+	// Base is the resolved default branch the count was measured against, so
+	// the renderer can name it instead of saying "main" on a repo where that is
+	// not true. LandedShas are the recorded landings credited.
+	Base       string   `json:"base"`
+	LandedShas []string `json:"landed_shas"`
+	StatusErr  string   `json:"status_error,omitempty"`
+	RevListErr string   `json:"rev_list_error,omitempty"`
+	BaseErr    string   `json:"base_error,omitempty"`
+	LookupErr  string   `json:"lookup_error,omitempty"`
 }
 
 func newWorktreeUnsettledJSON(d monitor.UnsettledDetail) worktreeUnsettledJSON {
 	// Nil slices marshal as null; the Python side wants lists it can iterate
 	// unconditionally, so normalize to empty.
-	mod, auto, log := d.Modified, d.AutoManaged, d.UnlandedLog
+	mod, auto, log, landed := d.Modified, d.AutoManaged, d.UnlandedLog, d.LandedShas
 	if mod == nil {
 		mod = []string{}
 	}
@@ -756,20 +774,29 @@ func newWorktreeUnsettledJSON(d monitor.UnsettledDetail) worktreeUnsettledJSON {
 	if log == nil {
 		log = []string{}
 	}
+	if landed == nil {
+		landed = []string{}
+	}
 	return worktreeUnsettledJSON{
-		WorktreePath:  d.WorktreePath,
-		HasWorktree:   d.HasWorktree,
-		Unsettled:     d.Unsettled(),
-		Modified:      d.IsModified(),
-		Unlanded:      d.IsUnlanded(),
-		Reason:        d.Reason(),
-		Branch:        d.Branch,
-		ModifiedFiles: mod,
-		AutoManaged:   auto,
-		UnlandedCount: d.UnlandedCount,
-		UnlandedLog:   log,
-		StatusErr:     d.StatusErr,
-		RevListErr:    d.RevListErr,
+		WorktreePath:       d.WorktreePath,
+		HasWorktree:        d.HasWorktree,
+		Unsettled:          d.Unsettled(),
+		Modified:           d.IsModified(),
+		Unlanded:           d.IsUnlanded(),
+		Reason:             d.Reason(),
+		Branch:             d.Branch,
+		ModifiedFiles:      mod,
+		AutoManaged:        auto,
+		UnlandedCount:      d.UnlandedCount,
+		UnlandedLog:        log,
+		Undetermined:       d.IsUndetermined(),
+		UndeterminedReason: d.UndeterminedReason(),
+		Base:               d.Base,
+		LandedShas:         landed,
+		StatusErr:          d.StatusErr,
+		RevListErr:         d.RevListErr,
+		BaseErr:            d.BaseErr,
+		LookupErr:          d.LookupErr,
 	}
 }
 

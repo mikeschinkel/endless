@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -213,6 +214,13 @@ type reaperFixture struct {
 	worktreeRmErr error
 	branchDelErr  error
 	live          bool
+
+	// revParseErr makes every branch candidate fail to resolve, which is how
+	// DefaultBranch reports "I cannot name this repo's default branch" (E-1940).
+	revParseErr error
+	// revListArgs records the counting rev-list's arguments so a test can
+	// assert which revisions condition 4 excluded.
+	revListArgs []string
 }
 
 func newReaperFixture(t *testing.T, landedAt time.Time) *reaperFixture {
@@ -248,7 +256,13 @@ func newReaperFixture(t *testing.T, landedAt time.Time) *reaperFixture {
 		f.calls = append(f.calls, key)
 		switch key {
 		case "rev-list":
+			f.revListArgs = append([]string{}, args...)
 			return f.revListOut, f.revListErr
+		case "rev-parse":
+			if f.revParseErr != nil {
+				return "", f.revParseErr
+			}
+			return "deadbeef\n", nil
 		case "status":
 			return f.statusOut, f.statusErr
 		case "worktree":
@@ -259,9 +273,14 @@ func newReaperFixture(t *testing.T, landedAt time.Time) *reaperFixture {
 		return "", nil
 	}
 	hasLiveProcessInDir = func(string) (bool, error) { return f.live, nil }
+	// The reaper resolves the default branch per directory and memoizes it; a
+	// fixture that rewrites what git answers must not read the previous test's
+	// verdict.
+	resetDefaultBranchCache()
 	t.Cleanup(func() {
 		runGit = prevRunGit
 		hasLiveProcessInDir = prevLive
+		resetDefaultBranchCache()
 	})
 	return f
 }
@@ -650,6 +669,64 @@ func TestReapStaleWorktrees_SkipsNonMatchingDirNames(t *testing.T) {
 	for _, name := range []string{"e-abc", "not-a-task", "e-", ".hidden"} {
 		if _, err := os.Stat(filepath.Join(wtroot, name)); err != nil {
 			t.Errorf("dir %s should still exist: %v", name, err)
+		}
+	}
+}
+
+// TestMaybeReapWorktree_SkipsWhenDefaultBranchUnresolved pins the fail-closed
+// half of E-1940 on the code path that DELETES worktrees. The resolver replaced
+// a hardcoded `main` in condition 4, so it became a new way for that condition
+// to fail — and the only acceptable answer to "I cannot tell whether this
+// branch has unlanded work" is skip, never reap.
+func TestMaybeReapWorktree_SkipsWhenDefaultBranchUnresolved(t *testing.T) {
+	f := newReaperFixture(t, time.Now().Add(-30*24*time.Hour))
+	f.revParseErr = fmt.Errorf("fatal: unknown revision")
+	cutoff := time.Now().UTC().Add(-14 * 24 * time.Hour)
+
+	reaped, err := maybeReapWorktree(f.db, f.projRoot, f.dir, 42, cutoff)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if reaped {
+		t.Fatal("an unresolvable default branch must skip, never reap")
+	}
+	for _, c := range f.calls {
+		if c == "worktree" || c == "branch" {
+			t.Errorf("destructive git %q ran despite an unresolvable base (calls=%v)", c, f.calls)
+		}
+	}
+}
+
+// TestMaybeReapWorktree_CreditsRecordedLandings is the reap side of the
+// landed-state fix. Condition 1 already requires a task_landings row, so a
+// rebase-landed worktree passed 1 and was rejected by 4 — every SHA on its
+// branch was rewritten by the rebase, so `<base>..HEAD` counted them forever
+// and the directory could never be reaped. Crediting the recorded landings in
+// the range is what unblocks that; without it, landed worktrees accumulate
+// without bound.
+func TestMaybeReapWorktree_CreditsRecordedLandings(t *testing.T) {
+	f := newReaperFixture(t, time.Now().Add(-30*24*time.Hour))
+	if _, err := f.db.Exec(
+		`INSERT INTO task_landings (task_id, branch, merge_commit_sha, landed_at)
+		 VALUES (42, 'task/42-probe', 'cafebabe', '2026-01-01T00:00:00')`,
+	); err != nil {
+		t.Fatalf("seed second landing: %v", err)
+	}
+	cutoff := time.Now().UTC().Add(-14 * 24 * time.Hour)
+
+	if _, err := maybeReapWorktree(f.db, f.projRoot, f.dir, 42, cutoff); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	excluded := map[string]bool{}
+	for _, a := range f.revListArgs {
+		if strings.HasPrefix(a, "^") {
+			excluded[a] = true
+		}
+	}
+	for _, want := range []string{"^main", "^deadbeef", "^cafebabe"} {
+		if !excluded[want] {
+			t.Errorf("condition 4 did not exclude %s (args=%v)", want, f.revListArgs)
 		}
 	}
 }

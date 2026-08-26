@@ -7,8 +7,15 @@ import (
 	"testing"
 )
 
-// unsettledStub drives runGit for the two probes the predicate runs, plus the
+// unsettledStub drives runGit for the probes the predicate runs, plus the
 // display-only enrichment calls.
+//
+// The default-branch resolver (E-1940) also shells out, so the stub answers its
+// calls too: `rev-parse --verify` succeeds (every candidate exists) and the
+// candidate chain lands on `main` unless baseUnresolvable says otherwise. Note
+// that symbolic-ref is used by BOTH the resolver (origin/HEAD) and the
+// enrichment (HEAD), so the dispatch keys on the ref being asked about, never
+// on args[0] alone.
 type unsettledStub struct {
 	status     string
 	statusErr  error
@@ -18,32 +25,54 @@ type unsettledStub struct {
 	logErr     error
 	branch     string
 	branchErr  error
+	// baseUnresolvable makes every branch candidate fail to resolve, which is
+	// the state DefaultBranch reports as ErrDefaultBranchUnresolved.
+	baseUnresolvable bool
+	// revListArgs records the arguments of the counting rev-list, so a test can
+	// assert which revisions were excluded.
+	revListArgs *[]string
 }
 
 func (s unsettledStub) install(t *testing.T) {
 	t.Helper()
 	prev := runGit
 	t.Cleanup(func() { runGit = prev })
+	t.Cleanup(resetDefaultBranchCache)
+	resetDefaultBranchCache()
 	runGit = func(dir string, args ...string) (string, error) {
 		switch args[0] {
 		case "status":
 			return s.status, s.statusErr
 		case "rev-list":
+			if s.revListArgs != nil {
+				*s.revListArgs = append([]string{}, args...)
+			}
 			return s.revList, s.revListErr
 		case "log":
 			return s.log, s.logErr
 		case "symbolic-ref":
+			// The resolver asks for origin/HEAD; the enrichment asks for HEAD.
+			if args[len(args)-1] == "refs/remotes/origin/HEAD" {
+				return "", errors.New("not a symbolic ref")
+			}
 			return s.branch, s.branchErr
+		case "config":
+			return "", errors.New("unset")
+		case "rev-parse":
+			if s.baseUnresolvable {
+				return "", errors.New("unknown revision")
+			}
+			return "deadbeef\n", nil
 		}
 		return "", nil
 	}
 }
 
 // legacyUnsettled is a verbatim copy of the pre-E-1865 taskWorktreeUnsettled git
-// logic (minus the DB resolution). TestUnsettledMatchesLegacyPredicate asserts
-// the refactor did not change a single verdict — this is the whole safety
-// argument for collapsing the predicate into UnsettledDetail, so it is kept as
-// an independent oracle rather than expressed in terms of the new code.
+// logic (minus the DB resolution): fail-open, hardcoded `main`, no credit for a
+// recorded landing. Kept as an independent oracle so the tests below can state
+// where today's verdict deliberately differs from it, rather than asserting the
+// new code against itself.
 func legacyUnsettled(wt string) bool {
 	out, gerr := runGit(wt, "status", "--porcelain")
 	if gerr != nil {
@@ -60,13 +89,15 @@ func legacyUnsettled(wt string) bool {
 	return perr == nil && n > 0
 }
 
-// TestUnsettledMatchesLegacyPredicate is the regression guard for E-1865's
-// refactor: for every combination of git outcomes, the new detail-based verdict
-// must equal the old boolean predicate. It covers the two orderings that a naive
-// rewrite gets wrong — modified-with-failing-rev-list (still unsettled, because
-// the original short-circuits on status before rev-list runs) and an unparsable
-// count (settled).
-func TestUnsettledMatchesLegacyPredicate(t *testing.T) {
+// TestUnsettledDivergesFromLegacyOnlyWhereIntended is the successor to E-1865's
+// "must match the legacy predicate exactly" guard. E-1940 broke that equality on
+// purpose, in ONE direction: where a probe could not run, the legacy predicate
+// answered settled and today's answers undetermined-so-unsettled.
+//
+// Stating it as "diverges exactly here and nowhere else" keeps both halves under
+// test. A regression that re-opened the fail-open hole fails on the divergent
+// cases; a regression that made some unrelated verdict flip fails on the rest.
+func TestUnsettledDivergesFromLegacyOnlyWhereIntended(t *testing.T) {
 	gitErr := errors.New("fatal: not a git repository")
 	statuses := []struct {
 		name string
@@ -97,13 +128,112 @@ func TestUnsettledMatchesLegacyPredicate(t *testing.T) {
 					revList: rl.out, revListErr: rl.err,
 				}.install(t)
 
-				want := legacyUnsettled("/wt")
-				got := WorktreeUnsettledAt("/wt").Unsettled()
-				if got != want {
-					t.Errorf("verdict diverged from legacy predicate: got %v, want %v", got, want)
+				legacy := legacyUnsettled("/wt")
+				d := WorktreeUnsettledAt("/wt")
+
+				// A probe that could not run is the ONLY licensed divergence.
+				probeFailed := st.err != nil || rl.err != nil || rl.name == "unparsable"
+				if d.IsUndetermined() != probeFailed {
+					t.Fatalf("IsUndetermined() = %v, want %v (reason %q)",
+						d.IsUndetermined(), probeFailed, d.Reason())
+				}
+				if probeFailed {
+					if !d.Unsettled() {
+						t.Errorf("a probe that could not run must NOT read as the all-clear")
+					}
+					// A status failure short-circuits, so an unrunnable status
+					// probe is the reported cause even when rev-list also fails.
+					if st.err != nil && d.StatusErr == "" {
+						t.Errorf("status failure not recorded: %+v", d)
+					}
+					return
+				}
+				if got := d.Unsettled(); got != legacy {
+					t.Errorf("verdict diverged where it must not: got %v, want %v (%s)",
+						got, legacy, d.Reason())
 				}
 			})
 		}
+	}
+}
+
+// TestUndeterminedIsNotUnlanded pins the distinction the detail view exists to
+// draw. Both make the row ◆, and collapsing them is what made "I could not
+// tell" indistinguishable from "you have work to land".
+func TestUndeterminedIsNotUnlanded(t *testing.T) {
+	unsettledStub{revListErr: errors.New("boom")}.install(t)
+	d := WorktreeUnsettledAt("/wt")
+
+	if !d.Unsettled() || !d.IsUndetermined() {
+		t.Fatalf("failed probe must be unsettled AND undetermined: %+v", d)
+	}
+	if d.IsUnlanded() || d.IsModified() {
+		t.Errorf("undetermined must not claim a sub-state it could not measure: %+v", d)
+	}
+	if got := d.UndeterminedReason(); !strings.Contains(got, "rev-list") {
+		t.Errorf("UndeterminedReason() = %q, want it to name the failing probe", got)
+	}
+	if got := d.Reason(); !strings.HasPrefix(got, "undetermined (") {
+		t.Errorf("Reason() = %q, want it to lead with undetermined", got)
+	}
+}
+
+// TestUnresolvedDefaultBranchIsUndetermined covers the failure that used to be
+// permanent and invisible: on a repo whose default branch is neither resolvable
+// nor `main`, the hardcoded probe exited 128 on every tick and the fail-open
+// verdict rendered a clean row forever.
+func TestUnresolvedDefaultBranchIsUndetermined(t *testing.T) {
+	unsettledStub{baseUnresolvable: true, revList: "0\n"}.install(t)
+	d := WorktreeUnsettledAt("/wt")
+
+	if !d.Unsettled() || !d.IsUndetermined() || d.BaseErr == "" {
+		t.Fatalf("unresolvable default branch must read as undetermined: %+v", d)
+	}
+	if d.Base != "" {
+		t.Errorf("Base = %q, want empty — no caller may be handed a guess", d.Base)
+	}
+	if got := d.Reason(); !strings.Contains(got, "default branch unresolved") {
+		t.Errorf("Reason() = %q", got)
+	}
+}
+
+// TestUnlandedRangeCreditsRecordedLandings is the core of E-1940's second half:
+// `worktree land` rebases, so the branch keeps SHAs that main will never have,
+// and the range must exclude each recorded landing or the count reports landed
+// work as unlanded forever.
+func TestUnlandedRangeCreditsRecordedLandings(t *testing.T) {
+	var got []string
+	unsettledStub{revList: "0\n", revListArgs: &got}.install(t)
+
+	worktreeUnsettledAt("/wt", []string{"aaa111", "bbb222"}, false)
+
+	want := []string{"rev-list", "--count", "--ignore-missing", "HEAD", "^main", "^aaa111", "^bbb222"}
+	if len(got) != len(want) {
+		t.Fatalf("rev-list args = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("rev-list args = %v, want %v", got, want)
+		}
+	}
+}
+
+// TestNoLandingsLeavesTheLegacyRange proves the credit is additive. A task that
+// never landed must be measured exactly as before, or the fix would quietly
+// change the answer for every worktree in flight.
+func TestNoLandingsLeavesTheLegacyRange(t *testing.T) {
+	var got []string
+	unsettledStub{revList: "2\n", revListArgs: &got}.install(t)
+
+	d := worktreeUnsettledAt("/wt", nil, false)
+
+	for _, arg := range got {
+		if strings.HasPrefix(arg, "^") && arg != "^main" {
+			t.Errorf("nothing was landed, yet %q was excluded (args %v)", arg, got)
+		}
+	}
+	if !d.IsUnlanded() || d.UnlandedCount != 2 {
+		t.Errorf("want 2 unlanded commits, got %+v", d)
 	}
 }
 
@@ -113,40 +243,42 @@ func TestUnsettledMatchesLegacyPredicate(t *testing.T) {
 // subjects and branch that only `task unsettled <id>` displays. With dozens of
 // worktrees those extra two calls per row are dozens of needless subprocesses.
 func TestVerdictPathSkipsEnrichment(t *testing.T) {
-	var called []string
-	prev := runGit
-	t.Cleanup(func() { runGit = prev })
+	var called [][]string
+	unsettledStub{
+		status:      "",
+		revList:     "3\n",
+		log:         "abc1234 subject\n",
+		branch:      "task/x\n",
+		revListArgs: nil,
+	}.install(t)
+	inner := runGit
 	runGit = func(dir string, args ...string) (string, error) {
-		called = append(called, args[0])
-		switch args[0] {
-		case "status":
-			return "", nil
-		case "rev-list":
-			return "3\n", nil
-		case "log":
-			return "abc1234 subject\n", nil
-		case "symbolic-ref":
-			return "task/x\n", nil
-		}
-		return "", nil
+		called = append(called, args)
+		return inner(dir, args...)
 	}
 
-	// Verdict-only: exactly the two predicate probes.
+	// Verdict-only: the two predicate probes, and nothing display-only.
 	d := WorktreeUnsettledAt("/wt")
 	if !d.Unsettled() {
 		t.Fatal("expected unsettled")
 	}
 	for _, c := range called {
-		if c == "log" || c == "symbolic-ref" {
-			t.Errorf("verdict path ran display-only git %q (calls: %v)", c, called)
+		if c[0] == "log" || (c[0] == "symbolic-ref" && c[len(c)-1] == "HEAD") {
+			t.Errorf("verdict path ran display-only git %v (calls: %v)", c, called)
 		}
 	}
-	if len(called) != 2 {
-		t.Errorf("verdict path ran %d git calls (%v), want 2", len(called), called)
+
+	// The resolver's own calls must be paid ONCE per repo, not once per row:
+	// `session monitor` re-renders every two seconds.
+	before := len(called)
+	if second := WorktreeUnsettledAt("/wt"); second.UnlandedCount != d.UnlandedCount {
+		t.Fatalf("second probe disagreed: %+v vs %+v", second, d)
+	}
+	if n := len(called) - before; n != 2 {
+		t.Errorf("second probe ran %d git calls, want 2 (default branch not memoized)", n)
 	}
 
 	// Detail path: same verdict, plus the enrichment.
-	called = nil
 	full := WorktreeUnsettledDetailAt("/wt")
 	if full.Unsettled() != d.Unsettled() || full.UnlandedCount != d.UnlandedCount {
 		t.Errorf("enrichment changed the verdict: %+v vs %+v", full, d)

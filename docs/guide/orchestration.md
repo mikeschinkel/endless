@@ -183,11 +183,15 @@ endless worktree land <id> --dry-run        # preview without making changes
 `land` performs:
 
 1. Auto-commits endless-managed modifications (verbs.jsonl, ledger entries) — these auto-commit to main as global-config artifacts.
-2. Rebases the task branch onto current `main`.
-3. Fast-forwards `main` to the rebased tip.
+2. Rebases the task branch onto the project's current default branch.
+3. Fast-forwards that branch to the rebased tip.
 4. Records the landing (`task.landed`). **The worktree directory and its branch stay put** — `land` never removes them. A separate reaper sweep (`worktree reap`) deletes a landed worktree once it is older than `worktree_ttl` (`.endless/config.json`, default 14d) and no live process holds a cwd inside it. Retention is what makes re-landing work: commit a follow-up on the same branch and land again, and the dir and branch are reused.
 
 **Do not merge to main any other way.** `worktree land` is the single sanctioned path. The exception is global-config artifacts (verbs.jsonl, db-ledger entries) which auto-commit to main directly.
+
+**The default branch is resolved, not assumed.** Endless takes the first of: `default_branch` in `.endless/config.json`; `origin/HEAD`; `init.defaultBranch`; then `main` or `master`, whichever exists. Each candidate must name a branch that actually exists in the repository. If none does, Endless says so and refuses rather than guessing — a wrong base branch silently mis-reports what has landed, and would rebase onto the wrong thing. Set `default_branch` when the repository's convention is anything the detection steps cannot see, or run `git remote set-head origin --auto` to populate `origin/HEAD` on a fresh clone. The same resolution backs the ◆ unsettled marker and the worktree reaper, so all three agree on what "landed" means.
+
+Landing into a branch that is not `main` is fully supported; nothing in Endless requires the name.
 
 #### Post-land script
 

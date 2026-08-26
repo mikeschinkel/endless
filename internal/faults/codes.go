@@ -170,6 +170,40 @@ var (
 		Severity: SeverityWarning,
 		Title:    "Triage could not reach a verdict and left the task untriaged",
 	}
+
+	// ErrCodeWorktreeProbeFailed covers a git probe behind the ◆ unsettled
+	// marker failing: `git status --porcelain` or `git rev-list` returned an
+	// error for a task's worktree (E-1940).
+	//
+	// Error rather than warning: the user asked "is my work safe?" and Endless
+	// could not answer. Before this code the answer to an unanswerable probe
+	// was the all-clear — byte-identical to a verified-clean worktree — which
+	// is the failure the code exists to make visible.
+	//
+	// Deduped on (worktree, failing probe), so the 2s monitor tick raises one
+	// incident with a rising occurrence count rather than thousands.
+	ErrCodeWorktreeProbeFailed = Code{
+		ID:       "ERR-0010",
+		Slug:     "worktree-probe-failed",
+		Severity: SeverityError,
+		Title:    "A worktree's settled-state probe could not run",
+	}
+
+	// ErrCodeDefaultBranchUnresolved covers monitor.DefaultBranch falling
+	// through every resolution step (E-1940, absorbing E-1166): no
+	// `default_branch` in .endless/config.json, no origin/HEAD, no usable
+	// init.defaultBranch, and neither `main` nor `master` present.
+	//
+	// Error severity because it disables the unsettled probe and the reaper's
+	// unmerged-commits condition entirely — every worktree in the project
+	// becomes unjudgeable at once, which is a broken installation rather than
+	// a degraded one.
+	ErrCodeDefaultBranchUnresolved = Code{
+		ID:       "ERR-0011",
+		Slug:     "default-branch-unresolved",
+		Severity: SeverityError,
+		Title:    "The repository's default branch could not be resolved",
+	}
 )
 
 // catalog indexes every registered Code by ID. Built once at init from the
@@ -184,6 +218,8 @@ var catalog = buildCatalog(
 	ErrCodeTestError,
 	ErrCodeStatusLineUnavailable,
 	ErrCodeTriageFailed,
+	ErrCodeWorktreeProbeFailed,
+	ErrCodeDefaultBranchUnresolved,
 )
 
 // buildCatalog indexes codes by ID. It panics on a duplicate ID: a collision is

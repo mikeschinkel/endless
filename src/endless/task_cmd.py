@@ -1812,14 +1812,22 @@ def _unsettled_probe(paths: list[Path]) -> list[dict]:
 
     Path-based (never --task-id) for E-1766's reason: inside a self-dev worktree
     a DB lookup routes to the per-worktree sandbox, which has no task row.
+
+    The resolved DB context IS threaded through (E-1940): the probe credits the
+    recorded landings, and it must read them from the same database this
+    process is reading — otherwise `--db main` from inside a worktree would
+    render a verdict computed against the sandbox. A miss stays harmless; it
+    credits no landing and the verdict falls back to pure git.
     """
     if not paths:
         return []
     binary = shutil.which("endless-go")
     if not binary:
         raise click.ClickException("endless-go not found on PATH")
+    from endless import config
     result = subprocess.run(
-        [binary, "session-query", "worktree-unsettled", *(str(p) for p in paths)],
+        [binary, *config.go_db_context_args(),
+         "session-query", "worktree-unsettled", *(str(p) for p in paths)],
         capture_output=True, text=True,
     )
     if result.returncode != 0:
@@ -1977,32 +1985,42 @@ def unsettled_list(
 
 
 def _unsettled_color(probe: dict) -> str:
-    """Colour a reason by which fix it demands: yellow to commit, cyan to land."""
+    """Colour a reason by which fix it demands: red to investigate, yellow to
+    commit, cyan to land."""
+    if probe.get("undetermined"):
+        return "red"
     if not probe["unsettled"]:
         return "green"
     return "yellow" if probe["modified"] else "cyan"
 
 
-_PROBE_ERROR_LABELS = (("status_error", "git status"), ("rev_list_error", "git rev-list"))
+_PROBE_ERROR_LABELS = (
+    ("lookup_error", "worktree lookup"),
+    ("base_error", "default-branch resolution"),
+    ("status_error", "git status"),
+    ("rev_list_error", "git rev-list"),
+)
 
 
 def _probe_errors(probe: dict) -> list[tuple[str, str]]:
-    """Return [(label, message)] for each git probe that failed."""
+    """Return [(label, message)] for each probe that failed."""
     return [(label, probe[key]) for key, label in _PROBE_ERROR_LABELS if probe.get(key)]
 
 
 def _echo_probe_errors(probe: dict) -> None:
-    """Surface failed git probes.
+    """Surface failed probes and what the verdict does about them.
 
-    Both the predicate and the ◆ marker are fail-open — any git error is read as
-    settled — so a silent failure would present as "nothing to do". Saying the
-    verdict may under-report is the only honest rendering.
+    E-1940 flipped the polarity this used to apologise for. A probe that cannot
+    run no longer reads as settled; it makes the verdict UNDETERMINED, marks the
+    task's own ◆, and records a clearable fault. What is said here is therefore
+    what to do about it, not a warning that the answer above may be a lie.
     """
     for label, msg in _probe_errors(probe):
         click.echo()
         click.echo(click.style(
-            f"  Note: {label} failed ({msg}); the ◆ marker treats a git error "
-            f"as settled, so this verdict may under-report.", fg="red"))
+            f"  {label} failed ({msg}). The verdict is undetermined, not "
+            f"settled — the ◆ marks this task until the probe can run. "
+            f"Recorded as an error: endless errors show", fg="red"))
 
 
 def unsettled_item(item_id: int, llm: bool = False, as_json: bool = False):
@@ -2033,6 +2051,8 @@ def unsettled_item(item_id: int, llm: bool = False, as_json: bool = False):
         "unlanded": False, "reason": "no worktree", "branch": "",
         "modified_files": [], "auto_managed_files": [],
         "unlanded_count": 0, "unlanded_log": [],
+        "undetermined": False, "undetermined_reason": "",
+        "base": "", "landed_shas": [],
     }
 
     if as_json:
@@ -2068,21 +2088,32 @@ def unsettled_item(item_id: int, llm: bool = False, as_json: bool = False):
                click.style(probe["reason"], fg=_unsettled_color(probe)))
 
     if not probe["unsettled"]:
+        # Every probe ran and every one came back clean: a failure would have
+        # made this unsettled-because-undetermined and taken the branch below.
         click.echo()
         if not probe["has_worktree"]:
             click.echo(click.style("•", fg="cyan") +
                        " No worktree for this task — nothing to land.")
-        elif _probe_errors(probe):
-            # Fail-open: a failed probe reads as settled. Claiming the tree is
-            # clean here would assert something git never actually told us.
-            click.echo(click.style("•", fg="red") +
-                       " Cannot confirm settled — a git probe failed (see below).")
         else:
+            base = probe.get("base") or "the base branch"
+            landed = probe.get("landed_shas") or []
+            credit = (f" ({len(landed)} recorded landing(s) credited)"
+                      if landed else "")
             click.echo(click.style("•", fg="green") +
-                       " Settled: working tree clean and every commit is on main.")
-        _echo_probe_errors(probe)
+                       f" Settled: working tree clean and every commit is on "
+                       f"{base}{credit}.")
         click.echo()
         return
+
+    if probe.get("undetermined"):
+        # Not a return: `git status` may have succeeded and found modified files
+        # before `rev-list` failed, and both halves are worth showing. The
+        # per-probe remedy is printed by _echo_probe_errors at the end.
+        click.echo()
+        click.echo(click.style(
+            f"  Undetermined — {probe['undetermined_reason']}. "
+            f"Endless cannot say whether this worktree holds unlanded work, so "
+            f"it is marked rather than reported clean.", bold=True))
 
     if probe["modified_files"]:
         click.echo()
@@ -2102,8 +2133,9 @@ def unsettled_item(item_id: int, llm: bool = False, as_json: bool = False):
 
     if probe["unlanded"]:
         click.echo()
+        base = probe.get("base") or "the base branch"
         click.echo(click.style(
-            f"  Unlanded — {probe['unlanded_count']} commit(s) not on main. "
+            f"  Unlanded — {probe['unlanded_count']} commit(s) not on {base}. "
             f"Fix: endless worktree land {task_id_display(item['id'])}", bold=True))
         for c in probe["unlanded_log"]:
             click.echo(f"    {c}")

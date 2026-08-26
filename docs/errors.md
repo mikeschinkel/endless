@@ -225,3 +225,63 @@ detail log carries the failing invocation. If triage is not wanted on this
 machine, set `ENDLESS_NO_TRIAGE=1` to stop the automatic path, or route by hand
 with `endless task submit <id>` / `endless task update <id> --status unplanned`.
 Dismiss with `endless errors clear <id>`.
+
+## ERR-0010 — worktree-probe-failed
+
+**Severity:** error · **Raised by:** the ◆ unsettled probe (`session status`,
+`task unsettled`) and the worktree reaper (E-1940)
+
+A git probe behind the ◆ marker could not run for a task's worktree — either
+`git status --porcelain` or the `git rev-list` that counts commits not yet on
+the base branch returned an error.
+
+The severity is about what the failure *looked like* before this code existed.
+The probe was fail-open: any git error yielded `false`, the settled verdict, and
+`Reason()` rendered the words "settled (git status failed: …)". A worktree
+nobody could inspect was therefore drawn exactly like a worktree verified clean,
+on the one surface whose whole job is answering "is my work safe to walk away
+from?". The reaper — running the same two probes — had always failed *closed*,
+so the two surfaces that claim to agree on "done and landed" disagreed precisely
+where it mattered.
+
+Now the probe fails closed too: an unrunnable probe marks the task's own row ◆
+and records this fault. That widens ◆ from "you have work to land" to "look at
+this task — unlanded or uncheckable"; `endless task unsettled <id>` tells you
+which of the two, naming the failing command and git's own message.
+
+Repeats collapse on (worktree, failing probe), so `session monitor` re-probing
+every row every two seconds raises **one** incident with a rising occurrence
+count.
+
+**What to do.** Read the detail (`endless errors show --id <n> --detail`); it
+carries the worktree path, the failing git command and its stderr. The usual
+causes are a worktree directory whose git administrative file is stale or gone
+(`git worktree list` disagrees with the disk) and a base branch that does not
+exist locally. Dismiss with `endless errors clear <id>`.
+
+## ERR-0011 — default-branch-unresolved
+
+**Severity:** error · **Raised by:** `monitor.DefaultBranch` via the unsettled
+probe and the worktree reaper (E-1940, absorbing E-1166)
+
+Endless could not work out which branch this repository's work lands into. Every
+resolution step fell through: no `default_branch` in `.endless/config.json`, no
+`refs/remotes/origin/HEAD` (it is unset until `git remote set-head` runs — the
+normal state of a fresh clone), no `init.defaultBranch` naming a branch that
+exists here, and neither `main` nor `master` present.
+
+Error rather than warning because of the blast radius: the resolver backs both
+the ◆ marker and the reaper's unmerged-commits condition, so when it fails every
+worktree in the project becomes unjudgeable at once and no worktree can ever be
+reaped. This is the condition that used to be invisible — the probes hardcoded
+`main`, so a repo whose default branch is `master` got exit 128 on every tick, a
+permanent false all-clear, and a ◆ that could never appear.
+
+Endless will not substitute `main` here. Guessing is the bug this code exists to
+report.
+
+**What to do.** Set the branch explicitly — add `"default_branch": "<branch>"`
+to the project's `.endless/config.json`, which beats every detection step. Or
+give git the answer it is missing: `git remote set-head origin --auto` populates
+`origin/HEAD` for a clone that never had it. Dismiss with
+`endless errors clear <id>`.

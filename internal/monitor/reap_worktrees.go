@@ -13,6 +13,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/mikeschinkel/endless/internal/faults"
 )
 
 // DefaultWorktreeTTL is the fallback grace period applied when a project's
@@ -148,15 +150,16 @@ func reapBoundSandbox(worktreeName string) {
 //     etc. all advance it (see internal/events/session_tasks.go).
 //  3. No active (state != 'ended') session has task_id pointing at
 //     the task.
-//  4. The worktree's branch has no commits not yet on main
-//     (`git -C <wt> rev-list main..HEAD --count` == 0).
+//  4. The worktree's branch has no commits that have not reached the
+//     project's default branch, counting a recorded landing as reached
+//     (`git -C <wt> rev-list --count HEAD ^<base> ^<landing>...` == 0).
 //  5. The worktree's working tree is clean
 //     (`git -C <wt> status --porcelain` empty).
 //  6. No live process holds cwd inside the dir.
 //
-// Any git error while running 4 or 5 is treated as "in use" — the
-// reaper would rather skip a candidate it can't reason about than
-// destroy in-flight work.
+// Any git error while running 4 or 5 — including a default branch that
+// cannot be resolved — is treated as "in use". The reaper would rather
+// skip a candidate it can't reason about than destroy in-flight work.
 func maybeReapWorktree(db *sql.DB, projectRoot, dir string, taskID int64, cutoff time.Time) (bool, error) {
 	var landedAt string
 	// branch is nullable (E-1719): a historical/record-only landing records no
@@ -213,11 +216,27 @@ func maybeReapWorktree(db *sql.DB, projectRoot, dir string, taskID int64, cutoff
 		return false, nil
 	}
 
-	// Unmerged commits on the branch → skip. Hardcoded `main` matches
-	// the endless convention (consistent with `just land`). Treat any
-	// git error as "in use" — better to skip than destroy a worktree
-	// we can't inspect.
-	out, gerr := runGit(dir, "rev-list", "main..HEAD", "--count")
+	// Unmerged commits on the branch → skip. Treat any git error as "in use" —
+	// better to skip than destroy a worktree we can't inspect.
+	//
+	// E-1940 replaced the hardcoded `main` with the shared resolver and started
+	// crediting the recorded landings. Both changes let this condition PASS
+	// where it previously could not: on a project whose default branch is not
+	// `main` every candidate errored and was skipped forever, and a
+	// rebase-landed branch failed the SHA comparison by construction — so it
+	// passed condition 1 (a landing exists) and was rejected here, which is how
+	// landed worktrees accumulated without bound. The fail-closed handling
+	// itself is unchanged: a resolver error still means skip, never reap.
+	base, berr := DefaultBranch(dir)
+	if berr != nil {
+		recordReapDefaultBranchFault(dir, taskID, berr)
+		return false, nil
+	}
+	landedRefs, lerr := landedShas(db, taskID)
+	if lerr != nil {
+		return false, fmt.Errorf("query landing shas: %w", lerr)
+	}
+	out, gerr := runGit(dir, unlandedRevListArgs(base, landedRefs, "--count")...)
 	if gerr != nil {
 		return false, nil
 	}
@@ -366,6 +385,30 @@ func AnnotateSessionStatusUnsettled(rows []SessionStatusRow) {
 // preserves this function's original short-circuit order exactly.
 func taskWorktreeUnsettled(projectID, taskID int64) bool {
 	return TaskWorktreeUnsettledDetail(projectID, taskID).Unsettled()
+}
+
+// recordReapDefaultBranchFault reports the resolver failure that makes a
+// candidate permanently unreapable. Without it the sweep is silent about the
+// condition — it just never reaps anything, forever, and the growing worktree
+// directory is the only symptom (E-1940).
+//
+// Fingerprinted on the directory so a sweep over N unresolvable worktrees
+// raises N incidents (one per task, which is what the operator needs to act on)
+// rather than one per sweep per worktree.
+func recordReapDefaultBranchFault(dir string, taskID int64, err error) {
+	faults.Record(faults.Fault{
+		Code:        faults.ErrCodeDefaultBranchUnresolved,
+		Source:      "worktree:reap",
+		Fingerprint: dir,
+		Summary:     fmt.Sprintf("E-%d: no default branch, worktree cannot be reaped", taskID),
+		Detail:      err.Error(),
+		Fields: map[string]any{
+			"task":     fmt.Sprintf("E-%d", taskID),
+			"worktree": dir,
+			"command":  "monitor.DefaultBranch",
+			"error":    err.Error(),
+		},
+	})
 }
 
 // runGit executes `git -C <dir> <args...>` and returns the combined

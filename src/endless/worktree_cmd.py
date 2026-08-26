@@ -1002,18 +1002,86 @@ def _slugify_title(title: str) -> str:
     return slug or "task"
 
 
-def _default_base_branch(project_root: Path) -> str:
-    """Best-effort default-branch detection. Falls back to 'main'.
+class DefaultBranchUnresolved(click.ClickException):
+    """Raised when no resolution step could name this repo's default branch."""
 
-    Limitation tracked in E-1166: origin/HEAD may be unset on fresh
-    clones, leaving us with the literal 'main' fallback even when the
-    repo's actual default is master/develop.
-    """
+
+def _read_default_branch_config(project_root: Path) -> str:
+    """The `default_branch` field of <root>/.endless/config.json, or ''."""
     try:
-        ref = _git(["symbolic-ref", "--quiet", "refs/remotes/origin/HEAD"], cwd=project_root)
-    except subprocess.CalledProcessError:
-        return "main"
-    return ref.removeprefix("refs/remotes/origin/") or "main"
+        data = json.loads((project_root / ".endless" / "config.json").read_text())
+    except (OSError, ValueError):
+        return ""
+    value = data.get("default_branch") or ""
+    return value.strip() if isinstance(value, str) else ""
+
+
+def _branch_if_exists(project_root: Path, name: str) -> str:
+    """Return name when it resolves to a commit here, else ''."""
+    if not name:
+        return ""
+    res = _git_run(
+        ["rev-parse", "--verify", "--quiet", f"{name}^{{commit}}"],
+        cwd=project_root, check=False,
+    )
+    return name if res.returncode == 0 else ""
+
+
+def _git_config_value(project_root: Path, key: str) -> str:
+    res = _git_run(["config", "--get", key], cwd=project_root, check=False)
+    return res.stdout.strip() if res.returncode == 0 else ""
+
+
+def _default_base_branch(project_root: Path) -> str:
+    """Resolve the branch this repo's work lands into (E-1940, absorbing E-1166).
+
+    Resolution order, mirroring monitor.DefaultBranch in Go exactly:
+
+      1. `.endless/config.json`'s `default_branch` — explicit beats detection.
+      2. `git symbolic-ref --short refs/remotes/origin/HEAD`, minus `origin/`.
+      3. `git config init.defaultBranch`.
+      4. `main`, then `master`, whichever exists.
+
+    Every candidate must resolve to a commit here, and step 1 does not fall
+    through when it fails — an explicit branch that does not exist is a typo in
+    the project's own config, not an invitation to guess around it.
+
+    Raises rather than falling back to the literal 'main'. That fallback was
+    E-1166's open limitation and E-1940's bug: on a repo whose default branch is
+    something else it made every probe exit 128, which read as a permanent
+    all-clear. tests/test_default_branch_parity.py asserts the two
+    implementations agree case for case.
+    """
+    configured = _read_default_branch_config(project_root)
+    if configured:
+        if not _branch_if_exists(project_root, configured):
+            raise DefaultBranchUnresolved(
+                f"{_tilde(project_root)}/.endless/config.json sets default_branch "
+                f"{configured!r}, which does not exist in this repository."
+            )
+        return configured
+
+    res = _git_run(
+        ["symbolic-ref", "--short", "--quiet", "refs/remotes/origin/HEAD"],
+        cwd=project_root, check=False,
+    )
+    origin_head = ""
+    if res.returncode == 0:
+        origin_head = res.stdout.strip().removeprefix("origin/")
+    for candidate in (
+        origin_head,
+        _git_config_value(project_root, "init.defaultBranch"),
+        "main",
+        "master",
+    ):
+        if _branch_if_exists(project_root, candidate):
+            return candidate
+
+    raise DefaultBranchUnresolved(
+        f"Cannot resolve the default branch of {_tilde(project_root)}. "
+        f"Set it explicitly: add \"default_branch\": \"<branch>\" to "
+        f".endless/config.json, or run `git remote set-head origin --auto`."
+    )
 
 
 def _check_plan_file_committed(task_id: int, project_root: Path) -> str | None:
@@ -2159,6 +2227,42 @@ def _record_landing(
         )
 
 
+def _no_worktree_to_land_message(canonical: str) -> str:
+    """The message for `worktree land <id>` when no worktree exists (E-1308).
+
+    A landed worktree is REMOVED by the reaper once its recorded landing ages
+    past worktree_ttl, so "no worktree" is the ordinary end state of successful
+    work — yet the only message was "No endless-managed worktree for E-NNN",
+    which reads as "your work is lost". Consult the recorded landing before
+    saying that; today's message is still right when nothing is recorded.
+
+    E-1308 originally proposed detecting this with `git branch --merged`. That
+    cannot work: `land` rebases, so a landed branch is not an ancestor of the
+    base and the probe fails for exactly the case it targets. The recorded
+    landing is the reliable signal — the same one the unsettled probe and the
+    reaper now use.
+    """
+    from endless.task_cmd import _task_landings
+
+    try:
+        landings = _task_landings(int(canonical.removeprefix("E-")))
+    except Exception:
+        landings = []
+    if landings:
+        latest = landings[0]
+        sha = (latest["merge_commit_sha"] or "")[:12]
+        return (
+            f"{canonical} already landed (commit {sha} at {latest['landed_at']}); "
+            f"nothing to do. Its worktree was removed after the landing aged "
+            f"past worktree_ttl. Full history: endless task landed {canonical}"
+        )
+    return (
+        f"No endless-managed worktree for {canonical}, and no landing is "
+        f"recorded for it. "
+        f"(Use 'endless worktree list' to see available worktrees.)"
+    )
+
+
 def land_worktree(
     task_id: str,
     dry_run: bool,
@@ -2221,17 +2325,19 @@ def land_worktree(
     rows = _enriched_list(main_root)
     target = _branch_for_task(rows, canonical)
     if target is None:
-        raise click.ClickException(
-            f"No endless-managed worktree for {canonical}. "
-            f"(Use 'endless worktree list' to see available worktrees.)"
-        )
+        raise click.ClickException(_no_worktree_to_land_message(canonical))
     branch = target["branch"]
     if not branch:
         raise click.ClickException(
             f"Worktree for {canonical} has no branch (detached HEAD); cannot land."
         )
     worktree_path = Path(target["path"])
-    base_branch = (target["companion"] or {}).get("base_branch", "main")
+    # E-1940: the companion records the base the worktree was cut from; resolve
+    # it only when absent. The old `"main"` default was a silent wrong answer on
+    # any project whose default branch differs — and it is the LAND path, so it
+    # would have rebased onto a branch that is not the one being landed into.
+    base_branch = (target["companion"] or {}).get("base_branch") \
+        or _default_base_branch(main_root)
 
     if dry_run:
         click.echo(f"Would land: {canonical}")

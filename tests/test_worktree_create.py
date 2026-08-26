@@ -71,35 +71,15 @@ def test_slugify_lowercases():
 # _default_base_branch
 # ---------------------------------------------------------------------------
 
-def test_default_base_branch_returns_origin_head(monkeypatch, tmp_path):
-    from endless import worktree_cmd
-
-    def fake_git(args, cwd):
-        assert args == ["symbolic-ref", "--quiet", "refs/remotes/origin/HEAD"]
-        return "refs/remotes/origin/develop"
-
-    monkeypatch.setattr(worktree_cmd, "_git", fake_git)
-    assert _default_base_branch(tmp_path) == "develop"
-
-
-def test_default_base_branch_falls_back_to_main(monkeypatch, tmp_path):
-    from endless import worktree_cmd
-
-    def fake_git(args, cwd):
-        raise subprocess.CalledProcessError(1, ["git"], stderr="not set")
-
-    monkeypatch.setattr(worktree_cmd, "_git", fake_git)
-    assert _default_base_branch(tmp_path) == "main"
-
-
-def test_default_base_branch_handles_empty_ref(monkeypatch, tmp_path):
-    from endless import worktree_cmd
-
-    def fake_git(args, cwd):
-        return ""
-
-    monkeypatch.setattr(worktree_cmd, "_git", fake_git)
-    assert _default_base_branch(tmp_path) == "main"
+# _default_base_branch's resolution order, and its agreement with the Go
+# resolver that answers the same question for the ◆ probe and the reaper, are
+# covered case for case in tests/test_default_branch_parity.py (E-1940).
+#
+# The three stub-driven tests that stood here asserted the OLD contract — patch
+# `_git`, expect a literal "main" whenever origin/HEAD is unset. That fallback
+# is the bug: on a repo whose default branch differs, every probe built on the
+# result exits 128 forever. Their replacement runs against real repositories,
+# because every step of the order is a git behaviour a stub can only assume.
 
 
 # ---------------------------------------------------------------------------

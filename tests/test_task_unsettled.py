@@ -36,6 +36,10 @@ def _probe(**over) -> dict:
         "reason": "settled", "branch": "task/1-x",
         "modified_files": [], "auto_managed_files": [],
         "unlanded_count": 0, "unlanded_log": [],
+        # E-1940 additions: a probe that could not run is its own answer, and
+        # the base is resolved rather than assumed to be `main`.
+        "undetermined": False, "undetermined_reason": "",
+        "base": "main", "landed_shas": [],
     }
     base.update(over)
     return base
@@ -147,14 +151,47 @@ def test_item_no_worktree_is_distinct_from_settled(
 
 
 def test_item_reports_a_failed_git_probe(registered_project, stub_probe, capsys):
-    # Fail-open means the ◆ under-reports on a git error. Saying so beats
-    # silently claiming "settled".
+    # E-1940 flipped the polarity this test used to describe. A probe that could
+    # not run no longer renders as "settled (git status failed: …)" with a note
+    # that the verdict may under-report — it IS the verdict: undetermined, the
+    # row is marked, and the failure is recorded as a clearable error.
     _insert_task(9107)
-    stub_probe([_probe(reason="settled (git status failed: boom)",
+    stub_probe([_probe(unsettled=True, undetermined=True,
+                       reason="undetermined (git status failed: boom)",
+                       undetermined_reason="git status failed: boom",
                        status_error="boom")])
     task_cmd.unsettled_item(9107)
     out = capsys.readouterr().out
-    assert "under-report" in out
+    assert "Undetermined" in out
+    assert "not\nsettled" in out or "not settled" in out
+    assert "endless errors show" in out
+    assert "under-report" not in out
+
+
+def test_item_names_the_resolved_base_rather_than_main(
+        registered_project, stub_probe, capsys):
+    # E-1940: the renderer used to say "not on main" and "every commit is on
+    # main" unconditionally, which is simply false on a project that lands
+    # into anything else.
+    _insert_task(9117)
+    stub_probe([_probe(unsettled=True, unlanded=True, base="master",
+                       reason="unlanded (1 commit)", unlanded_count=1)])
+    task_cmd.unsettled_item(9117)
+    out = capsys.readouterr().out
+    assert "not on master" in out
+
+
+def test_item_settled_credits_the_recorded_landings(
+        registered_project, stub_probe, capsys):
+    # A rebase-landed worktree reads settled only because the recorded landing
+    # was credited; saying so is what distinguishes it from a branch that
+    # genuinely never diverged.
+    _insert_task(9118)
+    stub_probe([_probe(base="master", landed_shas=["abc123", "def456"])])
+    task_cmd.unsettled_item(9118)
+    out = capsys.readouterr().out
+    assert "every commit is on master" in out
+    assert "2 recorded landing(s) credited" in out
 
 
 def test_item_truncation_note_when_log_is_capped(
