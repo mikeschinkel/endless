@@ -351,25 +351,31 @@ else
 fi
 
 # ── 6. nothing live still carries the old sentence ──────────────────────────
-# Four places are allowed to hold the old wording, and each is asserted below
+# Five places are allowed to hold the old wording, and each is asserted below
 # rather than merely skipped:
 #   .endless/LESSONS.md      the account of the two incidents
 #   .endless/plans/          the mirrored plans, this task's included
 #   .endless/db-ledger/      durable, append-only, never hand-edited
-#   the templatecmd test     the guard itself — it asserts the form is ABSENT
+#   the templatecmd test     a guard — it asserts the form is ABSENT from a render
+#   THIS SCRIPT              a guard — OLD_FORM above is what section 2 greps for
+# A guard has to quote the sentence it forbids, or it cannot notice its return.
 # Everything else is live prose a session may read, and must not still say it.
-section "6. Only the record and the guard still quote it"
+section "6. Only the record and the guards still quote it"
 
-GUARD_TEST="internal/templatecmd/claim_handoff_test.go"
+GUARDS=(
+    "internal/templatecmd/claim_handoff_test.go"
+    "tests/tasks/e-2073-verify.sh"
+)
 
-live_hits=$(git -C "${WT}" grep -l -F -- "${OLD_FORM}" -- \
-                ':!.endless/LESSONS.md' ':!.endless/plans/' \
-                ':!.endless/db-ledger/' ":!${GUARD_TEST}" 2>/dev/null)
+excludes=(':!.endless/LESSONS.md' ':!.endless/plans/' ':!.endless/db-ledger/')
+for g in "${GUARDS[@]}"; do excludes+=(":!${g}"); done
+
+live_hits=$(git -C "${WT}" grep -l -F -- "${OLD_FORM}" -- "${excludes[@]}" 2>/dev/null)
 if [[ -z "${live_hits}" ]]; then
     report_pass "no tracked live file still carries the precondition form"
 else
     report_fail "no tracked live file still carries the precondition form" \
-        "no hits outside the record and the guard" \
+        "no hits outside the record and the guards" \
         "$(tr '\n' ' ' <<<"${live_hits}")"
 fi
 
@@ -382,14 +388,16 @@ else
         "the incident record, untouched" "the quote is gone"
 fi
 
-# The guard must keep quoting it too. A test that stopped naming the old
-# sentence would stop being able to notice its return.
-if git -C "${WT}" grep -q -F -- "${OLD_FORM}" -- "${GUARD_TEST}" 2>/dev/null; then
-    report_pass "the guard still names the form it forbids"
-else
-    report_fail "the guard still names the form it forbids" \
-        "the old sentence quoted in ${GUARD_TEST}" "absent"
-fi
+# Each guard must keep quoting it. One that stopped naming the old sentence
+# would go on passing while detecting nothing.
+for g in "${GUARDS[@]}"; do
+    if git -C "${WT}" grep -q -F -- "${OLD_FORM}" -- "${g}" 2>/dev/null; then
+        report_pass "${g} still names the form it forbids"
+    else
+        report_fail "${g} still names the form it forbids" \
+            "the old sentence quoted in ${g}" "absent — the guard detects nothing"
+    fi
+done
 
 # The task never writes a project-local override into this repo; a materialized
 # copy here would shadow the embedded template it just edited.
