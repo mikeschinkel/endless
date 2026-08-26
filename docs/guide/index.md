@@ -31,9 +31,8 @@ When your user gives you a task ID:
 6. When implementation is complete:
    - `endless task update <id> --status unverified`, **and**
    - In your reply to the user, include **how to test**: the specific commands, files, or UI actions that verify the change. Don't just say "ready" — say "ready; verify by running X then checking Y." The user shouldn't have to ask.
-{{if .report_gate}}7. Report completion to your user with the task ID. Write the reply you mean to send to a file, run `endless task report <id> --draft-file <path>`, and send that command's output verbatim as your entire message — an adversarial minimizer deletes what your user did not ask for, and a Stop hook enforces both halves. See **Reporting to your user** in `endless guide tasks`.
-{{else}}7. Report completion to your user with the task ID, and send that reply directly. This project has the report channel **off** (`"report_gate": false` in `.endless/config.json`), so there is no `endless task report` step here and no Stop hook holding the turn. See **Reporting to your user** in `endless guide tasks`.
-{{end}}8. **Do not mark `confirmed` yourself.** Only your user does that, after verifying. If you can't easily verify but believe it works, run `endless task assume <id> --outcome "..."` instead.
+7. Report completion to your user{{if .report_gate}} with the task ID. Write the reply you mean to send to a file, run `endless task report <id> --draft-file <path>`, and send that command's output verbatim as your entire message — an adversarial minimizer edits your indulgent "showing your work" replies down to just what the user needs, and a Stop hook enforces both halves. See **Reporting to your user** in `endless guide tasks`.{{else}}.{{end}}
+8. **Do not mark `confirmed` yourself.** Only your user does that, after verifying. 
 
 When implementation is verified **and your user has told you to land it** — never on your own initiative; see **Landing the work** in `endless guide orchestration` — land the work with `endless worktree land <id>` (auto-commits endless-managed files — **not yours; see step 5** — rebases onto main, fast-forwards, then retains the worktree and its branch; they're cleaned up automatically after a grace period rather than removed immediately).
 
