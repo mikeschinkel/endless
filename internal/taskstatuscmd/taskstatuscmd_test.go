@@ -208,3 +208,92 @@ func TestHelpExitsZeroAndListsTheRegistry(t *testing.T) {
 		}
 	}
 }
+
+// ---------------------------------------------------------------------------
+// The lifecycle verbs (E-2018)
+// ---------------------------------------------------------------------------
+
+// TestTransitionsEmitsTheWholeTable pins the data verb's shape: one edge per
+// line, five tab-separated columns, in table order. Compared against the
+// package rather than a golden file so an edge added tomorrow needs no edit.
+func TestTransitionsEmitsTheWholeTable(t *testing.T) {
+	stdout, _, code := run(t, "transitions")
+	if code != 0 {
+		t.Fatalf("transitions exited %d, want 0", code)
+	}
+	lines := strings.Split(strings.TrimRight(stdout, "\n"), "\n")
+	table := taskstatus.Transitions()
+	if len(lines) != len(table) {
+		t.Fatalf("transitions emitted %d lines, table has %d edges", len(lines), len(table))
+	}
+	for i, line := range lines {
+		cols := strings.Split(line, "\t")
+		if len(cols) != 5 {
+			t.Fatalf("line %d has %d columns, want 5: %q", i, len(cols), line)
+		}
+		tr := table[i]
+		if cols[0] != tr.From || cols[1] != tr.To {
+			t.Errorf("line %d = %s -> %s, want %s -> %s", i, cols[0], cols[1], tr.From, tr.To)
+		}
+		if cols[2] != tr.Actor.String() {
+			t.Errorf("line %d actor = %q, want %q", i, cols[2], tr.Actor)
+		}
+		if cols[4] != tr.Label {
+			t.Errorf("line %d label = %q, want %q", i, cols[4], tr.Label)
+		}
+	}
+}
+
+// TestTransitionsNamesTheTypeRestriction pins the fourth column: empty means
+// every type, and a restricted lane names its types slash-joined.
+func TestTransitionsNamesTheTypeRestriction(t *testing.T) {
+	stdout, _, _ := run(t, "transitions")
+	if !strings.Contains(stdout, "underway\tunverified\tsession\ttodo/bugfix\t") {
+		t.Error("the implementation lane does not carry its type restriction")
+	}
+	if !strings.Contains(stdout, "submitted\tready\tuser\t\t") {
+		t.Error("an every-type edge does not leave the types column empty")
+	}
+}
+
+// TestLifecycleEmitsTheRenderedDiagram pins that the verb the generator calls
+// returns exactly what the package renders — bytes, not a normalized form. A
+// trailing-newline difference here would make `just lifecycle-check` fail
+// forever with nothing to fix.
+func TestLifecycleEmitsTheRenderedDiagram(t *testing.T) {
+	stdout, _, code := run(t, "lifecycle")
+	if code != 0 {
+		t.Fatalf("lifecycle exited %d, want 0", code)
+	}
+	if stdout != taskstatus.RenderMermaid() {
+		t.Error("`task-status lifecycle` does not emit RenderMermaid() byte for byte")
+	}
+}
+
+// TestLifecycleIsByteStableAcrossProcesses is the property the drift check
+// rests on. The in-package test proves stability within one process; this
+// proves it across two, which is where a map iteration order would show up.
+func TestLifecycleIsByteStableAcrossProcesses(t *testing.T) {
+	first, _, _ := run(t, "lifecycle")
+	second, _, _ := run(t, "lifecycle")
+	if first != second {
+		t.Error("two `task-status lifecycle` runs disagree — the render is not deterministic")
+	}
+}
+
+// TestLifecycleVerbsRejectArguments keeps them arity-checked like every other
+// verb, so a typo'd invocation fails loudly rather than being ignored.
+func TestLifecycleVerbsRejectArguments(t *testing.T) {
+	for _, verb := range []string{"transitions", "lifecycle"} {
+		stdout, stderr, code := run(t, verb, "extra")
+		if code != 2 {
+			t.Errorf("task-status %s extra exited %d, want 2", verb, code)
+		}
+		if strings.TrimSpace(stderr) == "" {
+			t.Errorf("task-status %s extra exited 2 with no message on stderr", verb)
+		}
+		if strings.TrimSpace(stdout) != "" {
+			t.Errorf("task-status %s extra wrote %q to stdout on failure", verb, stdout)
+		}
+	}
+}

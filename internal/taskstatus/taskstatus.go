@@ -42,9 +42,18 @@ import (
 type Status = string
 
 // The closed vocabulary, in lifecycle order — the pre-work statuses, then the
-// in-flight ones, then the terminals. `blocked` is the odd one out: it is a
-// legacy status rather than a state docs/status-lifecycle.mmd draws (blocking
-// is a relation), so it sits with the management statuses at the end.
+// in-flight ones, then the terminals, then `revisit` and the two abandonment
+// states.
+//
+// `blocked` is NOT here (E-2018). It was a status once, and a handful of rows
+// still carried it, but blockedness is the `blocked_by` relation and always
+// has been: `endless task block` writes a relation and never touches status,
+// and the guide's blocking-semantics table computes a dependent's fate from
+// its blocker's own status. Shipping both mechanisms meant the duplicate had
+// to go stale — a blocker reaching `confirmed` released the relation while
+// `status=blocked` sat on the dependent until a human edited it. ED-1572
+// proposed writing the rule down and was rejected because it needs no
+// decision; what it needed was the data cleaned up, which it now is.
 const (
 	Untriaged  Status = "untriaged"
 	Unplanned  Status = "unplanned"
@@ -55,7 +64,6 @@ const (
 	Confirmed  Status = "confirmed"
 	Assumed    Status = "assumed"
 	Completed  Status = "completed"
-	Blocked    Status = "blocked"
 	Revisit    Status = "revisit"
 	Declined   Status = "declined"
 	Obsolete   Status = "obsolete"
@@ -86,8 +94,7 @@ const (
 
 	// Open is the "there is still work here" set backing the per-project task
 	// context: everything from freshly filed through in-flight. Deliberately
-	// narrower than !Terminal — `blocked` and `revisit` are not offered as work
-	// to pick up.
+	// narrower than !Terminal — `revisit` is not offered as work to pick up.
 	Open
 
 	// ChildrenStateOrder is the display order of the non-terminal buckets in an
@@ -120,7 +127,7 @@ const (
 	Reopenable
 
 	// SessionPending is the "Pending" bucket of the session-status task
-	// rollup. With Terminal, Blocked and Unverified it partitions All.
+	// rollup. With Terminal and Unverified it partitions All.
 	SessionPending
 
 	// SetsCompletedAt are the statuses whose arrival stamps
@@ -183,15 +190,15 @@ var groups = map[Group][]Status{
 	All: {
 		Untriaged, Unplanned, Submitted, Ready, Underway,
 		Unverified, Confirmed, Assumed, Completed,
-		Blocked, Revisit, Declined, Obsolete,
+		Revisit, Declined, Obsolete,
 	},
 	Actionable:    {Unplanned, Ready, Revisit},
-	NotActionable: {Untriaged, Submitted, Underway, Unverified, Confirmed, Assumed, Completed, Blocked, Declined, Obsolete},
+	NotActionable: {Untriaged, Submitted, Underway, Unverified, Confirmed, Assumed, Completed, Declined, Obsolete},
 	Active:        {Underway, Unverified},
-	ClaimPromotes: {Untriaged, Unplanned, Ready, Blocked, Revisit},
+	ClaimPromotes: {Untriaged, Unplanned, Ready, Revisit},
 	Open:          {Untriaged, Unplanned, Submitted, Ready, Underway},
 	ChildrenStateOrder: {
-		Untriaged, Unplanned, Submitted, Ready, Underway, Blocked, Revisit, Unverified,
+		Untriaged, Unplanned, Submitted, Ready, Underway, Revisit, Unverified,
 	},
 	DerivationPrecedence: {Underway, Ready, Submitted, Unplanned, Untriaged},
 	DescriptionResetFrom: {Untriaged, Unplanned, Submitted, Ready, Revisit},
@@ -202,7 +209,7 @@ var groups = map[Group][]Status{
 	SetsCompletedAt:      {Confirmed, Completed},
 	Settled:              {Unverified, Confirmed, Assumed, Completed, Declined, Obsolete},
 	Shipped:              {Unverified, Confirmed, Assumed, Completed},
-	StickyOverride:       {Blocked, Revisit, Declined, Obsolete},
+	StickyOverride:       {Revisit, Declined, Obsolete},
 	SubmittableFrom:      {Untriaged, Unplanned, Revisit},
 	Terminal:             {Confirmed, Assumed, Completed, Declined, Obsolete},
 	VerificationTerminal: {Confirmed, Assumed},
@@ -247,7 +254,6 @@ var labels = map[Status]string{
 	Confirmed:  "Confirmed",
 	Assumed:    "Assumed",
 	Completed:  "Completed",
-	Blocked:    "Blocked",
 	Revisit:    "Revisit",
 	Declined:   "Declined",
 	Obsolete:   "Obsolete",
@@ -257,7 +263,7 @@ var labels = map[Status]string{
 // styling. A surface maps its own palette onto these; `click.style(fg=...)` and
 // a CSS class are not shareable, the shape is.
 //
-// The nine that had a precedent keep it: ◌ ○ ● ◉ ◆ ✗ ? come from the status
+// The eight that had a precedent keep it: ◌ ○ ● ◉ ◆ ? come from the status
 // indicator map E-1899 deleted with `task list --tree`, and ⚑ (submitted) and
 // ☑ (unverified) from the session-status action legend, where they already
 // mean review-this and verify-this. The remaining three follow the same logic:
@@ -273,7 +279,6 @@ var glyphs = map[Status]string{
 	Confirmed:  "✔",
 	Assumed:    "✓",
 	Completed:  "◆",
-	Blocked:    "✗",
 	Revisit:    "?",
 	Declined:   "⊘",
 	Obsolete:   "⊗",

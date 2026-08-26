@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/mikeschinkel/go-cfgstore"
+
+	"github.com/mikeschinkel/endless/internal/taskstatus"
 )
 
 // init wires cfgstore's package-global logger so GetTrackingMode tests
@@ -186,15 +188,17 @@ func TestBindSessionToTask_EmptyPaneDoesNotStompProcess(t *testing.T) {
 func TestStartWorkSession_PromotesEligibleStatus(t *testing.T) {
 	db := withTestDB(t)
 	seedProject(t, db, 1, "proj-test-1", "/tmp/proj-test-1")
-	cases := []struct {
+	// Walked from the registry rather than hand-listed: ClaimPromotes IS the
+	// set this helper's WHERE clause is built from, so a status added to (or
+	// removed from) the group is covered here with no edit. E-2018 removed
+	// `blocked`, which a hand-written list would have kept asserting.
+	type promotes struct {
 		taskID int64
 		status string
-	}{
-		{1, "unplanned"},
-		{2, "ready"},
-		{3, "blocked"},
-		{4, "untriaged"},
-		{5, "revisit"},
+	}
+	var cases []promotes
+	for i, status := range taskstatus.Get(taskstatus.ClaimPromotes) {
+		cases = append(cases, promotes{taskID: int64(i + 1), status: status})
 	}
 	for _, c := range cases {
 		seedTask(t, db, c.taskID, 1, "task", c.status)
@@ -213,7 +217,7 @@ func TestStartWorkSession_PromotesEligibleStatus(t *testing.T) {
 }
 
 // TestStartWorkSession_DoesNotDemoteIneligibleStatus pins the WHERE
-// clause: tasks in statuses outside unplanned/ready/blocked (e.g.
+// clause: tasks in statuses outside taskstatus.ClaimPromotes (e.g.
 // underway, confirmed) are left alone — the helper must not stomp a
 // task already past the entry gates.
 func TestStartWorkSession_DoesNotDemoteIneligibleStatus(t *testing.T) {

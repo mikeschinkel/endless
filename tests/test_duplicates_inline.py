@@ -116,7 +116,7 @@ def test_note_renders_alongside_a_terminal_status(status):
 
 @pytest.mark.parametrize(
     "status", ["untriaged", "unplanned", "submitted", "ready", "underway",
-               "unverified", "blocked", "revisit"])
+               "unverified", "revisit"])
 def test_note_is_suppressed_on_an_open_status(status):
     assert task_cmd.duplicates_note(status, [7]) == ""
 

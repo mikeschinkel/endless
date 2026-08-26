@@ -127,7 +127,6 @@ func TestRenderSessionStatusMarkdown_EmptySectionsShowEmpty(t *testing.T) {
 	for _, want := range []string{
 		"## Resolved\n(empty)",
 		"## Pending\n(empty)",
-		"## Blocked\n(empty)",
 		"## Unverified\n(empty)",
 		"## Decisions\n(empty)",
 		"## Commits\n(empty)",

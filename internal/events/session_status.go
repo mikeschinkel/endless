@@ -257,15 +257,18 @@ func renderSessionStatusMarkdown(p *SessionStatusRecordedPayload) string {
 	return b.String()
 }
 
-// renderTasksGrouped walks the flat <task> list and emits 4 sections
-// (Resolved / Pending / Blocked / Unverified), with each task placed by a
+// renderTasksGrouped walks the flat <task> list and emits 3 sections
+// (Resolved / Pending / Unverified), with each task placed by a
 // status→disposition mapping. Sections with no tasks render `(empty)`.
 //
 // Status → disposition mapping:
 //   - resolved: confirmed, assumed, completed, obsolete, declined
 //   - pending:  untriaged, unplanned, submitted, ready, underway, revisit
-//   - blocked:  blocked
 //   - unverified:   unverified
+//
+// There is no Blocked bucket: `blocked` left the status vocabulary in E-2018,
+// and blockedness was never a status to bucket on — it is the `blocked_by`
+// relation, which this rollup does not read.
 //
 // An unknown status falls into Pending so it surfaces somewhere rather
 // than silently disappearing.
@@ -274,7 +277,6 @@ func renderTasksGrouped(b *strings.Builder, body string) {
 	buckets := map[string][]string{
 		"Resolved":   nil,
 		"Pending":    nil,
-		"Blocked":    nil,
 		"Unverified": nil,
 	}
 	if body != "" {
@@ -285,7 +287,7 @@ func renderTasksGrouped(b *strings.Builder, body string) {
 			)
 		}
 	}
-	for _, heading := range []string{"Resolved", "Pending", "Blocked", "Unverified"} {
+	for _, heading := range []string{"Resolved", "Pending", "Unverified"} {
 		b.WriteString("## ")
 		b.WriteString(heading)
 		b.WriteString("\n")
@@ -316,15 +318,13 @@ func renderTasksGrouped(b *strings.Builder, body string) {
 // statusToDisposition maps a task status to the bucket the renderer places it
 // in. Unknown statuses fall into "Pending" so they surface.
 //
-// The four buckets partition the vocabulary, and taskstatus asserts that
+// The three buckets partition the vocabulary, and taskstatus asserts that
 // (E-1891): a status in none of them would land in Pending by accident rather
 // than by decision, which is how the fallthrough would hide an omission.
 func statusToDisposition(status string) string {
 	switch {
 	case taskstatus.Has(taskstatus.Terminal, status):
 		return "Resolved"
-	case status == taskstatus.Blocked:
-		return "Blocked"
 	case status == taskstatus.Unverified:
 		return "Unverified"
 	default:

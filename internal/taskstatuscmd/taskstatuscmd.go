@@ -69,6 +69,27 @@ func Run(args []string) {
 	case "glyph":
 		requireArgs(verb, rest, 1)
 		fmt.Println(taskstatus.Glyph(mustStatus(rest[0])))
+	case "transitions":
+		// The table as data, one edge per line, tab-separated:
+		// from, to, actor, types (slash-joined, empty = every type), label.
+		// Tab-separated rather than JSON for the same reason every other verb
+		// here is line-oriented — the client parses no structure it would
+		// otherwise have to know about.
+		requireArgs(verb, rest, 0)
+		for _, t := range taskstatus.Transitions() {
+			slugs := make([]string, len(t.Types))
+			for i, tt := range t.Types {
+				slugs[i] = tt.String()
+			}
+			fmt.Printf("%s\t%s\t%s\t%s\t%s\n",
+				t.From, t.To, t.Actor, strings.Join(slugs, "/"), t.Label)
+		}
+	case "lifecycle":
+		// The generated body of docs/status-lifecycle.mmd. `just
+		// lifecycle-index` writes it between the file's generated markers;
+		// `just lifecycle-check` fails when the committed artifact has drifted.
+		requireArgs(verb, rest, 0)
+		fmt.Print(taskstatus.RenderMermaid())
 	default:
 		fmt.Fprintf(os.Stderr, "endless-go task-status: unknown command %q\n", verb)
 		usage(os.Stderr)
@@ -116,6 +137,8 @@ func usage(w *os.File) {
 	fmt.Fprintln(w, "  rank <group> <status>   index within an ordered group, -1 when absent")
 	fmt.Fprintln(w, "  label <status>          human display string")
 	fmt.Fprintln(w, "  glyph <status>          semantic glyph (no color)")
+	fmt.Fprintln(w, "  transitions             the lifecycle edge table, TSV: from to actor types label")
+	fmt.Fprintln(w, "  lifecycle               the generated mermaid body of docs/status-lifecycle.mmd")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Groups:")
 	// Derived from the registry, never typed: a group added in Go shows up here

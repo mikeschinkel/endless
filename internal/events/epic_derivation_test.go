@@ -15,6 +15,7 @@ import (
 	_ "modernc.org/sqlite"
 
 	"github.com/mikeschinkel/endless/internal/schema"
+	"github.com/mikeschinkel/endless/internal/taskstatus"
 	"github.com/mikeschinkel/endless/internal/tasktype"
 )
 
@@ -176,7 +177,7 @@ func TestDerive_ReopenCase(t *testing.T) {
 // TestDerive_StickyOverrideBlocks: an epic in any sticky-override status is left
 // alone regardless of its children.
 func TestDerive_StickyOverrideBlocks(t *testing.T) {
-	for _, sticky := range []string{"revisit", "declined", "obsolete", "blocked"} {
+	for _, sticky := range taskstatus.Get(taskstatus.StickyOverride) {
 		t.Run(sticky, func(t *testing.T) {
 			db := newDerivationDB(t)
 			seedTask(t, db, 1, nil, int(tasktype.TaskTypeEpic), sticky)

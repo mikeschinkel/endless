@@ -27,7 +27,7 @@ def test_parses_full_schema():
         <task id="E-1208" status="confirmed">verbs.jsonl write-time</task>
         <task id="E-1206" status="confirmed" filed="true">db-ledger write-time</task>
         <task id="E-1302" status="unplanned" filed="true">endless task id CLI</task>
-        <task id="E-9999" status="blocked">waiting on something</task>
+        <task id="E-9999" status="ready">waiting on something</task>
         <task id="E-1312" status="unverified">awaiting confirm</task>
       </tasks>
       <decisions>
@@ -115,7 +115,7 @@ def test_rejects_unknown_top_level_element():
 
 
 def test_rejects_old_resolved_element():
-    """E-1314: <resolved>/<pending>/<blocked>/<verify> are no longer
+    """E-1314: <resolved>/<pending>/<verify> are no longer
     top-level; tasks live under <tasks>. The old shape is rejected."""
     xml = """
     <session-status>

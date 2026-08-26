@@ -63,9 +63,9 @@ def test_add_with_text_and_explicit_status_preserves_caller_status(tmp_path, see
         title="Add a thing",
         description="short",
         text=plan.read_text(),
-        status="blocked",
+        status="ready",
     )
-    assert _status_of(item_id) == "blocked"
+    assert _status_of(item_id) == "ready"
 
 
 def test_add_tier_1_with_text_stays_ready(tmp_path, seeded_project_at_cwd):
@@ -127,9 +127,9 @@ def test_update_with_text_plus_explicit_status_caller_wins(tmp_path, seeded_proj
 
     plan = tmp_path / "plan.md"
     plan.write_text("# plan")
-    task_cmd.update_plan(item_id=item_id, text=plan.read_text(), status="blocked")
+    task_cmd.update_plan(item_id=item_id, text=plan.read_text(), status="ready")
 
-    assert _status_of(item_id) == "blocked"
+    assert _status_of(item_id) == "ready"
 
 
 def test_update_with_empty_text_does_not_promote(tmp_path, seeded_project_at_cwd):

@@ -105,13 +105,14 @@ func TestChildrenStateOrderPartitionsAll(t *testing.T) {
 }
 
 // TestSessionDispositionsPartitionAll pins the session-status task rollup: its
-// four buckets are Terminal, `blocked`, `unverified` and SessionPending. A
-// status in none of them would fall through to Pending by accident rather than
-// by decision.
+// three buckets are Terminal, `unverified` and SessionPending. A status in none
+// of them would fall through to Pending by accident rather than by decision.
+//
+// It was four buckets until E-2018 removed `blocked` from the vocabulary; the
+// bucket keyed on it went with it.
 func TestSessionDispositionsPartitionAll(t *testing.T) {
 	partition(t, "session dispositions",
 		taskstatus.Get(taskstatus.Terminal),
-		[]string{taskstatus.Blocked},
 		[]string{taskstatus.Unverified},
 		taskstatus.Get(taskstatus.SessionPending),
 	)
@@ -321,13 +322,13 @@ func TestParseGroupRejectsUnknown(t *testing.T) {
 // fails here.
 func TestGroupMembershipIsPinned(t *testing.T) {
 	want := map[string][]string{
-		"all":                    {"untriaged", "unplanned", "submitted", "ready", "underway", "unverified", "confirmed", "assumed", "completed", "blocked", "revisit", "declined", "obsolete"},
+		"all":                    {"untriaged", "unplanned", "submitted", "ready", "underway", "unverified", "confirmed", "assumed", "completed", "revisit", "declined", "obsolete"},
 		"actionable":             {"unplanned", "ready", "revisit"},
-		"not-actionable":         {"untriaged", "submitted", "underway", "unverified", "confirmed", "assumed", "completed", "blocked", "declined", "obsolete"},
+		"not-actionable":         {"untriaged", "submitted", "underway", "unverified", "confirmed", "assumed", "completed", "declined", "obsolete"},
 		"active":                 {"underway", "unverified"},
-		"claim-promotes":         {"untriaged", "unplanned", "ready", "blocked", "revisit"},
+		"claim-promotes":         {"untriaged", "unplanned", "ready", "revisit"},
 		"open":                   {"untriaged", "unplanned", "submitted", "ready", "underway"},
-		"children-state-order":   {"untriaged", "unplanned", "submitted", "ready", "underway", "blocked", "revisit", "unverified"},
+		"children-state-order":   {"untriaged", "unplanned", "submitted", "ready", "underway", "revisit", "unverified"},
 		"derivation-precedence":  {"underway", "ready", "submitted", "unplanned", "untriaged"},
 		"description-reset-from": {"untriaged", "unplanned", "submitted", "ready", "revisit"},
 		"pre-judgment":           {"untriaged", "unplanned"},
@@ -337,7 +338,7 @@ func TestGroupMembershipIsPinned(t *testing.T) {
 		"sets-completed-at":      {"confirmed", "completed"},
 		"settled":                {"unverified", "confirmed", "assumed", "completed", "declined", "obsolete"},
 		"shipped":                {"unverified", "confirmed", "assumed", "completed"},
-		"sticky-override":        {"blocked", "revisit", "declined", "obsolete"},
+		"sticky-override":        {"revisit", "declined", "obsolete"},
 		"submittable-from":       {"untriaged", "unplanned", "revisit"},
 		"terminal":               {"confirmed", "assumed", "completed", "declined", "obsolete"},
 		"verification-terminal":  {"confirmed", "assumed"},

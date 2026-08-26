@@ -31,6 +31,19 @@ def _status_of(item_id: int) -> str:
     return rows[0]["status"]
 
 
+def _finish(item_id: int, status: str, **kwargs) -> None:
+    """Walk a task the legal way to a verification-track status.
+
+    Setting one directly on a `submitted` task used to work and no longer does:
+    E-2018 made `task update --status` enforce the lifecycle, and a status that
+    reports work is refused on a task no work was done on. These tests want a
+    task IN a done state, so they walk it there rather than asserting it.
+    """
+    for step in ("ready", "underway", "unverified"):
+        task_cmd.update_plan(item_id=item_id, status=step)
+    task_cmd.update_plan(item_id=item_id, status=status, **kwargs)
+
+
 def _row(item_id: int) -> dict:
     rows = db.query(
         "SELECT status, text, tier, completed_at FROM tasks WHERE id = ?",
@@ -102,7 +115,7 @@ def test_keep_status_suppresses_the_description_reset(seeded_project_at_cwd):
 def test_keep_status_suppresses_the_done_task_auto_revisit(seeded_project_at_cwd):
     item_id = task_cmd.add_item(title="Add a thing", description="short")
     task_cmd.update_plan(item_id=item_id, text="# plan\n")
-    task_cmd.update_plan(item_id=item_id, status="assumed")
+    _finish(item_id, "assumed")
 
     task_cmd.update_plan(item_id=item_id, text="# plan (typo fixed)\n", keep_status=True)
 
@@ -123,9 +136,7 @@ def test_keep_status_on_a_done_task_does_not_restamp_completed_at(
     """
     item_id = task_cmd.add_item(title="Add a thing", description="short")
     task_cmd.update_plan(item_id=item_id, text="# plan\n")
-    task_cmd.update_plan(
-        item_id=item_id, status="confirmed", outcome="shipped"
-    )
+    _finish(item_id, "confirmed", outcome="shipped")
     before = _row(item_id)["completed_at"]
     assert before, "fixture: a confirmed task carries a completion timestamp"
 

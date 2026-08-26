@@ -10,7 +10,7 @@ Each row in `session_statuses` is a snapshot of one session's reported state at 
 
 - `task_id` — populated automatically by the handler from `sessions.task_id` at insert time; makes joins to `tasks` trivial. (A session holds one task, so there is no inactive one to distinguish it from.)
 - `headline` — one-line summary of what just changed.
-- `tasks` — every task the session is touching (resolved / pending / blocked / unverified, all in one column; the renderer derives the disposition bucket from each task's status).
+- `tasks` — every task the session is touching (resolved / pending / unverified, all in one column; the renderer derives the disposition bucket from each task's status).
 - `decisions` — design choices, framings, insights too lightweight to be `endless decision add` items but worth capturing.
 - `commits` — commit SHAs of work that didn't land via a task (manual hygiene, ledger splits, etc.).
 - `memory` — entries created or modified in `~/.claude/projects/.../memory/`.
@@ -31,7 +31,7 @@ endless session snapshot add <<'XML'
   <tasks>
     <task id="E-101" status="confirmed">short title of the finished work</task>
     <task id="E-102" status="unverified" filed="true">something you filed and started</task>
-    <task id="E-NNNN" status="blocked">waiting on the user's review</task>
+    <task id="E-NNNN" status="ready">waiting on the user's review</task>
     <task id="E-103" status="unplanned">something that still needs a plan</task>
   </tasks>
 

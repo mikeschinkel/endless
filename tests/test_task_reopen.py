@@ -142,7 +142,7 @@ def test_reopen_completed_epic_does_not_cascade(project_at_cwd, capsys):
 
 
 @pytest.mark.parametrize("status", ["ready", "unplanned", "underway",
-                                    "unverified", "blocked", "revisit"])
+                                    "unverified", "submitted", "revisit"])
 def test_reopen_refuses_non_terminal_status(project_at_cwd, status):
     from endless.task_cmd import reopen_item
 

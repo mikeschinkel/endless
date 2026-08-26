@@ -22,6 +22,8 @@ help:
     @echo "  just guide-check    Validate command->section map coverage (pre-land gate)"
     @echo "  just guide-index    Rebuild the cross-reference block in docs/guide/index.md"
     @echo "  just guide-scaffold Print the skeleton for /regenerate-guide"
+    @echo "  just lifecycle-check  Validate the status-lifecycle diagram is current (pre-land gate)"
+    @echo "  just lifecycle-index  Rebuild docs/status-lifecycle.mmd from internal/taskstatus"
     @echo ""
     @echo "Demo:"
     @echo "  cd deploy/machine && just demo-sync     Sync to demo machine"
@@ -476,6 +478,24 @@ guide-index:
 # exit on drift — a pre-land / CI gate. Acknowledged gaps are reported, not failed.
 guide-check:
     uv run python -m endless.guide_map check
+
+# Task status lifecycle diagram (E-2018).
+#
+# The transition table in internal/taskstatus/transitions.go is the source;
+# docs/status-lifecycle.mmd is its artifact, and README.md and
+# docs/guide/index.md embed that artifact byte-identically. Same shape as
+# guide-index/guide-check above, for the same reason: drift stops being
+# something a test detects and becomes something that cannot happen.
+
+# Rebuild docs/status-lifecycle.mmd (and its two embedded copies) from the Go
+# transition table. Idempotent; leaves the .mmd's hand-written preamble alone.
+lifecycle-index:
+    uv run python -m endless.lifecycle_map index
+
+# Fail when the committed lifecycle artifacts no longer match the Go table.
+# Non-zero exit on drift — a pre-land / CI gate next to guide-check.
+lifecycle-check:
+    uv run python -m endless.lifecycle_map check
 
 # Build just the Go binary
 go:

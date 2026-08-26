@@ -93,7 +93,7 @@ def test_note_renders_for_every_terminal_status(status):
 
 @pytest.mark.parametrize(
     "status", ["untriaged", "unplanned", "submitted", "ready", "underway",
-               "unverified", "blocked", "revisit"]
+               "unverified", "revisit"]
 )
 def test_note_is_silent_for_a_non_terminal_status(status):
     # An open task's replaced_by still shows in `task show`'s relations block;
@@ -214,8 +214,7 @@ def test_update_to_obsolete_is_refused_on_shipped_work(
 
 @pytest.mark.parametrize(
     "open_status",
-    ["untriaged", "unplanned", "submitted", "ready", "underway", "blocked",
-     "revisit"],
+    ["untriaged", "unplanned", "submitted", "ready", "underway", "revisit"],
 )
 def test_update_to_obsolete_is_allowed_on_unshipped_work(
     seeded_project_at_cwd, open_status
@@ -345,8 +344,16 @@ def test_update_accepts_every_status_the_help_advertises(seeded_project_at_cwd):
     # the other one still works.
     for status in statuses.TASK_STATUSES:
         tid = _add_task(f"Audit a thing for {status}", status="underway")
-        task_cmd.update_plan(tid, status=status, outcome="because", force=True)
-        assert _status(tid) == status
+        try:
+            task_cmd.update_plan(tid, status=status, outcome="because", force=True)
+        except click.ClickException as exc:
+            # A status may still be refused for a reason that NAMES itself —
+            # since E-2018, an illegal lifecycle edge out of `underway` is one.
+            # What must never happen is a status the --help advertises being
+            # refused as UNKNOWN, which is the defect this test covers.
+            assert "Invalid status" not in exc.message, status
+        else:
+            assert _status(tid) == status
 
 
 def test_update_still_rejects_an_unknown_status(seeded_project_at_cwd):

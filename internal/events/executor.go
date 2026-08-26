@@ -699,12 +699,24 @@ func execTaskFieldsUpdated(db dbQuerier, evt *Event, emit DerivedEmitter) (*Exec
 		}
 	}
 
+	// newStatus is the status this update will actually write, whatever its
+	// source — the explicit --status field, or the plan-attach promotion just
+	// below. Tracked in one variable so the E-2018 guard has ONE thing to
+	// validate: a second write path that skipped the guard is precisely how
+	// `task update --parent` slipped past the cycle check (E-2067).
+	var newStatus string
+	var hasNewStatus bool
+	if status, ok := p.Fields["status"]; ok {
+		newStatus = fmt.Sprintf("%v", status)
+		hasNewStatus = true
+	}
+
 	// Attaching a non-empty plan (--text) to a pre-judgment task moves it to
 	// `submitted` (spec-complete, awaiting human approval — NOT `ready`,
 	// which now means human-approved). Only fires when the same update does
 	// not already set status explicitly (caller wins).
 	if textVal, hasText := p.Fields["text"]; hasText {
-		if _, statusSet := p.Fields["status"]; !statusSet {
+		if !hasNewStatus {
 			textStr, _ := textVal.(string)
 			if strings.TrimSpace(textStr) != "" {
 				var currentStatus string
@@ -712,10 +724,39 @@ func execTaskFieldsUpdated(db dbQuerier, evt *Event, emit DerivedEmitter) (*Exec
 					taskID).Scan(&currentStatus); err == nil {
 					if isPreJudgmentStatus(currentStatus) {
 						setClauses = append(setClauses, "status = ?")
-						args = append(args, "submitted")
+						args = append(args, taskstatus.Submitted)
+						newStatus = taskstatus.Submitted
+						hasNewStatus = true
 					}
 				}
 			}
+		}
+	}
+
+	// E-2018: the status lifecycle is enforced here, on the same executor and
+	// by the same route that let E-2067's parent cycle through. Two checks —
+	// is this edge in the table, and does the actor have standing to take it.
+	// Only when the update actually writes a status; an unrelated edit must not
+	// be refused because the row already sits somewhere the table disallows.
+	if hasNewStatus {
+		currentStatus, currentType, terr := taskStatusAndType(db, taskID)
+		if terr != nil {
+			return nil, terr
+		}
+		// The incoming --type wins when the same update changes it: the write
+		// lands as one row, so the lane it is judged against is the lane it
+		// ends up on.
+		effectiveType := currentType
+		if typeStr, ok := p.Fields["type"].(string); ok {
+			if tt, perr := tasktype.Parse(typeStr); perr == nil {
+				effectiveType = tt
+			}
+		}
+		if err := ValidateStatusTransition(currentStatus, newStatus, effectiveType); err != nil {
+			return nil, err
+		}
+		if err := ValidateStatusActor(db, mustParseInt64(taskID), newStatus, evt.Actor); err != nil {
+			return nil, err
 		}
 	}
 

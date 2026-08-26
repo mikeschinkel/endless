@@ -31,13 +31,13 @@ def _status_of(item_id: int) -> str:
 def _set_status(item_id: int, status: str) -> None:
     """Force a status without going through the reset logic under test.
 
-    `submitted` goes via the verb: update_plan's --status validation omits it
-    (E-1891, pre-existing), and `submit` is the real route there anyway.
+    A raw write, deliberately. What these tests need is a task sitting IN a
+    status; how it got there is not their subject, and routing the setup through
+    `task update --status` would make them assert the lifecycle guard (E-2018)
+    as a side effect — a task in `underway` cannot be reached from `untriaged`
+    by declaration, only by claiming it.
     """
-    if status == "submitted":
-        task_cmd.submit_item(item_id)
-    else:
-        task_cmd.update_plan(item_id=item_id, status=status)
+    db.execute("UPDATE tasks SET status = ? WHERE id = ?", (status, item_id))
     assert _status_of(item_id) == status
 
 
@@ -56,7 +56,7 @@ def test_add_tier_1_still_lands_ready(seeded_project_at_cwd):
     assert _status_of(item_id) == "ready"
 
 
-@pytest.mark.parametrize("status", ["unplanned", "ready", "blocked", "revisit"])
+@pytest.mark.parametrize("status", ["unplanned", "ready", "submitted", "revisit"])
 def test_add_explicit_status_wins(status, seeded_project_at_cwd):
     item_id = task_cmd.add_item(
         title="Add a thing", description="short", status=status

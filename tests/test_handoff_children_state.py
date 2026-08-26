@@ -87,16 +87,16 @@ def test_children_state_terminal_collapse_aggregates_across_statuses():
     assert _children_state(3004) == "5 terminal (5 total)"
 
 
-def test_children_state_includes_blocked_and_revisit_buckets():
-    """blocked and revisit are in-flight states with their own buckets — no
-    child is silently dropped, and the total always reconciles."""
+def test_children_state_includes_every_in_flight_bucket():
+    """Each in-flight state gets its own bucket — no child is silently
+    dropped, and the total always reconciles."""
     _seed(
         3005,
-        ["unplanned", "blocked", "revisit", "unverified", "confirmed"],
+        ["unplanned", "underway", "revisit", "unverified", "confirmed"],
     )
     assert (
         _children_state(3005)
-        == "1 unplanned, 1 blocked, 1 revisit, 1 unverified, 1 terminal (5 total)"
+        == "1 unplanned, 1 underway, 1 revisit, 1 unverified, 1 terminal (5 total)"
     )
 
 

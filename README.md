@@ -124,40 +124,115 @@ means *approved to implement*, not merely *planned*.
 
 <!-- BEGIN canonical:docs/status-lifecycle.mmd — edit the canonical file, then re-sync; do not hand-edit here -->
 ```mermaid
-%% Canonical task status lifecycle — single source of truth.
-%% Embedded (byte-identical) in README.md and docs/guide/index.md between
-%% <!-- BEGIN canonical:docs/status-lifecycle.mmd --> / <!-- END ... --> markers.
-%% Edit HERE, then re-sync the copies (tests/test_status_lifecycle_sync.py
-%% asserts they match). Blocking is a relation (blocked_by), not a state, so it
-%% is intentionally absent.
+%% Canonical task status lifecycle.
+%%
+%% GENERATED, in part. The states and edges below are rendered from the
+%% transition table in internal/taskstatus/transitions.go — the table is the
+%% source of truth, this picture is its artifact. Do not hand-edit inside the
+%% BEGIN/END generated markers; edit the Go table and run `just lifecycle-index`.
+%% `just lifecycle-check` exits non-zero when the committed artifact has drifted,
+%% and `just test` asserts the same thing, so a table edited without
+%% regenerating fails the suite rather than shipping a picture that lies.
+%%
+%% This preamble is hand-written and survives regeneration, the same split
+%% `just guide-index` uses for docs/guide/index.md.
+%%
+%% Embedded byte-identically in README.md and docs/guide/index.md between
+%% <!-- BEGIN canonical:docs/status-lifecycle.mmd --> / <!-- END ... --> markers;
+%% `just lifecycle-index` rewrites those copies too, and
+%% tests/test_status_lifecycle_sync.py asserts all three stay in step.
+%%
+%% Two things this diagram deliberately does not draw:
+%%   - Blocking. It is the `blocked_by` relation, computed from the blocker's
+%%     own status, never a state a task sits in. There is no `blocked` status.
+%%   - Epic status. It is derived from an epic's children and written directly,
+%%     so an epic can arrive at any of its ladder's statuses from any other.
+%%     Drawing that would be drawing the derivation algorithm, not a lifecycle.
+%%
+%% BEGIN generated: rendered from internal/taskstatus/transitions.go
 stateDiagram-v2
     [*] --> untriaged
 
-    untriaged --> unplanned: triage routes (needs a plan)
-    untriaged --> submitted: triage routes (description sufficient)
-    unplanned --> submitted: agent submits (plan attached OR description sufficient)
-    submitted --> ready: user approves
-    ready --> underway: session claims
-    underway --> unverified: implementation done
-    unverified --> confirmed: user verifies
-    unverified --> assumed: believed done, verify on use
+    %% Triage — the description is judged, and routed
+    untriaged --> unplanned: agent triages — needs a plan
+    untriaged --> submitted: agent triages — description is a sufficient spec
 
+    %% Planning and approval — the two-step gate that makes `ready` mean approved
+    unplanned --> submitted: agent submits — plan attached, or description sufficient
+    submitted --> ready: user approves
+    submitted --> unplanned: user sends back — the spec is not sufficient
+    revisit --> submitted: agent re-submits
+
+    %% Planning exemption — a tier-1 task skips both planning and triage
+    untriaged --> ready: system advances a tier-1 task
+    unplanned --> ready: system advances a tier-1 task
+
+    %% Re-spec — a material description edit invalidates triage and approval
+    unplanned --> untriaged: system resets on a description re-spec
+    submitted --> untriaged: system resets on a description re-spec
+    ready --> untriaged: system resets on a description re-spec
+    revisit --> untriaged: system resets on a description re-spec
+    ready --> submitted: system resets on a description re-spec that attaches a plan
+
+    %% Claiming — `task claim` promotes any of these in place
+    ready --> underway: session claims
+    untriaged --> underway: session claims
+    unplanned --> underway: session claims
+    revisit --> underway: session claims
+
+    %% Implementation lane — work whose deliverable is testable behavior
+    underway --> unverified: session reports implementation done (todo/bugfix)
+    unverified --> confirmed: user verifies (todo/bugfix)
+    unverified --> assumed: agent believes done, verify on use (todo/bugfix)
+    underway --> confirmed: user verifies work still in flight (todo/bugfix)
+    underway --> assumed: agent believes done, verify on use (todo/bugfix)
+
+    %% Findings lane — work whose deliverable IS the outcome text
+    underway --> completed: agent delivers the findings as an outcome
+    ready --> completed: agent delivers the findings as an outcome
+
+    %% Reopening — the work is not settled after all
+    untriaged --> revisit: agent reopens — needs re-evaluation
+    unplanned --> revisit: agent reopens — needs re-evaluation
+    submitted --> revisit: agent reopens — needs re-evaluation
+    ready --> revisit: agent reopens — needs re-evaluation
+    underway --> revisit: session hands the task back
+    unverified --> revisit: user reopens — verification failed
+    confirmed --> revisit: user reopens — shipped work found wrong
+    assumed --> revisit: user reopens — shipped work found wrong
+    completed --> revisit: user reopens — shipped work found wrong
+
+    %% Declining — an active decision not to do (or not to keep) the work
+    untriaged --> declined: user declines
+    unplanned --> declined: user declines
+    submitted --> declined: user declines
+    ready --> declined: user declines
+    underway --> declined: user declines
+    revisit --> declined: user declines
+    unverified --> declined: user declines — the shipped work is not being kept
+    confirmed --> declined: user declines — the shipped work is not being kept
+    assumed --> declined: user declines — the shipped work is not being kept
+    completed --> declined: user declines — the shipped work is not being kept
+
+    %% Obsoleting — made irrelevant before the work ever shipped
+    untriaged --> obsolete: user retires — it never needed doing
+    unplanned --> obsolete: user retires — it never needed doing
+    submitted --> obsolete: user retires — it never needed doing
+    ready --> obsolete: user retires — it never needed doing
+    underway --> obsolete: user retires — it never needed doing
+    revisit --> obsolete: user retires — it never needed doing
+
+    %% Reversal — reconsidering an abandonment decision
+    declined --> untriaged: user reconsiders
+    obsolete --> untriaged: user reconsiders
+
+    %% Terminal — the work is over, one way or another
     confirmed --> [*]
     assumed --> [*]
-
-    unplanned --> revisit: needs re-evaluation
-    underway --> revisit
-    confirmed --> revisit: shipped work found wrong
-    assumed --> revisit: shipped work found wrong
-    completed --> revisit: shipped work found wrong
-    revisit --> submitted: re-submit
-
-    submitted --> declined
-    ready --> declined
-    unplanned --> obsolete
+    completed --> [*]
     declined --> [*]
     obsolete --> [*]
-    completed --> [*]
+%% END generated
 ```
 <!-- END canonical:docs/status-lifecycle.mmd -->
 

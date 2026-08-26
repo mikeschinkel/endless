@@ -183,6 +183,18 @@ def glyph(status: str) -> str:
     return stdout.strip()
 
 
+def lifecycle() -> str:
+    """The generated mermaid body of docs/status-lifecycle.mmd (E-2018).
+
+    Returned verbatim, newline for newline — this is an artifact whose BYTES are
+    compared, so `.strip()` here would make every drift check fail on whitespace
+    the renderer never emitted. `endless.lifecycle_map` writes it into the
+    canonical file and its two embedded copies.
+    """
+    stdout, _ = _run("lifecycle")
+    return stdout
+
+
 # The whole vocabulary, in lifecycle order. Read once at import because the
 # click decorators in cli.py consume it at decoration time — `click.Choice(...)`
 # is evaluated as the module loads, long before any argument is parsed.
