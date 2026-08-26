@@ -3942,3 +3942,17 @@ If a question is worth mentioning at all, it is worth asking properly in the sam
 
 (He added that in this instance I had picked the approach he would have chosen. The outcome was fine; the process cost him two exchanges and his patience where one question would have done.)
 - **Project**: endless
+
+### [2026-08-25] 'blocked' is NOT a status — it is legacy data; a rejected decision can mean the position is already settled, not that it lost
+Writing E-2018's plan I asked Mike whether the lifecycle table should let agents keep setting 'blocked'. Mike: 'I feel like groundhog day having just belabored the issue with blocked in another session. blocked IS NOT A STATUS even though it once was. I think the analysis WAY over-indexes on blocked as a status because some old tasks still have it. Why is this so complicated?'
+
+Two mistakes.
+
+First, I misread ED-1572's rejection. It proposed 'blocking is a relation, drop blocked from the status vocabulary' and was rejected with: 'We don't need this; it was motivated by finding old blocking values in the status field that were never cleaned up but should have been. We don't need a decision, we need to clean up the data.' I read rejected as 'blocked stays a status.' Wrong — he rejected the DECISION DOCUMENT, not the position. The position was never in dispute. A rejection can mean 'this is already settled, stop writing it down' rather than 'the opposite is true.' Read the reason, not the verdict.
+
+Second, and worse: the 8 rows still carrying status=blocked are stale data, and I let their existence argue that blocked is a live status. Data that exists is not evidence of a design. Old rows record what the system USED to allow.
+
+Concretely: the E-2018 lifecycle table gives blocked no edges. Blockedness is the blocked_by relation, computed from the blocker's status. And E-1891's registry lists blocked as a first-class member of All, ClaimPromotes, ChildrenStateOrder, SessionPending and StickyOverride — faithful to what it relocated, but it encodes a status that should not exist. That belongs in whatever task cleans up the data.
+
+The meta-lesson, third time this session: when something reads as an open question, check whether it is already decided somewhere before putting it to Mike. Asking him to re-decide settled things is more expensive than deciding wrong.
+- **Project**: endless
