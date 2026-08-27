@@ -4475,3 +4475,17 @@ The tell I missed: I was already reaching for a file whose name contains a task 
   two. Everything that merely confirms an existing belief stays in the
   artifact. If nothing changes his next move, say that in a sentence.
 - **Project**: endless
+
+### [2026-08-26] A pasteable command must fit one terminal line, not merely be one line
+- **What went wrong**: I gave Mike a seven-command chain joined with `&&` as a
+  single line, explicitly "one line, paste after `!`". At that length it wraps
+  in the terminal, which is the exact failure I was trying to avoid.
+- **Why**: I had internalised "keep it on one line" as the rule. It is not.
+  The rule is "the pasted text must not wrap". A single 300-character line
+  wraps and breaks just as badly as several lines do — worse, because a broken
+  chain runs a prefix of the commands rather than none of them.
+- **Rule**: Size a pasteable command to fit one terminal line. When a sequence
+  cannot, give short lines he runs one at a time, or write a script to the
+  scratchpad and hand him the single short line that runs it. Never present a
+  long chain as though its being on one logical line made it safe to paste.
+- **Project**: endless
