@@ -4535,3 +4535,23 @@ Concrete check before filing anything: if I can name an open task in the same ar
   path through a script written to the scratchpad rather than changing
   directory.
 - **Project**: endless
+
+### [2026-08-27] Read a rule to its end before citing it as authority; exemptions follow the emphatic clause
+- **What went wrong**: I cited ED-1550 rule 2 — "NEVER reopen shipped work to
+  extend it" — to declare that reopening E-1732 was forbidden, and to tell Mike
+  the CLI's own suggestion to reopen it was "the exact move ED-1550 forbids".
+  The same sentence continues: "Work still live in the session that landed it
+  is exempt. Reopen only when what shipped is wrong." This session landed
+  E-1732 and was still live, so the exemption covered the case precisely. The
+  CLI was applying the rule correctly; I was not.
+- **Why**: I read to the capitalised clause and stopped. Emphatic wording reads
+  as the whole rule, and qualifiers tend to sit immediately after it. Citing a
+  rule as authority — especially to overrule a tool, or to tell Mike his own
+  decision contradicts his own software — makes a partial read into a false
+  claim about what he decided.
+- **Rule**: Before invoking a decision or rule as grounds for anything, read it
+  to the end of the sentence and the end of the record, and check for exemption
+  clauses. When the conclusion is that a tool's behaviour or Mike's instruction
+  violates a rule, treat that as a signal to re-read rather than to report:
+  the tool usually encodes the rule more completely than my summary of it.
+- **Project**: endless
