@@ -4489,3 +4489,22 @@ The tell I missed: I was already reaching for a file whose name contains a task 
   scratchpad and hand him the single short line that runs it. Never present a
   long chain as though its being on one logical line made it safe to paste.
 - **Project**: endless
+
+### [2026-08-27] Never attribute a Claude-authored brief or plan to Mike as his instruction
+- **What went wrong**: Asked why the per-worktree hook override used
+  skip-worktree instead of `.claude/settings.local.json`, I quoted E-998's plan
+  — "the task brief specified `settings.json`" — and told Mike "the trade was
+  made with open eyes." Both the brief and the plan that cited it were written
+  by the Claude session working E-998. I handed Mike authorship of a design
+  choice he never made, and of a cost estimate ("a small one-time cost") he
+  never agreed to.
+- **Why**: A task's own text reads like settled history, and "the brief" sounds
+  like the user. It is not: Claude writes most briefs and plans here. Treating
+  Claude-authored text as the user's instruction launders a guess into an
+  authority, and then blames him for the consequence.
+- **Rule**: Before attributing a decision to Mike, establish that HE made it —
+  a decision record he accepted, or his own words. Task text, plans, and briefs
+  are Claude-authored by default; cite them as "E-NNN's plan claims", never as
+  "you specified" or "the brief required". When a past choice turns out badly,
+  the default owner is Claude.
+- **Project**: endless
