@@ -4555,3 +4555,15 @@ Concrete check before filing anything: if I can name an open task in the same ar
   violates a rule, treat that as a signal to re-read rather than to report:
   the tool usually encodes the rule more completely than my summary of it.
 - **Project**: endless
+
+### [2026-08-27] Search the decision record BEFORE designing, not after being asked
+Third instance of one root error in a single session, so the pattern is the lesson, not the instance.
+
+1. Told Mike $FULL was not deprecated, from code comments. ED-1575 had retired the sigils.
+2. Offered agentenv's string enum as a reason to weigh against ED-1506's int-enum pattern. Existing code that diverges from a decision is evidence the code is wrong.
+3. Designed a whole schema-coexistence strategy for E-2063 — expand-then-contract, plus capability gating with fallback to the old path, plus lazy row creation at runtime. ED-1568 (expand then contract, always separate lands) is REJECTED. ED-1569 (a derived compatibility window) is REJECTED. ED-1570 (ACCEPTED) says a binary works with exactly one schema version, there is no compatibility window, and an older binary writing a newer database is unsafe even when every migration was purely additive. I reinvented two rejected proposals and contradicted an accepted one, and only found out because Mike asked whether E-2063 should be blocked by E-1972.
+
+The trigger I keep missing: the moment I start DESIGNING rather than implementing — weighing options, proposing a strategy, inventing a mechanism — that is the moment to search decisions. 'endless decision list --db main' filtered on the topic word takes one command. I searched only after being challenged, three times.
+
+Also: when a problem feels big and structural enough that I am proud of having spotted it, that is the strongest signal someone already has. E-1944 had decided this whole area, E-2019, E-2020, E-2021 implement it, and E-1972 carries the exact measurement I re-derived by hand (89 worktrees pinned to their own stale binary). Search before congratulating myself on the find.
+- **Project**: endless
