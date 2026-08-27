@@ -4460,3 +4460,18 @@ The tell I missed: I was already reaching for a file whose name contains a task 
   task that landed it will say. If it was deliberate, write it up as a standing
   constraint with its sequencing, never as a gap, a risk, or an open question.
 - **Project**: endless
+
+### [2026-08-26] Reply with what changes his next move, not a summary of the deliverable
+- **What went wrong**: On finishing E-1732's research refresh I wrote a
+  four-bullet chat summary of the 30k-character deliverable. Mike's response
+  was "a wall of text; TL;DR. Was there anything else I NEEDED to understand?"
+- **Why**: I treated the reply as a miniature of the artifact. It is not. The
+  artifact is already stored and addressable; re-narrating its findings in chat
+  makes him read the same material twice and buries the part that actually
+  changes his next move. Three of my four bullets were confirmations of things
+  he already believed.
+- **Rule**: When a deliverable lands in a task field, the reply says where it
+  is and names only what changes what he does next — usually one item, at most
+  two. Everything that merely confirms an existing belief stays in the
+  artifact. If nothing changes his next move, say that in a sentence.
+- **Project**: endless
