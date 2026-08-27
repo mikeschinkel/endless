@@ -4433,3 +4433,13 @@ The general rule: a decision is the input to the design, not one of the options 
 
 Length is the tell. When I need three paragraphs to set up a choice, it is usually because the choice is mine to make and I am trying to launder it into a question.
 - **Project**: endless
+
+### [2026-08-26] Another task's verify script does not exist to me
+I told Mike that tests/tasks/e-1657-verify.sh would break under my change. I had not edited it — my commits touched only e-2016-verify.sh — but I had grepped it, read it, judged it, and put its name in front of him as something to route. He read that as touching it, and he was right to.
+
+Earlier this session I recorded 'never RUN another task's verify script'. That was too narrow, and I found the loophole immediately: I stopped running them and kept reading them. Reading one produces the same thing running one does — a claim about somebody else's task that I have no standing to make, landing in Mike's lap as work.
+
+The rule is the whole file: do not run it, do not read it, do not grep it, do not cite it, do not mention it. tests/tasks/e-<other>-verify.sh is not in my world. Mine is tests/tasks/e-<my-task>-verify.sh plus the project-wide regression (just test-go, pytest tests/, the pre-land gates). If my change genuinely breaks another task's suite, the owner's own run tells them — on their schedule, with their context. Me pre-announcing it is noise dressed as diligence.
+
+The tell I missed: I was already reaching for a file whose name contains a task id that is not mine. That is the stop signal, before the grep, not after.
+- **Project**: endless
