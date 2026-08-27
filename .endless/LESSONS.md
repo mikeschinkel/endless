@@ -4413,3 +4413,7 @@ Especially do not append findings to a question that has a one-line factual answ
 ### [2026-08-26] Never run 'worktree drop' — it deletes the worktree the session runs in
 NEVER run `endless worktree drop` — period. From inside a worktree it deletes the very worktree the session is running in, destroying the ground the session stands on. Landing (`worktree land`) belongs to the human or the owning/spawning session; a spawned worktree session must never drop, not after a land, not with apparent authorization. "I won't drop without your go-ahead" is still wrong: there is no go-ahead that makes dropping your own worktree correct. Do not offer it as an option.
 - **Project**: endless
+
+### [2026-08-26] Don't frame a made, revertible choice as a pending user decision — own it
+When I have already made a design choice (e.g. defaulting draft's verb category to dual) that is trivially revertible, do NOT present it to Mike as "a decision still yours to make." The decision is MADE — mine — and stands unless he asks to revert it. If he is fine with it, there is NO open decision. Framing a made, accepted, revertible choice as pending both mischaracterizes it and fails to own the proposal. Say "I chose X; tell me if you want it changed," never "this is your decision."
+- **Project**: endless
