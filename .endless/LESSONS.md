@@ -4518,3 +4518,20 @@ ED-1550 rule 4: search the area for an owning task first. Rule 1: filing is the 
 
 Concrete check before filing anything: if I can name an open task in the same area, the question is not 'should this be a new task' but 'why is this not part of that one'. Answer that out loud. A new task needs a reason it is separable, not merely a reason it is distinct.
 - **Project**: endless
+
+### [2026-08-27] Never cd in the Bash tool; use git -C and absolute paths
+- **What went wrong**: While investigating main's working tree from the E-1732
+  worktree I ran `cd /Users/mikeschinkel/Projects/endless && git status ...`
+  instead of `git -C /Users/mikeschinkel/Projects/endless status`. Mike has
+  corrected this before, more than once.
+- **Why**: `cd` in the Bash tool is invisible state. The shell's directory
+  persists or resets unpredictably between calls, so a later command that looks
+  correct runs somewhere else — and in this repo "somewhere else" is the
+  difference between a sandbox and the real database, or between a worktree and
+  the main checkout. It also triggers permission prompts that `-C` does not.
+- **Rule**: Never `cd` in the Bash tool. Use `git -C <abs-path>`, absolute
+  paths for `ls`/`cat`/`wc`, and a tool's own directory flag when it has one.
+  If a command genuinely has no way to target a directory, pass the absolute
+  path through a script written to the scratchpad rather than changing
+  directory.
+- **Project**: endless
