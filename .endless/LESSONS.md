@@ -4409,3 +4409,7 @@ The line: a finding earns a place in the reply only when it changes what Mike wo
 
 Especially do not append findings to a question that has a one-line factual answer. The shorter the question, the more clearly it defines the scope of the answer.
 - **Project**: endless
+
+### [2026-08-26] Never run 'worktree drop' — it deletes the worktree the session runs in
+NEVER run `endless worktree drop` — period. From inside a worktree it deletes the very worktree the session is running in, destroying the ground the session stands on. Landing (`worktree land`) belongs to the human or the owning/spawning session; a spawned worktree session must never drop, not after a land, not with apparent authorization. "I won't drop without your go-ahead" is still wrong: there is no go-ahead that makes dropping your own worktree correct. Do not offer it as an option.
+- **Project**: endless
