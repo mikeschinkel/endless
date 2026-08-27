@@ -118,9 +118,22 @@ ST() { E sql "SELECT status FROM tasks WHERE id=$1" --tsv 2>/dev/null; }
 # LAST_ID: id of the most recently inserted task.
 LAST_ID() { E sql "SELECT id FROM tasks ORDER BY id DESC LIMIT 1" --tsv 2>/dev/null; }
 # add_task TITLE [extra args...]: add a task; echoes its id.
+#
+# ABORTS on a failed add rather than echoing LAST_ID anyway. That silent
+# fallback cost a debugging cycle: E-1658's verb/type creation gate landed
+# mid-task and started refusing two of the fixture's titles, so `add_task`
+# returned the PREVIOUS task's id, later checks forced a status onto the wrong
+# row, and two assertions failed with symptoms that looked like product bugs in
+# opposite directions. A fixture that cannot create what a check needs must say
+# so, not hand back something plausible.
 add_task() {
     local title="$1"; shift
-    E task add "$title" --description "spec" "$@" >/dev/null 2>&1
+    local out
+    if ! out="$(E task add "$title" --description "spec" "$@" 2>&1)"; then
+        printf '\n  %sFIXTURE ERROR%s: task add %q failed:\n%s\n' \
+            "${RED}${BOLD}" "${RESET}" "$title" "$out" >&2
+        exit 2
+    fi
     LAST_ID
 }
 # force_status TASK_ID STATUS: a raw write, bypassing the executor. Used only to
@@ -133,7 +146,7 @@ force_status() {
 # --justification. Echoes its id.
 add_findings_task() {
     local epic
-    epic="$(add_task "Anchor epic for $2" --type epic)"
+    epic="$(add_task "Anchor epic for $2" --type epic)" || exit 2
     force_status "$epic" "underway"
     add_task "$1" --type "$2" --parent "E-$epic"
 }
@@ -157,22 +170,22 @@ setup_fixture() {
 
     E project register "$REPO" --name probe --label Probe --desc d --lang Go --status active >/dev/null 2>&1
 
-    # Seed the project verb list. E-1240's gate reserves `completed` for titles
-    # whose lead verb is marked `completable`, and matchers._resolved_verbs
-    # takes the FIRST source that exists — project, else machine, else the
-    # built-in defaults. It does not layer them. So the moment `task add`
-    # auto-registers one verb into the project file, that one-entry file
-    # SHADOWS every default, and `audit` stops being completable. Without this,
-    # section B would be testing E-1240's gate rather than E-2016's, and would
-    # pass for the wrong reason.
+    # Seed the project verb list. E-1658 gates CREATION on verb category: a
+    # research/brainstorm title must lead with an `investigation` verb and a
+    # todo/bugfix title with an `action` one. matchers._resolved_verbs takes the
+    # FIRST source that exists — project, else machine, else the built-in
+    # defaults — and does not layer them, so the moment `task add`
+    # auto-registers one verb into the project file, that file SHADOWS every
+    # default and the categories vanish. Seeding it explicitly is what keeps
+    # these checks about E-2016's gate rather than E-1658's.
     mkdir -p "$REPO/.endless"
     cat > "$REPO/.endless/verbs.jsonl" <<'VERBS'
-{"value": "audit", "definition": "to examine systematically", "completable": true}
-{"value": "anchor", "definition": "to fix or secure firmly in place"}
-{"value": "add", "definition": "to introduce or include something new"}
-{"value": "build", "definition": "to construct"}
-{"value": "fix", "definition": "to repair"}
-{"value": "brainstorm", "definition": "to generate ideas"}
+{"value": "audit", "definition": "to examine systematically", "category": ["investigation"]}
+{"value": "explore", "definition": "to investigate possibilities in a space", "category": ["investigation"]}
+{"value": "anchor", "definition": "to fix or secure firmly in place", "category": ["action"]}
+{"value": "add", "definition": "to introduce or include something new", "category": ["action"]}
+{"value": "build", "definition": "to construct", "category": ["action"]}
+{"value": "fix", "definition": "to repair", "category": ["action"]}
 VERBS
 
     [[ "$(E sql 'SELECT count(*) FROM projects' --tsv 2>/dev/null)" == "1" ]] || return 1
@@ -185,16 +198,18 @@ test_units() {
     section "A. Unit tests for the new behavior (fail-fast gate)"
     local out rc
 
-    out=$(cd "$WT" && go test ./internal/taskstatus/ ./internal/events/ 2>&1); rc=$?
+    out=$(cd "$WT" && go test ./internal/taskstatus/ ./internal/events/ \
+        ./internal/templatecmd/ ./internal/hookcmd/ 2>&1); rc=$?
     if [[ $rc -eq 0 ]]; then
-        report_pass "go test taskstatus + events passes"
+        report_pass "go test taskstatus + events + templatecmd + hookcmd passes"
     else
-        report_fail "go test taskstatus + events" \
+        report_fail "go test taskstatus + events + templatecmd + hookcmd" \
             "exit 0" "exit=$rc"$'\n'"$(printf '%s' "$out" | grep -v '^ok' | head -25)"
     fi
 
     out=$(cd "$WT" && uv run pytest tests/test_research_gate.py \
-        tests/test_completed_status.py tests/test_status_lifecycle_sync.py -q 2>&1); rc=$?
+        tests/test_completed_status.py tests/test_status_lifecycle_sync.py \
+        tests/test_handoff.py -q 2>&1); rc=$?
     if [[ $rc -eq 0 ]]; then
         report_pass "pytest research-gate + completed-status + artifact-currency suites pass"
     else
@@ -233,7 +248,7 @@ test_reported_case() {
     # Brainstorm is the same gate — one status, both types, because they share
     # the failure mode even though the deliverable differs.
     local b
-    b="$(add_findings_task "Brainstorm the thing" brainstorm)"
+    b="$(add_findings_task "Explore the thing" brainstorm)"
     force_status "$b" "underway"
     E task update "E-$b" --status completed --outcome "synthesis" >/dev/null 2>&1
     assert_eq "brainstorm is gated the same way" "underway" "$(ST "$b")"
@@ -293,14 +308,21 @@ test_implementation_types_refused() {
     E task update "E-$b" --status unreviewed >/dev/null 2>&1
     assert_eq "a bugfix is refused the same way" "underway" "$(ST "$b")"
 
-    # And the direct route to `completed` is intact for them: `completed` is
-    # gated on the title's lead verb, not on type, so a todo-typed audit still
-    # finishes in one step.
-    local a
-    a="$(add_task "Audit the config")"
-    force_status "$a" "underway"
-    E task update "E-$a" --status completed >/dev/null 2>&1
-    assert_eq "a todo keeps its one-step route to completed" "completed" "$(ST "$a")"
+    # And `completed` is not theirs either. When E-2016 landed, the findings
+    # lane still admitted todo/bugfix directly, on the theory that a
+    # todo-typed audit should finish there. E-1658 retired that: it gates
+    # CREATION on verb category (a todo cannot even be TITLED "Audit ...")
+    # and makes completed-eligibility a rule about type rather than about the
+    # title's verb. So the implementation types now live wholly in the
+    # verification lane, and this asserts the whole lane is closed to them.
+    E task update "E-$t" --status completed >/dev/null 2>&1
+    assert_eq "a todo cannot reach completed either" "underway" "$(ST "$t")"
+    E task update "E-$b" --status completed >/dev/null 2>&1
+    assert_eq "nor can a bugfix" "underway" "$(ST "$b")"
+
+    # The lane they DO have is intact — this change must not have stranded them.
+    E task update "E-$t" --status unverified >/dev/null 2>&1
+    assert_eq "a todo still reports done at unverified" "unverified" "$(ST "$t")"
 }
 
 # ─── section E: the outcome requirement moved to the gate ────────────────────
@@ -420,6 +442,40 @@ test_guide_documents_it() {
         '`unverified`, `unreviewed`, `confirmed`' "$tasks"
 }
 
+# ─── section H3: the handoff obeys the same table ────────────────────────────
+
+# render_handoff TYPE — the spawn handoff a session of that type is handed.
+render_handoff() {
+    printf '{"spawned_id":9999,"label_prefix":"E-9999","title":"Audit the thing","task_type":"%s","worktree_path":"/tmp/wt","branch":"b","child_count":0,"children_state":"","report_gate":true}' "$1" \
+        | "$WT/bin/endless-go" template render "handoff/$1"
+}
+
+test_handoff_agrees_with_the_table() {
+    section "H3. The spawn handoff instructs a legal transition"
+    # The gap this task shipped with, found by another session: the handoff is
+    # the ONLY lifecycle documentation a spawned session actually obeys — it is
+    # pasted into its first turn and names the exact command to finish with.
+    # E-2016 moved research and brainstorm behind `unreviewed` and left the
+    # templates saying `completed`, so every spawned research session was told
+    # to run a command the executor refuses. Both the spawn and claim variants
+    # carried it, because both include handoff/_mechanics.
+    local out typ
+    for typ in research brainstorm; do
+        out="$(render_handoff "$typ")"
+        assert_contains "the $typ handoff names the review gate" \
+            "--status unreviewed" "$out"
+        assert_not_contains "and no longer instructs the refused command ($typ)" \
+            "--status completed" "$out"
+        assert_contains "and says the terminal is the user's to set ($typ)" \
+            "mark \`completed\` yourself" "$out"
+    done
+
+    # A todo must NOT have been dragged into the review lane by the same edit.
+    out="$(render_handoff todo)"
+    assert_contains "the todo handoff still says unverified" "--status unverified" "$out"
+    assert_not_contains "and was not dragged into the review lane" "--status unreviewed" "$out"
+}
+
 # ─── section I: regression ───────────────────────────────────────────────────
 
 test_regression() {
@@ -472,6 +528,7 @@ main() {
     test_blocks_dependents
     test_diagram_is_current
     test_guide_documents_it
+    test_handoff_agrees_with_the_table
     test_regression
 
     [[ -n "$TMP" ]] && rm -rf "$TMP"

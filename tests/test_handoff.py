@@ -123,8 +123,12 @@ def test_render_handoff_research_variant():
     )
     # Research-specific framing.
     assert "Findings are the deliverable" in out
-    # End state guidance points at completed + outcome (file form, E-1001).
-    assert "--status completed --outcome-file" in out
+    # End state guidance points at the review gate + outcome (file form,
+    # E-1001). E-2016 moved this off `completed`: research reports done at
+    # `unreviewed` and leaves the terminal to the user, who has to read the
+    # findings first.
+    assert "--status unreviewed --outcome-file" in out
+    assert "--status completed" not in out
     # Research must NOT instruct --status unverified (its own gate per ED-1502).
     assert "--status unverified" not in out
 

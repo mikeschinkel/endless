@@ -83,8 +83,10 @@ func TestRender_Claim_TerminalRulePerType(t *testing.T) {
 	}{
 		{"todo", "--status unverified --db main"},
 		{"bugfix", "--status unverified --db main"},
-		{"research", "--status completed --outcome-file <path> --db main"},
-		{"brainstorm", "--status completed --outcome-file <path> --db main"},
+		// E-2016: findings work reports done at the review gate, not at the
+		// terminal — `completed` is the user's call once they have read it.
+		{"research", "--status unreviewed --outcome-file <path> --db main"},
+		{"brainstorm", "--status unreviewed --outcome-file <path> --db main"},
 		{"epic", "--status completed --db main"},
 	}
 	for _, c := range cases {
@@ -127,12 +129,12 @@ func TestRender_MechanicsPartial_SharedBySpawnAndClaim(t *testing.T) {
 		"research": {
 			"the fix is `git rebase main` or `git reset --hard main` **in place**",
 			"Findings are the deliverable.",
-			"When findings are ready: `endless task update E-9999 --status completed --outcome-file <path> --db main`",
+			"When findings are ready: `endless task update E-9999 --status unreviewed --outcome-file <path> --db main`",
 		},
 		"brainstorm": {
 			"the fix is `git rebase main` or `git reset --hard main` **in place**",
 			"The synthesis is the deliverable.",
-			"When the synthesis is ready: `endless task update E-9999 --status completed --outcome-file <path> --db main`",
+			"When the synthesis is ready: `endless task update E-9999 --status unreviewed --outcome-file <path> --db main`",
 		},
 		"epic": {
 			"the fix is `git rebase main` or `git reset --hard main` **in place**",

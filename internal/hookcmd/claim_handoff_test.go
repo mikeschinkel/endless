@@ -140,7 +140,9 @@ func TestHandlePostToolUseSession_ClaimDeliversHandoff(t *testing.T) {
 		"--db main",
 		// research type -> the artifact rule, NOT the todo `unverified` rule.
 		"Findings are the deliverable.",
-		"--status completed --outcome-file <path> --db main",
+		// E-2016: and NOT `completed` either — findings work reports done at
+		// the review gate and leaves the terminal to the user.
+		"--status unreviewed --outcome-file <path> --db main",
 	}
 	for _, w := range wants {
 		if !strings.Contains(handoff, w) {

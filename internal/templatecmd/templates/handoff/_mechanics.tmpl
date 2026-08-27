@@ -69,9 +69,9 @@ Don't run `endless worktree land` without asking. NEVER remove a worktree, and n
 {{- end}}
 
 {{define "handoff_deliverable" -}}
-{{if eq .task_type "research"}}Findings are the deliverable. Write them into `tasks.outcome` via `endless task update E-{{.spawned_id}} --outcome-file <path> --db main` (or `--outcome '<inline text>'`). End state is `completed` (research has its own gate, ED-1502), not `unverified`.
+{{if eq .task_type "research"}}Findings are the deliverable. Write them into `tasks.outcome` via `endless task update E-{{.spawned_id}} --outcome-file <path> --db main` (or `--outcome '<inline text>'`). End state is `unreviewed` — not `unverified` (research never enters that lane, ED-1502) and not `completed`, which is your user's call after they read the findings (E-2016).
 
-{{else if eq .task_type "brainstorm"}}The synthesis is the deliverable. Write it into `tasks.outcome` via `endless task update E-{{.spawned_id}} --outcome-file <path> --db main` (or `--outcome '<inline text>'`), and spawn the decisions/tasks it produces (`endless decision add ...`, `endless task add ... --cleans-up E-{{.spawned_id}}`). End state is `completed --outcome` (a brainstorm produces information, not testable behavior), not `unverified`.
+{{else if eq .task_type "brainstorm"}}The synthesis is the deliverable. Write it into `tasks.outcome` via `endless task update E-{{.spawned_id}} --outcome-file <path> --db main` (or `--outcome '<inline text>'`), and spawn the decisions/tasks it produces (`endless decision add ...`, `endless task add ... --cleans-up E-{{.spawned_id}}`). End state is `unreviewed --outcome` — a brainstorm produces information, not testable behavior, so it never enters the `unverified` lane; and `completed` is your user's call after they read the synthesis (E-2016).
 
 {{else if eq .task_type "epic"}}You're the coordinator on this epic. Don't implement directly — draft plans, tell the user which children to spawn, verify their work.
 
@@ -79,8 +79,8 @@ Don't run `endless worktree land` without asking. NEVER remove a worktree, and n
 {{- end}}
 
 {{define "handoff_terminal" -}}
-{{if eq .task_type "research"}}When findings are ready: `endless task update E-{{.spawned_id}} --status completed --outcome-file <path> --db main`, then tell me where to read them. Don't mark `confirmed`/`assumed` yourself.
-{{- else if eq .task_type "brainstorm"}}When the synthesis is ready: `endless task update E-{{.spawned_id}} --status completed --outcome-file <path> --db main`, then tell me where to read it and which follow-ups it spawned. Don't mark `confirmed`/`assumed` yourself.
+{{if eq .task_type "research"}}When findings are ready: `endless task update E-{{.spawned_id}} --status unreviewed --outcome-file <path> --db main`, then tell me where to read them. Don't mark `completed` yourself — that is mine to set once I have read them — and don't mark `confirmed`/`assumed`, which research never uses.
+{{- else if eq .task_type "brainstorm"}}When the synthesis is ready: `endless task update E-{{.spawned_id}} --status unreviewed --outcome-file <path> --db main`, then tell me where to read it and which follow-ups it spawned. Don't mark `completed` yourself — that is mine to set once I have read it — and don't mark `confirmed`/`assumed`, which a brainstorm never uses.
 {{- else if eq .task_type "epic"}}When all children are `confirmed`/`assumed`: `endless task update E-{{.spawned_id}} --status completed --db main`, then tell me. Don't mark the epic complete while children are still open.
 {{- else}}When implementation is done: `endless task update E-{{.spawned_id}} --status unverified --db main`, then hand me the one verify command. Don't mark `confirmed`/`assumed` yourself.
 {{- end}}
