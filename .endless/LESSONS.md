@@ -4417,3 +4417,7 @@ NEVER run `endless worktree drop` — period. From inside a worktree it deletes 
 ### [2026-08-26] Don't frame a made, revertible choice as a pending user decision — own it
 When I have already made a design choice (e.g. defaulting draft's verb category to dual) that is trivially revertible, do NOT present it to Mike as "a decision still yours to make." The decision is MADE — mine — and stands unless he asks to revert it. If he is fine with it, there is NO open decision. Framing a made, accepted, revertible choice as pending both mischaracterizes it and fails to own the proposal. Say "I chose X; tell me if you want it changed," never "this is your decision."
 - **Project**: endless
+
+### [2026-08-26] Re-query task status before reporting it; never state it from memory of my last action
+Never report a task's status (or any live, mutable state) from memory of my own last action. Re-query it before stating it. State moves out from under me: after I set E-1658 to unverified, Mike verified and landed it, flipping it to assumed — but I reported "at unverified" from memory. Status especially mutates (land, approve, reopen happen in other sessions/by the user). Before writing a status into a report, run the query and read the answer; the fact that I set it a certain way earlier is not evidence of what it is now.
+- **Project**: endless
