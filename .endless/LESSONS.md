@@ -4421,3 +4421,15 @@ When I have already made a design choice (e.g. defaulting draft's verb category 
 ### [2026-08-26] Re-query task status before reporting it; never state it from memory of my last action
 Never report a task's status (or any live, mutable state) from memory of my own last action. Re-query it before stating it. State moves out from under me: after I set E-1658 to unverified, Mike verified and landed it, flipping it to assumed — but I reported "at unverified" from memory. Status especially mutates (land, approve, reopen happen in other sessions/by the user). Before writing a status into a report, run the query and read the answer; the fact that I set it a certain way earlier is not evidence of what it is now.
 - **Project**: endless
+
+### [2026-08-26] Ask with the concrete outcome, not the abstraction — and never weigh existing code against a decision
+Two failures in one question about whether session_instances.harness should be an int FK per ED-1506 or a text slug.
+
+1. UNANSWERABLE FRAMING. I asked Mike to choose between 'consistency with four existing lookup tables and an explicit decision' and 'a child-table constraint that is legible without a lookup', then added that agentenv.ID is a string enum with a handful of call sites. He has no visibility into agentenv — I wrote it. He told me the question was Greek. A question is only askable if the person can answer it from what THEY see. Show the two concrete artifacts — the actual DDL each produces, the actual thing that breaks — and let the abstraction stay implicit. If I cannot show the difference in something he already knows about, I should decide it myself and tell him what I decided.
+
+2. REPEAT OF THE ED-1575 ERROR. I presented agentenv's non-compliance with ED-1506 as a consideration on the 'or' side of the choice. Mike drives ED-1506. Existing code that diverges from an accepted decision is EVIDENCE THE CODE IS WRONG, never an argument for revisiting the decision. The right move was: ED-1506 governs, agentenv does not comply, here is what complying costs and do you want it fixed here or filed.
+
+The general rule: a decision is the input to the design, not one of the options in it. When code and decision disagree, report the gap and propose the fix — do not offer the gap as a reason to weaken the decision.
+
+Length is the tell. When I need three paragraphs to set up a choice, it is usually because the choice is mine to make and I am trying to launder it into a question.
+- **Project**: endless
