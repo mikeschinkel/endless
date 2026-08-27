@@ -4508,3 +4508,13 @@ The tell I missed: I was already reaching for a file whose name contains a task 
   "you specified" or "the brief required". When a past choice turns out badly,
   the default owner is Claude.
 - **Project**: endless
+
+### [2026-08-27] Before proposing a new task, check whether the task you are citing as the reason already owns it
+I offered three options for E-2063's historical collapse and recommended filing it as a new task blocked by E-1983 — justifying that with 'E-1983 is the task that actually stops the mis-bindings, so collapsing before it lands means doing it twice'. Mike asked why not roll it into E-1983, citing ED-1550.
+
+The tell was in my own sentence. When the justification for a new task is 'it has to wait for task X and X is what makes it coherent', X owns the work. A dependency that strong is not a blocking relation, it is the same task.
+
+ED-1550 rule 4: search the area for an owning task first. Rule 1: filing is the exception; the default response to a finding is to tell the user in chat. Rule 2: fold a finding into an OPEN task as evidence. E-1983 was open and unplanned — its plan had not even been written yet, which is the ideal moment to widen scope rather than to chain a second task behind it.
+
+Concrete check before filing anything: if I can name an open task in the same area, the question is not 'should this be a new task' but 'why is this not part of that one'. Answer that out loud. A new task needs a reason it is separable, not merely a reason it is distinct.
+- **Project**: endless
