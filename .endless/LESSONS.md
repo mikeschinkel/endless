@@ -4443,3 +4443,20 @@ The rule is the whole file: do not run it, do not read it, do not grep it, do no
 
 The tell I missed: I was already reaching for a file whose name contains a task id that is not mine. That is the stop signal, before the grep, not after.
 - **Project**: endless
+
+### [2026-08-26] Report a deliberately disabled capability as a constraint, not a gap
+- **What went wrong**: E-1732's research map listed "`rebuild-db --confirm` is
+  refused, so the ledger cannot be replayed back over the DB" as an open
+  question, and my reply offered it as something Mike "may not have connected."
+  He had connected it: he requested the protection, and the repair is
+  deliberately sequenced behind the port of DB access to Go.
+- **Why**: I read `internal/eventcmd/rebuild_guard.go`, which states plainly
+  that the refusal is intentional and names the ordering. I reported it as a
+  gap anyway, because a disabled capability reads like a defect. Handing the
+  owner his own decision back as a discovery wastes his attention and implies
+  the system is broken when it is behaving as specified.
+- **Rule**: Before reporting a disabled, refused, or missing capability, find
+  out whether it was made that way on purpose — the guard's own comment and the
+  task that landed it will say. If it was deliberate, write it up as a standing
+  constraint with its sequencing, never as a gap, a risk, or an open question.
+- **Project**: endless
