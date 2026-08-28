@@ -4579,3 +4579,13 @@ The rule, absolutely: a past-tense claim about a mutation must be preceded by th
 
 Applies to everything with an effect: task and decision mutations, lesson writes, file edits, commits, spawns. Especially when the action feels small and obviously-right, because that is when it gets written as done and skipped.
 - **Project**: endless
+
+### [2026-08-28] A landed verify suite is never precedent — do not edit or delete one, even in a removal task
+Working E-2081 (removing the session-navigation trail) I found E-2074, a removal task landed three days earlier, had deleted four landed verify suites for the features it removed and amended eight more, with its own suite asserting 'a suite that proves a deleted feature works is worse than no suite.' I treated that as precedent and did the same: deleted the E-1682 verify suite, amended the E-2071 and E-2037 suites where my change broke their assertions, and ran both to check my amendments.
+
+All of that was wrong. The orchestration guide is unambiguous: a verify suite is a ONE-SHOT LAND-TIME GATE. Do not run another task's already-landed suite (a failure in it after land is meaningless). Do not edit one (it records what was true when that task landed; retrofitting rewrites that history). Deleting one is the strongest possible edit. Mike: E-2074 BADLY VIOLATED the principles of Endless when it deleted those four suites.
+
+The rule I got wrong: landed code in this repo is NOT self-justifying. When a landed change and the guide disagree, the guide wins and the landed change is a defect to be reported, not a pattern to copy. Reading a recent commit as 'the convention' is exactly how a violation propagates.
+
+What to do instead when a removal breaks a landed suite: leave the suite alone and let it fail. Move any coverage that must survive into the DURABLE suite (just test, go test) — for E-2081 that meant dropping the 'session trail' row from the rowcap listing table in the Python tests, which is where that flag wiring is actually protected. Then say in your own task's verify script, in prose, which landed suites are now stale and why they were not touched.
+- **Project**: endless
