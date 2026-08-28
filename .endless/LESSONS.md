@@ -4589,3 +4589,32 @@ The rule I got wrong: landed code in this repo is NOT self-justifying. When a la
 
 What to do instead when a removal breaks a landed suite: leave the suite alone and let it fail. Move any coverage that must survive into the DURABLE suite (just test, go test) — for E-2081 that meant dropping the 'session trail' row from the rowcap listing table in the Python tests, which is where that flag wiring is actually protected. Then say in your own task's verify script, in prose, which landed suites are now stale and why they were not touched.
 - **Project**: endless
+
+### [2026-08-28] Do not narrate intended behavior, and delete stale text instead of disclaiming it
+Two habits Mike called out in one message, and they are the same habit.
+
+1. NARRATING INTENDED BEHAVIOR. I reported "a material description edit
+   re-triages the task" every time I touched a description, and used it as a
+   reason to leave a stale description in place rather than fix it. Re-triage is
+   DESIGNED behavior. Reporting it repeatedly is, in his words, Chinese water
+   torture. And it is not even an obstacle: triage is just deciding whether the
+   description alone is enough to spawn from, then setting the status. When I
+   have the information — and if I just rewrote the description, I do — I triage
+   it myself with `task submit` and say nothing.
+
+2. DISCLAIMING INSTEAD OF DELETING. Asked to remove a stale caveat from E-1063
+   ("Not now: the Python CLI is mature... Move only on a concrete forcing
+   function"), my instinct was to keep it and annotate it as superseded. He said:
+   just delete it. A description is current state, not a changelog. The history
+   is in the ledger; the description should read as though the stale sentence was
+   never there.
+
+The common root: hedging dressed as diligence. Both add words that protect me
+from being wrong rather than serving the reader. The fix in both cases is the
+same and it is smaller than what I was doing — make the edit, set the status,
+move on.
+
+Corollary for reporting: a consequence the user already knows, that the system
+was built to do, is not news. Report what CHANGED and what needs a DECISION.
+Everything else is noise that trains him to skim past the parts that matter.
+- **Project**: endless
