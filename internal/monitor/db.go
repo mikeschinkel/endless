@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/mikeschinkel/endless/internal/gatekind"
-	"github.com/mikeschinkel/endless/internal/navvia"
 	"github.com/mikeschinkel/endless/internal/processkind"
 	"github.com/mikeschinkel/endless/internal/schema"
 	"github.com/mikeschinkel/endless/internal/sessiontaskrelation"
@@ -773,16 +772,6 @@ func DB() (*sql.DB, error) {
 			if hasTable(dbConn, "session_task_relations") {
 				if err := sessiontaskrelation.VerifyIntegrity(dbConn); err != nil {
 					dbErr = fmt.Errorf("session_task_relations integrity check on %s: %w", path, err)
-					dbConn = nil
-					return
-				}
-			}
-			// E-1682: same fail-closed contract for the nav_via_kinds enum mirror.
-			// Skipped on populated DBs that have not yet had the E-1682 migration
-			// applied (the table will not exist; the migration creates it).
-			if hasTable(dbConn, "nav_via_kinds") {
-				if err := navvia.VerifyIntegrity(dbConn); err != nil {
-					dbErr = fmt.Errorf("nav_via_kinds integrity check on %s: %w", path, err)
 					dbConn = nil
 					return
 				}

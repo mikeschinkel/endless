@@ -54,26 +54,26 @@ func TestBuildApplySteps_MenuBindingsRouteThroughTmuxVerb(t *testing.T) {
 	}
 }
 
-// TestBuildApplySteps_InstallsNavHooks pins the E-1682 nav-trail recorder
-// wiring: apply must register the two focus-change hooks (client-session-changed
-// and session-window-changed), each shelling out through
-// `<binPath> tmux record-nav` with the client + pane substitutions. The
-// double-quoted run-shell lets tmux substitute #{client_name}/#{pane_id} at
-// fire time.
-func TestBuildApplySteps_InstallsNavHooks(t *testing.T) {
+// TestBuildApplySteps_InstallsNoFocusHooks is the inverse of the test E-1682
+// used to pin here. The nav-trail recorder is gone (E-2081), so apply must
+// register NEITHER focus-change hook — installing one would silently clobber a
+// binding the user set for their own purposes, which is exactly what E-1682
+// did. Retiring a hook a PREVIOUS apply left behind is a separate, conditional
+// step (retireNavHooks); it inspects the live server, so it is not a step.
+func TestBuildApplySteps_InstallsNoFocusHooks(t *testing.T) {
 	steps := buildApplySteps("/usr/local/bin/endless-go", "e", 2)
-	wantHooks := []string{"client-session-changed", "session-window-changed"}
-	for _, hook := range wantHooks {
-		cmd, ok := findHookCommand(steps, hook)
-		if !ok {
-			t.Errorf("no set-hook -g %s step in: %v", hook, steps)
-			continue
+	for _, hook := range []string{"client-session-changed", "session-window-changed"} {
+		if cmd, ok := findHookCommand(steps, hook); ok {
+			t.Errorf("apply still installs a %s hook: %q", hook, cmd)
 		}
-		if !strings.Contains(cmd, "tmux record-nav") {
-			t.Errorf("hook %s command missing `tmux record-nav`: %q", hook, cmd)
-		}
-		if !strings.Contains(cmd, "#{client_name}") || !strings.Contains(cmd, "#{pane_id}") {
-			t.Errorf("hook %s command missing client/pane substitutions: %q", hook, cmd)
+	}
+	for _, step := range steps {
+		for _, arg := range step {
+			// Via the matcher rather than a literal, so the recorder's name is
+			// spelled in exactly one place (nav_hook_retire.go).
+			if isNavRecorderHook(arg) {
+				t.Errorf("apply step still references the removed recorder: %v", step)
+			}
 		}
 	}
 }

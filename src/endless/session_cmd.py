@@ -2058,9 +2058,11 @@ def _match_companions(live: list[dict], ref: str) -> list[dict]:
 # A stack token is an endless session id (resolved to that session's *current*
 # live pane at pop time, so a session that moved to a new pane still works); a
 # source location that isn't a tracked session is stored as a raw "%pane" token.
-# Capture is `goto`-only, so `back` predictably undoes your last `goto`. The
-# durable, captures-everything navigation trail for analysis is a separate
-# follow-up (E-1682).
+# Capture is `goto`-only, so `back` predictably undoes your last `goto`.
+#
+# E-1682 built a durable, captures-everything navigation trail alongside this
+# and E-2081 removed it; the back-stack is unrelated to that table and never
+# depended on it.
 # ---------------------------------------------------------------------------
 
 
@@ -2091,22 +2093,6 @@ def _tmux_switch_client(pane: str) -> bool:
     """Switch the tmux client to `pane`'s window/session. True on success."""
     res = _tmux_run(["switch-client", "-t", pane])
     return bool(res and res.returncode == 0)
-
-
-# One-shot tmux server option the nav-trail recorder reads to tag a goto-driven
-# focus change (E-1682). Kept in sync with navViaOption in
-# internal/tmuxcmd/record_nav.go.
-_NAV_VIA_OPTION = "@endless_nav_via"
-
-
-def _set_nav_via_goto() -> None:
-    """Mark the next focus change as via=goto for the nav-trail recorder."""
-    _tmux_run(["set-option", "-g", _NAV_VIA_OPTION, "goto"])
-
-
-def _clear_nav_via() -> None:
-    """Unset the via marker (used when a goto switch did not actually happen)."""
-    _tmux_run(["set-option", "-gu", _NAV_VIA_OPTION])
 
 
 def _backstack_key() -> str:
@@ -2372,10 +2358,10 @@ def _resume_new_window_pane(
     ref: str, revisit: bool = False, no_revisit: bool = False,
 ) -> tuple[str, str]:
     """Open a NEW tmux window running `claude --resume <uuid>` in the target's
-    worktree (detached, so the caller's own push+switch does the focusing and the
-    nav-trail records a single via=goto move) and return (pane, label). Backs
-    `session goto --resume` for a non-live target (E-1797). Raises
-    click.ClickException if the ref isn't resumable, SystemExit(1) on tmux failure.
+    worktree (detached, so the caller's own push+switch does the focusing) and
+    return (pane, label). Backs `session goto --resume` for a non-live target
+    (E-1797). Raises click.ClickException if the ref isn't resumable,
+    SystemExit(1) on tmux failure.
 
     The `--revisit` / `--no-revisit` gate runs FIRST (E-1968), so a target that
     needs an explicit intent is refused before any window is opened.
@@ -2462,15 +2448,9 @@ def session_goto(
     token = _current_pane_token(live)
     if token:
         _backstack_push(key, token)
-    # Tag the focus change the switch is about to cause as via=goto. The global
-    # focus-change hook's recorder reads + clears this one-shot marker (E-1682);
-    # every other (manual) move records as via=manual. Set immediately before
-    # the switch so a concurrent manual move can't trip it.
-    _set_nav_via_goto()
     if not _tmux_switch_client(target_pane):
         if token:  # target closed between resolution and switch — undo the push
             _backstack_pop(key)
-        _clear_nav_via()  # no switch happened; don't mis-tag the next move
         click.echo(
             f"Could not switch to pane {target_pane} (it may have closed).",
             err=True,
@@ -2512,92 +2492,3 @@ def session_back() -> None:
 
     click.echo("no previous session", err=True)
     raise SystemExit(1)
-
-
-def _resolve_client_name() -> str:
-    """The attached tmux client_name (a tty path), or '' if unresolvable.
-
-    The nav-trail recorder keys rows by this same value (#{client_name}), so it
-    scopes `session trail` to the navigator whose moves are being viewed.
-    """
-    res = _tmux_run(["display-message", "-p", "#{client_name}"])
-    return res.stdout.strip() if res and res.returncode == 0 else ""
-
-
-def _nav_endpoint_label(session_id, task_id, pane: str | None) -> str:
-    """Render one navigation endpoint: a tracked session (with its task id) or
-    the raw pane id for an untracked location.
-    """
-    from endless.task_cmd import task_id_display
-    if session_id:
-        if task_id:
-            return f"session {session_id} ({task_id_display(task_id)})"
-        return f"session {session_id}"
-    if pane:
-        return f"pane {pane}"
-    return "—"
-
-
-def session_trail(show_all: bool = False, limit: int | None = None,
-                  no_limit: bool = False) -> None:
-    """Print the durable session-navigation trail, newest-first (E-1682).
-
-    Each edge shows `from → to` (session id + task id, or raw pane), the `via`
-    tag (manual / goto), and a relative time. Defaults to the current tmux
-    client; --all lists every client's moves. The DB read goes through
-    `endless-go session-query trail` (no Python DB read, per E-1486).
-
-    The Go side is asked for EVERY edge (`--limit -1`) and the cap is applied
-    here (E-2071), because the footer names an exact remainder and the query
-    that stopped at the cap could not supply one. The trail is a table of tmux
-    moves, so reading all of it costs little.
-    """
-    import subprocess
-
-    from endless import config
-    from endless.task_cmd import _format_relative
-
-    cap = rowcap.resolve_cap(limit, no_limit)
-    cmd = ["endless-go", *config.go_db_context_args(),
-           "session-query", "trail", "--limit", "-1"]
-    if not show_all:
-        client = _resolve_client_name()
-        # An unresolved client (not attached to a tmux client) scopes to the
-        # empty-string client key, which matches nothing — clearer than silently
-        # widening to every client. Suggest --all in the empty-state below.
-        cmd += ["--client", client]
-
-    try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
-    except (FileNotFoundError, subprocess.SubprocessError):
-        click.echo("Could not read the navigation trail.", err=True)
-        raise SystemExit(1)
-    if result.returncode != 0:
-        click.echo(result.stderr.strip() or "Could not read the navigation trail.",
-                   err=True)
-        raise SystemExit(1)
-    try:
-        edges = json_mod.loads(result.stdout) or []
-    except ValueError:
-        edges = []
-
-    if not edges:
-        scope = "any client" if show_all else "this client"
-        click.echo(f"No navigation recorded yet for {scope}.", err=True)
-        if not show_all:
-            click.echo("Try `endless session trail --all`.", err=True)
-        return
-
-    edges, hidden = rowcap.cap_rows(edges, cap)
-
-    for e in edges:
-        frm = _nav_endpoint_label(
-            e.get("from_session_id"), e.get("from_task_id"), e.get("from_pane"))
-        to = _nav_endpoint_label(
-            e.get("to_session_id"), e.get("to_task_id"), e.get("to_pane"))
-        via = e.get("via") or "manual"
-        when = _format_relative(e.get("created_at"))
-        prefix = f"[{e.get('client')}] " if show_all else ""
-        click.echo(f"• {prefix}{frm} → {to}  ({via}, {when})")
-
-    rowcap.echo_footer(hidden)

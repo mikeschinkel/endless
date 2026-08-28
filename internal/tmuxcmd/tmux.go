@@ -45,8 +45,10 @@ func Run(args []string) {
 		runActiveID(args[1:])
 	case "show-menu":
 		runShowMenu(args[1:])
-	case "record-nav":
-		runRecordNav(args[1:])
+	// `record-nav` was removed by E-2081 along with the whole
+	// session-navigation trail. A tmux server still running the focus-change
+	// hooks an older `apply` installed will invoke it until the server
+	// restarts; `apply` now retires those hooks (see retireNavHooks).
 	case "-h", "--help", "help":
 		usage(os.Stdout)
 	default:

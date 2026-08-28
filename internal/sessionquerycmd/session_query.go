@@ -105,11 +105,6 @@ func Run(args []string) {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
-	case "trail":
-		if err := runTrail(args[1:]); err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
-		}
 	case "resume-target":
 		if err := runResumeTarget(args[1:]); err != nil {
 			fmt.Fprintln(os.Stderr, err)
@@ -142,8 +137,6 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "  worktree-unsettled <worktree-path>...")
 	fmt.Fprintln(os.Stderr, "                                    JSON array of per-worktree unsettled breakdowns (E-1865):")
 	fmt.Fprintln(os.Stderr, "                                    {unsettled, modified, unlanded, reason, modified_files, unlanded_log, …}")
-	fmt.Fprintln(os.Stderr, "  trail [--client <name>] [--limit N]")
-	fmt.Fprintln(os.Stderr, "                                    JSON array of navigation edges newest-first (no --client = all clients)")
 	fmt.Fprintln(os.Stderr, "  resume-target --ref <ES-session-id|task-id|session-id|uuid>")
 	fmt.Fprintln(os.Stderr, "                                    JSON {endless_id, session_id, task_id, worktree_path, state,")
 	fmt.Fprintln(os.Stderr, "                                    project_id, project_path, task_type, task_status, task_title, landed_sha}")
@@ -487,26 +480,6 @@ func runResumeTarget(args []string) error {
 	return json.NewEncoder(os.Stdout).Encode(target)
 }
 
-// runTrail prints the durable session-navigation trail as a JSON array of
-// edges, newest-first (E-1682). It backs `endless session trail`: the Python
-// viewer resolves the current tmux client_name and passes it as --client
-// (scoping to this navigator), or omits it for --all (every client). The DB
-// read stays Go-side (no Python SQLite read, per E-1486). Endpoint task labels
-// and relative time are rendered Python-side from the returned fields.
-func runTrail(args []string) error {
-	fs := flag.NewFlagSet("trail", flag.ContinueOnError)
-	client := fs.String("client", "", "tmux client_name to scope to (empty = all clients)")
-	limit := fs.Int("limit", 50, "max rows to return (negative returns every row)")
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-	edges, err := monitor.ListNavTrail(*client, *limit)
-	if err != nil {
-		return fmt.Errorf("list nav trail: %w", err)
-	}
-	return json.NewEncoder(os.Stdout).Encode(edges)
-}
-
 // runGateClear closes the session's open gate of the given kind, recording the
 // cleared_by reason, and prints how many open rows were cleared (0 = nothing was
 // pending). It backs the `endless task continue` verb so the Python side clears
@@ -801,4 +774,3 @@ func runEnsureClaudeID(args []string) error {
 	fmt.Println(id)
 	return nil
 }
-

@@ -109,9 +109,11 @@ def test_goto_by_task_id(goto_env, capsys):
     assert "goto E-1465 → session 10 (pane %10)" in err
 
 
-def test_goto_sets_via_goto_marker(goto_env):
-    """goto tags the focus change for the nav-trail recorder (E-1682): the
-    one-shot @endless_nav_via marker is set to 'goto' before the switch."""
+def test_goto_sets_no_nav_marker(goto_env):
+    """goto sets no tmux option beyond the back-stack. E-1682 had it stamp a
+    one-shot @endless_nav_via marker for the navigation-trail recorder; E-2081
+    removed the trail, and goto must not leave the marker behind for a hook that
+    no longer reads it."""
     stage, make = goto_env
     stage(endless_session_id=10, pane_id="%10", task_id=1465)
     ft = make({"%10", "%1"}, current_pane="%1")
@@ -119,7 +121,7 @@ def test_goto_sets_via_goto_marker(goto_env):
     session_cmd.session_goto("E-1465")
 
     assert ft.switched == ["%10"]
-    assert ft.options.get("@endless_nav_via") == "goto"
+    assert "@endless_nav_via" not in ft.options
 
 
 def test_goto_by_session_id(goto_env, capsys):

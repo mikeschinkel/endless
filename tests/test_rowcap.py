@@ -52,7 +52,6 @@ OTHER_LISTINGS = [
     ["session", "list"],
     ["session", "search", "widget"],
     ["session", "history"],
-    ["session", "trail"],
     ["worktree", "list"],
     ["verb", "list"],
     ["phrase", "list"],

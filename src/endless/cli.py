@@ -1265,22 +1265,6 @@ def session_back():
     run_back()
 
 
-@session_cmd.command("trail")
-@click.option("--all", "show_all", is_flag=True,
-              help="Show every tmux client's moves, not just this one.")
-@rowcap.limit_options
-def session_trail(show_all, limit, no_limit):
-    """Show the durable session-navigation trail (manual moves + goto).
-
-    Lists recent focus changes between Claude sessions/panes, newest-first:
-    `from → to` (session id + task id, or raw pane), the `via` tag (manual or
-    goto), and a relative time. Defaults to the current tmux client; --all
-    lists every client. Recorded by a tmux focus-change hook (see `goto`).
-    """
-    from endless.session_cmd import session_trail as run_trail
-    run_trail(show_all=show_all, limit=limit, no_limit=no_limit)
-
-
 @session_cmd.command("id")
 def session_id():
     """Print the current Endless session's integer id to stdout.

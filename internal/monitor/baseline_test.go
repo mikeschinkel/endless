@@ -129,8 +129,6 @@ func TestSchemaFreshDB_CreatesAllTables(t *testing.T) {
 		"project_deps",
 		"notes",
 		"sessions",
-		"nav_via_kinds",
-		"session_navigations",
 		"tasks",
 		"task_deps",
 		"activity",

@@ -1,0 +1,44 @@
+-- E-2081: drop the session-navigation trail.
+--
+-- E-1682 added a durable trail of every tmux focus change, recorded by a global
+-- focus-change hook, "for usability analysis of navigation, and recovering a
+-- session a user lost track of". Neither materialised. What accumulated was
+-- 5,374 rows at roughly 110 a day, 98% of them via=manual, with retention
+-- explicitly deferred — and one reader, `endless session trail`, which printed
+-- back the list of pane switches the user had just performed. The surface, the
+-- recorder, the tmux hooks and the navvia enum are all removed by this task, so
+-- the two tables have no writer and no reader left.
+--
+--   session_navigations — one row per focus change, keyed by tmux client.
+--   nav_via_kinds       — the ED-1506 SQL mirror of the NavVia Go enum
+--                         (internal/navvia, deleted here). Nothing else
+--                         references it.
+--
+-- Order matters: session_navigations carries a FOREIGN KEY to nav_via_kinds, so
+-- it is dropped first. (SQLite tolerates either order with foreign_keys off,
+-- but the dependency should be explicit rather than incidental.)
+--
+-- The index goes with its table; DROP TABLE takes it, and the explicit DROP
+-- INDEX is here only so a DB that somehow carries the index without the table
+-- is left clean too.
+--
+-- e-1682-session-navigations.sql, which created these tables, is deliberately
+-- KEPT: change files are the historical record of how a populated database got
+-- its shape, and a DB old enough to still need it applies create-then-drop,
+-- which is correct. This is the same treatment E-2074 gave the change files
+-- whose columns it dropped.
+--
+-- NOT to be confused with the tmux-option back-stack behind `endless session
+-- back`, which is unrelated, lives in tmux server options rather than the DB,
+-- and stays.
+--
+-- The apply-change dispatcher wraps this file in a BEGIN IMMEDIATE transaction
+-- and records this change's _schema_version marker after the statements below.
+-- Runs once, at land time, against the populated real DB where the tables still
+-- exist. The sandbox (`endless-sandbox init`) and tests build from schema.sql,
+-- which no longer declares them, and never apply change files — so there is no
+-- "table absent" path to guard.
+
+DROP INDEX IF EXISTS session_navigations_client;
+DROP TABLE IF EXISTS session_navigations;
+DROP TABLE IF EXISTS nav_via_kinds;

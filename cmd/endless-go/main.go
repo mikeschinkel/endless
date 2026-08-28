@@ -134,8 +134,7 @@ func main() {
 		// per-invocation flag is trustworthy; the env-driven pin is the
 		// fallback). Production invokers of these binaries never pass
 		// --config-dir, so the pin still applies for real hook/tmux
-		// traffic; only tests and sandbox tooling (e.g. the E-1682 nav-trail
-		// verify driving `tmux record-nav` against a sandbox DB) flip this.
+		// traffic; only tests and sandbox tooling flip this.
 		//
 		// `errors` MUST NOT be added here (tried and reverted under E-1950).
 		// These two are machine-invoked: a hook fires, tmux redraws. Nobody

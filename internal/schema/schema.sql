@@ -621,52 +621,6 @@ CREATE INDEX IF NOT EXISTS session_gates_open
 CREATE INDEX IF NOT EXISTS session_gates_corpus
     ON session_gates(kind_id, id) WHERE raw_draft IS NOT NULL;
 
--- Nav via kinds (E-1682). SQL mirror of the NavVia Go enum (ED-1506:
--- const-in-code is the source of truth, the table exists for FK enforcement
--- and queryability). The startup integrity check fails closed on drift between
--- this table and the navvia.All() enum. Adding a value = add an enum constant
--- + add a seed row here. Seed inserts below are idempotent on a populated DB.
-CREATE TABLE IF NOT EXISTS nav_via_kinds (
-    id    INTEGER PRIMARY KEY,
-    slug  TEXT UNIQUE NOT NULL,
-    label TEXT NOT NULL
-);
-
-INSERT OR IGNORE INTO nav_via_kinds (id, slug, label) VALUES
-    (1, 'manual', 'Manual'),
-    (2, 'goto',   'Goto');
-
--- Durable session-navigation trail (E-1682). One row per focus change between
--- Claude sessions/panes, keyed by tmux client (the navigator). A global tmux
--- hook records every manual move (client-session-changed / session-window-changed)
--- and `endless session goto` (tagged via_id=goto). This is the MUTABLE runtime
--- tier — the same non-committed tier as `sessions`, NOT the committed JSONL
--- ledger; high-churn nav state must never pollute the shared multi-dev ledger.
---
--- Endpoints are stored as session ids (resolved from the focused pane) when the
--- location is a tracked session, plus the raw pane id for untracked locations:
--- from_session_id/from_pane carry the prior focus (the client's last to_*),
--- to_session_id/to_pane the new focus. to_pane is always set; the *_session_id
--- columns are nullable. Retention is unbounded append in v1 (pruning deferred).
-CREATE TABLE IF NOT EXISTS session_navigations (
-    id              INTEGER PRIMARY KEY,
-    client          TEXT NOT NULL,
-    project_id      INTEGER,
-    from_session_id INTEGER,
-    from_pane       TEXT,
-    to_session_id   INTEGER,
-    to_pane         TEXT NOT NULL,
-    via_id          INTEGER NOT NULL,
-    created_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
-    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL,
-    FOREIGN KEY (from_session_id) REFERENCES sessions(id) ON DELETE SET NULL,
-    FOREIGN KEY (to_session_id) REFERENCES sessions(id) ON DELETE SET NULL,
-    FOREIGN KEY (via_id) REFERENCES nav_via_kinds(id)
-);
-
-CREATE INDEX IF NOT EXISTS session_navigations_client
-    ON session_navigations(client, id);
-
 -- Task dependencies (cross-project capable)
 CREATE TABLE IF NOT EXISTS task_deps (
     id INTEGER PRIMARY KEY,
