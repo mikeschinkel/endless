@@ -4618,3 +4618,11 @@ Corollary for reporting: a consequence the user already knows, that the system
 was built to do, is not news. Report what CHANGED and what needs a DECISION.
 Everything else is noise that trains him to skim past the parts that matter.
 - **Project**: endless
+
+### [2026-08-30] Filing a task on an unverified premise
+While surveying for E-2084 I found E-1361 in the db-ledger with no task.deleted event and no row in the tasks table, and filed E-2085 calling it a ledger-to-projection defect. It was not. E-1361 became ED-1361, an accepted decision with the exact title its ledger history ends on. Two cheap checks would have shown that before filing: querying the decisions table, and running 'endless-go event validate-db', which already implements the projection->live direction and does not report E-1361.
+
+The error was filing at the moment the evidence looked conclusive instead of at the moment it WAS conclusive. 'Present in the ledger, absent from the table, no deletion event' is three facts that suggest a conclusion; it is not the conclusion. An absence is only evidence once you have checked the places the thing could have gone.
+
+ED-1550 already says filing is the exception and to search the area for an owning task first. The sharper rule for me: before filing anything whose premise is 'X is missing', enumerate where X could legitimately be and check each one. If a tool exists that answers the question directly, run it — do not file a task proposing to build what already ships.
+- **Project**: endless
