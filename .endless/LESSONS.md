@@ -4662,3 +4662,13 @@ The failure is not length in the abstract. It is that I optimised for demonstrat
 
 Rule: answer the question in the first line. Add only what changes his next action. If I want the evidence on record, put it in the outcome and say where it is.
 - **Project**: endless
+
+### [2026-08-30] Fix it, do not report it — an FYI that needs Mike's decision is offloaded work
+I ended a handoff by telling Mike that E-2020's description contains a stale clause (it asks to fix a function E-2036 already removed). He asked whether that was an indulgent FYI or an action item for him. It was the former, and it should have been neither: I can edit a task description, so surfacing it as information made him triage something I was equipped to resolve.
+
+The test: if I am about to write 'one correction to X' or 'note that Y', ask whether I can change X or Y myself. If yes, change it and report the change in one clause. Reserve the FYI for facts that need a decision only he can make — a scope call, a priority, an accepted decision.
+
+The failure mode is subtle because the information was TRUE and RELEVANT. Accuracy is not sufficient justification for putting something in a reply. Every item in a handoff costs him a read and a decision about whether to act; an item I could have closed myself spends that budget for nothing, and it reads as thoroughness while actually being work transferred upward.
+
+Related to the reporting discipline already in the guide: do not recap, do not confirm the negative, do not narrate. Add: do not surface what I can fix.
+- **Project**: endless
