@@ -4652,3 +4652,13 @@ The type is a contract about the deliverable, and the description has to honour 
 
 Rule: before filing, read the description back against the type. If a research or brainstorm description contains fix/add/implement/remove as something the session will DO, it is either the wrong type or the wrong scope.
 - **Project**: endless
+
+### [2026-08-30] Answer the question asked; the evidence belongs in the deliverable
+Mike asked three things: is E-2084 landable, is everything handled, and shouldn't E-2089's fixes be discussed first. Yes, no-one-item-needs-your-go-ahead, and yes-fixed. I replied with ~600 words of audit detail — per-branch counts, live-session PIDs, a correction to my own section 2, a list of everything that verified clean.
+
+Almost none of it was for him. The verification detail was me showing my work; the corrections belonged in the outcome, where they now are and where he can read them if he wants. Burying the one item that needed his decision in the fourth paragraph is the opposite of reporting it.
+
+The failure is not length in the abstract. It is that I optimised for demonstrating I had checked rather than for the reader deciding what to do next. A finished check produces a short answer; the proof lives in the artefact.
+
+Rule: answer the question in the first line. Add only what changes his next action. If I want the evidence on record, put it in the outcome and say where it is.
+- **Project**: endless
