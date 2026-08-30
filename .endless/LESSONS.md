@@ -4634,3 +4634,11 @@ This is a repeat. A lesson already exists telling me not to narrate intended beh
 
 Rule: if a documented behavior would fire and I know the flag that expresses my actual intent, pass the flag and say nothing. Only mention a status change when it is one I cannot control, or when it is not what he asked for.
 - **Project**: endless
+
+### [2026-08-30] Volatile facts do not belong in durable task content
+I refused to file a follow-up because 'the real count is only knowable after the landings run', and said it should be filed 'against a real number rather than a guess'. Backwards. A count that changes is exactly what must NOT be written into a task, because the moment it is written it starts rotting — the same failure E-1934 is about for line numbers and other time-frozen specifics.
+
+The task states the shape of the work: 'tasks reached a terminal status with code that never landed; find them, explain how, fix the path that allowed it.' The agent that picks it up counts them itself, at the moment it matters, and is as capable of counting as I am. Withholding the filing until the number stabilizes also means the finding can be forgotten in the gap.
+
+Rule: never make filing conditional on a fact settling. Write the invariant, leave the measurement to the session that does the work.
+- **Project**: endless
