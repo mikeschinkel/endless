@@ -1,6 +1,6 @@
 // This file is the assertion list for E-2074's column drops, and NOTHING else.
 //
-// It is separate from transcript_test.go for one reason: tests/tasks/
+// It is separate from transcript_test.go for one reason: .endless/tasks/
 // e-2074-verify.sh sweeps the tree for any surviving mention of the dropped
 // identifiers, and a guard that must NAME what it forbids would trip that sweep
 // forever. The sweep exempts this file by name — the same exemption it grants

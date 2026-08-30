@@ -169,7 +169,7 @@ func keysOf(m map[string]*verify.Manifest) []string {
 
 // TestDiscover_DirCasingIsIndependentOfTaskField pins the convention E-1927
 // settled: the suite DIRECTORY is lowercase, matching every other Endless path
-// (.endless/worktrees/e-1889/, tests/tasks/e-1889-verify.sh), while the
+// (.endless/worktrees/e-1889/, .endless/tasks/e-1889/verify.sh), while the
 // manifest's `task` field stays the canonical display form E-NNNN that CLI
 // arguments and prose use. They are the same id written for two audiences, so
 // discovery normalizes rather than forcing one convention onto the other.

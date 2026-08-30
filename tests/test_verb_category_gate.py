@@ -16,7 +16,7 @@ to-research bypass that would otherwise strand a task in an un-terminable state.
 
 The gate helper (`_require_verb_category_for_type`) is exercised directly here —
 it raises before `add_item` reaches event emission, so no Go bridge is needed.
-The CLI end-to-end acceptance path is covered by tests/tasks/e-1658-verify.sh.
+The CLI end-to-end acceptance path is covered by .endless/tasks/e-1658/verify.sh.
 """
 
 import click

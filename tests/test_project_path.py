@@ -1,7 +1,7 @@
 """Tests for endless.project_path — the two project-path forms and the one rule.
 
 The Go half is pinned in internal/monitor/projects_test.go; the two agreeing
-end to end is what tests/tasks/e-2011-verify.sh drives through the real hook.
+end to end is what .endless/tasks/e-2011/verify.sh drives through the real hook.
 """
 
 import re

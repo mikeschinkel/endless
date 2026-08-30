@@ -3,7 +3,7 @@
 Exercises the resolver's base/status decisions across the state matrix with the
 Go resume-target lookup, git worktree recreation, and status emit all stubbed —
 so these assertions pin the *policy* (type gate, base chain, per-status
-transition), while tests/tasks/e-1801-verify.sh drives the real git side.
+transition), while .endless/tasks/e-1801/verify.sh drives the real git side.
 """
 
 import click

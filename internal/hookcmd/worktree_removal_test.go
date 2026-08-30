@@ -92,7 +92,7 @@ func TestWorktreeRemovalRes(t *testing.T) {
 		`echo "do not run endless worktree drop"`,
 		"grep -rn 'endless worktree drop' docs/",
 		`ROUTES=('endless worktree drop' 'git worktree remove')`,
-		`grep -q 'git worktree remove' tests/tasks/e-2073-verify.sh`,
+		`grep -q 'git worktree remove' .endless/tasks/e-2073/verify.sh`,
 		`git commit -m "block endless worktree drop at the tool layer"`,
 		`echo "rm -rf .endless/worktrees/e-1 is refused"`,
 	}

@@ -452,9 +452,11 @@ Do **not** create a second worktree for the same task. Two worktrees on one
 task means two branches landing the same work.
 
 **Re-verify with the suite that already exists.** The task's
-`tests/tasks/e-<id>-verify.sh` still exists and still applies — it encoded the
-acceptance criteria the bug just violated. Re-run it, and extend it with the
-case that escaped rather than authoring a second script beside it.
+`.endless/tasks/e-<id>/` suite still exists and still applies — it encoded the
+acceptance criteria the bug just violated. Re-run it with `endless task verify`,
+and extend it with the case that escaped rather than authoring a second suite
+beside it. A reopened task is still YOUR task, so the own-task-only refusal
+below does not fire on it — that is the case its second condition exists for.
 
 **When a separate task IS right.** The test is whether the discovery is a
 *defect in what shipped* or *new work the conversation surfaced*. Reopen for
@@ -511,28 +513,53 @@ How a task proves itself before it lands, and how a session hands that proof bac
 
 ### One suite per task
 
-Every task carries **one verification suite** — a single, self-contained proof that the change does what it claims. Today that suite is realized as a bash script at `tests/tasks/e-<id>-verify.sh`. A good suite:
+Every task carries **one verification suite** — a single, self-contained proof that the change does what it claims. It lives in that task's own directory, `.endless/tasks/e-<id>/`, in one of two forms:
 
-- Builds its own isolated environment (temp `HOME`/`XDG`, a throwaway fixture dir) so it never touches your real config or the main database.
-- Prints pass/fail per check, then a summary that ends in `ALL PASSED`.
+| Form | File | What it is |
+|------|------|------------|
+| Manifest | `verify.toml` | A declarative list of `[[check]]` entries the runner executes and normalizes (`gotest`, `pytest`, any TAP-emitting command). |
+| Script | `verify.sh` | A bash suite that sources `.endless/tasks/_harness.sh` and asserts. |
+
+A task carries one or the other; during a conversion it may hold both, and the manifest wins. A good suite:
+
+- Prints pass/fail per check, then a summary.
 - Exits `0` when everything passes and non-zero on any failure.
 
-Copy the shape from any existing `tests/tasks/e-*-verify.sh` — the section/report/summary helpers are the same across them. The suite folds in the task's own unit tests as a first, fail-fast check, so the one script is a complete proof for that task **at land time**.
+The **runner** provides the isolation — a per-run temp `HOME` and `XDG_CONFIG_HOME`, so a suite cannot read or pollute your real config or the main database. A suite that additionally builds its own throwaway fixture dir is belt-and-braces, not a requirement.
+
+The suite folds in the task's own unit tests as a first, fail-fast check, so the one command is a complete proof for that task **at land time**.
+
+### Running one: `endless task verify`
+
+```bash
+endless task verify            # this session's own task
+endless task verify E-<id>     # a named task
+```
+
+This is the only front door, and it is the front door for both forms — which is the point: the command a session hands back is identical whether the suite is a script today or a manifest later.
+
+Running a `verify.sh` directly is not a shortcut, it is a different (and worse) thing: it skips the isolation, and it skips the check that the suite is yours. A suite that sources the shared harness refuses a direct run and says so.
+
+**The runner refuses another task's landed suite.** Ask it for a suite that has landed and is not the task you are working on — not your session's task, and not the task whose worktree you are standing in — and it exits non-zero without running anything, naming what to run instead. Both halves of that condition matter: a task that landed and was then *reopened* is still your task, so re-verifying and re-landing your own work is untouched.
+
+> Inside Endless's own checkout, `just verify [E-NNNN]` is the self-dev wrapper: it resolves the task id the same way `just land` does, cds into that task's worktree, and runs the suite through the **worktree's** endless so a pre-land gate exercises candidate code rather than main's. It holds no verification logic — everything above lives in `endless task verify`.
 
 ### A verify suite is a land-time gate, not a standing regression suite
 
 A verify suite proves *one* task before it lands. Running it is a **one-shot, land-time gate**: whether it still runs — or passes — after that task lands is undefined, and nothing re-runs it for you. It is not the project's regression suite. So:
 
-- **Don't run another task's already-landed verify suite** to check your work. A failure in it after land is meaningless — its fixtures and assertions were pinned to that task's moment, and the code around it has since moved on.
+- **Don't run another task's already-landed verify suite** to check your work. A failure in it after land is meaningless — its fixtures and assertions were pinned to that task's moment, and the code around it has since moved on. The runner enforces this rather than asking; a glob over the suite directory is the same mistake at scale, and gets the same refusal at the first foreign suite.
 - **Don't edit a landed task's verify suite.** It records what was true when that task landed; retrofitting it to a later change rewrites that history. If your change alters a string or behavior a landed suite asserted, leave the suite alone.
 - **Coverage that must survive belongs in the project's own test suite** (what `just test` / `go test` exercises), not only in a verify suite. If a verify suite is the *only* place a behavior is checked, that behavior is unprotected the moment the task lands — mirror it into the durable suite.
+
+The same rules sit in `.endless/tasks/CLAUDE.md`, at the point of contact, and the runner's refusals point there.
 
 ### The one-command handoff contract
 
 This is the load-bearing policy. When a session hands a finished task back for verification, it must:
 
 1. **Run the project-wide regression itself** — the full test suite, lint, build — and **report the outcome in prose.** Never hand the user a list of commands to run to check the work; the session runs them and states the result.
-2. **Hand the user exactly ONE verification command** — `esu && ./tests/tasks/e-<id>-verify.sh` — and nothing more.
+2. **Hand the user exactly ONE verification command** — `esu && endless task verify` — and nothing more.
 3. **Fold the task's own tests into that one suite** as a fail-fast check, so the single command is a complete proof.
 4. **Never enumerate a manual checklist.** No "to test: run A, then B, then check C." One command, or nothing.
 
@@ -540,4 +567,4 @@ The point is that verification is *dense*: one line the user runs, one prose sen
 
 ### Forthcoming
 
-A declarative per-task manifest, the runner that consumes it, the runnability modes (how a suite declares what substrate it can run against), and the sandbox tier ladder are all in progress. Until they ship, realize the convention with the per-task script described above.
+The runnability modes (how a suite declares what substrate it can run against) and the sandbox tier ladder are still in progress. Until they ship, a suite runs at Tier 0 — a temp working dir plus an isolated `HOME`/`XDG_CONFIG_HOME` — and a manifest that declares `needs` or `seed` fails loudly rather than running something weaker than it asked for.

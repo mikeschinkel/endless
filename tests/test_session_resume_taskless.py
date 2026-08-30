@@ -1,7 +1,7 @@
 """E-1918: `ES-` refs everywhere, and resuming a session that never claimed a task.
 
 Two threads, both pinned here at the unit level (the real DB/git/worktree side is
-tests/tasks/e-1918-verify.sh):
+.endless/tasks/e-1918/verify.sh):
 
   1. Every session-ref entry point accepts `ES-<id>`. The Go resolver is covered
      by internal/monitor/resume_test.go; the live-pane matcher is covered here.

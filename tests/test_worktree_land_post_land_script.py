@@ -6,7 +6,7 @@ canonical id, merge sha, and base branch it discovers
 `<main_root>/.endless/hooks/post-land/<task>.sh`, execs it (cwd = main root,
 argv[1] = main root, the ENDLESS_* env set), and treats a non-zero exit as
 non-fatal + loud. These tests drive it directly (no git/DB fixture); the
-end-to-end call through a real land is covered by tests/tasks/e-1799-verify.sh.
+end-to-end call through a real land is covered by .endless/tasks/e-1799/verify.sh.
 
 The final test pins the call SITE: `_run_post_land_script` must be invoked in
 `land_worktree` after `_record_landing`/the Landed echo and before the reap

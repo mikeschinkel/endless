@@ -6,7 +6,7 @@ help:
     @echo "  just build        Build everything — the Go binaries (alias: just go)"
     @echo "  just install      Build + symlink binaries + install Python CLI"
     @echo "  just test         Run Python tests"
-    @echo "  just verify [E-NNNN]  Run a task's Tier-0 verify suite (self_dev; derives ID from cwd if omitted)"
+    @echo "  just verify [E-NNNN]  Run a task's verify suite in its worktree (derives ID like 'just land')"
     @echo ""
     @echo "Workflow:"
     @echo "  just land [E-NNNN]  Land a task (derives ID from cwd if omitted), then refresh binaries"
@@ -441,22 +441,57 @@ dev-sandbox-init:
 test:
     uv run pytest tests/ -v
 
-# Run a task's Tier-0 verification suite while developing Endless — the self_dev
-# counterpart to `just test`. With no id, defaults to the current session's /
-# worktree's bound task (`endless task verify`'s own resolution).
+# Run a task's verification suite while developing Endless — the self_dev
+# counterpart to `just test`.
 #
-# Thin wrapper over the PRODUCT verb `endless task verify` (E-1603). Per
+# Thin wrapper over the PRODUCT verb `endless task verify` (E-1603/E-2023). Per
 # just-is-dev-only, this recipe holds NO verification logic: discovery of the
-# task's .endless/tasks/<id>/verify.toml, per-run temp HOME/XDG isolation,
-# running the suite, CTRF normalization, and the pass/fail exit code all live in
-# `endless task verify` and the endless-go runner it shells to.
+# task's .endless/tasks/<id>/verify.toml or verify.sh, the own-task-only
+# refusal, per-run temp HOME/XDG isolation, running the suite, CTRF
+# normalization, and the pass/fail exit code all live in `endless task verify`
+# and the endless-go runner it shells to. This recipe only resolves an id and
+# picks a directory.
 #
-# `--db sandbox` is what makes this self_dev: it routes `endless task verify` to
-# the sandbox config context, which selects <worktree>/bin/endless-go (E-1510)
-# so the CANDIDATE runner is exercised, not the global install. Exit code passes
-# straight through, so `just verify E-NNNN && ...` gates on the result.
-verify id="":
-    endless --db sandbox task verify {{id}}
+# Task ID derivation is `just land`'s chain, verbatim, so the two verbs behave
+# alike and neither needs explaining twice:
+#   1. Explicit arg: `just verify E-NNNN`
+#   2. `endless-go tmux active-id` — DB-backed session->task binding.
+#   3. Path-pattern match on cwd (`.endless/worktrees/e-NNN`).
+#   4. Otherwise a usage error. The derived id is ECHOED: a verb that picks a
+#      target silently is the same class of problem as a listing that truncates
+#      silently.
+#
+# Having resolved the task it cds into THAT task's worktree and runs there. That
+# is what `esu` was doing by hand in the old handoff, and the reason it was in
+# the handoff at all: `--db sandbox` routes `endless task verify` to the sandbox
+# config context, which selects <worktree>/bin/endless-go (E-1510), so a pre-land
+# gate exercises the CANDIDATE runner rather than main's. Exit code passes
+# straight through, so `just verify && ...` gates on the result.
+verify task_id="":
+    #!/usr/bin/env bash
+    set -u
+    tid="{{task_id}}"
+    if [ -z "$tid" ]; then
+        if tid=$(endless-go tmux active-id 2>/dev/null) && [ -n "$tid" ]; then
+            echo "→ Derived task ID from session: $tid"
+        elif [[ "$(pwd)" =~ /\.endless/worktrees/e-([0-9]+)(/|$) ]]; then
+            tid="E-${BASH_REMATCH[1]}"
+            echo "→ Derived task ID from cwd: $tid"
+        else
+            echo "just verify: no active session task and not inside a task worktree." >&2
+            echo "  Usage: just verify [E-NNNN]" >&2
+            exit 1
+        fi
+    fi
+    main_root=$(cd "$(dirname "$(git rev-parse --git-common-dir)")" && pwd)
+    wt="$main_root/.endless/worktrees/e-${tid#[Ee]-}"
+    if [ ! -d "$wt" ]; then
+        echo "just verify: no worktree for $tid at $wt" >&2
+        echo "  A suite is a pre-land gate; it runs against that task's candidate tree." >&2
+        exit 1
+    fi
+    cd "$wt" || exit 1
+    endless --db sandbox task verify "$tid"
 
 # Guide cross-reference / agent --help map (E-1502).
 #

@@ -304,7 +304,7 @@ listed separately. (Generated — do not hand-edit; run `/regenerate-guide`.)
 | blocking semantics | tasks | How unverified/unreviewed/confirmed/assumed/completed affect whether a blocker is still active. |
 | verbs | tasks | The registered action words that can begin a task title. |
 | research-task field model | tasks | For a research task, text = the request, outcome = the deliverable. |
-| per-task verification suite | orchestration | One suite per task and the one-command verify handoff (tests/tasks/e-*-verify.sh). |
+| per-task verification suite | orchestration | One suite per task and the one-command verify handoff (`endless task verify`, .endless/tasks/e-*/). |
 | commit message convention | orchestration | Commit subjects on a task branch take the form E-<id>: verb-first summary. |
 | landing is the user's call (ask first) | orchestration | Never run worktree land or drop on your own initiative - ask every time. |
 | work you discover mid-task (do it, reopen, or file it) | tasks | Four-case test for a drive-by discovery: do it now, reopen your own landed work, file it with --cleans-up, or fold symptoms into one root cause. |

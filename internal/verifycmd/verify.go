@@ -20,7 +20,6 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"sort"
 	"strings"
 
 	"github.com/mikeschinkel/endless/internal/verify"
@@ -74,6 +73,8 @@ func Run(args []string) {
 func run(id string, keep bool) (code int, err error) {
 	var root dt.DirPath
 	var manifests map[string]*verify.Manifest
+	var scripts map[string]dt.Filepath
+	var script dt.Filepath
 	var eff *verify.Manifest
 	var ok bool
 	var runDir dt.DirPath
@@ -87,6 +88,14 @@ func run(id string, keep bool) (code int, err error) {
 		goto end
 	}
 
+	// The own-task-only refusal comes FIRST — before discovery, before the temp
+	// dir, before anything runs. Nothing below this line may execute on behalf
+	// of a task that is not the caller's.
+	err = guardOwnTaskOnly(id, root)
+	if err != nil {
+		goto end
+	}
+
 	manifests, err = verify.Discover(root)
 	if err != nil {
 		goto end
@@ -94,8 +103,22 @@ func run(id string, keep bool) (code int, err error) {
 
 	eff, ok = manifests[verify.NormalizeTaskID(id)]
 	if !ok {
-		err = doterr.NewErr(ErrNoSuiteForTask,
-			"task", id, "available", availableIDs(manifests), "root", root)
+		// A manifest is the documented form and wins when a task has both, so
+		// the script is a FALLBACK rather than a second search path: same
+		// directory, other filename.
+		scripts, err = verify.DiscoverScripts(root)
+		if err != nil {
+			goto end
+		}
+		script, ok = scripts[verify.NormalizeTaskID(id)]
+		if !ok {
+			err = doterr.NewErr(ErrNoSuiteForTask,
+				"task", id, "dir", suiteDir(root, id),
+				"looked_for", verify.ManifestFile+", "+verify.ScriptFile,
+				"suites_found", suiteCount(manifests, scripts), "root", root)
+			goto end
+		}
+		code, err = runScriptSuite(id, script, root, keep)
 		goto end
 	}
 
@@ -153,16 +176,34 @@ end:
 	return code, err
 }
 
-// availableIDs renders the discovered task ids as a sorted, comma-separated
-// string for the "no suite for task" error metadata.
-func availableIDs(manifests map[string]*verify.Manifest) (list string) {
-	var ids []string
+// suiteCount reports how many DISTINCT tasks have a suite, in either form.
+//
+// It is a count and not a listing on purpose. The error used to enumerate every
+// discovered id, which was useful while two tasks had manifests and became a
+// two-hundred-id wall the moment every task's script moved into this tree — and
+// a wall of ids is not a listing, it is the reader's answer buried in noise.
+// What actually helps is already in the error: the directory the suite would
+// live in and both filenames it was looked for under. The count only says
+// whether discovery found anything at all, which distinguishes "you typed the
+// wrong id" from "this project has no suites".
+func suiteCount(manifests map[string]*verify.Manifest, scripts map[string]dt.Filepath) (n int) {
+	var seen map[string]bool
 
-	ids = make([]string, 0, len(manifests))
+	seen = make(map[string]bool, len(manifests)+len(scripts))
 	for id := range manifests {
-		ids = append(ids, id)
+		seen[id] = true
 	}
-	sort.Strings(ids)
-	list = strings.Join(ids, ", ")
-	return list
+	for id := range scripts {
+		seen[id] = true
+	}
+	n = len(seen)
+	return n
+}
+
+// suiteDir renders the directory a task's suite would live in, for the
+// not-found error. Naming the directory alongside both filenames turns "no
+// suite" into an instruction: this is where it goes, and this is what it is
+// called.
+func suiteDir(root dt.DirPath, id string) (dir string) {
+	return string(root.Join(verify.SuitesDir, strings.ToLower(id)))
 }

@@ -10,7 +10,7 @@ _SUBMITTABLE_FROM, so `submit` is also the manual triage route out of it — the
 guarantee that a freshly filed task is never stranded with no evaluator around.
 
 Background-session gating (approve + non-ready pickup) is exercised
-end-to-end by tests/tasks/e-1648-verify.sh, which can seed a
+end-to-end by .endless/tasks/e-1648/verify.sh, which can seed a
 `kind=background` session; these unit tests run with no resolvable session
 (so never background) and cover the status-transition logic.
 """

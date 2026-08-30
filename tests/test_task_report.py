@@ -6,7 +6,7 @@ PLUMBING — that a draft reaches the minimizer whole, that only the minimized
 text reaches stdout, that failures fail closed, and that the appeal is bounded.
 
 What it deliberately does NOT cover is the minimizer's judgment, which is the
-only thing a stub cannot fake. That lives in `tests/tasks/e-1953-verify.sh`,
+only thing a stub cannot fake. That lives in `.endless/tasks/e-1953/verify.sh`,
 which runs the real model against `tests/fixtures/report-draft.md` and asserts
 the six properties the plan names. No stubbed test substitutes for it, and one
 pretending to would be worse than none.

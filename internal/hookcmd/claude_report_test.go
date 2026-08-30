@@ -171,7 +171,7 @@ func TestComposeSessionStartContext(t *testing.T) {
 //
 // Asserted at the text level because the branch itself needs a DB and a project
 // row. The end-to-end half — the hook staying silent in a gate-off project — is
-// in tests/tasks/e-1953-verify.sh.
+// in .endless/tasks/e-1953/verify.sh.
 func TestReportReinforcement_RespectsTheSwitch(t *testing.T) {
 	ac := reportRelayInstruction
 

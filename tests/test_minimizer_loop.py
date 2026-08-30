@@ -7,7 +7,7 @@ record's round trip, the bypass, and the shape of a paired presentation.
 
 What it deliberately does NOT cover is judgment: whether the rewritten prompt
 actually produces better replies, and whether the judge's fidelity score means
-anything. No stub can fake either. That lives in `tests/tasks/e-1975-verify.sh`,
+anything. No stub can fake either. That lives in `.endless/tasks/e-1975/verify.sh`,
 which runs the real model.
 """
 
@@ -164,9 +164,9 @@ def test_a_reformatted_code_block_is_vetoed():
 def test_an_altered_command_is_vetoed():
     """The dangerous case is not a dropped command but a plausible-looking one:
     the user sees an invocation and runs it, and it is not what they were given."""
-    raw = "Verify with `./tests/tasks/e-1975-verify.sh --strict`."
+    raw = "Verify with `./.endless/tasks/e-1975/verify.sh --strict`."
     ok, _, violations = minimizer_invariants.check(
-        raw, "Verify with `./tests/tasks/e-1975-verify.sh`.")
+        raw, "Verify with `./.endless/tasks/e-1975/verify.sh`.")
     assert not ok
     assert any("command" in v for v in violations)
 

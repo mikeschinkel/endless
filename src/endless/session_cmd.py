@@ -228,7 +228,7 @@ def _auto_task_for_taskless_session(target: dict) -> tuple[str, int]:
 
     Idempotency needs no bookkeeping — claiming sets `sessions.task_id`,
     so the next resume of this session takes the ordinary task path and mints
-    nothing. tests/tasks/e-1918-verify.sh asserts that rather than trusting it.
+    nothing. .endless/tasks/e-1918/verify.sh asserts that rather than trusting it.
 
     Returns (worktree_path, task_id).
     """

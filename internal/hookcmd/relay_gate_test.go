@@ -13,7 +13,7 @@ import (
 // which is worse, because an agent that learns the gate is noise stops treating
 // any of it as real.
 
-const sampleSanctioned = "Verify: `esu && ./tests/tasks/e-1901-verify.sh`\n" +
+const sampleSanctioned = "Verify: `esu && endless task verify E-1901`\n" +
 	"Follow-ups you filed: E-1906 [untriaged]"
 
 func TestRelayVerdict_Compliant(t *testing.T) {
@@ -29,10 +29,10 @@ func TestRelayVerdict_Compliant(t *testing.T) {
 		// Cosmetic-only differences. Each of these is an agent relaying the
 		// report correctly and formatting it for a terminal; bouncing any of
 		// them would be a false positive.
-		"trailing whitespace per line": "Verify: `esu && ./tests/tasks/e-1901-verify.sh`   \n" +
+		"trailing whitespace per line": "Verify: `esu && endless task verify E-1901`   \n" +
 			"Follow-ups you filed: E-1906 [untriaged]\t",
 		"leading and trailing blank lines": "\n\n" + sampleSanctioned + "\n\n\n",
-		"extra blank line between": "Verify: `esu && ./tests/tasks/e-1901-verify.sh`\n\n\n" +
+		"extra blank line between": "Verify: `esu && endless task verify E-1901`\n\n\n" +
 			"Follow-ups you filed: E-1906 [untriaged]",
 		"wrapped in a code fence":   "```\n" + sampleSanctioned + "\n```",
 		"wrapped in a tagged fence": "```text\n" + sampleSanctioned + "\n```",

@@ -40,7 +40,7 @@ covers: For a research task, text = the request, outcome = the deliverable.
 
 topic: per-task verification suite
 section: orchestration
-covers: One suite per task and the one-command verify handoff (tests/tasks/e-*-verify.sh).
+covers: One suite per task and the one-command verify handoff (`endless task verify`, .endless/tasks/e-*/).
 
 topic: commit message convention
 section: orchestration

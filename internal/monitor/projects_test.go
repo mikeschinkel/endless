@@ -850,7 +850,7 @@ func TestRepairProjectPaths_LeavesUnrelatedProjectsAlone(t *testing.T) {
 // A source-level check because the failure is silent — a comparison that uses
 // Abs alone works perfectly on any machine whose paths happen to have no
 // symlinks, which is most development boxes and no macOS temp directory. It
-// belongs here rather than in tests/tasks/e-2002-verify.sh, which is a pre-land
+// belongs here rather than in .endless/tasks/e-2002/verify.sh, which is a pre-land
 // gate for one task and stops protecting anything the moment that task lands.
 func TestProjectLookupNeverNormalizesWithAbsAlone(t *testing.T) {
 	for _, name := range []string{"db.go", "project_path.go"} {

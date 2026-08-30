@@ -432,7 +432,7 @@ def test_task_unlink_to_decision_removes_task_deps_row(isolated_env):
 # decision update (E-1533) — edit title/description in place
 #
 # The emit_event path (Go binary) and the .md-mirror rewrite are exercised
-# end-to-end by tests/tasks/e-1533-verify.sh against an isolated sandbox.
+# end-to-end by .endless/tasks/e-1533/verify.sh against an isolated sandbox.
 # These unit tests cover the Python-side validation guards and the payload
 # shape (with emit_event / mirror stubbed) so no Go binary is required.
 # ────────────────────────────────────────────────────────────────────────

@@ -17,12 +17,29 @@ const SuitesDir = ".endless/tasks"
 // ManifestFile is the manifest filename within each suite directory.
 const ManifestFile = "verify.toml"
 
+// ScriptFile is the shell-script suite filename within each suite directory —
+// the second of the two forms a task's verification can take. A task carries a
+// manifest, a script, or (during a conversion) both; the manifest is the
+// documented form and wins when both are present.
+//
+// It is a product-controlled constant beside ManifestFile rather than a literal
+// at the runner's call site, so a project that lays its suites out differently
+// is a config change here rather than a fork of the runner.
+const ScriptFile = "verify.sh"
+
+// HarnessFile is the shared shell harness a script suite sources, at the ROOT of
+// SuitesDir (.endless/tasks/_harness.sh) rather than inside any task's
+// directory: it belongs to no task. Discovery iterates directory entries looking
+// for per-task directories, so a plain file sitting beside them is skipped and
+// the harness is never mistaken for a task of its own.
+const HarnessFile = "_harness.sh"
+
 // NormalizeTaskID folds a task id to a case-insensitive comparison form.
 //
 // The same id is written two ways, for two audiences, and both are right where
 // they appear. On disk it is lowercase — `.endless/tasks/e-1758/` — matching
 // every other Endless path (`.endless/worktrees/e-1889/`,
-// `tests/tasks/e-1889-verify.sh`). In the manifest's `task` field, in CLI
+// `.endless/tasks/e-1889/verify.sh`). In the manifest's `task` field, in CLI
 // arguments, and in prose it is the canonical display form `E-1758`, which is
 // how a task id is written everywhere else in the product.
 //
@@ -164,6 +181,72 @@ end:
 		err = doterr.WithErr(err, "root", root)
 	}
 	return manifests, err
+}
+
+// DiscoverScripts walks <root>/.endless/tasks/*/verify.sh and returns the
+// script suites keyed by task id (normalized — see NormalizeTaskID). It is the
+// script-form counterpart of Discover and deliberately mirrors its rules: only
+// directory entries are considered, a directory without the file is skipped, and
+// a missing .endless/tasks directory yields an empty map and no error.
+//
+// The key is the DIRECTORY name, because a script carries no `task` field to
+// declare its own id. That is the whole reason the two forms cannot share one
+// keying rule, and the reason discovery normalizes rather than lowercasing: the
+// directory is lowercase by path convention while callers name the task in the
+// canonical E-NNNN form.
+//
+// Non-directory entries — HarnessFile, a directory-level CLAUDE.md — are skipped
+// by the same IsDir() test that skips them in Discover, so a shared file living
+// beside the per-task directories is never discoverable as a task.
+func DiscoverScripts(root dt.DirPath) (scripts map[string]dt.Filepath, err error) {
+	var tasksDir dt.DirPath
+	var entries []os.DirEntry
+	var entry os.DirEntry
+	var exists bool
+	var hasScript bool
+	var scriptPath dt.Filepath
+
+	scripts = make(map[string]dt.Filepath)
+
+	tasksDir = root.Join(SuitesDir)
+
+	exists, err = tasksDir.Exists()
+	if err != nil {
+		err = doterr.NewErr(ErrDiscoveringSuites, err)
+		goto end
+	}
+	if !exists {
+		goto end
+	}
+
+	entries, err = tasksDir.ReadDir()
+	if err != nil {
+		err = doterr.NewErr(ErrDiscoveringSuites, err)
+		goto end
+	}
+
+	for _, entry = range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		scriptPath = dt.FilepathJoin3(tasksDir, entry.Name(), ScriptFile)
+
+		hasScript, err = scriptPath.Exists()
+		if err != nil {
+			err = doterr.NewErr(ErrDiscoveringSuites, err)
+			goto end
+		}
+		if !hasScript {
+			continue
+		}
+		scripts[NormalizeTaskID(entry.Name())] = scriptPath
+	}
+
+end:
+	if err != nil {
+		err = doterr.WithErr(err, "root", root)
+	}
+	return scripts, err
 }
 
 // loadManifestForMerge reads and leniently decodes a per-task verify.toml: it

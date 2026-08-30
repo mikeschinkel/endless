@@ -5,7 +5,7 @@ these tests cover everything AROUND it — parsing, model resolution, the
 fail-open contract, the guards on the automatic path, and the E-1486 boundary
 the module was built to respect. The end-to-end wiring (Go reads, template
 render, the emitted event's actor kind) is exercised against a stubbed `claude`
-by `tests/tasks/e-1859-verify.sh`.
+by `.endless/tasks/e-1859/verify.sh`.
 """
 
 import json

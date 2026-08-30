@@ -5,7 +5,7 @@ The verb clears the session's open revisit gate by shelling out to
 DB write, per E-1486). These tests mock that subprocess and the session
 resolver, so they assert the verb wiring and the friendly no-pending message.
 E-1968 removed its counterpart `task pause`; the last test pins that removal.
-The DB-backed end-to-end behavior is covered by tests/tasks/e-1542-verify.sh
+The DB-backed end-to-end behavior is covered by .endless/tasks/e-1542/verify.sh
 and the Go tests in internal/{monitor,hookcmd}.
 """
 

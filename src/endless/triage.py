@@ -12,7 +12,7 @@ model → parse → `emit_event`. Four properties are load-bearing.
 (`untriaged-tasks`, `triage-context`); the write already routes through
 `emit_event` → the Go executor. This module must never import `sqlite3` or open
 a database — that is the E-1486 boundary this feature was built on the right
-side of, and `tests/tasks/e-1859-verify.sh` asserts it.
+side of, and `.endless/tasks/e-1859/verify.sh` asserts it.
 
 **Persisted artifacts only.** The context handed to the model is the task's
 description, its parent, its sibling titles, and its linked decisions. NOT the

@@ -9,7 +9,7 @@ corruption that lost E-1626/E-1564). Two rules block that:
 
 Relative tokens mid-content are always allowed; --allow-path <regex> (repeatable)
 exempts a matching absolute path from both rules. These tests hit the predicate
-directly; tests/tasks/e-1744-verify.sh covers the same rules end-to-end via CLI.
+directly; .endless/tasks/e-1744/verify.sh covers the same rules end-to-end via CLI.
 """
 
 import click

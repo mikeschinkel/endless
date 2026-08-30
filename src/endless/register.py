@@ -8,6 +8,7 @@ import click
 
 from endless import db, config
 from endless.project_path import resolved, stored
+from endless.suite_rules import scaffold_suite_rules
 
 NAME_PATTERN = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
 
@@ -201,6 +202,12 @@ def register_project(
     added = scaffold_gitignore(project_path)
     (project_path / ".endless" / "tmp").mkdir(parents=True, exist_ok=True)
 
+    # Place the verification-suite rules before the project has any suites, so
+    # the reasoning is already there the first time someone writes or runs one.
+    # Never overwrites an existing file — a customized copy survives re-running
+    # registration.
+    suite_rules_written = scaffold_suite_rules(project_path)
+
     # Detect group from parent directory
     group_name = None
     parent = project_path.parent
@@ -250,6 +257,12 @@ def register_project(
             click.style("•", fg="cyan")
             + " .gitignore updated with "
             + click.style(", ".join(added), dim=True)
+        )
+    if suite_rules_written:
+        click.echo(
+            click.style("•", fg="cyan")
+            + " Verification-suite rules written to "
+            + click.style(".endless/tasks/CLAUDE.md", dim=True)
         )
 
     _scaffold_output_style(project_path)

@@ -3,7 +3,7 @@
 {{- end}}
 
 {{define "handoff_verify" -}}
-Hand me exactly ONE command to verify this — `esu && ./tests/tasks/e-{{.spawned_id}}-verify.sh` — folding this task's own tests into that one suite as a fail-fast check. Do NOT enumerate a manual checklist. Run the project-wide regression (tests, lint, build) yourself and state the result in one line — never as commands for me to run. See `endless guide orchestration`.
+Hand me exactly ONE command to verify this — `esu && endless task verify E-{{.spawned_id}}` — folding this task's own tests into that one suite as a fail-fast check. Do NOT enumerate a manual checklist. Run the project-wide regression (tests, lint, build) yourself and state the result in one line — never as commands for me to run. See `endless guide orchestration`.
 {{- end}}
 
 {{define "handoff_nonverify" -}}

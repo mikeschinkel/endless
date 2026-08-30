@@ -9,7 +9,7 @@ a later task taking the freed id silently inherited the dead relations and
 reported them as computed fact.
 
 Every test here stops before the `task.deleted` event, so none of them need the
-Go executor. The end-to-end removal path is covered by tests/tasks/e-1915-verify.sh.
+Go executor. The end-to-end removal path is covered by .endless/tasks/e-1915/verify.sh.
 """
 
 import click
