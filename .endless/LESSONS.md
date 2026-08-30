@@ -4626,3 +4626,11 @@ The error was filing at the moment the evidence looked conclusive instead of at 
 
 ED-1550 already says filing is the exception and to search the area for an owning task first. The sharper rule for me: before filing anything whose premise is 'X is missing', enumerate where X could legitimately be and check each one. If a tool exists that answers the question directly, run it — do not file a task proposing to build what already ships.
 - **Project**: endless
+
+### [2026-08-30] Reporting by-design behavior as a hazard, instead of just handling it
+I told Mike that editing E-1063's description would reset a submitted task to untriaged, called it a 'hazard worth knowing', and then told him the fix was --keep-status. Both halves were wrong to say. The reset is by design — it is in the guide, in the lifecycle diagram, and in the status table. And when I already know the flag that expresses the intent, naming it to him instead of passing it is me handing back work I was asked to do.
+
+This is a repeat. A lesson already exists telling me not to narrate intended behavior. The new part is the second half: knowing the remedy and reporting it anyway is worse than the original narration, because it converts a fact he did not need into a decision he did not need to make.
+
+Rule: if a documented behavior would fire and I know the flag that expresses my actual intent, pass the flag and say nothing. Only mention a status change when it is one I cannot control, or when it is not what he asked for.
+- **Project**: endless
