@@ -4672,3 +4672,13 @@ The failure mode is subtle because the information was TRUE and RELEVANT. Accura
 
 Related to the reporting discipline already in the guide: do not recap, do not confirm the negative, do not narrate. Add: do not surface what I can fix.
 - **Project**: endless
+
+### [2026-08-30] Do not summarize a deliverable the user is about to read
+I finished E-2089, wrote 14k chars of findings into tasks.outcome, and then reproduced the headline, the four cause-groups and the open design question in my reply. Mike asked what in that reply he needed that was not already in the outcome he has to review anyway. The answer was: the path to it, and nothing else.
+
+A research task's deliverable IS the document. Once it is written, the reply's only job is to say where it lives. Restating it does not save him a read — he still has to read the outcome to review it — so the summary is pure duplication, and worse, it front-runs the document with my framing of it.
+
+The test: if the fact is in the deliverable, it does not go in the reply. What belongs in the reply is what is NOT in the deliverable — where to find it, and anything discovered that the deliverable deliberately does not cover. I also flagged the four un-reset branches as if it were new, when Group 4 of the outcome already said it.
+
+This is the reporting discipline already in the guide (do not recap, do not narrate) applied to my own finished work, not just to task state.
+- **Project**: endless
