@@ -4642,3 +4642,13 @@ The task states the shape of the work: 'tasks reached a terminal status with cod
 
 Rule: never make filing conditional on a fact settling. Write the invariant, leave the measurement to the session that does the work.
 - **Project**: endless
+
+### [2026-08-30] A research task must not carry an implementation verb in its scope
+I filed E-2089 as type=research and wrote 'find the affected tasks, determine how each reached a terminal status without landing, and fix the path that allows it.' The last clause makes it a do-task wearing a research label.
+
+Two things break. The lifecycle has no implementation lane for research: it reaches completed through unreviewed, on an outcome someone reads — there is no unverified step where a fix gets verified. And it skips Mike. Research exists to surface causes so he can decide what to change; writing the fix into the scope decides that for him, before anyone knows what the causes are.
+
+The type is a contract about the deliverable, and the description has to honour it. Research and brainstorm produce findings, and any fix they suggest is a proposal in the outcome — discussed, then filed separately if it is wanted. Only todo and bugfix carry 'fix'.
+
+Rule: before filing, read the description back against the type. If a research or brainstorm description contains fix/add/implement/remove as something the session will DO, it is either the wrong type or the wrong scope.
+- **Project**: endless
