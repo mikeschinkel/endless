@@ -84,6 +84,18 @@ else
     summary
 fi
 
+# The main-database read the refusal is built on lives in internal/monitor. Only
+# its own tests are selected: the rest of that package is a two-minute suite
+# this task does not touch, and `just test-go` covers it.
+if go test ./internal/monitor/ -run 'TestSuiteOwnershipDB|TestReadOnlyDSN' -count=1 \
+        >"${TMP}/go-monitor.log" 2>&1; then
+    report_pass "go test ./internal/monitor (suite-ownership reads are read-only)"
+else
+    report_fail "go test ./internal/monitor (suite-ownership reads)" \
+        "exit 0" "$(tail -25 "${TMP}/go-monitor.log")"
+    summary
+fi
+
 if uv run pytest tests/test_suite_rules.py -q >"${TMP}/py.log" 2>&1; then
     report_pass "pytest tests/test_suite_rules.py"
 else

@@ -97,10 +97,13 @@ func suiteOwnershipDB() (*sql.DB, error) {
 	if _, err := os.Stat(path); err != nil {
 		return nil, nil
 	}
-	db, err := sql.Open("sqlite", path)
+	db, err := sql.Open("sqlite", readOnlyDSN(path))
 	if err != nil {
 		return nil, fmt.Errorf("open %s: %w", path, err)
 	}
+	// One connection, so the pragma below applies to every query this handle
+	// makes rather than to whichever pooled connection happened to run first.
+	db.SetMaxOpenConns(1)
 	// Match the main connection's busy_timeout so a concurrent writer makes this
 	// read wait rather than fail — a spurious SQLITE_BUSY here would surface as a
 	// refusal, which is the one outcome a transient lock must not cause.
@@ -109,6 +112,23 @@ func suiteOwnershipDB() (*sql.DB, error) {
 		return nil, fmt.Errorf("configure %s: %w", path, err)
 	}
 	return db, nil
+}
+
+// readOnlyDSN renders path as a SQLite read-only URI, so the guard's handle
+// cannot write to the user's main database even by mistake. That is defense in
+// depth over "we only issue SELECTs", and it matters here specifically: this is
+// a candidate binary opening a database it does not own, which is the shape of
+// the E-1818 incident.
+//
+// A path containing ? or # is opened plainly instead. In the URI form SQLite
+// reads those as the query and fragment delimiters, and a # does not error — it
+// silently opens a DIFFERENT (empty) database, which would turn the guard off
+// without saying so. Correct-and-writable beats read-only-and-wrong.
+func readOnlyDSN(path string) string {
+	if strings.ContainsAny(path, "?#") {
+		return path
+	}
+	return "file:" + path + "?mode=ro"
 }
 
 // taskHasLanded reports whether the task has any task_landings row. A database
