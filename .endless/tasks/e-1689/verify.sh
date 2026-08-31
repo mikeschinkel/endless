@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1689 and records what was true when E-1689
+# landed. Edit it only if you ARE E-1689. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1689 verification script — the headless `--focal <id>` flag on
 # `endless-go session-status` is renamed to `--task <id>`:

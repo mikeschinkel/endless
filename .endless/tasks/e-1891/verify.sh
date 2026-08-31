@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1891 and records what was true when E-1891
+# landed. Edit it only if you ARE E-1891. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1891 verification script — one owning package for the task status vocabulary.
 #

@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1872 and records what was true when E-1872
+# landed. Edit it only if you ARE E-1872. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1872 verification — "Document the guide's memory-only conventions in one
 # pass".

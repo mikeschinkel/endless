@@ -148,7 +148,7 @@ func run(id string, keep bool) (code int, err error) {
 	if err != nil {
 		goto end
 	}
-	env, err = suiteEnv(env, id, root, runDir)
+	env, err = suiteEnv(env, id, root)
 	if err != nil {
 		goto end
 	}

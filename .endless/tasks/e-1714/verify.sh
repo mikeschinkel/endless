@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1714 and records what was true when E-1714
+# landed. Edit it only if you ARE E-1714. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1714 verification script — proves the E-1586 cwd-outside-worktree gate
 # (`enforceClaimedCwd`, internal/hookcmd/claude.go) actually FIRES end-to-end in

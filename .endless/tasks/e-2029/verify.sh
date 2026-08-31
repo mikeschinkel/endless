@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-2029 and records what was true when E-2029
+# landed. Edit it only if you ARE E-2029. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-2029 verification — the inter-session channel surface is gone, and nothing
 # that survived it is broken.

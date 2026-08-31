@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1756 and records what was true when E-1756
+# landed. Edit it only if you ARE E-1756. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1756 verification script — the project-management verbs moved under a new
 # `project` command group. Exercises end-to-end against the worktree's sandbox DB.

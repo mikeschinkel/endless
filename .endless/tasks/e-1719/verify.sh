@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1719 and records what was true when E-1719
+# landed. Edit it only if you ARE E-1719. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1719 verification script — the record-only landing slice: nullable
 # task_landings.branch, historical --ts, and the explicit-value task.landed emit

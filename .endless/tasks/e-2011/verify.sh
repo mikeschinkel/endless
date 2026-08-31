@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-2011 and records what was true when E-2011
+# landed. Edit it only if you ARE E-2011. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-2011 verification script — project paths are STORED home-relative, and the
 # Go hook and the Python CLI agree on that one spelling.

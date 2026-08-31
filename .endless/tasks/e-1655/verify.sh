@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1655 and records what was true when E-1655
+# landed. Edit it only if you ARE E-1655. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1655 verification script — confirms worktree + sandbox handling is
 # collapsed to the canonical `e-<id>` name and that named-alternate `-slug`

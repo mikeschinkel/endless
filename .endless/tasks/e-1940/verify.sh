@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1940 and records what was true when E-1940
+# landed. Edit it only if you ARE E-1940. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1940 verification script — landed-state detection reads the RECORDED
 # landing, and a probe that cannot run says so instead of saying "you're clear".

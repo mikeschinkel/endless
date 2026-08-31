@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1865 and records what was true when E-1865
+# landed. Edit it only if you ARE E-1865. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1865 verification — "Add `task unsettled` to explain why a worktree is
 # unsettled (modified vs unlanded)".

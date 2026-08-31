@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1757 and records what was true when E-1757
+# landed. Edit it only if you ARE E-1757. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1757 verification script — the unified `project init` command. `project init`
 # registers the DB row AND scaffolds on-disk files in one idempotent pass, and

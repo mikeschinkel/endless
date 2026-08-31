@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1880 and records what was true when E-1880
+# landed. Edit it only if you ARE E-1880. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1880 verification — `endless task report` no longer contradicts the handoff
 # contract it serves.

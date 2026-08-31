@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1969 and records what was true when E-1969
+# landed. Edit it only if you ARE E-1969. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1969 verification script — `sessions.active_task_id` is now
 # `sessions.task_id`, `sessions.active_epic_id` is `sessions.epic_id`,

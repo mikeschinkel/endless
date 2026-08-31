@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1803 and records what was true when E-1803
+# landed. Edit it only if you ARE E-1803. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1803 verification script — the report channel enforcement (Arm 1) + coverage
 # (Arm 2) reinforcement, plus mid-session usability of `endless task report`.

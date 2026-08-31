@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1685 and records what was true when E-1685
+# landed. Edit it only if you ARE E-1685. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1685 verification script — exercises the focal task's direct dependents
 # (what it unblocks) in `session next`, end-to-end against the worktree's

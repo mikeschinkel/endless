@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-2005 and records what was true when E-2005
+# landed. Edit it only if you ARE E-2005. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-2005 verification script — a session is told when a task it holds is landed.
 #

@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1898 and records what was true when E-1898
+# landed. Edit it only if you ARE E-1898. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1898 verification — liveness is OBSERVED, never inferred; the dead-pane
 # reaper is gone.

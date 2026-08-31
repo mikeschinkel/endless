@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1745 and records what was true when E-1745
+# landed. Edit it only if you ARE E-1745. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1745 verification script — proves the worktree reaper now auto-removes
 # stranded orphan worktree dirs (non-empty, no .git, untracked by git) via a

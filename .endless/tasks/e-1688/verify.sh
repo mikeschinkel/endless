@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1688 and records what was true when E-1688
+# landed. Edit it only if you ARE E-1688. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1688 verification script — `session next` is split into an accurately-named
 # pair and the colliding E-1312 verb is freed:

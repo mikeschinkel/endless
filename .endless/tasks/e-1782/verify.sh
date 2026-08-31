@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1782 and records what was true when E-1782
+# landed. Edit it only if you ARE E-1782. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1782 verification — `endless guide tasks` documents the `endless task report`
 # command and the report-by-default posture. Before this task the guide had zero

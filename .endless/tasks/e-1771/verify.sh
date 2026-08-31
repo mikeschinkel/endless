@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1771 and records what was true when E-1771
+# landed. Edit it only if you ARE E-1771. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1771 verification — `endless task report <id>`: the steering-prompt
 # reporting command. The command computes the facts it can (status, follow-ups,

@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1832 and records what was true when E-1832
+# landed. Edit it only if you ARE E-1832. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1832 verification — README.md is refocused on onboarding a new human:
 # what Endless is, how to install it, and how to start using it. The exhaustive

@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1776 and records what was true when E-1776
+# landed. Edit it only if you ARE E-1776. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1776 verification — `endless session resume <ref>` relaunches a lost Claude
 # session in the CURRENT tmux pane: resolve <ref> (task id off the tmux tab, or

@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1859 and records what was true when E-1859
+# landed. Edit it only if you ARE E-1859. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1859 verification — the description-sufficiency triager.
 #

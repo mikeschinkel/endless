@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1966 and records what was true when E-1966
+# landed. Edit it only if you ARE E-1966. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1966 verification — the Python wind-down report nudge obeys `report_gate`,
 # and harness detection has exactly one implementation.

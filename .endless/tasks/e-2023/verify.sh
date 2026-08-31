@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-2023 and records what was true when E-2023
+# landed. Edit it only if you ARE E-2023. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-2023 verification — the own-task-only rule is enforced at the verify runner.
 #

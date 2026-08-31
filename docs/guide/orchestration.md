@@ -84,6 +84,23 @@ endless worktree current                    # what worktree is cwd in (or "none"
 endless worktree for-task <id>              # resolve a task ID to its path
 ```
 
+### Stale worktrees (`worktree sync`)
+
+A worktree branched before a change landed does not have that change, and keeps
+not having it until someone rebases. A fix to a file every task shares can
+therefore reach `main` and reach no working checkout at all — invisibly, in
+every worktree at once.
+
+```bash
+endless worktree sync                       # report which worktrees are behind
+endless worktree sync --apply               # rebase the ones that safely can be
+```
+
+Dry run by default. It skips any worktree holding uncommitted changes (that is
+a session's in-flight work) and the one you are standing in, aborts and reports
+a rebase that conflicts, and never removes anything. A worktree it cannot sweep
+is left exactly as it was, for its own session to rebase in place.
+
 ### Why a worktree is unsettled (`task unsettled`)
 
 `session status` marks a row with **◆** when its worktree is *unsettled*. That is a union of two sub-states which need **opposite fixes**, so the marker alone doesn't tell you what to do:

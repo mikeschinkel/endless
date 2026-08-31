@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1617 and records what was true when E-1617
+# landed. Edit it only if you ARE E-1617. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1617 verification script — exercises the epic verb-gate exemption
 # (ED-1511) end-to-end against the worktree's sandbox DB.

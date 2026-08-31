@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1866 and records what was true when E-1866
+# landed. Edit it only if you ARE E-1866. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1866 verification — session provenance on `endless task show`.
 #

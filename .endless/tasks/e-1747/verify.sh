@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1747 and records what was true when E-1747
+# landed. Edit it only if you ARE E-1747. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1747 verification — every multiline document field is mirrored to a
 # committed `.endless/<subdir>/E-NNN.md` (or ED-NNN.md) file, not just the plan.

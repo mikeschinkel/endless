@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1640 and records what was true when E-1640
+# landed. Edit it only if you ARE E-1640. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1640 verification script — confirms duplicate session rows are no longer
 # minted per Claude launch when TMUX_PANE is empty.

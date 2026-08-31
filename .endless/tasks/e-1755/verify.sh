@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1755 and records what was true when E-1755
+# landed. Edit it only if you ARE E-1755. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1755 verification script — confirms the obsolete `.endless/sessions/`
 # companion-file path is fully pruned and the live session commands still work

@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1694 and records what was true when E-1694
+# landed. Edit it only if you ARE E-1694. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1694 verification script — exercises the spawner/parent split in
 # `session status`: the ↑ parent row is the focal's REAL task-tree parent

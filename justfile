@@ -575,3 +575,33 @@ git-push msg:
     just git-commit "{{ msg }}"
     git push
 
+
+# Put the DO-NOT-EDIT banner on every verify suite that lacks one (E-2090).
+#
+# The banner names the suite's OWN task, so an agent meets the do-not-edit rule
+# when it opens the file rather than after it has edited it — the interlock the
+# E-1916 PreToolUse arm enforces. It is inserted below the shebang and touches
+# nothing else: no assertion, fixture or message changes.
+#
+# Idempotent by construction: a suite that already carries the banner is
+# skipped, so re-running adds no second copy. tests/test_suite_guard.py asserts
+# the invariant this recipe establishes, which is what catches a suite written
+# without one rather than requiring anyone to remember to run this.
+suite-banner:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    added=0; had=0
+    for f in .endless/tasks/e-*/verify.sh; do
+        id="$(basename "$(dirname "${f}")")"; id="E-${id#e-}"
+        if grep -q '^# ── DO NOT EDIT' "${f}"; then had=$((had + 1)); continue; fi
+        awk -v id="${id}" 'NR==1 {
+            print
+            print "# ── DO NOT EDIT ─────────────────────────────────────────────────────"
+            print "# This suite belongs to " id " and records what was true when " id
+            print "# landed. Edit it only if you ARE " id ". If your change breaks an"
+            print "# assertion here, leave it alone — see .endless/tasks/CLAUDE.md."
+            next
+        } { print }' "${f}" > "${f}.tmp" && mv "${f}.tmp" "${f}"
+        added=$((added + 1))
+    done
+    echo "suite-banner: ${added} banner(s) added, ${had} already present"

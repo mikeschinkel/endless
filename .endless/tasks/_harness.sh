@@ -8,13 +8,11 @@
 # vocabulary these suites have always shared, and adds two things a copied
 # block could not:
 #
-#   1. It REFUSES when the suite was not started by `endless task verify`.
-#      A suite is a land-time gate for ONE task; running one from another
-#      task's worktree is meaningless at best (its fixtures were pinned to the
-#      moment it landed) and destructive at worst (a suite that drives the hook
-#      binary writes into the real database). The runner is the only caller
-#      that knows which task it is running and can refuse a foreign one, so
-#      the harness insists on being reached through it.
+#   1. It sources _guard.sh, which REFUSES a suite run from another task's
+#      worktree or outside the runner's isolation. Sourcing it here rather
+#      than repeating the check is what lets a suite carry one line and get
+#      both; see _guard.sh for why neither refusal trusts an environment
+#      variable.
 #
 #   2. It emits TAP alongside the human-readable output, so the runner
 #      normalizes each assertion into the same CTRF report a manifest suite
@@ -24,17 +22,10 @@
 #
 # See .endless/tasks/CLAUDE.md for the rules these suites live under.
 
-if [[ -z "${ENDLESS_VERIFY_RUN:-}" ]]; then
-    printf '%s\n' \
-        "This verification suite must be run through the verify runner:" \
-        "" \
-        "    endless task verify E-<id>" \
-        "" \
-        "Running it directly skips the isolation that keeps a suite out of your" \
-        "real config and the main database, and skips the check that it is YOUR" \
-        "task's suite. See .endless/tasks/CLAUDE.md." >&2
-    exit 2
-fi
+# The guard, FIRST, before this file defines anything. A suite reaches the
+# harness on its first executable line, so sourcing the guard here means the
+# refusal has had its say before a single assertion, fixture or `cd` exists.
+source "$(dirname "${BASH_SOURCE[0]}")/_guard.sh"
 
 PASS_COUNT=0
 FAIL_COUNT=0

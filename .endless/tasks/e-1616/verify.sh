@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1616 and records what was true when E-1616
+# landed. Edit it only if you ARE E-1616. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1616 verification script — exercises the maybe-parent gate (ED-1510)
 # end-to-end against the worktree's sandbox DB.

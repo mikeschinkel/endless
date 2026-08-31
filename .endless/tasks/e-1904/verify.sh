@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1904 and records what was true when E-1904
+# landed. Edit it only if you ARE E-1904. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1904 verification — a worktree's dependents are cleaned up when the
 # worktree is reaped, and NOTHING still referenced is ever destroyed.

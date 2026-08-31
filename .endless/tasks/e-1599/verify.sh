@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1599 and records what was true when E-1599
+# landed. Edit it only if you ARE E-1599. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1599 verification script — exercises the analysis-rendering surface and the
 # --all-fields flag end-to-end against the worktree's sandbox DB.

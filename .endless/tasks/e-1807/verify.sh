@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1807 and records what was true when E-1807
+# landed. Edit it only if you ARE E-1807. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1807 verification script — exercises the spawn/claim ownership guard's
 # dead-pane self-heal: a ghost owner (a non-ended `sessions` row pointing at a

@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1915 and records what was true when E-1915
+# landed. Edit it only if you ARE E-1915. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1915 verification script — `task remove` no longer orphans relation rows.
 #

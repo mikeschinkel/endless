@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1858 and records what was true when E-1858
+# landed. Edit it only if you ARE E-1858. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1858 verification — the deprecated ".endless/verbs.json" glob is removed from
 # BOTH auto-managed mirror lists (the E-1268 migration is complete: verbs.json is

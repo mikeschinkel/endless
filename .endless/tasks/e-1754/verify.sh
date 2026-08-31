@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1754 and records what was true when E-1754
+# landed. Edit it only if you ARE E-1754. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1754 verification — the one-shot backfill materializes committed
 # .endless/{plans,outcomes,analyses}/E-NNN.md + .endless/decisions/ED-NNN.md

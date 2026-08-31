@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1645 and records what was true when E-1645
+# landed. Edit it only if you ARE E-1645. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1645 verification script — confirms `endless task spawn --reopen` does the
 # right thing: a liveness guard that navigates to a live owner instead of

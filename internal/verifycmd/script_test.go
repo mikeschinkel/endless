@@ -54,11 +54,16 @@ func TestRun_ScriptSuite_ExitCodeIsTheVerdict(t *testing.T) {
 	}
 }
 
-// The runner exports the marker and the TAP destination, and nothing else needs
-// to be true for a harness-sourcing suite to work.
-func TestRun_ScriptSuite_ExportsTheMarkerAndTAPPath(t *testing.T) {
+// The runner exports the TAP destination and the task id, and nothing else
+// needs to be true for a harness-sourcing suite to work.
+//
+// ENDLESS_VERIFY_RUN is asserted ABSENT on purpose. It was a "the runner
+// started you" marker, which is a claim a caller can make about itself for the
+// price of one `export`; E-2090 removed it rather than leave a variable that
+// reads as permission. Nothing may reintroduce it quietly.
+func TestRun_ScriptSuite_ExportsTAPPathAndTaskID(t *testing.T) {
 	enterScriptSuite(t, "E-2", `#!/usr/bin/env bash
-[[ -n "${ENDLESS_VERIFY_RUN:-}" ]] || exit 10
+[[ -z "${ENDLESS_VERIFY_RUN:-}" ]] || exit 10
 [[ -n "${ENDLESS_VERIFY_TAP:-}" ]] || exit 11
 [[ "${ENDLESS_VERIFY_TASK:-}" == "E-2" ]] || exit 12
 exit 0
@@ -68,7 +73,7 @@ exit 0
 		t.Fatalf("run: %v", err)
 	}
 	if code != 0 {
-		t.Fatalf("exit code = %d; the suite reports which variable was missing (10=RUN, 11=TAP, 12=TASK)", code)
+		t.Fatalf("exit code = %d (10=RUN marker is back, 11=TAP missing, 12=TASK wrong)", code)
 	}
 }
 
@@ -152,10 +157,21 @@ func TestRun_NoSuiteNamesBothFilenames(t *testing.T) {
 
 // The suite runs under the same isolation the manifest path gets: a temp HOME
 // and XDG_CONFIG_HOME, so it cannot read or pollute the real ones.
+//
+// The property is asserted on the environment's actual shape rather than
+// against the old run-dir marker, and it is deliberately the SAME property
+// .endless/tasks/_guard.sh refuses on: no Endless config is reachable from
+// here. If the runner ever stopped isolating, the guard would start refusing
+// every suite, so pinning both to one statement is what keeps that from
+// becoming a surprise.
 func TestRun_ScriptSuite_RunsIsolated(t *testing.T) {
 	enterScriptSuite(t, "E-9", `#!/usr/bin/env bash
-[[ "$HOME" == "$ENDLESS_VERIFY_RUN"/* ]] || exit 20
-[[ "$XDG_CONFIG_HOME" == "$ENDLESS_VERIFY_RUN"/* ]] || exit 21
+[[ -d "$HOME" ]] || exit 20
+[[ -d "$XDG_CONFIG_HOME" ]] || exit 21
+[[ "$HOME" != "$XDG_CONFIG_HOME" ]] || exit 22
+[[ "$(dirname "$HOME")" == "$(dirname "$XDG_CONFIG_HOME")" ]] || exit 23
+[[ ! -d "$HOME/.config/endless" ]] || exit 24
+[[ ! -d "$XDG_CONFIG_HOME/endless" ]] || exit 25
 exit 0
 `)
 	code, err := run("E-9", false)
@@ -163,7 +179,7 @@ exit 0
 		t.Fatalf("run: %v", err)
 	}
 	if code != 0 {
-		t.Errorf("exit code = %d; the suite reports what was not isolated (20=HOME, 21=XDG)", code)
+		t.Errorf("exit code = %d; the suite reports what was not isolated (20=HOME, 21=XDG, 22=same dir, 23=different parents, 24/25=an endless config is reachable)", code)
 	}
 }
 

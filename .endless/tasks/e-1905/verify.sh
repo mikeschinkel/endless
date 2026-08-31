@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1905 and records what was true when E-1905
+# landed. Edit it only if you ARE E-1905. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1905 verification — remove the vestigial `sessions.transcript_path` column
 # and the `endless session reimport` escape hatch.

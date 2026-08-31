@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-2051 and records what was true when E-2051
+# landed. Edit it only if you ARE E-2051. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-2051 verification — LESSONS.md follows the verbs.jsonl model.
 #

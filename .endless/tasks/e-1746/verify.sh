@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1746 and records what was true when E-1746
+# landed. Edit it only if you ARE E-1746. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1746 verification — colorized markdown rendering for `endless task show`.
 #

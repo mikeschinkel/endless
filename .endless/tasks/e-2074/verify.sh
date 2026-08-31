@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-2074 and records what was true when E-2074
+# landed. Edit it only if you ARE E-2074. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-2074 verification — background-agent support is gone from Endless, and the
 # four `sessions` columns that outlived their reasons went with it.

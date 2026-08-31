@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1602 and records what was true when E-1602
+# landed. Edit it only if you ARE E-1602. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1602 verification script — exercises the verify.toml manifest schema and
 # the .endless/tasks/ discovery convention (Go package internal/verify).

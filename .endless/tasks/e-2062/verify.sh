@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-2062 and records what was true when E-2062
+# landed. Edit it only if you ARE E-2062. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-2062 verification — `rebuild-db --confirm` refuses deliberately.
 #

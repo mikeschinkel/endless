@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1806 and records what was true when E-1806
+# landed. Edit it only if you ARE E-1806. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1806 verification script — confirms the `completed` status-gate refusal (and
 # the `task complete --help` docstring) drop internal jargon and speak plain

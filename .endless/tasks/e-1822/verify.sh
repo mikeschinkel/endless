@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1822 and records what was true when E-1822
+# landed. Edit it only if you ARE E-1822. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1822 verification script — deliver a task's type handoff on a claim into an
 # already-running session, not only on spawn.

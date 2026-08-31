@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1711 and records what was true when E-1711
+# landed. Edit it only if you ARE E-1711. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1711 verification script — confirms drift_detection (E-917) and the orphaned
 # suggestions framework (E-918) are fully excised.

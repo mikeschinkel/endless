@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1605 and records what was true when E-1605
+# landed. Edit it only if you ARE E-1605. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1605 verification script — proves the txtar/testscript executable form and the
 # two first reference verification suites (E-1758 and E-1603) end to end.

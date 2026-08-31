@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1967 and records what was true when E-1967
+# landed. Edit it only if you ARE E-1967. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1967 verification script — `endless task spawn` refuses a task any session
 # already claimed, and the history that refusal reads is durable.

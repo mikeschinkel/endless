@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1533 and records what was true when E-1533
+# landed. Edit it only if you ARE E-1533. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1533 verification — `endless decision update <id>` edits a decision's
 # title and/or description IN PLACE (no new ID, no rejected row), re-emitting

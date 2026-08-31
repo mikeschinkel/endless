@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1465 and records what was true when E-1465
+# landed. Edit it only if you ARE E-1465. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1465 verification script — exercises `endless session next` end-to-end
 # against an ISOLATED, synthetic database.

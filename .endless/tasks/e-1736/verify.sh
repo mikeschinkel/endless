@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1736 and records what was true when E-1736
+# landed. Edit it only if you ARE E-1736. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1736 verification — worktree land refuses when the task branch's
 # commits touch .endless/db-ledger/.

@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1657 and records what was true when E-1657
+# landed. Edit it only if you ARE E-1657. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1657 verification script — confirms `brainstorm` is a first-class task type:
 # the requester-led sibling of research (ED-1516).

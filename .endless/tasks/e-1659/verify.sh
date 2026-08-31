@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1659 and records what was true when E-1659
+# landed. Edit it only if you ARE E-1659. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1659 verification script — confirms the task-TYPE slug rename:
 #   task -> todo    (label Task -> Todo)

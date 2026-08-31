@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1628 and records what was true when E-1628
+# landed. Edit it only if you ARE E-1628. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1628 verification — worktree land / db apply-change / db backup must target
 # the REAL (main) DB even when invoked from a self-dev session whose

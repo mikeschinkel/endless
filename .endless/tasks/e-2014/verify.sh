@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-2014 and records what was true when E-2014
+# landed. Edit it only if you ARE E-2014. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-2014 verification script — CLAUDE.md is the minimized WHAT-only rewrite,
 # every rule left in it is true, and nothing it dropped was lost.

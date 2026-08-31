@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-2067 and records what was true when E-2067
+# landed. Edit it only if you ARE E-2067. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-2067 verification — a parent cycle is refused on `task update`, not only on
 # `task move`.

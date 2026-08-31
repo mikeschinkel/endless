@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1001 and records what was true when E-1001
+# landed. Edit it only if you ARE E-1001. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1001 verification script — exercises the --xxx (inline) / --xxx-file (path)
 # content-flag convention end-to-end against the worktree's sandbox DB.

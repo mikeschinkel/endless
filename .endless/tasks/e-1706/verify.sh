@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1706 and records what was true when E-1706
+# landed. Edit it only if you ARE E-1706. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1706 verification suite — the SINGLE entry point for verifying E-1706.
 #

@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1750 and records what was true when E-1750
+# landed. Edit it only if you ARE E-1750. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1750 verification — the session-status legend is DYNAMIC: it lists only the
 # glyphs for actions/decorations actually present in the current frame, with no

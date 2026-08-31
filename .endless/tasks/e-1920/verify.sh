@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1920 and records what was true when E-1920
+# landed. Edit it only if you ARE E-1920. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1920 verification script — superseded and obsolete end states for decisions.
 #

@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1768 and records what was true when E-1768
+# landed. Edit it only if you ARE E-1768. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1768 verification — the focal task's OWN uncommitted work is suppressed from
 # the `session status` anomaly expansion, while every genuine kind still surfaces

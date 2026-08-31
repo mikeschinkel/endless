@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1953 and records what was true when E-1953
+# landed. Edit it only if you ARE E-1953. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1953 verification — `task report` rebuilt as an enforced minimizer.
 #

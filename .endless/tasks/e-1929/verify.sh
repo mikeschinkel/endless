@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1929 and records what was true when E-1929
+# landed. Edit it only if you ARE E-1929. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1929 verification script — task removal retains the row and filters it out
 # of every read path.

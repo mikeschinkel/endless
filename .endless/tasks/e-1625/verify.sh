@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1625 and records what was true when E-1625
+# landed. Edit it only if you ARE E-1625. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1625 verification script — confirms the `just verify` self_dev recipe is a
 # thin wrapper around the PRODUCT verb `endless task verify` (E-1603) and holds

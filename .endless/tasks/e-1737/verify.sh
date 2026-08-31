@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1737 and records what was true when E-1737
+# landed. Edit it only if you ARE E-1737. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1737 verification — --db must be REJECTED in a project that is not self-dev,
 # instead of silently mkdir'ing a stray sandbox endless.db in the cache.

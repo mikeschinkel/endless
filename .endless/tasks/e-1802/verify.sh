@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1802 and records what was true when E-1802
+# landed. Edit it only if you ARE E-1802. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1802 verification script — exercises the NO-GOAL `session status` view:
 # when a session has no claimed task (active_task_id NULL), it still lists the

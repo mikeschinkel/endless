@@ -14,16 +14,13 @@ import (
 // between the runner and a suite that sources the shared harness, and they are
 // the reason a harness-sourcing script cannot be run any other way.
 const (
-	// EnvRunMarker proves the suite was started BY the runner. The shared
-	// harness refuses when it is absent, so a direct `./verify.sh` exits
-	// non-zero with a message naming the sanctioned command instead of running
-	// outside the isolation and the own-task-only guard.
-	//
-	// It is deliberately not documented as a user-settable escape. An override
-	// an agent can set is an override an agent can rationalize, which is the
-	// exact failure this whole task exists to stop. Its value is the per-run
-	// temp directory, which is useful when debugging and useless as a bypass.
-	EnvRunMarker = "ENDLESS_VERIFY_RUN"
+	// There is deliberately no "you were started by the runner" marker here.
+	// ENDLESS_VERIFY_RUN was one, and it was a claim rather than a check:
+	// nothing ever read its value, one `export` satisfied it, and its presence
+	// stood in for enforcement that was never built behind it. E-2090 replaced
+	// it with .endless/tasks/_guard.sh, which asks the two questions directly —
+	// is this suite in its own task's worktree, and is a real config reachable
+	// from here — neither of which the caller can answer for itself.
 
 	// EnvTAPPath is where a suite writes its TAP stream. Writing to a FILE
 	// rather than stdout is what lets the suite keep its own human-readable
@@ -82,7 +79,7 @@ func runScriptSuite(id string, script dt.Filepath, root dt.DirPath, keep bool) (
 		goto end
 	}
 
-	env, err = suiteEnv(env, id, root, runDir)
+	env, err = suiteEnv(env, id, root)
 	if err != nil {
 		goto end
 	}
@@ -114,16 +111,20 @@ end:
 	return code, err
 }
 
-// suiteEnv appends the variables every suite gets, in EITHER form: the marker
-// that proves the runner started it, the task id, and the suite's own
-// directory. They are added in one place rather than at each call site because
-// a variable a script suite can rely on and a manifest suite cannot is a
-// difference nobody would predict from the outside.
+// suiteEnv appends the variables every suite gets, in EITHER form: the task id
+// and the suite's own directory. They are added in one place rather than at
+// each call site because a variable a script suite can rely on and a manifest
+// suite cannot is a difference nobody would predict from the outside.
+//
+// Neither carries any authority. What a suite is ALLOWED to do is decided by
+// _guard.sh from facts no environment can restate — the path the running file
+// sits at, and whether a real config is reachable — so there is nothing here a
+// caller could set to grant itself permission.
 //
 // EnvTAPPath is deliberately NOT here. It names where a single script suite
 // writes its result stream, and a manifest's checks each declare and emit their
 // own — so exporting it there would promise a channel nothing reads.
-func suiteEnv(env []string, id string, root, runDir dt.DirPath) (out []string, err error) {
+func suiteEnv(env []string, id string, root dt.DirPath) (out []string, err error) {
 	var dir dt.DirPath
 	var ok bool
 
@@ -132,7 +133,6 @@ func suiteEnv(env []string, id string, root, runDir dt.DirPath) (out []string, e
 		goto end
 	}
 	out = append(env,
-		EnvRunMarker+"="+string(runDir),
 		EnvTaskID+"="+verify.NormalizeTaskID(id),
 	)
 	if ok {

@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-986 and records what was true when E-986
+# landed. Edit it only if you ARE E-986. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-986 land-readiness gate — pluggable post-worktree-create hook.
 #

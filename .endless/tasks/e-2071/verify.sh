@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-2071 and records what was true when E-2071
+# landed. Edit it only if you ARE E-2071. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-2071 verification — a truncated list announces itself instead of being cut
 # off silently.

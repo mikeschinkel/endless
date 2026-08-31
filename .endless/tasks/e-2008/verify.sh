@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-2008 and records what was true when E-2008
+# landed. Edit it only if you ARE E-2008. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-2008 verification script — an empty --<field>-file is refused, never written.
 #

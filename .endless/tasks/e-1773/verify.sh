@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1773 and records what was true when E-1773
+# landed. Edit it only if you ARE E-1773. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1773 verification — the handoff spawn-prompt templates now carry two
 # additions to the reporting discipline E-1759 established:

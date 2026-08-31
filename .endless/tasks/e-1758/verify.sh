@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1758 and records what was true when E-1758
+# landed. Edit it only if you ARE E-1758. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1758 verification — `endless worktree check` (and its Go core
 # `session-query worktree-anomalies`) reports ONLY genuine git/worktree handoff

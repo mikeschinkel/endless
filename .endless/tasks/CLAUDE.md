@@ -2,7 +2,8 @@
 
 One directory per task: `.endless/tasks/e-<id>/`, holding a `verify.toml`
 manifest, a `verify.sh` script, or both. `_harness.sh` is the shared shell
-harness a script suite sources; it belongs to no task.
+harness a script suite sources, and `_guard.sh` is the guard the harness
+sources; both belong to no task.
 
 ## Run one with the runner, never by hand
 
@@ -16,13 +17,23 @@ or the main database), and refuses a task's suite that is not yours. Executing a
 script directly skips all of it — which is why every suite here refuses to run
 that way.
 
-It exports three things into a suite's environment:
+It exports two things into a suite's environment:
 
 | Variable | What it is |
 |----------|------------|
 | `ENDLESS_VERIFY_TASK` | the task being verified, `E-NNNN` |
 | `ENDLESS_VERIFY_DIR`  | this suite's own directory |
-| `ENDLESS_VERIFY_RUN`  | the per-run temp dir; its presence is what proves the runner started you |
+
+Neither grants permission, and there is no variable that does. `_guard.sh`
+decides what a suite may do from facts no environment can restate: the path the
+running file sits at, and whether a real config is reachable from it. It refuses
+a suite running from another task's worktree, and it refuses a direct run —
+because a direct run has your real `HOME`, and one of them wrote into the main
+database and took down session tracking.
+
+There was once a marker variable whose presence meant "the runner started you".
+One `export` satisfied it, so it enforced nothing while looking like it did.
+Do not add another.
 
 Read a file you ship beside your suite from `$ENDLESS_VERIFY_DIR`, never from a
 path you type out. A hand-written path has to match a directory-casing
@@ -52,6 +63,9 @@ change rewrites that history. If your change alters a string or a behaviour a
 landed suite asserted, leave the suite alone — its owner's own run will tell
 them, on their schedule, with their context.
 
+Every suite says so in its own first lines, naming the task it belongs to, so
+you meet the rule when you open the file rather than after you have edited it.
+
 Yours is `.endless/tasks/e-<your-task>/`, and nothing else in this tree.
 
 ## Coverage that must survive belongs elsewhere
@@ -65,8 +79,13 @@ is expected and accepted; bit rot there is a bug.
 A new script suite sources the harness and calls `summary` last:
 
     #!/usr/bin/env bash
-    set -u
+    # ── DO NOT EDIT ─────────────────────────────────────────────────────
+    # This suite belongs to E-101 and records what was true when E-101
+    # landed. Edit it only if you ARE E-101. If your change breaks an
+    # assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
     source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
+
+    set -u
 
     section "What this proves"
     assert_eq "the thing does the thing" "expected" "$(the-thing)"

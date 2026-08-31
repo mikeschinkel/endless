@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-2002 and records what was true when E-2002
+# landed. Edit it only if you ARE E-2002. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-2002 verification script — the Go hook and the Python CLI must normalize a
 # project path to the same string.

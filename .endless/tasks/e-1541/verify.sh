@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1541 and records what was true when E-1541
+# landed. Edit it only if you ARE E-1541. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1541 verification script — exercises epic status auto-derivation end-to-end
 # against the worktree's sandbox DB, through the real `endless` CLI.

@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1683 and records what was true when E-1683
+# landed. Edit it only if you ARE E-1683. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1683 verification suite — the SINGLE entry point for verifying E-1683.
 #

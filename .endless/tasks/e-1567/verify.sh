@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1567 and records what was true when E-1567
+# landed. Edit it only if you ARE E-1567. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1567 verification script — exercises the children-state breakdown that gets
 # computed and injected into the epic spawn handoff at render time, end-to-end

@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1598 and records what was true when E-1598
+# landed. Edit it only if you ARE E-1598. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1598 verification script — confirms the internal/hookcmd
 # shouldSkipForWorktreeAt unit tests are green and pins the fix in place.

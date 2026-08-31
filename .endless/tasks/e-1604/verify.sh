@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1604 and records what was true when E-1604
+# landed. Edit it only if you ARE E-1604. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1604 verification script — exercises the vendored CTRF-subset result writer
 # and the native normalizers (go test -json, pytest JSON, TAP) in the Go package

@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-2000 and records what was true when E-2000
+# landed. Edit it only if you ARE E-2000. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-2000 verification — a session records lessons in its OWN worktree, and the
 # log lives in .endless/, not .claude/.

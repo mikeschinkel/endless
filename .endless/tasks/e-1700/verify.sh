@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1700 and records what was true when E-1700
+# landed. Edit it only if you ARE E-1700. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1700 verification script — confirms a spawned worker session's
 # active_task_id no longer ends up NULL (which made its tmux status line show

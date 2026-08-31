@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1939 and records what was true when E-1939
+# landed. Edit it only if you ARE E-1939. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1939 verification script — the web dashboard and its build stack are gone.
 #

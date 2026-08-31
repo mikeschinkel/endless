@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1729 and records what was true when E-1729
+# landed. Edit it only if you ARE E-1729. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1729 verification script — ledger-target routing follows the active DB
 # context (ED-1525): main context → project ledger, auto-committed on main

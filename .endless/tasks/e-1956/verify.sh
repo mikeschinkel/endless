@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1956 and records what was true when E-1956
+# landed. Edit it only if you ARE E-1956. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1956 verification script — `replaced_by` inline with terminal status,
 # `obsolete` guarded on shipped work.

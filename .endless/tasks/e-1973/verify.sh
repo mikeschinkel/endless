@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1973 and records what was true when E-1973
+# landed. Edit it only if you ARE E-1973. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1973 verification — the appeal budget is enforcement state, so it must not
 # refuse where nothing enforces.

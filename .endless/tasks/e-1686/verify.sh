@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1686 and records what was true when E-1686
+# landed. Edit it only if you ARE E-1686. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1686 verification script — proves a session row stuck 'ended' is revived to
 # a live state by the SAME session's continued activity, while the E-1530

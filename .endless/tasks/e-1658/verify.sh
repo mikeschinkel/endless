@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1658 and records what was true when E-1658
+# landed. Edit it only if you ARE E-1658. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1658 verification — gate task TYPE against verb CATEGORY; replace the boolean
 # `completable` verb flag with a `category` set (action | investigation) plus a

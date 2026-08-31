@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1749 and records what was true when E-1749
+# landed. Edit it only if you ARE E-1749. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1749 verification script — asserts the `endless guide` happy path no longer
 # claims `endless worktree land` removes the worktree, and instead describes the

@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1611 and records what was true when E-1611
+# landed. Edit it only if you ARE E-1611. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1611 verification script — exercises the verify manifest's `setup` field and
 # the project-level .endless/verify.toml config layering (Go package

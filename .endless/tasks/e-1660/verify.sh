@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1660 and records what was true when E-1660
+# landed. Edit it only if you ARE E-1660. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1660 verification script — confirms `just land`'s record-landing step no
 # longer trips the task_types integrity gate when a branch ADDS a mirrored-enum

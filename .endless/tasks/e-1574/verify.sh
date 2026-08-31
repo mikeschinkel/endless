@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1574 and records what was true when E-1574
+# landed. Edit it only if you ARE E-1574. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1574 verification script — confirms the research-task field model is
 # documented in the endless guide (`endless guide tasks`), that the two

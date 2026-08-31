@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1695 and records what was true when E-1695
+# landed. Edit it only if you ARE E-1695. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1695 verification script — confirms the epic handoff template no longer
 # tells the coordinator to dispatch children itself (and no longer via `--bg`),

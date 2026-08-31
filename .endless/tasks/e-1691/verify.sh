@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1691 and records what was true when E-1691
+# landed. Edit it only if you ARE E-1691. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1691 verification script — exercises the focal task's direct CHILDREN
 # (tasks with parent_id = focal) in `session next`, end-to-end against the

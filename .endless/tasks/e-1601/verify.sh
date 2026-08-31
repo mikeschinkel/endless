@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1601 and records what was true when E-1601
+# landed. Edit it only if you ARE E-1601. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1601 verification script — exercises the flag-gated rendering of `task
 # show`'s large fields (outcome / text / analysis) end-to-end against the

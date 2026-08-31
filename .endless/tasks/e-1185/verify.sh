@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1185 and records what was true when E-1185
+# landed. Edit it only if you ARE E-1185. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1185 verification script — the `duplicates` / `duplicated_by` relation type.
 #

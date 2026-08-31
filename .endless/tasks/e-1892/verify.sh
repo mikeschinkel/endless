@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1892 and records what was true when E-1892
+# landed. Edit it only if you ARE E-1892. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1892 verification — `session monitor` re-resolves its focal task until one
 # appears, instead of resolving once at startup and showing the claim/bind hint

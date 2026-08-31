@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1576 and records what was true when E-1576
+# landed. Edit it only if you ARE E-1576. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1576 verification script — confirms `endless task show` / `task relations`
 # render the reformatted, direction-disambiguated links section.

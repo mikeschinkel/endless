@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1709 and records what was true when E-1709
+# landed. Edit it only if you ARE E-1709. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1709 verification script — `just land` rebuilds the worktree's endless-go
 # up-front, before the steps that consume it, so a stale binary can't break the

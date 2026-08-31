@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1368 and records what was true when E-1368
+# landed. Edit it only if you ARE E-1368. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1368 verification script — proves the endless-go binary self-detects the
 # per-worktree sandbox from cwd (replacing the deleted bin-sandbox/ wrappers).

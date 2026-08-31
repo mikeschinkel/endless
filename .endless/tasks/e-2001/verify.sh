@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-2001 and records what was true when E-2001
+# landed. Edit it only if you ARE E-2001. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-2001 verification script — UserPromptSubmit and SessionStart additionalContext
 # must reach the agent.

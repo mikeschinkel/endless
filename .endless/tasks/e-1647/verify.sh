@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1647 and records what was true when E-1647
+# landed. Edit it only if you ARE E-1647. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1647 verification script — confirms the flat, type-agnostic respawn handoff
 # template exists and renders correctly through the REAL render path.

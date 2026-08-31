@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1856 and records what was true when E-1856
+# landed. Edit it only if you ARE E-1856. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1856 verification script — proves the SessionStart cwd auto-bind no longer
 # silently repoints a session's active_task_id, closing the two defects that

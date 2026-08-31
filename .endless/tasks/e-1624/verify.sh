@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1624 and records what was true when E-1624
+# landed. Edit it only if you ARE E-1624. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1624 verification script — confirms sessions.active_epic_id is populated on
 # interactive task claim and cleared on release.

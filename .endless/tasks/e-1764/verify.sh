@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1764 and records what was true when E-1764
+# landed. Edit it only if you ARE E-1764. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1764 verification — two shipped, user-facing docs no longer hardcode a
 # personal name where they should generically reference "the user".

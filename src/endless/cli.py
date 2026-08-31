@@ -3586,6 +3586,26 @@ def worktree_reap():
     _reap_stale_worktrees(_project_root())
 
 
+@worktree_cmd.command("sync")
+@click.option("--apply", is_flag=True,
+              help="Actually rebase. Without it, sync only reports what it would do.")
+def worktree_sync(apply):
+    """Rebase this project's task worktrees onto the default branch.
+
+    A worktree branched before a change landed does not have that change until
+    someone rebases it, so a fix to a shared file can reach main and reach no
+    working checkout at all. This reports that drift, and with --apply closes
+    it.
+
+    Dry run by default. Skips any worktree with uncommitted changes (that is a
+    session's in-flight work) and the one you are standing in. A conflicting
+    rebase is aborted, reported, and left exactly as it was; the sweep carries
+    on. Nothing is ever removed.
+    """
+    from endless.worktree_cmd import sync_worktrees
+    sync_worktrees(apply)
+
+
 @worktree_cmd.command("check")
 def worktree_check():
     """Report genuine git/worktree handoff anomalies for the current worktree.

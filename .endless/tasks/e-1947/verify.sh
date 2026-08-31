@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1947 and records what was true when E-1947
+# landed. Edit it only if you ARE E-1947. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1947 verification — `endless worktree drop` refuses a worktree that is
 # still in use, using the SAME implementation the reaper uses.

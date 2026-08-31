@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1997 and records what was true when E-1997
+# landed. Edit it only if you ARE E-1997. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1997 verification — the unsupported-harness banner stays out of other
 # commands' output.

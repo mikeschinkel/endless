@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-2030 and records what was true when E-2030
+# landed. Edit it only if you ARE E-2030. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-2030 verification — the guide no longer instructs a report-gate-off project
 # to use the minimizer, and the freelanced "do not pre-summarize" criteria are

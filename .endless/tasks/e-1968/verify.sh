@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1968 and records what was true when E-1968
+# landed. Edit it only if you ARE E-1968. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1968 verification script — the session/task movement verbs account for task
 # state, and stop editing `sessions.active_task_id` behind the user's back.

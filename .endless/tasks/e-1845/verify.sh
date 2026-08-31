@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1845 and records what was true when E-1845
+# landed. Edit it only if you ARE E-1845. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1845 verification script — the `untriaged` status upstream of `unplanned`.
 #

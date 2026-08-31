@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1818 and records what was true when E-1818
+# landed. Edit it only if you ARE E-1818. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1818 verification — an unlanded worktree binary must not apply
 # schema/migrations (or fail-close the enum integrity gate) to a real DB it does

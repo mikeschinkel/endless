@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1919 and records what was true when E-1919
+# landed. Edit it only if you ARE E-1919. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1919 verification script — the Endless output style, embedded and delivered.
 #

@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1851 and records what was true when E-1851
+# landed. Edit it only if you ARE E-1851. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1851 verification — `endless task spawn` builds the canonical 3-pane tmux
 # layout, and `endless session monitor` sizes its own pane to the frame it

@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1252 and records what was true when E-1252
+# landed. Edit it only if you ARE E-1252. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1252 verification script — confirms the task-status vocabulary rename:
 #   needs_plan  -> unplanned

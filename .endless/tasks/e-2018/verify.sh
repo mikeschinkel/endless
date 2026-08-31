@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-2018 and records what was true when E-2018
+# landed. Edit it only if you ARE E-2018. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-2018 verification — the documented status lifecycle is enforced on
 # `task update`, and the diagram that documents it is generated from the rule.

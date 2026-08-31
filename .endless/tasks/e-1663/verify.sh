@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1663 and records what was true when E-1663
+# landed. Edit it only if you ARE E-1663. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1663 verification script — confirms the outcome requirement is keyed on task
 # TYPE (research, brainstorm), not on the `completed` status (ED-1520, which

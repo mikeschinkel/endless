@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-2066 and records what was true when E-2066
+# landed. Edit it only if you ARE E-2066. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-2066 verification — Endless's own ids are gone from user-visible text.
 #

@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1962 and records what was true when E-1962
+# landed. Edit it only if you ARE E-1962. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1962 verification — Endless runs against SUPPORTED agent harnesses only.
 #

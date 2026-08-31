@@ -559,6 +559,119 @@ def check_worktree() -> None:
     raise SystemExit(result.returncode)
 
 
+def _sync_state(path: Path, base: str, here: Path | None) -> tuple[str, str]:
+    """Classify one worktree for a sync sweep: (disposition, reason).
+
+    Disposition is "rebase", "skip" or "error". The reason is shown verbatim,
+    so it says what is true of THIS worktree rather than naming a rule the
+    reader then has to apply.
+    """
+    if here is not None and path.resolve() == here.resolve():
+        return "skip", "you are in it"
+    # _git_status_partition sorts for `land`, which treats the DB ledger as user
+    # work; for a sweep the ledger is endless-managed like the rest, so re-sort
+    # with the broader rule. The distinction only changes what the skip SAYS —
+    # both are skipped — and saying "its session is mid-flight" about a plan
+    # mirror would be false.
+    auto_raw, user_raw = _git_status_partition(path)
+    auto = auto_raw + [f for f in user_raw if _is_auto_file(f)]
+    user = [f for f in user_raw if not _is_auto_file(f)]
+    if user:
+        return "skip", f"{len(user)} uncommitted file(s), e.g. {user[0]}"
+    if auto:
+        return "skip", f"{len(auto)} uncommitted endless-managed file(s)"
+    res = _git_run(["merge-base", "--is-ancestor", base, "HEAD"], cwd=path, check=False)
+    if res.returncode == 0:
+        return "skip", f"already on {base}"
+    if res.returncode != 1:
+        return "error", (res.stderr.strip() or "could not compare against " + base)
+    return "rebase", f"behind {base}"
+
+
+def sync_worktrees(apply: bool) -> None:
+    """Rebase this project's task worktrees onto the default branch.
+
+    A worktree branched before a change landed does not have that change, and
+    keeps not having it for as long as nobody rebases: a fix to a shared file
+    reaches `main` and reaches nothing else. That is not an Endless-specific
+    condition — it is what worktrees do — but it is invisible until something
+    depends on the shared file being current, at which point it is invisible in
+    a hundred checkouts at once.
+
+    So this reports the drift and, with --apply, closes it. It is deliberately
+    conservative, because every branch here belongs to a task somebody else may
+    be working on right now:
+
+      - Dry run by default. A sweep that rewrites ninety branches shows its work
+        before it does it, not after.
+      - A worktree with ANY uncommitted change is skipped and named. `git
+        rebase` would refuse there anyway, and the refusal matters more than the
+        sweep: those changes are a session's in-flight work.
+      - The worktree you are standing in is skipped. Rebasing it would rewrite
+        the branch under the process doing the rewriting.
+      - A conflicting rebase is aborted and reported, and the sweep continues.
+        One worktree's conflict must strand neither the sweep nor the worktree.
+
+    Nothing is ever removed. A worktree that cannot be swept is left exactly as
+    it was, for its own session to deal with.
+    """
+    root = _project_root()
+    base = _default_base_branch(root)
+    here = worktree_root_for_cwd()
+    rows = [w for w in _enriched_list(root) if w["state"] == "active"]
+    if not rows:
+        click.echo("No task worktrees for this project.")
+        return
+
+    plan: list[tuple[Path, str, str, str]] = []
+    for w in rows:
+        path = Path(w["path"])
+        if not path.is_dir():
+            continue
+        disposition, reason = _sync_state(path, base, here)
+        plan.append((path, w["branch"], disposition, reason))
+
+    todo = [r for r in plan if r[2] == "rebase"]
+    skipped = [r for r in plan if r[2] == "skip"]
+    errored = [r for r in plan if r[2] == "error"]
+
+    if not apply:
+        for path, branch, _, reason in todo:
+            click.echo(f"  would rebase  {_display_path(path)}  ({reason})")
+        for path, branch, _, reason in skipped:
+            click.echo(f"  skip          {_display_path(path)}  ({reason})")
+        for path, branch, _, reason in errored:
+            click.echo(f"  error         {_display_path(path)}  ({reason})")
+        click.echo(
+            f"\n{len(todo)} would be rebased onto {base}, {len(skipped)} skipped"
+            f"{f', {len(errored)} errored' if errored else ''}."
+        )
+        if todo:
+            click.echo("Re-run with --apply to rebase them.")
+        return
+
+    done, failed = 0, []
+    for path, branch, _, _reason in todo:
+        res = _git_run(["rebase", base], cwd=path, check=False)
+        if res.returncode == 0:
+            done += 1
+            click.echo(f"  rebased   {_display_path(path)}  ({branch})")
+            continue
+        _git_run(["rebase", "--abort"], cwd=path, check=False)
+        detail = (res.stderr.strip() or res.stdout.strip() or "rebase failed").splitlines()
+        failed.append((path, branch, detail[-1] if detail else "rebase failed"))
+        click.echo(f"  CONFLICT  {_display_path(path)}  ({branch}) — aborted, left untouched")
+
+    click.echo(f"\n{done} rebased onto {base}, {len(skipped)} skipped, {len(failed)} conflicted.")
+    for path, branch, detail in failed:
+        click.echo(f"  {_display_path(path)}: {detail}")
+    if failed:
+        click.echo(
+            "\nA conflicted worktree was restored to where it was. Its own session "
+            "resolves it, in place — `git rebase " + base + "` there."
+        )
+
+
 def show_worktree(name_or_path: str, as_json: bool) -> None:
     """Show detail for one worktree, identified by trailing path segment or full path."""
     root = _project_root()

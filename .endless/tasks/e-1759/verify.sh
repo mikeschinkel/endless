@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1759 and records what was true when E-1759
+# landed. Edit it only if you ARE E-1759. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1759 verification — the handoff spawn-prompt templates close with a single
 # exception rule (invoke `endless worktree check`) instead of enumerating report

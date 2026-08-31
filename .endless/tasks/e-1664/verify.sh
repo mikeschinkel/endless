@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1664 and records what was true when E-1664
+# landed. Edit it only if you ARE E-1664. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1664 verification script — confirms a self_dev land deterministically uses
 # the WORKTREE's endless-go binary for the record-landing emit, in CODE (not via

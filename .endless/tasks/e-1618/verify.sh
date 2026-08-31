@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1618 and records what was true when E-1618
+# landed. Edit it only if you ARE E-1618. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1618 verification script — exercises the verify.toml [[check]] list: the
 # first-class runner registry (gotest/pytest), tests/paths -> native-filter

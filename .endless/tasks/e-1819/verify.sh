@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1819 and records what was true when E-1819
+# landed. Edit it only if you ARE E-1819. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1819 verification — `endless task add` accepts --analysis (inline) and
 # --analysis-file (path), persisting to the task's analysis field at creation,

@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1765 and records what was true when E-1765
+# landed. Edit it only if you ARE E-1765. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1765 verification script — the `⚑ review` action for `submitted` tasks.
 #

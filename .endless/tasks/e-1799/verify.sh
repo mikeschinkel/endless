@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1799 and records what was true when E-1799
+# landed. Edit it only if you ARE E-1799. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1799 verification — per-task post-land script run by `endless worktree land`.
 #

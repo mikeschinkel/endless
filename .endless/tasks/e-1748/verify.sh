@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1748 and records what was true when E-1748
+# landed. Edit it only if you ARE E-1748. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1748 verification script — project-local .endless/tmp scratch dir.
 #

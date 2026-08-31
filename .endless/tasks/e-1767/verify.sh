@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1767 and records what was true when E-1767
+# landed. Edit it only if you ARE E-1767. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1767 verification suite — the SINGLE entry point for verifying E-1767.
 #

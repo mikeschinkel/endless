@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1573 and records what was true when E-1573
+# landed. Edit it only if you ARE E-1573. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1573 verification script — confirms the orchestration guide's spawn
 # write-up was rewritten to cover the shipped spawn/coordinator patterns:
