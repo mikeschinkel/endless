@@ -96,8 +96,19 @@ def test_every_suite_names_its_own_owner_in_a_do_not_edit_banner(suite):
     )
 
 
-def test_the_harness_sources_the_guard_first():
-    assert _first_code_line(HARNESS) == 'source "$(dirname "${BASH_SOURCE[0]}")/_guard.sh"'
+def test_the_harness_reaches_the_guard_before_defining_anything():
+    """The guard runs before the harness's own vocabulary exists.
+
+    Not literally the first line any more — the harness first locates the guard
+    and refuses if it is absent — but before PASS_COUNT, before any helper, and
+    so before anything a suite could call.
+    """
+    code = [ln.strip() for ln in HARNESS.read_text().splitlines()
+            if ln.strip() and not ln.strip().startswith("#")]
+    assert "_guard.sh" in code[0], "the harness does not go looking for the guard first"
+    sourced = code.index('source "${_endless_guard}"')
+    defined = next(i for i, ln in enumerate(code) if ln.startswith("PASS_COUNT="))
+    assert sourced < defined, "the harness defines its vocabulary before the guard runs"
 
 
 def _marker_lines(path: Path, comment: str) -> tuple[list[str], list[str]]:
@@ -216,6 +227,41 @@ def test_abstains_outside_any_worktree(tmp_path):
     suite = _checkout(tmp_path, worktree_task=None, suite_task="1001")
     res = _run(suite, tmp_path / "home")
     assert res.returncode == 0 and "RAN" in res.stdout, res.stderr
+
+
+def test_a_missing_guard_is_fatal_rather_than_a_warning(tmp_path):
+    """The harness must refuse when _guard.sh is not beside it.
+
+    `source` on an absent file prints an error and carries on, so the suite
+    would run with no ownership and no isolation check — and still report a
+    pass. That is worse than no guard at all: it looks like the check happened.
+    A fixture that copies the harness without the guard is the shape that found
+    this, and it is the shape a hand-assembled project tree takes too.
+    """
+    root = tmp_path / "proj" / ".endless" / "worktrees" / "e-102"
+    tasks = root / ".endless" / "tasks"
+    (tasks / "e-101").mkdir(parents=True)
+    shutil.copy(HARNESS, tasks / "_harness.sh")  # deliberately WITHOUT _guard.sh
+    suite = tasks / "e-101" / "verify.sh"
+    suite.write_text(
+        '#!/usr/bin/env bash\n'
+        'source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"\n'
+        'report_pass "ran unguarded"\n'
+        'summary\n'
+    )
+    suite.chmod(0o755)
+
+    res = _run(suite, tmp_path / "home")
+    assert res.returncode == 2, "a tree missing the guard must refuse, not proceed"
+    assert "ran unguarded" not in res.stdout, "the suite ran with no guard at all"
+    assert "guard is missing" in res.stderr
+
+    # And with the guard restored it is the ownership refusal that fires, not
+    # this one — so the check above is not quietly masking the real guard.
+    shutil.copy(GUARD, tasks / "_guard.sh")
+    res = _run(suite, tmp_path / "home")
+    assert res.returncode == 2
+    assert "E-101" in res.stderr and "E-102" in res.stderr
 
 
 def test_refuses_when_a_real_config_is_reachable(tmp_path):

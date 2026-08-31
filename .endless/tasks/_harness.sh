@@ -25,7 +25,28 @@
 # The guard, FIRST, before this file defines anything. A suite reaches the
 # harness on its first executable line, so sourcing the guard here means the
 # refusal has had its say before a single assertion, fixture or `cd` exists.
-source "$(dirname "${BASH_SOURCE[0]}")/_guard.sh"
+#
+# A MISSING guard is fatal, not a warning. `source` on an absent file prints an
+# error and carries on, which would run the suite with no ownership and no
+# isolation check at all — the exact failure the guard exists to prevent, and
+# silent in the only way that matters, because the suite still passes. The two
+# files ship together; one without the other is a broken tree, not a
+# configuration.
+_endless_guard="$(dirname "${BASH_SOURCE[0]}")/_guard.sh"
+if [[ ! -f "${_endless_guard}" ]]; then
+    printf '%s\n' \
+        "This verification suite cannot run: its guard is missing." \
+        "" \
+        "    expected: ${_endless_guard}" \
+        "" \
+        "Refusing rather than continuing. Without _guard.sh nothing checks that" \
+        "this is your task's suite, or that you are isolated from your real" \
+        "config and the main database — so a suite that ran anyway would look" \
+        "like it passed while proving nothing. _guard.sh ships beside" \
+        "_harness.sh; restore it and re-run." >&2
+    exit 2
+fi
+source "${_endless_guard}"
 
 PASS_COUNT=0
 FAIL_COUNT=0
