@@ -1,12 +1,8 @@
 #!/usr/bin/env bash
 #
-# E-1661 verification script — a failing hook exits 2, so the AGENT sees it.
+# E-1661 verification suite — a failing hook exits 2, so the AGENT sees it.
 #
-# Run from anywhere inside the worktree:
-#   esu && ./tests/tasks/e-1661-verify.sh
-#
-# Output: pass/fail per check, then a summary. Exit 0 on all-passed, 1 on any
-# failure, 2 on a setup problem.
+#   endless task verify E-1661
 #
 # ─── what this proves ───────────────────────────────────────────────────────
 #
@@ -30,8 +26,7 @@
 # makes a pinned open SCHEMA-PASSIVE: schema.SQL is not applied and the enum
 # integrity gates do not run at all, so a pinned binary cannot fail-close on a
 # real DB it does not own. --config-dir routes this binary at a throwaway DB it
-# DOES own, which is the only way to reach those gates — and, not incidentally,
-# the only way to run this script without writing to the real ledger.
+# DOES own, which is the only way to reach those gates.
 #
 # Step 4 covers the failure a real pinned session still hits, and the one that
 # replaced the integrity gate as the live stale-binary symptom: the open
@@ -49,88 +44,40 @@
 #
 # ─── isolation ──────────────────────────────────────────────────────────────
 #
-# One mktemp -d holds the throwaway XDG_CONFIG_HOME (so even hook.log lands
-# inside it), three separate DBs, and the fixture directory used as the hook's
-# cwd. The EXIT trap removes it. No real DB, ledger, cache or log is touched.
+# Every DB, log and fixture directory here lives under $ENDLESS_VERIFY_RUN, the
+# runner's per-run temp dir, inside the temp HOME and XDG_CONFIG_HOME the runner
+# already put this process in. No real DB, ledger, cache or log is touched.
 #
 # Fail-fast: the Go unit layer runs FIRST. It pins the grading table event by
 # event, and pins the deferred tag in runClaude that the whole feature hangs
-# from — a regression the shell can only observe one event at a time.
+# from — a regression the shell can only observe one event at a time. Those
+# tests are the durable half; this suite is the land-time proof.
+
+# Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
+# FIRST executable statement so the refusal fires before anything in this file
+# runs; every definition below overrides the harness's own.
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
 
-# ─── output ─────────────────────────────────────────────────────────────────
-
-PASS_COUNT=0
-FAIL_COUNT=0
-FAILED_TESTS=()
-
-if [[ -t 1 ]]; then
-    GREEN=$'\033[32m'; RED=$'\033[31m'; DIM=$'\033[2m'; BOLD=$'\033[1m'; RESET=$'\033[0m'
-else
-    GREEN=""; RED=""; DIM=""; BOLD=""; RESET=""
-fi
-UNDERLINE="──────────────────────────────────────────────────────────────"
-
-section()     { printf '\n%s%s%s\n%s\n' "${BOLD}" "$1" "${RESET}" "${UNDERLINE}"; }
-note()        { printf '  %s%s%s\n' "${DIM}" "$1" "${RESET}"; }
-report_pass() { printf '  %s✓%s %s\n' "${GREEN}" "${RESET}" "$1"; PASS_COUNT=$((PASS_COUNT + 1)); }
-report_fail() {
-    printf '  %s✗%s %s\n' "${RED}" "${RESET}" "$1"
-    printf '      %sexpected:%s %s\n' "${DIM}" "${RESET}" "$2"
-    printf '      %sgot:%s      %s\n' "${DIM}" "${RESET}" "$3"
-    FAIL_COUNT=$((FAIL_COUNT + 1)); FAILED_TESTS+=("$1")
-}
-summary() {
-    printf '\n%sSummary%s\n%s\n' "${BOLD}" "${RESET}" "${UNDERLINE}"
-    if [[ "${FAIL_COUNT}" -eq 0 ]]; then
-        printf '  %s%d passed%s\n\n  %sALL PASSED%s\n\n' \
-            "${GREEN}" "${PASS_COUNT}" "${RESET}" "${GREEN}${BOLD}" "${RESET}"
-        return 0
-    fi
-    printf '  %d passed, %s%d failed%s\n\n  %sFAILED:%s\n' \
-        "${PASS_COUNT}" "${RED}" "${FAIL_COUNT}" "${RESET}" "${RED}${BOLD}" "${RESET}"
-    local t
-    for t in "${FAILED_TESTS[@]}"; do printf '    - %s\n' "$t"; done
-    printf '\n'
-    return 1
-}
-setup_failed() {
-    printf '%sSETUP FAILED%s: %s\n' "${RED}" "${RESET}" "$1" >&2
-    exit 2
-}
-
-# assert_eq DESC EXPECTED ACTUAL
-assert_eq() {
-    if [[ "$2" == "$3" ]]; then report_pass "$1"; else report_fail "$1" "$2" "$3"; fi
-}
-# assert_contains DESC NEEDLE HAYSTACK
-assert_contains() {
-    if [[ "$3" == *"$2"* ]]; then report_pass "$1"
-    else report_fail "$1" "output contains: $2" "$3"; fi
-}
-# assert_not_contains DESC NEEDLE HAYSTACK
-assert_not_contains() {
-    if [[ "$3" != *"$2"* ]]; then report_pass "$1"
-    else report_fail "$1" "output does NOT contain: $2" "$3"; fi
-}
+# The one bit of vocabulary the harness does not carry.
+note() { printf '  %s%s%s\n' "${DIM}" "$1" "${RESET}"; }
 
 # ─── locate the worktree + binary ───────────────────────────────────────────
 
-WT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)" || setup_failed "cannot locate the worktree"
+WT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)" || setup_error "cannot locate the worktree"
 EGO="$WT/bin/endless-go"
 
-command -v sqlite3 >/dev/null 2>&1 || setup_failed "sqlite3 is not on PATH; the fixtures are built with it"
+command -v sqlite3 >/dev/null 2>&1 || setup_error "sqlite3 is not on PATH; the fixtures are built with it"
 
-# Build only when something is actually stale — the grading lives in the binary,
-# so a stale one would verify the wrong code.
+# The grading lives in the binary, so a stale one would verify the wrong code.
 if [[ ! -x "$EGO" ]] || [[ -n "$(find "$WT" -name '*.go' -not -path '*/vendor/*' -newer "$EGO" 2>/dev/null | head -1)" ]]; then
-    ( cd "$WT" && just build ) >/dev/null 2>&1 || setup_failed "just build"
+    ( cd "$WT" && just build ) >/dev/null 2>&1 \
+        || setup_error "bin/endless-go is stale and \`just build\` failed here; build it, then re-run"
 fi
-[[ -x "$EGO" ]] || setup_failed "$EGO not built"
+[[ -x "$EGO" ]] || setup_error "$EGO not built; run \`just build\`"
 
-printf '%sE-1661 verification%s\n%s\n' "${BOLD}" "${RESET}" "${UNDERLINE}"
-printf '  worktree: %s\n  binary:   %s\n' "$WT" "$EGO"
+printf '  binary: %s\n' "$EGO"
 
 # ─── 1. fail-fast unit layer ────────────────────────────────────────────────
 
@@ -143,18 +90,13 @@ else
     report_fail "go test ./internal/hookcmd -run '…HookExitCode|RunClaude_TagsItsFailures…'" \
         "all tests pass" "$go_out"
     summary
-    exit 1
 fi
 
 # ─── fixture ────────────────────────────────────────────────────────────────
 
-BASE=""
-cleanup() { [[ -n "$BASE" && -d "$BASE" ]] && rm -rf "$BASE"; }
-trap cleanup EXIT
-
-BASE="$(mktemp -d)" || setup_failed "mktemp -d"
+BASE="${ENDLESS_VERIFY_RUN}/e-1661"
 CWD="$BASE/project"          # the directory the hook is told it is running in
-mkdir -p "$CWD" || setup_failed "mkdir fixture project dir"
+mkdir -p "$CWD" || setup_error "mkdir fixture project dir under \$ENDLESS_VERIFY_RUN"
 
 # HOOK <cfgdir> <event> — run the real hook binary against one throwaway DB.
 # Echoes stderr; the caller reads $? for the exit code.
@@ -163,9 +105,9 @@ mkdir -p "$CWD" || setup_failed "mkdir fixture project dir"
 # gated on the harness and returns immediately — exit 0, no output — when the
 # environment is not a supported agent host, and a bare shell is not one.
 # TMUX_PANE and ENDLESS_SESSION_ID are stripped so the probe cannot read the
-# live session running this script and bind itself to that session's task.
-# XDG_CONFIG_HOME is redirected because hook.log is opened at package init,
-# before --config-dir is consumed.
+# live session running this suite and bind itself to that session's task.
+# XDG_CONFIG_HOME is narrowed to this fixture because hook.log is opened at
+# package init, before --config-dir is consumed.
 HOOK() {
     local cfg="$1" event="$2"
     printf '{"session_id":"e1661-verify","cwd":"%s","hook_event_name":"%s","tool_name":"Bash","source":"startup","prompt":"probe"}' \
@@ -183,16 +125,31 @@ HOOK_RC() { HOOK "$1" "$2" >/dev/null 2>&1; }
 seed_db() {
     local cfg="$1"
     mkdir -p "$cfg/endless" || return 1
-    HOOK_RC "$cfg" PostToolUse
+    HOOK_RC "$cfg" PostToolUse || return 1
+    [[ -s "$cfg/endless/endless.db" ]] || return 1
+}
+
+# diverge <cfgdir> <sql> <what> — mutate one fixture DB.
+#
+# sqlite3 and not `endless sql`: the target is a throwaway file this suite just
+# watched the binary create, not durable state, and `endless sql` speaks
+# --db main|sandbox — it has no way to address a fixture at all. The one real
+# hazard in reaching for sqlite3 is that a wrong path is CREATED rather than
+# refused, so the path is proved non-empty here before anything is written to
+# it, and again by seed_db above.
+diverge() {
+    local db="$1/endless/endless.db"
+    [[ -s "$db" ]] || setup_error "fixture DB missing at ${db}; refusing to let sqlite3 create one"
+    sqlite3 "$db" "$2" || setup_error "$3"
 }
 
 CFG_OK="$BASE/ok"
 CFG_ENUM="$BASE/enum-drift"
 CFG_SCHEMA="$BASE/schema-drift"
 
-seed_db "$CFG_OK"     || setup_failed "seeding the healthy fixture DB"
-seed_db "$CFG_ENUM"   || setup_failed "seeding the enum-drift fixture DB"
-seed_db "$CFG_SCHEMA" || setup_failed "seeding the schema-drift fixture DB"
+seed_db "$CFG_OK"     || setup_error "seeding the healthy fixture DB"
+seed_db "$CFG_ENUM"   || setup_error "seeding the enum-drift fixture DB"
+seed_db "$CFG_SCHEMA" || setup_error "seeding the schema-drift fixture DB"
 
 # ─── 2. a healthy database changes nothing ──────────────────────────────────
 
@@ -215,9 +172,9 @@ section "3. Enum drift — the fail-closed integrity gate reaches the agent"
 # so a mutated id=1 would be reconciled away before the gate ever saw it. An
 # extra id survives the reconcile, which is also how a stale binary meets a
 # database seeded by a newer one that added a task type.
-sqlite3 "$CFG_ENUM/endless/endless.db" \
+diverge "$CFG_ENUM" \
     "INSERT INTO task_types (id, slug, label) VALUES (99, 'bogus', 'Bogus');" \
-    || setup_failed "diverging task_types in the fixture DB"
+    "diverging task_types in the fixture DB"
 
 ENUM_ERR="$(HOOK "$CFG_ENUM" PostToolUse)"
 
@@ -261,9 +218,9 @@ section "4. Schema drift — a query the deployed schema cannot answer"
 # then dies on the first statement naming a column the deployed schema lacks.
 # Same invisibility, different origin — and it is NOT an integrity error, so
 # grading on the DB layer alone would have missed it entirely.
-sqlite3 "$CFG_SCHEMA/endless/endless.db" \
+diverge "$CFG_SCHEMA" \
     "ALTER TABLE sessions DROP COLUMN last_activity;" \
-    || setup_failed "diverging the sessions schema in the fixture DB"
+    "diverging the sessions schema in the fixture DB"
 
 SCHEMA_ERR="$(HOOK "$CFG_SCHEMA" PostToolUse)"
 
@@ -291,7 +248,7 @@ assert_contains "the notice fires for this failure as well" \
 section "5. Isolation"
 
 note "every DB written above lives under ${BASE}"
-assert_eq "the fixture DBs exist where the trap will remove them" "3" \
+assert_eq "all three fixture DBs are inside the runner's temp dir" "3" \
     "$(find "$BASE" -name 'endless.db' | wc -l | tr -d ' ')"
 
 summary
