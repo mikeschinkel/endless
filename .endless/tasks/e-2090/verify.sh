@@ -173,12 +173,28 @@ G="${TMP}/g"; mkdir -p "${G}"
   && echo v2 > shared.txt && git commit -qam moved ) >/dev/null 2>&1 \
   || setup_error "could not build the git fixture"
 
+# The in-use probe is stubbed here, and only here. It shells out to
+# `endless-go worktree in-use`, which cannot reach a sessions table from inside
+# this suite's isolated HOME — so left alone it answers "unknown" and the sweep
+# fails closed. That is the right behaviour and it is asserted below; stubbing
+# it is how the DRIFT logic gets tested rather than the probe's environment.
+state="$(uv run python -c "
+from pathlib import Path
+import endless.worktree_cmd as w
+w._worktree_in_use_probe = lambda p: ('free', '')
+print(w._sync_state(Path('${TMP}/gw'), 'main', None)[0])
+")"
+assert_eq "a worktree behind the base branch is a rebase candidate" "rebase" "${state}"
+
+# Unstubbed, from in here, the probe cannot answer — and a sweep that cannot
+# tell whether somebody is standing in a worktree must not rebase it.
 state="$(uv run python -c "
 from pathlib import Path
 from endless.worktree_cmd import _sync_state
-print(_sync_state(Path('${TMP}/gw'), 'main', None)[0])
+d, r = _sync_state(Path('${TMP}/gw'), 'main', None)
+print(d, r)
 ")"
-assert_eq "a worktree behind the base branch is a rebase candidate" "rebase" "${state}"
+assert_contains "an unanswerable in-use probe fails closed" "skip cannot tell" "${state}"
 
 echo "in flight" > "${TMP}/gw/wip.py"
 state="$(uv run python -c "
