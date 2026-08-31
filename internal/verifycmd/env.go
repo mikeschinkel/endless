@@ -47,13 +47,36 @@ end:
 // substrate: it holds the temp HOME/XDG and per-check intermediates). The OS
 // temp root gives each run — and so each concurrent `endless task verify` — its own
 // unique directory, which is what keeps concurrent runs from colliding.
+//
+// The path is CANONICALIZED, and that is load-bearing rather than tidy. On
+// macOS os.MkdirTemp returns /var/folders/..., and /var is a symlink to
+// /private/var — so without this every suite runs under a $HOME reached through
+// a symlink, which a real home directory almost never is. Code that compares a
+// resolved path against filepath.Join(os.UserHomeDir(), ...) then fails, in a
+// suite that has nothing to do with the change being verified.
+//
+// That is an artifact of the isolation MECHANISM, not a property of the system
+// under test, and the runner's whole job is to substitute HOME transparently.
+// It is also platform-dependent: the same suite passes on Linux, where /tmp is
+// not symlinked, and fails on macOS. A runner whose verdict depends on the OS's
+// mktemp implementation reports failures against the wrong task, which is the
+// one thing a verification front door must never do (E-2094).
+//
+// Resolution failure is not fatal. A directory this process just created should
+// always resolve; if it somehow does not, running under the unresolved path is
+// far better than refusing to verify at all.
 func makeRunDir() (dir dt.DirPath, err error) {
-	var s string
+	var s, resolved string
+	var rerr error
 
 	s, err = os.MkdirTemp("", "endless-verify-")
 	if err != nil {
 		err = doterr.NewErr(ErrMakingRunDir, err)
 		goto end
+	}
+	resolved, rerr = filepath.EvalSymlinks(s)
+	if rerr == nil {
+		s = resolved
 	}
 	dir = dt.DirPath(s)
 end:
