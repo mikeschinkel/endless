@@ -19,6 +19,11 @@ func paneWindowHeightArgs(pane string) []string {
 	return []string{"display-message", "-p", "-t", pane, "#{window_height}"}
 }
 
+// paneWindowPanesArgs builds `tmux display-message -p -t <pane> #{window_panes}`.
+func paneWindowPanesArgs(pane string) []string {
+	return []string{"display-message", "-p", "-t", pane, "#{window_panes}"}
+}
+
 // resizePaneHeightArgs builds `tmux resize-pane -t <pane> -y <rows>`.
 func resizePaneHeightArgs(pane string, rows int) []string {
 	return []string{"resize-pane", "-t", pane, "-y", strconv.Itoa(rows)}
@@ -56,4 +61,27 @@ func ResizePaneHeight(pane string, rows int) error {
 		return fmt.Errorf("tmux %v: %w", args, err)
 	}
 	return nil
+}
+
+// PaneWindowPanes returns how many panes share the tmux WINDOW containing pane,
+// or 0 when it can't be determined (empty pane id, not in tmux, tmux errors,
+// unparsable output). Callers treat 0 as "unknown" rather than an error, on the
+// same rule as PaneWindowHeight.
+//
+// A live view uses this to know whether it is sharing its window. A view that
+// reserves part of the window for a companion pane is reserving it for nothing
+// when it is the only pane there (E-1976).
+func PaneWindowPanes(pane string) int {
+	if pane == "" {
+		return 0
+	}
+	out, err := exec.Command("tmux", paneWindowPanesArgs(pane)...).Output()
+	if err != nil {
+		return 0
+	}
+	n, err := strconv.Atoi(strings.TrimSpace(string(out)))
+	if err != nil || n <= 0 {
+		return 0
+	}
+	return n
 }

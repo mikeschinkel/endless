@@ -9,28 +9,43 @@ import (
 
 // The project attention board's reads (E-1976).
 
-func TestProjectSessionNameIsTmuxSafe(t *testing.T) {
+func TestSanitizeTmuxName(t *testing.T) {
 	tests := []struct{ project, want string }{
-		{"endless", "endless-monitor"},
-		{"go-tealeaves", "go-tealeaves-monitor"},
+		{"endless", "endless"},
+		{"go-tealeaves", "go-tealeaves"},
 		// tmux forbids '.' and ':' in a session name — both are target
 		// separators, so a name containing one addresses something else.
-		{"my.project", "my-project-monitor"},
-		{"ns:proj", "ns-proj-monitor"},
+		{"my.project", "my-project"},
+		{"ns:proj", "ns-proj"},
 		// PRODUCT: project names are user-chosen and arrive with spaces and
 		// slashes in them. None of that may be a rule the user has to know.
-		{"My Cool App", "My-Cool-App-monitor"},
-		{"a/b/c", "a-b-c-monitor"},
+		{"My Cool App", "My-Cool-App"},
+		{"a/b/c", "a-b-c"},
 		// A leading '-' would be read as a flag by tmux, so the fold is trimmed.
-		{"-weird-", "weird-monitor"},
+		{"-weird-", "weird"},
 		// Every character folded away. A board still has to be reachable.
-		{"...", "project-monitor"},
-		{"", "project-monitor"},
+		{"...", "project"},
+		{"", "project"},
 	}
 	for _, tt := range tests {
-		if got := ProjectSessionName(tt.project); got != tt.want {
-			t.Errorf("ProjectSessionName(%q) = %q, want %q", tt.project, got, tt.want)
+		if got := SanitizeTmuxName(tt.project); got != tt.want {
+			t.Errorf("SanitizeTmuxName(%q) = %q, want %q", tt.project, got, tt.want)
 		}
+	}
+}
+
+// TestMonitorSessionNameSurvivesTruncation pins the reason this name is short.
+// A tmux status line truncates a session name to the width it has; the
+// project-qualified `endless-monitor` it replaced arrived on the tab as
+// `endless-m`, saying neither what it is nor whose it is (E-1976, reported live).
+func TestMonitorSessionNameSurvivesTruncation(t *testing.T) {
+	if n := len(MonitorSessionName); n > 9 {
+		t.Errorf("MonitorSessionName is %d chars (%q); the observed tab budget is 9",
+			n, MonitorSessionName)
+	}
+	if SanitizeTmuxName(MonitorSessionName) != MonitorSessionName {
+		t.Errorf("MonitorSessionName %q is not a legal tmux session name",
+			MonitorSessionName)
 	}
 }
 

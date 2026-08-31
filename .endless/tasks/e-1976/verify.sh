@@ -94,10 +94,15 @@ PY_SRC="${WT}/src/endless/project_status_cmd.py"
 CLI_SRC="${WT}/src/endless/cli.py"
 ROWCAP_SRC="${WT}/src/endless/rowcap.py"
 SESSION_SRC="${WT}/internal/sessionstatuscmd/session_status.go"
+LIVEVIEW_SRC="${WT}/internal/liveview/liveview.go"
+
+# Read out of the source rather than restated here, so the assertion below is
+# about the shipped name and not about a copy of it in this file.
+MONITOR_SESSION=$(grep -oE 'MonitorSessionName = "[^"]+"' "${QUERY_SRC}" | sed 's/.*"\(.*\)"/\1/')
 
 
 for f in "${SCHEMA_SQL}" "${BOARD_SRC}" "${QUERY_SRC}" "${WINDOW_SRC}" "${PY_SRC}" \
-         "${CLI_SRC}" "${ROWCAP_SRC}" "${SESSION_SRC}"; do
+         "${CLI_SRC}" "${ROWCAP_SRC}" "${SESSION_SRC}" "${LIVEVIEW_SRC}"; do
     [[ -f "${f}" ]] || setup_error "missing ${f}"
 done
 command -v sqlite3 >/dev/null || setup_error "sqlite3 is required"
@@ -511,6 +516,39 @@ for rows in 6 10 20 40; do
     fi
 done
 
+# The defect reported against the first landing: run in a plain terminal or any
+# single-pane window, the board drew 27 lines into a 44-row pane and left 17 rows
+# of dead space. `boardPctOfWindow` reserves a third of the window for the SHELL
+# pane beneath the board — and reserves it for nothing when the board is alone.
+if grep -q 'if n := monitor.PaneWindowPanes(pane); n == 1 {' "${LIVEVIEW_SRC}"; then
+    report_pass "the window reservation applies only when the board SHARES its window"
+else
+    report_fail "the window reservation applies only when the board shares its window" \
+        "a window_panes == 1 branch lifting the cap" \
+        "the board reserves room for a pane that may not exist"
+fi
+if grep -q 'pct = 100' "${LIVEVIEW_SRC}"; then
+    report_pass "alone in its window, the board takes the whole height"
+else
+    report_fail "alone in its window, the board takes the whole height" \
+        "the solo case raising the share to 100" "absent"
+fi
+
+# ...and the behaviour, not just the branch: given rows to spend, a 44-row budget
+# must produce a frame that fills it rather than one two-thirds its size.
+#
+# --limit 40 so the BUDGET is the binding constraint. Under the default 10 the
+# per-group cap binds first on this two-group fixture and the frame is short for
+# a reason that has nothing to do with the defect — which is what the first
+# version of this check measured, and why it failed against correct code.
+board --cols 110 --rows 44 --limit 40
+lines=$(grep -c '' <<<"${B_OUT}")
+if (( lines >= 40 && lines <= 44 )); then
+    report_pass "a 44-row budget yields a ${lines}-line frame — the pane is filled"
+else
+    report_fail "a 44-row budget fills the pane" "40-44 lines" "${lines}"
+fi
+
 board --cols 110 --rows 200 --no-limit
 if [[ "$(grep -cE '^☑ ' <<<"${B_OUT}")" == "60" ]]; then
     report_pass "--no-limit renders all 60 unverified rows"
@@ -630,14 +668,79 @@ layout_check() {
         report_fail "${label}" "pass" "failed — see ${RUN_DIR}/${test_name}.log"
     fi
 }
-layout_check "the monitor session is created DETACHED (never steals focus)" \
-    TestNewSessionArgsIsDetached
-layout_check "the shell pane runs the user's own shell, at a starting height" \
-    TestSplitShellArgsRunsTheDefaultShell
+layout_check "the session is created DETACHED, and its first pane is the SHELL" \
+    TestNewSessionArgsIsADetachedShell
+layout_check "the board is inserted ABOVE the shell, guessing no height" \
+    TestSplitBoardArgsInsertsAboveTheShell
+layout_check "focus is handed back to the shell (the board is read, not typed in)" \
+    TestFocusReturnsToTheShell
+layout_check "a second project cannot be shown the first project's board" \
+    TestProjectStampIsSessionScoped
 layout_check "every session target is EXACT (=name, so a prefix cannot match another session)" \
     TestSessionTargetsAreExact
 layout_check "the monitor pane names its project rather than trusting cwd" \
     TestMonitorCommandNamesTheProject
+
+# The two defects the first landing shipped, reported live and fixed here.
+#
+# Ordering: the board shrinks its own pane on first paint, so building the board
+# first and splitting a shell off it races that shrink — E-1851 learned this in
+# spawnlaunchcmd.buildSpawnLayout and this launcher shipped with it backwards.
+# When the split loses, the window has no second pane at all, which is exactly
+# what was reported.
+if grep -q '"split-window", "-v", "-b", "-t", shellPane' "${WINDOW_SRC}"; then
+    report_pass "the board is inserted above an EXISTING shell (E-1851's ordering, restored)"
+else
+    report_fail "the board is inserted above an existing shell" \
+        "a -b split targeting the shell pane" \
+        "the board is built first and the shell split off it — the racing order"
+fi
+
+# The argv builders above are shape tests, and a shape test cannot see a contract
+# it never exercises: the project stamp shipped with tmux's exact-match `=`
+# prefix, every argv test agreed with it, and tmux refused it outright ("no such
+# session: =e-monitor") so the stamp never wrote anything. Drive the real binary
+# against a real tmux server, and skip cleanly where there is none.
+if command -v tmux >/dev/null && tmux start-server 2>/dev/null; then
+    probe="e1976-stamp-$$"
+    tmux kill-session -t "=${probe}" 2>/dev/null
+    if tmux new-session -d -s "${probe}" 2>/dev/null; then
+        if tmux set-option -t "${probe}" @endless_project demo 2>/dev/null \
+                && [[ "$(tmux show-options -v -t "${probe}" @endless_project 2>/dev/null)" == "demo" ]]; then
+            report_pass "tmux ACCEPTS the stamp argv and reads the value back"
+        else
+            report_fail "tmux accepts the stamp argv and reads the value back" \
+                "set-option then show-options round-trips 'demo'" \
+                "tmux refused the argv the launcher builds"
+        fi
+        # An unset user option is an ERROR in tmux, not an empty string. The
+        # launcher treats both alike as "unstamped"; if that ever became a hard
+        # failure, a first-ever launch would refuse to open.
+        tmux kill-session -t "=${probe}" 2>/dev/null
+        tmux new-session -d -s "${probe}" 2>/dev/null
+        if ! tmux show-options -v -t "${probe}" @endless_project >/dev/null 2>&1; then
+            report_pass "an unstamped session ERRORS rather than reading empty (handled as unstamped)"
+        else
+            report_fail "an unstamped session errors rather than reading empty" \
+                "show-options to fail on an unset user option" "it succeeded"
+        fi
+        tmux kill-session -t "=${probe}" 2>/dev/null
+    else
+        report_skip "tmux accepts the stamp argv" "could not create a probe session"
+    fi
+else
+    report_skip "tmux accepts the stamp argv" "no tmux server available"
+fi
+
+# Naming: a tmux status line truncates a session name, and the first landing's
+# `endless-monitor` arrived on the tab as `endless-m`.
+name_len=${#MONITOR_SESSION}
+if (( name_len <= 9 )); then
+    report_pass "the session name survives tab truncation (${MONITOR_SESSION}, ${name_len} chars)"
+else
+    report_fail "the session name survives tab truncation" \
+        "9 characters or fewer" "${MONITOR_SESSION} (${name_len})"
+fi
 out=$("${BIN}" project monitor --help 2>&1)
 if grep -q -- "--tmux" <<<"${out}" && grep -q "two-pane" <<<"${out}"; then
     report_pass "project monitor --tmux is the documented way into the layout"

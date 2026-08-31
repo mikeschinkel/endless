@@ -354,14 +354,34 @@ func projectTaskRows(db *sql.DB, projectID int64, all bool) ([]ProjectStatusRow,
 	return out, rows.Err()
 }
 
-// ProjectSessionName is the tmux session name the dedicated two-pane monitor
-// runs under, derived from the project's own name so two projects never collide.
+// MonitorSessionName is the tmux session the dedicated two-pane board runs
+// under.
+//
+// Short on purpose. A tmux status line truncates a session name to the width it
+// has, and the project-qualified name this replaced — `endless-monitor` — landed
+// on the tab as `endless-m`, which says neither what it is nor which project it
+// is for. `e-monitor` fits, and `e-` is the prefix Endless already wears on its
+// ids (E-NNNN, ES-NNNN, ED-NNNN), so the tab reads as Endless's monitor rather
+// than as an abbreviation of something.
+//
+// It carries no project name because it does not need one: there is one board
+// open in the ordinary case, and the board's own legend names its project on
+// every frame. When a SECOND project's board is opened the launcher qualifies it
+// (projectstatuscmd.sessionNameFor) rather than handing that user the first
+// project's board.
+const MonitorSessionName = "e-monitor"
+
+// SanitizeTmuxName folds a project name into something tmux will accept as part
+// of a session name.
 //
 // tmux forbids '.' and ':' in a session name (both are target separators) and
 // treats a leading '-' as a flag, so every character outside [A-Za-z0-9_-] is
 // folded to '-'. PRODUCT: project names are user-chosen and arrive with spaces,
 // dots and slashes in them; this must not be a rule the user has to know.
-func ProjectSessionName(project string) string {
+//
+// A name that folds away to nothing yields "project", so a board stays
+// reachable rather than the launcher refusing over a naming detail.
+func SanitizeTmuxName(project string) string {
 	var b strings.Builder
 	for _, r := range project {
 		switch {
@@ -373,11 +393,9 @@ func ProjectSessionName(project string) string {
 	}
 	name := strings.Trim(b.String(), "-")
 	if name == "" {
-		// Every character was folded away. A board still has to be reachable, so
-		// fall back to a fixed name rather than refusing to open.
-		name = "project"
+		return "project"
 	}
-	return name + "-monitor"
+	return name
 }
 
 // ProjectNameByID resolves a project's name from its id. Used by the headless

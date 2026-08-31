@@ -344,17 +344,31 @@ func IsTerminal(f *os.File) bool {
 // frame loses its TOP, which on a ranked board is the loudest rows. Any view
 // whose row set can outgrow a pane has to spend this budget deliberately rather
 // than discover it.
-// `pct` is the share of the tmux WINDOW this view may claim; <= 0 means
-// PanePctOfWindow. A view whose frame always grows to fill its budget wants a
-// smaller share than that default, because for such a view the cap is not a
-// safety net that rarely binds — it binds every frame, and whatever it leaves
-// over is all the pane below it will ever get.
+// `pct` is the share of the tmux WINDOW this view may claim WHEN IT IS SHARING
+// THAT WINDOW; <= 0 means PanePctOfWindow. A view whose frame always grows to
+// fill its budget wants a smaller share than that default, because for such a
+// view the cap is not a safety net that rarely binds — it binds every frame, and
+// whatever it leaves over is all the pane below it will ever get.
+//
+// The share applies ONLY when another pane is actually there to receive the
+// remainder. Alone in its window a view takes the whole height: the reservation
+// exists to feed a companion pane, and reserving a third of the window for a
+// pane that does not exist just draws a short frame above a block of dead space.
+// That is what `endless project monitor` did when run in a plain terminal or a
+// single-pane window — 27 lines of board in a 44-row pane (E-1976).
 func DetectRows(pane string, pct, fallback int) int {
 	if pct <= 0 {
 		pct = PanePctOfWindow
 	}
 	if pane != "" {
 		if h := monitor.PaneWindowHeight(pane); h > 0 {
+			// PaneWindowPanes returns 0 for "could not tell". Treating unknown as
+			// shared keeps the cautious behaviour: an over-reserved frame is a
+			// cosmetic loss, while an under-reserved one squeezes a companion pane
+			// the view cannot see.
+			if n := monitor.PaneWindowPanes(pane); n == 1 {
+				pct = 100
+			}
 			if budget := h * pct / 100; budget > 0 {
 				return budget
 			}
