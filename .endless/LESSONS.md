@@ -4730,3 +4730,24 @@ Rules:
 
 The two misuses themselves had one cause worth naming. I had folded two unrelated items into E-2093 at Mike's direction, and then tried to make the TITLE justify the fold and the DESCRIPTION enumerate both halves — a 118-char title and a multi-paragraph description. Neither field is for that. The title names WHAT; the description is a blurb; enumeration and rationale belong in --analysis, which is where they ended up. When a title will not fit, the honest reading is usually that the task is carrying more than one thing, not that the cap is too small.
 - **Project**: endless
+
+### [2026-08-30] The footgun is 2>&1 | tail, not | tail — errors already go to stderr and survive the pipe untouched
+Sharpens the lesson I wrote an hour ago, which blamed `| tail` and would have made me over-correct into avoiding all pipes.
+
+Measured, not assumed. Same refusing command, three ways:
+
+    endless task update ... 2>&1 | tail -3   -> the bottom of a 10-line advisory block; the verdict is GONE
+    endless task update ... | tail -3        -> stdout is empty, and 'Error: Title is 104 characters; max is 100.'
+                                                prints straight to the terminal, in full
+    (no pipe)                                -> same, in full
+
+Endless already does the right thing: errors go to stderr, which does not enter the pipe. Checked across `task show`, `task verify` and `worktree for-task` — every refusal is on stderr, every one leaves stdout empty. The tool never hid anything from me. My `2>&1` merged the error stream INTO the stream I then truncated, and the truncation kept the tail of a teaching block instead of the one line that named the constraint.
+
+The rule, precisely:
+- Never write `2>&1 | tail` or `2>&1 | head`. Cap stdout when it is noisy; NEVER merge stderr into a capped pipe. If I want both, capture stderr to a file (`2>/tmp/err`) and read it whole.
+- `| tail -N` alone is fine and stays fine. The dangerous token is `2>&1`, and I reach for it reflexively.
+
+Second-order, on the message side: a refusal whose headline is followed by ten lines of guidance pushes its own verdict out of any small window. When I author a refusal, the actionable line goes LAST as well as first, so it survives `head -n` and `tail -n` alike.
+
+Third: isatty is not the fix. An executable can tell it is being piped (that is how these suites choose colour), but it cannot tell a truncating pipe from `--tsv | ...`, `> file`, or a CI capture — and identifying `tail` specifically means walking sibling processes, which is fragile and whose false positive is refusing to run. The enforceable point is the PreToolUse Bash matcher, which already sees the whole command string as text, the same way it matches `sqlite3 .endless` paths and worktree removal.
+- **Project**: endless
