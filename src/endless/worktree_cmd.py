@@ -559,6 +559,30 @@ def check_worktree() -> None:
     raise SystemExit(result.returncode)
 
 
+def _git_state_anomaly(path: Path) -> str:
+    """Name what is going on in a worktree that is not simply sitting on a branch.
+
+    A rebase run into a detached HEAD or a half-finished merge/cherry-pick does
+    not just fail — `git rebase --abort` in that state can disturb the operation
+    already in flight. The sweep does not go near one. Empty string means the
+    worktree is on a branch with nothing in progress.
+    """
+    if _git_run(["symbolic-ref", "-q", "HEAD"], cwd=path, check=False).returncode != 0:
+        return "detached HEAD"
+    gitdir = _git_run(["rev-parse", "--git-dir"], cwd=path, check=False).stdout.strip()
+    if not gitdir:
+        return "not a git worktree"
+    root = Path(gitdir) if Path(gitdir).is_absolute() else path / gitdir
+    for marker, label in (
+        ("rebase-merge", "a rebase"), ("rebase-apply", "a rebase"),
+        ("MERGE_HEAD", "a merge"), ("CHERRY_PICK_HEAD", "a cherry-pick"),
+        ("REVERT_HEAD", "a revert"), ("BISECT_LOG", "a bisect"),
+    ):
+        if (root / marker).exists():
+            return f"{label} is in progress"
+    return ""
+
+
 def _sync_state(path: Path, base: str, here: Path | None) -> tuple[str, str]:
     """Classify one worktree for a sync sweep: (disposition, reason).
 
@@ -580,6 +604,27 @@ def _sync_state(path: Path, base: str, here: Path | None) -> tuple[str, str]:
         return "skip", f"{len(user)} uncommitted file(s), e.g. {user[0]}"
     if auto:
         return "skip", f"{len(auto)} uncommitted endless-managed file(s)"
+    anomaly = _git_state_anomaly(path)
+    if anomaly:
+        return "skip", anomaly
+
+    # Liveness LAST among the skips, because it costs a subprocess per worktree
+    # and the cheap checks above have already removed most candidates.
+    #
+    # It is the check this sweep most needs and least obviously needs. A clean
+    # worktree is not an idle one: a session that has just committed is clean
+    # and about to keep working, and rebasing under it changes every file
+    # beneath a process that has already READ them. An agent that then edits
+    # from what it read silently reverts whatever arrived in the rebase — which
+    # is the failure this project exists to prevent, arriving by our own hand.
+    verdict, detail = _worktree_in_use_probe(path)
+    if verdict == "in-use":
+        return "skip", detail
+    if verdict != "free":
+        # Fail closed, as `drop` does: a sweep that cannot tell whether someone
+        # is standing here does not rebase on the assumption that nobody is.
+        return "skip", f"cannot tell whether it is in use ({detail})"
+
     res = _git_run(["merge-base", "--is-ancestor", base, "HEAD"], cwd=path, check=False)
     if res.returncode == 0:
         return "skip", f"already on {base}"
@@ -650,11 +695,17 @@ def sync_worktrees(apply: bool) -> None:
             click.echo("Re-run with --apply to rebase them.")
         return
 
-    done, failed = 0, []
+    done, failed, undo = 0, [], []
     for path, branch, _, _reason in todo:
+        # The pre-rebase tip, captured before anything moves. `git rebase` also
+        # leaves it in ORIG_HEAD, but ORIG_HEAD is overwritten by the next
+        # operation in that worktree — so the sweep records it here and prints
+        # it, and the way back stays available after the session works on.
+        was = _git_run(["rev-parse", "HEAD"], cwd=path, check=False).stdout.strip()
         res = _git_run(["rebase", base], cwd=path, check=False)
         if res.returncode == 0:
             done += 1
+            undo.append((path, was))
             click.echo(f"  rebased   {_display_path(path)}  ({branch})")
             continue
         _git_run(["rebase", "--abort"], cwd=path, check=False)
@@ -670,6 +721,10 @@ def sync_worktrees(apply: bool) -> None:
             "\nA conflicted worktree was restored to where it was. Its own session "
             "resolves it, in place — `git rebase " + base + "` there."
         )
+    if undo:
+        click.echo("\nTo put any of them back exactly as they were:")
+        for path, was in undo:
+            click.echo(f"  git -C {_display_path(path)} reset --hard {was[:12]}")
 
 
 def show_worktree(name_or_path: str, as_json: bool) -> None:
@@ -2705,6 +2760,51 @@ def land_worktree(
     )
 
 
+def _worktree_in_use_probe(worktree_path: Path) -> tuple[str, str]:
+    """Ask `endless-go worktree in-use` whether anything depends on a directory.
+
+    Returns (verdict, detail); verdict is "free", "in-use", "unknown" or
+    "no-binary". Callers decide what to DO about each — dropping refuses on
+    anything but "free", and so does the sync sweep, for the same reason in a
+    milder form: rebasing a branch under a session that is standing in it does
+    not orphan its cwd, but it does change every file beneath a process that
+    has already read them.
+
+    This shells out rather than probing here, because monitor.WorktreeInUse is
+    the one implementation of the question and it runs two complementary probes
+    (an active-session row, and a live process holding cwd). Reimplementing
+    either in Python is what the verb exists to prevent — see
+    internal/monitor/worktree_inuse.go.
+    """
+    from endless import config
+
+    task_id = _task_id_from_worktree_path(worktree_path)
+    # `--task 0` means "no owning task", which the verb reads as "run only the
+    # live-process probe". A worktree outside the e-NNN convention has no task
+    # row to look up, so that is the whole answer available for it.
+    task_arg = task_id.removeprefix("E-") if task_id else "0"
+
+    binary = shutil.which("endless-go")
+    if not binary:
+        return "no-binary", "endless-go is not on PATH"
+
+    # E-1429: the verb READS the sessions table, so thread the resolved --db
+    # context. Without it a probe run from a self-dev worktree would ask the
+    # real ledger about a sandbox's sessions and be told nobody is home.
+    result = subprocess.run(
+        [binary, *config.go_db_context_args(), "worktree", "in-use",
+         "--dir", str(worktree_path), "--task", task_arg],
+        capture_output=True, text=True,
+    )
+    detail = (result.stdout.strip() or result.stderr.strip()
+              or f"exit {result.returncode}")
+    if result.returncode == 0:
+        return "free", ""
+    if result.returncode == 3:
+        return "in-use", detail
+    return "unknown", detail
+
+
 def _guard_worktree_in_use(worktree_path: Path) -> None:
     """Refuse to drop a worktree anything is still using (E-1947).
 
@@ -2721,36 +2821,16 @@ def _guard_worktree_in_use(worktree_path: Path) -> None:
 
     Callers pass --force to skip this entirely, as with drop's other refusals.
     """
-    from endless import config
-
-    task_id = _task_id_from_worktree_path(worktree_path)
-    # `--task 0` means "no owning task", which the verb reads as "run only the
-    # live-process probe". A worktree outside the e-NNN convention has no task
-    # row to look up, so that is the whole answer available for it.
-    task_arg = task_id.removeprefix("E-") if task_id else "0"
-
-    binary = shutil.which("endless-go")
-    if not binary:
+    verdict, detail = _worktree_in_use_probe(worktree_path)
+    if verdict == "free":
+        return
+    if verdict == "no-binary":
         raise click.ClickException(
             f"Cannot verify whether this worktree is in use: endless-go is "
             f"not on PATH.\n{worktree_path}\n"
             f"Install it (`just install`) or use --force to drop anyway."
         )
-
-    # E-1429: the verb READS the sessions table, so thread the resolved --db
-    # context. Without it a drop run from a self-dev worktree would ask the
-    # real ledger about a sandbox's sessions and be told nobody is home.
-    result = subprocess.run(
-        [binary, *config.go_db_context_args(), "worktree", "in-use",
-         "--dir", str(worktree_path), "--task", task_arg],
-        capture_output=True, text=True,
-    )
-    if result.returncode == 0:
-        return
-
-    detail = (result.stdout.strip() or result.stderr.strip()
-              or f"exit {result.returncode}")
-    if result.returncode != 3:
+    if verdict == "unknown":
         raise click.ClickException(
             f"Cannot verify whether this worktree is in use: {detail}\n"
             f"{worktree_path}\n"

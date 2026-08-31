@@ -103,3 +103,66 @@ def test_rebasing_actually_delivers_the_change(repo_and_worktree):
     _run(["git", "rebase", "-q", "main"], wt)
     assert (wt / "shared.txt").read_text() == "v2\n"
     assert _sync_state(wt, "main", here=None) == ("skip", "already on main")
+
+
+# --- the checks that keep the sweep off a worktree somebody is using --------
+
+def test_a_worktree_someone_is_standing_in_is_never_rebased(repo_and_worktree, monkeypatch):
+    """Clean is not idle.
+
+    A session that has just committed is clean and about to keep working. The
+    rebase would change every file under a process that has already read them,
+    and an agent editing from what it read silently reverts what arrived. This
+    is the check that makes a fleet-wide sweep safe to run at all.
+    """
+    _, wt = repo_and_worktree
+    monkeypatch.setattr(
+        "endless.worktree_cmd._worktree_in_use_probe",
+        lambda p: ("in-use", "a live session has this task active"),
+    )
+    disposition, reason = _sync_state(wt, "main", here=None)
+    assert disposition == "skip"
+    assert reason == "a live session has this task active"
+
+
+def test_an_unanswerable_in_use_probe_fails_closed(repo_and_worktree, monkeypatch):
+    """Not being able to tell is not permission to proceed."""
+    _, wt = repo_and_worktree
+    monkeypatch.setattr(
+        "endless.worktree_cmd._worktree_in_use_probe",
+        lambda p: ("unknown", "database is locked"),
+    )
+    disposition, reason = _sync_state(wt, "main", here=None)
+    assert disposition == "skip"
+    assert "cannot tell" in reason and "database is locked" in reason
+
+
+def test_a_detached_head_is_skipped(repo_and_worktree):
+    _, wt = repo_and_worktree
+    _run(["git", "checkout", "-q", "--detach"], wt)
+    disposition, reason = _sync_state(wt, "main", here=None)
+    assert disposition == "skip"
+    assert reason == "detached HEAD"
+
+
+@pytest.mark.parametrize("marker,expected", [
+    ("CHERRY_PICK_HEAD", "a cherry-pick is in progress"),
+    ("MERGE_HEAD", "a merge is in progress"),
+    ("REVERT_HEAD", "a revert is in progress"),
+])
+def test_an_operation_in_progress_is_skipped(repo_and_worktree, marker, expected):
+    """`git rebase --abort` in a half-finished operation disturbs it.
+
+    The sweep does not go near a worktree mid-anything — one of the real
+    worktrees was sitting in a cherry-pick when this was written.
+    """
+    _, wt = repo_and_worktree
+    gitdir = subprocess.run(["git", "rev-parse", "--absolute-git-dir"], cwd=str(wt),
+                            capture_output=True, text=True, check=True).stdout.strip()
+    (Path(gitdir) / marker).write_text(
+        subprocess.run(["git", "rev-parse", "HEAD"], cwd=str(wt),
+                       capture_output=True, text=True, check=True).stdout
+    )
+    disposition, reason = _sync_state(wt, "main", here=None)
+    assert disposition == "skip"
+    assert reason == expected
