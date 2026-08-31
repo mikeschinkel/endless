@@ -4715,3 +4715,18 @@ The rule: when a sanctioned surface is too weak for what I need, the next move i
 
 Check first: `endless --help` and `endless guide reference` list the surface. The instinct to type a path to a .db file is itself the signal that I have left the sanctioned path.
 - **Project**: endless
+
+### [2026-08-30] Piping a command's output through tail hid the error line, and I reasoned from the fragment for three turns
+Mike: 'What would have STOPPED you from burning three turns trying to misuse the command?'
+
+The answer is not judgment. I ran `endless task update E-2093 --title '...' | tail -3`. The refusal's FIRST line was 'Title is 118 characters; max is 100.' My tail window cut it off and showed only the trailing shape-guidance block, so I concluded the problem was the title's SHAPE, reworded it, and resubmitted at 105 characters — still over. Two turns spent on a constraint the tool had told me exactly, in a line I had truncated away. Then I ran `--title 'test'` on a real task to probe the validator, which mutated a live record to learn something the error already said and the source states in one line (TITLE_MAX_LENGTH = 100).
+
+This is the same root cause as the `task search` failure earlier in the same session: acting on a partial view of what a tool told me. There I trusted an empty result from a query that could not match; here I trusted a fragment of an error I had cropped myself. Both times the tool was not wrong and was not silent — I had narrowed what I let it say.
+
+Rules:
+- Never pipe through `tail`/`head` a command whose FAILURE I will then reason about. Cap noisy SUCCESS output if I must; read a refusal in full, always. A refusal is short by design — that is why it is a refusal.
+- When a command refuses twice, stop editing my input and go read the constraint: `--help`, the guide, or the source. My second attempt changed the wording but not the length, which is proof I never identified what was actually wrong.
+- Never probe a validator by writing a junk value to a real record. Read the code.
+
+The two misuses themselves had one cause worth naming. I had folded two unrelated items into E-2093 at Mike's direction, and then tried to make the TITLE justify the fold and the DESCRIPTION enumerate both halves — a 118-char title and a multi-paragraph description. Neither field is for that. The title names WHAT; the description is a blurb; enumeration and rationale belong in --analysis, which is where they ended up. When a title will not fit, the honest reading is usually that the task is carrying more than one thing, not that the cap is too small.
+- **Project**: endless
