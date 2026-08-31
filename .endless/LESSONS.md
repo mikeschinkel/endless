@@ -4698,3 +4698,20 @@ The rule: ED-1550 §4 says search the area for an owning task before filing. "Se
 
 The same shape as the E-2071 note already in that function's docstring: "a LIMIT 20 query cannot tell you it matched 60, and '20 match(es)' under a silently truncated table is the exact sentence that produced two false 'no existing task' conclusions." That fixed the truncation half. The phrase-matching half is the same trap and is still open.
 - **Project**: endless
+
+### [2026-08-30] Use endless sql, not sqlite3 against a hand-typed DB path — it resolves the path, honours --db, and is read-only by default
+When `endless task search` turned out to be too weak to establish that no task owned E-2093, I reached straight for `sqlite3 "$HOME/.config/endless/endless.db"` and ran my searches there. Mike: "`endless sql` is the command you wanted to use."
+
+It exists for exactly this, and its own --help says so: "Resolves the DB path internally (no need to know where it lives). Read-only by default — pass --write for mutations. Replaces the agent instinct to reach for sqlite3 against speculative paths."
+
+Four things I gave up by not using it, three of them safety:
+
+1. sqlite3 CREATES the database file when the path is wrong. A typo does not error — it opens an empty DB, and every query then returns nothing. That is the same false-negative shape I had just been caught on one message earlier: a tool answering "nothing" when the truth is "you asked wrong". My path happened to be right, but only because I happened to know it.
+2. `endless sql` is read-only unless you pass --write. Raw sqlite3 is not. I was one typo away from mutating durable state in the MAIN database, from inside a worktree.
+3. It honours --db main|sandbox. Raw sqlite3 has no notion of it, so hardcoding the path walked straight past the E-1429 gate — the whole discipline that makes a command say which database it touches.
+4. It reports what it truncated instead of silently capping, which is the E-2071 lesson already baked into that surface.
+
+The rule: when a sanctioned surface is too weak for what I need, the next move is to ask what the right surface is, or look — never to drop to the raw tool underneath it and hand-type a path to durable state. `endless sql --db main "SELECT ..."` is the read; `endless <verb>` is the write. I reached for the raw tool in the very turn I was writing a lesson about not trusting a tool's empty output, which is the tell: I was optimizing for getting my answer, not for being right about it.
+
+Check first: `endless --help` and `endless guide reference` list the surface. The instinct to type a path to a .db file is itself the signal that I have left the sanctioned path.
+- **Project**: endless
