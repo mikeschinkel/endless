@@ -5,7 +5,7 @@
 # XDG_CONFIG_HOME points at a per-worktree sandbox and no explicit --db is given.
 #
 # Run from inside the worktree:
-#   ./tests/tasks/e-1628-verify.sh
+#   endless task verify E-1628
 #
 # What it proves:
 #   1. BASELINE BUG  — a task.landed emit routed to the sandbox (no --config-dir,
@@ -20,6 +20,12 @@
 #
 # Safe: the only write is a (rotated) main-DB backup copy; the FK probe writes
 # nothing because it fails.
+
+# Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
+# FIRST executable statement so the refusal fires before anything in this file
+# runs; every definition below overrides the harness's own, so a suite written
+# before the harness existed behaves exactly as it did.
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
 
@@ -60,7 +66,7 @@ summary(){
 
 # ─── environment ─────────────────────────────────────────────────────────────
 
-# Worktree root (this script lives at <root>/tests/tasks/).
+# Worktree root (this script lives at <root>/.endless/tasks/).
 WORKTREE_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "${WORKTREE_ROOT}" || { echo "cannot cd to worktree root"; exit 1; }
 

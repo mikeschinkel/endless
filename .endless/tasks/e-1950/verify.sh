@@ -19,7 +19,7 @@
 #      block. The whole row is now reversed using fixed 256-color indices.
 #
 # Run from anywhere inside the worktree:
-#   esu && ./tests/tasks/e-1950-verify.sh
+#   endless task verify E-1950
 #
 # Output: pass/fail per check, then a summary. Exit 0 on all-passed, 1 on any
 # failure, 2 on a setup problem.
@@ -27,6 +27,12 @@
 # Isolation: no real DB, ledger or cache is touched. The Go unit tests run
 # against in-memory SQLite; the render checks drive the freshly-built worktree
 # binary's own renderer through `go test`, and the static checks read source.
+
+# Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
+# FIRST executable statement so the refusal fires before anything in this file
+# runs; every definition below overrides the harness's own, so a suite written
+# before the harness existed behaves exactly as it did.
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
 

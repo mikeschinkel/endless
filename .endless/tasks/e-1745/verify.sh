@@ -5,7 +5,7 @@
 # strictly path-scoped RemoveAll, and no longer fakes a "removed" success.
 #
 # Run from anywhere inside the worktree:
-#   ./tests/tasks/e-1745-verify.sh
+#   endless task verify E-1745
 #
 # The Go unit tests in internal/monitor/reap_worktrees_test.go are the real
 # driver — removeStrandedWorktreeDir is unexported, so it is exercised there
@@ -15,6 +15,12 @@
 #
 # Output: pass/fail per check, then a summary. Exit 0 on all-passed, 1 on any
 # failure.
+
+# Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
+# FIRST executable statement so the refusal fires before anything in this file
+# runs; every definition below overrides the harness's own, so a suite written
+# before the harness existed behaves exactly as it did.
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
 

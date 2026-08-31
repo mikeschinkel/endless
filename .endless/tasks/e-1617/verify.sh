@@ -4,7 +4,7 @@
 # (ED-1511) end-to-end against the worktree's sandbox DB.
 #
 # Run from anywhere inside the worktree:
-#   ./tests/tasks/e-1617-verify.sh
+#   endless task verify E-1617
 #
 # Output: pass/fail per check, then a summary. Exit 0 on all-passed, 1 on any
 # failure. Each run creates fresh task IDs; the script does NOT wipe the
@@ -13,6 +13,12 @@
 #
 # Ad-hoc prototype following the convention being formalized by E-1596;
 # requires no external tools beyond `uv` + the per-worktree sandbox.
+
+# Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
+# FIRST executable statement so the refusal fires before anything in this file
+# runs; every definition below overrides the harness's own, so a suite written
+# before the harness existed behaves exactly as it did.
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
 

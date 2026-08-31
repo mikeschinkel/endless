@@ -57,15 +57,24 @@
 #      verifies from its own worktree, by id and with no id.
 #  14. A freshly registered project has .endless/tasks/CLAUDE.md, and
 #      re-registering neither duplicates nor overwrites a customized one.
+#  15. EVERY suite in the corpus refuses a direct run, and refuses it before
+#      executing a single line of its own.
+#  16. $ENDLESS_VERIFY_DIR reaches BOTH suite forms, and no manifest hand-writes
+#      its own directory any more.
+#  17. `endless task verify` is sufficient by itself: it resolves the task from
+#      the session or the cwd, and runs in that task's worktree.
 #
 # Exit 0 on all-passed, 1 on any failure, 2 on setup error.
+
+# Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
+# FIRST executable statement, the same way every other suite in this tree now
+# does it — so nothing in this file runs before the refusal has had its say.
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
 
 WT="$(git rev-parse --show-toplevel)" || { echo "SETUP ERROR: not in a git repo" >&2; exit 2; }
 cd "${WT}" || exit 2
-
-source "${WT}/.endless/tasks/_harness.sh"
 
 GO_BIN="${WT}/bin/endless-go"
 [[ -x "${GO_BIN}" ]] || setup_error "missing ${GO_BIN} — run 'just go' first"
@@ -96,10 +105,12 @@ else
     summary
 fi
 
-if uv run pytest tests/test_suite_rules.py -q >"${TMP}/py.log" 2>&1; then
-    report_pass "pytest tests/test_suite_rules.py"
+if uv run pytest tests/test_suite_rules.py tests/test_verify_cmd.py -q \
+        >"${TMP}/py.log" 2>&1; then
+    report_pass "pytest tests/test_suite_rules.py tests/test_verify_cmd.py"
 else
-    report_fail "pytest tests/test_suite_rules.py" "exit 0" "$(tail -25 "${TMP}/py.log")"
+    report_fail "pytest tests/test_suite_rules.py tests/test_verify_cmd.py" \
+        "exit 0" "$(tail -25 "${TMP}/py.log")"
     summary
 fi
 
@@ -542,5 +553,105 @@ print(f'{first} {same} {second} {kept}')
 " 2>&1)" || setup_error "scaffolding probe failed: ${scaffold_out}"
 assert_eq "written once, matching the shipped text, never overwritten after" \
     "True True False True" "${scaffold_out}"
+
+# ── 15. the whole corpus, not just new suites ───────────────────────────────
+section "15. Every suite refuses a direct run"
+
+# The plan deferred this: existing suites were to stay directly runnable, with
+# only the runner and E-1916's hook guarding them. Mike overruled it, and he was
+# right — "the enforcement point moved from 200 places to one" is only true if
+# the 200 cannot still be reached individually. Each suite now sources the
+# harness as its FIRST executable statement, so a direct run refuses before the
+# script's own code exists, which is also what makes this check safe to run on
+# all 200 of them.
+refused=0; ran=0; leaked=0
+for s in "${WT}"/.endless/tasks/e-*/verify.sh; do
+    out="$(env -u ENDLESS_VERIFY_RUN -u ENDLESS_VERIFY_TAP -u ENDLESS_VERIFY_TASK \
+        "${s}" 2>&1)"; rc=$?
+    if [[ ${rc} -ne 0 && "${out}" == *"must be run through the verify runner"* ]]; then
+        refused=$((refused + 1))
+    else
+        ran=$((ran + 1))
+        [[ ${ran} -le 3 ]] && printf '      %snot refused:%s %s (rc=%d)\n' \
+            "${DIM}" "${RESET}" "${s#${WT}/}" "${rc}"
+    fi
+    # A suite that got as far as its own first check would have printed one.
+    [[ "${out}" == *"✓"* || "${out}" == *"✗"* ]] && leaked=$((leaked + 1))
+done
+assert_eq "no suite in the corpus can be run directly" "0" "${ran}"
+if (( refused > 150 )); then
+    report_pass "all ${refused} suites refuse, naming the runner"
+else
+    report_fail "the whole corpus refuses" "more than 150 suites" "${refused}"
+fi
+assert_eq "and none of them executed a check before refusing" "0" "${leaked}"
+
+# ── 16. the suite directory reaches both forms ──────────────────────────────
+section "16. \$ENDLESS_VERIFY_DIR, in both suite forms"
+
+P16="$(new_project suitedir)"
+add_script "${P16}" "e-1601" '#!/usr/bin/env bash
+[[ -n "${ENDLESS_VERIFY_DIR:-}" ]] || exit 30
+[[ -f "${ENDLESS_VERIFY_DIR}/companion.txt" ]] || exit 31
+[[ "${ENDLESS_VERIFY_TASK:-}" == "E-1601" ]] || exit 32
+exit 0
+'
+printf 'beside me\n' > "${P16}/.endless/tasks/e-1601/companion.txt"
+verify_in "${P16}" E-1601; rc16a=$?
+assert_eq "a script suite reads a file beside it via \$ENDLESS_VERIFY_DIR" "0" "${rc16a}"
+
+# The same variable on the manifest path — the half E-2092 was filed for, folded
+# in here instead (ED-1550: several symptoms of one cause are one task).
+add_manifest "${P16}" "e-1602" 'schema = 1
+task = "E-1602"
+[[check]]
+runner = "sh"
+command = "sh \"$ENDLESS_VERIFY_DIR\"/probe.sh"
+format = "tap"
+'
+printf '#!/usr/bin/env bash\nprintf "1..1\\nok 1 - reached via ENDLESS_VERIFY_DIR\\n"\n' \
+    > "${P16}/.endless/tasks/e-1602/probe.sh"
+chmod +x "${P16}/.endless/tasks/e-1602/probe.sh"
+verify_in "${P16}" E-1602; rc16b=$?
+assert_eq "a manifest check reads one via the same variable" "0" "${rc16b}"
+assert_contains "and its result is normalized" "1 passed (1 tests)" "${LAST_OUT}"
+
+# No manifest in this project may hand-write its own suite directory again.
+hardcoded=0
+for m in "${WT}"/.endless/tasks/e-*/verify.toml; do
+    [[ -f "${m}" ]] || continue
+    dir="$(basename "$(dirname "${m}")")"
+    # Comment lines are excluded: e-1603's manifest explains the mistake it used
+    # to make, and quoting the old path in order to warn about it is not making
+    # it again.
+    if grep -vE '^[[:space:]]*#' "${m}" | grep -qiE "\.endless/tasks/${dir}/"; then
+        hardcoded=$((hardcoded + 1))
+        printf '      %shard-coded:%s %s\n' "${DIM}" "${RESET}" "${m#${WT}/}"
+    fi
+done
+assert_eq "no manifest hand-writes its own directory" "0" "${hardcoded}"
+
+# ── 17. the product verb is sufficient by itself ────────────────────────────
+section "17. endless task verify needs no cd and no id"
+
+probe_out="$(cd "${WT}" && uv run python -c "
+from pathlib import Path
+from endless import verify_cmd as v
+print(v._cwd_task_id(Path('/p/.endless/worktrees/e-1889/src')))
+print(v._cwd_task_id(Path('/p/src')))
+print(v._main_checkout(Path('/p/.endless/worktrees/e-1889/src')))
+" 2>&1)" || setup_error "resolution probe failed: ${probe_out}"
+assert_eq "cwd inside a worktree names its task, and elsewhere names none" \
+    "1889
+None
+/p" "${probe_out}"
+
+# The suite has to run against the CANDIDATE tree, so the wrapper picks the
+# task's worktree rather than trusting whatever directory the caller stood in.
+rundir_out="$(cd "${WT}" && uv run python -c "
+from endless import verify_cmd as v
+print(v._run_dir(2023))
+" 2>&1)" || setup_error "run-dir probe failed: ${rundir_out}"
+assert_eq "and the suite runs in that task's worktree" "${WT}" "${rundir_out}"
 
 summary

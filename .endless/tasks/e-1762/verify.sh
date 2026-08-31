@@ -13,13 +13,19 @@
 #     would trip the E-1542 pause gate for descendant sessions).
 #
 # Run from anywhere inside the worktree:
-#   ./tests/tasks/e-1762-verify.sh
+#   endless task verify E-1762
 #
 # Output: pass/fail per check, then a summary. Exit 0 on all-passed, 1 on any
 # failure. Uses the worktree's sandbox DB via `uv run endless ... --db sandbox`;
 # no build required. Each run creates fresh tasks; the sandbox is not wiped
 # between runs (pollution is bounded, inspectable via
 #   uv run endless task list --db sandbox).
+
+# Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
+# FIRST executable statement so the refusal fires before anything in this file
+# runs; every definition below overrides the harness's own, so a suite written
+# before the harness existed behaves exactly as it did.
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
 

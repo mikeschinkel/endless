@@ -24,7 +24,7 @@
 # the land was attributed to.
 #
 # Run from anywhere inside the worktree:
-#   esu && ./tests/tasks/e-2005-verify.sh
+#   endless task verify E-2005
 #
 # Output: pass/fail per check, then a summary. Exit 0 on all-passed, 1 on any
 # failure, 2 on a setup problem.
@@ -40,10 +40,16 @@
 # suppression rule and the renderer at a granularity the shell cannot reach, so
 # if it fails there is no point running the end-to-end checks.
 #
-# The last section re-runs tests/tasks/e-2001-verify.sh in full. Without E-2001's
+# The last section re-runs .endless/tasks/e-2001/verify.sh in full. Without E-2001's
 # framing fix every notice this task queues would be composed correctly, written
 # to stdout, and silently discarded — so that suite is a precondition of this
 # one, not a neighbour.
+
+# Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
+# FIRST executable statement so the refusal fires before anything in this file
+# runs; every definition below overrides the harness's own, so a suite written
+# before the harness existed behaves exactly as it did.
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
 

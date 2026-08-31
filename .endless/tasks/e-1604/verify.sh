@@ -5,7 +5,7 @@
 # internal/verify.
 #
 # Run from anywhere inside the worktree:
-#   ./tests/tasks/e-1604-verify.sh
+#   endless task verify E-1604
 #
 # E-1604 ships no CLI surface yet (the `endless verify` consumer is E-1603), so
 # this script verifies the Go package three ways:
@@ -27,6 +27,12 @@
 # Shape borrowed from the E-1602 / E-1599 / E-1577 ad-hoc prototypes (the
 # formalization task is E-1596); this is a per-task verify script, not a
 # deliverable of E-1596.
+
+# Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
+# FIRST executable statement so the refusal fires before anything in this file
+# runs; every definition below overrides the harness's own, so a suite written
+# before the harness existed behaves exactly as it did.
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
 

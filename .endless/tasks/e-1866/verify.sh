@@ -3,7 +3,7 @@
 # E-1866 verification — session provenance on `endless task show`.
 #
 # Run from anywhere inside the worktree:
-#   ./tests/tasks/e-1866-verify.sh
+#   endless task verify E-1866
 #
 # What E-1866 added:
 #   - the `Created:` line names the session that filed the task, as
@@ -22,6 +22,12 @@
 # rows whether or not the assertions passed.
 #
 # Exit 0 on all-passed, 1 on any failure.
+
+# Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
+# FIRST executable statement so the refusal fires before anything in this file
+# runs; every definition below overrides the harness's own, so a suite written
+# before the harness existed behaves exactly as it did.
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
 

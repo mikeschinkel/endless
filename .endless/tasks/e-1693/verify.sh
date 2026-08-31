@@ -3,7 +3,7 @@
 # E-1693 verification suite — the SINGLE entry point for verifying E-1693.
 #
 #   esu
-#   ./tests/tasks/e-1693-verify.sh
+#   endless task verify E-1693
 #
 # Self-contained: it builds the worktree binaries, runs the Go unit tests for
 # the landed-column query + classify routing, then drives the real worktree-built
@@ -23,6 +23,12 @@
 #        - decoration precedence holds: a landed task a live session is on still
 #          renders ⟳ (doing), proving the landed check yields to the in-flight
 #          decoration.
+
+# Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
+# FIRST executable statement so the refusal fires before anything in this file
+# runs; every definition below overrides the harness's own, so a suite written
+# before the harness existed behaves exactly as it did.
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
 

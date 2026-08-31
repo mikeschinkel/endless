@@ -148,6 +148,10 @@ func run(id string, keep bool) (code int, err error) {
 	if err != nil {
 		goto end
 	}
+	env, err = suiteEnv(env, id, root, runDir)
+	if err != nil {
+		goto end
+	}
 
 	// Preconditions, in order: provision (Tier-0 no-op) -> setup -> seed
 	// (guarded out above). A failing setup step aborts loudly.

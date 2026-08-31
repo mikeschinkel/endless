@@ -11,7 +11,7 @@
 # workflow. The fix ships the pointer in the product: a pinned lead line on the
 # first-time context injection.
 #
-# Run from anywhere inside the worktree:  ./tests/tasks/e-1854-verify.sh
+# Run from anywhere inside the worktree:  endless task verify E-1854
 #
 # Stage 1 (fail-fast): the Go unit tests that pin the wording, the lead
 # position, and the single composition site. If they fail the script stops
@@ -36,6 +36,12 @@
 #   6. The end-to-end probe left no rows in the real ledger.
 #
 # Exit 0 on all-passed, 1 on any failure.
+
+# Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
+# FIRST executable statement so the refusal fires before anything in this file
+# runs; every definition below overrides the harness's own, so a suite written
+# before the harness existed behaves exactly as it did.
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
 

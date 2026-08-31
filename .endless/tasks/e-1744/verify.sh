@@ -12,7 +12,7 @@
 # is the escape hatch for a genuine absolute path.
 #
 # Run from anywhere inside the worktree:
-#   ./tests/tasks/e-1744-verify.sh
+#   endless task verify E-1744
 #
 # Output: pass/fail per check, then a summary. Exit 0 on all-passed, 1 on any
 # failure. Uses the worktree's sandbox DB via `uv run endless ... --db sandbox`;
@@ -25,6 +25,12 @@
 # row (no committed mirror, gone /tmp file). It was cleared by hand via
 #   endless task update E-1626 --text "" --db main
 # — eyeball it with `endless task show E-1626 --text --db main`.
+
+# Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
+# FIRST executable statement so the refusal fires before anything in this file
+# runs; every definition below overrides the harness's own, so a suite written
+# before the harness existed behaves exactly as it did.
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
 

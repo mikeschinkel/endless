@@ -3,7 +3,7 @@
 # E-1699 verification suite — the SINGLE entry point for verifying E-1699.
 #
 #   esu
-#   ./tests/tasks/e-1699-verify.sh
+#   endless task verify E-1699
 #
 # Bug: the live `session monitor` redraw (internal/sessionstatuscmd/session_status.go)
 # did `\x1b[H` + frame + `\x1b[J`. The trailing `\x1b[J` erases to end-of-DISPLAY
@@ -24,6 +24,12 @@
 #      frame with the OLD escapes leaves a stale tail; with the fix's escapes it
 #      does not. This proves the escape choice is correct in an actual VTE, not
 #      just in the Go string transform.
+
+# Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
+# FIRST executable statement so the refusal fires before anything in this file
+# runs; every definition below overrides the harness's own, so a suite written
+# before the harness existed behaves exactly as it did.
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
 

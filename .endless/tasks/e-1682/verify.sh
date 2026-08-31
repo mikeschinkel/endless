@@ -4,7 +4,7 @@
 #
 # Run from anywhere inside the worktree:
 #   esu
-#   ./tests/tasks/e-1682-verify.sh
+#   endless task verify E-1682
 #
 # Output: pass/fail per check, then a summary. Exit 0 on all-passed, 1 on any
 # failure, 2 on setup error.
@@ -21,8 +21,14 @@
 # full `go test ./...` and `just test` suites (which subsume the E-1682 unit
 # tests — recorder, reader, enum/schema integrity, hook wiring, trail rendering,
 # goto marker), then the binary/tmux E2E checks those suites can't cover. So
-# `esu && tests/tasks/e-1682-verify.sh` proves the whole task end to end.
-# Modeled on tests/tasks/e-1681-verify.sh.
+# `endless task verify E-1682` proves the whole task end to end.
+# Modeled on .endless/tasks/e-1681/verify.sh.
+
+# Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
+# FIRST executable statement so the refusal fires before anything in this file
+# runs; every definition below overrides the harness's own, so a suite written
+# before the harness existed behaves exactly as it did.
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
 

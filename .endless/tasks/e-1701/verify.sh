@@ -3,7 +3,7 @@
 # E-1701 verification suite — the SINGLE entry point for verifying E-1701.
 #
 #   esu
-#   ./tests/tasks/e-1701-verify.sh
+#   endless task verify E-1701
 #
 # Self-contained: it builds the worktree binaries, runs the Go unit tests for
 # the dirty-marker render logic, then drives the real worktree-built endless-go
@@ -22,6 +22,12 @@
 #        - a clean worktree at main             → no ◆ (space),
 #        - a task with no worktree at all        → no ◆.
 #      The ◆/space swap is width-neutral, so the id column does not shift.
+
+# Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
+# FIRST executable statement so the refusal fires before anything in this file
+# runs; every definition below overrides the harness's own, so a suite written
+# before the harness existed behaves exactly as it did.
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
 

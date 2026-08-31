@@ -4,7 +4,7 @@
 #
 # Run from anywhere inside the worktree:
 #   esu
-#   ./tests/tasks/e-2037-verify.sh
+#   endless task verify E-2037
 #
 # WHAT LANDED
 #   Endless has two durable things and one name was doing both jobs. The
@@ -20,7 +20,7 @@
 #   that genuinely meant the JSONL ledger was left alone — that is the half a
 #   blanket sed would have destroyed, and it is checked here as its own layer.
 #
-#   Out of scope by the plan: the 80 occurrences in tests/tasks/*-verify.sh.
+#   Out of scope by the plan: the 80 occurrences in .endless/tasks/*-verify.sh.
 #   A landed verify script is a spent pre-land gate; nothing runs it again, so
 #   its wording cannot mislead anyone. E-2033 was filed and declined for
 #   misreading that rule. Layer C proves none of them were touched.
@@ -45,11 +45,17 @@
 #   A. FAIL-FAST — the rendered surfaces, from the candidate build.
 #      If an agent still reads "the real ledger", nothing below matters.
 #   B. Source sweep — no site missed, no real-ledger wording destroyed.
-#   C. Scope — tests/tasks/*-verify.sh untouched.
+#   C. Scope — .endless/tasks/*-verify.sh untouched.
 #   D. Project-wide regression — build, vet, go test, Python suite, guide map.
 #
 # Output: pass/fail per check, then a summary. Exit 0 all-passed, 1 any
 # failure, 2 setup error.
+
+# Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
+# FIRST executable statement so the refusal fires before anything in this file
+# runs; every definition below overrides the harness's own, so a suite written
+# before the harness existed behaves exactly as it did.
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
 
@@ -146,7 +152,7 @@ assert_cmd() {
 #
 #   .endless/     — the ledger itself plus the frozen plan/analysis/outcome
 #                   record. Historical text; rewriting it would be forgery.
-#   tests/tasks/  — spent pre-land verify scripts (see the header).
+#   .endless/tasks/  — spent pre-land verify scripts (see the header).
 #
 # Printed as NUL-delimited paths so a space in a filename cannot split one.
 in_scope_files() {

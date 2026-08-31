@@ -21,7 +21,7 @@
 # pipeline cannot reach by accident.
 #
 # Run from anywhere inside the worktree:
-#   esu && ./tests/tasks/e-2008-verify.sh
+#   endless task verify E-2008
 #
 # Output: pass/fail per check, then a summary. Exit 0 on all-passed, 1 on any
 # failure, 2 on a setup problem.
@@ -38,6 +38,12 @@
 #
 # Isolation: a throwaway git repo under a temp dir with its own
 # XDG_CONFIG_HOME / XDG_CACHE_HOME, so no real, sandbox or cached DB is touched.
+
+# Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
+# FIRST executable statement so the refusal fires before anything in this file
+# runs; every definition below overrides the harness's own, so a suite written
+# before the harness existed behaves exactly as it did.
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
 

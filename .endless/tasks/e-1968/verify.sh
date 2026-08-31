@@ -26,7 +26,7 @@
 # red, the CLI-level sections below are measuring nothing, so the run stops there.
 #
 # Run from anywhere inside the worktree:
-#   esu && ./tests/tasks/e-1968-verify.sh
+#   endless task verify E-1968
 #
 # Output: pass/fail per check, then a summary. Exit 0 on all-passed, 1 on any
 # failure, 2 on a setup problem.
@@ -39,6 +39,12 @@
 # `session goto --resume` opens a tmux window; a stub `claude` earlier on PATH
 # records any launch, $TMUX points at a server that does not exist, and the final
 # section fails if the marker ever appears.
+
+# Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
+# FIRST executable statement so the refusal fires before anything in this file
+# runs; every definition below overrides the harness's own, so a suite written
+# before the harness existed behaves exactly as it did.
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
 

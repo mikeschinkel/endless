@@ -4,7 +4,7 @@
 # refuse where nothing enforces.
 #
 # Run from anywhere inside the worktree:
-#   ./tests/tasks/e-1973-verify.sh
+#   endless task verify E-1973
 #
 # The bug: `report_item` refused a third run with "You have already used this
 # turn's one appeal" regardless of `report_gate`. Where the gate is off no Stop
@@ -20,6 +20,12 @@
 # missed" and a per-task test cannot see that.
 #
 # Exit 0 on all-passed, 1 on any failure.
+
+# Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
+# FIRST executable statement so the refusal fires before anything in this file
+# runs; every definition below overrides the harness's own, so a suite written
+# before the harness existed behaves exactly as it did.
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
 

@@ -5,7 +5,7 @@
 # `|` group divider, and the old ⁇ catch-all is split into ⏚ landed + ⁇ unknown.
 #
 # Run from anywhere inside the worktree:
-#   esu && ./tests/tasks/e-1750-verify.sh
+#   endless task verify E-1750
 #
 # Two check groups, both folded in:
 #   1. Hermetic legend logic — `go test ./internal/sessionstatuscmd/...`. This is
@@ -18,6 +18,12 @@
 # Output: pass/fail per check, then a summary. Exit 0 all-pass / 1 any-fail /
 # 2 setup. Each run creates fresh task IDs; the sandbox is not wiped between runs
 # (pollution is bounded, inspect with `uv run endless task list --db sandbox`).
+
+# Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
+# FIRST executable statement so the refusal fires before anything in this file
+# runs; every definition below overrides the harness's own, so a suite written
+# before the harness existed behaves exactly as it did.
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
 

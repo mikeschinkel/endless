@@ -12,6 +12,7 @@ exercises the pytest first-class runner end to end.
 """
 
 import subprocess
+from pathlib import Path
 
 import click
 import pytest
@@ -71,8 +72,87 @@ def test_none_id_resolves_active_task(monkeypatch):
     assert calls == [["endless-go", "verify", "E-1758"]]
 
 
+def test_none_id_falls_back_to_the_cwd_worktree(monkeypatch):
+    """The session is the primary source; the checkout is the fallback.
+
+    It needs no database, which is what makes a bare `endless task verify`
+    work in a self-dev worktree with no --db and outside tmux (E-2023).
+    """
+    calls = _stub_run(monkeypatch, returncode=0)
+    monkeypatch.setattr(verify_cmd, "_current_session_task_id", lambda: None)
+    monkeypatch.setattr(verify_cmd, "_cwd_task_id", lambda: 1889)
+    with pytest.raises(SystemExit):
+        verify_cmd.run_verify(None, keep=False)
+    assert calls == [["endless-go", "verify", "E-1889"]]
+
+
+def test_session_wins_over_cwd(monkeypatch):
+    """Standing in a foreign worktree must not retarget your own verify."""
+    calls = _stub_run(monkeypatch, returncode=0)
+    monkeypatch.setattr(verify_cmd, "_current_session_task_id", lambda: 1758)
+    monkeypatch.setattr(verify_cmd, "_cwd_task_id", lambda: 1889)
+    with pytest.raises(SystemExit):
+        verify_cmd.run_verify(None, keep=False)
+    assert calls == [["endless-go", "verify", "E-1758"]]
+
+
+def test_an_unreadable_session_is_not_the_answer(monkeypatch):
+    """A refused database read falls through to the cwd rather than failing.
+
+    Inside a self-dev worktree, reading the session's task without --db raises.
+    That is a reason to try the other source, not to report no task.
+    """
+    calls = _stub_run(monkeypatch, returncode=0)
+
+    def boom():
+        raise click.ClickException("--db is required here")
+
+    monkeypatch.setattr(verify_cmd, "_current_session_task_id", boom)
+    monkeypatch.setattr(verify_cmd, "_cwd_task_id", lambda: 1889)
+    with pytest.raises(SystemExit):
+        verify_cmd.run_verify(None, keep=False)
+    assert calls == [["endless-go", "verify", "E-1889"]]
+
+
 def test_none_id_no_active_task_raises(monkeypatch):
     _stub_run(monkeypatch)
     monkeypatch.setattr(verify_cmd, "_current_session_task_id", lambda: None)
+    monkeypatch.setattr(verify_cmd, "_cwd_task_id", lambda: None)
     with pytest.raises(click.ClickException):
         verify_cmd.run_verify(None, keep=False)
+
+
+def test_cwd_task_id_reads_the_worktree_path():
+    assert verify_cmd._cwd_task_id(Path("/p/.endless/worktrees/e-1889")) == 1889
+    assert verify_cmd._cwd_task_id(Path("/p/.endless/worktrees/e-1889/src/x")) == 1889
+    assert verify_cmd._cwd_task_id(Path("/p/src")) is None
+    assert verify_cmd._cwd_task_id(Path("/p/.endless/worktrees/scratch")) is None
+
+
+def test_runs_in_the_tasks_worktree(monkeypatch, tmp_path):
+    """A suite proves the CANDIDATE tree, so it runs there — not in main.
+
+    Without this, asking for a task from the main checkout would discover
+    main's copy of the suite and run it against code that has not landed.
+    """
+    worktree = tmp_path / ".endless" / "worktrees" / "e-1889"
+    worktree.mkdir(parents=True)
+    monkeypatch.setattr(verify_cmd, "_main_checkout", lambda: tmp_path)
+
+    cwds: list = []
+
+    def fake_run(cmd, **kwargs):
+        cwds.append(kwargs.get("cwd"))
+        return _FakeProc(0)
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    monkeypatch.setattr(verify_cmd, "_resolve_endless_go", lambda: "endless-go")
+    with pytest.raises(SystemExit):
+        verify_cmd.run_verify(1889, keep=False)
+    assert cwds == [str(worktree)]
+
+
+def test_missing_worktree_inherits_cwd(monkeypatch, tmp_path):
+    """A reaped worktree, or a project not using them, still verifies."""
+    monkeypatch.setattr(verify_cmd, "_main_checkout", lambda: tmp_path)
+    assert verify_cmd._run_dir(1889) is None

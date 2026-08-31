@@ -4,7 +4,7 @@
 # instead of silently mkdir'ing a stray sandbox endless.db in the cache.
 #
 # Run from inside the worktree:
-#   ./tests/tasks/e-1737-verify.sh
+#   endless task verify E-1737
 #
 # What it proves:
 #   1. FIX — in a non-self_dev project (its worktree AND its main checkout),
@@ -19,6 +19,12 @@
 #
 # Safe: every DB write is confined to a throwaway XDG_CACHE_HOME under a mktemp
 # dir that is removed on exit. Nothing touches the real or sandbox ledgers.
+
+# Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
+# FIRST executable statement so the refusal fires before anything in this file
+# runs; every definition below overrides the harness's own, so a suite written
+# before the harness existed behaves exactly as it did.
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
 
@@ -59,7 +65,7 @@ summary(){
 
 # ─── environment ─────────────────────────────────────────────────────────────
 
-# Worktree root (this script lives at <root>/tests/tasks/).
+# Worktree root (this script lives at <root>/.endless/tasks/).
 WORKTREE_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "${WORKTREE_ROOT}" || { echo "cannot cd to worktree root"; exit 1; }
 

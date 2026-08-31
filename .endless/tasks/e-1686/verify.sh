@@ -5,7 +5,7 @@
 # reused-pane safety and live-state authority are preserved.
 #
 # Run from anywhere inside the worktree:
-#   ./tests/tasks/e-1686-verify.sh
+#   endless task verify E-1686
 #
 # Lever: the revive is reachable headlessly through the candidate Go binary —
 #   ./bin/endless-go session-query ensure-claude-id --session-id <uuid> \
@@ -21,6 +21,12 @@
 # The `task bind` facet (execTaskClaimed reviving an ended row, E-1686) is
 # covered by the Go executor test TestClaim_RevivesEndedSession — driving the
 # event pipeline headlessly here would add no coverage the unit test lacks.
+
+# Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
+# FIRST executable statement so the refusal fires before anything in this file
+# runs; every definition below overrides the harness's own, so a suite written
+# before the harness existed behaves exactly as it did.
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
 

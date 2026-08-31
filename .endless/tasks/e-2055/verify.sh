@@ -11,7 +11,7 @@
 # (E-1208), and land's auto-commit entry for the log is retired.
 #
 # Run from inside the worktree (esu puts you there):
-#   esu && ./tests/tasks/e-2055-verify.sh
+#   endless task verify E-2055
 #
 # What it proves:
 #   1. FAIL-FAST unit gate: the Go + Python unit suites this task owns pass.
@@ -25,7 +25,7 @@
 #   5. No stale "land auto-commits the lessons file" wording survives in the
 #      tracked instruction sweep.
 #   6. The guide's auto-commit table still documents every live glob (the
-#      doc/code sync tests/tasks/e-1870-verify.sh pins) and the new command has
+#      doc/code sync .endless/tasks/e-1870/verify.sh pins) and the new command has
 #      a guide-map entry.
 #   7. FUNCTIONAL, in a throwaway repo with no real DB or ledger writes:
 #      a. a modified `.endless/LESSONS.md` now partitions as USER WORK, so a
@@ -40,6 +40,12 @@
 #         before anything is written.
 #
 # Exit 0 on all-passed, 1 on any failure, 2 on setup error.
+
+# Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
+# FIRST executable statement so the refusal fires before anything in this file
+# runs; every definition below overrides the harness's own, so a suite written
+# before the harness existed behaves exactly as it did.
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
 

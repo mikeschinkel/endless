@@ -11,9 +11,9 @@
 #
 # Run from anywhere inside the worktree:
 #   esu
-#   ./tests/tasks/e-1859-verify.sh
+#   endless task verify E-1859
 #
-# Strategy (shape per tests/tasks/e-1880-verify.sh): a FULLY ISOLATED throwaway
+# Strategy (shape per .endless/tasks/e-1880/verify.sh): a FULLY ISOLATED throwaway
 # env (temp XDG_CONFIG_HOME + fresh DB, a temp git project) driving the
 # CANDIDATE Python CLI (`.venv/bin/endless`) and the worktree-built
 # `bin/endless-go`. Nothing touches the real endless repo or ledger.
@@ -57,6 +57,12 @@
 #
 # Output: pass/fail per check, then a summary. Exit 0 all-passed, 1 any failure,
 # 2 setup error.
+
+# Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
+# FIRST executable statement so the refusal fires before anything in this file
+# runs; every definition below overrides the harness's own, so a suite written
+# before the harness existed behaves exactly as it did.
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
 
@@ -286,7 +292,7 @@ ${out}"; fi
     # The status-lifecycle prose this task rewrote lives in three files that must
     # carry the canonical block byte-identically.
     #
-    # Asserted HERE rather than by invoking tests/tasks/e-1648-verify.sh. A
+    # Asserted HERE rather than by invoking .endless/tasks/e-1648/verify.sh. A
     # landed verify suite is a point-in-time proof, frozen at its own land and
     # UNDEFINED afterward — chaining one makes this suite's result depend on
     # another task's expired assertions, which is exactly how E-1859's suite

@@ -4,7 +4,7 @@
 # (Arm 2) reinforcement, plus mid-session usability of `endless task report`.
 #
 # Run from anywhere inside the worktree:
-#   ./tests/tasks/e-1803-verify.sh
+#   endless task verify E-1803
 #
 # Single entry point (per E-1596). It ensures binaries are current, runs the Go
 # unit suite that pins the hook detection/response shapes, checks the coverage
@@ -19,7 +19,13 @@
 # the whole turn" is a strong nudge, not a hard gate. Compliance *visibility* is
 # E-1826, not a gate here; there is nothing to check by hand.
 #
-# Model: tests/tasks/e-1542-verify.sh.
+# Model: .endless/tasks/e-1542/verify.sh.
+
+# Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
+# FIRST executable statement so the refusal fires before anything in this file
+# runs; every definition below overrides the harness's own, so a suite written
+# before the harness existed behaves exactly as it did.
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
 

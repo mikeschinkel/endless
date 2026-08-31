@@ -14,7 +14,7 @@
 # them.
 #
 # Run from anywhere inside the worktree:
-#   ./tests/tasks/e-1573-verify.sh
+#   endless task verify E-1573
 #
 # Output: pass/fail per check, then a summary. Exit 0 on all-passed, 1 on any
 # failure. This task is documentation-only — the script makes NO DB writes and
@@ -27,6 +27,12 @@
 #
 # Shape borrowed from the E-1574 docs-only verify script; this is a per-task
 # verify script, not a deliverable of the verify-suite formalization epic.
+
+# Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
+# FIRST executable statement so the refusal fires before anything in this file
+# runs; every definition below overrides the harness's own, so a suite written
+# before the harness existed behaves exactly as it did.
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
 

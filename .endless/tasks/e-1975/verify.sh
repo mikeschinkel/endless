@@ -3,7 +3,7 @@
 # E-1975 verification — the minimizer's autoresearch loop.
 #
 # Run from anywhere inside the worktree:
-#   ./tests/tasks/e-1975-verify.sh
+#   endless task verify E-1975
 #
 # Single entry point (per E-1596). Fail-fast on the unit contracts, then every
 # part driven end-to-end through the real CLI -> worktree endless-go -> sandbox
@@ -46,7 +46,13 @@
 # which exercises the REAL nearest-config resolution and keeps the assertions
 # independent of whichever way the repo's own switch is currently set.
 #
-# Model: tests/tasks/e-1953-verify.sh.
+# Model: .endless/tasks/e-1953/verify.sh.
+
+# Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
+# FIRST executable statement so the refusal fires before anything in this file
+# runs; every definition below overrides the harness's own, so a suite written
+# before the harness existed behaves exactly as it did.
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
 

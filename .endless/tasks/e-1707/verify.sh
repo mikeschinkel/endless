@@ -3,7 +3,7 @@
 # E-1707 verification suite — the SINGLE entry point for verifying E-1707.
 #
 #   esu
-#   ./tests/tasks/e-1707-verify.sh
+#   endless task verify E-1707
 #
 # Self-contained: it builds the worktree binaries, runs the Go unit tests that
 # pin the render/color logic, then drives the real worktree-built endless-go
@@ -30,6 +30,12 @@
 #      worktree still renders ◆ in the id column and still documents it in the
 #      legend (the E-1701 behavior E-1707 must not regress), a landed one does not,
 #      and the ◆/space swap stays width-neutral.
+
+# Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
+# FIRST executable statement so the refusal fires before anything in this file
+# runs; every definition below overrides the harness's own, so a suite written
+# before the harness existed behaves exactly as it did.
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
 

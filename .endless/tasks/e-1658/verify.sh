@@ -28,11 +28,17 @@
 #   MAIN's on land.
 #
 # Run from anywhere inside the worktree (esu cd's here and exports the session):
-#   ./tests/tasks/e-1658-verify.sh
+#   endless task verify E-1658
 #
 # Output: pass/fail per check, then a summary. Exit 0 all-passed, 1 any failure,
 # 2 environment/setup error. Fail-fast on the first failing section boundary is
 # NOT enforced (every check runs) so a single run surfaces all regressions.
+
+# Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
+# FIRST executable statement so the refusal fires before anything in this file
+# runs; every definition below overrides the harness's own, so a suite written
+# before the harness existed behaves exactly as it did.
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
 

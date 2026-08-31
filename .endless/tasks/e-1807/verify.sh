@@ -7,9 +7,9 @@
 # the task reads as free and the spawn/claim proceeds with no user step.
 #
 # Run from anywhere inside the worktree:
-#   ./tests/tasks/e-1807-verify.sh
+#   endless task verify E-1807
 #
-# Structure (mirrors tests/tasks/e-1802-verify.sh):
+# Structure (mirrors .endless/tasks/e-1802/verify.sh):
 #   1. Fail-fast unit gate: the Go `reap-dead-panes` binary test plus the Python
 #      `_check_task_ownership` test. Abort before the E2E if either fails.
 #   2. E2E against this worktree's sandbox DB:
@@ -23,6 +23,12 @@
 # requires a reachable tmux server (present under `esu`, which runs in tmux).
 # Each run creates fresh task/session ids; the sandbox is not wiped between runs
 # (pollution is bounded and inspectable via `uv run endless task list --db sandbox`).
+
+# Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
+# FIRST executable statement so the refusal fires before anything in this file
+# runs; every definition below overrides the harness's own, so a suite written
+# before the harness existed behaves exactly as it did.
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
 

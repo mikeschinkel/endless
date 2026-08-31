@@ -3,7 +3,7 @@
 # E-1746 verification — colorized markdown rendering for `endless task show`.
 #
 # Run from anywhere inside the worktree (after `esu`):
-#   ./tests/tasks/e-1746-verify.sh
+#   endless task verify E-1746
 #
 # Exercises the candidate end-to-end against the worktree's sandbox DB so both
 # the Python CLI (`uv run endless`) and the Go binary (`./bin/endless-go`,
@@ -18,6 +18,12 @@
 # path is tested without a human. The only checks NOT automated here are the two
 # interactive ones (see the handoff): paging with `-p` through less, and
 # mouse-wheel scroll inside it.
+
+# Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
+# FIRST executable statement so the refusal fires before anything in this file
+# runs; every definition below overrides the harness's own, so a suite written
+# before the harness existed behaves exactly as it did.
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
 

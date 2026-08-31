@@ -34,6 +34,14 @@ const (
 	// EnvTaskID is the task being verified, in canonical E-NNNN form, so a
 	// suite can name itself without hardcoding an id twice.
 	EnvTaskID = "ENDLESS_VERIFY_TASK"
+
+	// EnvSuiteDir is the task's own suite directory. A suite that ships a
+	// helper file beside itself reads it from here instead of retyping the
+	// path — which is the same class of mistake in a manifest as a hardcoded
+	// id: .endless/tasks/e-1603/verify.toml named its own directory "E-1603",
+	// a casing discovery tolerates and the shell does not, so the check ran
+	// only because APFS is case-insensitive.
+	EnvSuiteDir = "ENDLESS_VERIFY_DIR"
 )
 
 // tapFile is the per-run filename a script suite's TAP stream is written to.
@@ -74,15 +82,16 @@ func runScriptSuite(id string, script dt.Filepath, root dt.DirPath, keep bool) (
 		goto end
 	}
 
+	env, err = suiteEnv(env, id, root, runDir)
+	if err != nil {
+		goto end
+	}
+
 	tapPath, err = scriptTAPPath(runDir)
 	if err != nil {
 		goto end
 	}
-	env = append(env,
-		EnvRunMarker+"="+string(runDir),
-		EnvTAPPath+"="+string(tapPath),
-		EnvTaskID+"="+verify.NormalizeTaskID(id),
-	)
+	env = append(env, EnvTAPPath+"="+string(tapPath))
 
 	code, err = execScript(script, root, env)
 	if err != nil {
@@ -103,6 +112,37 @@ func runScriptSuite(id string, script dt.Filepath, root dt.DirPath, keep bool) (
 	printSummary(id, results, merged, ctrfPath)
 end:
 	return code, err
+}
+
+// suiteEnv appends the variables every suite gets, in EITHER form: the marker
+// that proves the runner started it, the task id, and the suite's own
+// directory. They are added in one place rather than at each call site because
+// a variable a script suite can rely on and a manifest suite cannot is a
+// difference nobody would predict from the outside.
+//
+// EnvTAPPath is deliberately NOT here. It names where a single script suite
+// writes its result stream, and a manifest's checks each declare and emit their
+// own — so exporting it there would promise a channel nothing reads.
+func suiteEnv(env []string, id string, root, runDir dt.DirPath) (out []string, err error) {
+	var dir dt.DirPath
+	var ok bool
+
+	dir, ok, err = verify.SuiteDir(root, id)
+	if err != nil {
+		goto end
+	}
+	out = append(env,
+		EnvRunMarker+"="+string(runDir),
+		EnvTaskID+"="+verify.NormalizeTaskID(id),
+	)
+	if ok {
+		out = append(out, EnvSuiteDir+"="+string(dir))
+	}
+end:
+	if err != nil {
+		out = nil
+	}
+	return out, err
 }
 
 // scriptTAPPath allocates the per-run TAP destination under the run dir's

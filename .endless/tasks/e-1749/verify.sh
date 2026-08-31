@@ -6,7 +6,7 @@
 # a reaper sweep collects them after a grace period).
 #
 # Run from anywhere inside the worktree:
-#   ./tests/tasks/e-1749-verify.sh
+#   endless task verify E-1749
 #
 # Checks the canonical source (docs/guide/index.md — deterministic) and, when
 # available, the rendered `endless guide` output (best-effort).
@@ -14,7 +14,13 @@
 # Exit 0 on all-passed, 1 on any failure, 2 on a setup problem.
 #
 # Per-task verify script (house pattern; structure borrowed from
-# tests/tasks/e-1567-verify.sh), not a shipped deliverable.
+# .endless/tasks/e-1567/verify.sh), not a shipped deliverable.
+
+# Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
+# FIRST executable statement so the refusal fires before anything in this file
+# runs; every definition below overrides the harness's own, so a suite written
+# before the harness existed behaves exactly as it did.
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
 

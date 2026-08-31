@@ -5,7 +5,7 @@
 #
 # Run from anywhere inside the worktree:
 #   esu
-#   ./tests/tasks/e-1766-verify.sh
+#   endless task verify E-1766
 #
 # The bug: `worktree check` resolved the worktree from cwd (path + companion,
 # both DB-free) but then handed the Go core only `--task-id`, which round-tripped
@@ -17,7 +17,7 @@
 # companion, repo root from the path convention) was already in hand. The fix
 # hands the Go core `--worktree-path` + `--project-root` and drops the DB touch.
 #
-# Strategy (same shape as tests/tasks/e-1758-verify.sh): build a FULLY ISOLATED
+# Strategy (same shape as .endless/tasks/e-1758/verify.sh): build a FULLY ISOLATED
 # throwaway environment and — crucially — reproduce the self-dev split that
 # e-1758's verify did NOT: the task lives in the "main" DB (XDG_CONFIG_HOME) while
 # cwd inside the worktree routes the CANDIDATE `bin/endless-go` to a per-worktree
@@ -39,6 +39,12 @@
 #
 # Output: pass/fail per check, then a summary. Exit 0 all-passed, 1 any failure,
 # 2 setup error.
+
+# Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
+# FIRST executable statement so the refusal fires before anything in this file
+# runs; every definition below overrides the harness's own, so a suite written
+# before the harness existed behaves exactly as it did.
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
 

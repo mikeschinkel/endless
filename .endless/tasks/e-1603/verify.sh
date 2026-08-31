@@ -5,7 +5,7 @@
 #
 # Run from anywhere inside the worktree:
 #   esu
-#   ./tests/tasks/e-1603-verify.sh
+#   endless task verify E-1603
 #
 # Output: pass/fail per check, then a summary. Exit 0 on all-passed, 1 on any
 # failure, 2 on setup error. It builds the worktree's endless-go, runs the Go
@@ -15,8 +15,14 @@
 # a failing suite (non-zero + failure detail), HOME/XDG isolation, two concurrent
 # runs, --keep vs default temp-dir cleanup, and the Tier-0 needs/seed guards.
 #
-# Interim ad-hoc location tests/tasks/ (matches the E-1577 prototype); migrates
+# Interim ad-hoc location .endless/tasks/ (matches the E-1577 prototype); migrates
 # to .endless/tasks/<id>/ once the system it verifies lands.
+
+# Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
+# FIRST executable statement so the refusal fires before anything in this file
+# runs; every definition below overrides the harness's own, so a suite written
+# before the harness existed behaves exactly as it did.
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
 

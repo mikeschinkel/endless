@@ -3,7 +3,7 @@
 # E-1706 verification suite — the SINGLE entry point for verifying E-1706.
 #
 #   esu
-#   ./tests/tasks/e-1706-verify.sh
+#   endless task verify E-1706
 #
 # Self-contained. Verifies the session-status type-letter reassignment:
 # `brainstorm` renders as B (was Z) and `bug` renders as F (was B), via the
@@ -17,6 +17,12 @@
 # brainstorm+bug rows into the sandbox to grep a rendered column is fragile.
 #
 # Exit 0 on all-passed, 1 on any failure (with detail to diagnose).
+
+# Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
+# FIRST executable statement so the refusal fires before anything in this file
+# runs; every definition below overrides the harness's own, so a suite written
+# before the harness existed behaves exactly as it did.
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
 

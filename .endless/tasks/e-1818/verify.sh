@@ -6,7 +6,7 @@
 #
 # Run from anywhere inside the worktree:
 #   esu
-#   ./tests/tasks/e-1818-verify.sh
+#   endless task verify E-1818
 #
 # FAIL-FAST: each step aborts the run on first failure (exit 1); setup problems
 # exit 2. This is the single comprehensive gate for E-1818.
@@ -38,7 +38,13 @@
 #                                           fail-closes and leaves it unchanged.
 #                                           Your real ledger is never touched.
 #   4. full Go + Python suites            — complete regression.
-# Modeled on tests/tasks/e-1682-verify.sh (structure) with fail-fast control.
+# Modeled on .endless/tasks/e-1682/verify.sh (structure) with fail-fast control.
+
+# Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
+# FIRST executable statement so the refusal fires before anything in this file
+# runs; every definition below overrides the harness's own, so a suite written
+# before the harness existed behaves exactly as it did.
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
 

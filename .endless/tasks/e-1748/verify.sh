@@ -13,12 +13,18 @@
 # co-located and recoverable instead of vaporized.
 #
 # Run from anywhere inside the worktree:
-#   ./tests/tasks/e-1748-verify.sh
+#   endless task verify E-1748
 #
 # Output: pass/fail per check, then a summary. Exit 0 on all-passed, 1 on any
 # failure, 2 on a precondition failure. The register check writes to the
 # worktree's sandbox DB (via `uv run endless ... --db sandbox`) and cleans up
 # after itself (unregister + rm the throwaway repo); nothing touches the real DB.
+
+# Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
+# FIRST executable statement so the refusal fires before anything in this file
+# runs; every definition below overrides the harness's own, so a suite written
+# before the harness existed behaves exactly as it did.
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
 

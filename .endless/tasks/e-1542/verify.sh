@@ -4,7 +4,7 @@
 # continue` / `endless task pause` verbs.
 #
 # Run from anywhere inside the worktree:
-#   ./tests/tasks/e-1542-verify.sh
+#   endless task verify E-1542
 #
 # This is the single entry point for verifying E-1542 (per E-1596): it ensures
 # the binaries are current, runs the Go + Python automated suites, and then
@@ -21,7 +21,13 @@
 # hook is NOT exercised here directly because `endless-go hook` pins to the real
 # main DB (PinMainDB) and would write to the real ledger.
 #
-# Model: tests/tasks/e-1577-verify.sh (the E-1596 reference prototype).
+# Model: .endless/tasks/e-1577/verify.sh (the E-1596 reference prototype).
+
+# Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
+# FIRST executable statement so the refusal fires before anything in this file
+# runs; every definition below overrides the harness's own, so a suite written
+# before the harness existed behaves exactly as it did.
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
 

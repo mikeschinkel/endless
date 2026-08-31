@@ -22,13 +22,19 @@
 #   9. Nothing anywhere tells users to run the removed `/output-style` command.
 #
 # Run from anywhere inside the worktree:
-#   esu && ./tests/tasks/e-1919-verify.sh
+#   endless task verify E-1919
 #
 # Output: pass/fail per check, then a summary. Exit 0 on all-passed, 1 on any
 # failure, 2 on a setup problem.
 #
 # Isolation: throwaway project roots under a temp dir plus a temp XDG_CONFIG_HOME
 # and XDG_CACHE_HOME. No real DB, ledger, cache, or ~/.claude file is touched.
+
+# Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
+# FIRST executable statement so the refusal fires before anything in this file
+# runs; every definition below overrides the harness's own, so a suite written
+# before the harness existed behaves exactly as it did.
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
 

@@ -5,7 +5,7 @@
 # project`).
 #
 # Run from anywhere inside the worktree:
-#   ./tests/tasks/e-1650-verify.sh
+#   endless task verify E-1650
 #
 # Single entry point for verifying E-1650 (per E-1596). It runs the Python
 # suites that cover the new behavior, asserts the regenerated shell-init no
@@ -14,7 +14,13 @@
 # cwd instead of erroring. Output: pass/fail per check, then a summary. Exit 0
 # on all-passed, 1 on any failure. No irreducible manual step.
 #
-# Model: tests/tasks/e-1542-verify.sh (the E-1596 reference prototype).
+# Model: .endless/tasks/e-1542/verify.sh (the E-1596 reference prototype).
+
+# Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
+# FIRST executable statement so the refusal fires before anything in this file
+# runs; every definition below overrides the harness's own, so a suite written
+# before the harness existed behaves exactly as it did.
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
 

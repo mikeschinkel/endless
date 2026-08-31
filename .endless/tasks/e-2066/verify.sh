@@ -11,7 +11,7 @@
 # whole Click tree, the guide and every runtime string so it cannot come back.
 #
 # Run from inside the worktree (esu puts you there):
-#   esu && ./tests/tasks/e-2066-verify.sh
+#   endless task verify E-2066
 #
 # What it proves:
 #   1. FAIL-FAST unit gate: this task's own guard suite passes.
@@ -28,6 +28,12 @@
 #      for a fact now states the fact.
 #
 # Exit 0 on all-passed, 1 on any failure, 2 on setup error.
+
+# Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
+# FIRST executable statement so the refusal fires before anything in this file
+# runs; every definition below overrides the harness's own, so a suite written
+# before the harness existed behaves exactly as it did.
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
 

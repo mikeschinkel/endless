@@ -4,7 +4,7 @@
 # two first reference verification suites (E-1758 and E-1603) end to end.
 #
 # Run from anywhere inside the worktree (esu puts you here):
-#   esu && ./tests/tasks/e-1605-verify.sh
+#   endless task verify E-1605
 #
 # Output: pass/fail per check, then a summary. Exit 0 on all-passed, 1 on any
 # failure, 2 on a setup/environment error. This is the single fail-fast suite for
@@ -13,6 +13,12 @@
 # This exercises all four runner forms the system now supports: gotest, the
 # testscript/.txtar CLI/e2e form, a raw TAP command, and the first-class pytest
 # runner (pytest/uv, per E-1789's driver architecture).
+
+# Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
+# FIRST executable statement so the refusal fires before anything in this file
+# runs; every definition below overrides the harness's own, so a suite written
+# before the harness existed behaves exactly as it did.
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
 

@@ -28,8 +28,14 @@
 #   8. Functional: the documented `git add` pathspec really does stage source
 #      while excluding the ledger and verbs, proven in a throwaway repo.
 #
-# Run from anywhere inside the worktree:  ./tests/tasks/e-1870-verify.sh
+# Run from anywhere inside the worktree:  endless task verify E-1870
 #
+# Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
+# FIRST executable statement so the refusal fires before anything in this file
+# runs; every definition below overrides the harness's own, so a suite written
+# before the harness existed behaves exactly as it did.
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
+
 set -u
 
 ROOT=$(git rev-parse --show-toplevel) || { echo "not in a git repo" >&2; exit 1; }

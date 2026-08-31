@@ -4,7 +4,7 @@
 # already-running session, not only on spawn.
 #
 # Run from anywhere inside the worktree:
-#   ./tests/tasks/e-1822-verify.sh
+#   endless task verify E-1822
 #
 # Single entry point (per E-1596). It ensures binaries are current, runs the Go
 # suites that pin both axes fail-fast, then proves the two claims that matter at
@@ -29,7 +29,13 @@
 # documented for the mechanism this rides on). Nothing here needs checking by
 # hand.
 #
-# Model: tests/tasks/e-1803-verify.sh.
+# Model: .endless/tasks/e-1803/verify.sh.
+
+# Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
+# FIRST executable statement so the refusal fires before anything in this file
+# runs; every definition below overrides the harness's own, so a suite written
+# before the harness existed behaves exactly as it did.
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
 

@@ -3,7 +3,7 @@
 # E-1684 verification suite — the SINGLE entry point for verifying E-1684.
 #
 #   esu
-#   ./tests/tasks/e-1684-verify.sh
+#   endless task verify E-1684
 #
 # Self-contained: it builds the worktree binaries, runs the Go unit tests for
 # the tree-layering logic, then drives the real worktree-built endless-go binary
@@ -22,6 +22,12 @@
 #        - an independent task renders as a separate flush-left root,
 #        - output is IDs-only (no legend / titles / icons),
 #        - a per-session do_order (E-1683) overrides the DAG order.
+
+# Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
+# FIRST executable statement so the refusal fires before anything in this file
+# runs; every definition below overrides the harness's own, so a suite written
+# before the harness existed behaves exactly as it did.
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
 

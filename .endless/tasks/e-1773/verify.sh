@@ -16,9 +16,9 @@
 #
 # Run from anywhere inside the worktree:
 #   esu
-#   ./tests/tasks/e-1773-verify.sh
+#   endless task verify E-1773
 #
-# Strategy (mirrors tests/tasks/e-1759-verify.sh): render each handoff type
+# Strategy (mirrors .endless/tasks/e-1759/verify.sh): render each handoff type
 # through the worktree-built `bin/endless-go template render` against a
 # throwaway self_dev project fixture, and assert on the rendered text. Nothing
 # touches the real endless repo, ledger, or this worktree's branch — teardown is
@@ -38,6 +38,12 @@
 #
 # Output: pass/fail per check, then a summary. Exit 0 all-passed, 1 any failure,
 # 2 setup error.
+
+# Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
+# FIRST executable statement so the refusal fires before anything in this file
+# runs; every definition below overrides the harness's own, so a suite written
+# before the harness existed behaves exactly as it did.
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
 

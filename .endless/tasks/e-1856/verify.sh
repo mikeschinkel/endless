@@ -5,7 +5,7 @@
 # made a task's Claude session unreachable via `session goto`/`session resume`.
 #
 # Run from anywhere inside the worktree:
-#   ./tests/tasks/e-1856-verify.sh
+#   endless task verify E-1856
 #
 # The two behaviors under test (internal/hookcmd/claude.go, autoBindFromCwd):
 #   1. A worktree already owned by a LIVE sibling session (non-stale worktree
@@ -26,6 +26,12 @@
 # "replacement directory ../go-pkgs/... does not exist", run `just go-work-init`.
 #
 # Per-task verify script (convention from E-1596 / E-1602).
+
+# Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
+# FIRST executable statement so the refusal fires before anything in this file
+# runs; every definition below overrides the harness's own, so a suite written
+# before the harness existed behaves exactly as it did.
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
 

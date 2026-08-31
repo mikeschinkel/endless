@@ -14,11 +14,17 @@
 # bare human shell sees nothing.
 #
 # Run from anywhere inside the worktree:
-#   ./tests/tasks/e-1772-verify.sh
+#   endless task verify E-1772
 #
 # Fail-fast: the pytest unit suite (tests/test_report_reminder.py) runs first
 # and aborts the script on any failure; the end-to-end sandbox checks below
 # then exercise the real CLI. Exit 0 on all-passed, 1 on any failure.
+
+# Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
+# FIRST executable statement so the refusal fires before anything in this file
+# runs; every definition below overrides the harness's own, so a suite written
+# before the harness existed behaves exactly as it did.
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
 

@@ -5,7 +5,7 @@
 # never produced, only read-and-removed as a legacy straggler).
 #
 # Run from inside the worktree (esu puts you there):
-#   esu && ./tests/tasks/e-1858-verify.sh
+#   endless task verify E-1858
 #
 # What it proves:
 #   1. FAIL-FAST unit gate: the affected Go + Python unit suites pass.
@@ -19,6 +19,12 @@
 #   5. The two mirrors agree: neither treats the deprecated path as auto-managed.
 #
 # Exit 0 on all-passed, 1 on any failure, 2 on setup error.
+
+# Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
+# FIRST executable statement so the refusal fires before anything in this file
+# runs; every definition below overrides the harness's own, so a suite written
+# before the harness existed behaves exactly as it did.
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
 

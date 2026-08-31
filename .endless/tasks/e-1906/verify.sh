@@ -18,7 +18,7 @@
 #
 # Run from anywhere inside the worktree:
 #   esu
-#   ./tests/tasks/e-1906-verify.sh
+#   endless task verify E-1906
 #
 # Requires `just build` (or `just go`) first — checks 4/5 drive the CANDIDATE
 # bin/endless-go, not the global install.
@@ -26,7 +26,7 @@
 # What it checks:
 #   0. Fail-fast fold-in regression: `go build ./...`, the Go tests for the four
 #      packages this touched, `just guide-check`, and the whole of
-#      tests/tasks/e-1780-verify.sh (which pinned the appendix command list this
+#      .endless/tasks/e-1780/verify.sh (which pinned the appendix command list this
 #      change had to amend). A failure here short-circuits the rest.
 #   1. No reference survives anywhere in the source tree.
 #   2. The two dead Go files are actually deleted, not just unreferenced.
@@ -43,6 +43,12 @@
 #
 # Output: pass/fail per check, then a summary. Exit 0 all-passed, 1 any failure,
 # 2 setup error.
+
+# Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
+# FIRST executable statement so the refusal fires before anything in this file
+# runs; every definition below overrides the harness's own, so a suite written
+# before the harness existed behaves exactly as it did.
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
 
@@ -308,7 +314,7 @@ check_schema_shape() {
 
 # 4. The change file is what runs against the real populated DB at land time,
 # so prove it on a populated old-shape DB rather than trusting the DDL. Shape
-# built inline for the same reason tests/tasks/e-1568-verify.sh does it: no git
+# built inline for the same reason .endless/tasks/e-1568/verify.sh does it: no git
 # archaeology, fully deterministic.
 check_change_file_migrates() {
     section "4 — the change file migrates a populated old-shape DB"

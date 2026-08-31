@@ -6,7 +6,7 @@
 # involvement; validate-db/rebuild-db read the same target emits write.
 #
 # Run from anywhere inside the worktree:
-#   esu && ./tests/tasks/e-1729-verify.sh
+#   endless task verify E-1729
 #
 # Output: pass/fail per check, then a summary. Exit 0 on all-passed, 1 on any
 # failure, 2 on a setup problem.
@@ -32,6 +32,12 @@
 # detection is ConfigDir-under-CacheDir()/sandboxes, and CacheDir honors
 # XDG_CACHE_HOME). No real DB, ledger, or cache is touched. This is the
 # E-1596 ad-hoc-prototype shape, not a shared harness.
+
+# Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
+# FIRST executable statement so the refusal fires before anything in this file
+# runs; every definition below overrides the harness's own, so a suite written
+# before the harness existed behaves exactly as it did.
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
 

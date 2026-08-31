@@ -3,7 +3,7 @@
 # E-1821 verification — the `esm` shell helper for `endless session monitor`.
 #
 # Run from inside the worktree (esu puts you there):
-#   esu && ./tests/tasks/e-1821-verify.sh
+#   endless task verify E-1821
 #
 # What it proves:
 #   1. `endless shell-init` (from THIS worktree's source) emits an `esm()`
@@ -17,6 +17,12 @@
 #   4. The pytest suite tests/test_shell_init.py still passes (regression).
 #
 # Exit 0 on all-passed, 1 on any failure, 2 on setup error.
+
+# Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
+# FIRST executable statement so the refusal fires before anything in this file
+# runs; every definition below overrides the harness's own, so a suite written
+# before the harness existed behaves exactly as it did.
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
 

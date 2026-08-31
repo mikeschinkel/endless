@@ -4,7 +4,7 @@
 # commands' output.
 #
 # Run from anywhere inside the worktree:
-#   ./tests/tasks/e-1997-verify.sh
+#   endless task verify E-1997
 #
 # Single entry point (per E-1596). Fail-fast on the unit contracts, then
 # reproduce the reported symptom with a REAL zsh reading a REAL rc file.
@@ -44,7 +44,13 @@
 # pre-land gates for their own task in their own worktree, not a regression
 # suite. Project-wide regression here is `go build/vet/test ./...` + `just test`.
 #
-# Model: tests/tasks/e-1962-verify.sh.
+# Model: .endless/tasks/e-1962/verify.sh.
+
+# Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
+# FIRST executable statement so the refusal fires before anything in this file
+# runs; every definition below overrides the harness's own, so a suite written
+# before the harness existed behaves exactly as it did.
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
 
@@ -163,7 +169,7 @@ assert_text_lacks() {
 # tool, whose shell reads the same file.
 #
 # ENDLESS_SESSION_ID is scrubbed from every run. The documented way to invoke
-# this suite is `esu && ./tests/tasks/e-1997-verify.sh`, and `esu` EXPORTS that
+# this suite is `endless task verify E-1997`, and `esu` EXPORTS that
 # variable — so a check written in a shell that had not run `esu` can pass for
 # its author and fail for everyone following the instructions. The helpers
 # branch on it (see _endless_run and esf), so leaving it inherited makes this

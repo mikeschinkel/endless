@@ -4,7 +4,7 @@
 # log lives in .endless/, not .claude/.
 #
 # Run from anywhere inside the worktree:
-#   ./tests/tasks/e-2000-verify.sh
+#   endless task verify E-2000
 #
 # Single entry point (per E-1596).
 #
@@ -45,7 +45,13 @@
 # What this suite does NOT do: run any other task's verify script. Project-wide
 # regression is `go build/vet/test ./...` + `just test`.
 #
-# Model: tests/tasks/e-1997-verify.sh.
+# Model: .endless/tasks/e-1997/verify.sh.
+
+# Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
+# FIRST executable statement so the refusal fires before anything in this file
+# runs; every definition below overrides the harness's own, so a suite written
+# before the harness existed behaves exactly as it did.
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
 

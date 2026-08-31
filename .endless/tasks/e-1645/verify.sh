@@ -25,10 +25,16 @@
 # loudly with exit 2 (no /dev/null swallowing).
 #
 # Run from inside the worktree, in a tmux session (esu provides one):
-#   esu && ./tests/tasks/e-1645-verify.sh
+#   endless task verify E-1645
 #
 # Output: pass/fail per check, then a summary. Exit 0 on all-passed, 1 on any
 # failure, 2 on environment/setup error.
+
+# Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
+# FIRST executable statement so the refusal fires before anything in this file
+# runs; every definition below overrides the harness's own, so a suite written
+# before the harness existed behaves exactly as it did.
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
 

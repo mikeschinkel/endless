@@ -23,7 +23,7 @@
 # client holds nothing of its own). See E-1889's convention.
 #
 # Run from anywhere inside the worktree:
-#   esu && ./tests/tasks/e-1891-verify.sh
+#   endless task verify E-1891
 #
 # Output: pass/fail per check, then a summary. Exit 0 on all-passed, 1 on any
 # failure, 2 on a setup problem.
@@ -34,7 +34,13 @@
 #
 # Isolation: a throwaway git repo as project root under a temp dir, a temp
 # XDG_CONFIG_HOME (its own DB) and XDG_CACHE_HOME. No real DB/ledger/cache is
-# touched. Harness shape borrowed from tests/tasks/e-1845-verify.sh.
+# touched. Harness shape borrowed from .endless/tasks/e-1845/verify.sh.
+
+# Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
+# FIRST executable statement so the refusal fires before anything in this file
+# runs; every definition below overrides the harness's own, so a suite written
+# before the harness existed behaves exactly as it did.
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
 

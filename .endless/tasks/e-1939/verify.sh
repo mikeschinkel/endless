@@ -16,7 +16,7 @@
 # green build and only bites the next person to clone the repo.
 #
 # Run from anywhere inside the worktree:
-#   esu && ./tests/tasks/e-1939-verify.sh
+#   endless task verify E-1939
 #
 # Output: pass/fail per check, then a summary. Exit 0 on all-passed, 1 on any
 # failure, 2 on a setup problem.
@@ -32,6 +32,12 @@
 # the real main checkout — the script deletes the untracked templUI symlink
 # residue that the merge cannot remove, and a bug there would delete files on
 # main. Nothing in this suite touches the real DB, ledger or main checkout.
+
+# Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
+# FIRST executable statement so the refusal fires before anything in this file
+# runs; every definition below overrides the harness's own, so a suite written
+# before the harness existed behaves exactly as it did.
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
 

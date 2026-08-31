@@ -5,7 +5,7 @@
 # landing.
 #
 # Run from anywhere inside the worktree:
-#   ./tests/tasks/e-1709-verify.sh
+#   endless task verify E-1709
 #
 # This is the single entry point for verifying E-1709 (per E-1596). The fix is
 # an ORDERING change in the dev-only `just land` recipe: the worktree binary is
@@ -24,7 +24,13 @@
 # ordered before every real-DB consumer — so the original failure has no
 # remaining path.
 #
-# Model: tests/tasks/e-1542-verify.sh (the E-1596 reference shape).
+# Model: .endless/tasks/e-1542/verify.sh (the E-1596 reference shape).
+
+# Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
+# FIRST executable statement so the refusal fires before anything in this file
+# runs; every definition below overrides the harness's own, so a suite written
+# before the harness existed behaves exactly as it did.
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
 

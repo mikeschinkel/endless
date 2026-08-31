@@ -10,7 +10,7 @@
 #                                   `session status` so the live view can own it
 #
 # Run from anywhere inside the worktree:
-#   ./tests/tasks/e-1688-verify.sh
+#   endless task verify E-1688
 #
 # The snapshot VIEW is exercised headlessly through the worktree's candidate Go
 # binary (`./bin/endless-go session-status --task <id>`), which names the focal
@@ -18,6 +18,12 @@
 # per-worktree sandbox DB instead of pinning main (E-1685's headless entry point).
 # Surface checks (verb present/absent, help text) go through the Python CLI.
 # Seeds route to `--db sandbox`; exit 0 on all-passed, 1 on any failure.
+
+# Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
+# FIRST executable statement so the refusal fires before anything in this file
+# runs; every definition below overrides the harness's own, so a suite written
+# before the harness existed behaves exactly as it did.
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
 

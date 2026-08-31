@@ -28,12 +28,18 @@
 # explicit path so no stale global is exercised.
 #
 # Run from anywhere inside the worktree:
-#   ./tests/tasks/e-1714-verify.sh
+#   endless task verify E-1714
 #
 # Output: pass/fail per check, then a summary. Exit 0 on all-passed, 1 on any
-# failure, 2 on setup error. Shape follows tests/tasks/e-1577-verify.sh /
-# e-1662-verify.sh. Interim location tests/tasks/ (pre-E-1596); migrates to the
+# failure, 2 on setup error. Shape follows .endless/tasks/e-1577/verify.sh /
+# e-1662-verify.sh. Interim location .endless/tasks/ (pre-E-1596); migrates to the
 # formal .endless/tasks/<id>/ convention via E-1623 once the runner lands.
+
+# Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
+# FIRST executable statement so the refusal fires before anything in this file
+# runs; every definition below overrides the harness's own, so a suite written
+# before the harness existed behaves exactly as it did.
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
 

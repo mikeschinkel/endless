@@ -6,7 +6,7 @@
 # worktree's sandbox DB, using throwaway scratch dirs for the on-disk scaffolding.
 #
 # Run from anywhere inside the worktree:
-#   ./tests/tasks/e-1757-verify.sh
+#   endless task verify E-1757
 #
 # Asserts:
 #   1. `project init --help` and `project register --help` are both reachable.
@@ -20,6 +20,12 @@
 # Output: pass/fail per check, then a summary. Exit 0 on all-passed, 1 on any
 # failure, 2 on setup error. A trap removes the scratch dirs and unregisters the
 # test rows from the sandbox DB so re-runs stay clean.
+
+# Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
+# FIRST executable statement so the refusal fires before anything in this file
+# runs; every definition below overrides the harness's own, so a suite written
+# before the harness existed behaves exactly as it did.
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
 

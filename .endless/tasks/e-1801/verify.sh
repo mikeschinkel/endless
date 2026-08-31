@@ -5,7 +5,7 @@
 #
 # Run from anywhere inside the worktree:
 #   esu
-#   ./tests/tasks/e-1801-verify.sh
+#   endless task verify E-1801
 #
 # Output: pass/fail per check, then a summary. Exit 0 on all-passed, 1 on any
 # failure, 2 on setup error.
@@ -25,7 +25,13 @@
 #   3. LIVE CLI WIRING — the argument-shape guards that raise before any DB or
 #      git access (mutually-exclusive flags; --print-decision requires an intent).
 #
-# Modeled on tests/tasks/e-1577-verify.sh.
+# Modeled on .endless/tasks/e-1577/verify.sh.
+
+# Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
+# FIRST executable statement so the refusal fires before anything in this file
+# runs; every definition below overrides the harness's own, so a suite written
+# before the harness existed behaves exactly as it did.
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
 

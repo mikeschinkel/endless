@@ -7,7 +7,7 @@
 # mislabeled ↑ parent.
 #
 # Run from anywhere inside the worktree:
-#   ./tests/tasks/e-1694-verify.sh
+#   endless task verify E-1694
 #
 # Seeds tasks via the Python CLI (`endless ... --db sandbox`) and reads them back
 # through the worktree's candidate Go binary headless:
@@ -16,6 +16,12 @@
 # id the live path would read from @endless_spawned_by. The spawning session row
 # is inserted directly into the sandbox sessions table (the hook normally writes
 # it). Output: pass/fail per check, then a summary. Exit 0 on all-passed.
+
+# Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
+# FIRST executable statement so the refusal fires before anything in this file
+# runs; every definition below overrides the harness's own, so a suite written
+# before the harness existed behaves exactly as it did.
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
 

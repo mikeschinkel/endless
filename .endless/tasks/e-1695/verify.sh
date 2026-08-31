@@ -5,7 +5,7 @@
 # and instead advises the user to spawn each child.
 #
 # Run from anywhere inside the worktree:
-#   ./tests/tasks/e-1695-verify.sh
+#   endless task verify E-1695
 #
 # The change is to an embedded Go template (internal/templatecmd/templates/
 # handoff/epic.md.tmpl). For self-dev projects the renderer reads the EMBEDDED
@@ -18,7 +18,13 @@
 # failure, 2 on setup error (not a git worktree / build failed / go missing).
 #
 # Ad-hoc per-task verify script, following the E-1596 convention and modeled on
-# tests/tasks/e-1577-verify.sh.
+# .endless/tasks/e-1577/verify.sh.
+
+# Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
+# FIRST executable statement so the refusal fires before anything in this file
+# runs; every definition below overrides the harness's own, so a suite written
+# before the harness existed behaves exactly as it did.
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
 

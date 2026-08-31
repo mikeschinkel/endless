@@ -28,7 +28,7 @@
 # are re-run below verbatim to hold that line.
 #
 # Run from anywhere inside the worktree:
-#   esu && ./tests/tasks/e-2006-verify.sh
+#   endless task verify E-2006
 #
 # Output: pass/fail per check, then a summary. Exit 0 on all-passed, 1 on any
 # failure, 2 on a setup problem.
@@ -44,10 +44,16 @@
 # executor and the predicate at a granularity the shell cannot reach, so if it
 # fails there is no point running the end-to-end checks.
 #
-# The last section re-runs tests/tasks/e-1917-verify.sh and
-# tests/tasks/e-2005-verify.sh in full. The first owns the behavior this task
+# The last section re-runs .endless/tasks/e-1917/verify.sh and
+# .endless/tasks/e-2005/verify.sh in full. The first owns the behavior this task
 # re-expresses; the second owns the field it now reads. Neither needed editing,
 # which is itself the evidence that only the SOURCE of the answer moved.
+
+# Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
+# FIRST executable statement so the refusal fires before anything in this file
+# runs; every definition below overrides the harness's own, so a suite written
+# before the harness existed behaves exactly as it did.
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
 

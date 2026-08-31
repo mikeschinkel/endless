@@ -10,7 +10,7 @@
 # sessions may run neither `approve` nor pick up (`claim`) non-`ready` work.
 #
 # Run from anywhere inside the worktree:
-#   esu && ./tests/tasks/e-1648-verify.sh
+#   endless task verify E-1648
 #
 # Output: pass/fail per check, then a summary. Exit 0 on all-passed, 1 on any
 # failure, 2 on a setup problem.
@@ -23,6 +23,12 @@
 # falls back to a PATH-resolved `endless-go` when cwd is not a self-dev
 # worktree, which the isolated /tmp repo is not). This is the E-1596 ad-hoc
 # prototype shape, not a shared harness.
+
+# Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
+# FIRST executable statement so the refusal fires before anything in this file
+# runs; every definition below overrides the harness's own, so a suite written
+# before the harness existed behaves exactly as it did.
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
 

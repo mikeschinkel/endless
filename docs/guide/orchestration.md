@@ -518,7 +518,7 @@ Every task carries **one verification suite** — a single, self-contained proof
 | Form | File | What it is |
 |------|------|------------|
 | Manifest | `verify.toml` | A declarative list of `[[check]]` entries the runner executes and normalizes (`gotest`, `pytest`, any TAP-emitting command). |
-| Script | `verify.sh` | A bash suite that sources `.endless/tasks/_harness.sh` and asserts. |
+| Script | `verify.sh` | A bash suite that sources `.endless/tasks/_harness.sh` and asserts. Sourcing the harness is what makes it refuse a direct run, so every suite does it. |
 
 A task carries one or the other; during a conversion it may hold both, and the manifest wins. A good suite:
 
@@ -532,17 +532,21 @@ The suite folds in the task's own unit tests as a first, fail-fast check, so the
 ### Running one: `endless task verify`
 
 ```bash
-endless task verify            # this session's own task
+endless task verify            # this session's task, or the worktree you are in
 endless task verify E-<id>     # a named task
 ```
 
 This is the only front door, and it is the front door for both forms — which is the point: the command a session hands back is identical whether the suite is a script today or a manifest later.
 
-Running a `verify.sh` directly is not a shortcut, it is a different (and worse) thing: it skips the isolation, and it skips the check that the suite is yours. A suite that sources the shared harness refuses a direct run and says so.
+**It is sufficient on its own — no `cd` first, and nothing to remember.** With no id it takes the session's active task, falling back to the task whose worktree you are standing in (the same two sources `just land` uses, and the second needs no database, so it works outside tmux and in a self-dev worktree with no `--db`). Having resolved the task it runs the suite **in that task's worktree**, because a suite is a pre-land gate and has to prove the candidate tree — asking from the main checkout would otherwise run main's copy against code the task hasn't landed.
+
+The runner exports three variables into the suite's environment: `ENDLESS_VERIFY_TASK` (the id), `ENDLESS_VERIFY_DIR` (the suite's own directory — read files you ship beside a suite from here rather than typing the path), and `ENDLESS_VERIFY_RUN` (the per-run temp dir, whose presence is what proves the runner started you).
+
+Running a `verify.sh` directly is not a shortcut, it is a different (and worse) thing: it skips the isolation, and it skips the check that the suite is yours. Every suite refuses a direct run and names the command to use instead.
 
 **The runner refuses another task's landed suite.** Ask it for a suite that has landed and is not the task you are working on — not your session's task, and not the task whose worktree you are standing in — and it exits non-zero without running anything, naming what to run instead. Both halves of that condition matter: a task that landed and was then *reopened* is still your task, so re-verifying and re-landing your own work is untouched.
 
-> Inside Endless's own checkout, `just verify [E-NNNN]` is the self-dev wrapper: it resolves the task id the same way `just land` does, cds into that task's worktree, and runs the suite through the **worktree's** endless so a pre-land gate exercises candidate code rather than main's. It holds no verification logic — everything above lives in `endless task verify`.
+> Inside Endless's own checkout, `just verify [E-NNNN]` adds one self-dev-only thing: `--db sandbox`, which selects the **worktree's** `endless-go` so a pre-land gate exercises candidate code rather than main's. Everything else it does, `endless task verify` now does itself.
 
 ### A verify suite is a land-time gate, not a standing regression suite
 

@@ -6,7 +6,7 @@
 # `claude --resume <uuid>`.
 #
 # Run from anywhere inside the worktree:
-#   ./tests/tasks/e-1776-verify.sh
+#   endless task verify E-1776
 #
 # What it checks:
 #   1. Resolver unit tests (hermetic; task-first, most-recent, prefix, fallback).
@@ -17,6 +17,12 @@
 #      resumable session with an on-disk worktree exists.
 #
 # Exit 0 on all-passed (or e2e-skipped), 1 on any failure.
+
+# Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
+# FIRST executable statement so the refusal fires before anything in this file
+# runs; every definition below overrides the harness's own, so a suite written
+# before the harness existed behaves exactly as it did.
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
 

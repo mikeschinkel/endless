@@ -6,7 +6,7 @@
 #
 # Run from anywhere inside the worktree:
 #   esu
-#   ./tests/tasks/e-1768-verify.sh
+#   endless task verify E-1768
 #
 # Background (see the task text): E-1758 unified two surfaces onto one
 # monitor.WorktreeAnomalies set. `worktree check` runs at HANDOFF (a dirty tree
@@ -15,7 +15,7 @@
 # EXPECTED work-in-progress state — a false positive. This task suppresses ONLY
 # AnomalyUncommitted, ONLY in the session-status focal render.
 #
-# Strategy (same shape as tests/tasks/e-1758-verify.sh): build a FULLY ISOLATED
+# Strategy (same shape as .endless/tasks/e-1758/verify.sh): build a FULLY ISOLATED
 # throwaway environment (temp XDG_CONFIG_HOME + fresh DB, a temp git project, a
 # real linked worktree) and drive the worktree-built `bin/endless-go` +
 # candidate `.venv/bin/endless` against it. Nothing touches the real endless
@@ -37,6 +37,12 @@
 #
 # Output: pass/fail per check, then a summary. Exit 0 all-passed, 1 any failure,
 # 2 setup error.
+
+# Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
+# FIRST executable statement so the refusal fires before anything in this file
+# runs; every definition below overrides the harness's own, so a suite written
+# before the harness existed behaves exactly as it did.
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
 

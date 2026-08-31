@@ -24,7 +24,7 @@
 #      `update_plan` refused while every other surface accepted it.
 #
 # Run from anywhere inside the worktree:
-#   esu && ./tests/tasks/e-1956-verify.sh
+#   endless task verify E-1956
 #
 # Fail-fast: the first failed check exits 1. Exit 0 on all-passed, 2 on a setup
 # problem.
@@ -33,6 +33,12 @@
 # in-memory SQLite; the Python checks run under pytest's own tmp-dir isolation;
 # the end-to-end CLI section drives the freshly-built worktree binaries against a
 # throwaway XDG_CONFIG_HOME with its own DB, in a throwaway git repo.
+
+# Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
+# FIRST executable statement so the refusal fires before anything in this file
+# runs; every definition below overrides the harness's own, so a suite written
+# before the harness existed behaves exactly as it did.
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
 

@@ -3,7 +3,7 @@
 # E-1690 verification suite — the SINGLE entry point for verifying E-1690.
 #
 #   esu
-#   ./tests/tasks/e-1690-verify.sh
+#   endless task verify E-1690
 #
 # Self-contained. Verifies Part A of E-1690: the handoff templates'
 # end-of-session `Final message` line no longer instructs a task-status recap
@@ -18,6 +18,12 @@
 # Part B (the `session status` dirty `◆` indicator) is an exploration deferred
 # to its own task per the plan; when it lands, its rendering assertions get
 # their own verify script.
+
+# Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
+# FIRST executable statement so the refusal fires before anything in this file
+# runs; every definition below overrides the harness's own, so a suite written
+# before the harness existed behaves exactly as it did.
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
 

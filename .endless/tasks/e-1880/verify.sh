@@ -19,9 +19,9 @@
 #
 # Run from anywhere inside the worktree:
 #   esu
-#   ./tests/tasks/e-1880-verify.sh
+#   endless task verify E-1880
 #
-# Strategy (shape per tests/tasks/e-1771-verify.sh, the command's own script): a
+# Strategy (shape per .endless/tasks/e-1771/verify.sh, the command's own script): a
 # FULLY ISOLATED throwaway env (temp XDG_CONFIG_HOME + fresh DB, a temp git
 # project) driving the CANDIDATE Python CLI (`.venv/bin/endless`) and the
 # worktree-built `bin/endless-go`. Nothing touches the real endless repo/ledger.
@@ -44,6 +44,12 @@
 #
 # Output: pass/fail per check, then a summary. Exit 0 all-passed, 1 any failure,
 # 2 setup error.
+
+# Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
+# FIRST executable statement so the refusal fires before anything in this file
+# runs; every definition below overrides the harness's own, so a suite written
+# before the harness existed behaves exactly as it did.
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
 

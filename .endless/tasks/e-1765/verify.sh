@@ -11,7 +11,7 @@
 # submitted stays out of the --tree do/plan backlog (not spawnable).
 #
 # Run from anywhere inside the worktree:
-#   esu && ./tests/tasks/e-1765-verify.sh
+#   endless task verify E-1765
 #
 # Output: pass/fail per check, then a summary. Exit 0 on all-passed, 1 on any
 # failure, 2 on a setup problem.
@@ -20,6 +20,12 @@
 # worktree source plus greps of the worktree source, so no DB/ledger/cache is
 # touched. It mirrors the e-1648-verify.sh shape (section/pass/fail/summary
 # helpers) minus the DB fixture, which the classifier change does not need.
+
+# Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
+# FIRST executable statement so the refusal fires before anything in this file
+# runs; every definition below overrides the harness's own, so a suite written
+# before the harness existed behaves exactly as it did.
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
 

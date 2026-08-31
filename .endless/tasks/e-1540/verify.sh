@@ -5,7 +5,7 @@
 # sandbox DB.
 #
 # Run from anywhere inside the worktree:
-#   ./tests/tasks/e-1540-verify.sh
+#   endless task verify E-1540
 #
 # Output: pass/fail per check, then a summary. Exit 0 on all-passed, 1 on any
 # failure, 2 on setup error (not a git worktree / uv missing). Each new task
@@ -15,6 +15,12 @@
 #
 # Shape/output mirrors the E-1577 prototype referenced by E-1596 (the
 # verification-suite formalization task).
+
+# Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
+# FIRST executable statement so the refusal fires before anything in this file
+# runs; every definition below overrides the harness's own, so a suite written
+# before the harness existed behaves exactly as it did.
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
 

@@ -5,7 +5,7 @@
 # sandbox DB.
 #
 # Run from anywhere inside the worktree:
-#   ./tests/tasks/e-1685-verify.sh
+#   endless task verify E-1685
 #
 # It seeds focal/dependent tasks via the Python CLI (`endless ... --db sandbox`)
 # and reads them back through the worktree's candidate Go binary in its headless
@@ -15,6 +15,12 @@
 # all-passed, 1 on any failure. Each run creates fresh task IDs; the sandbox is
 # not wiped between runs (pollution is bounded and inspectable via
 #   uv run endless task list --db sandbox).
+
+# Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
+# FIRST executable statement so the refusal fires before anything in this file
+# runs; every definition below overrides the harness's own, so a suite written
+# before the harness existed behaves exactly as it did.
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
 

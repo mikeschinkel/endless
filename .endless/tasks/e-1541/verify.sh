@@ -4,7 +4,7 @@
 # against the worktree's sandbox DB, through the real `endless` CLI.
 #
 # Run from anywhere inside the worktree:
-#   ./tests/tasks/e-1541-verify.sh
+#   endless task verify E-1541
 #
 # What it checks (the §1 derivation rule + consequences): an epic's status is a
 # pure function of its children's statuses — in_progress > ready > needs_plan >
@@ -26,6 +26,12 @@
 # user-facing CLI behavior: the derived status the user sees after each change.
 #
 # Ad-hoc verify script in the shape established by E-1577 / formalized by E-1596.
+
+# Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
+# FIRST executable statement so the refusal fires before anything in this file
+# runs; every definition below overrides the harness's own, so a suite written
+# before the harness existed behaves exactly as it did.
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
 

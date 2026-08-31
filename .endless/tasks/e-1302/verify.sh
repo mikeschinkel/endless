@@ -12,7 +12,7 @@
 # Both print one bare `E-NNNN` line and exit non-zero when there is no task.
 #
 # Run from inside the worktree (esu puts you there):
-#   esu && ./tests/tasks/e-1302-verify.sh
+#   endless task verify E-1302
 #
 # What it proves:
 #   1. FAIL-FAST unit gate: this task's Python suite and the CLI-surface
@@ -35,6 +35,12 @@
 #      stale `endless-tmux active-id` spelling survives in the guide.
 #
 # Exit 0 on all-passed, 1 on any failure, 2 on setup error.
+
+# Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
+# FIRST executable statement so the refusal fires before anything in this file
+# runs; every definition below overrides the harness's own, so a suite written
+# before the harness existed behaves exactly as it did.
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
 

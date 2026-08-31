@@ -14,11 +14,11 @@
 #
 # Not exotic: on macOS /tmp and /var are symlinks into /private, so every
 # project under a temp dir hits it — which is how it surfaced, breaking
-# tests/tasks/e-2001-verify.sh — and so does any user whose projects live under
+# .endless/tasks/e-2001/verify.sh — and so does any user whose projects live under
 # a symlinked parent.
 #
 # Run from anywhere inside the worktree:
-#   esu && ./tests/tasks/e-2002-verify.sh
+#   endless task verify E-2002
 #
 # Output: pass/fail per check, then a summary. Exit 0 on all-passed, 1 on any
 # failure, 2 on a setup problem.
@@ -46,6 +46,12 @@
 # NOTE the fixture does NOT use `pwd -P` on the symlinked spelling. That
 # workaround is what e-2001-verify.sh had to do to dodge this bug; here the
 # unresolved spelling is the input under test.
+
+# Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
+# FIRST executable statement so the refusal fires before anything in this file
+# runs; every definition below overrides the harness's own, so a suite written
+# before the harness existed behaves exactly as it did.
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
 

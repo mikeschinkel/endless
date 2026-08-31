@@ -4,7 +4,7 @@
 #
 # Run from anywhere inside the worktree:
 #   esu
-#   ./tests/tasks/e-1797-verify.sh
+#   endless task verify E-1797
 #
 # Output: pass/fail per check, then a summary. Exit 0 on all-passed, 1 on any
 # failure, 2 on setup error.
@@ -21,7 +21,13 @@
 # (wiring + the outside-tmux refusal). The interactive new-window/focus behavior
 # is left to the MANUAL steps printed at the end.
 #
-# Modeled on tests/tasks/e-1681-verify.sh.
+# Modeled on .endless/tasks/e-1681/verify.sh.
+
+# Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
+# FIRST executable statement so the refusal fires before anything in this file
+# runs; every definition below overrides the harness's own, so a suite written
+# before the harness existed behaves exactly as it did.
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
 

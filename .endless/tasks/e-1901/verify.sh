@@ -3,7 +3,7 @@
 # E-1901 verification script — the verbatim-report-relay Stop gate.
 #
 # Run from anywhere inside the worktree:
-#   ./tests/tasks/e-1901-verify.sh
+#   endless task verify E-1901
 #
 # Single entry point (per E-1596). Fail-fast on the unit contract (the
 # comparison matrix is where correctness actually lives), then the schema, the
@@ -25,7 +25,13 @@
 # verified here, is that appending is caught, quantified, and named to both the
 # agent and the user every time.
 #
-# Model: tests/tasks/e-1803-verify.sh.
+# Model: .endless/tasks/e-1803/verify.sh.
+
+# Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
+# FIRST executable statement so the refusal fires before anything in this file
+# runs; every definition below overrides the harness's own, so a suite written
+# before the harness existed behaves exactly as it did.
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
 

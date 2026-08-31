@@ -6,13 +6,28 @@ harness a script suite sources; it belongs to no task.
 
 ## Run one with the runner, never by hand
 
-    endless task verify E-<id>      # or, with no id, this session's own task
+    endless task verify             # this session's task, or the worktree you are in
+    endless task verify E-<id>      # a named task
 
-The runner is the only front door. It builds the isolation a suite needs (a
-temp `HOME` and `XDG_CONFIG_HOME`, so a suite cannot read or pollute your real
-config or the main database), it knows which task it is running, and it refuses
-a task's suite that is not yours. Executing a script directly skips all three —
-which is why a suite that sources `_harness.sh` refuses to run that way.
+The runner is the only front door, and it is enough on its own: it resolves the
+task, runs in that task's worktree, builds the isolation a suite needs (a temp
+`HOME` and `XDG_CONFIG_HOME`, so a suite cannot read or pollute your real config
+or the main database), and refuses a task's suite that is not yours. Executing a
+script directly skips all of it — which is why every suite here refuses to run
+that way.
+
+It exports three things into a suite's environment:
+
+| Variable | What it is |
+|----------|------------|
+| `ENDLESS_VERIFY_TASK` | the task being verified, `E-NNNN` |
+| `ENDLESS_VERIFY_DIR`  | this suite's own directory |
+| `ENDLESS_VERIFY_RUN`  | the per-run temp dir; its presence is what proves the runner started you |
+
+Read a file you ship beside your suite from `$ENDLESS_VERIFY_DIR`, never from a
+path you type out. A hand-written path has to match a directory-casing
+convention it cannot see, and gets that wrong silently on a case-insensitive
+filesystem and loudly on everyone else's.
 
 ## Do not run another task's suite
 

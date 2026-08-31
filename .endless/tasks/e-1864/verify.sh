@@ -3,7 +3,7 @@
 # E-1864 verification script — the single verification command for this task.
 #
 # Run from anywhere inside the worktree:
-#   ./tests/tasks/e-1864-verify.sh
+#   endless task verify E-1864
 #
 # E-1864 makes a settled decision reversible. Before it, `decision accept` and
 # `decision reject` were one-way: `decision update` has no --status flag and no
@@ -35,10 +35,16 @@
 #
 # Stage 3 leaves one probe decision in the worktree's sandbox DB (never the
 # real ledger); there is no `decision delete` CLI verb to clean it up with.
-# Same bounded, inspectable pollution as tests/tasks/e-1788-verify.sh.
+# Same bounded, inspectable pollution as .endless/tasks/e-1788/verify.sh.
 #
 # Output: pass/fail per check, then a summary. Exit 0 on all-passed, 1 on any
 # failure.
+
+# Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
+# FIRST executable statement so the refusal fires before anything in this file
+# runs; every definition below overrides the harness's own, so a suite written
+# before the harness existed behaves exactly as it did.
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
 

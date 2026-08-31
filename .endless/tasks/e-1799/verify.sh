@@ -10,7 +10,7 @@
 # names the script, exit code, cwd, and the re-run command.
 #
 # Run from anywhere inside the worktree:
-#   esu && ./tests/tasks/e-1799-verify.sh
+#   endless task verify E-1799
 #
 # This is the single fail-fast gate. It folds:
 #   1. The task's pytest suite (tests/test_worktree_land_post_land_script.py) —
@@ -21,7 +21,13 @@
 #   2. Doc + wiring smoke checks (guide section present, call site present).
 #
 # Exit 0 all-passed, 1 any failure, 2 setup error. Structure per the house
-# per-task verify convention (shape borrowed from tests/tasks/e-1577-verify.sh).
+# per-task verify convention (shape borrowed from .endless/tasks/e-1577/verify.sh).
+
+# Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
+# FIRST executable statement so the refusal fires before anything in this file
+# runs; every definition below overrides the harness's own, so a suite written
+# before the harness existed behaves exactly as it did.
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
 

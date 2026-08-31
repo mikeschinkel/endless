@@ -27,7 +27,7 @@
 #   Section F is the project-wide regression.
 #
 # Run from anywhere inside the worktree:
-#   esu && ./tests/tasks/e-1889-verify.sh
+#   endless task verify E-1889
 #
 # Isolation: templates are rendered through the worktree's own `endless-go`
 # into a throwaway project dir per render (the renderer materializes a copy of
@@ -38,6 +38,12 @@
 #
 # Output: pass/fail per check, then a summary. Exit 0 all-passed, 1 any
 # failure, 2 setup error.
+
+# Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
+# FIRST executable statement so the refusal fires before anything in this file
+# runs; every definition below overrides the harness's own, so a suite written
+# before the harness existed behaves exactly as it did.
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
 
@@ -288,7 +294,7 @@ test_regression() {
         "exit=$rc"$'\n'"$(printf '%s' "$out" | tail -25)"; fi
 
     # NOTHING ELSE BELONGS HERE. In particular, do not invoke another task's
-    # tests/tasks/e-NNNN-verify.sh. A per-task verify script is an acceptance
+    # .endless/tasks/e-NNNN-verify.sh. A per-task verify script is an acceptance
     # harness valid ONLY in the window just before its own task lands; after
     # that it is expired by design, and its going stale is its expected end
     # state, not a defect. Running one as a regression gate asserts that a

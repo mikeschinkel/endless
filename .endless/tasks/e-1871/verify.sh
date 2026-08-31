@@ -3,7 +3,7 @@
 # E-1871 verification suite — the SINGLE entry point for verifying E-1871.
 #
 #   esu
-#   ./tests/tasks/e-1871-verify.sh
+#   endless task verify E-1871
 #
 # Self-contained: it builds the worktree binaries, runs the Go unit tests that pin
 # the new classification as a fail-fast gate, then drives the real worktree-built
@@ -33,6 +33,12 @@
 #   4. End-to-end through the binary: a seeded epic with confirmed/declined/obsolete/
 #      landed/ready children renders ⇥ for the closed-and-unlanded ones, ⏚ for the
 #      landed one, ⁇ nowhere, the right legend, and no id-column shift.
+
+# Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
+# FIRST executable statement so the refusal fires before anything in this file
+# runs; every definition below overrides the harness's own, so a suite written
+# before the harness existed behaves exactly as it did.
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
 

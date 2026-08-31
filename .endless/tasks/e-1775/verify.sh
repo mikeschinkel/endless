@@ -3,11 +3,17 @@
 # E-1775 verification — GFM table rendering in `endless-go markdown render`.
 #
 # Run from anywhere inside the worktree:
-#   ./tests/tasks/e-1775-verify.sh
+#   endless task verify E-1775
 #
 # Builds the worktree binary, runs the mdterm unit tests, then drives the
 # renderer end-to-end asserting on visible (ANSI-stripped) layout. Exit 0 on
 # all-passed, 1 on any failure, 2 on setup failure.
+
+# Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
+# FIRST executable statement so the refusal fires before anything in this file
+# runs; every definition below overrides the harness's own, so a suite written
+# before the harness existed behaves exactly as it did.
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
 

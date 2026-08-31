@@ -5,7 +5,7 @@
 #
 # Run from anywhere inside the worktree:
 #   esu
-#   ./tests/tasks/e-1947-verify.sh
+#   endless task verify E-1947
 #
 # WHAT LANDED
 #   drop removed the directory a live process was sitting in, orphaning that
@@ -60,7 +60,13 @@
 #
 # Exit 0 all-passed, 1 any failure, 2 setup error.
 #
-# Model: tests/tasks/e-1962-verify.sh.
+# Model: .endless/tasks/e-1962/verify.sh.
+
+# Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
+# FIRST executable statement so the refusal fires before anything in this file
+# runs; every definition below overrides the harness's own, so a suite written
+# before the harness existed behaves exactly as it did.
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
 

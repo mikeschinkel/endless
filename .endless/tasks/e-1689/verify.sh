@@ -12,12 +12,18 @@
 #                                       back-compat).
 #
 # Run from anywhere inside the worktree:
-#   ./tests/tasks/e-1689-verify.sh
+#   endless task verify E-1689
 #
 # The view is exercised headlessly through the worktree's candidate Go binary;
 # seeds route to `--db sandbox` so nothing touches the real ledger. NO_COLOR +
 # a wide --cols keep output ANSI-free and untruncated so greps are reliable.
 # Exit 0 on all-passed, 1 on any failure.
+
+# Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
+# FIRST executable statement so the refusal fires before anything in this file
+# runs; every definition below overrides the harness's own, so a suite written
+# before the harness existed behaves exactly as it did.
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
 

@@ -183,6 +183,54 @@ end:
 	return manifests, err
 }
 
+// SuiteDir resolves a task's suite directory: the entry under
+// <root>/.endless/tasks whose name normalizes to id. It scans rather than
+// joining strings.ToLower(id) because the directory name is data on disk, and
+// discovery has always compared these NORMALIZED — the directory is lowercase
+// by path convention while the id is written canonically everywhere else.
+// Deriving the path by re-lowercasing would be a second, quieter casing rule
+// that disagrees with the first on a case-sensitive filesystem.
+//
+// A missing suites directory, or no matching entry, returns ok=false and no
+// error: not every task has a suite.
+func SuiteDir(root dt.DirPath, id string) (dir dt.DirPath, ok bool, err error) {
+	var tasksDir dt.DirPath
+	var entries []os.DirEntry
+	var entry os.DirEntry
+	var exists bool
+
+	tasksDir = root.Join(SuitesDir)
+
+	exists, err = tasksDir.Exists()
+	if err != nil {
+		err = doterr.NewErr(ErrDiscoveringSuites, err, "root", root)
+		goto end
+	}
+	if !exists {
+		goto end
+	}
+
+	entries, err = tasksDir.ReadDir()
+	if err != nil {
+		err = doterr.NewErr(ErrDiscoveringSuites, err, "root", root)
+		goto end
+	}
+
+	for _, entry = range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		if NormalizeTaskID(entry.Name()) != NormalizeTaskID(id) {
+			continue
+		}
+		dir = tasksDir.Join(entry.Name())
+		ok = true
+		goto end
+	}
+end:
+	return dir, ok, err
+}
+
 // DiscoverScripts walks <root>/.endless/tasks/*/verify.sh and returns the
 // script suites keyed by task id (normalized — see NormalizeTaskID). It is the
 // script-form counterpart of Discover and deliberately mirrors its rules: only

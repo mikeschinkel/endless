@@ -3,7 +3,7 @@
 # E-1953 verification — `task report` rebuilt as an enforced minimizer.
 #
 # Run from anywhere inside the worktree:
-#   ./tests/tasks/e-1953-verify.sh
+#   endless task verify E-1953
 #
 # Single entry point (per E-1596). Fail-fast on the unit contracts, then each
 # part driven end-to-end through the real CLI -> worktree endless-go -> sandbox
@@ -45,7 +45,13 @@
 # resolution rather than by editing the repo's config and hoping the restore
 # runs.
 #
-# Model: tests/tasks/e-1911-verify.sh.
+# Model: .endless/tasks/e-1911/verify.sh.
+
+# Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
+# FIRST executable statement so the refusal fires before anything in this file
+# runs; every definition below overrides the harness's own, so a suite written
+# before the harness existed behaves exactly as it did.
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
 

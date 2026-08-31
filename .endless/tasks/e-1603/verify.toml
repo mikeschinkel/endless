@@ -16,9 +16,13 @@ paths  = ["./internal/verify/...", "./internal/verifycmd/..."]
 
 # End-to-end TAP check: drives endless-go verify against passing/failing/unknown
 # fixture suites and asserts the pass/fail summary and exit-code contract.
+#
+# $ENDLESS_VERIFY_DIR is this task's own suite directory, exported by the
+# runner. It used to be typed out as ".endless/tasks/E-1603/", which resolved
+# only because APFS is case-insensitive — the directory on disk is "e-1603".
 [[check]]
 runner  = "sh"
-command = "sh .endless/tasks/E-1603/e2e.sh"
+command = "sh \"$ENDLESS_VERIFY_DIR\"/e2e.sh"
 format  = "tap"
 
 # pytest first-class check (the pytest/uv showcase): the Python `task verify`

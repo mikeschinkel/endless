@@ -3,7 +3,7 @@
 # E-1698 verification suite — the SINGLE entry point for verifying E-1698.
 #
 #   esu
-#   ./tests/tasks/e-1698-verify.sh
+#   endless task verify E-1698
 #
 # Bug: in a tmux window whose status line resolves NO active task (renders the
 # placeholder `·`), `endless session status` / `monitor` still rendered a task
@@ -28,6 +28,12 @@
 # (monitor.PinMainDB), so it cannot be driven against a throwaway temp DB without
 # polluting the real ledger. That path is covered by the resolver unit tests in
 # (2) plus the manual contrast documented at the end of this script.
+
+# Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
+# FIRST executable statement so the refusal fires before anything in this file
+# runs; every definition below overrides the harness's own, so a suite written
+# before the harness existed behaves exactly as it did.
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
 

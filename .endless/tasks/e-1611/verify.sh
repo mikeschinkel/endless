@@ -5,7 +5,7 @@
 # internal/verify, building on E-1602).
 #
 # Run from anywhere inside the worktree:
-#   ./tests/tasks/e-1611-verify.sh
+#   endless task verify E-1611
 #
 # E-1611 ships no CLI surface yet (the runner that executes `setup` is E-1603),
 # so this verifies the Go package three ways:
@@ -26,6 +26,12 @@
 #
 # Per-task verify script (convention from E-1596 / E-1602), not a deliverable of
 # the epic itself.
+
+# Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
+# FIRST executable statement so the refusal fires before anything in this file
+# runs; every definition below overrides the harness's own, so a suite written
+# before the harness existed behaves exactly as it did.
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
 

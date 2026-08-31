@@ -48,8 +48,12 @@ else
 fi
 UNDERLINE="──────────────────────────────────────────────────────────────"
 
-# tap writes one line to the runner's TAP stream. A suite sourced outside the
-# runner never gets here (the refusal above), so the variable is always set.
+# tap writes one line to the runner's TAP stream. The destination is unset when
+# the harness is sourced by a script the runner invoked as a manifest [[check]]
+# rather than as the task's own suite — that check declares and emits its own
+# result stream, so there is nothing here to collect and the assertions still
+# print. Discarding is right; dying under `set -u` would not be.
+ENDLESS_VERIFY_TAP="${ENDLESS_VERIFY_TAP:-/dev/null}"
 tap() { printf '%s\n' "$1" >>"${ENDLESS_VERIFY_TAP}"; }
 
 # section prints a heading on the terminal only. It emits no TAP: a TAP

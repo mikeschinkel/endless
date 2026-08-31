@@ -4,7 +4,7 @@
 # and harness detection has exactly one implementation.
 #
 # Run from anywhere inside the worktree:
-#   ./tests/tasks/e-1966-verify.sh
+#   endless task verify E-1966
 #
 # Single entry point (per E-1596). Fail-fast on the unit contracts, then drive
 # the REAL `endless` CLI and watch what it prints.
@@ -44,7 +44,13 @@
 # pre-land gates for their own task in their own worktree, not a regression
 # suite. Project-wide regression here is `go build/vet/test ./...` + `just test`.
 #
-# Model: tests/tasks/e-1962-verify.sh.
+# Model: .endless/tasks/e-1962/verify.sh.
+
+# Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
+# FIRST executable statement so the refusal fires before anything in this file
+# runs; every definition below overrides the harness's own, so a suite written
+# before the harness existed behaves exactly as it did.
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
 

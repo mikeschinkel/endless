@@ -3,7 +3,7 @@
 # E-1911 verification script — append a curated block, park the relay gate.
 #
 # Run from anywhere inside the worktree:
-#   ./tests/tasks/e-1911-verify.sh
+#   endless task verify E-1911
 #
 # Single entry point (per E-1596). Fail-fast on the unit contract, then each of
 # the task's four parts, driven end-to-end through the real CLI -> worktree
@@ -35,7 +35,13 @@
 # separator in every case, and that nothing in the harness still instructs the
 # opposite.
 #
-# Model: tests/tasks/e-1901-verify.sh.
+# Model: .endless/tasks/e-1901/verify.sh.
+
+# Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
+# FIRST executable statement so the refusal fires before anything in this file
+# runs; every definition below overrides the harness's own, so a suite written
+# before the harness existed behaves exactly as it did.
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
 

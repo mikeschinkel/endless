@@ -3,7 +3,7 @@
 # E-1767 verification suite — the SINGLE entry point for verifying E-1767.
 #
 #   esu
-#   ./tests/tasks/e-1767-verify.sh
+#   endless task verify E-1767
 #
 # Self-contained: builds the worktree binaries, runs the Go executor/replay unit
 # tests and the Python relation tests, then drives the real worktree-built
@@ -22,6 +22,12 @@
 #   4. The REAL binary, driven end-to-end: emitting task_dep.created/​deleted with
 #      a session records the session_tasks 'revisited' touch for both endpoints;
 #      a session-less actor writes the row but records no touch.
+
+# Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
+# FIRST executable statement so the refusal fires before anything in this file
+# runs; every definition below overrides the harness's own, so a suite written
+# before the harness existed behaves exactly as it did.
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
 

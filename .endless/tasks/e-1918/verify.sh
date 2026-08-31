@@ -17,7 +17,7 @@
 #      refusing a session whose transcript is intact.
 #
 # Run from anywhere inside the worktree:
-#   esu && ./tests/tasks/e-1918-verify.sh
+#   endless task verify E-1918
 #
 # Output: pass/fail per check, then a summary. Exit 0 on all-passed, 1 on any
 # failure, 2 on a setup problem.
@@ -30,6 +30,12 @@
 # check drives it through `--dry-run`, the seam E-1918 widened from the
 # --review/--reopen paths to every path. A stub `claude` earlier on PATH than the
 # real one records any launch, and section H fails if that record ever appears.
+
+# Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
+# FIRST executable statement so the refusal fires before anything in this file
+# runs; every definition below overrides the harness's own, so a suite written
+# before the harness existed behaves exactly as it did.
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
 

@@ -8,15 +8,21 @@
 # `endless task update --text-file` still loads content correctly.
 #
 # Single command to run from anywhere inside the worktree:
-#   esu && ./tests/tasks/e-1202-verify.sh
+#   endless task verify E-1202
 #
-# Exit 0 on all-passed, 1 on any failure. Modeled on tests/tasks/e-1577-verify.sh.
+# Exit 0 on all-passed, 1 on any failure. Modeled on .endless/tasks/e-1577/verify.sh.
 #
 # The gate is pure path-matching (no DB), so the hook-driven checks assert on exit
 # code + message text. Non-plan paths may still be refused by the *worktree* gate
 # (a synthetic session doesn't own the lock) — those checks therefore assert only
 # that the *plan-file* gate did NOT fire (its unique phrase is absent), which is
 # exactly what E-1202 governs.
+
+# Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
+# FIRST executable statement so the refusal fires before anything in this file
+# runs; every definition below overrides the harness's own, so a suite written
+# before the harness existed behaves exactly as it did.
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
 

@@ -41,7 +41,7 @@
 #
 # Run from anywhere inside the worktree:
 #   esu
-#   ./tests/tasks/e-2081-verify.sh
+#   endless task verify E-2081
 #
 # Requires `just build` first — checks 4/5 drive the CANDIDATE bin/endless-go,
 # not the global install. (Setup builds it if it is missing.)
@@ -67,6 +67,12 @@
 #
 # Output: pass/fail per check, then a summary. Exit 0 all-passed, 1 any failure,
 # 2 setup error.
+
+# Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
+# FIRST executable statement so the refusal fires before anything in this file
+# runs; every definition below overrides the harness's own, so a suite written
+# before the harness existed behaves exactly as it did.
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
 
@@ -250,14 +256,14 @@ check_regression_front() {
 #                      among the tables referencing `sessions`. True at the
 #                      moment it runs; editing it would be rewriting history;
 #      - e-2081-*      this change's own DDL and this script's assertion list;
-#      - tests/tasks/  every OTHER landed verify suite, for the reason in
+#      - .endless/tasks/  every OTHER landed verify suite, for the reason in
 #                      "WHAT IS DELIBERATELY LEFT BROKEN" above: e-2071-* and
 #                      e-2037-* assert on what this task removed and are frozen
 #                      records, not live code. Excluding the directory rather
 #                      than naming two files is deliberate — the alternative is
 #                      a sweep that pressures a later session into editing a
 #                      landed suite to make it pass, which is the rule this
-#                      exemption exists to protect. Nothing under tests/tasks/
+#                      exemption exists to protect. Nothing under .endless/tasks/
 #                      is imported, executed at build time, or read by the
 #                      product; a stale mention there cannot reach a user.
 #

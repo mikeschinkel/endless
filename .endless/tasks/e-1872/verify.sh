@@ -28,8 +28,14 @@
 #   9. The generated command/topic cross-reference is in sync and carries the
 #      new topics.
 #
-# Run from anywhere inside the worktree:  ./tests/tasks/e-1872-verify.sh
+# Run from anywhere inside the worktree:  endless task verify E-1872
 #
+# Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
+# FIRST executable statement so the refusal fires before anything in this file
+# runs; every definition below overrides the harness's own, so a suite written
+# before the harness existed behaves exactly as it did.
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
+
 set -u
 
 ROOT=$(git rev-parse --show-toplevel) || { echo "not in a git repo" >&2; exit 1; }

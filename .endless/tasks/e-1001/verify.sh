@@ -4,15 +4,21 @@
 # content-flag convention end-to-end against the worktree's sandbox DB.
 #
 # Run from anywhere inside the worktree:
-#   ./tests/tasks/e-1001-verify.sh
+#   endless task verify E-1001
 #
 # Output: pass/fail per check, then a summary. Exit 0 on all-passed, 1 on any
 # failure. Each new task gets a fresh ID; the script does NOT wipe the sandbox
 # between runs (pollution is bounded and inspectable via
 #   uv run endless task list --db sandbox).
 #
-# Shape/output learned from the ad-hoc prototype tests/tasks/e-1577-verify.sh
+# Shape/output learned from the ad-hoc prototype .endless/tasks/e-1577/verify.sh
 # (the convention E-1596 is formalizing).
+
+# Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
+# FIRST executable statement so the refusal fires before anything in this file
+# runs; every definition below overrides the harness's own, so a suite written
+# before the harness existed behaves exactly as it did.
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
 

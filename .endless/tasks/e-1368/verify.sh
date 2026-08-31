@@ -5,7 +5,7 @@
 #
 # Run from anywhere inside the worktree:
 #   esu
-#   ./tests/tasks/e-1368-verify.sh
+#   endless task verify E-1368
 #
 # What it checks (against THIS worktree's sandbox):
 #   1. Bare `./bin/endless-go` (no XDG_CONFIG_HOME, no --config-dir) inside the
@@ -25,6 +25,12 @@
 # Output: pass/fail per check, then a summary. Exit 0 on all-passed, 1 on any
 # failure, 2 on setup error. The probe task is left in the sandbox (bounded,
 # inspectable via `uv run endless task list --db sandbox`).
+
+# Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
+# FIRST executable statement so the refusal fires before anything in this file
+# runs; every definition below overrides the harness's own, so a suite written
+# before the harness existed behaves exactly as it did.
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
 

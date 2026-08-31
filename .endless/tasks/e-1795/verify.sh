@@ -4,7 +4,7 @@
 #
 # Run from anywhere inside the worktree:
 #   esu
-#   ./tests/tasks/e-1795-verify.sh
+#   endless task verify E-1795
 #
 # Output: pass/fail per check, then a summary. Exit 0 on all-passed, 1 on any
 # failure, 2 on setup error.
@@ -21,7 +21,13 @@
 # then drives the REAL rendered CLI end-to-end against the per-worktree sandbox DB
 # to prove the chain actually reaches the pane.
 #
-# Modeled on tests/tasks/e-1797-verify.sh.
+# Modeled on .endless/tasks/e-1797/verify.sh.
+
+# Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
+# FIRST executable statement so the refusal fires before anything in this file
+# runs; every definition below overrides the harness's own, so a suite written
+# before the harness existed behaves exactly as it did.
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
 

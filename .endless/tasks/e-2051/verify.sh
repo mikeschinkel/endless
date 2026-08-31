@@ -10,7 +10,7 @@
 # `.endless/verbs.jsonl` already does.
 #
 # Run from inside the worktree (esu puts you there):
-#   esu && ./tests/tasks/e-2051-verify.sh
+#   endless task verify E-2051
 #
 # What it proves:
 #   1. FAIL-FAST unit gate: the affected Go + Python unit suites pass.
@@ -23,13 +23,19 @@
 #   5. No stale worktree-copy or commit-on-branch wording survives anywhere in
 #      the tracked docs/source sweep.
 #   6. The guide's auto-commit table lists the new path (doc/code sync, the same
-#      invariant tests/tasks/e-1870-verify.sh pins).
+#      invariant .endless/tasks/e-1870/verify.sh pins).
 #   7. FUNCTIONAL, in a throwaway repo with no real DB or ledger writes: a
 #      modified `.endless/LESSONS.md` on the main checkout partitions as
 #      endless-managed (auto-commit), not as user work that would make land
 #      refuse.
 #
 # Exit 0 on all-passed, 1 on any failure, 2 on setup error.
+
+# Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
+# FIRST executable statement so the refusal fires before anything in this file
+# runs; every definition below overrides the harness's own, so a suite written
+# before the harness existed behaves exactly as it did.
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
 

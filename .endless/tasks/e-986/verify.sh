@@ -4,7 +4,7 @@
 #
 # Run from inside the worktree:
 #   esu
-#   ./tests/tasks/e-986-verify.sh
+#   endless task verify E-986
 #
 # This is a LAND-READINESS GATE, not a test suite: run it to decide whether
 # E-986 is ready to land. It must therefore exercise the CANDIDATE code on this
@@ -28,6 +28,12 @@
 # worktree's venv is gone, paths drift) that's fine — it's kept for posterity.
 #
 # Output: pass/fail per check + summary. Exit 0 all-passed, 1 any failure, 2 setup error.
+
+# Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
+# FIRST executable statement so the refusal fires before anything in this file
+# runs; every definition below overrides the harness's own, so a suite written
+# before the harness existed behaves exactly as it did.
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
 
