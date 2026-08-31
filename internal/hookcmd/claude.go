@@ -136,7 +136,7 @@ type preToolUseBlock struct {
 	HookSpecificOutput hookContextOutput `json:"hookSpecificOutput"`
 }
 
-func runClaude(args []string) error {
+func runClaude(args []string) (err error) {
 	// E-1962: on an unsupported harness the whole hook is a no-op — silently,
 	// and before stdin is even read.
 	//
@@ -175,6 +175,13 @@ func runClaude(args []string) error {
 	if err := json.Unmarshal(data, &payload); err != nil {
 		return fmt.Errorf("parsing payload: %w", err)
 	}
+
+	// E-1661: label every failure below with the event that fired. The exit
+	// code a hook must use to reach the agent is a property of the event, and
+	// this is the last frame that knows which one fired — so tagging once, at
+	// the single exit, covers every return site below and every one added
+	// after this comment. Nil stays nil. See hookExitCode.
+	defer func() { err = taggedWithEvent(payload.EventName, err) }()
 
 	if payload.CWD == "" {
 		return nil

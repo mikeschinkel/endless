@@ -15,6 +15,10 @@
 //     hookcmd.Run so hook-fired writes always target the real DB,
 //     regardless of cwd or XDG_CONFIG_HOME, and the E-1429 worktree
 //     gate is satisfied.
+//
+// Run owns the third contract, the one on the way out: a failure exits with
+// the code that puts it in front of the AGENT rather than only the user. See
+// halt.go — that grading is the whole of E-1661.
 package hookcmd
 
 import (
@@ -46,7 +50,13 @@ func Run(args []string) {
 	}
 
 	if err != nil {
+		// The log writer includes stderr, so this line IS the error the agent
+		// or the user reads; haltNotice below only adds the instruction.
 		log.Printf("%s: %v", args[0], err)
-		os.Exit(1)
+		code := hookExitCode(err)
+		if code == exitBlocking {
+			fmt.Fprint(os.Stderr, haltNotice())
+		}
+		os.Exit(code)
 	}
 }
