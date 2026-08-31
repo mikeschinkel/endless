@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-1661 and records what was true when E-1661
+# landed. Edit it only if you ARE E-1661. If your change breaks an
+# assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1661 verification suite — a failing hook exits 2, so the AGENT sees it.
 #
