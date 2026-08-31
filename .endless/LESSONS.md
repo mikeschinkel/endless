@@ -4682,3 +4682,19 @@ The test: if the fact is in the deliverable, it does not go in the reply. What b
 
 This is the reporting discipline already in the guide (do not recap, do not narrate) applied to my own finished work, not just to task state.
 - **Project**: endless
+
+### [2026-08-30] Searching for an owning task with multi-word queries is not a search; endless task search is a literal substring LIKE
+Mike asked whether I had verified no other task existed before filing E-2093. I had run seven `endless task search` queries, six of them multi-word phrases ("session state idle", "already active in session", "unverified session idle", "session working state", "session idle blocked claim reactivate"), got "No tasks matching" from all but one, and reported to Mike that "No open task owned it" as though that were established.
+
+It was not established. `search_tasks` (src/endless/task_cmd.py) builds ONE `LIKE '%<the entire query>%'` pattern over title and description only — not `text` unless --search-text, and never `analysis`. A multi-word query therefore requires that exact phrase, verbatim, in a title or description. Six of my seven queries were structurally incapable of matching anything. "No tasks matching" was not evidence of absence; it was the tool telling me my query was a phrase.
+
+The conclusion happened to be right — I re-ran it properly (single tokens, all four text fields, via SQL) and the closest candidates, E-1244 (task claim's binding target under multiple companions), E-1262 (retaining the session-task link after a task closes, for the status bar), and E-1703 (a PreToolUse rule about write TARGETS), each own a different problem. But I asserted the conclusion on evidence that could not support it, and would have asserted it just as confidently if an owner had existed.
+
+The rule: ED-1550 §4 says search the area for an owning task before filing. "Search the area" is a claim about coverage, so it obliges me to know what the search actually covers. Before treating an empty result as absence:
+- Use single distinctive TOKENS, one per query, never a phrase.
+- Search all four text fields; `task search` reaches two of them by default.
+- Confirm the search can find something — run a term you KNOW is present. An empty result from an untested query is a statement about the query.
+- When I report the negative to Mike, say what I searched and over what, so he can judge the coverage rather than take the verdict.
+
+The same shape as the E-2071 note already in that function's docstring: "a LIMIT 20 query cannot tell you it matched 60, and '20 match(es)' under a silently truncated table is the exact sentence that produced two false 'no existing task' conclusions." That fixed the truncation half. The phrase-matching half is the same trap and is still open.
+- **Project**: endless
