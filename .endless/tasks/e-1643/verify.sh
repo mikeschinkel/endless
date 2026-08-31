@@ -12,10 +12,16 @@
 #      (forbid / warn / leave) — i.e. a concrete decision was recorded.
 #
 # Run from anywhere inside the worktree (esu cd's here and exports the session):
-#   ./tests/tasks/e-1643-verify.sh
+#   endless task verify E-1643
 #
 # Output: pass/fail per check, then a summary. Exit 0 on all-passed, 1 on any
 # failure, 2 on environment/setup error. Re-runnable (read-only).
+
+# Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
+# FIRST executable statement so the refusal fires before anything in this file
+# runs; every definition below overrides the harness's own, so a suite written
+# before the harness existed behaves exactly as it did.
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
 
