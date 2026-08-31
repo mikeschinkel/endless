@@ -91,6 +91,19 @@ const (
 	// Active is what `task active` lists, in display order.
 	Active
 
+	// AwaitsUser is work that has stopped and is waiting on a PERSON, in the
+	// order the project attention board ranks them (E-1976): a finished
+	// implementation awaiting verification, a delivered outcome awaiting a read,
+	// a plan awaiting approval.
+	//
+	// Deliberately not a slice of NotActionable, though every member is in it:
+	// NotActionable answers "may `task next` offer this?", which is also true of
+	// `underway` (someone else has it) and `untriaged` (nobody has looked). This
+	// group answers a narrower question — "is the ball in the user's court?" —
+	// and that is the whole basis on which the board decides a row is worth a
+	// line.
+	AwaitsUser
+
 	// ClaimPromotes are the statuses `task claim` promotes to `underway` in
 	// place. Its complement is `submitted` and `underway` (which the claim gate
 	// refuses and the already-claimed case, respectively) plus Settled, which
@@ -212,6 +225,7 @@ var groups = map[Group][]Status{
 	Actionable:    {Unplanned, Ready, Revisit},
 	NotActionable: {Untriaged, Submitted, Underway, Unverified, Unreviewed, Confirmed, Assumed, Completed, Declined, Obsolete},
 	Active:        {Underway, Unverified, Unreviewed},
+	AwaitsUser:    {Unverified, Unreviewed, Submitted},
 	ClaimPromotes: {Untriaged, Unplanned, Ready, Revisit},
 	Open:          {Untriaged, Unplanned, Submitted, Ready, Underway},
 	ChildrenStateOrder: {
@@ -242,6 +256,7 @@ var groupSlugs = map[Group]string{
 	Actionable:           "actionable",
 	NotActionable:        "not-actionable",
 	Active:               "active",
+	AwaitsUser:           "awaits-user",
 	ClaimPromotes:        "claim-promotes",
 	Open:                 "open",
 	ChildrenStateOrder:   "children-state-order",

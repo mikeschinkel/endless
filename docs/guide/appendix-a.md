@@ -14,3 +14,14 @@ Interactive commands on the `session` group:
 - **`endless session search <query>`** — search across all session messages.
 - **`endless session hide <ids...>`** / **`endless session unhide <ids...>`** — hide sessions from (or restore them to) `session list`. With `--task <id>` (repeatable) they switch senses entirely and hide/restore individual TASK rows in one session's `session status` view — see **Quieting a noisy status view** in `endless guide sessions`.
 - **`endless session task add <ids...>`** / **`endless session task remove <ids...>`** — add tasks to a session's list as decided work (`queued`), or drop the association entirely. Distinct from `session hide --task`, which suppresses a row while keeping the association — see **Correcting what your session's list holds** in `endless guide sessions`.
+
+## Project-wide attention triage
+
+Interactive commands on the `project` group. Where the `session` views above answer *"what is next for the task I am on"*, these answer the other question: *"what, across every session in this project, is claiming my attention"*.
+
+- **`endless project status [name]`** — the attention board, as one frame. Ranks every claim in the project loudest first: sessions blocked waiting on you (⚠), then unverified work awaiting your verdict (☑), outcomes awaiting a read (☰), plans awaiting approval (⚑), tasks somebody claimed and walked away from (◷), then the sessions that are idle (‖) or working (⟳). A live session and the task it claimed render as **one** row, carrying the task's id and title alongside the session's id and how long it has been in that state. `--all` adds spawnable `ready` work — a claim on capacity rather than on attention. `--json` dumps the rows, uncapped, each carrying its action. Defaults to the project enclosing the working directory; name another to read it from anywhere.
+- **`endless project monitor [name]`** — the same board, live: redrawn every 2 seconds, repainting only on change. Ctrl-C exits.
+- **`endless project monitor --tmux`** — open the board in the home it is designed for: its own tmux session, the board on top and a bare shell beneath it for running `endless` commands against what the board shows. Focus lands on the shell. Idempotent — running it again switches to the session that already exists. `--no-switch` creates it and leaves you where you are.
+- **`endless project info [name]`** — the project's registration card: metadata, pending notes, dependencies. (This is what `project status` used to be, before the board took the name.)
+
+The board's cap is **per rank**, not per board, and `--limit` sets it. A single board-wide cap would spend every row on the unverified backlog and push the sessions off the bottom, which is the disappearance the board exists to prevent. Each truncated rank prints `… N more <rank> (--no-limit)`, and the frame sizes itself to the height it actually has — so the loudest rows are always the ones on screen.

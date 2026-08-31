@@ -108,7 +108,10 @@ def test_register_and_list(isolated_env):
     assert "cli-test" in result.output
 
 
-def test_status_by_name(isolated_env):
+# E-1976 renamed this command: `project status` is now the attention board, and
+# the project's registration card — what these three tests read — is `project
+# info`. They still assert the CARD's content, so they follow the card.
+def test_info_by_name(isolated_env):
     project_dir = isolated_env["projects_root"] / "status-test"
     project_dir.mkdir()
 
@@ -117,7 +120,7 @@ def test_status_by_name(isolated_env):
         main, ["project", "register", str(project_dir), "--infer"]
     )
 
-    result = runner.invoke(main, ["project", "status", "status-test"])
+    result = runner.invoke(main, ["project", "info", "status-test"])
     assert result.exit_code == 0
     assert "status-test" in result.output
     assert "Status:" in result.output
@@ -139,7 +142,7 @@ def test_set_field(isolated_env):
     assert "New Label" in result.output
 
     # Verify it stuck
-    result = runner.invoke(main, ["project", "status", "set-test"])
+    result = runner.invoke(main, ["project", "info", "set-test"])
     assert "New Label" in result.output
 
 
@@ -159,11 +162,11 @@ def test_rename(isolated_env):
     assert "new-name" in result.output
 
     # Old name should be gone
-    result = runner.invoke(main, ["project", "status", "old-name"])
+    result = runner.invoke(main, ["project", "info", "old-name"])
     assert result.exit_code != 0
 
     # New name should work
-    result = runner.invoke(main, ["project", "status", "new-name"])
+    result = runner.invoke(main, ["project", "info", "new-name"])
     assert result.exit_code == 0
 
 

@@ -1,4 +1,12 @@
-package sessionstatuscmd
+// Package faultbadge renders the uncleared-fault badge (E-698) — the one-line
+// annotation both live status views append below their rows.
+//
+// Extracted from internal/sessionstatuscmd by E-1976, which added a second
+// caller: the project-scoped attention board. The badge annotates the MACHINE
+// (open incidents in the faults store), not the view it hangs off, so neither
+// view owns it. Moved wholesale, tests included — nothing about how it renders
+// changed.
+package faultbadge
 
 import (
 	"fmt"
@@ -10,15 +18,17 @@ import (
 	"github.com/mattn/go-runewidth"
 
 	"github.com/mikeschinkel/endless/internal/faults"
+	"github.com/mikeschinkel/endless/internal/liveview"
 	"github.com/mikeschinkel/endless/internal/monitor"
 )
 
 // The uncleared-fault badge (E-698).
 //
-// Rendered as a trailing line on BOTH `session status` (one-shot) and
-// `session monitor` (looped), because they share this renderer and the one-shot
-// is the more frequently seen surface — a fault raised while no monitor pane is
-// open would otherwise be invisible.
+// Rendered as a trailing line on every status view that hangs it: `session
+// status` (one-shot), `session monitor` (looped), and since E-1976 the
+// `project status` / `project monitor` pair. The one-shot surfaces matter as
+// much as the looped ones — a fault raised while no monitor pane is open would
+// otherwise be invisible.
 //
 // ONE line, always (E-1950). The badge sits in a status pane where every row is
 // scarce, so the severity chip, the incident text, and the command that explains
@@ -46,10 +56,14 @@ const (
 	badgeReset  = "\033[0m"
 )
 
-// badgeHint is the command the badge points at. It names a shell helper rather
-// than the underlying `endless errors ...` invocation because the hint shares a
-// row with the incident text it would otherwise crowd out.
-const badgeHint = "Run eeh"
+// Hint is the command the badge points at. It names a shell helper rather than
+// the underlying `endless errors ...` invocation because the hint shares a row
+// with the incident text it would otherwise crowd out.
+//
+// Exported (E-1976) because it is the badge's public contract: it is the one
+// string by which a caller — or a caller's test — can identify the badge line
+// inside a frame it did not render itself.
+const Hint = "Run eeh"
 
 // staleWarningAfter is how much ACTIVE time (see monitor.ActiveSecondsSince) may
 // pass after a warning's last occurrence before it stops being badged.
@@ -66,14 +80,14 @@ const badgeHint = "Run eeh"
 // present for.
 const staleWarningAfter = time.Hour
 
-// renderFaultBadge writes the badge line when incidents worth badging exist, and
+// Render writes the badge line when incidents worth badging exist, and
 // writes nothing at all otherwise.
 //
 // It NEVER fails the render. Any error reading the fault store — a missing table
 // on a schema-passive connection, a locked DB — is swallowed and the badge is
 // simply omitted. A diagnostics surface must not be able to take down the view
 // it is annotating.
-func renderFaultBadge(w io.Writer, cols int, color bool) {
+func Render(w io.Writer, cols int, color bool) {
 	var incidents []faults.Incident
 	var overview faults.Overview
 	var line string
@@ -198,7 +212,7 @@ func badgeLine(overview faults.Overview, cols int, color bool) (line string) {
 	}
 
 	text = badgeText(overview)
-	hint = badgeHint
+	hint = Hint
 
 	// Columns left for text + hint, after the chip and the space following it.
 	avail = width - chipWidth - 1
@@ -247,7 +261,7 @@ func badgeText(overview faults.Overview) (text string) {
 		if text != "" {
 			text += " — "
 		}
-		text += overview.Latest.Code + " " + collapse(overview.Latest.Summary)
+		text += overview.Latest.Code + " " + liveview.Collapse(overview.Latest.Summary)
 	}
 
 	return text

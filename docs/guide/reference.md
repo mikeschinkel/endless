@@ -10,9 +10,19 @@ Endless tracks multiple projects from a single global DB. Every project is a reg
 
 ```bash
 endless project list                           # all registered projects
-endless project status                         # detailed status of current project
-endless project status --project <name>        # of a named project
+endless project info                           # registration card for the current project
+endless project info <name>                    # for a named project
+endless project status                         # what in this project needs attention
+endless project status <name>                  # for a named project
+endless project monitor                        # the same board, live, until Ctrl-C
+endless project monitor --tmux                 # the board in its own two-pane tmux session
 ```
+
+`project info` is the registration card — metadata, notes, dependencies.
+`project status` is the attention board: every claim on your attention across
+every session in the project, loudest first. `project monitor` is the live
+version of the same board, the project-scoped counterpart to
+`endless session monitor`.
 
 ### Registering a project
 
@@ -23,7 +33,7 @@ endless project register                       # register current directory
 endless project register --name <custom-name>  # with an explicit name
 ```
 
-After registering, `endless project list` should show the project and `endless project status` should work from inside the repo.
+After registering, `endless project list` should show the project and `endless project info` should work from inside the repo.
 
 ---
 

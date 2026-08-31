@@ -19,7 +19,7 @@ def show_status(name: str | None = None):
         if not name:
             raise click.ClickException(
                 "Not in a registered project directory. "
-                "Specify a name: endless project status <name>"
+                "Specify a name: endless project info <name>"
             )
 
     row = db.query(

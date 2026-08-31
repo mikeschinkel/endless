@@ -11,6 +11,7 @@ import click
 from endless import __version__
 from endless import agent_help
 from endless import help_settings
+from endless import project_status_cmd
 from endless import rowcap
 from endless.agent_help import AgentHelpMixin
 from endless import statuses
@@ -452,12 +453,84 @@ def list_cmd(status, group, limit, no_limit):
                   limit=limit, no_limit=no_limit)
 
 
-@project_cmd.command("status")
+# E-1976 renamed this command. `project status` now names the attention board
+# below — the project-scoped counterpart to `session status` — and this, the
+# project's metadata card, became `project info`. The pairing that results
+# matches the session verbs exactly: `session show` is the card, `session status`
+# is the board, and now so is the project trio.
+@project_cmd.command("info")
 @click.argument("name", default=None, required=False)
-def status(name):
-    """Show detailed status of a project."""
+def info(name):
+    """Show a project's registration card — metadata, notes and dependencies.
+
+    Defaults to the project enclosing the working directory. For what in the
+    project needs your attention, see `endless project status`.
+    """
     from endless.status import show_status
     show_status(name)
+
+
+@project_cmd.command("status")
+@click.argument("name", default=None, required=False)
+@click.option("--all", "show_all", is_flag=True,
+              help="Include `ready` tasks — spawnable work, a claim on capacity "
+                   "rather than attention")
+@click.option("--json", "as_json", is_flag=True,
+              help="Emit the rows as JSON, uncapped, each carrying its action")
+@project_status_cmd.group_limit_options
+def project_status(name, show_all, as_json, limit, no_limit):
+    """Show what in this project needs attention — a one-shot snapshot.
+
+    The project-scoped counterpart to `endless session status`. Ranks every
+    attention claim in one list, loudest first: sessions blocked waiting on you,
+    then unverified work awaiting your verdict, outcomes awaiting a read, plans
+    awaiting approval, orphaned tasks nobody is holding, then the sessions that
+    are idle or working. A live session and the task it claimed are one row.
+
+    Defaults to the project enclosing the working directory; name another to see
+    it from anywhere. For a live, self-updating view, use `endless project
+    monitor`.
+
+    The cap is PER GROUP, not per board: a single cap would spend every row on
+    the unverified backlog and push the sessions off the bottom. Each truncated
+    group says how many it left out.
+    """
+    project_status_cmd.project_status_resolve(
+        name, show_all=show_all, limit=limit, no_limit=no_limit, as_json=as_json,
+    )
+
+
+@project_cmd.command("monitor")
+@click.argument("name", default=None, required=False)
+@click.option("--all", "show_all", is_flag=True,
+              help="Include `ready` tasks — spawnable work, a claim on capacity "
+                   "rather than attention")
+@click.option("--tmux", "use_tmux", is_flag=True,
+              help="Open the board in its own two-pane tmux session (monitor "
+                   "above, a bare shell below) and switch to it. Idempotent.")
+@click.option("--no-switch", is_flag=True,
+              help="With --tmux: create the session but stay where you are.")
+@project_status_cmd.group_limit_options
+def project_monitor(name, show_all, use_tmux, no_switch, limit, no_limit):
+    """Live board: repeatedly render `project status` until interrupted.
+
+    The pane you keep open all day when several sessions are running. Loops the
+    same view `project status` prints once, redrawing every 2 seconds and
+    repainting only when the frame changes (no flicker). Ctrl-C exits.
+
+    --tmux gives it the home it is designed for: its own tmux session, the board
+    on top and a bare shell beneath it for running `endless` commands against
+    what the board shows. Focus lands on the shell. Running it again switches to
+    the session that already exists rather than making a second one.
+    """
+    if use_tmux:
+        project_status_cmd.project_window_resolve(name, no_switch=no_switch)
+        return
+    if no_switch:
+        raise click.UsageError("--no-switch only applies with --tmux.")
+    project_status_cmd.project_status_resolve(
+        name, monitor=True, show_all=show_all, limit=limit, no_limit=no_limit,
+    )
 
 
 @project_cmd.command("scan")

@@ -12,23 +12,19 @@
 package sessionstatuscmd
 
 import (
-	"context"
 	"flag"
 	"fmt"
 	"io"
 	"os"
-	"os/signal"
 	"sort"
 	"strconv"
 	"strings"
-	"sync/atomic"
-	"syscall"
-	"time"
 
 	"github.com/mattn/go-runewidth"
 	"golang.org/x/term"
 
-	"github.com/mikeschinkel/endless/internal/jobs"
+	"github.com/mikeschinkel/endless/internal/faultbadge"
+	"github.com/mikeschinkel/endless/internal/liveview"
 	"github.com/mikeschinkel/endless/internal/monitor"
 	"github.com/mikeschinkel/endless/internal/sessiontaskrelation"
 	"github.com/mikeschinkel/endless/internal/taskstatus"
@@ -160,32 +156,16 @@ func hiddenFooter(n int) string {
 	return fmt.Sprintf("… %d hidden (--show-hidden)", n)
 }
 
-// monitorInterval is the redraw cadence for the live monitor, matching the bash
-// prototype's watch loop.
-const monitorInterval = 2 * time.Second
-
-// Self-sizing constants for the live monitor's own tmux pane (E-1851). The
-// monitor is the top-right pane of the canonical 3-pane spawn layout, above a
-// bare shell; it owns exactly as many rows as its frame needs so the shell keeps
-// the rest of the column. Because the frame grows and shrinks with the row set,
-// the fit is re-applied on every repaint rather than fixed at spawn time — which
-// also means `task spawn` never has to guess a height it cannot know.
+// The redraw cadence and the pane self-sizing rule moved to internal/liveview
+// in E-1976, when the project-scoped board became a second view needing both.
+// These aliases keep the names this package's tests were written against, and
+// keep the two dashboards provably sharing one set of numbers.
 const (
-	// monitorPaneSlack is the spare row kept below the frame so the last row
-	// isn't flush against the pane border.
-	monitorPaneSlack = 1
-	// monitorPaneMinHeight is the absolute floor for a real frame — a pane
-	// thinner than legend+slack is not worth having.
-	monitorPaneMinHeight = 2
-	// monitorPaneEmptyHeight is the height held while there are no task rows
-	// (the no-task hint). Exact-fitting the hint gives a 2-row sliver that reads
-	// as a broken pane; holding a modest block reads as an empty monitor with
-	// room to grow. Costs the shell pane a few rows in the empty case only.
-	monitorPaneEmptyHeight = 8
-	// monitorPanePctOfWindow caps the fit as a percentage of the window height,
-	// so an unusually long row set can't swallow the shell pane below it. A
-	// frame taller than the cap simply scrolls inside its pane.
-	monitorPanePctOfWindow = 80
+	monitorInterval        = liveview.Interval
+	monitorPaneSlack       = liveview.PaneSlack
+	monitorPaneMinHeight   = liveview.PaneMinHeight
+	monitorPaneEmptyHeight = liveview.PaneEmptyHeight
+	monitorPanePctOfWindow = liveview.PanePctOfWindow
 )
 
 // no-task hints are shown when no focal task resolves. They mirror the tmux
@@ -570,137 +550,39 @@ func monitorFrame(tracker *anchorTracker, w io.Writer, all bool, cols int, color
 // common case under `task spawn`'s layout — recovers instead of showing the
 // claim/bind hint forever.
 func monitorLoop(tracker *anchorTracker, all bool, colsOverride int, color bool, hm hiddenMode) {
-	out := os.Stdout
-	fmt.Fprint(out, "\x1b[?25l")                         // hide cursor
-	restore := func() { fmt.Fprint(out, "\x1b[?25h\n") } // show cursor + trailing newline
-
-	sigs := make(chan os.Signal, 1)
-	signal.Notify(sigs, os.Interrupt, syscall.SIGTERM)
-	defer signal.Stop(sigs)
-
-	fmt.Fprint(out, "\x1b[2J\x1b[H") // clear screen, cursor home
-	ticker := time.NewTicker(monitorInterval)
-	defer ticker.Stop()
-
-	// The job-runner trigger (E-698). Each refresh fires the fire-once runner,
-	// which executes any DUE jobs and returns; repetition lives here, in the
-	// trigger, never in the runner.
-	//
-	// On a goroutine behind a single-in-flight guard: a job slower than the 2s
-	// cadence must never stack up invocations or stall the redraw. Concurrency
-	// with OTHER monitors is not this guard's job — the runner's DB lease
-	// arbitrates that, so at most one process runs any given due job.
-	var jobsInFlight atomic.Bool
-	fireJobs := func() {
-		if jobsInFlight.Swap(true) {
-			return
-		}
-		go func() {
-			defer jobsInFlight.Store(false)
-			jobs.RunDue(context.Background())
-		}()
-	}
-
-	pane := os.Getenv("TMUX_PANE")
-	prev, fitted := "", 0
-	for {
-		var b strings.Builder
-
-		fireJobs()
-		rows, err := monitorFrame(tracker, &b, all, detectCols(colsOverride), color, hm)
-		if err != nil {
-			restore()
+	liveview.Loop(liveview.LoopConfig{
+		Render: func(w io.Writer, cols int, color bool) (int, error) {
+			return monitorFrame(tracker, w, all, cols, color, hm)
+		},
+		ColsOverride: colsOverride,
+		FallbackCols: fallbackCols,
+		Color:        color,
+		// process is the session's process handle — a tmux pane id today. The
+		// view fits this pane to its own frame on every repaint (E-1851).
+		Pane:     os.Getenv("TMUX_PANE"),
+		FireJobs: true,
+		Fatal: func(err error) {
 			fmt.Fprintln(os.Stderr, "session-status:", err)
 			os.Exit(1)
-		}
-		if frame := b.String(); frame != prev {
-			// Resize BEFORE painting so the frame lands in a pane already the
-			// right size (a shrink after the paint would scroll rows away).
-			fitted = fitPaneToFrame(pane, frame, rows, fitted)
-			// Home, repaint each line (erased to end-of-line), then clear to
-			// end-of-display so a now-shorter frame leaves no stale rows behind.
-			fmt.Fprint(out, "\x1b[H"+eraseEachLineToEOL(frame)+"\x1b[J")
-			prev = frame
-		}
-		select {
-		case <-sigs:
-			restore()
-			return
-		case <-ticker.C:
-		}
-	}
+		},
+	})
 }
 
-// frameLines counts the terminal rows one rendered frame occupies. Every line
-// renderTo emits ends in a newline (it uses Fprintln throughout), so the newline
-// count IS the line count — no off-by-one for a trailing empty segment.
-//
-// Measuring the RENDERED frame, rather than deriving a height from the row
-// count, is what keeps the fit correct as the view grows new parts: the fault
-// badge adds a line when an incident is open and none when it isn't, and the fit
-// tracks that for free. (It cost two lines under E-698 and one since E-1950 —
-// neither number appears here, which is the point.)
-func frameLines(frame string) int {
-	return strings.Count(frame, "\n")
-}
+// frameLines, paneHeightForFrame, fitPaneToFrame and eraseEachLineToEOL moved
+// to internal/liveview in E-1976 (the project board fits its pane by the same
+// rule). They stay reachable under their original names so this package's tests
+// — which are where the rule is pinned — keep exercising the shared code.
+func frameLines(frame string) int { return liveview.FrameLines(frame) }
 
-// paneHeightForFrame is the pure sizing rule: the frame's lines plus a slack
-// row, floored at monitorPaneMinHeight and capped at monitorPanePctOfWindow
-// percent of windowHeight. A windowHeight of 0 means "unknown": no cap.
-//
-// rows == 0 is the no-task hint, NOT a short real frame, and gets
-// monitorPaneEmptyHeight instead of an exact fit. Sizing the hint exactly
-// collapses the pane to a 2-row sliver that reads as broken rather than as
-// empty, and leaves no room to grow into the moment a task resolves. The cap
-// still applies, so a tiny window never gets an oversized monitor.
 func paneHeightForFrame(lines, rows, windowHeight int) int {
-	height := lines + monitorPaneSlack
-	if rows == 0 {
-		height = monitorPaneEmptyHeight
-	}
-	if height < monitorPaneMinHeight {
-		height = monitorPaneMinHeight
-	}
-	if windowHeight > 0 {
-		maxHeight := windowHeight * monitorPanePctOfWindow / 100
-		if maxHeight < monitorPaneMinHeight {
-			maxHeight = monitorPaneMinHeight
-		}
-		if height > maxHeight {
-			height = maxHeight
-		}
-	}
-	return height
+	return liveview.PaneHeightForFrame(lines, rows, windowHeight)
 }
 
-// fitPaneToFrame resizes pane to hold frame and returns the height now in
-// effect. `fitted` is the height the last successful resize applied, so an
-// unchanged fit costs no tmux subprocess; a failed resize leaves it untouched so
-// the next repaint retries. Returns fitted unchanged when not running in tmux.
 func fitPaneToFrame(pane, frame string, rows, fitted int) int {
-	if pane == "" {
-		return fitted
-	}
-	height := paneHeightForFrame(frameLines(frame), rows, monitor.PaneWindowHeight(pane))
-	if height == fitted {
-		return fitted
-	}
-	if err := monitor.ResizePaneHeight(pane, height); err != nil {
-		return fitted
-	}
-	return height
+	return liveview.FitPaneToFrame(pane, frame, rows, fitted)
 }
 
-// eraseEachLineToEOL wraps a rendered frame so that repainting it over a prior
-// frame leaves no stale characters. It appends an erase-to-end-of-line (\x1b[K)
-// before every newline and one after the final line, so a row whose new title
-// is shorter than the prior frame's on that row does not keep the old tail. The
-// caller's trailing \x1b[J still clears whole rows below a now-shorter frame;
-// \x1b[J alone cannot, because it only erases from the cursor's final position
-// to end-of-display, never the tails of the overwritten lines above it (E-1699).
-func eraseEachLineToEOL(frame string) string {
-	return strings.ReplaceAll(frame, "\n", "\x1b[K\n") + "\x1b[K"
-}
+func eraseEachLineToEOL(frame string) string { return liveview.EraseEachLineToEOL(frame) }
 
 // renderTo writes the legend and rows to w. focal==0 (or no rows) prints the
 // no-task hint instead of an empty table — a claim/bind message (or a
@@ -723,7 +605,7 @@ func renderTo(w io.Writer, rows []monitor.SessionStatusRow, focal int64, noTaskH
 	// would be actively wrong advice for the second.
 	if len(rows) == 0 {
 		fmt.Fprintln(w, dim(noTaskHint, color))
-		renderFaultBadge(w, cols, color)
+		faultbadge.Render(w, cols, color)
 		return
 	}
 
@@ -743,7 +625,7 @@ func renderTo(w io.Writer, rows []monitor.SessionStatusRow, focal int64, noTaskH
 		} else if hiddenN > 0 {
 			fmt.Fprintln(w, dim(hiddenFooter(hiddenN), color))
 		}
-		renderFaultBadge(w, cols, color)
+		faultbadge.Render(w, cols, color)
 		return
 	}
 
@@ -846,7 +728,7 @@ func renderTo(w io.Writer, rows []monitor.SessionStatusRow, focal int64, noTaskH
 
 	// Uncleared faults are appended last so they read as an annotation on the
 	// view rather than competing with the task rows for attention (E-698).
-	renderFaultBadge(w, cols, color)
+	faultbadge.Render(w, cols, color)
 }
 
 // applyHiddenMode splits rows by the viewing session's hides and returns the set
@@ -1223,46 +1105,14 @@ func isTerminal(status string) bool {
 	return taskstatus.Has(taskstatus.Terminal, status)
 }
 
-func detectCols(override int) int {
-	if override > 0 {
-		return override
-	}
-	if w, _, err := term.GetSize(int(os.Stdout.Fd())); err == nil && w > 0 {
-		return w
-	}
-	if v := os.Getenv("COLUMNS"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n > 0 {
-			return n
-		}
-	}
-	return fallbackCols
-}
+func detectCols(override int) int { return liveview.DetectCols(override, fallbackCols) }
 
-func colorEnabled() bool {
-	if os.Getenv("NO_COLOR") != "" {
-		return false
-	}
-	return term.IsTerminal(int(os.Stdout.Fd()))
-}
+func colorEnabled() bool { return liveview.ColorEnabled() }
 
 // collapse squeezes internal whitespace runs to single spaces so multi-line or
-// padded titles render on one line (matches `endless session list`).
-func collapse(s string) string {
-	out := make([]rune, 0, len(s))
-	prevSpace := false
-	for _, r := range s {
-		if r == ' ' || r == '\t' || r == '\n' || r == '\r' {
-			if !prevSpace {
-				out = append(out, ' ')
-			}
-			prevSpace = true
-			continue
-		}
-		out = append(out, r)
-		prevSpace = false
-	}
-	return string(out)
-}
+// padded titles render on one line (matches `endless session list`). Shared with
+// the project board via internal/liveview since E-1976.
+func collapse(s string) string { return liveview.Collapse(s) }
 
 // ANSI helpers. Phase-by-intensity: urgent bold, later/maybe dim, terminal rows
 // dim, everything else normal — except that an unsettled (◆) row is never dimmed
@@ -1270,9 +1120,9 @@ func collapse(s string) string {
 // without color-profile guessing — lipgloss is reserved for the future TUI
 // (E-859/E-1622), out of scope here.
 const (
-	ansiReset = "\x1b[0m"
-	ansiBold  = "\x1b[1m"
-	ansiDim   = "\x1b[2m"
+	ansiReset = liveview.Reset
+	ansiBold  = liveview.Bold
+	ansiDim   = liveview.DimSGR
 )
 
 // colorize applies the row's intensity. unsettled (◆, E-1701) VETOES every dim
@@ -1322,9 +1172,4 @@ func colorize(line string, r monitor.SessionStatusRow, enabled bool) string {
 	}
 }
 
-func dim(s string, enabled bool) string {
-	if !enabled {
-		return s
-	}
-	return ansiDim + s + ansiReset
-}
+func dim(s string, enabled bool) string { return liveview.Dim(s, enabled) }

@@ -12,6 +12,8 @@
 //	endless-go session-query list-live|task-text|resume-target
 //	endless-go worktree      in-use   (the shared "is this worktree still in use" guard)
 //	endless-go session-status  (renders the per-session status view; --monitor loops it)
+//	endless-go project-status  (renders the project attention board; --monitor loops it)
+//	endless-go project-window  (creates the dedicated two-pane tmux session the board lives in)
 //	endless-go spawn-window  (the multiplexer seam: creates the tmux window that launches Claude on a task)
 //	endless-go spawn-launch  (internal: sets @endless_* window options, then execs claude inside the window)
 //	endless-go template      render
@@ -29,6 +31,9 @@
 //     table, which hook writes pin to main regardless of cwd), but with --task
 //     (headless/tests) it skips the pin and reads the resolved sandbox/
 //     --config-dir context; the decision lives in sessionstatuscmd.Run (E-1685).
+//   - project-status, project-window → the same rule and the same reason, for
+//     the same single-database join; the headless escape is --project-id and the
+//     decision lives in projectstatuscmd.resolveProject (E-1976).
 //   - event, session-query, worktree → ConsumeDBContextFlag (E-1429).
 //   - sandbox → no DB-context init.
 //
@@ -51,6 +56,7 @@ import (
 	"github.com/mikeschinkel/endless/internal/markdowncmd"
 	"github.com/mikeschinkel/endless/internal/monitor"
 	"github.com/mikeschinkel/endless/internal/outputstylecmd"
+	"github.com/mikeschinkel/endless/internal/projectstatuscmd"
 	"github.com/mikeschinkel/endless/internal/sandboxcmd"
 	"github.com/mikeschinkel/endless/internal/sessionquerycmd"
 	"github.com/mikeschinkel/endless/internal/sessionstatuscmd"
@@ -166,6 +172,7 @@ func main() {
 	// session-status pins main itself, but only on its normal tmux-resolved path;
 	// with --task (headless/tests) it deliberately reads the resolved sandbox
 	// context instead, so the decision lives inside sessionstatuscmd.Run (E-1685).
+	// project-status/project-window do the same, keyed off --project-id (E-1976).
 
 	// Let the worktree reaper clean up each reaped worktree's sandbox (E-1904).
 	// Wired here because sandboxcmd imports monitor, so monitor cannot call into
@@ -187,6 +194,8 @@ func main() {
 		worktreecmd.Run(rest)
 	case "session-status":
 		sessionstatuscmd.Run(rest)
+	case "project-status", "project-window":
+		projectstatuscmd.Run(sub, rest)
 	case "spawn-window", "spawn-launch":
 		spawnlaunchcmd.Run(sub, rest)
 	case "template":
@@ -248,6 +257,8 @@ func usage(w *os.File) {
 	fmt.Fprintln(w, "  session-query  list-live|task-text|resume-target")
 	fmt.Fprintln(w, "  worktree       in-use  (is this worktree still in use?)")
 	fmt.Fprintln(w, "  session-status render the per-session status view (--monitor loops it)")
+	fmt.Fprintln(w, "  project-status render the project attention board (--monitor loops it)")
+	fmt.Fprintln(w, "  project-window create the dedicated two-pane tmux session the board lives in")
 	fmt.Fprintln(w, "  spawn-window   create the tmux window that launches Claude on a task")
 	fmt.Fprintln(w, "  spawn-launch   (internal) set window options and exec claude inside the window")
 	fmt.Fprintln(w, "  template       render")

@@ -365,6 +365,7 @@ func TestGroupMembershipIsPinned(t *testing.T) {
 		"actionable":             {"unplanned", "ready", "revisit"},
 		"not-actionable":         {"untriaged", "submitted", "underway", "unverified", "unreviewed", "confirmed", "assumed", "completed", "declined", "obsolete"},
 		"active":                 {"underway", "unverified", "unreviewed"},
+		"awaits-user":            {"unverified", "unreviewed", "submitted"},
 		"claim-promotes":         {"untriaged", "unplanned", "ready", "revisit"},
 		"open":                   {"untriaged", "unplanned", "submitted", "ready", "underway"},
 		"children-state-order":   {"untriaged", "unplanned", "submitted", "ready", "underway", "revisit", "unverified", "unreviewed"},
