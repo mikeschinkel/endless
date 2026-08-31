@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/mikeschinkel/endless/internal/verify"
+	"github.com/mikeschinkel/go-dt"
 )
 
 // enterScriptSuite chdirs into a fresh project holding one script suite, with a
@@ -56,14 +57,8 @@ func TestRun_ScriptSuite_ExitCodeIsTheVerdict(t *testing.T) {
 
 // The runner exports the TAP destination and the task id, and nothing else
 // needs to be true for a harness-sourcing suite to work.
-//
-// ENDLESS_VERIFY_RUN is asserted ABSENT on purpose. It was a "the runner
-// started you" marker, which is a claim a caller can make about itself for the
-// price of one `export`; E-2090 removed it rather than leave a variable that
-// reads as permission. Nothing may reintroduce it quietly.
 func TestRun_ScriptSuite_ExportsTAPPathAndTaskID(t *testing.T) {
 	enterScriptSuite(t, "E-2", `#!/usr/bin/env bash
-[[ -z "${ENDLESS_VERIFY_RUN:-}" ]] || exit 10
 [[ -n "${ENDLESS_VERIFY_TAP:-}" ]] || exit 11
 [[ "${ENDLESS_VERIFY_TASK:-}" == "E-2" ]] || exit 12
 exit 0
@@ -73,7 +68,34 @@ exit 0
 		t.Fatalf("run: %v", err)
 	}
 	if code != 0 {
-		t.Fatalf("exit code = %d (10=RUN marker is back, 11=TAP missing, 12=TASK wrong)", code)
+		t.Fatalf("exit code = %d (11=TAP missing, 12=TASK wrong)", code)
+	}
+}
+
+// The runner ADDS no variable that reads as permission.
+//
+// ENDLESS_VERIFY_RUN was one: a "the runner started you" marker satisfied by a
+// single `export`, which is why it is gone. What is asserted here is that
+// suiteEnv does not put it back — deliberately NOT that a suite never sees it.
+// The runner passes the parent environment through (PATH and the rest), so a
+// caller that exports the name still hands it down, and an earlier version of
+// this test failed for exactly that reason when an older installed runner
+// invoked the newer test binary. A suite inheriting the name is harmless
+// because nothing reads it; a runner setting it would not be.
+func TestSuiteEnv_AddsNoPermissionGrantingVariable(t *testing.T) {
+	root := enterScriptSuite(t, "E-2", "#!/usr/bin/env bash\nexit 0\n")
+
+	env, err := suiteEnv(nil, "E-2", dt.DirPath(root))
+	if err != nil {
+		t.Fatalf("suiteEnv: %v", err)
+	}
+	for _, kv := range env {
+		if strings.HasPrefix(kv, "ENDLESS_VERIFY_RUN=") {
+			t.Errorf("suiteEnv reintroduced the run marker: %q", kv)
+		}
+	}
+	if len(env) == 0 {
+		t.Fatal("suiteEnv returned nothing; the assertion above proves nothing")
 	}
 }
 
