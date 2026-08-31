@@ -4751,3 +4751,29 @@ Second-order, on the message side: a refusal whose headline is followed by ten l
 
 Third: isatty is not the fix. An executable can tell it is being piped (that is how these suites choose colour), but it cannot tell a truncating pipe from `--tsv | ...`, `> file`, or a CI capture — and identifying `tail` specifically means walking sibling processes, which is fragile and whose false positive is refusing to run. The enforceable point is the PreToolUse Bash matcher, which already sees the whole command string as text, the same way it matches `sqlite3 .endless` paths and worktree removal.
 - **Project**: endless
+
+### [2026-08-30] Correcting myself twice over: the fault is truncating output I then reason from; 2>&1 is only what put the error in the truncated stream
+Third pass at this, because my first two namings were wrong and Mike corrected each one. He asked: 'If stdout should never output if we have stderr, then why is 2>&1 a problem? Seems the problem is you are just truncating valid data?' He is right.
+
+The anatomy, measured:
+
+     1
+     2  Error: Title is 104 characters; max is 100.
+     3
+     4-16 (fourteen lines of guidance on how to shape a title)
+    17
+
+Stdout was EMPTY — 0 bytes. Nothing drowned the error out. The message is 17 lines, the verdict is line 2, and my `tail -3` kept lines 15 through 17. I truncated a short message and threw away its head.
+
+So the causal chain, precisely:
+- `| tail -3` alone: stderr never enters the pipe, all 17 lines reach the terminal, no harm.
+- `2>&1 | tail -3`: stderr enters the pipe, and THEN I truncate it.
+
+`2>&1` is the enabling condition, not the fault. The fault is truncating output I am about to reason from. Had those 17 lines been on stdout, a plain `| tail -3` would have done identical damage — and that is not hypothetical: `endless task show ... | tail -5` is the same mistake waiting.
+
+What this invalidates: the PreToolUse matcher I proposed for `2>&1` + a truncator. It targets a correlate. It would not catch `| tail -N` on a long stdout report, and it would fire on plenty of cases that are fine. Withdrawn.
+
+What survives, and it needs no matcher: put the actionable line LAST as well as first in a refusal. Then any tail window catches it. Worth noting this message spends fourteen of its seventeen lines teaching, positioned AFTER the answer — so the one line that mattered is the one line a small window cannot see.
+
+The rule for me is simpler than any of my three attempts at it: do not narrow what a tool tells me and then reason from the remainder. That is the same failure as trusting `task search`'s empty result from a query that could not match — there I narrowed the question, here I narrowed the answer.
+- **Project**: endless
