@@ -695,8 +695,18 @@ def sync_worktrees(apply: bool) -> None:
             click.echo("Re-run with --apply to rebase them.")
         return
 
-    done, failed, undo = 0, [], []
+    done, failed, undo, moved = 0, [], [], []
     for path, branch, _, _reason in todo:
+        # Re-check immediately before acting. The plan above was built for the
+        # whole fleet at once, and rebasing it takes minutes — long enough for a
+        # session to wake up, start editing, or begin a merge in a worktree that
+        # was idle and clean when it was surveyed. The window cannot be closed
+        # entirely, but it can be made a moment wide instead of a sweep wide.
+        disposition, reason = _sync_state(path, base, here)
+        if disposition != "rebase":
+            moved.append((path, reason))
+            click.echo(f"  skip      {_display_path(path)}  (changed while sweeping: {reason})")
+            continue
         # The pre-rebase tip, captured before anything moves. `git rebase` also
         # leaves it in ORIG_HEAD, but ORIG_HEAD is overwritten by the next
         # operation in that worktree — so the sweep records it here and prints
@@ -709,16 +719,27 @@ def sync_worktrees(apply: bool) -> None:
             click.echo(f"  rebased   {_display_path(path)}  ({branch})")
             continue
         _git_run(["rebase", "--abort"], cwd=path, check=False)
-        detail = (res.stderr.strip() or res.stdout.strip() or "rebase failed").splitlines()
-        failed.append((path, branch, detail[-1] if detail else "rebase failed"))
-        click.echo(f"  CONFLICT  {_display_path(path)}  ({branch}) — aborted, left untouched")
+        # Report what git SAID, not a guess at why. Most of these are not merge
+        # conflicts at all — a file git refuses to overwrite on checkout looks
+        # identical from here, and calling that a conflict sends the reader
+        # hunting for markers that do not exist.
+        lines = [ln for ln in (res.stderr + "\n" + res.stdout).splitlines() if ln.strip()]
+        reason = next((ln.strip() for ln in lines if ln.startswith("error:")), "")
+        detail = reason or (lines[-1].strip() if lines else "rebase failed")
+        failed.append((path, branch, detail))
+        click.echo(f"  FAILED    {_display_path(path)}  ({branch}) — aborted: {detail}")
 
-    click.echo(f"\n{done} rebased onto {base}, {len(skipped)} skipped, {len(failed)} conflicted.")
+    click.echo(
+        f"\n{done} rebased onto {base}, {len(skipped) + len(moved)} skipped, "
+        f"{len(failed)} conflicted."
+    )
+    if moved:
+        click.echo(f"  {len(moved)} of those became busy after the survey and were left alone.")
     for path, branch, detail in failed:
         click.echo(f"  {_display_path(path)}: {detail}")
     if failed:
         click.echo(
-            "\nA conflicted worktree was restored to where it was. Its own session "
+            "\nEach failed worktree was restored to where it was. Its own session "
             "resolves it, in place — `git rebase " + base + "` there."
         )
     if undo:
