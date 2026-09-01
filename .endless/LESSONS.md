@@ -4923,3 +4923,44 @@ The distinction that matters, since Endless deliberately refuses --force in seve
 
 Second time in two turns I had the correct diagnosis and still took the frictionless route — the same shape as reaching for `decision add` because the skill had put it in front of me. The rule: when a refusal names a specific remedy, that remedy is the default, and reaching past it needs a reason I can state.
 - **Project**: endless
+
+### [2026-09-01] I filed a lesson as a decision, and wrote both too densely for the person who has to adjudicate them
+Mike, on ED-1582 and ED-1583: "are these REALLY architectural decisions, OR are
+they lessons you learned? Your wording was so complex it was hard for me to
+understand what points you were trying to make."
+
+Two separate faults, one artifact.
+
+1. ED-1582 is a lesson wearing a decision's clothes. "Consolidating a rule into
+one enforcement point is unfinished until every other path to the artifact is
+closed" decides nothing. It picks between no options, constrains no future
+choice, and is Endless-specific in none of its words — it is a general
+engineering aphorism, and I reached it by being corrected. The actual decision
+in that episode was Mike's: retrofit all 206 suites now rather than defer. That
+choice is already executed and wholly contained in E-2023, where its reasoning
+belongs (and already sits, in the plan's Amendment 1). Nothing downstream
+consults it as a rule.
+
+The test I should apply, sharper than "would it still matter if the task were
+deleted" — which a truism always passes:
+
+  - Did it choose between options that were both actually available?
+  - Does something NOT YET BUILT have to obey it?
+  - Would a reader who never saw this session need it to make a later call?
+
+ED-1583 passes all three: fix the test or fix the runner were both real, the
+Tier 1+ substrate ladder must obey it, and someone hitting it later needs the
+answer. ED-1582 passes none.
+
+2. The density is its own failure, independent of the first. A decision exists
+to be read later, by someone deciding something, and adjudicated now by Mike. If
+he cannot tell what point I am making, it cannot do either job — however sound
+the argument underneath. My 800-character single-paragraph descriptions,
+stacking a narrative and a generalisation and a boundary clause into one breath,
+are optimised for completeness against a reader who is optimising for a verdict.
+
+The rule: a decision states in ONE plain sentence what was chosen, then in a few
+short ones what it binds and what it does not. If the statement needs the reader
+to reconstruct the session, rewrite it, not the reader. `decision update` exists
+for exactly that. Same goes for these lessons.
+- **Project**: endless
