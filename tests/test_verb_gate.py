@@ -71,9 +71,9 @@ def test_verb_gate_human_form_omits_force_and_alternatives(monkeypatch):
 
 
 def test_verb_gate_agent_form_includes_binary_and_anti_rationalization(monkeypatch):
-    # The harness signal, not CLAUDECODE. `_running_under_agent()` delegates to
-    # agent_env (E-1966), which keys on the entrypoint: CLAUDECODE=1 alone says
-    # "some Claude Code", not which surface, and is no longer an agent.
+    # The harness signal, not CLAUDECODE. `agent_help.agent_facing()` delegates
+    # to agent_env (E-1962/E-1966), which keys on the entrypoint: CLAUDECODE=1
+    # alone says "some Claude Code", not which surface, and is no longer an agent.
     #
     # This test passed against the OLD contract for a while after the new one
     # shipped, because the runner's own shell exported CLAUDE_CODE_ENTRYPOINT

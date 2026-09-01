@@ -33,8 +33,13 @@ def _agent_gate_open(monkeypatch):
     """Default the reminder's agent gate OPEN so the behavior tests exercise the
     transition logic, not the gate. The gate itself (agent vs. human vs.
     --agent-view) is tested explicitly below, each overriding this. Also pins
-    --agent-view OFF so it never leaks in from the ambient CLI state."""
-    monkeypatch.setattr(task_cmd, "_running_under_agent", lambda: True)
+    --agent-view OFF so it never leaks in from the ambient CLI state.
+
+    Opened through the harness signal rather than by stubbing
+    `agent_help.agent_facing`: that function is where detection and
+    --agent-view compose (E-2097), so a stub would make the three gate tests
+    below assert against the stub instead of the composition."""
+    monkeypatch.setenv("CLAUDE_CODE_ENTRYPOINT", "cli")
     monkeypatch.setattr(agent_help, "_AGENT_VIEW", False)
 
 
@@ -163,7 +168,11 @@ def test_non_status_update_does_not_fire(seeded_project_at_cwd, capsys):
 
 
 def test_agent_session_fires(seeded_project_at_cwd, capsys, monkeypatch):
-    monkeypatch.setattr(task_cmd, "_running_under_agent", lambda: True)
+    # The real gate, from the real harness signal — conftest strips it, so this
+    # line is what makes the session an agent's (E-2097 replaced the patched
+    # `task_cmd._running_under_agent` with `agent_help.agent_facing`, which
+    # composes detection with --agent-view; patching it out would test nothing).
+    monkeypatch.setenv("CLAUDE_CODE_ENTRYPOINT", "cli")
     monkeypatch.setattr(agent_help, "_AGENT_VIEW", False)
     tid = _add_task("Fix the agent-session path", status="underway")
     task_cmd.update_plan(tid, status="unverified")
@@ -171,7 +180,7 @@ def test_agent_session_fires(seeded_project_at_cwd, capsys, monkeypatch):
 
 
 def test_human_invocation_stays_silent(seeded_project_at_cwd, capsys, monkeypatch):
-    monkeypatch.setattr(task_cmd, "_running_under_agent", lambda: False)
+    monkeypatch.delenv("CLAUDE_CODE_ENTRYPOINT", raising=False)
     monkeypatch.setattr(agent_help, "_AGENT_VIEW", False)
     tid = _add_task("Fix the human path", status="underway")
     task_cmd.update_plan(tid, status="unverified")
@@ -180,7 +189,7 @@ def test_human_invocation_stays_silent(seeded_project_at_cwd, capsys, monkeypatc
 
 def test_agent_view_flag_lets_human_preview(seeded_project_at_cwd, capsys, monkeypatch):
     # Not an agent session, but the human passed --agent-view (sets _AGENT_VIEW).
-    monkeypatch.setattr(task_cmd, "_running_under_agent", lambda: False)
+    monkeypatch.delenv("CLAUDE_CODE_ENTRYPOINT", raising=False)
     monkeypatch.setattr(agent_help, "_AGENT_VIEW", True)
     tid = _add_task("Fix the agent-view path", status="underway")
     task_cmd.update_plan(tid, status="unverified")

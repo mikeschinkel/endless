@@ -10,10 +10,12 @@ import sys
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import NamedTuple
 
 import click
 from tabulate import tabulate
 
+from endless import agent_help
 from endless import db, config
 from endless import rowcap
 from endless import statuses
@@ -235,30 +237,6 @@ def _emit_field_changes(
         click.echo(f"{bullet} {label}: {_format_field_value(name, old)} -> {_format_field_value(name, new)}")
 
 
-def _running_under_agent() -> bool:
-    """True if invoked from an LLM agent harness — any recognized one.
-
-    A convenience wrapper, not a second implementation: `agent_env` (E-1962)
-    owns harness detection, and this names the question its two callers
-    actually ask — the anti-rationalization variant of the verb-gate error, and
-    the wind-down report nudge — in their vocabulary. It used to key on
-    CLAUDECODE=1 directly, which answered "some Claude Code" rather than which,
-    and missed every non-Claude harness.
-
-    Deliberately `present()`, not `supported()`: both callers want "am I
-    talking to an agent at all", not "is this harness supported". Since E-1962
-    the CLI refuses an unsupported harness at the group callback, so by the time
-    either caller runs a recognized harness is a supported one. (E-2006 moved
-    that comparison into `agent_env.present`; this used to spell it out here,
-    and so did `agent_help._should_augment`.)
-
-    (An earlier docstring said "never to gate behavior". That stopped being
-    true when E-1772 added the nudge, which does.)
-    """
-    from endless import agent_env
-    return agent_env.present()
-
-
 _VERB_CHECK_PROMPT_TEMPLATE = (
     "Is '{word}' a verb? "
     "If it is say 'YES:' and then provide a definition. "
@@ -307,14 +285,55 @@ def _check_verb_via_haiku(word: str) -> tuple[bool, str | None]:
 
 
 TITLE_MAX_LENGTH = 100
+DESCRIPTION_MAX_LENGTH = 1024
+
+# The no-change half of a verdict line (E-2097). A refusal that never says
+# whether it partially applied leaves the caller to find out by reading the
+# record back — or, as happened, by writing a probe value to a live task.
+# The verb that refused picks the precise one; NOTHING_WRITTEN is the default
+# because these validators are shared (decisions call the description one), and
+# a shared default that says "created" would be wrong half the time.
+NOTHING_CREATED = "Nothing was created."
+NOTHING_CHANGED = "Nothing was changed."
+NOTHING_WRITTEN = "Nothing was written."
+
+# One remedy for the whole long-form family — title over length, description
+# over length, description with a newline. All three are the same mistake
+# (long-form content in a short field) with the same fix, so they collapse to
+# a single clause however many of them fired.
+_LONG_FORM_REMEDY = (
+    "Long-form goes in --analysis (rationale) or --text (plan); "
+    "the title names WHAT and the description is a 2-3 sentence blurb."
+)
 
 
-def validate_title(title: str, force: bool = False):
-    """Reject titles that don't start with a registered actionable verb.
+class _Refusal(NamedTuple):
+    """One field problem, held rather than raised, so a call can report all of them.
 
-    On a miss, ask claude haiku whether the first word is a verb; if YES,
+    `verdict` is the dense fragment for the one-line verdict — measured
+    numbers, never an adjective, because the number is what makes the
+    correction computable. `remedy` says where the content belongs instead;
+    identical remedies dedupe. `guidance` is the full teaching block, unchanged
+    from what this refusal has always printed.
+
+    `blank_before` reproduces the blank line the title-length refusal has
+    always echoed to stderr ahead of itself. It is suppressed for an agent:
+    the point of the bracket is that the verdict is the FIRST line, and a
+    leading blank makes it the second.
+    """
+    verdict: str
+    remedy: str
+    guidance: str
+    blank_before: bool = False
+
+
+def _title_problems(title: str, force: bool) -> list[_Refusal]:
+    """Everything wrong with a title, collected (E-2097).
+
+    Reject titles that don't start with a registered actionable verb. On a
+    miss, ask claude haiku whether the first word is a verb; if YES,
     auto-register it (E-1264) and let the title pass. NO / failure falls
-    through to the standard error.
+    through to the standard refusal.
 
     Also reject titles longer than TITLE_MAX_LENGTH (E-1517). Length is a
     structural constraint, not a heuristic — `force` does NOT bypass it.
@@ -322,37 +341,43 @@ def validate_title(title: str, force: bool = False):
     Add new verbs manually with: endless verb add <new-verb> --definition "<def>"
     """
     if len(title) > TITLE_MAX_LENGTH:
-        click.echo("", err=True)
-        raise click.ClickException(
-            f"Title is {len(title)} characters; max is {TITLE_MAX_LENGTH}.\n"
-            f"\n"
-            f"If it does not fit in {TITLE_MAX_LENGTH} chars, the title is usually naming HOW instead\n"
-            f"of WHAT. Long-form belongs elsewhere: analysis in --analysis, design/plan in\n"
-            f"--text, a brief blurb in --description — not the title.\n"
-            f"\n"
-            f"Consider using this template:\n"
-            f"\n"
-            f"    Shape: <verb> <subject>'s <symptom> on/when <trigger> [via <mechanism>]\n"
-            f"    Subject   = user-facing name (e.g. 'just land'), not internal symbol\n"
-            f"    Symptom   = what the user observes breaking (e.g. 'recording failure'),\n"
-            f"                not the implementation cause\n"
-            f"    Trigger   = when the symptom shows up (e.g. 'on self-modifying branches')\n"
-            f"    Mechanism = optional; the flag/verb that fixes it (e.g. 'via --no-record').\n"
-            f"                Include only when it sharpens understanding.\n"
-        )
+        # Length short-circuits the verb check, as it always has: a title
+        # 34 characters over the cap is not being refused for its first word,
+        # and the verb check costs a model call to say so.
+        return [_Refusal(
+            verdict=f"title {len(title)}>{TITLE_MAX_LENGTH} chars",
+            remedy=_LONG_FORM_REMEDY,
+            blank_before=True,
+            guidance=(
+                f"Title is {len(title)} characters; max is {TITLE_MAX_LENGTH}.\n"
+                f"\n"
+                f"If it does not fit in {TITLE_MAX_LENGTH} chars, the title is usually naming HOW instead\n"
+                f"of WHAT. Long-form belongs elsewhere: analysis in --analysis, design/plan in\n"
+                f"--text, a brief blurb in --description — not the title.\n"
+                f"\n"
+                f"Consider using this template:\n"
+                f"\n"
+                f"    Shape: <verb> <subject>'s <symptom> on/when <trigger> [via <mechanism>]\n"
+                f"    Subject   = user-facing name (e.g. 'just land'), not internal symbol\n"
+                f"    Symptom   = what the user observes breaking (e.g. 'recording failure'),\n"
+                f"                not the implementation cause\n"
+                f"    Trigger   = when the symptom shows up (e.g. 'on self-modifying branches')\n"
+                f"    Mechanism = optional; the flag/verb that fixes it (e.g. 'via --no-record').\n"
+                f"                Include only when it sharpens understanding.\n"
+            ),
+        )]
+
     first_word = title.split()[0].lower() if title.strip() else ""
     from endless import matchers
     verbs = matchers.get_verbs()
-    if first_word in verbs:
-        return
-    if force:
-        return
+    if first_word in verbs or force:
+        return []
 
     # E-1264: ask claude haiku whether the first word is a verb. If YES,
     # auto-register it and let the title pass. This removes the agent's
     # bypass option (rewriting the title with a different verb) that was
     # wasting tokens across sessions. NO / failure paths fall through to
-    # the standard error below.
+    # the standard refusal below.
     is_verb, definition = _check_verb_via_haiku(first_word)
     if is_verb and definition:
         try:
@@ -364,14 +389,14 @@ def validate_title(title: str, force: bool = False):
                 click.style("•", fg="cyan")
                 + f" Auto-registered verb '{first_word}': {definition}"
             )
-            return
+            return []
 
     register_cmd = (
         f"endless verb add '{first_word}' --definition \"<short definition>\""
     )
 
-    if _running_under_agent():
-        msg = (
+    if agent_help.agent_facing():
+        guidance = (
             f"Title must start with an actionable verb. '{first_word}' is not registered.\n"
             f"\n"
             f"  Decide: does '{first_word}' name an action?\n"
@@ -384,36 +409,115 @@ def validate_title(title: str, force: bool = False):
             f"  Registering a non-verb defeats the check for everyone — including future-you."
         )
     else:
-        msg = (
+        guidance = (
             f"Title must start with an actionable verb. '{first_word}' is not registered.\n"
             f"  Register it (if it really is a verb): {register_cmd}"
         )
-    raise click.ClickException(msg)
+    return [_Refusal(
+        verdict=f"title's first word '{first_word}' is not a registered verb",
+        remedy=(f"Register a real verb with: {register_cmd} — otherwise rewrite "
+                f"the title; never register a non-verb to get past this."),
+        guidance=guidance,
+    )]
 
 
-DESCRIPTION_MAX_LENGTH = 1024
+def _description_problems(description: str | None) -> list[_Refusal]:
+    """Everything wrong with a description, collected (E-2097).
+
+    Reject descriptions longer than DESCRIPTION_MAX_LENGTH or with embedded
+    newlines. Per E-1058 / E-1073: description is a 2-3 sentence blurb, not
+    long-form. Empty or None is allowed here; required-ness is E-963's concern.
+
+    Both problems are reported together. They used to be sequential raises, so
+    a description that was long AND multi-line cost two round trips to learn.
+    """
+    if not description:
+        return []
+    problems: list[_Refusal] = []
+    if len(description) > DESCRIPTION_MAX_LENGTH:
+        problems.append(_Refusal(
+            verdict=f"description {len(description)}>{DESCRIPTION_MAX_LENGTH} chars",
+            remedy=_LONG_FORM_REMEDY,
+            guidance=(
+                f"Description is {len(description)} characters; max is {DESCRIPTION_MAX_LENGTH}.\n"
+                f"  Description is a 2-3 sentence blurb, not a dissertation. Long-form context\n"
+                f"  belongs in a dedicated field: analysis in --analysis, plans/verification in --text."
+            ),
+        ))
+    if "\n" in description or "\r" in description:
+        problems.append(_Refusal(
+            verdict="description contains a newline; it must be one line",
+            remedy=_LONG_FORM_REMEDY,
+            guidance=(
+                "Description must be a single line; embedded newlines are not allowed.\n"
+                "  Description is a brief blurb. Long-form context belongs in a dedicated field:\n"
+                "  analysis in --analysis, plans/verification in --text."
+            ),
+        ))
+    return problems
+
+
+def _refuse(problems: list[_Refusal], action: str) -> None:
+    """Refuse once, for every problem found (E-2097). A no-op when there are none.
+
+    The verdict line is assembled here so every refusal that reaches an agent
+    has the same shape: sentinel, the command that produced it, the measured
+    problems, where the content goes instead, and whether anything changed.
+    """
+    if not problems:
+        return
+    verdict = "; ".join(p.verdict for p in problems) + "."
+    remedies: list[str] = []
+    for problem in problems:
+        if problem.remedy and problem.remedy not in remedies:
+            remedies.append(problem.remedy)
+    summary = " ".join([verdict, *remedies, action])
+
+    # A lone problem renders today's message unchanged, trailing newline and
+    # all — a human must see no difference. Only a multi-problem refusal, which
+    # could not happen before, normalizes the seam between guidance blocks.
+    if len(problems) == 1:
+        guidance = problems[0].guidance
+    else:
+        guidance = "\n\n".join(p.guidance.rstrip("\n") for p in problems)
+
+    if not agent_help.agent_facing() and any(p.blank_before for p in problems):
+        click.echo("", err=True)
+    raise click.ClickException(agent_help.agent_error(summary, guidance))
+
+
+def validate_fields(
+    title: str | None = None,
+    description: str | None = None,
+    force: bool = False,
+    action: str = NOTHING_WRITTEN,
+) -> None:
+    """Validate every field of one write, and refuse ONCE with all the problems.
+
+    The write boundary for `task add` and `task update`. Passing None for a
+    field means "not being written", which is not the same as writing an empty
+    one — `task update` clears a description with the empty string.
+
+    Collecting first is the point (E-2097). Raising on the first failure made a
+    title-and-description problem cost two refusals to discover, and each
+    refusal read as the only thing wrong.
+    """
+    problems: list[_Refusal] = []
+    if title is not None:
+        problems.extend(_title_problems(title, force))
+    if description is not None:
+        problems.extend(_description_problems(description))
+    _refuse(problems, action)
+
+
+def validate_title(title: str, force: bool = False):
+    """Validate a title on its own. See `_title_problems` for the rules."""
+    _refuse(_title_problems(title, force), NOTHING_WRITTEN)
 
 
 def validate_description(description: str | None):
-    """Reject descriptions longer than 1024 chars or with embedded newlines.
-
-    Per E-1058 / E-1073: description is a 2-3 sentence blurb, not long-form.
-    Empty or None is allowed here; required-ness is E-963's concern.
-    """
-    if not description:
-        return
-    if len(description) > DESCRIPTION_MAX_LENGTH:
-        raise click.ClickException(
-            f"Description is {len(description)} characters; max is {DESCRIPTION_MAX_LENGTH}.\n"
-            f"  Description is a 2-3 sentence blurb, not a dissertation. Long-form context\n"
-            f"  belongs in a dedicated field: analysis in --analysis, plans/verification in --text."
-        )
-    if "\n" in description or "\r" in description:
-        raise click.ClickException(
-            "Description must be a single line; embedded newlines are not allowed.\n"
-            "  Description is a brief blurb. Long-form context belongs in a dedicated field:\n"
-            "  analysis in --analysis, plans/verification in --text."
-        )
+    """Validate a description on its own. See `_description_problems`."""
+    _refuse(_description_problems(description), NOTHING_WRITTEN)
 
 
 def task_id_display(item_id: int) -> str:
@@ -2249,8 +2353,8 @@ def add_item(
     from endless.event_bridge import emit_event
 
     task_type = task_type or "todo"
-    validate_title(title, force=force)
-    validate_description(description)
+    validate_fields(title=title, description=description, force=force,
+                    action=NOTHING_CREATED)
     _reject_maybe_with_parent(phase, parent_id)
     _, proj_name = _resolve_project(project_name)
     # E-1845: a new task is `untriaged` — filed, not yet looked at. Triage
@@ -3117,8 +3221,8 @@ def _maybe_emit_report_reminder(
     The reminder steers an *agent*; a human running `task assume`/`complete`
     interactively should not see it. So it fires only when the invoker is an
     agent harness or a human explicitly asked to preview the agent's view with
-    the global `--agent-view` flag — the same gate the agent `--help`
-    augmentation uses.
+    the global `--agent-view` flag — `agent_help.agent_facing`, the same gate
+    the agent `--help` augmentation and the bracketed refusals use.
 
     And only in a project that actually runs the report channel (E-1966). The
     nudge asserts that all further reporting goes through `task report`; where
@@ -3128,9 +3232,7 @@ def _maybe_emit_report_reminder(
     harmlessly; a claim about enforcement may not, because a session told it is
     being checked when it is not learns that Endless's statements about its own
     behavior cannot be relied on."""
-    from endless.agent_help import agent_view_requested
-
-    if not (_running_under_agent() or agent_view_requested()):
+    if not agent_help.agent_facing():
         return
     if not _is_report_wind_down(old_status, new_status, outcome_present):
         return
@@ -4756,11 +4858,8 @@ def update_plan(
     # Use the incoming --type if set in this same update, else the existing type.
     effective_type_for_outcome = task_type if task_type is not None else row[0]["type"]
     _require_outcome_for_completed(status, effective_type_for_outcome, effective_outcome)
-    if title is not None:
-        validate_title(title, force=force)
-
-    if description is not None:
-        validate_description(description)
+    validate_fields(title=title, description=description, force=force,
+                    action=NOTHING_CHANGED)
 
     # E-1658: when the title or type is being changed, re-gate the effective
     # (title, type) against the verb-category accepts map. Closes the

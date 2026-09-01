@@ -149,8 +149,10 @@ def test_present_is_not_supported():
 # Two helpers predate this module and each carried its own CLAUDECODE=1 test:
 # task_cmd._running_under_agent() and agent_help.is_claude_code_agent(). Three
 # spellings of one question, of which two answered "some Claude Code" rather
-# than which, and missed every non-Claude harness. Both now delegate here; the
-# second is gone entirely, folded into its only caller.
+# than which, and missed every non-Claude harness. Both are gone now: the
+# second folded into its only caller (E-1966), the first into
+# agent_help.agent_facing (E-2097), which is what both of its callers were
+# asking for.
 
 
 def _pin_env(monkeypatch, **vars_):
@@ -168,32 +170,34 @@ def _pin_env(monkeypatch, **vars_):
     # The case that proves the delegation: the retired body returned True here.
     ("claudecode without an entrypoint", dict(CLAUDECODE="1"), False),
 ])
-def test_running_under_agent_follows_the_detector(monkeypatch, name, vars_, expected):
-    from endless import task_cmd
-    _pin_env(monkeypatch, **vars_)
-    assert task_cmd._running_under_agent() is expected, name
-
-
-@pytest.mark.parametrize("name,vars_,expected", [
-    ("claude code in a terminal", TERMINAL, True),
-    ("bare shell", {}, False),
-    ("claudecode without an entrypoint", dict(CLAUDECODE="1"), False),
-])
-def test_help_augmentation_follows_the_detector(monkeypatch, name, vars_, expected):
+def test_agent_facing_follows_the_detector(monkeypatch, name, vars_, expected):
     from endless import agent_help
     _pin_env(monkeypatch, **vars_)
     monkeypatch.setattr(agent_help, "_AGENT_VIEW", False)
-    assert agent_help._should_augment() is expected, name
+    assert agent_help.agent_facing() is expected, name
     # --agent-view is a human's deliberate preview, not harness detection, so it
     # stays an independent term rather than being folded in.
     monkeypatch.setattr(agent_help, "_AGENT_VIEW", True)
-    assert agent_help._should_augment() is True
+    assert agent_help.agent_facing() is True
+
+
+def test_the_fourth_spelling_is_gone():
+    """task_cmd no longer answers the harness question itself either (E-2097).
+
+    `_running_under_agent()` wrapped `agent_env.present()` for two callers, one
+    of which had already written `_running_under_agent() or
+    agent_view_requested()` — `agent_facing()` spelled out. Both now call
+    `agent_facing()`, and the wrapper is gone rather than left as a second name
+    for a question this codebase has consolidated three times.
+    """
+    from endless import task_cmd
+    assert not hasattr(task_cmd, "_running_under_agent")
 
 
 def test_the_third_spelling_is_gone():
     """agent_help no longer answers the harness question itself.
 
-    Its `is_claude_code_agent()` was folded into `_should_augment()`, its only
+    Its `is_claude_code_agent()` was folded into `agent_facing()`, its only
     caller. Re-adding a module-level harness predicate here is how the codebase
     grows a second answer to a question that has one.
 
@@ -250,7 +254,7 @@ def test_refusal_covers_help_so_the_agent_block_never_lands(monkeypatch):
     """`--help` is refused too, which is the seam E-1966 opened.
 
     Folding `is_claude_code_agent()` onto the detector widened
-    `_should_augment()` from "Claude Code CLI" to "any recognized harness", so
+    `agent_facing()` from "Claude Code CLI" to "any recognized harness", so
     Desktop now answers True and the directive block IS computed for it. It
     never reaches anyone: Click runs the root group callback before rendering a
     subcommand's help, so the banner replaces the whole output. Were that
