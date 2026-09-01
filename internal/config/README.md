@@ -68,12 +68,44 @@ These are not expected to appear in CLI files. Same safety-net pattern.
 | ---------- | ----------------- | ----------------------------------------------------------------------------------------- |
 | `tracking` | `string`          | Receiver wins when set to a non-empty string; empty string inherits from other.           |
 | `checks`   | `map[string]bool` | Per-key merge: for each key, receiver value wins if present; otherwise inherit from other. |
+| `tmux`     | `object`          | Merged PER FIELD, not wholesale — see `tmux` below.                                        |
 
 #### `tracking`
 
 Allowed values: `"enforce"`, `"track"`, `"off"`. Empty string means
 "inherit". A final empty value after merge is the caller's signal to
 apply a default ("enforce" for registered projects, "off" for anonymous).
+
+#### `tmux`
+
+Multiplexer preferences.
+
+| Field          | Type     | Meaning |
+| -------------- | -------- | ------- |
+| `session_name` | `string` | Go `text/template` naming the tmux session a project's attention board runs in (`endless project monitor --tmux`). Default `e-{{project}}-monitor`. |
+
+`{{project}}` is available as a function, so the setting reads the way you would
+write it; `{{.Project}}` resolves to the same string. The rendered result is
+folded to a legal tmux session name, so a template may hold spaces, dots or
+slashes without you having to know tmux's rules.
+
+```json
+{ "tmux": { "session_name": "{{project}}-board" } }
+```
+
+A template that fails to parse or renders to nothing falls back to the default
+and warns on stderr: this is a preference, and a typo in one must not stop the
+board from opening.
+
+**Naming is a preference; ownership is a fact.** Because you can choose a name
+that collides with a session you already keep open, the launcher marks every
+session it creates (`@endless_monitor`, holding the project) and refuses to take
+over one it did not create, rather than switching you into a window with no board
+in it. That is why this setting costs an ownership check — see
+`internal/projectstatuscmd/window.go`.
+
+Merged per field rather than wholesale, so a project that sets one tmux
+preference does not silently blank the others it inherits from the CLI layer.
 
 #### `checks`
 

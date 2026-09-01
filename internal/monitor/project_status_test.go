@@ -34,21 +34,6 @@ func TestSanitizeTmuxName(t *testing.T) {
 	}
 }
 
-// TestMonitorSessionNameSurvivesTruncation pins the reason this name is short.
-// A tmux status line truncates a session name to the width it has; the
-// project-qualified `endless-monitor` it replaced arrived on the tab as
-// `endless-m`, saying neither what it is nor whose it is (E-1976, reported live).
-func TestMonitorSessionNameSurvivesTruncation(t *testing.T) {
-	if n := len(MonitorSessionName); n > 9 {
-		t.Errorf("MonitorSessionName is %d chars (%q); the observed tab budget is 9",
-			n, MonitorSessionName)
-	}
-	if SanitizeTmuxName(MonitorSessionName) != MonitorSessionName {
-		t.Errorf("MonitorSessionName %q is not a legal tmux session name",
-			MonitorSessionName)
-	}
-}
-
 // TestBoardTaskStatusesComesFromTheVocabulary pins that the board's status set
 // is DERIVED from taskstatus.AwaitsUser rather than spelled out. A status list
 // inside a SQL string is invisible to every tool, which is exactly why it rots.

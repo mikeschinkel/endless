@@ -37,8 +37,9 @@ type windowLayout struct {
 	Dir string
 	// MonitorCmd is the argv of the board's pane.
 	MonitorCmd []string
-	// Project is the project the board is for, stamped on the session so a later
-	// launch can tell whether an existing session is showing THIS project.
+	// Project is the project the board is for. It is already baked into Session
+	// (monitor.MonitorSessionName), and kept here because the layout is the one
+	// place that knows both, which is what a future multiplexer driver will need.
 	Project string
 }
 
@@ -96,34 +97,6 @@ func selectPaneArgs(pane string) []string {
 	return []string{"select-pane", "-t", pane}
 }
 
-// projectOptionArgs stamps the project a monitor session was built for onto the
-// session itself, and reads it back.
-//
-// Without it a second project's launch finds a session by the right name and
-// switches to it — showing that project's user the FIRST project's board, with
-// nothing on screen to say so except a legend they had no reason to re-read.
-// A session option rather than parsing the pane's command line: the option is
-// what the launcher wrote, the command line is a coincidence of how the pane was
-// started. `@endless_*` matches the window options spawn-launch already sets.
-//
-// NOTE the target has NO `=` prefix, unlike every other builder in this file.
-// tmux's option commands do not accept the exact-match form and fail outright
-// with `no such session: =e-monitor` — which is how this shipped broken: the
-// argv-shape test agreed with the other builders and never asked tmux whether it
-// would take them. Losing the exact match costs nothing here, because these are
-// only ever called for a session `has-session -t =<name>` has already resolved
-// exactly, so tmux's prefix fallback has nothing left to reach for.
-//
-// Reading an option that was never set is an ERROR in tmux ("invalid option"),
-// not an empty string. sessionNameFor treats both alike as "unstamped".
-func setProjectOptionArgs(session, project string) []string {
-	return []string{"set-option", "-t", session, "@endless_project", project}
-}
-
-func getProjectOptionArgs(session string) []string {
-	return []string{"show-options", "-v", "-t", session, "@endless_project"}
-}
-
 // hasSessionArgs builds the existence check that makes the launcher idempotent.
 func hasSessionArgs(session string) []string {
 	return []string{"has-session", "-t", "=" + session}
@@ -139,6 +112,83 @@ func switchClientArgs(session string) []string {
 // attachArgs builds the attach used when the caller is NOT inside tmux.
 func attachArgs(session string) []string {
 	return []string{"attach-session", "-t", "=" + session}
+}
+
+// monitorOptionKey is the tmux session option that marks a session as one
+// Endless built, and records which project's board it holds.
+//
+// One option carrying both facts: its PRESENCE is the ownership proof, its VALUE
+// is the project. A session without it was made by someone else, whatever it is
+// called.
+//
+// This is load-bearing exactly because the name is configurable. With the
+// built-in `e-<project>-monitor` a collision was implausible; the moment a user
+// can set `tmux.session_name` to `{{project}}` — which is the natural thing to
+// want — the launcher can find a session with the right name that is the user's
+// own shell. Adopting it would switch them into a window with no board and
+// report "reusing", which is a lie told confidently.
+const monitorOptionKey = "@endless_monitor"
+
+// setMonitorOptionArgs / getMonitorOptionArgs stamp and read the ownership mark.
+//
+// NOTE the target carries NO `=` prefix, unlike every other builder in this
+// file. tmux's option commands do not accept the exact-match form and fail
+// outright with `no such session: =name` — which is how an earlier draft of this
+// shipped inert: the argv was written to match its neighbours, every argv test
+// agreed with it, and nothing asked tmux whether it would take it. The verify
+// suite now drives a real tmux server for this round trip.
+//
+// Losing the exact match costs nothing here: these are only ever called for a
+// session `has-session -t =<name>` has already resolved exactly.
+func setMonitorOptionArgs(session, project string) []string {
+	return []string{"set-option", "-t", session, monitorOptionKey, project}
+}
+
+func getMonitorOptionArgs(session string) []string {
+	return []string{"show-options", "-v", "-t", session, monitorOptionKey}
+}
+
+// ownership is what the launcher learned about a session already using the name
+// it wants.
+type ownership int
+
+const (
+	// ownNone: no session by that name. Build it.
+	ownNone ownership = iota
+	// ownMine: Endless built it, for THIS project. Reuse it.
+	ownMine
+	// ownOtherProject: Endless built it, for a different project. Only reachable
+	// when the configured template does not vary by project — `board`, say. Not
+	// an error in the session; an error in the name.
+	ownOtherProject
+	// ownForeign: a session by that name exists and Endless did not make it.
+	// Never adopt it.
+	ownForeign
+)
+
+// checkOwnership decides which of those four a name is in.
+//
+// An unstamped session reads as FOREIGN, and that is the deliberate direction.
+// tmux reports an unset user option as an error rather than an empty string, so
+// "no stamp" and "cannot read the stamp" arrive alike — and both mean the same
+// thing operationally: nothing here proves Endless built it. Guessing generously
+// would put us straight back to adopting a stranger's session.
+//
+// The one cost is a board created before this stamp existed: it reads foreign
+// and the user is told to close it. That is a one-time message, not a silent
+// wrong window.
+func checkOwnership(session, project string) ownership {
+	if !tmuxOK(hasSessionArgs(session)) {
+		return ownNone
+	}
+	owner, err := tmuxOut(getMonitorOptionArgs(session))
+	if err != nil || owner == "" {
+		return ownForeign
+	}
+	if owner != project {
+		return ownOtherProject
+	}
+	return ownMine
 }
 
 // monitorCommand is the argv run in the monitor pane. `endless project monitor
@@ -183,15 +233,40 @@ func runWindow(args []string) {
 		dir = ""
 	}
 
+	// The name is a PREFERENCE, read from layered config; a bad template warns
+	// and falls back rather than refusing, because a typo in a preference must
+	// not be able to stop the board from opening.
+	sessionName, warn := sessionNameFor(name, sessionNameTemplate(dir))
+	if warn != nil {
+		fmt.Fprintf(os.Stderr, "project-window: %v\n", warn)
+	}
+
 	layout := windowLayout{
-		Session:    sessionNameFor(name),
+		Session:    sessionName,
 		Dir:        dir,
 		MonitorCmd: monitorCommand(name),
 		Project:    name,
 	}
 
 	created := false
-	if !tmuxOK(hasSessionArgs(layout.Session)) {
+	switch checkOwnership(layout.Session, layout.Project) {
+	case ownMine:
+		// Ours, for this project. Fall through to the switch/attach below.
+	case ownOtherProject:
+		fmt.Fprintf(os.Stderr,
+			"project-window: the session %q already holds another project's board.\n"+
+				"Your `tmux.session_name` renders the same name for every project. "+
+				"Include the project in it — the default is %q.\n",
+			layout.Session, DefaultSessionNameTemplate)
+		os.Exit(1)
+	case ownForeign:
+		fmt.Fprintf(os.Stderr,
+			"project-window: a tmux session named %q already exists and Endless did not create it.\n"+
+				"Refusing to take it over. Either close it, or set `tmux.session_name` "+
+				"in .endless/config.json to a name of your own (default: %q).\n",
+			layout.Session, DefaultSessionNameTemplate)
+		os.Exit(1)
+	case ownNone:
 		shellPane, serr := tmuxOut(newSessionArgs(layout))
 		if serr != nil {
 			fmt.Fprintf(os.Stderr, "project-window: creating the monitor session: %v\n", serr)
@@ -207,10 +282,17 @@ func runWindow(args []string) {
 			// in. Cosmetic if it fails — the user presses a pane key.
 			fmt.Fprintf(os.Stderr, "project-window: focus shell: %v\n", err)
 		}
-		// Stamp the project LAST, so a session that failed to build is not
-		// claimed by a project whose board never started.
-		if err = tmuxRun(setProjectOptionArgs(layout.Session, layout.Project)); err != nil {
-			fmt.Fprintf(os.Stderr, "project-window: stamping project: %v\n", err)
+		// Stamp ownership LAST, so a session that failed to build is not claimed
+		// by a project whose board never started. A stamp that fails is fatal,
+		// not best-effort: an unstamped session reads as foreign on the next
+		// launch, so leaving one behind would strand the user under a name they
+		// are then told they cannot have.
+		if err = tmuxRun(setMonitorOptionArgs(layout.Session, layout.Project)); err != nil {
+			fmt.Fprintf(os.Stderr,
+				"project-window: could not mark %q as Endless's: %v\n"+
+					"Close it before running this again; unmarked, it will be refused as foreign.\n",
+				layout.Session, err)
+			os.Exit(1)
 		}
 		created = true
 	}
@@ -256,39 +338,6 @@ func reportWindow(session string, created, switched bool) {
 		line += fmt.Sprintf("  (attach with: tmux attach -t %s)", session)
 	}
 	fmt.Fprintln(os.Stderr, line)
-}
-
-// sessionNameFor picks the tmux session name for one project's board.
-//
-// The plain name is monitor.MonitorSessionName — `e-monitor`, short enough to
-// survive the truncation a tmux status line applies to a session name (the
-// project-qualified `endless-monitor` it replaced arrived on the tab as
-// `endless-m`). It carries no project, because in the overwhelmingly common case
-// there is one board and the board's own legend already names its project.
-//
-// The qualified form exists for the case that name cannot serve: a session by
-// that name already exists AND was built for a DIFFERENT project. Reusing it
-// there would switch the user to another project's board and say nothing —
-// a wrong answer, not a collision. So the second project gets
-// `e-monitor-<project>` and both stay reachable.
-//
-// Reads the stamp the launcher wrote (setProjectOptionArgs), not the pane's
-// command line: the stamp is what this code recorded, the command line is a
-// coincidence of how the pane happened to start. An unstamped session — one
-// predating the stamp, or one the user made by hand under this name — reads as
-// empty and is treated as ours, which is the forgiving direction: it hands the
-// user the session they already had rather than quietly opening a second one
-// beside it.
-func sessionNameFor(project string) string {
-	base := monitor.MonitorSessionName
-	if !tmuxOK(hasSessionArgs(base)) {
-		return base
-	}
-	owner, err := tmuxOut(getProjectOptionArgs(base))
-	if err != nil || owner == "" || owner == project {
-		return base
-	}
-	return base + "-" + monitor.SanitizeTmuxName(project)
 }
 
 func tmuxRun(args []string) error {

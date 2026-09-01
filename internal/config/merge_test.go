@@ -130,3 +130,32 @@ func TestIsCheckEnabled_FallsBackToDefault(t *testing.T) {
 	}
 }
 
+// TestTmuxSessionNameMerge pins that the tmux object layers PER FIELD, project
+// over global — the same rule Tracking follows.
+//
+// Per field rather than wholesale, because a project that sets one tmux
+// preference must not silently blank the others it inherits. The object has one
+// field today, which is exactly when this is easy to get wrong and impossible to
+// notice: a wholesale copy passes every test until the second field is added.
+func TestTmuxSessionNameMerge(t *testing.T) {
+	tests := []struct {
+		name            string
+		project, global string
+		want            string
+	}{
+		{"project wins", "{{project}}-board", "e-{{project}}-monitor", "{{project}}-board"},
+		{"project inherits when unset", "", "e-{{project}}-monitor", "e-{{project}}-monitor"},
+		{"neither set stays empty (caller applies the default)", "", "", ""},
+		{"project-only", "board", "", "board"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			proj := &EndlessConfig{Tmux: Tmux{SessionName: tt.project}}
+			glob := &EndlessConfig{Tmux: Tmux{SessionName: tt.global}}
+			got := proj.Merge(glob).(*EndlessConfig)
+			if got.Tmux.SessionName != tt.want {
+				t.Errorf("merged session_name = %q, want %q", got.Tmux.SessionName, tt.want)
+			}
+		})
+	}
+}

@@ -43,9 +43,11 @@ package main
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 
+	"github.com/mikeschinkel/go-cfgstore"
 	_ "modernc.org/sqlite"
 
 	"github.com/mikeschinkel/endless/internal/errorscmd"
@@ -76,6 +78,25 @@ import (
 )
 
 func main() {
+	// go-cfgstore refuses to run without a package-global logger and PANICS in
+	// EnsureLogger rather than degrading. Set it first, before anything can reach
+	// config.Load.
+	//
+	// This is not new surface for E-1976, it is a latent gap that task made
+	// reachable. Nothing set the logger, and the three config.Load call sites
+	// (monitor.GetTrackingMode, monitor.IsCheckEnabled, and now the board's
+	// tmux.session_name lookup) survived only because ~/.config/endless/config.json
+	// happens to exist on a developed machine: cfgstore reaches the logger on the
+	// path where it CREATES a missing config, so a fresh install — or any run
+	// under a temp HOME, which is exactly what the verify runner builds — panics.
+	//
+	// Warn level to stderr: cfgstore logs real problems (a config file it could
+	// not close), and stderr is safe for the hook, whose stdout is a single JSON
+	// document.
+	cfgstore.SetLogger(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
+		Level: slog.LevelWarn,
+	})))
+
 	// E-1429: the Python CLI threads --db main|sandbox through as
 	// --config-dir <dir>. Consume scans os.Args, strips the flag, and
 	// applies the config dir. Must run BEFORE reading os.Args[1] so

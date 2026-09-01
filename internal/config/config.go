@@ -27,7 +27,7 @@ const ConfigFile = "config.json"
 //     These have no project-layer analog; the project layer ignores them.
 //   - Project-only: Name, Label, Description, Language, Status, Dependencies, Documents.
 //     These have no CLI-layer analog; the CLI layer ignores them.
-//   - Layered: Tracking, Checks. Project values override CLI values.
+//   - Layered: Tracking, Checks, Tmux. Project values override CLI values.
 //
 // JSON tags MUST stay byte-identical to the existing on-disk schema so files
 // continue to load without migration.
@@ -59,6 +59,28 @@ type EndlessConfig struct {
 	// Checks is a per-key enable/disable map. Merge is per-key with optional
 	// per-key custom rules; see merge.go.
 	Checks map[string]bool `json:"checks,omitempty"`
+
+	// Tmux holds multiplexer preferences. Layered per field, not wholesale:
+	// setting one of its fields in a project must not blank the others
+	// inherited from the CLI layer.
+	Tmux Tmux `json:"tmux,omitzero"`
+}
+
+// Tmux is the "tmux" object: how Endless names and shapes what it creates in
+// the multiplexer.
+type Tmux struct {
+	// SessionName is the Go text/template rendering the tmux session name for a
+	// project's attention board (E-1976). Empty inherits, and a fully-empty
+	// result falls back to projectstatuscmd's built-in default.
+	//
+	// `{{project}}` is available as a function, so the value reads the way a user
+	// would write it; `{{.Project}}` resolves to the same string for anyone who
+	// prefers the data form.
+	//
+	// The rendered result is folded to a legal tmux session name, so a template
+	// may hold spaces, dots or slashes without the user having to know tmux's
+	// rules.
+	SessionName string `json:"session_name,omitempty"`
 }
 
 // Documents is the per-project "documents" object. Currently holds only

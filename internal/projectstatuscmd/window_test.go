@@ -14,7 +14,7 @@ import (
 func joined(args []string) string { return strings.Join(args, " ") }
 
 var demoLayout = windowLayout{
-	Session:    "e-monitor",
+	Session:    "e-demo-monitor",
 	Dir:        "/tmp/demo",
 	MonitorCmd: []string{"endless", "project", "monitor", "demo"},
 	Project:    "demo",
@@ -33,7 +33,7 @@ var demoLayout = windowLayout{
 // (E-1976). The symptom is a window with no second pane at all.
 func TestNewSessionArgsIsADetachedShell(t *testing.T) {
 	got := newSessionArgs(demoLayout)
-	if !strings.Contains(joined(got), "new-session -d -s e-monitor") {
+	if !strings.Contains(joined(got), "new-session -d -s e-demo-monitor") {
 		t.Errorf("new-session is not detached or misnames the session: %v", got)
 	}
 	if !strings.Contains(joined(got), "-c /tmp/demo") {
@@ -83,52 +83,53 @@ func TestFocusReturnsToTheShell(t *testing.T) {
 	}
 }
 
-// TestProjectStampIsSessionScoped pins how a second project is kept from being
-// shown the first project's board: the launcher stamps the session it built, and
-// reads that stamp back rather than inferring ownership from a pane's command.
-func TestProjectStampIsSessionScoped(t *testing.T) {
-	set := joined(setProjectOptionArgs("e-monitor", "demo"))
-	if set != "set-option -t e-monitor @endless_project demo" {
-		t.Errorf("the project stamp is not written as a session option: %v", set)
-	}
-	get := joined(getProjectOptionArgs("e-monitor"))
-	if get != "show-options -v -t e-monitor @endless_project" {
-		t.Errorf("the project stamp is not read back from the session: %v", get)
-	}
-}
-
-// TestProjectStampTargetsCarryNoEqualsPrefix is the counterpart to
+// TestOwnershipMarkTargetsCarryNoEqualsPrefix is the counterpart to
 // TestSessionTargetsAreExact, and it exists because these two builders are the
-// ONLY ones that must not carry `=`.
+// ONLY ones here that must not carry `=`.
 //
 // tmux's option commands reject the exact-match form outright — `no such
-// session: =e-monitor` — and that is how the stamp shipped broken: it was
-// written to match its neighbours, every argv test agreed with it, and nothing
-// asked tmux whether it would take the argv. A shape test cannot see a contract
-// it never exercises; the live check lives in this task's verify suite.
-func TestProjectStampTargetsCarryNoEqualsPrefix(t *testing.T) {
+// session: =name` — and that is how an earlier draft of this stamp shipped
+// inert: it was written to match its neighbours, every argv test agreed with it,
+// and nothing asked tmux whether it would take the argv. A shape test cannot see
+// a contract it never exercises; the live round trip is in this task's verify
+// suite.
+func TestOwnershipMarkTargetsCarryNoEqualsPrefix(t *testing.T) {
 	for name, args := range map[string][]string{
-		"set-option":   setProjectOptionArgs("e-monitor", "demo"),
-		"show-options": getProjectOptionArgs("e-monitor"),
+		"set-option":   setMonitorOptionArgs("e-demo-monitor", "demo"),
+		"show-options": getMonitorOptionArgs("e-demo-monitor"),
 	} {
-		if strings.Contains(joined(args), "=e-monitor") {
+		if strings.Contains(joined(args), "=e-demo-monitor") {
 			t.Errorf("%s carries the = prefix tmux refuses on option commands: %v", name, args)
 		}
 	}
 }
 
+// TestOwnershipMarkCarriesBothFacts: one option, two jobs. Its PRESENCE proves
+// Endless built the session; its VALUE says which project's board it holds. A
+// session without it was made by someone else, whatever it is called — which is
+// the only question that matters once the name is user-configurable.
+func TestOwnershipMarkCarriesBothFacts(t *testing.T) {
+	set := joined(setMonitorOptionArgs("e-demo-monitor", "demo"))
+	if set != "set-option -t e-demo-monitor @endless_monitor demo" {
+		t.Errorf("the ownership mark does not record the project: %q", set)
+	}
+	get := joined(getMonitorOptionArgs("e-demo-monitor"))
+	if get != "show-options -v -t e-demo-monitor @endless_monitor" {
+		t.Errorf("the ownership mark is not read back from the session: %q", get)
+	}
+}
+
 // TestSessionTargetsAreExact pins the `=` prefix. Without it tmux matches a
-// session name as a PREFIX, so `e-monitor` would also match `e-monitor-gomion`
-// — and the launcher would attach to, or declare existing, another project's
-// board. That qualified form is not hypothetical: sessionNameFor produces it
-// whenever a second project opens a board.
+// session name as a PREFIX, so a project whose name is a prefix of another's
+// (`h2pp` inside `h2pp-legacy`) resolves to the wrong board, and the launcher
+// attaches to — or declares already existing — a session that is not its own.
 func TestSessionTargetsAreExact(t *testing.T) {
 	for name, args := range map[string][]string{
-		"has-session":    hasSessionArgs("e-monitor"),
-		"switch-client":  switchClientArgs("e-monitor"),
-		"attach-session": attachArgs("e-monitor"),
+		"has-session":    hasSessionArgs("e-demo-monitor"),
+		"switch-client":  switchClientArgs("e-demo-monitor"),
+		"attach-session": attachArgs("e-demo-monitor"),
 	} {
-		if !strings.Contains(joined(args), "=e-monitor") {
+		if !strings.Contains(joined(args), "=e-demo-monitor") {
 			t.Errorf("%s targets the session by prefix, not exactly: %v", name, args)
 		}
 	}

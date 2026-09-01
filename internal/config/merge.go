@@ -86,6 +86,13 @@ func (c *EndlessConfig) Merge(other cfgstore.RootConfig) cfgstore.RootConfig {
 	// rules. See mergeChecks.
 	out.Checks = mergeChecks(c.Checks, o.Checks)
 
+	// Layered field: Tmux. Merged PER FIELD rather than wholesale, so a
+	// project that sets one tmux preference does not silently blank the
+	// others it inherits. Same receiver-wins-on-non-empty rule as Tracking.
+	if out.Tmux.SessionName == "" {
+		out.Tmux.SessionName = o.Tmux.SessionName
+	}
+
 	return &out
 }
 

@@ -354,23 +354,6 @@ func projectTaskRows(db *sql.DB, projectID int64, all bool) ([]ProjectStatusRow,
 	return out, rows.Err()
 }
 
-// MonitorSessionName is the tmux session the dedicated two-pane board runs
-// under.
-//
-// Short on purpose. A tmux status line truncates a session name to the width it
-// has, and the project-qualified name this replaced — `endless-monitor` — landed
-// on the tab as `endless-m`, which says neither what it is nor which project it
-// is for. `e-monitor` fits, and `e-` is the prefix Endless already wears on its
-// ids (E-NNNN, ES-NNNN, ED-NNNN), so the tab reads as Endless's monitor rather
-// than as an abbreviation of something.
-//
-// It carries no project name because it does not need one: there is one board
-// open in the ordinary case, and the board's own legend names its project on
-// every frame. When a SECOND project's board is opened the launcher qualifies it
-// (projectstatuscmd.sessionNameFor) rather than handing that user the first
-// project's board.
-const MonitorSessionName = "e-monitor"
-
 // SanitizeTmuxName folds a project name into something tmux will accept as part
 // of a session name.
 //

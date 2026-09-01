@@ -96,9 +96,7 @@ ROWCAP_SRC="${WT}/src/endless/rowcap.py"
 SESSION_SRC="${WT}/internal/sessionstatuscmd/session_status.go"
 LIVEVIEW_SRC="${WT}/internal/liveview/liveview.go"
 
-# Read out of the source rather than restated here, so the assertion below is
-# about the shipped name and not about a copy of it in this file.
-MONITOR_SESSION=$(grep -oE 'MonitorSessionName = "[^"]+"' "${QUERY_SRC}" | sed 's/.*"\(.*\)"/\1/')
+
 
 
 for f in "${SCHEMA_SQL}" "${BOARD_SRC}" "${QUERY_SRC}" "${WINDOW_SRC}" "${PY_SRC}" \
@@ -674,12 +672,64 @@ layout_check "the board is inserted ABOVE the shell, guessing no height" \
     TestSplitBoardArgsInsertsAboveTheShell
 layout_check "focus is handed back to the shell (the board is read, not typed in)" \
     TestFocusReturnsToTheShell
-layout_check "a second project cannot be shown the first project's board" \
-    TestProjectStampIsSessionScoped
+layout_check "the ownership mark carries BOTH facts: whose, and which project" \
+    TestOwnershipMarkCarriesBothFacts
+layout_check "the ownership argv omits the = prefix tmux refuses on option commands" \
+    TestOwnershipMarkTargetsCarryNoEqualsPrefix
 layout_check "every session target is EXACT (=name, so a prefix cannot match another session)" \
     TestSessionTargetsAreExact
 layout_check "the monitor pane names its project rather than trusting cwd" \
     TestMonitorCommandNamesTheProject
+
+# Naming. A tmux status line truncates a session name to nine characters on the
+# machine this was reported from, so what distinguishes two boards has to be in
+# the FIRST nine — not merely somewhere in the full name. Two shapes failed that
+# before the current default, and both looked fine in `tmux ls`:
+# `{{project}}-monitor` showed `endless-m`, a mangled twin of the user's own
+# `endless` session beside it; a fixed `e-monitor` with a `-{{project}}` suffix
+# showed `e-monitor` for every project.
+#
+# Driven as Go tests, which call the shipped functions. Restating an expected
+# name in this file would assert only that the copy agrees with itself.
+name_check() {
+    local label="$1" pkg="$2" test_name="$3"
+    if go test "${pkg}" -run "^${test_name}$" -count=1 \
+            >"${RUN_DIR}/${test_name}.log" 2>&1; then
+        report_pass "${label}"
+    else
+        report_fail "${label}" "pass" "failed — see ${RUN_DIR}/${test_name}.log"
+    fi
+}
+name_check "the DEFAULT name leads with the PROJECT, inside the 9-column tab" \
+    ./internal/projectstatuscmd/ TestDefaultNameLeadsWithTheProject
+name_check "a user-chosen project name is folded into a legal tmux name" \
+    ./internal/monitor/ TestSanitizeTmuxName
+name_check "{{project}} and {{.Project}} are both accepted" \
+    ./internal/projectstatuscmd/ TestSessionNameTemplateForms
+name_check "the fold applies to the RENDERED name, not just the substitution" \
+    ./internal/projectstatuscmd/ TestSessionNameIsFoldedAfterRendering
+name_check "a broken template falls back to the default AND says why" \
+    ./internal/projectstatuscmd/ TestBadTemplateFallsBackAndSaysSo
+name_check "tmux.session_name is actually READ from layered config" \
+    ./internal/projectstatuscmd/ TestSessionNameTemplateReadsProjectConfig
+name_check "an unparseable config file cannot stop the board from opening" \
+    ./internal/projectstatuscmd/ TestSessionNameTemplateSurvivesABrokenConfig
+name_check "the tmux config field merges per field, project over global" \
+    ./internal/config/ TestTmuxSessionNameMerge
+
+# go-cfgstore PANICS without a package-global logger, and reaches it on the path
+# where it CREATES a missing config file. Nothing set that logger: the two
+# pre-existing config.Load call sites survived only because a developed machine
+# has ~/.config/endless/config.json already. A fresh install did not — and
+# neither does this suite, which the runner gives a temp HOME. Found by that
+# temp HOME, fixed at the binary's entry point.
+if grep -q "cfgstore.SetLogger" "${WT}/cmd/endless-go/main.go"; then
+    report_pass "the binary sets cfgstore's logger before anything can load config"
+else
+    report_fail "the binary sets cfgstore's logger" \
+        "a cfgstore.SetLogger call in main()" \
+        "absent — a fresh install panics on the first config read"
+fi
 
 # The two defects the first landing shipped, reported live and fixed here.
 #
@@ -697,50 +747,77 @@ else
 fi
 
 # The argv builders above are shape tests, and a shape test cannot see a contract
-# it never exercises: the project stamp shipped with tmux's exact-match `=`
-# prefix, every argv test agreed with it, and tmux refused it outright ("no such
-# session: =e-monitor") so the stamp never wrote anything. Drive the real binary
-# against a real tmux server, and skip cleanly where there is none.
+# it never exercises. That is not hypothetical here: an earlier draft of the
+# per-project guard stamped `@endless_project` on the session using tmux's
+# exact-match `=` target, every argv test agreed with it, and tmux refused the
+# argv outright — so the guard never wrote anything and nothing noticed.
+#
+# The stamp is gone (the naming makes the collision impossible), but the lesson
+# stands: drive the real binary against a real tmux server for the layout, and
+# skip cleanly where there is none.
 if command -v tmux >/dev/null && tmux start-server 2>/dev/null; then
-    probe="e1976-stamp-$$"
+    probe_dir="${RUN_DIR}/tmuxprobe"
+    mkdir -p "${probe_dir}"
+    probe_session=$("${GO_BIN}" project-status --project endless --json >/dev/null 2>&1 && echo ok)
+    probe="e1976-layout-$$"
     tmux kill-session -t "=${probe}" 2>/dev/null
-    if tmux new-session -d -s "${probe}" 2>/dev/null; then
-        if tmux set-option -t "${probe}" @endless_project demo 2>/dev/null \
-                && [[ "$(tmux show-options -v -t "${probe}" @endless_project 2>/dev/null)" == "demo" ]]; then
-            report_pass "tmux ACCEPTS the stamp argv and reads the value back"
+    # Build the layout by hand with the SAME argv the launcher uses, so what is
+    # tested is the shape those builders produce, not a paraphrase of it.
+    if shell_pane=$(tmux new-session -d -s "${probe}" -c "${probe_dir}" -P -F '#{pane_id}' 2>/dev/null); then
+        if tmux split-window -v -b -t "${shell_pane}" -c "${probe_dir}" \
+                -P -F '#{pane_id}' -- sleep 30 >/dev/null 2>&1; then
+            report_pass "tmux ACCEPTS the launcher's argv: a board inserted above an existing shell"
         else
-            report_fail "tmux accepts the stamp argv and reads the value back" \
+            report_fail "tmux accepts the launcher's argv" \
+                "split-window -v -b -t <shell pane> to succeed" "tmux refused it"
+        fi
+        n=$(tmux list-panes -t "=${probe}" 2>/dev/null | grep -c '.')
+        if [[ "${n}" == "2" ]]; then
+            report_pass "the layout really has TWO panes (the defect reported was one)"
+        else
+            report_fail "the layout really has two panes" "2" "${n}"
+        fi
+        tmux select-pane -t "${shell_pane}" 2>/dev/null
+        active=$(tmux list-panes -t "=${probe}" -F '#{pane_id}:#{pane_active}' 2>/dev/null | grep ':1$' | cut -d: -f1)
+        if [[ "${active}" == "${shell_pane}" ]]; then
+            report_pass "tmux really leaves focus on the shell, not on the redraw loop"
+        else
+            report_fail "tmux really leaves focus on the shell" "${shell_pane}" "${active:-none}"
+        fi
+        # The ownership mark, round-tripped through a real server. This is the
+        # check that could not exist as a shape test: an earlier draft's argv
+        # carried tmux's exact-match `=` prefix, which the option commands
+        # REFUSE, so the mark was never written and nothing noticed.
+        if tmux set-option -t "${probe}" @endless_monitor demo 2>/dev/null \
+                && [[ "$(tmux show-options -v -t "${probe}" @endless_monitor 2>/dev/null)" == "demo" ]]; then
+            report_pass "tmux accepts the ownership mark and reads the value back"
+        else
+            report_fail "tmux accepts the ownership mark and reads the value back" \
                 "set-option then show-options round-trips 'demo'" \
                 "tmux refused the argv the launcher builds"
         fi
-        # An unset user option is an ERROR in tmux, not an empty string. The
-        # launcher treats both alike as "unstamped"; if that ever became a hard
-        # failure, a first-ever launch would refuse to open.
         tmux kill-session -t "=${probe}" 2>/dev/null
-        tmux new-session -d -s "${probe}" 2>/dev/null
-        if ! tmux show-options -v -t "${probe}" @endless_project >/dev/null 2>&1; then
-            report_pass "an unstamped session ERRORS rather than reading empty (handled as unstamped)"
-        else
-            report_fail "an unstamped session errors rather than reading empty" \
-                "show-options to fail on an unset user option" "it succeeded"
+
+        # An UNMARKED session must read as foreign, not as ours. tmux reports an
+        # unset user option as an ERROR rather than an empty string, so "no mark"
+        # and "cannot read the mark" arrive alike — and both must land on the
+        # cautious side, or the launcher is back to adopting a stranger's window.
+        if tmux new-session -d -s "${probe}" 2>/dev/null; then
+            if ! tmux show-options -v -t "${probe}" @endless_monitor >/dev/null 2>&1; then
+                report_pass "an unmarked session cannot be mistaken for one Endless built"
+            else
+                report_fail "an unmarked session cannot be mistaken for one Endless built" \
+                    "show-options to fail on an unset user option" "it succeeded"
+            fi
+            tmux kill-session -t "=${probe}" 2>/dev/null
         fi
-        tmux kill-session -t "=${probe}" 2>/dev/null
     else
-        report_skip "tmux accepts the stamp argv" "could not create a probe session"
+        report_skip "tmux accepts the launcher's argv" "could not create a probe session"
     fi
 else
-    report_skip "tmux accepts the stamp argv" "no tmux server available"
+    report_skip "tmux accepts the launcher's argv" "no tmux server available"
 fi
 
-# Naming: a tmux status line truncates a session name, and the first landing's
-# `endless-monitor` arrived on the tab as `endless-m`.
-name_len=${#MONITOR_SESSION}
-if (( name_len <= 9 )); then
-    report_pass "the session name survives tab truncation (${MONITOR_SESSION}, ${name_len} chars)"
-else
-    report_fail "the session name survives tab truncation" \
-        "9 characters or fewer" "${MONITOR_SESSION} (${name_len})"
-fi
 out=$("${BIN}" project monitor --help 2>&1)
 if grep -q -- "--tmux" <<<"${out}" && grep -q "two-pane" <<<"${out}"; then
     report_pass "project monitor --tmux is the documented way into the layout"
