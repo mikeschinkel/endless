@@ -187,10 +187,7 @@ def test_resolve_file_content_is_never_gated(tmp_path):
 # A token is a path only on one of three lexical signals: it is absolute, it
 # carries an explicit ./ ../ ~/ prefix, or it ends in a filename extension.
 
-from endless.cli import (
-    _absolute_path_verdict, _AMBIGUOUS, _is_absolute_path, _is_path_shaped,
-    _NOT_PATH, _PATH,
-)
+from endless.cli import _is_absolute_path, _is_path_shaped
 
 
 @pytest.mark.parametrize("value", [
@@ -307,27 +304,32 @@ def test_rule2_keeps_explaining_why():
 # them, plus task add/update and the status-transition verbs, funnel through
 # _resolve_content_flag — one composition point, so one defect, not three.
 
-@pytest.mark.parametrize("token,expected", [
-    ("/",                 _NOT_PATH),    # nothing after the slash
-    ("//",                _NOT_PATH),
-    ("/tmp/x.md",         _PATH),        # two segments
-    ("/Users/x/plan.md",  _PATH),        # the gate's primary target
-    ("/tmp/sbx",          _PATH),        # two segments, no extension
-    ("/plan.md",          _PATH),        # one segment, but carries an extension
-    ("/tmp",              _AMBIGUOUS),   # a real directory…
-    ("/whats-left",       _AMBIGUOUS),   # …shape-identical to a slash command
-    ("/loop",             _AMBIGUOUS),
+@pytest.mark.parametrize("token,is_path", [
+    ("/",                 False),   # nothing after the slash
+    ("//",                False),
+    ("/tmp/x.md",         True),    # two segments
+    ("/Users/x/plan.md",  True),    # the gate's primary target
+    ("/tmp/sbx",          True),    # two segments, no extension
+    ("/plan.md",          True),    # one segment, but carries an extension
+    ("/tmp",              False),   # a directory NAMED in prose, not pointed at
+    ("/whats-left",       False),   # a slash-command name
+    ("/loop",             False),
 ])
-def test_the_lexical_classifier_is_total_and_machine_independent(token, expected):
-    assert _absolute_path_verdict(token) is expected
+def test_the_rule_is_lexical_and_machine_independent(token, is_path):
+    assert _is_absolute_path(token) is is_path
 
 
-def test_the_primary_target_never_reaches_the_ambiguous_tier():
-    """/Users/... is what the gate exists to catch, so it must be decided by the
-    string alone — never by a model call, a network, or which directories happen
-    to exist here. Two segments is what guarantees that."""
-    for token in ("/Users/mike/plan.md", "/tmp/e-1626-plan.md", "/opt/corp/spec.md"):
-        assert _absolute_path_verdict(token) is _PATH
+def test_a_one_segment_token_is_decided_not_deferred():
+    """The cheap answer is the correct one, so there is no model tier here.
+
+    A model asked whether /tmp is a path says yes — and that would make this
+    gate's own sentence, "a /tmp path is lost when a worktree drops",
+    unwritable in a lesson again. The mis-passed file this gate exists to catch
+    always carries a directory or an extension, so nothing is given up.
+    """
+    assert not _is_absolute_path("/tmp")
+    assert _is_absolute_path("/tmp/plan.md")   # a directory: still caught
+    assert _is_absolute_path("/plan.md")       # an extension: still caught
 
 
 @pytest.mark.parametrize("value", [
