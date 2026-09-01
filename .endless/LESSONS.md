@@ -4814,3 +4814,62 @@ Between my turns Mike acts: he accepts and rejects decisions, confirms and lands
 
 The rule: any sentence containing a task or decision status is preceded by the command that read it, in the same turn. No exceptions for 'I just set it myself' or 'it was only a moment ago' — a moment is long enough. This applies to closing pleasantries as much as to reports; the violation here was in a throwaway sign-off line, which is precisely where the guard slips.
 - **Project**: endless
+
+### [2026-08-31] Three failures this session share one cause: I reason from filtered views of files I never open
+Mike: "--agent-view is intended for users for debugging to be able to see what
+an agent sees." I had written into E-2097's plan: "NOT the --agent-view flag,
+because an agent will never pass a flag it does not know it needs." The premise
+is true; the conclusion is wrong. The flag is not a detection mechanism, it is a
+HUMAN's override for previewing agent-facing output — and excluding it would
+have made agent-facing refusals the one thing --agent-view cannot show.
+
+The answer was in the file. src/endless/agent_help.py, line 3: "When a Claude
+Code agent (or a human passing --agent-view) runs <cmd> --help". And the exact
+predicate I was designing already exists there:
+
+    def _should_augment() -> bool:
+        """An agent is reading this help, or a human asked to see what one sees."""
+        return agent_env.present() or _AGENT_VIEW
+
+I saw neither. I had run: grep -rn "AGENT" src/endless/*.py | head -5.
+Case-sensitive on the uppercase spelling and capped at five lines, so it matched
+line 11 ("_AGENT_VIEW is set by the root group's argv pre-scan") and not line 3,
+which spells "agent" in lower case. From that one fragment I inferred the flag's
+PURPOSE and wrote the inference into a plan another session would implement.
+
+This is the third instance of one failure mode in a single session, and I named
+the first two without recognising the third arriving:
+
+1. task search — I narrowed the QUESTION (multi-word queries a substring
+   matcher cannot satisfy) and read the empty result as absence.
+2. 2>&1 | tail -3 — I narrowed the ANSWER (a 17-line refusal cropped to its
+   last three) and read the remainder as the whole.
+3. This — I narrowed the SOURCE (a case-sensitive, head-capped grep) and read
+   the fragment as the file.
+
+Same shape every time: a filter I chose, then confident reasoning over whatever
+survived it, with no step that asks what the filter removed.
+
+Two rules, and the second is the one I keep skipping:
+
+- When a decision turns on what a thing IS FOR, open the file. A grep tells me
+  where a symbol appears, never why it exists. Purpose lives in docstrings and
+  comments — precisely the text a symbol grep skips.
+- When my reading makes an existing mechanism look useless ("a flag agents will
+  never pass"), the reading is wrong, not the mechanism. Somebody built it
+  deliberately. Its existence is evidence against my interpretation, and that
+  contradiction is the cheapest signal I get that I am about to be confidently
+  wrong.
+
+Separately, recording this lesson failed twice over and both are the same
+carelessness in a different medium: I passed the text inline in double quotes
+with backticks in it, so the shell ran `task search` and the other quoted
+fragments as command substitutions. --text-file exists precisely so prose never
+meets the shell. Use it for anything longer than a sentence.
+
+E-2097's plan and verification criteria are corrected: the bracket renders on
+agent_env.present() OR agent_view_requested(), reusing agent_help's existing
+composed predicate rather than adding a fourth spelling of the same question —
+that module's own history is two prior consolidations of exactly this
+duplication (E-1966, E-2006).
+- **Project**: endless
