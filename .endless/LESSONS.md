@@ -4897,3 +4897,15 @@ Two rules for next time:
 
 2. Watch the prose as a diagnostic. I titled it 'a state write that asserts an observation belongs to the caller that made the observation, never to a shared row-touch helper' — four stacked abstractions over 'I did not check who else calls this'. Mike could not follow it well enough to judge it, which is itself the evidence: when a statement needs that much scaffolding to sound load-bearing, it usually is not. Write the plain sentence first, then see if it still deserves to be a decision.
 - **Project**: endless
+
+### [2026-09-01] When the verdict is 'lesson, not decision', the verb is `endless lesson write` — route it, don't just diagnose it
+Companion to the lesson above, which stops at the diagnosis. This one names where each kind of finding goes, because having the diagnosis did not stop me reaching for the wrong verb: the whats-left skill put `endless decision add` in front of me, so I filed ED-1581 with it even though the content was a self-correction.
+
+Three destinations, and the verb is part of the verdict:
+
+- An architectural posture, a choice between live alternatives that binds future work -> `endless decision add`. Lands `proposed`; Mike accepts or rejects.
+- A correction from Mike, or a mistake I made and fixed inside one task -> `endless lesson write`, immediately and without asking. There is no approval step and none is needed, which is exactly why reaching for `decision add` instead puts my own error on Mike's review queue.
+- Anything that only makes sense in the context of one task -> that task's `--text` or `--analysis`. Not either of the above.
+
+The failure mode is not misjudging the category. It is judging correctly and still using whichever verb the current workflow happened to surface. When a skill or a handoff hands me one filing command, that is not evidence it is the right one for what I am holding.
+- **Project**: endless
