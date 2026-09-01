@@ -5065,3 +5065,7 @@ Filing a decision is not reversible by rejecting it. The ID is consumed permanen
 ### [2026-09-01] Do mandatory prep (a required search or check) silently as part of the task — never ask permission for a step that is a non-optional precondition of what you were already cleared to do.
 ED-1550(4) requires searching the area for an owning task before filing. I had already been told to file, then asked 'want me to search first and, if none, file?' — asking permission for the required precondition of the thing I was cleared to do. It manufactures a round-trip and signals I don't know my own rules. Rule: mandatory prep is not a question; do it as part of the task and surface only a decision the user actually owns.
 - **Project**: endless
+
+### [2026-09-01] Use cleans_up X only when the new task pays down debt from X's work — never link a bug to the task that merely happened to be the active/session context when the bug surfaced.
+I filed a resume/window-binding bug with --cleans-up E-1834 because E-1834 was the epic my session was coordinating when the bug surfaced. But cleans_up means 'resolves debt created by that task's work'; discovery context is incidental and creates no relation. Rule: add cleans_up X only when the new task genuinely pays down debt from X. Where a bug surfaced is not a relation — if worth noting, it goes in the task body, never a cleans_up edge.
+- **Project**: endless
