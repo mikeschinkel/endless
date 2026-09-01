@@ -187,7 +187,10 @@ def test_resolve_file_content_is_never_gated(tmp_path):
 # A token is a path only on one of three lexical signals: it is absolute, it
 # carries an explicit ./ ../ ~/ prefix, or it ends in a filename extension.
 
-from endless.cli import _is_absolute_path, _is_path_shaped
+from endless.cli import (
+    _absolute_path_verdict, _AMBIGUOUS, _is_absolute_path, _is_path_shaped,
+    _NOT_PATH, _PATH,
+)
 
 
 @pytest.mark.parametrize("value", [
@@ -250,10 +253,11 @@ def test_real_absolute_paths_in_prose_still_block(value):
 
 def test_is_absolute_path_predicate():
     assert _is_absolute_path("/tmp/x")
-    assert _is_absolute_path("/tmp")
     assert not _is_absolute_path("/")
     assert not _is_absolute_path("//")
     assert not _is_absolute_path("pytest/uv")
+    # /tmp is the ambiguous one-segment case — see the E-1794-reopened section.
+    assert not _is_absolute_path("/tmp")
 
 
 def test_is_path_shaped_leaves_urls_alone():
@@ -289,6 +293,93 @@ def test_rule2_still_offers_the_file_flag_for_long_form_fields(name):
 
 def test_rule2_keeps_explaining_why():
     assert "non-portable" in _blocked("see /tmp/x.md here")
+
+
+# ═══ E-1794 reopened — a slash command is not an absolute path ═════════════
+#
+# The first pass defined absolute as "a leading slash followed by a path", which
+# still read every one-segment leading-slash token as a path. So a lesson could
+# not name a slash command (/whats-left, /loop), and — the sharpest case — the
+# gate's OWN refusal text ("a /tmp path is lost when a worktree drops") could
+# not be written into a lesson or a decision by the tool that emits it.
+#
+# Reported against `lesson write` and suspected of `decision add/update`. All of
+# them, plus task add/update and the status-transition verbs, funnel through
+# _resolve_content_flag — one composition point, so one defect, not three.
+
+@pytest.mark.parametrize("token,expected", [
+    ("/",                 _NOT_PATH),    # nothing after the slash
+    ("//",                _NOT_PATH),
+    ("/tmp/x.md",         _PATH),        # two segments
+    ("/Users/x/plan.md",  _PATH),        # the gate's primary target
+    ("/tmp/sbx",          _PATH),        # two segments, no extension
+    ("/plan.md",          _PATH),        # one segment, but carries an extension
+    ("/tmp",              _AMBIGUOUS),   # a real directory…
+    ("/whats-left",       _AMBIGUOUS),   # …shape-identical to a slash command
+    ("/loop",             _AMBIGUOUS),
+])
+def test_the_lexical_classifier_is_total_and_machine_independent(token, expected):
+    assert _absolute_path_verdict(token) is expected
+
+
+def test_the_primary_target_never_reaches_the_ambiguous_tier():
+    """/Users/... is what the gate exists to catch, so it must be decided by the
+    string alone — never by a model call, a network, or which directories happen
+    to exist here. Two segments is what guarantees that."""
+    for token in ("/Users/mike/plan.md", "/tmp/e-1626-plan.md", "/opt/corp/spec.md"):
+        assert _absolute_path_verdict(token) is _PATH
+
+
+@pytest.mark.parametrize("value", [
+    "/whats-left",                                   # whole value
+    "the /whats-left skill reports remaining work",  # the reported case
+    "run /loop 5m /foo to repeat it",
+    "/code-review ultra launches a cloud review",
+    "a /tmp path is lost when a worktree drops",     # the gate's own sentence
+    "the sandbox lives at /tmp",
+])
+def test_slash_commands_and_bare_dirs_are_not_absolute_paths(value):
+    # Must not raise.
+    _guard_inline_content(value, "text", ())
+
+
+@pytest.mark.parametrize("value", [
+    "the plan is at /Users/mike/plan.md today",
+    "the plan lives at /tmp/x.md, see there",
+    "the sandbox is at /tmp/sbx for this run",
+])
+def test_real_absolute_paths_still_block_after_the_reopening(value):
+    assert "contains an absolute path" in _blocked(value)
+
+
+def test_a_root_level_file_is_still_a_path():
+    # One segment, but an extension — a filename, not a command.
+    assert "received a file path" in _blocked("/plan.md")
+
+
+# ─── one gate, every verb ───────────────────────────────────────────────────
+#
+# Reported on `lesson write`; the fix is in the shared predicate, so what has to
+# be true is that these verbs reach it rather than carrying gates of their own.
+# Asserted on the wiring, not by executing them: `lesson write` appends to the
+# project's real lessons log and commits it, which is not something a test suite
+# should be doing.
+
+@pytest.mark.parametrize("command_path", [
+    ("lesson", "write"),
+    ("decision", "add"),
+    ("decision", "update"),
+    ("task", "add"),
+    ("task", "update"),
+])
+def test_every_content_bearing_verb_carries_the_gates_escape_hatch(command_path):
+    from endless.cli import main as root
+    cmd = root
+    for name in command_path:
+        cmd = cmd.get_command(None, name)
+        assert cmd is not None, f"no such command: {' '.join(command_path)}"
+    flags = {opt for param in cmd.params for opt in getattr(param, "opts", ())}
+    assert "--allow-path" in flags
 
 
 # ═══ E-2008 — the empty-file gate ═══════════════════════════════════════════

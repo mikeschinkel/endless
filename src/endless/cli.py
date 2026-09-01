@@ -2119,16 +2119,71 @@ _LEAD_STRIP = "\"'`([{"
 _TRAIL_STRIP = "\"'`.,;:!?)]}"
 
 
-def _is_absolute_path(token):
-    """True if *token* is a genuine absolute path: a leading slash followed by a
-    path. Purely lexical — the file need not exist, so a gone /tmp path counts.
+# The three answers the lexical classifier can give. AMBIGUOUS is a real third
+# state, not a hedge: it names the one shape no lexical rule can decide, and
+# keeping it distinct from NOT_PATH is what lets a model-backed tier be added
+# later at one seam instead of being threaded through the gate.
+_PATH = "path"
+_NOT_PATH = "not_path"
+_AMBIGUOUS = "ambiguous"
 
-    A bare slash does not. '/' is punctuation in prose — a delimiter being named
-    ("'/' splits family from variant"), a spaced alternative ("type / subtype") —
-    and reporting it as an absolute path is what forced --allow-path onto
-    ED-1537 (E-1794). Neither does a run of them, which is the same token with
-    the same nothing after it."""
-    return token.startswith("/") and token.strip("/") != ""
+
+def _resolve_ambiguous_slash_token(token):
+    """Decide a one-segment, extension-less leading-slash token: /tmp (a real
+    directory) against /whats-left (a slash-command name). They are
+    shape-identical, so this is a judgement, not a lexical test.
+
+    Today it answers NOT a path, deliberately, because the two directions are
+    not symmetric. Calling /whats-left a path is the bug E-1794 was reopened
+    for — it refuses a lesson for naming a slash command. Calling a bare /tmp
+    prose mention "not a path" admits nothing the gate is for: the harm it
+    names, "a /tmp path is lost when a worktree drops", needs a FILE under
+    /tmp, which is two segments and never reaches here.
+
+    This is the seam for a model-backed tier if a one-segment absolute is ever
+    found that genuinely matters — ask once via internal_claude, cache the
+    verdict in a layered project-over-machine JSONL the way matchers.add_verb
+    caches an auto-registered verb, and degrade to this answer when the call
+    fails. Nothing above depends on that landing: /Users/x/plan.md and every
+    other real mis-passed file is decided lexically and never arrives here."""
+    return False
+
+
+def _absolute_path_verdict(token):
+    """Classify a leading-slash *token* as PATH, NOT_PATH, or AMBIGUOUS.
+
+    Lexical and total — no I/O, no model, same answer on every machine. It is
+    deliberately the only thing tiers 2 and 3 are allowed to defer to, because
+    every mis-passed file the gate exists to catch is decided right here:
+
+      nothing after the slash   NOT_PATH   '/', '//' — punctuation in prose
+      two or more segments      PATH       /tmp/x.md, /Users/x/plan.md
+      one segment + extension   PATH       /plan.md
+      one segment, no extension AMBIGUOUS  /tmp, /whats-left, /loop
+
+    The ambiguous row is the whole of E-1794's reopening: a slash-command name
+    is shape-identical to a one-segment absolute path, and no lexical rule can
+    separate '/whats-left' from '/tmp'. Note what is NOT ambiguous — a token
+    with a directory and something in it. /Users/x/plan.md is the gate's
+    primary target and is decided here, so it can never turn on a model call,
+    a network, or which directories happen to exist on the machine."""
+    if not token.startswith("/"):
+        return _NOT_PATH
+    segments = [seg for seg in token.strip("/").split("/") if seg]
+    if not segments:
+        return _NOT_PATH
+    if len(segments) > 1 or _PATH_EXT_RE.search(segments[0]):
+        return _PATH
+    return _AMBIGUOUS
+
+
+def _is_absolute_path(token):
+    """True if *token* is a genuine absolute path, resolving the ambiguous
+    one-segment case through the classifier cache (see _looks_like_a_path)."""
+    verdict = _absolute_path_verdict(token)
+    if verdict is _AMBIGUOUS:
+        return _resolve_ambiguous_slash_token(token)
+    return verdict is _PATH
 
 
 def _is_path_shaped(token):

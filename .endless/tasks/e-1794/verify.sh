@@ -125,6 +125,53 @@ RUN task update "${TID}" --analysis 'the registry key is docs/plan'
 assert_eq "a slash-separated token with no extension is not a path" 0 "${RC}"
 
 # ---------------------------------------------------------------------------
+section "B2. Slash commands, and the gate's own sentence"
+# ---------------------------------------------------------------------------
+# The reopening. A one-segment leading-slash token was still read as an absolute
+# path, so a lesson could not name a slash command — and the gate's OWN refusal
+# text could not be written into a lesson by the tool that emits it.
+
+RUN task update "${TID}" --text 'the /whats-left skill reports remaining work'
+assert_eq "a slash-command name in prose is accepted" 0 "${RC}"
+RUN task update "${TID}" --text 'run /loop 5m /foo to repeat it'
+assert_eq "a slash command with a slash-command argument is accepted" 0 "${RC}"
+RUN task update "${TID}" --analysis 'a /tmp path is lost when a worktree drops'
+assert_eq "the gate's own refusal sentence is now writable content" 0 "${RC}"
+assert_contains "…and it is what the ledger holds" \
+    "a /tmp path is lost" \
+    "$(Q "SELECT analysis FROM live_tasks WHERE id=${TID}")"
+
+# ---------------------------------------------------------------------------
+section "B3. Every content-bearing verb, not just task update"
+# ---------------------------------------------------------------------------
+# Reported on `lesson write`, suspected of `decision add/update`, and true of
+# both — because all of them funnel through one composition point. `decision`
+# is exercised here; `lesson write` is NOT, deliberately: it appends to the
+# project's real lessons log and commits it on main, which a suite must never
+# do. Its wiring is asserted in tests/test_content_flag_gate.py instead.
+
+DID="$(E decision add "Capture the E-1794 gate probe" \
+        --description 'the /whats-left skill reports remaining work' 2>&1 \
+        | grep -oE 'ED-[0-9]+' | head -1)"
+assert_contains "decision add accepts a slash-command name" "ED-" "${DID}"
+
+RUN decision update "${DID}" --description 'a /tmp path is lost when a worktree drops'
+assert_eq "decision update accepts it too" 0 "${RC}"
+
+RUN decision add "Capture a genuinely non-portable path" \
+    --description 'the plan is at /Users/mike/plan.md today'
+assert_contains "…and decision add still refuses a real absolute path" \
+    "contains an absolute path" "${OUT}"
+
+# The fixture writes into a throwaway project. A decision mirror is named by id,
+# and a fresh database numbers from 1 — so a decision created here while the
+# registered project resolved to the WORKTREE would silently overwrite that
+# worktree's committed .endless/decisions/ED-1.md. It happened once, by hand,
+# while this task was being written. Assert the isolation rather than trust it.
+assert_eq "no decision mirror leaked into the worktree's own tree" \
+    "" "$(cd "${WT}" && git status --porcelain -- .endless/decisions/)"
+
+# ---------------------------------------------------------------------------
 section "C. What must NOT have been relaxed"
 # ---------------------------------------------------------------------------
 # The narrowing is a hole the moment it lets a mis-passed file through — the
