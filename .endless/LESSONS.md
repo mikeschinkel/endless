@@ -5045,3 +5045,7 @@ Zero decisions is the normal outcome. A filed non-decision costs Mike a review a
 I edited the whats-left command file in the same turn to encode this: section 4 now routes lesson-vs-decision, states the three tests, says zero is expected, and adds 'lesson write' to the commands I must never hand back on his todo list.
 - **Project**: endless
 
+
+### [2026-09-01] Do not hand back a call you have already reasoned out; 'say the word if you'd rather' spends Mike's attention on your own decision
+Offering Mike a choice you are equipped to make is not deference, it is offloading. It costs the scarcest resource in the loop — his attention — to read the framing, reconstruct the tradeoff and hand the answer back. If a task was filed to resolve something, resolving it is the deliverable; parking a stub plus a question works against the objective the task exists for. Decide, state the reasoning where the code lives, and say what you decided. Corollary on judging 'harmless': count the interaction cost, not just data correctness. A false refusal makes the filing agent thrash and burn tokens, then costs a human turn to adjudicate. That cost is frequently the dominant one and it can flip which answer is correct.
+- **Project**: endless
