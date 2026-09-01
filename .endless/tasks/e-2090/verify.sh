@@ -140,6 +140,16 @@ assert_eq "every suite reaches the guard on its first executable line" "0" "${ba
 assert_eq "every suite carries a banner naming its own owner" "0" "${bad_banner}"
 assert_eq "and none doubles the guard by sourcing it directly too" "0" "${bad_double}"
 
+# The runner exec's a script suite, so the executable bit is load-bearing. A
+# sweep that rewrote every suite through `> tmp && mv` replaced each inode with
+# one carrying the temp file's umask mode, and the front door died with a bare
+# "permission denied" for every task at once.
+notexec=0
+for s in "${TASKS}"/e-*/verify.sh; do [[ -x "${s}" ]] || notexec=$((notexec + 1)); done
+assert_eq "every suite is executable, so the runner can start it" "0" "${notexec}"
+assert_contains "and the sourced helpers are not" "no" \
+    "$( { [[ -x "${TASKS}/_harness.sh" ]] || [[ -x "${TASKS}/_guard.sh" ]]; } && echo yes || echo no)"
+
 # ── 6. the banner sweep is idempotent ───────────────────────────────────────
 section "6. Re-running the banner sweep is a no-op"
 

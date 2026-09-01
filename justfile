@@ -601,7 +601,13 @@ suite-banner:
             print "# landed. Edit it only if you ARE " id ". If your change breaks an"
             print "# assertion here, leave it alone — see .endless/tasks/CLAUDE.md."
             next
-        } { print }' "${f}" > "${f}.tmp" && mv "${f}.tmp" "${f}"
+        } { print }' "${f}" > "${f}.tmp"
+        # Write BACK INTO the original file rather than mv'ing over it. A `mv`
+        # replaces the inode, so the suite inherits the temp file's umask mode
+        # and silently loses its executable bit — which is how a sweep once
+        # left 205 suites at 0644 and the runner, which exec's them, unable to
+        # start any of them.
+        cat "${f}.tmp" > "${f}" && rm -f "${f}.tmp"
         added=$((added + 1))
     done
     echo "suite-banner: ${added} banner(s) added, ${had} already present"

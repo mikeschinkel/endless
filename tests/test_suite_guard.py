@@ -96,6 +96,31 @@ def test_every_suite_names_its_own_owner_in_a_do_not_edit_banner(suite):
     )
 
 
+@pytest.mark.parametrize("suite", SUITES, ids=lambda p: p.parent.name)
+def test_every_suite_is_executable(suite):
+    """The runner exec's a script suite, so the bit is not cosmetic.
+
+    A sweep that rewrote every suite through `awk > tmp && mv tmp file` replaced
+    each inode and handed it the temp file's umask mode, dropping the bit on 205
+    of 206 suites at once. The front door then failed with a bare `permission
+    denied` for every task in the project — and the one suite that kept its bit
+    was the sweep's own, so it verified green.
+
+    Nothing else in the tree asserts this, which is why it landed.
+    """
+    assert os.access(suite, os.X_OK), (
+        "the runner exec's this file; without the executable bit "
+        "`endless task verify` cannot start it at all"
+    )
+
+
+def test_the_sourced_helpers_are_not_executable():
+    """_harness.sh and _guard.sh are sourced, never run. Marking them
+    executable invites exactly the direct invocation they exist to refuse."""
+    for helper in (HARNESS, GUARD):
+        assert not os.access(helper, os.X_OK), f"{helper.name} is marked executable"
+
+
 def test_the_harness_reaches_the_guard_before_defining_anything():
     """The guard runs before the harness's own vocabulary exists.
 
