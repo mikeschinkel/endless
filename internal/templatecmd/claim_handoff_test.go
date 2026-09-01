@@ -295,3 +295,61 @@ func TestRender_Handoff_WorktreeRemovalIsCategorical(t *testing.T) {
 func flattenWhitespace(s string) string {
 	return strings.Join(strings.Fields(s), " ")
 }
+
+// TestRender_Handoff_VerifyPartialNamesTheSuiteLocation is E-2093's guard.
+//
+// The `handoff_verify` partial said how to RUN a suite and never where the
+// FILE goes, so sessions writing one from scratch reached for the retired
+// `tests/tasks/e-NNNN-verify.sh` path that git history is still full of.
+// `.endless/tasks/CLAUDE.md` says otherwise, but a directory-level CLAUDE.md
+// only reaches a session already working in that directory — which is exactly
+// what these sessions had not done.
+//
+// The assertions run against RENDERED output for both the per-type wrapper and
+// the claim wrapper, so the sentence is verified where a session actually
+// meets it. The negative half matters as much: the three findings types render
+// `handoff_nonverify` instead, and telling a research session where its verify
+// suite goes would contradict the sentence right beside it saying there is
+// nothing to verify.
+func TestRender_Handoff_VerifyPartialNamesTheSuiteLocation(t *testing.T) {
+	wants := []string{
+		"The suite goes at `.endless/tasks/e-9999/verify.sh`",
+		"sources the shared harness at `.endless/tasks/_harness.sh`",
+		"read `.endless/tasks/CLAUDE.md` before you write it",
+	}
+	// The path E-2023 retired. A handoff must never lead a session back to it.
+	const retired = "tests/tasks/"
+
+	verifyLane := map[string]bool{"todo": true, "bugfix": true}
+
+	for _, typ := range handoffTypes {
+		t.Run(typ, func(t *testing.T) {
+			root := projectFixture(t)
+			vars := handoffVarsForType(typ)
+
+			for _, name := range []string{"handoff/" + typ, "handoff/claim"} {
+				out, errOut, err := runRenderInProject(t, root, name, vars)
+				if err != nil {
+					t.Fatalf("render %s: %v\nstderr: %s", name, err, errOut)
+				}
+				flat := flattenWhitespace(out)
+
+				if strings.Contains(flat, retired) {
+					t.Errorf("%s names the retired suite path %q\n--- output ---\n%s",
+						name, retired, flat)
+				}
+				for _, w := range wants {
+					got := strings.Contains(flat, w)
+					if verifyLane[typ] && !got {
+						t.Errorf("%s missing %q\n--- output ---\n%s", name, w, flat)
+					}
+					if !verifyLane[typ] && got {
+						t.Errorf("%s carries %q, but a %s handoff has nothing to verify\n"+
+							"--- output ---\n%s", name, w, typ, flat)
+					}
+				}
+			}
+		})
+	}
+}
+

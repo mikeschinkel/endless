@@ -109,6 +109,40 @@ sid=$(endless sql --tsv "SELECT id FROM sessions
                          ORDER BY last_activity DESC LIMIT 1" | tail -1)
 ```
 
+## Session state, and what the write gate actually refuses
+
+A session row carries a **state**, and it moves on its own:
+
+| State         | Meaning                                                                                  |
+|---------------|------------------------------------------------------------------------------------------|
+| `working`     | A turn is in progress.                                                                     |
+| `idle`        | Between turns. Set by the `Stop` hook at the end of every turn; the next hook event of the next turn puts a session that holds a task back to `working`. |
+| `needs_input` | You asked your user something and the answer has not arrived. Only their next message ends it — no command clears it. |
+| `ended`       | The session is over. An incoming hook event revives it to `needs_input`, because an event is proof it is alive. |
+
+On a project with tracking in `enforce` mode, a **PreToolUse gate** stands in
+front of the file-writing tools. The question it asks is *"has this session
+declared what it is working on?"*, and the answer is `sessions.task_id` — set at
+claim, write-once, true for the session's lifetime. So it admits a session that
+**holds a task** and is `working` or `idle`.
+
+`idle` is admitted deliberately. A write from an idle session is mid-turn by
+construction — writes only happen inside turns — so the state is stale, not the
+agent. The gate once admitted `working` alone, which meant a session that
+completed one clean turn could never write again for the rest of its life.
+
+Exactly two things are refused, and each says which one it is:
+
+- **A session that has declared nothing** — no task, or no session row at all.
+  The refusal lists the project's open tasks and names `endless task claim <id>`,
+  which works from that state.
+- **A session in `needs_input`.** It *has* declared its task; it is waiting on a
+  person. The refusal says so and names no command, because there is none to
+  run: your user's next message clears it.
+
+Neither refusal offers `--force`, and neither should be answered with one.
+Repairing a session field by demoting a task's status is not a fix.
+
 ## Orienting and inspecting sessions: `status`, `show`, `list`
 
 Three read-only commands for self-orientation and for coordinating with sibling / child sessions — no snapshot required:

@@ -44,6 +44,7 @@ const (
 	SessionLogEnd        SessionLogReason = "end"         // EndSession
 	SessionLogDedup      SessionLogReason = "dedup"       // paneless stale-row dedup
 	SessionLogRelease    SessionLogReason = "release"     // task.released executor
+	SessionLogWake       SessionLogReason = "wake"        // WakeSession: idle -> working on a hook event
 )
 
 // sessionLogEntry is one line in the diagnostic log. The top-level `kind`

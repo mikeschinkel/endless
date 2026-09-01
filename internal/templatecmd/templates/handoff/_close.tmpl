@@ -2,8 +2,24 @@
 {{if .report_gate}}Every reply you send me goes through the minimizer first: write the reply you mean to send — exactly as you would send it — to a file, run `endless task report E-{{.spawned_id}} --draft-file <path> --db main`, and send that command's output as your entire message, verbatim. An adversarial editor decides what survives, and `endless task report --raw` prints your draft back unchanged if it cuts too far. You get one appeal per turn. If I type `$FULL`, that one response bypasses the minimizer entirely — it licenses one response, not a sticky mode. Run{{else}}Run{{end}} `endless worktree check` and {{if .report_gate}}put anything it prints in your draft{{else}}relay anything it prints{{end}} — it stays silent when the worktree is clean, so a clean handoff says nothing about git. Flag external state (CI, services) only if it's actually in play.{{if not .report_gate}} Do NOT recap task status, phase, or relationships, and do NOT confirm the negative ("no stray files").{{end}}
 {{- end}}
 
+{{/*
+  E-2093 added the second sentence. The first says how to RUN the suite and
+  never said where the FILE goes, so sessions writing one from scratch reached
+  for the shape visible throughout git history and `.endless/LESSONS.md` — the
+  `tests/tasks/e-NNNN-verify.sh` path E-2023 retired. `.endless/tasks/CLAUDE.md`
+  states the rules, but a directory-level CLAUDE.md only reaches a session
+  already working in that directory, which is the thing these sessions fail to
+  do: the rules were in a room the session never enters.
+
+  The cost was never the wrong path. It was that correcting the session sent it
+  into a long investigation of E-2023 instead of a two-line fix.
+
+  It says `verify.sh` and not "or a verify.toml manifest" because this is the
+  one a session writes by hand; the runner is the front door for both, and
+  CLAUDE.md — which this sentence sends the session to — covers the choice.
+*/ -}}
 {{define "handoff_verify" -}}
-Hand me exactly ONE command to verify this — `esu && endless task verify E-{{.spawned_id}}` — folding this task's own tests into that one suite as a fail-fast check. Do NOT enumerate a manual checklist. Run the project-wide regression (tests, lint, build) yourself and state the result in one line — never as commands for me to run. See `endless guide orchestration`.
+Hand me exactly ONE command to verify this — `esu && endless task verify E-{{.spawned_id}}` — folding this task's own tests into that one suite as a fail-fast check. The suite goes at `.endless/tasks/e-{{.spawned_id}}/verify.sh`, whose first statement sources the shared harness at `.endless/tasks/_harness.sh`; read `.endless/tasks/CLAUDE.md` before you write it. Do NOT enumerate a manual checklist. Run the project-wide regression (tests, lint, build) yourself and state the result in one line — never as commands for me to run. See `endless guide orchestration`.
 {{- end}}
 
 {{define "handoff_nonverify" -}}

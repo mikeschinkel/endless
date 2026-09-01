@@ -2729,14 +2729,22 @@ def task_complete_cmd(item_ids, outcome, outcome_file, allow_paths):
 
 @task_cmd.command("claim")
 @click.argument("item_id", type=TASK_ID)
-@click.option("--force", is_flag=True,
-              help="Re-claim even when the task is in a settled status "
-                   f"({', '.join(statuses.get('settled'))}) — "
-                   "demotes it back to underway.")
-def task_claim(item_id, force):
+@click.option("--unattended", is_flag=True,
+              help="Claim with no Claude session bound — manual work at a "
+                   "terminal, a plain shell, cron. Distinct from the global "
+                   "--no-session, which governs event attribution, not "
+                   "binding.")
+# E-2093: `--force` spelled two unrelated decisions and documented only one.
+# Both halves are now named — `--unattended` above for the session half, an
+# explicit status transition for the settled half — so the flag is on its way
+# out. Hidden and warning for one release (it still does what it did), then
+# deleted. It must NOT survive as an alias for either half: an alias that
+# still spells two decisions is the defect.
+@click.option("--force", is_flag=True, hidden=True)
+def task_claim(item_id, unattended, force):
     """Claim ownership of a task for this session."""
     from endless.task_cmd import claim_item
-    claim_item(item_id, force=force)
+    claim_item(item_id, unattended=unattended, force=force)
 
 
 @task_cmd.command("release")
@@ -2768,13 +2776,18 @@ def task_continue():
 @task_cmd.command("bind")
 @click.argument("item_id", type=TASK_ID)
 def task_bind(item_id):
-    """Bind this session to a task for status-bar display only.
+    """Record this session as a task's owner, without changing its status.
 
-    Unlike `claim`, `bind` does not change the task's status or create
-    a worktree — it just sets sessions.task_id so the second
-    tmux status row shows this task. Use when the task is already in
-    `assumed` / `confirmed` / `unverified` and you want the bar to keep
-    showing it as context. Symmetric counterpart to `release`.
+    Bind sets `sessions.task_id`, which is the ownership record — write-once,
+    and the only route back to this session's transcript. It is not a display
+    field, though the tmux status row does read it.
+
+    Unlike `claim` it changes nothing else: not the task's status, not a
+    worktree, and not the session's own state (binding to an idle or
+    waiting-on-you session leaves it as it was). Use it when the task's status
+    should not move — typically one already `assumed` / `confirmed` /
+    `unverified`. To resume WORKING such a task, reopen it and claim:
+    `task update <id> --status revisit`, then `task claim <id>`.
     """
     from endless.task_cmd import bind_item
     bind_item(item_id)
@@ -2843,10 +2856,11 @@ def task_handoff(item_id):
                    "spawned session reads .claude/settings.json from this "
                    "directory, so a worktree-local hook override (see "
                    "'just claude-settings-init') applies.")
-@click.option("--force", is_flag=True,
-              help="Allow spawn on a task in a settled status "
-                   f"({'/'.join(statuses.get('settled'))}); "
-                   "demotes it back to underway. Mirrors `claim --force`.")
+# E-2093: deprecated alongside `claim --force`, which it mirrored. Two verbs
+# disagreeing about what one flag meant is the condition that made it reachable
+# as a catch-all. Hidden and warning for one release, then deleted; the
+# settled-status refusal now names the reopen route instead.
+@click.option("--force", is_flag=True, hidden=True)
 # E-1968 retired --reopen. Its only capability the navigation verbs lacked was
 # changing task status, and `session goto --resume --revisit` now provides that
 # on the verb that already resumes the session which did the work — a strictly

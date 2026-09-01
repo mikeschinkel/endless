@@ -43,25 +43,63 @@ def project_with_task(seeded_project_at_cwd):
     return {"project_root": repo, "task_id": task_id, "title": title}
 
 
-def test_claim_refuses_done_status_without_force(project_with_task):
-    """E-1235: claim refuses unverified/confirmed/declined/obsolete/assumed without --force."""
+def test_claim_refuses_settled_status_and_names_the_reopen_route(project_with_task):
+    """E-1235 refused; E-2093 changed what the refusal offers.
+
+    No flag clears this gate any more. The refusal has to name a command that
+    works FROM THE STATUS THAT PRODUCED IT, and that is two different commands:
+    shipped work reopens to `revisit`, while `declined`/`obsolete` never
+    shipped and the lifecycle reverses those to `untriaged` instead — it has no
+    edge from either to `revisit` at all.
+    """
     from endless.task_cmd import claim_item
 
     tid = project_with_task["task_id"]
-    for status in ("unverified", "confirmed", "declined", "obsolete", "assumed"):
+    routes = {
+        "unverified": "revisit",
+        "unreviewed": "revisit",
+        "confirmed": "revisit",
+        "assumed": "revisit",
+        "completed": "revisit",
+        "declined": "untriaged",
+        "obsolete": "untriaged",
+    }
+    for status, target in routes.items():
         db.execute("UPDATE tasks SET status = ? WHERE id = ?", (status, tid))
         with pytest.raises(click.ClickException) as exc:
             claim_item(tid)
         msg = str(exc.value)
         assert f"E-{tid} is in status '{status}'" in msg
-        assert "--force" in msg
+        assert f"endless task update E-{tid} --status {target}" in msg
+        assert f"endless task claim E-{tid}" in msg
+        # The bypass is gone; the refusal must not resurrect it.
+        assert "--force" not in msg
         # Status must not have changed
         row = db.query("SELECT status FROM tasks WHERE id = ?", (tid,))[0]
         assert row["status"] == status
 
 
-def test_claim_with_force_demotes_done_status(project_with_task, capsys):
-    """E-1235: --force allows the demotion."""
+def test_claim_reopen_route_then_claim_actually_works(project_with_task):
+    """E-2093: the route the refusal names must BE a route, not a suggestion.
+
+    This is the entire replacement for the removed demotion bypass, so it is
+    walked end to end for both halves of the split.
+    """
+    from endless.task_cmd import claim_item, update_plan
+
+    tid = project_with_task["task_id"]
+    for settled, target in (("confirmed", "revisit"), ("declined", "untriaged")):
+        db.execute("UPDATE tasks SET status = ? WHERE id = ?", (settled, tid))
+        update_plan(tid, status=target)
+        claim_item(tid, unattended=True)
+        row = db.query("SELECT status FROM tasks WHERE id = ?", (tid,))[0]
+        assert row["status"] == "underway", (
+            f"reopening {settled} -> {target} then claiming did not reach underway"
+        )
+
+
+def test_claim_force_still_demotes_but_warns(project_with_task, capsys):
+    """E-2093: `--force` works for one release and announces its own removal."""
     from endless.task_cmd import claim_item
 
     tid = project_with_task["task_id"]
@@ -72,9 +110,20 @@ def test_claim_with_force_demotes_done_status(project_with_task, capsys):
     row = db.query("SELECT status FROM tasks WHERE id = ?", (tid,))[0]
     assert row["status"] == "underway"
 
+    err = capsys.readouterr().err
+    assert "`endless task claim --force` is deprecated" in err
+    # Both halves are named, so the warning is actionable for either caller.
+    assert "--unattended" in err
+    assert f"endless task update E-{tid} --status revisit" in err
 
-def test_claim_refuses_when_no_session_and_no_force(project_with_task):
-    """E-1242: claim with no resolvable session refuses without --force."""
+
+def test_claim_refuses_when_no_session_and_names_unattended(project_with_task):
+    """E-1242 refused; E-2093 renamed the flag that clears it.
+
+    `--force`'s undocumented second half is now `--unattended`, and this
+    refusal is the only place a caller learns the flag exists — so it names the
+    new one and not the deprecated one.
+    """
     from unittest.mock import patch
     from endless.task_cmd import claim_item, _reset_session_choice_cache
 
@@ -88,7 +137,34 @@ def test_claim_refuses_when_no_session_and_no_force(project_with_task):
             claim_item(tid)
     msg = str(exc.value)
     assert "No Claude session available" in msg
-    assert "--force" in msg
+    assert "--unattended" in msg
+    assert "--force" not in msg
+
+
+def test_claim_unattended_is_only_the_session_half(project_with_task):
+    """E-2093: `--unattended` does exactly one thing — claim with no session.
+
+    The point of splitting `--force` is that each half now decides one thing,
+    so `--unattended` must NOT also clear the settled-status gate.
+    """
+    from unittest.mock import patch
+    from endless.task_cmd import claim_item, _reset_session_choice_cache
+
+    _reset_session_choice_cache()
+    tid = project_with_task["task_id"]
+    with patch(
+        "endless.task_cmd._resolve_session_id_with_prompt",
+        return_value=None,
+    ):
+        claim_item(tid, unattended=True)
+        assert db.query(
+            "SELECT status FROM tasks WHERE id = ?", (tid,)
+        )[0]["status"] == "underway"
+
+        db.execute("UPDATE tasks SET status = 'confirmed' WHERE id = ?", (tid,))
+        with pytest.raises(click.ClickException) as exc:
+            claim_item(tid, unattended=True)
+    assert "re-claiming would demote it" in " ".join(str(exc.value).split())
 
 
 def test_claim_binds_sibling_claude_session(project_with_task):
@@ -114,7 +190,7 @@ def test_claim_binds_sibling_claude_session(project_with_task):
 def test_claim_creates_worktree_no_plan_file(project_with_task, capsys):
     from endless.task_cmd import claim_item
 
-    claim_item(project_with_task["task_id"], force=True)
+    claim_item(project_with_task["task_id"], unattended=True)
 
     repo = project_with_task["project_root"]
     tid = project_with_task["task_id"]
@@ -155,10 +231,10 @@ def test_claim_creates_worktree_no_plan_file(project_with_task, capsys):
 def test_claim_idempotent_on_second_run(project_with_task, capsys):
     from endless.task_cmd import claim_item
 
-    claim_item(project_with_task["task_id"], force=True)
+    claim_item(project_with_task["task_id"], unattended=True)
     capsys.readouterr()  # clear
 
-    claim_item(project_with_task["task_id"], force=True)
+    claim_item(project_with_task["task_id"], unattended=True)
     captured = capsys.readouterr()
     assert "worktree already exists:" in captured.out
     # Re-run still shows the same two-option block
@@ -185,7 +261,7 @@ def test_claim_refuses_when_plan_file_uncommitted(project_with_task, capsys):
     (plans / f"E-{tid}.md").write_text("plan content\n")
 
     with pytest.raises(click.ClickException) as exc_info:
-        claim_item(tid, force=True)
+        claim_item(tid, unattended=True)
 
     msg = exc_info.value.message
     assert f".endless/plans/E-{tid}.md" in msg
@@ -208,7 +284,7 @@ def test_claim_succeeds_when_plan_file_committed(project_with_task):
     _run(["git", "add", f".endless/plans/E-{tid}.md"], repo)
     _run(["git", "commit", "-q", "-m", "add plan"], repo)
 
-    claim_item(tid, force=True)
+    claim_item(tid, unattended=True)
 
     wt = repo / ".endless" / "worktrees" / f"e-{tid}"
     assert wt.exists()
@@ -236,7 +312,7 @@ def test_claim_uses_task_fallback_for_all_filler_title(seeded_project_at_cwd):
     )
     tid = db.query("SELECT id FROM tasks WHERE title = ?", ("The to from",))[0]["id"]
 
-    claim_item(tid, force=True)
+    claim_item(tid, unattended=True)
 
     companion = json.loads(
         (repo / ".endless" / "worktrees" / f"e-{tid}" / ".endless" / "worktree.json").read_text()
@@ -249,7 +325,7 @@ def test_claim_skips_eval_line_when_eswt_already_defined(project_with_task, caps
     from endless import task_cmd
 
     monkeypatch.setattr(task_cmd, "_eswt_defined_in_user_shell", lambda: True)
-    task_cmd.claim_item(project_with_task["task_id"], force=True)
+    task_cmd.claim_item(project_with_task["task_id"], unattended=True)
     captured = capsys.readouterr()
     tid = project_with_task["task_id"]
     assert f"eswt E-{tid}" in captured.out
@@ -261,7 +337,7 @@ def test_claim_worktree_discoverable_via_for_task(project_with_task):
     from endless.task_cmd import claim_item
     from endless.worktree_cmd import _branch_for_task, _enriched_list
 
-    claim_item(project_with_task["task_id"], force=True)
+    claim_item(project_with_task["task_id"], unattended=True)
 
     repo = project_with_task["project_root"]
     tid = project_with_task["task_id"]

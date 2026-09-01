@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/mikeschinkel/go-cfgstore"
 
@@ -467,54 +466,6 @@ func TestEndSession_FlipsState(t *testing.T) {
 	}
 }
 
-// TestIsSessionExpired_TableDriven covers the pure timestamp branches:
-// recent activity is not expired; old activity is; empty and malformed
-// timestamps are treated as expired (caller can't tell when the session
-// last spoke, so it must be considered dead).
-func TestIsSessionExpired_TableDriven(t *testing.T) {
-	now := time.Now().UTC()
-	cases := []struct {
-		name           string
-		lastActivity   string
-		timeoutMinutes int
-		want           bool
-	}{
-		{
-			name:           "recent activity not expired",
-			lastActivity:   now.Add(-1 * time.Minute).Format("2006-01-02T15:04:05"),
-			timeoutMinutes: 30,
-			want:           false,
-		},
-		{
-			name:           "stale activity expired",
-			lastActivity:   now.Add(-2 * time.Hour).Format("2006-01-02T15:04:05"),
-			timeoutMinutes: 30,
-			want:           true,
-		},
-		{
-			name:           "empty timestamp expired",
-			lastActivity:   "",
-			timeoutMinutes: 30,
-			want:           true,
-		},
-		{
-			name:           "malformed timestamp expired",
-			lastActivity:   "not-a-time",
-			timeoutMinutes: 30,
-			want:           true,
-		},
-	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			s := &SessionInfo{LastActivity: c.lastActivity}
-			if got := IsSessionExpired(s, c.timeoutMinutes); got != c.want {
-				t.Errorf("IsSessionExpired(%q, %d) = %v, want %v",
-					c.lastActivity, c.timeoutMinutes, got, c.want)
-			}
-		})
-	}
-}
-
 // TestGetTrackingMode_AnonymousReturnsOff pins the short-circuit:
 // projects with status='anonymous' bypass config entirely and report
 // 'off' so transient/scratch projects don't trip enforcement.
@@ -607,5 +558,223 @@ func TestGetTrackingMode_ConfigOffPassesThrough(t *testing.T) {
 
 	if got := GetTrackingMode(1); got != "off" {
 		t.Errorf("GetTrackingMode(off-cfg) = %q, want off", got)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// E-2093: WakeSession — the missing half of Stop.
+// ---------------------------------------------------------------------------
+
+// TestWakeSession_WakesIdleSessionHoldingATask is the regression the two
+// stranded sessions needed. `Stop` sets idle at the end of every turn; nothing
+// set `working` back, so the write gate — which admitted `working` alone —
+// refused every write a session made after its first clean turn.
+func TestWakeSession_WakesIdleSessionHoldingATask(t *testing.T) {
+	db := withTestDB(t)
+	seedProject(t, db, 1, "proj-test-1", "/tmp/proj-test-1")
+	seedTask(t, db, 42, 1, "test task", "underway")
+
+	if err := BindSessionToTask("sess-A", 1, 42); err != nil {
+		t.Fatalf("BindSessionToTask: %v", err)
+	}
+	if err := IdleSession("sess-A"); err != nil {
+		t.Fatalf("IdleSession: %v", err)
+	}
+	if state, _, _ := sessionLifecycleRow(t, db, "sess-A"); state != "idle" {
+		t.Fatalf("precondition: state = %q, want idle", state)
+	}
+
+	if err := WakeSession("sess-A"); err != nil {
+		t.Fatalf("WakeSession: %v", err)
+	}
+
+	state, taskID, _ := sessionLifecycleRow(t, db, "sess-A")
+	if state != "working" {
+		t.Errorf("state = %q, want working — the session holds a task and was observed acting", state)
+	}
+	if taskID == nil || *taskID != 42 {
+		t.Errorf("task_id = %v, want 42 — the wake must not touch the binding", taskID)
+	}
+}
+
+// TestWakeSession_DoesNotWakeSessionHoldingNoTask pins the precondition. The
+// wake RESTORES a declaration already made; it must never manufacture one. A
+// session that never claimed is exactly what the gate exists to refuse, and
+// waking it would admit it.
+func TestWakeSession_DoesNotWakeSessionHoldingNoTask(t *testing.T) {
+	db := withTestDB(t)
+	seedProject(t, db, 1, "proj-test-1", "/tmp/proj-test-1")
+
+	if err := StartChatSession("sess-A", 1); err != nil {
+		t.Fatalf("StartChatSession: %v", err)
+	}
+	if err := IdleSession("sess-A"); err != nil {
+		t.Fatalf("IdleSession: %v", err)
+	}
+
+	if err := WakeSession("sess-A"); err != nil {
+		t.Fatalf("WakeSession: %v", err)
+	}
+
+	state, taskID, _ := sessionLifecycleRow(t, db, "sess-A")
+	if state != "idle" {
+		t.Errorf("state = %q, want idle — a session holding no task is not woken", state)
+	}
+	if taskID != nil {
+		t.Errorf("task_id = %v, want NULL", taskID)
+	}
+}
+
+// TestWakeSession_LeavesEveryOtherState pins what the wake must NOT touch.
+//
+// `needs_input` is the one that matters: it means a human was asked something
+// and has not answered, and only the human answering ends it. Waking it would
+// erase the single state that says a session is waiting on a person. `ended`
+// is left too — an incoming event revives it to `needs_input` in TouchSession,
+// and reviving a dead row into work is bind's job.
+func TestWakeSession_LeavesEveryOtherState(t *testing.T) {
+	for _, state := range []string{"needs_input", "ended", "working"} {
+		t.Run(state, func(t *testing.T) {
+			db := withTestDB(t)
+			seedProject(t, db, 1, "proj-test-1", "/tmp/proj-test-1")
+			seedTask(t, db, 42, 1, "test task", "underway")
+			if err := BindSessionToTask("sess-A", 1, 42); err != nil {
+				t.Fatalf("BindSessionToTask: %v", err)
+			}
+			if _, err := db.Exec(
+				"UPDATE sessions SET state=? WHERE session_id=?", state, "sess-A",
+			); err != nil {
+				t.Fatalf("seed %s: %v", state, err)
+			}
+
+			if err := WakeSession("sess-A"); err != nil {
+				t.Fatalf("WakeSession: %v", err)
+			}
+
+			if got, _, _ := sessionLifecycleRow(t, db, "sess-A"); got != state {
+				t.Errorf("state = %q, want %q untouched", got, state)
+			}
+		})
+	}
+}
+
+// TestWakeSession_IsIdempotent pins that a second call is a no-op rather than
+// a second transition. The hook fires it on every event of every turn, so this
+// is the common case, not an edge one.
+func TestWakeSession_IsIdempotent(t *testing.T) {
+	db := withTestDB(t)
+	seedProject(t, db, 1, "proj-test-1", "/tmp/proj-test-1")
+	seedTask(t, db, 42, 1, "test task", "underway")
+	if err := BindSessionToTask("sess-A", 1, 42); err != nil {
+		t.Fatalf("BindSessionToTask: %v", err)
+	}
+	if err := IdleSession("sess-A"); err != nil {
+		t.Fatalf("IdleSession: %v", err)
+	}
+	for i := 0; i < 3; i++ {
+		if err := WakeSession("sess-A"); err != nil {
+			t.Fatalf("WakeSession #%d: %v", i, err)
+		}
+	}
+	if state, _, _ := sessionLifecycleRow(t, db, "sess-A"); state != "working" {
+		t.Errorf("state = %q, want working", state)
+	}
+}
+
+// TestWakeSession_UnknownSessionIsNotAnError pins the fail-soft shape. The
+// hook calls this on every event, including ones for a session whose row does
+// not exist yet; an error there would take the session down over a state
+// refresh the next event would have fixed anyway.
+func TestWakeSession_UnknownSessionIsNotAnError(t *testing.T) {
+	withTestDB(t)
+	if err := WakeSession("sess-never-seen"); err != nil {
+		t.Errorf("WakeSession on an unknown session = %v, want nil", err)
+	}
+}
+
+// TestTouchSession_DoesNotWakeIdle is the guard for where the wake must NOT
+// live, and it is not hypothetical: the wake was written inside TouchSession
+// first, and this is what it broke.
+//
+// TouchSession is reached by callers that are NOT the session. A sibling shell
+// pane resolves a Claude session's row through EnsureClaudeSessionID, by
+// reading the window's published UUID — that caller has observed nothing about
+// whether the session is acting. With the wake in TouchSession, every `endless`
+// command a human ran in the shell pane woke the sibling session, and the
+// monitor pane beside it did the same on every repaint, so an idle session read
+// as `working` forever and `project status` lost the distinction entirely.
+func TestTouchSession_DoesNotWakeIdle(t *testing.T) {
+	db := withTestDB(t)
+	seedProject(t, db, 1, "proj-test-1", "/tmp/proj-test-1")
+	seedTask(t, db, 42, 1, "test task", "underway")
+	if err := BindSessionToTask("sess-A", 1, 42); err != nil {
+		t.Fatalf("BindSessionToTask: %v", err)
+	}
+	if err := IdleSession("sess-A"); err != nil {
+		t.Fatalf("IdleSession: %v", err)
+	}
+
+	// Both routes into TouchSession, including the sibling-shell resolver.
+	if err := TouchSession("sess-A", "claude", "", 1); err != nil {
+		t.Fatalf("TouchSession: %v", err)
+	}
+	if _, err := EnsureClaudeSessionID("sess-A", "", 1); err != nil {
+		t.Fatalf("EnsureClaudeSessionID: %v", err)
+	}
+
+	if state, _, _ := sessionLifecycleRow(t, db, "sess-A"); state != "idle" {
+		t.Errorf("state = %q, want idle — TouchSession must not wake; only the hook may", state)
+	}
+}
+
+// TestTouchSession_EndedRevivalStillLandsNeedsInput guards E-1686 alongside
+// the wake. An `ended` row is revived to `needs_input`, never straight to
+// `working`.
+func TestTouchSession_EndedRevivalStillLandsNeedsInput(t *testing.T) {
+	db := withTestDB(t)
+	seedProject(t, db, 1, "proj-test-1", "/tmp/proj-test-1")
+	seedTask(t, db, 42, 1, "test task", "underway")
+
+	if err := BindSessionToTask("sess-A", 1, 42); err != nil {
+		t.Fatalf("BindSessionToTask: %v", err)
+	}
+	if err := EndSession("sess-A"); err != nil {
+		t.Fatalf("EndSession: %v", err)
+	}
+
+	if err := TouchSession("sess-A", "claude", "", 1); err != nil {
+		t.Fatalf("TouchSession: %v", err)
+	}
+
+	if state, _, _ := sessionLifecycleRow(t, db, "sess-A"); state != "needs_input" {
+		t.Errorf("state = %q, want needs_input", state)
+	}
+}
+
+// TestWakeSession_StopStillEndsIdle pins the Stop ordering. The hook wakes on
+// every event — Stop included — and then idles, so the turn still ends idle.
+// If that order ever inverted, every session would read as permanently working
+// and `session status` would say so.
+func TestWakeSession_StopStillEndsIdle(t *testing.T) {
+	db := withTestDB(t)
+	seedProject(t, db, 1, "proj-test-1", "/tmp/proj-test-1")
+	seedTask(t, db, 42, 1, "test task", "underway")
+
+	if err := BindSessionToTask("sess-A", 1, 42); err != nil {
+		t.Fatalf("BindSessionToTask: %v", err)
+	}
+	// The Stop event, in the order `hook claude` performs it.
+	if err := TouchSession("sess-A", "claude", "", 1); err != nil {
+		t.Fatalf("TouchSession: %v", err)
+	}
+	if err := WakeSession("sess-A"); err != nil {
+		t.Fatalf("WakeSession: %v", err)
+	}
+	if err := IdleSession("sess-A"); err != nil {
+		t.Fatalf("IdleSession: %v", err)
+	}
+
+	if state, _, _ := sessionLifecycleRow(t, db, "sess-A"); state != "idle" {
+		t.Errorf("state = %q, want idle — Stop must still end the turn idle", state)
 	}
 }

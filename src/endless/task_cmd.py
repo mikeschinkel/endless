@@ -3931,7 +3931,82 @@ def _check_task_ownership(item_id: int, current_eid: int | None) -> bool:
 
 # E-1891: `settled` — the work is over one way or another, shipped or
 # abandoned. The same group gates the tier clear in the Go executor.
-_CLAIM_REQUIRES_FORCE: frozenset[str] = frozenset(statuses.get("settled"))
+#
+# E-2093 renamed this from `_CLAIM_REQUIRES_FORCE`. It no longer names a flag,
+# because no flag clears it any more: re-claiming settled work goes through an
+# explicit status transition, and `--force` is deprecated rather than being the
+# answer. See `_settled_reopen_route`.
+_CLAIM_REFUSED_STATUSES: frozenset[str] = frozenset(statuses.get("settled"))
+
+
+def _settled_reopen_route(item_id: int, current_status: str) -> str:
+    """The `task update --status` call that reopens a settled task, as typed.
+
+    E-2093 removed `--force`'s settled-status demotion from `claim` and
+    `spawn`. What replaces it is not another flag: it is saying what you are
+    doing. `task update --status <s>` leaves an auditable transition on the
+    task; a demotion riding a flag on an unrelated verb leaves nothing.
+
+    The status has to be one the task can actually REACH, because a refusal
+    that names a command the next call rejects is the defect this task exists
+    to remove. Two routes, split on the `shipped` group:
+
+      - shipped work (`unverified`/`unreviewed`/`confirmed`/`assumed`/
+        `completed`) reopens to `revisit` — "needs re-evaluation before it can
+        proceed", which is exactly what reopening means.
+      - `declined`/`obsolete` never shipped; the lifecycle reverses them to
+        `untriaged` ("user reconsiders"), and has no edge to `revisit` at all.
+
+    Both land in `claim-promotes`, so the ordinary claim that follows works.
+    """
+    target = "revisit" if statuses.has("shipped", current_status) else "untriaged"
+    return f"endless task update E-{item_id} --status {target}"
+
+
+def _warn_force_deprecated(verb: str, item_id: int, current_status: str) -> None:
+    """Announce that `--force` is on its way out, and name what replaces it.
+
+    E-2093. `--force` spelled two unrelated decisions on `claim` — demote a
+    settled task, and claim with no Claude session to bind — and only the first
+    was documented. One flag, two decisions, one of them invisible, is why it
+    got reached for as the answer to "I cannot write", which is neither of
+    them. `spawn --force` spelled only the first, so two verbs also disagreed
+    about what the flag meant.
+
+    Both halves are now named separately: `--unattended` for the session half,
+    and an explicit status transition for the settled half. This release the
+    flag still does what it did, so nobody's script breaks mid-cycle; the next
+    one deletes it. It does NOT survive as an alias for either half — an alias
+    that still spells two decisions is the defect.
+
+    It takes `current_status` because the reopen route it prints is only a
+    route from a settled status, and only to the status the lifecycle has an
+    edge for. A deprecation notice that hands you a command your next call
+    refuses is the same defect this task exists to remove, one layer out.
+
+    stderr, not an exception: the point of the deprecation window is that the
+    command still runs.
+    """
+    lines = [
+        f"warning: `endless task {verb} --force` is deprecated and will be removed.",
+    ]
+    if verb == "claim":
+        lines.append(
+            "  Claiming with no Claude session to bind is now `--unattended`."
+        )
+    if current_status in _CLAIM_REFUSED_STATUSES:
+        lines.append(
+            f"  Re-{verb}ing settled work now means reopening it first, "
+            f"then {verb}ing normally:"
+        )
+        lines.append(f"      {_settled_reopen_route(item_id, current_status)}")
+        lines.append(f"      endless task {verb} E-{item_id}")
+    else:
+        lines.append(
+            "  Its settled-status demotion is going away with no replacement "
+            "flag; reopen a settled task explicitly instead."
+        )
+    click.echo(click.style("\n".join(lines), fg="yellow"), err=True)
 
 
 # E-1555: statuses a task can be reopened from. `declined`/`obsolete` carry an
@@ -3979,10 +4054,11 @@ def _check_prior_claim(item_id: int, current_status: str) -> None:
     the live check saw a free task and let a second session start over without
     the first one's reasoning.
 
-    There is no escape hatch and none left to offer: `--force` governs the status
-    demotion, not this; `--new-session` was dropped by E-1968; and `task release`
-    is disabled, so a claim is not something anyone can undo. Working a task a
-    prior session claimed means resuming that session.
+    There is no escape hatch and none left to offer: `--force` governed the
+    status demotion, not this, and E-2093 deprecated it outright; `--new-session`
+    was dropped by E-1968; and `task release` is disabled, so a claim is not
+    something anyone can undo. Working a task a prior session claimed means
+    resuming that session.
 
     No exclusion for the spawning session, matching `_check_task_ownership`'s
     `current_eid=None`: spawn never claims ownership for the spawner. Under
@@ -4000,8 +4076,8 @@ def _check_prior_claim(item_id: int, current_status: str) -> None:
     # `--revisit` / `--no-revisit` are E-1968's flags on `session goto`, and they
     # are accepted only when the task is settled. Rendering them unconditionally
     # would teach a flag the very next command rejects. Reached with a settled
-    # status only via `--force`, which skips the settled-status gate above but
-    # not this one.
+    # status only via the deprecated `--force`, which skips the settled-status
+    # gate above but not this one.
     settled = current_status in _REOPENABLE_TERMINAL_STATUSES
     revisit = " --revisit" if settled else ""
 
@@ -4057,6 +4133,7 @@ def _perform_claim_work(
     target_session: int | None,
     proj_name: str,
     project_root: Path | None = None,
+    unattended: bool = False,
 ):
     """Emit claim events, print status/binding/worktree lines, create the worktree.
 
@@ -4067,6 +4144,23 @@ def _perform_claim_work(
     target_session=None is the spawn pre-claim case (Claude not yet
     started); skips the task.claimed event entirely. SessionStart's
     spawn-marker auto-bind records the binding once Claude is up.
+
+    `unattended` (E-2093) says target_session is None because the CALLER
+    decided there is no session — `task claim --unattended`, for manual work,
+    a plain shell, or cron — rather than because the binding is merely deferred
+    (spawn's pre-claim, where the spawner's own session is the right actor).
+    The distinction matters at the event layer: `actor_kind="cli"` requires a
+    resolvable session and refuses without one, which is why the old
+    `claim --force`-with-no-session path was unreachable except by accident —
+    it got past claim's own gate and then died inside `emit_event` with a
+    message about a pane. A claim that deliberately has no session IS the
+    `system` actor by that field's own definition ("cron / one-shot tools; no
+    session expected"), so it says so.
+
+    That is NOT this flag quietly doing the global `--no-session`'s job.
+    `--no-session` downgrades attribution for EVERY event of an invocation,
+    including ones that do have a session to name. This names the actor
+    correctly for the one claim that genuinely has none.
 
     `project_root` defaults to cwd's project, which is right for every
     interactive claim. `session resume`'s task-less auto-claim (E-1918) passes
@@ -4081,6 +4175,7 @@ def _perform_claim_work(
     # binding we just established, or fail outright when called from a
     # plain shell during spawn pre-claim).
     session_id_arg = str(target_session) if target_session is not None else None
+    actor_kind = "system" if unattended and target_session is None else "cli"
 
     # E-1500: secure the worktree FIRST. If creation refuses (orphan branch
     # carrying real work, a DB/file plan mismatch, an undeletable branch),
@@ -4100,6 +4195,7 @@ def _perform_claim_work(
                 "old_status": current_status,
                 "new_status": "underway",
             },
+            actor_kind=actor_kind,
             session_id=session_id_arg,
         )
         _emit_field_changes(
@@ -4186,22 +4282,46 @@ def create_claimed_task_for_session(
     return item_id, wt_path
 
 
-def claim_item(item_id: int, force: bool = False):
+def claim_item(item_id: int, unattended: bool = False, force: bool = False):
     """Claim ownership of a task and bind a Claude session to it.
 
-    `force` covers two distinct override gates (single flag for one
-    "I know what I'm doing" intent):
-      - Bypasses the done-ish status gate (unverified/confirmed/declined/
-        obsolete/assumed/completed → underway demotion)
-      - Allows claim WITHOUT a Claude session binding when no session
-        can be resolved (manual-work-without-Claude case, E-1242)
+    `unattended` (E-2093) claims with NO Claude session bound: manual work at a
+    terminal, a plain shell, cron. It is one of the two decisions `--force`
+    used to spell, and the one that is real; it was unreachable except by
+    accident, since nothing documented that `--force` did it.
+
+    It is NOT the global `--no-session`, and the two must not be confused.
+    Traced for E-2093, because the names are close enough to be mistaken for
+    each other and different enough to matter:
+
+      - `--no-session` never reaches the session resolution below. Claim
+        resolves a session and binds it exactly as it always does, so a claim
+        run with `--no-session` from a Claude pane still gets a bound session.
+      - What it does reach is the EVENTS claim emits: `emit_event` downgrades
+        `actor.kind` to `system` and NULLs the envelope's `session_id`, so the
+        claim is recorded as done by the system rather than by that pane.
+      - The binding survives that, because the executor reads the session id
+        out of the `task.claimed` PAYLOAD, not out of the envelope.
+
+    That is the flag's documented meaning — attribution — applied to this verb
+    like any other, not a third hidden behaviour. So the two are orthogonal:
+    `--unattended` decides whether a session is BOUND, `--no-session` decides
+    who the resulting events are ATTRIBUTED to, and neither silently does the
+    other's job.
+
+    `force` is DEPRECATED (E-2093) and still does what it always did for one
+    release; see `_warn_force_deprecated`. Do not add callers.
+
+    The settled-status gate no longer has a bypass. Re-claiming settled work
+    means reopening it first, which is a status transition that says so; see
+    `_settled_reopen_route`.
 
     Resolves the binding target as: (1) current Endless session via
     ENDLESS_SESSION_ID / TMUX_PANE; (2) single sibling Claude session in
     the same tmux window (auto-pick); (3) on a tty, multi-sibling case
     displays `endless session list --project <project>` and prompts for
     a session ID. Off-tty multi-sibling refuses loudly. If no session
-    resolves and not force: refuse.
+    resolves and this is not `--unattended`: refuse.
     """
     row = db.query(
         "SELECT id, COALESCE(title, description) as title, status FROM live_tasks "
@@ -4214,15 +4334,19 @@ def claim_item(item_id: int, force: bool = False):
         )
 
     current_status = row[0]["status"]
-    if not force and current_status in _CLAIM_REQUIRES_FORCE:
+    if force:
+        _warn_force_deprecated("claim", item_id, current_status)
+    if not force and current_status in _CLAIM_REFUSED_STATUSES:
         raise click.ClickException(
             f"E-{item_id} is in status '{current_status}'; re-claiming "
             f"would demote it to 'underway'.\n"
-            "Pass --force to confirm the demotion, run "
-            f"`endless task bind E-{item_id}` to attach this session "
-            "to the task for status-bar display without changing its "
-            "status, or update the status first if that's not what "
-            "you intended."
+            "  To pick the work back up, reopen it first — then claim "
+            "normally:\n"
+            f"      {_settled_reopen_route(item_id, current_status)}\n"
+            f"      endless task claim E-{item_id}\n"
+            "  To attach this session to the task without changing its "
+            "status (ownership\n  record + status bar, no worktree):\n"
+            f"      endless task bind E-{item_id}"
         )
 
     _, proj_name = _resolve_project(None)
@@ -4231,15 +4355,15 @@ def claim_item(item_id: int, force: bool = False):
         prompt_verb="claimed for",
     )
     if target_session is None:
-        if not force:
+        if not (unattended or force):
             raise click.ClickException(
                 "No Claude session available to bind this task to "
                 "(not running inside a Claude session, and no sibling "
                 "Claude pane in this tmux window).\n"
-                "Pass --force to claim without a session binding "
+                "Pass --unattended to claim without a session binding "
                 "(manual work, no Claude assistance)."
             )
-        # --force with no resolvable session: claim without a binding.
+        # --unattended: claim without a binding.
 
     # E-2074 removed the "a background session may only claim `ready` work"
     # refusal that stood here. It gated on sessions.kind_id = background, and
@@ -4283,6 +4407,7 @@ def claim_item(item_id: int, force: bool = False):
         current_status=current_status,
         target_session=target_session,
         proj_name=proj_name,
+        unattended=unattended or force,
     )
 
     click.echo("")
@@ -4308,16 +4433,27 @@ def claim_item(item_id: int, force: bool = False):
 
 
 def bind_item(item_id: int) -> None:
-    """Bind a Claude session to a task for status-bar display only.
+    """Record this session as the owner of a task, without changing its status.
 
-    Sets the session's `task_id` so the second tmux status row shows
-    this task. Unlike `claim_item`, bind does NOT change the task's status and
-    does NOT create a worktree.
+    E-2093 rewrote this description. It used to say "for status-bar display
+    only", which understated the verb by a wide margin: bind sets
+    `sessions.task_id`, and under ED-1560 that column IS the ownership record —
+    write-once, never cleared, and the only route back to the session's
+    transcript (`endless session goto E-<id> --resume` resolves through it).
+    Setting ownership is not display. The understatement is why bind read as
+    too small to be the answer when a session needed one.
 
-    Use when the task is already in `assumed` / `confirmed` / `unverified`
-    and the user wants the status row to keep showing it as context.
-    `claim --force` is the wrong tool there because it demotes status
-    back to `underway`.
+    What it does NOT do, and what separates it from `claim`: it does not change
+    the task's status, it does not create a worktree, and it does not change
+    the session's STATE — the executor deliberately preserves a live state, so
+    binding a task to an idle session leaves it idle. (Since E-2093 that no
+    longer strands anybody: the session's next hook event wakes it, because it
+    now holds a task. See monitor.WakeSession.)
+
+    Use it to attach a session to a task whose status should not move —
+    typically one already `assumed` / `confirmed` / `unverified`. To resume
+    WORKING such a task, reopen it and claim: `task update <id> --status
+    revisit`, then `task claim <id>`.
 
     Target session resolution mirrors `claim_item`: env var / pane-
     direct / single-sibling auto-pick / on-a-tty multi-sibling prompt.
@@ -5686,6 +5822,11 @@ def spawn_plan(item_id: int, project_name: str | None = None,
     `bg` dispatched headless via `claude --bg` instead of opening a window;
     `attach` opened a window onto an already-live one. tmux is now the only
     delivery surface, so its presence is required unconditionally below.
+
+    `force` is DEPRECATED (E-2093). It bypassed the settled-status demotion and
+    nothing else — unlike claim's `--force`, which spelled a second decision as
+    well — and it still does so for one release while warning. What replaces it
+    is reopening the task explicitly; the refusal below names that route.
     """
     import shutil
     import subprocess
@@ -5721,6 +5862,9 @@ def spawn_plan(item_id: int, project_name: str | None = None,
     title = item["title"]
     current_status = item["status"]
 
+    if force:
+        _warn_force_deprecated("spawn", item_id, current_status)
+
     # --worktree overrides the cd target so the spawned session reads
     # .claude/settings.json from the worktree (worktree-local hook override
     # via 'just claude-settings-init' applies). tmux send-keys would not
@@ -5736,12 +5880,12 @@ def spawn_plan(item_id: int, project_name: str | None = None,
         cd_target = None  # default below to the spawn-created worktree
 
     # Mirror claim's done-ish-status gate
-    if not force and current_status in _CLAIM_REQUIRES_FORCE:
+    if not force and current_status in _CLAIM_REFUSED_STATUSES:
         if current_status in _REOPENABLE_TERMINAL_STATUSES:
             # E-1968 rewrote this. It used to offer two routes, and both were
             # wrong: `--reopen` is retired, and `task reopen E-NNNN` first was
             # always the worse of the two — it moves the task to `revisit`,
-            # outside _CLAIM_REQUIRES_FORCE, so the follow-up plain spawn
+            # outside _CLAIM_REFUSED_STATUSES, so the follow-up plain spawn
             # proceeds with no prompt at all. The message routed the user into
             # the trap it had just warned them about. The right move on settled
             # work is to pick up the session that did it, not to start a second
@@ -5753,11 +5897,16 @@ def spawn_plan(item_id: int, project_name: str | None = None,
                 f"  (--no-revisit instead, to read it back without reopening "
                 f"the task.)"
             )
+        # E-2093: the demotion bypass is going, so this no longer offers
+        # `--force`. It names the same route claim's refusal does — reopen
+        # explicitly, then spawn normally — so the two verbs stop disagreeing
+        # about what settled work costs to pick back up.
         raise click.ClickException(
             f"E-{item_id} is in status '{current_status}'; spawning "
             f"would demote it to 'underway'.\n"
-            "Pass --force to confirm the demotion, or update the status "
-            "first if that's not what you intended."
+            "  Reopen it first, then spawn normally:\n"
+            f"      {_settled_reopen_route(item_id, current_status)}\n"
+            f"      endless task spawn E-{item_id}"
         )
 
     # Refuse if another live session already owns the task. Passing

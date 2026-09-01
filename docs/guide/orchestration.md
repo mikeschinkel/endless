@@ -18,6 +18,7 @@ Every task you claim gets its own git worktree. All work happens there — never
 
 ```bash
 endless task claim <id>
+endless task claim <id> --unattended        # no Claude session to bind (manual work, a plain shell, cron)
 ```
 
 This:
@@ -396,6 +397,20 @@ Three consequences you will meet:
 - **`endless task bind` is first-set-only.** It may fill a session that holds no
   task. It may not move a bound one; it refuses and names what the session
   already holds.
+
+  Bind sets the **ownership record**, not a display field — `sessions.task_id`
+  is the write-once column this whole section is about, and the only route back
+  to a session's transcript. What it does *not* touch is the task's status, the
+  worktree, or the session's **state**: the executor deliberately preserves a
+  live state, so binding a task to an idle session leaves it idle and binding to
+  a `needs_input` session leaves it waiting (which is the point — someone else's
+  bind must not erase the fact that a human was asked something). That costs
+  nothing, because a session holding a task is woken to `working` by its next
+  hook event anyway.
+
+  So bind is the verb for "this session owns that task, and its status should
+  not move". To resume *working* a settled task, reopen it and claim:
+  `task update <id> --status revisit`, then `task claim <id>`.
 - **`endless task reopen` leaves the binding alone.** It changes task state and
   nothing else, so the session that did the work stays reachable afterwards.
 
@@ -410,18 +425,20 @@ endless task spawn <id>                           # new tmux window
 endless task spawn <id> --permission-mode plan    # override the spawned session's permission mode (default: auto)
 endless task spawn <id> --model <model>           # pass a --model through to the spawned claude (optional)
 endless task spawn <id> --worktree <path>         # cd to <path> instead of the spawn-created worktree
-endless task spawn <id> --force                   # allow spawn on a done-ish task (demotes status)
 ```
 
 `--reopen` is retired. Reopening settled work in a *fresh* session threw away
 the session that did it — the only place its reasoning lives. Reopen in that
 session instead: `endless session goto <id> --resume --revisit`.
 
+`--force` is deprecated and will be removed. See **`--force` is going away**
+below — it still works for one release, warning as it goes.
+
 Foreground flow:
 
 1. Validates tmux is running (fails otherwise).
-2. Refuses if the task is in a done-ish status (`unverified`/`confirmed`/`declined`/`obsolete`/`assumed`/`completed`) without `--force`, or if another live session already owns the task. On the reopenable subset (`assumed`/`confirmed`/`completed`) the refusal routes to `session goto <id> --resume --revisit` rather than offering `--force`, because a second session on settled work is rarely what you want.
-2. Refuses if **any** session ever claimed the task — live or long since ended. Ownership is read off `sessions.task_id`, which is write-once, so the record survives the claiming session's death. The refusal names that session and routes to `endless session goto <id> --resume`; with several claimants it names the most recent and lists the rest. There is **no** override: `--force` governs only the status demotion, and a claim cannot be released. To work a task a prior session claimed, resume that session — starting a second one throws away the reasoning that only exists there.
+2. Refuses if the task is in a done-ish status (`unverified`/`confirmed`/`declined`/`obsolete`/`assumed`/`completed`), or if another live session already owns the task. There is no flag that clears the status half: on the reopenable subset (`assumed`/`confirmed`/`completed`) the refusal routes to `session goto <id> --resume --revisit`, because a second session on settled work is rarely what you want, and otherwise it names the reopen-then-spawn route — `task update <id> --status revisit` (or `untriaged`, from `declined`/`obsolete`), then an ordinary spawn.
+2. Refuses if **any** session ever claimed the task — live or long since ended. Ownership is read off `sessions.task_id`, which is write-once, so the record survives the claiming session's death. The refusal names that session and routes to `endless session goto <id> --resume`; with several claimants it names the most recent and lists the rest. There is **no** override, and none to reach for — `--force` is deprecated (see below) and never governed this — because a claim cannot be released. To work a task a prior session claimed, resume that session — starting a second one throws away the reasoning that only exists there.
 3. **Pre-claims the task**: flips status to `underway` (emitting `task.status_changed`) and creates the per-task worktree at `.endless/worktrees/e-<id>/`.
 4. Renders the handoff from the template and writes it to a temp file.
 5. Launches Claude as the tmux window's *command* through the `endless-go spawn-window` launcher: the launcher creates a window named `E-NNNN` — the task id and nothing else, since a tab is narrow and the project and title are things you already know — at the spawn-created worktree (or `--worktree <path>`), sets the window variables `@endless_spawned_by`, `@endless_task_id`, `@endless_project_id` in-process **before** exec, then execs `claude --permission-mode auto` with the handoff as its positional prompt argument. The handoff text never touches a command line or the session environment, and there is no send-keys, no readiness sleep, and no plan-mode step.
@@ -432,6 +449,47 @@ The spawned session can discover its task ID from the tmux window variable:
 ```bash
 tmux show-window-options -v @endless_task_id    # prints the task ID
 ```
+
+### `--force` is going away
+
+`--force` on `task claim` spelled **two unrelated decisions**, and its help text
+described only one of them:
+
+| What it did                                         | Documented? |
+|-----------------------------------------------------|-------------|
+| Demote a settled task back to `underway` on re-claim | yes         |
+| Claim when no Claude session can be resolved at all  | no          |
+
+`task spawn --force` spelled only the first, so the two verbs also disagreed
+about what one flag meant. A single flag spelling two decisions — one of them
+invisible, and the two verbs not even agreeing on the count — is why it got
+reached for as the answer to "I cannot write", which is neither of them.
+
+Both halves are now named separately:
+
+- **`endless task claim <id> --unattended`** keeps the session half: claim with
+  **no** Claude session bound — manual work at a terminal, a plain shell, cron.
+  It is not the global `--no-session`, which is about **attribution** (it
+  downgrades an event's actor to `system`) and never decides whether a session
+  is bound. `--unattended` decides binding; `--no-session` decides attribution;
+  neither does the other's job.
+- **The settled-status half gets no replacement flag.** Re-claiming settled work
+  means reopening it first, which is a status transition that says what it is
+  doing and leaves an auditable record — instead of a silent demotion riding a
+  flag on an unrelated verb:
+
+  ```bash
+  endless task update <id> --status revisit    # or --status untriaged, from declined/obsolete
+  endless task claim <id>                      # or: endless task spawn <id>
+  ```
+
+  Both refusals name that route. This is the posture `task update --status` and
+  the removal refusal already take: there is no `--force`, because `--force` is
+  exactly the flag a mistaken caller appends after reading a refusal.
+
+`--force` still works for one release and warns, so nothing breaks mid-cycle.
+Then it is deleted — it does **not** survive as an alias for either half, since
+an alias that still spells two decisions is the defect.
 
 ### Fix a bug in your own landed work
 

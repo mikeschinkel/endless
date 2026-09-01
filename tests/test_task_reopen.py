@@ -332,8 +332,17 @@ def test_any_session_can_claim_a_reopened_task(project_at_cwd):
     )[0]["status"] == "underway"
 
 
-def test_spawn_no_flag_unverified_keeps_force_error(project_at_cwd, monkeypatch):
-    """`task spawn` on unverified still points at --force (not --reopen)."""
+def test_spawn_no_flag_unverified_names_the_reopen_route(project_at_cwd, monkeypatch):
+    """`task spawn` on unverified routes to a reopen, not to a flag.
+
+    E-1968 made this point at `--force` rather than `--reopen`; E-2093 removed
+    the demotion bypass from both verbs, so what a settled task costs to pick
+    back up is now an explicit status transition — the same one `claim`'s
+    refusal names, so the two verbs stop disagreeing.
+
+    `--revisit` stays out: it is a `session goto` flag, and it is offered only
+    on the reopenable subset. `unverified` is not in it.
+    """
     from endless.task_cmd import spawn_plan
 
     monkeypatch.setenv("TMUX", "fake")
@@ -347,5 +356,37 @@ def test_spawn_no_flag_unverified_keeps_force_error(project_at_cwd, monkeypatch)
         spawn_plan(1610)
     msg = str(exc.value)
     assert "unverified" in msg
-    assert "--force" in msg
+    assert "endless task update E-1610 --status revisit" in msg
+    assert "endless task spawn E-1610" in msg
+    assert "--force" not in msg
     assert "--revisit" not in msg
+
+
+def test_spawn_force_still_demotes_but_warns(project_at_cwd, monkeypatch, capsys):
+    """E-2093: `spawn --force` works for one release and warns as it goes.
+
+    It only ever spelled the status demotion — unlike `claim --force`, which
+    spelled a second decision too — so its warning names one replacement route,
+    not two.
+    """
+    from endless.task_cmd import spawn_plan
+
+    monkeypatch.setenv("TMUX", "fake")
+
+    _insert_task(
+        pk=1611, project_id=project_at_cwd["project_id"],
+        status="unverified", text="plan",
+    )
+
+    # The launcher cannot open a window against a fake $TMUX, so the spawn
+    # itself dies downstream. What is being pinned is upstream of that: the
+    # warning fired, and the settled-status gate let the call through.
+    with pytest.raises(Exception):
+        spawn_plan(1611, force=True)
+
+    err = capsys.readouterr().err
+    assert "`endless task spawn --force` is deprecated" in err
+    assert "endless task update E-1611 --status revisit" in err
+    assert db.query(
+        "SELECT status FROM tasks WHERE id = 1611"
+    )[0]["status"] == "underway"

@@ -260,6 +260,27 @@ func runClaude(args []string) (err error) {
 		return fmt.Errorf("touching session: %w", err)
 	}
 
+	// The wake (E-2093), beside the touch and before any event-specific
+	// branching, because this is the ONE point every turn reaches whatever
+	// entry point began it. Not in the UserPromptSubmit handler: a turn begun
+	// from a `!` bash-input fires no UserPromptSubmit, so waking there alone
+	// would reproduce the stranding bug in a narrower, harder-to-see form.
+	//
+	// A hook event is the "observed acting" half of monitor.WakeSession's rule
+	// — TouchSession cannot assert it, because a sibling shell pane reaches
+	// that helper on a session's behalf. Here, the session itself is what
+	// fired.
+	//
+	// Runs for `Stop` too, which then idles the session a few lines below. That
+	// is correct rather than a race: the session IS working while it processes
+	// Stop, and idle is the state the turn should end in.
+	//
+	// Non-fatal. A failed wake costs a stale state that the next event fixes;
+	// failing the hook over it would take the session down instead.
+	if err := monitor.WakeSession(payload.SessionID); err != nil {
+		log.Printf("waking session %s: %v", payload.SessionID, err)
+	}
+
 	// Publish this session's UUID to the tmux window so sibling shell panes
 	// can discover and resolve it under --db sandbox (E-1585). Best-effort,
 	// every event, to self-heal after a tmux server restart.
@@ -836,6 +857,15 @@ const (
 	scopeTask     = "task"
 )
 
+// The session states the declaration gate reasons about. Named here so the
+// admission rule and the refusal that explains it cannot spell them differently
+// (E-2093).
+const (
+	stateWorking    = "working"
+	stateIdle       = "idle"
+	stateNeedsInput = "needs_input"
+)
+
 func handlePreToolUse(projectID int64, isRegistered bool, payload claudePayload) error {
 	// E-1226: refuse `sqlite3 .endless/...` regardless of registration —
 	// the antipattern is file-pattern-specific, not project-state-specific,
@@ -901,29 +931,104 @@ func handlePreToolUse(projectID int64, isRegistered bool, payload claudePayload)
 		return nil
 	}
 
-	// Check for active session
+	// The declaration gate (E-2093 rewrote what it asks).
+	//
+	// It used to admit `state == 'working'` and nothing else. That is a proxy
+	// for the question it actually wants answered — "has this session declared
+	// what it is working on?" — and the proxy expired at the end of every turn,
+	// because `Stop` sets `idle` and (until E-2093) nothing set `working` back.
+	// A session that finished one clean turn could never write again.
+	//
+	// `sessions.task_id` is the durable answer: it is set at claim, write-once
+	// under ED-1560, and stays true for the session's lifetime. So the gate
+	// admits a session that HOLDS A TASK and is live-and-acting — `working`, or
+	// `idle` because its state has not caught up yet. A write from an idle
+	// session is by definition mid-turn (writes only happen inside turns), so
+	// the state is stale, not the agent. With the TouchSession wake in place
+	// this idle arm is belt-and-braces; it is what keeps a wake that is somehow
+	// missed from stranding anyone again.
+	//
+	// Two cases are still refused, and they are the ones the gate exists for:
+	// a session that has declared nothing, and `needs_input`, which means a
+	// human was asked something and has not answered.
 	session, err := monitor.GetActiveSession(payload.SessionID)
-	if err == nil && session != nil {
-		if session.State == "working" {
-			// Check expiration
-			if monitor.IsSessionExpired(session, 30) {
-				blockToolUse("Your work session has expired due to inactivity.\n\n" +
-					"Run `endless task claim <id>` to resume working on a task.\n" +
-					"Run `endless task show` to see available tasks.")
-			}
-			// Active and valid — allow through (per-event TouchSession in
-			// runClaude already refreshed last_activity).
-			return nil
-		}
+	if err != nil {
+		session = nil
+	}
+	if sessionMayWrite(session) {
+		return nil
 	}
 
-	// No active session — block with helpful message
+	blockToolUse(declarationRefusal(projectID, session))
+	return nil // unreachable, blockToolUse calls os.Exit
+}
+
+// sessionMayWrite is the declaration gate's admission rule, stated as the rule
+// rather than as a list of states that happened to be enumerated.
+//
+// A session may write when it has DECLARED what it is working on and is
+// live-and-acting. The declaration is `sessions.task_id` — set at claim,
+// write-once under ED-1560, true for the session's lifetime. Acting is
+// `working` or `idle`: a write from an idle session is by definition mid-turn,
+// because writes only happen inside turns, so `idle` at this moment means the
+// state has not caught up rather than that the session is away.
+//
+// `needs_input` is not acting — a human was asked something and has not
+// answered — and a session holding no task has declared nothing. Both are
+// refused, and they are the two cases the gate exists for.
+//
+// nil (no row could be read) is the undeclared case.
+func sessionMayWrite(s *monitor.SessionInfo) bool {
+	if s == nil || s.TaskID == nil {
+		return false
+	}
+	switch s.State {
+	case stateWorking, stateIdle:
+		return true
+	}
+	return false
+}
+
+// declarationRefusal composes the message for a write the declaration gate
+// turned down. It exists so the two refusals stay DISTINCT: one message served
+// both until E-2093, and it was wrong for one of them — an idle session holding
+// a task was told it had "no active work session", which was false, and pointed
+// at `task claim`, which refuses on status before it ever reaches the question
+// of who holds the task.
+//
+// The rule both branches obey: name a command that works FROM THE STATE THAT
+// PRODUCED THE REFUSAL. Nothing here offers `--force`; repairing a session
+// field by demoting a task is the trade E-2093 removed.
+//
+// `session` is nil when no row could be read at all, which is the same
+// undeclared case as a row holding no task.
+func declarationRefusal(projectID int64, session *monitor.SessionInfo) string {
+	var msg strings.Builder
+
+	if session != nil && session.TaskID != nil {
+		// Declared, but in a state that cannot write. Say which state, and do
+		// not describe a state that was not checked — asserting `needs_input`
+		// unconditionally here would be the same defect in a new place.
+		fmt.Fprintf(&msg, "BLOCKED: this session holds E-%d but is in state '%s'.\n",
+			*session.TaskID, session.State)
+		msg.WriteString("The task IS declared — it is the session state that cannot write.\n\n")
+		if session.State == stateNeedsInput {
+			msg.WriteString("`needs_input` means you asked your user something and the answer " +
+				"has not arrived.\nAsk again in your reply and wait for it; their next " +
+				"message clears this state.\nThere is no command for you to run.\n")
+		} else {
+			msg.WriteString("End the turn and say so in your reply; your user's next message " +
+				"clears this state.\nDo NOT re-claim the task — it is already yours, and " +
+				"re-claiming repairs a session\nfield by changing a task's status.\n")
+		}
+		return msg.String()
+	}
+
 	projectName, _ := monitor.GetProjectName(projectID)
 	items, _ := monitor.GetActiveTasks(projectID)
 
-	var msg strings.Builder
-	fmt.Fprintf(&msg, "BLOCKED: No active work session for project '%s'.\n", projectName)
-	msg.WriteString("You must register which task you're working on before making changes.\n\n")
+	fmt.Fprintf(&msg, "BLOCKED: this session has not declared a task in project '%s'.\n", projectName)
+	msg.WriteString("Say what you're working on before changing it.\n\n")
 
 	if len(items) > 0 {
 		msg.WriteString("Available tasks:\n")
@@ -945,8 +1050,7 @@ func handlePreToolUse(projectID int64, isRegistered bool, payload claudePayload)
 	msg.WriteString("  endless task show         — see all available tasks\n")
 	msg.WriteString("  endless task chat         — start a chat-only session (no task tracking)\n")
 
-	blockToolUse(msg.String())
-	return nil // unreachable, blockToolUse calls os.Exit
+	return msg.String()
 }
 
 // blockToolUse writes an error to stderr and exits with code 2.

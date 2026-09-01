@@ -304,6 +304,15 @@ func GetActiveSession(sessionID string) (*SessionInfo, error) {
 // DIFFERENT session_id and takes the INSERT path, so a prior occupant's ended
 // row stays ended (E-1530).
 //
+// It does NOT wake an idle session; WakeSession does, and the split is
+// deliberate (E-2093). TouchSession is reached by callers that are NOT the
+// session — EnsureClaudeSessionID resolves a Claude session's row on behalf of
+// a SIBLING SHELL pane reading the window's UUID, and that caller has observed
+// nothing about whether the session is acting. A wake in here would fire on
+// every `endless` command a human ran in the shell pane (and on every repaint
+// of the monitor pane beside it), so an idle session would read as `working`
+// forever. See WakeSession for where the rule lives instead.
+//
 // This helper no longer performs collision invalidation; see the note at the
 // commit below for why that write is gone rather than fixed.
 //
@@ -366,6 +375,75 @@ func TouchSession(sessionID, platform, process string, projectID int64) error {
 	// readers order by last_activity. No liveness heuristic, no recency window,
 	// and — the point — no write that can end a session nobody observed dying.
 	return tx.Commit()
+}
+
+// WakeSession is the missing half of `Stop` (E-2093).
+//
+// `Stop` marks a session `idle` at the end of every turn. Nothing marked it
+// `working` again, so a session that completed one clean turn stayed `idle` for
+// the rest of its life — and the PreToolUse gate, which admitted `working`
+// alone, then refused every write it attempted. Two sessions were stranded that
+// way, and neither had a command that could recover: `task claim` refuses on
+// status first, and `--force` cleared that only by demoting the task.
+//
+// The rule it implements is "a session holding a task, observed acting, is
+// working", stated that way so a future entry point inherits it:
+//
+//   - OBSERVED ACTING is the caller's assertion, which is why this is a
+//     separate verb rather than a clause inside TouchSession. Only a hook event
+//     is evidence that THIS session did something; TouchSession is also reached
+//     on a session's behalf by a sibling shell pane, which has observed nothing.
+//   - HOLDING A TASK is the precondition, checked in the same statement that
+//     writes. It restores a declaration already made and must never manufacture
+//     one, so a session that never claimed is left exactly as it was — that is
+//     the case the gate exists to refuse.
+//
+// `needs_input` is deliberately not woken: it means a human was asked something
+// and has not answered, and only the human answering ends it. Waking it would
+// erase the one state that says a session is waiting on a person. `ended` is
+// not woken either — an incoming event revives it to `needs_input` in
+// TouchSession, and reviving a dead row into work is `bind`'s job.
+//
+// Caller placement matters as much as the rule. It belongs at the single
+// per-event point every turn reaches, NOT in the UserPromptSubmit handler: a
+// turn begun from a `!` bash-input fires no UserPromptSubmit, so waking there
+// alone would reproduce the same bug in a narrower and harder-to-see form.
+// `hook claude` calls it beside TouchSession, before any event-specific
+// branching, so every event of every turn goes through it.
+//
+// Idempotent and self-conditioning: the WHERE clause is the whole rule, so a
+// second call is a no-op and there is no read-then-write window. RowsAffected
+// is what says the transition happened, which is also what gates the log —
+// `sessions` is not journaled, so without that line the idle→working edge would
+// have no history at all.
+func WakeSession(sessionID string) error {
+	db, err := DB()
+	if err != nil {
+		return err
+	}
+	snap := SnapshotSession(sessionID)
+	res, err := db.Exec(
+		`UPDATE sessions SET state = 'working'
+		  WHERE session_id = ? AND state = 'idle' AND task_id IS NOT NULL`,
+		sessionID,
+	)
+	if err != nil {
+		return fmt.Errorf("wake session: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil || n == 0 {
+		return nil
+	}
+	LogSessionTxn(SessionTxn{
+		SessionGUID: sessionID,
+		OldState:    snap.State,
+		NewState:    "working",
+		OldTaskID:   snap.TaskID,
+		NewTaskID:   snap.TaskID, // the wake does not change task_id
+		Reason:      SessionLogWake,
+		Caller:      "monitor.WakeSession",
+	})
+	return nil
 }
 
 // EnsureClaudeSessionID looks up (or lazy-creates) the integer sessions.id
@@ -505,17 +583,19 @@ func EndSession(sessionID string) error {
 	return nil
 }
 
-// IsSessionExpired returns true if the session's last activity is older than timeoutMinutes.
-func IsSessionExpired(s *SessionInfo, timeoutMinutes int) bool {
-	if s.LastActivity == "" {
-		return true
-	}
-	t, err := time.Parse("2006-01-02T15:04:05", s.LastActivity)
-	if err != nil {
-		return true
-	}
-	return time.Since(t) > time.Duration(timeoutMinutes)*time.Minute
-}
+// IsSessionExpired was deleted by E-2093 along with its only caller.
+//
+// The PreToolUse gate used to refuse a `working` session whose `last_activity`
+// was over 30 minutes old, with "your work session has expired due to
+// inactivity". That branch had been unreachable since E-1426 put a per-event
+// TouchSession at the top of every hook invocation: by the time the gate reads
+// the row, `last_activity` is always the current instant. It could not fire,
+// and it named `endless task claim <id>` — a command that refuses on status
+// before it reaches the question the refusal was about.
+//
+// Nothing replaces it. Liveness is answered by observing the pane
+// (internal/monitor/liveness.go), not by a timestamp the hook itself keeps
+// resetting.
 
 // GetTrackingMode returns the tracking enforcement level for a project.
 // Returns "enforce" (default for registered), "track", or "off".
