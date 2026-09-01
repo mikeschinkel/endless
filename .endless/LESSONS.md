@@ -4794,3 +4794,13 @@ Test before rephrasing to satisfy a guard: would I write it this way if the guar
 
 Evidence added to E-1794, which already proposes leading its message with --allow-path — the ordering does not merely bury the flag, it selects against it.
 - **Project**: endless
+
+### [2026-08-31] Never write file:line into a plan or analysis — name the symbol instead
+Mike: hardcoded line numbers in a plan are VERBOTEN in Endless BECAUSE THEY DRIFT, and the spawning session has the intelligence to find the line numbers in the code in its own worktree.
+
+A plan is read by a session working in a worktree that may be hundreds of commits from where the plan was written. 'src/endless/session_cmd.py:1050' is a fact with a shelf life of about one commit to that file; 'the tmux list-panes call inside _tmux_window_pane_ids' stays true until the function is renamed, and a session can locate it in one grep. Writing the number transfers a stale fact instead of a durable one, and the reader cannot tell it has gone stale — it just lands on the wrong line and either follows it or has to re-derive the location anyway.
+
+The rule: name the file plus the SYMBOL (function, type, const, test name, or a distinctive string). Never file:line. This applies to plans, to analysis, and to task descriptions — anything a later session reads as instruction. Same reasoning as the E-1073 constraint that analysis carries no time-frozen specifics like byte counts.
+
+Measured while recording this: 129 of 412 plan files in .endless/plans/ carry file:line references, including recent ones (E-2001, E-2063, E-2081). So this is the house norm being stated, not a one-off slip — and it is a candidate for a lint gate in the same shape as E-1760's.
+- **Project**: endless
