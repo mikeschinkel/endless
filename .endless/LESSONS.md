@@ -4873,3 +4873,15 @@ composed predicate rather than adding a fourth spelling of the same question —
 that module's own history is two prior consolidations of exactly this
 duplication (E-1966, E-2006).
 - **Project**: endless
+
+### [2026-09-01] Filing a follow-up task is still authoring durable content — no open questions in its description or analysis
+While working E-1976 I deferred permission-prompt detection and filed it as E-2091. Its description ended 'decide the mechanism (Claude Code's Notification hook vs. inferring a stall from last_activity age)' and its analysis laid out 'Two candidate mechanisms: 1... 2...' as a menu. Mike: that violates the prohibition on leaving open questions in descriptions and plans unless he specifically allows it.
+
+What is NEW here: I already knew the rule for PLANS and had been applying it. I did not carry it across to a task I was FILING. Filing felt like note-taking — 'capture it before it is lost' — so I wrote down the state of my thinking, menu and all. But a filed task is durable content the same way a plan is, and worse in one respect: a plan gets read again by me in the same session, while a filed task is read cold by whoever picks it up, with the deciding context gone.
+
+The specific self-deception: I had ASKED Mike about this mechanism earlier in the session (AskUserQuestion, three options, Notification hook recommended). He answered the SCOPE question — ship without it, file separately — and that answer felt like it covered the mechanism too. It did not. An answer to 'should we do this now' is not an answer to 'how'. Having asked once, I treated the remaining fork as handled and let it flow into the artifact.
+
+The rule, restated to cover the case I missed: any durable artifact I author — plan, description, analysis, decision, outcome — states decisions, not choices. When I hit a genuine fork while FILING, ask it right then, the same as I would mid-plan. Do not write the fork down and file it. Do not silently pick either.
+
+Test to apply before every 'endless task add': read the description and analysis back and look for 'decide', 'vs.', 'candidate', 'either/or', 'TBD', or a numbered list of alternatives. Any of those means I am handing a decision forward instead of making it or asking for it.
+- **Project**: endless
