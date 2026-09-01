@@ -46,8 +46,8 @@
 #   5. A task with neither form names BOTH filenames in its error.
 #   6. The refusal fires on a landed foreign suite, in either form, and does NOT
 #      fire on the caller's own task — by worktree or by session.
-#   7. The marker works: a suite sourcing the harness passes under the runner
-#      and refuses a bare direct run, naming the runner.
+#   7. A suite sourcing the harness passes under the runner, and a bare direct
+#      run of it is refused by the guard, naming the runner.
 #   8. The E-2071 shape — a glob over the suite directory — is unreachable.
 #   9. _harness.sh and CLAUDE.md sitting beside the per-task directories do not
 #      confuse discovery and are not discoverable as tasks.
@@ -61,8 +61,9 @@
 #      verifies from its own worktree, by id and with no id.
 #  14. A freshly registered project has .endless/tasks/CLAUDE.md, and
 #      re-registering neither duplicates nor overwrites a customized one.
-#  15. EVERY suite in the corpus refuses a direct run, and refuses it before
-#      executing a single line of its own.
+#  15. EVERY suite in the corpus refuses a direct run, before executing a line
+#      of its own — foreign suites on ownership, this worktree's own on
+#      isolation.
 #  16. $ENDLESS_VERIFY_DIR reaches BOTH suite forms, and no manifest hand-writes
 #      its own directory any more.
 #  17. `endless task verify` is sufficient by itself: it resolves the task from
@@ -168,7 +169,11 @@ mkdir -p "${FIX}" || setup_error "could not create ${FIX}"
 new_project() {
     local root="${FIX}/$1"
     mkdir -p "${root}/.endless/tasks"
+    # Both files, always. _harness.sh sources _guard.sh as its first act and
+    # exits 2 when it is not beside it, so a fixture carrying only the harness
+    # would refuse for a reason this suite is not testing (E-2090).
     cp "${WT}/.endless/tasks/_harness.sh" "${root}/.endless/tasks/_harness.sh"
+    cp "${WT}/.endless/tasks/_guard.sh" "${root}/.endless/tasks/_guard.sh"
     printf '%s\n' "${root}"
 }
 
@@ -241,7 +246,8 @@ add_script "${P4}" "e-401" "${PASSING_RAW}"
 add_script "${P4}" "e-402" "${FAILING_RAW}"
 
 # The reference verdict: what the script does when executed directly, which is
-# what it did before the move. It carries no marker check, so it still runs.
+# what it did before the move. It sources nothing, so no guard stands in its
+# way and it still runs.
 "${P4}/.endless/tasks/e-401/verify.sh" >/dev/null 2>&1; direct_pass=$?
 "${P4}/.endless/tasks/e-402/verify.sh" >/dev/null 2>&1; direct_fail=$?
 
@@ -294,6 +300,7 @@ else
     OWNER="${FIX}/proj/.endless/worktrees/e-500"
     mkdir -p "${OWNER}/.endless/tasks"
     cp "${WT}/.endless/tasks/_harness.sh" "${OWNER}/.endless/tasks/_harness.sh"
+    cp "${WT}/.endless/tasks/_guard.sh" "${OWNER}/.endless/tasks/_guard.sh"
     add_script "${OWNER}" "e-500" "${PASSING_RAW}"
     add_script "${OWNER}" "e-600" "${PASSING_RAW}"
     add_manifest "${OWNER}" "e-601" "${M_OK//E-301/E-601}"
@@ -378,7 +385,7 @@ else
 fi
 
 # ── 7. the marker ───────────────────────────────────────────────────────────
-section "7. The harness marker"
+section "7. A harness-sourcing suite runs under the runner and nowhere else"
 
 P7="$(new_project marker)"
 HARNESSED='#!/usr/bin/env bash
@@ -395,15 +402,48 @@ verify_in "${P7}" E-701; rc_h=$?
 assert_eq "a harness-sourcing suite passes under the runner" "0" "${rc_h}"
 assert_contains "its assertions are normalized individually" "2 passed (2 tests)" "${LAST_OUT}"
 
-direct_out="$(env -u ENDLESS_VERIFY_RUN -u ENDLESS_VERIFY_TAP \
+# A direct run is refused on either of the guard's two grounds, and both are
+# exercised here because each is reachable on its own. Neither is a claim the
+# caller makes about itself — that was the retired marker's flaw, and its
+# absence is asserted elsewhere (tests/test_suite_guard.py); do not reintroduce
+# it to make anything here pass.
+
+# Arm 2, NOT ISOLATED: a hand-run with a real config reachable. This is what a
+# person or an agent actually does, and the case the arm exists for. HOME is
+# pointed at a fixture holding a config dir, since this suite is itself running
+# under the runner's isolated HOME, where nothing is reachable.
+REAL_HOME="${FIX}/realhome"
+mkdir -p "${REAL_HOME}/.config/endless"
+direct_out="$(env -u ENDLESS_VERIFY_TAP -u XDG_CONFIG_HOME HOME="${REAL_HOME}" \
     "${P7}/.endless/tasks/e-701/verify.sh" 2>&1)"; rc_direct=$?
 if (( rc_direct != 0 )); then
-    report_pass "running it directly is refused, non-zero"
+    report_pass "a hand-run with a reachable config is refused, non-zero"
 else
-    report_fail "running it directly is refused" "non-zero" "0"
+    report_fail "a hand-run with a reachable config is refused" "non-zero" "0"
 fi
 assert_contains "the refusal names the runner" "endless task verify" "${direct_out}"
 assert_contains "and points at the rules" ".endless/tasks/CLAUDE.md" "${direct_out}"
+assert_not_contains "and nothing ran" "2 passed" "${direct_out}"
+
+# Arm 1, NOT YOURS: the same suite sitting in another task's worktree. Both
+# facts come from the file's own path, so this refuses even under the runner's
+# isolation — which is why the id in the path, not the environment, is what
+# makes it un-forgeable.
+FOREIGN="${FIX}/wt/.endless/worktrees/e-702"
+mkdir -p "${FOREIGN}/.endless/tasks/e-701"
+cp "${WT}/.endless/tasks/_harness.sh" "${FOREIGN}/.endless/tasks/_harness.sh"
+cp "${WT}/.endless/tasks/_guard.sh" "${FOREIGN}/.endless/tasks/_guard.sh"
+printf '%s' "${HARNESSED}" > "${FOREIGN}/.endless/tasks/e-701/verify.sh"
+chmod +x "${FOREIGN}/.endless/tasks/e-701/verify.sh"
+foreign_out="$(env -u ENDLESS_VERIFY_TAP "${FOREIGN}/.endless/tasks/e-701/verify.sh" 2>&1)"
+rc_foreign=$?
+if (( rc_foreign != 0 )); then
+    report_pass "the same suite in another task's worktree is refused, non-zero"
+else
+    report_fail "the same suite in another task's worktree is refused" "non-zero" "0"
+fi
+assert_contains "the refusal names whose suite it is and where it is sitting" \
+    "E-701's verification suite from E-702's worktree" "${foreign_out}"
 
 # ── 9. shared files beside the task directories ─────────────────────────────
 section "9. _harness.sh and CLAUDE.md are not tasks"
@@ -564,31 +604,49 @@ section "15. Every suite refuses a direct run"
 # The plan deferred this: existing suites were to stay directly runnable, with
 # only the runner and E-1916's hook guarding them. Mike overruled it, and he was
 # right — "the enforcement point moved from 200 places to one" is only true if
-# the 200 cannot still be reached individually. Each suite now sources the
-# harness as its FIRST executable statement, so a direct run refuses before the
-# script's own code exists, which is also what makes this check safe to run on
-# all 200 of them.
-refused=0; ran=0; leaked=0
+# the 200 cannot still be reached individually.
+#
+# E-2090 then replaced this task's ENDLESS_VERIFY_RUN marker with an
+# un-forgeable guard, and it refuses on TWO grounds with two different messages.
+# Read from this worktree, every suite hits exactly one of them, and which one
+# is decided by whose suite it is:
+#
+#   - a FOREIGN suite (its directory names a task that is not this worktree's)
+#     refuses on ownership, before it can consider anything else;
+#   - THIS worktree's own suite passes ownership and refuses on isolation,
+#     because a real Endless config is reachable from a hand-run shell.
+#
+# Asserting one message for both would pass for the wrong reason on 205 of the
+# 206 — which is exactly what this check did until E-2090 landed, and what its
+# session flagged rather than let stand.
+own=0; foreign=0; ran=0; leaked=0
 for s in "${WT}"/.endless/tasks/e-*/verify.sh; do
-    out="$(env -u ENDLESS_VERIFY_RUN -u ENDLESS_VERIFY_TAP -u ENDLESS_VERIFY_TASK \
+    id="$(basename "$(dirname "${s}")")"; id="${id#e-}"
+    out="$(env -u ENDLESS_VERIFY_TAP -u ENDLESS_VERIFY_TASK \
         "${s}" 2>&1)"; rc=$?
-    if [[ ${rc} -ne 0 && "${out}" == *"must be run through the verify runner"* ]]; then
-        refused=$((refused + 1))
+    if (( rc == 0 )); then
+        ran=$((ran + 1))
+        [[ ${ran} -le 3 ]] && printf '      %sran:%s %s\n' "${DIM}" "${RESET}" "${s#${WT}/}"
+    elif [[ "${id}" == "2023" && "${out}" == *"must be run through the verify runner"* ]]; then
+        own=$((own + 1))
+    elif [[ "${id}" != "2023" && "${out}" == *"verification suite from E-2023's worktree"* ]]; then
+        foreign=$((foreign + 1))
     else
         ran=$((ran + 1))
-        [[ ${ran} -le 3 ]] && printf '      %snot refused:%s %s (rc=%d)\n' \
-            "${DIM}" "${RESET}" "${s#${WT}/}" "${rc}"
+        [[ ${ran} -le 3 ]] && printf '      %swrong refusal:%s %s → %s\n' \
+            "${DIM}" "${RESET}" "${s#${WT}/}" "$(printf '%s' "${out}" | head -1)"
     fi
     # A suite that got as far as its own first check would have printed one.
     [[ "${out}" == *"✓"* || "${out}" == *"✗"* ]] && leaked=$((leaked + 1))
 done
 assert_eq "no suite in the corpus can be run directly" "0" "${ran}"
-if (( refused > 150 )); then
-    report_pass "all ${refused} suites refuse, naming the runner"
+if (( foreign > 150 )); then
+    report_pass "${foreign} foreign suites refuse on OWNERSHIP, naming both tasks"
 else
-    report_fail "the whole corpus refuses" "more than 150 suites" "${refused}"
+    report_fail "the foreign corpus refuses on ownership" "more than 150 suites" "${foreign}"
 fi
-assert_eq "and none of them executed a check before refusing" "0" "${leaked}"
+assert_eq "and this worktree's own suite refuses on ISOLATION, naming the runner" "1" "${own}"
+assert_eq "none of them executed a check before refusing" "0" "${leaked}"
 
 # ── 16. the suite directory reaches both forms ──────────────────────────────
 section "16. \$ENDLESS_VERIFY_DIR, in both suite forms"
