@@ -123,6 +123,53 @@ def test_tmux_multiple_siblings(registered_with_sessions, monkeypatch, capsys):
     assert "Multiple sibling Claude panes" in err
 
 
+def test_tmux_window_pane_ids_scopes_by_calling_pane(monkeypatch):
+    """`_tmux_window_pane_ids` invokes tmux with `-t $TMUX_PANE` so the
+    lookup follows the calling pane's window — not whichever window the
+    user happens to have focused. Regression coverage for the fix
+    landed under E-1395; the original bug is E-1115.
+
+    Without `-t`, `tmux list-panes` resolves against tmux's currently
+    active pane in the user's client, not the pane of the calling
+    process — so a subprocess spawned from pane %150 saw panes for
+    whichever window the user was focused on at that instant, silently
+    misattributing claim/bind/emit_event session resolution.
+    """
+    import subprocess
+    monkeypatch.setenv("TMUX", "/tmp/x")
+    monkeypatch.setenv("TMUX_PANE", "%53")
+
+    captured: dict = {}
+    def fake_run(cmd, **kw):
+        captured["cmd"] = cmd
+        return subprocess.CompletedProcess(cmd, 0, stdout="%53\n%99\n", stderr="")
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    panes = session_cmd._tmux_window_pane_ids()
+
+    assert panes == ["%53", "%99"]
+    assert captured["cmd"] == [
+        "tmux", "list-panes", "-t", "%53", "-F", "#{pane_id}",
+    ]
+
+
+def test_tmux_window_pane_ids_returns_none_outside_tmux(monkeypatch):
+    monkeypatch.delenv("TMUX", raising=False)
+    monkeypatch.delenv("TMUX_PANE", raising=False)
+
+    assert session_cmd._tmux_window_pane_ids() is None
+
+
+def test_tmux_window_pane_ids_returns_none_when_pane_unset(monkeypatch):
+    """TMUX set but TMUX_PANE missing: refuse to guess — callers fall
+    through their existing "no resolution" paths rather than silently
+    misattributing. (E-1395.)"""
+    monkeypatch.setenv("TMUX", "/tmp/x")
+    monkeypatch.delenv("TMUX_PANE", raising=False)
+
+    assert session_cmd._tmux_window_pane_ids() is None
+
+
 def test_no_tmux_no_arg_errors(registered_with_sessions, monkeypatch, capsys):
     _, sessions_dir, stage = registered_with_sessions
     stage()
