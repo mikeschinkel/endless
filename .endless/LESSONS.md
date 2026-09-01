@@ -4992,3 +4992,40 @@ That is worse than staying silent about drawbacks. A fabricated con costs the re
 
 Rule: state a cost only when I can say what it costs and in what units — latency, tokens, a behaviour someone loses, a decision that becomes harder to reverse. 'It changes something shared' is a category, not a cost. When an option has no meaningful downside, say so plainly and let the recommendation stand on its merits. Balance is not a writing style to perform; it is whatever the evidence happens to be.
 - **Project**: endless
+
+### [2026-09-01] I read a companion file's created_at as the directory's age and wrote the wrong finding into a plan
+Mike: "E-1115 was filed a long time ago, and just revisited today. So it was
+never provisioned."
+
+I had reported the opposite, in a plan another session would implement: that
+some worktree-creation path is still producing sandbox-less worktrees today, and
+that the implementer should hunt for it. My whole basis was one field —
+`created_at: 2026-09-01T02:29` in that worktree's `.endless/worktree.json`.
+
+Corroborating it takes one command and settles it the other way:
+
+    dir birth : 2026-05-02      <- the worktree itself, pre-sandbox era
+    json birth: 2026-08-31      <- the companion file, rewritten by the revisit
+
+A field named `created_at` in a companion file records when that FILE was
+written, and a revisit rewrites it. I read the label as the fact.
+
+Two things make this worse than a wrong guess:
+
+- It was surprising. "A bug is still producing broken worktrees right now"
+  contradicted the 25 other cases, which were all plainly legacy. A conclusion
+  that breaks the pattern of its own evidence needs a second source before it is
+  written down, not after someone objects.
+- It was load-bearing in a durable artifact. It would have sent an implementing
+  session looking for a defect that does not exist, and it sat in the plan under
+  "find that path during implementation."
+
+The rule: before a single field becomes a claim in a plan, a decision, or a
+report, corroborate it with an independent signal. Here: stat the directory, or
+read the branch's first commit. Both were one command away and both said May.
+
+Related to the lesson about reasoning from filtered views, but not the same
+fault — there I never opened the file. Here I opened it and trusted a label
+inside it. The common thread is one source, no second look, and a conclusion
+stated with more confidence than its evidence carried.
+- **Project**: endless
