@@ -286,6 +286,7 @@ def _resume_decision(
     label: str,
     eid: int,
     task: int | None,
+    project: int | None,
     decision_out: dict | None,
     **fields,
 ) -> tuple[str, str, str, int]:
@@ -295,6 +296,10 @@ def _resume_decision(
     of them (E-1918) — the plain path included, which is what makes the whole
     command testable without exec'ing `claude`. `setdefault` leaves fields an
     earlier step already decided (`_recover_dropped_worktree`'s recovery block).
+
+    `project_id` rides along (E-2104) because the resolved target is also what
+    `resume_session` re-binds the tmux window to, and the window identity spawn
+    publishes is task AND project.
     """
     if decision_out is not None:
         decision_out.update({
@@ -303,6 +308,7 @@ def _resume_decision(
             "worktree": worktree,
             "label": label,
             "task_id": task,
+            "project_id": project,
         })
         decision_out.update(fields)
         decision_out.setdefault("recovered", False)
@@ -344,6 +350,7 @@ def _resolve_resume(
     worktree = target.get("worktree_path") or ""
     eid = target.get("endless_id")
     task = target.get("task_id")
+    project = target.get("project_id")
     label = f"E-{task}" if task else f"session {eid}"
 
     # E-1889: refuse `--reopen` on a decision-bearing status before anything
@@ -368,7 +375,9 @@ def _resolve_resume(
         )
 
     if worktree and os.path.isdir(worktree):
-        return _resume_decision(uuid, worktree, label, eid, task, decision_out)
+        return _resume_decision(
+            uuid, worktree, label, eid, task, project, decision_out
+        )
 
     # No task at all: mint one, rather than refusing a session whose transcript
     # is intact (E-1918). The old refusal here blamed "a background agent that
@@ -377,7 +386,7 @@ def _resolve_resume(
     if task is None:
         worktree, task = _auto_task_for_taskless_session(target)
         return _resume_decision(
-            uuid, worktree, f"E-{task}", eid, task, decision_out,
+            uuid, worktree, f"E-{task}", eid, task, project, decision_out,
             created_task=True,
         )
 
@@ -393,7 +402,9 @@ def _resolve_resume(
         )
 
     worktree = _recover_dropped_worktree(target, intent, override, decision_out)
-    return _resume_decision(uuid, worktree, label, eid, task, decision_out)
+    return _resume_decision(
+        uuid, worktree, label, eid, task, project, decision_out
+    )
 
 
 def _resolve_recovery_base(
@@ -555,6 +566,47 @@ def _current_pane_task() -> tuple[int, int] | None:
     return eid, int(rows[0]["task_id"])
 
 
+def _bind_pane_window_options(
+    pane: str, task_id: int | None, project_id: int | None, uuid: str
+) -> None:
+    """Publish the `@endless_*` window identity for a session being resumed.
+
+    Shared by both resume surfaces. `session resume` execs in the CURRENT pane,
+    so the window it lands in keeps whatever options it already carried — a
+    spawned window's, naming a different session and a different task, or none
+    at all when the pane is the plain recovery shell resume is most often run
+    from. `session goto --resume` opens a brand-new window, which starts with no
+    options whatsoever. Everything that asks "what is this window working?"
+    reads them: `_current_pane_task`'s clobber gate, `session status` focal
+    resolution, and the hook's spawn-bind. Spawn has published them since the
+    launcher existed (internal/spawnlaunchcmd/tmux_driver.go); neither resume
+    path did, so a resumed window's identity was stale or absent (E-2104).
+
+    `@endless_session_uuid` is written here rather than left to the hook's
+    per-event self-heal (internal/hookcmd/claude.go): the self-heal only lands
+    once the resumed session's first event fires, and only if the hook is wired
+    in that worktree at all — the resolved UUID is already in hand, so waiting
+    on either is strictly worse.
+
+    `@endless_spawned_by` is deliberately untouched. It records which session
+    CREATED this window, and resume creates no window — it moves into one that
+    already exists, whoever made it.
+
+    Best-effort, exactly like the spawn launcher's own writes: no pane, or a
+    failing set-option, must not stop a recovery. The cwd-derived bind (E-1291)
+    still binds the resumed session from its worktree.
+    """
+    if not pane:
+        return
+    for key, value in (
+        ("@endless_task_id", "" if task_id is None else str(task_id)),
+        ("@endless_project_id", "" if not project_id else str(project_id)),
+        ("@endless_session_uuid", uuid),
+    ):
+        if value:
+            _tmux_run(["set-option", "-w", "-t", pane, key, value])
+
+
 def resume_session(
     ref: str,
     review: str | None = None,
@@ -591,6 +643,10 @@ def resume_session(
     session working a task: the exec replaces that session, and doing it to live
     work should be a decision, not a side effect. `--dry-run` never needs it —
     it does not reach the exec.
+
+    Because the exec replaces the pane's session, it also rewrites the window's
+    `@endless_*` identity to match the resumed target before launching
+    (E-2104) — see `_bind_pane_window_options`.
     """
     if review is not None and reopen is not None:
         raise click.ClickException(
@@ -630,6 +686,12 @@ def resume_session(
         f"• Resuming session {eid} ({label}) in {_short_path(worktree)} "
         f"→ claude --resume {uuid[:8]}…",
         err=True,
+    )
+    # After `_require_claude`, so a resume that cannot launch leaves the pane's
+    # identity as it found it.
+    _bind_pane_window_options(
+        os.environ.get("TMUX_PANE", ""),
+        decision.get("task_id"), decision.get("project_id"), uuid,
     )
     os.chdir(worktree)
     sys.stdout.flush()
@@ -2381,7 +2443,8 @@ def _resume_new_window_pane(
     said which task it held. The id comes from the resolved target rather than
     from the worktree path: `_resolve_resume` may have MINTED the task for a
     task-less session (E-1918), and `decision_out` is where it reports the one
-    it settled on.
+    it settled on — which is also what the window's `@endless_*` identity is
+    written from once it exists (E-2104).
     """
     import shlex
     from endless.task_cmd import tmux_window_name
@@ -2401,6 +2464,12 @@ def _resume_new_window_pane(
         click.echo("Could not open a new tmux window to resume.", err=True)
         raise SystemExit(1)
     pane = res.stdout.strip()
+    # The window is brand new, so it carries no `@endless_*` identity at all
+    # until we write one (E-2104) — same omission `session resume` had on the
+    # current pane, and the same fix.
+    _bind_pane_window_options(
+        pane, task, decision.get("project_id"), uuid
+    )
     return pane, f"--resume {rlabel} (new window)"
 
 

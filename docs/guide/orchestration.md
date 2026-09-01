@@ -450,6 +450,15 @@ The spawned session can discover its task ID from the tmux window variable:
 tmux show-window-options -v @endless_task_id    # prints the task ID
 ```
 
+Both resume paths publish the same identity, from the target they resolved:
+`session resume` writes `@endless_task_id`, `@endless_project_id` and
+`@endless_session_uuid` onto the pane it is about to exec in, and `session goto
+<ref> --resume` writes them onto the window it opens. Neither touches
+`@endless_spawned_by` — that names the session that *created* the window, and
+resume creates none. Before this, a resumed window kept whatever identity it
+already held: a different task's, when resume landed in a spawned window, or
+none at all, when it landed in a plain recovery shell.
+
 ### `--force` is going away
 
 `--force` on `task claim` spelled **two unrelated decisions**, and its help text
