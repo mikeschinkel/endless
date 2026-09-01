@@ -48,12 +48,21 @@ func emptyGuard(t *testing.T) *ReapGuard {
 	return newTestGuard(t, map[string]string{}, nil)
 }
 
+// guardWithTmuxWindows builds a guard whose tmux probe reports exactly these
+// window names.
+func guardWithTmuxWindows(t *testing.T, windows ...string) *ReapGuard {
+	t.Helper()
+	return newTestGuard(t, map[string]string{
+		"list-windows": strings.Join(windows, "\n") + "\n",
+	}, nil)
+}
+
+// guardWithTmux builds a guard seeing a window named for `name`'s task in the
+// form windows carry today (E-2102), plus one for an unrelated task.
 func guardWithTmux(t *testing.T, name string) *ReapGuard {
 	t.Helper()
 	id := strings.TrimPrefix(name, "e-")
-	return newTestGuard(t, map[string]string{
-		"list-windows": "endless_something[E-" + id + "]\nendless_other[E-9999]\n",
-	}, nil)
+	return guardWithTmuxWindows(t, "E-"+id, "E-9999")
 }
 
 func guardWithUnmerged(t *testing.T, name string) *ReapGuard {
@@ -139,6 +148,49 @@ func TestReapGuardProtectionConditions(t *testing.T) {
 			t.Fatal("a random-hex ephemeral name must not be worktree-protected")
 		}
 	})
+}
+
+// TestReapGuardTmuxWindowForms pins which window names spare a sandbox.
+//
+// The window name is the user's own record that a task is still in play, and
+// it is one of the two protections that outlive the worktree directory — so
+// the set of names that count is load-bearing, not cosmetic. E-2102 renamed
+// windows from `<project>_<slug>[E-NNNN]` to the bare id; both forms must
+// match, because windows named before the rename stay open until their
+// sessions end, and a guard that protected only the new ones would drop a
+// sandbox with no error and no signal.
+//
+// The negative cases are the other half: both forms are anchored to the whole
+// name, so a window that merely mentions an id in passing spares nothing.
+func TestReapGuardTmuxWindowForms(t *testing.T) {
+	tests := []struct {
+		name    string
+		window  string
+		protect bool
+	}{
+		{"the bare id windows carry today", "E-42", true},
+		{"the bracketed form from before E-2102", "endless_some-slug[E-42]", true},
+		{"an id merely mentioned in the name", "notes on E-42", false},
+		{"the id with anything after it", "E-42 scratch", false},
+		{"the bracketed id with anything after it", "endless_x[E-42] scratch", false},
+		{"a longer id that starts with it", "E-420", false},
+		{"the command name tmux used to fall back to", "claude", false},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			guard := guardWithTmuxWindows(t, tc.window)
+			protected, reason := guard.Protected("e-42")
+			if protected != tc.protect {
+				t.Fatalf("window %q: protected = %v (%s), want %v",
+					tc.window, protected, reason, tc.protect)
+			}
+			if protected && reason != reasonTmuxWindow {
+				t.Fatalf("window %q: reason = %q, want %q",
+					tc.window, reason, reasonTmuxWindow)
+			}
+		})
+	}
 }
 
 // TestReapGuardFailsClosed asserts a probe error surfaces rather than yielding

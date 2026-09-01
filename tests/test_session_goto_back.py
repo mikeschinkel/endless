@@ -244,6 +244,31 @@ def test_goto_resume_opens_new_window_when_not_live(
     assert "goto --resume" in capsys.readouterr().err
 
 
+def test_goto_resume_names_the_window_for_the_task(
+    goto_env, registered_project, monkeypatch
+):
+    """E-2102: the resumed window is named `E-NNNN` and nothing else.
+
+    Before, this call passed no `-n`, so tmux fell back to naming the window
+    after its command and every resumed window on screen read `claude`. The id
+    comes from the resolved target, not from the worktree path, because the
+    target may carry a task that was minted during resolution.
+
+    `internal/sandboxcmd/reapguard.go` reads this name back to decide which DB
+    sandboxes to spare, so it is an interface, not a label.
+    """
+    stage, make = goto_env
+    stage(endless_session_id=10, pane_id="%10", task_id=1465)
+    ft = make({"%10", "%cur"}, current_pane="%cur")
+    _stage_resumable(monkeypatch, registered_project)
+
+    session_cmd.session_goto("E-1748", resume=True)
+
+    argv = ft.new_windows[0]
+    assert "-n" in argv, f"the window must be named: {argv}"
+    assert argv[argv.index("-n") + 1] == "E-1748"
+
+
 def test_goto_resume_noop_when_live(goto_env, monkeypatch):
     stage, make = goto_env
     stage(endless_session_id=10, pane_id="%10", task_id=1465)

@@ -15,10 +15,44 @@ import (
 // sandbox has a random hex name and never matches.
 var sandboxTaskRe = regexp.MustCompile(`^e-(\d+)$`)
 
-// tmuxWindowTaskRe extracts the task ID a tmux window is dedicated to. Window
-// names follow endless_<slug>[E-NNNN]; the bracketed ID is the user's own
-// record that the task is still in play, and it outlives the worktree dir.
-var tmuxWindowTaskRe = regexp.MustCompile(`\[E-(\d+)]`)
+// tmuxWindowTaskRe extracts the task ID a tmux window is dedicated to. A
+// window name is the user's own record that the task is still in play, and it
+// outlives the worktree dir.
+//
+// Two forms are matched, because both are on screen at once:
+//
+//	E-NNNN                     what a window is named today (E-2102)
+//	<project>_<slug>[E-NNNN]   what it was named before E-2102 landed
+//
+// The old form stays because windows opened before the rename are still open
+// on the user's machine and age out only as their sessions end. A guard that
+// protected only the newly-named ones would be a guard with a migration-shaped
+// hole, and the sandbox it dropped would go without a word.
+//
+// Both alternatives are anchored to the whole name, so a window that merely
+// MENTIONS a task in passing does not spare that task's sandbox. Only one of
+// the two groups is populated per match; tmuxWindowTaskID picks the non-empty
+// one.
+var tmuxWindowTaskRe = regexp.MustCompile(`^(?:E-(\d+)|.*\[E-(\d+)])$`)
+
+// tmuxWindowTaskID returns the task ID in a tmux window name, or "" if the
+// name is not one of the forms tmuxWindowTaskRe recognizes.
+func tmuxWindowTaskID(name string) (id string) {
+	var match []string
+
+	match = tmuxWindowTaskRe.FindStringSubmatch(strings.TrimSpace(name))
+	if match == nil {
+		goto end
+	}
+
+	id = match[1]
+	if id == "" {
+		id = match[2]
+	}
+
+end:
+	return id
+}
 
 // taskBranchRe matches the branch naming convention task/NNNN-<slug>.
 var taskBranchRe = regexp.MustCompile(`^task/(\d+)-`)
@@ -187,7 +221,7 @@ end:
 func liveTmuxTasks() (names map[string]struct{}, err error) {
 	var out string
 	var line string
-	var match []string
+	var id string
 
 	names = make(map[string]struct{})
 
@@ -203,11 +237,11 @@ func liveTmuxTasks() (names map[string]struct{}, err error) {
 	}
 
 	for _, line = range strings.Split(out, "\n") {
-		match = tmuxWindowTaskRe.FindStringSubmatch(line)
-		if match == nil {
+		id = tmuxWindowTaskID(line)
+		if id == "" {
 			continue
 		}
-		names["e-"+match[1]] = struct{}{}
+		names["e-"+id] = struct{}{}
 	}
 
 end:

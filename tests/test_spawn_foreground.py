@@ -97,3 +97,19 @@ def test_spawn_has_no_no_plan_flag():
     flags = {opt for p in task_spawn.params for opt in getattr(p, "opts", [])}
     assert "--no-plan" not in flags
     assert "--permission-mode" in flags
+
+
+def test_foreground_spawn_window_named_for_the_task_alone(isolated_env, fg_env):
+    """E-2102: the window name is the task id, with no project or title slug.
+
+    A tab is narrow, and the words that used to fill it — the project name and
+    the first two words of the title — are things the user already knows. The
+    name is also read back by `internal/sandboxcmd/reapguard.go` to decide
+    which DB sandboxes to spare, so its form is an interface.
+    """
+    _seed_project_and_task(1705, title="A task with a long and wordy title")
+
+    spawn_plan(1705)
+
+    cmd = [c for c in fg_env if "spawn-window" in c][0]
+    assert cmd[cmd.index("--window-name") + 1] == "E-1705"

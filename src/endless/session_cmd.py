@@ -2375,15 +2375,28 @@ def _resume_new_window_pane(
 
     The `--revisit` / `--no-revisit` gate runs FIRST (E-1968), so a target that
     needs an explicit intent is refused before any window is opened.
+
+    The window is named for the task (E-2102). Without `-n` tmux names a window
+    after its command, so every resumed window read `claude` and none of them
+    said which task it held. The id comes from the resolved target rather than
+    from the worktree path: `_resolve_resume` may have MINTED the task for a
+    task-less session (E-1918), and `decision_out` is where it reports the one
+    it settled on.
     """
     import shlex
+    from endless.task_cmd import tmux_window_name
+
     _apply_revisit_intent(ref, revisit, no_revisit)
-    uuid, worktree, rlabel, _eid = _resolve_resume(ref)
+    decision: dict = {}
+    uuid, worktree, rlabel, _eid = _resolve_resume(ref, decision_out=decision)
     claude = _require_claude()
     cmd = f"{shlex.quote(claude)} --resume {shlex.quote(uuid)}"
-    res = _tmux_run(
-        ["new-window", "-d", "-c", worktree, "-P", "-F", "#{pane_id}", cmd]
-    )
+    args = ["new-window", "-d", "-c", worktree]
+    task = decision.get("task_id")
+    if task is not None:
+        args += ["-n", tmux_window_name(int(task))]
+    args += ["-P", "-F", "#{pane_id}", cmd]
+    res = _tmux_run(args)
     if not res or res.returncode != 0 or not res.stdout.strip():
         click.echo("Could not open a new tmux window to resume.", err=True)
         raise SystemExit(1)

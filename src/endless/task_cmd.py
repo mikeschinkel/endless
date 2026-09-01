@@ -5627,24 +5627,27 @@ def show_handoff(item_id: int):
     ))
 
 
-_SPAWN_WINDOW_STOP_WORDS = frozenset({
-    "a", "an", "the", "to", "from", "of", "for", "with",
-    "in", "on", "at", "by", "and", "or",
-})
+def tmux_window_name(item_id: int) -> str:
+    """The tmux window name for a task: the task id, and nothing else (E-2102).
 
+    A tab is narrow and a window name is the only per-window label the user
+    sees, so it spends none of that width on a project name or a title slug the
+    user already knows. Both windows Endless opens for a task — `task spawn`'s
+    and `session goto --resume`'s — go through here, so the two cannot drift
+    into naming the same thing differently.
 
-def _spawn_window_name(project_name: str, title: str, item_id: int) -> str:
-    """Build tmux window name in the form <project>_<one_or_two_words>[E-nnn].
+    Do not reintroduce a richer format without re-checking two constraints the
+    bare id satisfies by construction:
 
-    Separator is '_' because tmux parses ':' as session:window and '.' as
-    window.pane in -t targets, so either char in a window name breaks
-    'select-window -t <name>' / 'send-keys -t <name>' even within one session.
+      - tmux parses ':' as session:window and '.' as window.pane in `-t`
+        targets, so either character in a window name breaks
+        `select-window -t <name>` / `send-keys -t <name>` even within one
+        session. `E-NNNN` contains neither.
+      - `internal/sandboxcmd/reapguard.go` reads window names back to decide
+        which DB sandboxes to spare. Change the format and that regex changes
+        with it, or a sandbox gets reaped while its window is open.
     """
-    words = re.findall(r"[a-z0-9]+", title.lower())
-    meaningful = [w for w in words if w not in _SPAWN_WINDOW_STOP_WORDS]
-    slug_words = meaningful or words or ["task"]
-    slug = "-".join(slug_words[:2])
-    return f"{project_name}_{slug}[{task_id_display(item_id)}]"
+    return task_id_display(item_id)
 
 
 def _claude_binary() -> str:
@@ -5701,7 +5704,7 @@ def spawn_plan(item_id: int, project_name: str | None = None,
     # Get the plan item
     row = db.query(
         "SELECT p.id, p.title, p.status, p.project_id, p.parent_id, "
-        "proj.path as project_path, proj.name as project_name, "
+        "proj.path as project_path, "
         "COALESCE(tt.slug, '') AS type_slug "
         "FROM live_tasks p "
         "JOIN projects proj ON p.project_id = proj.id "
@@ -5790,10 +5793,7 @@ def spawn_plan(item_id: int, project_name: str | None = None,
     # marker that SessionStart can key off.
     spawner_id = _current_endless_session_id() or f"pid-{os.getpid()}"
 
-    # Build window name: <project>_<one_or_two_words>[E-nnn]
-    window_name = _spawn_window_name(
-        item["project_name"], title, item_id,
-    )
+    window_name = tmux_window_name(item_id)
 
     # Render the handoff from the template (no stored prompt — E-1469) and
     # write it to a temp file for tmux load-buffer. cd_target is the worktree
