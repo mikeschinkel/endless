@@ -4885,3 +4885,15 @@ The rule, restated to cover the case I missed: any durable artifact I author —
 
 Test to apply before every 'endless task add': read the description and analysis back and look for 'decide', 'vs.', 'candidate', 'either/or', 'TBD', or a numbered list of alternatives. Any of those means I am handing a decision forward instead of making it or asking for it.
 - **Project**: endless
+
+### [2026-09-01] A bug I introduced and fixed inside one task is a lesson, not an architectural decision — and inflated wording is the tell
+While implementing E-2093 I put the session wake edge inside monitor.TouchSession without checking its callers, discovered that a sibling shell pane reaches it via EnsureClaudeSessionID, and moved the wake to its own verb called from the hook. I then filed that as decision ED-1581.
+
+It is not a decision. A decision records a call between live alternatives that binds future work — 'worktree removal is not an agent capability', 'use pressly/goose as the canonical source'. There was no fork here: TouchSession was simply wrong, because I had not read its call sites. 'Know your callers before adding a side effect' is general engineering hygiene I failed to apply, not a posture Endless adopted. The rule is also already enforced at the point of contact — the doc comments on WakeSession and TouchSession, plus TestTouchSession_DoesNotWakeIdle — so the decision row carried nothing the code did not already say.
+
+Two rules for next time:
+
+1. Before filing a decision, ask whether a competent engineer could have reasonably chosen the other branch. If the rejected option is just 'the bug', it is a lesson. Self-correction inside a single task almost never rises to a decision, however architectural the fix feels while making it.
+
+2. Watch the prose as a diagnostic. I titled it 'a state write that asserts an observation belongs to the caller that made the observation, never to a shared row-touch helper' — four stacked abstractions over 'I did not check who else calls this'. Mike could not follow it well enough to judge it, which is itself the evidence: when a statement needs that much scaffolding to sound load-bearing, it usually is not. Write the plain sentence first, then see if it still deserves to be a decision.
+- **Project**: endless
