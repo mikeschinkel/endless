@@ -10,6 +10,9 @@ corruption that lost E-1626/E-1564). Two rules block that:
 Relative tokens mid-content are always allowed; --allow-path <regex> (repeatable)
 exempts a matching absolute path from both rules. These tests hit the predicate
 directly; .endless/tasks/e-1744/verify.sh covers the same rules end-to-end via CLI.
+
+E-1794 narrowed what counts as a path for both rules — see the section at the
+foot of this file — and reordered Rule 2's advice to lead with --allow-path.
 """
 
 import click
@@ -172,6 +175,120 @@ def test_resolve_file_content_is_never_gated(tmp_path):
     p = tmp_path / "plan.md"
     p.write_text("the sandbox lives at /tmp/anything and that is fine here")
     assert _resolve_content_flag(None, str(p), "text").startswith("the sandbox")
+
+
+# ═══ E-1794 — slash-separated notation is not a path ═══════════════════════
+#
+# Both rules keyed off "has a slash in it", so a runner type/subtype (pytest/uv)
+# was refused as a mis-passed file and a bare '/' being named as a delimiter was
+# refused as an absolute path. Filing E-1789's ED-1535/1536/1537 needed three
+# --allow-path workarounds for content holding no path at all.
+#
+# A token is a path only on one of three lexical signals: it is absolute, it
+# carries an explicit ./ ../ ~/ prefix, or it ends in a filename extension.
+
+from endless.cli import _is_absolute_path, _is_path_shaped
+
+
+@pytest.mark.parametrize("value", [
+    "pytest/uv",                    # the reported case — a runner type/subtype
+    "docs/plan",                    # slash, no extension, no ./ prefix
+    "and/or",
+])
+def test_slash_separated_notation_is_not_a_whole_value_path(value):
+    # Must not raise: Rule 1 no longer fires on a bare slash-separated token.
+    _guard_inline_content(value, "description", ())
+
+
+def test_extension_signal_still_wins_over_notation_as_a_whole_value():
+    """A known limit, recorded so it is not mistaken for a regression.
+
+    ED-1537's in-family vendor form ends in what a lexical test cannot tell from
+    a filename extension, so as an ENTIRE value it still reads as a path. No
+    rule separates '.uv' from '.md' without a known-extension list, and dropping
+    the extension signal would let `--text plan.md` through — the E-1626/E-1564
+    corruption. The case is degenerate anyway: a description is a 2-3 sentence
+    blurb, never one bare token. Where the notation actually appears — inside
+    prose — it passes, which the next test pins.
+    """
+    assert "received a file path" in _blocked("pytest/vnd.newclarity.uv")
+
+
+def test_notation_in_prose_passes_including_the_vendor_form():
+    _guard_inline_content(
+        "an in-family custom type is pytest/vnd.newclarity.uv, never "
+        "vnd/newclarity/foo", "description", ())
+
+
+@pytest.mark.parametrize("value", [
+    "/",                                          # whole value
+    "'/' splits family from variant (pytest/uv)",  # ED-1537, verbatim
+    "written as type / subtype",                   # spaced alternative
+    "a // comment marker",                         # a run of slashes is still nothing
+])
+def test_bare_slash_is_punctuation_not_an_absolute_path(value):
+    # Must not raise: a leading slash counts only when a path follows it.
+    _guard_inline_content(value, "description", ())
+
+
+@pytest.mark.parametrize("value", [
+    "/abs/x.md", "/tmp/e-1.md", "./x.md", "../x.md", "~/x.txt",
+    "foo.md", "docs/guide/index.md",
+])
+def test_the_three_path_signals_still_block_as_a_whole_value(value):
+    # The narrowing must not reopen E-1626/E-1564: a mis-passed file still blocks.
+    assert "received a file path" in _blocked(value)
+
+
+@pytest.mark.parametrize("value", [
+    "See /tmp/x.md for detail",
+    "sandbox at /tmp/sbx here",     # absolute, no extension — still a path
+])
+def test_real_absolute_paths_in_prose_still_block(value):
+    assert "contains an absolute path" in _blocked(value)
+
+
+def test_is_absolute_path_predicate():
+    assert _is_absolute_path("/tmp/x")
+    assert _is_absolute_path("/tmp")
+    assert not _is_absolute_path("/")
+    assert not _is_absolute_path("//")
+    assert not _is_absolute_path("pytest/uv")
+
+
+def test_is_path_shaped_leaves_urls_alone():
+    assert not _is_path_shaped("https://github.com/org/repo/blob/main/x.md")
+
+
+# ─── Rule 2's advice: --allow-path leads (E-1794 part 2) ────────────────────
+#
+# The flag was the last clause of the last sentence, behind "put real content
+# inline" — so an agent reading the whole message still rephrased the content to
+# satisfy the gate, which is the opposite of what the gate is for.
+
+def test_allow_path_leads_the_rule2_advice():
+    msg = _blocked("see /tmp/x.md here")
+    assert msg.index("--allow-path") < msg.index("put real content inline")
+
+
+def test_rule2_does_not_offer_a_file_flag_for_a_description():
+    # description is one line capped at 1024 chars; --description-file cannot be
+    # the remedy, and following it earned a second refusal on E-2094.
+    msg = _blocked("see /tmp/x.md here", name="description")
+    assert "--description-file" not in msg
+    assert "short metadata" in msg
+    assert "--allow-path" in msg
+
+
+@pytest.mark.parametrize("name", ["text", "analysis", "outcome"])
+def test_rule2_still_offers_the_file_flag_for_long_form_fields(name):
+    msg = _blocked("see /tmp/x.md here", name=name)
+    assert f"--{name}-file" in msg
+    assert ".endless/tmp/" in msg
+
+
+def test_rule2_keeps_explaining_why():
+    assert "non-portable" in _blocked("see /tmp/x.md here")
 
 
 # ═══ E-2008 — the empty-file gate ═══════════════════════════════════════════

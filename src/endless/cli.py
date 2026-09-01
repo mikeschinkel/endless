@@ -2110,22 +2110,48 @@ def task_search(query, project, show_all, status, phase, parent_id,
 
 # A single whitespace-free token ending in one of these is treated as a file path.
 _PATH_EXT_RE = re.compile(r"\.[A-Za-z][A-Za-z0-9]{0,5}$")
+# Prefixes that name a file on purpose. A token carrying one is a path even
+# without an extension; a slash anywhere else in it is not enough (E-1794).
+_REL_PREFIXES = ("./", "../", "~/")
 # Surrounding punctuation trimmed off a candidate before the path test. Leading '.'
 # and '~' are intentionally NOT stripped (they start real relative/home paths).
 _LEAD_STRIP = "\"'`([{"
 _TRAIL_STRIP = "\"'`.,;:!?)]}"
 
 
+def _is_absolute_path(token):
+    """True if *token* is a genuine absolute path: a leading slash followed by a
+    path. Purely lexical — the file need not exist, so a gone /tmp path counts.
+
+    A bare slash does not. '/' is punctuation in prose — a delimiter being named
+    ("'/' splits family from variant"), a spaced alternative ("type / subtype") —
+    and reporting it as an absolute path is what forced --allow-path onto
+    ED-1537 (E-1794). Neither does a run of them, which is the same token with
+    the same nothing after it."""
+    return token.startswith("/") and token.strip("/") != ""
+
+
 def _is_path_shaped(token):
-    """True if a single whitespace-free token looks like a filesystem path
-    (absolute or relative). Purely lexical — the file need not exist. A URL
-    (contains '://') is never a mis-passed file path — and a Git file URL is the
-    recommended way to reference another project — so it is not path-shaped."""
+    """True if a single whitespace-free token names a file on purpose — the
+    signature of a path mis-passed to an inline flag. Purely lexical; the file
+    need not exist. Three signals, and only these three (E-1794):
+
+      absolute              /tmp/plan.md, /opt/corp/spec.md
+      explicitly relative   ./x.md, ../x.md, ~/x.txt
+      a filename extension  plan.md, docs/guide/index.md
+
+    A slash alone is not one of them. pytest/uv (a runner type/subtype),
+    vnd.newclarity.foo and type/subtype are slash-separated notation, not
+    filenames; passing one inline is never the mis-passed-file mistake this gate
+    exists to catch, and blocking them cost E-1789 three --allow-path
+    workarounds. A URL (contains '://') is never a mis-passed file path — and a
+    Git file URL is the recommended way to reference another project — so it is
+    not path-shaped."""
     if "://" in token:
         return False
     return (
-        token.startswith(("/", "./", "../", "~/"))
-        or "/" in token
+        _is_absolute_path(token)
+        or token.startswith(_REL_PREFIXES)
         or bool(_PATH_EXT_RE.search(token))
     )
 
@@ -2138,9 +2164,9 @@ def _absolute_path_tokens(content):
         tok = raw.lstrip(_LEAD_STRIP).rstrip(_TRAIL_STRIP)
         if not tok:
             continue
-        if tok.startswith("/"):
+        if _is_absolute_path(tok):
             yield tok
-        elif tok.startswith("~/") and os.path.isabs(os.path.expanduser(tok)):
+        elif tok.startswith("~/") and _is_absolute_path(os.path.expanduser(tok)):
             yield tok
 
 
@@ -2174,6 +2200,33 @@ def _under_allowed_dir(path, dirs):
     return any(p == d or d in p.parents for d in dirs)
 
 
+# Fields whose value is short inline metadata, where "author it in a file and
+# load it" can never be the remedy. A description is a single line capped at
+# task_cmd.DESCRIPTION_MAX_LENGTH, so offering --description-file to a caller
+# holding one line of prose just earns a second refusal ("Description must be a
+# single line") — observed on E-2094 (E-1794). A table rather than an
+# `if name == "description"`, so the next such field joins it in one place.
+_SHORT_INLINE_FIELDS = ("description",)
+
+
+def _gate_alternative(name):
+    """The second remedy in the Rule 2 refusal — what to do when you do NOT want
+    to keep the path. Second on purpose: --allow-path leads, because an agent
+    takes the first sanctioned option it is offered, and when that option was
+    "rephrase the content" the gate got satisfied by distorting the very content
+    it exists to protect (E-1794)."""
+    if name in _SHORT_INLINE_FIELDS:
+        return (
+            f"Otherwise put real content inline — a {name} is short metadata, "
+            f"not a document."
+        )
+    return (
+        f"Otherwise put real content inline, or author scratch under "
+        f".endless/tmp/ and load it with --{name}-file; a cross-project file "
+        f"can be referenced by a Git URL."
+    )
+
+
 def _guard_inline_content(inline, name, allow_paths):
     """Block a mis-passed file path (Rule 1: the whole value IS a path token,
     absolute or relative) or an absolute path embedded anywhere in otherwise-inline
@@ -2195,7 +2248,7 @@ def _guard_inline_content(inline, name, allow_paths):
     stripped = inline.strip()
     # Rule 1 — the whole value is a single path token (absolute OR relative).
     if stripped and len(stripped.split()) == 1 and _is_path_shaped(stripped):
-        is_abs = os.path.isabs(os.path.expanduser(stripped))
+        is_abs = _is_absolute_path(os.path.expanduser(stripped))
         if not (is_abs and _exempt(stripped)):
             raise click.ClickException(
                 f"--{name} received a file path ({stripped!r}). --{name} stores its "
@@ -2209,12 +2262,10 @@ def _guard_inline_content(inline, name, allow_paths):
         if _exempt(tok):
             continue
         raise click.ClickException(
-            f"--{name} content contains an absolute path ({tok!r}). Absolute paths "
-            f"don't belong in durable ledger content — they're non-portable and a "
-            f"/tmp path is lost when a worktree drops. Put real content inline, or "
-            f"author scratch under .endless/tmp/ and load it with --{name}-file; a "
-            f"cross-project file can be referenced by a Git URL. To keep this path, "
-            f"add --allow-path with a regex matching it."
+            f"--{name} content contains an absolute path ({tok!r}). To keep this "
+            f"path, add --allow-path with a regex matching it. {_gate_alternative(name)} "
+            f"Absolute paths don't belong in durable ledger content — they're "
+            f"non-portable, and a /tmp path is lost when a worktree drops."
         )
 
 
