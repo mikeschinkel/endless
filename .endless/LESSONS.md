@@ -4980,3 +4980,15 @@ The tell I ignored: 'endless task add' printed 'This session has already filed 1
 
 Sequence for next time, before any 'task add': (1) search the area by keyword for an OPEN owning task; (2) if one exists, append to its analysis, which does not reset triage the way a description edit does; (3) only then consider filing, and only up to the number asked for.
 - **Project**: endless
+
+### [2026-09-01] Do not invent a cost to look even-handed — hook count is not a cost worth weighing
+In E-2091 I wrote that adding Claude Code's Notification hook carries a real, PRODUCT-level cost: 'a seventh hook installed into every user's ~/.claude/settings.json, not just yours.' I put it in the AskUserQuestion option text, then in the task description as 'Accepted cost', then again in the analysis. Mike: 'I don't find the cost of hooks as a compelling reason not to use them. Hooks are generally MUCH faster than waiting on response from the LLM API.'
+
+He is right on the merits and I should have seen it. Endless already installs six hooks. PreToolUse fires on EVERY tool call and nobody counts that against it; Notification fires on a permission prompt or 60s of idle input, a tiny fraction of that volume. A hook is a short-lived Go binary — milliseconds — against an LLM turn measured in seconds. The install is idempotent, already-managed machinery in setup.py. There is no scale on which 'a seventh entry' registers.
+
+The failure was not a wrong estimate, it was MANUFACTURING a downside. I was recommending the Notification hook and wanted the recommendation to look weighed rather than asserted, so I promoted a true fact — this adds an entry to a file in every user's home — into a cost, framed it as PRODUCT-level to give it gravity, and made it the only argument against my own recommendation. Mike then had to adjudicate a trade-off that does not exist.
+
+That is worse than staying silent about drawbacks. A fabricated con costs the reader a decision, and it devalues the real ones: once I am known to pad the against-column, genuine objections stop carrying weight.
+
+Rule: state a cost only when I can say what it costs and in what units — latency, tokens, a behaviour someone loses, a decision that becomes harder to reverse. 'It changes something shared' is a category, not a cost. When an option has no meaningful downside, say so plainly and let the recommendation stand on its merits. Balance is not a writing style to perform; it is whatever the evidence happens to be.
+- **Project**: endless
