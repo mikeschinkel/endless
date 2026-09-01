@@ -76,8 +76,8 @@ def test_human_form_is_the_guidance_unchanged():
 def test_agent_form_brackets_the_guidance(as_agent):
     msg = agent_help.agent_error("title 107>100 chars.", "the guidance", command="task add")
     lines = msg.split("\n")
-    assert lines[0] == "ENDLESS-ERROR task add: title 107>100 chars."
-    assert lines[-1] == "Error: ENDLESS-ERROR task add: title 107>100 chars."
+    assert lines[0] == "[Endless] task add: title 107>100 chars."
+    assert lines[-1] == "Error: [Endless] task add: title 107>100 chars."
     assert "the guidance" in msg
 
 
@@ -85,7 +85,7 @@ def test_agent_form_without_a_command_still_carries_the_sentinel(as_agent):
     """Called outside a running command there is no verb to name, and a bare
     error line still has to be identifiable as one of ours."""
     msg = agent_help.agent_error("something is wrong.", "guidance", command=None)
-    assert msg.split("\n")[0] == "ENDLESS-ERROR: something is wrong."
+    assert msg.split("\n")[0] == "[Endless]: something is wrong."
 
 
 # ─── the property, through the real CLI ─────────────────────────────────────
@@ -96,7 +96,7 @@ def test_refusal_first_and_last_lines_are_identical(project_row, as_agent):
     assert result.exit_code != 0
     lines = _stderr_lines(result)
     assert lines[0] == lines[-1], "\n".join(lines)
-    assert lines[0].startswith("Error: ENDLESS-ERROR task add:")
+    assert lines[0].startswith("Error: [Endless] task add:")
 
 
 def test_head_and_tail_each_keep_the_verdict(project_row, as_agent):

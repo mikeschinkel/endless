@@ -81,9 +81,17 @@ def current_command_path() -> str | None:
     return _command_path(ctx) or None
 
 
-# The stable prefix that makes one line of an agent's scrollback identifiable
-# as an Endless refusal without the surrounding message.
-ERROR_SENTINEL = "ENDLESS-ERROR"
+# The stable marker that makes one line of an agent's scrollback identifiable
+# as an Endless refusal without the surrounding message. It has to carry the
+# project name: the command alone does not identify us — `task add` is also
+# Taskwarrior's verb — and a bare "ERROR:" is in every tool's output, so it
+# greps to noise.
+#
+# It does NOT repeat the word "error". Click already supplies that (see
+# _CLICK_ERROR_PREFIX), and the line reads as one sentence rather than two:
+#
+#     Error: [Endless] task add: title 107>100 chars. …
+ERROR_SENTINEL = "[Endless]"
 
 # Click prints a ClickException as `Error: <message>`, so the message's first
 # line arrives with that prefix and the bracket's two ends would not match byte
@@ -104,11 +112,11 @@ def agent_error(summary: str, guidance: str, command: str | None = None) -> str:
 
     For an agent, the same guidance arrives bracketed:
 
-        ENDLESS-ERROR task add: <summary>
+        [Endless] task add: <summary>
 
         … guidance, unchanged …
 
-        Error: ENDLESS-ERROR task add: <summary>
+        Error: [Endless] task add: <summary>
 
     The two verdict lines are IDENTICAL on purpose. Split them — problem first,
     remedy last — and `head -N` yields the problem without the fix while

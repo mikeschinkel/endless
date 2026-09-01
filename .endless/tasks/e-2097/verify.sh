@@ -42,6 +42,11 @@ LONG_TITLE="Add $(printf 'x%.0s' $(seq 1 103))"
 [[ ${#LONG_TITLE} -eq 107 ]] || setup_error "fixture title is ${#LONG_TITLE} chars, expected 107"
 LONG_DESC="$(printf 'd%.0s' $(seq 1 1032))"
 
+# The marker that makes one line identifiable as an Endless refusal out of
+# context. Not "ERROR" — Click already prints that, and a bare ERROR: greps to
+# noise; not the command alone — `task add` is Taskwarrior's verb too.
+SENTINEL="[Endless]"
+
 # The refusal as an agent meets it, and as a human meets it. Both go through
 # the real binary in a real process: the property is about what lands on the
 # terminal, and only a rendered run can see Click's own `Error: ` prefix.
@@ -87,8 +92,8 @@ section "B. A truncating pipe keeps the verdict, from either end"
 
 head3="$(agent_run task add "${LONG_TITLE}" | head -3)"
 tail3="$(agent_run task add "${LONG_TITLE}" | tail -3)"
-assert_contains "head -3 keeps the verdict" "ENDLESS-ERROR" "${head3}"
-assert_contains "tail -3 keeps the verdict" "ENDLESS-ERROR" "${tail3}"
+assert_contains "head -3 keeps the verdict" "${SENTINEL}" "${head3}"
+assert_contains "tail -3 keeps the verdict" "${SENTINEL}" "${tail3}"
 
 full="$(agent_run task add "${LONG_TITLE}")"
 first_line="$(printf '%s\n' "${full}" | head -1)"
@@ -98,7 +103,7 @@ assert_eq "first and last lines are byte-identical" "${first_line}" "${last_line
 # Identical, not split. Split them — problem first, remedy last — and head -N
 # yields the problem without the fix while tail -N yields the fix without the
 # problem.
-verdict_lines="$(printf '%s\n' "${full}" | grep -c 'ENDLESS-ERROR')"
+verdict_lines="$(printf '%s\n' "${full}" | grep -cF "${SENTINEL}")"
 assert_eq "the verdict appears exactly twice, and nowhere else" "2" "${verdict_lines}"
 
 # The guidance is unchanged BETWEEN the brackets — the bracket adds, it does
@@ -114,7 +119,7 @@ section "C. What the verdict line carries"
 assert_contains "the measured numbers, not an adjective" \
     "title 107>100 chars" "${first_line}"
 assert_contains "a fixed sentinel plus the command" \
-    "ENDLESS-ERROR task add:" "${first_line}"
+    "${SENTINEL} task add:" "${first_line}"
 assert_contains "where the overflow goes (--analysis)" "--analysis" "${first_line}"
 assert_contains "where the overflow goes (--text)" "--text" "${first_line}"
 assert_contains "whether anything changed" "Nothing was created." "${first_line}"
@@ -189,7 +194,7 @@ section "E. --agent-view shows a human what an agent sees"
 view="$(human_run task add "${LONG_TITLE}" --agent-view)"
 view_first="$(printf '%s\n' "${view}" | head -1)"
 view_last="$(printf '%s\n' "${view}" | tail -1)"
-assert_contains "--agent-view renders the verdict" "ENDLESS-ERROR" "${view_first}"
+assert_contains "--agent-view renders the verdict" "${SENTINEL}" "${view_first}"
 assert_eq "--agent-view brackets both ends" "${view_first}" "${view_last}"
 
 # ---------------------------------------------------------------------------
@@ -205,7 +210,7 @@ assert_contains "the title overflow is named" "title 107>100 chars" "${both_firs
 assert_contains "the description overflow is named" \
     "description 1032>1024 chars" "${both_first}"
 assert_eq "still exactly one refusal, bracketed once at each end" "2" \
-    "$(printf '%s\n' "${both}" | grep -c 'ENDLESS-ERROR')"
+    "$(printf '%s\n' "${both}" | grep -cF "${SENTINEL}")"
 assert_contains "both guidance blocks are present (title)" \
     "Consider using this template:" "${both}"
 assert_contains "both guidance blocks are present (description)" \
