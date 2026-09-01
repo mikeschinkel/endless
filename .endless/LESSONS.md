@@ -5029,3 +5029,18 @@ fault — there I never opened the file. Here I opened it and trusted a label
 inside it. The common thread is one source, no second look, and a conclusion
 stated with more confidence than its evidence carried.
 - **Project**: endless
+
+### [2026-09-01] A decision records an architecture choice with a real alternative; everything else — corrections, conventions, how-it-works — is a lesson
+Mike corrected me after I filed ED-1585 ('Is an agent reading this? has exactly one answer: agent_help.agent_facing()'). That statement names a symbol and asserts DRY. Nobody would argue the other side, and if the function is renamed the decision becomes a stale pointer — the failure mode of documentation, not of a decision. Its entire content already sat in the function's docstring.
+
+He named the cause: the whats-left slash command has been pressuring me to produce a decision every session that lands a task, so I reach for one instead of judging whether one exists. Across several sessions I have filed lessons and documentation as decisions.
+
+The rule. Before recording anything, route it:
+
+  - Lesson (endless lesson write) is the DEFAULT. A correction, a convention, a gotcha, how a thing works, a process fix. It commits itself, needs no review, and is mine end to end. When I cannot tell which of the two it is, it is a lesson.
+  - Decision (endless decision add) is ARCHITECTURE only, and must pass three tests: (1) a real alternative existed and someone could argue it; (2) it outlives the task — if the statement names a function, file or symbol, it is documentation, so write the docstring and a lesson; (3) I actually made the call this session, rather than inferring a preference or restating what the task's own plan already specified.
+
+Zero decisions is the normal outcome. A filed non-decision costs Mike a review and, once accepted, gets cited as authority by later sessions and calcifies.
+
+I edited the whats-left command file in the same turn to encode this: section 4 now routes lesson-vs-decision, states the three tests, says zero is expected, and adds 'lesson write' to the commands I must never hand back on his todo list.
+- **Project**: endless
