@@ -4804,3 +4804,13 @@ The rule: name the file plus the SYMBOL (function, type, const, test name, or a 
 
 Measured while recording this: 129 of 412 plan files in .endless/plans/ carry file:line references, including recent ones (E-2001, E-2063, E-2081). So this is the house norm being stated, not a one-off slip — and it is a candidate for a lint gate in the same shape as E-1760's.
 - **Project**: endless
+
+### [2026-08-31] Never state a task or decision status from memory — query it first
+I told Mike 'ED-1580 is still sitting at proposed' without checking. He had already rejected it. The status I reported came from my own earlier turn, not from the database.
+
+This is the exact failure the whats-left skill warns about in bold — 'Never report a status you recall from earlier in this conversation' — and I had read that instruction twice in this same session before violating it. Knowing the rule is not the safeguard; running the query is.
+
+Between my turns Mike acts: he accepts and rejects decisions, confirms and lands tasks, spawns sessions. Every status I hold in context is a snapshot of a moment that has already passed. The cost is not just being wrong — it is that a confident stale status sends him to re-do something already done, or to trust a state that no longer holds.
+
+The rule: any sentence containing a task or decision status is preceded by the command that read it, in the same turn. No exceptions for 'I just set it myself' or 'it was only a moment ago' — a moment is long enough. This applies to closing pleasantries as much as to reports; the violation here was in a throwaway sign-off line, which is precisely where the guard slips.
+- **Project**: endless
