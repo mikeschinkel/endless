@@ -4909,3 +4909,17 @@ Three destinations, and the verb is part of the verdict:
 
 The failure mode is not misjudging the category. It is judging correctly and still using whichever verb the current workflow happened to surface. When a skill or a handoff hands me one filing command, that is not evidence it is the right one for what I am holding.
 - **Project**: endless
+
+### [2026-09-01] A named escape hatch is the intended route, not a bypass — reword only when the content is wrong, not when the check is
+Writing a lesson, the path gate refused '/whats-left' as an absolute path. It is a slash-command name. The refusal itself said: 'To keep this path, add --allow-path with a regex matching it.' I reworded to 'the whats-left skill' instead.
+
+Three things wrong with that:
+
+- The hatch is the intended route for exactly this case. The gate cannot tell a command name from a path; --allow-path exists so the author, who can, says so.
+- The durable content got worse. A reader who wants to run the thing now has a description instead of the string they would type.
+- It destroyed the signal. A false positive nobody ever invokes the hatch on looks like no false positive at all. Mike is now spending a session reworking that message because sessions keep quietly routing around it instead of using it, so the misfire never surfaced as data.
+
+The distinction that matters, since Endless deliberately refuses --force in several places: --force is a blanket override appended after reading a refusal you disagree with, which is why claim, spawn, task update and the removal gate all reject it. --allow-path is narrow, names exactly what it permits, and the refusal itself points at it for a known false-positive class. Being pointed at a specific hatch by the message is the signal to use it.
+
+Second time in two turns I had the correct diagnosis and still took the frictionless route — the same shape as reaching for `decision add` because the skill had put it in front of me. The rule: when a refusal names a specific remedy, that remedy is the default, and reaching past it needs a reason I can state.
+- **Project**: endless
