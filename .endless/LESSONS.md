@@ -5045,6 +5045,3 @@ Zero decisions is the normal outcome. A filed non-decision costs Mike a review a
 I edited the whats-left command file in the same turn to encode this: section 4 now routes lesson-vs-decision, states the three tests, says zero is expected, and adds 'lesson write' to the commands I must never hand back on his todo list.
 - **Project**: endless
 
-### [2026-09-01] Probe
-The /whats-left skill reports remaining work; a /tmp path is lost when a worktree drops
-- **Project**: endless
