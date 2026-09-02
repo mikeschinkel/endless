@@ -232,8 +232,9 @@ Dismiss with `endless errors clear <id>`.
 `task unsettled`) and the worktree reaper (E-1940)
 
 A git probe behind the ◆ marker could not run for a task's worktree — either
-`git status --porcelain` or the `git rev-list` that counts commits not yet on
-the base branch returned an error.
+`git status --porcelain`, or one of the commands that work out which commits'
+content has not reached the base branch (`git merge-base`, `git rev-list`,
+`git range-diff`, `git log`).
 
 The severity is about what the failure *looked like* before this code existed.
 The probe was fail-open: any git error yielded `false`, the settled verdict, and
@@ -271,7 +272,7 @@ normal state of a fresh clone), no `init.defaultBranch` naming a branch that
 exists here, and neither `main` nor `master` present.
 
 Error rather than warning because of the blast radius: the resolver backs both
-the ◆ marker and the reaper's unmerged-commits condition, so when it fails every
+the ◆ marker and the reaper's settled condition, so when it fails every
 worktree in the project becomes unjudgeable at once and no worktree can ever be
 reaped. This is the condition that used to be invisible — the probes hardcoded
 `main`, so a repo whose default branch is `master` got exit 128 on every tick, a

@@ -1908,6 +1908,10 @@ def landed_item(item_id: int, llm: bool = False, as_json: bool = False):
 # the ◆ (monitor.WorktreeUnsettledAt via `session-query worktree-unsettled`), so
 # the marker and its explanation cannot drift apart. Python resolves tasks to
 # worktree paths and renders; Go decides.
+#
+# "Unlanded" means the branch holds a commit whose CONTENT the base branch
+# lacks, not one whose SHA it lacks (E-2087). `worktree land` rebases, so those
+# are different questions, and only the first one is the one being asked.
 
 
 def _unsettled_probe(paths: list[Path]) -> list[dict]:
@@ -1919,11 +1923,9 @@ def _unsettled_probe(paths: list[Path]) -> list[dict]:
     Path-based (never --task-id) for E-1766's reason: inside a self-dev worktree
     a DB lookup routes to the per-worktree sandbox, which has no task row.
 
-    The resolved DB context IS threaded through (E-1940): the probe credits the
-    recorded landings, and it must read them from the same database this
-    process is reading — otherwise `--db main` from inside a worktree would
-    render a verdict computed against the sandbox. A miss stays harmless; it
-    credits no landing and the verdict falls back to pure git.
+    The DB context is threaded through for the probe's own bookkeeping (faults),
+    not for the verdict: since E-2087 the probe reads no database at all, so
+    `--db main` from inside a worktree and a bare run agree by construction.
     """
     if not paths:
         return []
@@ -2104,7 +2106,7 @@ _PROBE_ERROR_LABELS = (
     ("lookup_error", "worktree lookup"),
     ("base_error", "default-branch resolution"),
     ("status_error", "git status"),
-    ("rev_list_error", "git rev-list"),
+    ("unlanded_error", "the unlanded-commit comparison"),
 )
 
 
@@ -2158,7 +2160,7 @@ def unsettled_item(item_id: int, llm: bool = False, as_json: bool = False):
         "modified_files": [], "auto_managed_files": [],
         "unlanded_count": 0, "unlanded_log": [],
         "undetermined": False, "undetermined_reason": "",
-        "base": "", "landed_shas": [],
+        "base": "",
     }
 
     if as_json:
@@ -2202,12 +2204,9 @@ def unsettled_item(item_id: int, llm: bool = False, as_json: bool = False):
                        " No worktree for this task — nothing to land.")
         else:
             base = probe.get("base") or "the base branch"
-            landed = probe.get("landed_shas") or []
-            credit = (f" ({len(landed)} recorded landing(s) credited)"
-                      if landed else "")
             click.echo(click.style("•", fg="green") +
                        f" Settled: working tree clean and every commit is on "
-                       f"{base}{credit}.")
+                       f"{base}.")
         click.echo()
         return
 

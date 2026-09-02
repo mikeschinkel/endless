@@ -2,13 +2,14 @@ package monitor
 
 import (
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 	"testing"
 )
 
 // unsettledStub drives runGit for the probes the predicate runs, plus the
-// display-only enrichment calls.
+// display-only enrichment call.
 //
 // The default-branch resolver (E-1940) also shells out, so the stub answers its
 // calls too: `rev-parse --verify` succeeds (every candidate exists) and the
@@ -16,21 +17,44 @@ import (
 // that symbolic-ref is used by BOTH the resolver (origin/HEAD) and the
 // enrichment (HEAD), so the dispatch keys on the ref being asked about, never
 // on args[0] alone.
+//
+// E-2087 split what used to be one knob in two. `revList` still answers the
+// counts, but a count is now only a gate — it says whether there is anything to
+// compare, not what the comparison found. `unlanded` says how many of the
+// branch's commits `git range-diff` matched nothing on the base, which is the
+// verdict. Setting revList non-zero with unlanded 0 is the rebase-landed
+// worktree this task exists to stop mis-reporting.
 type unsettledStub struct {
 	status     string
 	statusErr  error
 	revList    string
 	revListErr error
-	log        string
-	logErr     error
-	branch     string
-	branchErr  error
+	// unlanded is how many left-only rows the range-diff answers with.
+	unlanded     int
+	rangeDiffErr error
+	mergeBaseErr error
+	log          string
+	logErr       error
+	branch       string
+	branchErr    error
 	// baseUnresolvable makes every branch candidate fail to resolve, which is
 	// the state DefaultBranch reports as ErrDefaultBranchUnresolved.
 	baseUnresolvable bool
-	// revListArgs records the arguments of the counting rev-list, so a test can
-	// assert which revisions were excluded.
-	revListArgs *[]string
+	// rangeDiffArgs records the arguments of the content comparison, so a test
+	// can assert which ranges were compared.
+	rangeDiffArgs *[]string
+}
+
+// stubRangeDiff renders n left-only rows in `git range-diff --no-patch`'s
+// output shape, interleaved with a paired row so a parser that counted every
+// line rather than the left-only ones would fail here.
+func stubRangeDiff(n int) string {
+	var b strings.Builder
+	b.WriteString("  1:  ffff0000 =   1:  eeee0000 already landed\n")
+	for i := 0; i < n; i++ {
+		fmt.Fprintf(&b, "  %d:  aaaa%04d <   -:  -------- unlanded commit %d\n", i+2, i, i+1)
+	}
+	return b.String()
 }
 
 func (s unsettledStub) install(t *testing.T) {
@@ -43,11 +67,21 @@ func (s unsettledStub) install(t *testing.T) {
 		switch args[0] {
 		case "status":
 			return s.status, s.statusErr
-		case "rev-list":
-			if s.revListArgs != nil {
-				*s.revListArgs = append([]string{}, args...)
+		case "merge-base":
+			if s.mergeBaseErr != nil {
+				return "", s.mergeBaseErr
 			}
+			return "b45e0000\n", nil
+		case "rev-list":
 			return s.revList, s.revListErr
+		case "range-diff":
+			if s.rangeDiffArgs != nil {
+				*s.rangeDiffArgs = append([]string{}, args...)
+			}
+			if s.rangeDiffErr != nil {
+				return "", s.rangeDiffErr
+			}
+			return stubRangeDiff(s.unlanded), nil
 		case "log":
 			return s.log, s.logErr
 		case "symbolic-ref":
@@ -123,15 +157,22 @@ func TestUnsettledDivergesFromLegacyOnlyWhereIntended(t *testing.T) {
 	for _, st := range statuses {
 		for _, rl := range revLists {
 			t.Run(st.name+"/"+rl.name, func(t *testing.T) {
+				// Every branch commit unmatched, so the content comparison and
+				// the SHA count agree by construction and any OTHER divergence
+				// is what this test is looking for. The case where they
+				// legitimately disagree is TestRebasedCommitsAreNotUnlanded.
+				n, _ := strconv.Atoi(strings.TrimSpace(rl.out))
 				unsettledStub{
 					status: st.out, statusErr: st.err,
 					revList: rl.out, revListErr: rl.err,
+					unlanded: n,
 				}.install(t)
 
 				legacy := legacyUnsettled("/wt")
 				d := WorktreeUnsettledAt("/wt")
 
-				// A probe that could not run is the ONLY licensed divergence.
+				// A probe that could not run is the ONLY licensed divergence
+				// here.
 				probeFailed := st.err != nil || rl.err != nil || rl.name == "unparsable"
 				if d.IsUndetermined() != probeFailed {
 					t.Fatalf("IsUndetermined() = %v, want %v (reason %q)",
@@ -170,7 +211,7 @@ func TestUndeterminedIsNotUnlanded(t *testing.T) {
 	if d.IsUnlanded() || d.IsModified() {
 		t.Errorf("undetermined must not claim a sub-state it could not measure: %+v", d)
 	}
-	if got := d.UndeterminedReason(); !strings.Contains(got, "rev-list") {
+	if got := d.UndeterminedReason(); !strings.Contains(got, "git rev-list") {
 		t.Errorf("UndeterminedReason() = %q, want it to name the failing probe", got)
 	}
 	if got := d.Reason(); !strings.HasPrefix(got, "undetermined (") {
@@ -197,59 +238,145 @@ func TestUnresolvedDefaultBranchIsUndetermined(t *testing.T) {
 	}
 }
 
-// TestUnlandedRangeCreditsRecordedLandings is the core of E-1940's second half:
-// `worktree land` rebases, so the branch keeps SHAs that main will never have,
-// and the range must exclude each recorded landing or the count reports landed
-// work as unlanded forever.
-func TestUnlandedRangeCreditsRecordedLandings(t *testing.T) {
+// TestRebasedCommitsAreNotUnlanded is E-2087 at the unit level: the branch is
+// three commits ahead of the base by SHA, and the content comparison matches
+// every one of them to a commit already on the base. The old probe reported
+// three, advised `worktree land`, and would have replayed work that was in.
+func TestRebasedCommitsAreNotUnlanded(t *testing.T) {
+	unsettledStub{revList: "3\n", unlanded: 0}.install(t)
+
+	d := WorktreeUnsettledAt("/wt")
+
+	if d.IsUndetermined() {
+		t.Fatalf("probe could not run: %s", d.UndeterminedReason())
+	}
+	if d.Unsettled() || d.IsUnlanded() {
+		t.Errorf("commits already on the base still read as unlanded: %s", d.Reason())
+	}
+	if legacyUnsettled("/wt") != true {
+		t.Fatal("fixture does not reproduce the bug: the legacy probe agreed")
+	}
+}
+
+// TestUnlandedComparesTheForkPointRanges pins the two ranges the comparison is
+// made over. Both must start at the merge base: comparing the branch against
+// all of the base's history, or against the base's tip alone, is a different
+// question with a different answer.
+func TestUnlandedComparesTheForkPointRanges(t *testing.T) {
 	var got []string
-	unsettledStub{revList: "0\n", revListArgs: &got}.install(t)
+	unsettledStub{revList: "2\n", unlanded: 2, rangeDiffArgs: &got}.install(t)
 
-	worktreeUnsettledAt("/wt", []string{"aaa111", "bbb222"}, false)
+	worktreeUnsettledAt("/wt", false)
 
-	want := []string{"rev-list", "--count", "--ignore-missing", "HEAD", "^main", "^aaa111", "^bbb222"}
+	want := []string{"range-diff", "--no-color", "--no-patch",
+		"b45e0000..HEAD", "b45e0000..main"}
 	if len(got) != len(want) {
-		t.Fatalf("rev-list args = %v, want %v", got, want)
+		t.Fatalf("range-diff args = %v, want %v", got, want)
 	}
 	for i := range want {
 		if got[i] != want[i] {
-			t.Fatalf("rev-list args = %v, want %v", got, want)
+			t.Fatalf("range-diff args = %v, want %v", got, want)
 		}
 	}
 }
 
-// TestNoLandingsLeavesTheLegacyRange proves the credit is additive. A task that
-// never landed must be measured exactly as before, or the fix would quietly
-// change the answer for every worktree in flight.
-func TestNoLandingsLeavesTheLegacyRange(t *testing.T) {
-	var got []string
-	unsettledStub{revList: "2\n", revListArgs: &got}.install(t)
+// TestBaseUnmovedSkipsTheComparison covers the guard that keeps a fresh
+// worktree from reading as undetermined. When the base has not moved since the
+// fork there is nothing to compare against, and `git range-diff` refuses an
+// empty range rather than answering "zero counterparts" — so the branch's own
+// log is the answer, and range-diff must not be called at all.
+func TestBaseUnmovedSkipsTheComparison(t *testing.T) {
+	var called [][]string
+	unsettledStub{
+		revList: "0\n",
+		log:     "abc1234 first\n",
+	}.install(t)
+	inner := runGit
+	runGit = func(dir string, args ...string) (string, error) {
+		called = append(called, args)
+		// The branch is 2 ahead; the base gained nothing.
+		if args[0] == "rev-list" && strings.HasSuffix(args[len(args)-1], "..HEAD") {
+			return "2\n", nil
+		}
+		return inner(dir, args...)
+	}
 
-	d := worktreeUnsettledAt("/wt", nil, false)
+	d := WorktreeUnsettledAt("/wt")
 
-	for _, arg := range got {
-		if strings.HasPrefix(arg, "^") && arg != "^main" {
-			t.Errorf("nothing was landed, yet %q was excluded (args %v)", arg, got)
+	if d.IsUndetermined() {
+		t.Fatalf("an unmoved base made the verdict undetermined: %s", d.UndeterminedReason())
+	}
+	if d.UnlandedCount != 1 || len(d.UnlandedLog) != 1 {
+		t.Errorf("count=%d log=%v, want the branch's own log", d.UnlandedCount, d.UnlandedLog)
+	}
+	for _, c := range called {
+		if c[0] == "range-diff" {
+			t.Errorf("range-diff was called with an empty range to compare against")
 		}
 	}
-	if !d.IsUnlanded() || d.UnlandedCount != 2 {
-		t.Errorf("want 2 unlanded commits, got %+v", d)
+}
+
+// TestUnlandedProbeFailureIsUndetermined proves the comparison fails CLOSED. A
+// range-diff that cannot run must mark the row, never clear it.
+func TestUnlandedProbeFailureIsUndetermined(t *testing.T) {
+	unsettledStub{
+		revList:      "2\n",
+		rangeDiffErr: errors.New("fatal: need two commit ranges"),
+	}.install(t)
+
+	d := WorktreeUnsettledAt("/wt")
+
+	if !d.Unsettled() || !d.IsUndetermined() {
+		t.Fatalf("a failed comparison must not read as the all-clear: %+v", d)
+	}
+	if d.IsUnlanded() {
+		t.Error("undetermined must not claim the unlanded sub-state it could not measure")
+	}
+	if got := d.UndeterminedReason(); !strings.Contains(got, "git range-diff") {
+		t.Errorf("UndeterminedReason() = %q, want it to name the failing probe", got)
+	}
+}
+
+// TestUnmovedBaseLogFailureIsUndetermined completes the fail-closed rule on the
+// one path that reads `git log` for the verdict rather than for display. When
+// the base has not moved the branch's own log IS the answer, so a failure there
+// is a failure of the probe — not a lost detail.
+func TestUnmovedBaseLogFailureIsUndetermined(t *testing.T) {
+	unsettledStub{revList: "0\n", logErr: errors.New("git exploded")}.install(t)
+	inner := runGit
+	runGit = func(dir string, args ...string) (string, error) {
+		if args[0] == "rev-list" && strings.HasSuffix(args[len(args)-1], "..HEAD") {
+			return "2\n", nil
+		}
+		return inner(dir, args...)
+	}
+
+	d := WorktreeUnsettledAt("/wt")
+
+	if !d.Unsettled() || !d.IsUndetermined() {
+		t.Fatalf("a failed log on the verdict path must not read as clean: %+v", d)
+	}
+	if got := d.UndeterminedReason(); !strings.Contains(got, "git log") {
+		t.Errorf("UndeterminedReason() = %q, want it to name the failing probe", got)
 	}
 }
 
 // TestVerdictPathSkipsEnrichment guards the hot path.
 // AnnotateSessionStatusUnsettled runs the verdict probe once per row on EVERY
-// flat `session status` render, so the marker must never pay for the commit
-// subjects and branch that only `task unsettled <id>` displays. With dozens of
-// worktrees those extra two calls per row are dozens of needless subprocesses.
+// flat `session status` render, so the marker must never pay for the branch
+// name that only `task unsettled <id>` displays.
+//
+// E-2087 moved the commit subjects OFF that list. The content comparison has to
+// identify the unlanded commits individually to count them, so naming them
+// costs nothing extra and both entry points carry them; what used to be a
+// second `git log` per row is now no git call at all.
 func TestVerdictPathSkipsEnrichment(t *testing.T) {
 	var called [][]string
 	unsettledStub{
-		status:      "",
-		revList:     "3\n",
-		log:         "abc1234 subject\n",
-		branch:      "task/x\n",
-		revListArgs: nil,
+		status:   "",
+		revList:  "3\n",
+		unlanded: 3,
+		branch:   "task/x\n",
 	}.install(t)
 	inner := runGit
 	runGit = func(dir string, args ...string) (string, error) {
@@ -257,10 +384,13 @@ func TestVerdictPathSkipsEnrichment(t *testing.T) {
 		return inner(dir, args...)
 	}
 
-	// Verdict-only: the two predicate probes, and nothing display-only.
+	// Verdict-only: the predicate's probes, and nothing display-only.
 	d := WorktreeUnsettledAt("/wt")
 	if !d.Unsettled() {
 		t.Fatal("expected unsettled")
+	}
+	if len(d.UnlandedLog) != 3 {
+		t.Errorf("UnlandedLog = %v, want the commits the comparison already named", d.UnlandedLog)
 	}
 	for _, c := range called {
 		if c[0] == "log" || (c[0] == "symbolic-ref" && c[len(c)-1] == "HEAD") {
@@ -274,8 +404,10 @@ func TestVerdictPathSkipsEnrichment(t *testing.T) {
 	if second := WorktreeUnsettledAt("/wt"); second.UnlandedCount != d.UnlandedCount {
 		t.Fatalf("second probe disagreed: %+v vs %+v", second, d)
 	}
-	if n := len(called) - before; n != 2 {
-		t.Errorf("second probe ran %d git calls, want 2 (default branch not memoized)", n)
+	for _, c := range called[before:] {
+		if c[0] == "rev-parse" || c[0] == "config" {
+			t.Errorf("second probe re-resolved the default branch (%v)", c)
+		}
 	}
 
 	// Detail path: same verdict, plus the enrichment.
@@ -283,8 +415,26 @@ func TestVerdictPathSkipsEnrichment(t *testing.T) {
 	if full.Unsettled() != d.Unsettled() || full.UnlandedCount != d.UnlandedCount {
 		t.Errorf("enrichment changed the verdict: %+v vs %+v", full, d)
 	}
-	if len(full.UnlandedLog) == 0 || full.Branch == "" {
+	if full.Branch == "" {
 		t.Errorf("detail path did not enrich: %+v", full)
+	}
+}
+
+// TestUnlandedLogIsCappedButTheCountIsNot pins which of the two is a sample.
+// The list view renders the count; the detail view renders the log under it and
+// says how many more there are, so a count that tracked the cap would under-
+// report every branch with more than unlandedLogLimit commits outstanding.
+func TestUnlandedLogIsCappedButTheCountIsNot(t *testing.T) {
+	const n = unlandedLogLimit + 7
+	unsettledStub{revList: "99\n", unlanded: n}.install(t)
+
+	d := WorktreeUnsettledDetailAt("/wt")
+
+	if d.UnlandedCount != n {
+		t.Errorf("UnlandedCount = %d, want the exact %d", d.UnlandedCount, n)
+	}
+	if len(d.UnlandedLog) != unlandedLogLimit {
+		t.Errorf("len(UnlandedLog) = %d, want it capped at %d", len(d.UnlandedLog), unlandedLogLimit)
 	}
 }
 
@@ -332,10 +482,10 @@ func TestUnsettledAutoManagedOnlyReason(t *testing.T) {
 // normal pre-land condition, where the fix is `worktree land`, not a commit.
 func TestUnsettledUnlandedOnly(t *testing.T) {
 	unsettledStub{
-		status:  "",
-		revList: "2\n",
-		log:     "abc1234 first\ndef5678 second\n",
-		branch:  "task/1865-x\n",
+		status:   "",
+		revList:  "2\n",
+		unlanded: 2,
+		branch:   "task/1865-x\n",
 	}.install(t)
 
 	// Detail variant: this test asserts the display enrichment.
@@ -359,9 +509,9 @@ func TestUnsettledUnlandedOnly(t *testing.T) {
 // — the case where telling the user only one of them would leave them stuck.
 func TestUnsettledBothSubStates(t *testing.T) {
 	unsettledStub{
-		status:  " M src/endless/cli.py\n",
-		revList: "1\n",
-		log:     "abc1234 first\n",
+		status:   " M src/endless/cli.py\n",
+		revList:  "1\n",
+		unlanded: 1,
 	}.install(t)
 
 	d := WorktreeUnsettledAt("/wt")
@@ -395,14 +545,13 @@ func TestUnsettledSettledAndNoWorktree(t *testing.T) {
 	}
 }
 
-// TestUnsettledDisplayFailuresDoNotChangeVerdict proves the enrichment calls are
-// advisory: a failing `git log` or `symbolic-ref` may cost detail but must never
-// flip (or suppress) the verdict.
+// TestUnsettledDisplayFailuresDoNotChangeVerdict proves the enrichment call is
+// advisory: a failing `symbolic-ref` may cost detail but must never flip (or
+// suppress) the verdict.
 func TestUnsettledDisplayFailuresDoNotChangeVerdict(t *testing.T) {
 	boom := errors.New("git exploded")
 	unsettledStub{
-		status: "", revList: "4\n",
-		logErr:    boom,
+		status: "", revList: "4\n", unlanded: 4,
 		branchErr: boom,
 	}.install(t)
 
@@ -411,8 +560,8 @@ func TestUnsettledDisplayFailuresDoNotChangeVerdict(t *testing.T) {
 	if !d.Unsettled() || d.UnlandedCount != 4 {
 		t.Fatalf("verdict changed by display-only failures: %+v", d)
 	}
-	if len(d.UnlandedLog) != 0 || d.Branch != "" {
-		t.Errorf("expected empty display fields, got log=%v branch=%q", d.UnlandedLog, d.Branch)
+	if d.Branch != "" {
+		t.Errorf("expected an empty branch, got %q", d.Branch)
 	}
 }
 

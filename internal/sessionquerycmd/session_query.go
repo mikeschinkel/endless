@@ -607,11 +607,9 @@ func runWorktreeAnomalies(args []string) int {
 // every path in ONE invocation so the list view costs a single subprocess
 // rather than one per worktree.
 //
-// E-1940 added a best-effort landings lookup underneath, keyed off the `e-NNNN`
-// directory name. It does not make the command DB-dependent: a miss credits no
-// landing and the verdict falls back to pure git. To make the lookup HIT, pass
-// the same `--config-dir` the caller's own database context resolved to — which
-// is what endless.task_cmd._unsettled_probe threads through.
+// The probe underneath reads no database at all (E-2087): "has this branch's
+// work reached the base?" is answered by comparing content in the repository,
+// so nothing here depends on a task row being reachable.
 //
 // Always exits 0 when it ran: "settled" is a legitimate answer, not a failure,
 // and the caller reads the verdict from the JSON rather than the exit code.
@@ -657,19 +655,18 @@ type worktreeUnsettledJSON struct {
 	UndeterminedReason string `json:"undetermined_reason"`
 	// Base is the resolved default branch the count was measured against, so
 	// the renderer can name it instead of saying "main" on a repo where that is
-	// not true. LandedShas are the recorded landings credited.
-	Base       string   `json:"base"`
-	LandedShas []string `json:"landed_shas"`
-	StatusErr  string   `json:"status_error,omitempty"`
-	RevListErr string   `json:"rev_list_error,omitempty"`
-	BaseErr    string   `json:"base_error,omitempty"`
-	LookupErr  string   `json:"lookup_error,omitempty"`
+	// not true.
+	Base        string `json:"base"`
+	StatusErr   string `json:"status_error,omitempty"`
+	UnlandedErr string `json:"unlanded_error,omitempty"`
+	BaseErr     string `json:"base_error,omitempty"`
+	LookupErr   string `json:"lookup_error,omitempty"`
 }
 
 func newWorktreeUnsettledJSON(d monitor.UnsettledDetail) worktreeUnsettledJSON {
 	// Nil slices marshal as null; the Python side wants lists it can iterate
 	// unconditionally, so normalize to empty.
-	mod, auto, log, landed := d.Modified, d.AutoManaged, d.UnlandedLog, d.LandedShas
+	mod, auto, log := d.Modified, d.AutoManaged, d.UnlandedLog
 	if mod == nil {
 		mod = []string{}
 	}
@@ -678,9 +675,6 @@ func newWorktreeUnsettledJSON(d monitor.UnsettledDetail) worktreeUnsettledJSON {
 	}
 	if log == nil {
 		log = []string{}
-	}
-	if landed == nil {
-		landed = []string{}
 	}
 	return worktreeUnsettledJSON{
 		WorktreePath:       d.WorktreePath,
@@ -697,9 +691,8 @@ func newWorktreeUnsettledJSON(d monitor.UnsettledDetail) worktreeUnsettledJSON {
 		Undetermined:       d.IsUndetermined(),
 		UndeterminedReason: d.UndeterminedReason(),
 		Base:               d.Base,
-		LandedShas:         landed,
 		StatusErr:          d.StatusErr,
-		RevListErr:         d.RevListErr,
+		UnlandedErr:        d.UnlandedErr,
 		BaseErr:            d.BaseErr,
 		LookupErr:          d.LookupErr,
 	}

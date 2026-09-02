@@ -1,7 +1,8 @@
 """Tests for E-1865: `task unsettled` — why a worktree hasn't settled.
 
 The VERDICT is computed in Go (monitor.WorktreeUnsettledAt, shared with the ◆
-marker) and is covered by internal/monitor/worktree_unsettled_test.go. These
+marker) and is covered by internal/monitor/worktree_unsettled_test.go and
+internal/monitor/worktree_unlanded_test.go. These
 tests cover the Python half: that each sub-state is rendered with the fix it
 actually needs, that a truncated list says so, and that the JSON contract is
 stable. The Go probe is stubbed throughout — these are renderer tests, and
@@ -39,7 +40,7 @@ def _probe(**over) -> dict:
         # E-1940 additions: a probe that could not run is its own answer, and
         # the base is resolved rather than assumed to be `main`.
         "undetermined": False, "undetermined_reason": "",
-        "base": "main", "landed_shas": [],
+        "base": "main",
     }
     base.update(over)
     return base
@@ -181,17 +182,19 @@ def test_item_names_the_resolved_base_rather_than_main(
     assert "not on master" in out
 
 
-def test_item_settled_credits_the_recorded_landings(
+def test_item_settled_names_the_resolved_base(
         registered_project, stub_probe, capsys):
-    # A rebase-landed worktree reads settled only because the recorded landing
-    # was credited; saying so is what distinguishes it from a branch that
-    # genuinely never diverged.
+    # E-2087 removed the "N recorded landing(s) credited" qualifier along with
+    # the mechanism behind it: a rebase-landed worktree now reads settled
+    # because its commits' CONTENT is on the base, which is the same reason a
+    # branch that never diverged reads settled. There is nothing left to
+    # distinguish, so the sentence no longer tries to.
     _insert_task(9118)
-    stub_probe([_probe(base="master", landed_shas=["abc123", "def456"])])
+    stub_probe([_probe(base="master")])
     task_cmd.unsettled_item(9118)
     out = capsys.readouterr().out
     assert "every commit is on master" in out
-    assert "2 recorded landing(s) credited" in out
+    assert "credited" not in out
 
 
 def test_item_truncation_note_when_log_is_capped(

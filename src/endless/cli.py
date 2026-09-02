@@ -2037,16 +2037,16 @@ def task_unsettled(item_id, project, show_all, include_settled, limit, llm, as_j
 
     `task unsettled <id>` shows the full breakdown for one task — which files
     are uncommitted (and which of those are endless's own auto-managed files)
-    and which commits are not yet on main. `task unsettled --all` surveys every
-    task worktree in the project, one line each.
+    and which commits have not reached the base branch. `task unsettled --all`
+    surveys every task worktree in the project, one line each.
 
     A target is required: the survey walks every worktree on disk and is slow
     enough that it should be asked for, not stumbled into.
 
     This is the explanation behind the ◆ marker in `session status`: it reads the
     same probe, so the two can never disagree. Unsettled means modified
-    (uncommitted changes) OR unlanded (commits not in main) — the fix differs,
-    which is why the marker alone is not enough.
+    (uncommitted changes) OR unlanded (commits whose content is not on the base
+    branch) — the fix differs, which is why the marker alone is not enough.
     """
     if item_id is not None and show_all:
         raise click.UsageError("pass a task id or --all, not both.")
@@ -3659,12 +3659,15 @@ def worktree_drop(name_or_path, force):
 
 @worktree_cmd.command("reap")
 def worktree_reap():
-    """Sweep stale landed worktrees.
+    """Sweep stale settled worktrees.
 
-    Removes worktree directories whose owning task has at least one row
-    in task_landings older than worktree_ttl (.endless/config.json,
-    default 14d) AND has no live process holding cwd inside. Pre-existing
-    orphan directories without landing records are skipped.
+    Removes worktree directories that are settled — clean, and holding no
+    commit whose content the base branch lacks — whose owning task has been
+    untouched for longer than worktree_ttl (.endless/config.json, default
+    14d) AND that no live process holds a cwd inside. A recorded landing is
+    not required: a branch sitting at the base with nothing to land is just
+    as disposable as one that landed. A directory nothing was ever recorded
+    about is skipped — there is no moment to age off.
     """
     from endless.worktree_cmd import _project_root, _reap_stale_worktrees
     _reap_stale_worktrees(_project_root())

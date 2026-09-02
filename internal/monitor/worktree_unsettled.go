@@ -3,7 +3,6 @@ package monitor
 import (
 	"fmt"
 	"path/filepath"
-	"strconv"
 	"strings"
 
 	"github.com/mikeschinkel/endless/internal/faults"
@@ -36,10 +35,14 @@ import (
 //     whose whole job is answering "is my work safe?". Now it is undetermined,
 //     which marks the row and records a fault. The reaper always failed closed;
 //     this is the display catching up to it.
-//   - It credits the recorded landing (task_landings.go). A rebasing land
-//     rewrites every commit's SHA, so the old `<base>..HEAD` count reported
-//     landed work as unlanded forever, and advised `worktree land` — which
-//     would replay hundreds of stale commits.
+//   - It credited the recorded landing, because a rebasing land rewrites every
+//     commit's SHA and the old `<base>..HEAD` count reported landed work as
+//     unlanded forever.
+//
+// E-2087 replaced that second half. The count now comes from a CONTENT
+// comparison (worktree_unlanded.go) that sees a rebased — and even a
+// conflict-resolved — copy for what it is, so the database credit it used as a
+// stand-in is gone and this probe is pure git again.
 
 // UnsettledDetail is the breakdown behind one worktree's unsettled state: which
 // files are modified (split into user work vs endless's own auto-managed files)
@@ -63,32 +66,29 @@ type UnsettledDetail struct {
 	// against (DefaultBranch, E-1940). Empty when resolution failed.
 	Base string
 
-	// LandedShas are the recorded landings credited against the branch — the
-	// commits reachable from each are excluded from UnlandedCount, because a
-	// rebasing land rewrote their SHAs and no git-only probe can see that they
-	// are in. Empty means "nothing recorded", not "nothing landed".
-	LandedShas []string
-
-	// UnlandedCount is the number of commits on this branch that are neither on
-	// Base nor covered by a recorded landing — i.e. work that genuinely has not
-	// reached the base branch.
+	// UnlandedCount is the number of commits on this branch whose CONTENT has
+	// not reached Base — work that genuinely has not landed, as opposed to work
+	// a rebasing land re-hashed (E-2087).
 	UnlandedCount int
 	// UnlandedLog holds up to unlandedLogLimit "<short-sha> <subject>" lines for
-	// display only; UnlandedCount, not len(UnlandedLog), drives the predicate.
+	// display; UnlandedCount, not len(UnlandedLog), drives the predicate. These
+	// are the unlanded commits themselves, not a sample of the branch — the
+	// content comparison identifies them individually, so it costs nothing to
+	// name the right ones.
 	UnlandedLog []string
 
 	// Branch is the worktree's current branch ("" when detached).
 	Branch string
 
-	// LookupErr, BaseErr, StatusErr and RevListErr record a probe that could not
-	// run: resolving the task's worktree, resolving the default branch, `git
-	// status`, and `git rev-list` respectively. Any of them makes the verdict
-	// UNDETERMINED, which Unsettled() reports as unsettled — "I could not tell"
-	// must never render as "you are clear" (E-1940).
-	LookupErr  string
-	BaseErr    string
-	StatusErr  string
-	RevListErr string
+	// LookupErr, BaseErr, StatusErr and UnlandedErr record a probe that could
+	// not run: resolving the task's worktree, resolving the default branch,
+	// `git status`, and the unlanded-commit comparison respectively. Any of them
+	// makes the verdict UNDETERMINED, which Unsettled() reports as unsettled —
+	// "I could not tell" must never render as "you are clear" (E-1940).
+	LookupErr   string
+	BaseErr     string
+	StatusErr   string
+	UnlandedErr string
 }
 
 // unlandedLogLimit caps the commit subjects carried for display. The count is
@@ -100,7 +100,7 @@ const unlandedLogLimit = 20
 // which folds it in — so `task unsettled <id>` can say WHICH it is; the list
 // view collapses the two, the detail view explains them.
 func (d UnsettledDetail) IsUndetermined() bool {
-	return d.LookupErr != "" || d.BaseErr != "" || d.StatusErr != "" || d.RevListErr != ""
+	return d.LookupErr != "" || d.BaseErr != "" || d.StatusErr != "" || d.UnlandedErr != ""
 }
 
 // Unsettled reports whether this worktree needs the user's attention: it has
@@ -134,7 +134,7 @@ func (d UnsettledDetail) IsModified() bool {
 // "unlanded"). False when the count could not be established — that is the
 // undetermined state, not the unlanded one.
 func (d UnsettledDetail) IsUnlanded() bool {
-	return d.RevListErr == "" && d.BaseErr == "" && d.UnlandedCount > 0
+	return d.UnlandedErr == "" && d.BaseErr == "" && d.UnlandedCount > 0
 }
 
 // UndeterminedReason names the probe that could not run and why, or "" when
@@ -148,8 +148,8 @@ func (d UnsettledDetail) UndeterminedReason() string {
 		return "default branch unresolved: " + d.BaseErr
 	case d.StatusErr != "":
 		return "git status failed: " + d.StatusErr
-	case d.RevListErr != "":
-		return "git rev-list failed: " + d.RevListErr
+	case d.UnlandedErr != "":
+		return "unlanded commits could not be counted: " + d.UnlandedErr
 	}
 	return ""
 }
@@ -191,33 +191,28 @@ func (d UnsettledDetail) Reason() string {
 // calls it once per row on every flat `session status` render, so it must not pay
 // for detail nobody is going to read.
 //
-// The recorded landings are looked up best-effort from the `e-NNNN` directory
-// name (landedShasForWorktreePath). That is a softening of E-1766's DB-free
-// rule, not a reversal of it: the lookup is never authoritative, every failure
-// is silent, and a miss only returns the count to its pre-E-1940 over-reporting
-// — so the probe still behaves in a self-dev sandbox that has no task row, it
-// just credits nothing there.
+// It reads no database (E-1766, restored by E-2087): everything the verdict
+// needs is in the repository, so the probe answers the same way inside a
+// self-dev worktree whose sandbox has no task row as it does anywhere else.
 func WorktreeUnsettledAt(worktreePath string) UnsettledDetail {
-	return worktreeUnsettledAt(worktreePath, landedShasForWorktreePath(worktreePath), false)
+	return worktreeUnsettledAt(worktreePath, false)
 }
 
 // WorktreeUnsettledDetailAt returns the verdict PLUS the display enrichment
-// (unlanded commit subjects, current branch) that `task unsettled <id>` renders.
-// Costs two extra git calls per worktree, so it is reserved for the surfaces
-// that actually show the breakdown — never the per-row marker.
+// (the worktree's current branch) that `task unsettled <id>` renders. One extra
+// git call per worktree, so it is reserved for the surfaces that show the
+// breakdown — never the per-row marker.
 func WorktreeUnsettledDetailAt(worktreePath string) UnsettledDetail {
-	return worktreeUnsettledAt(worktreePath, landedShasForWorktreePath(worktreePath), true)
+	return worktreeUnsettledAt(worktreePath, true)
 }
 
 // worktreeUnsettledAt is the shared core. It runs exactly the probes the ◆
 // predicate runs, in the same order; the enrich flag adds display-only calls
-// that never affect the verdict. landed carries the recorded landing SHAs to
-// credit, which the caller resolves — the git logic here takes no database.
-func worktreeUnsettledAt(worktreePath string, landed []string, enrich bool) UnsettledDetail {
+// that never affect the verdict.
+func worktreeUnsettledAt(worktreePath string, enrich bool) UnsettledDetail {
 	d := UnsettledDetail{
 		HasWorktree:  worktreePath != "",
 		WorktreePath: worktreePath,
-		LandedShas:   landed,
 	}
 	if !d.HasWorktree {
 		return d
@@ -239,10 +234,10 @@ func worktreeUnsettledAt(worktreePath string, landed []string, enrich bool) Unse
 		}
 	}
 
-	// Probe 2 — commits that have not reached the base branch. Two corrections
-	// over the original `main..HEAD` (E-1940): the base is resolved rather than
-	// hardcoded, and each recorded landing is excluded so a rebase-rewritten
-	// SHA is not mistaken for work that never landed.
+	// Probe 2 — commits whose content has not reached the base branch. Two
+	// corrections over the original `main..HEAD`: the base is resolved rather
+	// than hardcoded (E-1940), and the comparison is by content rather than by
+	// SHA, so a commit a rebasing land re-hashed is seen to be in (E-2087).
 	base, berr := DefaultBranch(worktreePath)
 	if berr != nil {
 		d.BaseErr = berr.Error()
@@ -251,66 +246,32 @@ func worktreeUnsettledAt(worktreePath string, landed []string, enrich bool) Unse
 	}
 	d.Base = base
 
-	out, gerr = runGit(worktreePath, unlandedRevListArgs(base, landed, "--count")...)
-	if gerr != nil {
-		d.RevListErr = firstLine(out, gerr)
-		recordProbeFault(d, "git rev-list", d.RevListErr)
+	commits, uerr := unlandedCommits(worktreePath, base)
+	if uerr != nil {
+		d.UnlandedErr = uerr.Error()
+		recordProbeFault(d, probeCommand(uerr), d.UnlandedErr)
 		return d
 	}
-	n, perr := strconv.Atoi(strings.TrimSpace(out))
-	if perr != nil {
-		d.RevListErr = "unparsable rev-list count: " + strings.TrimSpace(out)
-		recordProbeFault(d, "git rev-list", d.RevListErr)
-		return d
+	d.UnlandedCount = len(commits)
+	// The comparison names the unlanded commits as a side effect of finding
+	// them, so the log costs no extra git call and both entry points carry it.
+	// Only the sample is bounded; the count above is exact.
+	if len(commits) > unlandedLogLimit {
+		commits = commits[:unlandedLogLimit]
 	}
-	d.UnlandedCount = n
+	d.UnlandedLog = commits
 
 	if !enrich {
 		return d
 	}
 
-	// Display-only enrichment. Failures here are silent: they must never change
+	// Display-only enrichment. A failure here is silent: it must never change
 	// the verdict, only the detail rendered under it.
-	if d.UnlandedCount > 0 {
-		args := append([]string{"log", "--oneline", "--no-decorate", "-n",
-			strconv.Itoa(unlandedLogLimit)}, unlandedRangeArgs(base, landed)...)
-		if lg, lerr := runGit(worktreePath, args...); lerr == nil {
-			for _, ln := range strings.Split(strings.TrimSpace(lg), "\n") {
-				if ln = strings.TrimSpace(ln); ln != "" {
-					d.UnlandedLog = append(d.UnlandedLog, ln)
-				}
-			}
-		}
-	}
 	if br, berr := runGit(worktreePath, "symbolic-ref", "--short", "--quiet", "HEAD"); berr == nil {
 		d.Branch = strings.TrimSpace(br)
 	}
 
 	return d
-}
-
-// unlandedRevListArgs builds the `git rev-list` invocation that counts the
-// branch's genuinely-unlanded commits. Exported to the reaper too, so the two
-// surfaces cannot drift apart on what "unlanded" means.
-func unlandedRevListArgs(base string, landed []string, extra ...string) []string {
-	args := append([]string{"rev-list"}, extra...)
-	return append(args, unlandedRangeArgs(base, landed)...)
-}
-
-// unlandedRangeArgs is the revision range itself: everything reachable from
-// HEAD, minus the base branch, minus every recorded landing.
-//
-// `--ignore-missing` covers a landing SHA that is no longer an object here —
-// a branch recreated from scratch, or a record-only landing naming a commit
-// this clone never had. Without it one absent SHA makes git exit 128 and the
-// whole probe fails. It cannot mask a bad BASE: DefaultBranch only ever returns
-// a branch it verified resolves to a commit.
-func unlandedRangeArgs(base string, landed []string) []string {
-	args := []string{"--ignore-missing", "HEAD", "^" + base}
-	for _, sha := range landed {
-		args = append(args, "^"+sha)
-	}
-	return args
 }
 
 // recordProbeFault reports a git probe that could not run. Deduped on (worktree,
@@ -395,13 +356,7 @@ func TaskWorktreeUnsettledDetail(projectID, taskID int64) UnsettledDetail {
 	if wt == "" {
 		return UnsettledDetail{}
 	}
-	landed, lerr := LandedShasForTask(taskID)
-	if lerr != nil {
-		// Same softness as the path-based lookup: crediting nothing can only
-		// over-report unlanded work, never hide it, so it is not a fault.
-		landed = nil
-	}
-	return worktreeUnsettledAt(wt, landed, false)
+	return worktreeUnsettledAt(wt, false)
 }
 
 // statusPaths parses `git status --porcelain` output into repo-relative paths.

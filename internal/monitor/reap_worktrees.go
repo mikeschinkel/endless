@@ -71,13 +71,20 @@ var worktreeDirRe = regexp.MustCompile(`^e-(\d+)$`)
 // worktree checks above cover the sandbox (E-1904).
 var ReapSandbox func(worktreeName string) error
 
-// ReapStaleWorktrees removes worktree directories whose owning task has
-// at least one row in task_landings older than ttl AND has no live
-// process holding cwd inside the directory.
+// ReapStaleWorktrees removes worktree directories that are SETTLED — clean and
+// holding no work the default branch lacks — whose task has been untouched for
+// longer than ttl and whose directory no live process is sitting in.
 //
-// Pre-existing orphan directories (no rows in task_landings) are
-// skipped — the reaper only touches dirs whose task has landed at
-// least once.
+// It used to require a row in task_landings, which read as "only reclaim what
+// has landed". That gate turned out to be a proxy for the wrong thing: a
+// worktree whose branch sits at the base with nothing to land is just as
+// disposable as one that landed, and E-2087 found two of them (E-1360, E-1697)
+// permanently unreclaimable because nothing had ever been recorded for them.
+// The tempting shortcut — record a landing so they reap — writes a falsehood
+// into the table the not-on-main report reads, so the gate moved instead: what
+// is required now is that there be nothing to land, which a landing implies but
+// does not exhaust. A directory with no recorded history at all is still
+// skipped; see maybeReapWorktree.
 //
 // projectRoot is the main checkout path; `git worktree remove` runs
 // there. The function is idempotent and best-effort: per-directory
@@ -144,33 +151,40 @@ func reapBoundSandbox(worktreeName string) {
 // was removed.
 //
 // Eligibility (all must hold):
-//  1. A task_landings row exists for the task.
-//  2. The latest activity timestamp — MAX(landed_at, session_tasks.updated_at)
-//     — is older than cutoff. session_tasks.updated_at is upserted by every
-//     task.* event from a session actor, so claim / status flip / decision /
-//     etc. all advance it (see internal/events/session_tasks.go).
+//  1. The task has been touched at some recorded moment — a landing, or any
+//     session activity. A directory with neither has no timestamp to measure a
+//     TTL against, and the reaper cannot tell an abandoned worktree from one
+//     created a minute ago, so it skips.
+//  2. That moment — MAX(landed_at, session_tasks.updated_at) — is older than
+//     cutoff. session_tasks.updated_at is upserted by every task.* event from a
+//     session actor, so claim / status flip / decision / etc. all advance it
+//     (see internal/events/session_tasks.go).
 //  3. No active (state != 'ended') session has task_id pointing at
 //     the task.
-//  4. The worktree's branch has no commits that have not reached the
-//     project's default branch, counting a recorded landing as reached
-//     (`git -C <wt> rev-list --count HEAD ^<base> ^<landing>...` == 0).
-//  5. The worktree's working tree is clean
-//     (`git -C <wt> status --porcelain` empty).
-//  6. No live process holds cwd inside the dir.
+//  4. The worktree is SETTLED: its working tree is clean, and it holds no
+//     commit whose content the project's default branch lacks.
+//  5. No live process holds cwd inside the dir.
 //
-// Conditions 3 and 6 are not evaluated here: they are WorktreeInUse, the one
+// Condition 4 is one call to the probe `session status` reads for its ◆ and
+// `task unsettled` explains (E-2087), so the reaper can never disagree with
+// what the user was just told about the same directory. Undetermined counts as
+// unsettled there, which preserves the fail-closed handling this function has
+// always had: it would rather skip a candidate it cannot reason about —
+// including one whose default branch will not resolve — than destroy in-flight
+// work.
+//
+// Conditions 3 and 5 are not evaluated here: they are WorktreeInUse, the one
 // implementation `endless worktree drop` also consults (E-1947), and it is
 // called after the cheap git conditions since its lsof probe is the expensive
 // one. They are still listed above in significance order.
-//
-// Any git error while running 4 or 5 — including a default branch that
-// cannot be resolved — is treated as "in use". The reaper would rather
-// skip a candidate it can't reason about than destroy in-flight work.
 func maybeReapWorktree(db *sql.DB, projectRoot, dir string, taskID int64, cutoff time.Time) (bool, error) {
+	// The most recent landing, if there is one. Its absence no longer
+	// disqualifies the directory (E-2087) — it only means the branch name has
+	// to come from git rather than from the row.
 	var landedAt string
 	// branch is nullable (E-1719): a historical/record-only landing records no
-	// branch. Scan into NullString so a NULL row doesn't error, and skip the
-	// branch -D step below when it's absent.
+	// branch. Scan into NullString so a NULL row doesn't error, and fall back
+	// to what git reports when it's absent.
 	var branch sql.NullString
 	err := db.QueryRow(
 		`SELECT landed_at, branch
@@ -180,18 +194,20 @@ func maybeReapWorktree(db *sql.DB, projectRoot, dir string, taskID int64, cutoff
 		 LIMIT 1`,
 		taskID,
 	).Scan(&landedAt, &branch)
+	hasLanding := true
 	if err == sql.ErrNoRows {
-		return false, nil
-	}
-	if err != nil {
+		hasLanding = false
+	} else if err != nil {
 		return false, fmt.Errorf("query last landing: %w", err)
 	}
 
-	landed, err := time.Parse("2006-01-02T15:04:05", landedAt)
-	if err != nil {
-		return false, fmt.Errorf("parse landed_at %q: %w", landedAt, err)
+	var latest time.Time
+	if hasLanding {
+		latest, err = time.Parse("2006-01-02T15:04:05", landedAt)
+		if err != nil {
+			return false, fmt.Errorf("parse landed_at %q: %w", landedAt, err)
+		}
 	}
-	latest := landed
 
 	var sessionTouched sql.NullString
 	err = db.QueryRow(
@@ -206,48 +222,45 @@ func maybeReapWorktree(db *sql.DB, projectRoot, dir string, taskID int64, cutoff
 			latest = t
 		}
 	}
+	// Condition 1. Nothing was ever recorded about this task, so there is no
+	// moment to age off. Skipping is the only safe answer: the alternative
+	// reaps a directory created seconds ago whose session has not yet emitted
+	// its first event.
+	if latest.IsZero() {
+		return false, nil
+	}
 	if latest.After(cutoff) {
 		return false, nil
 	}
 
-	// Unmerged commits on the branch → skip. Treat any git error as "in use" —
-	// better to skip than destroy a worktree we can't inspect.
-	//
-	// E-1940 replaced the hardcoded `main` with the shared resolver and started
-	// crediting the recorded landings. Both changes let this condition PASS
-	// where it previously could not: on a project whose default branch is not
-	// `main` every candidate errored and was skipped forever, and a
-	// rebase-landed branch failed the SHA comparison by construction — so it
-	// passed condition 1 (a landing exists) and was rejected here, which is how
-	// landed worktrees accumulated without bound. The fail-closed handling
-	// itself is unchanged: a resolver error still means skip, never reap.
-	base, berr := DefaultBranch(dir)
-	if berr != nil {
+	// The resolver is asked BEFORE the probe so an unresolvable default branch
+	// raises the REAPER's own fault. "This worktree can never be reaped" is a
+	// different thing for the operator to fix from "this row is marked ◆", and
+	// the probe below would record only the latter (E-1940). Resolution is
+	// memoized per directory, so asking twice costs one git call.
+	if _, berr := DefaultBranch(dir); berr != nil {
 		recordReapDefaultBranchFault(dir, taskID, berr)
 		return false, nil
 	}
-	landedRefs, lerr := landedShas(db, taskID)
-	if lerr != nil {
-		return false, fmt.Errorf("query landing shas: %w", lerr)
-	}
-	out, gerr := runGit(dir, unlandedRevListArgs(base, landedRefs, "--count")...)
-	if gerr != nil {
+
+	// Condition 4, in one call to the shared probe — and the branch name it
+	// enriches with, so a worktree that never recorded a landing still knows
+	// which branch to delete.
+	d := worktreeUnsettledAt(dir, true)
+	if d.Unsettled() {
 		return false, nil
 	}
-	if n, perr := strconv.Atoi(strings.TrimSpace(out)); perr != nil || n > 0 {
-		return false, nil
+	// The recorded branch when there is a landing row, git's answer when there
+	// is not. The fallback is deliberately NOT applied to a landing row whose
+	// branch is NULL: that is E-1719's record-only landing, where the absent
+	// name is a recorded fact about what was landed, and this function has
+	// always left such a branch alone.
+	branchName := strings.TrimSpace(branch.String)
+	if !hasLanding {
+		branchName = d.Branch
 	}
 
-	// Modified working tree → skip.
-	out, gerr = runGit(dir, "status", "--porcelain")
-	if gerr != nil {
-		return false, nil
-	}
-	if strings.TrimSpace(out) != "" {
-		return false, nil
-	}
-
-	// Conditions 3 and 6 in one call — the shared "is anything still using
+	// Conditions 3 and 5 in one call — the shared "is anything still using
 	// this directory" predicate `endless worktree drop` also consults, so the
 	// two destructive paths can never disagree (E-1947). Placed here rather
 	// than at condition 3's position in the list because its lsof probe is the
@@ -279,13 +292,14 @@ func maybeReapWorktree(db *sql.DB, projectRoot, dir string, taskID int64, cutoff
 		}
 		return false, fmt.Errorf("git worktree remove: %v: %s", err, out)
 	}
-	// A record-only landing (E-1719) records no branch, so there is nothing to
-	// delete — the dir removal above is the whole reap in that case.
-	if branch.Valid && branch.String != "" {
-		if out, err := runGit(projectRoot, "branch", "-D", branch.String); err != nil {
+	// A record-only landing (E-1719) records no branch, and a detached HEAD has
+	// none to read, so there may be nothing to delete — the dir removal above
+	// is the whole reap in that case.
+	if branchName != "" {
+		if out, err := runGit(projectRoot, "branch", "-D", branchName); err != nil {
 			// Branch deletion failure shouldn't unwind the dir removal —
 			// log it but treat the reap as successful.
-			log.Printf("reap worktrees: %s: git branch -D %s: %v: %s", displayPath(dir), branch.String, err, out)
+			log.Printf("reap worktrees: %s: git branch -D %s: %v: %s", displayPath(dir), branchName, err, out)
 		}
 	}
 	return true, nil

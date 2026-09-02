@@ -109,7 +109,7 @@ is left exactly as it was, for its own session to rebase in place.
 | Sub-state    | Meaning                                | Fix                        |
 |--------------|----------------------------------------|----------------------------|
 | `modified`   | Uncommitted working-tree changes       | Commit or discard          |
-| `unlanded`   | Commits on the branch not yet on `main`| `endless worktree land <id>` |
+| `unlanded`   | Commits whose *content* is not yet on the base branch | `endless worktree land <id>` |
 
 Because ◆ means *there is still something to do here*, an unsettled row is never rendered dim — not when its status is terminal (`confirmed`/`assumed`/`completed`), not when its phase is `later`/`maybe`. Dim reads as "done, ignore me", which is precisely the wrong signal for a worktree still awaiting a land.
 
@@ -125,7 +125,11 @@ A target is required — bare `task unsettled` is an error. The survey walks eve
 
 The per-task form lists exactly which files are uncommitted — separating **your** work from endless's own auto-managed files (`verbs.jsonl`, ledger entries), which `worktree land` commits for you — and which commits are not yet on main, with the land command to run.
 
-It is the inverse of `task landed`, and it reads the *same* probe that raises the ◆, so the marker and its explanation cannot disagree. Note both are fail-open: if a git call fails the verdict reads "settled", and the command says so rather than claiming the tree is clean.
+It is the inverse of `task landed`, and it reads the *same* probe that raises the ◆ and that the worktree reaper inverts to decide a directory is safe to reclaim — so none of the three can disagree about what "landed" means. The probe fails **closed**: a git call that cannot run makes the verdict *undetermined*, which still marks the row and records an error, rather than reporting a tree nobody could inspect as clean.
+
+**Unlanded is measured by content, not by SHA.** `worktree land` rebases before it fast-forwards, so the base branch receives a *copy* of every commit under a new hash while the branch keeps the original. Comparing hashes therefore reports landed work as unlanded forever, and the count grows with every later land. Endless compares the two commit series with `git range-diff`, which pairs them by similarity — so a commit that landed after a conflict was resolved, and no longer has even the same diff, is still recognised as in. The comparison is not free: a survey of a hundred-odd worktrees takes a minute or two, which is the other reason `--all` has to be asked for.
+
+What it deliberately does *not* decide: a branch can hold commits genuinely absent from the base and still not be worth landing, because the base moved past them by another route. Those correctly read `unlanded`; whether to land them is yours to judge.
 
 Distinct from `worktree check`, which reports *handoff anomalies* and is deliberately silent about commits ahead of main (the normal pre-land state). Use `worktree check` at handoff; use `task unsettled` when you want to know why something hasn't landed.
 
@@ -203,7 +207,7 @@ endless worktree land <id> --dry-run        # preview without making changes
 1. Auto-commits endless-managed modifications (verbs.jsonl, ledger entries) — these auto-commit to main as global-config artifacts.
 2. Rebases the task branch onto the project's current default branch.
 3. Fast-forwards that branch to the rebased tip.
-4. Records the landing (`task.landed`). **The worktree directory and its branch stay put** — `land` never removes them. A separate reaper sweep (`worktree reap`) deletes a landed worktree once it is older than `worktree_ttl` (`.endless/config.json`, default 14d) and no live process holds a cwd inside it. Retention is what makes re-landing work: commit a follow-up on the same branch and land again, and the dir and branch are reused.
+4. Records the landing (`task.landed`). **The worktree directory and its branch stay put** — `land` never removes them. A separate reaper sweep (`worktree reap`) deletes a *settled* worktree — clean, and holding nothing the base branch lacks — once its task has been untouched for longer than `worktree_ttl` (`.endless/config.json`, default 14d) and no live process holds a cwd inside it. A recorded landing is not required: a branch that sits at the base holding nothing is just as disposable as one that landed. A directory nothing was ever recorded about is skipped, since there is no moment to age off. Retention is what makes re-landing work: commit a follow-up on the same branch and land again, and the dir and branch are reused.
 
 **Do not merge to main any other way.** `worktree land` is the single sanctioned path. The exception is global-config artifacts (verbs.jsonl, db-ledger entries) which auto-commit to main directly.
 

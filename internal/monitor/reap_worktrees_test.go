@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
@@ -154,19 +153,20 @@ func TestReadWorktreeTTLConfig_PresentField(t *testing.T) {
 	}
 }
 
-// TestMaybeReapWorktree_NoLandingRow asserts that a worktree directory
-// whose owning task has no rows in task_landings is treated as a
-// pre-existing orphan and skipped, regardless of TTL.
+// TestMaybeReapWorktree_NoLandingRow asserts that a task with no rows in
+// task_landings AND no session activity is skipped: E-2087 dropped the landing
+// requirement, but a directory nothing was ever recorded about still has no
+// moment to measure the TTL against.
 func TestMaybeReapWorktree_NoLandingRow(t *testing.T) {
 	db := newReaperTestDB(t)
-	// No task_landings rows for task 42.
+	// No task_landings and no session_tasks rows for task 42.
 	cutoff := time.Now().UTC().Add(-time.Hour)
 	reaped, err := maybeReapWorktree(db, t.TempDir(), "/tmp/fake-worktree-dir", 42, cutoff)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if reaped {
-		t.Errorf("expected reap=false for task with no landing row, got true")
+		t.Errorf("expected reap=false for task with nothing recorded, got true")
 	}
 }
 
@@ -206,7 +206,7 @@ type reaperFixture struct {
 	calls    []string
 
 	// answers — left as defaults to make the worktree look fully reapable.
-	revListOut    string // "0" → no unmerged commits
+	revListOut    string // "0" → the branch is contained in the base
 	statusOut     string // "" → clean
 	worktreeRmOut string // stub output for the "worktree" branch (e.g. git's stderr)
 	revListErr    error
@@ -215,12 +215,18 @@ type reaperFixture struct {
 	branchDelErr  error
 	live          bool
 
+	// unlanded is how many commits the content comparison finds no counterpart
+	// for on the base — condition 4's actual verdict since E-2087. revListOut
+	// only decides whether the comparison is reached at all.
+	unlanded     int
+	rangeDiffErr error
+	// branchOut answers `symbolic-ref --short HEAD`, which is where the branch
+	// name comes from when no landing row recorded one.
+	branchOut string
+
 	// revParseErr makes every branch candidate fail to resolve, which is how
 	// DefaultBranch reports "I cannot name this repo's default branch" (E-1940).
 	revParseErr error
-	// revListArgs records the counting rev-list's arguments so a test can
-	// assert which revisions condition 4 excluded.
-	revListArgs []string
 }
 
 func newReaperFixture(t *testing.T, landedAt time.Time) *reaperFixture {
@@ -240,13 +246,16 @@ func newReaperFixture(t *testing.T, landedAt time.Time) *reaperFixture {
 		projRoot:   projRoot,
 		revListOut: "0",
 		statusOut:  "",
+		branchOut:  "task/42-probe",
 	}
-	if _, err := f.db.Exec(
-		`INSERT INTO task_landings (task_id, branch, merge_commit_sha, landed_at)
-		 VALUES (42, 'task/42-probe', 'deadbeef', ?)`,
-		landedAt.UTC().Format("2006-01-02T15:04:05"),
-	); err != nil {
-		t.Fatalf("seed landing: %v", err)
+	if !landedAt.IsZero() {
+		if _, err := f.db.Exec(
+			`INSERT INTO task_landings (task_id, branch, merge_commit_sha, landed_at)
+			 VALUES (42, 'task/42-probe', 'deadbeef', ?)`,
+			landedAt.UTC().Format("2006-01-02T15:04:05"),
+		); err != nil {
+			t.Fatalf("seed landing: %v", err)
+		}
 	}
 
 	prevRunGit := runGit
@@ -256,8 +265,14 @@ func newReaperFixture(t *testing.T, landedAt time.Time) *reaperFixture {
 		f.calls = append(f.calls, key)
 		switch key {
 		case "rev-list":
-			f.revListArgs = append([]string{}, args...)
 			return f.revListOut, f.revListErr
+		case "merge-base":
+			return "b45e0000\n", nil
+		case "range-diff":
+			if f.rangeDiffErr != nil {
+				return "", f.rangeDiffErr
+			}
+			return stubRangeDiff(f.unlanded), nil
 		case "rev-parse":
 			if f.revParseErr != nil {
 				return "", f.revParseErr
@@ -265,6 +280,13 @@ func newReaperFixture(t *testing.T, landedAt time.Time) *reaperFixture {
 			return "deadbeef\n", nil
 		case "status":
 			return f.statusOut, f.statusErr
+		case "symbolic-ref":
+			// The default-branch resolver asks for origin/HEAD; condition 4's
+			// enrichment asks for HEAD.
+			if args[len(args)-1] == "refs/remotes/origin/HEAD" {
+				return "", fmt.Errorf("not a symbolic ref")
+			}
+			return f.branchOut, nil
 		case "worktree":
 			return f.worktreeRmOut, f.worktreeRmErr
 		case "branch":
@@ -401,6 +423,7 @@ func TestMaybeReapWorktree_OldSessionTaskActivityReaps(t *testing.T) {
 func TestMaybeReapWorktree_UnmergedCommitsProtect(t *testing.T) {
 	f := newReaperFixture(t, time.Now().Add(-30*24*time.Hour))
 	f.revListOut = "3"
+	f.unlanded = 3
 	cutoff := time.Now().UTC().Add(-14 * 24 * time.Hour)
 	reaped, err := maybeReapWorktree(f.db, f.projRoot, f.dir, 42, cutoff)
 	if err != nil {
@@ -697,36 +720,110 @@ func TestMaybeReapWorktree_SkipsWhenDefaultBranchUnresolved(t *testing.T) {
 	}
 }
 
-// TestMaybeReapWorktree_CreditsRecordedLandings is the reap side of the
-// landed-state fix. Condition 1 already requires a task_landings row, so a
-// rebase-landed worktree passed 1 and was rejected by 4 — every SHA on its
-// branch was rewritten by the rebase, so `<base>..HEAD` counted them forever
-// and the directory could never be reaped. Crediting the recorded landings in
-// the range is what unblocks that; without it, landed worktrees accumulate
-// without bound.
-func TestMaybeReapWorktree_CreditsRecordedLandings(t *testing.T) {
+// TestMaybeReapWorktree_RebaseLandedWorktreeIsReapable is the reap side of
+// E-2087. A rebasing land rewrites every SHA, so `<base>..HEAD` counted the
+// branch's originals forever and condition 4 rejected exactly the directories
+// condition 1 had just admitted — which is how landed worktrees accumulated
+// without bound. The content comparison sees the copies for what they are.
+func TestMaybeReapWorktree_RebaseLandedWorktreeIsReapable(t *testing.T) {
 	f := newReaperFixture(t, time.Now().Add(-30*24*time.Hour))
+	// Three commits ahead by SHA, every one of them matched on the base.
+	f.revListOut = "3"
+	f.unlanded = 0
+	cutoff := time.Now().UTC().Add(-14 * 24 * time.Hour)
+
+	reaped, err := maybeReapWorktree(f.db, f.projRoot, f.dir, 42, cutoff)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !reaped {
+		t.Fatalf("a rebase-landed worktree was not reaped (calls=%v)", f.calls)
+	}
+}
+
+// TestMaybeReapWorktree_SettledWithNoLandingIsReapable is E-2087's eligibility
+// change. The reaper used to require a task_landings row, which read as "only
+// reclaim what has landed" but actually meant "only reclaim what was RECORDED
+// as landing" — so a worktree whose branch sits at the base holding nothing was
+// settled, disposable, and never reclaimed. E-1360 and E-1697 sat in exactly
+// that state. What is required now is that there be nothing to land.
+func TestMaybeReapWorktree_SettledWithNoLandingIsReapable(t *testing.T) {
+	f := newReaperFixture(t, time.Time{}) // no landing row at all
 	if _, err := f.db.Exec(
-		`INSERT INTO task_landings (task_id, branch, merge_commit_sha, landed_at)
-		 VALUES (42, 'task/42-probe', 'cafebabe', '2026-01-01T00:00:00')`,
+		`INSERT INTO session_tasks (session_id, task_id, created_at, updated_at)
+		 VALUES (1, 42, ?, ?)`,
+		time.Now().Add(-30*24*time.Hour).UTC().Format("2006-01-02T15:04:05"),
+		time.Now().Add(-30*24*time.Hour).UTC().Format("2006-01-02T15:04:05"),
 	); err != nil {
-		t.Fatalf("seed second landing: %v", err)
+		t.Fatalf("seed session activity: %v", err)
 	}
 	cutoff := time.Now().UTC().Add(-14 * 24 * time.Hour)
 
-	if _, err := maybeReapWorktree(f.db, f.projRoot, f.dir, 42, cutoff); err != nil {
+	reaped, err := maybeReapWorktree(f.db, f.projRoot, f.dir, 42, cutoff)
+	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-
-	excluded := map[string]bool{}
-	for _, a := range f.revListArgs {
-		if strings.HasPrefix(a, "^") {
-			excluded[a] = true
+	if !reaped {
+		t.Fatalf("a settled worktree with nothing to land was not reaped (calls=%v)", f.calls)
+	}
+	// The branch still has to be deleted, and with no landing row the only
+	// place its name can come from is git.
+	var sawBranchDelete bool
+	for _, c := range f.calls {
+		if c == "branch" {
+			sawBranchDelete = true
 		}
 	}
-	for _, want := range []string{"^main", "^deadbeef", "^cafebabe"} {
-		if !excluded[want] {
-			t.Errorf("condition 4 did not exclude %s (args=%v)", want, f.revListArgs)
+	if !sawBranchDelete {
+		t.Errorf("branch was not deleted (calls=%v)", f.calls)
+	}
+}
+
+// TestMaybeReapWorktree_NoLandingStillNeedsSomethingToLandNothing keeps the
+// eligibility change honest in the other direction: dropping the landing
+// requirement must not make an UNSETTLED worktree reapable just because nothing
+// was ever recorded for it.
+func TestMaybeReapWorktree_NoLandingStillProtectsUnlandedWork(t *testing.T) {
+	f := newReaperFixture(t, time.Time{})
+	f.revListOut = "2"
+	f.unlanded = 2
+	if _, err := f.db.Exec(
+		`INSERT INTO session_tasks (session_id, task_id, created_at, updated_at)
+		 VALUES (1, 42, ?, ?)`,
+		time.Now().Add(-30*24*time.Hour).UTC().Format("2006-01-02T15:04:05"),
+		time.Now().Add(-30*24*time.Hour).UTC().Format("2006-01-02T15:04:05"),
+	); err != nil {
+		t.Fatalf("seed session activity: %v", err)
+	}
+	cutoff := time.Now().UTC().Add(-14 * 24 * time.Hour)
+
+	reaped, err := maybeReapWorktree(f.db, f.projRoot, f.dir, 42, cutoff)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if reaped {
+		t.Fatal("a worktree holding unlanded work was reaped because it had no landing row")
+	}
+}
+
+// TestMaybeReapWorktree_NoRecordedActivityIsSkipped is the floor under the
+// eligibility change. With neither a landing nor session activity there is no
+// timestamp to age off, and a TTL measured against nothing would reap a
+// directory created seconds ago.
+func TestMaybeReapWorktree_NoRecordedActivityIsSkipped(t *testing.T) {
+	f := newReaperFixture(t, time.Time{})
+	cutoff := time.Now().UTC().Add(-14 * 24 * time.Hour)
+
+	reaped, err := maybeReapWorktree(f.db, f.projRoot, f.dir, 42, cutoff)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if reaped {
+		t.Fatal("a task with no recorded moment at all was reaped")
+	}
+	for _, c := range f.calls {
+		if c == "worktree" || c == "branch" {
+			t.Errorf("destructive git %q ran with no timestamp to age off (calls=%v)", c, f.calls)
 		}
 	}
 }
