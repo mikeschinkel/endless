@@ -36,7 +36,7 @@ type LiveSession struct {
 //
 // Two filters, and the difference between them is the point (E-1898):
 //
-//   - state != 'ended' — a recorded FACT. Something reported the session over.
+//   - sessionstate.Live — a recorded FACT. Something reported the session over.
 //   - liveness != 'dead' — a fresh OBSERVATION. We reached the session's tmux
 //     server and its pane was not there.
 //
@@ -65,7 +65,7 @@ func ListLiveSessions(projectID int64) ([]LiveSession, error) {
 		 FROM sessions s
 		 LEFT JOIN processes p ON p.id = s.process_id
 		 JOIN session_liveness sl ON sl.session_id = s.id
-		 WHERE s.state != 'ended' AND s.project_id = ?
+		 WHERE s.state IN (`+liveSessionStates+`) AND s.project_id = ?
 		   AND sl.liveness != 'dead'
 		 ORDER BY s.last_activity DESC`,
 		projectID,

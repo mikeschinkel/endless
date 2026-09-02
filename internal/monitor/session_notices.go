@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/mikeschinkel/endless/internal/sessionstate"
 )
 
 // Notice is one undelivered change notice for a session (E-1917): a snapshot,
@@ -366,7 +368,8 @@ func ReapNoticesForEndedSessions() error {
 	_, err = db.Exec(
 		`DELETE FROM session_notices
 		  WHERE notified = 0
-		    AND session_id IN (SELECT id FROM sessions WHERE state = 'ended')`,
+		    AND session_id IN (SELECT id FROM sessions WHERE state = ?)`,
+		sessionstate.Ended,
 	)
 	if err != nil {
 		return fmt.Errorf("reaping notices for ended sessions: %w", err)

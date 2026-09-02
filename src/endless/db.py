@@ -310,29 +310,23 @@ def _migrate_v2(conn: sqlite3.Connection):
         )
         conn.commit()
 
-    # Safety net: ensure sessions table exists
-    # Handles edge cases where partial migrations left the table missing
-    if not _has_table(conn, "sessions"):
-        conn.executescript("""
-            CREATE TABLE IF NOT EXISTS sessions (
-                id INTEGER PRIMARY KEY,
-                session_id TEXT NOT NULL,
-                project_id INTEGER,
-                platform TEXT NOT NULL DEFAULT 'claude'
-                    CHECK (platform IN ('claude', 'codex')),
-                state TEXT NOT NULL DEFAULT 'working'
-                    CHECK (state IN ('working', 'idle', 'needs_input', 'ended')),
-                task_id INTEGER,
-                process TEXT,
-                started_at TEXT NOT NULL
-                    DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
-                last_activity TEXT,
-                UNIQUE (session_id),
-                FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL,
-                FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE SET NULL
-            );
-        """)
-        conn.commit()
+    # The "safety net" CREATE TABLE sessions that stood here is gone (E-2105).
+    #
+    # It was unreachable and wrong in three separate ways, and the third is why
+    # it was deleted rather than corrected. Unreachable: it was guarded by
+    # `if not _has_table(conn, "sessions")`, and the Go schema runs on every
+    # connection, so the table always exists by the time this reads. Wrong in
+    # shape: it declared a `sessions` missing process_id, epic_id, hidden and
+    # every report_* column that internal/schema/schema.sql — the authoritative
+    # definition — has carried for many revisions. And it carried a BANNED
+    # CHECK constraint on `state`: SQLite cannot ALTER or DROP one without
+    # rebuilding the whole table, which is how a schema change caused
+    # catastrophic data loss here once already. Validation lives in application
+    # code (ED-1495, and the header of schema.sql).
+    #
+    # It was also the fourth copy of the session state vocabulary, on the one
+    # surface — a CHECK — where a fifth state would not merely be misrendered
+    # but REFUSED at write time.
 
 
 def _migrate_v3(conn: sqlite3.Connection):

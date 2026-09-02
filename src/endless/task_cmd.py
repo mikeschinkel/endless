@@ -18,6 +18,7 @@ from tabulate import tabulate
 from endless import agent_help
 from endless import db, config
 from endless import rowcap
+from endless import session_states
 from endless import statuses
 from endless.statuses import TASK_STATUSES
 from endless.project_path import project_name_for_cwd, resolved
@@ -3996,7 +3997,7 @@ def _check_task_ownership(item_id: int, current_eid: int | None) -> bool:
 
     rows = db.query(
         "SELECT id AS eid FROM sessions "
-        "WHERE task_id = ? AND state != 'ended'",
+        f"WHERE task_id = ? AND state IN ({session_states.sql_list('live')})",
         (item_id,),
     )
     if not rows:
@@ -6353,9 +6354,12 @@ def move_task(
 def start_chat():
     """Start a chat-only session (no task tracking required)."""
     session_id = str(uuid.uuid4())
+    # `state` is deliberately not named here (E-2105). internal/schema/schema.sql
+    # declares `state TEXT NOT NULL DEFAULT 'working'`, so the column the schema
+    # already owns supplies it; restating the value on this side made Python a
+    # fifth copy of the vocabulary for no gain.
     cursor = db.execute(
-        "INSERT INTO sessions (session_id, platform, state) "
-        "VALUES (?, 'claude', 'working')",
+        "INSERT INTO sessions (session_id, platform) VALUES (?, 'claude')",
         (session_id,),
     )
     row_id = cursor.lastrowid
@@ -6854,10 +6858,20 @@ _UNCLASSIFIED_TOUCH_LABEL = "Touched"
 # session (see internal/schema/schema.sql); the touch is still real history.
 _MISSING_SESSION_STATE = "gone"
 
-# States that mean the session is no longer in flight, colored green like a
-# terminal task status in the relations block. `gone` belongs here too: a touch
-# whose session record is absent can't be live. Everything else is in flight.
-_FINISHED_SESSION_STATES = ("ended", _MISSING_SESSION_STATE)
+def _finished_session_states() -> tuple[str, ...]:
+    """States meaning the session is no longer in flight.
+
+    Rendered green in the relations block, like a terminal task status;
+    everything else is in flight. Derived as the complement of the `live` group
+    rather than typed out (E-2105), so a state added in Go is classified once,
+    there, and lands on the right side of this line without an edit here.
+    `gone` belongs with them: a touch whose session record is absent can't be
+    live either.
+    """
+    live = session_states.get("live")
+    return tuple(
+        state for state in session_states.SESSION_STATES if state not in live
+    ) + (_MISSING_SESSION_STATE,)
 
 
 # The relation a session holding `sessions.task_id = <this task>` renders as,
@@ -7015,9 +7029,10 @@ def _echo_touched_by_section(touches: list[dict], min_width: int = 0) -> bool:
     if not touches:
         return False
     width = max(_bullet_label_width(t["rel_label"] for t in touches), min_width)
+    finished_states = _finished_session_states()
     click.echo(click.style("Touched by:", fg="cyan"))
     for t in touches:
-        color = "green" if t["state"] in _FINISHED_SESSION_STATES else "yellow"
+        color = "green" if t["state"] in finished_states else "yellow"
         label = (t["rel_label"] + ":").ljust(width)
         click.echo(
             f"- {label}{_session_ref(t)} "

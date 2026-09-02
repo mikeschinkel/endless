@@ -7,9 +7,21 @@ import (
 
 	"github.com/mikeschinkel/endless/internal/agentenv"
 	"github.com/mikeschinkel/endless/internal/config"
+	"github.com/mikeschinkel/endless/internal/sessionstate"
 	"github.com/mikeschinkel/endless/internal/taskstatus"
 	"github.com/mikeschinkel/go-dt"
 )
+
+// liveSessionStates is sessionstate.Live rendered for a SQL IN clause, the
+// session counterpart to terminalStatusSet in session_status.go. Rendered once
+// at init because every reader in this package asks the same question — "is this
+// session still able to act?" — and it was twenty-nine hand-written
+// `state != 'ended'` clauses before E-2105.
+//
+// A membership list rather than the negation it replaced, deliberately: a state
+// added later has to be classified into Live or left out of it, instead of
+// inheriting "live" from having simply not been `ended`.
+var liveSessionStates = sessionstate.SQLList(sessionstate.Live)
 
 // SessionInfo represents an active AI coding session.
 //
@@ -53,12 +65,12 @@ func BindSessionToTask(sessionID string, projectID int64, taskID int64) error {
 	// is gone (E-1898), so there is always something left to preserve.
 	_, err = tx.Exec(
 		`INSERT INTO sessions (session_id, project_id, platform, state, task_id, process_id, started_at, last_activity)
-		 VALUES (?, ?, 'claude', 'working', ?, ?, ?, ?)
+		 VALUES (?, ?, 'claude', ?, ?, ?, ?, ?)
 		 ON CONFLICT(session_id) DO UPDATE SET
-		   state='working', task_id=?, last_activity=?, project_id=?,
+		   state=?, task_id=?, last_activity=?, project_id=?,
 		   process_id=COALESCE(?, sessions.process_id)`,
-		sessionID, projectID, taskID, processID, now, now,
-		taskID, now, projectID, processID,
+		sessionID, projectID, sessionstate.Working, taskID, processID, now, now,
+		sessionstate.Working, taskID, now, projectID, processID,
 	)
 	if err != nil {
 		return fmt.Errorf("upsert session: %w", err)
@@ -82,7 +94,7 @@ func BindSessionToTask(sessionID string, projectID int64, taskID int64) error {
 	dedupWhere := `task_id = ?
 		   AND session_id != ?
 		   AND process_id IS NULL
-		   AND state != 'ended'`
+		   AND state IN (` + liveSessionStates + `)`
 	dedupArgs := []any{taskID, sessionID}
 
 	// Capture the rows about to be ended (within the tx, before the write) so the
@@ -91,8 +103,8 @@ func BindSessionToTask(sessionID string, projectID int64, taskID int64) error {
 	// erase.
 	deduped := collectDedupTargets(tx, dedupWhere, dedupArgs)
 
-	_, err = tx.Exec(`UPDATE sessions SET state = 'ended', last_activity = ? WHERE `+dedupWhere,
-		append([]any{now}, dedupArgs...)...)
+	_, err = tx.Exec(`UPDATE sessions SET state = ?, last_activity = ? WHERE `+dedupWhere,
+		append([]any{sessionstate.Ended, now}, dedupArgs...)...)
 	if err != nil {
 		return fmt.Errorf("dedup stale paneless sessions for task: %w", err)
 	}
@@ -105,7 +117,7 @@ func BindSessionToTask(sessionID string, projectID int64, taskID int64) error {
 		LogSessionTxn(SessionTxn{
 			SessionGUID: d.SessionGUID,
 			OldState:    d.State,
-			NewState:    "ended",
+			NewState:    sessionstate.Ended,
 			OldTaskID:   d.TaskID,
 			NewTaskID:   d.TaskID, // dedup ends the row; task_id is unchanged
 			Reason:      SessionLogDedup,
@@ -176,7 +188,7 @@ func StartWorkSession(sessionID string, projectID int64, taskID int64) error {
 	LogSessionTxn(SessionTxn{
 		SessionGUID: sessionID,
 		OldState:    snap.State,
-		NewState:    "working", // BindSessionToTask sets state='working'
+		NewState:    sessionstate.Working, // what BindSessionToTask just wrote
 		OldTaskID:   snap.TaskID,
 		NewTaskID:   &newTaskID,
 		Reason:      SessionLogClaimEvent,
@@ -232,12 +244,12 @@ func StartChatSession(sessionID string, projectID int64) error {
 
 	_, err = db.Exec(
 		`INSERT INTO sessions (session_id, project_id, platform, state, task_id, process_id, started_at, last_activity)
-		 VALUES (?, ?, 'claude', 'working', NULL, ?, ?, ?)
+		 VALUES (?, ?, 'claude', ?, NULL, ?, ?, ?)
 		 ON CONFLICT(session_id) DO UPDATE SET
-		   state='working', last_activity=?,
+		   state=?, last_activity=?,
 		   process_id=COALESCE(?, sessions.process_id)`,
-		sessionID, projectID, processID, now, now,
-		now, processID,
+		sessionID, projectID, sessionstate.Working, processID, now, now,
+		sessionstate.Working, now, processID,
 	)
 	return err
 }
@@ -253,9 +265,9 @@ func InitSession(sessionID string, projectID int64) error {
 
 	_, err = db.Exec(
 		`INSERT INTO sessions (session_id, project_id, platform, state, started_at, last_activity)
-		 VALUES (?, ?, 'claude', 'needs_input', ?, ?)
+		 VALUES (?, ?, 'claude', ?, ?, ?)
 		 ON CONFLICT(session_id) DO UPDATE SET last_activity=?`,
-		sessionID, projectID, now, now,
+		sessionID, projectID, sessionstate.NeedsInput, now, now,
 		now,
 	)
 	return err
@@ -298,7 +310,7 @@ func GetActiveSession(sessionID string) (*SessionInfo, error) {
 // An incoming hook is proof the session is alive, so an `ended` row is lifted
 // back to 'needs_input' (the same neutral state INSERT uses; the next
 // lifecycle hook re-derives working/idle/ended). Without this an `ended` row
-// never recovers, and since every reader filters `state != 'ended'` the
+// never recovers, and since every reader filters on sessionstate.Live the
 // still-live session goes permanently invisible. Gated on the
 // ON CONFLICT(session_id) target, NOT a pane match: a reused pane id carries a
 // DIFFERENT session_id and takes the INSERT path, so a prior occupant's ended
@@ -348,12 +360,13 @@ func TouchSession(sessionID, platform, process string, projectID int64) error {
 	// authoritative while giving a stale ending a recovery path.
 	_, err = tx.Exec(
 		`INSERT INTO sessions (session_id, project_id, platform, state, process_id, started_at, last_activity)
-		 VALUES (?, ?, ?, 'needs_input', ?, ?, ?)
+		 VALUES (?, ?, ?, ?, ?, ?, ?)
 		 ON CONFLICT(session_id) DO UPDATE SET
 		   last_activity = excluded.last_activity,
 		   process_id    = COALESCE(excluded.process_id, sessions.process_id),
-		   state         = CASE WHEN sessions.state = 'ended' THEN 'needs_input' ELSE sessions.state END`,
-		sessionID, projectID, platform, processID, now, now,
+		   state         = CASE WHEN sessions.state = ? THEN ? ELSE sessions.state END`,
+		sessionID, projectID, platform, sessionstate.NeedsInput, processID, now, now,
+		sessionstate.Ended, sessionstate.NeedsInput,
 	)
 	if err != nil {
 		return fmt.Errorf("upsert session: %w", err)
@@ -423,9 +436,9 @@ func WakeSession(sessionID string) error {
 	}
 	snap := SnapshotSession(sessionID)
 	res, err := db.Exec(
-		`UPDATE sessions SET state = 'working'
-		  WHERE session_id = ? AND state = 'idle' AND task_id IS NOT NULL`,
-		sessionID,
+		`UPDATE sessions SET state = ?
+		  WHERE session_id = ? AND state = ? AND task_id IS NOT NULL`,
+		sessionstate.Working, sessionID, sessionstate.Idle,
 	)
 	if err != nil {
 		return fmt.Errorf("wake session: %w", err)
@@ -437,7 +450,7 @@ func WakeSession(sessionID string) error {
 	LogSessionTxn(SessionTxn{
 		SessionGUID: sessionID,
 		OldState:    snap.State,
-		NewState:    "working",
+		NewState:    sessionstate.Working,
 		OldTaskID:   snap.TaskID,
 		NewTaskID:   snap.TaskID, // the wake does not change task_id
 		Reason:      SessionLogWake,
@@ -509,8 +522,8 @@ func CompleteTask(sessionID string, taskID int64) error {
 
 	// Idle the session; the task binding stays (see the doc comment).
 	_, err = db.Exec(
-		"UPDATE sessions SET state='idle', last_activity=? WHERE session_id=?",
-		now, sessionID,
+		"UPDATE sessions SET state=?, last_activity=? WHERE session_id=?",
+		sessionstate.Idle, now, sessionID,
 	)
 	return err
 }
@@ -525,8 +538,8 @@ func IdleSession(sessionID string) error {
 	snap := SnapshotSession(sessionID)
 	now := time.Now().UTC().Format("2006-01-02T15:04:05")
 	_, err = db.Exec(
-		"UPDATE sessions SET state='idle', last_activity=? WHERE session_id=?",
-		now, sessionID,
+		"UPDATE sessions SET state=?, last_activity=? WHERE session_id=?",
+		sessionstate.Idle, now, sessionID,
 	)
 	if err != nil {
 		return err
@@ -535,7 +548,7 @@ func IdleSession(sessionID string) error {
 		LogSessionTxn(SessionTxn{
 			SessionGUID: sessionID,
 			OldState:    snap.State,
-			NewState:    "idle",
+			NewState:    sessionstate.Idle,
 			OldTaskID:   snap.TaskID,
 			NewTaskID:   snap.TaskID, // idle does not change task_id
 			Reason:      SessionLogIdle,
@@ -563,8 +576,8 @@ func EndSession(sessionID string) error {
 	// an ended row holding "%414" winning a lookup against a reissued "%414" —
 	// no longer applies, because the reissued pane is a different processes row.
 	_, err = db.Exec(
-		"UPDATE sessions SET state='ended', last_activity=? WHERE session_id=?",
-		now, sessionID,
+		"UPDATE sessions SET state=?, last_activity=? WHERE session_id=?",
+		sessionstate.Ended, now, sessionID,
 	)
 	if err != nil {
 		return err
@@ -573,7 +586,7 @@ func EndSession(sessionID string) error {
 		LogSessionTxn(SessionTxn{
 			SessionGUID: sessionID,
 			OldState:    snap.State,
-			NewState:    "ended",
+			NewState:    sessionstate.Ended,
 			OldTaskID:   snap.TaskID,
 			NewTaskID:   snap.TaskID, // end does not change task_id
 			Reason:      SessionLogEnd,

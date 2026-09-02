@@ -15,6 +15,7 @@ from endless import project_status_cmd
 from endless import rowcap
 from endless.agent_help import AgentHelpMixin
 from endless import statuses
+from endless.session_states import SESSION_STATES
 from endless.statuses import TASK_STATUSES, TASK_STATUS_HELP
 
 # Subcommands that are safe to run inside an `endless-go sandbox` subshell
@@ -1115,7 +1116,7 @@ def session_monitor(show_all, tree, show_hidden, only_hidden):
 @click.option("--all-projects", is_flag=True,
               help="List every project's sessions (default: the current project)")
 @click.option("--state", default=None,
-              type=click.Choice(["working", "idle", "needs_input", "ended"]),
+              type=click.Choice(SESSION_STATES),
               help="Filter by state")
 @click.option("--sort", "sort_by", default=None,
               type=click.Choice(["id", "project", "state", "count"]),

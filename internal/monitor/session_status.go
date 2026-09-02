@@ -344,7 +344,7 @@ enr AS (
     COALESCE(b.id = (SELECT stid FROM sfoc), 0) AND b.id <> (SELECT tid FROM ftask) AS is_from,
     (EXISTS(
        SELECT 1 FROM sessions s
-        WHERE s.state != 'ended' AND s.task_id = b.id
+        WHERE s.state IN (` + liveSessionStates + `) AND s.task_id = b.id
      ) AND b.id <> (SELECT tid FROM ftask)) AS in_flight,
     -- E-1693: the task's work has already merged (>=1 task_landings row). A
     -- landed non-terminal task stays visible (it still passes the terminal-status
@@ -459,7 +459,7 @@ enr AS (
     0 AS is_from,
     EXISTS(
        SELECT 1 FROM sessions s
-        WHERE s.state != 'ended' AND s.task_id = b.id
+        WHERE s.state IN (` + liveSessionStates + `) AND s.task_id = b.id
      ) AS in_flight,
     EXISTS(SELECT 1 FROM task_landings tl WHERE tl.task_id = b.id) AS landed,
     (SELECT count(*) FROM task_deps d JOIN live_tasks blk ON blk.id = d.source_id

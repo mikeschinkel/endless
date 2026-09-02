@@ -8,7 +8,7 @@ from pathlib import Path
 
 import click
 
-from endless import db, rowcap, statuses
+from endless import db, rowcap, session_states, statuses
 from endless.project_path import match_project_path, resolved
 
 
@@ -896,35 +896,57 @@ def session_status_resolve(
         raise SystemExit(result.returncode)
 
 
-# Fixed-width state glyphs for `session list` (E-1914). The old view printed the
-# raw state word, and `needs_input` is 11 characters against `idle`'s 4 — so a
-# single needs-input row shoved every following column right and the table read as
+# Fixed-width state glyphs for `session list` (E-1914), read from the registry
+# that owns them rather than spelled here (E-2105). The old view printed the raw
+# state word, and `needs_input` is 11 characters against `idle`'s 4 — so a single
+# needs-input row shoved every following column right and the table read as
 # ragged. A one-column glyph per state makes the width constant by construction.
 #
-# ⟳ is `session status`'s own "doing" glyph, reused because it already means
-# exactly this: a live session working a task. ▶ is deliberately NOT reused — over
-# there it means "ready to spawn", a different claim. The other three states have
-# no equivalent in that vocabulary, so they get glyphs of their own; ⏸ was avoided
-# for idle because it already means "blocks" in the status view.
+# Keyed by the vocabulary, so a state added in Go arrives here with its glyph and
+# needs no edit on this side. That is the whole reason this is not a literal any
+# more: a fifth state landing in a hardcoded map would render as the
+# should-never-happen marker below, in a view whose entire point is that the
+# column is legible.
 SESSION_STATE_ICONS = {
-    "working": "⟳",
-    "idle": "‖",
-    "needs_input": "?",
-    "ended": "␥",
+    state: session_states.glyph(state)
+    for state in session_states.SESSION_STATES
 }
 
 # Glyph for a state not in the map — a should-never-happen marker, matching the
-# ⁇-for-unknown-status idiom in internal/sessionstatuscmd.
-SESSION_STATE_UNKNOWN_ICON = "⁇"
+# ⁇-for-unknown idiom in internal/sessionstatuscmd. Obtained by asking the
+# registry about something that is deliberately NOT a state, which is how this
+# side gets the marker without holding a copy of it.
+SESSION_STATE_UNKNOWN_ICON = session_states.glyph("")
 
-# Printed under the table. Static (all four states, always) rather than built from
+# Printed under the table. Static (every state, always) rather than built from
 # the rows present: the legend is short, and a stable legend line means the eye
 # learns one mapping instead of re-reading a different one every invocation.
-SESSION_STATE_LEGEND = "⟳ working   ‖ idle   ? needs input   ␥ ended"
+#
+# Lowercased here rather than in the registry: the labels are the vocabulary's
+# words, the casing is this view's own choice.
+SESSION_STATE_LEGEND = "   ".join(
+    f"{SESSION_STATE_ICONS[state]} {session_states.label(state).lower()}"
+    for state in session_states.SESSION_STATES
+)
 
 
 def _session_state_icon(state: str | None) -> str:
     return SESSION_STATE_ICONS.get(state or "", SESSION_STATE_UNKNOWN_ICON)
+
+
+def _state_sort_case() -> str:
+    """`session list`'s state-priority ordering, as a SQL CASE.
+
+    Built from the DisplayOrder group's rank rather than typed out, so the
+    reading order lives with the vocabulary. It is deliberately NOT the
+    lifecycle order: a working session is the most interesting row, a blocked
+    one the next, and the dead sort last.
+    """
+    whens = " ".join(
+        f"WHEN '{state}' THEN {position}"
+        for position, state in enumerate(session_states.get("display-order"))
+    )
+    return f"CASE s.state {whens} END"
 
 
 def _current_project_name() -> str:
@@ -1041,9 +1063,8 @@ def list_sessions(
     sort_map = {
         "id": "s.id DESC",
         "project": "project_name, s.id DESC",
-        "state": ("CASE s.state WHEN 'working' THEN 0 WHEN 'needs_input' THEN 1 "
-                  "WHEN 'idle' THEN 2 WHEN 'ended' THEN 3 END, "
-                  "COALESCE(s.last_activity, s.started_at) DESC"),
+        "state": (_state_sort_case() +
+                  ", COALESCE(s.last_activity, s.started_at) DESC"),
         "count": "msg_count DESC",
     }
     # Default sort: state priority (working first, ended last), then recency

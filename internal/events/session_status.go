@@ -22,6 +22,7 @@ import (
 
 	"github.com/mikeschinkel/endless/internal/monitor"
 	"github.com/mikeschinkel/endless/internal/processkind"
+	"github.com/mikeschinkel/endless/internal/sessionstate"
 	"github.com/mikeschinkel/endless/internal/taskstatus"
 )
 
@@ -110,9 +111,14 @@ func execSessionStatusRecorded(db dbQuerier, evt *Event) (*ExecuteResult, error)
 	}, nil
 }
 
+// liveSessionStates is sessionstate.Live rendered for a SQL IN clause — this
+// package's own copy of the monitor-side constant, because monitor imports
+// nothing from here and the dependency runs one way only.
+var liveSessionStates = sessionstate.SQLList(sessionstate.Live)
+
 // sessionIDFromSentinel detects and resolves the "__session_id=N"
 // process sentinel (E-1588). When process carries the sentinel it parses
-// N, validates the row exists and is live (state != 'ended'), and returns
+// N, validates the row exists and is live (sessionstate.Live), and returns
 // (id, true, nil). Absent the sentinel it returns (0, false, nil) so the
 // caller falls through to the tmux-pane lookup. A malformed or
 // non-live id returns a clear error.
@@ -129,7 +135,7 @@ func sessionIDFromSentinel(db dbQuerier, process string) (int64, bool, error) {
 	}
 	var got int64
 	err = db.QueryRow(
-		`SELECT id FROM sessions WHERE id = ? AND state != 'ended'`,
+		`SELECT id FROM sessions WHERE id = ? AND state IN (`+liveSessionStates+`)`,
 		id,
 	).Scan(&got)
 	if err == sql.ErrNoRows {
@@ -170,7 +176,7 @@ func liveSessionByProcessTx(db dbQuerier, process string) (int64, error) {
 		`SELECT s.id FROM sessions s
 		 JOIN processes p ON p.id = s.process_id
 		 WHERE p.kind_id = ? AND p.server_uuid = ? AND p.address = ?
-		   AND s.state != 'ended'
+		   AND s.state IN (`+liveSessionStates+`)
 		 ORDER BY s.last_activity DESC LIMIT 1`,
 		int(processkind.ProcessKindTmux), serverUUID, process,
 	).Scan(&id)

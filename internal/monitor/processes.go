@@ -217,7 +217,7 @@ func AdoptPaneBindings(tx *sql.Tx, serverUUID string, panes []string) (int, erro
 		err := tx.QueryRow(
 			`SELECT s.id FROM sessions s
 			   JOIN processes p ON p.id = s.process_id
-			  WHERE s.state != 'ended'
+			  WHERE s.state IN (`+liveSessionStates+`)
 			    AND p.kind_id = ?
 			    AND p.server_uuid IS NULL
 			    AND p.address = ?

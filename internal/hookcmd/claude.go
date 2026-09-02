@@ -16,6 +16,7 @@ import (
 
 	"github.com/mikeschinkel/endless/internal/matchers"
 	"github.com/mikeschinkel/endless/internal/monitor"
+	"github.com/mikeschinkel/endless/internal/sessionstate"
 )
 
 func init() {
@@ -857,15 +858,6 @@ const (
 	scopeTask     = "task"
 )
 
-// The session states the declaration gate reasons about. Named here so the
-// admission rule and the refusal that explains it cannot spell them differently
-// (E-2093).
-const (
-	stateWorking    = "working"
-	stateIdle       = "idle"
-	stateNeedsInput = "needs_input"
-)
-
 func handlePreToolUse(projectID int64, isRegistered bool, payload claudePayload) error {
 	// E-1226: refuse `sqlite3 .endless/...` regardless of registration —
 	// the antipattern is file-pattern-specific, not project-state-specific,
@@ -969,24 +961,24 @@ func handlePreToolUse(projectID int64, isRegistered bool, payload claudePayload)
 // A session may write when it has DECLARED what it is working on and is
 // live-and-acting. The declaration is `sessions.task_id` — set at claim,
 // write-once under ED-1560, true for the session's lifetime. Acting is
-// `working` or `idle`: a write from an idle session is by definition mid-turn,
-// because writes only happen inside turns, so `idle` at this moment means the
-// state has not caught up rather than that the session is away.
+// sessionstate.MayWrite, whose membership and its reasons live with the
+// vocabulary rather than here.
 //
-// `needs_input` is not acting — a human was asked something and has not
-// answered — and a session holding no task has declared nothing. Both are
-// refused, and they are the two cases the gate exists for.
+// It reads a NAMED GROUP for a structural reason, not a stylistic one (E-2105).
+// This was a `switch` with a silent `default: return false`, so a state added to
+// the vocabulary joined the refused set without anyone deciding it should — and
+// a session proposing to route Claude Code's permission prompts to `needs_input`
+// nearly shipped exactly that, refusing the session's next write after the user
+// answered. Asking the registry makes classifying a new state a thing somebody
+// has to do, in the open, in one file.
 //
-// nil (no row could be read) is the undeclared case.
+// nil (no row could be read) is the undeclared case, as is a row holding no
+// task: neither has declared anything, whatever state it is in.
 func sessionMayWrite(s *monitor.SessionInfo) bool {
 	if s == nil || s.TaskID == nil {
 		return false
 	}
-	switch s.State {
-	case stateWorking, stateIdle:
-		return true
-	}
-	return false
+	return sessionstate.Has(sessionstate.MayWrite, s.State)
 }
 
 // declarationRefusal composes the message for a write the declaration gate
@@ -1012,7 +1004,7 @@ func declarationRefusal(projectID int64, session *monitor.SessionInfo) string {
 		fmt.Fprintf(&msg, "BLOCKED: this session holds E-%d but is in state '%s'.\n",
 			*session.TaskID, session.State)
 		msg.WriteString("The task IS declared — it is the session state that cannot write.\n\n")
-		if session.State == stateNeedsInput {
+		if session.State == sessionstate.NeedsInput {
 			msg.WriteString("`needs_input` means you asked your user something and the answer " +
 				"has not arrived.\nAsk again in your reply and wait for it; their next " +
 				"message clears this state.\nThere is no command for you to run.\n")
@@ -1653,14 +1645,14 @@ func trySpawnBind(projectID int64, payload claudePayload) bool {
 }
 
 // logSessionBind records one BindSessionToTask transition in the machine-local
-// diagnostic log. new_state is always 'working' — that is what BindSessionToTask
+// diagnostic log. new_state is always `working` — that is what BindSessionToTask
 // sets on a successful bind. Best-effort; never returns an error.
 func logSessionBind(sessionID string, snap monitor.SessionSnapshot, taskID int64, reason monitor.SessionLogReason, caller string) {
 	newTaskID := taskID
 	monitor.LogSessionTxn(monitor.SessionTxn{
 		SessionGUID: sessionID,
 		OldState:    snap.State,
-		NewState:    "working",
+		NewState:    sessionstate.Working,
 		OldTaskID:   snap.TaskID,
 		NewTaskID:   &newTaskID,
 		Reason:      reason,

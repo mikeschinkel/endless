@@ -13,6 +13,7 @@ import (
 	"github.com/mikeschinkel/endless/internal/faultbadge"
 	"github.com/mikeschinkel/endless/internal/liveview"
 	"github.com/mikeschinkel/endless/internal/monitor"
+	"github.com/mikeschinkel/endless/internal/sessionstate"
 	"github.com/mikeschinkel/endless/internal/taskstatus"
 )
 
@@ -151,11 +152,11 @@ const defaultGroupCap = 10
 func classify(r monitor.ProjectStatusRow) action {
 	if r.HasSession() {
 		switch r.SessionState {
-		case "needs_input":
+		case sessionstate.NeedsInput:
 			return actWaiting
-		case "idle":
+		case sessionstate.Idle:
 			return actIdle
-		case "working":
+		case sessionstate.Working:
 			return actDoing
 		default:
 			return actUnknown

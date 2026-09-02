@@ -246,13 +246,20 @@ func ProjectStatusRows(projectID int64, all bool) ([]ProjectStatusRow, error) {
 }
 
 // boardSessionStates is the set of session states that earn a board row, and it
-// is deliberately NOT "everything except ended".
+// is deliberately NOT sessionstate.Live.
+//
+// It stays a local constant rather than becoming a sixth group (E-2105). A
+// group in the registry names a durable meaning; this names a TEMPORARY
+// exclusion, and E-2091 deletes it. Promoting it would be writing down as a rule
+// something that exists only until a producer appears.
 //
 // `needs_input` is excluded, and that exclusion is the honest reading of what
 // the column currently holds rather than a policy choice. Nothing transitions a
 // session INTO that state: InitSession writes it on INSERT and TouchSession
 // writes it when reviving an ended row, while every live transition writes
-// `working` (BindSessionToTask) or `idle` (the Stop hook). The rows carrying it
+// `working` (BindSessionToTask) or `idle` (the Stop hook) — the whole writer
+// list is internal/sessionstate's transition table, which is where to check
+// this claim rather than re-deriving it from a grep. The rows carrying it
 // are therefore sessions that registered and never had a turn — measured on the
 // development machine at the time of writing: 34 of them in one project, every
 // single one last active between 25 and 71 days ago, none bound to a pane that

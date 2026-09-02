@@ -12,6 +12,7 @@ import (
 
 	"github.com/mikeschinkel/endless/internal/monitor"
 	"github.com/mikeschinkel/endless/internal/schema"
+	"github.com/mikeschinkel/endless/internal/sessionstate"
 
 	_ "modernc.org/sqlite"
 )
@@ -83,8 +84,8 @@ func seedFromWorktree(sandboxDir string) error {
 
 	_, err = sandboxDB.Exec(
 		"INSERT INTO sessions (session_id, project_id, platform, state, started_at, last_activity) "+
-			"VALUES (?, ?, 'claude', 'working', strftime('%Y-%m-%dT%H:%M:%S', 'now'), strftime('%Y-%m-%dT%H:%M:%S', 'now'))",
-		sessionID, projectID,
+			"VALUES (?, ?, 'claude', ?, strftime('%Y-%m-%dT%H:%M:%S', 'now'), strftime('%Y-%m-%dT%H:%M:%S', 'now'))",
+		sessionID, projectID, sessionstate.Working,
 	)
 	if err != nil {
 		return fmt.Errorf("inserting session row: %w", err)

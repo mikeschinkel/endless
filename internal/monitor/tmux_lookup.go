@@ -96,7 +96,7 @@ func queryTaskForPanes(db *sql.DB, panes []string) (*TaskInfo, error) {
 	// structural version of what E-1530 could only approximate by NULLing the
 	// pane out of dead rows.
 	//
-	// state != 'ended' is still required, for the unrelated case of a session
+	// The Live filter is still required, for the unrelated case of a session
 	// that ended cleanly in a pane still open and rebound to a new session.
 	q := `SELECT t.id, t.title, t.status, COALESCE(tt.slug, ''), t.phase, t.tier, COALESCE(p.name, ''), s.epic_id
 	      FROM sessions s
@@ -105,7 +105,7 @@ func queryTaskForPanes(db *sql.DB, panes []string) (*TaskInfo, error) {
 	      LEFT JOIN task_types tt ON tt.id = t.type_id
 	      WHERE s.process_id IN (` + placeholders + `)
 	        AND s.task_id IS NOT NULL
-	        AND s.state != 'ended'
+	        AND s.state IN (` + liveSessionStates + `)
 	      ORDER BY s.last_activity DESC
 	      LIMIT 1`
 
@@ -263,7 +263,8 @@ func anySessionForPanes(panes []string) (bool, error) {
 
 	var found int
 	err = db.QueryRow(
-		"SELECT 1 FROM sessions WHERE process_id IN ("+placeholders+") AND state != 'ended' LIMIT 1",
+		"SELECT 1 FROM sessions WHERE process_id IN ("+placeholders+
+			") AND state IN ("+liveSessionStates+") LIMIT 1",
 		args...,
 	).Scan(&found)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -378,7 +379,8 @@ func sessionForPanes(panes []string) (int64, error) {
 	placeholders, args := processIDArgs(ids)
 	var id int64
 	err = db.QueryRow(
-		"SELECT id FROM sessions WHERE process_id IN ("+placeholders+") AND state != 'ended' ORDER BY last_activity DESC LIMIT 1",
+		"SELECT id FROM sessions WHERE process_id IN ("+placeholders+
+			") AND state IN ("+liveSessionStates+") ORDER BY last_activity DESC LIMIT 1",
 		args...,
 	).Scan(&id)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -447,7 +449,7 @@ func GetActiveBlockers(taskID int64) ([]int64, error) {
 
 // GetLiveSessionByProcess returns the most-recently-active live session bound
 // to the given tmux pane id (e.g. "%124") ON THE SERVER THIS PROCESS CAN REACH.
-// Filters out state='ended' rows so the result is always the live binding.
+// Filters to sessionstate.Live so the result is always the live binding.
 //
 // Per E-1312, this is the canonical session-discovery function for callers that
 // know their pane — used by `endless session status add` and `endless task id`
@@ -480,7 +482,7 @@ func GetLiveSessionByProcess(process string) (int64, error) {
 	var id int64
 	err = db.QueryRow(
 		`SELECT id FROM sessions
-		 WHERE process_id = ? AND state != 'ended'
+		 WHERE process_id = ? AND state IN (`+liveSessionStates+`)
 		 ORDER BY last_activity DESC LIMIT 1`,
 		ids[0],
 	).Scan(&id)

@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/mikeschinkel/endless/internal/monitor"
+	"github.com/mikeschinkel/endless/internal/sessionstate"
 )
 
 // E-2093. Two sessions were stranded by the same defect: `Stop` marks a
@@ -51,6 +52,36 @@ func TestSessionMayWrite(t *testing.T) {
 // for: a session that never said what it is working on. This is the ONE case
 // the old single message was accurate about, and it keeps naming `task claim`,
 // which does work from that state.
+// TestSessionMayWriteFollowsTheGroup pins the gate to the REGISTRY rather than
+// to the enumerated cases above (E-2105).
+//
+// The two differ in what they catch. The cases above prove the gate answers
+// correctly for the four states that exist today; this proves it will answer
+// however sessionstate.MayWrite says for whatever states exist tomorrow. That
+// is the structural half of the fix: the rule used to be a `switch` with a
+// silent `default: return false`, so a fifth state joined the refused set
+// without anyone deciding it should — and a proposal to route Claude Code's
+// permission prompts to `needs_input` nearly shipped exactly that failure,
+// refusing the session's next write after the user answered.
+//
+// The final assertion keeps the ONE good property that `default` had: a value
+// that is not a state at all is refused. Failing open there would admit a
+// corrupt row.
+func TestSessionMayWriteFollowsTheGroup(t *testing.T) {
+	for _, state := range sessionstate.Get(sessionstate.All) {
+		want := sessionstate.Has(sessionstate.MayWrite, state)
+		got := sessionMayWrite(&monitor.SessionInfo{State: state, TaskID: ptrInt64(42)})
+		if got != want {
+			t.Errorf("sessionMayWrite(state=%q) = %v, but sessionstate.MayWrite says %v",
+				state, got, want)
+		}
+	}
+	if sessionMayWrite(&monitor.SessionInfo{State: "prompted", TaskID: ptrInt64(42)}) {
+		t.Error("a session in a state outside the vocabulary was admitted — the gate " +
+			"must refuse what it cannot classify")
+	}
+}
+
 func TestDeclarationRefusal_UndeclaredSession(t *testing.T) {
 	db := newSchemaDB(t)
 	restore := monitor.SetTestDB(db)

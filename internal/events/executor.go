@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/mikeschinkel/endless/internal/monitor"
+	"github.com/mikeschinkel/endless/internal/sessionstate"
 	"github.com/mikeschinkel/endless/internal/sessiontaskrelation"
 	"github.com/mikeschinkel/endless/internal/taskstatus"
 	"github.com/mikeschinkel/endless/internal/tasktype"
@@ -979,7 +980,7 @@ func execTaskClaimed(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 		        -- revival: binding a task to a session is proof it's alive, so
 		        -- task bind must not silently land on (and report success against)
 		        -- an invisible dead row. CASE keeps live states authoritative.
-		        state = CASE WHEN state = 'ended' THEN 'needs_input' ELSE state END,
+		        state = CASE WHEN state = ? THEN ? ELSE state END,
 		        epic_id = (
 		          WITH RECURSIVE ancestry(id, parent_id, type_id, depth) AS (
 		            SELECT id, parent_id, type_id, 0 FROM tasks WHERE id = ?
@@ -993,7 +994,7 @@ func execTaskClaimed(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 		           ORDER BY a.depth LIMIT 1
 		        )
 		  WHERE id = ?`,
-		taskID, taskID, p.SessionID,
+		taskID, sessionstate.Ended, sessionstate.NeedsInput, taskID, p.SessionID,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("events: claim task: %w", err)
@@ -1101,8 +1102,8 @@ func logSessionClaim(res sql.Result, snap monitor.SessionSnapshot, taskID string
 		return
 	}
 	newState := snap.State
-	if newState == "ended" {
-		newState = "needs_input"
+	if newState == sessionstate.Ended {
+		newState = sessionstate.NeedsInput
 	}
 	newTaskID := mustParseInt64(taskID)
 	monitor.LogSessionTxn(monitor.SessionTxn{

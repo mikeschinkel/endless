@@ -23,7 +23,13 @@ func initRepoWithOrigin(t *testing.T) (root, segmentRel, origin string) {
 	t.Helper()
 	root, segmentRel = initRepo(t)
 	origin = filepath.Join(t.TempDir(), "origin.git")
-	mustGit(t, filepath.Dir(origin), "init", "-q", "--bare", origin)
+	// `-b main` is load-bearing, not decoration (E-2105). Without it the bare
+	// repo's HEAD comes from the caller's global `init.defaultBranch`, so on a
+	// machine that has not set it — every verify-suite run, which isolates HOME
+	// — origin points at `master`, upstreamAdvance's clone lands with no local
+	// `main`, and its push fails with "src refspec main does not match any".
+	// A fixture must not depend on the developer's own git config.
+	mustGit(t, filepath.Dir(origin), "init", "-q", "--bare", "-b", "main", origin)
 	mustGit(t, root, "remote", "add", "origin", origin)
 	mustGit(t, root, "push", "-q", "-u", "origin", "main")
 	return root, segmentRel, origin

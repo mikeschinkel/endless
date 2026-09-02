@@ -50,7 +50,7 @@ func WorktreeInUse(db *sql.DB, dir string, taskID int64) (bool, InUseReason, err
 	if taskID > 0 {
 		var activeSessions int
 		err := db.QueryRow(
-			`SELECT count(*) FROM sessions WHERE task_id = ? AND state != 'ended'`,
+			`SELECT count(*) FROM sessions WHERE task_id = ? AND state IN (`+liveSessionStates+`)`,
 			taskID,
 		).Scan(&activeSessions)
 		if err != nil {

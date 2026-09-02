@@ -159,7 +159,7 @@ func reapBoundSandbox(worktreeName string) {
 //     cutoff. session_tasks.updated_at is upserted by every task.* event from a
 //     session actor, so claim / status flip / decision / etc. all advance it
 //     (see internal/events/session_tasks.go).
-//  3. No active (state != 'ended') session has task_id pointing at
+//  3. No active (sessionstate.Live) session has task_id pointing at
 //     the task.
 //  4. The worktree is SETTLED: its working tree is clean, and it holds no
 //     commit whose content the project's default branch lacks.
