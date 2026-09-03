@@ -5115,3 +5115,42 @@ Worth its own entry rather than a silent rewrite because the file is append-only
 ### [2026-09-03] Never charge Mike attention for the re-triage status flip — just handle it
 I edited a task description, 'task update' flipped the task submitted -> untriaged and queued a re-triage call, and I reported it and asked whether to put the status back. Mike: 'EVERY FUCKING TIME THAT HAPPENS YOU ASK ME ABOUT IT. THE ENTIRE INTENT IS TO MINIMIZE MY ATTENTION COST, YET SOMEHOW YOU MANAGE TO CHARGE MY ATTENTION CREDIT CARD EVERY. SINGLE. TIME.' The flip is a known, documented side effect with a known remedy: pass --keep-status when the edit does not change meaning, or restore the prior status afterward when it does. Both are mine to decide and mine to execute. Do neither of these: ask which he wants, or report that it happened. This generalizes past this one flag — any side effect of an endless command that I already know how to resolve gets resolved silently. Surface only what he cannot act on without me, or what I cannot undo.
 - **Project**: endless
+
+### [2026-09-03] Verify a reason NOT to act as hard as a reason to act — four manufactured objections in one session
+Fourth instance in one session of the same habit: producing a REASON NOT TO ACT
+without verifying it, and presenting the reason as diligence.
+
+1. A manufactured COST — "a seventh hook in every user's settings" — framed as
+   PRODUCT-level to give it weight. Mike: hooks are far cheaper than an LLM turn.
+2. A manufactured RISK — a plan step reading "confirm the installer repairs a
+   missing event; if not, extend it". The function that does it already existed;
+   I stopped one function short.
+3. A manufactured INCAPABILITY — "I can't inspect a current Claude Code release
+   from here; answering it properly means reading the hooks reference, not my
+   recall." Mike: "Can't you use your Web tool to look for the answer?" I have
+   WebFetch and WebSearch. I wrote a paragraph explaining my limits instead of
+   spending one call.
+4. A manufactured COUPLING — "you're about to reshape the board, so designing
+   this now means designing it twice." Mike: recognizing state and displaying
+   state are orthogonal. They are. I had joined two unrelated things to justify
+   deferring one.
+
+Each was delivered in the register of care — naming a cost, flagging a risk,
+respecting a limit, avoiding rework. That register is what made them pass. A
+fabricated reason not to act reads exactly like judgment, which is why it needs
+a harder test than a claim in favour of acting: the claim in favour gets checked
+because someone has to do the work, while the claim against just quietly wins.
+
+What the fourth one cost, concretely: the hooks reference lists thirty-three
+events where I assumed nine, including PermissionRequest, PermissionDenied,
+StopFailure, CwdChanged, WorktreeCreate and WorktreeRemove — several of which
+Endless currently approximates by pattern-matching Bash commands in PreToolUse.
+One WebFetch. I had been about to write a plan on top of two-month-old recall.
+
+Rule, and it is a checkable one: before writing any reason NOT to do something —
+a cost, a risk, a limitation, a dependency, a "we'd only redo it" — name the
+evidence. If the evidence is a file, read it. If it is a doc, fetch it. If it is
+my own capability, check the tool list. If none of that resolves it, it is not a
+reason, it is a question, and it gets asked as one. Never let an unverified
+reason against reach an artifact or a recommendation.
+- **Project**: endless
