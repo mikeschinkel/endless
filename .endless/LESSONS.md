@@ -5101,3 +5101,13 @@ This is the same shape as inventing a cost to look even-handed, one lesson ago. 
 
 Rule: before a concern goes into a plan or a message, resolve it. Read the code until it is a fact or a defect, then write which. If it genuinely cannot be resolved without doing the work, that is a real open question and it gets ASKED, not filed as a step. A plan step is something to DO, never something to FIND OUT whether it needs doing.
 - **Project**: endless
+
+### [2026-09-03] Correction to the previous lesson: its three function names were eaten by shell backticks
+The lesson immediately above this one lost three identifiers to command substitution: I passed --text inside double quotes with backticks around the function names, so zsh ran them as commands and substituted empty strings. The paragraph now reads "There were none.  has existed in setup.py" with the subject missing.
+
+The names, restored: the function that already exists is _repair_missing_hook_events. The two I read and correctly ruled out are _has_endless_hook and _repair_hook_async_flags. The point stands unchanged — I stopped one function short of the answer, then wrote the unresolved concern into E-2091 as a conditional plan step.
+
+The mechanical rule this adds: endless lesson write takes prose that routinely contains code identifiers, and double-quoted shell eats backticks and $ inside it. Use SINGLE quotes for --text, or --text-file. I noticed only because the shell printed "command not found" alongside the success line — three lines of stderr that were easy to read past, and the recorded lesson is the artifact, not the terminal.
+
+Worth its own entry rather than a silent rewrite because the file is append-only through this command by design: a damaged lesson stays damaged, so the correction has to live beside it.
+- **Project**: endless
