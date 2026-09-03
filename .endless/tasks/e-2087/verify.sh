@@ -25,8 +25,9 @@
 #      the all-clear.
 #   F. The probe reads no database. E-1940's landed-SHA credit was a stand-in
 #      for this fix and is gone, along with the `landed_shas` wire field.
-#   G. The reaper reads the SAME probe, and no longer requires a recorded
-#      landing to reclaim a settled worktree.
+#   G. The reaper does NOT read that probe, and the reason is load-bearing:
+#      it runs on PreToolUse/PostToolUse. It keeps the cheap containment test,
+#      and no longer requires a recorded landing to reclaim a settled worktree.
 #
 # See E-2087's analysis (endless task show E-2087 --analysis).
 source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
@@ -214,26 +215,35 @@ assert_not_contains "the settled verdict carries no landing credit" \
     '"landed_shas"' "${landed_probe}"
 
 # ---------------------------------------------------------------------------
-section "G. The reaper reads the same probe"
+section "G. The reaper keeps the CHEAP check, and stays off the slow one"
 # ---------------------------------------------------------------------------
-# The reaper used to run its own copy of the two git conditions, so "settled"
-# could mean one thing to the ◆ and another to the thing that deletes
-# directories. It now calls the probe. Its eligibility gate moved too: a
-# recorded landing is no longer required, because a branch sitting at the base
-# holding nothing is as disposable as one that landed (E-1360 and E-1697 sat
-# unreclaimable in exactly that state). What is still required is a recorded
-# moment to age off.
+# This section asserts the opposite of what it did when E-2087 first landed,
+# and the reversal is the finding. monitor.ReapWorktreesForProject is called
+# from five branches of internal/hookcmd/claude.go, including PreToolUse and
+# PostToolUse — the reaper sweeps every worktree before and after every tool
+# call in every session. Routing that through the content comparison made each
+# sweep ~90s and stopped the product. The reaper answers condition 4 with a
+# sufficient condition instead: a cheap containment test, wrong only in the
+# direction that refuses to reap. E-2111 is where it gets the exact answer back
+# affordably; until then this is the guard that keeps it off the hot path.
 
 reap_src="$(cat "${WT}/internal/monitor/reap_worktrees.go")"
-assert_contains "condition 4 is the shared probe" \
-    "d := worktreeUnsettledAt(dir, true)" "${reap_src}"
-assert_contains "and an unsettled verdict skips" \
-    "if d.Unsettled() {" "${reap_src}"
-assert_not_contains "the reaper runs no rev-list of its own" \
-    'runGit(dir, "rev-list"' "${reap_src}"
+assert_not_contains "the reaper does not call the content probe" \
+    "worktreeUnsettledAt(" "${reap_src}"
+assert_contains "condition 4 is the cheap containment test" \
+    "nothing, gerr := reapNothingToLand(dir, base, landedRefs)" "${reap_src}"
+assert_contains "which is one rev-list, crediting the recorded landings (E-1940)" \
+    'args := []string{"rev-list", "--count", "--ignore-missing", "HEAD", "^" + base}' "${reap_src}"
 assert_contains "a missing landing row no longer disqualifies" \
     "hasLanding = false" "${reap_src}"
 assert_contains "but a task with no recorded moment at all is skipped" \
     "if latest.IsZero() {" "${reap_src}"
+
+# The hook wiring is the reason for all of the above; assert it rather than
+# trusting the comment, so a future move off the hook path is noticed here.
+hook_src="$(cat "${WT}/internal/hookcmd/claude.go")"
+reap_calls="$(printf '%s' "${hook_src}" | grep -c 'ReapWorktreesForProject')"
+assert_eq "the reaper is still on five hook branches (E-2111's premise)" \
+    "5" "${reap_calls}"
 
 summary

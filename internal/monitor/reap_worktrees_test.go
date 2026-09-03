@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -223,6 +224,9 @@ type reaperFixture struct {
 	// branchOut answers `symbolic-ref --short HEAD`, which is where the branch
 	// name comes from when no landing row recorded one.
 	branchOut string
+	// revListArgs records condition 4's arguments so a test can assert which
+	// revisions it excluded.
+	revListArgs []string
 
 	// revParseErr makes every branch candidate fail to resolve, which is how
 	// DefaultBranch reports "I cannot name this repo's default branch" (E-1940).
@@ -265,6 +269,7 @@ func newReaperFixture(t *testing.T, landedAt time.Time) *reaperFixture {
 		f.calls = append(f.calls, key)
 		switch key {
 		case "rev-list":
+			f.revListArgs = append([]string{}, args...)
 			return f.revListOut, f.revListErr
 		case "merge-base":
 			return "b45e0000\n", nil
@@ -720,24 +725,77 @@ func TestMaybeReapWorktree_SkipsWhenDefaultBranchUnresolved(t *testing.T) {
 	}
 }
 
-// TestMaybeReapWorktree_RebaseLandedWorktreeIsReapable is the reap side of
-// E-2087. A rebasing land rewrites every SHA, so `<base>..HEAD` counted the
-// branch's originals forever and condition 4 rejected exactly the directories
-// condition 1 had just admitted — which is how landed worktrees accumulated
-// without bound. The content comparison sees the copies for what they are.
-func TestMaybeReapWorktree_RebaseLandedWorktreeIsReapable(t *testing.T) {
-	f := newReaperFixture(t, time.Now().Add(-30*24*time.Hour))
-	// Three commits ahead by SHA, every one of them matched on the base.
+// TestMaybeReapWorktree_UnrecordedRebaseLandingIsNotReaped pins a debt, not a
+// feature. E-2087 briefly gave the reaper the exact content comparison, which
+// recognised a rebase-landed branch with no task_landings row and reclaimed it.
+// That probe costs ~1-2s per worktree and the reaper runs on PreToolUse and
+// PostToolUse, so the sweep cost ~90s before and after every tool call in every
+// session. It was reverted to the cheap containment test.
+//
+// The consequence, asserted here so it is visible rather than merely absent: a
+// branch whose work reached the base under rewritten SHAs, with nothing
+// recorded, is never reclaimed. Reversing this assertion is the point of
+// E-2111 — do it there, with something that makes the exact answer affordable,
+// not by loosening the test.
+func TestMaybeReapWorktree_UnrecordedRebaseLandingIsNotReaped(t *testing.T) {
+	f := newReaperFixture(t, time.Time{}) // no landing row to credit
+	// Three commits ahead by SHA; every one of them is on the base under a
+	// different hash, which only a content comparison could see.
 	f.revListOut = "3"
 	f.unlanded = 0
+	if _, err := f.db.Exec(
+		`INSERT INTO session_tasks (session_id, task_id, created_at, updated_at)
+		 VALUES (1, 42, ?, ?)`,
+		time.Now().Add(-30*24*time.Hour).UTC().Format("2006-01-02T15:04:05"),
+		time.Now().Add(-30*24*time.Hour).UTC().Format("2006-01-02T15:04:05"),
+	); err != nil {
+		t.Fatalf("seed session activity: %v", err)
+	}
 	cutoff := time.Now().UTC().Add(-14 * 24 * time.Hour)
 
 	reaped, err := maybeReapWorktree(f.db, f.projRoot, f.dir, 42, cutoff)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !reaped {
-		t.Fatalf("a rebase-landed worktree was not reaped (calls=%v)", f.calls)
+	if reaped {
+		t.Fatal("the reaper reached for the exact comparison again — see E-2111")
+	}
+	for _, c := range f.calls {
+		if c == "range-diff" {
+			t.Errorf("the reaper ran range-diff; it is on the PreToolUse/PostToolUse path (calls=%v)", f.calls)
+		}
+	}
+}
+
+// TestMaybeReapWorktree_CreditsRecordedLandings is E-1940's regression, kept
+// after E-2087's revert: a rebasing land rewrites every SHA, so without
+// crediting the recorded landing the cheap containment test can never clear a
+// worktree that landed through `worktree land`, and landed worktrees accumulate
+// without bound.
+func TestMaybeReapWorktree_CreditsRecordedLandings(t *testing.T) {
+	f := newReaperFixture(t, time.Now().Add(-30*24*time.Hour))
+	if _, err := f.db.Exec(
+		`INSERT INTO task_landings (task_id, branch, merge_commit_sha, landed_at)
+		 VALUES (42, 'task/42-probe', 'cafebabe', '2026-01-01T00:00:00')`,
+	); err != nil {
+		t.Fatalf("seed second landing: %v", err)
+	}
+	cutoff := time.Now().UTC().Add(-14 * 24 * time.Hour)
+
+	if _, err := maybeReapWorktree(f.db, f.projRoot, f.dir, 42, cutoff); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	excluded := map[string]bool{}
+	for _, a := range f.revListArgs {
+		if strings.HasPrefix(a, "^") {
+			excluded[a] = true
+		}
+	}
+	for _, want := range []string{"^main", "^deadbeef", "^cafebabe"} {
+		if !excluded[want] {
+			t.Errorf("condition 4 did not exclude %s (args=%v)", want, f.revListArgs)
+		}
 	}
 }
 

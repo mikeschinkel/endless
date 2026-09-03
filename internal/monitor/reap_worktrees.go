@@ -233,31 +233,30 @@ func maybeReapWorktree(db *sql.DB, projectRoot, dir string, taskID int64, cutoff
 		return false, nil
 	}
 
-	// The resolver is asked BEFORE the probe so an unresolvable default branch
-	// raises the REAPER's own fault. "This worktree can never be reaped" is a
-	// different thing for the operator to fix from "this row is marked ◆", and
-	// the probe below would record only the latter (E-1940). Resolution is
-	// memoized per directory, so asking twice costs one git call.
-	if _, berr := DefaultBranch(dir); berr != nil {
+	base, berr := DefaultBranch(dir)
+	if berr != nil {
 		recordReapDefaultBranchFault(dir, taskID, berr)
 		return false, nil
 	}
 
-	// Condition 4, in one call to the shared probe — and the branch name it
-	// enriches with, so a worktree that never recorded a landing still knows
-	// which branch to delete.
-	d := worktreeUnsettledAt(dir, true)
-	if d.Unsettled() {
+	// Condition 4, answered cheaply — see reapNothingToLand for why this is
+	// deliberately NOT the probe behind ◆.
+	landedRefs, lerr := landedShas(db, taskID)
+	if lerr != nil {
+		return false, fmt.Errorf("query landing shas: %w", lerr)
+	}
+	nothing, gerr := reapNothingToLand(dir, base, landedRefs)
+	if gerr != nil || !nothing {
 		return false, nil
 	}
-	// The recorded branch when there is a landing row, git's answer when there
-	// is not. The fallback is deliberately NOT applied to a landing row whose
-	// branch is NULL: that is E-1719's record-only landing, where the absent
-	// name is a recorded fact about what was landed, and this function has
-	// always left such a branch alone.
-	branchName := strings.TrimSpace(branch.String)
-	if !hasLanding {
-		branchName = d.Branch
+
+	// Condition 5 — a modified working tree.
+	out, gerr := runGit(dir, "status", "--porcelain")
+	if gerr != nil {
+		return false, nil
+	}
+	if strings.TrimSpace(out) != "" {
+		return false, nil
 	}
 
 	// Conditions 3 and 5 in one call — the shared "is anything still using
@@ -273,6 +272,23 @@ func maybeReapWorktree(db *sql.DB, projectRoot, dir string, taskID int64, cutoff
 	}
 	if inUse {
 		return false, nil
+	}
+
+	// The branch to delete: the recorded one when there is a landing row, git's
+	// answer when there is not (E-2087 stopped requiring a landing, so a
+	// reapable worktree may have no row to read a name from). Read here rather
+	// than with the conditions above so the extra git call is paid only by a
+	// directory actually being removed.
+	//
+	// The git fallback is deliberately NOT applied to a landing row whose
+	// branch is NULL: that is E-1719's record-only landing, where the absent
+	// name is a recorded fact about what was landed, and this function has
+	// always left such a branch alone.
+	branchName := strings.TrimSpace(branch.String)
+	if !hasLanding {
+		if out, gerr := runGit(dir, "symbolic-ref", "--short", "--quiet", "HEAD"); gerr == nil {
+			branchName = strings.TrimSpace(out)
+		}
 	}
 
 	if out, err := runGit(projectRoot, "worktree", "remove", "--force", dir); err != nil {
@@ -303,6 +319,87 @@ func maybeReapWorktree(db *sql.DB, projectRoot, dir string, taskID int64, cutoff
 		}
 	}
 	return true, nil
+}
+
+// reapNothingToLand answers the reaper's condition 4 with a SUFFICIENT
+// condition rather than an exact one: every commit on this branch is reachable
+// from base by SHA, so there is provably nothing here to land.
+//
+// It is deliberately NOT the probe behind ◆ and `task unsettled`, and the
+// asymmetry is the point. Those two surfaces answer a question a person is
+// reading — "what is outstanding?" — where a wrong answer misleads, so they pay
+// `git range-diff` to recognise a commit a rebasing land re-hashed (E-2087).
+// This function answers a question that ends in `rm -rf`, where the two
+// mistakes are not comparable: refusing to reap a reapable directory costs disk
+// space, and reaping one that still holds work destroys it. A cheap containment
+// test is wrong only in the safe direction — it never reports "nothing to land"
+// about a branch that holds something.
+//
+// It is also on a hot path that has no business being slow. ReapWorktreesForProject
+// is called from five hook branches in internal/hookcmd/claude.go, including
+// PreToolUse and PostToolUse, so this runs before and after EVERY tool call in
+// every session. E-2087 briefly routed it through the range-diff probe and made
+// each sweep cost ~90 seconds, which did not degrade the product so much as stop
+// it. Anything added here is paid per tool call; treat that as the constraint it
+// is.
+//
+// The cost of being conservative: a branch whose work landed under rewritten
+// SHAs reads as holding something, so its directory is never reclaimed and
+// landed worktrees accumulate — the leak E-1940 and E-2087 each tried to close.
+// That is a known, accepted debt, tracked for a proper fix (caching the exact
+// verdict rather than recomputing it per tool call). A slow leak is survivable;
+// a 90-second tool call is not.
+//
+// The recorded landings are still credited (E-1940): excluding each one from
+// the range is one more `^sha` on the same single git call, and dropping it
+// would cost the reaper a second fix it already had — a rebasing land rewrites
+// every SHA, so without the credit a worktree that landed through `worktree
+// land` could never be reclaimed at all. `--ignore-missing` covers a recorded
+// SHA this clone no longer has; without it one absent object makes git exit 128
+// and the candidate is skipped forever.
+//
+// A git error answers false: the reaper skips what it cannot inspect.
+func reapNothingToLand(dir, base string, landed []string) (bool, error) {
+	args := []string{"rev-list", "--count", "--ignore-missing", "HEAD", "^" + base}
+	for _, sha := range landed {
+		args = append(args, "^"+sha)
+	}
+	out, err := runGit(dir, args...)
+	if err != nil {
+		return false, err
+	}
+	n, perr := strconv.Atoi(strings.TrimSpace(out))
+	if perr != nil {
+		return false, fmt.Errorf("unparsable rev-list count %q", strings.TrimSpace(out))
+	}
+	return n == 0, nil
+}
+
+// landedShas returns the merge_commit_sha of every recorded landing for a task,
+// newest first. Reaper-only: the display probe answers by content and needs no
+// such credit (E-2087).
+func landedShas(db *sql.DB, taskID int64) ([]string, error) {
+	rows, err := db.Query(
+		`SELECT merge_commit_sha
+		   FROM task_landings
+		  WHERE task_id = ? AND merge_commit_sha != ''
+		  ORDER BY landed_at DESC`,
+		taskID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	var shas []string
+	for rows.Next() {
+		var sha string
+		if err := rows.Scan(&sha); err != nil {
+			return nil, err
+		}
+		shas = append(shas, sha)
+	}
+	return shas, rows.Err()
 }
 
 // removeStrandedWorktreeDir deletes a stranded orphan worktree directory
