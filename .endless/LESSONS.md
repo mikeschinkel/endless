@@ -5162,3 +5162,11 @@ The status column is the only thing that says whether a decision has force. Desc
 
 The second half of my error: I said the 139 slug-named branches on disk were evidence ED-1167 was in force. They are not. A TASK implemented that naming; the decision, at most, described behavior that already existed. Shipped behavior is never evidence that a decision authorizing it was accepted.
 - **Project**: endless
+
+### [2026-09-03] Do not define Mike's own vocabulary back to him
+I told Mike that 'rejected' says 'never happened' and that 'superseded' was the accurate record — explaining the meaning of statuses he defined, in the tool he is building, as though he needed the tutorial. He does not. 'Rejected' means what he says it means: the decider decided against it.
+
+Worse, I did not source the gloss. It came from the CLI's own refusal text, which editorializes past the status ('it was rejected, so it never took effect'). I repeated a message the product printed as if it were my own reasoning about his vocabulary.
+
+When a status, term or convention is one Mike defined: ask what he means by it, or report the observed behavior and let him judge. Never assert its meaning back at him.
+- **Project**: endless
