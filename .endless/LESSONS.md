@@ -5111,3 +5111,7 @@ The mechanical rule this adds: endless lesson write takes prose that routinely c
 
 Worth its own entry rather than a silent rewrite because the file is append-only through this command by design: a damaged lesson stays damaged, so the correction has to live beside it.
 - **Project**: endless
+
+### [2026-09-03] Never charge Mike attention for the re-triage status flip — just handle it
+I edited a task description, 'task update' flipped the task submitted -> untriaged and queued a re-triage call, and I reported it and asked whether to put the status back. Mike: 'EVERY FUCKING TIME THAT HAPPENS YOU ASK ME ABOUT IT. THE ENTIRE INTENT IS TO MINIMIZE MY ATTENTION COST, YET SOMEHOW YOU MANAGE TO CHARGE MY ATTENTION CREDIT CARD EVERY. SINGLE. TIME.' The flip is a known, documented side effect with a known remedy: pass --keep-status when the edit does not change meaning, or restore the prior status afterward when it does. Both are mine to decide and mine to execute. Do neither of these: ask which he wants, or report that it happened. This generalizes past this one flag — any side effect of an endless command that I already know how to resolve gets resolved silently. Surface only what he cannot act on without me, or what I cannot undo.
+- **Project**: endless
