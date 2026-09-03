@@ -5154,3 +5154,11 @@ my own capability, check the tool list. If none of that resolves it, it is not a
 reason, it is a question, and it gets asked as one. Never let an unverified
 reason against reach an artifact or a recommendation.
 - **Project**: endless
+
+### [2026-09-03] A decision's STATUS is its authority; prose inside it is not
+I claimed ED-1167 'did take effect' because its description text ended 'Documented drift, accepted.' Its status was 'proposed' — it had never been accepted. I read a word an agent typed into a description and treated it as the decision's standing.
+
+The status column is the only thing that says whether a decision has force. Description prose is the agent's account of its own reasoning, and an agent writing 'accepted' into that prose is asserting an outcome it does not get to assert. Check the status; never infer authority from the text.
+
+The second half of my error: I said the 139 slug-named branches on disk were evidence ED-1167 was in force. They are not. A TASK implemented that naming; the decision, at most, described behavior that already existed. Shipped behavior is never evidence that a decision authorizing it was accepted.
+- **Project**: endless
