@@ -5073,3 +5073,7 @@ I filed a resume/window-binding bug with --cleans-up E-1834 because E-1834 was t
 ### [2026-09-02] Read the question's domain before reaching for project state
 Mike asked where a Claude session transcript lived so he could find it in Time Machine. I opened the Endless ledger and the SQLite DB first. He stopped me: 'Why are you searching in the database for that session? It is a question about the Claude home directory and tmutil, not Endless.' Working inside Endless does not make every question an Endless question. Locate the question's domain first — the host filesystem, the OS tooling, another project — and search there. Reaching for the ledger by reflex burns turns and answers a question nobody asked.
 - **Project**: endless
+
+### [2026-09-02] Raising a concern means presenting options with tradeoffs, not just the observation
+I flagged that the output Mike specified for 'task claim' would resolve to the claiming session itself, then filed the task anyway. He said: 'You brought up potentially a good point, but you did not make clear what my options were and what the pros and cons of each are.' Naming a problem without naming the ways out leaves the work of enumerating them to him, which is the work he asked me to do. When flagging a design wrinkle, give the two or three real options, the cost of each, and a recommendation — in the same message as the flag, not after he asks.
+- **Project**: endless
