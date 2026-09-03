@@ -5077,3 +5077,11 @@ Mike asked where a Claude session transcript lived so he could find it in Time M
 ### [2026-09-02] Raising a concern means presenting options with tradeoffs, not just the observation
 I flagged that the output Mike specified for 'task claim' would resolve to the claiming session itself, then filed the task anyway. He said: 'You brought up potentially a good point, but you did not make clear what my options were and what the pros and cons of each are.' Naming a problem without naming the ways out leaves the work of enumerating them to him, which is the work he asked me to do. When flagging a design wrinkle, give the two or three real options, the cost of each, and a recommendation — in the same message as the flag, not after he asks.
 - **Project**: endless
+
+### [2026-09-03] Sub-second latency deltas are not decisions to escalate
+I measured `endless session list` going from ~333ms to ~507ms after E-2105 converted the Python renderer to shell out to the Go registry, and I handed Mike that delta as an open decision — 'say the word and I'll add a batching verb.' His answer: there is NO effective difference between 333ms and 507ms; the API round-trip he is already waiting on is an order of magnitude longer.
+
+The error was calibration, not measurement. Measuring the cost was right; framing a 174ms difference in a human-interactive CLI as something requiring his judgment was not. It spent one of his decisions on a number that changes nothing he experiences.
+
+The rule: for a human-interactive command, a latency change that stays well under a second is a footnote, not an action item. Report it in one clause if at all, pick the design the plan specifies, and move on. Escalate latency only when it crosses into something a person actually feels — a perceptible pause on a command run in a loop, a status line that visibly lags, a hook that delays every turn, or a regression measured in seconds. The comparison that matters is not 'how much slower than before' but 'is this now slow enough to notice.'
+- **Project**: endless
