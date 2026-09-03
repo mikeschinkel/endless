@@ -181,14 +181,54 @@ def glyph(state: str) -> str:
     return stdout.strip()
 
 
-# The whole vocabulary, in lifecycle order. Read once at import because the
-# click decorators in cli.py consume it at decoration time — `click.Choice(...)`
-# is evaluated as the module loads, long before any argument is parsed.
-#
-# That is also why the failure below is handled here rather than raised: click's
-# exception handler is not installed during import, so an escaping
-# ClickException would print a traceback. This prints the message and stops.
-try:
-    SESSION_STATES = get("all")
-except SessionStateVocabularyError as exc:
-    raise SystemExit(f"endless: {exc.format_message()}") from exc
+def all_states() -> tuple[str, ...]:
+    """The whole vocabulary, in lifecycle order.
+
+    A FUNCTION, not a module constant, and the difference is load-bearing
+    (E-2105). `endless.statuses` reads its vocabulary at import for
+    `click.Choice(TASK_STATUSES)`, which is evaluated as cli.py loads — so every
+    `endless` command, whatever it does, cannot start unless `endless-go` can
+    answer. That is fine for a subcommand every installed binary already has,
+    and fatal for one being introduced: `just land` fast-forwards main's Python
+    source into place and rebuilds the global binary only at the END of the
+    recipe, so in between, every `endless` invocation from the main checkout
+    runs new Python against an old binary. `endless worktree land` — which has
+    nothing to say about session state — died there, and no resolver could have
+    saved it, because during that window no binary on the machine knows the
+    verb yet.
+
+    So nobody pays for this vocabulary who does not use it. See StateChoice for
+    the click side.
+    """
+    return get("all")
+
+
+class StateChoice(click.ParamType):
+    """`click.Choice` over the vocabulary, resolved on USE rather than on
+    decoration (E-2105).
+
+    click evaluates a `type=` argument when the decorator runs, i.e. at cli.py
+    import. Deferring the lookup to conversion and metavar time is what keeps a
+    command that never mentions `--state` from depending on the registry at all
+    — see all_states above for why that matters at land time.
+
+    Every method delegates to a real `click.Choice` built on the spot, so the
+    metavar, the shell completions and the rejection message are click's own
+    rather than a re-implementation that could drift from them.
+    """
+
+    name = "choice"
+
+    def _choice(self) -> click.Choice:
+        return click.Choice(all_states())
+
+    def convert(self, value, param, ctx):
+        return self._choice().convert(value, param, ctx)
+
+    def get_metavar(self, *args, **kwargs):
+        # Signature moved between click 8.1 and 8.2 (`param` gained `ctx`);
+        # forwarding verbatim keeps this working on either.
+        return self._choice().get_metavar(*args, **kwargs)
+
+    def shell_complete(self, ctx, param, incomplete):
+        return self._choice().shell_complete(ctx, param, incomplete)

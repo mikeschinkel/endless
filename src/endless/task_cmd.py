@@ -6870,7 +6870,7 @@ def _finished_session_states() -> tuple[str, ...]:
     """
     live = session_states.get("live")
     return tuple(
-        state for state in session_states.SESSION_STATES if state not in live
+        state for state in session_states.all_states() if state not in live
     ) + (_MISSING_SESSION_STATE,)
 
 

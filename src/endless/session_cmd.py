@@ -909,7 +909,7 @@ def session_status_resolve(
 # column is legible.
 SESSION_STATE_ICONS = {
     state: session_states.glyph(state)
-    for state in session_states.SESSION_STATES
+    for state in session_states.all_states()
 }
 
 # Glyph for a state not in the map — a should-never-happen marker, matching the
@@ -926,7 +926,7 @@ SESSION_STATE_UNKNOWN_ICON = session_states.glyph("")
 # words, the casing is this view's own choice.
 SESSION_STATE_LEGEND = "   ".join(
     f"{SESSION_STATE_ICONS[state]} {session_states.label(state).lower()}"
-    for state in session_states.SESSION_STATES
+    for state in session_states.all_states()
 )
 
 

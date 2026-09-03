@@ -37,6 +37,14 @@
 #       next write after the user answered.
 #   C4  PYTHON HOLDS NOTHING. session_states.py declares no state, no group and
 #       no list; cli.py and session_cmd.py carry no literal.
+#   C5  NOBODY PAYS WHO DOES NOT USE IT. The vocabulary is read when a command
+#       needs it, never while cli.py's decorators run. The first land of this
+#       task died on exactly that: `just land` puts main's new Python source in
+#       place and rebuilds the global endless-go only at the END of the recipe,
+#       so in between `endless worktree land` ran new Python against a binary
+#       that did not know `session-state` — and exited at import, from a
+#       command with nothing to say about session state. Section H is that
+#       window, reproduced.
 #
 # ISOLATION
 #   Sections A–E touch no database at all — they are unit tests, a built
@@ -53,6 +61,7 @@
 #   D. The sweep — C2.
 #   E. Python holds no vocabulary — C4.
 #   F. Byte-identical rendering — C1.
+#   H. The land window — C5.
 #   G. Project-wide regression.
 #
 # Output: pass/fail per check, then a summary. Exit 0 all-passed, 1 on any
@@ -306,7 +315,14 @@ assert_eq "session_states.py holds no group list either" "" \
     "$(grep -nE "^(SESSION_STATE_GROUPS|GROUPS) *=" src/endless/session_states.py)"
 
 assert_contains "cli.py builds --state's choice from the registry" \
-    "click.Choice(SESSION_STATES)" "$(cat src/endless/cli.py)"
+    "session_states.StateChoice()" "$(cat src/endless/cli.py)"
+
+# C5, and the reason section H exists below: the registry must not be consulted
+# while cli.py's decorators run, because that is every command's import.
+assert_eq "cli.py reads no vocabulary at import" "" \
+    "$(grep -n 'from endless.session_states import\|session_states.all_states()' src/endless/cli.py)"
+assert_ok "the deferred-lookup tests (mirrored into the durable suite)" \
+    uv run --project "${WT}" pytest tests/test_session_state_lazy_lookup.py -q
 
 assert_contains "session_cmd.py builds its glyph map from the registry" \
     "session_states.glyph(state)" "$(cat src/endless/session_cmd.py)"
@@ -415,6 +431,56 @@ assert_eq "session list --json orders rows exactly as the table does" \
 assert_contains "an unknown --state is rejected naming every real state" \
     "'bogus' is not one of 'working', 'idle', 'needs_input', 'ended'" \
     "$(E session list --all --state bogus 2>&1 || true)"
+
+# ── H. the land window (C5) ─────────────────────────────────────────────────
+
+section "H — an endless-go that does not know session-state bricks nothing"
+
+# The first land of E-2105 failed here, and this is the check that would have
+# caught it. `just land` fast-forwards main's Python source into place and
+# rebuilds the global binary only at the END of the recipe; in between, every
+# `endless` invocation from the main checkout runs new Python against an old
+# binary. No resolver can help — during that window no binary on the machine
+# knows the verb — so the requirement is that a command which does not USE the
+# vocabulary never asks for it.
+#
+# The stale binary is a shim rather than a real old build: what is being
+# modelled is exactly "this endless-go does not know `session-state`", and a
+# shim says that without a second toolchain. Everything else delegates to the
+# real binary, so `statuses.py` and the rest behave normally and the only
+# missing thing is the verb under test.
+STALE="${TMP}/stale"
+mkdir -p "${STALE}"
+cat > "${STALE}/endless-go" <<SHIM
+#!/usr/bin/env bash
+if [ "\${1:-}" = "session-state" ]; then
+    echo 'endless-go: unknown subcommand "session-state"' >&2
+    exit 2
+fi
+exec "${EGO}" "\$@"
+SHIM
+chmod +x "${STALE}/endless-go"
+
+# cwd OUTSIDE any worktree, so config.worktree_endless_go() answers None and
+# the shim on PATH is the only candidate — the main-checkout condition exactly.
+OUTSIDE="${TMP}/outside"
+mkdir -p "${OUTSIDE}"
+stale_run() { ( cd "${OUTSIDE}" && PATH="${STALE}:${PATH}" uv run --project "${WT}" endless "$@" ); }
+
+assert_ok "\`endless worktree --help\` survives a stale endless-go (the land's own command)" \
+    stale_run worktree --help
+assert_ok "\`endless task --help\` survives a stale endless-go" \
+    stale_run task --help
+assert_ok "\`endless --help\` survives a stale endless-go" \
+    stale_run --help
+
+# The other half: a command that genuinely needs the vocabulary still refuses,
+# and refuses as a clean CLI error rather than an import-time SystemExit.
+assert_contains "a command that DOES need it fails cleanly, naming the remedy" \
+    "rebuild it with \`just install\`" "$(stale_run session list --state working 2>&1 || true)"
+assert_contains "...and as click's Error:, not a traceback" \
+    "Error: could not read the session state vocabulary" \
+    "$(stale_run session list --state working 2>&1 || true)"
 
 export XDG_CONFIG_HOME="${SAVED_XDG_CONFIG}"
 export XDG_CACHE_HOME="${SAVED_XDG_CACHE}"
