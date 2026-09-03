@@ -822,7 +822,7 @@ func hiddenField(r monitor.SessionStatusRow, hw int) string {
 // truncation, which would hide a real glyph).
 func buildLegend(rows []monitor.SessionStatusRow) string {
 	var present [len(actionMeta)]bool
-	var done, blocked, blocks, unsettled, hidden, queued, referenced bool
+	var done, blocked, blocks, unsettled, notStarted, hidden, queued, referenced bool
 	for _, r := range rows {
 		present[classify(r)] = true
 		if isTerminal(r.Status) {
@@ -843,8 +843,11 @@ func buildLegend(rows []monitor.SessionStatusRow) string {
 		if r.BlocksN > 0 {
 			blocks = true
 		}
-		if r.Unsettled {
+		switch unsettledMark(r) {
+		case unsettledGlyph:
 			unsettled = true
+		case notStartedGlyph:
+			notStarted = true
 		}
 	}
 	var parts []string
@@ -854,8 +857,10 @@ func buildLegend(rows []monitor.SessionStatusRow) string {
 		}
 	}
 	// Decorations after the actions, each shown only when a row bears it. ✓ is the
-	// phase-column done marker (phaseChar); ⊗/⏸ match blockField; ◆ matches
-	// unsettledMark (E-1701). ✓ leads the decorations as it marks the task's own state
+	// phase-column done marker (phaseChar); ⊗/⏸ match blockField; ◆ and ⊙ match
+	// unsettledMark (E-1701, E-2107) — derived by CALLING it rather than
+	// re-deriving the rule, so the legend cannot disagree with the column it
+	// documents. ✓ leads the decorations as it marks the task's own state
 	// (a focal/parent/from row can be terminal) before the relational/worktree
 	// markers.
 	if done {
@@ -868,7 +873,13 @@ func buildLegend(rows []monitor.SessionStatusRow) string {
 		parts = append(parts, "⏸ blocks")
 	}
 	if unsettled {
-		parts = append(parts, "◆ unsettled")
+		parts = append(parts, unsettledGlyph+" unsettled")
+	}
+	// ⊙ sits beside ◆ because they are two states of the SAME column, and after
+	// it because the column reads in descending order of outstanding work: ◆ has
+	// some, ⊙ has none yet, a space has none left (E-2107).
+	if notStarted {
+		parts = append(parts, notStartedGlyph+" not started")
 	}
 	// ⊘ comes last: it is the only decoration that describes THIS SESSION's view
 	// of the row rather than a property of the task or its worktree, and it can
@@ -1000,18 +1011,68 @@ func phaseRank(phase string) int {
 	}
 }
 
+// unsettledGlyph and notStartedGlyph are the two marked states of the
+// unsettledMark column; the third is a plain space. ◆ (U+25C6 BLACK DIAMOND)
+// is E-1701's original. ⊙ (U+2299 CIRCLED DOT OPERATOR) is E-2107's addition,
+// chosen for its silhouette: it shares this column with only ◆ and a space, so
+// the sole within-column distinction is circle vs diamond — which ◇ (U+25C7)
+// would not have given. The other circled operators — ⊗ blocked, ⏸ blocks,
+// ⊘ hidden, ⊕ queued — all render AFTER the id, so position disambiguates them.
+// Both measure one column (asserted in TestUnsettledMark), like the space they
+// replace.
+const (
+	unsettledGlyph  = "◆"
+	notStartedGlyph = "⊙"
+)
+
 // unsettledMark is the single-column separator between the task-type letter and
-// the id: ◆ (U+25C6 BLACK DIAMOND) when the row's worktree diverges from main
-// (unlanded work / changes since a land — E-1701), else a plain space. Both are
-// width 1, so the fixed 13-col prefix and its alignment hold either way.
-// buildLegend documents ◆ as "unsettled" whenever an unsettled row is present
-// (E-1750, reversing the 2026-07-01 "◆ stays out of the legend" call). Distinct
-// from --tree's leading focal marker — different view, different glyph, no clash.
+// the id. Three states (E-2107), together answering "is there work product here,
+// and where is it?":
+//
+//	◆   work product, still outstanding — the worktree diverges from main:
+//	    unlanded commits, or changes made since a land (E-1701).
+//	⊙   no work product yet — never spawned, or claimed and still empty.
+//	    (space) work product, and all of it landed.
+//
+// All three are width 1, so the fixed 13-col prefix and its alignment hold in
+// every state. ◆ wins whenever the worktree is unsettled, unchanged.
+//
+// The two cases sharing ⊙ — a task nobody picked up, and a task a session is
+// sitting on that has produced nothing — are the same fact about the work, and
+// this column deliberately does not try to tell them apart: the action icon and
+// the status already do.
+//
+// The ⊙/space split is decided by STATUS, not by landing history. task_landings
+// is not a reliable record of what reached main (E-2087 measured branches whose
+// content is demonstrably on main with no landing row at all), and a git-side
+// answer would put a new probe on a per-row hot path. taskstatus.Shipped is
+// exactly "reached the verification gate or passed it", which is what having
+// produced work product means, and it is already on the row for free — so a
+// status added to the vocabulary forces this decision rather than silently
+// defaulting to a blank.
+//
+// One accepted mis-signal: a task that lands mid-flight and keeps working stays
+// `underway`, so it wears ⊙ despite real landed work. It is still true that
+// nothing is outstanding. The legend therefore labels ⊙ by what it MEANS —
+// "not started" — not by the status test it is derived from, so the derivation
+// can be sharpened later without the vocabulary changing.
+//
+// ⊙ must NOT join ◆ in vetoing dim (see colorize): ◆ means "still something to
+// do here", ⊙ means the opposite, and a never-started `later` row should still
+// read dim.
+//
+// buildLegend documents whichever of ◆/⊙ a rendered row bears (E-1750 for ◆,
+// reversing the 2026-07-01 "◆ stays out of the legend" call). Distinct from
+// --tree's leading focal marker — different view, different glyph, no clash.
 func unsettledMark(r monitor.SessionStatusRow) string {
-	if r.Unsettled {
-		return "◆"
+	switch {
+	case r.Unsettled:
+		return unsettledGlyph
+	case !taskstatus.Has(taskstatus.Shipped, r.Status):
+		return notStartedGlyph
+	default:
+		return " "
 	}
-	return " "
 }
 
 func typeLetter(slug string) string {

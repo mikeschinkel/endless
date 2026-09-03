@@ -222,17 +222,91 @@ func TestBlockField(t *testing.T) {
 	}
 }
 
+// TestUnsettledMark pins all three states of the column and the rule that picks
+// between them (E-1701 for ◆, E-2107 for the ⊙/space split). The load-bearing
+// case is the last pair: `underway` settled and `unverified` settled differ ONLY
+// in status, and before E-2107 both rendered blank — the collapse the task
+// exists to undo.
 func TestUnsettledMark(t *testing.T) {
-	if got := unsettledMark(monitor.SessionStatusRow{Unsettled: true}); got != "◆" {
-		t.Errorf("unsettled row = %q, want ◆", got)
+	cases := []struct {
+		name   string
+		row    monitor.SessionStatusRow
+		want   string
+		reason string
+	}{
+		{"unsettled beats everything", monitor.SessionStatusRow{Status: "underway", Unsettled: true}, "◆",
+			"a diverged worktree has outstanding work product whatever the status says"},
+		{"unsettled outranks a shipped status", monitor.SessionStatusRow{Status: "confirmed", Unsettled: true}, "◆",
+			"◆ takes precedence over the ⊙/space split, unchanged from E-1701"},
+		{"never spawned", monitor.SessionStatusRow{Status: "ready"}, "⊙",
+			"nobody has picked this up, so there is no work product"},
+		{"untriaged", monitor.SessionStatusRow{Status: "untriaged"}, "⊙", "same, earlier still"},
+		{"claimed but empty", monitor.SessionStatusRow{Status: "underway"}, "⊙",
+			"a session is sitting on it and has produced nothing — the same fact about the work"},
+		{"revisit", monitor.SessionStatusRow{Status: "revisit"}, "⊙",
+			"reopened work has not been restarted"},
+		{"declined", monitor.SessionStatusRow{Status: "declined"}, "⊙",
+			"abandoned without shipping — terminal, but never any work product"},
+		{"obsolete", monitor.SessionStatusRow{Status: "obsolete"}, "⊙", "same"},
+		{"unverified and settled", monitor.SessionStatusRow{Status: "unverified"}, " ",
+			"reached the gate with a clean worktree: produced work, all of it landed"},
+		{"unreviewed and settled", monitor.SessionStatusRow{Status: "unreviewed"}, " ", "the findings-lane gate"},
+		{"confirmed and settled", monitor.SessionStatusRow{Status: "confirmed"}, " ", "past the gate"},
+		{"assumed and settled", monitor.SessionStatusRow{Status: "assumed"}, " ", "past the gate"},
+		{"completed and settled", monitor.SessionStatusRow{Status: "completed"}, " ", "past the gate"},
 	}
-	if got := unsettledMark(monitor.SessionStatusRow{Unsettled: false}); got != " " {
-		t.Errorf("settled row = %q, want a single space", got)
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := unsettledMark(c.row); got != c.want {
+				t.Errorf("unsettledMark(status=%q, unsettled=%v) = %q, want %q — %s",
+					c.row.Status, c.row.Unsettled, got, c.want, c.reason)
+			}
+		})
 	}
-	// ◆ and the space it replaces must both be display-width 1 so the fixed 13-col
-	// prefix and its alignment hold regardless of the unsettled state (E-1701).
-	if w := displayWidth("◆"); w != 1 {
-		t.Errorf("◆ display width = %d, want 1", w)
+}
+
+// TestUnsettledMarkGlyphWidths pins every state of the column at one terminal
+// column, the same invariant TestHiddenGlyphWidth and TestRelationGlyphWidths
+// enforce for their own slots. This one is load-bearing for the WHOLE table:
+// the column sits inside the fixed 13-col prefix (E-1765), so a double-width
+// glyph here shoves the id, phase and title right on marked rows only.
+//
+// ⊙ (U+2299) is East Asian Ambiguous, the same class as the already-shipped ⊘ —
+// asserted rather than assumed (E-2107).
+func TestUnsettledMarkGlyphWidths(t *testing.T) {
+	for name, g := range map[string]string{
+		"unsettledGlyph":         unsettledGlyph,
+		"notStartedGlyph":        notStartedGlyph,
+		"the space they replace": " ",
+	} {
+		if w := displayWidth(g); w != 1 {
+			t.Errorf("%s %q display width = %d, want 1", name, g, w)
+		}
+	}
+}
+
+// TestNotStartedDoesNotVetoDim is the deliberate asymmetry between the two
+// marked states (E-2107). ◆ vetoes dim because it means "there is still
+// something to do here" (E-1707); ⊙ means the opposite, so a never-started
+// `later` or terminal row must still read dim. Getting this wrong would
+// un-dim most of the table at once, since ⊙ is the common state.
+func TestNotStartedDoesNotVetoDim(t *testing.T) {
+	for _, r := range []monitor.SessionStatusRow{
+		{Status: "ready", Phase: "later"},
+		{Status: "ready", Phase: "maybe"},
+		{Status: "declined", Phase: "now"},
+	} {
+		if got := unsettledMark(r); got != "⊙" {
+			t.Fatalf("fixture no longer bears ⊙ (got %q) — the test proves nothing", got)
+		}
+		if got := colorize("row", r, true); !strings.HasPrefix(got, ansiDim) {
+			t.Errorf("status=%q phase=%q: ⊙ row = %q, want dim", r.Status, r.Phase, got)
+		}
+	}
+	// The contrast case: same row, unsettled, stays at full intensity.
+	unsettled := monitor.SessionStatusRow{Status: "ready", Phase: "later", Unsettled: true}
+	if got := colorize("row", unsettled, true); got != "row" {
+		t.Errorf("◆ row = %q, want undimmed", got)
 	}
 }
 
@@ -254,7 +328,8 @@ func TestRenderUnsettledIndicator(t *testing.T) {
 	if !strings.HasPrefix(lines[1], "● T◆E-1701 1 ") {
 		t.Errorf("unsettled row prefix wrong: %q", lines[1])
 	}
-	if !strings.HasPrefix(lines[2], "▶ T E-1702 1 ") {
+	// `ready` and settled is the never-spawned case: ⊙, not a blank (E-2107).
+	if !strings.HasPrefix(lines[2], "▶ T⊙E-1702 1 ") {
 		t.Errorf("clean row prefix wrong: %q", lines[2])
 	}
 	// The id column must start at the same DISPLAY offset in both rows — the ◆/space
@@ -264,6 +339,74 @@ func TestRenderUnsettledIndicator(t *testing.T) {
 	if dw != cw {
 		t.Errorf("id column shifted by unsettled marker: unsettled width=%d settled width=%d", dw, cw)
 	}
+}
+
+// TestRenderThreeStateColumn is E-2107's whole-render proof: one frame holding
+// all three states of the column at once, showing that they are DISTINGUISHABLE
+// and that swapping between them never shifts the id column.
+//
+// The alignment half matters more than it looks. The column sits inside the
+// fixed 13-col prefix, so the E-1765 guarantee — every row's id, phase and title
+// start at the same display offset — holds only if all three states measure the
+// same. Byte offsets differ (◆ and ⊙ are 3 bytes, a space is 1), which is
+// exactly why the assertion measures display width instead.
+func TestRenderThreeStateColumn(t *testing.T) {
+	rows := []monitor.SessionStatusRow{
+		// ◆ — a session's worktree still diverges from main.
+		{ID: 2101, Title: "outstanding", Status: "underway", Phase: "now", TypeSlug: "todo", IsFocal: true, Unsettled: true},
+		// ⊙ — claimed, settled worktree: nothing produced yet.
+		{ID: 2102, Title: "claimed and empty", Status: "underway", Phase: "now", TypeSlug: "todo", InFlight: true},
+		// ⊙ — never spawned at all. Same column state as E-2102 on purpose: this
+		// column does not distinguish them, the action icon does.
+		{ID: 2103, Title: "never spawned", Status: "ready", Phase: "now", TypeSlug: "todo"},
+		// (blank) — shipped and settled: produced work, all of it landed.
+		{ID: 2104, Title: "landed and done", Status: "unverified", Phase: "now", TypeSlug: "todo"},
+	}
+	var b strings.Builder
+	renderTo(&b, rows, 2101, hintClaimBind, 90, false, hiddenOmit)
+	lines := strings.Split(strings.TrimRight(b.String(), "\n"), "\n")
+	if len(lines) != 5 {
+		t.Fatalf("want 5 lines (legend + 4 rows), got %d:\n%s", len(lines), b.String())
+	}
+	if !strings.Contains(lines[0], "◆ unsettled") || !strings.Contains(lines[0], "⊙ not started") {
+		t.Errorf("legend must document both marked states, got %q", lines[0])
+	}
+
+	want := map[string]string{"E-2101": "◆", "E-2102": "⊙", "E-2103": "⊙", "E-2104": " "}
+	offsets := map[string]int{}
+	for _, ln := range lines[1:] {
+		for id, glyph := range want {
+			i := strings.Index(ln, id)
+			if i < 0 {
+				continue
+			}
+			// The column is the single glyph immediately before the id.
+			prefix := ln[:i]
+			if !strings.HasSuffix(prefix, glyph) {
+				t.Errorf("%s column = %q, want %q (row %q)", id, lastGlyph(prefix), glyph, ln)
+			}
+			offsets[id] = displayWidth(prefix)
+		}
+	}
+	if len(offsets) != len(want) {
+		t.Fatalf("not every row rendered: got offsets for %v", offsets)
+	}
+	for id, off := range offsets {
+		if off != offsets["E-2101"] {
+			t.Errorf("id column shifted on %s: display offset %d, want %d (E-1765 alignment)",
+				id, off, offsets["E-2101"])
+		}
+	}
+}
+
+// lastGlyph returns the final rune of s as a string, for readable failure
+// messages when the column carries the wrong mark.
+func lastGlyph(s string) string {
+	r := []rune(s)
+	if len(r) == 0 {
+		return ""
+	}
+	return string(r[len(r)-1])
 }
 
 func TestRenderEmptyFocal(t *testing.T) {
@@ -328,7 +471,7 @@ func TestBuildLegend(t *testing.T) {
 				{Status: "ready"},     // do
 				{Status: "unplanned"}, // plan
 			},
-			want:        "▶ do  ✎ plan",
+			want:        "▶ do  ✎ plan  ⊙ not started",
 			mustNotHave: []string{"orphan", "verify", "landed", "unknown", "closed", "done", "blocked", "blocks", "unsettled", "|"},
 		},
 		// E-1871: an undecorated, unlanded terminal row is the case that used to
@@ -337,15 +480,20 @@ func TestBuildLegend(t *testing.T) {
 		// redundant: ✓ is what a DECORATED terminal row shows instead, where column 1
 		// is ●/↑/⏚.
 		{
-			name:        "undecorated unlanded terminal row surfaces ⇥ closed and ✓ done, never ⁇",
-			rows:        []monitor.SessionStatusRow{{Status: "confirmed"}},
-			want:        "⇥ closed  ✓ done",
-			mustNotHave: []string{"⁇ unknown"},
+			name: "undecorated unlanded terminal row surfaces ⇥ closed and ✓ done, never ⁇",
+			rows: []monitor.SessionStatusRow{{Status: "confirmed"}},
+			want: "⇥ closed  ✓ done",
+			// No ⊙: `confirmed` is Shipped, so the row's column is a blank —
+			// "produced work, all of it landed". Contrast the declined/obsolete
+			// case below, which is terminal but never shipped anything (E-2107).
+			mustNotHave: []string{"⁇ unknown", "not started"},
 		},
 		{
-			name:        "declined and obsolete — which never land — also read ⇥ closed",
-			rows:        []monitor.SessionStatusRow{{Status: "declined"}, {Status: "obsolete"}},
-			want:        "⇥ closed  ✓ done",
+			name: "declined and obsolete — which never land — also read ⇥ closed",
+			rows: []monitor.SessionStatusRow{{Status: "declined"}, {Status: "obsolete"}},
+			// ⊙ too: abandoned work is terminal but never shipped, so the column
+			// correctly reports no work product (E-2107).
+			want:        "⇥ closed  ✓ done  ⊙ not started",
 			mustNotHave: []string{"⁇ unknown"},
 		},
 		// ⏚ wins over ⇥: a terminal task whose work merged is landed, so ⇥ is the
@@ -377,7 +525,7 @@ func TestBuildLegend(t *testing.T) {
 				{Status: "submitted"}, // review (later in enum)
 				{Status: "ready"},     // do (earlier in enum)
 			},
-			want: "▶ do  ⚑ review",
+			want: "▶ do  ⚑ review  ⊙ not started",
 		},
 		{
 			name:     "landed row surfaces ⏚ landed",
@@ -396,7 +544,7 @@ func TestBuildLegend(t *testing.T) {
 				{Status: "blocked"},   // unknown
 				{Status: "ready"},     // do
 			},
-			want: "▶ do  ⁇ unknown  ⇥ closed  ✓ done",
+			want: "▶ do  ⁇ unknown  ⇥ closed  ✓ done  ⊙ not started",
 		},
 		{
 			name:     "blocked decoration",
@@ -409,9 +557,24 @@ func TestBuildLegend(t *testing.T) {
 			mustHave: []string{"⏸ blocks"},
 		},
 		{
-			name:     "unsettled decoration",
-			rows:     []monitor.SessionStatusRow{{Status: "ready", Unsettled: true}},
-			mustHave: []string{"◆ unsettled"},
+			name:        "unsettled decoration",
+			rows:        []monitor.SessionStatusRow{{Status: "ready", Unsettled: true}},
+			mustHave:    []string{"◆ unsettled"},
+			mustNotHave: []string{"not started"},
+		},
+		{
+			name:        "not-started decoration",
+			rows:        []monitor.SessionStatusRow{{Status: "underway"}},
+			mustHave:    []string{"⊙ not started"},
+			mustNotHave: []string{"unsettled"},
+		},
+		{
+			// The conditional half of the width-on-demand rule: a frame in which
+			// every row has shipped and settled bears no ⊙, so the legend must not
+			// advertise one (E-2107).
+			name:        "no ⊙ when every row has shipped and settled",
+			rows:        []monitor.SessionStatusRow{{Status: "unverified"}, {Status: "confirmed"}},
+			mustNotHave: []string{"not started"},
 		},
 		{
 			name: "actions in enum order then decorations",
@@ -421,7 +584,7 @@ func TestBuildLegend(t *testing.T) {
 				{Status: "ready", BlockedByN: 1},      // do + ⊗
 				{Status: "underway", Unsettled: true}, // orphan + ◆
 			},
-			want: "● this  ▶ do  ✎ plan  ◷ orphan  ⊗ blocked  ◆ unsettled",
+			want: "● this  ▶ do  ✎ plan  ◷ orphan  ⊗ blocked  ◆ unsettled  ⊙ not started",
 		},
 		{
 			name: "no rows yields empty legend",
@@ -467,10 +630,10 @@ func TestRenderColumnsAndTruncation(t *testing.T) {
 	if len(lines) != 4 {
 		t.Fatalf("want 4 lines (legend + 3 rows), got %d:\n%s", len(lines), b.String())
 	}
-	if !strings.HasPrefix(lines[1], "● T E-1465 1 ") {
+	if !strings.HasPrefix(lines[1], "● T⊙E-1465 1 ") {
 		t.Errorf("focal row prefix wrong: %q", lines[1])
 	}
-	if !strings.HasPrefix(lines[2], "↑ E E-1461 1 ") {
+	if !strings.HasPrefix(lines[2], "↑ E⊙E-1461 1 ") {
 		t.Errorf("parent row prefix wrong: %q", lines[2])
 	}
 	if !strings.HasPrefix(lines[3], "↩ T E-1684 ") {

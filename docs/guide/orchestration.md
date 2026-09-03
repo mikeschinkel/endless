@@ -104,14 +104,24 @@ is left exactly as it was, for its own session to rebase in place.
 
 ### Why a worktree is unsettled (`task unsettled`)
 
-`session status` marks a row with **◆** when its worktree is *unsettled*. That is a union of two sub-states which need **opposite fixes**, so the marker alone doesn't tell you what to do:
+`session status` gives every row one column between the task-type letter and the id, answering *is there work product here, and where is it?*
+
+| Mark  | Meaning                              | Example                                       |
+|-------|--------------------------------------|-----------------------------------------------|
+| **◆** | Work product, still outstanding      | Anything unsettled — see the sub-states below |
+| **⊙** | No work product yet                  | Never spawned, or claimed and still empty     |
+| blank | Work product, and all of it landed   | `unverified` with a clean, landed worktree    |
+
+**⊙** does not distinguish "nobody has picked this up" from "a session is sitting on it and has produced nothing" — deliberately. They are the same fact about the work, and the action icon and status already tell them apart. It is decided by status rather than by landing history: a task that has not reached the verification gate has not shipped anything. One consequence worth knowing: a task that lands mid-flight and keeps working stays `underway`, so it wears ⊙ despite real landed work. It is still true that nothing is outstanding there.
+
+**◆** is a union of two sub-states which need **opposite fixes**, so the marker alone doesn't tell you what to do:
 
 | Sub-state    | Meaning                                | Fix                        |
 |--------------|----------------------------------------|----------------------------|
 | `modified`   | Uncommitted working-tree changes       | Commit or discard          |
 | `unlanded`   | Commits whose *content* is not yet on the base branch | `endless worktree land <id>` |
 
-Because ◆ means *there is still something to do here*, an unsettled row is never rendered dim — not when its status is terminal (`confirmed`/`assumed`/`completed`), not when its phase is `later`/`maybe`. Dim reads as "done, ignore me", which is precisely the wrong signal for a worktree still awaiting a land.
+Because ◆ means *there is still something to do here*, an unsettled row is never rendered dim — not when its status is terminal (`confirmed`/`assumed`/`completed`), not when its phase is `later`/`maybe`. Dim reads as "done, ignore me", which is precisely the wrong signal for a worktree still awaiting a land. ⊙ means the opposite and does **not** un-dim a row: a never-started `later` task should still read dim.
 
 `task unsettled` expands the marker:
 
