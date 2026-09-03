@@ -5085,3 +5085,19 @@ The error was calibration, not measurement. Measuring the cost was right; framin
 
 The rule: for a human-interactive command, a latency change that stays well under a second is a footnote, not an action item. Report it in one clause if at all, pick the design the plan specifies, and move on. Escalate latency only when it crosses into something a person actually feels — a perceptible pause on a command run in a loop, a status line that visibly lags, a hook that delays every turn, or a regression measured in seconds. The comparison that matters is not 'how much slower than before' but 'is this now slow enough to notice.'
 - **Project**: endless
+
+### [2026-09-03] Verify a concern before writing it into a plan — a conditional step is an open question wearing a disguise
+In E-2091's plan I wrote a step reading: confirm that setup.py's drift detection reports an event that is MISSING ENTIRELY, not only one whose entry is mis-shaped; if it only inspects entries that exist, extend it. I then flagged it to Mike as 'the real risk' of the task. He asked me to elaborate and whether there were pending action items.
+
+There were none.  has existed in setup.py since before I looked, does exactly what I said needed confirming, and its docstring describes the precise failure mode I presented as a discovery — a machine whose install predates an event never gaining it, PreToolUse named as the case that made it real. I had read  and , reasoned correctly that neither covers a missing event, and stopped one function short of the one that does.
+
+Two faults, and the second is the one that matters.
+
+The small one: I stopped reading before the answer. Cheap to fix — read the caller, not just the helper.
+
+The real one: I wrote the unverified concern INTO THE PLAN as a conditional step, then presented it to Mike as the task's main risk. 'Confirm X; if not, extend it' is an open question wearing the costume of a step. It reads as diligence and it is the opposite: a plan is supposed to be the place where questions have been answered, and I put an unanswered one in it and drew attention to it as though finding it were the work.
+
+This is the same shape as inventing a cost to look even-handed, one lesson ago. Both promote something unverified into the artifact to make the artifact look thorough. Manufactured risk and manufactured cost are one habit.
+
+Rule: before a concern goes into a plan or a message, resolve it. Read the code until it is a fact or a defect, then write which. If it genuinely cannot be resolved without doing the work, that is a real open question and it gets ASKED, not filed as a step. A plan step is something to DO, never something to FIND OUT whether it needs doing.
+- **Project**: endless
