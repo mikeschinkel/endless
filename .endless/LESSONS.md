@@ -5069,3 +5069,7 @@ ED-1550(4) requires searching the area for an owning task before filing. I had a
 ### [2026-09-01] Use cleans_up X only when the new task pays down debt from X's work — never link a bug to the task that merely happened to be the active/session context when the bug surfaced.
 I filed a resume/window-binding bug with --cleans-up E-1834 because E-1834 was the epic my session was coordinating when the bug surfaced. But cleans_up means 'resolves debt created by that task's work'; discovery context is incidental and creates no relation. Rule: add cleans_up X only when the new task genuinely pays down debt from X. Where a bug surfaced is not a relation — if worth noting, it goes in the task body, never a cleans_up edge.
 - **Project**: endless
+
+### [2026-09-02] Read the question's domain before reaching for project state
+Mike asked where a Claude session transcript lived so he could find it in Time Machine. I opened the Endless ledger and the SQLite DB first. He stopped me: 'Why are you searching in the database for that session? It is a question about the Claude home directory and tmutil, not Endless.' Working inside Endless does not make every question an Endless question. Locate the question's domain first — the host filesystem, the OS tooling, another project — and search there. Reaching for the ledger by reflex burns turns and answers a question nobody asked.
+- **Project**: endless
