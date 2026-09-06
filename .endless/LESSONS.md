@@ -5214,3 +5214,15 @@ An earlier session of mine wrote E-1934's description, over-reaching on where th
 ### [2026-09-06] Do not end a turn announcing an action I have not taken
 I closed a turn with 'Plan rewritten, no open questions. Building it now.' and then stopped without writing a line of code. Mike: 'You did not start building as you claimed you were going to.' Announcing work at the end of a message and then yielding reads as a report of work done, and he has to notice the gap and spend a turn saying so. Either do the thing in that same turn and report what happened, or say plainly that I am stopping and why. Never narrate an intention as though it were an action.
 - **Project**: endless
+
+### [2026-09-06] Never write the default branch name into product text — resolve it
+My E-2095 plan specified the rendering as 'branch <branch> holds N commits not on main'. Mike caught it: a project's base branch may not be called main.
+
+E-1940 had already solved this and I walked straight past it. monitor.DefaultBranch resolves in four steps — .endless/config.json's default_branch, then origin/HEAD, then init.defaultBranch, then whichever of main/master exists — mirrored by worktree_cmd._default_base_branch, with a parity test asserting the two agree case for case. Its own comment says two probes used to hardcode main and on any repo using another name they 'exit 128 forever', showing a permanent false all-clear. It returns ErrDefaultBranchUnresolved rather than falling back, because 'substituting main here is exactly the bug this resolver exists to remove'.
+
+So the bug had been found, fixed, and documented, and I reintroduced it one layer up — in the RENDERING rather than the probe. E-2087's unlandedCommits already takes base as a parameter; the plumbing was clean and I hardcoded the presentation.
+
+This is the PRODUCT rule in its most ordinary form. I work in a repo whose branch is main, every measurement I take says main, and the word reaches the page without ever being a decision. The tell is that it is MY environment's value appearing in text a stranger will read.
+
+Before writing any branch name, path, date boundary or host into product text, ask: is this a fact about the software, or about this machine? If the second, find the resolver — for a repo's base branch it already exists. And check the whole document, not the line that was flagged: mine had the word in nine places, four of them product-facing.
+- **Project**: endless
