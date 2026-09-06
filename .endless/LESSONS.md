@@ -5196,3 +5196,13 @@ The signal is the STATUS. `submitted` is spec-complete and awaiting approval —
 
 Do not infer activity from a diff, a timestamp, or a character count.
 - **Project**: endless
+
+### [2026-09-06] `main..HEAD` empty does not mean a branch is current — it counts one direction only; check `HEAD..main` before claiming a worktree is in sync.
+Twice today I ran `git log --oneline main..HEAD`, saw one commit or none, and reported the branch as fully landed and in sync. It was 585 commits BEHIND main.
+
+`main..HEAD` answers "what do I have that main lacks" — ahead-ness. It says nothing about behind-ness, which is `HEAD..main`. A branch can be simultaneously 1 ahead and 585 behind, and the one-directional read reports that as clean.
+
+The cost was concrete: Mike ran `just verify E-2030` before landing and got "no verification suite found" while the file plainly existed in the main checkout. The runner rooted at the worktree, whose HEAD predated the migration of suites from `tests/tasks/<id>-verify.sh` to `.endless/tasks/<id>/verify.sh` — so it saw the two suites that existed back then and none of the 200 since.
+
+Use `git rev-list --count main..HEAD` AND `--count HEAD..main`, or `git status -sb`, which prints both.
+- **Project**: endless
