@@ -48,6 +48,33 @@ def test_throttled_backup_does_not_claim_to_have_written_one(monkeypatch):
     assert "~/.config/endless/backups/endless-20260815-055020.db" in out
 
 
+def test_a_retention_failure_warns_without_failing_the_backup(monkeypatch):
+    """E-2121: the copy and the retention sweep can fail independently.
+
+    A land fires `db backup` unattended before applying a schema change, so a
+    failed unlink must not abort it — the copy the land needs is on disk. But
+    silence is how a backups directory stops being pruned for a year, so the
+    failure rides out beside the path.
+    """
+    path = str(Path.home() / ".config/endless/backups/endless-20260815-055020.db")
+    out = run_backup(monkeypatch, {
+        "status": "ok",
+        "path": path,
+        "pruned": 0,
+        "warning": "prune backup endless-20250101-000000.db: permission denied",
+    })
+
+    assert "Database backed up to " in out
+    assert "backup retention did not complete" in out
+    assert "permission denied" in out
+
+
+def test_no_warning_is_printed_when_retention_succeeded(monkeypatch):
+    path = str(Path.home() / ".config/endless/backups/endless-20260815-055020.db")
+    out = run_backup(monkeypatch, {"status": "ok", "path": path, "pruned": 3})
+    assert "retention" not in out
+
+
 def test_a_pre_e1942_binary_falls_back_to_the_old_message(monkeypatch):
     """A self-dev worktree runs its own Python against the INSTALLED endless-go,
     which may predate this change and report no path. Say less, not wrong."""

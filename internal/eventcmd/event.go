@@ -826,19 +826,34 @@ func applyGoChange(path, name string) {
 }
 
 // runBackup reports the destination path so the CLI can name the file it just
-// wrote. "skipped" means a backup newer than the 60s throttle window already
+// wrote. "skipped" means a backup newer than the throttle window already
 // existed and `path` is that one — the caller must not claim it wrote it (E-1942).
+//
+// BackupDB also enforces retention, and folds a failure of EITHER half into one
+// error. Which half is readable from the result: Path is empty only when no
+// backup exists. A land runs this unattended before applying a schema change, so
+// a failed unlink must not abort it — the copy the land needs is on disk. The
+// retention failure rides out as a warning instead, and the Python CLI prints
+// it, because a directory that has stopped being pruned is worth saying out loud
+// exactly once rather than never (E-2121).
 func runBackup() {
+	payload := map[string]any{}
 	res, err := monitor.BackupDB()
-	if err != nil {
+	if err != nil && res.Path == "" {
 		fmt.Fprintf(os.Stderr, "endless-go event backup: %v\n", err)
 		os.Exit(1)
+	}
+	if err != nil {
+		payload["warning"] = err.Error()
 	}
 	status := "ok"
 	if res.Skipped {
 		status = "skipped"
 	}
-	b, _ := json.Marshal(map[string]any{"status": status, "path": res.Path})
+	payload["status"] = status
+	payload["path"] = res.Path
+	payload["pruned"] = res.Pruned
+	b, _ := json.Marshal(payload)
 	fmt.Println(string(b))
 }
 

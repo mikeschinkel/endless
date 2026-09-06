@@ -278,10 +278,13 @@ def backups_dir(db_path: Path) -> Path:
 def pre_restore_dir(db_path: Path) -> Path:
     """Where a restore parks the database it is about to replace.
 
-    Deliberately NOT the backups directory: monitor.BackupDB rotates that
-    directory by name, keeping the last 60 entries, so parking files there would
-    quietly evict real backups (and `pre-restore-*` sorts after `endless-*`, so
-    it would evict them first).
+    Deliberately NOT the backups directory. `_move_aside` parks under the very
+    name a backup wears — `endless-<stamp>.db` — so a parked database dropped in
+    there would be indistinguishable from a backup, and the retention sweep
+    (E-2121: hourly for a day, daily for a month, weekly for a year) would age it
+    out on the sweep's schedule rather than the operator's. The whole point of
+    the parked copy is that a restore stays reversible until a human says
+    otherwise.
     """
     return db_path.parent / "pre-restore"
 

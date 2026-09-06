@@ -4370,8 +4370,17 @@ def db_backup():
         click.echo("Database already backed up within the last 60s — "
                    "nothing written.")
         click.echo(f"Existing backup: {config.tilde(path)}")
-        return
-    click.echo(f"Database backed up to {config.tilde(path)}")
+    else:
+        click.echo(f"Database backed up to {config.tilde(path)}")
+
+    # E-2121: the backup and the retention sweep can fail independently. A
+    # written backup is still a success — a land depends on that — so a failed
+    # sweep arrives as a warning beside the path rather than as an exit code.
+    # Saying nothing would let a backups directory stop being pruned in silence.
+    warning = result.get("warning")
+    if warning:
+        click.echo(f"Warning: backup retention did not complete: {warning}",
+                   err=True)
 
 
 @db_cmd.command("restore")

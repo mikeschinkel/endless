@@ -23,6 +23,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	_ "modernc.org/sqlite"
 
@@ -786,6 +787,74 @@ func TestEventBackup_NoDatabaseFailsLoudly(t *testing.T) {
 	}
 	if !strings.Contains(stderr.String(), "no database at") {
 		t.Errorf("expected the missing-database path to be named, got: %s", stderr.String())
+	}
+}
+
+// TestEventBackup_EnforcesTieredRetention is E-2121 end to end through the real
+// binary: writing a backup also prunes the directory BY AGE.
+//
+// The three seeded backups are, respectively, aged out of every tier, inside the
+// weekly tier, and a same-hour duplicate of one already there. Only the first
+// and the third may go, and nothing that is not one of BackupDB's own filenames
+// may be touched at all — the rotation this replaced deleted by list position,
+// so a stray file that sorted early went first.
+func TestEventBackup_EnforcesTieredRetention(t *testing.T) {
+	cfgDir := t.TempDir()
+	initSchemaDB(t, cfgDir)
+
+	backupDir := filepath.Join(cfgDir, "backups")
+	if err := os.MkdirAll(backupDir, 0o755); err != nil {
+		t.Fatalf("mkdir backups: %v", err)
+	}
+	seed := func(name string) string {
+		path := filepath.Join(backupDir, name)
+		if err := os.WriteFile(path, []byte("not really a database"), 0o644); err != nil {
+			t.Fatalf("seed %s: %v", name, err)
+		}
+		return path
+	}
+	stamp := func(age time.Duration) string {
+		return "endless-" + time.Now().Add(-age).Format("20060102-150405") + ".db"
+	}
+
+	expired := seed(stamp(400 * 24 * time.Hour))
+	keptWeekly := seed(stamp(200 * 24 * time.Hour))
+	// Two backups in one hour, six days back: same daily bucket, so the older
+	// one loses.
+	olderInBucket := seed(stamp(6*24*time.Hour + 90*time.Minute))
+	newerInBucket := seed(stamp(6 * 24 * time.Hour))
+	foreign := seed("operators-copy.sqlite")
+
+	bin := endlessGoBin(t)
+	out, err := exec.Command(bin, "--config-dir", cfgDir, "event", "backup").Output()
+	if err != nil {
+		t.Fatalf("backup failed: %v\nstdout: %s", err, out)
+	}
+	var result map[string]any
+	if err := json.Unmarshal(bytes.TrimSpace(out), &result); err != nil {
+		t.Fatalf("decode output: %v\nraw: %s", err, out)
+	}
+	if got, ok := result["pruned"].(float64); !ok || int(got) != 2 {
+		t.Errorf("pruned = %v, want 2; raw: %s", result["pruned"], out)
+	}
+	if warning := result["warning"]; warning != nil {
+		t.Errorf("unexpected retention warning: %v", warning)
+	}
+
+	for _, gone := range []string{expired, olderInBucket} {
+		if _, err := os.Stat(gone); !os.IsNotExist(err) {
+			t.Errorf("%s survived the retention sweep", filepath.Base(gone))
+		}
+	}
+	for _, kept := range []string{keptWeekly, newerInBucket, foreign} {
+		if _, err := os.Stat(kept); err != nil {
+			t.Errorf("%s was removed but should have been kept: %v", filepath.Base(kept), err)
+		}
+	}
+	// And the backup this run wrote is on disk under the path it reported.
+	path, _ := result["path"].(string)
+	if _, err := os.Stat(path); err != nil {
+		t.Errorf("reported path does not exist: %v", err)
 	}
 }
 

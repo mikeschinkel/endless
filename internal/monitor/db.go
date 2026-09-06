@@ -1,6 +1,7 @@
 package monitor
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -798,15 +799,46 @@ type BackupResult struct {
 	// Skipped is true when a backup newer than the throttle window already
 	// existed, so nothing was written this call.
 	Skipped bool
+	// Pruned is how many aged-out backups the retention sweep removed.
+	Pruned int
 }
 
-// BackupDB copies the database file to the backups directory if the last
-// backup is older than 60 seconds. Keeps the last 60 backups.
+// backupThrottle is the minimum gap between two written backups. It is a
+// THROTTLE, not a cadence: it stops two migrations a few seconds apart from
+// writing two near-identical copies, and it has never made a backup happen.
 //
-// Returns the resulting path (see BackupResult). Errors are returned rather
-// than only logged: the CLI surfaces them, and the hook — which fires this on
-// every prompt — logs them and carries on.
+// Cadence is E-2121's job (internal/backupjob), which fires this hourly. The
+// distinction matters because the docstring here used to read "if last backup is
+// > 60 seconds old", which sounds like a frequency — and on the strength of that
+// reading nobody noticed the newest backup was nine days old.
+const backupThrottle = 60 * time.Second
+
+// BackupDB writes a consistent copy of the database into the backups directory
+// and enforces the retention policy over what is already there.
+//
+// It writes nothing when a backup younger than backupThrottle already exists,
+// reporting that one instead (BackupResult.Skipped). Retention is applied on
+// both paths: it is an invariant of the directory, not a side effect of writing,
+// so it holds even on a machine where the scheduled job never runs.
+//
+// The returned error covers BOTH halves, and a caller that cares which half
+// failed reads BackupResult.Path: it is empty only when no backup exists, so a
+// non-nil error with a non-empty Path means the copy is on disk and RETENTION is
+// what did not complete. `endless db backup` uses exactly that to warn without
+// failing a land; the job (internal/backupjob) does not distinguish, because a
+// backups directory that has stopped being pruned is a job failure.
+//
+// Errors are returned rather than only logged: the CLI surfaces them, and the
+// prompt hook logs them and carries on.
 func BackupDB() (BackupResult, error) {
+	return BackupDBContext(context.Background())
+}
+
+// BackupDBContext is BackupDB bounded by ctx. VACUUM INTO is the one step here
+// that can run long — it rewrites the whole database — and internal/jobs hands
+// every job a context carrying its lease deadline precisely so a slow step
+// cannot outrun the claim protecting it from concurrent execution.
+func BackupDBContext(ctx context.Context) (BackupResult, error) {
 	src := DBPath()
 	if _, err := os.Stat(src); err != nil {
 		return BackupResult{}, fmt.Errorf("no database at %s: %w", src, err)
@@ -816,28 +848,33 @@ func BackupDB() (BackupResult, error) {
 	// real database, its backups land beside it rather than in the sandbox
 	// (E-1450). In the normal case DBPath() is ConfigDir()/endless.db, so this
 	// resolves to ConfigDir()/backups exactly as before.
-	backupDir := filepath.Join(filepath.Dir(DBPath()), "backups")
+	backupDir := backupsDir()
 	os.MkdirAll(backupDir, 0755)
 
-	// Check if backup is needed (last backup > 60s ago)
-	entries, _ := os.ReadDir(backupDir)
-	if len(entries) > 0 {
-		newest := entries[len(entries)-1]
-		info, err := newest.Info()
-		if err == nil && time.Since(info.ModTime()) < 60*time.Second {
-			// A recent backup exists. Name it: the caller reports a path either
-			// way, and reporting the one that already covers this moment is
-			// both true and the path a restore would use.
-			return BackupResult{
-				Path:    filepath.Join(backupDir, newest.Name()),
-				Skipped: true,
-			}, nil
-		}
+	// The throttle reads the newest backup's own TIMESTAMP, taken from its name.
+	// The list position of an os.ReadDir entry is not that: the directory holds
+	// a pre-restore parking file or an operator's stray copy often enough, and
+	// whichever name happened to sort last used to decide whether a backup was
+	// due — by its mtime, which a copy rewrites.
+	existing, err := listBackups(backupDir)
+	if err != nil {
+		return BackupResult{}, err
+	}
+	if newest, ok := newestBackup(existing); ok && time.Since(newest.Stamp) < backupThrottle {
+		// A recent backup exists. Name it: the caller reports a path either
+		// way, and reporting the one that already covers this moment is
+		// both true and the path a restore would use.
+		pruned, pruneErr := pruneBackups(backupDir, time.Now())
+		return BackupResult{
+			Path:    filepath.Join(backupDir, newest.Name),
+			Skipped: true,
+			Pruned:  pruned,
+		}, pruneErr
 	}
 
 	// Use SQLite VACUUM INTO for a consistent backup
-	ts := time.Now().Format("20060102-150405")
-	dst := filepath.Join(backupDir, fmt.Sprintf("endless-%s.db", ts))
+	ts := time.Now().Format(backupStampLayout)
+	dst := filepath.Join(backupDir, backupPrefix+ts+backupSuffix)
 
 	backupDB, err := sql.Open("sqlite", src)
 	if err != nil {
@@ -847,23 +884,17 @@ func BackupDB() (BackupResult, error) {
 
 	// Match the main DB connection's busy_timeout so VACUUM INTO waits for
 	// concurrent writers instead of failing immediately with SQLITE_BUSY.
-	if _, err := backupDB.Exec("PRAGMA busy_timeout=5000"); err != nil {
+	if _, err := backupDB.ExecContext(ctx, "PRAGMA busy_timeout=5000"); err != nil {
 		log.Printf("backup PRAGMA busy_timeout=5000: %v", err)
 	}
 
-	_, err = backupDB.Exec("VACUUM INTO ?", dst)
+	_, err = backupDB.ExecContext(ctx, "VACUUM INTO ?", dst)
 	if err != nil {
 		return BackupResult{}, fmt.Errorf("VACUUM INTO %s: %w", dst, err)
 	}
 
-	// Rotate: keep last 60 backups
-	entries, _ = os.ReadDir(backupDir)
-	if len(entries) > 60 {
-		for _, e := range entries[:len(entries)-60] {
-			os.Remove(filepath.Join(backupDir, e.Name()))
-		}
-	}
-	return BackupResult{Path: dst}, nil
+	pruned, pruneErr := pruneBackups(backupDir, time.Now())
+	return BackupResult{Path: dst, Pruned: pruned}, pruneErr
 }
 
 // ProjectPath returns the registered filesystem path for a project ID in

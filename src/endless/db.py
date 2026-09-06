@@ -83,7 +83,24 @@ def _init_schema(conn: sqlite3.Connection):
 
 
 def _backup_db():
-    """Backup DB using SQLite backup API if last backup is > 60 seconds old. Keeps last 60."""
+    """Snapshot the DB through SQLite's backup API before an ancient migration.
+
+    Throttled, not scheduled: it writes nothing when a backup less than 60
+    seconds old already exists, which stops two migrations seconds apart from
+    writing two near-identical copies. That is all the window has ever done —
+    read as a cadence it is how the newest backup came to be nine days old
+    (E-2121).
+
+    Cadence, and retention, belong to the Go side. `internal/backupjob` fires
+    `monitor.BackupDB` hourly and prunes this same directory by AGE — hourly for
+    a day, daily for a month, weekly for a year. So this function deliberately
+    does not rotate: the keep-last-60-by-count sweep it used to run is now a
+    second, contradictory policy over one directory, and the one that would win
+    is whichever ran last.
+
+    Reached only from `_migrate`, which short-circuits at PRAGMA user_version >=
+    6 — so on any database of the last two years this never runs at all.
+    """
     import time as _time
 
     if not config.DB_PATH.exists():
@@ -108,12 +125,6 @@ def _backup_db():
     src_conn.backup(dst_conn)
     dst_conn.close()
     src_conn.close()
-
-    # Rotate: keep last 60
-    backups = sorted(backup_dir.glob("endless-*.db"))
-    if len(backups) > 60:
-        for old in backups[:-60]:
-            old.unlink()
 
 
 def _migrate(conn: sqlite3.Connection):

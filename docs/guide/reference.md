@@ -111,7 +111,7 @@ Many session monitors may fire the runner at the same moment. Exactly one of the
 
 A job that fails is rescheduled rather than abandoned. Jobs that declare a backoff cap push their next attempt exponentially further out as failures accumulate, so a persistently broken job decays toward that cap instead of retrying at full rate forever. Fixing the cause does not mean waiting the backoff out — `endless jobs retry <name>` makes it due again immediately.
 
-`endless jobs list` printing `no jobs registered` is the expected state today: the runner deliberately ships knowing nothing job-specific.
+The runner itself knows nothing job-specific — jobs register themselves with it. Three do today: the description-sufficiency triage sweep, the minimizer's autoresearch tick, and the hourly database backup below.
 
 ---
 
@@ -163,12 +163,25 @@ Every code's cause and remedy is documented in `docs/errors.md`.
 
 ## Restoring the database from a backup
 
-`endless db backup` writes a timestamped copy to `<config dir>/backups/` (last
-60 kept) and prints the path it wrote. `just land` fires it before a schema
-change, so a backup of the main database almost always exists. Backups are
-throttled to one a minute — inside that window `db backup` writes nothing and
-says so, naming the existing backup rather than claiming a fresh one.
+Backups run **hourly**, on the background job runner above (`db-backup`), so the
+newest one is at most an hour old. `just land` also fires one before a schema
+change, and `endless db backup` writes one on demand and prints the path.
+Whichever wrote it, a backup is a `VACUUM INTO` copy under `<config dir>/backups/`.
 `endless db restore` is the other half — the supported way to *use* one.
+
+Two numbers are easy to confuse:
+
+- **The throttle** is one written backup a minute. Inside that window a backup
+  call writes nothing and says so, naming the existing file rather than claiming
+  a fresh one. It stops two migrations seconds apart from writing two copies; it
+  is not a cadence, and reading it as one is how the newest backup came to be
+  nine days old.
+- **Retention** is by age, not by count: hourly for 24 hours, then daily for 30
+  days, then weekly for a year — about a hundred files at steady state. Every
+  write prunes, so the policy holds even on a machine that never runs the
+  scheduled job, and the newest backup is never removed. Only files named
+  `endless-<timestamp>.db` are considered; anything else in the directory is left
+  alone.
 
 ```bash
 endless db restore --dry-run        # the report you want first, mid-incident
@@ -244,7 +257,7 @@ If you see "Endless: auto-record session activity" commits in `git log`, those a
 | Path                                          | Purpose                                                                  |
 |-----------------------------------------------|--------------------------------------------------------------------------|
 | `~/.config/endless/endless.db`                | SQLite DB (rebuildable projection of all project ledgers).               |
-| `~/.config/endless/backups/endless-<ts>.db`   | `endless db backup` output (`VACUUM INTO`), last 60 kept. Restore one with `endless db restore`. |
+| `~/.config/endless/backups/endless-<ts>.db`   | Backups (`VACUUM INTO`), written hourly by the `db-backup` job and before every schema change. Retained hourly for a day, daily for a month, weekly for a year. Restore one with `endless db restore`. |
 | `~/.config/endless/pre-restore/endless-<ts>.db` | The database a restore replaced, parked with its sidecars so the restore is reversible. Not rotated — delete by hand. |
 | `~/.config/endless/config.json`               | Per-machine Endless config (node_id, defaults).                          |
 | `~/.local/bin/endless`                        | Python CLI entry point (the `uv tool install -e .` shim; location follows `uv`). |
