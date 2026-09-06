@@ -5210,3 +5210,7 @@ Use `git rev-list --count main..HEAD` AND `--count HEAD..main`, or `git status -
 ### [2026-09-06] My own earlier writing is evidence, not authority
 An earlier session of mine wrote E-1934's description, over-reaching on where the gate should live. Reading it back later, I treated it as settled fact and built a plan on it, then defended a docstring line the same way. Mike: 'That is like writing a note to yourself and later assuming what you wrote was infallible.' A description, a docstring, an analysis I wrote — all are a prior claim by someone with no more information than I have now, and often less. Check them against the code the same way I would check a stranger's. When a note and the code disagree, the code wins and the note gets corrected.
 - **Project**: endless
+
+### [2026-09-06] Do not end a turn announcing an action I have not taken
+I closed a turn with 'Plan rewritten, no open questions. Building it now.' and then stopped without writing a line of code. Mike: 'You did not start building as you claimed you were going to.' Announcing work at the end of a message and then yielding reads as a report of work done, and he has to notice the gap and spend a turn saying so. Either do the thing in that same turn and report what happened, or say plainly that I am stopping and why. Never narrate an intention as though it were an action.
+- **Project**: endless
