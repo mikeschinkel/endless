@@ -71,9 +71,9 @@ var worktreeDirRe = regexp.MustCompile(`^e-(\d+)$`)
 // worktree checks above cover the sandbox (E-1904).
 var ReapSandbox func(worktreeName string) error
 
-// ReapStaleWorktrees removes worktree directories that are SETTLED — clean and
-// holding no work the default branch lacks — whose task has been untouched for
-// longer than ttl and whose directory no live process is sitting in.
+// ReapStaleWorktrees removes worktree directories that are clean and hold no
+// commit the default branch cannot already reach, whose task has been untouched
+// for longer than ttl, and whose directory no live process is sitting in.
 //
 // It used to require a row in task_landings, which read as "only reclaim what
 // has landed". That gate turned out to be a proxy for the wrong thing: a
@@ -161,17 +161,24 @@ func reapBoundSandbox(worktreeName string) {
 //     (see internal/events/session_tasks.go).
 //  3. No active (sessionstate.Live) session has task_id pointing at
 //     the task.
-//  4. The worktree is SETTLED: its working tree is clean, and it holds no
-//     commit whose content the project's default branch lacks.
+//  4. The worktree's working tree is clean, and every commit on its branch is
+//     reachable from the project's default branch by SHA — crediting each
+//     recorded landing, since a rebasing land rewrites those SHAs (E-1940).
 //  5. No live process holds cwd inside the dir.
 //
-// Condition 4 is one call to the probe `session status` reads for its ◆ and
-// `task unsettled` explains (E-2087), so the reaper can never disagree with
-// what the user was just told about the same directory. Undetermined counts as
-// unsettled there, which preserves the fail-closed handling this function has
-// always had: it would rather skip a candidate it cannot reason about —
-// including one whose default branch will not resolve — than destroy in-flight
-// work.
+// Condition 4 is deliberately NOT the probe `session status` reads for its ◆
+// and `task unsettled` explains. That probe answers by CONTENT and is exact;
+// this one answers by SHA reachability and is merely sufficient — it can report
+// work outstanding on a branch that holds none, never the reverse. The reasons
+// are in reapNothingToLand, and both are load-bearing: this function's mistakes
+// are asymmetric, and it runs on every tool call. Do not "unify" the two
+// without reading that comment first — E-2087 did, and cost ~90s per sweep on
+// PreToolUse and PostToolUse before it was reverted here.
+//
+// Every failure still means skip, never reap: a git error, an unparsable count,
+// or a default branch that will not resolve all leave the directory alone. The
+// reaper would rather keep a candidate it cannot reason about than destroy
+// in-flight work.
 //
 // Conditions 3 and 5 are not evaluated here: they are WorktreeInUse, the one
 // implementation `endless worktree drop` also consults (E-1947), and it is
