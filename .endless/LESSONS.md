@@ -5170,3 +5170,11 @@ Worse, I did not source the gloss. It came from the CLI's own refusal text, whic
 
 When a status, term or convention is one Mike defined: ask what he means by it, or report the observed behavior and let him judge. Never assert its meaning back at him.
 - **Project**: endless
+
+### [2026-09-06] Do not define Mike's own vocabulary back to him
+I told Mike that 'rejected' says 'never happened' and that 'superseded' was the accurate record for ED-1167 — explaining the meaning of statuses he defined, in the tool he is building, as though he needed the tutorial. He does not. 'Rejected' means what he says it means: the decider decided against it.
+
+Worse, I did not source the gloss. It came from the CLI's own refusal text, which editorializes past the status ('it was rejected, so it never took effect'). I repeated a message the product printed as if it were my own reasoning about his vocabulary, and used it to argue he had recorded the wrong thing.
+
+When a status, term or convention is one Mike defined: ask what he means by it, or report the observed behavior and let him judge. Never assert its meaning back at him. If a product message asserts a meaning, that message is a candidate defect to report, not a source to quote at its author.
+- **Project**: endless
