@@ -288,8 +288,14 @@ layer_a() {
     # THE DEFECT, stated. A gate-off project must not be handed the invocation.
     assert_lacks "gate-off index: no \`--draft-file\` invocation" \
         "${off}" "--draft-file" || return 1
-    assert_contains "gate-off index: says the channel is off here" \
-        "${off}" '"report_gate": false' || return 1
+    # Deliberately asserts the ABSENCE of the whole clause, not any particular
+    # wording for its replacement. The design allowed either "omit the step" or
+    # "state it is off here", and step 7 has since been rewritten from the second
+    # to the first. Pinning the old prose also pinned `"report_gate": false` --
+    # the key spelling E-1975 retired -- so the check failed on a guide that was
+    # behaving correctly.
+    assert_lacks "gate-off index: step 7 carries no channel instruction" \
+        "${off}" "send that command's output verbatim" || return 1
 
     # The other half of told-iff-gated: a gate-ON project must still be told.
     assert_contains "gate-on index: still routes through the channel" \
@@ -494,8 +500,13 @@ layer_c2() {
     # The help still DESCRIBES the loop wherever it is read — it is reached by
     # typing the command, so hiding it would answer a direct question with
     # silence. What changes is the setting reported beneath it.
-    assert_contains "gate-off: help still describes the loop" \
-        "${from_root}" "autoresearch loop"
+    # Anchored on the Usage line, not on the description's prose. The claim is
+    # that help is NOT gated -- it renders in full wherever it is typed -- and
+    # the wording of what it describes is free to change. An earlier version
+    # pinned "autoresearch loop" and failed when that description was rewritten,
+    # reporting a regression against help that was behaving correctly.
+    assert_contains "gate-off: help still renders in full" \
+        "${from_root}" "Usage: endless minimizer"
     assert_contains "gate-off: and says the channel is off here" \
         "${from_root}" "minimizer.enabled    false"
 
