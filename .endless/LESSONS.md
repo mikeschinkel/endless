@@ -5178,3 +5178,7 @@ Worse, I did not source the gloss. It came from the CLI's own refusal text, whic
 
 When a status, term or convention is one Mike defined: ask what he means by it, or report the observed behavior and let him judge. Never assert its meaning back at him. If a product message asserts a meaning, that message is a candidate defect to report, not a source to quote at its author.
 - **Project**: endless
+
+### [2026-09-06] Decide delegated code questions; do not hand them back to Mike as options
+I wrote a plan for E-1934 that ended in three questions, one of which was whether to gate file-loaded content — where not gating it means the task fails at its own stated purpose. Mike: 'Why would this even be a question since not doing it means not achieving the objective of the task?' and 'You are explaining details of code, which I have been delegating to you 100%, so why expect me to understand it when the description you wrote does not make sense?' Two rules follow. First, a question with only one answer consistent with the task's purpose is not a question — decide it and say what I decided. Second, Mike delegates code-level design entirely; a question is only his when it is about product behaviour, priority, or a tradeoff he holds preferences over. Third, when an earlier session of mine wrote a description that turns out to be wrong, correcting it is my job, not a matter for his approval.
+- **Project**: endless
