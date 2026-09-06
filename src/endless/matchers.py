@@ -28,7 +28,7 @@ array. Action-regex lookup (get_action_regex) still reads from `matchers`.
 import json
 import re
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 from endless import config, main_commit
 from endless.project_path import project_root
@@ -862,6 +862,28 @@ def _toggle_in_file(
 
 # --- Verb mutation API (E-1117 / E-1124) -----------------------------------
 
+def _normalize_categories(category: list[str] | None) -> list[str]:
+    """Canonicalize a category argument: lowercased, de-duped, stably ordered,
+    and narrowed to `VERB_CATEGORIES`.
+
+    Unrecognized tokens are dropped rather than raising, so the empty list is
+    the single "nothing usable was passed" answer for both callers. `add_verb`
+    reads it as "omit the field" (which resolves back to {"action"});
+    `update_verb` reads it as an error, because an update that silently dropped
+    the field would leave the verb miscategorized exactly as before.
+    """
+    if not category:
+        return []
+    seen: set[str] = set()
+    cats: list[str] = []
+    for c in category:
+        token = str(c).strip().lower()
+        if token in VERB_CATEGORIES and token not in seen:
+            seen.add(token)
+            cats.append(token)
+    return cats
+
+
 def add_verb(
     *,
     value: str,
@@ -889,16 +911,9 @@ def add_verb(
     if not definition or not definition.strip():
         raise ValueError("verb definition is required")
     entry = {"value": value.strip(), "definition": definition.strip()}
-    if category:
-        seen: set[str] = set()
-        cats: list[str] = []
-        for c in category:
-            token = str(c).strip().lower()
-            if token in VERB_CATEGORIES and token not in seen:
-                seen.add(token)
-                cats.append(token)
-        if cats:
-            entry["category"] = cats
+    cats = _normalize_categories(category)
+    if cats:
+        entry["category"] = cats
 
     wrote_project = False
     wrote_machine = False
@@ -922,13 +937,17 @@ def _add_verb_to_file(path: Path, entry: dict) -> bool:
     return True
 
 
-def _commit_project_verbs(verb_value: str) -> None:
+def _commit_project_verbs(verb_value: str, action: str = "register") -> None:
     """Commit just .endless/verbs.jsonl on main (E-1208).
 
     The commit mechanics — single-path add + `commit -o`, git-locating env vars
     stripped — live in `main_commit` (E-2055), shared with the lessons log.
     Raises RuntimeError on git failure; the file write that preceded this call
     is not rolled back.
+
+    `action` names what happened to the verb in the subject line — "register"
+    for `add_verb`, "update" for `update_verb` (E-2114) — so main's log
+    distinguishes a new verb from a corrected one at a glance.
     """
     project_vp = project_verbs_path()
     if project_vp is None:
@@ -936,8 +955,177 @@ def _commit_project_verbs(verb_value: str) -> None:
     main_commit.commit_path(
         project_vp.parent.parent,
         ".endless/verbs.jsonl",
-        f"Endless: register verb '{verb_value}'",
+        f"Endless: {action} verb '{verb_value}'",
     )
+
+
+class UnknownVerbError(ValueError):
+    """Raised when a mutation names a verb no layer knows.
+
+    A ValueError subclass so the existing `except ValueError` handlers keep
+    working, but distinguishable, so the CLI can answer "no such verb" with a
+    recovery line pointing at `verb add` instead of restating the message.
+    """
+
+
+class VerbUpdate(NamedTuple):
+    """What `update_verb` did.
+
+    `value` is the registered spelling (the argument is matched
+    case-insensitively, so it need not be what the caller typed), `layers`
+    names the layers actually rewritten — empty when every target already held
+    those values — `fields` names the fields set, and `materialized` says the
+    addressed layer had no entry for the verb and one was created holding only
+    those fields, the rest still resolving from the layer below.
+    """
+
+    value: str
+    layers: tuple[str, ...]
+    fields: tuple[str, ...]
+    materialized: bool
+
+
+def _canonical_verb_value(value: str) -> str | None:
+    """The registered spelling of `value`, matched case-insensitively through
+    the resolution route, or None when no layer knows the verb.
+
+    Resolution, not a file scan: a built-in from `DEFAULT_VERBS` is a known
+    verb even though no verbs.jsonl mentions it.
+    """
+    target = value.strip().lower()
+    for entry in _resolved_verbs():
+        if not isinstance(entry, dict):
+            continue
+        candidate = entry.get("value")
+        if isinstance(candidate, str) and candidate.lower() == target:
+            return candidate
+    return None
+
+
+def update_verb(
+    *,
+    value: str,
+    definition: str | None = None,
+    category: list[str] | None = None,
+    machine_only: bool = False,
+) -> VerbUpdate:
+    """Change only the named fields of an existing verb (E-2114).
+
+    `definition` and `category` are applied when passed and left untouched when
+    None, so correcting one never requires restating the others — which is the
+    whole difference from the remove-then-add round trip this replaces, where a
+    field you forgot to retype was silently rewritten rather than left alone.
+    `category` is a set, so passing it REPLACES the whole set; there is no
+    append.
+
+    Layer targeting is by SCOPE, not by where the verb happens to sit today.
+    The layer being addressed — the project verbs.jsonl, or the machine one
+    under `machine_only` — is written whether or not it already carries the
+    verb: an absent entry is materialized holding ONLY the passed fields, and
+    `_resolved_verbs`' field-wise fall-through supplies the rest from the layer
+    below, so `update_verb(value="research", category=["action"])` corrects a
+    `DEFAULT_VERBS` built-in for the project while keeping its built-in
+    definition. Presence-first targeting cannot express that: `_ensure_default_seeds`
+    writes every built-in into the machine verbs.jsonl on first run, so a
+    built-in IS present in a file, and following presence would send a
+    project-scoped correction machine-wide.
+
+    The other layer is then kept in step but never created: it is rewritten
+    only if it already carries the verb, so correcting a verb that arrived with
+    a fresh clone (in the committed project file, absent from this machine's)
+    does not install it machine-wide as a side effect.
+
+    Returns a `VerbUpdate`. Raises `UnknownVerbError` for a verb no layer
+    knows, ValueError for an empty field set or a field passed with no usable
+    content, and propagates RuntimeError from the main-branch commit as
+    `add_verb` does.
+    """
+    if not value or not value.strip():
+        raise ValueError("verb value is required")
+
+    fields: dict = {}
+    if definition is not None:
+        if not definition.strip():
+            raise ValueError("verb definition cannot be empty")
+        fields["definition"] = definition.strip()
+    if category is not None:
+        cats = _normalize_categories(category)
+        if not cats:
+            raise ValueError(
+                "verb category must name at least one of: "
+                + ", ".join(sorted(VERB_CATEGORIES))
+            )
+        fields["category"] = cats
+    if not fields:
+        raise ValueError("nothing to update: pass a definition and/or a category")
+
+    canonical = _canonical_verb_value(value)
+    if canonical is None:
+        raise UnknownVerbError(f"no verb matched: value={value!r}")
+
+    # (layer, path, create-if-absent). The addressed layer is first and is the
+    # only one an absent entry is created in; the other is kept in step only.
+    targets: list[tuple[str, Path, bool]] = []
+    project_vp = project_verbs_path()
+    if project_vp is not None and not machine_only:
+        targets.append(("project", project_vp, True))
+        targets.append(("machine", machine_verbs_path(), False))
+    else:
+        targets.append(("machine", machine_verbs_path(), True))
+
+    changed: list[str] = []
+    materialized = False
+    for layer, path, create in targets:
+        outcome = _update_verb_in_file(path, canonical, fields, create=create)
+        if outcome in ("changed", "created"):
+            changed.append(layer)
+        if outcome == "created":
+            materialized = True
+
+    if "project" in changed:
+        _commit_project_verbs(canonical, action="update")
+    return VerbUpdate(canonical, tuple(changed), tuple(fields), materialized)
+
+
+def _update_verb_in_file(
+    path: Path, value: str, fields: dict, *, create: bool,
+) -> str:
+    """Apply `fields` to every entry for `value` in the verbs.jsonl at `path`.
+
+    Returns "changed" when matching entries were rewritten, "unchanged" when
+    they already held exactly those values, "absent" when nothing matched and
+    `create` is False, and "created" when nothing matched and `create` appended
+    an entry holding `value` plus the fields and nothing else.
+
+    Matching is case-insensitive, mirroring verb resolution, and every matching
+    entry is updated rather than the first: `merge=union` on this file can leave
+    two lines for one verb after concurrent registrations, and fixing only the
+    line that happens to win resolution would leave the other as a trap for
+    whichever side of a later merge wins instead.
+    """
+    verbs = _load_verbs_list(path)
+    target = value.lower()
+    matched = False
+    dirty = False
+    for entry in verbs:
+        if not isinstance(entry, dict):
+            continue
+        if str(entry.get("value", "")).lower() != target:
+            continue
+        matched = True
+        if any(entry.get(k) != v for k, v in fields.items()):
+            entry.update(fields)
+            dirty = True
+    if matched:
+        if not dirty:
+            return "unchanged"
+        _save_verbs_list(path, verbs)
+        return "changed"
+    if not create:
+        return "absent"
+    verbs.append({"value": value, **fields})
+    _save_verbs_list(path, verbs)
+    return "created"
 
 
 def remove_verb(*, value: str, machine_only: bool = False) -> tuple[int, int]:

@@ -790,8 +790,27 @@ Verbs are the registered action words that may start a task title. When you `tas
 ```bash
 endless verb list                                    # all registered verbs (project + machine layers)
 endless verb add <verb>                              # register a new verb
+endless verb update <verb>                           # correct a registered verb's definition or category
 endless verb remove <verb>                           # remove (with confirmation)
 ```
+
+`verb update` changes only the fields you pass — `--definition`, `--category`
+(repeatable), or both — and leaves everything else exactly as it was. Reach for
+it instead of remove-then-add, where a field you forget to restate is silently
+rewritten rather than left alone; that is how `brainstorm` came to be
+registered as an `action` verb, which then made a `--type brainstorm` task
+refuse a title led by the word "brainstorm". `--category` replaces the whole
+set, so `--category action --category investigation` is how a verb becomes a
+dual.
+
+The correction is written to the layer you are addressing — the project's
+`verbs.jsonl` by default, the machine's under `--machine-only` — even when that
+layer had no entry for the verb. A built-in verb corrected that way gets a new
+line carrying only the corrected fields; the rest still resolves from the
+built-in, so `endless verb update research --category action` keeps
+`research`'s definition. The other layer is kept in step only when it already
+carries the verb, so correcting a verb that arrived with a clone does not
+install it machine-wide.
 
 When the first word of a title isn't a registered verb, `task add` shells out to `claude --model haiku -p` and asks whether the word is a verb. On a `YES: <definition>` reply, Endless auto-registers the verb on the fly and lets the title pass — you'll see a `• Auto-registered verb '<word>': <definition>` line before the task-added line. On `NO` (or any failure: missing binary, timeout, malformed reply), `task add` falls through to the standard error.
 

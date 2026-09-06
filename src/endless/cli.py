@@ -4002,6 +4002,31 @@ def verb_list(as_json, limit, no_limit):
     list_verbs(as_json, limit=limit, no_limit=no_limit)
 
 
+@verb_cmd.command("update")
+@click.argument("value")
+@click.option("--definition", default=None,
+              help="Replace the 'to ___' definition. Omit to leave it as-is.")
+@click.option("--category", "category", multiple=True,
+              type=click.Choice(["action", "investigation"]),
+              help="Replace the category set, repeatable. 'action' verbs lead "
+                   "changed-behavior/artifact work (todo/bugfix); 'investigation' "
+                   "verbs lead findings/decision work (research/brainstorm). Pass "
+                   "both for a genuine dual. Omit to leave the set as-is.")
+@click.option("--machine-only", is_flag=True,
+              help="Update the machine layer only (skip the project config write)")
+def verb_update(value, definition, category, machine_only):
+    """Correct a registered verb's definition or category.
+
+    Changes only the fields you pass and leaves the rest exactly as they are.
+    That is the difference from remove-then-add, where a field you forgot to
+    restate was silently rewritten instead of left alone. A built-in verb with
+    no entry of its own gets one holding just the corrected fields; the rest
+    still resolves from the built-in.
+    """
+    from endless.verb_cmd import update_verb
+    update_verb(value, definition, category, machine_only)
+
+
 @verb_cmd.command("remove")
 @click.argument("value")
 @click.option("--machine-only", is_flag=True,

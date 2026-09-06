@@ -89,6 +89,58 @@ def list_verbs(as_json: bool, limit: int | None = None,
     rowcap.echo_footer(hidden)
 
 
+def update_verb(
+    value: str,
+    definition: str | None,
+    category: tuple[str, ...] = (),
+    machine_only: bool = False,
+) -> None:
+    if not value or not value.strip():
+        raise click.ClickException("Verb value is required.")
+    if definition is None and not category:
+        raise click.ClickException(
+            "Nothing to update. Pass --definition and/or --category.\n"
+            f"  Example: endless verb update '{value}' --category investigation\n"
+            "  What you omit is left exactly as it is — that is the point of update."
+        )
+
+    try:
+        result = matchers.update_verb(
+            value=value, definition=definition,
+            category=list(category) if category else None,
+            machine_only=machine_only,
+        )
+    except matchers.UnknownVerbError:
+        raise click.ClickException(
+            f"No verb matched: value={value!r}\n"
+            f"  Register it first: endless verb add '{value}' --definition \"...\"\n"
+            f"  Or run 'endless verb list' to see what is registered."
+        )
+    except ValueError as e:
+        raise click.ClickException(str(e))
+    except RuntimeError as e:
+        raise click.ClickException(str(e))
+
+    fields = ", ".join(result.fields)
+    if not result.layers:
+        click.echo(
+            click.style("•", fg="yellow")
+            + f" Already set (no change): verb={result.value!r} ({fields})"
+        )
+        return
+    click.echo(
+        click.style("•", fg="cyan")
+        + f" Updated in {' + '.join(result.layers)}: verb={result.value!r} ({fields})"
+    )
+    if result.materialized:
+        # The new line holds only what was passed, so it reads as a truncated
+        # entry unless the reader knows the rest still resolves from below.
+        click.echo(
+            f"  New override for {result.value!r} in the {result.layers[0]} layer"
+            f" — the fields you did not pass still resolve from below."
+        )
+
+
 def remove_verb(value: str, machine_only: bool) -> None:
     pr, mr = matchers.remove_verb(value=value, machine_only=machine_only)
     if pr == 0 and mr == 0:
