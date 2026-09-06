@@ -5186,3 +5186,13 @@ I wrote a plan for E-1934 that ended in three questions, one of which was whethe
 ### [2026-09-06] Never use internal shorthand with Mike without defining it first
 I spent several exchanges writing 'Rule 1', 'Rule 2' and 'Rule 3' as if they were shared vocabulary. They are local names I invented for branches of one function. Mike: 'I am also not 100 percent sure what Rule 2 and Rule 3 refer to.' He had been answering design questions about them anyway, which means I was collecting decisions on things he could not see. Name the behaviour, not the label — 'the rule that refuses an absolute path anywhere in the content' costs six words and needs no glossary. If a short label is genuinely worth having, define it once at first use and expect to redefine it if it goes unused for a few turns.
 - **Project**: endless
+
+### [2026-09-06] An agent editing a task is not an agent working it — read the status field: `underway` means a session holds it and `unverified` may, while `submitted` is nobody.
+I saw E-2035's plan grow between two reads and told Mike "another session has been working it — worth a glance before anyone starts implementing."
+
+Wrong on both halves. An agent did edit it, but sessions routinely update tasks other than the one they hold, so an edit says nothing about ownership. The ledger records the actor as the machine user, not a session, so it cannot even attribute the edit.
+
+The signal is the STATUS. `submitted` is spec-complete and awaiting approval — nobody working it. `underway` means a session holds it. `unverified` MAY mean one still does: implementation is done and awaiting verification, so the session may be live, or may have been killed by a tmux crash. Do not read `unverified` as unowned.
+
+Do not infer activity from a diff, a timestamp, or a character count.
+- **Project**: endless
