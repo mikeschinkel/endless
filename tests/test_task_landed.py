@@ -25,12 +25,11 @@ def _insert_task(pk: int, title: str = "Some work", status: str = "ready"):
     )
 
 
-def _insert_landing(task_id: int, sha: str, landed_at: str,
-                    branch: str = "task/x"):
+def _insert_landing(task_id: int, sha: str, landed_at: str):
     db.execute(
-        "INSERT INTO task_landings (task_id, branch, merge_commit_sha, landed_at) "
-        "VALUES (?, ?, ?, ?)",
-        (task_id, branch, sha, landed_at),
+        "INSERT INTO task_landings (task_id, merge_commit_sha, landed_at) "
+        "VALUES (?, ?, ?)",
+        (task_id, sha, landed_at),
     )
 
 
@@ -140,8 +139,8 @@ def test_landed_list_empty(registered_project, capsys):
 
 def test_landed_item_history_newest_first(registered_project, capsys):
     _insert_task(9201, title="Multi-land")
-    _insert_landing(9201, "oldddd1", "2026-05-20T10:00:00", branch="task/9201-x")
-    _insert_landing(9201, "newwww2", "2026-05-25T10:00:00", branch="task/9201-x")
+    _insert_landing(9201, "oldddd1", "2026-05-20T10:00:00")
+    _insert_landing(9201, "newwww2", "2026-05-25T10:00:00")
     task_cmd.landed_item(9201)
     out = capsys.readouterr().out
     assert "newwww2" in out and "oldddd1" in out

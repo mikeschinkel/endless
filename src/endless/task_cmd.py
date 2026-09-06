@@ -1883,7 +1883,6 @@ def landed_item(item_id: int, llm: bool = False, as_json: bool = False):
                 {
                     "landed_at": land["landed_at"],
                     "merge_commit_sha": land["merge_commit_sha"],
-                    "branch": land["branch"],
                 }
                 for land in landings
             ],
@@ -1898,7 +1897,7 @@ def landed_item(item_id: int, llm: bool = False, as_json: bool = False):
             return
         for land in landings:
             sha = (land["merge_commit_sha"] or "")[:7]
-            click.echo(f"{land['landed_at']} {sha} {land['branch']}")
+            click.echo(f"{land['landed_at']} {sha}")
         return
 
     # Human-readable
@@ -1913,7 +1912,7 @@ def landed_item(item_id: int, llm: bool = False, as_json: bool = False):
     for land in landings:
         sha = (land["merge_commit_sha"] or "")[:7]
         ts = _format_timestamp(land["landed_at"])
-        click.echo(f"  {ts}  {sha}  {land['branch']}")
+        click.echo(f"  {ts}  {sha}")
     click.echo()
 
 
@@ -4423,8 +4422,7 @@ def _perform_claim_work(
     # the task's status is left untouched rather than stranded underway.
     if project_root is None:
         project_root = _project_root()
-    slug_source = title or "task"
-    wt_path, created = create_task_worktree(item_id, slug_source, project_root)
+    wt_path, created = create_task_worktree(item_id, project_root)
 
     rows: list[tuple[str, str]] = []
 
@@ -4623,8 +4621,7 @@ def claim_item(item_id: int, unattended: bool = False, force: bool = False):
             project_root = _project_root()
         except click.ClickException:
             return
-        slug_source = title or "task"
-        wt_path, _ = create_task_worktree(item_id, slug_source, project_root)
+        wt_path, _ = create_task_worktree(item_id, project_root)
         click.echo("")
         _echo_labeled_rows([("Git worktree", config.tilde(wt_path))])
         # Best-effort post-claim sweep (E-1337).
@@ -5404,9 +5401,13 @@ def _task_landings(item_id: int) -> list:
 
     Landing is append-only — `endless worktree land` writes one
     task_landings row per land — so a task can have more than one.
+
+    No branch column: E-2108 retired it. The task branch is `task/<id>`
+    (ED-1587), so a landing that wanted to name it can construct it from the
+    id the caller already has.
     """
     return db.query(
-        "SELECT branch, merge_commit_sha, landed_at "
+        "SELECT merge_commit_sha, landed_at "
         "FROM task_landings WHERE task_id = ? "
         "ORDER BY landed_at DESC, id DESC",
         (item_id,),
@@ -5674,7 +5675,6 @@ def detail_item(
                 {
                     "landed_at": landings[0]["landed_at"],
                     "merge_commit_sha": landings[0]["merge_commit_sha"],
-                    "branch": landings[0]["branch"],
                     "count": len(landings),
                 }
                 if landings else None

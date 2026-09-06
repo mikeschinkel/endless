@@ -735,13 +735,19 @@ END;
 -- MAX(landed_at) per task_id to decide when a worktree dir is eligible
 -- for removal. Re-landing (post-land bug fix) appends a second row;
 -- the first row is preserved.
--- branch is nullable: a historical/record-only landing (E-1719) has no
--- surviving branch to name (the worktree is long gone), so it records NULL
--- rather than a fabricated name. A normal live land still records its branch.
--- base_branch (E-2005) is the branch the work landed ON; `branch` is the one it
--- landed FROM. Nullable for the same reason `branch` is: a record-only backfill
--- has no base branch to name, and "main" written there would be a guess stored
--- as a fact.
+-- There is no `branch` column, and its absence is the point (ED-1587, E-2108).
+-- It existed because a task branch carried a title slug frozen at creation, so
+-- the name could only be looked up, never constructed. Task branches are now
+-- `task/<id>`, a pure function of task_id, so a stored copy would be a second
+-- source of truth for a fact this row already determines. Its readers were the
+-- worktree reaper (which now asks git what the worktree has checked out — the
+-- authority on that, and correct across the rename for a repo that predates it)
+-- and `task landed`, which never needed it.
+--
+-- base_branch (E-2005) is the branch the work landed ON — the one thing about a
+-- landing that is NOT derivable, since a project may land into any branch.
+-- Nullable: a record-only backfill (E-1719) has no base branch to name, and
+-- "main" written there would be a guess stored as a fact.
 --
 -- landed_by_harness (E-2005) names the agent harness that ran the land — an
 -- agentenv.ID, or NULL when a PERSON ran it. It is the axis session_id cannot
@@ -754,7 +760,6 @@ CREATE TABLE IF NOT EXISTS task_landings (
     id                INTEGER PRIMARY KEY,
     task_id           INTEGER NOT NULL,
     session_id        INTEGER,
-    branch            TEXT,
     base_branch       TEXT,
     merge_commit_sha  TEXT    NOT NULL,
     landed_at         TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),

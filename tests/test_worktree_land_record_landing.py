@@ -17,7 +17,7 @@ def _args():
     return dict(
         item_id=1474,
         proj_name="endless",
-        branch="task/1474-x",
+        branch="task/1474",
         base_branch="main",
         canonical="E-1474",
         merge_sha="deadbeef",
@@ -39,10 +39,13 @@ def test_record_landing_success(monkeypatch):
 def test_record_landing_payload_carries_the_base_branch(monkeypatch):
     """E-2005: the notice reads back the branch the work landed ON.
 
-    `branch` is the task branch it landed FROM, and "E-1474 landed on
-    task/1474-x" is not what anyone wants to be told. base_branch is known only
-    here — the Go executor sees the event, never the git repo behind it — so a
-    payload that drops it makes the notice unable to name a branch at all.
+    base_branch is known only here — the Go executor sees the event, never the
+    git repo behind it — so a payload that drops it makes the notice unable to
+    name a branch at all.
+
+    The task branch it landed FROM is deliberately absent (E-2108): `task/1474`
+    follows from the entity id the event already carries, and "E-1474 landed on
+    task/1474" was never what anyone wanted to be told anyway.
     """
     calls = []
     monkeypatch.setattr(
@@ -50,7 +53,7 @@ def test_record_landing_payload_carries_the_base_branch(monkeypatch):
     )
     _record_landing(**_args())
     assert calls[0]["payload"]["base_branch"] == "main"
-    assert calls[0]["payload"]["branch"] == "task/1474-x"
+    assert "branch" not in calls[0]["payload"]
 
 
 def test_record_landing_clickexception_is_recoverable(monkeypatch):

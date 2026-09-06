@@ -1408,35 +1408,27 @@ def _normalize_task_id(task_id: str) -> str:
     return f"E-{m.group(1)}"
 
 
-_FILLER_WORDS = frozenset({
-    "a", "an", "the", "to", "from", "of", "for", "with",
-    "in", "on", "at", "by", "and", "or",
-})
-
-
 def _tilde(p: Path) -> str:
     """Display a Path with $HOME collapsed to ~. Falls back to absolute."""
     from endless import config
     return config.tilde(p)
 
 
-def _slugify_title(title: str) -> str:
-    """Slug per E-971 spec for task branch names.
+def task_branch(task_id: int) -> str:
+    """The git branch a task's worktree sits on: `task/<id>` (ED-1587).
 
-    Lowercase, drop filler words, replace non-alnum with '-', collapse
-    repeats, truncate to 40 chars at a word boundary. Returns 'task' if
-    the input contains only filler/punctuation.
+    The one place the pattern is written down, and the reason it is a function
+    at all: a branch name is now a pure function of the task id, so any code
+    that has the id can CONSTRUCT the name instead of looking it up. That is
+    what retired `task_landings.branch` — the column existed because the name
+    was unknowable from the id, back when it carried a title slug frozen at
+    creation (E-971, ED-1167).
+
+    Deliberately not configurable. A pattern the user can change reintroduces
+    the lookup this removes, and strands every existing branch the moment it
+    changes; ED-1587 rejects it explicitly.
     """
-    cleaned = re.sub(r"[^a-z0-9]+", " ", title.lower())
-    words = [w for w in cleaned.split() if w and w not in _FILLER_WORDS]
-    slug = "-".join(words)
-    if len(slug) > 40:
-        truncated = slug[:40]
-        # Only back up to the last '-' if the cut landed mid-word.
-        if slug[40] != "-" and "-" in truncated:
-            truncated = truncated.rsplit("-", 1)[0]
-        slug = truncated
-    return slug or "task"
+    return f"task/{task_id}"
 
 
 class DefaultBranchUnresolved(click.ClickException):
@@ -1753,6 +1745,35 @@ def _reconcile_orphan_plan(
     )
 
 
+def _orphan_task_branches(task_id: int, project_root: Path) -> list[str]:
+    """Every existing local branch that belongs to this task.
+
+    `task/<id>` — the name this task's worktree is cut on — plus any surviving
+    `task/<id>-<slug>` from before ED-1587 renamed them. The legacy sweep is the
+    one place a branch name is still looked up rather than constructed, and it
+    earns it: E-1500's guarantee is that a claim can never silently strand an
+    orphan branch holding real work, and an orphan cut before the rename would
+    walk straight past a check that only knows the new name. Once no
+    slug-branches remain in a repo this returns exactly the constructed name.
+
+    Ordered constructed-first so the message a user sees names their own task's
+    branch before any legacy one.
+    """
+    names = []
+    if _branch_exists(task_branch(task_id), project_root):
+        names.append(task_branch(task_id))
+    res = _git_run(
+        ["for-each-ref", "--format=%(refname:short)",
+         f"refs/heads/task/{task_id}-*"],
+        cwd=project_root, check=False,
+    )
+    if res.returncode == 0:
+        names.extend(
+            ln.strip() for ln in res.stdout.splitlines() if ln.strip()
+        )
+    return names
+
+
 def _handle_orphan_branch(
     task_id: int, branch: str, base: str, project_root: Path,
 ) -> None:
@@ -1773,7 +1794,7 @@ def _handle_orphan_branch(
 
 
 def create_task_worktree(
-    task_id: int, title: str, project_root: Path,
+    task_id: int, project_root: Path,
 ) -> tuple[Path, bool]:
     """Create the per-task worktree for E-<id>.
 
@@ -1783,8 +1804,7 @@ def create_task_worktree(
     uncommitted plan files (per E-1169), or on git-add failure.
     """
     canonical = f"E-{task_id}"
-    slug = _slugify_title(title)
-    branch = f"task/{task_id}-{slug}"
+    branch = task_branch(task_id)
     wt_dir = project_root / ".endless" / "worktrees" / f"e-{task_id}"
     base = _default_base_branch(project_root)
 
@@ -1803,12 +1823,12 @@ def create_task_worktree(
     if msg:
         raise click.ClickException(msg)
 
-    # E-1500: the dir is gone but the branch may still exist (orphan branch
-    # left by `worktree drop` / land-reap). Recover instead of failing on
+    # E-1500: the dir is gone but a branch for this task may still exist (an
+    # orphan left by `worktree drop` / land-reap). Recover instead of failing on
     # `git worktree add -b`: either delete the branch so we recreate it fresh
     # below, or raise with actionable guidance if it carries real work.
-    if _branch_exists(branch, project_root):
-        _handle_orphan_branch(task_id, branch, base, project_root)
+    for orphan in _orphan_task_branches(task_id, project_root):
+        _handle_orphan_branch(task_id, orphan, base, project_root)
 
     wt_dir.parent.mkdir(parents=True, exist_ok=True)
     try:
@@ -1869,7 +1889,6 @@ def _bootstrap_task_worktree(
 
 def recreate_dropped_worktree(
     task_id: int,
-    title: str,
     project_root: Path,
     base: str,
     *,
@@ -1883,15 +1902,14 @@ def recreate_dropped_worktree(
 
     detached=True (`--review`): `git worktree add --detach <path> <base>` — a
     read-mostly inspection tree with no working branch. detached=False
-    (`--reopen`): a working branch — the original `task/<id>-<slug>` branch is
+    (`--reopen`): a working branch — the original `task/<id>` branch is
     reused if it still exists, else a fresh branch is cut off `base`.
 
     Runs the shared bootstrap but performs NO status transition (the caller
     owns that). Returns the worktree path.
     """
     canonical = f"E-{task_id}"
-    slug = _slugify_title(title)
-    branch = f"task/{task_id}-{slug}"
+    branch = task_branch(task_id)
     wt_dir = project_root / ".endless" / "worktrees" / f"e-{task_id}"
 
     if wt_dir.exists():
@@ -2550,7 +2568,6 @@ def _apply_branch_schema_changes(
 def _record_only_landing(
     canonical: str,
     sha: str | None,
-    branch: str | None,
     at: str | None,
     dry_run: bool,
 ) -> None:
@@ -2563,10 +2580,14 @@ def _record_only_landing(
     worktree and branch are long gone.
 
     The emitted event is attributed to the system actor with no session
-    (`session_id` NULL), records `branch` NULL when none is given (the original
-    branch is unrecoverable), and stamps `landed_at` at the merge commit's date
-    — derived here from `git show -s --format=%cI <sha>` unless `at` is passed —
+    (`session_id` NULL) and stamps `landed_at` at the merge commit's date —
+    derived here from `git show -s --format=%cI <sha>` unless `at` is passed —
     so the row reflects when the work actually landed, not now().
+
+    E-2108 removed the `--branch` this used to accept. A landing records no
+    branch at all now (the task branch is `task/<id>`, derivable from the id),
+    so the flag had nothing left to fill in and the "records NULL" case it
+    existed for stopped being a case.
     """
     if not sha:
         raise click.ClickException("--record-only requires --sha <merge-commit-sha>.")
@@ -2594,7 +2615,6 @@ def _record_only_landing(
         click.echo(f"Would record-only land: {canonical}")
         click.echo(f"  Project:   {proj_name}")
         click.echo(f"  SHA:       {sha}")
-        click.echo(f"  Branch:    {branch or '(none — records NULL)'}")
         click.echo(f"  Landed at: {landed_at}")
         return
 
@@ -2605,7 +2625,7 @@ def _record_only_landing(
         project=proj_name,
         entity_type="task",
         entity_id=str(item_id),
-        payload={"branch": branch or "", "merge_commit_sha": sha},
+        payload={"merge_commit_sha": sha},
         actor_kind="system",
         actor_id="backfill",
         session_id=None,
@@ -2637,10 +2657,12 @@ def _record_landing(
     the cause is resolved (E-1474).
 
     base_branch rides in the payload (E-2005) so task_landings records the
-    branch the work landed ON, not just the task branch it landed FROM. It is
-    what the "E-NNNN landed on main (1dd0006)" notice reads back to a session,
-    and it is known only here — the Go executor sees the event, never the git
-    repo it came from.
+    branch the work landed ON. It is what the "E-NNNN landed on main (1dd0006)"
+    notice reads back to a session, and it is known only here — the Go executor
+    sees the event, never the git repo it came from. The task branch it landed
+    FROM is not in the payload: `task/<id>` follows from the entity ref the
+    event already carries (ED-1587, E-2108). `branch` stays a parameter only
+    because the failure message below names the branch the user was landing.
     """
     from endless.event_bridge import emit_event
 
@@ -2651,7 +2673,6 @@ def _record_landing(
             entity_type="task",
             entity_id=str(item_id),
             payload={
-                "branch": branch,
                 "base_branch": base_branch,
                 "merge_commit_sha": merge_sha,
             },
@@ -2878,7 +2899,6 @@ def land_worktree(
     dry_run: bool,
     record_only: bool = False,
     sha: str | None = None,
-    branch: str | None = None,
     at: str | None = None,
 ) -> None:
     """Land the worktree for <task-id> into main per E-987 + E-1337.
@@ -2928,7 +2948,7 @@ def land_worktree(
     # happened; there is no live worktree/branch to rebase or ff-merge, so it
     # dispatches before all of that.
     if record_only:
-        _record_only_landing(canonical, sha, branch, at, dry_run)
+        _record_only_landing(canonical, sha, at, dry_run)
         return
 
     main_root = _project_root()

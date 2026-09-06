@@ -1019,10 +1019,9 @@ func execTaskLanded(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 	if evt.Actor.SessionID != "" {
 		sessionID = mustParseInt64(evt.Actor.SessionID)
 	}
-	// A record-only/historical landing (E-1719) carries an empty branch — the
-	// original branch is gone — so record NULL rather than an empty string.
-	// Same reasoning for base_branch (E-2005), which a backfill never knows.
-	branch := nullIfEmpty(p.Branch)
+	// A record-only/historical landing (E-1719) knows no base branch — the land
+	// it records happened before anything was asked to remember one — so record
+	// NULL rather than an empty string (E-2005).
 	baseBranch := nullIfEmpty(p.BaseBranch)
 	// landed_at is the event timestamp, not now(): a historical record-only
 	// landing (E-1719) sets evt.TS to the commit date via `emit --ts`, so the
@@ -1032,10 +1031,10 @@ func execTaskLanded(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 	landedAt := kairosToISO(evt.TS)
 	if _, err := db.Exec(
 		`INSERT INTO task_landings
-		     (task_id, session_id, branch, base_branch, merge_commit_sha,
+		     (task_id, session_id, base_branch, merge_commit_sha,
 		      landed_at, landed_by_harness)
-		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		taskID, sessionID, branch, baseBranch, p.MergeCommitSHA, landedAt,
+		 VALUES (?, ?, ?, ?, ?, ?)`,
+		taskID, sessionID, baseBranch, p.MergeCommitSHA, landedAt,
 		nullIfEmpty(evt.Actor.Harness),
 	); err != nil {
 		return nil, fmt.Errorf("events: insert task_landing: %w", err)
@@ -1231,8 +1230,9 @@ func mustParseInt64(s string) int64 {
 // The distinction is load-bearing wherever a column means "nobody recorded
 // this": an empty string is a recorded value, so `IS NULL` stops answering the
 // question and every reader has to remember to spell it as NULL-or-empty.
-// task_landings.branch established the rule for a record-only backfill
-// (E-1719); base_branch and landed_by_harness (E-2005) inherit it.
+// task_landings.branch established the rule for a record-only backfill (E-1719)
+// and E-2108 retired that column; base_branch and landed_by_harness (E-2005)
+// inherited the rule and keep it.
 func nullIfEmpty(s string) any {
 	if s == "" {
 		return nil

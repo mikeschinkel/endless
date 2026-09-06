@@ -178,8 +178,8 @@ func TestMaybeReapWorktree_LandingTooRecent(t *testing.T) {
 	// Insert a landing row with timestamp = now (well after any reasonable cutoff).
 	now := time.Now().UTC().Format("2006-01-02T15:04:05")
 	if _, err := db.Exec(
-		`INSERT INTO task_landings (task_id, branch, merge_commit_sha, landed_at)
-		 VALUES (42, 'task/42-probe', 'deadbeef', ?)`,
+		`INSERT INTO task_landings (task_id, merge_commit_sha, landed_at)
+		 VALUES (42, 'deadbeef', ?)`,
 		now,
 	); err != nil {
 		t.Fatalf("seed landing: %v", err)
@@ -221,8 +221,9 @@ type reaperFixture struct {
 	// only decides whether the comparison is reached at all.
 	unlanded     int
 	rangeDiffErr error
-	// branchOut answers `symbolic-ref --short HEAD`, which is where the branch
-	// name comes from when no landing row recorded one.
+	// branchOut answers `symbolic-ref --short HEAD`, the ONLY place the branch
+	// name comes from since E-2108. Empty makes that call fail, which is what
+	// git does for a detached HEAD.
 	branchOut string
 	// revListArgs records condition 4's arguments so a test can assert which
 	// revisions it excluded.
@@ -250,12 +251,12 @@ func newReaperFixture(t *testing.T, landedAt time.Time) *reaperFixture {
 		projRoot:   projRoot,
 		revListOut: "0",
 		statusOut:  "",
-		branchOut:  "task/42-probe",
+		branchOut:  "task/42",
 	}
 	if !landedAt.IsZero() {
 		if _, err := f.db.Exec(
-			`INSERT INTO task_landings (task_id, branch, merge_commit_sha, landed_at)
-			 VALUES (42, 'task/42-probe', 'deadbeef', ?)`,
+			`INSERT INTO task_landings (task_id, merge_commit_sha, landed_at)
+			 VALUES (42, 'deadbeef', ?)`,
 			landedAt.UTC().Format("2006-01-02T15:04:05"),
 		); err != nil {
 			t.Fatalf("seed landing: %v", err)
@@ -289,6 +290,10 @@ func newReaperFixture(t *testing.T, landedAt time.Time) *reaperFixture {
 			// The default-branch resolver asks for origin/HEAD; condition 4's
 			// enrichment asks for HEAD.
 			if args[len(args)-1] == "refs/remotes/origin/HEAD" {
+				return "", fmt.Errorf("not a symbolic ref")
+			}
+			if f.branchOut == "" {
+				// A detached HEAD: `symbolic-ref --quiet` exits non-zero.
 				return "", fmt.Errorf("not a symbolic ref")
 			}
 			return f.branchOut, nil
@@ -340,26 +345,26 @@ func TestMaybeReapWorktree_ReapsCleanAbandoned(t *testing.T) {
 	}
 }
 
-// TestMaybeReapWorktree_NullBranchSkipsBranchDelete covers E-1719: a
-// record-only/historical landing records a NULL branch. The reaper must read
-// that row without erroring (it scans branch as sql.NullString) and skip the
-// `git branch -D` step, since there is no branch to delete.
-func TestMaybeReapWorktree_NullBranchSkipsBranchDelete(t *testing.T) {
+// TestMaybeReapWorktree_DetachedHeadSkipsBranchDelete is what survives E-1719's
+// NULL-branch case after E-2108 retired the column. The question is no longer
+// "did the row record a name" but "does this directory have a branch at all" —
+// and a detached HEAD (a `session resume --review` tree) does not. The reap
+// still removes the directory; it must not then run `git branch -D` on an empty
+// name, which git reads as a syntax error rather than a no-op.
+func TestMaybeReapWorktree_DetachedHeadSkipsBranchDelete(t *testing.T) {
 	f := newReaperFixture(t, time.Now().Add(-30*24*time.Hour))
-	if _, err := f.db.Exec("UPDATE task_landings SET branch = NULL WHERE task_id = 42"); err != nil {
-		t.Fatalf("null out branch: %v", err)
-	}
+	f.branchOut = "" // makes `symbolic-ref --quiet HEAD` fail, as it does when detached
 	cutoff := time.Now().UTC().Add(-14 * 24 * time.Hour)
 	reaped, err := maybeReapWorktree(f.db, f.projRoot, f.dir, 42, cutoff)
 	if err != nil {
-		t.Fatalf("unexpected error reading NULL-branch landing: %v", err)
+		t.Fatalf("unexpected error reaping a detached worktree: %v", err)
 	}
 	if !reaped {
-		t.Errorf("expected reap=true for clean abandoned worktree with NULL branch, got false")
+		t.Errorf("expected reap=true for a clean abandoned detached worktree, got false")
 	}
 	for _, c := range f.calls {
 		if c == "branch" {
-			t.Errorf("expected NO `git branch -D` for a NULL-branch landing, got calls=%v", f.calls)
+			t.Errorf("expected NO `git branch -D` for a detached HEAD, got calls=%v", f.calls)
 		}
 	}
 }
@@ -775,8 +780,8 @@ func TestMaybeReapWorktree_UnrecordedRebaseLandingIsNotReaped(t *testing.T) {
 func TestMaybeReapWorktree_CreditsRecordedLandings(t *testing.T) {
 	f := newReaperFixture(t, time.Now().Add(-30*24*time.Hour))
 	if _, err := f.db.Exec(
-		`INSERT INTO task_landings (task_id, branch, merge_commit_sha, landed_at)
-		 VALUES (42, 'task/42-probe', 'cafebabe', '2026-01-01T00:00:00')`,
+		`INSERT INTO task_landings (task_id, merge_commit_sha, landed_at)
+		 VALUES (42, 'cafebabe', '2026-01-01T00:00:00')`,
 	); err != nil {
 		t.Fatalf("seed second landing: %v", err)
 	}
@@ -824,8 +829,8 @@ func TestMaybeReapWorktree_SettledWithNoLandingIsReapable(t *testing.T) {
 	if !reaped {
 		t.Fatalf("a settled worktree with nothing to land was not reaped (calls=%v)", f.calls)
 	}
-	// The branch still has to be deleted, and with no landing row the only
-	// place its name can come from is git.
+	// The branch still has to be deleted, and git is the only place its name
+	// comes from (E-2108) — with or without a landing row.
 	var sawBranchDelete bool
 	for _, c := range f.calls {
 		if c == "branch" {

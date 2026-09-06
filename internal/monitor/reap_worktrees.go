@@ -186,21 +186,18 @@ func reapBoundSandbox(worktreeName string) {
 // one. They are still listed above in significance order.
 func maybeReapWorktree(db *sql.DB, projectRoot, dir string, taskID int64, cutoff time.Time) (bool, error) {
 	// The most recent landing, if there is one. Its absence no longer
-	// disqualifies the directory (E-2087) — it only means the branch name has
-	// to come from git rather than from the row.
+	// disqualifies the directory (E-2087) — it only supplies one of the two
+	// timestamps the TTL is measured from. The branch name is not read here and
+	// no longer stored anywhere (E-2108); git is asked for it below.
 	var landedAt string
-	// branch is nullable (E-1719): a historical/record-only landing records no
-	// branch. Scan into NullString so a NULL row doesn't error, and fall back
-	// to what git reports when it's absent.
-	var branch sql.NullString
 	err := db.QueryRow(
-		`SELECT landed_at, branch
+		`SELECT landed_at
 		 FROM task_landings
 		 WHERE task_id = ?
 		 ORDER BY landed_at DESC
 		 LIMIT 1`,
 		taskID,
-	).Scan(&landedAt, &branch)
+	).Scan(&landedAt)
 	hasLanding := true
 	if err == sql.ErrNoRows {
 		hasLanding = false
@@ -248,7 +245,7 @@ func maybeReapWorktree(db *sql.DB, projectRoot, dir string, taskID int64, cutoff
 
 	// Condition 4, answered cheaply — see reapNothingToLand for why this is
 	// deliberately NOT the probe behind ◆.
-	landedRefs, lerr := landedShas(db, taskID)
+	landedRefs, lerr := landedSHAs(db, taskID)
 	if lerr != nil {
 		return false, fmt.Errorf("query landing shas: %w", lerr)
 	}
@@ -281,21 +278,22 @@ func maybeReapWorktree(db *sql.DB, projectRoot, dir string, taskID int64, cutoff
 		return false, nil
 	}
 
-	// The branch to delete: the recorded one when there is a landing row, git's
-	// answer when there is not (E-2087 stopped requiring a landing, so a
-	// reapable worktree may have no row to read a name from). Read here rather
-	// than with the conditions above so the extra git call is paid only by a
-	// directory actually being removed.
+	// The branch to delete is whatever this directory has checked out. Git is
+	// the authority on that, so it is the only thing asked (E-2108). This
+	// replaces three code paths that used to disagree: a name read from
+	// task_landings.branch, the NULL case that column carried for a record-only
+	// landing (E-1719), and the git fallback E-2087 added for a worktree with no
+	// landing row at all. Deriving `task/<taskID>` from the id would be the
+	// other option now that ED-1587 makes that the name — but git is right about
+	// a branch cut before the rename too, and about a detached HEAD, where the
+	// error below correctly leaves branchName empty and nothing is deleted.
 	//
-	// The git fallback is deliberately NOT applied to a landing row whose
-	// branch is NULL: that is E-1719's record-only landing, where the absent
-	// name is a recorded fact about what was landed, and this function has
-	// always left such a branch alone.
-	branchName := strings.TrimSpace(branch.String)
-	if !hasLanding {
-		if out, gerr := runGit(dir, "symbolic-ref", "--short", "--quiet", "HEAD"); gerr == nil {
-			branchName = strings.TrimSpace(out)
-		}
+	// Read here rather than with the conditions above so the extra git call is
+	// paid only by a directory actually being removed, and before the removal
+	// below, which takes the answer with it.
+	var branchName string
+	if out, gerr := runGit(dir, "symbolic-ref", "--short", "--quiet", "HEAD"); gerr == nil {
+		branchName = strings.TrimSpace(out)
 	}
 
 	if out, err := runGit(projectRoot, "worktree", "remove", "--force", dir); err != nil {
@@ -315,9 +313,8 @@ func maybeReapWorktree(db *sql.DB, projectRoot, dir string, taskID int64, cutoff
 		}
 		return false, fmt.Errorf("git worktree remove: %v: %s", err, out)
 	}
-	// A record-only landing (E-1719) records no branch, and a detached HEAD has
-	// none to read, so there may be nothing to delete — the dir removal above
-	// is the whole reap in that case.
+	// A detached HEAD has no branch to read, so there may be nothing to delete —
+	// the dir removal above is the whole reap in that case.
 	if branchName != "" {
 		if out, err := runGit(projectRoot, "branch", "-D", branchName); err != nil {
 			// Branch deletion failure shouldn't unwind the dir removal —
@@ -382,10 +379,10 @@ func reapNothingToLand(dir, base string, landed []string) (bool, error) {
 	return n == 0, nil
 }
 
-// landedShas returns the merge_commit_sha of every recorded landing for a task,
+// landedSHAs returns the merge_commit_sha of every recorded landing for a task,
 // newest first. Reaper-only: the display probe answers by content and needs no
 // such credit (E-2087).
-func landedShas(db *sql.DB, taskID int64) ([]string, error) {
+func landedSHAs(db *sql.DB, taskID int64) ([]string, error) {
 	rows, err := db.Query(
 		`SELECT merge_commit_sha
 		   FROM task_landings

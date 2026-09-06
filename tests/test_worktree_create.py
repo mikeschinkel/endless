@@ -1,6 +1,6 @@
 """Tests for E-971 Layer F: per-task worktree auto-creation helpers.
 
-Covers _slugify_title, _default_base_branch, and _check_plan_file_committed.
+Covers task_branch, _default_base_branch, and _check_plan_file_committed.
 The end-to-end create_task_worktree flow is exercised via test_task_claim_worktree.
 """
 
@@ -14,57 +14,32 @@ from endless.worktree_cmd import (
     _check_plan_file_committed,
     _default_base_branch,
     _run_post_worktree_create_hook,
-    _slugify_title,
+    task_branch,
 )
 
 
 # ---------------------------------------------------------------------------
-# _slugify_title
+# task_branch (E-2108 / ED-1587)
 # ---------------------------------------------------------------------------
+#
+# These replace nine tests of _slugify_title, the title-to-slug function that
+# fed the old `task/<id>-<slug>` names. The slug is gone, and with it every
+# question those tests asked (filler words, punctuation, truncation at a word
+# boundary). What is left to pin is that the name is a pure function of the id
+# — the property `task_landings.branch` was retired on.
 
-def test_slugify_normal_title():
-    out = _slugify_title("Move title verbs from hardcoded list to database table")
-    assert out == "move-title-verbs-hardcoded-list-database"
-
-
-def test_slugify_all_filler_falls_back_to_task():
-    assert _slugify_title("The to from") == "task"
-
-
-def test_slugify_whitespace_only_falls_back_to_task():
-    assert _slugify_title("   ") == "task"
+def test_task_branch_is_id_only():
+    assert task_branch(2108) == "task/2108"
 
 
-def test_slugify_empty_string_falls_back_to_task():
-    assert _slugify_title("") == "task"
+def test_task_branch_ignores_everything_but_the_id():
+    """No title reaches it, so a renamed task cannot drift from its branch.
 
-
-def test_slugify_drops_punctuation():
-    out = _slugify_title("Edit user's profile (UI/UX)")
-    assert out == "edit-user-s-profile-ui-ux"
-
-
-def test_slugify_collapses_repeated_separators():
-    out = _slugify_title("foo___bar---baz")
-    assert out == "foo-bar-baz"
-
-
-def test_slugify_truncates_at_word_boundary():
-    title = "alpha bravo charlie delta echo foxtrot golf hotel india juliet"
-    out = _slugify_title(title)
-    assert len(out) <= 40
-    assert not out.endswith("-")
-    # Confirm we cut at a hyphen, not mid-word
-    assert "-" in out
-    assert all(part for part in out.split("-"))
-
-
-def test_slugify_short_title_passes_through():
-    assert _slugify_title("Add tests") == "add-tests"
-
-
-def test_slugify_lowercases():
-    assert _slugify_title("FOO BAR") == "foo-bar"
+    ED-1167 accepted that drift because renaming refs had remote/PR/CI fallout;
+    ED-1587 removed the slug instead, which removes the drift at the source.
+    """
+    assert task_branch(1) == "task/1"
+    assert task_branch(999999) == "task/999999"
 
 
 # ---------------------------------------------------------------------------

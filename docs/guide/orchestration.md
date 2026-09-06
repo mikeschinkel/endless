@@ -25,7 +25,7 @@ This:
 
 1. Sets the task status to `underway`.
 2. Binds the task to your session.
-3. Creates a git worktree at `.endless/worktrees/e-<id>/` rooted on a fresh branch `task/<id>-<slug>`.
+3. Creates a git worktree at `.endless/worktrees/e-<id>/` rooted on a fresh branch `task/<id>`.
 4. Writes companion metadata to `.endless/worktree.json` (task_id, base_branch, branch, timestamp).
 5. Ends with the ONE next step for whoever ran it, rather than a menu:
 
@@ -47,6 +47,8 @@ This:
    the only path among them — the per-worktree sandbox directory used to be
    printed beside it, and readers cd'd into the cache directory instead of the
    checkout. Ask for that one when you want it: `endless worktree sandbox`.
+
+The branch name is the task id and nothing else — no title slug, and no pattern to configure. That makes it a pure function of the id: anything holding the id can construct the branch name instead of looking it up, and renaming a task can never leave its branch describing what the task used to be called. Nothing records the name anywhere, because nothing has to.
 
 One task gets exactly one worktree: `.endless/worktrees/e-<id>/`. Only that canonical name is recognized — a directory created by hand under any other name simply isn't seen as the task's worktree. When you need a *second* checkout for the same line of work — an A/B comparison, running one copy while editing another, a `git bisect`, or a throwaway snapshot — file a **child task** and claim it. The child gets its own `e-<child-id>/` worktree (and its own sandbox), so the two checkouts are first-class, independently tracked, and land or drop on their own.
 

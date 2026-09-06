@@ -2,8 +2,11 @@
 
 _record_only_landing records a historical landing that already happened, without
 any git rebase/ff-merge. These tests mock the collaborators (_project_root,
-_resolve_project, _git, emit_event) so they assert the wiring — actor/session,
-NULL branch, and the commit-date-derived timestamp — with no git/DB fixture.
+_resolve_project, _git, emit_event) so they assert the wiring — actor/session and
+the commit-date-derived timestamp — with no git/DB fixture.
+
+E-2108 removed the `--branch` this used to carry: a landing records no branch at
+all now, so the payload is (merge_commit_sha) and nothing else.
 """
 
 from pathlib import Path
@@ -34,7 +37,7 @@ def wired(monkeypatch):
 
 
 def test_record_only_derives_at_from_commit_date(wired):
-    _record_only_landing("E-1209", "6671bca9", None, None, dry_run=False)
+    _record_only_landing("E-1209", "6671bca9", None, dry_run=False)
     # Derived --at via `git show -s --format=%cI`.
     assert wired["git"], "expected a git call to read the commit date"
     assert wired["git"][0][0] == ["show", "-s", "--format=%cI", "6671bca9"]
@@ -46,28 +49,23 @@ def test_record_only_derives_at_from_commit_date(wired):
     assert kw["actor_id"] == "backfill"
     assert kw["session_id"] is None
     assert kw["ts"] == "2026-05-09T18:30:00-04:00"
-    # No branch given → empty payload branch → recorded NULL downstream (Go side).
-    assert kw["payload"] == {"branch": "", "merge_commit_sha": "6671bca9"}
+    # The whole payload: no branch key, because no column reads one (E-2108).
+    assert kw["payload"] == {"merge_commit_sha": "6671bca9"}
 
 
 def test_record_only_explicit_at_skips_git(wired):
-    _record_only_landing("E-1209", "6671bca9", None, "2026-01-02T03:04:05Z", dry_run=False)
+    _record_only_landing("E-1209", "6671bca9", "2026-01-02T03:04:05Z", dry_run=False)
     assert wired["git"] == [], "explicit --at must not shell out for the commit date"
     assert wired["emit"][0]["ts"] == "2026-01-02T03:04:05Z"
 
 
-def test_record_only_branch_passed_through(wired):
-    _record_only_landing("E-1209", "6671bca9", "task/1209-x", None, dry_run=False)
-    assert wired["emit"][0]["payload"]["branch"] == "task/1209-x"
-
-
 def test_record_only_requires_sha(wired):
     with pytest.raises(click.ClickException) as exc:
-        _record_only_landing("E-1209", None, None, None, dry_run=False)
+        _record_only_landing("E-1209", None, None, dry_run=False)
     assert "--sha" in exc.value.message
     assert wired["emit"] == []
 
 
 def test_record_only_dry_run_emits_nothing(wired):
-    _record_only_landing("E-1209", "6671bca9", None, None, dry_run=True)
+    _record_only_landing("E-1209", "6671bca9", None, dry_run=True)
     assert wired["emit"] == [], "dry-run must not emit"

@@ -485,19 +485,17 @@ func replayTaskLanded(db *sql.DB, evt *Event, result *ProjectResult) error {
 	if evt.Actor.SessionID != "" {
 		sessionID = mustParseInt64(evt.Actor.SessionID)
 	}
-	// A record-only/historical landing (E-1719) carries an empty branch — the
-	// original branch is gone — so record NULL rather than an empty string.
-	// Same for base_branch and landed_by_harness (E-2005): every event that
-	// predates them omits both, and NULL is what "nobody recorded it" means.
-	branch := nullIfEmpty(p.Branch)
+	// base_branch and landed_by_harness (E-2005) are NULL when absent, not "":
+	// every event that predates them omits both, and NULL is what "nobody
+	// recorded it" means.
 	baseBranch := nullIfEmpty(p.BaseBranch)
 	ts := kairosToISO(evt.TS)
 	_, err := db.Exec(
 		`INSERT INTO task_landings
-		     (task_id, session_id, branch, base_branch, merge_commit_sha,
+		     (task_id, session_id, base_branch, merge_commit_sha,
 		      landed_at, landed_by_harness)
-		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		taskID, sessionID, branch, baseBranch, p.MergeCommitSHA, ts,
+		 VALUES (?, ?, ?, ?, ?, ?)`,
+		taskID, sessionID, baseBranch, p.MergeCommitSHA, ts,
 		nullIfEmpty(evt.Actor.Harness),
 	)
 	if err != nil {

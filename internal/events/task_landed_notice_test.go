@@ -72,7 +72,6 @@ func landedEventWith(t *testing.T, sessionID, harness, baseBranch, sha string) *
 	t.Helper()
 	evt := landedEvent(t, 1337, sessionID)
 	payload, err := json.Marshal(TaskLandedPayload{
-		Branch:         "task/1337-stop-deleting-worktrees",
 		BaseBranch:     baseBranch,
 		MergeCommitSHA: sha,
 	})

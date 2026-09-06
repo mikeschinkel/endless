@@ -33,9 +33,9 @@ def stub_recovery(monkeypatch, tmp_path):
         "rev_parse_ok": True,
     }
 
-    def fake_recreate(task_id, title, project_root, base, *, detached):
+    def fake_recreate(task_id, project_root, base, *, detached):
         calls["recreate"] = {
-            "task_id": task_id, "title": title, "base": base, "detached": detached,
+            "task_id": task_id, "base": base, "detached": detached,
         }
         return tmp_path / f"e-{task_id}"
 
@@ -50,7 +50,6 @@ def stub_recovery(monkeypatch, tmp_path):
     monkeypatch.setattr(
         worktree_cmd, "_branch_exists", lambda b, r: calls["branch_exists"]
     )
-    monkeypatch.setattr(worktree_cmd, "_slugify_title", lambda t: "slug")
     monkeypatch.setattr(
         worktree_cmd, "_git_run",
         lambda *a, **k: _Res(0 if calls["rev_parse_ok"] else 1),
@@ -212,7 +211,7 @@ def test_default_base_falls_back_to_branch_when_never_landed(monkeypatch, stub_r
     decision, _, _ = _resolve(
         monkeypatch, _target(landed_sha=""), intent="reopen", override=".landed"
     )
-    assert decision["base"] == "task/10-slug"
+    assert decision["base"] == "task/10"
 
 
 def test_never_landed_no_branch_errors_with_explicit_hint(monkeypatch, stub_recovery):

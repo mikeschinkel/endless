@@ -478,7 +478,6 @@ def _resolve_recovery_base(
     override: str | None,
     landed_sha: str,
     task_id: int,
-    title: str,
     project_root,
 ) -> str:
     """Resolve the git base a dropped worktree is rebuilt from (E-1801).
@@ -489,7 +488,7 @@ def _resolve_recovery_base(
     else the task's original branch tip if it survives, else a loud error naming
     the explicit-ref escape hatch.
     """
-    from endless.worktree_cmd import _branch_exists, _slugify_title, _git_run
+    from endless.worktree_cmd import _branch_exists, task_branch, _git_run
 
     if override and override != ".landed":
         res = _git_run(
@@ -505,7 +504,7 @@ def _resolve_recovery_base(
     if landed_sha:
         return landed_sha
 
-    branch = f"task/{task_id}-{_slugify_title(title)}"
+    branch = task_branch(task_id)
     if _branch_exists(branch, project_root):
         return branch
 
@@ -579,12 +578,12 @@ def _recover_dropped_worktree(
         )
 
     base = _resolve_recovery_base(
-        intent, override, landed_sha, task_id, title, project_root
+        intent, override, landed_sha, task_id, project_root
     )
 
     detached = intent == "review"
     worktree = recreate_dropped_worktree(
-        task_id, title, project_root, base, detached=detached
+        task_id, project_root, base, detached=detached
     )
 
     status_to = None

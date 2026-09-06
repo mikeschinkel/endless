@@ -78,12 +78,12 @@ func snBlocks(t *testing.T, db *sql.DB, blockerID, blockedID int64) {
 
 // snLanding inserts one task_landings row so the query's `landed` column can be
 // exercised. session_id is left NULL; landed_at takes its schema default.
-func snLanding(t *testing.T, db *sql.DB, id, taskID int64, branch, sha string) {
+func snLanding(t *testing.T, db *sql.DB, id, taskID int64, sha string) {
 	t.Helper()
 	if _, err := db.Exec(
-		`INSERT INTO task_landings (id, task_id, session_id, branch, merge_commit_sha)
-		 VALUES (?, ?, NULL, ?, ?)`,
-		id, taskID, branch, sha,
+		`INSERT INTO task_landings (id, task_id, session_id, merge_commit_sha)
+		 VALUES (?, ?, NULL, ?)`,
+		id, taskID, sha,
 	); err != nil {
 		t.Fatalf("snLanding id=%d task=%d: %v", id, taskID, err)
 	}
@@ -348,7 +348,7 @@ func TestSessionStatusRows_LandedColumn(t *testing.T) {
 	snSessionTask(t, db, 1, landed)
 	snSessionTask(t, db, 1, plain)
 
-	snLanding(t, db, 1, landed, "task/601-x", "deadbeef")
+	snLanding(t, db, 1, landed, "deadbeef")
 
 	rows, err := SessionStatusRows(focal, 0, false)
 	if err != nil {

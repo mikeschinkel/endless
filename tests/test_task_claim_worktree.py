@@ -247,17 +247,19 @@ def test_claim_creates_worktree_no_plan_file(project_with_task, capsys):
     # worktree's provenance (base_branch, branch, created_at).
     assert "task_id" not in companion
     assert companion["base_branch"] == "main"
-    assert companion["branch"].startswith(f"task/{tid}-")
     assert "created_at" in companion
 
-    # Slug should derive from title
-    assert companion["branch"] == f"task/{tid}-move-title-verbs-hardcoded-list-database"
+    # ED-1587: the branch is the task id and nothing else. The fixture's title
+    # ("Move title verbs from hardcoded list to database table") used to become
+    # a slug on the end of it; no part of it reaches the name now.
+    assert companion["branch"] == f"task/{tid}"
 
     # Branch exists in git
     branches = subprocess.run(
         ["git", "branch"], cwd=repo, capture_output=True, text=True, check=True,
     ).stdout
-    assert f"task/{tid}-move-title-verbs-hardcoded-list-database" in branches
+    assert f"task/{tid}" in branches
+    assert "move-title-verbs" not in branches
 
     # User-facing output. E-2106 replaced the trailing "choose one" block with
     # one outcome per caller; `--unattended` says there is no Claude session
@@ -303,7 +305,7 @@ def test_claim_idempotent_on_second_run(project_with_task, capsys):
         ["git", "branch"], cwd=repo, capture_output=True, text=True, check=True,
     ).stdout
     # Only one task branch
-    assert branches.count(f"task/{tid}-") == 1
+    assert branches.count(f"task/{tid}") == 1
 
 
 def test_claim_refuses_when_plan_file_uncommitted(project_with_task, capsys):
@@ -347,7 +349,14 @@ def test_claim_succeeds_when_plan_file_committed(project_with_task):
     assert (wt / ".endless" / "plans" / f"E-{tid}.md").exists()
 
 
-def test_claim_uses_task_fallback_for_all_filler_title(seeded_project_at_cwd):
+def test_claim_branch_is_the_id_whatever_the_title(seeded_project_at_cwd):
+    """A title that used to slugify to nothing is now simply not consulted.
+
+    This was `..._uses_task_fallback_for_all_filler_title`, which pinned the
+    `task` fallback _slugify_title returned for a title made entirely of filler
+    words. ED-1587 removed the slug, so the fallback has nothing to fall back
+    from — the same title now produces the same `task/<id>` as any other.
+    """
     from endless.task_cmd import claim_item
 
     repo = seeded_project_at_cwd
@@ -372,7 +381,7 @@ def test_claim_uses_task_fallback_for_all_filler_title(seeded_project_at_cwd):
     companion = json.loads(
         (repo / ".endless" / "worktrees" / f"e-{tid}" / ".endless" / "worktree.json").read_text()
     )
-    assert companion["branch"] == f"task/{tid}-task"
+    assert companion["branch"] == f"task/{tid}"
 
 
 def test_claim_inside_a_claude_session_prints_only_cd(project_with_task,

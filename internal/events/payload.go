@@ -67,15 +67,19 @@ type TaskClaimedPayload struct {
 // The acting session is read from the envelope's actor.session_id —
 // it's the session that ran the land. When empty (system actor,
 // pre-bridge call), task_landings.session_id is NULL.
+//
+// There is no Branch field, and E-2108 removed it rather than deprecating it:
+// the task branch is `task/<id>` (ED-1587), so the entity ref this event
+// already carries determines the name. Events emitted before that carry a
+// "branch" key in the ledger and keep it — encoding/json drops an unknown key
+// on replay, so a rebuild reads them without special handling.
 type TaskLandedPayload struct {
-	Branch         string `json:"branch"`
 	MergeCommitSHA string `json:"merge_commit_sha"`
 
 	// BaseBranch is the branch the work landed ON — `main` for almost every
-	// project, whatever `origin/HEAD` names for the rest (E-2005). Branch above
-	// is the branch it landed FROM, which is the task branch and is not what a
-	// human wants read back to them ("E-2005 landed on main", not "landed on
-	// task/2005-notify-session-…").
+	// project, whatever `origin/HEAD` names for the rest (E-2005). It is the
+	// one branch a landing cannot derive: the task branch follows from the id,
+	// but nothing says which branch a project lands into.
 	//
 	// omitempty and nullable downstream. A record-only backfill (E-1719) has no
 	// base branch to name — the land it records happened before anything was

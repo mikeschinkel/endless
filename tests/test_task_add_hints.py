@@ -37,8 +37,8 @@ def _insert_task(pk: int, project_id: int, *, status: str = "untriaged",
 def _insert_landing(task_id: int, session_id: int | None,
                     hours_ago: float) -> None:
     db.execute(
-        "INSERT INTO task_landings (task_id, session_id, branch, "
-        "merge_commit_sha, landed_at) VALUES (?, ?, 'b', 'sha', "
+        "INSERT INTO task_landings (task_id, session_id, "
+        "merge_commit_sha, landed_at) VALUES (?, ?, 'sha', "
         "strftime('%Y-%m-%dT%H:%M:%S', 'now', ?))",
         (task_id, session_id, f"-{hours_ago} hours"),
     )

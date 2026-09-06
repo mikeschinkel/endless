@@ -1461,7 +1461,7 @@ If you have an Endless task for this work:
   endless task claim E-NNN          # creates worktree at .endless/worktrees/e-NNN
 
 Or by hand:
-  git worktree add -b task/NNN-<slug> .endless/worktrees/e-NNN main
+  git worktree add -b task/NNN .endless/worktrees/e-NNN main
   cd .endless/worktrees/e-NNN
   # ... do work, commit ...
   endless worktree land E-NNN
@@ -2009,7 +2009,7 @@ func enforceWorktreeGate(projectID int64, payload claudePayload) {
 			"If you already have an active task without a worktree:\n" +
 			"  endless task claim E-NNN          # idempotent; creates if missing\n\n" +
 			"Or create the worktree by hand or via `endless pivot` (when available):\n" +
-			"  git worktree add -b task/NNN-<slug> .endless/worktrees/e-NNN main" +
+			"  git worktree add -b task/NNN .endless/worktrees/e-NNN main" +
 			redirectHint)
 		return
 	}

@@ -31,9 +31,9 @@ def _insert_task(pk: int, title: str = "Landed work"):
 
 def _insert_landing(task_id: int, sha: str, landed_at: str):
     db.execute(
-        "INSERT INTO task_landings (task_id, branch, merge_commit_sha, landed_at) "
-        "VALUES (?, ?, ?, ?)",
-        (task_id, f"task/{task_id}-x", sha, landed_at),
+        "INSERT INTO task_landings (task_id, merge_commit_sha, landed_at) "
+        "VALUES (?, ?, ?)",
+        (task_id, sha, landed_at),
     )
 
 

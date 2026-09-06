@@ -64,7 +64,6 @@ func newLandingTestDB(t *testing.T) *sql.DB {
 func landedEvent(t *testing.T, taskID int64, sessionID string) *Event {
 	t.Helper()
 	payload, err := json.Marshal(TaskLandedPayload{
-		Branch:         "task/1337-stop-deleting-worktrees",
 		MergeCommitSHA: "deadbeef",
 	})
 	if err != nil {
@@ -94,15 +93,15 @@ func TestExecTaskLanded_InsertsRow(t *testing.T) {
 	}
 
 	var (
-		taskID                       int64
-		sessionID                    sql.NullInt64
-		branch, sha, landedAt        string
+		taskID        int64
+		sessionID     sql.NullInt64
+		sha, landedAt string
 	)
 	err := db.QueryRow(
-		`SELECT task_id, session_id, branch, merge_commit_sha, landed_at
+		`SELECT task_id, session_id, merge_commit_sha, landed_at
 		 FROM task_landings WHERE task_id = ?`,
 		1337,
-	).Scan(&taskID, &sessionID, &branch, &sha, &landedAt)
+	).Scan(&taskID, &sessionID, &sha, &landedAt)
 	if err != nil {
 		t.Fatalf("query: %v", err)
 	}
@@ -111,9 +110,6 @@ func TestExecTaskLanded_InsertsRow(t *testing.T) {
 	}
 	if sessionID.Valid {
 		t.Errorf("expected NULL session_id when actor has empty SessionID, got %d", sessionID.Int64)
-	}
-	if branch != "task/1337-stop-deleting-worktrees" {
-		t.Errorf("branch: got %q", branch)
 	}
 	if sha != "deadbeef" {
 		t.Errorf("merge_commit_sha: got %q", sha)
@@ -125,26 +121,30 @@ func TestExecTaskLanded_InsertsRow(t *testing.T) {
 	}
 }
 
-// TestExecTaskLanded_EmptyBranchRecordsNull covers the E-1719 record-only case:
-// an emitted task.landed with an empty branch records NULL, not "".
-func TestExecTaskLanded_EmptyBranchRecordsNull(t *testing.T) {
+// TestExecTaskLanded_LegacyBranchKeyIgnored is the compatibility claim E-2108
+// leaves behind: every task.landed already in the ledger carries a "branch" key
+// that TaskLandedPayload no longer declares, and the column it fed is gone. The
+// event must still execute — a rebuild replays the whole ledger — so the key has
+// to be dropped silently rather than rejected or written somewhere.
+func TestExecTaskLanded_LegacyBranchKeyIgnored(t *testing.T) {
 	db := newLandingTestDB(t)
 	evt := landedEvent(t, 1337, "")
-	payload, _ := json.Marshal(TaskLandedPayload{Branch: "", MergeCommitSHA: "6671bca9"})
-	evt.Payload = payload
+	evt.Payload = json.RawMessage(
+		`{"branch":"task/1337-stop-deleting-worktrees","merge_commit_sha":"6671bca9"}`,
+	)
 
 	if _, err := execTaskLanded(db, evt); err != nil {
-		t.Fatalf("execTaskLanded: %v", err)
+		t.Fatalf("execTaskLanded on a pre-E-2108 payload: %v", err)
 	}
 
-	var branch sql.NullString
+	var sha string
 	if err := db.QueryRow(
-		"SELECT branch FROM task_landings WHERE task_id = ?", 1337,
-	).Scan(&branch); err != nil {
+		"SELECT merge_commit_sha FROM task_landings WHERE task_id = ?", 1337,
+	).Scan(&sha); err != nil {
 		t.Fatalf("query: %v", err)
 	}
-	if branch.Valid {
-		t.Errorf("expected NULL branch for empty-branch landing, got %q", branch.String)
+	if sha != "6671bca9" {
+		t.Errorf("merge_commit_sha: got %q, want %q", sha, "6671bca9")
 	}
 }
 
@@ -155,7 +155,7 @@ func TestExecTaskLanded_HistoricalTSSetsLandedAt(t *testing.T) {
 	db := newLandingTestDB(t)
 	evt := landedEvent(t, 1337, "")
 	evt.TS = kairosTS(time.Date(2026, 5, 9, 18, 30, 0, 0, time.UTC))
-	payload, _ := json.Marshal(TaskLandedPayload{Branch: "", MergeCommitSHA: "6671bca9"})
+	payload, _ := json.Marshal(TaskLandedPayload{MergeCommitSHA: "6671bca9"})
 	evt.Payload = payload
 
 	if _, err := execTaskLanded(db, evt); err != nil {
@@ -215,7 +215,6 @@ func TestExecTaskLanded_AppendsOnReland(t *testing.T) {
 	// Second land (re-land after a follow-up commit)
 	second := landedEvent(t, 1337, "")
 	secondPayload, _ := json.Marshal(TaskLandedPayload{
-		Branch:         "task/1337-stop-deleting-worktrees",
 		MergeCommitSHA: "feedface",
 	})
 	second.Payload = secondPayload

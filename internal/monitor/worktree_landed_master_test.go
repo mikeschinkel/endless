@@ -45,7 +45,7 @@ func newMasterFixture(t *testing.T) *masterFixture {
 
 	root := fixtureRepo(t, "master")
 	const taskID = 42
-	branch := "task/42-probe"
+	branch := "task/42"
 	worktree := filepath.Join(root, ".endless", "worktrees", "e-42")
 	mustGit(t, root, "worktree", "add", "-b", branch, worktree)
 
@@ -98,9 +98,9 @@ func (f *masterFixture) land(t *testing.T, landedAt time.Time) string {
 	mustGit(t, f.root, "merge", "--ff-only", f.branch)
 	sha := mustGit(t, f.root, "rev-parse", "HEAD")
 	if _, err := f.db.Exec(
-		`INSERT INTO task_landings (task_id, branch, base_branch, merge_commit_sha, landed_at)
-		 VALUES (?, ?, 'master', ?, ?)`,
-		f.taskID, f.branch, sha, landedAt.UTC().Format("2006-01-02T15:04:05"),
+		`INSERT INTO task_landings (task_id, base_branch, merge_commit_sha, landed_at)
+		 VALUES (?, 'master', ?, ?)`,
+		f.taskID, sha, landedAt.UTC().Format("2006-01-02T15:04:05"),
 	); err != nil {
 		t.Fatalf("record landing: %v", err)
 	}

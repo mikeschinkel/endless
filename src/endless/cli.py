@@ -2090,7 +2090,7 @@ def task_landed(item_id, project, show_all, limit, llm, as_json, no_limit):
 
     Bare `task landed` lists tasks that have landed at least once, most
     recent first. `task landed <id>` shows that task's full landing history
-    (every land's timestamp, branch, and merge SHA).
+    (every land's timestamp and merge SHA).
     """
     from endless.task_cmd import landed_list, landed_item
     if item_id is not None:
@@ -3830,14 +3830,12 @@ def worktree_sandbox(task_id):
               help="Record a landing that already happened (no git). Requires --sha.")
 @click.option("--sha", default=None,
               help="Merge commit SHA for --record-only.")
-@click.option("--branch", default=None,
-              help="Branch for --record-only; omit to record NULL (branch gone).")
 @click.option("--at", default=None,
               help="Landing timestamp (RFC3339) for --record-only; default: the --sha commit date.")
-def worktree_land(task_id, dry_run, record_only, sha, branch, at):
+def worktree_land(task_id, dry_run, record_only, sha, at):
     """Auto-commit endless-managed modifications, rebase, ff-merge, remove worktree."""
     from endless.worktree_cmd import land_worktree
-    land_worktree(task_id, dry_run, record_only=record_only, sha=sha, branch=branch, at=at)
+    land_worktree(task_id, dry_run, record_only=record_only, sha=sha, at=at)
 
 
 @worktree_cmd.command("diagnose")
