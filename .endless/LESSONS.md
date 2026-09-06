@@ -5206,3 +5206,7 @@ The cost was concrete: Mike ran `just verify E-2030` before landing and got "no 
 
 Use `git rev-list --count main..HEAD` AND `--count HEAD..main`, or `git status -sb`, which prints both.
 - **Project**: endless
+
+### [2026-09-06] My own earlier writing is evidence, not authority
+An earlier session of mine wrote E-1934's description, over-reaching on where the gate should live. Reading it back later, I treated it as settled fact and built a plan on it, then defended a docstring line the same way. Mike: 'That is like writing a note to yourself and later assuming what you wrote was infallible.' A description, a docstring, an analysis I wrote — all are a prior claim by someone with no more information than I have now, and often less. Check them against the code the same way I would check a stranger's. When a note and the code disagree, the code wins and the note gets corrected.
+- **Project**: endless
