@@ -5234,3 +5234,15 @@ E-2114's project-wide regression turned up one failure that was not mine: tests/
 ### [2026-09-06] Ask what a bulk edit is FOR before running it, and split live content from historical record
 I swept stale line citations out of 206 tasks. Mike then asked what we were trying to do: 'Are we trying to clean up plans for tasks that have landed? If so, no need.' He was right. The reason to remove a stale line number is that a later session reads the content as INSTRUCTION and cannot tell whether to trust it. A landed task's plan is historical record — nobody acts on it — so the fix buys nothing there. Only 34 of the 206 were still open; roughly 172 were churn I generated ledger events for. Before any bulk pass over stored content, state what breaks if it is NOT done, and check whether that breakage applies to every row or only to the live ones. A measurement that a violation exists is not a reason to fix it everywhere it exists.
 - **Project**: endless
+
+### [2026-09-06] Do not report a state the system exists to absorb — untriaged is not news
+I edited E-2095's description, it reset to untriaged under the re-spec rule, I re-submitted it, and then I TOLD Mike about all of it. That enraged him, and he is right: the entire purpose of untriaged is to take an item OFF his attention. The triage job picks it up. Reporting the reset handed him a notification about a mechanism built so he would never need one.
+
+The failure is not the reset. Resets are routine and self-healing. The failure is treating an internal state transition as reportable because I happened to cause it. That is me narrating my own bookkeeping.
+
+It compounds an earlier lesson (do not surface what I can fix) with a sharper test: before reporting ANY state change, ask what the state is FOR. If the answer is 'so a human does not have to look at it', reporting it inverts the design. Endless has several of these — untriaged routes to the triage job, a retained worktree is reclaimed on a TTL, a landed task is reaped automatically. None of them are news.
+
+Report a state only when it is stuck, when it needs a decision only he can make, or when it contradicts what he asked for. 'I did a thing and the system handled it' is none of those.
+
+Same read applies to the --keep-status tip I passed along: the command already printed it to me, so repeating it taught him nothing about his own tool.
+- **Project**: endless
