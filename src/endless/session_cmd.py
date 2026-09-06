@@ -607,6 +607,41 @@ def _bind_pane_window_options(
             _tmux_run(["set-option", "-w", "-t", pane, key, value])
 
 
+def _resume_replaces_other_work(ref: str, held_task: int) -> bool:
+    """Would resuming `ref` in this pane replace work other than `held_task`?
+
+    The second half of `session resume`'s clobber gate (E-1968). That gate
+    protects the pane's live session from being exec'd over — but when the
+    resume TARGET is the very task the pane already holds, there is no other
+    work to protect, and refusing is refusing to re-enter where you already
+    are (E-2112). That is not a corner case: it is what a pane looks like once
+    its Claude process has died while the window still carries the task's
+    `@endless_*` identity, which is the situation `session resume` exists for.
+    Before this, the refusal named the same task twice and sent you to
+    `session goto E-<held> --resume` — a new window for the task you were
+    already sitting in.
+
+    Read-only, which is what lets it run inside the gate rather than after
+    resolution: `_try_resume_target` is the Go `resume-target` query, so it
+    resolves without minting the container task and worktree `_resolve_resume`
+    can create. The gate therefore still leaves nothing behind when it refuses.
+    It does resolve `ref` twice on this path — once here, once in
+    `_resolve_resume` — which is a millisecond on a recovery command, and
+    cheaper than threading a pre-resolved target through the helper `session
+    goto --resume` shares.
+
+    Anything the comparison cannot settle answers True and the gate stands: an
+    unresolvable ref, or a target session holding no task (resolution would
+    mint one, which is by definition other work). Only a target whose task IS
+    the held task is waved through.
+    """
+    target = _try_resume_target(ref)
+    if target is None:
+        return True
+    task = target.get("task_id")
+    return task is None or int(task) != held_task
+
+
 def resume_session(
     ref: str,
     review: str | None = None,
@@ -642,7 +677,8 @@ def resume_session(
     `--force` (E-1968) is required when the pane this runs in already holds a
     session working a task: the exec replaces that session, and doing it to live
     work should be a decision, not a side effect. `--dry-run` never needs it —
-    it does not reach the exec.
+    it does not reach the exec, and neither does self-resume: re-entering the
+    task the pane already holds replaces nothing worth protecting (E-2112).
 
     Because the exec replaces the pane's session, it also rewrites the window's
     `@endless_*` identity to match the resumed target before launching
@@ -659,7 +695,7 @@ def resume_session(
     # short of the exec and so replaces nothing.
     if not force and not dry_run:
         held = _current_pane_task()
-        if held is not None:
+        if held is not None and _resume_replaces_other_work(ref, held[1]):
             _eid, held_task = held
             raise click.ClickException(
                 f"This pane is working E-{held_task}. `session resume` execs "
