@@ -5270,3 +5270,7 @@ Mike, at the end of his rope: my compulsion to opine on --keep-status and untria
 ### [2026-09-06] whats-left reports only what blocks archiving THIS session, not other sessions' tasks
 I listed 'verify E-2121' and 'verify E-2114' on Mike's archive checklist while he was sitting in the E-1934 session. He asked why he would verify or land those from E-1934's worktree. He would not. A task filed from this session gets its own session and worktree, and verifying or landing it happens THERE, by whoever is working it. Filing a task hands it off; it does not leave a residue on the filer's checklist. What belongs on the archive list is only what this session still holds: its own bound task, its own uncommitted or unlanded work, and decisions I filed that need his review. Another session's unverified task is that session's business.
 - **Project**: endless
+
+### [2026-09-06] endless task next is deprecated — do not put it on Mike's list
+I closed a whats-left report with 'endless task next on E-2106 and E-2109'. Mike: 'endless task next is deprecated.' Its --help still renders with no deprecation banner, which is how I reached for it, but that is not evidence it is current. Two rules follow. Do not recommend a command to Mike on the strength of --help alone when it is not one I have seen used this session. And a backlog task sitting in  is not an archive blocker at all — it is the backlog doing its job, so it did not belong on the list under any verb.
+- **Project**: endless
