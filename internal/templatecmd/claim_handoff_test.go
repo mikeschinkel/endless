@@ -289,6 +289,79 @@ func TestRender_Handoff_WorktreeRemovalIsCategorical(t *testing.T) {
 	}
 }
 
+// TestRender_Handoff_DiscoveryBranchesSurviveCompression is E-2120's guard on
+// the mid-task discovery rule.
+//
+// Bullet 1 used to ask whether a finding could be done "inside the work already
+// underway" — a topical-membership question, which sessions answered honestly
+// and correctly: a stray id in a guide paragraph is not part of `verb update`'s
+// subject, so they fell through to "otherwise file it". That reading was given
+// as the justification for over-filing more than once. The axis is what the fix
+// costs to make and to review; the bound the guide actually protects is a LARGE
+// unrelated change, which is a size test.
+//
+// The branch with no other guard is the ASK. This partial has lost material to
+// compression before — it folded docs/guide/tasks.md's numbered tests into
+// three bullets and kept neither the framing nor the override clause, and
+// nothing failed. So each obligation is pinned individually, against RENDERED
+// output for the per-type wrappers and the claim wrapper alike, and the retired
+// phrasing is pinned as a negative so a future edit cannot quietly restore the
+// purity test.
+func TestRender_Handoff_DiscoveryBranchesSurviveCompression(t *testing.T) {
+	// Matched against whitespace-flattened output, so an expectation is the
+	// sentence a session reads rather than one template's line breaks.
+	wants := []string{
+		// The axis, and the failure mode named outright.
+		"The test is COST and reviewer confusion, not kinship",
+		`"not a pure example of this task" is not a reason to file`,
+		// The real bound, kept: size, not relatedness.
+		"The bound is size — a large or risky unrelated change still splits out",
+		// Bullet 1's third obligation. The commit message and the reply are
+		// transient; the task row is what anyone reads later.
+		"record the grown scope on the task",
+		"`endless task update E-9999 --text-file <path> --keep-status --db main`",
+		// The branch that routes the residue to the user instead of into
+		// `task add`, with the shape that makes the question answerable.
+		"ASK me before filing — that call is mine, not yours",
+		"the case for filing, the case against, and your recommendation",
+		// Filing survives as the answer to that question, still linked back.
+		"`--cleans-up E-9999`",
+	}
+	// The wording that made bullet 1 a kinship test.
+	const retired = "inside the work already underway"
+
+	for _, typ := range handoffTypes {
+		t.Run(typ, func(t *testing.T) {
+			root := projectFixture(t)
+			vars := handoffVarsForType(typ)
+
+			for _, name := range []string{"handoff/" + typ, "handoff/claim"} {
+				out, errOut, err := runRenderInProject(t, root, name, vars)
+				if err != nil {
+					t.Fatalf("render %s: %v\nstderr: %s", name, err, errOut)
+				}
+				flat := flattenWhitespace(out)
+
+				if strings.Contains(flat, retired) {
+					t.Errorf("%s restored the kinship test %q\n--- output ---\n%s",
+						name, retired, flat)
+				}
+				// A brainstorm files its resolved ideas by design and renders
+				// its own branch, so the discovery tests are not addressed to
+				// it. The negative above still is.
+				if typ == "brainstorm" {
+					continue
+				}
+				for _, w := range wants {
+					if !strings.Contains(flat, w) {
+						t.Errorf("%s missing %q\n--- output ---\n%s", name, w, flat)
+					}
+				}
+			}
+		})
+	}
+}
+
 // flattenWhitespace collapses every run of whitespace to a single space so an
 // expectation can be written as the sentence a session reads, independent of
 // where a template happens to wrap it.
@@ -352,4 +425,3 @@ func TestRender_Handoff_VerifyPartialNamesTheSuiteLocation(t *testing.T) {
 		})
 	}
 }
-

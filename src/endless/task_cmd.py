@@ -4913,33 +4913,31 @@ def update_plan(
             effective_parent = row[0]["parent_id"]
         _reject_maybe_with_parent(effective_phase, effective_parent)
 
-    # E-1762: auto-reopen a done task whose plan text is actually edited.
-    # Editing tasks.text on a done task adds unshipped scope, so the done-status
-    # becomes a lie and the task stays hidden from session monitor. Flip it to
-    # `revisit` so the reopened work is honestly signaled and re-surfaces. Guards:
-    #   - only a REAL text change (identical re-write is a no-op),
-    #   - only from a completed-successfully status (reuse the reopen set;
-    #     obsolete/declined are deliberate decisions, not revivals),
-    #   - an explicit --status in the same update wins (intent), as does
-    #     --keep-status (typo/formatting-only edit),
-    #   - epics are excluded: their only done-state is `completed`, and flipping
-    #     an epic to revisit would trip the E-1542 pause gate for every in-flight
-    #     descendant session — too blunt for a plan tweak (flip by hand instead).
-    auto_revisit_type = task_type if task_type is not None else row[0]["type"]
-    text_changed = text is not None and text != (row[0]["text"] or "")
-    auto_revisit = (
-        not keep_status
-        and status is None
-        and text_changed
-        and auto_revisit_type != "epic"
-        and row[0]["status"] in _REOPENABLE_TERMINAL_STATUSES
-    )
+    # E-2120 removed the plan-edit auto-revisit (E-1762). It flipped a
+    # terminal-status task to `revisit` whenever its plan text actually changed,
+    # inferring "the work needs redoing" from an edit that, on a finished task,
+    # usually records what shipped. That inference was calibrated when such an
+    # edit was rare and therefore suspicious; the discovery rules in
+    # `docs/guide/tasks.md` now REQUIRE a session to record grown scope on the
+    # task it folded work into, so the common case inverted and the inference
+    # became wrong more often than right.
+    #
+    # It also fired a user-owned edge. `{From: Assumed, To: Revisit, Actor:
+    # ActorUser, "reopens — shipped work found wrong"}` in
+    # internal/taskstatus/transitions.go (with twins from Confirmed and
+    # Completed) is the transition it drove, and `revisit` cannot reach a
+    # terminal status again — so documenting what shipped destroyed the
+    # verification the user had granted, recoverable only by walking the task
+    # back through underway/unverified for them to re-close by hand.
+    #
+    # Reopening keeps its explicit spelling, `--status revisit`, and stays the
+    # user's to make. The edges are untouched; only the inference is gone.
 
     # E-1845: a material description edit resets a pre-work task to `untriaged`.
     # The description IS the spec that triage (untriaged → unplanned/submitted)
     # and approval (submitted → ready) were judged against, so rewriting it
     # invalidates those judgments — the task has to be looked at again. Guards
-    # mirror E-1762's auto-revisit above:
+    # (they were shared with the auto-revisit E-2120 removed above):
     #   - only a REAL change (an identical re-write is a no-op),
     #   - an explicit --status in the same update wins (intent), as does
     #     --keep-status (typo/formatting-only edit),
@@ -4955,7 +4953,6 @@ def update_plan(
     auto_untriage = (
         not keep_status
         and status is None
-        and not auto_revisit
         and description_changed
         and row[0]["status"] in _DESCRIPTION_RESET_FROM
     )
@@ -4974,7 +4971,7 @@ def update_plan(
     untriage_target = "submitted" if plan_attached else "untriaged"
 
     # E-1913: `--keep-status` holds the status across EVERY auto-transition, not
-    # only the two guarded above. The plan-attach promotion (a pre-judgment task
+    # only the one guarded above. The plan-attach promotion (a pre-judgment task
     # + non-empty --text → `submitted`) is the one that used to leak through: it
     # lives in the Go executor, and the flag has no field in the event payload
     # to travel in. So cross the boundary in the vocabulary the executor already
@@ -4985,9 +4982,9 @@ def update_plan(
     # inert in the executor: whenever one is present it also rewrites
     # `completed_at` and clears the tier of a terminal-status task, so pinning
     # unconditionally would restamp the completion time of a `confirmed` task
-    # whose plan text was merely typo-fixed — the E-1762 case this flag has
-    # always served. `status is None` is not re-checked here: passing both
-    # --status and --keep-status was rejected at the top of this function.
+    # whose plan text was merely typo-fixed. `status is None` is not re-checked
+    # here: passing both --status and --keep-status was rejected at the top of
+    # this function.
     keep_status_pin = (
         keep_status
         and plan_attached
@@ -5005,8 +5002,6 @@ def update_plan(
 
     if status is not None:
         _add("status", status)
-    elif auto_revisit:
-        _add("status", "revisit")
     elif auto_untriage:
         _add("status", untriage_target)
     elif keep_status_pin:
@@ -5103,22 +5098,40 @@ def update_plan(
         payload={"fields": fields},
     )
 
+    # E-2120: audience-gate the status render. An agent is shown the fields it
+    # ASKED to change; a status entry it did not ask for — the E-1845
+    # description-edit reset, the tier-1 advance — is a completed, correct
+    # transition it can do nothing about, and every one of them got relayed to
+    # the user as if it were news, spending the scarcest resource in the loop.
+    # Rewording that output was tried (E-1859) and did not take: the stimulus is
+    # the PRESENCE of agent-addressed text about a status, not its phrasing, so
+    # the fix has to be the audience gate rather than a third rewrite.
+    #
+    # A human running the command interactively still sees all of it, unchanged
+    # — there the status line and the advisory below are the useful part.
+    #
+    # `status is None` is the whole "did it ask for this" test: an explicit
+    # --status is a field the agent named, and every other status entry in
+    # `changes` was inferred from some other edit.
+    #
+    # The gate is `agent_help.agent_facing()` rather than a fourth spelling of
+    # the same question — E-1966, E-2006 and E-2097 each folded a competing
+    # spelling into that one function.
+    agent_reading = agent_help.agent_facing()
+    rendered = (
+        [c for c in changes if c[0] != "status"]
+        if agent_reading and status is None
+        else changes
+    )
+
     # Header title reflects the new title if it was changed in this update.
     header_title = fields.get("title", row[0]["title"]) or row[0]["description"]
-    _emit_field_changes(item_id, header_title, changes)
+    _emit_field_changes(item_id, header_title, rendered)
 
-    # E-1762: explain the auto-flip. The field render above already shows
-    # `Status: <old> -> revisit`; this line names WHY and the escape hatch.
-    if auto_revisit:
-        click.echo(
-            f"{task_id_display(item_id)} was '{row[0]['status']}'; plan text "
-            f"changed → status set to revisit "
-            f"(pass --keep-status to suppress for a typo/formatting-only edit)."
-        )
-
-    # E-1845: same shape as the auto-revisit note above — the field render
-    # already shows `Status: <old> -> untriaged`; this names WHY and the hatch.
-    if auto_untriage:
+    # E-1845: the field render above already shows `Status: <old> ->
+    # untriaged`; this names WHY and the escape hatch. Human-only (E-2120):
+    # an agent is shown the fields it asked to change and nothing else.
+    if auto_untriage and not agent_reading:
         because = (
             "re-spec'd and re-planned in one call"
             if plan_attached

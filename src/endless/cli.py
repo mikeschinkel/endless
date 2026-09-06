@@ -2619,9 +2619,9 @@ def task_add(title, description, description_file, text, text_file, analysis_tex
                    "(repeatable; escape hatch for the path gate).")
 @click.option("--keep-status", is_flag=True,
               help="Hold the current status: no auto-transition fires for this edit "
-                   "(plan-attach promotion, description-edit reset, done-task "
-                   "auto-revisit, tier-1 advance). For a typo- or formatting-only "
-                   "edit. Cannot be combined with --status.")
+                   "(plan-attach promotion, description-edit reset, tier-1 "
+                   "advance). For a typo- or formatting-only edit. Cannot be "
+                   "combined with --status.")
 @click.option("--clear", "clear_fields", multiple=True,
               type=click.Choice(CLEARABLE_CONTENT_FIELDS),
               help="Erase a content field, naming it (repeatable). --<field>-file "

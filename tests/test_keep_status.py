@@ -1,17 +1,21 @@
 """Tests for E-1913: `--keep-status` holds the status across EVERY auto-transition.
 
-`task update` infers a status change from what you edited, in four places:
+`task update` infers a status change from what you edited, in three places:
 
   1. non-empty `--text` on a pre-judgment task      -> `submitted`  (E-1266/E-1648)
   2. a material `--description` edit on pre-work    -> `untriaged`  (E-1845)
-  3. a real `--text` edit on a done task            -> `revisit`    (E-1762)
-  4. `--tier 1` on a pre-judgment task              -> `ready`
+  3. `--tier 1` on a pre-judgment task              -> `ready`
 
-Legs 2 and 3 were already guarded by the flag. Leg 1 leaked: the promotion
-lives in the Go executor, and the flag had no way to cross the Python-to-
-executor boundary — so appending a line to an `unplanned` task's plan silently
-promoted it, which is how E-1671 lost a deliberately-unapproved status. Leg 4
-was never guarded either.
+Leg 2 was already guarded by the flag. Leg 1 leaked: the promotion lives in the
+Go executor, and the flag had no way to cross the Python-to-executor boundary —
+so appending a line to an `unplanned` task's plan silently promoted it, which is
+how E-1671 lost a deliberately-unapproved status. Leg 3 was never guarded
+either.
+
+There was a fourth: a real `--text` edit on a done task inferred `revisit`
+(E-1762). E-2120 removed the inference rather than the guard, so that edit is
+now inert with the flag or without it; the last section here holds what remains
+true about it.
 
 The flag now means exactly what its name says: the status you see is the status
 you keep. Its siblings — the no-op-on-identical-rewrite guard and the
@@ -110,9 +114,49 @@ def test_keep_status_suppresses_the_description_reset(seeded_project_at_cwd):
     assert _status_of(item_id) == "ready"
 
 
-# --- leg 3: the done-task auto-revisit (E-1762, already guarded) -------------
+# --- the retired leg: a plan edit on a done task (E-1762 -> E-2120) ----------
 
-def test_keep_status_suppresses_the_done_task_auto_revisit(seeded_project_at_cwd):
+def test_a_plan_edit_on_a_done_task_infers_nothing(seeded_project_at_cwd):
+    """The inference is gone, so the flag is not what holds the status here.
+
+    E-1762 read a real `--text` change on a finished task as unshipped scope and
+    flipped it to `revisit`. Recording what shipped is now an obligation on any
+    session that folds discovered work into the task it is on, so that edit is
+    routine — and `revisit` has no edge back to `assumed`, so the flip destroyed
+    a verification the user had granted, to report an edit the session was told
+    to make.
+    """
+    item_id = task_cmd.add_item(title="Add a thing", description="short")
+    task_cmd.update_plan(item_id=item_id, text="# plan\n")
+    _finish(item_id, "assumed")
+
+    task_cmd.update_plan(item_id=item_id, text="# plan\n\n## Also shipped\nx\n")
+
+    row = _row(item_id)
+    assert row["status"] == "assumed", "no status is inferred from the edit"
+    assert "## Also shipped" in row["text"], "the plan edit still lands"
+
+
+def test_a_plan_edit_on_a_done_task_reports_no_status_change(
+    capsys, seeded_project_at_cwd
+):
+    """Nothing moved, so nothing about status is printed — to either audience."""
+    item_id = task_cmd.add_item(title="Add a thing", description="short")
+    task_cmd.update_plan(item_id=item_id, text="# plan\n")
+    _finish(item_id, "assumed")
+    capsys.readouterr()
+
+    task_cmd.update_plan(item_id=item_id, text="# plan\n\n## Also shipped\nx\n")
+
+    out = capsys.readouterr().out
+    assert "Status:" not in out, out
+    assert "revisit" not in out, out
+
+
+def test_keep_status_on_a_done_task_still_holds(seeded_project_at_cwd):
+    """The flag is now redundant here, not wrong: it is what the discovery
+    rules tell a session to pass, and it must stay a no-op rather than an
+    error or a surprise."""
     item_id = task_cmd.add_item(title="Add a thing", description="short")
     task_cmd.update_plan(item_id=item_id, text="# plan\n")
     _finish(item_id, "assumed")
@@ -147,7 +191,7 @@ def test_keep_status_on_a_done_task_does_not_restamp_completed_at(
     assert after["completed_at"] == before, "the completion time is history"
 
 
-# --- leg 4: the tier-1 planning exemption -----------------------------------
+# --- leg 3: the tier-1 planning exemption -----------------------------------
 
 @pytest.mark.parametrize("start", ["untriaged", "unplanned"])
 def test_keep_status_suppresses_the_tier_1_advance(start, seeded_project_at_cwd):

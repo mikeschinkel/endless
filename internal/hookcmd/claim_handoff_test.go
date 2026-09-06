@@ -143,6 +143,11 @@ func TestHandlePostToolUseSession_ClaimDeliversHandoff(t *testing.T) {
 		// E-2016: and NOT `completed` either — findings work reports done at
 		// the review gate and leaves the terminal to the user.
 		"--status unreviewed --outcome-file <path> --db main",
+		// E-2120: the discovery rule reaches a claimed-in session too — the
+		// cost axis for folding work in, and the branch that puts the filing
+		// decision in front of the user instead of taking it alone.
+		"The test is COST and reviewer confusion, not kinship",
+		"ASK me before filing",
 	}
 	for _, w := range wants {
 		if !strings.Contains(handoff, w) {

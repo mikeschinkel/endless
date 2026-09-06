@@ -22,15 +22,49 @@
 Your worktree is: {{.worktree_path}} (branch {{.branch}}) — confirm with `pwd`. Don't edit the main checkout. The worktree routes DB access to a sandbox, so every `endless` command that must reach the main database takes `--db main`.
 {{- end}}
 
+{{/*
+  E-2120 rewrote the non-brainstorm discovery branch. The old bullet 1 asked
+  "could it reasonably be done now, INSIDE THE WORK ALREADY UNDERWAY?" — a
+  topical-membership question, and sessions answered it honestly: a stray id in
+  a guide paragraph is not part of `verb update`'s subject, so they fell through
+  to "otherwise file it". That is the wrong axis, and it had been given as the
+  justification for over-filing more than once. The axis is what the fix costs
+  to make and to review; the real bound the guide protects is a LARGE unrelated
+  change, which is a size test, not a kinship test.
+
+  Bullet 1 also carries a third obligation now: record the grown scope on the
+  task. The commit message and the reply are both transient — the commit is
+  found only by someone already reading that diff, the reply dies with the
+  session — so a task whose plan describes only its original scope is a lie
+  about what shipped under it.
+
+  And filing is no longer a branch the session takes alone. A session that files
+  reflexively inflates the backlog; one that drops a finding silently loses it.
+  It has the context to explain a finding and not the standing to rule on
+  whether it earns a row, so the terminal branch is a QUESTION with a fixed
+  shape (what, why it matters to someone who was not here, for, against,
+  recommendation) and the user's answer decides.
+*/ -}}
 {{define "handoff_focus" -}}
 Stay focused on E-{{.spawned_id}} — one session, one task. {{if eq .task_type "brainstorm"}}As ideas resolve into concrete work, file them as new tasks (`--cleans-up E-{{.spawned_id}}`) or decisions (`endless decision add`) rather than building inline.
    Filing more than one? Check whether they share a root cause — file the
    cause, not each symptom.{{else}}For anything you discover along the way:
-   - Could it reasonably be done now, inside the work already underway? Do it —
-     note it in the commit message, and say so in your reply draft.
+   - Could it reasonably be done now? Do it — note it in the commit message,
+     record the grown scope on the task (`endless task update E-{{.spawned_id}}
+     --text-file <path> --keep-status --db main`), and say so in your reply
+     draft. The test is COST and reviewer confusion, not kinship: "not a pure
+     example of this task" is not a reason to file, and a fix cheaper to make
+     than the task row describing it gets folded in. The bound is size — a
+     large or risky unrelated change still splits out, because it inflates the
+     diff you are reviewed on, couples two changes into one land, and widens a
+     revert's blast radius.
    - Is it a bug in work THIS session landed? Reopen that task
      (`endless task update E-NNN --status revisit --db main`) and fix it there.
-   - Otherwise file it (`--cleans-up E-{{.spawned_id}}`) and confirm before
+   - Otherwise ASK me before filing — that call is mine, not yours. Give me
+     what you saw and why it would matter to someone who was not in this
+     session, the case for filing, the case against, and your recommendation.
+     File or drop it on my answer.
+   - Filing on that answer: `--cleans-up E-{{.spawned_id}}`, and confirm before
      implementing.
    - Filing more than one? Check whether they share a root cause — file the
      cause, not each symptom.{{end}}

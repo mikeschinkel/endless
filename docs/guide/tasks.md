@@ -176,21 +176,36 @@ Use the task ID printed by `task add` **literally**. IDs advance globally across
 
 ### Work you discover mid-task (`--cleans-up`)
 
-**Filing is one of four answers, not the default.** When you spot a bug, a rough edge, or an obvious cleanup while working a task, run these tests in order — the handoff every spawned session receives carries the same four:
+**Filing is one of five answers, not the default — and it is never yours alone.** When you spot a bug, a rough edge, or an obvious cleanup while working a task, run these tests in order — the handoff every spawned session receives carries the same five:
 
-{{if .report_gate}}**1. Could it reasonably be done now, inside the work already underway?** Then do it. Note it in the commit message, and put it in your reply draft so your user learns the scope grew without having to read the diff:
+{{if .report_gate}}**1. Could it reasonably be done now?** Then do it, and do all three parts: note it in the commit message, record the grown scope on the task itself, and put it in your reply draft so your user learns the scope grew without having to read the diff:
 
 ```bash
+# The task row is what posterity reads; the commit and the reply are transient.
+endless task update <id> --text-file <path> --keep-status
 # Discoveries go in your reply draft; the minimizer decides what survives.
 endless task report <id> --draft-file <path>
 ```
-{{else}}**1. Could it reasonably be done now, inside the work already underway?** Then do it. Note it in the commit message, and say so in your reply so your user learns the scope grew without having to read the diff.
+{{else}}**1. Could it reasonably be done now?** Then do it, and do all three parts: note it in the commit message, record the grown scope on the task itself (`endless task update <id> --text-file <path> --keep-status`), and say so in your reply so your user learns the scope grew without having to read the diff.
 {{end}}
-"Reasonably, inside the work already underway" is a real bound, not a license. A drive-by that is *unrelated* to what you are changing stays a separate task: fixing it inline inflates the diff your user reviews, couples two unrelated changes into one land, hides the change the task was actually about, and expands the blast radius of a revert.
+**The test is cost and reviewer confusion, not kinship.** How big is the fix, and would carrying it in this diff mislead whoever reviews it? "Not a pure example of this task" is not a reason to file — a one-line fix in a file you already have open is cheaper to make than the task row describing it. Do not let purity get in the way of proficiency.
+
+The bound this test really protects is **size**, not relatedness: a *large or risky* drive-by stays a separate task, because fixing it inline inflates the diff your user reviews, couples two unrelated changes into one land, hides the change the task was actually about, and expands the blast radius of a revert. A small unrelated fix does none of that.
+
+Recording the grown scope is not optional. The commit message is found only by someone already reading that diff, and your reply dies with the session; the task row is what anyone reads later. A task whose plan describes only its original scope is a lie about what shipped under it. `--keep-status` says the edit records history rather than re-specifying the work.
 
 **2. Is it a bug in work THIS session landed?** Then reopen the task that shipped it — `endless task update E-<id> --status revisit` — and fix it there. A defect in your own landed work is that task done wrong, not a new task. See [Fix a bug in your own landed work](orchestration.md#fix-a-bug-in-your-own-landed-work).
 
-**3. Otherwise, file it** — a new task linked back to the one you're on, and confirm with your user before implementing it:
+**3. Otherwise, ask your user before filing.** You have the context to explain a finding; you do not have the standing to rule on whether it earns a row. Filing reflexively inflates the backlog your user has to review, prioritize and schedule; dropping it silently loses a real finding. So put the decision in front of them, in this shape:
+
+- **What you observed**, and why it would matter to someone who was not in this session. Enough to understand the purpose and no more — not a repro transcript, not a diff, not a plan.
+- **The case for filing:** what goes unfixed or unremembered if it is dropped, who trips over it next, whether it compounds.
+- **The case against:** the review and scheduling cost, whether an existing task already owns the area, whether it is a symptom of something already filed, whether noticing it again later costs less than carrying the row.
+- **Your recommendation**, so your user is ratifying a judgement rather than doing the triage themselves.
+
+They answer; you file or drop on that answer.
+
+**4. Filing on that answer** — a new task linked back to the one you're on, and confirm with your user before implementing it:
 
 ```bash
 endless task add "Verb-first title" --cleans-up <current_id> --description "What you saw and why it matters"
@@ -198,9 +213,9 @@ endless task add "Verb-first title" --cleans-up <current_id> --description "What
 
 `cleans_up` is the canonical follow-up link (see [When to use each relation type](#when-to-use-each-relation-type)), so the discovery stays attached to the work that surfaced it and shows up as a follow-up on the parent task's `task show`.
 
-**4. Filing more than one?** Check whether they share a root cause — file the cause, not each symptom. Two tasks that trace to one defect are one task; see [Lean toward FEWER tasks](#lean-toward-fewer-tasks) for why.
+**5. Filing more than one?** Check whether they share a root cause — file the cause, not each symptom. Two tasks that trace to one defect are one task; see [Lean toward FEWER tasks](#lean-toward-fewer-tasks) for why.
 
-One case overrides test 1's bound: a drive-by you genuinely cannot complete the task without — a broken build, a test that fails for an unrelated reason. Fix the minimum that unblocks you even when it is otherwise out of scope, and say so explicitly in your report so the user isn't surprised by it in the diff.
+One case overrides test 1's bound: **a failure in a check you are obliged to run and report** — a red test, a lint error, a broken build in the project-wide regression you run before handing off. You cannot report that suite green while leaving it red, so fix the minimum that clears it even when the cause is otherwise out of scope, and say so explicitly in your report so the user isn't surprised by it in the diff. The override is about the obligation to report, not about being blocked: an unrelated red test rarely stops you finishing the task, and it is still yours to clear.
 
 ### Lean toward FEWER tasks
 
@@ -286,18 +301,19 @@ Attaching a non-empty plan (`--text`) to a `unplanned` task moves it to `submitt
 
 ### `--keep-status`: edit the content, infer nothing
 
-`task update` reads a status change out of what you edited, in four places:
+`task update` reads a status change out of what you edited, in three places:
 
 | The edit | Infers |
 |---|---|
 | non-empty `--text` on an `untriaged`/`unplanned` task | → `submitted` (plan attached = spec-complete) |
 | a material `--description` change on a pre-work task | → `untriaged` (the spec every later judgment was made against changed) |
-| a real `--text` change on a done task | → `revisit` (unshipped scope on a task that reads as finished) |
 | `--tier 1` on an `untriaged`/`unplanned` task | → `ready` (tier 1 is exempt from planning and triage) |
 
-**`--keep-status` suppresses all four.** The status you see is the status you keep. Reach for it when the edit is not a re-spec — a typo fix, a formatting pass, appending a finding to a plan that is deliberately parked at an unapproved status. Without it, a one-line append to an `unplanned` task's plan silently promotes it to `submitted`.
+**`--keep-status` suppresses all three.** The status you see is the status you keep. Reach for it when the edit is not a re-spec — a typo fix, a formatting pass, appending a finding to a plan that is deliberately parked at an unapproved status. Without it, a one-line append to an `unplanned` task's plan silently promotes it to `submitted`.
 
-`--keep-status` cannot be combined with `--status`; the call is refused rather than silently resolved. Naming a status is already the explicit way to say what the status should be, and it wins over all four inferences on its own.
+`--keep-status` cannot be combined with `--status`; the call is refused rather than silently resolved. Naming a status is already the explicit way to say what the status should be, and it wins over all three inferences on its own.
+
+**Editing a done task's plan changes nothing but the plan.** There was a fourth inference: a real `--text` change on a `confirmed`/`assumed`/`completed` task flipped it to `revisit`, reading the edit as unshipped scope. Recording what shipped is now an obligation (test 1 above), so that edit is routine and benign — and the flip cost a verification `revisit` cannot walk back. Reopening is still spelled `--status revisit`, and it is your user's call, not an inference.
 
 ### An empty `--<field>-file` is refused
 

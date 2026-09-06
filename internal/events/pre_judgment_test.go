@@ -21,7 +21,9 @@ func TestIsPreJudgmentStatus(t *testing.T) {
 		"underway":  false,
 		"revisit":   false,
 
-		// Post-implementation: E-1762's auto-revisit owns these, not this path.
+		// Post-implementation: a plan attached here records what shipped, and
+		// nothing infers a status from it (E-2120 removed E-1762's auto-revisit;
+		// reopening is the explicit `--status revisit`, and it is the user's).
 		"unverified": false,
 		"confirmed":  false,
 		"assumed":    false,
