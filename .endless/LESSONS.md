@@ -5226,3 +5226,7 @@ This is the PRODUCT rule in its most ordinary form. I work in a repo whose branc
 
 Before writing any branch name, path, date boundary or host into product text, ask: is this a fact about the software, or about this machine? If the second, find the resolver — for a repo's base branch it already exists. And check the whole document, not the line that was flagged: mine had the word in nine places, four of them product-facing.
 - **Project**: endless
+
+### [2026-09-06] A one-line fix found while running the regression gets done, not filed
+E-2114's project-wide regression turned up one failure that was not mine: tests/test_no_self_dev_ids.py red on a stray self-dev id in docs/guide/orchestration.md. I filed it as E-2119 and handed Mike an approval line. Wrong call. ED-1550: filing is the EXCEPTION, the default response to a finding is to tell the user in chat, and agents that file more than they close give the project no completion date. The session brief's 'could it reasonably be done now, inside the work already underway? Do it' branch was the one that applied - a single sentence in a doc file, in a tree I already had open, unbreaking a suite I had just run. The 'otherwise file it' branch is for work that needs its own plan, its own review, or its own risk envelope, not for work whose whole cost is smaller than the task row describing it. Test: if the fix is shorter than the description I would have to write for it, do the fix and say so in the reply.
+- **Project**: endless
