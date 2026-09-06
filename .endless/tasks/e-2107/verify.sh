@@ -171,28 +171,37 @@ assert_not_contains "C6: ...so no legend label leaks the status test" \
 
 section "E — what this task did NOT touch (C5, structural)"
 
-# Measured as "what E-2107's own commit changed", i.e. commit^..commit — NOT as
-# a diff against main. A merge-base against main answers this correctly only
-# until the task lands, after which the merge-base IS this commit and every
-# diff below is trivially empty: the check would go green by measuring nothing.
-# Commit-to-parent is the same answer before and after the land, and is immune
-# to main moving underneath.
-SHIP="$(git log --format='%H' --grep='^E-2107: ' -1 HEAD 2>/dev/null || true)"
-if [[ -z "${SHIP}" ]]; then
-    report_skip "blast radius" "E-2107's own commit is not in HEAD's history"
+# What E-2107 changed is the union of its OWN commits' diffs against their own
+# parents — never a range, and never a diff against main.
+#
+# Two traps this shape avoids, both of which produced a wrong answer here:
+#   - `git merge-base main HEAD` answers correctly only until the task lands.
+#     Afterwards the merge-base IS this work, so every diff under it is empty
+#     and the check goes green by measuring nothing.
+#   - Any range ending at HEAD attributes OTHER tasks' commits to this one:
+#     post-land these commits sit inside main's history with later lands after
+#     them.
+# Per-commit, diffed against its own parent, is the same answer before the land,
+# after it, and after any number of follow-up commits on this task.
+e2107_touched() {
+    local c
+    for c in $(git log --format='%H' --grep='^E-2107: ' HEAD); do
+        git diff --name-only "${c}^" "${c}" -- "$@"
+    done | LC_ALL=C sort -u
+}
+
+if [[ -z "$(git log --format='%H' --grep='^E-2107: ' -1 HEAD 2>/dev/null)" ]]; then
+    report_skip "blast radius" "no E-2107 commit in HEAD's history"
 else
-    BASE="${SHIP}^"
     assert_eq "internal/monitor is untouched — no new per-row git or DB probe" \
-        "" "$(git diff --name-only "${BASE}" "${SHIP}" -- internal/monitor)"
+        "" "$(e2107_touched internal/monitor)"
     assert_eq "the --json surface is untouched — it already carries status and unsettled" \
-        "" "$(git diff --name-only "${BASE}" "${SHIP}" -- "${PKG}/json.go")"
+        "" "$(e2107_touched "${PKG}/json.go")"
     # The shipped change, exhaustively: one renderer file, its tests, one guide
     # section. Anything else appearing here means the task grew a second job.
-    # LC_ALL=C so the comparison does not depend on the runner's collation.
     assert_eq "the shipped change is the renderer, its tests and the guide — nothing else" \
         "docs/guide/orchestration.md ${PKG}/session_status.go ${PKG}/session_status_test.go" \
-        "$(git diff --name-only "${BASE}" "${SHIP}" -- docs internal cmd src tests \
-            | LC_ALL=C sort | tr '\n' ' ' | sed 's/ $//')"
+        "$(e2107_touched docs internal cmd src tests | tr '\n' ' ' | sed 's/ $//')"
 fi
 
 # ⊙ must not already mean something else on another surface: the column shares
