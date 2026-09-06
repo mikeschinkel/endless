@@ -171,20 +171,27 @@ assert_not_contains "C6: ...so no legend label leaks the status test" \
 
 section "E — what this task did NOT touch (C5, structural)"
 
-BASE="$(git merge-base main HEAD 2>/dev/null || true)"
-if [[ -z "${BASE}" ]]; then
-    report_skip "blast radius" "no merge-base with main (detached or renamed default branch)"
+# Measured as "what E-2107's own commit changed", i.e. commit^..commit — NOT as
+# a diff against main. A merge-base against main answers this correctly only
+# until the task lands, after which the merge-base IS this commit and every
+# diff below is trivially empty: the check would go green by measuring nothing.
+# Commit-to-parent is the same answer before and after the land, and is immune
+# to main moving underneath.
+SHIP="$(git log --format='%H' --grep='^E-2107: ' -1 HEAD 2>/dev/null || true)"
+if [[ -z "${SHIP}" ]]; then
+    report_skip "blast radius" "E-2107's own commit is not in HEAD's history"
 else
+    BASE="${SHIP}^"
     assert_eq "internal/monitor is untouched — no new per-row git or DB probe" \
-        "" "$(git diff --name-only "${BASE}" -- internal/monitor)"
+        "" "$(git diff --name-only "${BASE}" "${SHIP}" -- internal/monitor)"
     assert_eq "the --json surface is untouched — it already carries status and unsettled" \
-        "" "$(git diff --name-only "${BASE}" -- "${PKG}/json.go")"
+        "" "$(git diff --name-only "${BASE}" "${SHIP}" -- "${PKG}/json.go")"
     # The shipped change, exhaustively: one renderer file, its tests, one guide
     # section. Anything else appearing here means the task grew a second job.
     # LC_ALL=C so the comparison does not depend on the runner's collation.
     assert_eq "the shipped change is the renderer, its tests and the guide — nothing else" \
         "docs/guide/orchestration.md ${PKG}/session_status.go ${PKG}/session_status_test.go" \
-        "$(git diff --name-only "${BASE}" -- docs internal cmd src tests \
+        "$(git diff --name-only "${BASE}" "${SHIP}" -- docs internal cmd src tests \
             | LC_ALL=C sort | tr '\n' ' ' | sed 's/ $//')"
 fi
 
