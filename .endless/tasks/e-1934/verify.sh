@@ -79,6 +79,19 @@ section "Clean content still loads"
 assert_contains "prose naming a function is accepted" "ACCEPTED" \
     "$(probe file text 'Rewrite _guard_content_rules in the resolver, then retest.')"
 
+section "project set names where the unsettable keys live"
+# Asserted against the message builder, not the CLI: the runner isolates HOME,
+# so no project is registered and `project set` refuses on the PROJECT before it
+# ever reaches the field check. tests/test_project_set_fields_help.py covers the
+# refusal path itself, with the resolution patched.
+set_msg="$(cd "$WT" && uv run python -c '
+import sys; sys.path.insert(0, "src")
+from endless.set_cmd import _fields_help
+print(_fields_help())' 2>&1 | tr '\n' ' ')"
+assert_contains "says which keys this command writes" "project set\` writes" "$set_msg"
+assert_contains "names the config file the rest live in" ".endless/config.json" "$set_msg"
+assert_contains "names content as one of them" "content" "$set_msg"
+
 section "The guide states the rule"
 assert_contains "tasks guide carries the no-time-frozen-specifics rule" \
     "No time-frozen specifics" \

@@ -15,6 +15,25 @@ SETTABLE_FIELDS = {
     "name", "label", "description", "language", "status",
 }
 
+# Keys that live in the same config file but that this command does not write.
+# Named in the refusal because "Settable fields: ..." read as "the config file
+# has five fields", which sent a reader looking for a flag that does not exist
+# instead of opening the file (E-1934). Not a whitelist and not validated — it
+# exists so the error can say where the rest of the config lives.
+FILE_ONLY_FIELDS = (
+    "content", "dependencies", "documents", "matchers", "minimizer", "self_dev",
+)
+
+
+def _fields_help() -> str:
+    """The two-line inventory both refusals end with: what this command writes,
+    and where everything else is edited."""
+    return (
+        f"  `project set` writes: {', '.join(sorted(SETTABLE_FIELDS))}\n"
+        f"  Other keys are edited directly in the project's "
+        f".endless/config.json: {', '.join(FILE_ONLY_FIELDS)}"
+    )
+
 # name.field=value (explicit project)
 NAMED_PATTERN = re.compile(r"^([a-z0-9][a-z0-9_-]*)\.(\w+)=(.*)$")
 # field=value (current directory)
@@ -37,8 +56,7 @@ def set_field(expression: str, path_hint: str | None = None):
                 "(in a project directory)\n"
                 "  endless project set <name>.<field>=<value>  "
                 "(from anywhere)\n"
-                f"Settable fields: "
-                f"{', '.join(sorted(SETTABLE_FIELDS))}"
+                + _fields_help()
             )
         field, value = m.group(1), m.group(2)
 
@@ -54,9 +72,7 @@ def set_field(expression: str, path_hint: str | None = None):
 
     if field not in SETTABLE_FIELDS:
         raise click.ClickException(
-            f"Unknown field '{field}'. "
-            f"Settable fields: "
-            f"{', '.join(sorted(SETTABLE_FIELDS))}"
+            f"Unknown field '{field}'.\n" + _fields_help()
         )
 
     project_path = resolved(project["path"])
