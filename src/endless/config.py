@@ -209,6 +209,93 @@ def project_is_self_dev(project_path: Path) -> bool:
     return bool(cfg.get("self_dev", False))
 
 
+# Extensions whose `name.ext:NNN` form is read as a source citation (E-1934).
+# Deliberately broad: under-matching lets the defect back in, and a project that
+# finds an entry noisy removes it with content.extensions.unblock. Many of these
+# are also ccTLDs (rs, py, pl, sh, ml, cc, md, tf), which is why the citation
+# scan must skip URL-shaped tokens rather than lean on this set alone.
+CITATION_EXTENSIONS: frozenset[str] = frozenset({
+    # systems
+    "go", "rs", "zig", "nim", "c", "h", "cc", "cpp", "cxx", "hpp", "hh", "m", "mm",
+    # jvm / .net
+    "java", "kt", "kts", "scala", "clj", "cljs", "cs", "fs",
+    # scripting
+    "py", "rb", "php", "pl", "lua", "sh", "bash", "zsh", "fish", "ps1", "tcl",
+    # js / ts / web
+    "js", "jsx", "mjs", "cjs", "ts", "tsx", "vue", "svelte", "astro",
+    "html", "htm", "css", "scss", "sass", "less",
+    # functional and other
+    "ex", "exs", "erl", "hs", "ml", "swift", "dart", "r", "jl",
+    # data and config
+    "json", "yaml", "yml", "toml", "ini", "cfg", "conf", "xml", "csv", "tsv",
+    "env", "properties",
+    # docs
+    "md", "markdown", "rst", "adoc", "txt", "tex",
+    # build and schema
+    "mk", "cmake", "gradle", "bzl", "just", "tf", "tfvars", "proto",
+    "graphql", "gql", "sql",
+})
+
+
+def project_content_config(project_path: Path) -> dict:
+    """The project's durable-content gate settings (E-1934).
+
+        "content": {
+          "extensions": {"block": ["phtml"], "unblock": ["md"]},
+          "gates": {"absolute_paths": true, "line_citations": true}
+        }
+
+    Absent file, absent key, or unreadable all mean BOTH GATES ON with the
+    built-in extension set, so a project that has never heard of the setting is
+    still protected.
+
+    `block` and `unblock` layer over CITATION_EXTENSIONS rather than replacing
+    it: the set runs to eighty-odd entries and a project adding one extension
+    must not have to restate the rest.
+
+    Listing an extension in BOTH is refused, not resolved. Two settings spelling
+    contradictory intent is the ambiguity `--clear` against a field flag and
+    `--status` against `--keep-status` already refuse; picking a winner here
+    would mean the config file says one thing and the gate does another.
+
+    Raises ValueError on that conflict. The caller converts it — this module
+    does not import click.
+    """
+    gates = {"absolute_paths": True, "line_citations": True}
+    default = {"extensions": CITATION_EXTENSIONS, "gates": gates}
+
+    cfg = project_config_read(project_path)
+    if cfg is None:
+        return default
+    content = cfg.get("content")
+    if not isinstance(content, dict):
+        return default
+
+    out_gates = dict(gates)
+    declared_gates = content.get("gates")
+    if isinstance(declared_gates, dict):
+        for key in ("absolute_paths", "line_citations"):
+            if isinstance(declared_gates.get(key), bool):
+                out_gates[key] = declared_gates[key]
+
+    exts = set(CITATION_EXTENSIONS)
+    declared_exts = content.get("extensions")
+    if isinstance(declared_exts, dict):
+        block = {e.lower().lstrip(".") for e in declared_exts.get("block") or ()}
+        unblock = {e.lower().lstrip(".") for e in declared_exts.get("unblock") or ()}
+        both = block & unblock
+        if both:
+            raise ValueError(
+                "content.extensions lists "
+                + ", ".join(sorted(both))
+                + " under both block and unblock; they say opposite things. "
+                "Remove the extension from one of the two lists."
+            )
+        exts = (exts | block) - unblock
+
+    return {"extensions": frozenset(exts), "gates": out_gates}
+
+
 def project_minimizer_config(project_path: Path) -> dict[str, bool]:
     """The project's minimizer switches (E-1953, reshaped by E-1975).
 

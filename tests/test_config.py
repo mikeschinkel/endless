@@ -79,3 +79,73 @@ def test_mark_as_group(isolated_env):
     cfg = config.project_config_read(group_dir)
     assert cfg["type"] == "group"
     assert cfg["name"] == "my-group"
+
+
+# ═══ E-1934 — durable-content gate settings ════════════════════════════════
+
+import json as _json
+
+import pytest as _pytest
+
+from endless.config import CITATION_EXTENSIONS, project_content_config
+
+
+def _project(tmp_path, content):
+    (tmp_path / ".endless").mkdir(parents=True, exist_ok=True)
+    (tmp_path / ".endless" / "config.json").write_text(
+        _json.dumps({"name": "probe", "content": content})
+    )
+    return tmp_path
+
+
+def test_absent_config_means_both_gates_on_with_the_builtin_set(tmp_path):
+    cfg = project_content_config(tmp_path)
+    assert cfg["gates"] == {"absolute_paths": True, "line_citations": True}
+    assert cfg["extensions"] == CITATION_EXTENSIONS
+
+
+def test_block_adds_to_the_default_rather_than_replacing_it(tmp_path):
+    root = _project(tmp_path, {"extensions": {"block": ["phtml"]}})
+    exts = project_content_config(root)["extensions"]
+    assert "phtml" in exts
+    assert "go" in exts, "block must layer over the default, not replace it"
+
+
+def test_unblock_removes_one_entry_and_leaves_the_rest(tmp_path):
+    root = _project(tmp_path, {"extensions": {"unblock": ["md"]}})
+    exts = project_content_config(root)["extensions"]
+    assert "md" not in exts
+    assert "go" in exts
+
+
+def test_a_leading_dot_and_mixed_case_are_accepted(tmp_path):
+    root = _project(tmp_path, {"extensions": {"block": [".PHTML"]}})
+    assert "phtml" in project_content_config(root)["extensions"]
+
+
+def test_an_extension_in_both_lists_is_refused_not_resolved(tmp_path):
+    """Two settings spelling contradictory intent is the ambiguity --clear
+    against a field flag and --status against --keep-status already refuse.
+    Picking a winner would let the config file say one thing and the gate do
+    another."""
+    root = _project(tmp_path, {"extensions": {"block": ["go"], "unblock": ["go"]}})
+    with _pytest.raises(ValueError) as exc:
+        project_content_config(root)
+    assert "go" in str(exc.value)
+    assert "both" in str(exc.value)
+
+
+@_pytest.mark.parametrize("gate", ["absolute_paths", "line_citations"])
+def test_either_gate_can_be_switched_off(tmp_path, gate):
+    root = _project(tmp_path, {"gates": {gate: False}})
+    gates = project_content_config(root)["gates"]
+    assert gates[gate] is False
+    other = "line_citations" if gate == "absolute_paths" else "absolute_paths"
+    assert gates[other] is True, "the switches are independent"
+
+
+def test_a_malformed_content_block_falls_back_to_the_defaults(tmp_path):
+    root = _project(tmp_path, "not-a-dict")
+    cfg = project_content_config(root)
+    assert cfg["gates"] == {"absolute_paths": True, "line_citations": True}
+    assert cfg["extensions"] == CITATION_EXTENSIONS

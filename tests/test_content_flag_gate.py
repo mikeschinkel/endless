@@ -1,29 +1,48 @@
-"""E-1744: the inline-content path gate at cli._resolve_content_flag.
+"""E-1744: the content gate at cli._resolve_content_flag.
 
-Inline flags (--text/--outcome/--description/--analysis) store their argument
-verbatim; passing a file path silently discarded the intended content (the
-corruption that lost E-1626/E-1564). Two rules block that:
+Three checks, and they are two different KINDS of check (E-1934):
 
-  Rule 1 — the whole value IS a path token (absolute OR relative).
-  Rule 2 — the content contains an ABSOLUTE path anywhere.
+  MIS-PASSED FLAG — the whole value IS a path token, absolute or relative.
+    Inline flags store their argument verbatim, so passing a path silently
+    discarded the intended content: the corruption that lost E-1626/E-1564.
+    Inline-only, and correctly so — handing a path to --<name>-file is that
+    flag's entire purpose, so there is nothing to catch on the file branch.
 
-Relative tokens mid-content are always allowed; --allow-path <regex> (repeatable)
-exempts a matching absolute path from both rules. These tests hit the predicate
-directly; .endless/tasks/e-1744/verify.sh covers the same rules end-to-end via CLI.
+  ABSOLUTE PATH anywhere in the content.
+  LINE CITATION anywhere in the content (name.ext:NNN).
+    Rules about what durable content may SAY. Both run on RESOLVED content, so
+    a file is judged exactly as inline text is. Content does not become portable,
+    or stop going stale, because it arrived in a file.
 
-E-1794 narrowed what counts as a path for both rules — see the section at the
-foot of this file — and reordered Rule 2's advice to lead with --allow-path.
+Relative tokens mid-content are always allowed. --allow-path <regex> (repeatable)
+exempts a matching absolute path; the citation check has no escape hatch by
+decision. These tests hit the predicates directly; the per-task verify suites
+cover the same rules end-to-end via CLI.
+
+E-1794 narrowed what counts as a path — see the section at the foot of this
+file — and reordered the absolute-path advice to lead with --allow-path.
 """
 
 import click
 import pytest
 
-from endless.cli import _guard_inline_content, _resolve_content_flag
+from endless.cli import (
+    _guard_content_rules,
+    _guard_inline_content,
+    _resolve_content_flag,
+)
+
+
+def _gate(value, name="text", allow=()):
+    """Both checks a caller of an inline flag actually meets, in order —
+    the same pair, in the same sequence, that _resolve_content_flag runs."""
+    _guard_inline_content(value, name, allow)
+    _guard_content_rules(value, name, allow, whole_value_checked=True)
 
 
 def _blocked(value, name="text", allow=()):
     with pytest.raises(click.ClickException) as exc:
-        _guard_inline_content(value, name, allow)
+        _gate(value, name, allow)
     return str(exc.value)
 
 
@@ -77,13 +96,13 @@ def test_rule2_absolute_in_content_blocks(value):
 ])
 def test_allowed_content_passes(value):
     # Must not raise.
-    _guard_inline_content(value, "text", ())
+    _gate(value, "text", ())
 
 
 # ─── Escape hatch — --allow-path <regex> (repeatable) ───────────────────────
 
 def test_allow_path_exempts_matching_absolute():
-    _guard_inline_content("see /opt/corp/spec.md for the API", "text",
+    _gate("see /opt/corp/spec.md for the API", "text",
                           (r"^/opt/corp/",))
 
 
@@ -95,13 +114,13 @@ def test_allow_path_second_nonmatching_still_blocks():
 
 
 def test_allow_path_repeatable_covers_multiple():
-    _guard_inline_content("refs /opt/corp/spec.md and /opt/acme/api.md", "text",
+    _gate("refs /opt/corp/spec.md and /opt/acme/api.md", "text",
                           (r"^/opt/corp/", r"^/opt/acme/"))
 
 
 def test_allow_path_exempts_rule1_whole_value_when_absolute():
     # A whole-value absolute path matching an allow regex is exempt from Rule 1.
-    _guard_inline_content("/opt/corp/spec.md", "text", (r"^/opt/corp/",))
+    _gate("/opt/corp/spec.md", "text", (r"^/opt/corp/",))
 
 
 # ─── Built-in allowed paths — endless's own config + cache dirs ──────────────
@@ -113,23 +132,23 @@ def test_allow_path_exempts_rule1_whole_value_when_absolute():
 ])
 def test_builtin_config_cache_dirs_allowed_without_allow_path(value):
     # endless's own config/cache dirs are always exempt — no --allow-path needed.
-    _guard_inline_content(value, "text", ())
+    _gate(value, "text", ())
 
 
 def test_builtin_absolute_home_expanded_form_allowed(tmp_path, monkeypatch):
     # The /Users/... (already-absolute) spelling of ~/.config/endless is exempt.
     from pathlib import Path
     cfg = Path.home() / ".config" / "endless" / "endless.db"
-    _guard_inline_content(f"see {cfg} for the ledger", "text", ())
+    _gate(f"see {cfg} for the ledger", "text", ())
 
 
 def test_builtin_honors_xdg_config_home(monkeypatch):
     # A path under $XDG_CONFIG_HOME/endless is exempt (resolution honors XDG).
     monkeypatch.setenv("XDG_CONFIG_HOME", "/tmp/fake-xdg-cfg")
-    _guard_inline_content("cfg at /tmp/fake-xdg-cfg/endless/config.json here",
+    _gate("cfg at /tmp/fake-xdg-cfg/endless/config.json here",
                           "text", ())
     # HOME-anchored ~/.config/endless stays exempt even under XDG redirection.
-    _guard_inline_content("db at ~/.config/endless/endless.db here", "text", ())
+    _gate("db at ~/.config/endless/endless.db here", "text", ())
     # A sibling under the XDG root but NOT under /endless still blocks.
     assert "contains an absolute path" in _blocked(
         "x at /tmp/fake-xdg-cfg/other/y here")
@@ -138,7 +157,7 @@ def test_builtin_honors_xdg_config_home(monkeypatch):
 def test_builtin_honors_xdg_cache_home(monkeypatch):
     # A path under $XDG_CACHE_HOME/endless is exempt.
     monkeypatch.setenv("XDG_CACHE_HOME", "/tmp/fake-xdg-cache")
-    _guard_inline_content("sandbox at /tmp/fake-xdg-cache/endless/sandboxes/e-1 here",
+    _gate("sandbox at /tmp/fake-xdg-cache/endless/sandboxes/e-1 here",
                           "text", ())
 
 
@@ -169,11 +188,23 @@ def test_resolve_inline_path_blocks():
         _resolve_content_flag("/tmp/x.md", None, "text")
 
 
-def test_resolve_file_content_is_never_gated(tmp_path):
-    # A file that itself contains an absolute path loads fine — --<name>-file is
-    # the sanctioned way to load real content.
+def test_resolve_file_content_is_gated_too(tmp_path):
+    """E-1934 reversed this. It used to assert the opposite — that a file's
+    CONTENT was trusted because --<name>-file is the sanctioned way to load a
+    file. That conflated the flag with what it carries. E-2089 measured the cost:
+    a third of stored plans hold a file-and-line reference, and a plan is
+    long-form, so it arrives by --text-file — through the branch that was exempt.
+    """
     p = tmp_path / "plan.md"
     p.write_text("the sandbox lives at /tmp/anything and that is fine here")
+    with pytest.raises(click.ClickException) as exc:
+        _resolve_content_flag(None, str(p), "text")
+    assert "absolute path" in str(exc.value)
+
+
+def test_resolve_file_content_without_a_violation_still_loads(tmp_path):
+    p = tmp_path / "plan.md"
+    p.write_text("the sandbox lives under the endless cache dir, resolved at run time")
     assert _resolve_content_flag(None, str(p), "text").startswith("the sandbox")
 
 
@@ -197,7 +228,7 @@ from endless.cli import _is_absolute_path, _is_path_shaped
 ])
 def test_slash_separated_notation_is_not_a_whole_value_path(value):
     # Must not raise: Rule 1 no longer fires on a bare slash-separated token.
-    _guard_inline_content(value, "description", ())
+    _gate(value, "description", ())
 
 
 def test_extension_signal_still_wins_over_notation_as_a_whole_value():
@@ -215,7 +246,7 @@ def test_extension_signal_still_wins_over_notation_as_a_whole_value():
 
 
 def test_notation_in_prose_passes_including_the_vendor_form():
-    _guard_inline_content(
+    _gate(
         "an in-family custom type is pytest/vnd.newclarity.uv, never "
         "vnd/newclarity/foo", "description", ())
 
@@ -228,7 +259,7 @@ def test_notation_in_prose_passes_including_the_vendor_form():
 ])
 def test_bare_slash_is_punctuation_not_an_absolute_path(value):
     # Must not raise: a leading slash counts only when a path follows it.
-    _guard_inline_content(value, "description", ())
+    _gate(value, "description", ())
 
 
 @pytest.mark.parametrize("value", [
@@ -269,7 +300,7 @@ def test_is_path_shaped_leaves_urls_alone():
 
 def test_allow_path_leads_the_rule2_advice():
     msg = _blocked("see /tmp/x.md here")
-    assert msg.index("--allow-path") < msg.index("put real content inline")
+    assert msg.index("--allow-path") < msg.index("project-relative")
 
 
 def test_rule2_does_not_offer_a_file_flag_for_a_description():
@@ -282,10 +313,13 @@ def test_rule2_does_not_offer_a_file_flag_for_a_description():
 
 
 @pytest.mark.parametrize("name", ["text", "analysis", "outcome"])
-def test_rule2_still_offers_the_file_flag_for_long_form_fields(name):
+def test_the_file_flag_is_no_longer_offered_as_the_way_out(name):
+    """E-1934: the file branch is gated now, so naming --<name>-file as the
+    remedy would hand the reader a route that refuses them one command later."""
     msg = _blocked("see /tmp/x.md here", name=name)
-    assert f"--{name}-file" in msg
-    assert ".endless/tmp/" in msg
+    assert f"--{name}-file" not in msg
+    assert "--allow-path" in msg
+    assert "project-relative" in msg
 
 
 def test_rule2_keeps_explaining_why():
@@ -342,7 +376,7 @@ def test_a_one_segment_token_is_decided_not_deferred():
 ])
 def test_slash_commands_and_bare_dirs_are_not_absolute_paths(value):
     # Must not raise.
-    _guard_inline_content(value, "text", ())
+    _gate(value, "text", ())
 
 
 @pytest.mark.parametrize("value", [
@@ -509,3 +543,71 @@ def test_clear_does_not_disturb_other_fields():
 def test_clear_of_nothing_is_a_passthrough():
     resolved = {"text": "a plan", "analysis": None}
     assert _apply_clear_flags((), resolved) == resolved
+
+
+# ═══ E-1934 — line citations ═══════════════════════════════════════════════
+#
+# ED-1073 forbids time-frozen specifics in durable content and was widened to
+# cover every field. Nothing enforced it: E-2089 measured 129 of 412 stored
+# plans carrying a file-and-line reference, and not decaying.
+#
+# A citation is name.ext:NNN with a KNOWN extension, optionally :COL or -END.
+# A bare :NNN is deliberately not matched — nobody writes one, and the shape
+# collides with clock times, host:port and ratios.
+
+@pytest.mark.parametrize("value", [
+    "the gate is in cli.py:2249 today",
+    "internal/monitor/session.go:55 does the upsert",
+    "cli.py:12-40 covers the range",
+    "cli.py:12:5 is line and column",
+    "wrapped `task_cmd.py:4387` in backticks",
+    "[the gate](src/endless/cli.py:2249) as a markdown link",
+])
+def test_line_citations_block(value):
+    msg = _blocked(value)
+    assert "cites a line number" in msg
+
+
+@pytest.mark.parametrize("value", [
+    "ES-1060 ran 06:00:57 to 06:01:27, thirty seconds",
+    "bind to localhost:8080 in development",
+    "an aspect ratio of 16:9 or 4:3",
+    "a bare :2279 is not a citation anyone writes",
+    "version v1.2:30 of the spec",
+    "example.com:8080 is a host and port",
+])
+def test_colon_numbers_that_are_not_citations_pass(value):
+    _gate(value)
+
+
+@pytest.mark.parametrize("value", [
+    "see https://example.com/a/b.py:80 for the source",
+    "mail user@host.py:12 about it",
+    "www.example.md:99 is a website",
+])
+def test_url_shaped_tokens_are_never_citations(value):
+    """Load-bearing, not decoration: rs, py, pl, sh, ml, cc, md and tf are all
+    ccTLDs as well as source extensions, so the extension set cannot separate a
+    citation from an address on its own."""
+    _gate(value)
+
+
+def test_an_unknown_extension_is_not_a_citation():
+    _gate("the record at customer.acme:2249 is unrelated")
+
+
+def test_the_citation_refusal_names_the_remedy_and_offers_no_escape():
+    msg = _blocked("the gate is in cli.py:2249 today")
+    assert "no\n  --allow flag" in msg or "no --allow flag" in msg
+    assert "go stale" in msg
+    assert "function, command or symbol" in msg
+
+
+def test_citations_block_on_the_file_branch_too(tmp_path):
+    """The regression that proves the placement. A plan is long-form, so it
+    arrives by --text-file; gating inline only would miss most of them."""
+    p = tmp_path / "plan.md"
+    p.write_text("Rewrite the helper in src/endless/cli.py:2249 and retest.\n")
+    with pytest.raises(click.ClickException) as exc:
+        _resolve_content_flag(None, str(p), "text")
+    assert "cites a line number" in str(exc.value)

@@ -2190,6 +2190,36 @@ def _absolute_path_tokens(content):
             yield tok
 
 
+# A source citation: a filename with a known extension, then :LINE, optionally
+# followed by :COL or -ENDLINE. The path half forbids colons so a clock time or
+# a host:port cannot be dragged into the match (E-1934).
+_LINE_CITATION_RE = re.compile(
+    r"^[^\s:]+?\.(?P<ext>[A-Za-z][A-Za-z0-9]{0,9}):\d+(?:[:-]\d+)?$"
+)
+# Token shapes that are addresses, not citations. Checked before the extension
+# set rather than after, because the set cannot settle this on its own: rs, py,
+# pl, sh, ml, cc, md and tf are all ccTLDs as well as source extensions.
+_URL_MARKERS = ("://", "@")
+
+
+def _line_citation_tokens(content, extensions):
+    """Yield tokens in *content* that cite a file by line number.
+
+    A bare :NNN is deliberately not matched. Nobody writes a leading-colon line
+    number in prose, and the shape collides with clock times, host:port pairs
+    and ratios — all of which are legitimate durable content.
+    """
+    for raw in content.split():
+        tok = raw.lstrip(_LEAD_STRIP).rstrip(_TRAIL_STRIP)
+        if not tok:
+            continue
+        if any(m in tok for m in _URL_MARKERS) or tok.lower().startswith("www."):
+            continue
+        m = _LINE_CITATION_RE.match(tok)
+        if m and m.group("ext").lower() in extensions:
+            yield tok
+
+
 def _builtin_allowed_dirs():
     """endless's own config + cache dirs — ALWAYS exempt from the path gate (both
     rules), no --allow-path needed. Docs and plans legitimately reference stable
@@ -2230,63 +2260,122 @@ _SHORT_INLINE_FIELDS = ("description",)
 
 
 def _gate_alternative(name):
-    """The second remedy in the Rule 2 refusal — what to do when you do NOT want
-    to keep the path. Second on purpose: --allow-path leads, because an agent
-    takes the first sanctioned option it is offered, and when that option was
-    "rephrase the content" the gate got satisfied by distorting the very content
-    it exists to protect (E-1794)."""
+    """The second remedy in the absolute-path refusal — what to do when you do
+    NOT want to keep the path. Second on purpose: --allow-path leads, because an
+    agent takes the first sanctioned option it is offered, and when that option
+    was "rephrase the content" the gate got satisfied by distorting the very
+    content it exists to protect (E-1794).
+
+    It no longer offers --<name>-file as the way out. E-1934 moved the content
+    rules onto resolved content, so a file is judged exactly as inline text is;
+    naming it here would hand the reader a route that now refuses them, which is
+    the failure this whole gate exists to stop happening quietly."""
     if name in _SHORT_INLINE_FIELDS:
         return (
             f"Otherwise put real content inline — a {name} is short metadata, "
             f"not a document."
         )
     return (
-        f"Otherwise put real content inline, or author scratch under "
-        f".endless/tmp/ and load it with --{name}-file; a cross-project file "
-        f"can be referenced by a Git URL."
+        "Otherwise write the path project-relative, or reference a "
+        "cross-project file by Git URL."
     )
 
 
+def _path_exempt(path, allow_paths):
+    """True if *path* escapes the absolute-path checks. Single composition point
+    for the effective allowed set: built-in endless config/cache dirs
+    (always-on) + per-invocation --allow-path regexes."""
+    if _under_allowed_dir(path, _builtin_allowed_dirs()):
+        return True
+    expanded = os.path.expanduser(path)
+    return any(
+        re.compile(p).search(path) or re.compile(p).search(expanded)
+        for p in allow_paths
+    )
+
+
+def _content_gate_settings():
+    """Project settings for the two content checks. Falls back to the built-in
+    defaults outside a project, so the gate never silently switches itself off
+    for want of a config file."""
+    from endless import config
+    root = config.enclosing_project_root()
+    if root is None:
+        return {"extensions": config.CITATION_EXTENSIONS,
+                "gates": {"absolute_paths": True, "line_citations": True}}
+    try:
+        return config.project_content_config(root)
+    except ValueError as e:
+        raise click.ClickException(str(e))
+
+
 def _guard_inline_content(inline, name, allow_paths):
-    """Block a mis-passed file path (Rule 1: the whole value IS a path token,
-    absolute or relative) or an absolute path embedded anywhere in otherwise-inline
-    content (Rule 2). Single composition point for the effective allowed set:
-    built-in endless config/cache dirs (always-on) + per-invocation --allow-path
-    regexes. An exempt absolute path escapes both rules; relative tokens
-    mid-content are always allowed."""
-    patterns = [re.compile(p) for p in allow_paths]
-    allowed_dirs = _builtin_allowed_dirs()
+    """Block a file path mis-passed to an inline flag: the whole value IS a path
+    token, absolute or relative.
 
-    def _exempt(path):
-        # Built-in: under one of endless's own config/cache dirs (always-on).
-        if _under_allowed_dir(path, allowed_dirs):
-            return True
-        # Per-invocation: matches a --allow-path regex.
-        expanded = os.path.expanduser(path)
-        return any(rx.search(path) or rx.search(expanded) for rx in patterns)
-
+    INLINE ONLY, and correctly so — this is a flag-usage check, not a content
+    rule. Passing a path to `--<name>-file` is that flag's whole purpose, so
+    there is no mistake to catch on the file branch. The two CONTENT rules that
+    used to live here moved to _guard_content_rules (E-1934), which runs on
+    resolved content instead."""
     stripped = inline.strip()
-    # Rule 1 — the whole value is a single path token (absolute OR relative).
     if stripped and len(stripped.split()) == 1 and _is_path_shaped(stripped):
         is_abs = _is_absolute_path(os.path.expanduser(stripped))
-        if not (is_abs and _exempt(stripped)):
+        if not (is_abs and _path_exempt(stripped, allow_paths)):
             raise click.ClickException(
                 f"--{name} received a file path ({stripped!r}). --{name} stores its "
                 f"argument verbatim as inline content; to load a file's content use "
                 f"--{name}-file."
             )
-        return
 
-    # Rule 2 — any absolute path token appearing anywhere in the content.
-    for tok in _absolute_path_tokens(inline):
-        if _exempt(tok):
-            continue
-        raise click.ClickException(
-            f"--{name} content contains an absolute path ({tok!r}). To keep this "
-            f"path, add --allow-path with a regex matching it. {_gate_alternative(name)} "
-            f"Absolute paths don't belong in durable ledger content — they're "
-            f"non-portable, and a /tmp path is lost when a worktree drops."
+
+def _guard_content_rules(content, name, allow_paths, whole_value_checked=False):
+    """Refuse durable content that names an absolute path or cites a line number.
+
+    Runs on RESOLVED content — inline OR file-loaded. That placement is the
+    point (E-1934): these are rules about what durable content may SAY, and
+    content does not become portable, or stop going stale, because it arrived in
+    a file. E-2089 measured the cost of the old inline-only placement — a third
+    of stored plans carry a file-and-line reference, and a plan is long-form, so
+    it arrives by --<name>-file.
+
+    `whole_value_checked` says the caller already ran the mis-passed-flag check,
+    so a content that is ENTIRELY one path token has been judged and cleared
+    there and must not be re-reported here with a worse message. Only the inline
+    branch sets it: on the file branch there is no mis-pass to have cleared, so a
+    file holding nothing but an absolute path is judged like any other."""
+    settings = _content_gate_settings()
+    gates = settings["gates"]
+
+    if gates["absolute_paths"]:
+        stripped = content.strip()
+        whole_value_path = (
+            whole_value_checked
+            and stripped
+            and len(stripped.split()) == 1
+            and _is_path_shaped(stripped)
         )
+        if not whole_value_path:
+            for tok in _absolute_path_tokens(content):
+                if _path_exempt(tok, allow_paths):
+                    continue
+                raise click.ClickException(
+                    f"--{name} content contains an absolute path ({tok!r}). To keep this "
+                    f"path, add --allow-path with a regex matching it. {_gate_alternative(name)} "
+                    f"Absolute paths don't belong in durable ledger content — they're "
+                    f"non-portable, and a /tmp path is lost when a worktree drops."
+                )
+
+    if gates["line_citations"]:
+        for tok in _line_citation_tokens(content, settings["extensions"]):
+            raise click.ClickException(
+                f"--{name} content cites a line number ({tok!r}). There is no "
+                f"--allow flag for this one, by decision.\n"
+                f"  Line numbers go stale the moment anything else lands, so a "
+                f"later session cannot tell whether to trust them.\n"
+                f"  Name the function, command or symbol instead — or better, "
+                f"state the search that finds the site."
+            )
 
 
 # ─── empty-file gate (E-2008) ────────────────────────────────────────────────
@@ -2337,10 +2426,12 @@ def _refuse_empty_file(path, content, name, clearable):
 def _resolve_content_flag(inline, file_path, name, allow_paths=(), clearable=False):
     """Resolve a paired `--<name>` (inline) / `--<name>-file` (path) option pair
     into content. Returns the content string, or None if neither was given.
-    Raises if both were given, the file does not exist or is empty (E-2008), or
-    an inline value fails the path gate (see _guard_inline_content).
-    `--<name>-file` content is otherwise trusted and never gated — it is the
-    sanctioned way to load a file.
+    Raises if both were given, the file does not exist or is empty (E-2008), if
+    an inline value is itself a mis-passed path (see _guard_inline_content), or
+    if the resolved content breaks a durable-content rule (see
+    _guard_content_rules). The content rules apply to BOTH branches: passing a
+    path to `--<name>-file` is that flag's sanctioned use, but what the file
+    HOLDS is judged exactly as inline content is.
 
     `clearable` says whether the calling command carries `--clear <field>`; it
     only shapes the empty-file refusal's recovery line. The `update` verbs set
@@ -2357,9 +2448,11 @@ def _resolve_content_flag(inline, file_path, name, allow_paths=(), clearable=Fal
         content = p.read_text()
         if not content.strip():
             _refuse_empty_file(p, content, name, clearable)
+        _guard_content_rules(content, name, allow_paths)
         return content
     if inline is not None:
         _guard_inline_content(inline, name, allow_paths)
+        _guard_content_rules(inline, name, allow_paths, whole_value_checked=True)
     return inline
 
 
