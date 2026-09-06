@@ -5246,3 +5246,7 @@ Report a state only when it is stuck, when it needs a decision only he can make,
 
 Same read applies to the --keep-status tip I passed along: the command already printed it to me, so repeating it taught him nothing about his own tool.
 - **Project**: endless
+
+### [2026-09-06] ED-1550's no-reopen rule has an exemption clause: work still live in the landing session
+Told to fix a stray self-dev id found during E-2114's regression, I claimed the follow-up task E-2119 and did the work in its own worktree, because E-2114 had already landed and ED-1550 says never reopen shipped work to extend it. I stopped reading one sentence too early. The rule continues: 'Work still live in the session that landed it is exempt.' E-2114 was still live in my session - I was mid-handoff, the worktree was open, nothing was archived - so the exemption applied and the fix belonged in E-2114's own commit with E-2119 obsoleted. Landed is not the test; whether the session that landed it is still holding the work is. Applying a rule from the half of it I remembered, when the other half was two clauses away and reversed the answer, cost a whole extra worktree, an extra task row, and a partial-state claim error. Read the exemption before applying the prohibition.
+- **Project**: endless
