@@ -5278,3 +5278,7 @@ I closed a whats-left report with 'endless task next on E-2106 and E-2109'. Mike
 ### [2026-09-06] Correction to the previous lesson: a backlog task in now phase is not an archive blocker
 The prior lesson about task next being deprecated was recorded through a shell that ate a backticked word, leaving a broken sentence. The intended second half, restated without backticks: a task sitting in the now phase is not a blocker to archiving a session. It is the backlog doing its job. It did not belong on the archive checklist under any verb, deprecated or not. Only work this session still holds belongs there.
 - **Project**: endless
+
+### [2026-09-06] Filing a task leaves one residue on the filer: spawning it, unless already spawned or later
+I told Mike a filed task leaves no residue on the filing session's checklist. He corrected me twice. First: 'There IS a residue on this session checklist; to SPAWN the task (but ONLY if not ALREADY spawned.)' The handoff completes at spawn, not at add — until then nobody owns the work. Second: 'But not if the task is a later task.' So the rule has three conditions, all required before a spawn line goes on the report: the task is phase now or urgent, it has no session bound and no worktree, and nobody else already spawned it. A later task is parked on purpose; spawning it would undo the phase decision. A duplicate spawn is worse than a missing line, so check state before listing, never from memory of having filed it.
+- **Project**: endless
