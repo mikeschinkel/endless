@@ -5282,3 +5282,19 @@ The prior lesson about task next being deprecated was recorded through a shell t
 ### [2026-09-06] Filing a task leaves one residue on the filer: spawning it, unless already spawned or later
 I told Mike a filed task leaves no residue on the filing session's checklist. He corrected me twice. First: 'There IS a residue on this session checklist; to SPAWN the task (but ONLY if not ALREADY spawned.)' The handoff completes at spawn, not at add — until then nobody owns the work. Second: 'But not if the task is a later task.' So the rule has three conditions, all required before a spawn line goes on the report: the task is phase now or urgent, it has no session bound and no worktree, and nobody else already spawned it. A later task is parked on purpose; spawning it would undo the phase decision. A duplicate spawn is worse than a missing line, so check state before listing, never from memory of having filed it.
 - **Project**: endless
+
+### [2026-09-07] Read --analysis, always; --text alone is not the task
+A task's design content routinely lives in --analysis, not --text. Many tasks have NO plan at all, so 'endless task show <id> --text' renders the analysis as a one-line teaser ('Analysis: NNNN chars (--analysis to display)') and I proceed on the description alone.
+
+Two halves of the same defect, both mine:
+
+1. Planning side: when planning a task I put substantive design content -- fix direction, second call sites, secondary defects, explicit do-not-do instructions -- into --analysis, then set the task ready to spawn. I wrote it for a future session to read.
+
+2. Reading side: the spawned session (me) follows the handoff, which says --text, and never opens --analysis. The content I deliberately wrote for that session is the content I then skip.
+
+Mike has been spawning those tasks believing the analysis was being read. It was not. Insights that were captured were silently dropped.
+
+On E-2122 the analysis held: the actual fix direction, a SECOND call site with the same defect, a separate REBASE_HEAD defect, and an explicit 'do not spend effort reconstructing this instance' that directly contradicted the handoff's 'reproduce the bug first'. None of it is in the description.
+
+Rule: never work a task from the description alone. Read every populated field before doing anything -- --analysis especially, and especially when --text returns no plan. A non-zero analysis char count in the render is a hard requirement to go read it, not a hint. When handoff instructions and the analysis conflict, the analysis is the authoritative design content: surface the conflict rather than silently following the handoff.
+- **Project**: endless
