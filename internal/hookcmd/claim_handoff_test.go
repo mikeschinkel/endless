@@ -169,7 +169,7 @@ func TestHandlePostToolUseSession_ClaimDeliversHandoff(t *testing.T) {
 func TestHandlePostToolUseSession_NonClaimYieldsNoHandoff(t *testing.T) {
 	fx := newClaimFixture(t)
 	for _, cmd := range []string{
-		"endless task show E-10 --text --db main",
+		"endless task show E-10 --all-fields --db main",
 		"endless task report E-10 --db main",
 		"endless task release",
 		`git commit -m "E-10: deliver the claim handoff"`,

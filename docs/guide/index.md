@@ -20,7 +20,7 @@ Endless is in active development — paving the cowpaths. Expect rough edges, ex
 
 When your user gives you a task ID:
 
-1. `endless task show <id> --text` — read the task and any attached plan.
+1. `endless task show <id> --all-fields` — read the task and any attached plan.
 2. `endless task claim <id>` — claim the task. This automatically creates a git worktree at `.endless/worktrees/e-<id>/` for your work. Every task gets its own worktree so multiple sessions can work in parallel without stepping on each other, and `main`'s working tree stays clean.
 3. Get into the worktree:
    - **`/cd <worktree-path>`** — the primary move for a Claude Code session. `task claim` prints the exact `/cd` line; running it changes Claude's own working directory, so every later tool (Read/Write/Edit, and a fresh Bash) defaults to the worktree instead of main. Do this once, right after claiming, and you no longer have to qualify paths to avoid editing main by accident. Pass an **absolute** path — `/cd` does not expand `~` or `$(...)`, and the first `/cd` into a directory prompts you to trust it.

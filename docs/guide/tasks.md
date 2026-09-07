@@ -46,6 +46,7 @@ endless task list --json
 
 # Detail for one task
 endless task show <id>
+endless task show <id> --all-fields
 endless task show <id> --text
 endless task show <id> --children
 endless task show <id> --outcome
