@@ -895,10 +895,49 @@ def _display_path(p: Path) -> str:
     return s.replace(home, "~", 1) if s.startswith(home) else s
 
 
+def _rebase_in_progress(worktree_path: Path) -> bool:
+    """True when a rebase is stopped mid-flight in this worktree.
+
+    `git rebase` keeps its state in the worktree's OWN git dir, so this is
+    per-worktree rather than per-repo: a rebase paused in a sibling worktree
+    does not make this one true.
+
+    Land reads conflict state (unmerged paths, REBASE_HEAD) only when this is
+    true for a rebase it started itself. Read unconditionally, that state can
+    belong to an entirely different operation — see `_rebase_failure_message`.
+    """
+    probe = _git_run(
+        ["rev-parse", "--absolute-git-dir"], cwd=worktree_path, check=False,
+    )
+    if probe.returncode != 0 or not probe.stdout.strip():
+        return False
+    git_dir = Path(probe.stdout.strip())
+    return (git_dir / "rebase-merge").exists() or (git_dir / "rebase-apply").exists()
+
+
+def _git_said(stderr: str | None) -> str:
+    """Git's own words about a failure, indented for quoting into a message.
+
+    The whole of E-2122 is that this text was captured in CalledProcessError
+    and thrown away, and a guess printed in its place. When git failed for a
+    reason land cannot classify, this IS the report.
+    """
+    lines = [ln.rstrip() for ln in (stderr or "").strip().splitlines() if ln.strip()]
+    if not lines:
+        return "  (git printed nothing on stderr)"
+    return "\n".join(f"  {ln}" for ln in lines)
+
+
 def _rebase_conflict_message(
-    worktree_path: Path, base_branch: str, *, phase: str
+    worktree_path: Path, base_branch: str, *, phase: str,
+    stderr: str | None = None,
 ) -> str:
     """Build the user-facing message for a rebase conflict encountered by land.
+
+    Only for a rebase that actually stopped on conflicting content. The caller
+    establishes that (non-empty `--diff-filter=U`) before choosing this over the
+    other reports in `_rebase_failure_message`; reaching here on a rebase that
+    never started produces the fiction E-2122 removed.
 
     Called from BOTH conflict handlers (Step 3.7 orphan-replay and Step 4 main
     rebase) WHILE the rebase is still in progress — before `git rebase --abort`
@@ -920,30 +959,38 @@ def _rebase_conflict_message(
 
     # Name the commit that failed to replay, if git exposes REBASE_HEAD, so the
     # user knows which of their commits hit the conflict.
-    head = _git_run(
-        ["rev-parse", "--short", "REBASE_HEAD"],
-        cwd=worktree_path, check=False,
-    )
+    #
+    # Gated on a rebase actually being in progress (E-2122). REBASE_HEAD is a
+    # plain ref: when no rebase is running it either does not resolve or still
+    # holds a value from a DIFFERENT operation, and reading it unconditionally
+    # reported someone else's commit as the cause of this failure.
     commit_line = ""
-    if head.returncode == 0 and head.stdout.strip():
-        short = head.stdout.strip()
-        subj = _git_run(
-            ["log", "-1", "--format=%s", "REBASE_HEAD"],
+    if _rebase_in_progress(worktree_path):
+        head = _git_run(
+            ["rev-parse", "--short", "REBASE_HEAD"],
             cwd=worktree_path, check=False,
-        ).stdout.strip()
-        commit_line = (
-            f"Your commit that failed to replay: {short} {subj}\n\n"
-            if subj else f"Your commit that failed to replay: {short}\n\n"
         )
+        if head.returncode == 0 and head.stdout.strip():
+            short = head.stdout.strip()
+            subj = _git_run(
+                ["log", "-1", "--format=%s", "REBASE_HEAD"],
+                cwd=worktree_path, check=False,
+            ).stdout.strip()
+            commit_line = (
+                f"Your commit that failed to replay: {short} {subj}\n\n"
+                if subj else f"Your commit that failed to replay: {short}\n\n"
+            )
 
     wt = _display_path(worktree_path)
     file_block = (
         "\n".join(f"  {f}" for f in files) if files else "  (none reported)"
     )
+    said = f"git said:\n{_git_said(stderr)}\n\n" if stderr else ""
     header = (
         f"rebase conflict while {phase}.\n\n"
         f"{commit_line}"
         f"Conflicting files:\n{file_block}\n\n"
+        f"{said}"
     )
 
     only_auto = bool(files) and all(_is_auto_file(f) for f in files)
@@ -981,6 +1028,69 @@ def _rebase_conflict_message(
         f"Inspect first:\n"
         f"  git -C {wt} log {base_branch}..HEAD\n"
         f"  git -C {wt} diff {base_branch}...HEAD\n"
+    )
+
+
+def _rebase_failure_message(
+    worktree_path: Path, base_branch: str, *, phase: str,
+    stderr: str | None, pre_existing: bool,
+) -> str:
+    """Report a non-zero `git rebase` as what it actually was (E-2122).
+
+    Land used to treat EVERY non-zero exit as a content conflict. `git rebase`
+    also exits non-zero when it refuses to start at all — a dirty worktree, a
+    rebase already in progress, a plain operational failure — and none of those
+    produce unmerged paths or are fixed by a conflict's recoveries. The report
+    that resulted asserted a conflict that never happened, listed no files, and
+    offered candidate recoveries for a cause it had not established.
+
+    Three outcomes, distinguished by facts rather than by exit code:
+
+    - A rebase was already running before land touched this worktree. Nothing
+      land did caused the failure, and the state in the worktree belongs to that
+      other operation. Land does not abort it.
+    - Our rebase stopped on conflicting content — unmerged paths exist. A real
+      conflict; report it as one, with git's words as context.
+    - Our rebase failed for any other reason. Git named it on stderr, so quote
+      that verbatim and offer nothing: there is nothing to judge between when
+      the cause is already stated.
+    """
+    wt = _display_path(worktree_path)
+
+    if pre_existing:
+        return (
+            f"cannot rebase: a rebase was already in progress in this worktree "
+            f"before land started, so land did not begin one.\n\n"
+            f"git said:\n{_git_said(stderr)}\n\n"
+            f"That rebase has been left exactly as it was — land does not abort "
+            f"an operation it did not start. Finish or abandon it yourself, then "
+            f"retry:\n"
+            f"  cd {wt}\n"
+            f"  git status                # see what it stopped on\n"
+            f"  git rebase --continue     # if you can resolve it\n"
+            f"  git rebase --abort        # to discard it\n"
+            f"then re-run: endless worktree land <id>\n"
+        )
+
+    unmerged = _git_run(
+        ["diff", "--name-only", "--diff-filter=U"],
+        cwd=worktree_path, check=False,
+    ).stdout
+    if any(ln.strip() for ln in unmerged.splitlines()):
+        return _rebase_conflict_message(
+            worktree_path, base_branch, phase=phase, stderr=stderr,
+        )
+
+    return (
+        f"rebase failed while {phase}.\n\n"
+        f"This was NOT a content conflict — no files are in conflict, so there "
+        f"is nothing to resolve. Git reported why:\n\n"
+        f"git said:\n{_git_said(stderr)}\n\n"
+        f"Act on what git said above. No recovery candidates are offered here: "
+        f"the cause is stated, so there is nothing to guess between.\n\n"
+        f"Inspect:\n"
+        f"  git -C {wt} status\n"
+        f"  git -C {wt} log {base_branch}..HEAD\n"
     )
 
 
@@ -2606,19 +2716,28 @@ def land_worktree(
         # main as new events are appended; a branch forked off the old SHA
         # carries an orphan that conflicts on rebase. Strip them before
         # Step 4 so the rebase sees only the user's real commits.
+        # Whether a rebase was ALREADY stopped here before land ran. Captured
+        # before, because afterwards the two are indistinguishable — and land
+        # must neither blame nor abort an operation it did not start (E-2122).
+        # This step's rebase runs before Step 3.8's dirty-worktree guard, so an
+        # uncommitted edit reaches git here and it refuses to start.
+        rebase_was_running = _rebase_in_progress(worktree_path)
         try:
             n_orphans, first_subj = _drop_orphan_amendable_commits(
                 worktree_path, base_branch
             )
-        except subprocess.CalledProcessError:
+        except subprocess.CalledProcessError as e:
             # The orphan drop and the replay of the user's commits share one
             # rebase; a conflict here is the replay conflicting, not the drop.
-            # Read the conflict state BEFORE aborting, then abort.
-            msg = _rebase_conflict_message(
+            # Read the state BEFORE aborting, then abort — but only a rebase
+            # this step actually started.
+            msg = _rebase_failure_message(
                 worktree_path, base_branch,
                 phase="replaying your commits after dropping base auto-amend commits",
+                stderr=e.stderr, pre_existing=rebase_was_running,
             )
-            _git_run(["rebase", "--abort"], cwd=worktree_path, check=False)
+            if not rebase_was_running:
+                _git_run(["rebase", "--abort"], cwd=worktree_path, check=False)
             raise click.ClickException(msg)
         if n_orphans:
             noun = "commit" if n_orphans == 1 else "commits"
@@ -2653,18 +2772,21 @@ def land_worktree(
         _guard_modified_worktree(worktree_path, branch, canonical)
 
         # Step 4: rebase the worktree branch onto main.
+        rebase_was_running = _rebase_in_progress(worktree_path)
         try:
             _git_run(["rebase", base_branch], cwd=worktree_path)
-        except subprocess.CalledProcessError:
-            # Read the conflict state (files + failing commit) BEFORE aborting,
-            # then abort. The message reports facts confidently and offers
-            # recoveries as candidates rather than misattributing every conflict
-            # to an auto-file.
-            msg = _rebase_conflict_message(
+        except subprocess.CalledProcessError as e:
+            # Read the state (files + failing commit) BEFORE aborting, then
+            # abort. What git printed decides which report this is: a conflict
+            # names files and offers candidates, anything else quotes git and
+            # offers none (E-2122).
+            msg = _rebase_failure_message(
                 worktree_path, base_branch,
                 phase=f"rebasing your branch onto {base_branch}",
+                stderr=e.stderr, pre_existing=rebase_was_running,
             )
-            _git_run(["rebase", "--abort"], cwd=worktree_path, check=False)
+            if not rebase_was_running:
+                _git_run(["rebase", "--abort"], cwd=worktree_path, check=False)
             raise click.ClickException(msg)
 
         # Step 4.2 (E-1941): the branch is now rebased onto base, so the
