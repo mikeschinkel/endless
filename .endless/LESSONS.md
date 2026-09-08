@@ -5408,3 +5408,11 @@ Opening E-2106 I told Mike the plan and the analysis 'disagree' about scope. The
 ### [2026-09-07] When an existing verb already answers the design question, reuse its shape instead of enumerating caller cases
 Designing task claim's new output for E-2106 I asked Mike to adjudicate whether an ENDLESS_SESSION_ID exported by esu into a plain shell counts as 'inside the Claude session', versus a sibling pane, versus a prompted pick — three provenance layers I wanted to branch on. Mike: 'I don't get the distinctions. Feels like you are over-thinking. It should behave like task spawn behaves.' The taxonomy was mine, not the problem's. Exactly one distinction was load-bearing — is this process the Claude session, or is it a shell? — and for the shell half the answer was already built and shipped in task spawn. Before proposing a set of cases, check whether an existing verb already does the thing; if it does, the design is 'like that verb', and the cases collapse. Related: eswt is deprecated. It appears in the guide as 'planned, not yet shipped', and until this task claim_item printed it after every claim behind a probe for a shell function endless shell-init has never defined.
 - **Project**: endless
+
+### [2026-09-07] Handoff replies are action items, not a report of the work
+Mike's response to a long E-1960 handoff: 'TL;DR; wall-of-text. What of that did I NEED to know, i.e. that is an action item?'
+
+The final reply to Mike is not where the work gets explained. Rationale, design decisions, what was found along the way, test counts, and regression results already live in the commit message, the code comments, and the verify suite — repeating them in the reply makes him read the same thing twice and hunt for the one line that asks something of him.
+
+Write the handoff as: the command to run, plus anything that genuinely needs HIS decision or that he would be surprised by later. Nothing else. If a paragraph does not end in something he must do or choose, it does not belong in the reply.
+- **Project**: endless
