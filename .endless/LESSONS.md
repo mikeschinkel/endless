@@ -5450,3 +5450,7 @@ The one thing a prior task IS authoritative about: what was actually observed at
 
 Corollary that also bit me here: when asked whether prior art exists, I searched for the NARROW form (a task naming settings.json) and reported 'nothing exists', when the BROAD principle was sitting in plain sight as the epic E-2050 itself. Search the principle, not just the instance.
 - **Project**: endless
+
+### [2026-09-07] A guard that exists only to protect your own mechanism is evidence the mechanism is wrong
+In E-2106 I made task claim start a Claude session by exec'ing claude over the shell the claim was typed in. That forced a rule — the tmux window must hold that pane alone — and then a refusal to explain the rule, which Mike had to ask me to write properly. He then said: 'That FEELS like you are working around an architectural flaw instead of finding a solution to resolve the flaw. Have you considered running claude in the first pane, then claiming in pane 2?' He was right, and the tell was already in my own diff: the gate protected nothing about the user's intent, only my exec's need for an empty window. Ask of every guard I add — is this defending the user, or defending my implementation? If the latter, the implementation is the bug. The answer here was the seam that already existed: task spawn opens its own window, so claim uses it and the gate, the refusal and the destroyed shell all disappear together. Also: 'behave like X' from Mike means USE X's mechanism, not build something that resembles it.
+- **Project**: endless
