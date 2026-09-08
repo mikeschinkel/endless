@@ -34,12 +34,13 @@ import os
 import re
 import shutil
 import subprocess
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
 import click
 
-from endless import rowcap
+from endless import land_conflict, rowcap
 from endless.task_cmd import _display_path, _resolve_project, recover_task_text
 from endless.project_path import resolved
 
@@ -928,11 +929,42 @@ def _git_said(stderr: str | None) -> str:
     return "\n".join(f"  {ln}" for ln in lines)
 
 
+def _rebase_branch_name(worktree_path: Path) -> str:
+    """The branch a rebase in progress is rebasing, or "" if it cannot be told.
+
+    HEAD is detached partway through a replay, so it names the machinery rather
+    than the subject. git records the real answer in the rebase state directory
+    as `head-name`; `--git-path` resolves it without this having to know whether
+    the repository is a linked worktree.
+
+    Falls back to HEAD for the no-rebase-in-progress case, which is how the
+    rehearsal path and any future caller outside a rebase get a sane answer.
+    """
+    for state in ("rebase-merge", "rebase-apply"):
+        path_str = _git_run(
+            ["rev-parse", "--git-path", f"{state}/head-name"],
+            cwd=worktree_path, check=False,
+        ).stdout.strip()
+        if not path_str:
+            continue
+        head_name = Path(path_str)
+        if not head_name.is_absolute():
+            head_name = worktree_path / head_name
+        try:
+            return _short_branch(head_name.read_text().strip())
+        except OSError:
+            continue
+    current = _git_run(
+        ["rev-parse", "--abbrev-ref", "HEAD"], cwd=worktree_path, check=False,
+    ).stdout.strip()
+    return "" if current in ("", "HEAD") else current
+
+
 def _rebase_conflict_message(
     worktree_path: Path, base_branch: str, *, phase: str,
     stderr: str | None = None,
 ) -> str:
-    """Build the user-facing message for a rebase conflict encountered by land.
+    """Capture a live rebase conflict, persist it, and build land's message.
 
     Only for a rebase that actually stopped on conflicting content. The caller
     establishes that (non-empty `--diff-filter=U`) before choosing this over the
@@ -941,93 +973,127 @@ def _rebase_conflict_message(
 
     Called from BOTH conflict handlers (Step 3.7 orphan-replay and Step 4 main
     rebase) WHILE the rebase is still in progress — before `git rebase --abort`
-    — so it can read the conflict state (unmerged paths + REBASE_HEAD).
+    — because that abort destroys everything worth knowing. REBASE_HEAD, the
+    unmerged set, and both sides of every conflicting hunk exist only until it
+    runs, so the capture happens HERE rather than at the call sites: it has to
+    be impossible to add a third handler that reports a conflict without first
+    recording it.
 
     Reports the FACTS confidently: which step (via `phase`), which of the user's
-    commits failed to replay, and which files conflict. It offers recoveries as
-    CANDIDATES to judge between, never one confident prescription — the confident
-    misattribution is exactly the failure mode this task removes. Only when every
-    conflicting path is an endless-managed auto-file is a single mechanical
-    recovery presented with confidence; any source file makes the cause genuinely
-    ambiguous, so the candidates are flagged as possibly-wrong.
+    commits failed to replay, and which files conflict.
+
+    It prescribes NOTHING for a source conflict, and that absence is the point.
+    The message used to offer two numbered recoveries as candidates to judge
+    between — resolve in place, or reset and re-apply. Both put the branch's
+    side of the hunk back, and when the base branch has DELETED something that
+    side still references, both reintroduce a name with nothing behind it: the
+    land succeeds and ships code that fails on first use. Someone who knows the
+    codebase catches that. Someone reading two numbered steps as instructions
+    from the tool does not. So the message hands off to `endless worktree
+    diagnose`, which classifies from the capture and prescribes only what it can
+    prove.
+
+    The one confident path stays: when every conflicting file is an
+    endless-managed auto-file, endless wrote all of them and none carries
+    authored work, so restoring them from the base branch is lossless by
+    construction — proven, not guessed.
     """
-    unmerged = _git_run(
-        ["diff", "--name-only", "--diff-filter=U"],
-        cwd=worktree_path, check=False,
-    ).stdout
-    files = [ln for ln in unmerged.splitlines() if ln.strip()]
+    branch = _rebase_branch_name(worktree_path)
+    task_id = _task_id_from_worktree_path(worktree_path) or ""
+    # The REBASE_HEAD gate is E-2122's and travels with the read it guards.
+    # REBASE_HEAD is a plain ref: with no rebase running it either does not
+    # resolve or still holds a value from a DIFFERENT operation, and reading it
+    # unconditionally reported someone else's commit as the cause of this
+    # failure. That read now happens inside the capture, so the gate goes there.
+    ev = land_conflict.capture_evidence(
+        worktree_path, base_branch, branch, task_id=task_id, phase=phase,
+        rebase_in_progress=_rebase_in_progress(worktree_path),
+    )
+    stored = land_conflict.store_evidence(worktree_path, ev)
+    return _conflict_message(ev, captured=stored is not None, stderr=stderr)
 
-    # Name the commit that failed to replay, if git exposes REBASE_HEAD, so the
-    # user knows which of their commits hit the conflict.
-    #
-    # Gated on a rebase actually being in progress (E-2122). REBASE_HEAD is a
-    # plain ref: when no rebase is running it either does not resolve or still
-    # holds a value from a DIFFERENT operation, and reading it unconditionally
-    # reported someone else's commit as the cause of this failure.
+
+def _conflict_message(
+    ev: land_conflict.ConflictEvidence, *,
+    captured: bool = True, stderr: str | None = None,
+) -> str:
+    """Render land's refusal from captured evidence. Pure — no git, no writes.
+
+    `captured` is whether the evidence actually reached disk. It is threaded in
+    rather than assumed because the alternative is sending someone to a command
+    that will tell them there is nothing recorded, which reads as the tool
+    losing their conflict rather than as a directory it could not write.
+
+    `stderr` is git's own words about the failure (E-2122), quoted verbatim
+    under the facts. A conflict land can classify still benefits from what git
+    said about it, and the two are not in competition.
+    """
+    wt = _display_path(Path(ev.worktree_path))
     commit_line = ""
-    if _rebase_in_progress(worktree_path):
-        head = _git_run(
-            ["rev-parse", "--short", "REBASE_HEAD"],
-            cwd=worktree_path, check=False,
+    if ev.rebase_head:
+        short = ev.rebase_head[:12]
+        commit_line = (
+            f"Your commit that failed to replay: {short} {ev.rebase_head_subject}\n\n"
+            if ev.rebase_head_subject
+            else f"Your commit that failed to replay: {short}\n\n"
         )
-        if head.returncode == 0 and head.stdout.strip():
-            short = head.stdout.strip()
-            subj = _git_run(
-                ["log", "-1", "--format=%s", "REBASE_HEAD"],
-                cwd=worktree_path, check=False,
-            ).stdout.strip()
-            commit_line = (
-                f"Your commit that failed to replay: {short} {subj}\n\n"
-                if subj else f"Your commit that failed to replay: {short}\n\n"
-            )
 
-    wt = _display_path(worktree_path)
     file_block = (
-        "\n".join(f"  {f}" for f in files) if files else "  (none reported)"
+        "\n".join(f"  {f}" for f in ev.unmerged_paths)
+        if ev.unmerged_paths else "  (none reported)"
     )
     said = f"git said:\n{_git_said(stderr)}\n\n" if stderr else ""
     header = (
-        f"rebase conflict while {phase}.\n\n"
+        f"rebase conflict while {ev.phase}.\n\n"
         f"{commit_line}"
         f"Conflicting files:\n{file_block}\n\n"
         f"{said}"
     )
 
+    files = ev.unmerged_paths
     only_auto = bool(files) and all(_is_auto_file(f) for f in files)
     if only_auto:
         globs = " ".join(AUTO_COMMIT_GLOBS)
         return header + (
             f"Every conflicting file is an endless-managed auto-file; restoring "
-            f"them from {base_branch} is safe. Recover, then retry land:\n"
-            f"  git -C {wt} checkout {base_branch} -- {globs}\n"
+            f"them from {ev.base_branch} is safe. Recover, then retry land:\n"
+            f"  git -C {wt} checkout {ev.base_branch} -- {globs}\n"
             f"  endless worktree land <id>\n"
         )
 
-    # A source file conflicts — the cause is genuinely ambiguous. Present the
-    # plausible recoveries as candidates the user must judge between.
-    return header + (
-        f"Likely causes (inspect and choose; the wrong recovery can duplicate "
-        f"or lose work):\n\n"
-        f"  1. {base_branch} advanced with edits that overlap yours. Resolve "
-        f"the conflict in place:\n"
-        f"       cd {wt}\n"
-        f"       git rebase {base_branch}\n"
-        f"       # edit the conflicting files to resolve, then mark resolved:\n"
-        f"       git add <files>\n"
-        f"       git rebase --continue\n"
-        f"     then re-run: endless worktree land <id>\n\n"
-        f"  2. the branch re-introduces content already landed for this task "
-        f"(e.g. an amended, already-landed commit). Do NOT rebase-continue "
-        f"(it duplicates the commit); capture only your delta, reset to "
-        f"{base_branch}, re-apply it:\n"
-        f"       git -C {wt} diff {base_branch}...HEAD > /tmp/land-delta.patch\n"
-        f"       git -C {wt} reset --hard {base_branch}\n"
-        f"       git -C {wt} apply /tmp/land-delta.patch\n"
-        f"       git -C {wt} commit -am \"<describe your change>\"\n"
-        f"     then re-run: endless worktree land <id>\n\n"
-        f"Inspect first:\n"
-        f"  git -C {wt} log {base_branch}..HEAD\n"
-        f"  git -C {wt} diff {base_branch}...HEAD\n"
+    target = ev.task_id or "<id>"
+    if not captured:
+        return header + (
+            f"A source file conflicts, and the conflict state could NOT be "
+            f"written to {_display_path(land_conflict.evidence_path(Path(ev.worktree_path)))} "
+            f"— so `endless worktree diagnose` has nothing to read and this "
+            f"message is all that survives the abort. Fix that path and re-run "
+            f"the land to get a diagnosable failure.\n\n"
+            f"No recovery is offered here. The recoveries that fit most "
+            f"conflicts restore your side of the hunk, and when {ev.base_branch} "
+            f"has deleted something that side still uses, they reintroduce a "
+            f"reference with nothing behind it: the land succeeds and the code "
+            f"fails the first time it runs.\n"
+        )
+    hint_note = (
+        f"git's hints above are its generic advice for any conflict, and one of "
+        f"them is `git rebase --continue`. Do not follow it yet — see below.\n\n"
+        if stderr and "rebase --continue" in stderr else ""
+    )
+    return header + hint_note + (
+        f"A source file conflicts. The rebase has been aborted and your branch "
+        f"is exactly as it was, but the conflict state was recorded first — "
+        f"nothing about the failure is lost.\n\n"
+        f"Classify it before you touch anything:\n"
+        f"  endless worktree diagnose {target}\n\n"
+        f"No recovery is offered here on purpose. The recoveries that fit most "
+        f"conflicts — resolving in place, or resetting and re-applying your "
+        f"delta — both restore your side of the hunk, and when {ev.base_branch} "
+        f"has deleted something that side still uses, they reintroduce a "
+        f"reference with nothing behind it: the land succeeds and the code "
+        f"fails the first time it runs. `diagnose` tells you which kind of "
+        f"conflict this is, and prescribes a recovery only when it can prove "
+        f"one.\n"
     )
 
 
@@ -2569,6 +2635,175 @@ def _no_worktree_to_land_message(canonical: str) -> str:
     )
 
 
+def _resolve_land_target(task_id: str | None) -> tuple[str, Path, str, str]:
+    """Resolve a task id to (canonical, worktree_path, branch, base_branch).
+
+    The SAME resolution `land` performs, deliberately: `diagnose` reads a
+    capture keyed to the worktree `land` would have used, so any drift between
+    the two would have it reading someone else's failure.
+
+    `task_id` may be None, which means "the task whose worktree I am standing
+    in" — `land` cannot offer that (it is not a command to run by accident),
+    but a read-only diagnostic run mid-session should not make anyone retype
+    the id already encoded in cwd.
+    """
+    if task_id:
+        canonical = _normalize_task_id(task_id)
+    else:
+        here = worktree_root_for_cwd()
+        canonical = _task_id_from_worktree_path(here) if here else None
+        if not canonical:
+            raise click.ClickException(
+                "Not inside a task worktree, so there is no task to diagnose. "
+                "Name one: endless worktree diagnose E-NNNN"
+            )
+
+    rows = _enriched_list(_project_root())
+    target = _branch_for_task(rows, canonical)
+    if target is None:
+        raise click.ClickException(_no_worktree_to_land_message(canonical))
+    branch = target["branch"]
+    if not branch:
+        raise click.ClickException(
+            f"Worktree for {canonical} has no branch (detached HEAD)."
+        )
+    base_branch = (target["companion"] or {}).get("base_branch") \
+        or _default_base_branch(_project_root())
+    return canonical, Path(target["path"]), branch, base_branch
+
+
+def diagnose_land_conflict(task_id: str | None, as_json: bool) -> None:
+    """Classify the rebase conflict a land recorded, and prescribe only what is
+    proven (E-1957).
+
+    This is the second half of the split `land` makes when it fails: `land`
+    records the facts and refuses to interpret them mid-abort; this interprets
+    them, on demand, with the whole repository still available to test against.
+
+    Reproduces nothing. If there is no capture, that is the answer — said
+    plainly, with a non-zero exit — because a diagnosis invented from a
+    re-derived conflict would describe a rebase nobody ran.
+    """
+    canonical, worktree_path, _branch, base_branch = _resolve_land_target(task_id)
+
+    ev = land_conflict.load_evidence(worktree_path)
+    if ev is None:
+        raise click.ClickException(
+            f"No land conflict is recorded for {canonical}.\n\n"
+            f"A capture is written only when `endless worktree land` actually "
+            f"hits a rebase conflict, and it is stored with the worktree, so it "
+            f"is gone once the worktree is reaped. Nothing is reproduced here on "
+            f"purpose: a conflict re-derived now would be against today's "
+            f"{base_branch}, not the one the land failed against.\n\n"
+            f"To see whether a land WOULD conflict, rehearse it:\n"
+            f"  endless worktree land {canonical} --dry-run"
+        )
+
+    cl = land_conflict.classify(ev, worktree_path)
+    if as_json:
+        click.echo(land_conflict.render_json(ev, cl), nl=False)
+    else:
+        click.echo(land_conflict.render_human(ev, cl), nl=False)
+
+
+def _rehearse_land_rebase(
+    worktree_path: Path, branch: str, base_branch: str, main_root: Path,
+    canonical: str,
+) -> land_conflict.ConflictEvidence | None:
+    """Run land's rebase for real, on a copy, and return the conflict evidence
+    it produced — or None when it went through cleanly (E-1957).
+
+    `--dry-run` existed to preview a land and could not preview the one failure
+    worth previewing, because printing four paths tells you nothing about
+    whether the rebase works. This runs the actual sequence — the orphan drop,
+    then the rebase onto the base branch — against a throwaway branch in a
+    throwaway checkout, so the answer is git's rather than an estimate of it.
+
+    Same machinery as the post-mortem, deliberately: one rebase, one capture,
+    one classifier. A predictor built separately from the thing it predicts
+    drifts from it, and a `--dry-run` that disagrees with the land is worse than
+    no `--dry-run`.
+
+    The base branch, the task branch and the database are untouched. The
+    throwaway branch and checkout are removed in a `finally`, including when the
+    rehearsal itself raises.
+
+    One deliberate divergence: the evidence is not persisted. The capture slot
+    holds "the conflict this worktree's land hit", and a rehearsal overwriting
+    it would replace a real post-mortem with a hypothetical.
+    """
+    scratch = Path(tempfile.mkdtemp(prefix="endless-land-rehearsal-"))
+    # git worktree add wants to create the leaf itself.
+    checkout = scratch / "wt"
+    # Named from the scratch dir, whose suffix mkdtemp guarantees unique. A pid
+    # would repeat after a hard kill left the previous run's branch behind, and
+    # the collision would surface as a land that cannot rehearse.
+    rehearsal_branch = f"endless/land-rehearsal/{canonical.lower()}-{scratch.name}"
+
+    made_branch = False
+    made_checkout = False
+    try:
+        _git_run(["branch", rehearsal_branch, branch], cwd=worktree_path)
+        made_branch = True
+        _git_run(
+            ["worktree", "add", str(checkout), rehearsal_branch],
+            cwd=worktree_path,
+        )
+        made_checkout = True
+
+        # Land's Step 3.5 folds the worktree's pending verb additions into the
+        # branch before rebasing, which is what keeps verbs.jsonl from
+        # conflicting. A fresh checkout has no pending additions, so copy the
+        # live file across first — otherwise the rehearsal predicts a conflict
+        # the land itself would have dissolved.
+        live_verbs = worktree_path / ".endless" / "verbs.jsonl"
+        if live_verbs.exists():
+            rehearsed_verbs = checkout / ".endless" / "verbs.jsonl"
+            rehearsed_verbs.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(live_verbs, rehearsed_verbs)
+            _dedup_worktree_verbs_against_main(checkout, main_root)
+
+        phase = None
+        try:
+            _drop_orphan_amendable_commits(checkout, base_branch)
+        except subprocess.CalledProcessError:
+            phase = ("replaying your commits after dropping base auto-amend "
+                     "commits")
+        if phase is None:
+            try:
+                _git_run(["rebase", base_branch], cwd=checkout)
+            except subprocess.CalledProcessError:
+                phase = f"rebasing your branch onto {base_branch}"
+        if phase is None:
+            return None
+
+        ev = land_conflict.capture_evidence(
+            checkout, base_branch, rehearsal_branch,
+            task_id=canonical, phase=phase, rehearsal=True,
+            rebase_in_progress=_rebase_in_progress(checkout),
+        )
+        _git_run(["rebase", "--abort"], cwd=checkout, check=False)
+        # Re-point at the real worktree: the classifier re-reads the repository
+        # (`git grep` over the base branch and the fork point), and the checkout
+        # this ran in is about to stop existing. Same repository, same objects.
+        ev.worktree_path = str(worktree_path)
+        ev.branch = branch
+        return ev
+    finally:
+        if made_checkout:
+            _git_run(
+                ["worktree", "remove", "--force", str(checkout)],
+                cwd=worktree_path, check=False,
+            )
+        if made_branch:
+            _git_run(
+                ["branch", "-D", rehearsal_branch],
+                cwd=worktree_path, check=False,
+            )
+        shutil.rmtree(scratch, ignore_errors=True)
+        _git_run(["worktree", "prune"], cwd=worktree_path, check=False)
+
+
 def land_worktree(
     task_id: str,
     dry_run: bool,
@@ -2651,7 +2886,34 @@ def land_worktree(
         click.echo(f"  Branch:   {branch}")
         click.echo(f"  Base:     {base_branch}")
         click.echo(f"  Main:     {main_root}")
-        return
+        click.echo("")
+        # E-1957: rehearse the rebase rather than describe it. A preview that
+        # cannot preview the failure it exists to preview is a preview of
+        # nothing, and the rebase is the only step of a land that fails in a way
+        # the operator has to reason about.
+        try:
+            ev = _rehearse_land_rebase(
+                worktree_path, branch, base_branch, main_root, canonical,
+            )
+        except subprocess.CalledProcessError as e:
+            raise click.ClickException(
+                f"could not rehearse the rebase: {e.stderr or e}"
+            )
+        if ev is None:
+            click.echo(
+                click.style("✓", fg="green")
+                + f" Rehearsed the rebase onto {base_branch} on a throwaway "
+                f"branch: no conflict."
+            )
+            return
+        click.echo(
+            click.style("✗", fg="red")
+            + f" Rehearsed the rebase onto {base_branch} on a throwaway "
+            f"branch: it conflicts.\n"
+        )
+        cl = land_conflict.classify(ev, worktree_path)
+        click.echo(land_conflict.render_human(ev, cl), nl=False)
+        raise SystemExit(1)
 
     # Resolve the binary the record-landing emit must use BEFORE the ff-merge,
     # so a self_dev worktree that isn't built fails loudly here rather than

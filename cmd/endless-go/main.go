@@ -10,7 +10,9 @@
 //	endless-go sandbox       run|enter|init|bind|list|prune|destroy
 //	endless-go tmux          apply|status-line|active-id|show-menu
 //	endless-go session-query list-live|task-text|resume-target
-//	endless-go worktree      in-use   (the shared "is this worktree still in use" guard)
+//	endless-go worktree      in-use|ledger-orphans  (the shared "is this worktree
+//	                         still in use" guard; and which of a branch's ledger
+//	                         commits the base branch provably already holds)
 //	endless-go session-status  (renders the per-session status view; --monitor loops it)
 //	endless-go project-status  (renders the project attention board; --monitor loops it)
 //	endless-go project-window  (creates the dedicated two-pane tmux session the board lives in)

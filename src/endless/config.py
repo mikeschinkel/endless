@@ -511,16 +511,30 @@ def main_cache_dir() -> Path:
     return Path.home() / ".cache" / "endless"
 
 
+def sandbox_root(worktree_dir_name: str) -> Path:
+    """A worktree's per-worktree sandbox: the isolated state that belongs to
+    that worktree and shares its lifetime.
+
+    Sandbox dir basename is the worktree dir's basename (e-NNN), so each
+    worktree maps 1-to-1 to its own sandbox.
+
+    The single seam every sandbox path composes from, so a sandbox that moves
+    moves here and nowhere else — which is what ED-1554 (relocating sandboxes
+    into the worktree itself) will do. Callers name what they want UNDER the
+    sandbox; they do not spell out where the sandbox is.
+    """
+    return _cache_root() / "endless" / "sandboxes" / worktree_dir_name
+
+
 def sandbox_config_dir(worktree_dir_name: str) -> Path:
     """The endless config dir inside a worktree's per-worktree sandbox.
 
-    Sandbox dir basename is the worktree dir's basename (e-NNN), so each
-    worktree maps 1-to-1 to its own sandbox. Endless appends its own
-    "endless" segment (as ConfigDir does to XDG_CONFIG_HOME), so the DB lives
-    at <cache>/endless/sandboxes/<worktree-dir-name>/endless/endless.db.
+    Endless appends its own "endless" segment (as ConfigDir does to
+    XDG_CONFIG_HOME), so the DB lives at
+    <sandbox_root>/endless/endless.db. Endless is one client of the sandbox
+    among however many the project has, and this is its corner of it.
     """
-    sandbox = _cache_root() / "endless" / "sandboxes" / worktree_dir_name
-    return sandbox / "endless"
+    return sandbox_root(worktree_dir_name) / "endless"
 
 
 def worktree_dir_name(cwd: Path | None = None) -> str | None:

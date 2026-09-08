@@ -8,12 +8,14 @@
 // gates directory removal — the failure class that has already cost weeks. So
 // the Python side shells out here instead.
 //
-// DB context: this subcommand READS the sessions table, so it must see the
-// database the caller resolved. It is deliberately NOT in cmd/endless-go's
-// PinMainDB group — it takes the `--config-dir` that ConsumeDBContextFlag
-// strips, exactly as `event` and `session-query` do, and the Python caller
-// threads `config.go_db_context_args()`. Pinning main instead would answer a
-// self-dev worktree's question from the real ledger and report no live session.
+// DB context: `in-use` READS the sessions table, so it must see the database
+// the caller resolved. It is deliberately NOT in cmd/endless-go's PinMainDB
+// group — it takes the `--config-dir` that ConsumeDBContextFlag strips, exactly
+// as `event` and `session-query` do, and the Python caller threads
+// `config.go_db_context_args()`. Pinning main instead would answer a self-dev
+// worktree's question from the real ledger and report no live session.
+// `ledger-orphans` opens no database at all: it is pure git, so its caller
+// threads nothing and the resolved context is simply unused.
 package worktreecmd
 
 import (
@@ -22,6 +24,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/mikeschinkel/endless/internal/events"
 	"github.com/mikeschinkel/endless/internal/monitor"
 )
 
@@ -42,6 +45,8 @@ func Run(args []string) {
 	switch args[0] {
 	case "in-use":
 		os.Exit(runInUse(args[1:]))
+	case "ledger-orphans":
+		os.Exit(runLedgerOrphans(args[1:]))
 	case "-h", "--help", "help":
 		usage(os.Stdout)
 	default:
@@ -123,9 +128,58 @@ func report(asJSON bool, out inUseJSON) int {
 	return exitNotInUse
 }
 
+// runLedgerOrphans classifies the commits in base..branch by whether the base
+// branch already holds their ledger content.
+//
+//	endless-go worktree ledger-orphans --repo <path> --base <rev> --branch <rev>
+//
+// Always JSON on stdout — the only caller is `endless worktree diagnose`, which
+// needs the per-commit evidence, not a verdict. Exit 0 on a successful
+// classification whatever it found; 1 when git could not answer.
+//
+// This is pure git: no database, no config. It is here rather than in Python
+// because the rule it applies (ED-1553: a fork point is identified by ledger
+// content, never by the SHA that held it) already has one implementation, in
+// internal/events, and the behind-base bug is what a second copy of a git
+// predicate costs.
+func runLedgerOrphans(args []string) int {
+	fs := flag.NewFlagSet("ledger-orphans", flag.ContinueOnError)
+	repo := fs.String("repo", "", "repository or worktree directory (required)")
+	base := fs.String("base", "", "base revision the branch would land on (required)")
+	branch := fs.String("branch", "", "branch revision to classify (required)")
+	if err := fs.Parse(args); err != nil {
+		return exitUsage
+	}
+	for name, val := range map[string]string{
+		"--repo": *repo, "--base": *base, "--branch": *branch,
+	} {
+		if val == "" {
+			fmt.Fprintf(os.Stderr,
+				"endless-go worktree ledger-orphans: %s is required\n", name)
+			return exitUsage
+		}
+	}
+
+	rpt, err := events.LedgerOrphans(*repo, *base, *branch)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "endless-go worktree ledger-orphans: %s\n", err)
+		return exitUndetermined
+	}
+	enc := json.NewEncoder(os.Stdout)
+	enc.SetIndent("", "  ")
+	if err = enc.Encode(rpt); err != nil {
+		fmt.Fprintf(os.Stderr, "endless-go worktree ledger-orphans: %s\n", err)
+		return exitUndetermined
+	}
+	return exitNotInUse
+}
+
 func usage(w *os.File) {
 	fmt.Fprintln(w, "Usage: endless-go worktree <verb> [flags]")
 	fmt.Fprintln(w, "Verbs:")
 	fmt.Fprintln(w, "  in-use --dir <path> [--task <id>] [--json]")
 	fmt.Fprintln(w, "         exit 0 not in use, 3 in use (reason on stdout), 1 undetermined")
+	fmt.Fprintln(w, "  ledger-orphans --repo <path> --base <rev> --branch <rev>")
+	fmt.Fprintln(w, "         JSON on stdout: which commits in base..branch hold ledger")
+	fmt.Fprintln(w, "         content the base branch provably already has")
 }

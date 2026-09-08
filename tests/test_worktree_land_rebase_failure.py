@@ -192,9 +192,20 @@ def test_real_conflict_still_routes_to_the_conflict_report(tmp_path):
     assert "(none reported)" not in msg
     # The failing commit is named, because a rebase really is in progress.
     assert "failed to replay" in msg and "my real work" in msg
-    # And git's words are carried as context alongside the candidates.
+    # And git's words are carried as context.
     assert "git said:" in msg
-    assert "the wrong recovery can duplicate or lose work" in msg
+    # E-1957 removed the two candidate recoveries this used to assert: both
+    # restored the branch's side of the hunk, which reintroduces anything the
+    # base branch has deleted. The conflict report still routes HERE — which is
+    # what this test is about — it just hands the classification off instead of
+    # guessing at it.
+    assert "endless worktree diagnose" in msg
+    assert "the wrong recovery can duplicate or lose work" not in msg
+    assert "land-delta.patch" not in msg
+    # `git rebase --continue` still appears — inside git's quoted hints, which
+    # E-2122 carries verbatim on purpose. What must not appear is endless
+    # RECOMMENDING it. The report says so in as many words.
+    assert "Do not follow it yet" in msg
 
     _run(["git", "rebase", "--abort"], repo, check=False)
 

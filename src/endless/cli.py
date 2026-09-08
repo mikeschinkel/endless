@@ -3772,6 +3772,31 @@ def worktree_land(task_id, dry_run, record_only, sha, branch, at):
     land_worktree(task_id, dry_run, record_only=record_only, sha=sha, branch=branch, at=at)
 
 
+@worktree_cmd.command("diagnose")
+@click.argument("task_id", required=False)
+@click.option("--json", "as_json", is_flag=True, help="JSON output")
+def worktree_diagnose(task_id, as_json):
+    """Classify the rebase conflict a land recorded, and prescribe only what is proven.
+
+    When `worktree land` hits a rebase conflict it records the state — the
+    unmerged paths, both sides of every conflicting hunk, the commit that failed
+    to replay — before aborting the rebase, and refuses to interpret any of it
+    on the spot. This interprets it.
+
+    It reports which of five kinds of conflict this is, and prints a recovery
+    ONLY for the kinds it can prove. For the two it cannot — your branch using
+    names the base branch has deleted, and a genuine overlap between two
+    intentional edits — it prints the evidence, names what is at stake, and
+    stops. A recovery you cannot prove is a guess, and a guess printed by a tool
+    is read as an instruction.
+
+    With no task id, diagnoses the worktree you are standing in. Exits non-zero
+    when there is no recorded conflict; nothing is reproduced.
+    """
+    from endless.worktree_cmd import diagnose_land_conflict
+    diagnose_land_conflict(task_id, as_json)
+
+
 @worktree_cmd.command("drop")
 @click.argument("name_or_path")
 @click.option("--force", is_flag=True,

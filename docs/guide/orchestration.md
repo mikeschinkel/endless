@@ -226,7 +226,7 @@ endless worktree land <id>
 endless worktree land <id> --dry-run        # preview without making changes
 ```
 
-`--dry-run` is the exception to the rule above: it changes nothing, so use it freely to preview what a land would do.
+`--dry-run` is the exception to the rule above: it changes nothing, so use it freely to preview what a land would do. It **rehearses the rebase** — on a throwaway branch in a throwaway checkout, both deleted afterwards — so it answers the only question about a land that is actually in doubt: whether the rebase conflicts, and if so what kind of conflict it is. Your branch, the base branch and the database are untouched either way. It exits non-zero when it predicts a conflict.
 
 `land` performs:
 
@@ -240,6 +240,44 @@ endless worktree land <id> --dry-run        # preview without making changes
 **The default branch is resolved, not assumed.** Endless takes the first of: `default_branch` in `.endless/config.json`; `origin/HEAD`; `init.defaultBranch`; then `main` or `master`, whichever exists. Each candidate must name a branch that actually exists in the repository. If none does, Endless says so and refuses rather than guessing — a wrong base branch silently mis-reports what has landed, and would rebase onto the wrong thing. Set `default_branch` when the repository's convention is anything the detection steps cannot see, or run `git remote set-head origin --auto` to populate `origin/HEAD` on a fresh clone. The same resolution backs the ◆ unsettled marker and the worktree reaper, so all three agree on what "landed" means.
 
 Landing into a branch that is not `main` is fully supported; nothing in Endless requires the name.
+
+#### When the rebase conflicts
+
+`land` rebases in two places (dropping orphaned auto-commits at the branch base,
+then rebasing onto the base branch). If either conflicts, `land` **records the
+conflict before aborting the rebase** — the unmerged paths, both sides of every
+conflicting hunk, the commit that failed to replay, uncapped — and then refuses
+with the facts and one instruction:
+
+```bash
+endless worktree diagnose [<id>]            # bare, inside the worktree, works too
+endless worktree diagnose <id> --json
+```
+
+`diagnose` reads that record and classifies the conflict into one of five kinds,
+printing a recovery only for the three it can prove:
+
+| Kind | What it means | What it prints |
+|---|---|---|
+| already-landed content | The base branch already holds an equivalent of the commit that failed to replay | Reset and re-apply your delta; resolving in place would duplicate the commit |
+| orphaned ledger base | Your branch is based on ledger auto-commits the base branch has since amended past | Drop them, when they form an unbroken run at the branch's base |
+| auto-file-only | Every conflicting file is one endless writes and commits itself | Restore them from the base branch |
+| symbol supersession | Your branch still uses names the base branch has **deleted** | **Nothing.** The names, and why both obvious recoveries would ship broken code |
+| semantic overlap | Two intentional edits to the same code | **Nothing.** Both sides in full, and the names they share |
+
+**`land` itself offers no recovery for a source conflict, and that is the
+design.** It used to offer two, numbered, for you to pick between — and both put
+your side of the hunk back. When the base branch has deleted something your side
+still calls, either one produces a land that *succeeds* while shipping code that
+fails the first time it runs. Classification is decidable; resolution is not. So
+`land` states facts, `diagnose` states the class, and neither prescribes what it
+cannot prove. For the last two kinds the honest output is evidence and silence —
+a human or an agent with the context has to choose.
+
+`diagnose` reproduces nothing. If no conflict was recorded it says so and exits
+non-zero, because a conflict re-derived now would be against today's base
+branch, not the one the land failed against. The record lives with the worktree
+and is reaped with it.
 
 #### Post-land script
 
