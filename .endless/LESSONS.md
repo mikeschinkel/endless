@@ -5338,3 +5338,27 @@ For a resume whose Claude transcript is gone I proposed warn-then-launch-anyway,
 ### [2026-09-07] Do not narrate diligence — caveats about states that do not exist cost attention and buy nothing
 Mike asked whether a BLOB-stored field could be restored as TEXT. I did it, then added two caveats: that a BLOB which is not valid UTF-8 could not be round-tripped, and that a length figure had dropped for a benign reason. He asked whether that was information he NEEDED, and whether it deserved his most precious resource, his attention. It was not and it did not. The first described a state nothing in the database is in. The second raised a suspicion of data loss he had not raised, so I could defuse it one sentence later. Both were me showing my work. Same failure family as reporting the re-triage flip: I resolve something, then bill him for the resolution. Test before adding a caveat: does it change what he does next? If the condition it warns about is not present, or I already checked it and it was fine, it is a note to myself. Leave it out.
 - **Project**: endless
+
+### [2026-09-07] Diff the analysis's findings against the plan's steps before implementing; a finding the plan drops is a STOP-and-ask, not a handoff footnote
+E-2120's analysis carried a section titled "Secondary: the handoff drops the
+framing and the override", naming two clauses the mechanics partial had
+compressed away. The plan's step A1 enumerated four changes and scheduled
+neither. I read both documents before starting, noticed nothing, implemented A1
+as written, and surfaced the gap only when Mike asked whether the analysis held
+facts I had missed.
+
+The handoff's own rule covers this: if the plan is insufficient, STOP and ask. A
+plan whose steps do not cover a defect its own analysis names IS insufficient,
+and the discrepancy is visible on the first read, before any code. So diff the
+analysis's findings against the plan's steps as a deliberate step of
+orientation, and put anything the plan drops in front of the user then — when it
+costs one question — rather than after the work is committed and handed off.
+
+Second half of the same mistake: when I did surface it, I recommended fixing
+only one of the two, on the grounds that handoff text is expensive. Mike said
+add both. "It costs space" is not a reason to leave a defect the analysis
+specifically named, and the clause I proposed to drop was the framing ("filing
+is the exception, not the default") — exactly what stops the bullet list reading
+as a menu of equals. Do not offer a menu whose cheapest option is "do less than
+the analysis argued for"; that argument was already made and was not rebutted.
+- **Project**: endless
