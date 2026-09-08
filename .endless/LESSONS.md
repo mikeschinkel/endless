@@ -5310,3 +5310,19 @@ Rule: when I discover something worth filing, describe the finding and ASK. Do n
 
 The pattern behind it: an instruction that authorizes a specific action once is not a rule that authorizes the class of action from then on. Re-derive authorization per action, especially for anything that writes to state other people read.
 - **Project**: endless
+
+### [2026-09-07] Search the backlog before proposing a task — this exact one was filed twice already
+Mike asked 'Did you search to see if we already have a task that covers it?' I had not. I diagnosed the skip-worktree/land collision, wrote a full analysis, and tried to file it.
+
+E-1347 already covers it, in 'revisit' status: same file, same git error text verbatim, same '(none reported)' tell, same manual recovery, plus a settled design-tension section with three options -- which my 'four directions' had independently reinvented, worse.
+
+The damning part is the precedent. During the E-1997 land, a session hit this identical failure and filed E-1998 and E-1999. Both were folded back as duplicates and marked obsolete -- E-1347 'Replaces E-1998', E-1957 'Replaces E-1999'. I was about to become the third session to file the same discovery from the same trigger.
+
+Why I skipped it: I had searched before filing E-2123 earlier in the session, so searching felt like something I 'do'. But that search was prompted by suspicion of duplication; here I had a vivid fresh diagnosis and momentum, and the confidence of having just proven the mechanism substituted for checking whether it was already known.
+
+Rules:
+- Before proposing ANY task, search the backlog. The trigger is 'I am about to describe a new problem', not 'I suspect a duplicate'.
+- Search the error string and the filename, not just my summary words. 'skip-worktree' and 'settings.json' both found E-1347 instantly; the phrasing in my head did not.
+- A backlog with hundreds of open tasks means a vivid discovery is MORE likely to be already-known, not less. Something that bites hard has probably bitten before.
+- Read what the existing task already decided before restating it. E-1347 also said explicitly NOT to re-run claude-settings-init after recovery -- the exact step I had put in my proposed unblock, which would have re-armed the collision.
+- **Project**: endless
