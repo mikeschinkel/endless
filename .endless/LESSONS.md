@@ -5473,3 +5473,13 @@ The general shape: distinguish 'something happened to me while working' from 'so
 
 Same test applies to the near-miss: do not report errors I caught myself before they had any effect.
 - **Project**: endless
+
+### [2026-09-08] A reply is not the place to re-report what the commit and task record already hold
+Mike's attention is the scarcest resource in the loop, and a long reply spends it whether or not it contains anything he needs. After the E-2125 rebase I wrote several hundred words on what E-2106 had changed underneath, a false-alarm test failure I had already chased down, and a regression line — then, asked for the TL;DR, produced two bullets. Those two bullets were the whole message; everything above them was cost.
+
+The detail was not wrong, it was misplaced. All of it was ALREADY written into the commit message and the task's text field, both durable and both readable on demand. Putting it in the reply too does not add a record, it just charges him to read the record a second time, at the one moment he is trying to decide what to do next.
+
+So: the reply is the ACTION SURFACE, not the report. Lead with what he has to do, and stop. A finding earns a line in the reply only if it changes what he does next or what he would otherwise wrongly believe — 'main was never red, it was my stale binary' does not qualify once the suite is green, because the outcome he acts on is identical either way. Narrative about how the work went, what I considered, what turned out to be a false alarm: that goes in the commit and the task, where it costs nothing to skip.
+
+Do not confuse thoroughness in the WORK with thoroughness in the REPORT. Being complete in the reply is not diligence; it is offloading my summarizing onto him.
+- **Project**: endless
