@@ -5420,3 +5420,11 @@ Write the handoff as: the command to run, plus anything that genuinely needs HIS
 ### [2026-09-07] Search the backlog, then ACT on what the search found — an owning task means report, not file
 For E-2106 I searched for eswt before filing, found three owning tasks (E-1180 add the helper, E-1254 and E-1428 fix claim's reference to it), reported them to Mike — and filed E-2124 anyway for the guide references. Mike: 'Please read ED-1550 and reconsider if you should have filed those two tasks.' ED-1550 rule 4 is search for an owning task FIRST; running the search and then filing regardless satisfies the letter and defeats the point. The guide references were a symptom of the same cause the three tasks already own — eswt was proposed and never shipped — so rule 3 says file the cause, and the cause was already filed. Rule 1 covers the rest: the default response to a finding is to tell the user in chat, and I had already done that in the same breath as filing. Obsoleted E-2124. The test before filing is not 'is this true and unowned by an exact-title match' but 'does an open task already own the CAUSE'.
 - **Project**: endless
+
+### [2026-09-07] A session implements its own task and nothing else — a task you filed is not yours to pick up, and its status is not yours to track
+One session, one task. When you file a follow-up task from inside a task session, filing is where your involvement ends. Do not implement it, do not offer to, do not ask whether to, and do not report its status back — watching it move through the lifecycle frames it as work you are waiting to take, which is the same mistake one step earlier.
+
+The concrete slip: after filing E-2125 from the E-1957 session, the handoff listed it as an action item for Mike and noted it had gone submitted -> underway, adding 'nothing for you unless that wasn't intentional'. That reads as a session keeping a claim on work it does not own. The correct handoff mentions the filed id once, as provenance, and stops.
+
+The rule is not about avoiding wasted effort. Endless tracks which session did which work, and a session that reaches outside its task corrupts that record for both tasks.
+- **Project**: endless
