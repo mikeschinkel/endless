@@ -5454,3 +5454,22 @@ Corollary that also bit me here: when asked whether prior art exists, I searched
 ### [2026-09-07] A guard that exists only to protect your own mechanism is evidence the mechanism is wrong
 In E-2106 I made task claim start a Claude session by exec'ing claude over the shell the claim was typed in. That forced a rule — the tmux window must hold that pane alone — and then a refusal to explain the rule, which Mike had to ask me to write properly. He then said: 'That FEELS like you are working around an architectural flaw instead of finding a solution to resolve the flaw. Have you considered running claude in the first pane, then claiming in pane 2?' He was right, and the tell was already in my own diff: the gate protected nothing about the user's intent, only my exec's need for an empty window. Ask of every guard I add — is this defending the user, or defending my implementation? If the latter, the implementation is the bug. The answer here was the seam that already existed: task spawn opens its own window, so claim uses it and the gate, the refusal and the destroyed shell all disappear together. Also: 'behave like X' from Mike means USE X's mechanism, not build something that resembles it.
 - **Project**: endless
+
+### [2026-09-08] Do not report a guardrail catch I already fixed — that refunds nothing and re-spends the attention the guard saved
+I told Mike: 'I had to fix two stale line-number citations in E-2035's pre-existing analysis — the validator rejected the whole field.' He was right to be angry.
+
+E-2026 is the task that motivated that validator: plans kept arriving with file:line references, they go stale, and Mike had been giving the rule verbally for months without it sticking. The mechanical check exists SO HE NEVER HAS TO THINK ABOUT IT AGAIN. The validator fired, I complied, the content is now durable. That is the system working end to end, with zero cost to him.
+
+Then I narrated it -- and made him spend exactly the attention the guard was built to save. A guard's value IS the attention it saves. Reporting the catch refunds none of it and charges the same amount twice.
+
+Rule: when a guardrail catches me and I resolve it, that is not news. Do not mention it. The work product is the report.
+
+What still IS worth surfacing:
+- The guard fired and I could NOT resolve it, so the work is blocked or incomplete.
+- The guard itself is wrong -- misfiring, or refusing something correct. That is a defect in the guard, not a story about me.
+- The fix changed MEANING rather than form. Rewording a citation to drop a line number is form. Deleting a constraint because the validator complained is meaning, and he must know.
+
+The general shape: distinguish 'something happened to me while working' from 'something you need to decide or know'. Only the second belongs in the reply. My compliance with an existing rule is never the first kind of news -- and confessing it reads as seeking credit for following a rule.
+
+Same test applies to the near-miss: do not report errors I caught myself before they had any effect.
+- **Project**: endless
