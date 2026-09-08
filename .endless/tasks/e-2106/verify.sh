@@ -350,6 +350,37 @@ else
     report_fail "task claim --help" "exit 0" "$(tail -10 "${TMP}/claimhelp.log")"
 fi
 
+# A shell claim starts Claude in the pane it runs in, so a window holding other
+# panes is REFUSED rather than quietly redirected to a new window — a new
+# window is a different outcome from the one the command implies, and choosing
+# it silently leaves the caller looking at an unchanged screen.
+cat >"${TMP}/window_gate.py" <<'PY_GATE'
+import sys
+from endless import task_cmd, session_cmd
+session_cmd._tmux_window_pane_ids = lambda: (
+    None if sys.argv[1] == "NOTMUX" else ["%1"] * int(sys.argv[1])
+)
+try:
+    task_cmd._require_launchable_window(2106)
+except Exception as e:
+    print("REFUSED: " + " ".join(str(e).split()))
+    sys.exit(3)
+print("ALLOWED")
+PY_GATE
+
+assert_eq "a window holding this pane alone is launchable" \
+    "ALLOWED" "$(uv run python "${TMP}/window_gate.py" 1)"
+
+gate="$(uv run python "${TMP}/window_gate.py" 3)"
+assert_contains "a window holding other panes is refused" "REFUSED" "${gate}"
+assert_contains "…the refusal says WHY" "resize the panes you arranged" "${gate}"
+assert_contains "…and how not to hit it again" "tmux new-window" "${gate}"
+assert_contains "…naming the claim to re-run" "endless task claim E-2106" "${gate}"
+
+gate="$(uv run python "${TMP}/window_gate.py" NOTMUX)"
+assert_contains "no tmux is refused too" "no tmux" "${gate}"
+assert_contains "…routed to the flag for working it by hand" "--unattended" "${gate}"
+
 # Grepped as CODE, not as prose: this change's own comments explain what it
 # removed and name both strings.
 if grep -q "^def _eswt_defined_in_user_shell" src/endless/task_cmd.py; then

@@ -129,6 +129,9 @@ def test_claim_refuses_when_no_session_and_names_unattended(project_with_task):
     shell, in tmux, picking up a task — for whom a session is available, just
     not started yet. What is left is the caller who cannot start one at all: no
     tmux. (No TMUX in the environment here; `isolated_env` strips it.)
+
+    It also fires BEFORE the claim now, so a refusal leaves no half-claimed
+    task behind.
     """
     from unittest.mock import patch
     from endless.task_cmd import claim_item, _reset_session_choice_cache
@@ -146,6 +149,8 @@ def test_claim_refuses_when_no_session_and_names_unattended(project_with_task):
     assert "no tmux" in msg
     assert "--unattended" in msg
     assert "--force" not in msg
+    assert db.query("SELECT status FROM tasks WHERE id = ?", (tid,))[0]["status"] \
+        != "underway", "a refused claim must not have moved the task"
 
 
 def test_claim_from_a_shell_in_tmux_starts_a_session(project_with_task,
@@ -159,10 +164,14 @@ def test_claim_from_a_shell_in_tmux_starts_a_session(project_with_task,
 
     task_cmd._reset_session_choice_cache()
     monkeypatch.setenv("TMUX", "/tmp/tmux-501/default,1,0")
+    monkeypatch.setenv("TMUX_PANE", "%3")
+    monkeypatch.setattr(
+        "endless.session_cmd._tmux_window_pane_ids", lambda: ["%3"],
+    )
     launched: list[tuple] = []
     monkeypatch.setattr(
         task_cmd, "_launch_claude_for_claim",
-        lambda item_id, project_id, worktree, spawner: launched.append(
+        lambda item_id, project_id, worktree: launched.append(
             (item_id, worktree)
         ),
     )
@@ -399,3 +408,29 @@ def test_claim_worktree_discoverable_via_for_task(project_with_task):
     assert match is not None
     assert match["state"] == "active"
     assert Path(match["path"]) == repo / ".endless" / "worktrees" / f"e-{tid}"
+
+
+def test_a_bound_sibling_session_is_pointed_at_not_launched_over(
+    project_with_task, monkeypatch, capsys
+):
+    """E-1242's path is untouched: when the resolver finds a live Claude
+    session in another pane, claim binds the task to it. Nothing needs
+    starting, so nothing is launched and no window is refused — the caller just
+    needs the way over to it."""
+    from unittest.mock import patch
+    from endless import task_cmd
+
+    task_cmd._reset_session_choice_cache()
+    monkeypatch.setattr(
+        task_cmd, "_launch_claude_for_claim",
+        lambda *a, **kw: pytest.fail("a bound session must not be launched over"),
+    )
+    tid = project_with_task["task_id"]
+    with patch(
+        "endless.task_cmd._resolve_session_id_with_prompt", return_value=4242,
+    ):
+        task_cmd.claim_item(tid)
+
+    out = capsys.readouterr().out
+    assert "ES-4242" in out
+    assert "endless session goto ES-4242" in out

@@ -10,9 +10,11 @@ marks it "planned, not yet shipped"), so its bootstrap line taught a command
 that does not exist.
 
 What replaced it is one outcome per caller, decided rather than offered. These
-pin the shell caller's: a shell cannot BECOME the session, so one is launched —
-the same thing `task spawn` does, minus the handoff, since delivering a handoff
-is what re-reads a task as if it were new.
+pin the shell caller's: a shell cannot BECOME the session, so one is launched in
+this pane — the same thing `task spawn` does, minus the handoff, since
+delivering a handoff is what re-reads a task as if it were new. A window that
+cannot be launched into safely is refused before the claim, never quietly
+redirected somewhere the caller did not ask for.
 """
 
 import pytest
@@ -57,17 +59,6 @@ def shell_in_tmux(monkeypatch, tmp_path):
 
     monkeypatch.setattr(task_cmd.os, "execvp", fake_exec)
 
-    def fake_run(argv, **kw):
-        trace.append(("spawn-window", list(argv)))
-
-        class _R:
-            returncode = 0
-        return _R()
-
-    monkeypatch.setattr(task_cmd.subprocess, "run", fake_run)
-    monkeypatch.setattr(
-        "endless.event_bridge._resolve_endless_go", lambda *a, **kw: "/bin/endless-go",
-    )
     return trace
 
 
@@ -80,16 +71,13 @@ def _kind(trace, kind):
     return [payload for k, payload in trace if k == kind]
 
 
-def test_a_lone_pane_is_taken_over_in_place(shell_in_tmux, monkeypatch):
-    """The window holds nothing else, so there is nothing to disturb: the pane
-    becomes the Claude pane."""
+def test_the_pane_becomes_the_claude_pane(shell_in_tmux, monkeypatch):
     _panes(monkeypatch, ["%3"])
 
     with pytest.raises(_Exec):
-        task_cmd._launch_claude_for_claim(77, 3, "/wt/e-77", "pid-1")
+        task_cmd._launch_claude_for_claim(77, 3, "/wt/e-77")
 
     assert _kind(shell_in_tmux, "exec") == [["/bin/claude", "claude"]]
-    assert _kind(shell_in_tmux, "spawn-window") == []
 
 
 def test_the_pane_is_laid_out_before_the_exec(shell_in_tmux, monkeypatch):
@@ -98,7 +86,7 @@ def test_the_pane_is_laid_out_before_the_exec(shell_in_tmux, monkeypatch):
     _panes(monkeypatch, ["%3"])
 
     with pytest.raises(_Exec):
-        task_cmd._launch_claude_for_claim(77, 3, "/wt/e-77", "pid-1")
+        task_cmd._launch_claude_for_claim(77, 3, "/wt/e-77")
 
     kinds = [k for k, _ in shell_in_tmux]
     assert kinds.index("options") < kinds.index("exec")
@@ -112,36 +100,44 @@ def test_the_window_is_renamed_for_the_task(shell_in_tmux, monkeypatch):
     _panes(monkeypatch, ["%3"])
 
     with pytest.raises(_Exec):
-        task_cmd._launch_claude_for_claim(77, 3, "/wt/e-77", "pid-1")
+        task_cmd._launch_claude_for_claim(77, 3, "/wt/e-77")
 
     assert _kind(shell_in_tmux, "tmux") == [
         ["rename-window", "-t", "%3", task_cmd.tmux_window_name(77)]
     ]
 
 
-def test_a_populated_window_gets_a_new_one(shell_in_tmux, monkeypatch):
-    """Taking over a pane here would resize panes the user arranged — the same
-    rule, and the same reason, as `session resume`'s refusal."""
+def test_a_populated_window_is_refused(shell_in_tmux, monkeypatch):
+    """Taking over a pane here would resize panes the user arranged, and
+    quietly opening a new window instead is a different outcome from the one
+    the command implies — the caller would be left looking at an unchanged
+    screen. So it refuses, and says how not to hit it again."""
+    import click
     _panes(monkeypatch, ["%3", "%4", "%5"])
 
-    task_cmd._launch_claude_for_claim(77, 3, "/wt/e-77", "pid-1")
+    with pytest.raises(click.ClickException) as err:
+        task_cmd._require_launchable_window(77)
 
-    assert _kind(shell_in_tmux, "exec") == []
-    argv = _kind(shell_in_tmux, "spawn-window")[0]
-    assert argv[1] == "spawn-window"
-    assert "--task-id" in argv and argv[argv.index("--task-id") + 1] == "77"
-    assert "--cwd" in argv and argv[argv.index("--cwd") + 1] == "/wt/e-77"
+    msg = err.value.format_message()
+    assert "3 panes" in msg
+    assert "tmux new-window" in msg
+    assert "endless task claim E-77" in msg
+    assert "--unattended" in msg
 
 
-def test_the_new_window_carries_no_handoff(shell_in_tmux, monkeypatch, tmp_path):
-    """Spawn's handoff is what re-reads a task as if it were new, and picking
-    work back UP is this task's whole subject. The launcher spells "a bare
-    interactive claude" as an empty handoff file, so that is what is passed."""
-    _panes(monkeypatch, ["%3", "%4"])
+def test_no_tmux_is_refused_with_the_unattended_route(shell_in_tmux, monkeypatch):
+    import click
+    _panes(monkeypatch, None)
 
-    task_cmd._launch_claude_for_claim(77, 3, "/wt/e-77", "pid-1")
+    with pytest.raises(click.ClickException) as err:
+        task_cmd._require_launchable_window(77)
 
-    argv = _kind(shell_in_tmux, "spawn-window")[0]
-    handoff = argv[argv.index("--handoff-file") + 1]
-    with open(handoff) as f:
-        assert f.read() == ""
+    msg = err.value.format_message()
+    assert "no tmux" in msg
+    assert "endless task claim E-77 --unattended" in msg
+
+
+def test_a_lone_pane_is_launchable(shell_in_tmux, monkeypatch):
+    _panes(monkeypatch, ["%3"])
+
+    task_cmd._require_launchable_window(77)   # does not raise
