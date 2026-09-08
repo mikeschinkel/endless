@@ -5416,3 +5416,7 @@ The final reply to Mike is not where the work gets explained. Rationale, design 
 
 Write the handoff as: the command to run, plus anything that genuinely needs HIS decision or that he would be surprised by later. Nothing else. If a paragraph does not end in something he must do or choose, it does not belong in the reply.
 - **Project**: endless
+
+### [2026-09-07] Search the backlog, then ACT on what the search found — an owning task means report, not file
+For E-2106 I searched for eswt before filing, found three owning tasks (E-1180 add the helper, E-1254 and E-1428 fix claim's reference to it), reported them to Mike — and filed E-2124 anyway for the guide references. Mike: 'Please read ED-1550 and reconsider if you should have filed those two tasks.' ED-1550 rule 4 is search for an owning task FIRST; running the search and then filing regardless satisfies the letter and defeats the point. The guide references were a symptom of the same cause the three tasks already own — eswt was proposed and never shipped — so rule 3 says file the cause, and the cause was already filed. Rule 1 covers the rest: the default response to a finding is to tell the user in chat, and I had already done that in the same breath as filing. Obsoleted E-2124. The test before filing is not 'is this true and unowned by an exact-title match' but 'does an open task already own the CAUSE'.
+- **Project**: endless
