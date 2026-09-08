@@ -5326,3 +5326,7 @@ Rules:
 - A backlog with hundreds of open tasks means a vivid discovery is MORE likely to be already-known, not less. Something that bites hard has probably bitten before.
 - Read what the existing task already decided before restating it. E-1347 also said explicitly NOT to re-run claude-settings-init after recovery -- the exact step I had put in my proposed unblock, which would have re-armed the collision.
 - **Project**: endless
+
+### [2026-09-07] task spawn is for never-before-worked tasks; its prior-claim refusal is the feature
+Planning E-2106 I argued that task spawn already means start fresh on this task, and that its prior-claim refusal was a catch to be taught an exemption. Mike: 'NO. It isnt. Spawn is for NEW sessions which mean NEVER BEFORE worked on tasks. Spawn is NOT to rework an existing task. Why? To stop from ACCIDENTALLY restarting an existing task as if it were new.' The refusal is working as intended and must not learn exemptions. The verbs divide by WINDOW, not by freshness: session resume takes over the CURRENT tmux window, assuming no prior session was started there; session goto --resume opens a NEW window. When resume cannot proceed, the fix is a flag on resume, not a hole in spawn. Read a refusal as a designed guard before treating it as an obstacle to the thing I happen to be building.
+- **Project**: endless
