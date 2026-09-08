@@ -84,19 +84,6 @@ func runSpawnWindow(args []string) {
 	buildSpawnLayout(*windowName, *cwd)
 }
 
-// monitorCommand is the argv run in the layout's monitor pane. `endless session
-// monitor` is the verb a user would type; it is resolved to an absolute path
-// when possible so the pane doesn't depend on tmux's PATH matching the
-// spawner's, and left bare (letting tmux's execvp report the failure in-pane)
-// when the CLI isn't on PATH at all.
-func monitorCommand() []string {
-	bin, err := exec.LookPath("endless")
-	if err != nil {
-		bin = "endless"
-	}
-	return []string{bin, "session", "monitor"}
-}
-
 // projectDirFor resolves the directory the monitor and shell panes start in: the
 // project's MAIN checkout, even when the spawned session works in a per-task
 // worktree.
@@ -161,54 +148,20 @@ func gitRevParse(dir, arg string) (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
-// buildSpawnLayout turns the freshly created single-pane window into the
-// canonical Endless working layout (E-1851): claude on the left at half width
-// and full height, `endless session monitor` top-right, and a bare interactive
-// shell bottom-right for ad-hoc endless commands. Focus ends on claude.
-//
-// The two right panes start in the PROJECT dir, not the window's worktree cwd —
-// see projectDirFor for why the DB routing makes that the correct home for both.
+// buildSpawnLayout resolves the freshly created window's only pane — which is
+// claude, because nothing else exists in it yet — and hands it to the shared
+// layout builder in layout.go.
 //
 // It runs AFTER new-window returns, from this process, because pane 0 is claude:
 // runSpawnLaunch replaces that pane via syscall.Exec and so cannot orchestrate
 // anything afterward.
-//
-// Split order matters. The SHELL pane is created first and the monitor is
-// inserted ABOVE it (-b), rather than the reverse: `session monitor` shrinks its
-// own pane to its frame on first paint (see sessionstatuscmd.fitPaneToFrame), so
-// creating the monitor first and then splitting it would race that shrink and
-// leave the shell with whatever few rows survived. Splitting the shell can't
-// race anything. The monitor is therefore left at tmux's even split and sizes
-// itself a moment later — which is also why nothing here has to guess a height
-// it has no way to know.
-//
-// Best-effort throughout, matching the option-setting path: claude in pane 0 is
-// the load-bearing part of a spawn, so a tmux failure here surfaces on stderr
-// and returns, never fails the spawn.
 func buildSpawnLayout(windowName, cwd string) {
-	// The window's active pane is claude — nothing else exists in it yet.
-	claudePane, err := runTmuxOut(panePaneIDArgs(windowName)...)
+	claudePane, err := tmuxRunOut(panePaneIDArgs(windowName)...)
 	if err != nil || claudePane == "" {
 		fmt.Fprintf(os.Stderr, "spawn-window: layout skipped (no pane id): %v\n", err)
 		return
 	}
-
-	paneDir := projectDirFor(cwd)
-
-	shellPane, err := runTmuxOut(splitWindowArgs(claudePane, true, false, paneDir, 0, nil)...)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "spawn-window: layout: shell pane: %v\n", err)
-		return
-	}
-
-	if _, err = runTmuxOut(splitWindowArgs(shellPane, false, true, paneDir, 0, monitorCommand())...); err != nil {
-		fmt.Fprintf(os.Stderr, "spawn-window: layout: monitor pane: %v\n", err)
-		// Fall through: a 2-pane window still wants focus back on claude.
-	}
-
-	if err = runTmux(selectPaneArgs(claudePane)...); err != nil {
-		fmt.Fprintf(os.Stderr, "spawn-window: layout: focus claude: %v\n", err)
-	}
+	buildLayoutAround(claudePane, cwd)
 }
 
 func fail(format string, a ...any) {

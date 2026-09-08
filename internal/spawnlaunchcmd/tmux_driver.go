@@ -97,6 +97,16 @@ func windowOptionCommands(target string, spec LaunchSpec) [][]string {
 	}
 }
 
+// tmuxRun / tmuxRunOut are the indirection the layout builder calls through.
+// The argv builders above are pure and tested directly; the builder that
+// SEQUENCES them is not, and since E-2106 three verbs share it — spawn, both
+// resume paths, and a shell `task claim` — so the order and the pane it threads
+// between splits are worth pinning without a live tmux server.
+var (
+	tmuxRun    = runTmux
+	tmuxRunOut = runTmuxOut
+)
+
 // runTmux execs one tmux command, surfacing its stderr on failure.
 func runTmux(args ...string) error {
 	cmd := exec.Command("tmux", args...)

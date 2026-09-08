@@ -81,6 +81,10 @@ def goto_env(registered_project, monkeypatch, stage_live_session):
     inside tmux, and optionally sets the current pane.
     """
     monkeypatch.chdir(registered_project)
+    # E-2106: the resume path lays its window out via `endless-go spawn-layout`.
+    # FakeTmux stands in for tmux, not for the Go binary, so the builder is
+    # stubbed out — pane geometry has its own tests.
+    monkeypatch.setattr(session_cmd, "build_pane_layout", lambda pane, cwd: None)
 
     def _make(panes, spawned_by="", current_pane=None, client="cli"):
         monkeypatch.setenv("TMUX", "/tmp/tmux-test,1,0")
@@ -211,8 +215,21 @@ def test_goto_outside_tmux(goto_env, monkeypatch, capsys):
 # ─── --resume (E-1797) ────────────────────────────────────────────────────────
 
 
+def _stage_transcript(monkeypatch, tmp_path, uuid):
+    """Put `uuid`'s transcript on disk under a private Claude home.
+
+    Since E-2106 a resume refuses a target whose transcript is gone, so "this
+    resolves cleanly" includes the file being there. Isolated via
+    CLAUDE_CONFIG_DIR so the test never reads (or depends on) the real one.
+    """
+    projects = tmp_path / "claude-home" / "projects" / "-staged"
+    projects.mkdir(parents=True, exist_ok=True)
+    (projects / f"{uuid}.jsonl").write_text("{}\n")
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(tmp_path / "claude-home"))
+
+
 def _stage_resumable(monkeypatch, worktree, uuid="uuid-abc123",
-                     eid=1748, task=1748):
+                     eid=1748, task=1748, tmp_path=None):
     """Patch _resume_target + _require_claude so a resume resolves cleanly to a
     real on-disk worktree, without needing endless-go or a live `claude`."""
     monkeypatch.setattr(session_cmd, "_resume_target", lambda ref: {
@@ -220,6 +237,7 @@ def _stage_resumable(monkeypatch, worktree, uuid="uuid-abc123",
         "worktree_path": str(worktree), "state": "ended",
     })
     monkeypatch.setattr(session_cmd, "_require_claude", lambda: "/usr/bin/claude")
+    _stage_transcript(monkeypatch, tmp_path or worktree, uuid)
 
 
 def test_goto_resume_opens_new_window_when_not_live(
@@ -429,6 +447,7 @@ def _stage_settled(monkeypatch, worktree, status, task=1748, eid=1748):
         "task_status": status, "task_title": "settled task",
     })
     monkeypatch.setattr(session_cmd, "_require_claude", lambda: "/usr/bin/claude")
+    _stage_transcript(monkeypatch, worktree, "uuid-settled")
     monkeypatch.setattr(
         session_cmd, "_emit_task_status_change",
         lambda *a, **kw: emitted.append((a, kw)),

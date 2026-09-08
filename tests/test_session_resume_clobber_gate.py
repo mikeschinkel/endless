@@ -223,10 +223,12 @@ def test_unresolvable_target_still_refuses(pane_holding, target, no_resolution):
     assert "E-1958" in str(exc.value)
 
 
-def test_self_resume_reaches_the_exec(pane_holding, target, monkeypatch, capsys):
+def test_self_resume_reaches_the_exec(pane_holding, target, monkeypatch, capsys,
+                                      stage_transcript):
     """End to end past the gate: a self-resume execs `claude --resume` in the
     pane instead of raising."""
     target(1958)
+    stage_transcript("uuid-1958")
     monkeypatch.setattr(
         session_cmd, "_resolve_resume",
         lambda ref, **kw: ("uuid-1958", "/tmp/wt", "E-1958", 70),
@@ -234,6 +236,7 @@ def test_self_resume_reaches_the_exec(pane_holding, target, monkeypatch, capsys)
     monkeypatch.setattr(session_cmd, "_require_claude", lambda: "/bin/claude")
     monkeypatch.setattr(session_cmd, "_bind_pane_window_options",
                         lambda *a, **kw: None)
+    monkeypatch.setattr(session_cmd, "build_pane_layout", lambda p, c: None)
     monkeypatch.setattr(session_cmd.os, "chdir", lambda p: None)
     execed = {}
     monkeypatch.setattr(session_cmd.os, "execvp",

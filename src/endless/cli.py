@@ -1229,6 +1229,17 @@ def session_cd(session_ref, show_all, target):
     session_cd_resolve(session_ref, show_all=show_all, target=target)
 
 
+# E-2106: one sentence, two verbs. `session resume` and `session goto --resume`
+# divide by WINDOW — current pane vs. new window — and giving up on a transcript
+# is a separate choice from where the replacement session opens, so the flag is
+# on both and must read identically on both.
+NEW_TRANSCRIPT_HELP = (
+    "give up on the target's transcript and start a FRESH Claude session on "
+    "the task instead: a plain `claude` in its worktree, no `--resume`. "
+    "Required once the transcript file is gone."
+)
+
+
 @session_cmd.command("goto")
 @click.argument("target_ref")
 @click.option(
@@ -1246,7 +1257,11 @@ def session_cd(session_ref, show_all, target):
     help="With --resume, on a confirmed/assumed/completed target: open the "
          "session to read it back; leave the task's status alone.",
 )
-def session_goto(target_ref, resume, revisit, no_revisit):
+@click.option(
+    "--new-transcript", "new_transcript", is_flag=True,
+    help="With --resume, " + NEW_TRANSCRIPT_HELP,
+)
+def session_goto(target_ref, resume, revisit, no_revisit, new_transcript):
     """Switch tmux focus to a task's or session's pane, with a back-stack.
 
     <target_ref> is a task id (E-NNNN or NNNN) or a session id (ES-NNNN, a bare
@@ -1264,10 +1279,14 @@ def session_goto(target_ref, resume, revisit, no_revisit):
     Resuming settled work (confirmed/assumed/completed) requires saying which
     you mean: --revisit reopens the task and continues; --no-revisit reads the
     session back without touching its status.
+
+    A target whose Claude transcript file is gone is refused rather than
+    launched into a window that dies on the spot; --new-transcript is the route
+    on from there.
     """
     from endless.session_cmd import session_goto as run_goto
     run_goto(target_ref, resume=resume, revisit=revisit,
-             no_revisit=no_revisit)
+             no_revisit=no_revisit, new_transcript=new_transcript)
 
 
 @session_cmd.command("resume")
@@ -1304,7 +1323,12 @@ def session_goto(target_ref, resume, revisit, no_revisit):
     help="Replace this pane even though the session in it is working a task. "
          "Required whenever that is the case — the exec destroys it.",
 )
-def session_resume(ref, review, reopen, dry_run, print_decision, force):
+@click.option(
+    "--new-transcript", "new_transcript", is_flag=True,
+    help=NEW_TRANSCRIPT_HELP[0].upper() + NEW_TRANSCRIPT_HELP[1:],
+)
+def session_resume(ref, review, reopen, dry_run, print_decision, force,
+                   new_transcript):
     """Relaunch a lost Claude session in the CURRENT tmux pane.
 
     REF is a task id (E-NNNN, as shown on the tmux tab), a session id
@@ -1325,11 +1349,18 @@ def session_resume(ref, review, reopen, dry_run, print_decision, force):
 
     This replaces the pane it runs in. When that pane already holds a session
     working a task, it refuses without --force and points at
-    `session goto <ref> --resume`, which opens a new window instead.
+    `session goto <ref> --resume`, which opens a new window instead. It also
+    refuses a window holding more than one pane, since it lays the window out
+    around the pane it takes over.
+
+    A target whose Claude transcript file is gone is refused before anything is
+    launched — the file may still be recoverable from a backup, and that window
+    closes quietly. --new-transcript is the deliberate give-up route.
     """
     from endless.session_cmd import resume_session
     resume_session(ref, review=review, reopen=reopen,
-                   dry_run=dry_run or print_decision, force=force)
+                   dry_run=dry_run or print_decision, force=force,
+                   new_transcript=new_transcript)
 
 
 @session_cmd.command("back")

@@ -27,6 +27,20 @@ This:
 2. Binds the task to your session.
 3. Creates a git worktree at `.endless/worktrees/e-<id>/` rooted on a fresh branch `task/<id>-<slug>`.
 4. Writes companion metadata to `.endless/worktree.json` (task_id, base_branch, branch, timestamp).
+5. Ends with the ONE next step for whoever ran it, rather than a menu:
+
+   | You ran it from | What claim does |
+   |---|---|
+   | inside a Claude session | prints `/cd <worktree>`. The session is already here; only its working directory is in the wrong place. |
+   | a shell, in tmux | starts Claude on the task — the layout `task spawn` builds, and a plain `claude` in the worktree, without spawn's handoff. A window holding that pane alone is taken over in place; a populated one gets a new window rather than having your panes resized around a split. |
+   | a shell, no tmux | refuses, naming `--unattended`. There is no session and nowhere to start one. |
+   | `--unattended` | prints the worktree and stops. You said there is no Claude session and you want none. |
+
+   It used to print "To work on this task, choose one:" instead, and on a
+   re-claim — the case that reaches it most often — both options were dead ends.
+   Option 1 was `task spawn`, refused for any task that has ever been claimed.
+   Option 2 taught `eswt`, a shell helper `endless shell-init` has never
+   defined.
 
 One task gets exactly one worktree: `.endless/worktrees/e-<id>/`. Only that canonical name is recognized — a directory created by hand under any other name simply isn't seen as the task's worktree. When you need a *second* checkout for the same line of work — an A/B comparison, running one copy while editing another, a `git bisect`, or a throwaway snapshot — file a **child task** and claim it. The child gets its own `e-<child-id>/` worktree (and its own sandbox), so the two checkouts are first-class, independently tracked, and land or drop on their own.
 

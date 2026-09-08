@@ -123,6 +123,12 @@ def test_claim_refuses_when_no_session_and_names_unattended(project_with_task):
     `--force`'s undocumented second half is now `--unattended`, and this
     refusal is the only place a caller learns the flag exists — so it names the
     new one and not the deprecated one.
+
+    E-2106 narrowed WHEN it fires. It used to cover every caller that could not
+    name a session, including the most ordinary one there is: a user in a
+    shell, in tmux, picking up a task — for whom a session is available, just
+    not started yet. What is left is the caller who cannot start one at all: no
+    tmux. (No TMUX in the environment here; `isolated_env` strips it.)
     """
     from unittest.mock import patch
     from endless.task_cmd import claim_item, _reset_session_choice_cache
@@ -136,9 +142,39 @@ def test_claim_refuses_when_no_session_and_names_unattended(project_with_task):
         with pytest.raises(click.ClickException) as exc:
             claim_item(tid)
     msg = str(exc.value)
-    assert "No Claude session available" in msg
+    assert "No Claude session to bind this task to" in msg
+    assert "no tmux" in msg
     assert "--unattended" in msg
     assert "--force" not in msg
+
+
+def test_claim_from_a_shell_in_tmux_starts_a_session(project_with_task,
+                                                     monkeypatch):
+    """The caller the old refusal got wrong (E-2106). A shell cannot BECOME the
+    session, so one is launched — the same thing `task spawn` does, minus the
+    handoff, because delivering a handoff is what re-reads a task as if it were
+    new."""
+    from unittest.mock import patch
+    from endless import task_cmd
+
+    task_cmd._reset_session_choice_cache()
+    monkeypatch.setenv("TMUX", "/tmp/tmux-501/default,1,0")
+    launched: list[tuple] = []
+    monkeypatch.setattr(
+        task_cmd, "_launch_claude_for_claim",
+        lambda item_id, project_id, worktree, spawner: launched.append(
+            (item_id, worktree)
+        ),
+    )
+    tid = project_with_task["task_id"]
+    with patch(
+        "endless.task_cmd._resolve_session_id_with_prompt", return_value=None,
+    ):
+        task_cmd.claim_item(tid)
+
+    assert len(launched) == 1
+    assert launched[0][0] == tid
+    assert f"e-{tid}" in launched[0][1]
 
 
 def test_claim_unattended_is_only_the_session_half(project_with_task):
@@ -218,14 +254,17 @@ def test_claim_creates_worktree_no_plan_file(project_with_task, capsys):
     ).stdout
     assert f"task/{tid}-move-title-verbs-hardcoded-list-database" in branches
 
-    # User-facing output: new format with "worktree created", spawn option,
-    # and the eswt helper command. Defaults to verbose form because no
-    # SHELL is set in the test environment (or eswt isn't defined there).
+    # User-facing output. E-2106 replaced the trailing "choose one" block with
+    # one outcome per caller; `--unattended` says there is no Claude session
+    # and none is wanted, so the worktree path IS the whole answer. The two
+    # options it used to print were both dead: `task spawn` refuses any task
+    # that has ever been claimed, and `eswt` is a shell helper
+    # `endless shell-init` has never defined.
     captured = capsys.readouterr()
     assert "worktree created:" in captured.out
-    assert f"endless task spawn E-{tid}" in captured.out
-    assert f"eswt E-{tid}" in captured.out
-    assert 'eval "$(endless shell-init)"' in captured.out
+    assert "choose one" not in captured.out
+    assert f"endless task spawn E-{tid}" not in captured.out
+    assert "eswt" not in captured.out
 
 
 def test_claim_idempotent_on_second_run(project_with_task, capsys):
@@ -237,10 +276,11 @@ def test_claim_idempotent_on_second_run(project_with_task, capsys):
     claim_item(project_with_task["task_id"], unattended=True)
     captured = capsys.readouterr()
     assert "worktree already exists:" in captured.out
-    # Re-run still shows the same two-option block
+    # A re-claim is the case the old block got most wrong — its first option,
+    # `task spawn`, is refused on any task with a prior claimant (E-2106).
     tid = project_with_task["task_id"]
-    assert f"endless task spawn E-{tid}" in captured.out
-    assert f"eswt E-{tid}" in captured.out
+    assert f"endless task spawn E-{tid}" not in captured.out
+    assert "eswt" not in captured.out
 
     repo = project_with_task["project_root"]
     tid = project_with_task["task_id"]
@@ -320,16 +360,29 @@ def test_claim_uses_task_fallback_for_all_filler_title(seeded_project_at_cwd):
     assert companion["branch"] == f"task/{tid}-task"
 
 
-def test_claim_skips_eval_line_when_eswt_already_defined(project_with_task, capsys, monkeypatch):
-    """When _eswt_defined_in_user_shell() returns True, suppress the bootstrap line."""
+def test_claim_inside_a_claude_session_prints_only_cd(project_with_task,
+                                                      capsys, monkeypatch):
+    """A Claude session that claims a task is already here; the one thing out
+    of place is its working directory (E-2106). So it gets `/cd` and nothing
+    else — no menu, and above all no second Claude launched for a task the
+    first one is about to work."""
     from endless import task_cmd
 
-    monkeypatch.setattr(task_cmd, "_eswt_defined_in_user_shell", lambda: True)
-    task_cmd.claim_item(project_with_task["task_id"], unattended=True)
+    monkeypatch.setenv("CLAUDECODE", "1")
+    monkeypatch.setattr(task_cmd, "_resolve_session_id_with_prompt",
+                        lambda **kw: 1)
+    monkeypatch.setattr(
+        task_cmd, "_launch_claude_for_claim",
+        lambda *a, **kw: pytest.fail("a Claude session must not launch another"),
+    )
+
+    task_cmd.claim_item(project_with_task["task_id"])
+
     captured = capsys.readouterr()
     tid = project_with_task["task_id"]
-    assert f"eswt E-{tid}" in captured.out
-    assert 'eval "$(endless shell-init)"' not in captured.out
+    assert f"/cd " in captured.out
+    assert f".endless/worktrees/e-{tid}" in captured.out
+    assert "choose one" not in captured.out
 
 
 def test_claim_worktree_discoverable_via_for_task(project_with_task):

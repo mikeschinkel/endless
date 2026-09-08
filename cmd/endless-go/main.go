@@ -15,6 +15,7 @@
 //	endless-go project-status  (renders the project attention board; --monitor loops it)
 //	endless-go project-window  (creates the dedicated two-pane tmux session the board lives in)
 //	endless-go spawn-window  (the multiplexer seam: creates the tmux window that launches Claude on a task)
+//	endless-go spawn-layout  (the pane layout around an existing Claude pane — resume and claim reach it too)
 //	endless-go spawn-launch  (internal: sets @endless_* window options, then execs claude inside the window)
 //	endless-go template      render
 //	endless-go markdown      render
@@ -220,7 +221,7 @@ func main() {
 		sessionstatuscmd.Run(rest)
 	case "project-status", "project-window":
 		projectstatuscmd.Run(sub, rest)
-	case "spawn-window", "spawn-launch":
+	case "spawn-window", "spawn-layout", "spawn-launch":
 		spawnlaunchcmd.Run(sub, rest)
 	case "template":
 		templatecmd.Run(rest)
@@ -327,6 +328,7 @@ func usage(w *os.File) {
 	fmt.Fprintln(w, "  project-status render the project attention board (--monitor loops it)")
 	fmt.Fprintln(w, "  project-window create the dedicated two-pane tmux session the board lives in")
 	fmt.Fprintln(w, "  spawn-window   create the tmux window that launches Claude on a task")
+	fmt.Fprintln(w, "  spawn-layout   build the standard pane layout around an existing Claude pane")
 	fmt.Fprintln(w, "  spawn-launch   (internal) set window options and exec claude inside the window")
 	fmt.Fprintln(w, "  template       render")
 	fmt.Fprintln(w, "  markdown       render (markdown → colorized ANSI)")

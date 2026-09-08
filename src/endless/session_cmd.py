@@ -154,6 +154,72 @@ def _try_resume_target(ref: str) -> dict | None:
         return None
 
 
+def claude_projects_dir() -> Path:
+    """Root of Claude Code's per-project transcript directories.
+
+    `CLAUDE_CONFIG_DIR` is Claude Code's own override for where its home lives;
+    honouring it is what keeps this working for someone whose Claude home is not
+    `~/.claude` — a shared machine, an XDG-tidy setup, a second install kept
+    beside the first.
+    """
+    override = os.environ.get("CLAUDE_CONFIG_DIR")
+    base = Path(override).expanduser() if override else Path.home() / ".claude"
+    return base / "projects"
+
+
+def transcript_path(uuid: str) -> Path | None:
+    """The on-disk Claude transcript for `uuid`, or None when it is gone.
+
+    Claude files a transcript at `<claude home>/projects/<slug>/<uuid>.jsonl`,
+    where the slug encodes the directory the session was running in. So this
+    GLOBS every project directory rather than deriving the slug from the task's
+    worktree: a session that ran `/cd` is filed under the slug of wherever it
+    ENDED, not where it started, and slug-derivation reports a confident, false
+    "missing" for it. Observed live while recovering E-1934 (E-2106).
+
+    Returns the first match. More than one is possible in principle — the same
+    uuid filed under two slugs — and they are the same session's transcript
+    either way, so there is nothing to choose between them.
+    """
+    if not uuid:
+        return None
+    try:
+        matches = sorted(claude_projects_dir().glob(f"*/{uuid}.jsonl"))
+    except OSError:
+        return None
+    return matches[0] if matches else None
+
+
+def _require_transcript(uuid: str, label: str, verb: str) -> None:
+    """Refuse a resume whose Claude transcript is gone, and route the user.
+
+    An ERROR on every path, never a warning, and never warn-then-launch-anyway
+    (E-2106). A file that is merely missing is often still recoverable — a
+    backup, a snapshot, another machine — and that window closes quietly.
+    Handing `claude --resume` a uuid with nothing behind it spends the recovery
+    decision on the user's behalf: the process exits immediately, and on the
+    `session goto --resume` path it does so inside a brand-new window that
+    closes with it, so nothing is left on screen to read.
+
+    `verb` is the caller's full command form, so the give-up route can be
+    printed as a line the user can run rather than a flag they have to attach.
+    """
+    if transcript_path(uuid) is not None:
+        return
+    raise click.ClickException(
+        f"{label}'s Claude transcript is gone — no {uuid}.jsonl under "
+        f"{_short_path(str(claude_projects_dir()))}, so there is nothing for "
+        f"`claude --resume` to open.\n"
+        f"  It may still be recoverable: check a backup, a snapshot, or "
+        f"another machine, and\n"
+        f"  put the file back under that directory. Nothing here deletes it, "
+        f"and once you give up\n"
+        f"  on it the conversation is gone for good.\n"
+        f"  To give up and start a fresh session on this task instead:\n"
+        f"      {verb} --new-transcript"
+    )
+
+
 def _require_claude() -> str:
     """Absolute path to the `claude` binary, or a ClickException if it's absent."""
     import shutil
@@ -607,6 +673,62 @@ def _bind_pane_window_options(
             _tmux_run(["set-option", "-w", "-t", pane, key, value])
 
 
+def build_pane_layout(pane: str, cwd: str) -> None:
+    """Build the standard Endless pane layout around `pane` (E-2106).
+
+    Delegates to `endless-go spawn-layout`, which is the same builder `task
+    spawn` runs — the split geometry lives in exactly one place
+    (internal/spawnlaunchcmd/layout.go) rather than being reimplemented once per
+    verb that ends up with a lone Claude pane.
+
+    Best-effort, and silent about it: every caller is on its way to starting a
+    session, and a window that came up with one pane instead of three is a
+    worse window, not a failed recovery.
+    """
+    import subprocess
+    from endless.event_bridge import _resolve_endless_go
+
+    if not pane:
+        return
+    try:
+        go_bin = _resolve_endless_go()
+    except Exception:
+        return
+    try:
+        subprocess.run(
+            [go_bin, "spawn-layout", "--pane", pane, "--cwd", cwd],
+            capture_output=True, text=True, timeout=10,
+        )
+    except (FileNotFoundError, subprocess.SubprocessError):
+        return
+
+
+def _require_lone_pane(verb: str, ref: str) -> None:
+    """Refuse `session resume` in a tmux window that holds more than one pane.
+
+    Resume execs in place and then builds the standard layout around the pane it
+    took over, which only makes sense in a window that holds nothing else: in a
+    populated window the splits land among panes the user arranged, resizing
+    work they are in the middle of. `session goto --resume` is the verb that
+    opens a NEW window, so the route out is the sibling verb rather than a flag.
+
+    A no-op outside tmux: there is no window to be crowded, and nothing to lay
+    out. Also a no-op when the pane list cannot be read — unprovable is not the
+    same as crowded, and refusing a recovery on a failed tmux query would make
+    the command less reliable than the thing it is recovering from.
+    """
+    panes = _tmux_window_pane_ids()
+    if panes is None or len(panes) <= 1:
+        return
+    raise click.ClickException(
+        f"This tmux window holds {len(panes)} panes. `{verb}` takes over the "
+        f"current pane and lays out the window around it, which would resize "
+        f"the panes you arranged.\n"
+        f"  Open the session in a NEW window instead:\n"
+        f"      endless session goto {ref} --resume"
+    )
+
+
 def _resume_replaces_other_work(ref: str, held_task: int) -> bool:
     """Would resuming `ref` in this pane replace work other than `held_task`?
 
@@ -648,6 +770,7 @@ def resume_session(
     reopen: str | None = None,
     dry_run: bool = False,
     force: bool = False,
+    new_transcript: bool = False,
 ) -> None:
     """Relaunch a lost Claude session in the current tmux pane.
 
@@ -673,6 +796,18 @@ def resume_session(
 
     To resume a non-live target in a NEW window instead of clobbering the
     current pane, use `session goto <ref> --resume` (E-1797).
+
+    A target whose transcript file is gone is REFUSED before anything is
+    launched (E-2106) — see `_require_transcript`. `--new-transcript` is the
+    give-up route: it starts a plain `claude` in the task's worktree instead of
+    resuming, so the work carries on in a new conversation. The window choice
+    and the give-up choice are independent, so the flag is on `session goto
+    --resume` too.
+
+    Once the pane is taken over, the standard three-pane layout is built around
+    it — the one `task spawn` builds, from the same builder. That is only
+    coherent in a window that holds this pane alone, so a populated window is
+    refused with `session goto --resume` named as the route.
 
     `--force` (E-1968) is required when the pane this runs in already holds a
     session working a task: the exec replaces that session, and doing it to live
@@ -716,23 +851,53 @@ def resume_session(
         click.echo(json_mod.dumps(decision, indent=2))
         return
 
+    # E-2106: the transcript check comes before `_require_claude`, before the
+    # pane identity is bound, and before the exec — so a refusal leaves the pane
+    # exactly as it found it.
+    if not new_transcript:
+        _require_transcript(uuid, label, f"endless session resume {ref}")
+
+    _require_lone_pane("session resume", ref)
+
     claude = _require_claude()
 
-    click.echo(
-        f"• Resuming session {eid} ({label}) in {_short_path(worktree)} "
-        f"→ claude --resume {uuid[:8]}…",
-        err=True,
-    )
+    pane = os.environ.get("TMUX_PANE", "")
+    if new_transcript:
+        click.echo(
+            f"• Starting a FRESH session on {label} in "
+            f"{_short_path(worktree)} — session {eid}'s transcript "
+            f"({uuid[:8]}…) is not being resumed.",
+            err=True,
+        )
+        argv = ["claude"]
+        # The old uuid is deliberately NOT republished as the window's
+        # `@endless_session_uuid`: the pane is about to hold a DIFFERENT
+        # session, and the new one's own hook publishes its uuid on its first
+        # event. Task and project identity DO carry over — that is what the
+        # SessionStart bind reads to attach the new session to this task.
+        bind_uuid = ""
+    else:
+        click.echo(
+            f"• Resuming session {eid} ({label}) in {_short_path(worktree)} "
+            f"→ claude --resume {uuid[:8]}…",
+            err=True,
+        )
+        argv = ["claude", "--resume", uuid]
+        bind_uuid = uuid
+
     # After `_require_claude`, so a resume that cannot launch leaves the pane's
     # identity as it found it.
     _bind_pane_window_options(
-        os.environ.get("TMUX_PANE", ""),
-        decision.get("task_id"), decision.get("project_id"), uuid,
+        pane, decision.get("task_id"), decision.get("project_id"), bind_uuid,
     )
+    # Before the exec, which replaces this process and so can orchestrate
+    # nothing afterward — the same reason spawn lays its window out from the
+    # spawner rather than from the launched pane.
+    build_pane_layout(pane, worktree)
     os.chdir(worktree)
     sys.stdout.flush()
     sys.stderr.flush()
-    os.execvp(claude, ["claude", "--resume", uuid])
+    os.execvp(claude, argv)
 
 
 def show_history(
@@ -2485,6 +2650,7 @@ def _apply_revisit_intent(ref: str, revisit: bool, no_revisit: bool) -> None:
 
 def _resume_new_window_pane(
     ref: str, revisit: bool = False, no_revisit: bool = False,
+    new_transcript: bool = False,
 ) -> tuple[str, str]:
     """Open a NEW tmux window running `claude --resume <uuid>` in the target's
     worktree (detached, so the caller's own push+switch does the focusing) and
@@ -2509,8 +2675,20 @@ def _resume_new_window_pane(
     _apply_revisit_intent(ref, revisit, no_revisit)
     decision: dict = {}
     uuid, worktree, rlabel, _eid = _resolve_resume(ref, decision_out=decision)
+    # E-2106: checked in the CURRENT pane, BEFORE the window is created. This
+    # is the defect the task was filed for — `tmux new-window` succeeds because
+    # the window really was created, so the caller sees `(new window)` and a
+    # pane id while the claude inside exits on the missing transcript and takes
+    # the window down with it. Nothing reached the user at all.
+    if not new_transcript:
+        _require_transcript(
+            uuid, rlabel, f"endless session goto {ref} --resume"
+        )
     claude = _require_claude()
-    cmd = f"{shlex.quote(claude)} --resume {shlex.quote(uuid)}"
+    if new_transcript:
+        cmd = shlex.quote(claude)
+    else:
+        cmd = f"{shlex.quote(claude)} --resume {shlex.quote(uuid)}"
     args = ["new-window", "-d", "-c", worktree]
     task = decision.get("task_id")
     if task is not None:
@@ -2523,11 +2701,15 @@ def _resume_new_window_pane(
     pane = res.stdout.strip()
     # The window is brand new, so it carries no `@endless_*` identity at all
     # until we write one (E-2104) — same omission `session resume` had on the
-    # current pane, and the same fix.
+    # current pane, and the same fix. On `--new-transcript` the uuid is left
+    # out: the window holds a DIFFERENT session, which publishes its own.
     _bind_pane_window_options(
-        pane, task, decision.get("project_id"), uuid
+        pane, task, decision.get("project_id"),
+        "" if new_transcript else uuid,
     )
-    return pane, f"--resume {rlabel} (new window)"
+    build_pane_layout(pane, worktree)
+    label = "--new-transcript" if new_transcript else "--resume"
+    return pane, f"{label} {rlabel} (new window)"
 
 
 def _fail_not_live(nl: _GotoNotLive) -> None:
@@ -2553,6 +2735,7 @@ def session_goto(
     resume: bool = False,
     revisit: bool = False,
     no_revisit: bool = False,
+    new_transcript: bool = False,
 ) -> None:
     """Switch tmux focus to a task's or session's pane, pushing the current pane
     onto the back-stack. See the module section header (E-1681).
@@ -2566,7 +2749,17 @@ def session_goto(
     see `_apply_revisit_intent`. They belong to the resume path, so like
     `--resume` itself they do nothing when the target is already live — a live
     session's task status is that session's business, not a navigator's.
+
+    `new_transcript` (E-2106) belongs to the resume path for the same reason: it
+    is the give-up route out of a refused resume, and there is nothing to give
+    up on when the target is live and simply being focused.
     """
+    if new_transcript and not resume:
+        raise click.ClickException(
+            "--new-transcript applies only with --resume (it says what to do "
+            "when the target's transcript cannot be opened). A live target is "
+            "just focused."
+        )
     if revisit and not resume:
         raise click.ClickException(
             "--revisit applies only with --resume (it says what reopening the "
@@ -2591,6 +2784,7 @@ def session_goto(
             _fail_not_live(nl)
         target_pane, label = _resume_new_window_pane(
             nl.ref, revisit=revisit, no_revisit=no_revisit,
+            new_transcript=new_transcript,
         )
 
     key = _backstack_key()

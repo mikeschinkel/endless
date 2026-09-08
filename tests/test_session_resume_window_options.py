@@ -46,7 +46,7 @@ def _target(**over):
 
 
 @pytest.fixture
-def harness(monkeypatch, tmp_path):
+def harness(monkeypatch, tmp_path, stage_transcript):
     """Drive `resume_session` to the exec with tmux and claude stubbed.
 
     Yields the ordered trace of what the command did to the outside world:
@@ -58,6 +58,11 @@ def harness(monkeypatch, tmp_path):
     trace: list[tuple] = []
 
     monkeypatch.setenv("TMUX_PANE", "%42")
+    # E-2106: a resume refuses a target whose transcript is gone, and these
+    # tests are about the window options a resume that PROCEEDS writes.
+    stage_transcript("uuid-xyz")
+    monkeypatch.setattr(session_cmd, "build_pane_layout", lambda pane, cwd: None)
+    monkeypatch.setattr(session_cmd, "_tmux_window_pane_ids", lambda: ["%42"])
     monkeypatch.setattr(
         session_cmd, "_resume_target", lambda ref: _target(worktree_path=str(wt))
     )
@@ -140,9 +145,11 @@ def test_dry_run_touches_nothing(harness, capsys):
 
 # ── `session goto --resume` opens a NEW window, which starts with no identity ──
 
-def test_new_window_gets_the_same_identity(monkeypatch, tmp_path):
+def test_new_window_gets_the_same_identity(monkeypatch, tmp_path,
+                                           stage_transcript):
     wt = tmp_path / "wt"
     wt.mkdir()
+    stage_transcript("uuid-xyz")
     trace: list[list[str]] = []
 
     def fake_tmux(args, timeout=2.0):
@@ -158,6 +165,7 @@ def test_new_window_gets_the_same_identity(monkeypatch, tmp_path):
     monkeypatch.setattr(session_cmd, "_apply_revisit_intent", lambda *a: None)
     monkeypatch.setattr(session_cmd, "_require_claude", lambda: "/bin/claude")
     monkeypatch.setattr(session_cmd, "_tmux_run", fake_tmux)
+    monkeypatch.setattr(session_cmd, "build_pane_layout", lambda pane, cwd: None)
 
     pane, _label = session_cmd._resume_new_window_pane("E-10")
 

@@ -8,6 +8,10 @@
 //	              JSON launch-spec file, then creates the tmux window whose
 //	              command is `endless-go spawn-launch --spec <path>`. Returns
 //	              once the window exists.
+//	spawn-layout  The layout half of spawn-window, for a caller that already
+//	              has the Claude pane: `session resume` (current window),
+//	              `session goto --resume` (new window) and `task claim` from a
+//	              shell pane all reach it (E-2106).
 //	spawn-launch  Inner — runs inside the freshly created window. Sets the
 //	              @endless_* window options (BEFORE exec, so SessionStart's
 //	              option reads never race), reads+deletes the handoff and spec
@@ -44,6 +48,8 @@ func Run(verb string, args []string) {
 		runSpawnWindow(args)
 	case "spawn-launch":
 		runSpawnLaunch(args)
+	case "spawn-layout":
+		runSpawnLayout(args)
 	default:
 		fmt.Fprintf(os.Stderr, "endless-go: unknown spawn command %q\n", verb)
 		usage(os.Stderr)
@@ -52,7 +58,8 @@ func Run(verb string, args []string) {
 }
 
 func usage(w *os.File) {
-	fmt.Fprintln(w, "Usage: endless-go spawn-window|spawn-launch [flags]")
+	fmt.Fprintln(w, "Usage: endless-go spawn-window|spawn-layout|spawn-launch [flags]")
 	fmt.Fprintln(w, "  spawn-window  Create the tmux window that launches Claude on a task")
+	fmt.Fprintln(w, "  spawn-layout  Build the standard pane layout around an existing Claude pane")
 	fmt.Fprintln(w, "  spawn-launch  (internal) Set window options and exec claude inside the window")
 }

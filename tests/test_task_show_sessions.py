@@ -435,3 +435,44 @@ def test_goto_still_resolves_e_prefix_to_a_task(monkeypatch):
     pane, label = session_cmd._resolve_goto_target("E-42", live)
     assert pane == "%2"
     assert "E-42" in label
+
+
+# ── E-2106: a session whose Claude transcript is gone ────────────────────────
+#
+# The database row and the worktree survive a lost transcript, so a `Touched by:`
+# row goes on naming a session that did real work — while `session goto --resume`
+# and `session resume` can no longer open it. The marker puts that loss where the
+# task is read, instead of leaving it to surface as a failed resume weeks later.
+
+
+def test_touched_by_marks_a_gone_transcript(seeded_project_at_cwd):
+    """`isolated_env` points the transcript home at an empty directory, so this
+    session's uuid has nothing behind it."""
+    tid = _add_task("lost its session")
+    _add_session(4242, state="ended", task_id=tid)
+
+    out = _show(tid, "--no-color")
+    assert "ES-4242" in out
+    assert "(transcript gone)" in out
+
+
+def test_touched_by_is_quiet_when_the_transcript_is_there(
+    seeded_project_at_cwd, stage_transcript
+):
+    tid = _add_task("still resumable")
+    _add_session(4243, state="ended", task_id=tid)
+    stage_transcript("uuid-4243")
+
+    out = _show(tid, "--no-color")
+    assert "ES-4243" in out
+    assert "transcript gone" not in out
+
+
+def test_a_session_with_no_uuid_is_not_reported_as_lost(seeded_project_at_cwd):
+    """A session_tasks row can name a session whose sessions row is gone —
+    there is no uuid to stat, and "nothing to look for" is not evidence of
+    loss."""
+    tid = _add_task("orphan touch")
+    _touch(9911, tid, _SURFACED, "2026-01-01T00:00:00")
+
+    assert "transcript gone" not in _show(tid, "--no-color")

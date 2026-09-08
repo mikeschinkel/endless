@@ -3614,32 +3614,136 @@ def approve_item(item_id: int):
     )
 
 
-def _eswt_defined_in_user_shell() -> bool:
-    """Probe the user's interactive shell for the 'eswt' function.
+def _in_claude_session() -> bool:
+    """Is the process running this command the Claude session being bound?
 
-    Functions defined by 'endless shell-init' live in the parent shell's
-    process memory and don't propagate to Python subprocesses. To check
-    them, spawn $SHELL -ic which sources the user's rc files (where the
-    shell-init snippet was eval'd), then run 'command -v eswt'.
+    The one distinction `task claim`'s outcome turns on (E-2106). A Claude
+    session running `endless task claim` through its Bash tool is already here;
+    all it needs is its working directory moved, and starting a SECOND Claude
+    for a task the first one is about to work would be absurd. Every other
+    caller is a shell, and a shell cannot become the session — one has to be
+    launched.
 
-    Returns False on any failure so output defaults to the bootstrap
-    form — better to over-instruct than to print a command the user's
-    shell can't actually run.
+    Two ways to be that session, and both mean "this process", not "this
+    process can name a session":
+
+      - `CLAUDECODE=1`, which Claude Code sets in the environment of the
+        commands it runs (the E-1455 env-vars-as-truth path).
+      - `TMUX_PANE` is itself a live Claude pane — a subprocess deeper down the
+        same pane, whose env may have been stripped along the way.
+
+    Deliberately NOT included: `ENDLESS_SESSION_ID`. `esu` exports it into a
+    plain SHELL, pointing at a Claude session in some other pane or window, so
+    reading it as "I am that session" would hand a shell a `/cd` line it cannot
+    run.
     """
-    import subprocess
-
-    shell = os.environ.get("SHELL")
-    if not shell:
+    if os.environ.get("CLAUDECODE") == "1":
+        return True
+    pane = os.environ.get("TMUX_PANE")
+    if not pane:
         return False
+    from endless.session_cmd import _live_sessions, _project_root_for_cwd
     try:
-        result = subprocess.run(
-            [shell, "-ic", "command -v eswt >/dev/null"],
-            capture_output=True,
-            timeout=3,
-        )
-        return result.returncode == 0
-    except (subprocess.TimeoutExpired, OSError, ValueError):
+        live = _live_sessions(_project_root_for_cwd())
+    except Exception:
         return False
+    return any(c.get("pane_id") == pane for c in live)
+
+
+def _launch_claude_for_claim(
+    item_id: int, project_id: int, worktree: str, spawner_id: str,
+) -> None:
+    """Start a Claude session on a just-claimed task, from a shell (E-2106).
+
+    `task claim` used to end by printing a menu, and both of its options were
+    wrong: option 1 was `task spawn`, which `_check_prior_claim` refuses on any
+    task that has ever been claimed — which a re-claim always has — and option 2
+    spelled out `/cd`, `shell-init` and `eswt`, the last of which
+    `endless shell-init` has never defined. So the common outcome was a claimed
+    task, a built worktree, and no route into it that worked.
+
+    A shell cannot become the session, so this does what `task spawn` does:
+    creates the pane layout and launches Claude in the worktree. What it does
+    NOT do is deliver spawn's handoff — that is the part that re-reads a task as
+    if it were new, and E-2106's whole subject is picking work back UP.
+
+    Window choice follows `session resume`'s rule, for `session resume`'s
+    reason: a window holding this pane alone is taken over in place, and a
+    populated one gets a new window rather than having the panes the user
+    arranged resized around a split.
+
+    The session→task binding is not written here. Claude starts with its cwd
+    inside the worktree, and SessionStart binds from that (E-1291) — the same
+    path a user gets from `cd <worktree> && claude`.
+    """
+    import tempfile
+
+    from endless.session_cmd import (
+        _bind_pane_window_options, _tmux_window_pane_ids, build_pane_layout,
+    )
+
+    # Resolved to an absolute path where possible. `_claude_binary()` falls
+    # back to the bare name "claude", which `os.execvp` would resolve off PATH
+    # but the Go launcher's `syscall.Exec` would not — and the new-window branch
+    # below hands it to that launcher.
+    claude = shutil.which(_claude_binary()) or _claude_binary()
+    panes = _tmux_window_pane_ids()
+    pane = os.environ.get("TMUX_PANE", "")
+
+    if panes is not None and len(panes) == 1 and pane:
+        click.echo(
+            click.style("•", fg="cyan")
+            + f" Starting Claude on {task_id_display(item_id)} in this pane."
+        )
+        _bind_pane_window_options(pane, item_id, project_id, "")
+        _tmux_run_quiet(["rename-window", "-t", pane,
+                         tmux_window_name(item_id)])
+        # Before the exec, which replaces this process and so can orchestrate
+        # nothing afterward.
+        build_pane_layout(pane, worktree)
+        os.chdir(worktree)
+        sys.stdout.flush()
+        sys.stderr.flush()
+        os.execvp(claude, ["claude"])
+
+    # A populated window: open a new one, exactly as spawn does. The handoff
+    # file is empty on purpose — `buildClaudeArgv` omits the positional prompt
+    # for an empty handoff, which is how the launcher spells "a bare
+    # interactive claude" — so the launcher's window options, layout and
+    # before-exec ordering are all reused without spawn's handoff text.
+    from endless import event_bridge
+
+    handoff = tempfile.NamedTemporaryFile(
+        mode="w", suffix=".md", prefix="endless-claim-", delete=False,
+    )
+    handoff.close()
+    window_name = tmux_window_name(item_id)
+    subprocess.run([
+        event_bridge._resolve_endless_go(), "spawn-window",
+        "--claude-bin", claude,
+        "--handoff-file", handoff.name,
+        "--permission-mode", "auto",
+        "--task-id", str(item_id),
+        "--project-id", str(project_id),
+        "--spawned-by", spawner_id,
+        "--window-name", window_name,
+        "--cwd", worktree,
+    ], check=True)
+    click.echo(
+        click.style("•", fg="cyan")
+        + f" Started Claude on {task_id_display(item_id)} in window "
+        + click.style(f"'{window_name}'", bold=True)
+        + " (this window holds other panes)."
+    )
+    click.echo(f"  Switch to it: tmux select-window -t {window_name}")
+
+
+def _tmux_run_quiet(args: list[str]) -> None:
+    """Run one tmux command, ignoring whether it worked. Cosmetic calls only."""
+    try:
+        subprocess.run(["tmux", *args], capture_output=True, timeout=2)
+    except (FileNotFoundError, subprocess.SubprocessError):
+        pass
 
 
 def _current_session_task_id() -> int | None:
@@ -4247,9 +4351,10 @@ def _perform_claim_work(
     started); skips the task.claimed event entirely. SessionStart's
     spawn-marker auto-bind records the binding once Claude is up.
 
-    `unattended` (E-2093) says target_session is None because the CALLER
-    decided there is no session — `task claim --unattended`, for manual work,
-    a plain shell, or cron — rather than because the binding is merely deferred
+    `unattended` (E-2093) says target_session is None because there is no
+    session to name — `task claim --unattended`, for manual work or cron, and
+    (E-2106) a claim from a shell, whose session is about to be launched and so
+    does not exist yet — rather than because the binding is merely deferred
     (spawn's pre-claim, where the spawner's own session is the right actor).
     The distinction matters at the event layer: `actor_kind="cli"` requires a
     resolvable session and refuses without one, which is why the old
@@ -4426,7 +4531,8 @@ def claim_item(item_id: int, unattended: bool = False, force: bool = False):
     resolves and this is not `--unattended`: refuse.
     """
     row = db.query(
-        "SELECT id, COALESCE(title, description) as title, status FROM live_tasks "
+        "SELECT id, COALESCE(title, description) as title, status, "
+        "project_id FROM live_tasks "
         "WHERE id = ?",
         (item_id,),
     )
@@ -4456,16 +4562,21 @@ def claim_item(item_id: int, unattended: bool = False, force: bool = False):
         project_name=proj_name,
         prompt_verb="claimed for",
     )
-    if target_session is None:
-        if not (unattended or force):
+    if target_session is None and not (unattended or force):
+        # E-2106 narrowed this refusal. It used to fire for every caller that
+        # could not name a session, including the most ordinary one there is —
+        # a user in a shell, in tmux, picking up a task. There IS a session
+        # available to that caller: one that has not been started yet. So the
+        # refusal now covers only the caller who cannot start one, and
+        # `_launch_claude_for_claim` below does the starting.
+        if not os.environ.get("TMUX"):
             raise click.ClickException(
-                "No Claude session available to bind this task to "
-                "(not running inside a Claude session, and no sibling "
-                "Claude pane in this tmux window).\n"
-                "Pass --unattended to claim without a session binding "
-                "(manual work, no Claude assistance)."
+                "No Claude session to bind this task to, and no tmux to start "
+                "one in.\n"
+                "  Start one yourself in the task's worktree, or claim without "
+                "a session binding:\n"
+                f"      endless task claim E-{item_id} --unattended"
             )
-        # --unattended: claim without a binding.
 
     # E-2074 removed the "a background session may only claim `ready` work"
     # refusal that stood here. It gated on sessions.kind_id = background, and
@@ -4503,35 +4614,73 @@ def claim_item(item_id: int, unattended: bool = False, force: bool = False):
             pass
         return
 
-    _perform_claim_work(
+    wt_path, _created = _perform_claim_work(
         item_id=item_id,
         title=row[0]["title"],
         current_status=current_status,
         target_session=target_session,
         proj_name=proj_name,
+        # `target_session is None` reaches here only on E-2106's shell-in-tmux
+        # path — the no-tmux case raised above, and every other caller resolved
+        # something. At the moment this event is emitted that claim genuinely
+        # has no session: the one about to be launched does not exist yet, and
+        # binds itself from its cwd at SessionStart. So it is the `system`
+        # actor by that field's own definition, exactly as `--unattended` is.
+        # This is the EVENT actor only; what claim then PRINTS is decided
+        # separately below, where an unattended claim and a shell claim differ.
+        unattended=unattended or force or target_session is None,
+    )
+
+    _echo_claim_next_step(
+        item_id,
+        project_id=row[0]["project_id"],
+        worktree=str(wt_path) if wt_path else None,
         unattended=unattended or force,
     )
 
-    click.echo("")
-    click.echo("  To work on this task, choose one:")
-    click.echo("    1. Delegate to a fresh Claude session:")
-    click.echo(f"         endless task spawn E-{item_id}")
-    click.echo("    2. Do it yourself in THIS Claude session:")
-    wt = _worktree_for_task(item_id)
-    if wt is not None:
+
+def _echo_claim_next_step(
+    item_id: int,
+    *,
+    project_id: int,
+    worktree: str | None,
+    unattended: bool,
+) -> None:
+    """End a claim with the ONE next step for the caller that ran it (E-2106).
+
+    There used to be a "choose one" menu here. A menu is the right shape only
+    when the caller genuinely has a choice, and this caller never did: which
+    step applies is fully determined by where the claim ran from, and the two
+    options offered were a command that refuses re-claims and a shell helper
+    that does not exist. So this decides instead of asking.
+
+      - inside a Claude session — it is already here, and only its working
+        directory is in the wrong place. `/cd`, and nothing else.
+      - `--unattended` — the caller said there is no Claude session and does not
+        want one. The worktree path is the whole answer.
+      - a shell — a shell cannot become the session, so one is launched.
+        `_launch_claude_for_claim` does not return on the common path.
+
+    A claim with no worktree (nothing to cd into, nothing to launch in) falls
+    through silently; `_perform_claim_work` has already said what it did.
+    """
+    if worktree is None:
+        return
+    if unattended:
+        return
+    if _in_claude_session():
+        click.echo("")
         # /cd points Claude's own working directory at the worktree, so every
         # tool (Read/Write/Edit + a fresh Bash) defaults to it instead of main.
         # Absolute path: /cd does not expand ~ or $(...). Until you run this, a
         # claimed session is refused tool use from main (E-1586).
-        click.echo(f"         /cd {wt}   # point Claude's working dir at the worktree (do this first)")
-    eswt_cmd = f"eswt E-{item_id}"
-    if _eswt_defined_in_user_shell():
-        click.echo(f"         {eswt_cmd}   # (shell only) cd + ENDLESS_SESSION_ID routing")
-    else:
-        eval_cmd = 'eval "$(endless shell-init)"'
-        pad = " " * (len(eval_cmd) - len(eswt_cmd))
-        click.echo(f"         {eval_cmd}  # adds eswt shell helper func")
-        click.echo(f"         {eswt_cmd}{pad}  # (shell only) cd + ENDLESS_SESSION_ID routing")
+        click.echo(
+            f"  /cd {worktree}   "
+            f"# point Claude's working dir at the worktree (do this first)"
+        )
+        return
+    spawner_id = str(_current_endless_session_id() or f"pid-{os.getpid()}")
+    _launch_claude_for_claim(item_id, project_id, worktree, spawner_id)
 
 
 def bind_item(item_id: int) -> None:
@@ -6940,7 +7089,8 @@ def _session_touches(item_id: int) -> list[dict]:
         "         r.slug        AS rel_slug, "
         "         r.label       AS rel_label, "
         "         s.state       AS state, "
-        "         s.task_id     AS task_id "
+        "         s.task_id     AS task_id, "
+        "         s.session_id  AS uuid "
         "  FROM session_tasks st "
         "  LEFT JOIN session_task_relations r ON r.id = st.relation_id "
         "  LEFT JOIN sessions s ON s.id = st.session_id "
@@ -6952,7 +7102,8 @@ def _session_touches(item_id: int) -> list[dict]:
         "         NULL AS rel_slug, "
         "         NULL AS rel_label, "
         "         s.state AS state, "
-        "         s.task_id AS task_id "
+        "         s.task_id AS task_id, "
+        "         s.session_id AS uuid "
         "  FROM sessions s "
         "  WHERE s.task_id = ? "
         "    AND NOT EXISTS (SELECT 1 FROM session_tasks st2 "
@@ -6978,6 +7129,9 @@ def _session_touches(item_id: int) -> list[dict]:
             "touch_slug": row["rel_slug"],
             "state": row["state"] or _MISSING_SESSION_STATE,
             "task_id": row["task_id"],
+            # The Claude UUID, for the transcript marker (E-2106). NULL when
+            # session_tasks names a session whose sessions row is gone.
+            "uuid": row["uuid"],
         }
         for row in rows
     ]
@@ -7030,11 +7184,36 @@ def _session_json(touch: dict) -> dict:
     }
 
 
+# E-2106: what a `Touched by:` row says when the session's Claude transcript is
+# no longer on disk. The row still names a real session that did real work — the
+# database row and the worktree survive — but `session goto --resume` /
+# `session resume` can no longer open it, so the loss is worth reading while
+# reading the task rather than only when a resume refuses.
+_GONE_TRANSCRIPT_MARKER = "transcript gone"
+
+
+def _transcript_gone(touch: dict) -> bool:
+    """Does this touch name a session whose transcript is missing from disk?
+
+    False when there is no uuid to look for: a session_tasks row whose sessions
+    row is gone has nothing to stat, and "no uuid" is not evidence of loss.
+
+    One glob per row, which is why this is `task show` only and not
+    `session list` — a listing pays it per row over the whole table.
+    """
+    from endless.session_cmd import transcript_path
+    uuid = touch.get("uuid")
+    if not uuid:
+        return False
+    return transcript_path(uuid) is None
+
+
 def _echo_touched_by_section(touches: list[dict], min_width: int = 0) -> bool:
     """Emit the 'Touched by:' session block (E-1866) — the session-side peer of
     'This task:', laid out identically so the two read as siblings: a cyan
     heading, then one '- '-bulleted row per session, '- <Relation>:  ES-NNN
-    (E-NNN) [state]'. The relation carries how the task entered that session's
+    (E-NNN) [state]', plus '(transcript gone)' when that session can no longer
+    be resumed because its Claude transcript has left the disk (E-2106). The relation carries how the task entered that session's
     scope, the ES-NNN id feeds `session goto` directly, and the parenthesized
     task is what the session is bound to now. A session bound to THIS task reads
     `Claimed:` (E-1967) — see _session_touches. Emits nothing and returns False
@@ -7047,9 +7226,13 @@ def _echo_touched_by_section(touches: list[dict], min_width: int = 0) -> bool:
     for t in touches:
         color = "green" if t["state"] in finished_states else "yellow"
         label = (t["rel_label"] + ":").ljust(width)
+        marker = (
+            " " + click.style(f"({_GONE_TRANSCRIPT_MARKER})", fg="red")
+            if _transcript_gone(t) else ""
+        )
         click.echo(
             f"- {label}{_session_ref(t)} "
-            f"[{click.style(t['state'], fg=color)}]")
+            f"[{click.style(t['state'], fg=color)}]{marker}")
     return True
 
 

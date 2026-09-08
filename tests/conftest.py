@@ -52,10 +52,22 @@ def isolated_env(tmp_path, monkeypatch):
     # Tests that exercise the triager set this explicitly.
     monkeypatch.setenv("ENDLESS_NO_TRIAGE", "1")
 
-    # Force 'task claim' eswt-detection to default to verbose form. Without
-    # this, tests would non-deterministically read the developer's actual
-    # shell function table.
+    # Strip the runner's interactive shell. E-2106 deleted the last reader
+    # (`task claim`'s eswt probe, which shelled out to `$SHELL -ic`), so this
+    # guards nothing specific today — it stays because "no test resolves
+    # anything from the developer's shell" is the property this fixture is for,
+    # and the next `$SHELL` reader should inherit it rather than rediscover it.
     monkeypatch.delenv("SHELL", raising=False)
+
+    # E-2106: point Claude's transcript home at an empty tmp dir. The resume
+    # verbs now stat `<claude home>/projects/*/<uuid>.jsonl` before launching,
+    # so without this every test that resolves a resume target would read the
+    # DEVELOPER's real transcripts — passing or failing on which conversations
+    # happen to be on that machine. A test that wants a transcript to exist
+    # writes one under here.
+    claude_home = tmp_path / ".claude"
+    (claude_home / "projects").mkdir(parents=True)
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(claude_home))
 
     # Strip TMUX env vars leaked from the runner's shell. Resolver helpers
     # branch on these and will issue real `tmux list-panes` subprocess
@@ -298,4 +310,28 @@ def stage_live_session(monkeypatch):
 
     from endless import session_cmd
     monkeypatch.setattr(session_cmd, "_live_sessions", _patched)
+    return _stage
+
+
+@pytest.fixture
+def stage_transcript():
+    """Put a Claude transcript on disk for a session UUID (E-2106).
+
+    `isolated_env` points CLAUDE_CONFIG_DIR at an EMPTY transcript home, so by
+    default every session reads as one whose transcript is gone and both resume
+    verbs refuse. A test whose subject is anything else — window options, the
+    clobber gate, the back-stack — calls this to say "the transcript is there",
+    which is the ordinary case those tests were written against.
+
+    The project slug is arbitrary on purpose: the lookup globs every project
+    directory rather than deriving the slug, because a session that ran `/cd`
+    is filed under wherever it ENDED.
+    """
+    def _stage(uuid: str, slug: str = "-staged-project") -> Path:
+        d = Path(os.environ["CLAUDE_CONFIG_DIR"]) / "projects" / slug
+        d.mkdir(parents=True, exist_ok=True)
+        path = d / f"{uuid}.jsonl"
+        path.write_text("{}\n")
+        return path
+
     return _stage
