@@ -10,7 +10,7 @@ You just claimed E-{{.spawned_id}} into an **already-running** session — this 
 
 {{template "handoff_mechanics" .}}
 {{if .child_count}}
-This task has {{.child_count}} children — read them with `endless task show E-{{.spawned_id}} --children --db main`.
+This task has {{.child_count}} children — the `--all-fields` read includes them.
 {{end}}{{if eq .task_type "epic"}}
 Children: {{.children_state}}.
 {{end}}

@@ -109,7 +109,7 @@ section "2. Every spawn and claim handoff says --all-fields"
 for pair in "todo todo" "bugfix bugfix" "research research" "epic epic" \
             "brainstorm brainstorm" "claim todo"; do
     tmpl="${pair%% *}"; type="${pair##* }"
-    saw_all_fields="yes"; saw_bare_text="no"; renders=0
+    saw_all_fields="yes"; saw_bare_text="no"; saw_children_flag="no"; renders=0
     for children in 0 2; do
         for gate in true false; do
             out="$(render "${tmpl}" "${type}" "${children}" "${gate}")"
@@ -117,13 +117,40 @@ for pair in "todo todo" "bugfix bugfix" "research research" "epic epic" \
             [[ "${out}" == *"task show E-2123 --all-fields --db main"* ]] \
                 || saw_all_fields="no"
             [[ "${out}" == *"task show E-2123 --text"* ]] && saw_bare_text="yes"
+            [[ "${out}" == *"--children"* ]] && saw_children_flag="yes"
         done
     done
     assert_eq "${tmpl}: reads the task with --all-fields --db main (${renders} renderings)" \
         "yes" "${saw_all_fields}"
     assert_eq "${tmpl}: no rendering still says \`task show ... --text\`" \
         "no" "${saw_bare_text}"
+    # `--all-fields` sets show_children, so a handoff that has just told the
+    # session to run it and then offers `--children` is pointing at a strictly
+    # weaker second read of what it already has.
+    assert_eq "${tmpl}: no rendering offers a redundant \`--children\` read" \
+        "no" "${saw_children_flag}"
 done
+
+# The count survives the removal — it is the part that carried information.
+# The command it used to offer did not.
+parented="$(render todo todo 2 true)"
+assert_contains "a parented task is still told how many children it has" \
+    "This task has 2 children" "${parented}"
+assert_contains "and told they are already in the read it was just given" \
+    'the `--all-fields` read includes them' "${parented}"
+childless="$(render todo todo 0 true)"
+assert_not_contains "a childless task gets no child line at all" \
+    "This task has" "${childless}"
+
+# The epic handoff's step 3 is the same redundancy in a different shape: it
+# used to send the coordinator back for a narrower read of the children step 2
+# had already rendered. The per-child STATE line stays — `children_state` is a
+# breakdown `--all-fields` does not produce.
+epic_out="$(render epic epic 3 true)"
+assert_contains "the epic coordinator is pointed at the children in that output" \
+    "Read the children in that output — these are the units of work" "${epic_out}"
+assert_contains "and still gets the state breakdown --all-fields cannot give it" \
+    "Children: " "${epic_out}"
 
 # ── 3. the trap: --text names two flags, and only one moved ─────────────────
 # claim.md.tmpl carries the read toggle and the write flag on ONE line. A sweep

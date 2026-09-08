@@ -15,7 +15,7 @@ Reproduce the bug first before changing anything. Link the failing test or the e
 7. {{template "handoff_land_drop" .}}
 {{- if .child_count}}
 
-This task has {{.child_count}} children — read them with `endless task show E-{{.spawned_id}} --children`.
+This task has {{.child_count}} children — the `--all-fields` read includes them.
 {{- end}}
 
 Final message — {{template "handoff_verify" .}} {{template "handoff_close" .}}

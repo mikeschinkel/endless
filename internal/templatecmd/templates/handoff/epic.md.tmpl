@@ -5,7 +5,7 @@ You're a worktree-bound Claude Code session spawned to coordinate this epic end 
 
 {{template "handoff_deliverable" .}}1. Run `endless guide` to learn the Endless workflow.
 2. Run `endless task show E-{{.spawned_id}} --all-fields --db main` to read the plan.
-3. Read the children: `endless task show E-{{.spawned_id}} --children` — these are the units of work to dispatch and verify.
+3. Read the children in that output — these are the units of work to dispatch and verify.
 
 Children: {{.children_state}}.
 

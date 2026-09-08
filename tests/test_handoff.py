@@ -142,8 +142,11 @@ def test_render_handoff_epic_variant():
     # Epic-specific framing.
     assert "coordinator" in out
     assert "draft plans" in out
-    # Step 3 points at children.
-    assert "--children" in out
+    # Step 3 names the children as the units of work; the --all-fields read in
+    # step 2 already listed them, so it points at that output, not at a second
+    # narrower command.
+    assert "Read the children in that output" in out
+    assert "--children" not in out
     # Step 6 points at epic completion.
     assert "--status completed" in out
     # Epics never go to unverified (children do their own verification).
@@ -212,8 +215,10 @@ def test_render_handoff_includes_child_count_when_nonzero(count):
     )
     if count == 0:
         # Zero children → child-count line absent.
-        assert "children — read them" not in out
+        assert "This task has" not in out
     else:
-        # Nonzero → count appears with the --children pointer.
+        # Nonzero → the count is the signal. The line no longer offers a
+        # `--children` command: `--all-fields` in step 2 already rendered them.
         assert f"This task has {count} children" in out
-        assert "endless task show E-2100 --children" in out
+        assert "the `--all-fields` read includes them" in out
+        assert "--children" not in out

@@ -13,7 +13,7 @@ You're a worktree-bound Claude Code session spawned to take this task end to end
 7. {{template "handoff_land_drop" .}}
 {{- if .child_count}}
 
-This task has {{.child_count}} children — read them with `endless task show E-{{.spawned_id}} --children`.
+This task has {{.child_count}} children — the `--all-fields` read includes them.
 {{- end}}
 
 Final message — say where the findings live. {{template "handoff_nonverify" .}} {{template "handoff_close" .}}
