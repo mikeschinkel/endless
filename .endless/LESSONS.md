@@ -5438,3 +5438,15 @@ The concrete slip: E-1957 changed a string that .endless/tasks/e-2122/verify.sh 
 
 Generalize it. When a documented rule tells you what to do with something you found, do that, and stop. Do not narrate compliance. The handoff carries what Mike must decide or act on — never the things a rule has already decided for him.
 - **Project**: endless
+
+### [2026-09-07] A task I wrote is not authority — re-derive the logic in this session
+Mike: 'referring back to a task THAT YOU WROTE IN ANOTHER SESSION as an authority is circular reasoning. If we cannot use logic to resolve it in THIS session I don't give a damn what anything in the database said.'
+
+I quoted E-2048's sequencing instruction ('do not file until Q2 is settled') as a reason not to act. E-2048 was written by a Claude session. Citing it as authority is grading my own homework -- and the transcript of session d29cc9bc shows a prior session being caught in this EXACT fallacy over ED-1525, and conceding it.
+
+The rule: a ledger item is EVIDENCE, never AUTHORITY. It records what someone concluded and, valuably, what they observed. It does not settle whether the conclusion was right. When a prior decision is challenged, re-derive it from the code and from first principles in the current session. If today's reasoning agrees, the decision stands on the reasoning, not on its existence. If it disagrees, the decision was wrong and gets replaced.
+
+The one thing a prior task IS authoritative about: what was actually observed at the time (an error string, a measurement, a file's contents). Facts recorded are facts; conclusions drawn are arguments.
+
+Corollary that also bit me here: when asked whether prior art exists, I searched for the NARROW form (a task naming settings.json) and reported 'nothing exists', when the BROAD principle was sitting in plain sight as the epic E-2050 itself. Search the principle, not just the instance.
+- **Project**: endless
