@@ -5400,3 +5400,7 @@ Two rules follow.
 
 2. As a fix: a test must never target the ACTIVE tmux session. It needs its own tmux server (a private socket via `tmux -L <name>`, torn down afterwards) or the tmux/Claude boundary stubbed. Reaching the operator's live session from a test is not an isolation gap to work around, it is a defect in the test.
 - **Project**: endless
+
+### [2026-09-07] A plan that omits something the description requires is an omission, not a disagreement — do not inflate it
+Opening E-2106 I told Mike the plan and the analysis 'disagree' about scope. They did not. The plan simply never mentioned the claim-output rewrite that the description's last sentence requires and the analysis details; there was no contradiction anywhere. Mike: 'Wait, what is the disagreement between plan and analysis? (BTW, plan is almost always authoritative.)' Two things. Read the plan as authoritative and the analysis as rationale behind it — where the plan speaks, it wins. And name what I actually found: an omission, a gap, a thing the plan does not cover. Calling it a disagreement made Mike go re-read two documents looking for a conflict that was not there.
+- **Project**: endless
