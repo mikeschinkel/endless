@@ -252,7 +252,11 @@ assert_not_contains "and still narrates no status" "Status:" "${out}"
 section "6. The discovery rule in the rendered handoff"
 
 T_HANDOFF="$(new_task 'Add a grommet' 'a spec')"
-handoff="$(human task handoff "${T_HANDOFF}")"
+# Flattened, the way internal/templatecmd's own guard flattens it: an
+# expectation here is the sentence a session reads, not one template's line
+# breaks. Two of these sentences wrap, and pinning where they wrap would make
+# this suite fail on a reflow that changed nothing a session sees.
+handoff="$(human task handoff "${T_HANDOFF}" | tr -s '[:space:]' ' ')"
 
 assert_not_contains "the kinship test is gone" \
     "inside the work already underway" "${handoff}"
@@ -273,6 +277,15 @@ assert_contains "and the question has a shape" \
 assert_contains "filing still links back to the task that surfaced it" \
     "--cleans-up" "${handoff}"
 
+# The two clauses this partial had compressed away. Both were in the guide and
+# in neither rendering, so a session that never opened the guide met neither.
+assert_contains "ED-1550's framing is back: the list is not a menu of equals" \
+    "Filing is the exception, not the default." "${handoff}"
+assert_contains "the override outranks the size bound" \
+    "obliged to run and report" "${handoff}"
+assert_contains "and it is phrased around the obligation, not around being blocked" \
+    "You cannot report that suite green and you cannot leave it red" "${handoff}"
+
 # ── 7. the guide says the same thing ────────────────────────────────────────
 # `docs/guide/tasks.md` is where a session that reads past the handoff lands. It
 # used to HARDEN the kinship reading, and its override clause named a condition
@@ -288,6 +301,8 @@ assert_contains "it states the axis" \
     "The test is cost and reviewer confusion, not kinship" "${guide}"
 assert_contains "it names the bound as size" \
     "The bound this test really protects is **size**, not relatedness" "${guide}"
+assert_contains "the guide keeps the same framing the handoff now carries" \
+    "not the default" "${guide}"
 assert_contains "the ask branch is a peer answer" \
     "Otherwise, ask your user before filing" "${guide}"
 assert_contains "with the case for" "The case for filing" "${guide}"

@@ -148,6 +148,7 @@ func TestHandlePostToolUseSession_ClaimDeliversHandoff(t *testing.T) {
 		// decision in front of the user instead of taking it alone.
 		"The test is COST and reviewer confusion, not kinship",
 		"ASK me before filing",
+		"Filing is the exception, not the default.",
 	}
 	for _, w := range wants {
 		if !strings.Contains(handoff, w) {

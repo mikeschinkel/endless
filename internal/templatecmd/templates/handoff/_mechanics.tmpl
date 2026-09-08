@@ -44,11 +44,36 @@ Your worktree is: {{.worktree_path}} (branch {{.branch}}) — confirm with `pwd`
   whether it earns a row, so the terminal branch is a QUESTION with a fixed
   shape (what, why it matters to someone who was not here, for, against,
   recommendation) and the user's answer decides.
+
+  Two clauses come back from docs/guide/tasks.md, which this partial compressed
+  away when it folded the guide's numbered tests into bullets. Both are
+  load-bearing at the decision point, and a session that never opens the guide
+  met neither:
+
+    - The FRAMING. ED-1550 makes filing arithmetic — an agent that files more
+      than it closes gives the project no completion date — so the list has to
+      open by saying filing is the exception. Without it the bullets read as a
+      menu of equals.
+
+    - The OVERRIDE, which outranks the size bound. `handoff_close` orders every
+      session to run the project-wide regression and report it, and until now
+      nothing told it what to do when that suite comes back red for a reason
+      that is not its own. It cannot report the suite green and it cannot leave
+      it red, so the fix is its to make whatever the failure belongs to. This
+      is the live case the whole task came from: E-2114's regression turned up
+      a one-sentence defect in a file already open, and the session filed it.
+
+      Phrased around the obligation to RUN AND REPORT, not around being
+      blocked. The guide's old condition ("a drive-by you genuinely cannot
+      complete the task without") did not match its own example ("a test that
+      fails for an unrelated reason") — an unrelated red test rarely stops you
+      finishing — so a session found the example matching, the condition not
+      matching, and fell through to filing.
 */ -}}
 {{define "handoff_focus" -}}
 Stay focused on E-{{.spawned_id}} — one session, one task. {{if eq .task_type "brainstorm"}}As ideas resolve into concrete work, file them as new tasks (`--cleans-up E-{{.spawned_id}}`) or decisions (`endless decision add`) rather than building inline.
    Filing more than one? Check whether they share a root cause — file the
-   cause, not each symptom.{{else}}For anything you discover along the way:
+   cause, not each symptom.{{else}}Filing is the exception, not the default. For anything you discover along the way:
    - Could it reasonably be done now? Do it — note it in the commit message,
      record the grown scope on the task (`endless task update E-{{.spawned_id}}
      --text-file <path> --keep-status --db main`), and say so in your reply
@@ -67,7 +92,11 @@ Stay focused on E-{{.spawned_id}} — one session, one task. {{if eq .task_type 
    - Filing on that answer: `--cleans-up E-{{.spawned_id}}`, and confirm before
      implementing.
    - Filing more than one? Check whether they share a root cause — file the
-     cause, not each symptom.{{end}}
+     cause, not each symptom.
+   - A check you are obliged to run and report — the project-wide regression —
+     outranks all of this. Fix the minimum that clears a red test or a broken
+     build even when the cause is out of scope, and say so explicitly. You
+     cannot report that suite green and you cannot leave it red.{{end}}
 {{- end}}
 
 {{/*

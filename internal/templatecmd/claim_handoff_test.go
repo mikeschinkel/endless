@@ -326,6 +326,14 @@ func TestRender_Handoff_DiscoveryBranchesSurviveCompression(t *testing.T) {
 		"the case for filing, the case against, and your recommendation",
 		// Filing survives as the answer to that question, still linked back.
 		"`--cleans-up E-9999`",
+		// ED-1550's framing, which this partial had compressed away: the list
+		// is not a menu of equals.
+		"Filing is the exception, not the default.",
+		// The override, likewise restored. `handoff_close` orders every session
+		// to run the project-wide regression, so a red test it did not cause is
+		// a situation the handoff creates and must answer.
+		"A check you are obliged to run and report — the project-wide regression — outranks all of this",
+		"You cannot report that suite green and you cannot leave it red.",
 	}
 	// The wording that made bullet 1 a kinship test.
 	const retired = "inside the work already underway"
