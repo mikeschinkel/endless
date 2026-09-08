@@ -5483,3 +5483,7 @@ So: the reply is the ACTION SURFACE, not the report. Lead with what he has to do
 
 Do not confuse thoroughness in the WORK with thoroughness in the REPORT. Being complete in the reply is not diligence; it is offloading my summarizing onto him.
 - **Project**: endless
+
+### [2026-09-08] A finished deliverable does not belong in a plan — a tombstone hides what its completion invalidated
+Editing E-1428 I marked its deliverable A 'DONE by E-2106' and left it in the plan, with the excuse 'Left in place because C and D are written against it.' Mike: 'Deliverable A Fix the broken helper reference is done, why is it even in the plan?' A plan is instructions for work not yet done; a completed item is record, and its home is the task's outcome or the commit that did it. The real cost was not clutter. Keeping A made the plan read as internally consistent and hid that deliverable C had gone STALE by the same change — C's sample output was the two-option menu E-2106 deleted, so it proposed a format for output that no longer exists. Removing the done item is what surfaces the downstream damage. When a change closes part of someone else's plan, delete that part and then ask what else in the plan was written against it.
+- **Project**: endless
