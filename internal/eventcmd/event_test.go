@@ -813,16 +813,31 @@ func TestEventBackup_EnforcesTieredRetention(t *testing.T) {
 		}
 		return path
 	}
+	name := func(t time.Time) string {
+		return "endless-" + t.Format("20060102-150405") + ".db"
+	}
 	stamp := func(age time.Duration) string {
-		return "endless-" + time.Now().Add(-age).Format("20060102-150405") + ".db"
+		return name(time.Now().Add(-age))
 	}
 
 	expired := seed(stamp(400 * 24 * time.Hour))
 	keptWeekly := seed(stamp(200 * 24 * time.Hour))
-	// Two backups in one hour, six days back: same daily bucket, so the older
-	// one loses.
-	olderInBucket := seed(stamp(6*24*time.Hour + 90*time.Minute))
-	newerInBucket := seed(stamp(6 * 24 * time.Hour))
+	// Two backups in one calendar day, six days back: same daily bucket, so
+	// the older one loses.
+	//
+	// Anchored to that day's midnight rather than offset back from now. Ages
+	// pick the TIER, but buckets are calendar periods, so a pair expressed as
+	// "six days back" and "six days and ninety minutes back" shares a daily
+	// bucket only when the suite runs after 01:30 — before that the older one
+	// falls into the previous day, wins its own bucket, and survives a sweep
+	// the test says should drop it. It failed exactly that way at 00:44.
+	sixDaysBack := time.Now().Add(-6 * 24 * time.Hour)
+	dayStart := time.Date(
+		sixDaysBack.Year(), sixDaysBack.Month(), sixDaysBack.Day(),
+		0, 0, 0, 0, time.Local,
+	)
+	olderInBucket := seed(name(dayStart.Add(10 * time.Hour)))
+	newerInBucket := seed(name(dayStart.Add(11*time.Hour + 30*time.Minute)))
 	foreign := seed("operators-copy.sqlite")
 
 	bin := endlessGoBin(t)

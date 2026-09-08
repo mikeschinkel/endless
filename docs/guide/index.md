@@ -25,7 +25,7 @@ When your user gives you a task ID:
 3. Get into the worktree:
    - **`/cd <worktree-path>`** — the primary move for a Claude Code session. `task claim` prints the exact `/cd` line; running it changes Claude's own working directory, so every later tool (Read/Write/Edit, and a fresh Bash) defaults to the worktree instead of main. Do this once, right after claiming, and you no longer have to qualify paths to avoid editing main by accident. Pass an **absolute** path — `/cd` does not expand `~` or `$(...)`, and the first `/cd` into a directory prompts you to trust it.
    - `cd "$(endless worktree for-task <id>)"` moves only the Bash shell's cwd, not Claude's — file tools still default to main. Prefer `/cd`.
-   - run `eval "$(endless shell-init)"` once per shell, then `esu` to cd to your session's worktree *and* export `ENDLESS_SESSION_ID` so subsequent endless commands route through the worktree's source (not the global install). `esu`/`eswt` are complementary to `/cd`: they handle session routing, `/cd` handles Claude's working directory. See **Shell helpers** in `endless guide orchestration`.
+   - run `eval "$(endless shell-init)"` once per shell, then `esu` to cd to your session's worktree *and* export `ENDLESS_SESSION_ID` so subsequent endless commands route through the worktree's source (not the global install). `esu` is complementary to `/cd`: it handles session routing, `/cd` handles Claude's working directory. See **Shell helpers** in `endless guide orchestration`.
 4. Do the work in the worktree.
 5. **Commit your work on the task branch** — `git commit -m "E-<id>: what changed"` from inside the worktree. Endless does not do this for you: it auto-commits only its own files (`verbs.jsonl`, ledger entries, the plan mirror), so uncommitted source makes `worktree land` refuse and leaves your changes stranded. For the exact `git add` (which paths to *exclude*), see **Committing your work** in `endless guide orchestration`.
 6. When implementation is complete:
@@ -276,7 +276,7 @@ listed separately. (Generated — do not hand-edit; run `/regenerate-guide`.)
 | `session` | sessions | Recording session status; discovery (who am I); reading status. |
 {{if .report_gate}}| `session turn` | sessions | Reading a session's raw draft, or one option of a paired minimization. |
 {{end}}| `setup` | _(none yet)_ | hook/integration setup (claude-hook, prompt-hook, shell-helpers) isn't covered by the guide yet. |
-| `shell-init` | orchestration | Shell helpers (esu/eswt) to enter your task's worktree. |
+| `shell-init` | orchestration | Shell helpers (esu/esp/esf) to enter your task's worktree. |
 | `sql` | reference | Read-only SQL against the Endless DB. |
 | `task` | tasks | Task CRUD, field semantics (title/description/text/analysis/notes/outcome), status transitions, relations. |
 | `task claim` | orchestration | Claiming a task: creates the per-task worktree and binds your session. |
@@ -300,7 +300,7 @@ listed separately. (Generated — do not hand-edit; run `/regenerate-guide`.)
 | preference vs prohibition | decisions | Soft signals ('ideally','usually') are not rules - verify before recording. |
 | the handoff (generated, not authored) | orchestration | Spawned sessions get a rendered handoff; agents never write it. |
 | worktree DB sandbox (--db main vs sandbox) | orchestration | Self-dev DB routing and the --db choice. |
-| shell helpers (esu / eswt) | orchestration | cd into your worktree and export ENDLESS_SESSION_ID. |
+| shell helpers (esu / esp / esf) | orchestration | cd into your worktree and export ENDLESS_SESSION_ID. |
 | blocking semantics | tasks | How unverified/unreviewed/confirmed/assumed/completed affect whether a blocker is still active. |
 | verbs | tasks | The registered action words that can begin a task title. |
 | research-task field model | tasks | For a research task, text = the request, outcome = the deliverable. |

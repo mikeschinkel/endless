@@ -22,7 +22,7 @@ topic: worktree DB sandbox (--db main vs sandbox)
 section: orchestration
 covers: Self-dev DB routing and the --db choice.
 
-topic: shell helpers (esu / eswt)
+topic: shell helpers (esu / esp / esf)
 section: orchestration
 covers: cd into your worktree and export ENDLESS_SESSION_ID.
 

@@ -1,2 +1,2 @@
 section: orchestration
-covers: Shell helpers (esu/eswt) to enter your task's worktree.
+covers: Shell helpers (esu/esp/esf) to enter your task's worktree.

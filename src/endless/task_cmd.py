@@ -226,16 +226,39 @@ def _emit_field_changes(
     before the colon (e.g., '(cascaded to 3 descendants)').
     """
     bullet = click.style("•", fg="cyan")
-    header = f"Updated {task_id_display(item_id)}"
-    if title:
-        header += f" ({_truncate(title)})"
+    header = f"Updated {_task_label(item_id, title)}"
     if suffix:
         header += f" {suffix}"
-    header += ":"
-    click.echo(header)
+    click.echo(header + ":")
     for name, old, new in changes:
         label = _FIELD_LABELS.get(name, name)
         click.echo(f"{bullet} {label}: {_format_field_value(name, old)} -> {_format_field_value(name, new)}")
+
+
+def _task_label(item_id: int, title: str | None) -> str:
+    """'E-NNN (<truncated title>)', the subject every change block opens on."""
+    label = task_id_display(item_id)
+    return f"{label} ({_truncate(title)})" if title else label
+
+
+def _echo_labeled_rows(rows: list[tuple[str, str]]) -> None:
+    """Print '  • <Label>:<pad> <value>' rows, values aligned to one column.
+
+    The output shape `task claim` and `task spawn` end on (E-1428). Alignment
+    is the whole point: those blocks mix a status transition with a filesystem
+    path, and ragged labels made the path — the one value a reader is scanning
+    for — start at a different column on every line.
+
+    Two spaces of indent, because the caller-specific next step E-2106 prints
+    below these rows is indented the same way; the block reads as one thing
+    hanging off the header rather than two lists at different depths.
+    """
+    if not rows:
+        return
+    bullet = click.style("•", fg="cyan")
+    width = max(len(label) for label, _ in rows)
+    for label, value in rows:
+        click.echo(f"  {bullet} {label + ':':<{width + 1}} {value}")
 
 
 _VERB_CHECK_PROMPT_TEMPLATE = (
@@ -3691,9 +3714,11 @@ def _launch_claude_for_claim(
     `task claim` used to end by printing a menu, and both of its options were
     wrong: option 1 was `task spawn`, which `_check_prior_claim` refuses on any
     task that has ever been claimed — which a re-claim always has — and option 2
-    spelled out `/cd`, `shell-init` and `eswt`, the last of which
+    spelled out `/cd`, `shell-init` and a worktree-switching helper
     `endless shell-init` has never defined. So the common outcome was a claimed
-    task, a built worktree, and no route into it that worked.
+    task, a built worktree, and no route into it that worked. E-1428 retired
+    that helper's name everywhere else it was still written down; `esu` is the
+    one that exists.
 
     A shell cannot become the session, so this starts one — through the same
     `spawn-window` seam `task spawn` uses, which is what keeps it from being a
@@ -3741,13 +3766,18 @@ def _launch_claude_for_claim(
         "--window-name", window_name,
         "--cwd", worktree,
     ], check=True)
+    # Shaped like claim's other tails (E-1428): the sentence at two spaces,
+    # the command alone at six, so what you paste is one whole line. It used to
+    # be a column-zero bullet with the command trailing a label on the same
+    # line, which made it the one outcome of the four that did not look like
+    # the others.
     click.echo("")
     click.echo(
-        click.style("•", fg="cyan")
-        + f" Started Claude on {task_id_display(item_id)} in window "
+        f"  Started Claude on {task_id_display(item_id)} in window "
         + click.style(f"'{window_name}'", bold=True)
+        + ". Switch to it:"
     )
-    click.echo(f"  Switch to it: tmux select-window -t {window_name}")
+    click.echo(f"      tmux select-window -t {window_name}")
 
 
 def _current_session_task_id() -> int | None:
@@ -4396,6 +4426,8 @@ def _perform_claim_work(
     slug_source = title or "task"
     wt_path, created = create_task_worktree(item_id, slug_source, project_root)
 
+    rows: list[tuple[str, str]] = []
+
     if current_status != "underway":
         emit_event(
             kind="task.status_changed",
@@ -4409,10 +4441,7 @@ def _perform_claim_work(
             actor_kind=actor_kind,
             session_id=session_id_arg,
         )
-        _emit_field_changes(
-            item_id, title,
-            [("status", current_status, "underway")],
-        )
+        rows.append(("Status", f"{current_status} -> underway"))
 
     if target_session is not None:
         emit_event(
@@ -4423,24 +4452,21 @@ def _perform_claim_work(
             payload={"session_id": target_session},
             session_id=str(target_session),
         )
-        click.echo(
-            click.style("•", fg="cyan")
-            + f" bound to session {target_session}"
-        )
+        # No "bound to session N" row (E-1428). It printed a BARE INTEGER in an
+        # id space that renders as ES-N everywhere else, above the two lines
+        # anyone acts on, and on the dominant path — a Claude session claiming
+        # its own task — it restated the caller's own identity. The one path
+        # where the binding IS news, a shell that bound a sibling in another
+        # pane, names the session in the `session goto ES-N` line below.
 
+    rows.append((
+        "Git worktree",
+        config.tilde(wt_path) + ("" if created else "  (already existed)"),
+    ))
+
+    click.echo(f"Updated {_task_label(item_id, title)}:")
     click.echo("")
-
-    home = str(Path.home())
-    wt_display = (
-        str(wt_path).replace(home, "~", 1)
-        if str(wt_path).startswith(home)
-        else str(wt_path)
-    )
-    state = "created" if created else "already exists"
-    click.echo(
-        click.style("•", fg="cyan")
-        + f" worktree {state}: {wt_display}"
-    )
+    _echo_labeled_rows(rows)
 
     # Best-effort post-claim sweep of stale landed worktrees (E-1337).
     try:
@@ -4585,32 +4611,37 @@ def claim_item(item_id: int, unattended: bool = False, force: bool = False):
 
     if _check_task_ownership(item_id, target_session):
         from endless.worktree_cmd import create_task_worktree, _project_root
+        # A re-claim by the session that already owns the task. Nothing to
+        # change, so this reports rather than updates — but it reports in the
+        # same aligned shape (E-1428), and without naming the session, which on
+        # this path is the caller itself.
+        title = row[0]["title"]
         click.echo(
-            click.style("•", fg="cyan")
-            + f" E-{item_id} is already active in session {target_session}"
+            f"{_task_label(item_id, title)} is already claimed by this session:"
         )
         try:
             project_root = _project_root()
         except click.ClickException:
             return
-        slug_source = row[0]["title"] or "task"
+        slug_source = title or "task"
         wt_path, _ = create_task_worktree(item_id, slug_source, project_root)
-        home = str(Path.home())
-        wt_display = (
-            str(wt_path).replace(home, "~", 1)
-            if str(wt_path).startswith(home)
-            else str(wt_path)
-        )
-        click.echo(
-            click.style("•", fg="cyan")
-            + f" worktree: {wt_display}"
-        )
+        click.echo("")
+        _echo_labeled_rows([("Git worktree", config.tilde(wt_path))])
         # Best-effort post-claim sweep (E-1337).
         try:
             from endless.worktree_cmd import _reap_stale_worktrees
             _reap_stale_worktrees(project_root)
         except Exception:
             pass
+        # The caller still needs the way in — a Claude session re-claiming its
+        # own task is usually one whose working directory is still main.
+        _echo_claim_next_step(
+            item_id,
+            project_id=row[0]["project_id"],
+            worktree=str(wt_path),
+            unattended=unattended or force,
+            bound_session=target_session,
+        )
         return
 
     wt_path, _created = _perform_claim_work(
@@ -4767,15 +4798,17 @@ def bind_item(item_id: int) -> None:
     already = held[0]["task_id"] if held else None
     if already is not None and already != item_id:
         raise click.ClickException(
-            f"Session {target_session} already holds E-{already}, and a "
-            f"session's task is set once and never moved.\n"
+            f"Session {session_id_display(target_session)} already holds "
+            f"E-{already}, and a session's task is set once and never "
+            f"moved.\n"
             f"To work E-{item_id}, use a different session:\n"
             f"    endless task spawn E-{item_id}"
         )
     if already == item_id:
         click.echo(
             click.style("•", fg="cyan")
-            + f" E-{item_id} is already bound to session {target_session} "
+            + f" E-{item_id} is already bound to session "
+              f"{session_id_display(target_session)} "
               f"(task status unchanged: {current_status})"
         )
         return
@@ -4790,9 +4823,16 @@ def bind_item(item_id: int) -> None:
         # explicitly so emit_event doesn't re-resolve.
         session_id=str(target_session),
     )
+    # `ES-N`, not a bare integer (E-1428, folded in). Sessions and tasks are
+    # separate id spaces that both used to render as `E-NNN` (E-1261), which is
+    # why `session_id_display` exists and why `session goto` refuses a bare
+    # number matching both — so the bare form spelled an id in the one shape
+    # the navigator rejects. `task claim` stopped doing this; `task bind` is
+    # the verb claim's own refusal routes people to, so it stops too.
     click.echo(
         click.style("•", fg="cyan")
-        + f" E-{item_id} bound to session {target_session} for display "
+        + f" E-{item_id} bound to session "
+          f"{session_id_display(target_session)} for display "
           f"(task status unchanged: {current_status})"
     )
 
@@ -6260,16 +6300,24 @@ def spawn_plan(item_id: int, project_name: str | None = None,
         spawn_cmd += ["--name", name]
     subprocess.run(spawn_cmd, check=True)
 
-    click.echo(
-        click.style("•", fg="cyan")
-        + f" Spawned window '{window_name}' for "
-        + click.style(f"{task_id_display(item_id)}: {title}", bold=True)
-    )
-    if worktree is not None:
-        click.echo(f"  cwd: {cd_target}")
-    click.echo(
-        f"  Switch to it: tmux select-window -t {window_name}"
-    )
+    # E-1428: the same aligned-label discipline `task claim` prints under, and
+    # for the same reason — this used to trail the window name off the end of a
+    # sentence and hang `cwd:` under it at a different indent.
+    #
+    # The title is not repeated here: `_perform_claim_work` printed it one
+    # block up, on this same task. `Session cwd` appears only when `--worktree`
+    # pointed the session somewhere other than the worktree named above, which
+    # is exactly when it is news rather than the same path twice.
+    click.echo("")
+    click.echo(f"Spawned a Claude session on {task_id_display(item_id)}:")
+    click.echo("")
+    rows = [("Window", window_name)]
+    if str(cd_target) != str(wt_path):
+        rows.append(("Session cwd", config.tilde(cd_target)))
+    _echo_labeled_rows(rows)
+    click.echo("")
+    click.echo("  Switch to it:")
+    click.echo(f"      tmux select-window -t {window_name}")
 
 
 def search_tasks(

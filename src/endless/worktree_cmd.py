@@ -821,6 +821,71 @@ def for_task(task_id: str, as_json: bool) -> None:
         click.echo(match["path"])
 
 
+def sandbox_dir(task_id: str | None) -> None:
+    """Print the absolute path of a worktree's sandbox directory (E-1428).
+
+    The sandbox is per-worktree state that endless keeps outside the checkout —
+    for a self-dev project, the throwaway database `--db sandbox` writes to. It
+    is deliberately absent from `task claim`'s output, because it is not
+    somewhere to cd: it is not a project, so an endless command run from it
+    fails. There is one case that genuinely wants it — pointing a SQL client at
+    a worktree's database — and this is that case's answer, asked for rather
+    than pushed.
+
+    With no argument, resolves the worktree cwd is inside. With `E-NNNN`,
+    resolves that task's worktree, which need not be the one you are standing
+    in.
+
+    Refuses rather than printing a path that does not exist: a sandbox is
+    provisioned only for a self-dev project, so on any other project the honest
+    answer is that there is none, not a plausible-looking directory nothing
+    ever wrote to.
+    """
+    from endless import config
+
+    if task_id is None:
+        name = config.worktree_dir_name()
+        if name is None:
+            raise click.ClickException(
+                "Not inside a task worktree, so there is no sandbox to "
+                "resolve.\n"
+                "  Name the task instead:\n"
+                "      endless worktree sandbox E-<id>"
+            )
+        canonical = _task_id_from_worktree_path(Path.cwd()) or name
+    else:
+        canonical = _normalize_task_id(task_id)
+        root = _project_root()
+        wt_dir = root / ".endless" / "worktrees" / f"e-{canonical[2:]}"
+        if not wt_dir.is_dir():
+            raise click.ClickException(
+                f"No endless-managed worktree for {canonical}, so it has no "
+                f"sandbox."
+            )
+        # The sandbox dir's basename IS the worktree dir's basename; that
+        # 1-to-1 mapping is what `endless-go sandbox init` writes against.
+        name = wt_dir.name
+
+    project_root = config.enclosing_project_root()
+    if project_root is None or not config.project_is_self_dev(project_root):
+        raise click.ClickException(
+            f"{canonical}'s project does not sandbox its worktrees, so there "
+            f"is no sandbox directory.\n"
+            "  Sandboxes are provisioned only for a project whose "
+            ".endless/config.json\n"
+            '  sets "self_dev": true.'
+        )
+
+    path = config.sandbox_root(name)
+    if not path.is_dir():
+        raise click.ClickException(
+            f"{canonical}'s sandbox has not been provisioned:\n\n"
+            f"    {path}\n\n"
+            f"Provision it with:  endless-go sandbox init --mode worktree {name}"
+        )
+    click.echo(str(path))
+
+
 # --- Mutation: land + drop -------------------------------------------------
 
 def _is_auto_commit_path(rel_path: str) -> bool:
@@ -2306,10 +2371,14 @@ def _maybe_auto_sandbox_bind(project_root: Path, worktree_path: Path, task_id: i
                 err=True,
             )
             return
-    click.echo(
-        click.style("•", fg="cyan")
-        + f" sandbox provisioned: ~/.cache/endless/sandboxes/{name}"
-    )
+    # Silent on success (E-1428). This used to print the sandbox cache path as
+    # a bullet directly above the worktree path, and readers scanning a claim
+    # for somewhere to cd took the first path they saw — landing in a cache
+    # directory that is not a project, so every endless command after it failed
+    # with "Not in a registered project directory". The path has no routine
+    # user-facing purpose; `endless worktree sandbox` prints it on demand for
+    # the rare case (pointing a SQL client at a worktree's database) that wants
+    # it.
 
 
 def _resolve_land_endless_go(worktree_path: Path, project_root: Path) -> str | None:

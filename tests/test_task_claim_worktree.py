@@ -263,10 +263,16 @@ def test_claim_creates_worktree_no_plan_file(project_with_task, capsys):
     # one outcome per caller; `--unattended` says there is no Claude session
     # and none is wanted, so the worktree path IS the whole answer. The two
     # options it used to print were both dead: `task spawn` refuses any task
-    # that has ever been claimed, and `eswt` is a shell helper
+    # that has ever been claimed, and `eswt` was a shell helper
     # `endless shell-init` has never defined.
+    #
+    # E-1428 gave the block aligned labels and took the sandbox cache path out
+    # of it — that path is not a cd target, and printing it beside one sent
+    # readers into a directory where every endless command fails.
     captured = capsys.readouterr()
-    assert "worktree created:" in captured.out
+    assert "  • Status:       ready -> underway" in captured.out
+    assert f"  • Git worktree: {wt}" in captured.out
+    assert "sandbox" not in captured.out
     assert "choose one" not in captured.out
     assert f"endless task spawn E-{tid}" not in captured.out
     assert "eswt" not in captured.out
@@ -280,7 +286,11 @@ def test_claim_idempotent_on_second_run(project_with_task, capsys):
 
     claim_item(project_with_task["task_id"], unattended=True)
     captured = capsys.readouterr()
-    assert "worktree already exists:" in captured.out
+    # No Status row: the task is already `underway`, so nothing moved. The
+    # worktree row says it was reused rather than built (E-1428).
+    assert "Status:" not in captured.out
+    assert "  • Git worktree: " in captured.out
+    assert "(already existed)" in captured.out
     # A re-claim is the case the old block got most wrong — its first option,
     # `task spawn`, is refused on any task with a prior claimant (E-2106).
     tid = project_with_task["task_id"]

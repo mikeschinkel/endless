@@ -3754,6 +3754,24 @@ def worktree_for_task(task_id, as_json):
     for_task(task_id, as_json)
 
 
+@worktree_cmd.command("sandbox")
+@click.argument("task_id", required=False)
+def worktree_sandbox(task_id):
+    """Print the absolute path of a worktree's sandbox directory.
+
+    The per-worktree state endless keeps outside the checkout — for a self-dev
+    project, the throwaway database `--db sandbox` writes to. `task claim` does
+    not print it, deliberately: it is not somewhere to cd, and when it was
+    printed beside the worktree path people cd'd into it and every command
+    after that failed. Ask for it here when you actually want it — pointing a
+    SQL client at a worktree's database is the case that does.
+
+    With no argument, resolves the worktree you are standing in.
+    """
+    from endless.worktree_cmd import sandbox_dir
+    sandbox_dir(task_id)
+
+
 @worktree_cmd.command("land")
 @click.argument("task_id")
 @click.option("--dry-run", is_flag=True,

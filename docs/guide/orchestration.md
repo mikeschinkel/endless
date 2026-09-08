@@ -40,8 +40,13 @@ This:
    It used to print "To work on this task, choose one:" instead, and on a
    re-claim — the case that reaches it most often — both options were dead ends.
    Option 1 was `task spawn`, refused for any task that has ever been claimed.
-   Option 2 taught `eswt`, a shell helper `endless shell-init` has never
-   defined.
+   Option 2 taught a worktree-switching shell helper `endless shell-init` has
+   never defined.
+
+   The facts above that step are printed as aligned labels, and the worktree is
+   the only path among them — the per-worktree sandbox directory used to be
+   printed beside it, and readers cd'd into the cache directory instead of the
+   checkout. Ask for that one when you want it: `endless worktree sandbox`.
 
 One task gets exactly one worktree: `.endless/worktrees/e-<id>/`. Only that canonical name is recognized — a directory created by hand under any other name simply isn't seen as the task's worktree. When you need a *second* checkout for the same line of work — an A/B comparison, running one copy while editing another, a `git bisect`, or a throwaway snapshot — file a **child task** and claim it. The child gets its own `e-<child-id>/` worktree (and its own sandbox), so the two checkouts are first-class, independently tracked, and land or drop on their own.
 
@@ -75,9 +80,12 @@ pick per invocation:
 
 - `--db main` — the main database at `~/.config/endless/endless.db`. Use it for
   **managing the project**: filing tasks, claiming, status updates, ledger entries.
-- `--db sandbox` — this worktree's throwaway DB under
-  `~/.cache/endless/sandboxes/worktree-e-NNN/`. Use it for **testing endless
-  itself** so experiments never touch the main database.
+- `--db sandbox` — this worktree's throwaway DB, inside the sandbox directory
+  endless provisions alongside the worktree. Use it for **testing endless
+  itself** so experiments never touch the main database. You do not need the
+  sandbox's path to use the flag, and nothing prints it at you; when you do
+  want it (pointing a SQL client at that database is the case that does),
+  `endless worktree sandbox [E-NNNN]` prints it.
 
 ```bash
 endless --db main task add "Fix the thing"     # before the command
@@ -98,6 +106,7 @@ endless worktree list                       # all worktrees for the current proj
 endless worktree show <slug-or-id>          # detail for one
 endless worktree current                    # what worktree is cwd in (or "none")
 endless worktree for-task <id>              # resolve a task ID to its path
+endless worktree sandbox [<id>]             # the worktree's sandbox dir (cwd's, or a task's)
 ```
 
 ### Stale worktrees (`worktree sync`)
@@ -359,7 +368,6 @@ This adds the following functions:
 | `esf`    | "Endless session forget." Unsets `ENDLESS_SESSION_ID` in the current shell. The session keeps running; only the shell's pointer is cleared. | When you're done coordinating one session and want a fresh shell. |
 | `esm`    | "Endless session monitor." Live dashboard — re-renders `session status` every 2s until Ctrl-C. Passes through `--all` / `--tree`.        | Watching a spawned session work without polling by hand.  |
 | `eeh`    | "Endless errors here." Runs `errors show`: the recorded errors for the project you are in, plus how to dismiss them. Takes `--detail` / `--all`, and `--all-projects` to cover the machine the way the `session status` badge counts. | The badge says `Run eeh` — this is what it means.        |
-| `eswt`   | *(Planned, not yet shipped.)* "Endless switch worktree." Pure `cd` to a task's worktree, given a task ID. Distinct from `esu` in that it does not export `ENDLESS_SESSION_ID`. | Quick navigation without binding. Until shipped, use `cd "$(endless worktree for-task <id>)"`. |
 
 `esm` and `eeh` are read-only views and need no session binding.
 
@@ -376,7 +384,7 @@ by `task claim`, or from `endless worktree for-task <id>`):
 `/cd` needs an absolute path — it does not expand `~` or `$(...)`. The first
 `/cd` into a directory triggers a one-time trust prompt, and `/cd` requires
 Claude Code v2.1.169+. Run it once after `task claim` so every tool defaults to
-the worktree instead of main. `/cd` and `esu`/`eswt` are complementary: `/cd`
+the worktree instead of main. `/cd` and `esu` are complementary: `/cd`
 fixes Claude's working directory, `esu` fixes shell session routing. A claimed
 session that hasn't `/cd`'d into its worktree is refused tool use until it does.
 
