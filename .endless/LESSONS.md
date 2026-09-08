@@ -5390,3 +5390,13 @@ just changed (a plugin toggle, say) is silently overridden by the backup you
 restored. Delete from the backup any key whose new committed value you want,
 and let the recipe pick it up.
 - **Project**: endless
+
+### [2026-09-07] Never run the project-wide pytest suite casually — tests/test_task_claim_worktree.py spawns real tmux windows and Claude Code sessions into the user's ACTIVE tmux session
+Running `just test` / `uv run pytest tests/` in the endless repo spawns real tmux windows into the user's live 'active' tmux session, each launching a Claude Code trust prompt for a pytest tmp_path. tests/test_task_claim_worktree.py::test_claim_binds_sibling_claude_session (and its neighbours) drive the real claim/spawn path, which reaches tmux and Claude for real instead of a throwaway server or a stub.
+
+Two rules follow.
+
+1. As a session: do not run the full pytest suite as a routine regression step. Run the files your change touches. If a project-wide run is genuinely needed, say so and let Mike start it, because it takes over his terminal.
+
+2. As a fix: a test must never target the ACTIVE tmux session. It needs its own tmux server (a private socket via `tmux -L <name>`, torn down afterwards) or the tmux/Claude boundary stubbed. Reaching the operator's live session from a test is not an isolation gap to work around, it is a defect in the test.
+- **Project**: endless
