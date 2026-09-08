@@ -76,6 +76,22 @@ def isolated_env(tmp_path, monkeypatch):
     monkeypatch.delenv("TMUX", raising=False)
     monkeypatch.delenv("TMUX_PANE", raising=False)
 
+    # E-2125: and give the suite its own tmux socket directory, because
+    # deleting the vars above only stops code that BRANCHES on them. tmux
+    # itself reaches the running server through the default socket regardless,
+    # so anything that shells out unconditionally still talked to the
+    # developer's live tmux — and one `new-window` there opens a real window,
+    # in a real session, in front of a real person.
+    #
+    # With TMUX unset, tmux derives its socket from TMUX_TMPDIR, so pointing
+    # that at an empty per-test directory means every tmux subprocess resolves
+    # to a socket with no server behind it and fails with "no server running".
+    # A test that wants a server can start one there; none can reach the
+    # operator's.
+    tmux_tmpdir = tmp_path / "tmux"
+    tmux_tmpdir.mkdir()
+    monkeypatch.setenv("TMUX_TMPDIR", str(tmux_tmpdir))
+
     # E-1455: strip Claude Code env vars leaked from a runner shell whose
     # parent IS a Claude Code session. The env-vars-as-truth layer in
     # _current_endless_session_id branches on CLAUDECODE=1 and would

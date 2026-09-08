@@ -13,17 +13,69 @@ import (
 // built-in multiplexer, relates E-1085) can add backends without touching the
 // spec/argv/exec logic in spawn_window.go and spawn_launch.go.
 
-// newWindowArgs builds `tmux new-window -c <cwd> -n <name> -- <cmd...>`. The
-// `--` terminates tmux flag parsing so the window command and its args are
+// newWindowArgs builds
+//
+//	tmux new-window -t <target> [-c <cwd>] -n <name> -P -F #{pane_id} -- <cmd...>
+//
+// target is REQUIRED and names the session the window is created in (E-2125).
+// Without it tmux picks the "current" session, which off a command line means
+// the most recently active one on the server — so a spawn asked for in one
+// session materialized in whichever session the person happened to be looking
+// at, with nothing on the window saying where it came from. The session that
+// asked for the window is the session that gets it; see spawnerSession.
+//
+// The `--` terminates tmux flag parsing so the window command and its args are
 // passed through literally (no shell re-quoting of cmd elements). When cwd is
 // empty the `-c` flag is omitted and the window inherits the caller's cwd.
-func newWindowArgs(cwd, windowName string, cmd []string) []string {
-	args := []string{"new-window"}
+//
+// `-P -F #{pane_id}` makes new-window report the created window's only pane, so
+// the layout builder anchors on that id instead of looking the window back up
+// by name. A name lookup is the same unqualified-target bug one call later: two
+// sessions can each hold a window called `E-1705`, and `-t E-1705` would answer
+// with whichever the server considered current.
+func newWindowArgs(target, cwd, windowName string, cmd []string) []string {
+	args := []string{"new-window", "-t", target}
 	if cwd != "" {
 		args = append(args, "-c", cwd)
 	}
-	args = append(args, "-n", windowName, "--")
+	args = append(args, "-n", windowName, "-P", "-F", "#{pane_id}", "--")
 	return append(args, cmd...)
+}
+
+// sessionIDArgs builds `tmux display-message -p -t <pane> #{session_id}`, which
+// resolves a pane to the id of the session holding it.
+func sessionIDArgs(pane string) []string {
+	return []string{"display-message", "-p", "-t", pane, "#{session_id}"}
+}
+
+// spawnerSession returns the new-window target: the session that owns the pane
+// this process is running in, as a session id (`$3`) suffixed with `:` so tmux
+// reads it as "this session, next free index" rather than as a window name.
+//
+// Session ids are used rather than names because a name can be changed or
+// duplicated across a rename while a `$N` id is fixed for the session's life.
+// The id is read from the pane rather than from $TMUX's third field, which
+// records the session a client was attached to when the process started and
+// goes stale the moment the pane is moved (`tmux move-window`, `break-pane`).
+//
+// An unresolvable target is an error, never a silent fall back to an untargeted
+// new-window: landing in an unknown session is the defect, so a spawn that
+// cannot say where it belongs refuses instead of guessing.
+func spawnerSession() (string, error) {
+	pane := os.Getenv("TMUX_PANE")
+	if pane == "" {
+		return "", fmt.Errorf(
+			"cannot tell which tmux session to open the window in: " +
+				"$TMUX_PANE is unset. Run this from inside a tmux pane")
+	}
+	id, err := tmuxRunOut(sessionIDArgs(pane)...)
+	if err != nil {
+		return "", fmt.Errorf("resolve session of pane %s: %w", pane, err)
+	}
+	if id == "" {
+		return "", fmt.Errorf("pane %s reported no session id", pane)
+	}
+	return id + ":", nil
 }
 
 // setOptionArgs builds `tmux set-option -w -t <target> <key> <value>` for one
@@ -77,13 +129,6 @@ func splitWindowArgs(target string, horizontal, before bool, cwd string, length 
 // to the claude pane once the layout is assembled.
 func selectPaneArgs(target string) []string {
 	return []string{"select-pane", "-t", target}
-}
-
-// panePaneIDArgs builds `tmux display-message -p -t <target> #{pane_id}`, which
-// resolves a window target to its ACTIVE pane's id. Called once right after
-// new-window, while the window's only pane is the claude pane.
-func panePaneIDArgs(target string) []string {
-	return []string{"display-message", "-p", "-t", target, "#{pane_id}"}
 }
 
 // windowOptionCommands returns the ordered set-option arg lists that publish the

@@ -140,23 +140,13 @@ func TestBuildLayoutAround_ShellFailureStopsEarly(t *testing.T) {
 	}
 }
 
-// TestBuildSpawnLayout_ResolvesTheWindowsOnlyPane pins that spawn's entry point
-// still resolves window name -> active pane and hands that pane to the shared
-// builder, which is the whole of what the E-2106 extraction changed for spawn.
-func TestBuildSpawnLayout_ResolvesTheWindowsOnlyPane(t *testing.T) {
-	f := &fakeTmux{}
-	install(t, f)
-
-	buildSpawnLayout("E-1851", "")
-
-	if got, want := verbs(f.calls),
-		[]string{"display-message", "split-window", "split-window", "select-pane"}; !reflect.DeepEqual(got, want) {
-		t.Fatalf("verbs = %q, want %q", got, want)
-	}
-	if got := targets(f.calls)[1]; got != "%claude" {
-		t.Fatalf("first split targeted %q, want the window's active pane", got)
-	}
-}
+// E-2125 removed buildSpawnLayout, and with it the test that pinned it here.
+// It asserted that spawn resolved window name -> active pane before splitting,
+// which is the defect: a window name is not unique across sessions, so tmux
+// answered with whichever window the server considered current. new-window now
+// reports the pane it created (`-P -F '#{pane_id}'`, pinned in
+// tmux_driver_test.go) and runSpawnWindow hands that id straight to
+// buildLayoutAround, so there is no lookup left to test.
 
 // failAfterFirstSplit lets the shell split succeed and refuses the monitor one.
 type failAfterFirstSplit struct {

@@ -73,15 +73,39 @@ func runSpawnWindow(args []string) {
 		fail("spawn-window: resolve self: %v", err)
 	}
 
+	// Resolve the landing session BEFORE the window is asked for, so a spawn
+	// that cannot say where it belongs fails without having created anything.
+	target, err := spawnerSession()
+	if err != nil {
+		_ = os.Remove(specPath)
+		fail("spawn-window: %v", err)
+	}
+
+	// new-window reports the window's only pane, which is claude because
+	// nothing else exists in it yet. That id is what the shared layout builder
+	// anchors on. Asking tmux for it afterwards BY WINDOW NAME, as this used
+	// to, is the same unqualified-target bug one call later: two sessions can
+	// each hold a window called `E-1705`, and tmux answers with whichever one
+	// it considers current.
 	cmd := []string{self, "spawn-launch", "--spec", specPath}
-	if err = runTmux(newWindowArgs(*cwd, *windowName, cmd)...); err != nil {
+	claudePane, err := tmuxRunOut(newWindowArgs(target, *cwd, *windowName, cmd)...)
+	if err != nil {
 		// The window was never created, so spawn-launch will not run to delete
 		// the spec file; remove it here.
 		_ = os.Remove(specPath)
 		fail("spawn-window: %v", err)
 	}
 
-	buildSpawnLayout(*windowName, *cwd)
+	// The spawn itself has succeeded by now — claude is running in the window.
+	// A missing pane id costs the layout, never the session.
+	if claudePane == "" {
+		fmt.Fprintln(os.Stderr, "spawn-window: layout skipped (no pane id)")
+		return
+	}
+	// Runs from THIS process, after new-window returns, because pane 0 is
+	// claude: runSpawnLaunch replaces that pane via syscall.Exec and so cannot
+	// orchestrate anything afterward.
+	buildLayoutAround(claudePane, *cwd)
 }
 
 // projectDirFor resolves the directory the monitor and shell panes start in: the
@@ -146,22 +170,6 @@ func gitRevParse(dir, arg string) (string, error) {
 		return "", err
 	}
 	return strings.TrimSpace(string(out)), nil
-}
-
-// buildSpawnLayout resolves the freshly created window's only pane — which is
-// claude, because nothing else exists in it yet — and hands it to the shared
-// layout builder in layout.go.
-//
-// It runs AFTER new-window returns, from this process, because pane 0 is claude:
-// runSpawnLaunch replaces that pane via syscall.Exec and so cannot orchestrate
-// anything afterward.
-func buildSpawnLayout(windowName, cwd string) {
-	claudePane, err := tmuxRunOut(panePaneIDArgs(windowName)...)
-	if err != nil || claudePane == "" {
-		fmt.Fprintf(os.Stderr, "spawn-window: layout skipped (no pane id): %v\n", err)
-		return
-	}
-	buildLayoutAround(claudePane, cwd)
 }
 
 func fail(format string, a ...any) {

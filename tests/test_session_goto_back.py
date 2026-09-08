@@ -19,8 +19,9 @@ class FakeTmux:
     switch-client target.
     """
 
-    def __init__(self, panes, spawned_by="", client="cli"):
+    def __init__(self, panes, spawned_by="", client="cli", session="$0"):
         self.panes = set(panes)
+        self.session = session
         self.options: dict[str, str] = {}
         self.spawned_by = spawned_by
         self.client = client
@@ -49,6 +50,11 @@ class FakeTmux:
             if fmt == "#{pane_id}":
                 # Real tmux returns exit 0 with empty output for a bad -t pane.
                 return (0, target + "\n") if target in self.panes else (0, "")
+            if fmt == "#{session_id}":
+                # E-2125: the pane -> landing-session lookup. This fake server
+                # holds one session; an unresolvable pane errors, as real
+                # tmux's `-t` resolution does.
+                return (0, self.session + "\n") if target in self.panes else (1, "")
             if fmt == "#{@endless_spawned_by}":
                 return 0, self.spawned_by + "\n"
             return 0, "\n"
@@ -86,9 +92,11 @@ def goto_env(registered_project, monkeypatch, stage_live_session):
     # stubbed out — pane geometry has its own tests.
     monkeypatch.setattr(session_cmd, "build_pane_layout", lambda pane, cwd: None)
 
-    def _make(panes, spawned_by="", current_pane=None, client="cli"):
+    def _make(panes, spawned_by="", current_pane=None, client="cli",
+              session="$0"):
         monkeypatch.setenv("TMUX", "/tmp/tmux-test,1,0")
-        ft = FakeTmux(panes, spawned_by=spawned_by, client=client)
+        ft = FakeTmux(panes, spawned_by=spawned_by, client=client,
+                      session=session)
         monkeypatch.setattr(session_cmd, "_tmux_run", ft.run)
         if current_pane is not None:
             monkeypatch.setenv("TMUX_PANE", current_pane)
@@ -585,3 +593,48 @@ def test_revisit_flags_require_resume(goto_env, kwargs):
     with pytest.raises(click.ClickException) as exc:
         session_cmd.session_goto("E-1465", **kwargs)
     assert "only with --resume" in str(exc.value)
+
+
+# ── E-2125: a new window lands in the session that asked for it ──
+
+def test_goto_resume_targets_the_spawning_session(
+    goto_env, registered_project, monkeypatch
+):
+    """An untargeted `new-window` lands in whichever session tmux considers
+    current — the most recently active one on the server, which off a command
+    line is whatever the operator was last looking at. So the window carries
+    the target explicitly, and the target is the session holding the pane the
+    command was run FROM.
+
+    The fake's session id is deliberately not `$0`: a hard-coded default would
+    pass this test without the pane ever being consulted.
+    """
+    stage, make = goto_env
+    stage(endless_session_id=10, pane_id="%10", task_id=1465)
+    ft = make({"%10", "%cur"}, current_pane="%cur", session="$7")
+    _stage_resumable(monkeypatch, registered_project)
+
+    session_cmd.session_goto("E-1748", resume=True)
+
+    argv = ft.new_windows[0]
+    assert "-t" in argv, f"new-window has no target: {argv}"
+    assert argv[argv.index("-t") + 1] == "$7:"
+
+
+def test_goto_resume_refuses_when_the_session_is_unresolvable(
+    goto_env, registered_project, monkeypatch, capsys
+):
+    """No resolvable pane means no answer to "which session does this belong
+    in", and the fix is worth nothing if that case quietly falls back to an
+    untargeted new-window. It refuses instead, and opens no window."""
+    stage, make = goto_env
+    stage(endless_session_id=10, pane_id="%10", task_id=1465)
+    # current_pane=None deletes $TMUX_PANE, so the session lookup has no input.
+    ft = make({"%10"}, current_pane=None)
+    _stage_resumable(monkeypatch, registered_project)
+
+    with pytest.raises(SystemExit):
+        session_cmd.session_goto("E-1748", resume=True)
+
+    assert ft.new_windows == []
+    assert "which tmux session" in capsys.readouterr().err

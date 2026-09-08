@@ -86,6 +86,10 @@ def harness(monkeypatch, tmp_path, claude_home):
         trace.append(("tmux", list(args)))
         if args and args[0] == "new-window":
             return _Res(stdout="%77\n")
+        if args and args[-1] == "#{session_id}":
+            # E-2125: the pane -> landing-session lookup a new-window makes
+            # before it can name a target.
+            return _Res(stdout="$0\n")
         return _Res()
 
     def fake_exec(file, argv):

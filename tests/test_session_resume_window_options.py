@@ -156,6 +156,8 @@ def test_new_window_gets_the_same_identity(monkeypatch, tmp_path,
         trace.append(list(args))
         if args[:1] == ["new-window"]:
             return _Res(stdout="%new1\n")
+        if args[-1] == "#{session_id}":
+            return _Res(stdout="$0\n")
         return _Res()
 
     monkeypatch.setenv("TMUX_PANE", "%42")
@@ -180,4 +182,10 @@ def test_new_window_gets_the_same_identity(monkeypatch, tmp_path,
     for args in trace:
         if args[:2] == ["set-option", "-w"]:
             assert args[2:4] == ["-t", "%new1"]
-    assert trace[0][:1] == ["new-window"], "identity is written after the window"
+    window = next(i for i, a in enumerate(trace) if a[:1] == ["new-window"])
+    first_opt = next(i for i, a in enumerate(trace) if a[:2] == ["set-option", "-w"])
+    assert window < first_opt, "identity is written after the window"
+    # E-2125: and the window says which session it lands in.
+    argv = trace[window]
+    assert "-t" in argv, f"new-window has no target: {argv}"
+    assert argv[argv.index("-t") + 1] == "$0:"

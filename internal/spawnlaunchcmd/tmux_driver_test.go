@@ -3,16 +3,19 @@ package spawnlaunchcmd
 import (
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 )
 
-// TestNewWindowArgs_WithCwd pins the normal new-window command: -c <cwd>,
-// -n <name>, then `--` and the window command passed through literally.
+// TestNewWindowArgs_WithCwd pins the normal new-window command: -t <session>,
+// -c <cwd>, -n <name>, the -P -F pane-id readback, then `--` and the window
+// command passed through literally.
 func TestNewWindowArgs_WithCwd(t *testing.T) {
-	got := newWindowArgs("/wt/e-1705", "endless_deliver[E-1705]",
+	got := newWindowArgs("$3:", "/wt/e-1705", "endless_deliver[E-1705]",
 		[]string{"/bin/endless-go", "spawn-launch", "--spec", "/tmp/spec.json"})
 	want := []string{
-		"new-window", "-c", "/wt/e-1705", "-n", "endless_deliver[E-1705]", "--",
+		"new-window", "-t", "$3:", "-c", "/wt/e-1705",
+		"-n", "endless_deliver[E-1705]", "-P", "-F", "#{pane_id}", "--",
 		"/bin/endless-go", "spawn-launch", "--spec", "/tmp/spec.json",
 	}
 	if !reflect.DeepEqual(got, want) {
@@ -21,12 +24,70 @@ func TestNewWindowArgs_WithCwd(t *testing.T) {
 }
 
 // TestNewWindowArgs_NoCwdOmitsFlag pins that an empty cwd drops -c so the window
-// inherits the caller's directory (used by the attach path).
+// inherits the caller's directory. The target does NOT drop with it: cwd is
+// optional, the landing session is not.
 func TestNewWindowArgs_NoCwdOmitsFlag(t *testing.T) {
-	got := newWindowArgs("", "win", []string{"/bin/claude", "attach", "abcd1234"})
-	want := []string{"new-window", "-n", "win", "--", "/bin/claude", "attach", "abcd1234"}
+	got := newWindowArgs("$0:", "", "win", []string{"/bin/claude", "attach", "abcd1234"})
+	want := []string{
+		"new-window", "-t", "$0:", "-n", "win", "-P", "-F", "#{pane_id}", "--",
+		"/bin/claude", "attach", "abcd1234",
+	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("args = %q, want %q", got, want)
+	}
+}
+
+// TestNewWindowArgs_AlwaysTargeted is E-2125's regression, stated as the
+// property rather than as one argv: whatever else varies, `-t <target>` is
+// present and immediately follows the verb. An untargeted new-window lands in
+// the server's most recently active session, so a spawn asked for in one
+// session appeared in whichever one the operator was looking at.
+func TestNewWindowArgs_AlwaysTargeted(t *testing.T) {
+	cases := []struct {
+		name   string
+		target string
+		cwd    string
+		win    string
+		cmd    []string
+	}{
+		{"cwd and command", "$3:", "/wt/e-1", "E-1", []string{"claude"}},
+		{"no cwd", "$12:", "", "E-2", []string{"claude"}},
+		{"no command", "$0:", "/wt/e-3", "E-3", nil},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := newWindowArgs(tc.target, tc.cwd, tc.win, tc.cmd)
+			if len(got) < 3 || got[0] != "new-window" || got[1] != "-t" || got[2] != tc.target {
+				t.Fatalf("args = %q, want it to open with new-window -t %q", got, tc.target)
+			}
+		})
+	}
+}
+
+// TestSessionIDArgs pins the pane -> session-id lookup that resolves the
+// new-window target.
+func TestSessionIDArgs(t *testing.T) {
+	got := sessionIDArgs("%246")
+	want := []string{"display-message", "-p", "-t", "%246", "#{session_id}"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("args = %q, want %q", got, want)
+	}
+}
+
+// TestSpawnerSession_RefusesWithoutPane pins that an unresolvable target is an
+// error rather than a silent fall back to an untargeted new-window. Guessing is
+// the defect; refusing is the fix.
+func TestSpawnerSession_RefusesWithoutPane(t *testing.T) {
+	t.Setenv("TMUX_PANE", "")
+	got, err := spawnerSession()
+	if err == nil {
+		t.Fatalf("spawnerSession() = %q, nil; want an error when $TMUX_PANE is unset", got)
+	}
+	if got != "" {
+		t.Fatalf("spawnerSession() = %q on error, want an empty target", got)
+	}
+	if !strings.Contains(err.Error(), "TMUX_PANE") {
+		t.Fatalf("error = %v, want it to name $TMUX_PANE", err)
 	}
 }
 
@@ -78,18 +139,6 @@ func TestSplitWindowArgs_LengthAndNoCwd(t *testing.T) {
 func TestSelectPaneArgs(t *testing.T) {
 	got := selectPaneArgs("%7")
 	want := []string{"select-pane", "-t", "%7"}
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("args = %q, want %q", got, want)
-	}
-}
-
-// TestPanePaneIDArgs pins the window→active-pane-id lookup that anchors the
-// layout on a stable pane ID rather than a base-index-dependent pane index.
-func TestPanePaneIDArgs(t *testing.T) {
-	got := panePaneIDArgs("endless_deliver[E-1851]")
-	want := []string{
-		"display-message", "-p", "-t", "endless_deliver[E-1851]", "#{pane_id}",
-	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("args = %q, want %q", got, want)
 	}

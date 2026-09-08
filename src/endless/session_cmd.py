@@ -2383,6 +2383,32 @@ def _pane_exists(pane: str) -> bool:
     return bool(res and res.returncode == 0 and res.stdout.strip())
 
 
+def _spawner_session_target() -> str | None:
+    """The tmux session this process's pane lives in, as a `$N:` new-window
+    target — or None when it can't be resolved.
+
+    Every window Endless creates has to say which session it belongs in
+    (E-2125). tmux resolves an untargeted `new-window` against the "current"
+    session, which off a command line means the most recently active session on
+    the server — so a window asked for here surfaced in whichever session the
+    person happened to be looking at, carrying nothing that said where it came
+    from. The session that asked for the window is the session that gets it.
+
+    The id is read from `$TMUX_PANE` rather than from `$TMUX`'s third field:
+    `$TMUX` records the session a client was attached to when the process
+    started, and goes stale as soon as the pane is moved. The trailing `:` is
+    what makes tmux read `$3` as a session rather than as a window name.
+    """
+    pane = os.environ.get("TMUX_PANE")
+    if not pane:
+        return None
+    res = _tmux_run(["display-message", "-p", "-t", pane, "#{session_id}"])
+    if not res or res.returncode != 0:
+        return None
+    session = res.stdout.strip()
+    return f"{session}:" if session else None
+
+
 def _tmux_switch_client(pane: str) -> bool:
     """Switch the tmux client to `pane`'s window/session. True on success."""
     res = _tmux_run(["switch-client", "-t", pane])
@@ -2689,7 +2715,18 @@ def _resume_new_window_pane(
         cmd = shlex.quote(claude)
     else:
         cmd = f"{shlex.quote(claude)} --resume {shlex.quote(uuid)}"
-    args = ["new-window", "-d", "-c", worktree]
+    # Land in the session that asked for the window, never in whichever one
+    # tmux considers current (E-2125). Refusing beats guessing: a window that
+    # opens somewhere unexplained is the defect being fixed.
+    target = _spawner_session_target()
+    if target is None:
+        click.echo(
+            "Could not tell which tmux session to open the window in "
+            "(no resolvable $TMUX_PANE). Run this from inside a tmux pane.",
+            err=True,
+        )
+        raise SystemExit(1)
+    args = ["new-window", "-d", "-t", target, "-c", worktree]
     task = decision.get("task_id")
     if task is not None:
         args += ["-n", tmux_window_name(int(task))]

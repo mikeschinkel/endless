@@ -47,7 +47,7 @@ type windowLayout struct {
 // command, so the session's first pane is the user's own shell.
 //
 // The SHELL is created first and the board inserted ABOVE it, not the other way
-// round. This is E-1851's rule, learned in spawnlaunchcmd.buildSpawnLayout and
+// round. This is E-1851's rule, learned in spawnlaunchcmd.buildLayoutAround and
 // restated here because getting it backwards is invisible until it bites: the
 // board shrinks its own pane to its frame on first paint
 // (liveview.FitPaneToFrame), so creating the board first and then splitting a
