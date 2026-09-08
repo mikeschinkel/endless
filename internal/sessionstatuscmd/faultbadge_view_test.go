@@ -37,13 +37,21 @@ func bindFaultStore(t *testing.T) {
 	if _, err = db.Exec(schema.SQL); err != nil {
 		t.Fatalf("apply schema: %v", err)
 	}
+	// A registered project, so a test can file a fault under one and have the
+	// foreign key on errors.project_id accept it.
+	if _, err = db.Exec(
+		`INSERT INTO projects (id, name, path) VALUES (1, 'elsewhere', '~/Projects/elsewhere')`,
+	); err != nil {
+		t.Fatalf("seed project: %v", err)
+	}
 
 	logDir := t.TempDir()
 	faults.Bind(
 		func() (*sql.DB, error) { return db, nil },
 		func() string { return logDir },
+		nil,
 	)
-	t.Cleanup(func() { faults.Bind(nil, nil) })
+	t.Cleanup(func() { faults.Bind(nil, nil, nil) })
 }
 
 // oneRow is the minimal row set that exercises the normal (non-empty) render
@@ -94,6 +102,37 @@ func TestRenderFaultBadge_AppearsWhenIncidentsAreOpen(t *testing.T) {
 	}
 }
 
+// TestRenderFaultBadge_StaysMachineWide is the session-status half of E-1960's
+// scoping contract, and the deliberate asymmetry with the project board.
+//
+// `session status` renders every live session on the box, whatever project each
+// is in, so its badge counts every project's open incidents. Narrowing it to the
+// project the pane happens to sit in would hide a fault in a project this very
+// frame is showing a session for. The board makes the opposite call — see
+// internal/projectstatuscmd/badge_scope_test.go — because the board is scoped to
+// one project in every other respect.
+func TestRenderFaultBadge_StaysMachineWide(t *testing.T) {
+	bindFaultStore(t)
+
+	// One fault filed under a project this session has nothing to do with. It is
+	// the only ERROR, so the severity chip is the tell.
+	faults.Record(faults.Fault{
+		Code:      faults.ErrCodeJobPanicked,
+		ProjectID: 1,
+		Source:    "job:elsewhere",
+		Summary:   `a job in another project panicked`,
+	})
+
+	var b strings.Builder
+	renderTo(&b, oneRow(), 698, hintClaimBind, 90, false, hiddenOmit)
+	out := b.String()
+
+	if !strings.Contains(out, "ERROR") {
+		t.Errorf("session status narrowed its badge to one project — "+
+			"a fault in another project vanished from a machine-wide view:\n%s", out)
+	}
+}
+
 func TestRenderFaultBadge_SilentWhenNothingIsOpen(t *testing.T) {
 	bindFaultStore(t)
 
@@ -113,7 +152,7 @@ func TestRenderFaultBadge_SilentWhenClearedEvenThoughHistoryRemains(t *testing.T
 		Source:  "job:fixed",
 		Summary: `job "fixed" failed`,
 	})
-	if _, err := faults.Clear(nil, "tester"); err != nil {
+	if _, err := faults.Clear(faults.AllProjects, nil, "tester"); err != nil {
 		t.Fatalf("clear: %v", err)
 	}
 
@@ -185,7 +224,7 @@ func badgeLineOf(frame string) string {
 }
 
 func TestRenderFaultBadge_SurvivesAnUnboundFaultStore(t *testing.T) {
-	faults.Bind(nil, nil)
+	faults.Bind(nil, nil, nil)
 
 	// A diagnostics surface must never be able to take down the view it
 	// annotates: with no fault store reachable the frame renders as normal,

@@ -36,8 +36,9 @@ func bindFaultsForTest(t *testing.T) *sql.DB {
 	faults.Bind(
 		func() (*sql.DB, error) { return db, nil },
 		func() string { return logDir },
+		nil,
 	)
-	t.Cleanup(func() { faults.Bind(nil, nil) })
+	t.Cleanup(func() { faults.Bind(nil, nil, nil) })
 	return db
 }
 
@@ -55,7 +56,7 @@ func TestProbeFailureRecordsOneIncidentPerProbe(t *testing.T) {
 		}
 	}
 
-	incidents, err := faults.List(false, 0)
+	incidents, err := faults.List(faults.AllProjects, false, 0)
 	if err != nil {
 		t.Fatalf("list incidents: %v", err)
 	}
@@ -86,7 +87,7 @@ func TestDistinctProbesRaiseDistinctIncidents(t *testing.T) {
 	WorktreeUnsettledAt("/wt/e-1000")
 	WorktreeUnsettledAt("/wt/e-2000")
 
-	incidents, err := faults.List(false, 0)
+	incidents, err := faults.List(faults.AllProjects, false, 0)
 	if err != nil {
 		t.Fatalf("list incidents: %v", err)
 	}
@@ -105,7 +106,7 @@ func TestUnresolvedDefaultBranchRecordsItsOwnCode(t *testing.T) {
 
 	WorktreeUnsettledAt("/wt/e-1940")
 
-	incidents, err := faults.List(false, 0)
+	incidents, err := faults.List(faults.AllProjects, false, 0)
 	if err != nil {
 		t.Fatalf("list incidents: %v", err)
 	}
@@ -129,7 +130,7 @@ func TestSettledWorktreeRecordsNothing(t *testing.T) {
 		t.Fatal("clean and fully landed must be settled")
 	}
 
-	incidents, err := faults.List(false, 0)
+	incidents, err := faults.List(faults.AllProjects, false, 0)
 	if err != nil {
 		t.Fatalf("list incidents: %v", err)
 	}

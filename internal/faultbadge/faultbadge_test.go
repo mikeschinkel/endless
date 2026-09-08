@@ -37,8 +37,9 @@ func bindFaultStore(t *testing.T) {
 	faults.Bind(
 		func() (*sql.DB, error) { return db, nil },
 		func() string { return logDir },
+		nil,
 	)
-	t.Cleanup(func() { faults.Bind(nil, nil) })
+	t.Cleanup(func() { faults.Bind(nil, nil, nil) })
 }
 
 // --- E-1950: one-line badge, stale-warning age-off, non-redundant counts ---

@@ -73,8 +73,14 @@ def jobs_retry(name: str) -> None:
     _run_go("jobs", ["retry", name])
 
 
-def errors_show(show_all: bool, detail: bool, error_id: int | None) -> None:
-    """List recorded errors."""
+def errors_show(show_all: bool, detail: bool, error_id: int | None,
+                project: str = "", all_projects: bool = False) -> None:
+    """List recorded errors.
+
+    Project scope is resolved on the Go side from this process's cwd, which the
+    subprocess inherits — the same walk `project status` uses, so standing in a
+    worktree scopes to the checkout that owns it.
+    """
     args = ["show"]
     if show_all:
         args.append("--all")
@@ -82,12 +88,32 @@ def errors_show(show_all: bool, detail: bool, error_id: int | None) -> None:
         args.append("--detail")
     if error_id:
         args += ["--id", str(error_id)]
+    args += _project_scope_args(project, all_projects)
     _run_go("errors", args)
 
 
-def errors_clear(ids: tuple[int, ...]) -> None:
+def errors_clear(ids: tuple[int, ...], project: str = "",
+                 all_projects: bool = False) -> None:
     """Mark errors cleared (never deletes)."""
-    _run_go("errors", ["clear", *[str(i) for i in ids]])
+    # Flags before positionals: Go's flag package stops parsing at the first
+    # non-flag argument, so an id ahead of --all-projects would leave the flag
+    # unparsed and silently narrow the clear back to the ambient project.
+    _run_go("errors", ["clear", *_project_scope_args(project, all_projects),
+                       *[str(i) for i in ids]])
+
+
+def _project_scope_args(project: str, all_projects: bool) -> list[str]:
+    """Render the shared --project/--all-projects pair for the Go subcommand.
+
+    Neither flag is passed when neither was given: absence is what tells the Go
+    side to resolve the ambient project, and an empty --project would instead
+    read as "the project literally named ''".
+    """
+    if all_projects:
+        return ["--all-projects"]
+    if project:
+        return ["--project", project]
+    return []
 
 
 def errors_record(code: str, summary: str, source: str, detail: str,

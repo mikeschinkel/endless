@@ -2,10 +2,17 @@
 // annotation both live status views append below their rows.
 //
 // Extracted from internal/sessionstatuscmd by E-1976, which added a second
-// caller: the project-scoped attention board. The badge annotates the MACHINE
-// (open incidents in the faults store), not the view it hangs off, so neither
-// view owns it. Moved wholesale, tests included — nothing about how it renders
-// changed.
+// caller: the project-scoped attention board. Neither view owns the badge, so it
+// lives here; what it COUNTS is each view's own decision, passed in as a
+// faults.ProjectScope (E-1960).
+//
+// The two callers answer that differently, and both are right. `session status`
+// passes faults.AllProjects: it is a machine-wide view of every session on the
+// box, so a fault in a project other than the one you are standing in is still
+// news. The project board passes its own project, because the whole board is
+// already scoped to that project and a badge counting other projects' incidents
+// would be the one line on it that isn't. Unattributed faults ride along with
+// both — see faults.ProjectScope for why they must.
 package faultbadge
 
 import (
@@ -80,20 +87,25 @@ const Hint = "Run eeh"
 // present for.
 const staleWarningAfter = time.Hour
 
-// Render writes the badge line when incidents worth badging exist, and
-// writes nothing at all otherwise.
+// Render writes the badge line when incidents worth badging exist within scope,
+// and writes nothing at all otherwise.
+//
+// scope is the caller's answer to "whose faults is this view responsible for":
+// faults.AllProjects for a machine-wide view, a project's id for a view already
+// scoped to it. Either way the unattributed incidents are included, because a
+// machine-level failure has no other view to be reported on.
 //
 // It NEVER fails the render. Any error reading the fault store — a missing table
 // on a schema-passive connection, a locked DB — is swallowed and the badge is
 // simply omitted. A diagnostics surface must not be able to take down the view
 // it is annotating.
-func Render(w io.Writer, cols int, color bool) {
+func Render(w io.Writer, cols int, color bool, scope faults.ProjectScope) {
 	var incidents []faults.Incident
 	var overview faults.Overview
 	var line string
 	var err error
 
-	incidents, err = faults.List(false, 0)
+	incidents, err = faults.List(scope, false, 0)
 	if err != nil {
 		goto end
 	}

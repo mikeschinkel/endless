@@ -339,7 +339,14 @@ func TaskWorktreeUnsettledDetail(projectID, taskID int64) UnsettledDetail {
 	if err != nil {
 		d := UnsettledDetail{LookupErr: err.Error()}
 		faults.Record(faults.Fault{
-			Code:        faults.ErrCodeWorktreeProbeFailed,
+			Code: faults.ErrCodeWorktreeProbeFailed,
+			// The one fault producer here that KNOWS its project rather than
+			// inheriting the process's (E-1960). The lookup that just failed was
+			// for this project's task, and the caller is often a machine-wide
+			// view running in some other project's directory — so ambient
+			// resolution would file the failure under the wrong project, which is
+			// worse than filing it under none.
+			ProjectID:   projectID,
 			Source:      "worktree:unsettled",
 			Fingerprint: fmt.Sprintf("task:%d\x00lookup", taskID),
 			Summary:     fmt.Sprintf("E-%d: worktree lookup failed", taskID),

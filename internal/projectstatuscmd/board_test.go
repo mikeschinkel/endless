@@ -7,6 +7,7 @@ import (
 
 	"github.com/mattn/go-runewidth"
 
+	"github.com/mikeschinkel/endless/internal/faults"
 	"github.com/mikeschinkel/endless/internal/monitor"
 )
 
@@ -128,7 +129,7 @@ func TestGroupsRenderInRankOrder(t *testing.T) {
 		taskRow(2, "submitted", time.Hour),
 	}
 	var b strings.Builder
-	render(&b, "demo", rows, 10, 0, 120, false, now)
+	render(&b, "demo", rows, 10, 0, 120, false, now, faults.AllProjects)
 
 	order := []string{"☑", "⚑", "‖", "⟳"}
 	at := 0
@@ -240,7 +241,7 @@ func TestCapIsPerGroup(t *testing.T) {
 	rows = append(rows, sessionRow(99, "working", time.Minute, 0))
 
 	var b strings.Builder
-	render(&b, "demo", rows, 3, 0, 120, false, now)
+	render(&b, "demo", rows, 3, 0, 120, false, now, faults.AllProjects)
 	out := b.String()
 
 	if n := strings.Count(out, "☑ "); n != 4 { // 3 rows + the legend entry
@@ -269,7 +270,7 @@ func TestBudgetKeepsTheFrameInsideThePane(t *testing.T) {
 
 	for budget := 5; budget <= 60; budget++ {
 		var b strings.Builder
-		render(&b, "demo", rows, 10, budget, 120, false, now)
+		render(&b, "demo", rows, 10, budget, 120, false, now, faults.AllProjects)
 		if lines := strings.Count(b.String(), "\n"); lines > budget {
 			t.Fatalf("budget %d produced a %d-line frame:\n%s", budget, lines, b.String())
 		}
@@ -289,7 +290,7 @@ func TestBudgetKeepsEveryGroupPresent(t *testing.T) {
 	}
 
 	var b strings.Builder
-	render(&b, "demo", rows, 10, 20, 120, false, now)
+	render(&b, "demo", rows, 10, 20, 120, false, now, faults.AllProjects)
 	out := b.String()
 	for _, glyph := range []string{"☑", "⚑", "‖", "⟳"} {
 		if !strings.Contains(out, glyph) {
@@ -342,7 +343,7 @@ func TestEmptyGroupStillFooters(t *testing.T) {
 		rows = append(rows, sessionRow(1000+i, "idle", time.Duration(i)*time.Minute, 0))
 	}
 	var b strings.Builder
-	render(&b, "demo", rows, 10, 4, 120, false, now)
+	render(&b, "demo", rows, 10, 4, 120, false, now, faults.AllProjects)
 	out := b.String()
 	if !strings.Contains(out, "more unverified") || !strings.Contains(out, "more idle") {
 		t.Fatalf("a group squeezed to nothing did not footer:\n%s", out)
@@ -352,7 +353,7 @@ func TestEmptyGroupStillFooters(t *testing.T) {
 func TestLegendCarriesOnlyPresentGlyphs(t *testing.T) {
 	rows := []monitor.ProjectStatusRow{taskRow(1, "unverified", time.Hour)}
 	var b strings.Builder
-	render(&b, "demo", rows, 10, 0, 120, false, now)
+	render(&b, "demo", rows, 10, 0, 120, false, now, faults.AllProjects)
 	legendLine := strings.SplitN(b.String(), "\n", 2)[0]
 
 	if !strings.HasPrefix(legendLine, "demo · ") {
@@ -370,7 +371,7 @@ func TestLegendCarriesOnlyPresentGlyphs(t *testing.T) {
 
 func TestEmptyBoard(t *testing.T) {
 	var b strings.Builder
-	n := render(&b, "demo", nil, 10, 0, 120, false, now)
+	n := render(&b, "demo", nil, 10, 0, 120, false, now, faults.AllProjects)
 	if n != 0 {
 		t.Errorf("empty board reported %d rows, want 0 (the pane fit treats 0 specially)", n)
 	}
@@ -386,7 +387,7 @@ func TestSessionColumnIsWidthOnDemand(t *testing.T) {
 	var tasksOnly strings.Builder
 	render(&tasksOnly, "demo", []monitor.ProjectStatusRow{
 		taskRow(1, "unverified", time.Hour),
-	}, 10, 0, 120, false, now)
+	}, 10, 0, 120, false, now, faults.AllProjects)
 	row := strings.Split(tasksOnly.String(), "\n")[1]
 	if strings.Contains(row, "  3d") && strings.Contains(row, "     3d") {
 		t.Errorf("task-only board padded a session column: %q", row)
@@ -396,7 +397,7 @@ func TestSessionColumnIsWidthOnDemand(t *testing.T) {
 	render(&mixed, "demo", []monitor.ProjectStatusRow{
 		taskRow(1, "unverified", time.Hour),
 		sessionRow(1234, "idle", time.Minute, 0),
-	}, 10, 0, 120, false, now)
+	}, 10, 0, 120, false, now, faults.AllProjects)
 	if !strings.Contains(mixed.String(), "ES-1234") {
 		t.Errorf("session column did not appear when a row had a session:\n%s", mixed.String())
 	}
@@ -419,7 +420,7 @@ func TestRowsNeverExceedTheWidth(t *testing.T) {
 
 	for cols := 20; cols <= 200; cols += 7 {
 		var b strings.Builder
-		render(&b, "demo", rows, 10, 0, cols, false, now)
+		render(&b, "demo", rows, 10, 0, cols, false, now, faults.AllProjects)
 		for i, line := range strings.Split(b.String(), "\n") {
 			if line == "" || i == 0 { // i == 0 is the legend; see above
 				continue

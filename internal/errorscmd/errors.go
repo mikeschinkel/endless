@@ -5,6 +5,24 @@
 //	endless-go errors clear [<id>...]                    mark incidents cleared
 //	endless-go errors codes                              print the error catalog
 //
+// # Project scope
+//
+// One Endless database holds every project on the machine, so `show` and `clear`
+// are scoped to ONE of them (E-1960): by default the project enclosing the
+// working directory, `--project <name>` for another, `--all-projects` for the
+// whole machine. Standing in a project and asking what went wrong should answer
+// about that project — before E-1960 it answered about every project at once and
+// gave no way to tell which rows were yours.
+//
+// Every scope includes the incidents no project could be attributed to. Those
+// are machine-level failures — the background job runner unable to open the
+// database, the tmux status bar unable to resolve a pane — and a scoped view
+// that hid them would be a view on which they are never reported at all.
+//
+// Outside any registered project there is nothing to scope to, so both verbs
+// fall back to the whole machine. The PROJECT column, which appears exactly when
+// the listing is machine-wide, is what tells the two situations apart.
+//
 // Clearing NEVER deletes: the row stays as history, and a recurrence of the same
 // fingerprint opens a NEW incident beside it, so a fault that came back is
 // visibly distinct from one that never left.
@@ -23,6 +41,7 @@ import (
 	"text/tabwriter"
 
 	"github.com/mikeschinkel/endless/internal/faults"
+	"github.com/mikeschinkel/endless/internal/monitor"
 )
 
 // Run dispatches the `errors` subcommand.
@@ -62,6 +81,11 @@ func usage(w *os.File) {
 	fmt.Fprintln(w, "                                   record a real catalog fault (internal; used by `endless triage run`)")
 	fmt.Fprintln(w, "  raise [--severity S] [--summary T] [--repeat N]")
 	fmt.Fprintln(w, "                                    record a SYNTHETIC fault, to see this surface work")
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "show and clear cover the project you are standing in, plus the faults")
+	fmt.Fprintln(w, "attributed to no project. Both accept:")
+	fmt.Fprintln(w, "  --project <name>                  that project instead of this one")
+	fmt.Fprintln(w, "  --all-projects                    every project on the machine")
 }
 
 // runRaise records a synthetic fault so the badge, the store and the detail log
@@ -126,7 +150,11 @@ func runRaise(args []string) {
 
 	// Record cannot report failure — by contract it swallows everything — so
 	// confirm by reading the incident back rather than by assuming it landed.
-	incidents, err := faults.List(false, 0)
+	// Machine-wide read-back, deliberately: `raise` records through the same
+	// ambient project resolution as any other fault, and asserting the row landed
+	// must not depend on this process agreeing with itself about which project
+	// that was. The match below is exact enough without the scope.
+	incidents, err := faults.List(faults.AllProjects, false, 0)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "endless-go errors: raise: recorded, but could not read it back:", err)
 		os.Exit(1)
@@ -145,12 +173,19 @@ func runRaise(args []string) {
 	os.Exit(1)
 }
 
-// runShow lists incidents.
+// runShow lists incidents within scope.
+//
+// --id bypasses the scope entirely, for the same reason `clear <id>` does: an id
+// is an exact selector the user typed, and refusing to show a row because it
+// belongs to another project would make `errors show --id 7` fail right after a
+// machine-wide listing displayed row 7.
 func runShow(args []string) {
 	fs := flag.NewFlagSet("show", flag.ExitOnError)
 	all := fs.Bool("all", false, "include cleared errors")
 	detail := fs.Bool("detail", false, "print each occurrence's full captured detail")
 	id := fs.Int64("id", 0, "show only this error id")
+	project := fs.String("project", "", "scope to this project instead of the one you are in")
+	allProjects := fs.Bool("all-projects", false, "cover every project on the machine")
 	if err := fs.Parse(args); err != nil {
 		os.Exit(2)
 	}
@@ -160,7 +195,9 @@ func runShow(args []string) {
 		return
 	}
 
-	incidents, err := faults.List(*all, 0)
+	scope := resolveScope("show", *project, *allProjects)
+
+	incidents, err := faults.List(scope, *all, 0)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "endless-go errors: show:", err)
 		os.Exit(1)
@@ -170,9 +207,25 @@ func runShow(args []string) {
 		return
 	}
 
+	// The PROJECT column earns its width only when the listing spans projects.
+	// On a scoped listing every row would carry the same value — the name the
+	// user is already standing in — which is a column of noise on a table that
+	// has to stay readable in a status pane.
+	wide := scope == faults.AllProjects
+
 	tw := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(tw, "ID\tSEVERITY\tCODE\tCOUNT\tLAST SEEN\tSOURCE\tSUMMARY")
+	if wide {
+		fmt.Fprintln(tw, "ID\tSEVERITY\tCODE\tPROJECT\tCOUNT\tLAST SEEN\tSOURCE\tSUMMARY")
+	} else {
+		fmt.Fprintln(tw, "ID\tSEVERITY\tCODE\tCOUNT\tLAST SEEN\tSOURCE\tSUMMARY")
+	}
 	for _, incident := range incidents {
+		if wide {
+			fmt.Fprintf(tw, "%d\t%s\t%s\t%s\t%d\t%s\t%s\t%s\n",
+				incident.ID, severityText(incident), incident.Code, projectText(incident),
+				incident.Occurrences, incident.LastSeenAt, incident.Source, incident.Summary)
+			continue
+		}
 		fmt.Fprintf(tw, "%d\t%s\t%s\t%d\t%s\t%s\t%s\n",
 			incident.ID, severityText(incident), incident.Code, incident.Occurrences,
 			incident.LastSeenAt, incident.Source, incident.Summary)
@@ -189,6 +242,56 @@ func runShow(args []string) {
 	}
 
 	printClearHint(incidents)
+}
+
+// resolveScope settles which project a `show` or `clear` covers.
+//
+// The precedence is explicit-beats-ambient and the two explicit flags are
+// mutually exclusive: naming a project and asking for all of them are opposite
+// instructions, and picking one silently would dismiss or hide rows the user did
+// not mean. An unknown --project name is a usage error for the same reason — a
+// typo must not degrade into "the whole machine", which for `clear` would
+// dismiss every open incident on it.
+//
+// The ambient case fails OPEN, to the whole machine: run outside any registered
+// project there is no project to scope to, and refusing would make the fault
+// record unreadable from exactly the directories where something unexplained is
+// most likely happening. The PROJECT column then appears, which is how the
+// listing says it widened.
+func resolveScope(verb, project string, allProjects bool) (scope faults.ProjectScope) {
+	if project != "" && allProjects {
+		fmt.Fprintf(os.Stderr,
+			"endless-go errors: %s: --project and --all-projects are opposites; pass one\n", verb)
+		os.Exit(2)
+	}
+	if allProjects {
+		return faults.AllProjects
+	}
+	if project != "" {
+		id, _, err := monitor.ProjectByName(project)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "endless-go errors: %s: %v\n", verb, err)
+			os.Exit(2)
+		}
+		return faults.ProjectScope(id)
+	}
+	id, _, err := monitor.ProjectForCwd()
+	if err != nil {
+		return faults.AllProjects
+	}
+	return faults.ProjectScope(id)
+}
+
+// projectText renders an incident's project for the wide listing. An
+// unattributed incident prints an em dash rather than an empty cell, so a
+// machine-level fault reads as "belongs to no project" instead of as a column
+// the renderer forgot to fill.
+func projectText(incident faults.Incident) (text string) {
+	text = incident.Project
+	if text == "" {
+		text = "—"
+	}
+	return text
 }
 
 // printClearHint names the command that makes these rows go away.
@@ -215,6 +318,8 @@ func printClearHint(incidents []faults.Incident) {
 	fmt.Println("  endless errors clear <id>       dismiss just one")
 	fmt.Println()
 	fmt.Println("Clearing is an acknowledgement, not a retry — it does not re-arm a failing job.")
+	fmt.Println("`clear` covers the same project scope the listing above did; pass the same")
+	fmt.Println("--project/--all-projects flag to widen or narrow both together.")
 }
 
 // showOne prints a single incident in long form.
@@ -232,6 +337,7 @@ func showOne(id int64, detail bool) {
 	fmt.Printf("Error:       %d\n", incident.ID)
 	fmt.Printf("Code:        %s (%s)\n", incident.Code, incident.Title())
 	fmt.Printf("Severity:    %s\n", severityText(incident))
+	fmt.Printf("Project:     %s\n", projectText(incident))
 	fmt.Printf("Source:      %s\n", incident.Source)
 	fmt.Printf("Occurrences: %d\n", incident.Occurrences)
 	fmt.Printf("First seen:  %s\n", incident.FirstSeenAt)
@@ -275,10 +381,23 @@ func printDetails(id int64) {
 }
 
 // runClear marks incidents cleared.
+//
+// The scope bounds the no-id form only — see faults.Clear. `clear` with no ids
+// means "dismiss what you just showed me", so it must cover the same set `show`
+// listed under the same flags, and nothing beyond it: a project-scoped listing
+// followed by a machine-wide clear would silently acknowledge other projects'
+// incidents on their owners' behalf.
 func runClear(args []string) {
 	var ids []int64
 
-	for _, arg := range args {
+	fs := flag.NewFlagSet("clear", flag.ExitOnError)
+	project := fs.String("project", "", "scope to this project instead of the one you are in")
+	allProjects := fs.Bool("all-projects", false, "cover every project on the machine")
+	if err := fs.Parse(args); err != nil {
+		os.Exit(2)
+	}
+
+	for _, arg := range fs.Args() {
 		id, err := strconv.ParseInt(arg, 10, 64)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "endless-go errors: clear: %q is not an error id\n", arg)
@@ -287,7 +406,7 @@ func runClear(args []string) {
 		ids = append(ids, id)
 	}
 
-	cleared, err := faults.Clear(ids, clearedBy())
+	cleared, err := faults.Clear(resolveScope("clear", *project, *allProjects), ids, clearedBy())
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "endless-go errors: clear:", err)
 		os.Exit(1)

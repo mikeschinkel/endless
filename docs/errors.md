@@ -13,7 +13,7 @@ Numbers are never reused. Retiring a code spends its number permanently.
 ## Seeing and clearing errors
 
 ```sh
-endless errors show              # open incidents
+endless errors show              # open incidents in the project you are in
 endless errors show --all        # include cleared ones (history)
 endless errors show --id 12 --detail   # one incident, with every logged occurrence
 endless errors clear             # mark every open incident cleared
@@ -35,14 +35,53 @@ Two behaviors worth knowing:
   a separate verb, so tidying your error list cannot silently re-arm a job that
   is still broken.
 
+## Which project an error belongs to
+
+One Endless database holds every project on your machine, so every fault records
+the project it happened in. `show` and `clear` are scoped to the project
+enclosing your working directory:
+
+```sh
+endless errors show                      # this project (plus the machine's own)
+endless errors show --project acme       # another project
+endless errors show --all-projects       # everything, with a PROJECT column
+endless errors clear --all-projects      # dismiss every open incident, everywhere
+```
+
+Both flags work the same on `clear`, and they matter there: with no ids, `clear`
+dismisses exactly the set a `show` under the same flags would list. Naming ids
+overrides the scope — `errors clear 12` clears incident 12 whichever project it
+belongs to, because you named it.
+
+**Every scope also includes the errors that belong to no project.** Some failures
+are the machine's, not a project's: the background job runner unable to open the
+database, the tmux status bar unable to resolve a pane. Those have no project to
+be filed under, so they ride along with whichever project you ask about — they
+would otherwise be visible on no default view at all. In an `--all-projects`
+listing their PROJECT column reads `—`.
+
+Run outside any registered project and there is nothing to scope to, so both
+verbs cover the whole machine. The PROJECT column appearing is how a listing
+tells you it widened.
+
+The same rule scopes the badge: `project status` and `project monitor` count
+their own project's open incidents plus the unattributed ones, while
+`session status` and `session monitor` stay machine-wide — they render every live
+session on the box, whatever project each is in.
+
 ## Where the detail lives
 
-The `errors` table holds only the index — code, source, summary, counts. Each
-occurrence's full capture (stack traces, command output, the job's own log
+The `errors` table holds only the index — project, code, source, summary, counts.
+Each occurrence's full capture (stack traces, command output, the job's own log
 output) is appended to `<config-dir>/log/errors.jsonl` and read back by
 `errors show --detail`. The table therefore stays bounded by the number of
 *distinct* faults rather than by how often they happen, and nothing is lost to
 diagnosis.
+
+Detail lines carry the project by NAME (`"project": "acme"`), because that file
+is read without a database — one log holds every project on the machine. Lines
+written before projects were recorded simply have no `project` key; nothing
+rewrites them, since a fault's project cannot be reconstructed after the fact.
 
 That file is machine-local. It is not the shareable db-ledger, it is never
 replayed into the database, and faults emit no ledger events.

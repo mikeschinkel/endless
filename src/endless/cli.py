@@ -3895,27 +3895,44 @@ def errors_cmd():
 @click.option("--all", "show_all", is_flag=True, help="Include cleared errors")
 @click.option("--detail", is_flag=True, help="Print every occurrence's full capture")
 @click.option("--id", "error_id", type=int, default=None, help="Show only this error id")
-def errors_show(show_all, detail, error_id):
+@click.option("--project", default="", help="Scope to this project instead of the one you are in")
+@click.option("--all-projects", "all_projects", is_flag=True,
+              help="Cover every project on the machine")
+def errors_show(show_all, detail, error_id, project, all_projects):
     """List recorded errors, most recently seen first.
 
     Only uncleared errors are shown by default — the same set the badge on
     `session status` / `session monitor` counts.
+
+    Scoped to the project you are standing in, plus the faults attributed to no
+    project (the background job runner's own failures belong to the machine, not
+    to a project, and would otherwise be reportable nowhere). --all-projects
+    widens to the whole machine and adds a PROJECT column; outside any registered
+    project that is what you get anyway.
     """
     from endless.jobs_cmd import errors_show as impl
-    impl(show_all, detail, error_id)
+    impl(show_all, detail, error_id, project, all_projects)
 
 
 @errors_cmd.command("clear")
 @click.argument("ids", nargs=-1, type=int)
-def errors_clear(ids):
+@click.option("--project", default="", help="Scope to this project instead of the one you are in")
+@click.option("--all-projects", "all_projects", is_flag=True,
+              help="Cover every project on the machine")
+def errors_clear(ids, project, all_projects):
     """Mark errors cleared. Clears every open error when given no ids.
 
     Clearing NEVER deletes: the row stays as history, and a recurrence opens a
     NEW error beside it, so a problem that came back is visibly distinct from
     one that never left.
+
+    With no ids the scope bounds what is cleared — the same set `errors show`
+    lists under the same flags, so "dismiss what you just showed me" cannot reach
+    another project's incidents. Named ids are cleared wherever they live: you
+    typed the id, so the scope has nothing left to decide.
     """
     from endless.jobs_cmd import errors_clear as impl
-    impl(ids)
+    impl(ids, project, all_projects)
 
 
 @errors_cmd.command("record", hidden=True)

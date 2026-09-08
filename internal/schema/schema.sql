@@ -1098,19 +1098,47 @@ CREATE INDEX IF NOT EXISTS idx_jobs_due ON jobs(next_due_at);
 -- into the DB, and NOT the shareable ledger — faults emit no db-ledger events,
 -- because they are machine-local observation, not shareable project history.
 --
--- Incident model: at most ONE open row per (source, code, fingerprint), enforced
--- by the partial unique index below. Repeats of an open incident bump
--- occurrences in place. Clearing closes the row, which then becomes immutable
--- history; a recurrence AFTER clearing opens a NEW row rather than resurrecting
--- the old one, so "failed 40x last week, cleared, came back Tuesday" reads as
--- two incidents with distinct windows — the signal that pinpoints a regression.
+-- Incident model: at most ONE open row per (project_id, source, code,
+-- fingerprint), enforced by the partial unique index below. Repeats of an open
+-- incident bump occurrences in place. Clearing closes the row, which then
+-- becomes immutable history; a recurrence AFTER clearing opens a NEW row rather
+-- than resurrecting the old one, so "failed 40x last week, cleared, came back
+-- Tuesday" reads as two incidents with distinct windows — the signal that
+-- pinpoints a regression.
 --
 -- severity is denormalized from the code catalog (internal/faults/codes.go) at
 -- write time. Severity is a property of the CODE, never of the call site, so two
 -- sites raising the same condition cannot disagree about whether it is a warning
 -- or an error.
+--
+-- project_id (E-1960) is the project the fault happened IN. One Endless database
+-- holds every project on the machine, so without it every recorded fault from
+-- every project landed in one undifferentiated table: `errors show` could not
+-- filter, the status badge could not scope, and two unrelated projects hitting
+-- the same condition collapsed into a single incident with a doubled count. The
+-- omission was an oversight in E-698, not a decision.
+--
+-- NULL means "no project could be resolved", which is a real answer and not a
+-- gap to be filled: the background job runner failing to open the database
+-- belongs to the machine, not to whatever directory the tick happened to run in.
+-- A project-scoped read therefore returns that project's incidents PLUS the
+-- NULL-project ones (see faults.ProjectScope) — the alternative is a view that
+-- can never report the runner being broken at all.
+--
+-- ON DELETE SET NULL, matching sessions.project_id: unregistering a project must
+-- not delete the machine-local record of what went wrong while it existed.
+--
+-- The REFERENCES is written INLINE on the column, not as a table-level FOREIGN
+-- KEY like the rest of this file, and that is not a style slip. ALTER TABLE ADD
+-- COLUMN — the only form the migration can use on a populated DB — can express
+-- nothing else, so a table-level declaration here would be a constraint shape
+-- the migrated half of the fleet could never reach. It would also make the
+-- column undroppable: SQLite refuses DROP COLUMN on a column named by a
+-- table-level foreign key, so no later change could unwind this one without
+-- rebuilding the table.
 CREATE TABLE IF NOT EXISTS errors (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id    INTEGER REFERENCES projects(id) ON DELETE SET NULL,
     code          TEXT NOT NULL,
     severity      TEXT NOT NULL,
     source        TEXT NOT NULL,
@@ -1123,8 +1151,26 @@ CREATE TABLE IF NOT EXISTS errors (
     cleared_by    TEXT
 );
 
+-- COALESCE(project_id, 0), not project_id, and that is load-bearing: SQLite
+-- treats NULLs as DISTINCT in a unique index, so a bare project_id column would
+-- silently stop deduplicating exactly the unattributed faults that repeat most
+-- (the job runner's tick, the tmux status bar's re-exec every two seconds).
+-- Folding NULL to a sentinel restores one open incident per unattributed
+-- fingerprint. faults.upsertIncident names the same expression in its ON
+-- CONFLICT target, which is how SQLite matches an upsert to an expression index.
+--
+-- The index NAME is deliberately unchanged from E-698's. schema.SQL runs on
+-- every connection, BEFORE `endless db apply-change` gets to add the column, so
+-- a CREATE ... IF NOT EXISTS naming project_id would abort schema application on
+-- every populated DB (the trap e-1929 documents). Keeping the name lets
+-- IF NOT EXISTS short-circuit on the old index instead, and the change file
+-- replaces the definition. For the same reason there is NO index on project_id
+-- itself: a new index name could not short-circuit, and adding one only in the
+-- change file would leave fresh and migrated DBs with different shapes. The
+-- table is bounded by distinct-fingerprint count, so the scan is nothing.
 CREATE UNIQUE INDEX IF NOT EXISTS idx_errors_open_uniq
-    ON errors(source, code, fingerprint) WHERE cleared_at IS NULL;
+    ON errors(COALESCE(project_id, 0), source, code, fingerprint)
+ WHERE cleared_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_errors_open
     ON errors(cleared_at, severity);
 

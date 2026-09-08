@@ -35,6 +35,18 @@ const detailLogFile = "errors.jsonl"
 // occurrence. The top-level `kind` discriminator matches the user-machine.jsonl
 // convention, so a future reader can consume either file with one decoder. A
 // struct (not a map) keeps field order and shape stable.
+//
+// Project carries the project NAME, not the id, because this file is read
+// without a database (E-1960). It sits beside Source for the same reason both
+// exist: one says which project the fault happened in, the other which subsystem
+// raised it, and until E-1960 a producer that wanted to say the first had to
+// smuggle it through the second or through Fields. Omitted when empty — the log
+// is shared by every project on the machine, and a fault the resolver could not
+// attribute should say nothing rather than claim a project.
+//
+// Lines written before E-1960 simply lack the key, and decode with Project "".
+// Nothing rewrites them: the log is append-only history, and a fault's project
+// cannot be reconstructed from a line that never recorded one.
 type Detail struct {
 	Kind        string         `json:"kind"` // always "fault"
 	TS          string         `json:"ts"`
@@ -42,6 +54,7 @@ type Detail struct {
 	Occurrence  int64          `json:"occurrence"` // 1-based count within the incident
 	Code        string         `json:"code"`
 	Severity    string         `json:"severity"`
+	Project     string         `json:"project,omitempty"` // project NAME; absent when unattributed
 	Source      string         `json:"source"`
 	Fingerprint string         `json:"fingerprint"`
 	Summary     string         `json:"summary"`
@@ -52,7 +65,7 @@ type Detail struct {
 // appendDetail writes one occurrence line. Best-effort and silent: an
 // unwritable log must never turn into a user-visible failure, and must never
 // recurse into Record.
-func appendDetail(f Fault, id, occurrence int64) {
+func appendDetail(f Fault, id, occurrence int64, project string) {
 	var dir string
 	var path string
 	var data []byte
@@ -76,6 +89,7 @@ func appendDetail(f Fault, id, occurrence int64) {
 		Occurrence:  occurrence,
 		Code:        f.Code.ID,
 		Severity:    string(f.Code.Severity),
+		Project:     project,
 		Source:      f.Source,
 		Fingerprint: f.Fingerprint,
 		Summary:     f.Summary,

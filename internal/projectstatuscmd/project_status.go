@@ -22,6 +22,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/mikeschinkel/endless/internal/faults"
 	"github.com/mikeschinkel/endless/internal/liveview"
 	"github.com/mikeschinkel/endless/internal/monitor"
 )
@@ -177,7 +178,8 @@ func frameFunc(projectID int64, name string, all bool, groupCap, rowBudget int) 
 		if budget == 0 {
 			budget = liveview.DetectRows(os.Getenv("TMUX_PANE"), boardPctOfWindow, 0)
 		}
-		return render(w, name, rows, groupCap, budget, cols, color, time.Now().UTC()), nil
+		return render(w, name, rows, groupCap, budget, cols, color, time.Now().UTC(),
+			faults.ProjectScope(projectID)), nil
 	}
 }
 

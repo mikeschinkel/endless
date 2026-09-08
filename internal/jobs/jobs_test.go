@@ -65,7 +65,7 @@ func newTestDB(t *testing.T) *sql.DB {
 	t.Cleanup(monitor.SetTestDB(db))
 	faults.Bind(monitor.DB, func() string {
 		return filepath.Join(monitor.ConfigDir(), "log")
-	})
+	}, nil)
 	return db
 }
 
@@ -241,7 +241,7 @@ func TestRunDue_FailureRecordsAFaultAndCountsTheFailure(t *testing.T) {
 		t.Error("last_error is empty, want the job's error message")
 	}
 
-	incidents, err := faults.List(false, 0)
+	incidents, err := faults.List(faults.AllProjects, false, 0)
 	if err != nil {
 		t.Fatalf("list faults: %v", err)
 	}
@@ -286,7 +286,7 @@ func TestRunDue_PanicIsRecoveredAndRecorded(t *testing.T) {
 		t.Errorf("lease_owner = %q, want NULL after a panicking run", owner.String)
 	}
 
-	incidents, err := faults.List(false, 0)
+	incidents, err := faults.List(faults.AllProjects, false, 0)
 	if err != nil {
 		t.Fatalf("list faults: %v", err)
 	}
@@ -311,7 +311,7 @@ func TestRunDue_StdoutLoggingIsCapturedIntoTheFaultDetail(t *testing.T) {
 
 	RunDue(context.Background())
 
-	incidents, err := faults.List(false, 0)
+	incidents, err := faults.List(faults.AllProjects, false, 0)
 	if err != nil {
 		t.Fatalf("list faults: %v", err)
 	}

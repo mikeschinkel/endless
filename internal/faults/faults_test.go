@@ -39,8 +39,9 @@ func newBoundStore(t *testing.T) (*sql.DB, string) {
 	faults.Bind(
 		func() (*sql.DB, error) { return db, nil },
 		func() string { return logDir },
+		nil,
 	)
-	t.Cleanup(func() { faults.Bind(nil, nil) })
+	t.Cleanup(func() { faults.Bind(nil, nil, nil) })
 
 	return db, logDir
 }
@@ -55,7 +56,7 @@ func TestRecord_OpensAnIncident(t *testing.T) {
 		Detail:  "the full stack, or command output, or both",
 	})
 
-	incidents, err := faults.List(false, 0)
+	incidents, err := faults.List(faults.AllProjects, false, 0)
 	if err != nil {
 		t.Fatalf("list: %v", err)
 	}
@@ -134,7 +135,7 @@ func TestRecord_RecurrenceAfterClearingOpensANewIncident(t *testing.T) {
 	faults.Record(fault)
 	faults.Record(fault)
 
-	cleared, err := faults.Clear(nil, "tester")
+	cleared, err := faults.Clear(faults.AllProjects, nil, "tester")
 	if err != nil {
 		t.Fatalf("clear: %v", err)
 	}
@@ -155,7 +156,7 @@ func TestRecord_RecurrenceAfterClearingOpensANewIncident(t *testing.T) {
 		t.Errorf("errors table has %d rows, want 2 (recurrence opens a new incident)", rows)
 	}
 
-	open, err := faults.List(false, 0)
+	open, err := faults.List(faults.AllProjects, false, 0)
 	if err != nil {
 		t.Fatalf("list open: %v", err)
 	}
@@ -166,7 +167,7 @@ func TestRecord_RecurrenceAfterClearingOpensANewIncident(t *testing.T) {
 		t.Errorf("new incident occurrences = %d, want 1 (it must not inherit the cleared count)", open[0].Occurrences)
 	}
 
-	all, err := faults.List(true, 0)
+	all, err := faults.List(faults.AllProjects, true, 0)
 	if err != nil {
 		t.Fatalf("list all: %v", err)
 	}
@@ -201,7 +202,7 @@ func TestRecord_SuccessDoesNotAutoResolveAnIncident(t *testing.T) {
 	// Nothing in the API clears an incident except an explicit Clear. This is
 	// deliberate: an intermittent fault that healed itself out of view would
 	// never get fixed, so every error stays visible until a human dismisses it.
-	incidents, err := faults.List(false, 0)
+	incidents, err := faults.List(faults.AllProjects, false, 0)
 	if err != nil {
 		t.Fatalf("list: %v", err)
 	}
@@ -228,7 +229,7 @@ func TestDetails_CarryEveryOccurrenceWithItsFullCapture(t *testing.T) {
 		Fields:  map[string]any{"job": "exploding", "attempt": 2},
 	})
 
-	incidents, err := faults.List(false, 0)
+	incidents, err := faults.List(faults.AllProjects, false, 0)
 	if err != nil {
 		t.Fatalf("list: %v", err)
 	}
@@ -285,7 +286,7 @@ func TestOpen_RanksErrorAboveWarningAndCountsEach(t *testing.T) {
 		Summary: "job c panicked",
 	})
 
-	overview, err := faults.Open()
+	overview, err := faults.Open(faults.AllProjects)
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
@@ -314,11 +315,11 @@ func TestOpen_IsEmptyWhenEverythingIsCleared(t *testing.T) {
 		Source:  "job:a",
 		Summary: "job a failed",
 	})
-	if _, err := faults.Clear(nil, "tester"); err != nil {
+	if _, err := faults.Clear(faults.AllProjects, nil, "tester"); err != nil {
 		t.Fatalf("clear: %v", err)
 	}
 
-	overview, err := faults.Open()
+	overview, err := faults.Open(faults.AllProjects)
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
@@ -331,7 +332,7 @@ func TestOpen_IsEmptyWhenEverythingIsCleared(t *testing.T) {
 }
 
 func TestRecord_IsASilentNoOpWhenUnbound(t *testing.T) {
-	faults.Bind(nil, nil)
+	faults.Bind(nil, nil, nil)
 
 	// Record's contract is that it NEVER fails: it is called from a live TUI's
 	// render tick, where a diagnostic failure must not become a user-visible
@@ -353,7 +354,7 @@ func TestClear_TargetsSpecificIncidents(t *testing.T) {
 	faults.Record(faults.Fault{Code: faults.ErrCodeJobFailed, Source: "job:a", Summary: "job a failed"})
 	faults.Record(faults.Fault{Code: faults.ErrCodeJobFailed, Source: "job:b", Summary: "job b failed"})
 
-	incidents, err := faults.List(false, 0)
+	incidents, err := faults.List(faults.AllProjects, false, 0)
 	if err != nil {
 		t.Fatalf("list: %v", err)
 	}
@@ -361,7 +362,7 @@ func TestClear_TargetsSpecificIncidents(t *testing.T) {
 		t.Fatalf("%d open incidents, want 2", len(incidents))
 	}
 
-	cleared, err := faults.Clear([]int64{incidents[0].ID}, "tester")
+	cleared, err := faults.Clear(faults.AllProjects, []int64{incidents[0].ID}, "tester")
 	if err != nil {
 		t.Fatalf("clear: %v", err)
 	}
@@ -369,7 +370,7 @@ func TestClear_TargetsSpecificIncidents(t *testing.T) {
 		t.Errorf("cleared %d, want 1", cleared)
 	}
 
-	remaining, err := faults.List(false, 0)
+	remaining, err := faults.List(faults.AllProjects, false, 0)
 	if err != nil {
 		t.Fatalf("list: %v", err)
 	}

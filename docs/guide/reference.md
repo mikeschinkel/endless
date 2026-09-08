@@ -120,7 +120,7 @@ The runner itself knows nothing job-specific — jobs register themselves with i
 Anything that goes wrong in the background is recorded as a classified, clearable **error** with a stable `ERR-NNNN` code. `session status` and `session monitor` show a trailing badge whenever uncleared errors exist — the most severe wins, and `error` outranks `warning`.
 
 ```bash
-endless errors show                    # open errors  (shell helper: eeh)
+endless errors show                    # open errors, this project  (shell helper: eeh)
 endless errors show --all              # include cleared ones (history)
 endless errors show --id N --detail    # one error, with every occurrence's full capture
 endless errors clear                   # mark every open error cleared
@@ -128,6 +128,12 @@ endless errors clear N                 # dismiss just one
 endless errors codes                   # the documented catalog
 endless errors raise                   # record a SYNTHETIC fault, to see the surface work
 ```
+
+**Which project's errors.** One database holds every project on the machine, so `show` and `clear` cover the project enclosing your working directory. `--project <name>` picks another; `--all-projects` covers the machine and adds a PROJECT column. On `clear` the same flags decide what a no-id "clear everything" reaches, so dismissing what you were just shown cannot acknowledge another project's incidents; naming ids overrides the scope, since you named them.
+
+Every scope also carries the errors that belong to **no** project — the job runner unable to open the database, the status bar unable to resolve a pane. Those are the machine's failures, and a scoped view that hid them would leave them visible nowhere. They show a `—` in the PROJECT column. Run outside any registered project and both verbs cover everything, which is what the PROJECT column appearing tells you.
+
+The badge follows the same rule: `project status` / `project monitor` count their own project plus the unattributed ones, while `session status` / `session monitor` stay machine-wide — they render every live session on the box, whatever project each is in.
 
 **Seeing it work without waiting for a failure.** `errors raise` records a real incident carrying a synthetic code (ERR-0006 warning / ERR-0007 error), through the same path a genuine fault takes — same upsert, same fingerprinting, same detail line. It exists because the one view whose job is reporting trouble was otherwise the hardest view to inspect.
 
@@ -155,7 +161,7 @@ Three behaviors are worth knowing before you rely on this:
 - **An error never leaves the badge on its own; a stale warning does.** Errors stay until a human dismisses them, even if the job has since been succeeding — an intermittent fault that healed itself out of view would never get fixed. A *warning* stops being badged once an hour of **active** time has passed since it last occurred; it is neither cleared nor deleted, and `errors show` still lists it. The hour is measured in time the user was actually at the machine — idle stretches don't count — so a warning cannot expire overnight without ever having been seen.
 - **Clearing is not retrying.** `errors clear` means "I have seen this"; making a backed-off job due again is `jobs retry`. They are separate verbs so that tidying your error list cannot silently re-arm a job that is still broken.
 
-The database stores only the index — code, source, summary, counts. Each occurrence's full capture goes to `<config-dir>/log/errors.jsonl` and comes back through `--detail`, so the table stays bounded by how many *distinct* things are wrong rather than how often they happen. That file is machine-local: it is not the db-ledger, it is never replayed into the database, and errors emit no ledger events.
+The database stores only the index — project, code, source, summary, counts. Each occurrence's full capture goes to `<config-dir>/log/errors.jsonl` and comes back through `--detail`, so the table stays bounded by how many *distinct* things are wrong rather than how often they happen. That file is machine-local: it is not the db-ledger, it is never replayed into the database, and errors emit no ledger events.
 
 Every code's cause and remedy is documented in `docs/errors.md`.
 

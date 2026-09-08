@@ -183,15 +183,15 @@ func main() {
 	}
 	// E-698: wire the fault recorder. faults imports nothing from the rest of
 	// Endless — a dependency on monitor there would become an import cycle the
-	// moment monitor itself reports a fault (E-1884) — so the DB accessor and the
-	// detail-log directory are injected here, once, for every subcommand. It must
-	// run AFTER the DB-context resolution above so a fault raised in a self-dev
-	// worktree lands in that worktree's sandbox rather than the main database.
-	// Both funcs are stored, not called, so this costs nothing in a process that
-	// never records a fault.
+	// moment monitor itself reports a fault (E-1884) — so the DB accessor, the
+	// detail-log directory and the project resolver are injected here, once, for
+	// every subcommand. It must run AFTER the DB-context resolution above so a
+	// fault raised in a self-dev worktree lands in that worktree's sandbox rather
+	// than the main database. All three funcs are stored, not called, so this
+	// costs nothing in a process that never records a fault.
 	faults.Bind(monitor.DB, func() string {
 		return filepath.Join(monitor.ConfigDir(), "log")
-	})
+	}, resolveFaultProject)
 
 	// session-status pins main itself, but only on its normal tmux-resolved path;
 	// with --task (headless/tests) it deliberately reads the resolved sandbox
@@ -271,6 +271,47 @@ func warnForeignHookBuild() {
 			"(or `just build` + `just claude-settings-init`) so the session "+
 			"dogfoods candidate code.\n",
 		exe, expected)
+}
+
+// resolveFaultProject is the faults package's ProjectResolver (E-1960): it turns
+// a producer's explicit project id — or 0, meaning "you decide" — into the
+// (id, name) pair recorded against a fault.
+//
+// It lives here rather than in internal/faults because that package imports
+// nothing from the rest of Endless, and rather than in internal/monitor because
+// the policy is the process's, not the store's: which project a fault belongs to
+// when nobody said is "the one this process is working in", and only main knows
+// that this process is a CLI invoked from a working directory.
+//
+// Read-only by construction. monitor.ProjectForCwd walks up from the cwd and
+// reports nothing when no registered project encloses it; the otherwise-identical
+// ProjectIDForPath auto-registers on a miss, which is right for a hook that must
+// record activity somewhere and catastrophic here — recording a diagnostic would
+// mint a project row for every directory anyone ever ran `endless` in.
+//
+// Every failure is answered with (0, ""), never with an error: attribution is a
+// refinement of a fault report, and a fault that cannot say where it happened
+// must still be recorded. That covers the honest cases too — a command run
+// outside any registered project, or inside a sandbox whose database has no
+// projects rows.
+func resolveFaultProject(explicit int64) (projectID int64, name string) {
+	if explicit != 0 {
+		// The producer already decided WHICH project; the lookup is what proves
+		// it exists. An id that resolves to no row is not attribution, it is a
+		// dangling reference — errors.project_id is a foreign key, so recording
+		// it would have the write rejected outright — so the fault falls back to
+		// unattributed rather than to a claim nothing backs.
+		_, name, err := monitor.ProjectNameByID(explicit)
+		if err != nil {
+			return 0, ""
+		}
+		return explicit, name
+	}
+	id, resolved, err := monitor.ProjectForCwd()
+	if err != nil {
+		return 0, ""
+	}
+	return id, resolved
 }
 
 func usage(w *os.File) {
