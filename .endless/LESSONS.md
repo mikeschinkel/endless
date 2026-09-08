@@ -5298,3 +5298,15 @@ On E-2122 the analysis held: the actual fix direction, a SECOND call site with t
 
 Rule: never work a task from the description alone. Read every populated field before doing anything -- --analysis especially, and especially when --text returns no plan. A non-zero analysis char count in the render is a hard requirement to go read it, not a hint. When handoff instructions and the analysis conflict, the analysis is the authoritative design content: surface the conflict rather than silently following the handoff.
 - **Project**: endless
+
+### [2026-09-07] Ask before filing a task, not just before implementing one
+I filed a task without asking. Mike stopped it.
+
+The handoff rule reads 'Otherwise file it (--cleans-up E-NNNN) and confirm before implementing.' I read that as: filing is the pre-authorized part, confirmation applies only to writing code. That is wrong. Filing is itself an action on shared state -- it adds a row to the backlog Mike reads, triages and prioritizes, and every filed task is one more item he has to read past on every pass. He had just been told the backlog carries 222 open tasks.
+
+Earlier in this same session I filed E-2123 correctly, because Mike had explicitly said 'I would like you to file a task'. That was authorization for that one task. It did not generalize into standing permission to file whenever I find something.
+
+Rule: when I discover something worth filing, describe the finding and ASK. Do not run 'endless task add'. One explicit instruction to file covers exactly the task it named -- it is not a policy change.
+
+The pattern behind it: an instruction that authorizes a specific action once is not a rule that authorizes the class of action from then on. Re-derive authorization per action, especially for anything that writes to state other people read.
+- **Project**: endless
