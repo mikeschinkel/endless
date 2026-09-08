@@ -61,7 +61,7 @@ def test_render_handoff_includes_task_and_no_return_line():
     assert "task/1469-render-handoff" in out
     # Delegates the workflow to the guide and points at the plan.
     assert "endless guide" in out
-    assert "endless task show E-1469 --text" in out
+    assert "endless task show E-1469 --all-fields" in out
     # Generic handoff rules that apply to every spawn.
     assert "STOP and ask" in out
     assert "Don't mark `confirmed`/`assumed`" in out
@@ -87,7 +87,7 @@ def test_render_handoff_child_label_includes_parent_prefix():
     )
     assert "- E-1564/E-1620: Render hierarchical labels." in out
     # The bare-id references elsewhere in the handoff stay unprefixed.
-    assert "endless task show E-1620 --text" in out
+    assert "endless task show E-1620 --all-fields" in out
 
 
 def test_render_handoff_degrades_without_runtime_context():

@@ -231,7 +231,7 @@ endless task update <id> --status revisit        # hand the task back, then: tas
 endless task spawn <id>                          # or spawn a fresh Claude session on it now
 
 # Read a task you didn't claim — no claim needed for reads
-endless task show <id> --text --children --llm
+endless task show <id> --all-fields --llm
 ```
 
 ## Sections

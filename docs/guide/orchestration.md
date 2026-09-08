@@ -364,7 +364,7 @@ Inspect the exact text spawn will paste:
 endless task handoff <id>
 ```
 
-The handoff is deliberately lean — it delegates the workflow rules to `endless guide` rather than restating them. It carries: the spawned task's id and title, the pointers to run `endless guide` and `endless task show <id> --text`, and the drive-to-completion rules (flip to `unverified` with how-to-test; don't `worktree land` without asking, and never remove a worktree; file drive-by work as separate tasks with `--cleans-up <id>`).
+The handoff is deliberately lean — it delegates the workflow rules to `endless guide` rather than restating them. It carries: the spawned task's id and title, the pointers to run `endless guide` and `endless task show <id> --all-fields`, and the drive-to-completion rules (flip to `unverified` with how-to-test; don't `worktree land` without asking, and never remove a worktree; file drive-by work as separate tasks with `--cleans-up <id>`).
 
 To change what every spawned session is told, edit the template — see [Customizing handoff templates](#customizing-handoff-templates). There is no per-task prompt to maintain.
 

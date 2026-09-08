@@ -6,7 +6,7 @@ You're a worktree-bound Claude Code session spawned to take this task end to end
 Reproduce the bug first before changing anything. Link the failing test or the exact reproduction steps in your first reply.
 
 1. Run `endless guide` to learn the Endless workflow.
-2. Run `endless task show E-{{.spawned_id}} --text --db main` to read the plan.
+2. Run `endless task show E-{{.spawned_id}} --all-fields --db main` to read the plan.
 3. You're already claimed and in the worktree — just do the work.
 4. {{template "handoff_focus" .}}
 5. If anything is ambiguous, the plan is insufficient, or you hit a design choice the plan

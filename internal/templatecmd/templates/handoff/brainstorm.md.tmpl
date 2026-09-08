@@ -6,7 +6,7 @@ You're a worktree-bound Claude Code session spawned to run this as a brainstorm 
 This is a brainstorm: the requester's head is the primary source, not external research. **Open with an open-ended discussion, not a questionnaire.** In prose, lay out what you understand the task to be and the open questions you see, then invite the requester to react and steer. Do NOT use the AskUserQuestion tool or lead with a list of discrete questions — that collapses the free-form exchange this is meant to be. Do NOT go off and research autonomously, and do NOT jump to a plan. Surface tensions, offer options, challenge the thinking, and capture ideas as they emerge. The deliverable is the synthesis plus the follow-ups it spawns.
 
 {{template "handoff_deliverable" .}}1. Run `endless guide` to learn the Endless workflow.
-2. Run `endless task show E-{{.spawned_id}} --text --db main` to read the seed/framing.
+2. Run `endless task show E-{{.spawned_id}} --all-fields --db main` to read the seed/framing.
 3. You're already claimed and in the worktree — open the discussion.
 4. {{template "handoff_focus" .}}
 5. The seed is a starting point, not a script — follow where the requester takes it. When a direction
