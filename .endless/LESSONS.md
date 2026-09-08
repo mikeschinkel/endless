@@ -5428,3 +5428,13 @@ The concrete slip: after filing E-2125 from the E-1957 session, the handoff list
 
 The rule is not about avoiding wasted effort. Endless tracks which session did which work, and a session that reaches outside its task corrupts that record for both tasks.
 - **Project**: endless
+
+### [2026-09-07] A rule that says 'leave it alone' has already handled it — do not escalate the thing the rule covers
+The verify-suite rule says: if your change breaks an assertion in a landed task's suite, leave the suite alone; its owner's own run will tell them, on their schedule, with their context. That is a complete disposition. The situation is handled.
+
+Reporting it anyway converts a handled non-event into an item Mike has to read, judge and carry. That is worse than saying nothing, because it teaches him the rules do not actually close anything and every one of them may still surface work.
+
+The concrete slip: E-1957 changed a string that .endless/tasks/e-2122/verify.sh asserts. The correct action was to leave that file untouched and say nothing. Instead the handoff listed it as one of two things for Mike, with a line number.
+
+Generalize it. When a documented rule tells you what to do with something you found, do that, and stop. Do not narrate compliance. The handoff carries what Mike must decide or act on — never the things a rule has already decided for him.
+- **Project**: endless
