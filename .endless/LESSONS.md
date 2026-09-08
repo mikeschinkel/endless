@@ -5362,3 +5362,31 @@ is the exception, not the default") — exactly what stops the bullet list readi
 as a menu of equals. Do not offer a menu whose cheapest option is "do less than
 the analysis argued for"; that argument was already made and was not rebutted.
 - **Project**: endless
+
+### [2026-09-07] A worktree rebase blocked by .claude/settings.json is the skip-worktree sandbox copy, not dirty state — clear the flag, rebase, then just claude-settings-init
+`git rebase main` in a self-dev worktree aborts with "Your local changes to
+.claude/settings.json would be overwritten by checkout" whenever main has
+touched that file — even though `git status` reports the tree completely clean.
+The file looks clean because the worktree carries a sandbox-specific copy
+(hooks rewritten to the worktree's own binary, plus an env block pointing
+XDG_CONFIG_HOME at the worktree's sandbox) and Endless marks it
+skip-worktree so that copy is never committed. `git ls-files -v` shows the flag
+as an `S`; nothing else does.
+
+Do not stash, do not reset, and do not commit the sandbox copy. Recovery:
+
+  cp .claude/settings.json <scratch>/settings.bak
+  git update-index --no-skip-worktree .claude/settings.json
+  git checkout -- .claude/settings.json
+  git rebase main
+  cp <scratch>/settings.bak .claude/settings.json
+  git update-index --no-skip-worktree .claude/settings.json
+  just claude-settings-init
+
+The last recipe regenerates the file from the NEW committed content plus the
+working copy's non-hook keys, then re-sets skip-worktree. One subtlety worth
+knowing: it lets the working copy win on every non-hook key, so a value main
+just changed (a plugin toggle, say) is silently overridden by the backup you
+restored. Delete from the backup any key whose new committed value you want,
+and let the recipe pick it up.
+- **Project**: endless
