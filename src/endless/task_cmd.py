@@ -3650,60 +3650,37 @@ def _in_claude_session() -> bool:
     return any(c.get("pane_id") == pane for c in live)
 
 
-def _require_launchable_window(item_id: int) -> None:
-    """Refuse a shell claim that cannot start a Claude session safely (E-2106).
+def _require_tmux_for_claim(item_id: int) -> None:
+    """Refuse a shell claim with nowhere to start a Claude session (E-2106).
 
-    A shell cannot become the session, so claiming from one means launching
-    Claude — in this pane, laying the standard layout out around it. That is
-    only coherent in a tmux window holding this pane alone. Two ways it is not:
+    A shell cannot become the session, so claiming from one means starting
+    Claude, and Claude is delivered in a tmux window. Without tmux there is
+    nowhere to put it.
 
-      - no tmux at all, so there is no window to launch into; and
-      - a window holding other panes, where the splits would land among panes
-        the user arranged and resize work they are in the middle of.
+    That is the whole gate now. It used to also refuse a window holding more
+    than one pane, because the launch exec'd over the pane the claim was typed
+    in and then split the window around it — so it needed the window to itself,
+    and destroyed the caller's shell when it got it. Opening a window of its
+    own removes both, and with them the refusal: splitting a window nothing
+    else is in disturbs nothing.
 
-    Refusing rather than quietly opening a new window: a new window is a
-    different outcome from the one the command implies, and silently choosing
-    it leaves the user looking at an unchanged screen with no idea what
-    happened. Endless does not try to place a session around whatever else is
-    on the window either — panes are cheap, and guessing which of the user's
-    should move is worth less than saying plainly that it will not guess.
+    Runs BEFORE the claim, so a refusal leaves no half-claimed task behind.
 
     Reached only when NO session resolved, so it never touches the case where a
     live Claude session in a sibling pane picks the task up (E-1242): that
-    claim binds an existing session rather than starting one, and needs no room
-    to start it in.
-
-    Runs BEFORE the claim, so nothing is half-done when it refuses.
+    claim binds an existing session rather than starting one.
     """
-    from endless.session_cmd import _tmux_window_pane_ids
-
-    panes = _tmux_window_pane_ids()
-    if panes is None:
-        raise click.ClickException(
-            "No Claude session to bind this task to, and no tmux to start one "
-            "in.\n"
-            "  Claiming from a shell starts Claude on the task, which needs a "
-            "tmux window.\n"
-            "  Start tmux and claim again, or claim with no session at all, to "
-            "work it by hand:\n"
-            f"      endless task claim E-{item_id} --unattended"
-        )
-    if len(panes) == 1:
+    if os.environ.get("TMUX"):
         return
-
-    lines = [
-        f"This tmux window holds {len(panes)} panes. Claiming from a shell "
-        f"starts Claude on the task and lays",
-        "the window out around this pane, which would resize the panes you "
-        "arranged.",
-        "  Claim again from a window holding one pane — a fresh one costs "
-        "nothing:",
-        "      tmux new-window",
-        f"      endless task claim E-{item_id}",
-        "  Or claim with no session at all, to work it by hand:",
-        f"      endless task claim E-{item_id} --unattended",
-    ]
-    raise click.ClickException("\n".join(lines))
+    raise click.ClickException(
+        "No Claude session to bind this task to, and no tmux to start one "
+        "in.\n"
+        "  Claiming from a shell starts Claude on the task, which needs a tmux "
+        "window.\n"
+        "  Start tmux and claim again, or claim with no session at all, to "
+        "work it by hand:\n"
+        f"      endless task claim E-{item_id} --unattended"
+    )
 
 
 def _launch_claude_for_claim(
@@ -3718,48 +3695,59 @@ def _launch_claude_for_claim(
     `endless shell-init` has never defined. So the common outcome was a claimed
     task, a built worktree, and no route into it that worked.
 
-    A shell cannot become the session, so this does what `task spawn` does:
-    lays the window out and launches Claude in the worktree. What it does NOT
-    do is deliver spawn's handoff — that is the part that re-reads a task as if
-    it were new, and E-2106's whole subject is picking work back UP.
+    A shell cannot become the session, so this starts one — through the same
+    `spawn-window` seam `task spawn` uses, which is what keeps it from being a
+    second, parallel way to launch Claude. What it does NOT do is deliver
+    spawn's handoff: that is the part that re-reads a task as if it were new,
+    and picking work back UP is this task's whole subject. The launcher spells
+    "a bare interactive claude" as an empty handoff file, so an empty one is
+    what it gets.
 
-    In THIS pane, always. `_require_launchable_window` has already established
-    that the window holds this pane alone, so there is no second shape to
-    choose between and no window arrangement to guess at.
+    In a window of its own, so the shell the claim was typed in survives.
+    This first took over the caller's pane instead — exec'ing Claude over the
+    shell and splitting the window around it — which cost the user their shell
+    and forced a refusal for any window holding another pane. Both were
+    consequences of the exec, not requirements of the claim.
 
-    The session→task binding is not written here. Claude starts with its cwd
-    inside the worktree, and SessionStart binds from that (E-1291) — the same
-    path a user gets from `cd <worktree> && claude`.
+    The session→task binding is not written here, and cannot be: the session
+    does not exist yet. `spawn-window` publishes `@endless_spawned_by` and
+    `@endless_task_id` on the new window, and SessionStart's spawn-bind reads
+    them once Claude is up — the same deferred bind every spawned session gets.
     """
-    from endless.session_cmd import _bind_pane_window_options, build_pane_layout
+    import tempfile
 
-    # Resolved to an absolute path where possible; `os.execvp` would resolve the
-    # bare name "claude" off PATH, but an absolute path is what the pane's
-    # process list will show.
+    from endless import event_bridge
+
+    # Resolved to an absolute path: the Go launcher execs it via syscall.Exec,
+    # which does no PATH lookup, and `_claude_binary()` may return a bare name.
     claude = shutil.which(_claude_binary()) or _claude_binary()
-    pane = os.environ.get("TMUX_PANE", "")
 
+    handoff = tempfile.NamedTemporaryFile(
+        mode="w", suffix=".md", prefix="endless-claim-", delete=False,
+    )
+    handoff.close()
+    window_name = tmux_window_name(item_id)
+    subprocess.run([
+        event_bridge._resolve_endless_go(), "spawn-window",
+        "--claude-bin", claude,
+        "--handoff-file", handoff.name,
+        "--permission-mode", "auto",
+        "--task-id", str(item_id),
+        "--project-id", str(project_id),
+        # Spawn's own fallback for a spawner that is not a Claude session: a
+        # non-empty marker is what makes SessionStart take the spawn-bind path
+        # rather than the cwd fallback.
+        "--spawned-by", str(_current_endless_session_id() or f"pid-{os.getpid()}"),
+        "--window-name", window_name,
+        "--cwd", worktree,
+    ], check=True)
+    click.echo("")
     click.echo(
         click.style("•", fg="cyan")
-        + f" Starting Claude on {task_id_display(item_id)} in this pane."
+        + f" Started Claude on {task_id_display(item_id)} in window "
+        + click.style(f"'{window_name}'", bold=True)
     )
-    _bind_pane_window_options(pane, item_id, project_id, "")
-    _tmux_run_quiet(["rename-window", "-t", pane, tmux_window_name(item_id)])
-    # Both before the exec, which replaces this process and so can orchestrate
-    # nothing afterward.
-    build_pane_layout(pane, worktree)
-    os.chdir(worktree)
-    sys.stdout.flush()
-    sys.stderr.flush()
-    os.execvp(claude, ["claude"])
-
-
-def _tmux_run_quiet(args: list[str]) -> None:
-    """Run one tmux command, ignoring whether it worked. Cosmetic calls only."""
-    try:
-        subprocess.run(["tmux", *args], capture_output=True, timeout=2)
-    except (FileNotFoundError, subprocess.SubprocessError):
-        pass
+    click.echo(f"  Switch to it: tmux select-window -t {window_name}")
 
 
 def _current_session_task_id() -> int | None:
@@ -4587,7 +4575,7 @@ def claim_item(item_id: int, unattended: bool = False, force: bool = False):
     # resolution. Checked here, before `_perform_claim_work`, so a refusal
     # leaves no half-claimed task behind.
     if target_session is None and not (unattended or force):
-        _require_launchable_window(item_id)
+        _require_tmux_for_claim(item_id)
 
     # E-2074 removed the "a background session may only claim `ready` work"
     # refusal that stood here. It gated on sessions.kind_id = background, and
@@ -4675,9 +4663,7 @@ def _echo_claim_next_step(
         session exists and now owns the task; what the caller needs is the way
         to it, which is `session goto`.
       - a shell that bound nothing — a shell cannot become the session, so one
-        is launched in this pane. `_require_launchable_window` has already
-        refused the shells that cannot be launched into, so this does not
-        return.
+        is started, in a window of its own so the caller's shell survives.
 
     A claim with no worktree (nothing to cd into, nothing to launch in) falls
     through silently; `_perform_claim_work` has already said what it did.

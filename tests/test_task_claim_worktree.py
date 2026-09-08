@@ -164,10 +164,6 @@ def test_claim_from_a_shell_in_tmux_starts_a_session(project_with_task,
 
     task_cmd._reset_session_choice_cache()
     monkeypatch.setenv("TMUX", "/tmp/tmux-501/default,1,0")
-    monkeypatch.setenv("TMUX_PANE", "%3")
-    monkeypatch.setattr(
-        "endless.session_cmd._tmux_window_pane_ids", lambda: ["%3"],
-    )
     launched: list[tuple] = []
     monkeypatch.setattr(
         task_cmd, "_launch_claude_for_claim",

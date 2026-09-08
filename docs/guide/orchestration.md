@@ -33,8 +33,7 @@ This:
    |---|---|
    | inside a Claude session | prints `/cd <worktree>`. The session is already here; only its working directory is in the wrong place. |
    | a shell beside a live Claude pane | binds the task to that session (unchanged) and prints `session goto ES-NNNN`, the way over to it. Nothing is launched — the session already exists. |
-   | a shell, in a tmux window holding that pane alone | starts Claude on the task: the layout `task spawn` builds, and a plain `claude` in the worktree, without spawn's handoff. |
-   | a shell, in a tmux window holding other panes | **refuses**, and says how to avoid it — claim again from a window holding one pane (`tmux new-window`), or `--unattended`. Taking the pane over would resize panes you arranged, and quietly opening a new window instead would leave you looking at an unchanged screen. The refusal runs *before* the claim, so nothing is half-done. |
+   | a shell, in tmux | starts Claude on the task, through the same `spawn-window` seam `task spawn` uses — a new window, laid out the same way, minus spawn's handoff. Your shell is left exactly where it was. |
    | a shell, no tmux | refuses, naming `--unattended`. There is no session, and no window to start one in. |
    | `--unattended` | prints the worktree and stops. You said there is no Claude session and you want none. |
 

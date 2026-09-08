@@ -350,35 +350,59 @@ else
     report_fail "task claim --help" "exit 0" "$(tail -10 "${TMP}/claimhelp.log")"
 fi
 
-# A shell claim starts Claude in the pane it runs in, so a window holding other
-# panes is REFUSED rather than quietly redirected to a new window — a new
-# window is a different outcome from the one the command implies, and choosing
-# it silently leaves the caller looking at an unchanged screen.
-cat >"${TMP}/window_gate.py" <<'PY_GATE'
-import sys
-from endless import task_cmd, session_cmd
-session_cmd._tmux_window_pane_ids = lambda: (
-    None if sys.argv[1] == "NOTMUX" else ["%1"] * int(sys.argv[1])
+# A shell claim starts Claude through the SAME `spawn-window` seam `task spawn`
+# uses — in a window of its own, so the shell the claim was typed in survives.
+# An earlier revision exec'd Claude over that pane and split the window around
+# it, which cost the caller their shell and forced a refusal for any window
+# holding another pane.
+cat >"${TMP}/claim_launch.py" <<'PY_LAUNCH'
+import sys, types
+from endless import task_cmd, event_bridge
+calls = []
+task_cmd._claude_binary = lambda: "/bin/claude"
+task_cmd._current_endless_session_id = lambda: None
+event_bridge._resolve_endless_go = lambda *a, **kw: "/bin/endless-go"
+# Rebind the NAME in task_cmd, rather than mutating the shared subprocess
+# module: everything else that shells out (the status vocabulary, for one) goes
+# through the same module object and would be stubbed along with it.
+task_cmd.subprocess = types.SimpleNamespace(
+    run=lambda argv, **kw: calls.append(list(argv))
 )
+task_cmd.shutil = types.SimpleNamespace(which=lambda name: "/bin/claude")
+task_cmd.os.execvp = lambda *a: sys.exit("EXECED OVER THE CALLER'S SHELL")
+task_cmd.os.chdir = lambda p: sys.exit("MOVED THE CALLER'S SHELL")
+task_cmd._launch_claude_for_claim(2106, 7, "/tmp/wt")
+argv = calls[0]
+handoff = argv[argv.index("--handoff-file") + 1]
+with open(handoff) as f:
+    body = f.read()
+print(" ".join([argv[1], argv[argv.index("--task-id") + 1],
+                argv[argv.index("--cwd") + 1],
+                "HANDOFF-EMPTY" if body == "" else "HANDOFF-PRESENT",
+                "SPAWN-MARKER" if argv[argv.index("--spawned-by") + 1] else "NO-MARKER"]))
+PY_LAUNCH
+
+launch="$(env TMUX="fake,1,0" uv run python "${TMP}/claim_launch.py" 2>&1 | tail -1)"
+assert_eq "claim launches through spawn-window, with the task, worktree, no handoff and a spawn marker" \
+    "spawn-window 2106 /tmp/wt HANDOFF-EMPTY SPAWN-MARKER" "${launch}"
+
+cat >"${TMP}/tmux_gate.py" <<'PY_GATE'
+import sys
+from endless import task_cmd
 try:
-    task_cmd._require_launchable_window(2106)
+    task_cmd._require_tmux_for_claim(2106)
 except Exception as e:
     print("REFUSED: " + " ".join(str(e).split()))
     sys.exit(3)
 print("ALLOWED")
 PY_GATE
 
-assert_eq "a window holding this pane alone is launchable" \
-    "ALLOWED" "$(uv run python "${TMP}/window_gate.py" 1)"
+assert_eq "in tmux, a claim from a shell is allowed whatever else the window holds" \
+    "ALLOWED" "$(env TMUX="fake,1,0" uv run python "${TMP}/tmux_gate.py")"
 
-gate="$(uv run python "${TMP}/window_gate.py" 3)"
-assert_contains "a window holding other panes is refused" "REFUSED" "${gate}"
-assert_contains "…the refusal says WHY" "resize the panes you arranged" "${gate}"
-assert_contains "…and how not to hit it again" "tmux new-window" "${gate}"
-assert_contains "…naming the claim to re-run" "endless task claim E-2106" "${gate}"
-
-gate="$(uv run python "${TMP}/window_gate.py" NOTMUX)"
-assert_contains "no tmux is refused too" "no tmux" "${gate}"
+gate="$(env -u TMUX uv run python "${TMP}/tmux_gate.py")"
+assert_contains "outside tmux it is refused — there is nowhere to start a session" \
+    "no tmux" "${gate}"
 assert_contains "…routed to the flag for working it by hand" "--unattended" "${gate}"
 
 # Grepped as CODE, not as prose: this change's own comments explain what it
