@@ -5495,3 +5495,17 @@ E-1428's plan ended with an 'Open question for Mike' section asking whether the 
 ### [2026-09-08] A guard that fired and was satisfied is not news — reporting it spends the attention the guard just saved
 I closed a report to Mike with 'One thing the ledger's path gate caught worth mentioning' — the absolute-path gate had rejected a placeholder in a plan I was writing, I fixed it immediately, and nothing about the result changed. Mike: 'Why was it worth mentioning? The gate is there to protect you from spending my attention, but for some godforsaken reason, it encouraged you to make me have to invest MORE of my attention for information that provided me ZERO value.' Exactly inverted the purpose. A guard catching me is the system working; it becomes news only if it BLOCKED the outcome, or if the guard itself is wrong. Otherwise fix it and say nothing. The same rule covers my own corrected slips generally: if the user's decisions are unchanged, the slip is not content. And beware the specific pull that produced this one — the gate's message was interesting to ME, and 'I found this interesting' is not the test.
 - **Project**: endless
+
+### [2026-09-08] A plan must contain zero open questions — resolve them before attaching it
+I attached a plan to E-2126 that carried two unresolved items: a truncation default marked 'confirm with Mike before building', and a --children asymmetry I described as 'a wart you may prefer to fix'. I then surfaced both in my reply as things for Mike to decide. He said: 'Plans MUST have no open question. Resolve them here.'
+
+Why this is worse than it looks. A plan is what a spawned session executes. An open question inside it does not get resolved -- it gets guessed, by a session with less context than I had, or it stalls the session into asking Mike something I could have asked while he was already engaged in the conversation. Either way the cost lands later and on him. Attaching a plan with a hole in it is deferring my work onto the implementor and calling it thoroughness.
+
+It also inverts the sequence. The moment to ask is BEFORE the plan is written, while the user is in the thread and the context is loaded. I had that moment -- I used AskUserQuestion twice in this very exchange -- and then wrote unresolved items into the durable artifact anyway.
+
+Rules:
+- Before attaching a plan, scan it for hedges: 'confirm', 'TBD', 'decide whether', 'may prefer', 'propose X; check'. Every one is an unfinished decision. Resolve it with the user, or make the call and state it as a decision with its rationale.
+- Asking is cheap while the user is engaged; asking is expensive after the plan lands. Batch the questions and ask them before writing.
+- 'I flagged it' is not resolution. Flagging moves the cost, it does not pay it.
+- A decision I make myself is fine and often preferred -- but it must be written as a decision, not as a question wearing a recommendation.
+- **Project**: endless
