@@ -31,8 +31,10 @@ import (
 // user's behalf; ambient churn in them alone still means "clean" for handoff.
 //
 // Mirrors src/endless/worktree_cmd.py AUTO_COMMIT_GLOBS — keep the two in sync.
-// (The companion .endless/worktree.json/.lock are gitignored and
-// .claude/settings.json is skip-worktree'd, so none of those ever surface in
+// (The companion .endless/worktree.json/.lock are gitignored, and since E-1347
+// the per-worktree Claude override lives in the equally-gitignored
+// .claude/settings.local.json rather than being masked onto the tracked
+// .claude/settings.json with skip-worktree — so none of those ever surface in
 // `git status`; only these globs can.)
 //
 // .endless/LESSONS.md was listed here between E-2051 and E-2055 and is

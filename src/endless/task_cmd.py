@@ -6297,9 +6297,9 @@ def spawn_plan(item_id: int, project_name: str | None = None,
         _warn_force_deprecated("spawn", item_id, current_status)
 
     # --worktree overrides the cd target so the spawned session reads
-    # .claude/settings.json from the worktree (worktree-local hook override
-    # via 'just claude-settings-init' applies). tmux send-keys would not
-    # surface a bad cd, so validate up front.
+    # .claude/settings.local.json from the worktree (worktree-local hook
+    # override via 'just claude-settings-init' applies). tmux send-keys would
+    # not surface a bad cd, so validate up front.
     if worktree is not None:
         cd_target = os.path.abspath(os.path.expanduser(worktree))
         if not os.path.isdir(cd_target):

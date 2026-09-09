@@ -9,7 +9,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sort"
-	"strings"
 )
 
 func bindCmd(args []string) {
@@ -57,12 +56,12 @@ func bindCmd(args []string) {
 	}
 
 	if err := updateClaudeSettings(worktree, sandboxDir); err != nil {
-		fmt.Fprintf(os.Stderr, "endless-sandbox bind: updating .claude/settings.json: %v\n", err)
+		fmt.Fprintf(os.Stderr, "endless-sandbox bind: updating %s: %v\n", localSettingsRel, err)
 		os.Exit(1)
 	}
 
 	fmt.Printf("Bound %s → %s\n", worktree, sandboxDir)
-	fmt.Printf("  settings: %s\n", filepath.Join(worktree, ".claude", "settings.json"))
+	fmt.Printf("  settings: %s\n", filepath.Join(worktree, localSettingsRel))
 }
 
 // defaultSandboxName derives a stable sandbox name from a worktree path.
@@ -75,10 +74,18 @@ func defaultSandboxName(worktree string) string {
 	return filepath.Base(worktree)
 }
 
-// updateClaudeSettings sets XDG_CONFIG_HOME in <worktree>/.claude/settings.json's
-// "env" block so endless binaries invoked from a Claude session (directly or
-// via hooks) route DB writes to the sandbox via inheritance. Preserves all
-// other settings keys.
+// updateClaudeSettings sets XDG_CONFIG_HOME in the "env" block of
+// <worktree>/.claude/settings.local.json so endless binaries invoked from a
+// Claude session (directly or via hooks) route DB writes to the sandbox via
+// inheritance. Preserves all other keys in that file.
+//
+// settings.local.json, not the tracked settings.json (E-1347). Claude Code
+// merges the two natively — env per-key with the local file winning — and the
+// local file is git-ignored, so the generated block never becomes a tracked
+// modification. Writing it into the tracked file instead meant hiding it with
+// `git update-index --skip-worktree`, and that bit makes git refuse to check
+// out any commit that changes the file: one commit to .claude/settings.json on
+// main blocked the rebase in every live worktree at once.
 //
 // Since E-1368 the Go binary self-detects the sandbox from cwd
 // (monitor.SelfDetectWorktreeSandbox), so this env block is no longer the only
@@ -96,7 +103,15 @@ func updateClaudeSettings(worktree, sandboxDir string) error {
 	if err := os.MkdirAll(claudeDir, 0o755); err != nil {
 		return fmt.Errorf("creating %s: %w", claudeDir, err)
 	}
-	settingsPath := filepath.Join(claudeDir, "settings.json")
+
+	// A worktree bound before E-1347 has the generated block inside the tracked
+	// file, hidden behind skip-worktree. Undo that first, so this bind is not
+	// writing a second, competing copy of the same override.
+	if _, err := repairWorktreeClaudeSettings(worktree); err != nil {
+		return fmt.Errorf("clearing legacy skip-worktree arming: %w", err)
+	}
+
+	settingsPath := filepath.Join(claudeDir, "settings.local.json")
 
 	settings, err := readSettings(settingsPath)
 	if err != nil {
@@ -116,34 +131,33 @@ func updateClaudeSettings(worktree, sandboxDir string) error {
 	if err := writeSettings(settingsPath, settings); err != nil {
 		return err
 	}
-	return markSettingsSkipWorktree(worktree)
+	warnIfLocalSettingsNotIgnored(worktree)
+	return nil
 }
 
-// markSettingsSkipWorktree sets the skip-worktree index bit on
-// <worktree>/.claude/settings.json so the generated env block stays out of
-// `git status` and doesn't block rebase during `endless worktree land`.
-// Mirrors the contract of `just claude-settings-init`, which sets the same
-// bit after it writes its hook-rewrite block.
+// warnIfLocalSettingsNotIgnored prints one line when the repository does not
+// ignore .claude/settings.local.json, and changes nothing.
 //
-// No-op if the file isn't tracked or the worktree isn't a git repository —
-// downstream projects may not commit .claude/settings.json.
-func markSettingsSkipWorktree(worktree string) error {
-	rel := filepath.Join(".claude", "settings.json")
-
-	chk := exec.Command("git", "-C", worktree, "ls-files", "--error-unmatch", rel)
-	chk.Stdout = io.Discard
-	chk.Stderr = io.Discard
-	if err := chk.Run(); err != nil {
-		return nil
+// Endless's own .gitignore covers it, and Claude Code's convention is that a
+// project ignores it, but neither is guaranteed for a project that merely uses
+// endless. Left un-ignored the generated file reads as untracked work in
+// `git status` and as a worktree anomaly at handoff, so say so once rather
+// than editing ignore rules the user did not ask endless to touch.
+func warnIfLocalSettingsNotIgnored(worktree string) {
+	cmd := exec.Command("git", "-C", worktree, "check-ignore", "-q", "--", localSettingsRel)
+	err := cmd.Run()
+	if err == nil {
+		return // exit 0: already ignored, nothing to say
 	}
-
-	cmd := exec.Command("git", "-C", worktree, "update-index", "--skip-worktree", rel)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("git update-index --skip-worktree %s: %w: %s",
-			rel, err, strings.TrimSpace(string(out)))
+	if cmd.ProcessState == nil || cmd.ProcessState.ExitCode() != 1 {
+		// git never ran, or answered 128 (not a repository). Either way there
+		// are no ignore rules to be missing from.
+		return
 	}
-	return nil
+	fmt.Fprintf(os.Stderr,
+		"endless-sandbox bind: warning: %s is not git-ignored, so it will show as untracked.\n"+
+			"  Add this to the project's .gitignore:\n    settings.local.json\n",
+		localSettingsRel)
 }
 
 func readSettings(path string) (map[string]any, error) {

@@ -27,6 +27,8 @@ func Run(args []string) {
 		pruneCmd(args[1:])
 	case "destroy":
 		destroyCmd(args[1:])
+	case "claude-settings-repair":
+		claudeSettingsRepairCmd(args[1:])
 	case "-h", "--help", "help":
 		usage(os.Stdout)
 	default:
@@ -46,4 +48,5 @@ func usage(w *os.File) {
 	fmt.Fprintln(w, "  list")
 	fmt.Fprintln(w, "  prune   [--older-than DURATION]")
 	fmt.Fprintln(w, "  destroy [--force] [--if-exists] <name>")
+	fmt.Fprintln(w, "  claude-settings-repair [--all] [<worktree> ...]")
 }

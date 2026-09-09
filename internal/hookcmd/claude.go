@@ -1811,21 +1811,32 @@ func autoImportTask(projectID int64, sessionID, filePath string) error {
 // osExecutable is a test seam for os.Executable.
 var osExecutable = os.Executable
 
-// worktreeOverrideRegistered returns true when the worktree's
-// .claude/settings.json references the worktree's own bin/endless-go
-// path — i.e. claude-settings-init was run and the override is active.
+// worktreeOverrideRegistered returns true when the worktree's Claude Code
+// settings reference the worktree's own bin/endless-go path — i.e.
+// claude-settings-init was run and the override is active.
 //
 // Why: every worktree inherits the committed .claude/settings.json from
 // HEAD (which holds enabledPlugins), so file presence alone is not a
 // reliable signal that the hook override is configured. Substring-checking
 // the file content for the worktree-specific binary path correctly
 // distinguishes the inherited committed file from the regenerated one.
+//
+// Both files are read (E-1347). settings.local.json is where the generated
+// override lives now; settings.json is still checked because a worktree
+// bootstrapped before that change carries the override there until the
+// skip-worktree repair moves it, and until then it is the only place the
+// override appears.
 func worktreeOverrideRegistered(worktreeRoot, worktreeBin string) bool {
-	data, err := os.ReadFile(filepath.Join(worktreeRoot, ".claude", "settings.json"))
-	if err != nil {
-		return false
+	for _, rel := range []string{"settings.local.json", "settings.json"} {
+		data, err := os.ReadFile(filepath.Join(worktreeRoot, ".claude", rel))
+		if err != nil {
+			continue
+		}
+		if strings.Contains(string(data), worktreeBin) {
+			return true
+		}
 	}
-	return strings.Contains(string(data), worktreeBin)
+	return false
 }
 
 // shouldSkipForWorktree returns true when this binary should yield to a

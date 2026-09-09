@@ -37,14 +37,28 @@ func makeWorktreeLayout(t *testing.T) (projectRoot, worktreeRoot string) {
 	return projectRoot, worktreeRoot
 }
 
-// writeSettingsOverride writes a worktree-level .claude/settings.json that
-// registers <worktreeRoot>/bin/endless-go as a hook command, simulating
+// writeSettingsOverride writes a worktree-level .claude/settings.local.json
+// that registers <worktreeRoot>/bin/endless-go as a hook command, simulating
 // what claude-settings-init produces.
 func writeSettingsOverride(t *testing.T, worktreeRoot string) {
 	t.Helper()
+	writeOverrideTo(t, worktreeRoot, "settings.local.json")
+}
+
+// writeLegacySettingsOverride writes the same override into the TRACKED
+// settings.json, which is where claude-settings-init put it before E-1347. A
+// worktree bootstrapped then still carries it there until the repair runs, and
+// the detector has to keep recognizing it.
+func writeLegacySettingsOverride(t *testing.T, worktreeRoot string) {
+	t.Helper()
+	writeOverrideTo(t, worktreeRoot, "settings.json")
+}
+
+func writeOverrideTo(t *testing.T, worktreeRoot, filename string) {
+	t.Helper()
 	worktreeBin := filepath.Join(worktreeRoot, "bin", "endless-go")
 	settings := fmt.Sprintf(`{"hooks":{"SessionStart":[{"hooks":[{"command":"%s claude","type":"command"}]}]}}`, worktreeBin)
-	writeTestFile(t, filepath.Join(worktreeRoot, ".claude", "settings.json"), settings)
+	writeTestFile(t, filepath.Join(worktreeRoot, ".claude", filename), settings)
 }
 
 func setOsExecutable(t *testing.T, path string) {
@@ -141,6 +155,19 @@ func TestShouldSkipForWorktreeAt_SelfIsGlobal(t *testing.T) {
 	}
 	if !strings.Contains(buf.String(), "deferring to") {
 		t.Fatalf("expected 'deferring to' log line; got: %q", buf.String())
+	}
+}
+
+func TestShouldSkipForWorktreeAt_SelfIsGlobal_LegacySettingsJSON(t *testing.T) {
+	projectRoot, worktreeRoot := makeWorktreeLayout(t)
+	writeLegacySettingsOverride(t, worktreeRoot)
+	worktreeBin := filepath.Join(worktreeRoot, "bin", "endless-go")
+	writeTestFile(t, worktreeBin, "#!/bin/sh\nexit 0\n")
+	globalBin := filepath.Join(t.TempDir(), "endless-go")
+	writeTestFile(t, globalBin, "#!/bin/sh\nexit 1\n")
+	setOsExecutable(t, globalBin)
+	if !shouldSkipForWorktreeAt(worktreeRoot, projectRoot) {
+		t.Fatal("expected skip when the override is still in the tracked settings.json")
 	}
 }
 

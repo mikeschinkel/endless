@@ -29,11 +29,12 @@
 #      copying is the identical result, instantly. Without bin/endless-go the
 #      per-worktree sandbox CLI falls back to the global/main binary (E-1662/
 #      E-1281). The agent rebuilds with `just build` only once it edits Go.
-#   3. `just claude-settings-init` layers the per-worktree hook override onto
-#      .claude/settings.json so the PostToolUse hook fires THIS worktree's
+#   3. `just claude-settings-init` writes the per-worktree hook override to
+#      .claude/settings.local.json so the PostToolUse hook fires THIS worktree's
 #      bin/endless-go (E-998), not the global one. Runs last so it sees the
 #      copied binary and preserves the XDG_CONFIG_HOME env block that the
-#      sandbox bind step (run before this hook) wrote.
+#      sandbox bind step (run before this hook) wrote to the same file. The
+#      LOCAL file, not the tracked .claude/settings.json — see E-1347.
 
 set -euo pipefail
 
