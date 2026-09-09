@@ -5620,3 +5620,13 @@ E-2030  now    assumed    n/a   Stop the guide instructing report-gate-off proj�
 
 This also cuts the other way: if the search finds nothing, the filing is now evidence-backed rather than a guess.
 - **Project**: endless
+
+### [2026-09-08] A handoff reply leads with the commands Mike must run; rationale goes below or nowhere
+Mike asked 'what of that wall-of-text is an action item I need to read?' after an E-1347 handoff that opened with the verify command but then buried the only other thing he had to know — that landing would sweep 135 worktrees — under five paragraphs of design rationale explaining merge semantics, migration mechanism, and PRODUCT reasoning.
+
+The rationale was accurate and was work he had asked for. That is exactly the trap: having done the reasoning is not a reason to make him read it. He is deciding what to DO next, and every line that is not an action he must take costs him a scan to rule out.
+
+Rule for the final message of a task: the action items come first and are countable — the verify command, plus anything that will happen when he lands that he should not mistake for an error. Everything else is optional reading, clearly marked as such, or left for the task's plan and the commit message, which is where a reviewer looks for it anyway. Design rationale already recorded in the plan does not need a second telling in the reply.
+
+Applies to any handoff, not just verify handoffs.
+- **Project**: endless
