@@ -4752,7 +4752,7 @@ def bind_item(item_id: int) -> None:
     Target session resolution mirrors `claim_item`: env var / pane-
     direct / single-sibling auto-pick / on-a-tty multi-sibling prompt.
     Refuses when no session resolves — bind without a session is
-    meaningless (nothing for the status bar to display).
+    meaningless (there is no owner to record).
 
     FIRST-SET-ONLY (E-1968, per ED-1560). `sessions.task_id` is
     write-once: bind may fill a session that holds no task, but it may not move
@@ -4832,7 +4832,7 @@ def bind_item(item_id: int) -> None:
     click.echo(
         click.style("•", fg="cyan")
         + f" E-{item_id} bound to session "
-          f"{session_id_display(target_session)} for display "
+          f"{session_id_display(target_session)} "
           f"(task status unchanged: {current_status})"
     )
 

@@ -403,6 +403,47 @@ def test_worktree_sandbox_refuses_rather_than_inventing_a_path(
     assert "endless worktree sandbox E-<id>" in str(exc.value)
 
 
+# ── task bind ───────────────────────────────────────────────────────────────
+
+def test_bind_names_its_session_as_ES_N_and_claims_no_more_than_it_does(
+    project_with_task, monkeypatch, capsys,
+):
+    """The same two defects, on the verb claim's own refusal routes people to.
+
+    It printed the session as a BARE INTEGER — the spelling `session goto`
+    refuses, because sessions and tasks are separate id spaces that both used
+    to render `E-NNN` (E-1261) — and it called the binding "for display", which
+    is the understatement E-2093 rewrote bind's docstring to reject: bind sets
+    `sessions.task_id`, and under ED-1560 that column IS the ownership record.
+
+    Everything a reader used is still there — what bound to what, and that the
+    status did not move.
+    """
+    from endless import db
+
+    tid = project_with_task["task_id"]
+    proj = db.query(
+        "SELECT project_id FROM tasks WHERE id = ?", (tid,)
+    )[0]["project_id"]
+    db.execute(
+        "INSERT INTO sessions (id, session_id, project_id, platform, state, "
+        "started_at, task_id) "
+        "VALUES (91, 's-91', ?, 'claude', 'working', "
+        "'2026-09-08T00:00:00', NULL)",
+        (proj,),
+    )
+    monkeypatch.setattr(
+        task_cmd, "_resolve_session_id_with_prompt", lambda **kw: 91,
+    )
+    task_cmd.bind_item(tid)
+    out = capsys.readouterr().out
+
+    assert f"E-{tid} bound to session ES-91" in out
+    assert "for display" not in out
+    assert not re.search(r"session 91\b", out)
+    assert "task status unchanged: ready" in out
+
+
 # ── task release ────────────────────────────────────────────────────────────
 
 def test_release_routes_only_through_commands_that_exist(project_with_task):
