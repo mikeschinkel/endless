@@ -5568,3 +5568,13 @@ The failure was not length for its own sake. Every one of those bullets was alre
 
 The rule: a handoff reply carries the verify command, and anything that BLOCKS Mike from running it or that he must decide before landing. Design rationale, folded-in scope, the out-of-scope check, and 'here is what I chose and why' all go on the task — 'recorded on the task' is a pointer, not a summary to expand. If a judgement call genuinely needs his eye before landing, it is one line naming the choice, not a bulleted defence of it.
 - **Project**: endless
+
+### [2026-09-08] Harmless and loud is a contradiction, not a trade-off
+I reported the reaper's post-land 'no such column: branch' error as 'loud, harmless, and self-clearing' and treated that pairing as acceptable. Mike: if it is harmless, it should not be loud.
+
+Loudness is a claim that a human must act. When nothing needs acting on, an error-level log line is not a courtesy — it is noise that teaches the reader to skip past this class of message, which is how a real error later goes unread. So 'harmless but loud' never describes an acceptable state; it describes a defect in either the loudness or my understanding of the harm. The two words together are a signal to stop and pick one: either the condition matters and the message should say what to do, or it does not and the message should not exist at that level.
+
+The specific instance: during a land that drops a column, the migration runs between the ff-merge and the binary rebuild, so any hook firing in that gap runs old code against the new schema. That window is expected and self-closing, which is exactly why the reaper should degrade quietly there rather than log a query failure it cannot act on.
+
+Do not defend a diagnostic by explaining why the underlying condition is benign. That explanation is the argument for making it quieter.
+- **Project**: endless
