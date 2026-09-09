@@ -5517,3 +5517,20 @@ The production code was correct — its own docstring says buckets are calendar 
 
 Rule: when a fixture needs two items in the same calendar period, build the stamps from that period's start — time.Date(y, m, d, 0,0,0,0, Local) plus an offset — rather than subtracting durations from now. Subtracting from now encodes the time of day the author happened to run it. The same trap exists for week and month buckets, and for any 'same day' assertion near midnight.
 - **Project**: endless
+
+### [2026-09-08] Anchor a spec to something that always exists — a total, not a partial
+Two corrections from Mike on the E-2126 plan, one root cause.
+
+1. I wrote that the children section moves 'directly after Description and before Analysis'. Mike: 'That is wrong. It should be directly before Analysis.' Description is conditional -- it is suppressed by --no-description and skipped when it merely repeats the title. So 'after Description' names a position that does not exist in some renders, and an implementor hitting that case has to invent the answer. 'Before Analysis' is unconditional and needs no case analysis.
+
+2. I specced <field>_chars as null when the field is empty. Mike: it should always be an int, 0 when the content is null. A nullable count forces every consumer to null-check before comparing or summing, and it spends null on a second meaning in the very task whose entire point is making null mean exactly one thing.
+
+The shared root: I defined each spec against something that may be absent. A spec should be anchored to a total -- a section that always renders, a value that always exists -- so there is no second case to reason about. Absence is the thing being specified, never the thing doing the specifying.
+
+Concrete checks when writing a spec:
+- Ordering: anchor to the neighbour that always renders. If both neighbours are conditional, name the container position instead.
+- Counts, sizes, lengths: never nullable. Zero is the absence.
+- Any 'X then Y' where X can be suppressed by a flag is a latent open question.
+
+This also compounds a rule I had just recorded: a plan must contain no open questions. An ordering anchored to a conditional element IS an open question, one that does not look like a question because it is phrased as an instruction.
+- **Project**: endless
