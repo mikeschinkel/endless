@@ -5429,6 +5429,64 @@ def _format_landed_line(landings: list) -> str:
     return "  ".join(parts)
 
 
+def brief_text(content: str | None, limit: int | None) -> str | None:
+    """Truncate `content` to `limit` characters, appending a single `…` (E-2126).
+
+    `limit is None` means "not in brief mode" and returns the content untouched.
+    A field at or under the limit is returned WHOLE with no ellipsis, so the
+    absence of `…` reliably means "not truncated". Truncation happens on the
+    decoded string, before any serialization, so no JSON escape sequence can be
+    split across the cut.
+    """
+    if content is None or limit is None or len(content) <= limit:
+        return content
+    return content[:limit] + "…"
+
+
+def _children_by_type(item_id: int) -> dict[str, int]:
+    """Direct children of `item_id` counted by type slug (E-2126).
+
+    One grouped query rather than fetching every child row, so the count is
+    available on every render without paying for the list. Ordered by
+    descending count, ties broken alphabetically by type, so the dominant kind
+    reads first and both the human line and the JSON object are deterministic.
+    `live_tasks`, so a removed child is not counted — matching the `children`
+    list, which reads the same view.
+
+    A child with no `type_id` counts under `untyped` rather than under the empty
+    string the join produces. Older rows really do carry a null type, and the
+    empty string renders as `4 ` in the human line and as a `""` key in JSON —
+    both of which read as a bug rather than as a fact about the data. `untyped`
+    is not a task type slug, so it cannot collide with a real one.
+    """
+    rows = db.query(
+        "SELECT COALESCE(tt.slug, 'untyped') AS type, COUNT(*) AS n "
+        "FROM live_tasks t "
+        "LEFT JOIN task_types tt ON tt.id = t.type_id "
+        "WHERE t.parent_id = ? "
+        "GROUP BY tt.slug",
+        (item_id,),
+    )
+    return {
+        r["type"]: r["n"]
+        for r in sorted(rows, key=lambda r: (-r["n"], r["type"]))
+    }
+
+
+def _children_summary(by_type: dict[str, int]) -> str | None:
+    """The `Children:` value — `3 todo` when one type, `5 tasks (3 todo, 2
+    bugfix)` when mixed, None when there are none (E-2126). None means "omit the
+    line", matching how a large field's placeholder behaves when it is empty."""
+    if not by_type:
+        return None
+    total = sum(by_type.values())
+    if len(by_type) == 1:
+        slug, n = next(iter(by_type.items()))
+        return f"{n} {slug}"
+    breakdown = ", ".join(f"{n} {slug}" for slug, n in by_type.items())
+    return f"{total} tasks ({breakdown})"
+
+
 def _echo_field_placeholder(label, val, name, content, show, flag):
     """One-line `Name: N chars (--flag to display)` for a large field that is
     present but hidden. Rendered with the header `label`/`val` styling so it
@@ -5534,8 +5592,16 @@ def detail_item(
     as_json: bool = False,
     paged: bool = False,
     no_color: bool = False,
+    brief: int | None = None,
 ):
     """Show full detail for a task.
+
+    `brief` is the `--brief[=N]` preview length in characters, or None for the
+    normal full-body render (E-2126). It means ONE thing in all three formats —
+    previews, not bodies — so it wins over every display flag: under `--brief`
+    each of the four body fields renders truncated whether or not its flag was
+    passed, and a flag that would have pulled a full body yields a preview
+    instead.
 
     `show_children` lists EVERY direct child, in all three render paths (JSON,
     llm, human). It used to exclude `status = 'confirmed'` — and only that one
@@ -5572,6 +5638,10 @@ def detail_item(
     # Resolved once here so all three output modes report the same facts.
     touches = _session_touches(item_id)
     creator = _creating_session(touches)
+    # One grouped query, resolved once for all three output modes (E-2126):
+    # children are structure, so every render advertises how many there are and
+    # of what kind, whether or not --children was passed to list them.
+    children_by_type = _children_by_type(item_id)
 
     if as_json:
         import json
@@ -5611,16 +5681,34 @@ def detail_item(
             ),
             "source_file": item["source_file"] or None,
             "tier": item["tier"],
-            "outcome": item["outcome"] if show_outcome else None,
-            "description": item["description"] if show_description else None,
-            "analysis": item["analysis"] if show_analysis else None,
-            "text": item["text"] if show_text else None,
-            # Char counts are always present (independent of the show flags) so
-            # the JSON shape is stable and a consumer can see a hidden field's
-            # size without pulling its full body (E-1601).
-            "analysis_chars": len(item["analysis"]) if item["analysis"] else None,
-            "text_chars": len(item["text"]) if item["text"] else None,
-            "outcome_chars": len(item["outcome"]) if item["outcome"] else None,
+            # Bodies are UNGATED here (E-2126). The display flags gate the human
+            # renderer; a machine format that withheld populated content behind
+            # a flag the consumer did not know to pass returned an empty-looking
+            # task and gave `null` two meanings. `null` now means exactly one
+            # thing on these four keys — the field is empty — so a consumer can
+            # branch on it. `--brief` truncates rather than omits, keeping a
+            # populated field a string in every mode.
+            "outcome": brief_text(item["outcome"] or None, brief),
+            "description": brief_text(item["description"] or None, brief),
+            "analysis": brief_text(item["analysis"] or None, brief),
+            "text": brief_text(item["text"] or None, brief),
+            # `<field>_chars` is the TRUE character count of the stored value —
+            # never the truncated preview's — present for all four body fields,
+            # always an integer, and 0 when the field is empty (E-2126). Never
+            # null: a nullable count would force every consumer to null-check
+            # before summing, and would spend `null` on a second meaning inside
+            # the very change whose purpose is to give it exactly one. The
+            # invariant a consumer can rely on: `<field>_chars == 0` if and only
+            # if `<field>` is null.
+            "description_chars": len(item["description"] or ""),
+            "analysis_chars": len(item["analysis"] or ""),
+            "text_chars": len(item["text"] or ""),
+            "outcome_chars": len(item["outcome"] or ""),
+            # Children are always advertised as a count; the full list stays
+            # gated behind --children (E-2126). Always present, so 0 / {} says
+            # "childless" rather than an absent key leaving it unsaid.
+            "children_count": sum(children_by_type.values()),
+            "children_by_type": children_by_type,
             # E-1929: the row is retained after `task remove`, so a consumer must
             # be able to tell a removed task from a live one. Always present, so
             # the absence of the key never reads as "live".
@@ -5689,21 +5777,30 @@ def detail_item(
         # Large fields collapse to a char marker unless their flag is set, so
         # `task show --llm` stays token-cheap on tasks whose outcome is a large
         # deliverable; pass --outcome/--text/--analysis to pull the body (E-1601).
+        # `--brief` upgrades the bare count to a readable preview (E-2126): the
+        # field counts as shown, so the marker gives way to a truncated section.
         for name, content, shown in (
-            ("analysis", item["analysis"], show_analysis),
-            ("text", item["text"], show_text),
-            ("outcome", item["outcome"], show_outcome),
+            ("analysis", item["analysis"], show_analysis or brief is not None),
+            ("text", item["text"], show_text or brief is not None),
+            ("outcome", item["outcome"], show_outcome or brief is not None),
         ):
             if content and not shown:
                 click.echo(f"{name}_chars={len(content)}")
-        if show_description and item["description"] and item["description"] != item["title"]:
-            click.echo(f"\n## Description\n{item['description']}")
-        if show_analysis and item["analysis"]:
-            click.echo(f"\n## Analysis\n{item['analysis']}")
-        if show_text and item["text"]:
-            click.echo(f"\n## Text\n{item['text']}")
-        if show_outcome and item["outcome"]:
-            click.echo(f"\n## Outcome\n{item['outcome']}")
+        # Children counted on the same rule as analysis_chars= — emitted only
+        # when there are some to count (E-2126).
+        if children_by_type:
+            click.echo(f"children_count={sum(children_by_type.values())}")
+            click.echo("children_by_type=" + ",".join(
+                f"{slug}:{n}" for slug, n in children_by_type.items()))
+        if (show_description or brief is not None) and item["description"] \
+                and item["description"] != item["title"]:
+            click.echo(f"\n## Description\n{brief_text(item['description'], brief)}")
+        if (show_analysis or brief is not None) and item["analysis"]:
+            click.echo(f"\n## Analysis\n{brief_text(item['analysis'], brief)}")
+        if (show_text or brief is not None) and item["text"]:
+            click.echo(f"\n## Text\n{brief_text(item['text'], brief)}")
+        if (show_outcome or brief is not None) and item["outcome"]:
+            click.echo(f"\n## Outcome\n{brief_text(item['outcome'], brief)}")
         if show_children:
             children = db.query(
                 "SELECT id, COALESCE(title, description) as title, status, phase "
@@ -5750,6 +5847,8 @@ def detail_item(
                 color=color,
                 touches=touches,
                 creator=creator,
+                brief=brief,
+                children_by_type=children_by_type,
             )
     finally:
         if pager is not None:
@@ -5770,12 +5869,21 @@ def _render_detail_human(
     color: bool,
     touches: list[dict],
     creator: dict | None,
+    brief: int | None = None,
+    children_by_type: dict[str, int] | None = None,
 ):
     """Emit the human-readable `task show` detail to the current stdout. Split
     from detail_item so the whole render can run under a color/pager proxy
     (E-1746). Multiline markdown fields (description/analysis/text/outcome) are
     colorized when `color`. `touches`/`creator` are the session provenance
-    detail_item already resolved for every output mode (E-1866)."""
+    detail_item already resolved for every output mode (E-1866). `brief` is the
+    `--brief[=N]` preview length: it wins over every display flag, rendering all
+    four bodies truncated rather than gated (E-2126)."""
+    children_by_type = children_by_type or {}
+    # --brief means previews, not bodies — one meaning in every format, so it
+    # reveals a gated field rather than merely shortening a revealed one.
+    if brief is not None:
+        show_description = show_analysis = show_text = show_outcome = True
     col_w = 11  # width of label column (longest: "Confirmed:" = 10 + 1 space)
     label = lambda s: click.style(f"{s:<{col_w}}", fg="cyan")
     val = lambda s: click.style(str(s), fg="white", bold=True)
@@ -5843,6 +5951,12 @@ def _render_detail_human(
     _echo_field_placeholder(label, val, "Analysis:", item["analysis"], show_analysis, "--analysis")
     _echo_field_placeholder(label, val, "Text:", item["text"], show_text, "--text")
     _echo_field_placeholder(label, val, "Outcome:", item["outcome"], show_outcome, "--outcome")
+    # Children are structure, so they are advertised as a count here whether or
+    # not --children was passed to list them below — the same shape as a large
+    # field's placeholder, and omitted entirely when there are none (E-2126).
+    children_line = _children_summary(children_by_type)
+    if children_line:
+        click.echo(f"{label('Children:')} {val(children_line)}")
     # Links last: multi-line blocks sit below the single-line fields (E-1477).
     # 'Touched by:' follows 'This task:' as its session-side peer (E-1866).
     _echo_links_section(item_id, min_width=bullet_w, links=links)
@@ -5854,12 +5968,12 @@ def _render_detail_human(
     if show_description and item["description"] and item["description"] != item["title"]:
         click.echo()
         click.echo(click.style("— Description —", fg="cyan"))
-        _echo_field_body(item["description"], color)
+        _echo_field_body(brief_text(item["description"], brief), color)
 
-    _echo_large_section("Analysis", item["analysis"], show_analysis, color)
-    _echo_large_section("Text", item["text"], show_text, color)
-    _echo_large_section("Outcome", item["outcome"], show_outcome, color)
-
+    # Children occupy slot 2 — the position Analysis would take if it rendered —
+    # whether or not any of the four surrounding sections actually render
+    # (E-2126). Structure first: the flag-gated long prose goes last, where it
+    # cannot push the task's shape off-screen.
     if show_children:
         children = db.query(
             "SELECT id, COALESCE(title, description) as title, status, phase "
@@ -5873,6 +5987,10 @@ def _render_detail_human(
             _render_flat_table(children)
         else:
             click.echo("(none)")
+
+    _echo_large_section("Analysis", brief_text(item["analysis"], brief), show_analysis, color)
+    _echo_large_section("Text", brief_text(item["text"], brief), show_text, color)
+    _echo_large_section("Outcome", brief_text(item["outcome"], brief), show_outcome, color)
 
     click.echo()
 

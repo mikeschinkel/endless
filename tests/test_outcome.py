@@ -317,21 +317,27 @@ def test_task_show_llm_outcome_gated(seeded_project_at_cwd):
     assert "llm-mode reason" in revealed.output
 
 
-def test_task_show_json_outcome_gated(seeded_project_at_cwd):
-    """E-1601: --json nulls outcome by default but always reports
-    outcome_chars; --outcome includes the full body."""
+def test_task_show_json_outcome_ungated(seeded_project_at_cwd):
+    """E-2126 inverts E-1601 for the machine format only: --json carries the
+    outcome body with no flag, and outcome_chars still reports its true length.
+
+    E-1601 applied the placeholder treatment to --json too, so this same call
+    returned `"outcome": null` for a populated field. The gating was the whole
+    point then; it is the defect now. What survives unchanged is the second
+    half of the original assertion — outcome_chars is always present — and the
+    fact that --outcome makes no difference to the payload."""
     tid = _add_task("Sample")
     task_cmd.decline_item(tid, reason="json reason")
     runner = CliRunner()
     default = json.loads(
         runner.invoke(main, ["task", "show", f"E-{tid}", "--json"]).output
     )
-    assert default["outcome"] is None
+    assert default["outcome"] == "json reason"
     assert default["outcome_chars"] == len("json reason")
     revealed = json.loads(
         runner.invoke(main, ["task", "show", f"E-{tid}", "--json", "--outcome"]).output
     )
-    assert revealed["outcome"] == "json reason"
+    assert revealed == default, "a display flag must not change the JSON payload"
 
 
 # ─── event log ────────────────────────────────────────────────────────────────

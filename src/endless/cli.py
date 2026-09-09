@@ -18,6 +18,14 @@ from endless import statuses
 from endless import session_states
 from endless.statuses import TASK_STATUSES, TASK_STATUS_HELP
 
+# Default preview length for `task show --brief`, in CHARACTERS (E-2126). The
+# unit is characters, not bytes, matching the `<field>_chars` keys a consumer
+# reads alongside a preview — this tree's content is full of multi-byte
+# punctuation, so a byte budget would be wrong for most tasks in it. It lives
+# here, at the flag, because the truncation itself (task_cmd.brief_text) takes
+# the limit as an argument and has no default of its own.
+BRIEF_CHARS = 256
+
 # Subcommands that are safe to run inside an `endless-go sandbox` subshell
 # (no project/global I/O — pure stdout). Anything else is refused at
 # CLI entry when ENDLESS_SANDBOX is set. New subcommands inherit the
@@ -79,6 +87,40 @@ class TaskIDType(click.ParamType):
 
 
 TASK_ID = TaskIDType()
+
+
+class BriefLenType(click.ParamType):
+    """The `--brief[=N]` preview length (E-2126).
+
+    `--brief` carries an OPTIONAL value, which means click's parser hands it
+    whatever token follows it. `task show --brief E-101` therefore offers the
+    task id as the length, and a bare integer-range failure would leave the
+    reader staring at their own task id being called a bad number. Recognizing
+    that shape and naming the two fixes is the whole reason this type exists.
+    """
+    name = "chars"
+
+    def convert(self, value, param, ctx):
+        if isinstance(value, int):
+            return value
+        s = str(value).strip()
+        try:
+            n = int(s)
+        except ValueError:
+            hint = ""
+            if re.fullmatch(r"(?i)e-?\d+", s):
+                hint = (
+                    f" — that looks like a task id. --brief takes its length "
+                    f"attached, so write '--brief={BRIEF_CHARS} {value}', or "
+                    f"put --brief after the id: '{value} --brief'."
+                )
+            self.fail(f"{value!r} is not a character count{hint}", param, ctx)
+        if n < 1:
+            self.fail(f"{n} is not a character count (expected 1 or more)", param, ctx)
+        return n
+
+
+BRIEF_LEN = BriefLenType()
 
 
 class DecisionIDType(click.ParamType):
@@ -1889,6 +1931,13 @@ def task_list(project, show_all, status, phase, tier, parent_id, related_to_id, 
 @click.option("--all-fields", "all_fields", is_flag=True,
               help="Show every content section (description, analysis, text, "
                    "outcome, children)")
+@click.option("--brief", "brief", is_flag=False, flag_value=str(BRIEF_CHARS),
+              default=None, type=BRIEF_LEN, metavar="[N]",
+              help=f"Preview every long field instead of its full body, cut to "
+                   f"N characters (default {BRIEF_CHARS}) with a trailing '…'. "
+                   f"Applies to human, --llm and --json alike, and wins over "
+                   f"the display flags: --all-fields --brief yields previews. "
+                   f"Write --brief=N, or put a bare --brief after the task id.")
 @click.option("--llm", is_flag=True,
               help="Token-efficient output for LLMs")
 @click.option("--json", "as_json", is_flag=True,
@@ -1898,7 +1947,7 @@ def task_list(project, show_all, status, phase, tier, parent_id, related_to_id, 
 @click.option("--no-color", is_flag=True,
               help="Disable ANSI color even on a TTY")
 def task_show(item_ids, no_description, show_analysis, show_text,
-              show_children, show_outcome, all_fields, llm, as_json,
+              show_children, show_outcome, all_fields, brief, llm, as_json,
               paged, no_color):
     """Show detail for one or more tasks."""
     from endless.task_cmd import detail_item
@@ -1908,7 +1957,8 @@ def task_show(item_ids, no_description, show_analysis, show_text,
         detail_item(item_id, show_description=not no_description,
                     show_analysis=show_analysis, show_text=show_text,
                     show_children=show_children, show_outcome=show_outcome,
-                    llm=llm, as_json=as_json, paged=paged, no_color=no_color)
+                    llm=llm, as_json=as_json, paged=paged, no_color=no_color,
+                    brief=brief)
 
 
 task_cmd.add_command(task_show, name="detail")

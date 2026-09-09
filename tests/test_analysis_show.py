@@ -108,11 +108,16 @@ def test_analysis_in_json_output(seeded_project_at_cwd):
     assert parsed["analysis"] == "json analysis"
 
 
-def test_json_default_omits_analysis(seeded_project_at_cwd):
+def test_json_default_returns_analysis(seeded_project_at_cwd):
+    """E-2126: --json carries the analysis body with no display flag passed.
+
+    This asserted `parsed["analysis"] is None` under E-1601, which is the defect
+    E-2126 fixes: the display flags gate the human renderer, not the machine
+    format."""
     tid = _add_task("Audit the X system")
     _set_fields(tid, analysis="json analysis")
     runner = CliRunner()
     result = runner.invoke(main, ["task", "show", f"E-{tid}", "--json"])
     assert result.exit_code == 0, result.output
     parsed = json.loads(result.output)
-    assert parsed["analysis"] is None
+    assert parsed["analysis"] == "json analysis"

@@ -52,8 +52,10 @@ endless task show <id> --analysis
 endless task show <id> --children
 endless task show <id> --outcome
 endless task show <id> --no-description
+endless task show <id> --brief                       # previews, not bodies (256 chars)
+endless task show <id> --brief=40                    # ...cut to 40 instead
 endless task show <id> --llm
-endless task show <id> --json
+endless task show <id> --json                        # every body, no flag needed
 
 # Top actionable tasks, ranked
 endless task next
@@ -73,6 +75,20 @@ endless task handoff <id>                            # render the spawn handoff
 ```
 
 Reach for `--llm` whenever you're parsing output yourself — it's token-efficient.
+
+`--json` carries every field's body with no flag passed. The display flags
+(`--all-fields`, `--analysis`, `--text`, `--outcome`, `--no-description`) shape
+the terminal render only; they do not change the JSON. In it, `null` means one
+thing — the field is empty — and `<field>_chars` is always an integer, `0` when
+it is, so `<field>_chars == 0` and `<field> is null` are the same question.
+Children are always counted (`children_count`, `children_by_type`); the child
+list itself still needs `--children`.
+
+`--brief[=N]` is the light payload: it cuts every long field to a preview
+ending in `…` rather than omitting it, so a populated field stays a string and
+its `_chars` still reports the true stored length. It means the same thing in
+all three formats and wins over the display flags — `--all-fields --brief`
+gives previews.
 
 ### Every listing stops at 20 rows and says so
 
