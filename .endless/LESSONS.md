@@ -5578,3 +5578,11 @@ The specific instance: during a land that drops a column, the migration runs bet
 
 Do not defend a diagnostic by explaining why the underlying condition is benign. That explanation is the argument for making it quieter.
 - **Project**: endless
+
+### [2026-09-08] Go initialisms stay fully capitalised in identifiers — SHA, not Sha
+I renamed a symbol only when Mike pointed it out: landedShas should be landedSHAs. Go's naming convention is that an initialism keeps one case throughout — SHA, ID, URL, HTTP, SQL, API — so a mixed-case Sha/Id/Url is wrong even when the surrounding code already has it.
+
+Two habits follow. First, when I touch a function for other reasons, its name is in scope for this check; I edited landedShas's body and comment in this task and did not notice the name. Second, a pre-existing violation is not a reason to leave it — the file I am already editing is the cheapest place it will ever be fixed, and consistency is the whole value of the convention.
+
+The same rule governs any new identifier I introduce: check the initialisms before writing it, not after review.
+- **Project**: endless
