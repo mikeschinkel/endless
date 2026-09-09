@@ -379,6 +379,7 @@ func TestGroupMembershipIsPinned(t *testing.T) {
 		"sets-completed-at":      {"confirmed", "completed"},
 		"settled":                {"unverified", "unreviewed", "confirmed", "assumed", "completed", "declined", "obsolete"},
 		"shipped":                {"unverified", "unreviewed", "confirmed", "assumed", "completed"},
+		"shipped-terminal":       {"confirmed", "assumed", "completed"},
 		"sticky-override":        {"revisit", "declined", "obsolete"},
 		"submittable-from":       {"untriaged", "unplanned", "revisit"},
 		"terminal":               {"confirmed", "assumed", "completed", "declined", "obsolete"},

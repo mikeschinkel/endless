@@ -162,6 +162,21 @@ const (
 	// refused on these.
 	Shipped
 
+	// ShippedTerminal is Shipped intersected with Terminal: work that both
+	// happened and is finished. It is the population for which "has this
+	// task's code reached the base branch?" is a real question, which is what
+	// `task unlanded` surveys and what makes `task show` state landedness
+	// rather than imply it by omission (E-2095).
+	//
+	// Neither parent group answers that on its own, and the two exclusions are
+	// for opposite reasons. `unverified`/`unreviewed` are Shipped but not
+	// finished — their work is SUPPOSED to be sitting on a branch, so reporting
+	// it as unlanded would flag the normal state of every task awaiting its
+	// user. `declined`/`obsolete` are Terminal but never shipped — there is no
+	// code to have landed, so "never" is the expected answer and carries no
+	// information.
+	ShippedTerminal
+
 	// StickyOverride block epic status derivation: while an epic sits in one,
 	// derivation reads its state and does nothing.
 	StickyOverride
@@ -241,6 +256,7 @@ var groups = map[Group][]Status{
 	SetsCompletedAt:      {Confirmed, Completed},
 	Settled:              {Unverified, Unreviewed, Confirmed, Assumed, Completed, Declined, Obsolete},
 	Shipped:              {Unverified, Unreviewed, Confirmed, Assumed, Completed},
+	ShippedTerminal:      {Confirmed, Assumed, Completed},
 	StickyOverride:       {Revisit, Declined, Obsolete},
 	SubmittableFrom:      {Untriaged, Unplanned, Revisit},
 	Terminal:             {Confirmed, Assumed, Completed, Declined, Obsolete},
@@ -270,6 +286,7 @@ var groupSlugs = map[Group]string{
 	SetsCompletedAt:      "sets-completed-at",
 	Settled:              "settled",
 	Shipped:              "shipped",
+	ShippedTerminal:      "shipped-terminal",
 	StickyOverride:       "sticky-override",
 	SubmittableFrom:      "submittable-from",
 	Terminal:             "terminal",

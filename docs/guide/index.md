@@ -284,6 +284,7 @@ listed separately. (Generated — do not hand-edit; run `/regenerate-guide`.)
 | `task release` | orchestration | Why releasing a task is disabled — a session owns one task for its lifetime. |
 {{if .report_gate}}| `task report` | tasks | The minimizer — write your whole draft, send its output verbatim, and the Stop hook that enforces both halves. |
 {{end}}| `task spawn` | orchestration | Spawning a session on a task: foreground/background, attach verbs, coordinator pattern. |
+| `task unlanded` | tasks | Which finished tasks claim to be done while their work has not reached the base branch. |
 | `task unsettled` | orchestration | Why a worktree hasn't settled — modified (commit or discard) vs unlanded (land). |
 | `tmux` | reference | Tmux status-line and popup integration. |
 | `triage` | tasks | Automatic routing of `untriaged` tasks by description sufficiency — the sweep, the file-time path, and the manual override. |

@@ -15,6 +15,7 @@ from pathlib import Path
 
 import click
 
+from endless import authority
 from endless import db
 from endless import rowcap
 from endless.project_path import resolved
@@ -315,6 +316,12 @@ def detail_decision(item_id: int, llm: bool = False, as_json: bool = False):
     # links: "superseded" without the successor is the dead end E-1920 exists
     # to close, so the one field that resolves it does not get buried.
     superseders = superseded_by_map([item_id]).get(item_id, [])
+    # Authority (E-2095): a decision gets quoted as governing without its
+    # rejected / superseded / not-yet-accepted state being noticed. The status
+    # line is on screen and is read as provenance, not as a caveat.
+    superseder_display = [decision_id_display(i) for i in superseders]
+    caveat = authority.for_decision(item["status"], superseder_display)
+    caveat_line = authority.banner(caveat, decision_id_display(item_id))
 
     if as_json:
         import json
@@ -329,7 +336,15 @@ def detail_decision(item_id: int, llm: bool = False, as_json: bool = False):
             ),
             "rejection_reason": item["rejection_reason"] or None,
             "obsolete_reason": item["obsolete_reason"] or None,
-            "superseded_by": [decision_id_display(i) for i in superseders],
+            "superseded_by": superseder_display,
+            # The banner's fact, as a key rather than a repeated line — nothing
+            # truncates JSON by lines. Null-free: `authoritative: true` says the
+            # decision governs, so silence never has to be interpreted.
+            "authority": (
+                caveat.as_json(decision_id_display(item_id)) if caveat
+                else {"authoritative": True, "kind": None, "reason": "",
+                      "see": [], "summary": ""}
+            ),
             "description": item["description"] or None,
             "text": item["text"] or None,
             "notes": item["notes"] or None,
@@ -349,6 +364,9 @@ def detail_decision(item_id: int, llm: bool = False, as_json: bool = False):
         return
 
     if llm:
+        if caveat_line:
+            click.echo(caveat_line)
+            click.echo()
         click.echo(f"# {decision_id_display(item['id'])} {item['title']}")
         click.echo(f"project={item['project_name']}")
         click.echo(f"status={item['status']}")
@@ -374,6 +392,9 @@ def detail_decision(item_id: int, llm: bool = False, as_json: bool = False):
             click.echo(f"\n## Description\n{item['description']}")
         if item["text"]:
             click.echo(f"\n## Text\n{item['text']}")
+        if caveat_line:
+            click.echo()
+            click.echo(caveat_line)
         return
 
     # Human-readable output (mirrors detail_item's shape but no phase /
@@ -383,6 +404,9 @@ def detail_decision(item_id: int, llm: bool = False, as_json: bool = False):
     val = lambda s: click.style(str(s), fg="white", bold=True)
 
     click.echo()
+    if caveat_line:
+        click.echo(caveat_line)
+        click.echo()
     click.echo(click.style("Decision Detail", fg="green", bold=True))
     click.echo(click.style("───────────────", dim=True))
     click.echo(f"{label('ID:')} {val(decision_id_display(item['id']))}")
@@ -429,6 +453,11 @@ def detail_decision(item_id: int, llm: bool = False, as_json: bool = False):
         click.echo(item["text"])
 
     click.echo()
+    if caveat_line:
+        # Byte-identical to the opening line (E-2097): whichever end a
+        # truncating pipe leaves has to be sufficient alone.
+        click.echo(caveat_line)
+        click.echo()
 
 
 # Add ---------------------------------------------------------------------

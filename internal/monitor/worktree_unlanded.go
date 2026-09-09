@@ -88,38 +88,101 @@ func probeCommand(err error) string {
 	return "unlanded probe"
 }
 
+// unlandedCommit is one commit on the branch with no counterpart on the base —
+// the row this file exists to identify. The SHA is git's abbreviation, which is
+// what range-diff prints and what every later git call here accepts.
+//
+// Structured rather than pre-rendered because E-2095 needs to ASK something of
+// each commit (does it touch anything outside Endless's own directory?) before
+// deciding whether to report it, and a "<sha> <subject>" string would have to
+// be taken apart again to do that.
+type unlandedCommit struct {
+	SHA     string
+	Subject string
+}
+
+// String is the display form every surface rendered before there was a struct.
+func (c unlandedCommit) String() string {
+	if c.Subject == "" {
+		return c.SHA
+	}
+	return c.SHA + " " + c.Subject
+}
+
+// renderCommits is String over a slice, for the callers that want display lines.
+func renderCommits(commits []unlandedCommit) []string {
+	if len(commits) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(commits))
+	for _, c := range commits {
+		out = append(out, c.String())
+	}
+	return out
+}
+
 // unlandedCommits returns the worktree's branch commits whose CONTENT has not
 // reached base, newest first, each rendered "<short-sha> <subject>".
 //
 // An empty result means every commit on the branch has a counterpart on base —
 // the settled steady state. An error means the comparison could not be made,
 // which every caller must treat as undetermined rather than as clean.
+//
+// This is the worktree-shaped entry point: it asks about whatever HEAD has
+// checked out. E-2095's landedness probe asks the same question of a NAMED
+// branch in a repository that may have no worktree for it at all, which is why
+// the body below takes a rev rather than assuming one.
 func unlandedCommits(worktreePath, base string) ([]string, error) {
-	out, err := runGit(worktreePath, "merge-base", base, "HEAD")
+	commits, err := unlandedRevs(worktreePath, base, "HEAD")
 	if err != nil {
-		return nil, gitProbeError{Command: "git merge-base", Detail: firstLine(out, err), Err: err}
+		return nil, err
+	}
+	return renderCommits(commits), nil
+}
+
+// mergeBaseOf resolves the fork point of two revs, or reports why it could not.
+func mergeBaseOf(dir, base, rev string) (string, error) {
+	out, err := runGit(dir, "merge-base", base, rev)
+	if err != nil {
+		return "", gitProbeError{Command: "git merge-base", Detail: firstLine(out, err), Err: err}
 	}
 	mergeBase := strings.TrimSpace(out)
 	if mergeBase == "" {
-		return nil, gitProbeError{
+		return "", gitProbeError{
 			Command: "git merge-base",
-			Detail:  "no common ancestor between HEAD and " + base,
+			Detail:  "no common ancestor between " + rev + " and " + base,
 		}
 	}
+	return mergeBase, nil
+}
 
-	branchRange := mergeBase + "..HEAD"
+// unlandedRevs is unlandedCommits' body, generalized over the rev being asked
+// about and returning the commits themselves.
+func unlandedRevs(dir, base, rev string) ([]unlandedCommit, error) {
+	mergeBase, err := mergeBaseOf(dir, base, rev)
+	if err != nil {
+		return nil, err
+	}
+	return unlandedRevsFrom(dir, mergeBase, base, rev)
+}
+
+// unlandedRevsFrom is the comparison itself, taking the fork point a caller has
+// already resolved. Splitting it out is what lets E-2095's probe run its own
+// cheap pre-filter against the same merge base instead of computing a second one.
+func unlandedRevsFrom(dir, mergeBase, base, rev string) ([]unlandedCommit, error) {
+	branchRange := mergeBase + ".." + rev
 	baseRange := mergeBase + ".." + base
 
-	ahead, err := countRevs(worktreePath, branchRange)
+	ahead, err := countRevs(dir, branchRange)
 	if err != nil {
 		return nil, err
 	}
 	if ahead == 0 {
-		// HEAD is an ancestor of base. Nothing to compare, nothing outstanding.
+		// The rev is an ancestor of base. Nothing to compare, nothing outstanding.
 		return nil, nil
 	}
 
-	gained, err := countRevs(worktreePath, baseRange)
+	gained, err := countRevs(dir, baseRange)
 	if err != nil {
 		return nil, err
 	}
@@ -129,10 +192,10 @@ func unlandedCommits(worktreePath, base string) ([]string, error) {
 		// Handled here rather than left to range-diff, which refuses an empty
 		// range outright ("fatal: need two commit ranges") instead of reading
 		// it as zero counterparts.
-		return commitLines(worktreePath, branchRange)
+		return commitLines(dir, branchRange)
 	}
 
-	out, err = runGit(worktreePath, "range-diff", "--no-color", "--no-patch",
+	out, err := runGit(dir, "range-diff", "--no-color", "--no-patch",
 		branchRange, baseRange)
 	if err != nil {
 		return nil, gitProbeError{Command: "git range-diff", Detail: firstLine(out, err), Err: err}
@@ -142,15 +205,15 @@ func unlandedCommits(worktreePath, base string) ([]string, error) {
 
 // parseUnlandedRows extracts the left-only commits from range-diff output,
 // reversed into newest-first order. range-diff lists a range oldest-first;
-// every surface that renders these lines shows history newest-first.
-func parseUnlandedRows(out string) []string {
-	var rows []string
+// every surface that renders these commits shows history newest-first.
+func parseUnlandedRows(out string) []unlandedCommit {
+	var rows []unlandedCommit
 	for _, ln := range strings.Split(out, "\n") {
 		m := rangeDiffLeftOnly.FindStringSubmatch(ln)
 		if m == nil {
 			continue
 		}
-		rows = append(rows, strings.TrimSpace(m[1]+" "+m[2]))
+		rows = append(rows, unlandedCommit{SHA: m[1], Subject: strings.TrimSpace(m[2])})
 	}
 	for i, j := 0, len(rows)-1; i < j; i, j = i+1, j-1 {
 		rows[i], rows[j] = rows[j], rows[i]
@@ -158,9 +221,12 @@ func parseUnlandedRows(out string) []string {
 	return rows
 }
 
-// countRevs counts the commits in a revision range.
-func countRevs(worktreePath, revRange string) (int, error) {
-	out, err := runGit(worktreePath, "rev-list", "--count", revRange)
+// countRevs counts the commits in a revision range. Trailing `extra` arguments
+// are passed to `rev-list` unchanged, which is how E-2095 narrows the same count
+// to the commits that touch project source.
+func countRevs(dir, revRange string, extra ...string) (int, error) {
+	args := append([]string{"rev-list", "--count", revRange}, extra...)
+	out, err := runGit(dir, args...)
 	if err != nil {
 		return 0, gitProbeError{Command: "git rev-list", Detail: firstLine(out, err), Err: err}
 	}
@@ -174,19 +240,22 @@ func countRevs(worktreePath, revRange string) (int, error) {
 	return n, nil
 }
 
-// commitLines renders a revision range as "<short-sha> <subject>" lines,
-// newest first — the same shape parseUnlandedRows produces, so the two paths
-// into unlandedCommits are indistinguishable downstream.
-func commitLines(worktreePath, revRange string) ([]string, error) {
-	out, err := runGit(worktreePath, "log", "--format=%h %s", revRange)
+// commitLines reads a revision range as commits, newest first — the same shape
+// parseUnlandedRows produces, so the two paths into unlandedRevs are
+// indistinguishable downstream.
+func commitLines(dir, revRange string) ([]unlandedCommit, error) {
+	out, err := runGit(dir, "log", "--format=%h %s", revRange)
 	if err != nil {
 		return nil, gitProbeError{Command: "git log", Detail: firstLine(out, err), Err: err}
 	}
-	var rows []string
+	var rows []unlandedCommit
 	for _, ln := range strings.Split(out, "\n") {
-		if ln = strings.TrimSpace(ln); ln != "" {
-			rows = append(rows, ln)
+		ln = strings.TrimSpace(ln)
+		if ln == "" {
+			continue
 		}
+		sha, subject, _ := strings.Cut(ln, " ")
+		rows = append(rows, unlandedCommit{SHA: sha, Subject: subject})
 	}
 	return rows, nil
 }

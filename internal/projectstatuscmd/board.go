@@ -551,6 +551,36 @@ func render(
 // load should not make the eye parse its first token.
 const prefixWidth = 13
 
+// SPECIFIED, NOT BUILT (E-2095): one unlanded claim belongs on this board.
+//
+// Read the paragraph above carefully before dismissing this as a contradiction.
+// It rules out a per-row ◆ — "does this worktree still hold something" is a
+// task-tree question. The claim below is a different one: a FINISHED task whose
+// code never reached the base branch is somebody believing work shipped when it
+// did not, which is squarely an attention claim. E-1115 sat `assumed` with its
+// fix on an unlanded branch and the same bug was fixed again fourteen days
+// later.
+//
+// The claim, in full, so the session that revises this board does not have to
+// re-derive it:
+//
+//	 ⊘ 3 unlanded (Run: task unlanded)
+//
+//   - COUNT: the first section of `task unlanded` only — the tasks whose branch
+//     still holds source, plus those whose probe could not run. NOT its second
+//     section, which is a standing historical count of tasks with no landing on
+//     file and would become permanent furniture.
+//   - GLYPH ⊘, one column wide like every glyph in actionMeta.
+//   - DRILL-DOWN: `endless task unlanded`.
+//   - Suppressed entirely at zero.
+//
+// It is specified here rather than built because this board is heading for
+// major revisions and a row designed now is a row designed to be replaced. The
+// producer already exists and needs no new query: monitor.TaskLandedness over
+// the project's finished tasks, keyed on `task/<id>`. Budget for it —
+// measured on this repository, ~13s for 151 branches — which is why it wants a
+// cached or on-demand path rather than a probe on every frame.
+
 // minTitleBudget is the floor on the columns left for a title. Below this the
 // title is all ellipsis and the row says nothing.
 const minTitleBudget = 10

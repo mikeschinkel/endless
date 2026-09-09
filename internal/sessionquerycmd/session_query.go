@@ -60,6 +60,11 @@ func Run(args []string) {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
+	case "task-landedness":
+		if err := runTaskLandedness(args[1:]); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
 	case "relay-checkpoint":
 		if err := runRelayCheckpoint(args[1:]); err != nil {
 			fmt.Fprintln(os.Stderr, err)
@@ -137,6 +142,9 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "  worktree-unsettled <worktree-path>...")
 	fmt.Fprintln(os.Stderr, "                                    JSON array of per-worktree unsettled breakdowns (E-1865):")
 	fmt.Fprintln(os.Stderr, "                                    {unsettled, modified, unlanded, reason, modified_files, unlanded_log, …}")
+	fmt.Fprintln(os.Stderr, "  task-landedness --project-root <path> <branch>...")
+	fmt.Fprintln(os.Stderr, "                                    JSON array of per-branch landedness verdicts (E-2095):")
+	fmt.Fprintln(os.Stderr, "                                    {branch, branch_exists, base, unlanded_count, unlanded_log, …}")
 	fmt.Fprintln(os.Stderr, "  resume-target --ref <ES-session-id|task-id|session-id|uuid>")
 	fmt.Fprintln(os.Stderr, "                                    JSON {endless_id, session_id, task_id, worktree_path, state,")
 	fmt.Fprintln(os.Stderr, "                                    project_id, project_path, task_type, task_status, task_title, landed_sha}")
@@ -629,6 +637,82 @@ func runWorktreeUnsettled(args []string) error {
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "  ")
 	return enc.Encode(out)
+}
+
+// runTaskLandedness emits the landedness verdict for each branch given as a
+// positional argument, as a JSON array in the same order (E-2095).
+//
+// BRANCH-based, where its neighbour above is path-based, and the difference is
+// the question. `worktree-unsettled` asks about a directory that exists; this
+// asks whether a TASK's work reached the base branch, and the most interesting
+// answers come from tasks whose worktree is long gone. ED-1587 made the branch
+// name a pure function of the task id, so the Python caller constructs
+// `task/<id>` and never looks one up.
+//
+// Reads no database, like every probe in this family (E-1766/E-2087): the answer
+// is in the repository, so it is the same inside a self-dev worktree whose
+// sandbox has no task row.
+//
+// Always exits 0 when it ran. "Never landed" is an answer, not a failure, and a
+// probe that could not run is reported in the row rather than as an exit code —
+// the caller must render it as unknown, never as clean.
+func runTaskLandedness(args []string) error {
+	fs := flag.NewFlagSet("task-landedness", flag.ContinueOnError)
+	root := fs.String("project-root", "", "repository root to probe (required)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *root == "" {
+		return fmt.Errorf("--project-root is required")
+	}
+	branches := fs.Args()
+	if len(branches) == 0 {
+		return fmt.Errorf("at least one branch argument is required")
+	}
+	rows := monitor.TaskLandedness(*root, branches)
+	out := make([]taskLandednessJSON, 0, len(rows))
+	for _, l := range rows {
+		// Nil slices marshal as null; the Python side wants a list it can
+		// iterate unconditionally, so normalize to empty.
+		log := l.UnlandedLog
+		if log == nil {
+			log = []string{}
+		}
+		out = append(out, taskLandednessJSON{
+			Branch:        l.Branch,
+			BranchExists:  l.BranchExists,
+			Base:          l.Base,
+			UnlandedCount: l.UnlandedCount,
+			UnlandedLog:   log,
+			Undetermined:  l.Undetermined(),
+			Interrupted:   l.Interrupted,
+			BaseErr:       l.BaseErr,
+			ProbeErr:      l.ProbeErr,
+		})
+	}
+	enc := json.NewEncoder(os.Stdout)
+	enc.SetIndent("", "  ")
+	return enc.Encode(out)
+}
+
+// taskLandednessJSON is the wire shape of one task's landedness. Declared
+// explicitly for the same reason worktreeUnsettledJSON is: the Go/Python
+// contract stays readable in one place, and `undetermined` is derived here so
+// the renderer never re-derives the predicate.
+type taskLandednessJSON struct {
+	Branch        string   `json:"branch"`
+	BranchExists  bool     `json:"branch_exists"`
+	Base          string   `json:"base"`
+	UnlandedCount int      `json:"unlanded_count"`
+	UnlandedLog   []string `json:"unlanded_log"`
+	Undetermined  bool     `json:"undetermined"`
+	// Interrupted rides alongside `undetermined` rather than replacing it: the
+	// verdict is the same (the probe established nothing), but a surface must
+	// not print "failed" about a repository somebody just pressed Ctrl-C in
+	// (E-2113).
+	Interrupted bool   `json:"interrupted"`
+	BaseErr     string `json:"base_error,omitempty"`
+	ProbeErr    string `json:"probe_error,omitempty"`
 }
 
 // worktreeUnsettledJSON is the wire shape of one worktree's breakdown. Declared

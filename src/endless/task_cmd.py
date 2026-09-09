@@ -15,7 +15,7 @@ from typing import NamedTuple
 import click
 from tabulate import tabulate
 
-from endless import agent_help
+from endless import agent_help, authority
 from endless import db, config
 from endless import rowcap
 from endless import session_states
@@ -1914,6 +1914,242 @@ def landed_item(item_id: int, llm: bool = False, as_json: bool = False):
         ts = _format_timestamp(land["landed_at"])
         click.echo(f"  {ts}  {sha}")
     click.echo()
+
+
+# --- task unlanded (E-2095) ------------------------------------------------
+#
+# The join nothing did. `task landed` answers "what reached the base branch?"
+# from the task_landings table alone, so a task the table never heard of is
+# indistinguishable from one that never existed. This asks the repository.
+#
+# Its neighbour `task unsettled` looks almost identical and asks a different
+# question, which is why each command's help opens by naming the difference:
+# `unsettled` asks whether a WORKTREE is modified or unlanded; `unlanded` asks
+# whether a TASK claims to be done while its work has not reached the base
+# branch. A task can be unlanded with no worktree at all, and a worktree can be
+# unsettled on a task nobody has finished.
+#
+# TWO SECTIONS, because they need different actions and collapsing them would
+# report a hundred-odd outstanding items when a handful are actionable.
+
+
+def _unlanded_rows(project_id: int) -> tuple[list[dict], str]:
+    """Every finished task in the project, with its landedness verdict.
+
+    Returns (rows, base) where `base` is the resolved default branch the
+    comparison ran against — named once per report rather than once per row,
+    which is what keeps the claim falsifiable without paying for the name on
+    every line.
+    """
+    tasks = db.query(
+        f"SELECT t.id, COALESCE(t.title, t.description) AS title, t.status, "
+        f"(SELECT COUNT(*) FROM task_landings l WHERE l.task_id = t.id) AS lands "
+        f"FROM live_tasks t "
+        f"WHERE t.project_id = ? "
+        f"  AND t.status IN ({statuses.sql_list('shipped-terminal')}) "
+        f"ORDER BY t.id DESC",
+        (project_id,),
+    )
+    if not tasks:
+        return [], ""
+
+    probes = _landedness_for([t["id"] for t in tasks],
+                             _project_repo_root(project_id))
+    rows = []
+    base = ""
+    for t in tasks:
+        probe = probes.get(t["id"])
+        if probe is None:
+            continue
+        base = base or probe.get("base") or ""
+        rows.append({
+            "id": t["id"],
+            "title": t["title"],
+            "status": t["status"],
+            "lands": t["lands"],
+            "probe": probe,
+        })
+    return rows, base
+
+
+def _unlanded_split(rows: list[dict]) -> tuple[list[dict], list[dict]]:
+    """Partition the rows into (outstanding, unrecorded).
+
+    OUTSTANDING is the list that should be driven to zero: a branch still holds
+    source the base branch lacks, or the probe could not run and nobody knows.
+    Both are actionable — land it, reset the branch in place, or find out why the
+    probe failed — and an undetermined row belongs here rather than among the
+    unrecorded ones precisely because it must never read as "nothing to land".
+
+    UNRECORDED is the standing historical count: work that finished before
+    landings were recorded, or whose branch is gone. There is nothing to land;
+    what is missing is the record.
+    """
+    outstanding, unrecorded = [], []
+    for r in rows:
+        probe = r["probe"]
+        if probe.get("undetermined") or (probe.get("unlanded_count") or 0) > 0:
+            outstanding.append(r)
+        elif not r["lands"]:
+            unrecorded.append(r)
+    # Undetermined first — a verdict nobody has is worse than one everybody can
+    # see — then by how much is outstanding, then by id for a stable order.
+    outstanding.sort(key=lambda r: (
+        not r["probe"].get("undetermined"),
+        -(r["probe"].get("unlanded_count") or 0),
+        -r["id"],
+    ))
+    unrecorded.sort(key=lambda r: -r["id"])
+    return outstanding, unrecorded
+
+
+def _unlanded_reason(probe: dict) -> str:
+    """The one-line verdict for a row, in the same vocabulary as the show line."""
+    if probe.get("base_error"):
+        if probe.get("interrupted"):
+            return "undetermined (base resolution interrupted)"
+        return "undetermined (base branch unresolved)"
+    if probe.get("probe_error"):
+        command = str(probe["probe_error"]).split(":", 1)[0].strip() or "the probe"
+        verb = "interrupted" if probe.get("interrupted") else "failed"
+        return f"undetermined ({command} {verb})"
+    count = probe.get("unlanded_count") or 0
+    if count:
+        return f"unlanded ({count} {'commit' if count == 1 else 'commits'})"
+    if not probe.get("branch_exists"):
+        return "no branch"
+    return "no landing recorded"
+
+
+def unlanded_list(
+    project_name: str | None = None,
+    show_all: bool = False,
+    limit: int | None = None,
+    no_limit: bool = False,
+    llm: bool = False,
+    as_json: bool = False,
+):
+    """Survey finished tasks whose work has not reached the base branch (E-2095)."""
+    cap = rowcap.resolve_cap(limit, no_limit, machine=as_json)
+    reports = []
+    for project_id, proj_name in _unlanded_targets(project_name, show_all):
+        rows, base = _unlanded_rows(project_id)
+        outstanding, unrecorded = _unlanded_split(rows)
+        reports.append((proj_name, base, outstanding, unrecorded))
+
+    if as_json:
+        import json
+        click.echo(json.dumps([
+            {
+                "project": name,
+                # Named once per report, never per row: `task unsettled` set the
+                # precedent, and it is what keeps "not on <base>" falsifiable
+                # without paying for the branch name on every line.
+                "base": base,
+                "outstanding": [_unlanded_json(r) for r in outstanding],
+                "unrecorded": [_unlanded_json(r) for r in unrecorded],
+            }
+            for name, base, outstanding, unrecorded in reports
+        ], indent=2))
+        return
+
+    if llm:
+        for name, base, outstanding, unrecorded in reports:
+            click.echo(f"# {name} base={base or 'unresolved'}")
+            click.echo(f"# outstanding={len(outstanding)} "
+                       f"unrecorded={len(unrecorded)}")
+            for r in outstanding:
+                click.echo(f"{task_id_display(r['id'])} outstanding "
+                           f"{_unlanded_reason(r['probe'])} {r['status']} "
+                           f"{r['title']}")
+            shown, hidden = rowcap.cap_rows(unrecorded, cap)
+            for r in shown:
+                click.echo(f"{task_id_display(r['id'])} unrecorded "
+                           f"{_unlanded_reason(r['probe'])} {r['status']} "
+                           f"{r['title']}")
+            rowcap.echo_footer(hidden, llm=True)
+        return
+
+    for name, base, outstanding, unrecorded in reports:
+        click.echo()
+        if not outstanding and not unrecorded:
+            click.echo(click.style("•", fg="green") +
+                       f" Every finished task in {name} has landed on "
+                       f"{base or 'the base branch'}.")
+            click.echo()
+            continue
+
+        # Ranked and labelled. Collapsing the two into one count would report a
+        # hundred-odd outstanding items when a handful are actionable.
+        if outstanding:
+            click.echo(click.style(
+                f"Unlanded work ({name}) — {len(outstanding)} finished "
+                f"{'task' if len(outstanding) == 1 else 'tasks'} whose commits "
+                f"are not on {base or 'the base branch'}:", bold=True))
+            _render_unlanded_rows(outstanding)
+            click.echo()
+            click.echo(click.style("  ", fg="cyan") +
+                       "Fix: land it (endless worktree land <id>), or reset the "
+                       "branch in place.")
+            click.echo()
+
+        if unrecorded:
+            shown, hidden = rowcap.cap_rows(unrecorded, cap)
+            click.echo(click.style(
+                f"No landing record ({name}) — {len(unrecorded)} finished "
+                f"{'task' if len(unrecorded) == 1 else 'tasks'} with nothing to "
+                f"land and no landing on file:", bold=True))
+            _render_unlanded_rows(shown)
+            rowcap.echo_footer(hidden)
+            click.echo()
+            click.echo(click.style("  ", fg="cyan") +
+                       "Not actionable by landing. Record a known one with "
+                       "endless worktree land <id> --record-only --sha <sha>.")
+            click.echo()
+
+
+def _unlanded_targets(project_name: str | None,
+                      show_all: bool) -> list[tuple[int, str]]:
+    """The (project id, name) pairs this run reports on.
+
+    `--all` means every registered project, matching what it means on `task
+    landed` — the pair share an option set precisely so a flag cannot mean two
+    things. The survey stays per PROJECT underneath because the probe is per
+    repository: each project resolves its own root and its own base branch.
+    """
+    if not show_all:
+        return [_resolve_project(project_name)]
+    rows = db.query("SELECT id, name FROM projects ORDER BY name")
+    return [(r["id"], r["name"]) for r in rows]
+
+
+def _unlanded_json(r: dict) -> dict:
+    """One row's machine shape: the task's facts plus the probe's, unflattened."""
+    return {
+        "id": task_id_display(r["id"]),
+        "title": r["title"],
+        "status": r["status"],
+        "landings": r["lands"],
+        "reason": _unlanded_reason(r["probe"]),
+        **r["probe"],
+    }
+
+
+def _render_unlanded_rows(rows: list[dict]) -> None:
+    """id / reason / title, one line each, padded before styling."""
+    id_w = max(len(task_id_display(r["id"])) for r in rows)
+    reasons = [_unlanded_reason(r["probe"]) for r in rows]
+    reason_w = max(len(x) for x in reasons)
+    for r, reason in zip(rows, reasons):
+        title = r["title"]
+        if len(title) > 44:
+            title = title[:43] + "…"
+        color = "red" if r["probe"].get("undetermined") else (
+            "cyan" if (r["probe"].get("unlanded_count") or 0) else "yellow")
+        click.echo(
+            f"  {task_id_display(r['id']):<{id_w}}  "
+            f"{click.style(f'{reason:<{reason_w}}', fg=color)}  {title}"
+        )
 
 
 # --- task unsettled (E-1865) -----------------------------------------------
@@ -5414,6 +5650,193 @@ def _task_landings(item_id: int) -> list:
     )
 
 
+# --- landedness (E-2095) ---------------------------------------------------
+#
+# Task status answers "what did we decide about this work". It is routinely read
+# as "is this code on the base branch", and it answers neither that nor whether
+# the record is still authoritative. E-2089 measured the cost: E-1115 sat
+# `assumed` with its fix on an unlanded branch, so the same bug was found and
+# fixed a second time fourteen days later as E-1395.
+#
+# The verdict is NOT computed here. It comes from monitor.TaskLandedness via
+# `session-query task-landedness`, the sibling of the probe behind `task
+# unsettled` — Python resolves tasks to branch names and renders; Go decides.
+#
+# The branch name is CONSTRUCTED from the task id (`worktree_cmd.task_branch`,
+# ED-1587), never looked up. E-2108 retired `task_landings.branch` for exactly
+# that reason, so a task whose worktree is long gone can still be asked about.
+
+
+def _landedness_probe(root: Path, branches: list[str]) -> list[dict]:
+    """Return the Go landedness verdict for each branch, in the same order.
+
+    One subprocess for the whole batch, like `_unsettled_probe`: `task unlanded`
+    asks about every finished task in the project, and a per-task invocation
+    would make it visibly slow.
+
+    Branch-based rather than path-based, which is the difference from its
+    neighbour. `task unsettled` asks about a directory that exists; this asks
+    whether a TASK's work reached the base branch, and the answers that matter
+    most come from tasks whose worktree has been reaped.
+    """
+    if not branches:
+        return []
+    detail = ""
+    for binary in _landedness_binaries():
+        result = subprocess.run(
+            [binary, "session-query", "task-landedness",
+             "--project-root", str(root), *branches],
+            capture_output=True, text=True,
+        )
+        if result.returncode != 0:
+            detail = result.stderr.strip() or f"exited {result.returncode}"
+            continue
+        import json
+        try:
+            return json.loads(result.stdout)
+        except ValueError as exc:
+            detail = f"unreadable probe output: {exc}"
+    return [_landedness_failure(b, detail or "endless-go not found on PATH")
+            for b in branches]
+
+
+def _landedness_binaries() -> list[str]:
+    """The endless-go builds to try, best first.
+
+    The worktree's own build leads when there is one, for E-1891's reason: the
+    worktree's Python is already what runs here, so the worktree's Go is its
+    coherent partner, and it is what lets the branch that ADDS a session-query
+    subcommand run before that subcommand lands. Outside a self-dev worktree
+    there is no candidate and this is just the PATH-resolved global.
+
+    No --db context: this probe opens no database. Its answer is entirely in the
+    repository (E-1766/E-2087), which is why it needs no schema baseline to agree
+    with and cannot be wrong about which one it got.
+    """
+    from endless import config
+    out: list[str] = []
+    worktree_bin = config.worktree_endless_go()
+    if worktree_bin is not None and worktree_bin.is_file():
+        out.append(str(worktree_bin))
+    found = shutil.which("endless-go")
+    if found and found not in out:
+        out.append(found)
+    return out
+
+
+def _landedness_failure(branch: str, detail: str) -> dict:
+    """The verdict for a probe that could not run at all.
+
+    UNDETERMINED, never clean, and never raised. `task show` must not die
+    because a git probe failed, and a failure that rendered as "never landed"
+    would be the exact defect E-1940 removed — an answer nobody could obtain
+    rendering identically to a verified one.
+    """
+    return {
+        "branch": branch,
+        "branch_exists": False,
+        "base": "",
+        "unlanded_count": 0,
+        "unlanded_log": [],
+        "undetermined": True,
+        # Not interrupted: endless-go could not be reached at all, which is a
+        # failure however the process ended.
+        "interrupted": False,
+        "probe_error": f"endless-go: {detail}",
+    }
+
+
+def _landedness_for(item_ids: list[int], root: Path | None) -> dict[int, dict]:
+    """Probe each task's branch in `root`; return {task id: verdict}.
+
+    A `root` of None means the repository could not be located, which is
+    UNDETERMINED — the caller renders it as unknown, never as clean.
+    """
+    if not item_ids:
+        return {}
+    from endless.worktree_cmd import task_branch
+    branches = [task_branch(i) for i in item_ids]
+    if root is None:
+        return {i: _landedness_failure(b, "the project's repository path could "
+                                          "not be resolved")
+                for i, b in zip(item_ids, branches)}
+    return dict(zip(item_ids, _landedness_probe(root, branches)))
+
+
+def _project_repo_root(project_id: int) -> Path | None:
+    """The registered filesystem root of a project, or None when it has none.
+
+    Its own lookup rather than worktree_cmd._project_root because that one
+    answers for the CURRENT directory's project, and `task unlanded --all`
+    surveys projects the user is not standing in.
+    """
+    row = db.query("SELECT path FROM projects WHERE id = ? LIMIT 1", (project_id,))
+    if not row or not row[0]["path"]:
+        return None
+    from endless.project_path import resolved
+    return resolved(row[0]["path"])
+
+
+# The landing line's negative forms, and the budget they are written to.
+#
+# HARD 60 characters including the label, because these are read in split panes
+# and a status field that wraps looks broken in a way a long TITLE does not — a
+# title is user content and obviously continues, a field value is not. Any future
+# case that cannot fit sheds detail to `task unlanded` rather than wrapping.
+#
+# `never` is the VALUE of the field and stays in BOTH negative cases; the clause
+# after the dash qualifies it. A reader scanning a column of these matches one
+# word to learn the verdict and only then reads the detail, and the two cases
+# must not look like different verdicts when they are the same one.
+#
+# `unknown` is the third value and is never `never`: a probe that could not run
+# has not established that the work did not land. Rendering it as `never` would
+# be the failure E-1940 removed — an answer that could not be obtained rendering
+# identically to a verified one.
+LANDING_LINE_BUDGET = 60
+
+# The population whose landedness `task show` states rather than implies, and
+# that `task unlanded` surveys: work that both happened and is finished.
+#
+# From the Go registry (E-1891), not typed out here. Neither parent group answers
+# the question alone, and the two exclusions are for opposite reasons —
+# `unverified`/`unreviewed` shipped but are not finished, so their work is
+# SUPPOSED to be sitting on a branch; `declined`/`obsolete` are finished but
+# never shipped, so "never" is the expected answer and says nothing.
+_SHIPPED_TERMINAL_STATUSES = frozenset(statuses.get("shipped-terminal"))
+
+
+def _landing_line(landings: list, probe: dict | None) -> str:
+    """The one-line landedness verdict for a task (E-2095).
+
+    `landings` wins when it is non-empty: a recorded landing is a fact, and the
+    probe is not consulted at all — which is also what keeps the common case free
+    of a git call.
+    """
+    if landings:
+        return _format_landed_line(landings)
+    if probe is None:
+        return "unknown — landedness could not be probed"
+    if probe.get("base_error"):
+        if probe.get("interrupted"):
+            return "unknown — base resolution interrupted"
+        return "unknown — base branch unresolved"
+    if probe.get("probe_error"):
+        # The gitProbeError's own shape is "<git command>: <detail>"; the line
+        # carries the command and sheds the detail, which `--json` still has.
+        command = str(probe["probe_error"]).split(":", 1)[0].strip() or "the probe"
+        # Never "failed" about a git child that was killed because its parent
+        # was: the verdict is the same, but the sentence would be false about a
+        # healthy repository somebody pressed Ctrl-C in (E-2113).
+        verb = "interrupted" if probe.get("interrupted") else "failed"
+        return f"unknown — {command} {verb}"
+    count = probe.get("unlanded_count") or 0
+    if count:
+        noun = "commit" if count == 1 else "commits"
+        return f"never — {count} unlanded {noun}"
+    return "never"
+
+
 def _format_landed_line(landings: list) -> str:
     """Render the most recent landing as 'TS  shortsha  (landed N times)'.
 
@@ -5621,7 +6044,7 @@ def detail_item(
         "COALESCE(tt.slug, '') AS type, "
         "t.parent_id, t.source_file, t.created_at, t.updated_at, "
         "t.completed_at, t.sort_order, t.tier, t.outcome, t.removed, "
-        "p.name as project_name "
+        "t.project_id, p.name as project_name "
         "FROM tasks t "
         "JOIN projects p ON t.project_id = p.id "
         "LEFT JOIN task_types tt ON tt.id = t.type_id "
@@ -5635,6 +6058,22 @@ def detail_item(
 
     item = row[0]
     landings = _task_landings(item_id)
+    # Landedness (E-2095), resolved once for all three output modes. Only for
+    # finished work, and only when no landing was recorded: a recorded landing is
+    # already the answer, and probing anything else would pay a git call to say
+    # something the status has not claimed. `None` means "not asked", which
+    # `_landing_line` never sees, because the line is not rendered then either.
+    landedness = None
+    if not landings and item["status"] in _SHIPPED_TERMINAL_STATUSES:
+        landedness = _landedness_for(
+            [item_id], _project_repo_root(item["project_id"])).get(item_id)
+    # Authority (E-2095), resolved once for all three output modes: is this
+    # record still the one to quote? The status line is already on screen and is
+    # demonstrably not enough — it is read as provenance, not as a caveat.
+    replaced_display = [f"E-{i}" for i in replaced_by_map([item_id]).get(item_id, ())]
+    duplicates_display = [f"E-{i}" for i in duplicates_map([item_id]).get(item_id, ())]
+    caveat = authority.for_task(item["status"], replaced_display, duplicates_display)
+    caveat_line = authority.banner(caveat, task_id_display(item_id))
     # Session provenance (E-1866): who created the task and who else touched it.
     # Resolved once here so all three output modes report the same facts.
     touches = _session_touches(item_id)
@@ -5656,12 +6095,17 @@ def detail_item(
             # E-1956/E-1185: emitted ungated (a terminal status is a display
             # rule; this is data) and always present, so an absent key never has
             # to be read as "not replaced" / "not a duplicate".
-            "replaced_by": [
-                f"E-{i}" for i in replaced_by_map([item_id]).get(item_id, ())
-            ],
-            "duplicates": [
-                f"E-{i}" for i in duplicates_map([item_id]).get(item_id, ())
-            ],
+            "replaced_by": replaced_display,
+            "duplicates": duplicates_display,
+            # E-2095: the same fact the agent banner carries, as a key rather
+            # than a repeated line — nothing truncates JSON by lines. Null means
+            # the record IS straightforwardly authoritative, so an absent caveat
+            # never has to be inferred from silence.
+            "authority": (
+                caveat.as_json(task_id_display(item_id)) if caveat
+                else {"authoritative": True, "kind": None, "reason": "",
+                      "see": [], "summary": ""}
+            ),
             "parent": f"E-{item['parent_id']}" if item["parent_id"] else None,
             "created": item["created_at"],
             # Session provenance (E-1866). `created_by` is null for a task filed
@@ -5678,6 +6122,19 @@ def detail_item(
                     "count": len(landings),
                 }
                 if landings else None
+            ),
+            # E-2095: `landed: null` means only "no landing was recorded", which
+            # is why it never sufficed. This carries the probe's answer — the
+            # branch, whether it exists, what it still holds, and any failure that
+            # made the verdict unknown — for the same population the human line
+            # renders. Null when the question was not asked (unfinished work, or
+            # a landing already on record).
+            "landedness": (
+                {
+                    "summary": _landing_line(landings, landedness),
+                    **landedness,
+                }
+                if landedness is not None else None
             ),
             "source_file": item["source_file"] or None,
             "tier": item["tier"],
@@ -5730,6 +6187,9 @@ def detail_item(
         return
 
     if llm:
+        if caveat_line:
+            click.echo(caveat_line)
+            click.echo()
         click.echo(f"# E-{item['id']} {item['title']}")
         if item["removed"]:
             # First line after the title, before anything else (E-1929): every
@@ -5774,6 +6234,10 @@ def detail_item(
             click.echo(f"confirmed={item['completed_at']}")
         if landings:
             click.echo(f"landed={_format_landed_line(landings)}")
+        elif landedness is not None:
+            click.echo(f"landed={_landing_line(landings, landedness)}")
+            for c in landedness.get("unlanded_log") or ():
+                click.echo(f"unlanded {c}")
         # Large fields collapse to a char marker unless their flag is set, so
         # `task show --llm` stays token-cheap on tasks whose outcome is a large
         # deliverable; pass --outcome/--text/--analysis to pull the body (E-1601).
@@ -5812,6 +6276,11 @@ def detail_item(
                 click.echo("\n## Children")
                 for c in children:
                     click.echo(f"E-{c['id']} {c['phase']} {c['status']} {c['title']}")
+        if caveat_line:
+            # Identical to the opening line, not a variation on it: whichever
+            # end a truncating pipe leaves has to be sufficient alone (E-2097).
+            click.echo()
+            click.echo(caveat_line)
         return
 
     # Human-readable output. Color decision (E-1746): honor --no-color; else
@@ -5839,6 +6308,8 @@ def detail_item(
         with contextlib.redirect_stdout(_ColorProxy(dest, color)):
             _render_detail_human(
                 item, landings, item_id,
+                landedness=landedness,
+                caveat_line=caveat_line,
                 show_description=show_description,
                 show_analysis=show_analysis,
                 show_text=show_text,
@@ -5861,6 +6332,8 @@ def detail_item(
 
 def _render_detail_human(
     item, landings, item_id,
+    landedness: dict | None,
+    caveat_line: str | None,
     show_description: bool,
     show_analysis: bool,
     show_text: bool,
@@ -5878,7 +6351,10 @@ def _render_detail_human(
     colorized when `color`. `touches`/`creator` are the session provenance
     detail_item already resolved for every output mode (E-1866). `brief` is the
     `--brief[=N]` preview length: it wins over every display flag, rendering all
-    four bodies truncated rather than gated (E-2126)."""
+    four bodies truncated rather than gated (E-2126). `landedness` is the probe
+    verdict detail_item resolved, or None when the question does not apply to
+    this task (E-2095). `caveat_line` is the agent authority banner, emitted
+    identically as the first and last line, or None (E-2095)."""
     children_by_type = children_by_type or {}
     # --brief means previews, not bodies — one meaning in every format, so it
     # reveals a gated field rather than merely shortening a revealed one.
@@ -5897,6 +6373,9 @@ def _render_detail_human(
     )
 
     click.echo()
+    if caveat_line:
+        click.echo(caveat_line)
+        click.echo()
     click.echo(click.style("Task Detail", fg="green", bold=True))
     click.echo(click.style("───────────", dim=True))
 
@@ -5940,8 +6419,12 @@ def _render_detail_human(
         click.echo(f"{label('Updated:')} {val(_format_timestamp(item['updated_at']))}")
     if item["completed_at"]:
         click.echo(f"{label('Confirmed:')} {val(_format_timestamp(item['completed_at']))}")
-    if landings:
-        click.echo(f"{label('Landed:')} {val(_format_landed_line(landings))}")
+    # E-2095: for finished work this line is ALWAYS rendered. It used to appear
+    # only when a task_landings row existed, so "landed before landings were
+    # recorded" and "the branch still holds the work" both rendered as nothing —
+    # absence doing work it cannot do.
+    if landings or landedness is not None:
+        click.echo(f"{label('Landed:')} {val(_landing_line(landings, landedness))}")
     if item["source_file"]:
         click.echo(f"{label('Source:')} {val(item['source_file'])}")
     # A hidden large field collapses to a single-line `Name: N chars` placeholder
@@ -5993,6 +6476,11 @@ def _render_detail_human(
     _echo_large_section("Outcome", brief_text(item["outcome"], brief), show_outcome, color)
 
     click.echo()
+    if caveat_line:
+        # The closing half of the bracket, byte-identical to the opening one:
+        # whichever end a `head -N` or `tail -N` leaves must be sufficient alone.
+        click.echo(caveat_line)
+        click.echo()
 
 
 # The spawn handoff is generated, not stored (E-1469). Per-task variables

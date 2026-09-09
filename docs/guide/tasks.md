@@ -57,6 +57,11 @@ endless task show <id> --brief=40                    # ...cut to 40 instead
 endless task show <id> --llm
 endless task show <id> --json                        # every body, no flag needed
 
+# Has the work landed?
+endless task landed                                  # tasks with a landing on record
+endless task landed <id>                             # one task's landing history
+endless task unlanded                                # finished tasks whose work has not
+
 # Top actionable tasks, ranked
 endless task next
 endless task next --limit 5
@@ -89,6 +94,41 @@ ending in `…` rather than omitting it, so a populated field stays a string and
 its `_chars` still reports the true stored length. It means the same thing in
 all three formats and wins over the display flags — `--all-fields --brief`
 gives previews.
+
+### A status says what was decided, never where the code is
+
+A task status answers *what did we decide about this work* — verified, believed
+done, declined. It does **not** answer *is the code on the base branch*. Reading
+it that way costs real work: a task sitting at `assumed` with its fix on a branch
+nobody landed looks finished from every listing, so the bug it fixed gets found
+and fixed a second time weeks later.
+
+So `task show` states landedness rather than implying it. For a finished task —
+`confirmed`, `assumed`, `completed` — the `Landed:` line is **always** rendered,
+in one of four forms:
+
+```
+Landed:     2026-08-30 10:16 pm  421726c     a landing is on record
+Landed:     never                            nothing on record, nothing outstanding
+Landed:     never — 3 unlanded commits       the branch still holds the work
+Landed:     unknown — base branch unresolved the probe could not run
+```
+
+`never` is the value in both negative cases; the clause after the dash qualifies
+it. `unknown` is a third value and never collapses into `never`: a probe that
+could not run has not established anything.
+
+Two commands answer the two follow-up questions, and they are easy to confuse:
+
+- `endless task unlanded` — which finished TASKS claim to be done while their
+  work has not reached the base branch. Two sections: work to land, and tasks
+  with no landing on file at all.
+- `endless task unsettled` — whether a WORKTREE is modified (commit or discard)
+  or unlanded (land). See [orchestration](orchestration.md#why-a-worktree-is-unsettled-task-unsettled).
+
+Landedness is measured by CONTENT, never by SHA: `worktree land` rebases, so a
+landed commit keeps a different hash on the branch forever. Commits confined to
+`.endless/` do not count as the task's work — they are Endless's own records.
 
 ### Every listing stops at 20 rows and says so
 

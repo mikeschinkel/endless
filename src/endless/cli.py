@@ -2074,23 +2074,46 @@ def task_recent(project, show_all, limit, llm, as_json, parent_id, no_limit):
                  parent_id=parent_val)
 
 
+def landing_report_options(all_help: str):
+    """The option set `task landed` and `task unlanded` share (E-2095).
+
+    One factory, on rowcap.limit_options_for's reasoning: so a flag cannot
+    appear on one of the pair and not the other, and so its help text is written
+    once. The two commands are the two halves of one question — what reached the
+    base branch, and what did not — and a reader who learns the flags on one is
+    entitled to find them on the other.
+
+    Only `--all` differs, because only its MEANING differs, so it is the
+    parameter.
+    """
+
+    def decorate(f):
+        f = rowcap.limit_options(f)
+        f = click.option("--json", "as_json", is_flag=True,
+                         help="JSON output")(f)
+        f = click.option("--llm", is_flag=True,
+                         help="Token-efficient output for LLMs")(f)
+        f = click.option("--all", "show_all", is_flag=True, help=all_help)(f)
+        f = click.option("--project", default=None,
+                         help="Project name (default: detect from cwd)")(f)
+        return f
+
+    return decorate
+
+
 @task_cmd.command("landed")
 @click.argument("item_id", type=TASK_ID, required=False)
-@click.option("--project", default=None,
-              help="Project name (default: detect from cwd)")
-@click.option("--all", "show_all", is_flag=True,
-              help="Show tasks from all projects")
-@click.option("--llm", is_flag=True,
-              help="Token-efficient output for LLMs")
-@click.option("--json", "as_json", is_flag=True,
-              help="JSON output")
-@rowcap.limit_options
+@landing_report_options("Show tasks from all projects")
 def task_landed(item_id, project, show_all, limit, llm, as_json, no_limit):
     """List landed tasks, or show one task's landing history.
 
     Bare `task landed` lists tasks that have landed at least once, most
     recent first. `task landed <id>` shows that task's full landing history
     (every land's timestamp and merge SHA).
+
+    Its sibling `task unlanded` asks the opposite question of the same
+    population — which finished tasks have NOT reached the base branch — and
+    reads the repository rather than the landings table to answer it.
     """
     from endless.task_cmd import landed_list, landed_item
     if item_id is not None:
@@ -2098,6 +2121,32 @@ def task_landed(item_id, project, show_all, limit, llm, as_json, no_limit):
     else:
         landed_list(project_name=project, show_all=show_all,
                     limit=limit, no_limit=no_limit, llm=llm, as_json=as_json)
+
+
+@task_cmd.command("unlanded")
+@landing_report_options("Survey every registered project")
+def task_unlanded(project, show_all, limit, llm, as_json, no_limit):
+    """List finished tasks whose work has not reached the base branch.
+
+    `task unlanded` asks whether a TASK claims to be done while its work is
+    still on a branch. Its neighbour `task unsettled` asks a different question
+    — whether a WORKTREE is modified or unlanded — and the two are easy to
+    confuse: a task can be unlanded with no worktree at all, and a worktree can
+    be unsettled on a task nobody has finished.
+
+    Two sections, because they need different actions. UNLANDED WORK is the list
+    to drive to zero: a branch still holds commits the base branch lacks, or the
+    probe could not run. NO LANDING RECORD is the standing historical count —
+    nothing to land, but no landing on file either.
+
+    Landedness is measured by CONTENT, not by SHA: `worktree land` rebases, so
+    a landed commit keeps a different hash on the branch forever.
+    Commits confined to `.endless/` do not count — they are Endless's own
+    records, not the project's code.
+    """
+    from endless.task_cmd import unlanded_list
+    unlanded_list(project_name=project, show_all=show_all, limit=limit,
+                  no_limit=no_limit, llm=llm, as_json=as_json)
 
 
 @task_cmd.command("unsettled")
@@ -2116,6 +2165,12 @@ def task_landed(item_id, project, show_all, limit, llm, as_json, no_limit):
 def task_unsettled(item_id, project, show_all, include_settled, limit, llm, as_json,
                    no_limit):
     """Explain why a task's worktree is unsettled (modified vs unlanded).
+
+    `task unsettled` asks whether a WORKTREE is modified (commit or discard) or
+    unlanded (land). Its neighbour `task unlanded` asks a different question —
+    whether a TASK claims to be done while its work has not reached the base
+    branch — and the two are easy to confuse: a worktree can be unsettled on a
+    task nobody has finished, and a task can be unlanded with no worktree at all.
 
     `task unsettled <id>` shows the full breakdown for one task — which files
     are uncommitted (and which of those are endless's own auto-managed files)

@@ -274,7 +274,10 @@ func TestParseUnlandedRowsIgnoresPairedCommits(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("parseUnlandedRows = %v, want only the left-only row", got)
 	}
-	if got[0] != "aaaaaaa3 genuinely unlanded" {
-		t.Errorf("parseUnlandedRows[0] = %q", got[0])
+	if got[0].SHA != "aaaaaaa3" || got[0].Subject != "genuinely unlanded" {
+		t.Errorf("parseUnlandedRows[0] = %+v", got[0])
+	}
+	if got[0].String() != "aaaaaaa3 genuinely unlanded" {
+		t.Errorf("parseUnlandedRows[0].String() = %q", got[0].String())
 	}
 }
