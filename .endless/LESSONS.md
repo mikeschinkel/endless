@@ -5509,3 +5509,11 @@ Rules:
 - 'I flagged it' is not resolution. Flagging moves the cost, it does not pay it.
 - A decision I make myself is fine and often preferred -- but it must be written as a decision, not as a question wearing a recommendation.
 - **Project**: endless
+
+### [2026-09-08] A test fixture that expresses a calendar bucket as an age offset is green for most of the day and red for the rest — anchor the stamp, do not subtract a duration.
+TestEventBackup_EnforcesTieredRetention seeded two backups as "six days back" and "six days and ninety minutes back" and asserted they shared a DAILY retention bucket. Buckets are calendar periods, so that only holds when the suite runs after 01:30; before then the older stamp falls into the previous day, wins its own bucket, and survives a sweep the test says must drop it. It was red at 00:44 on main, and green every time anyone had run it before.
+
+The production code was correct — its own docstring says buckets are calendar periods, not rolling windows. The fixture was the thing that confused a TIER (an age, relative to now) with a BUCKET (a calendar period the stamp itself falls in).
+
+Rule: when a fixture needs two items in the same calendar period, build the stamps from that period's start — time.Date(y, m, d, 0,0,0,0, Local) plus an offset — rather than subtracting durations from now. Subtracting from now encodes the time of day the author happened to run it. The same trap exists for week and month buckets, and for any 'same day' assertion near midnight.
+- **Project**: endless
