@@ -5546,3 +5546,17 @@ Two mistakes, one root.
 
 Rule: when a finding is a wording or one-line fix in code the current task already edits, make it and say so in the reply. Escalate only when proceeding either way would be unsafe or would waste the work if wrong. And before escalating a 'contradiction', check whether one side is verifiable — if it is, there is no decision, only a repair.
 - **Project**: endless
+
+### [2026-09-08] Anchoring to a 'section' is still conditional — order by fixed slots
+One turn after recording 'anchor a spec to something that always exists', I did it again. I changed the children ordering from 'after Description and before Analysis' to 'directly before Analysis' -- and the Analysis SECTION is just as conditional as Description. It renders only when its display flag is set AND its content is non-empty. Mike had to clarify: 'BEFORE the location where analysis would be if analysis has a value, whether or not analysis has a value.'
+
+My own lesson said 'anchor to the neighbour that always renders; if both neighbours are conditional, name the container position instead.' I had written the escape hatch and then not used it, because 'before Analysis' READS as concrete. A section name feels like a landmark, so I stopped checking whether the landmark is always there.
+
+The real fix is a change of frame, not a better neighbour. Rendering order is a fixed sequence of SLOTS; which slots are occupied on any given render is a separate question. Specify position in the sequence:
+
+    1 Description  2 Children  3 Analysis  4 Text  5 Outcome
+
+Children occupy slot 2 whether or not 1, 3, 4 or 5 render. No neighbour is named, so no neighbour's conditionality can leak into the spec.
+
+Rule: when specifying order among optional elements, define the total ordering once and place the element in it. Never phrase placement as 'before X' or 'after X' unless X is provably unconditional -- and check that, do not assume it from the name. If I catch myself writing 'before' or 'after' a named element, that is the trigger to go read whether the element can be absent.
+- **Project**: endless
