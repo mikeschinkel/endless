@@ -5560,3 +5560,11 @@ Children occupy slot 2 whether or not 1, 3, 4 or 5 render. No neighbour is named
 
 Rule: when specifying order among optional elements, define the total ordering once and place the element in it. Never phrase placement as 'before X' or 'after X' unless X is provably unconditional -- and check that, do not assume it from the name. If I catch myself writing 'before' or 'after' a named element, that is the trigger to go read whether the element can be absent.
 - **Project**: endless
+
+### [2026-09-08] A handoff reply is the one command plus what blocks Mike — design rationale belongs on the task, not in the reply
+E-2126's handoff instructions said: hand over exactly ONE verify command, do not enumerate a manual checklist, do not recap. I gave the one command — then wrapped it in a reproduction paragraph, a regression line, and three 'design calls worth your eye' bullets. Mike's reply was 'TL;DR What of that wall of text was an action item for me?' Only two lines of it were: run the command, then confirm.
+
+The failure was not length for its own sake. Every one of those bullets was already recorded on the task under 'Grown scope, recorded at implementation' — which is where a reviewer reads them, on their schedule, next to the diff. Restating them in the reply made Mike review the same content twice, which is the exact thing E-1785's epic exists to stop.
+
+The rule: a handoff reply carries the verify command, and anything that BLOCKS Mike from running it or that he must decide before landing. Design rationale, folded-in scope, the out-of-scope check, and 'here is what I chose and why' all go on the task — 'recorded on the task' is a pointer, not a summary to expand. If a judgement call genuinely needs his eye before landing, it is one line naming the choice, not a bulleted defence of it.
+- **Project**: endless
