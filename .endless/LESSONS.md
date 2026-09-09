@@ -5534,3 +5534,15 @@ Concrete checks when writing a spec:
 
 This also compounds a rule I had just recorded: a plan must contain no open questions. An ordering anchored to a conditional element IS an open question, one that does not look like a question because it is phrased as an instruction.
 - **Project**: endless
+
+### [2026-09-08] A wording fix inside code you already touched is yours to make, not a call to hand Mike — and 'it contradicts a docstring' is not an escalation, it is two candidates of which one is factually wrong.
+In E-1428 I changed the line `task bind` prints, then noticed the same line still claimed the bind was 'for display' while bind's docstring argued at length that calling it display understates the verb. I reported that as an open question needing Mike's judgment, and it landed on his archive-time to-do list.
+
+Two mistakes, one root.
+
+1. PROCESS. The fix was deleting two words from a string I had my hands on that same turn. ED-1550 says filing is the exception and the default response to a finding is to tell the user in chat; it does not say to convert a two-word fix into a decision the user has to adjudicate. Handing Mike a judgment call is the same offloading as handing him a create command — it costs him a context switch to save me one. Cheaper to fix than to describe means fix it.
+
+2. SUBSTANCE. 'A contradicts B, so someone must decide' is a false framing when one of A and B is checkable. bind sets sessions.task_id, and under ED-1560 that column IS the ownership record — a fact about the code, not a framing preference. So the output's 'for display' was the false half and the docstring's leftover 'nothing for the status bar to display' was the other half of the same stale wording. Nothing needed deciding; both needed correcting, and neither loses anything a reader used.
+
+Rule: when a finding is a wording or one-line fix in code the current task already edits, make it and say so in the reply. Escalate only when proceeding either way would be unsafe or would waste the work if wrong. And before escalating a 'contradiction', check whether one side is verifiable — if it is, there is no decision, only a repair.
+- **Project**: endless
