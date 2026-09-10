@@ -311,11 +311,35 @@ check_base_is_resolved() {
     assert_eq "a landed branch is still clean there — no false positive either" \
         "0" "$(field "${out}" 1 unlanded_count)"
 
-    local hits
-    hits=$(git grep -n '"main"' -- \
-        internal/monitor/task_landedness.go \
-        src/endless/authority.py 2>/dev/null)
-    assert_no_hits "no file this task added writes the word \"main\"" "${hits}"
+    # The rule is "no surface writes the base branch's name into a message, a
+    # query or a rev-range" — so CODE is what is searched, and whole-line
+    # comments are stripped first. The neighbouring probe already carries such a
+    # comment (session_query.go explains why it does not say "main"), and
+    # rewording an explanation of the rule to satisfy a grep for the rule makes
+    # the prose worse without making the code safer.
+    #
+    # The file list is asserted present BEFORE the grep, and that half is not
+    # ceremony. This check first ran as a bare `git grep` while both files were
+    # still untracked; git grep skips untracked files, so it passed by examining
+    # nothing. A guard that reports green without looking is worse than one that
+    # fails.
+    local guarded=(
+        internal/monitor/task_landedness.go
+        src/endless/authority.py
+    )
+    local f missing="" hits=""
+    for f in "${guarded[@]}"; do
+        if [[ ! -f "${f}" ]]; then
+            missing+="${f} "
+            continue
+        fi
+        hits+=$(grep -vE '^[[:space:]]*(//|#)' "${f}" | grep -n '"main"' \
+            | sed "s,^,${f}: ," )
+    done
+    assert_eq "every file this check guards is present to be searched" \
+        "" "${missing% }"
+    assert_no_hits "no file this task added writes the word \"main\" in code" \
+        "${hits}"
 }
 
 # ─── 4 — the two adjacent reports name each other ───────────────────────────
