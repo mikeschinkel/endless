@@ -5642,3 +5642,17 @@ Mike asked 'TL;DR; what action items do you have for me?' twice in one session, 
 ### [2026-09-09] Read the related task's own plan before proposing or filing anything near it
 Twice in one session I nearly duplicated work that already existed. I was about to file the range-diff cost problem as a new task when Mike asked 'Are you sure that E-2111 does not address this?' — it did, and the right move was a note on its analysis. Later I evaluated his single-writer architecture idea on its merits without first reading E-2111's plan; he had to prompt me with 'I MAY have suggested info that should be in E-2111 which is currently planned as endless task show E-2111 --text'. The plan already contained the decision and had rejected two of his three specifics for stated reasons. Searching task TITLES is not enough — an adjacent task's --text and --analysis are where the overlap actually lives, so read them before filing, before proposing, and before answering a design question in their territory.
 - **Project**: endless
+
+### [2026-09-10] Durable prose states the fact; it never tells the reader which part matters
+Mike flagged ED-1589 as 'filled with Claude-isms' and named them: 'the part that matters', 'Guessing is the part that matters', 'reads an answer something else computed', 'it says so'.
+
+Two distinct tics, both of which add words without adding information:
+
+1. EMPHASIS CONSTRUCTIONS that rank the content for the reader — 'the part that matters', 'what actually matters here', 'the key insight is', 'crucially', 'importantly'. If a sentence is in a decision, it already matters; saying so is filler. State the fact and let its placement carry the weight. The emphatic restatement pattern is worse: making a point, then repeating it as an aphorism ('Guessing is the part that matters') is one idea billed twice.
+
+2. VAGUE PLACEHOLDERS where a concrete noun belongs — 'something else', 'it says so', 'the thing that', 'some other surface'. 'Reads an answer something else computed' should name what computes it. If naming it would drag implementation detail into a decision, restructure the sentence rather than blur the actor.
+
+Applies to anything durable and read later by someone else: decision descriptions, task descriptions and analyses, plans, commit messages, CLAUDE.md. Write it the way a spec is written — declarative, concrete nouns, no narrator.
+
+Chat replies are looser, but the same tics read as padding there too.
+- **Project**: endless
