@@ -5634,3 +5634,7 @@ Applies to any handoff, not just verify handoffs.
 ### [2026-09-09] Guard only the failure mode you have evidence for; report the rest
 When suppressing a diagnostic, suppress exactly the scenario you have observed and let every neighbouring case keep reporting. Planning E-2113 I recommended suppressing the whole interrupt family (SIGINT/SIGTERM/SIGHUP) because they 'all mean someone stopped us'. Mike narrowed it to SIGINT: 'We know of one scenario where a problem occurs; can we not guard against that one and report all others?' The asymmetry is the reason — widening a suppression later is a one-line change, but narrowing it after silence has already hidden something means you never learned what it hid. A tidy-looking category is not evidence that every member of it is benign.
 - **Project**: endless
+
+### [2026-09-09] Lead with what Mike must do; the analysis goes underneath or nowhere
+Mike asked 'TL;DR; what action items do you have for me?' twice in one session, then reached for the /tl-dr skill a third time. Each of those replies had the finding, the evidence and the reasoning stacked in front of the one or two lines he actually needed. A reply he has to mine for his own todos has failed regardless of how correct the content is. Open with the action items, then stop; keep supporting detail to what changes his decision, and let the task's analysis or plan carry the rest — that is what those fields are for, and he can read them on his own schedule.
+- **Project**: endless
