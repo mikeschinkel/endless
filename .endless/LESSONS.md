@@ -5630,3 +5630,7 @@ Rule for the final message of a task: the action items come first and are counta
 
 Applies to any handoff, not just verify handoffs.
 - **Project**: endless
+
+### [2026-09-09] Guard only the failure mode you have evidence for; report the rest
+When suppressing a diagnostic, suppress exactly the scenario you have observed and let every neighbouring case keep reporting. Planning E-2113 I recommended suppressing the whole interrupt family (SIGINT/SIGTERM/SIGHUP) because they 'all mean someone stopped us'. Mike narrowed it to SIGINT: 'We know of one scenario where a problem occurs; can we not guard against that one and report all others?' The asymmetry is the reason — widening a suppression later is a one-line change, but narrowing it after silence has already hidden something means you never learned what it hid. A tidy-looking category is not evidence that every member of it is benign.
+- **Project**: endless
