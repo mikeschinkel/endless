@@ -60,9 +60,22 @@ var rangeDiffLeftOnly = regexp.MustCompile(`^\s*\d+:\s+([0-9a-f]+)\s+<\s+-:\s+-+
 type gitProbeError struct {
 	Command string
 	Detail  string
+	// Err is the failure this was built over, when there was one. It exists so a
+	// classification made where the subprocess ran — ErrGitInterrupted — survives
+	// being carried in this type and stays reachable by errors.Is (E-2113);
+	// Detail is a rendered string and drops the chain.
+	//
+	// Nil for the errors this file raises on its own rather than inheriting from
+	// git (no common ancestor, an unparsable count). That is correct: neither is a
+	// subprocess failure, so neither can have been interrupted.
+	Err error
 }
 
 func (e gitProbeError) Error() string { return e.Command + ": " + e.Detail }
+
+// Unwrap exposes the underlying git failure so errors.Is reaches through the
+// probe label to the classification beneath it.
+func (e gitProbeError) Unwrap() error { return e.Err }
 
 // probeCommand returns the git command an error came from, or a generic label
 // when the error is not one of ours. It is the fault's dedup key, so two
@@ -84,7 +97,7 @@ func probeCommand(err error) string {
 func unlandedCommits(worktreePath, base string) ([]string, error) {
 	out, err := runGit(worktreePath, "merge-base", base, "HEAD")
 	if err != nil {
-		return nil, gitProbeError{Command: "git merge-base", Detail: firstLine(out, err)}
+		return nil, gitProbeError{Command: "git merge-base", Detail: firstLine(out, err), Err: err}
 	}
 	mergeBase := strings.TrimSpace(out)
 	if mergeBase == "" {
@@ -122,7 +135,7 @@ func unlandedCommits(worktreePath, base string) ([]string, error) {
 	out, err = runGit(worktreePath, "range-diff", "--no-color", "--no-patch",
 		branchRange, baseRange)
 	if err != nil {
-		return nil, gitProbeError{Command: "git range-diff", Detail: firstLine(out, err)}
+		return nil, gitProbeError{Command: "git range-diff", Detail: firstLine(out, err), Err: err}
 	}
 	return parseUnlandedRows(out), nil
 }
@@ -149,7 +162,7 @@ func parseUnlandedRows(out string) []string {
 func countRevs(worktreePath, revRange string) (int, error) {
 	out, err := runGit(worktreePath, "rev-list", "--count", revRange)
 	if err != nil {
-		return 0, gitProbeError{Command: "git rev-list", Detail: firstLine(out, err)}
+		return 0, gitProbeError{Command: "git rev-list", Detail: firstLine(out, err), Err: err}
 	}
 	n, perr := strconv.Atoi(strings.TrimSpace(out))
 	if perr != nil {
@@ -167,7 +180,7 @@ func countRevs(worktreePath, revRange string) (int, error) {
 func commitLines(worktreePath, revRange string) ([]string, error) {
 	out, err := runGit(worktreePath, "log", "--format=%h %s", revRange)
 	if err != nil {
-		return nil, gitProbeError{Command: "git log", Detail: firstLine(out, err)}
+		return nil, gitProbeError{Command: "git log", Detail: firstLine(out, err), Err: err}
 	}
 	var rows []string
 	for _, ln := range strings.Split(out, "\n") {

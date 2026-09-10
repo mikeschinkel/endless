@@ -13,6 +13,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/mikeschinkel/endless/internal/faults"
@@ -525,6 +526,10 @@ func taskWorktreeUnsettled(projectID, taskID int64) bool {
 // raises N incidents (one per task, which is what the operator needs to act on)
 // rather than one per sweep per worktree.
 func recordReapDefaultBranchFault(dir string, taskID int64, err error) {
+	if errors.Is(err, ErrGitInterrupted) {
+		// The probe was killed, not failed — it is evidence about nothing (E-2113).
+		return
+	}
 	faults.Record(faults.Fault{
 		Code:        faults.ErrCodeDefaultBranchUnresolved,
 		Source:      "worktree:reap",
@@ -553,7 +558,49 @@ var runGit = func(dir string, args ...string) (string, error) {
 	full := append([]string{"-C", dir}, args...)
 	cmd := exec.Command("git", full...)
 	out, err := cmd.CombinedOutput()
+	if killedBySIGINT(err) {
+		// Classified here because this is the single point at which every probe's
+		// git child is created: no caller can forget to ask, and the meaning
+		// travels to any depth through errors.Is rather than having to be
+		// re-derived by each fault recorder (E-2113).
+		err = fmt.Errorf("%w: %v", ErrGitInterrupted, err)
+	}
 	return string(out), err
+}
+
+// ErrGitInterrupted marks a git child that died on SIGINT rather than failing.
+// A probe that was interrupted has said nothing about the worktree, so its
+// verdict is undetermined like any other unrunnable probe — but it is NOT an
+// incident, and recording one names an innocent task in the fault list forever
+// (E-2113).
+var ErrGitInterrupted = errors.New("git interrupted")
+
+// killedBySIGINT reports that a child died on SIGINT specifically.
+//
+// Narrow on purpose (E-2113): SIGINT is the one signal observed reaching a probe
+// benignly. Ctrl-C goes to the terminal's whole foreground process group, and
+// runGit uses a plain exec.Command, so the git child is in it — quitting
+// `session monitor` interrupts whichever probes are mid-flight. SIGTERM, SIGHUP
+// and SIGKILL still record: a SIGKILL is usually the OOM killer, and a probe big
+// enough to be OOM-killed is a real operational fact. Widening the set later is
+// a one-line change here; narrowing it after silence has hidden something is
+// not.
+//
+// On a platform whose ProcessState.Sys() is not a syscall.WaitStatus the type
+// assertion fails and this returns false — the fault is recorded, which is the
+// pre-E-2113 behaviour and the safe direction.
+func killedBySIGINT(err error) bool {
+	var exitErr *exec.ExitError
+	if !errors.As(err, &exitErr) {
+		// Never started (git absent, fork failure) or already classified — either
+		// way there is no exit status carrying a signal.
+		return false
+	}
+	ws, ok := exitErr.ProcessState.Sys().(syscall.WaitStatus)
+	if !ok {
+		return false
+	}
+	return ws.Signaled() && ws.Signal() == syscall.SIGINT
 }
 
 // displayPath returns a human-friendly form of path for log output:

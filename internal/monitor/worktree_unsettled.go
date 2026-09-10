@@ -1,6 +1,7 @@
 package monitor
 
 import (
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -89,6 +90,16 @@ type UnsettledDetail struct {
 	BaseErr     string
 	StatusErr   string
 	UnlandedErr string
+
+	// Interrupted marks the probe above as KILLED rather than failed — its git
+	// child took SIGINT, which is what Ctrl-C in the pane does to every process in
+	// the foreground group, `session monitor` and its in-flight probes alike
+	// (E-2113). The verdict is unchanged: an interrupted probe established
+	// nothing, so this is still undetermined and the row still marks. It changes
+	// only what is SAID about it — no incident is recorded, and the reason reads
+	// "interrupted" rather than "failed", which on the one surface whose job is
+	// explaining the marker was a false statement about a healthy worktree.
+	Interrupted bool
 }
 
 // unlandedLogLimit caps the commit subjects carried for display. The count is
@@ -143,12 +154,22 @@ func (d UnsettledDetail) IsUnlanded() bool {
 func (d UnsettledDetail) UndeterminedReason() string {
 	switch {
 	case d.LookupErr != "":
+		// No subprocess involved, so there is nothing here to have been signalled.
 		return "worktree lookup failed: " + d.LookupErr
 	case d.BaseErr != "":
+		if d.Interrupted {
+			return "default branch resolution interrupted"
+		}
 		return "default branch unresolved: " + d.BaseErr
 	case d.StatusErr != "":
+		if d.Interrupted {
+			return "git status interrupted"
+		}
 		return "git status failed: " + d.StatusErr
 	case d.UnlandedErr != "":
+		if d.Interrupted {
+			return "unlanded commit count interrupted"
+		}
 		return "unlanded commits could not be counted: " + d.UnlandedErr
 	}
 	return ""
@@ -223,7 +244,8 @@ func worktreeUnsettledAt(worktreePath string, enrich bool) UnsettledDetail {
 	out, gerr := runGit(worktreePath, "status", "--porcelain")
 	if gerr != nil {
 		d.StatusErr = firstLine(out, gerr)
-		recordProbeFault(d, "git status --porcelain", d.StatusErr)
+		d.Interrupted = errors.Is(gerr, ErrGitInterrupted)
+		recordProbeFault(d, "git status --porcelain", d.StatusErr, gerr)
 		return d
 	}
 	for _, p := range statusPaths(out) {
@@ -241,6 +263,7 @@ func worktreeUnsettledAt(worktreePath string, enrich bool) UnsettledDetail {
 	base, berr := DefaultBranch(worktreePath)
 	if berr != nil {
 		d.BaseErr = berr.Error()
+		d.Interrupted = errors.Is(berr, ErrGitInterrupted)
 		recordDefaultBranchFault(d, berr)
 		return d
 	}
@@ -249,7 +272,8 @@ func worktreeUnsettledAt(worktreePath string, enrich bool) UnsettledDetail {
 	commits, uerr := unlandedCommits(worktreePath, base)
 	if uerr != nil {
 		d.UnlandedErr = uerr.Error()
-		recordProbeFault(d, probeCommand(uerr), d.UnlandedErr)
+		d.Interrupted = errors.Is(uerr, ErrGitInterrupted)
+		recordProbeFault(d, probeCommand(uerr), d.UnlandedErr, uerr)
 		return d
 	}
 	d.UnlandedCount = len(commits)
@@ -277,7 +301,18 @@ func worktreeUnsettledAt(worktreePath string, enrich bool) UnsettledDetail {
 // recordProbeFault reports a git probe that could not run. Deduped on (worktree,
 // probe) so `session monitor`, which re-probes every row every two seconds,
 // raises one incident with a rising occurrence count rather than thousands.
-func recordProbeFault(d UnsettledDetail, command, detail string) {
+//
+// err is the failure behind detail, carried separately because detail is a
+// rendered string that has already lost the error chain. The guard lives HERE
+// rather than at the call sites so a probe added later cannot forget it
+// (E-2113).
+func recordProbeFault(d UnsettledDetail, command, detail string, err error) {
+	if errors.Is(err, ErrGitInterrupted) {
+		// Killed, not failed. The probe said nothing about this worktree, so there
+		// is nothing to report — and the process taking the signal is on its way
+		// out, so there is nobody left to report it to.
+		return
+	}
 	faults.Record(faults.Fault{
 		Code:        faults.ErrCodeWorktreeProbeFailed,
 		Source:      "worktree:unsettled",
@@ -298,6 +333,13 @@ func recordProbeFault(d UnsettledDetail, command, detail string) {
 // Fingerprinted on the worktree alone: there is one resolver, so a second code
 // path failing on the same directory is the same incident.
 func recordDefaultBranchFault(d UnsettledDetail, err error) {
+	if errors.Is(err, ErrGitInterrupted) {
+		// Killed, not failed — see recordProbeFault. Unreachable through
+		// DefaultBranch today, which collapses every git error into
+		// ErrDefaultBranchUnresolved; the guard is on the recorder rather than the
+		// caller so it holds however the resolver's error handling changes.
+		return
+	}
 	faults.Record(faults.Fault{
 		Code:        faults.ErrCodeDefaultBranchUnresolved,
 		Source:      "worktree:unsettled",
