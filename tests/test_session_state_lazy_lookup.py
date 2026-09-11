@@ -67,10 +67,10 @@ def test_a_value_outside_the_vocabulary_is_refused_naming_it(monkeypatch):
     monkeypatch.setattr(session_states, "get", _Recorder())
 
     with pytest.raises(click.exceptions.UsageError) as exc:
-        session_states.StateChoice().convert("prompted", None, None)
+        session_states.StateChoice().convert("waiting", None, None)
 
     message = str(exc.value)
-    assert "'prompted' is not one of" in message
+    assert "'waiting' is not one of" in message
     for state in ("working", "idle", "needs_input", "ended"):
         assert repr(state) in message
 

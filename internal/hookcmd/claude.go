@@ -56,6 +56,12 @@ type claudePayload struct {
 	// relay gate (E-1901) compares against this and never parses the transcript.
 	LastAssistantMessage string `json:"last_assistant_message,omitempty"`
 
+	// Notification only. Which notification the harness is showing the user —
+	// `permission_prompt`, `idle_prompt`, and at least a dozen more (auth,
+	// elicitation, quota, agent-team). handleNotification acts on exactly two
+	// and ignores the rest; see it for why that is the rule and not a TODO.
+	NotificationType string `json:"notification_type,omitempty"`
+
 	// Stop only, and UNDOCUMENTED: set when this Stop follows a hook-induced
 	// continuation. Used only as a corroborating signal — the relay gate's loop
 	// guard is its own bounce counter, because staking a livelock on an
@@ -292,7 +298,7 @@ func runClaude(args []string) (err error) {
 	case "SessionStart":
 		// Track the session from the start — DB errors here are critical.
 		// TouchSession at the top of runClaude already recorded process +
-		// state='needs_input' on INSERT; InitSession is retained for the
+		// state='idle' on INSERT; InitSession is retained for the
 		// transcript-path side effect path below and a defensive no-op
 		// UPDATE if the row exists.
 		if err := monitor.InitSession(payload.SessionID, projectID); err != nil {
@@ -355,6 +361,9 @@ func runClaude(args []string) (err error) {
 		return handleTaskContextInjection(projectID, isRegistered, payload)
 
 	case "UserPromptSubmit":
+		// The user typed instead of answering the prompt (E-2091). Non-fatal for
+		// clearPromptState's reason — see it.
+		clearPromptState(payload)
 		// Parse transcript to capture new messages
 		monitor.ParseTranscript(payload.SessionID, payload.TranscriptPath)
 		// E-1901: a new user turn retires any unconsumed relay checkpoint.
@@ -373,10 +382,16 @@ func runClaude(args []string) (err error) {
 		return handlePreToolUse(projectID, isRegistered, payload)
 
 	case "PostToolUse":
+		// The tool the prompt was about completed, so the user approved it
+		// (E-2091). Non-fatal for clearPromptState's reason — see it.
+		clearPromptState(payload)
 		if err := monitor.ReapWorktreesForProject(projectID); err != nil {
 			log.Printf("reaping stale worktrees: %v", err)
 		}
 		return handlePostToolUse(projectID, isRegistered, payload)
+
+	case "Notification":
+		return handleNotification(payload)
 
 	case "ExitPlanMode":
 		return handleExitPlanMode(projectID, payload)

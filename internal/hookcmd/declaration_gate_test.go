@@ -33,6 +33,10 @@ func TestSessionMayWrite(t *testing.T) {
 	}{
 		{"working and holding a task", &monitor.SessionInfo{State: "working", TaskID: ptrInt64(42)}, true},
 		{"idle and holding a task", &monitor.SessionInfo{State: "idle", TaskID: ptrInt64(42)}, true},
+		// E-2091's decision, asserted where the gate is: a session blocked on a
+		// permission prompt is mid-turn on a tool call it already chose to make,
+		// so approving the prompt must not be followed by a refusal.
+		{"prompted and holding a task", &monitor.SessionInfo{State: "prompted", TaskID: ptrInt64(42)}, true},
 		{"needs_input holding a task", &monitor.SessionInfo{State: "needs_input", TaskID: ptrInt64(42)}, false},
 		{"ended holding a task", &monitor.SessionInfo{State: "ended", TaskID: ptrInt64(42)}, false},
 		{"working but holding no task", &monitor.SessionInfo{State: "working"}, false},
@@ -62,7 +66,8 @@ func TestSessionMayWrite(t *testing.T) {
 // silent `default: return false`, so a fifth state joined the refused set
 // without anyone deciding it should — and a proposal to route Claude Code's
 // permission prompts to `needs_input` nearly shipped exactly that failure,
-// refusing the session's next write after the user answered.
+// refusing the session's next write after the user answered. E-2091 then added
+// that fifth state for real, `prompted`, and classified it deliberately.
 //
 // The final assertion keeps the ONE good property that `default` had: a value
 // that is not a state at all is refused. Failing open there would admit a
@@ -76,7 +81,7 @@ func TestSessionMayWriteFollowsTheGroup(t *testing.T) {
 				state, got, want)
 		}
 	}
-	if sessionMayWrite(&monitor.SessionInfo{State: "prompted", TaskID: ptrInt64(42)}) {
+	if sessionMayWrite(&monitor.SessionInfo{State: "nonsense", TaskID: ptrInt64(42)}) {
 		t.Error("a session in a state outside the vocabulary was admitted — the gate " +
 			"must refuse what it cannot classify")
 	}

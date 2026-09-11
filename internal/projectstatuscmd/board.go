@@ -31,14 +31,17 @@ import (
 type action int
 
 const (
-	// actWaiting: a live session blocked mid-turn on the user (state
-	// 'needs_input'). Ranked FIRST even though E-1976's brief says unverified
-	// sorts to the top, and the difference is a real one: a blocked session is a
-	// hard stop that nothing else can clear, and there are at most a handful of
-	// them, while unverified runs to dozens. Nothing sets 'needs_input' live
-	// today — no installed Claude hook fires on a permission prompt, which is
-	// E-2091 — so until that lands this rank has no producer and `verify` IS the
-	// top row in practice, exactly as the brief describes.
+	// actWaiting: a live session paused on the user — 'prompted' (blocked on a
+	// permission prompt) or 'needs_input' (it asked a question). Ranked FIRST
+	// even though E-1976's brief says unverified sorts to the top, and the
+	// difference is a real one: a paused session is a hard stop that nothing but
+	// the user can clear, and there are at most a handful of them, while
+	// unverified runs to dozens.
+	//
+	// E-2091 gave the rank its producer. Both states land here and the board
+	// needs no third rank to tell them apart: the age column already
+	// distinguishes a live prompt from a two-month-old row on sight, which is
+	// what that column is for.
 	actWaiting action = iota
 	// actVerify: an `unverified` task. The reason the board exists: 57 of these
 	// accumulated in `endless` alone precisely because nothing kept them in view.
@@ -153,7 +156,7 @@ const defaultGroupCap = 10
 func classify(r monitor.ProjectStatusRow) action {
 	if r.HasSession() {
 		switch r.SessionState {
-		case sessionstate.NeedsInput:
+		case sessionstate.Prompted, sessionstate.NeedsInput:
 			return actWaiting
 		case sessionstate.Idle:
 			return actIdle

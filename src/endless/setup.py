@@ -315,6 +315,13 @@ def remove_shell_helpers():
 CLAUDE_SETTINGS_PATH = Path.home() / ".claude" / "settings.json"
 
 # Events we want to hook into
+#
+# Notification joined in E-2091. It is the only event that reports the harness
+# is asking the USER something — `notification_type=permission_prompt` — and
+# without it a session sitting on a permission prompt reads `working`,
+# indistinguishable from one doing work. An install that predates it needs no
+# extra step: `_repair_missing_hook_events` adds an endless-go entry for any
+# hooked event that has none, which is exactly the case it exists for.
 CLAUDE_HOOK_EVENTS = [
     "PreToolUse",
     "SessionStart",
@@ -322,6 +329,7 @@ CLAUDE_HOOK_EVENTS = [
     "PostToolUse",
     "Stop",
     "SessionEnd",
+    "Notification",
 ]
 
 
@@ -363,6 +371,11 @@ def _make_hook_entry(hook_bin: str, is_async: bool = True) -> dict:
 # config-level disable would drift per machine and per worktree, and would
 # silently un-park itself on the next `setup` run. Reviving the gate must not
 # also require re-discovering that Stop has to be synchronous.
+#
+# Notification is deliberately NOT here (E-2091). Every member of this set is a
+# member because something downstream reads what it wrote within the same turn;
+# the Notification handler records a session state and gates nothing, so
+# blocking the harness on it would buy nothing.
 SYNC_EVENTS = {"PreToolUse", "SessionStart", "UserPromptSubmit", "PostToolUse", "Stop"}
 
 

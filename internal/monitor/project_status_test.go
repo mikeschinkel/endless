@@ -5,6 +5,8 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/mikeschinkel/endless/internal/sessionstate"
 )
 
 // The project attention board's reads (E-1976).
@@ -154,25 +156,45 @@ func statusSet(t *testing.T, projectID int64, all bool) map[string]bool {
 	return out
 }
 
-// TestProjectStatusRowsExcludesNeedsInput pins the deliberate omission E-1976
-// shipped with. Nothing transitions a session INTO 'needs_input' — it is written
-// on INSERT and on the revive-an-ended-row CASE, and never again — so every row
-// carrying it is a session that registered and never had a turn. Ranking those
-// as the board's loudest row would make the top of every board permanent noise.
-// E-2091 supplies the producer; this assertion is what should change then.
-func TestProjectStatusRowsExcludesNeedsInput(t *testing.T) {
+// TestProjectStatusRowsIsEveryLiveSession reverses the deliberate omission
+// E-1976 shipped with (E-2091).
+//
+// That omission excluded 'needs_input' because nothing transitioned a session
+// INTO it, so every row carrying it was a session that registered and never had
+// a turn — 34 in one project, none on a pane that still existed. Hiding them is
+// how they rotted unseen. The board caps each rank at ten rows and names the
+// remainder in a footer, which is machinery built for exactly this, and a row on
+// the board is what provides the mechanism to resolve it. So the filter is
+// sessionstate.Live and nothing narrower: every live state earns a row, 'ended'
+// alone does not.
+func TestProjectStatusRowsIsEveryLiveSession(t *testing.T) {
 	db := withTestDB(t)
 	seedProject(t, db, 1, "p", "/tmp/p")
-	seedBoardSession(t, db, 10, 1, "needs_input", nil)
-	seedBoardSession(t, db, 11, 1, "idle", nil)
 	seedBoardSession(t, db, 12, 1, "ended", nil)
+
+	for i, state := range sessionstate.Get(sessionstate.Live) {
+		seedBoardSession(t, db, int64(20+i), 1, state, nil)
+	}
 
 	rows, err := ProjectStatusRows(1, false)
 	if err != nil {
 		t.Fatalf("ProjectStatusRows: %v", err)
 	}
-	if len(rows) != 1 || rows[0].SessionID != 11 {
-		t.Fatalf("board sessions = %+v, want only the idle session (11)", rows)
+	got := map[string]bool{}
+	for _, r := range rows {
+		got[r.SessionState] = true
+	}
+	for _, state := range sessionstate.Get(sessionstate.Live) {
+		if !got[state] {
+			t.Errorf("a %q session is missing from the board", state)
+		}
+	}
+	if got[sessionstate.Ended] {
+		t.Errorf("an ended session rendered on the board")
+	}
+	if len(rows) != len(sessionstate.Get(sessionstate.Live)) {
+		t.Errorf("board returned %d rows, want one per live state (%d): %+v",
+			len(rows), len(sessionstate.Get(sessionstate.Live)), rows)
 	}
 }
 

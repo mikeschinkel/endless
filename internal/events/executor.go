@@ -980,6 +980,9 @@ func execTaskClaimed(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 		        -- revival: binding a task to a session is proof it's alive, so
 		        -- task bind must not silently land on (and report success against)
 		        -- an invisible dead row. CASE keeps live states authoritative.
+		        -- Lands on 'idle' since E-2091, tracking TouchSession's change —
+		        -- it wrote 'needs_input', which claimed a person was being waited
+		        -- on when all that happened was a row coming back.
 		        state = CASE WHEN state = ? THEN ? ELSE state END,
 		        epic_id = (
 		          WITH RECURSIVE ancestry(id, parent_id, type_id, depth) AS (
@@ -994,7 +997,7 @@ func execTaskClaimed(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 		           ORDER BY a.depth LIMIT 1
 		        )
 		  WHERE id = ?`,
-		taskID, sessionstate.Ended, sessionstate.NeedsInput, taskID, p.SessionID,
+		taskID, sessionstate.Ended, sessionstate.Idle, taskID, p.SessionID,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("events: claim task: %w", err)
@@ -1094,15 +1097,15 @@ func execTaskReleased(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 
 // logSessionClaim records the claim UPDATE in the machine-local diagnostic log
 // (E-1857). Skipped when the UPDATE matched no session row. new_state mirrors the
-// SQL's revive CASE: an 'ended' row becomes 'needs_input', any other state is
-// left as-is.
+// SQL's revive CASE: an 'ended' row becomes 'idle', any other state is left
+// as-is.
 func logSessionClaim(res sql.Result, snap monitor.SessionSnapshot, taskID string) {
 	if n, err := res.RowsAffected(); err != nil || n == 0 {
 		return
 	}
 	newState := snap.State
 	if newState == sessionstate.Ended {
-		newState = sessionstate.NeedsInput
+		newState = sessionstate.Idle
 	}
 	newTaskID := mustParseInt64(taskID)
 	monitor.LogSessionTxn(monitor.SessionTxn{

@@ -37,13 +37,30 @@ func TestEveryEndpointIsAStateOrSentinel(t *testing.T) {
 // each state. A state nothing writes is a state that can only arrive by hand —
 // and "what actually writes `needs_input`?" being answered from a grep instead
 // of from here is the mistake that filed E-2105.
+//
+// `needs_input` is now the one permitted exception, and the exception is
+// deliberate rather than a gap in the table (E-2091). Its two writers — a row's
+// initial value and the revive-an-ended-row CASE — both meant "this row exists
+// and has done nothing", not "a person is being waited on", and both now write
+// `idle`. So the state has no producer on purpose: it means exactly what the
+// declaration gate says it means, and the rows still carrying it are surfaced on
+// the attention board to be resolved rather than migrated away in the dark.
+//
+// The exception is a NAMED list, not a skip, so every other state still fails
+// here the moment its last writer goes.
 func TestEveryStateIsWritten(t *testing.T) {
+	writerless := map[sessionstate.State]bool{sessionstate.NeedsInput: true}
+
 	written := map[sessionstate.State]bool{}
 	for _, tr := range sessionstate.Transitions() {
 		written[tr.To] = true
 	}
 	for _, s := range sessionstate.Get(sessionstate.All) {
-		if !written[s] {
+		switch {
+		case written[s] && writerless[s]:
+			t.Errorf("state %q is listed as having no writer, but the table names one "+
+				"— drop it from the exception list", s)
+		case !written[s] && !writerless[s]:
 			t.Errorf("nothing writes state %q — either a writer is missing from the "+
 				"table, or the state has no producer at all", s)
 		}
@@ -129,13 +146,15 @@ func TestTransitionsReturnsDefensiveCopy(t *testing.T) {
 // undergoes, and adding one is a decision, not a detail.
 func TestTableIsPinned(t *testing.T) {
 	want := [][2]string{
-		{sessionstate.NoState, sessionstate.NeedsInput},
+		{sessionstate.NoState, sessionstate.Idle},
 		{sessionstate.NoState, sessionstate.Working},
 		{sessionstate.AnyState, sessionstate.Working},
 		{sessionstate.Idle, sessionstate.Working},
+		{sessionstate.AnyState, sessionstate.Prompted},
+		{sessionstate.Prompted, sessionstate.Working},
 		{sessionstate.AnyState, sessionstate.Idle},
 		{sessionstate.AnyState, sessionstate.Ended},
-		{sessionstate.Ended, sessionstate.NeedsInput},
+		{sessionstate.Ended, sessionstate.Idle},
 	}
 	var got [][2]string
 	for _, tr := range sessionstate.Transitions() {

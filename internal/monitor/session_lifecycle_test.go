@@ -11,6 +11,7 @@ import (
 
 	"github.com/mikeschinkel/go-cfgstore"
 
+	"github.com/mikeschinkel/endless/internal/sessionstate"
 	"github.com/mikeschinkel/endless/internal/taskstatus"
 )
 
@@ -288,9 +289,16 @@ func TestStartChatSession_UpsertKeepsTaskID(t *testing.T) {
 	}
 }
 
-// TestInitSession_InsertCreatesNeedsInput pins the SessionStart shape:
-// first call creates the row in state='needs_input'.
-func TestInitSession_InsertCreatesNeedsInput(t *testing.T) {
+// TestInitSession_InsertCreatesIdle pins the SessionStart shape: first call
+// creates the row in state='idle'.
+//
+// It wrote `needs_input` until E-2091. That was a claim about a person — the
+// state means the AGENT asked the USER something — made by a writer that knows
+// nothing of the kind, and the rows it produced were sessions that registered
+// and never had a turn. `idle` is what a row that exists and has done nothing
+// means, and this is the assertion that keeps a new writer from reintroducing
+// the old one.
+func TestInitSession_InsertCreatesIdle(t *testing.T) {
 	db := withTestDB(t)
 	seedProject(t, db, 1, "proj-test-1", "/tmp/proj-test-1")
 
@@ -298,8 +306,8 @@ func TestInitSession_InsertCreatesNeedsInput(t *testing.T) {
 		t.Fatalf("InitSession: %v", err)
 	}
 	state, _, _ := sessionLifecycleRow(t, db, "sess-A")
-	if state != "needs_input" {
-		t.Errorf("state = %q, want needs_input", state)
+	if state != "idle" {
+		t.Errorf("state = %q, want idle", state)
 	}
 }
 
@@ -625,15 +633,136 @@ func TestWakeSession_DoesNotWakeSessionHoldingNoTask(t *testing.T) {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// PromptSession / ResumeFromPrompt (E-2091) — the state machine for a session
+// blocked on a permission prompt.
+// ---------------------------------------------------------------------------
+
+// seedPromptSession binds a session to a task and forces it into `state`,
+// returning the throwaway DB. The two helpers under test are unconditional and
+// self-conditioning respectively, so every case starts from a known state
+// rather than from whatever a lifecycle call left behind.
+func seedPromptSession(t *testing.T, state string) *sql.DB {
+	t.Helper()
+	db := withTestDB(t)
+	seedProject(t, db, 1, "proj-test-1", "/tmp/proj-test-1")
+	seedTask(t, db, 42, 1, "test task", "underway")
+	if err := BindSessionToTask("sess-A", 1, 42); err != nil {
+		t.Fatalf("BindSessionToTask: %v", err)
+	}
+	if _, err := db.Exec(
+		"UPDATE sessions SET state=? WHERE session_id=?", state, "sess-A",
+	); err != nil {
+		t.Fatalf("seed %s: %v", state, err)
+	}
+	return db
+}
+
+// TestPromptSession_WritesPromptedFromEveryState pins the unconditional write.
+// A permission prompt is a fact about right now; what the row said a moment ago
+// does not change it, which is the same rule IdleSession and EndSession follow.
+func TestPromptSession_WritesPromptedFromEveryState(t *testing.T) {
+	for _, state := range sessionstate.Get(sessionstate.All) {
+		t.Run(state, func(t *testing.T) {
+			db := seedPromptSession(t, state)
+
+			if err := PromptSession("sess-A"); err != nil {
+				t.Fatalf("PromptSession: %v", err)
+			}
+			if got, _, _ := sessionLifecycleRow(t, db, "sess-A"); got != sessionstate.Prompted {
+				t.Errorf("state = %q, want %q", got, sessionstate.Prompted)
+			}
+		})
+	}
+}
+
+// TestResumeFromPrompt_ClearsOnlyPrompted is the narrowness the design rests
+// on. The WHERE clause is the whole rule, so the helper can only ever undo a
+// state PromptSession wrote — it fires on every PostToolUse and every
+// UserPromptSubmit, and an idle session between turns must survive both.
+func TestResumeFromPrompt_ClearsOnlyPrompted(t *testing.T) {
+	for _, state := range sessionstate.Get(sessionstate.All) {
+		t.Run(state, func(t *testing.T) {
+			db := seedPromptSession(t, state)
+
+			if err := ResumeFromPrompt("sess-A"); err != nil {
+				t.Fatalf("ResumeFromPrompt: %v", err)
+			}
+			want := state
+			if state == sessionstate.Prompted {
+				want = sessionstate.Working
+			}
+			if got, _, _ := sessionLifecycleRow(t, db, "sess-A"); got != want {
+				t.Errorf("state = %q, want %q", got, want)
+			}
+		})
+	}
+}
+
+// TestResumeFromPrompt_IsIdempotent: both clearing events can fire inside one
+// turn, so a second call must be a no-op rather than a second transition.
+func TestResumeFromPrompt_IsIdempotent(t *testing.T) {
+	db := seedPromptSession(t, sessionstate.Prompted)
+
+	for i := 0; i < 3; i++ {
+		if err := ResumeFromPrompt("sess-A"); err != nil {
+			t.Fatalf("ResumeFromPrompt %d: %v", i, err)
+		}
+	}
+	if got, _, _ := sessionLifecycleRow(t, db, "sess-A"); got != sessionstate.Working {
+		t.Errorf("state = %q, want %q", got, sessionstate.Working)
+	}
+}
+
+// TestResumeFromPrompt_NeedsNoTask is the one place it is deliberately WIDER
+// than WakeSession. That helper requires a task because it restores a
+// DECLARATION and must never manufacture one. This restores nothing but the
+// state it replaced, and a session prompted for a tool is exactly as entitled
+// to `working` as it was a moment earlier.
+func TestResumeFromPrompt_NeedsNoTask(t *testing.T) {
+	db := withTestDB(t)
+	seedProject(t, db, 1, "proj-test-1", "/tmp/proj-test-1")
+	if _, err := db.Exec(
+		`INSERT INTO sessions (session_id, project_id, platform, state, started_at, last_activity)
+		 VALUES ('sess-A', 1, 'claude', ?, '2026-09-01T00:00:00', '2026-09-01T00:00:00')`,
+		sessionstate.Prompted,
+	); err != nil {
+		t.Fatalf("seed unbound session: %v", err)
+	}
+
+	if err := ResumeFromPrompt("sess-A"); err != nil {
+		t.Fatalf("ResumeFromPrompt: %v", err)
+	}
+	state, taskID, _ := sessionLifecycleRow(t, db, "sess-A")
+	if state != sessionstate.Working {
+		t.Errorf("state = %q, want %q", state, sessionstate.Working)
+	}
+	if taskID != nil {
+		t.Errorf("task_id = %v, want NULL — the resume must not manufacture a claim", taskID)
+	}
+}
+
 // TestWakeSession_LeavesEveryOtherState pins what the wake must NOT touch.
 //
-// `needs_input` is the one that matters: it means a human was asked something
-// and has not answered, and only the human answering ends it. Waking it would
-// erase the single state that says a session is waiting on a person. `ended`
-// is left too — an incoming event revives it to `needs_input` in TouchSession,
-// and reviving a dead row into work is bind's job.
+// `needs_input` means a human was asked something and has not answered, and
+// only the human answering ends it. `prompted` is the sharper case (E-2091):
+// the hook calls WakeSession on EVERY event, so a wake that fired from
+// `prompted` would clear the prompt on the very event that set it, and
+// ResumeFromPrompt — which fires only where the answer actually arrived —
+// would have nothing left to do. `ended` is left too: TouchSession revives it
+// to `idle` earlier in the same event, and this helper then promotes it on its
+// own terms.
+//
+// Derived from the vocabulary rather than listed, so a state added later is
+// covered here without anyone remembering to add it.
 func TestWakeSession_LeavesEveryOtherState(t *testing.T) {
-	for _, state := range []string{"needs_input", "ended", "working"} {
+	var others []string
+	for _, state := range sessionstate.Get(sessionstate.All) {
+		if state != sessionstate.Idle {
+			others = append(others, state)
+		}
+	}
+	for _, state := range others {
 		t.Run(state, func(t *testing.T) {
 			db := withTestDB(t)
 			seedProject(t, db, 1, "proj-test-1", "/tmp/proj-test-1")
@@ -727,10 +856,12 @@ func TestTouchSession_DoesNotWakeIdle(t *testing.T) {
 	}
 }
 
-// TestTouchSession_EndedRevivalStillLandsNeedsInput guards E-1686 alongside
-// the wake. An `ended` row is revived to `needs_input`, never straight to
-// `working`.
-func TestTouchSession_EndedRevivalStillLandsNeedsInput(t *testing.T) {
+// TestTouchSession_EndedRevivalStillLandsNeutral guards E-1686 alongside the
+// wake: an `ended` row is revived to the neutral state, never straight to
+// `working`. That state is `idle` since E-2091 — TouchSession itself still
+// makes no promotion, which is the property under test; the hook's own
+// WakeSession call is what may promote afterwards, on its own preconditions.
+func TestTouchSession_EndedRevivalStillLandsNeutral(t *testing.T) {
 	db := withTestDB(t)
 	seedProject(t, db, 1, "proj-test-1", "/tmp/proj-test-1")
 	seedTask(t, db, 42, 1, "test task", "underway")
@@ -746,8 +877,8 @@ func TestTouchSession_EndedRevivalStillLandsNeedsInput(t *testing.T) {
 		t.Fatalf("TouchSession: %v", err)
 	}
 
-	if state, _, _ := sessionLifecycleRow(t, db, "sess-A"); state != "needs_input" {
-		t.Errorf("state = %q, want needs_input", state)
+	if state, _, _ := sessionLifecycleRow(t, db, "sess-A"); state != "idle" {
+		t.Errorf("state = %q, want idle", state)
 	}
 }
 

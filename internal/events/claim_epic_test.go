@@ -278,8 +278,8 @@ func TestClaim_RevivesEndedSession(t *testing.T) {
 	).Scan(&state); err != nil {
 		t.Fatalf("read state: %v", err)
 	}
-	if state != "needs_input" {
-		t.Errorf("state = %q, want needs_input (bind didn't revive ended row)", state)
+	if state != "idle" {
+		t.Errorf("state = %q, want idle (bind didn't revive ended row)", state)
 	}
 	if taskID, _ := sessionBinding(t, db, 42); !taskID.Valid || taskID.Int64 != 100 {
 		t.Errorf("task_id = %v, want 100", taskID)

@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/mikeschinkel/endless/internal/sessionstate"
 	"github.com/mikeschinkel/endless/internal/taskstatus"
 )
 
@@ -58,7 +59,7 @@ type ProjectStatusRow struct {
 
 	// --- the session half (zero when the row is a task nobody is holding) ---
 	SessionID int64
-	// SessionState is 'working', 'idle' or 'needs_input'. 'ended' never reaches
+	// SessionState is any member of sessionstate.Live. 'ended' never reaches
 	// here: an ended session has stopped claiming anything.
 	SessionState string
 	// SessionActivity is sessions.last_activity, falling back to started_at when
@@ -245,41 +246,22 @@ func ProjectStatusRows(projectID int64, all bool) ([]ProjectStatusRow, error) {
 	return rows, nil
 }
 
-// boardSessionStates is the set of session states that earn a board row, and it
-// is deliberately NOT sessionstate.Live.
-//
-// It stays a local constant rather than becoming a sixth group (E-2105). A
-// group in the registry names a durable meaning; this names a TEMPORARY
-// exclusion, and E-2091 deletes it. Promoting it would be writing down as a rule
-// something that exists only until a producer appears.
-//
-// `needs_input` is excluded, and that exclusion is the honest reading of what
-// the column currently holds rather than a policy choice. Nothing transitions a
-// session INTO that state: InitSession writes it on INSERT and TouchSession
-// writes it when reviving an ended row, while every live transition writes
-// `working` (BindSessionToTask) or `idle` (the Stop hook) — the whole writer
-// list is internal/sessionstate's transition table, which is where to check
-// this claim rather than re-deriving it from a grep. The rows carrying it
-// are therefore sessions that registered and never had a turn — measured on the
-// development machine at the time of writing: 34 of them in one project, every
-// single one last active between 25 and 71 days ago, none bound to a pane that
-// still exists.
-//
-// Ranking that as the board's LOUDEST row — which is what "waiting on you"
-// means — would make the top of every board permanent noise. The rank itself is
-// built and ready (projectstatuscmd.actWaiting, and classify() routes
-// `needs_input` to it); what is missing is a producer, which is E-2091: no
-// installed Claude hook fires when Claude asks for permission, so the one
-// condition the state names cannot currently be observed. When E-2091 lands, the
-// one-line change is here.
-const boardSessionStates = `'working','idle'`
-
 // projectSessionRows reads every live session in the project, with whatever task
 // it claimed joined on.
 //
 // Three filters, each answering a different question:
 //
-//   - state — see boardSessionStates above.
+//   - state — sessionstate.Live, the whole of it. E-1976 shipped a narrower
+//     local set that excluded `needs_input`, on the honest reading that nothing
+//     transitioned a session INTO that state, so every row carrying it was a
+//     session that registered and never had a turn — 34 of them in one project,
+//     each last active 25 to 71 days earlier. Hiding them is how they rotted
+//     unseen. E-2091 reveals them instead and fixes the writers that made them:
+//     the board already caps each rank at ten rows with a footer naming the
+//     remainder, which is machinery built for exactly this, and a row on the
+//     board is what provides the mechanism to resolve it. The existing rows are
+//     surfaced, not migrated — retiring them in the dark is the opposite of what
+//     revealing them is for.
 //   - liveness != 'dead' — a fresh OBSERVATION, joined the same way
 //     ListLiveSessions does it: we reached the session's tmux server and its
 //     pane was not there. `unknown` (server unreachable) deliberately stays,
@@ -308,7 +290,7 @@ func projectSessionRows(db *sql.DB, projectID int64) ([]ProjectStatusRow, error)
 		  LEFT JOIN live_tasks t ON t.id = s.task_id
 		  LEFT JOIN task_types ty ON ty.id = t.type_id
 		 WHERE s.project_id = ?
-		   AND s.state IN (`+boardSessionStates+`)
+		   AND s.state IN (`+sessionstate.SQLList(sessionstate.Live)+`)
 		   AND sl.liveness != 'dead'
 		   AND s.hidden = 0`, projectID)
 	if err != nil {

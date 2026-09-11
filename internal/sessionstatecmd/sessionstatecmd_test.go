@@ -118,15 +118,15 @@ func TestSQLListEmitsQuotedCommaList(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("sql-list live exited %d: %s", code, stderr)
 	}
-	if got, want := strings.TrimSpace(stdout), "'working','idle','needs_input'"; got != want {
+	if got, want := strings.TrimSpace(stdout), "'working','prompted','idle','needs_input'"; got != want {
 		t.Errorf("sql-list live = %q, want %q", got, want)
 	}
 }
 
 func TestRankEmitsIndexAndSentinel(t *testing.T) {
 	stdout, _, code := run(t, "rank", "display-order", "ended")
-	if code != 0 || strings.TrimSpace(stdout) != "3" {
-		t.Errorf("rank display-order ended = %q (exit %d), want \"3\"", stdout, code)
+	if code != 0 || strings.TrimSpace(stdout) != "4" {
+		t.Errorf("rank display-order ended = %q (exit %d), want \"4\"", stdout, code)
 	}
 	stdout, _, code = run(t, "rank", "may-write", "ended")
 	if code != 0 || strings.TrimSpace(stdout) != "-1" {
@@ -152,7 +152,7 @@ func TestLabelAndGlyph(t *testing.T) {
 // is how that side obtains the ⁇ marker without holding a copy of it. If this
 // starts exiting 2, `session list` loses its fallback glyph.
 func TestGlyphAnswersForANonState(t *testing.T) {
-	for _, arg := range []string{"", "prompted", "nonsense"} {
+	for _, arg := range []string{"", "waiting", "nonsense"} {
 		stdout, stderr, code := run(t, "glyph", arg)
 		if code != 0 {
 			t.Errorf("glyph %q exited %d: %s", arg, code, stderr)
@@ -260,7 +260,7 @@ func TestTransitionsEmitsTheWholeTable(t *testing.T) {
 // distinguishes the three shapes on that column alone.
 func TestTransitionsCarriesTheSentinelsVerbatim(t *testing.T) {
 	stdout, _, _ := run(t, "transitions")
-	if !strings.Contains(stdout, "\tneeds_input\t`SessionStart`") {
+	if !strings.Contains(stdout, "\tidle\t`SessionStart`") {
 		t.Error("a creating transition does not leave the from column empty")
 	}
 	if !strings.Contains(stdout, "*\tended\t") {

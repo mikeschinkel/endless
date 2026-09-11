@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"testing"
 
+	"github.com/mikeschinkel/endless/internal/sessionstate"
 )
 
 // freshSessionsDB returns a DB with schema.sql applied, seeded with project
@@ -36,12 +37,15 @@ func sessionRow(t *testing.T, db *sql.DB, sessionID string) (state, process, pla
 	return
 }
 
-// TestTouchSession_InsertCreatesNeedsInput is the SessionStart-happy-path
-// shape: no prior row, first touch creates one with state='needs_input'
-// and the supplied process. Exercises the public TouchSession wrapper
-// (and thus monitor.DB()) via the withTestDB seam — previously this test
-// targeted the unexported touchSessionDB carve-out (E-1506).
-func TestTouchSession_InsertCreatesNeedsInput(t *testing.T) {
+// TestTouchSession_InsertCreatesIdle is the SessionStart-happy-path shape: no
+// prior row, first touch creates one with state='idle' and the supplied
+// process. Exercises the public TouchSession wrapper (and thus monitor.DB())
+// via the withTestDB seam — previously this test targeted the unexported
+// touchSessionDB carve-out (E-1506).
+//
+// The INSERT default was `needs_input` until E-2091; see
+// TestInitSession_InsertCreatesIdle for why it moved.
+func TestTouchSession_InsertCreatesIdle(t *testing.T) {
 	db := withTestDB(t)
 	seedProject(t, db, 1, "proj-test-1", "/tmp/proj-test-1")
 
@@ -49,8 +53,8 @@ func TestTouchSession_InsertCreatesNeedsInput(t *testing.T) {
 		t.Fatalf("touch: %v", err)
 	}
 	state, process, platform := sessionRow(t, db, "sess-A")
-	if state != "needs_input" {
-		t.Errorf("state = %q, want needs_input", state)
+	if state != "idle" {
+		t.Errorf("state = %q, want idle", state)
 	}
 	if process != "%5" {
 		t.Errorf("process = %q, want %%5", process)
@@ -144,19 +148,21 @@ func TestTouchSession_RevivesEndedRow(t *testing.T) {
 		t.Fatalf("touch 2: %v", err)
 	}
 	state, _, _ := sessionRow(t, db, "sess-A")
-	if state != "needs_input" {
-		t.Errorf("state = %q, want needs_input (ended row not revived)", state)
+	if state != "idle" {
+		t.Errorf("state = %q, want idle (ended row not revived)", state)
 	}
 }
 
 // TestTouchSession_RevivesOnlyEndedNotLiveStates guards the CASE: revival fires
-// ONLY for 'ended'. A live state (working/idle/needs_input) must pass through
-// an UPDATE unchanged so the dedicated lifecycle helpers stay authoritative.
+// ONLY for 'ended'. Every live state must pass through an UPDATE unchanged so
+// the dedicated lifecycle helpers stay authoritative — `prompted` above all,
+// since TouchSession runs on every hook event and clobbering it there would
+// clear the prompt on the very event that set it (E-2091).
 func TestTouchSession_RevivesOnlyEndedNotLiveStates(t *testing.T) {
 	db := withTestDB(t)
 	seedProject(t, db, 1, "proj-test-1", "/tmp/proj-test-1")
 
-	for _, live := range []string{"working", "idle", "needs_input"} {
+	for _, live := range sessionstate.Get(sessionstate.Live) {
 		sid := "sess-" + live
 		if err := TouchSession(sid, "claude", "%5", 1); err != nil {
 			t.Fatalf("touch 1 (%s): %v", live, err)

@@ -116,20 +116,32 @@ A session row carries a **state**, and it moves on its own:
 | State         | Meaning                                                                                  |
 |---------------|------------------------------------------------------------------------------------------|
 | `working`     | A turn is in progress.                                                                     |
+| `prompted`    | Claude Code is asking your user to approve a tool call, and you are blocked mid-turn until they answer. Set by the `Notification` hook; cleared by your next activity — the approved tool completing, or their next message. |
 | `idle`        | Between turns. Set by the `Stop` hook at the end of every turn; the next hook event of the next turn puts a session that holds a task back to `working`. |
 | `needs_input` | You asked your user something and the answer has not arrived. Only their next message ends it — no command clears it. |
-| `ended`       | The session is over. An incoming hook event revives it to `needs_input`, because an event is proof it is alive. |
+| `ended`       | The session is over. An incoming hook event revives it to `idle`, because an event is proof it is alive. |
+
+The three states in which a session is **waiting on a person** — `prompted`,
+`idle` and `needs_input` — are one group, `awaits-human`. Waiting means it has
+paused for input, whether or not it asked a question; a finished turn and a
+question are the same fact for this purpose. Ask that group rather than listing
+states: `endless-go session-state get awaits-human`.
 
 On a project with tracking in `enforce` mode, a **PreToolUse gate** stands in
 front of the file-writing tools. The question it asks is *"has this session
 declared what it is working on?"*, and the answer is `sessions.task_id` — set at
 claim, write-once, true for the session's lifetime. So it admits a session that
-**holds a task** and is `working` or `idle`.
+**holds a task** and is `working`, `prompted` or `idle`.
 
 `idle` is admitted deliberately. A write from an idle session is mid-turn by
 construction — writes only happen inside turns — so the state is stale, not the
 agent. The gate once admitted `working` alone, which meant a session that
 completed one clean turn could never write again for the rest of its life.
+
+`prompted` is admitted on the same reasoning: a session blocked on a permission
+prompt is mid-turn on a tool call it already decided to make, and the tool it is
+waiting on is its own. Refusing it would mean the write right after your user
+clicks *approve* gets turned down.
 
 Exactly two things are refused, and each says which one it is:
 

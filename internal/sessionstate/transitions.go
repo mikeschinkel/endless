@@ -12,8 +12,9 @@ package sessionstate
 // distinctions people find worth drawing — thirteen members and counting, with
 // per-task-type edges nobody remembers correctly. A picture earns its keep.
 // Session state models a process lifecycle written by hooks, bounded by what a
-// harness can report: four members, unchanged across twelve schema revisions of
-// the table they live in, and a diagram of them would be four boxes.
+// harness can report: five members, four of which were unchanged across twelve
+// schema revisions of the table they live in, and a diagram of them would be
+// five boxes.
 //
 // The TABLE is justified on different grounds, and they do not shrink with the
 // member count. Its Trigger column names WHICH CODE performs each write, and
@@ -74,10 +75,23 @@ type Transition struct {
 
 // transitions is the table, ordered to read as a lifecycle: the two ways a row
 // is created, then the live edges, then the terminal, then the one way back.
+//
+// `needs_input` is absent from the To column, and that is the point of E-2091's
+// half of this table rather than an omission. Two writers used to put it there —
+// a row's initial value and the revive CASE — and neither meant a person was
+// being waited on; both now write `idle`. Nothing writes `needs_input`, so the
+// state means exactly what the declaration gate says it means and nothing else,
+// and the rows still carrying it are sessions that registered and never had a
+// turn. Those are surfaced on the attention board to be resolved deliberately,
+// not migrated away in the dark. TestEveryStateIsWritten names it as the one
+// permitted exception.
 var transitions = []Transition{
 	{
+		// E-2091 moved both creating writes from `needs_input` to `idle`. A row
+		// that exists and has done nothing is idle; saying it needs input was a
+		// claim about a person neither writer is in a position to make.
 		From:    NoState,
-		To:      NeedsInput,
+		To:      Idle,
 		Trigger: "`SessionStart` → monitor.InitSession; any hook event → monitor.TouchSession INSERT",
 	},
 	{
@@ -103,6 +117,26 @@ var transitions = []Transition{
 		Trigger: "any hook event → monitor.WakeSession",
 	},
 	{
+		// E-2091. Claude Code prompts the user for permission and the session
+		// blocks mid-turn. Unconditional, like every other write beside it: the
+		// Notification arrives as a fact, and what the row said a moment ago
+		// does not change it.
+		From:    AnyState,
+		To:      Prompted,
+		Trigger: "`Notification` (notification_type=permission_prompt) → monitor.PromptSession",
+	},
+	{
+		// The clearing half, and narrow for WakeSession's reason (E-2091): it
+		// only ever undoes a state this same feature wrote, so it fires from
+		// `prompted` alone and can never demote a session that moved on some
+		// other way. Not folded into TouchSession, which never clobbers a live
+		// state — making it the exception for one value is how a general helper
+		// starts carrying special cases.
+		From:    Prompted,
+		To:      Working,
+		Trigger: "`PostToolUse` (the approved tool completed) and `UserPromptSubmit` (the user typed instead) → monitor.ResumeFromPrompt",
+	},
+	{
 		From:    AnyState,
 		To:      Idle,
 		Trigger: "`Stop` → monitor.IdleSession; monitor.CompleteTask",
@@ -116,11 +150,15 @@ var transitions = []Transition{
 		// The one way back from the terminal (E-1686). An incoming event is
 		// proof the session is alive, and since every reader filters on Live an
 		// `ended` row that never recovers is a live session gone permanently
-		// invisible. It revives to `needs_input` — the same neutral state a
-		// creating INSERT uses — and the next lifecycle hook re-derives the
-		// rest.
+		// invisible. It revives to the same neutral state a creating INSERT
+		// uses — `idle` since E-2091, `needs_input` before it — and the next
+		// lifecycle hook re-derives the rest. For a revived session that holds a
+		// task and fired the event itself, that hook is WakeSession on the very
+		// same event, which is why `idle` rather than `working` is still the
+		// right landing here: the promotion is a separate rule with its own
+		// preconditions, not something this write gets to presume.
 		From:    Ended,
-		To:      NeedsInput,
+		To:      Idle,
 		Trigger: "any hook event → monitor.TouchSession revive; `task.claimed` → events.execTaskClaimed revive",
 	},
 }

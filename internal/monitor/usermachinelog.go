@@ -45,6 +45,8 @@ const (
 	SessionLogDedup      SessionLogReason = "dedup"       // paneless stale-row dedup
 	SessionLogRelease    SessionLogReason = "release"     // task.released executor
 	SessionLogWake       SessionLogReason = "wake"        // WakeSession: idle -> working on a hook event
+	SessionLogPrompt     SessionLogReason = "prompt"      // PromptSession: any -> prompted on a permission prompt
+	SessionLogResume     SessionLogReason = "resume"      // ResumeFromPrompt: prompted -> working on the next activity
 )
 
 // sessionLogEntry is one line in the diagnostic log. The top-level `kind`

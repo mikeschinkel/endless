@@ -29,6 +29,14 @@
 // `session list` renders byte-for-byte what it rendered before. Where a group's
 // membership reads oddly — AwaitsHuman including `idle` — the rule is preserved
 // exactly as found and the reading is left to the task that changes it.
+//
+// E-2091 is that task, and it is the first change to the vocabulary itself. It
+// added `prompted` — the session is blocked on a permission prompt, the state
+// the near-miss above was reaching for and could not have — and settled what
+// AwaitsHuman means rather than leaving it odd: a session awaits a human
+// whenever it has PAUSED FOR INPUT, question or no question. `idle` belongs
+// there on those terms, not by inheritance, and so do `needs_input` and
+// `prompted`. Anything asking "is this session waiting on me" asks that group.
 package sessionstate
 
 import (
@@ -42,18 +50,31 @@ import (
 // so callers need no conversion at the boundary.
 type State = string
 
-// The closed vocabulary, in lifecycle order — the two states a live session
-// alternates between, the state that means it is waiting on a person, and the
-// terminal.
+// The closed vocabulary, in lifecycle order — a turn in progress, that turn
+// blocked on a person, the pause between turns, a question asked and not yet
+// answered, and the terminal.
 //
-// Four members, and they have been four for the whole life of the table.
-// Twelve session-related schema changes exist and not one touches this value
-// set: sessions have churned through short ids, nullable session_id, active
-// epic, kind, gates added and dropped, transcript path, recap columns — and
-// these four held throughout. That stability is why this package carries a
-// transition TABLE but no generated diagram; see transitions.go.
+// Four members for the whole life of the table, and now five. Twelve
+// session-related schema changes touched none of them: sessions churned through
+// short ids, nullable session_id, active epic, kind, gates added and dropped,
+// transcript path, recap columns, and the value set held throughout. `prompted`
+// (E-2091) is the first addition, and it is one because the harness grew an
+// event Endless had not wired, not because the model was wrong — which is still
+// why this package carries a transition TABLE but no generated diagram; see
+// transitions.go.
 const (
-	Working    State = "working"
+	Working State = "working"
+
+	// Prompted means Claude Code is asking the USER for permission and the
+	// session is blocked mid-turn until they answer. Written from the
+	// `Notification` hook's `permission_prompt`, cleared on the session's next
+	// activity (monitor.PromptSession / monitor.ResumeFromPrompt).
+	//
+	// Beside Working rather than beside NeedsInput because it is a mid-turn
+	// state: the session is inside a turn, holding a tool call it has already
+	// decided to make. That is also why it is in MayWrite — see the group.
+	Prompted State = "prompted"
+
 	Idle       State = "idle"
 	NeedsInput State = "needs_input"
 	Ended      State = "ended"
@@ -85,25 +106,42 @@ const (
 	// inside turns — so the state is stale, not the agent (E-2093). `needs_input`
 	// is refused because a human was asked something and has not answered, and
 	// `ended` because the session is over. Both refusals are the gate working.
+	//
+	// `prompted` is admitted (E-2091, decided 2026-09-01) on the gate's own
+	// stated rule rather than on preference: the gate admits a session that has
+	// DECLARED what it is working on and is live-and-acting, and a
+	// prompt-blocked session is mid-turn by exactly the reasoning that admits
+	// `idle` — the tool it is waiting on is its own. The asymmetry of failure
+	// modes decided it. If the clearing transition is ever missed under this
+	// reading, a stale glyph sits on the board until the next Stop: cosmetic and
+	// self-correcting. Under the other reading a missed clear refuses the
+	// session's next write and tells it there is no command to run — which is
+	// the failure E-2093 spent a task cleaning up after.
 	MayWrite
 
-	// AwaitsHuman is the states in which a session is waiting on a PERSON, in
-	// the order the project attention board ranks them (E-1976): blocked
-	// mid-turn first, then between turns.
+	// AwaitsHuman is the states in which a session is waiting on a PERSON,
+	// ordered blocked-mid-turn first, then between turns.
 	//
-	// `idle` is a member, which reads oddly next to `needs_input` and is
-	// preserved exactly as found. The board's actIdle rank says an idle session
-	// "is waiting for the user's next prompt, so it is a genuine claim on
-	// attention, just a quieter one". That is the rule as it stands; E-2091 owns
-	// whether it should change.
+	// E-2105 left `idle`'s membership here reading oddly beside `needs_input`
+	// and handed the reading to E-2091, which settled it: a session awaits a
+	// human whenever it has PAUSED FOR INPUT, whether or not it asked a
+	// question. A finished turn and a question are the same fact for this
+	// purpose — the ball is in the user's court. So all three belong, each on
+	// the same rule rather than by inheritance: `prompted` blocked on a
+	// permission answer, `needs_input` blocked on an answer it asked for,
+	// `idle` waiting for the next prompt.
+	//
+	// This group is the ONE place that answers "is this session waiting on me".
+	// Ask it rather than listing states.
 	AwaitsHuman
 
-	// DisplayOrder is `session list`'s sort order — working first, then the
-	// blocked session that most wants attention, then the quiet ones, then the
-	// dead. Read back with Rank, which is what builds the SQL CASE.
+	// DisplayOrder is `session list`'s sort order — the session blocked
+	// mid-turn on a person first, then working, then the quieter claims on
+	// attention, then the dead. Read back with Rank, which is what builds the
+	// SQL CASE.
 	//
 	// Deliberately NOT All's order: All is the lifecycle, this is the reading
-	// order, and they disagree about where `needs_input` sits.
+	// order, and they disagree about where the waiting states sit.
 	DisplayOrder
 )
 
@@ -114,11 +152,11 @@ const (
 // read back with Rank. Unordered groups are written in lifecycle order for
 // readability only.
 var groups = map[Group][]State{
-	All:          {Working, Idle, NeedsInput, Ended},
-	Live:         {Working, Idle, NeedsInput},
-	MayWrite:     {Working, Idle},
-	AwaitsHuman:  {Idle, NeedsInput},
-	DisplayOrder: {Working, NeedsInput, Idle, Ended},
+	All:          {Working, Prompted, Idle, NeedsInput, Ended},
+	Live:         {Working, Prompted, Idle, NeedsInput},
+	MayWrite:     {Working, Prompted, Idle},
+	AwaitsHuman:  {Prompted, Idle, NeedsInput},
+	DisplayOrder: {Prompted, Working, NeedsInput, Idle, Ended},
 }
 
 // groupSlugs is the CLI-facing name of each Group. The Python client passes
@@ -137,6 +175,7 @@ var groupSlugs = map[Group]string{
 // registry owns the words, a surface owns its own casing.
 var labels = map[State]string{
 	Working:    "Working",
+	Prompted:   "Prompted",
 	Idle:       "Idle",
 	NeedsInput: "Needs Input",
 	Ended:      "Ended",
@@ -151,8 +190,14 @@ var labels = map[State]string{
 // view; ? and ␥ had no precedent to keep. The reason they are one column wide
 // is the reason they exist at all — `needs_input` is eleven characters against
 // `idle`'s four, and printing the raw word made every following column ragged.
+//
+// ⚠ for `prompted` is borrowed the same way (E-2091): it is already the attention
+// board's glyph for its waiting rank, so the two surfaces teach one symbol
+// rather than two. TestGlyphsAreSingleWidth holds the column rule for every
+// member, which is what a borrowed glyph most needs checking against.
 var glyphs = map[State]string{
 	Working:    "⟳",
+	Prompted:   "⚠",
 	Idle:       "‖",
 	NeedsInput: "?",
 	Ended:      "␥",

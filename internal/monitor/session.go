@@ -254,7 +254,15 @@ func StartChatSession(sessionID string, projectID int64) error {
 	return err
 }
 
-// InitSession creates a session with state='needs_input' on SessionStart.
+// InitSession creates a session row on SessionStart.
+//
+// It lands the row in `idle`, which is what a row that exists and has done
+// nothing means. It wrote `needs_input` until E-2091, and that was a claim about
+// a person this writer is in no position to make: `needs_input` means the AGENT
+// asked the USER something. Nothing here knows that, and the rows accumulated —
+// 34 in one project on the development machine, every one last active 25 to 71
+// days earlier and none on a pane that still existed — were sessions that
+// registered and never had a turn.
 func InitSession(sessionID string, projectID int64) error {
 	db, err := DB()
 	if err != nil {
@@ -267,7 +275,7 @@ func InitSession(sessionID string, projectID int64) error {
 		`INSERT INTO sessions (session_id, project_id, platform, state, started_at, last_activity)
 		 VALUES (?, ?, 'claude', ?, ?, ?)
 		 ON CONFLICT(session_id) DO UPDATE SET last_activity=?`,
-		sessionID, projectID, sessionstate.NeedsInput, now, now,
+		sessionID, projectID, sessionstate.Idle, now, now,
 		now,
 	)
 	return err
@@ -308,13 +316,18 @@ func GetActiveSession(sessionID string) (*SessionInfo, error) {
 //
 // Revival of `ended` (E-1686): the one state transition TouchSession owns.
 // An incoming hook is proof the session is alive, so an `ended` row is lifted
-// back to 'needs_input' (the same neutral state INSERT uses; the next
-// lifecycle hook re-derives working/idle/ended). Without this an `ended` row
-// never recovers, and since every reader filters on sessionstate.Live the
-// still-live session goes permanently invisible. Gated on the
-// ON CONFLICT(session_id) target, NOT a pane match: a reused pane id carries a
-// DIFFERENT session_id and takes the INSERT path, so a prior occupant's ended
-// row stays ended (E-1530).
+// back to 'idle' — the same neutral state INSERT uses, and the next lifecycle
+// hook re-derives the rest. Without this an `ended` row never recovers, and
+// since every reader filters on sessionstate.Live the still-live session goes
+// permanently invisible. Gated on the ON CONFLICT(session_id) target, NOT a
+// pane match: a reused pane id carries a DIFFERENT session_id and takes the
+// INSERT path, so a prior occupant's ended row stays ended (E-1530).
+//
+// It landed on 'needs_input' until E-2091, for INSERT's reason and with the
+// same defect. `idle` is still the right landing rather than 'working': for a
+// revived session that holds a task and fired the event itself, WakeSession
+// promotes it on the very same event, on its own preconditions, which is not a
+// judgement this write gets to make.
 //
 // It does NOT wake an idle session; WakeSession does, and the split is
 // deliberate (E-2093). TouchSession is reached by callers that are NOT the
@@ -353,11 +366,11 @@ func TouchSession(sessionID, platform, process string, projectID int64) error {
 
 	// UPSERT: process_id is NULL on INSERT when no pane identity is available,
 	// and COALESCEd against the existing value on UPDATE so an unidentifiable
-	// bind never overwrites a known-good one. state defaults to 'needs_input'
-	// only on INSERT (matches InitSession semantics). On UPDATE state is
-	// preserved for every LIVE state and only an 'ended' row is revived to
-	// 'needs_input' (E-1686, see the doc comment) — the CASE keeps working↔idle
-	// authoritative while giving a stale ending a recovery path.
+	// bind never overwrites a known-good one. state defaults to 'idle' only on
+	// INSERT (matches InitSession semantics). On UPDATE state is preserved for
+	// every LIVE state and only an 'ended' row is revived to 'idle' (E-1686, see
+	// the doc comment) — the CASE keeps the live states authoritative while
+	// giving a stale ending a recovery path.
 	_, err = tx.Exec(
 		`INSERT INTO sessions (session_id, project_id, platform, state, process_id, started_at, last_activity)
 		 VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -365,8 +378,8 @@ func TouchSession(sessionID, platform, process string, projectID int64) error {
 		   last_activity = excluded.last_activity,
 		   process_id    = COALESCE(excluded.process_id, sessions.process_id),
 		   state         = CASE WHEN sessions.state = ? THEN ? ELSE sessions.state END`,
-		sessionID, projectID, platform, sessionstate.NeedsInput, processID, now, now,
-		sessionstate.Ended, sessionstate.NeedsInput,
+		sessionID, projectID, platform, sessionstate.Idle, processID, now, now,
+		sessionstate.Ended, sessionstate.Idle,
 	)
 	if err != nil {
 		return fmt.Errorf("upsert session: %w", err)
@@ -412,10 +425,15 @@ func TouchSession(sessionID, platform, process string, projectID int64) error {
 //     the case the gate exists to refuse.
 //
 // `needs_input` is deliberately not woken: it means a human was asked something
-// and has not answered, and only the human answering ends it. Waking it would
-// erase the one state that says a session is waiting on a person. `ended` is
-// not woken either — an incoming event revives it to `needs_input` in
-// TouchSession, and reviving a dead row into work is `bind`'s job.
+// and has not answered, and only the human answering ends it. `prompted` is not
+// woken either, and for the sharper version of the same reason — every hook
+// event reaches this helper, so waking it here would clear the prompt state on
+// the event that set it. ResumeFromPrompt owns that clearing, from the two
+// events that mean the user actually answered. `ended` is not woken directly;
+// TouchSession revives it to `idle` earlier in the same event, and this helper
+// then promotes it on its own terms if it holds a task — which is the rule
+// doing its job rather than a hole in it, because a revived row that fired a
+// hook and holds a task IS a session observed acting.
 //
 // Caller placement matters as much as the rule. It belongs at the single
 // per-event point every turn reaches, NOT in the UserPromptSubmit handler: a
@@ -555,6 +573,101 @@ func IdleSession(sessionID string) error {
 			Caller:      "monitor.IdleSession",
 		})
 	}
+	return nil
+}
+
+// PromptSession marks a session blocked on a permission prompt (E-2091).
+//
+// Claude Code's `Notification` hook with notification_type=permission_prompt is
+// the event that reports the user is actually being asked. Until it was wired,
+// a session sitting on a prompt read `working` — indistinguishable from one
+// doing work — which is the fact the attention board's first rank was built for
+// and had no producer of.
+//
+// Unconditional, like IdleSession and EndSession beside it: the notification is
+// a fact about right now, and what the row said a moment ago does not change it.
+// The state clears via ResumeFromPrompt on the session's next activity, or via
+// IdleSession if the turn ends with the prompt still outstanding.
+//
+// Why it is safe to write without a clearing guarantee: `prompted` is a member
+// of sessionstate.MayWrite, so a clear that never arrives costs a stale glyph
+// until the next Stop. It cannot refuse anyone a write.
+func PromptSession(sessionID string) error {
+	db, err := DB()
+	if err != nil {
+		return err
+	}
+
+	snap := SnapshotSession(sessionID)
+	now := time.Now().UTC().Format("2006-01-02T15:04:05")
+	_, err = db.Exec(
+		"UPDATE sessions SET state=?, last_activity=? WHERE session_id=?",
+		sessionstate.Prompted, now, sessionID,
+	)
+	if err != nil {
+		return fmt.Errorf("prompt session: %w", err)
+	}
+	if snap.Found { // only record a transition that actually had a prior row
+		LogSessionTxn(SessionTxn{
+			SessionGUID: sessionID,
+			OldState:    snap.State,
+			NewState:    sessionstate.Prompted,
+			OldTaskID:   snap.TaskID,
+			NewTaskID:   snap.TaskID, // the prompt does not change task_id
+			Reason:      SessionLogPrompt,
+			Caller:      "monitor.PromptSession",
+		})
+	}
+	return nil
+}
+
+// ResumeFromPrompt clears `prompted` on the session's next activity (E-2091).
+//
+// Narrow on purpose, the way WakeSession is narrow: the WHERE clause is the
+// whole rule, so this can only ever undo a state PromptSession wrote. It cannot
+// demote a session that moved on some other way, there is no read-then-write
+// window, and a second call is a no-op.
+//
+// Callers are `PostToolUse` (the tool the prompt was about completed, so the
+// user approved) and `UserPromptSubmit` (the user typed instead of answering).
+// `Stop` needs no call: it writes `idle` unconditionally, which is correct for a
+// turn that ended with a prompt still outstanding.
+//
+// Deliberately NOT folded into TouchSession, which never clobbers a live state.
+// Making it the exception for one value is how a general helper starts carrying
+// special cases — and TouchSession is reached on a session's behalf by sibling
+// shell panes that have observed nothing, which is the same reason WakeSession
+// is separate.
+//
+// Unlike WakeSession this does not require a task: it restores whatever the
+// session was doing before the prompt, and an unbound session prompted for a
+// tool is exactly as entitled to `working` as it was a moment earlier.
+func ResumeFromPrompt(sessionID string) error {
+	db, err := DB()
+	if err != nil {
+		return err
+	}
+	snap := SnapshotSession(sessionID)
+	res, err := db.Exec(
+		"UPDATE sessions SET state=? WHERE session_id=? AND state=?",
+		sessionstate.Working, sessionID, sessionstate.Prompted,
+	)
+	if err != nil {
+		return fmt.Errorf("resume session from prompt: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil || n == 0 {
+		return nil
+	}
+	LogSessionTxn(SessionTxn{
+		SessionGUID: sessionID,
+		OldState:    snap.State,
+		NewState:    sessionstate.Working,
+		OldTaskID:   snap.TaskID,
+		NewTaskID:   snap.TaskID, // the resume does not change task_id
+		Reason:      SessionLogResume,
+		Caller:      "monitor.ResumeFromPrompt",
+	})
 	return nil
 }
 

@@ -480,10 +480,10 @@ Three consequences you will meet:
   to a session's transcript. What it does *not* touch is the task's status, the
   worktree, or the session's **state**: the executor deliberately preserves a
   live state, so binding a task to an idle session leaves it idle and binding to
-  a `needs_input` session leaves it waiting (which is the point — someone else's
-  bind must not erase the fact that a human was asked something). That costs
-  nothing, because a session holding a task is woken to `working` by its next
-  hook event anyway.
+  a session that is waiting on a person leaves it waiting (which is the point —
+  someone else's bind must not erase the fact that a human is being waited on).
+  That costs nothing, because a session holding a task is woken to `working` by
+  its next hook event anyway.
 
   So bind is the verb for "this session owns that task, and its status should
   not move". To resume *working* a settled task, reopen it and claim:

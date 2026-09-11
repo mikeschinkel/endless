@@ -97,7 +97,7 @@ func TestEnsureClaudeID_ReturnsExistingRow(t *testing.T) {
 
 // TestEnsureClaudeID_LazyCreatesMissingRow pins the first-event-timing
 // case: no hook has fired yet and the DB has no row for the env-identified
-// Claude session. The verb INSERTs a 'needs_input' row keyed to the
+// Claude session. The verb INSERTs an 'idle' row keyed to the
 // session_id and prints the new row's id.
 func TestEnsureClaudeID_LazyCreatesMissingRow(t *testing.T) {
 	cfgDir := t.TempDir()
@@ -122,8 +122,8 @@ func TestEnsureClaudeID_LazyCreatesMissingRow(t *testing.T) {
 	if id != got {
 		t.Errorf("printed id %d does not match row id %d", got, id)
 	}
-	if state != "needs_input" {
-		t.Errorf("state = %q, want 'needs_input' (TouchSession's INSERT default)", state)
+	if state != "idle" {
+		t.Errorf("state = %q, want 'idle' (TouchSession's INSERT default)", state)
 	}
 	if process != "%9" {
 		t.Errorf("process = %q, want '%%9'", process)

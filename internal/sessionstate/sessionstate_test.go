@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/mattn/go-runewidth"
 	"github.com/mikeschinkel/endless/internal/sessionstate"
 )
 
@@ -96,27 +97,65 @@ func TestMayWriteIsASubsetOfLive(t *testing.T) {
 	}
 }
 
-// TestMayWriteAndAwaitsHumanDisagreeOnlyAboutIdle documents, as a test, the one
-// place the registry contains a tension rather than a rule.
+// TestAwaitingAHumanAndMayWriteOverlapOnlyMidTurn pins the two states that are
+// in BOTH policy groups, and the reason both are there is the same one.
 //
-// `idle` is in BOTH: the declaration gate admits it because a write from an
-// idle session is mid-turn (E-2093), and the attention board ranks it because a
-// session between turns is waiting for a prompt (E-1976). Both readings are
-// live in the tree and E-2105 preserved them exactly as found, so the overlap
-// is deliberate. `needs_input` is the state where they agree — awaiting a human
-// AND refused — and that agreement is the invariant worth holding: a state that
-// awaits a human must not be admitted unless something else says it is acting.
-func TestMayWriteAndAwaitsHumanDisagreeOnlyAboutIdle(t *testing.T) {
+// A session is admitted to write when it is mid-turn; it awaits a human when it
+// has paused for input. `idle` and `prompted` are both at once. `idle` because a
+// write from an idle session is mid-turn by construction — writes only happen
+// inside turns, so the state is stale, not the agent (E-2093) — while the board
+// still ranks it as a claim on attention (E-1976). `prompted` because the
+// session is blocked on a permission answer for a tool call it has already
+// decided to make (E-2091).
+//
+// `needs_input` is where the groups agree — awaiting a human AND refused — and
+// that agreement is the invariant worth holding: a state that awaits a human
+// must not be admitted unless something else says it is acting. A new state in
+// both needs that "something else" written down, the way these two have it.
+func TestAwaitingAHumanAndMayWriteOverlapOnlyMidTurn(t *testing.T) {
 	var both []string
 	for _, s := range sessionstate.Get(sessionstate.AwaitsHuman) {
 		if sessionstate.Has(sessionstate.MayWrite, s) {
 			both = append(both, s)
 		}
 	}
-	want := []string{sessionstate.Idle}
+	want := []string{sessionstate.Prompted, sessionstate.Idle}
 	if !reflect.DeepEqual(both, want) {
 		t.Errorf("MayWrite ∩ AwaitsHuman = %v, want %v — a new state in both needs "+
-			"the same argument `idle` has, written down", both, want)
+			"the mid-turn argument `idle` and `prompted` have, written down", both, want)
+	}
+}
+
+// TestPromptedMayWrite states E-2091's load-bearing decision on its own, rather
+// than leaving it to be inferred from the pinned membership above.
+//
+// It is separate because its failure mode is separate. A wrong glyph is
+// cosmetic; `prompted` falling out of MayWrite wedges every prompt-blocked
+// session — the declaration gate refuses its next write the moment the user
+// approves, and tells it there is no command to run. That is the exact failure
+// E-2093 spent a task cleaning up after, and it is what the near-miss recorded
+// in this package's doc comment would have shipped.
+func TestPromptedMayWrite(t *testing.T) {
+	if !sessionstate.Has(sessionstate.MayWrite, sessionstate.Prompted) {
+		t.Error("prompted is not in MayWrite: a session blocked on a permission " +
+			"prompt will be refused its next write after the user approves")
+	}
+}
+
+// TestAwaitsHumanIsEveryPausedState pins what E-2091 decided "waiting on the
+// user" means: the session has PAUSED FOR INPUT, question or no question. All
+// three paused states are members on that one rule, so a later edit that drops
+// or adds one is deliberate rather than incidental.
+func TestAwaitsHumanIsEveryPausedState(t *testing.T) {
+	got := sessionstate.Get(sessionstate.AwaitsHuman)
+	want := []string{sessionstate.Prompted, sessionstate.Idle, sessionstate.NeedsInput}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("AwaitsHuman = %v, want %v", got, want)
+	}
+	for _, s := range []string{sessionstate.Working, sessionstate.Ended} {
+		if sessionstate.Has(sessionstate.AwaitsHuman, s) {
+			t.Errorf("state %q awaits a human, but it is not paused for input", s)
+		}
 	}
 }
 
@@ -149,6 +188,25 @@ func TestEveryStateHasLabelAndGlyph(t *testing.T) {
 	}
 }
 
+// TestGlyphsAreSingleWidth pins the property `session list`'s state column
+// rests on: the column is exactly one character wide, so a two-column glyph
+// shifts every following cell on that row alone and reads as a corrupt table
+// rather than as a bad glyph choice. Measured with go-runewidth, the same
+// library the renderers use, because the answer for a symbol like ⚠ differs
+// between rune count and terminal columns.
+func TestGlyphsAreSingleWidth(t *testing.T) {
+	for _, s := range sessionstate.Get(sessionstate.All) {
+		if w := runewidth.StringWidth(sessionstate.Glyph(s)); w != 1 {
+			t.Errorf("state %q glyph %q measures %d columns, want 1",
+				s, sessionstate.Glyph(s), w)
+		}
+	}
+	if w := runewidth.StringWidth(sessionstate.UnknownGlyph); w != 1 {
+		t.Errorf("UnknownGlyph %q measures %d columns, want 1",
+			sessionstate.UnknownGlyph, w)
+	}
+}
+
 // TestGlyphsAreDistinct keeps the glyph vocabulary readable. It matters more
 // here than for task status: `session list`'s state column is exactly one
 // character wide, so two states sharing a glyph are indistinguishable in the
@@ -174,7 +232,7 @@ func TestGlyphsAreDistinct(t *testing.T) {
 
 func TestGetReturnsMembersInGroupOrder(t *testing.T) {
 	got := sessionstate.Get(sessionstate.DisplayOrder)
-	want := []string{"working", "needs_input", "idle", "ended"}
+	want := []string{"prompted", "working", "needs_input", "idle", "ended"}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("Get(DisplayOrder) = %v, want %v", got, want)
 	}
@@ -213,10 +271,13 @@ func TestHas(t *testing.T) {
 		want  bool
 	}{
 		{sessionstate.MayWrite, sessionstate.Working, true},
+		{sessionstate.MayWrite, sessionstate.Prompted, true},
 		{sessionstate.MayWrite, sessionstate.Idle, true},
 		{sessionstate.MayWrite, sessionstate.NeedsInput, false},
 		{sessionstate.MayWrite, sessionstate.Ended, false},
+		{sessionstate.Live, sessionstate.Prompted, true},
 		{sessionstate.Live, sessionstate.Ended, false},
+		{sessionstate.AwaitsHuman, sessionstate.Prompted, true},
 		{sessionstate.AwaitsHuman, sessionstate.Working, false},
 		{sessionstate.All, "nonsense", false},
 		{sessionstate.Group(9999), sessionstate.Working, false},
@@ -230,7 +291,7 @@ func TestHas(t *testing.T) {
 }
 
 func TestSQLListQuotesAndJoins(t *testing.T) {
-	if got, want := sessionstate.SQLList(sessionstate.MayWrite), "'working','idle'"; got != want {
+	if got, want := sessionstate.SQLList(sessionstate.MayWrite), "'working','prompted','idle'"; got != want {
 		t.Errorf("SQLList(MayWrite) = %q, want %q", got, want)
 	}
 	if got := sessionstate.SQLList(sessionstate.Group(9999)); got != "" {
@@ -265,10 +326,13 @@ func TestSQLListNeedsNoEscaping(t *testing.T) {
 }
 
 func TestRank(t *testing.T) {
-	if got, want := sessionstate.Rank(sessionstate.DisplayOrder, sessionstate.Working), 0; got != want {
+	if got, want := sessionstate.Rank(sessionstate.DisplayOrder, sessionstate.Prompted), 0; got != want {
+		t.Errorf("Rank(DisplayOrder, prompted) = %d, want %d", got, want)
+	}
+	if got, want := sessionstate.Rank(sessionstate.DisplayOrder, sessionstate.Working), 1; got != want {
 		t.Errorf("Rank(DisplayOrder, working) = %d, want %d", got, want)
 	}
-	if got, want := sessionstate.Rank(sessionstate.DisplayOrder, sessionstate.Ended), 3; got != want {
+	if got, want := sessionstate.Rank(sessionstate.DisplayOrder, sessionstate.Ended), 4; got != want {
 		t.Errorf("Rank(DisplayOrder, ended) = %d, want %d", got, want)
 	}
 	if got := sessionstate.Rank(sessionstate.MayWrite, sessionstate.Ended); got != sessionstate.NoRank {
@@ -298,9 +362,9 @@ func TestValidate(t *testing.T) {
 			t.Errorf("Validate(%q) = %v, want nil", s, err)
 		}
 	}
-	err := sessionstate.Validate("prompted")
+	err := sessionstate.Validate("waiting")
 	if err == nil {
-		t.Fatal("Validate(prompted) = nil, want an error")
+		t.Fatal("Validate(waiting) = nil, want an error")
 	}
 	// The message must name the vocabulary — an agent that guessed wrong should
 	// learn the whole set in one round trip.
@@ -354,15 +418,19 @@ func TestParseGroupRejectsUnknown(t *testing.T) {
 func TestGroupMembershipIsPinned(t *testing.T) {
 	want := map[string][]string{
 		// the vocabulary, in lifecycle order
-		"all": {"working", "idle", "needs_input", "ended"},
+		"all": {"working", "prompted", "idle", "needs_input", "ended"},
 		// was `state != 'ended'`, 29 sites
-		"live": {"working", "idle", "needs_input"},
-		// was hookcmd's `switch s.State { case stateWorking, stateIdle: }`
-		"may-write": {"working", "idle"},
-		// was projectstatuscmd's actWaiting/actIdle ranks, in that order
-		"awaits-human": {"idle", "needs_input"},
-		// was session_cmd.py's `CASE s.state WHEN 'working' THEN 0 ...`
-		"display-order": {"working", "needs_input", "idle", "ended"},
+		"live": {"working", "prompted", "idle", "needs_input"},
+		// was hookcmd's `switch s.State { case stateWorking, stateIdle: }`;
+		// `prompted` joined it by decision, not by default (E-2091)
+		"may-write": {"working", "prompted", "idle"},
+		// every state in which the session has paused for input (E-2091),
+		// blocked-mid-turn first
+		"awaits-human": {"prompted", "idle", "needs_input"},
+		// was session_cmd.py's `CASE s.state WHEN 'working' THEN 0 ...`;
+		// `prompted` sorts above `working` because it is the row that wants a
+		// person (E-2091)
+		"display-order": {"prompted", "working", "needs_input", "idle", "ended"},
 	}
 	for _, g := range sessionstate.AllGroups() {
 		slug := sessionstate.GroupSlug(g)
@@ -388,6 +456,7 @@ func TestGroupMembershipIsPinned(t *testing.T) {
 func TestLabelsAndGlyphsArePinned(t *testing.T) {
 	want := map[string][2]string{
 		sessionstate.Working:    {"Working", "⟳"},
+		sessionstate.Prompted:   {"Prompted", "⚠"},
 		sessionstate.Idle:       {"Idle", "‖"},
 		sessionstate.NeedsInput: {"Needs Input", "?"},
 		sessionstate.Ended:      {"Ended", "␥"},
@@ -424,7 +493,7 @@ func TestLegendRendersAsSessionListPrintsIt(t *testing.T) {
 		parts = append(parts, sessionstate.Glyph(s)+" "+strings.ToLower(sessionstate.Label(s)))
 	}
 	got := strings.Join(parts, "   ")
-	want := "⟳ working   ‖ idle   ? needs input   ␥ ended"
+	want := "⟳ working   ⚠ prompted   ‖ idle   ? needs input   ␥ ended"
 	if got != want {
 		t.Errorf("session list legend = %q, want %q", got, want)
 	}

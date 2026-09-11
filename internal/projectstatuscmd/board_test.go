@@ -80,10 +80,13 @@ func TestClassify(t *testing.T) {
 		{"working session", sessionRow(10, "working", time.Minute, 0), actDoing},
 		{"idle session", sessionRow(11, "idle", time.Minute, 0), actIdle},
 
-		// The rank E-2091 will supply a producer for. classify() already routes
-		// the state, so when the Notification hook starts writing it the board
-		// needs no change here — only the SQL filter (monitor.boardSessionStates)
-		// has to widen.
+		// Both paused-on-a-person states are the waiting rank, and they share it
+		// deliberately (E-2091). `prompted` is the producer the rank was built
+		// for — a session blocked on a permission prompt — while `needs_input`
+		// is the older one. The board needs no third rank to tell them apart:
+		// the age column distinguishes a live prompt from a two-month-old row on
+		// sight, which is what that column is for.
+		{"prompted session is the waiting rank", sessionRow(11, "prompted", time.Minute, 0), actWaiting},
 		{"needs_input session is the waiting rank", sessionRow(12, "needs_input", time.Minute, 0), actWaiting},
 
 		// The session half wins over the task half. An `underway` task held by a
