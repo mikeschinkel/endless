@@ -5656,3 +5656,15 @@ Applies to anything durable and read later by someone else: decision description
 
 Chat replies are looser, but the same tics read as padding there too.
 - **Project**: endless
+
+### [2026-09-10] Do not file a decision that generalises a prohibition from one use case, or that prescribes a mechanism the code already has
+Mike rejected ED-1590 ('A destructive sweep runs on a schedule, never from a hook on the tool-call path') on three grounds, each worth separating:
+
+1. ABSOLUTIST FROM ONE DATA POINT. 'never from a hook' was generalised from a single incident with a single sweep. A decision states a rule that binds future choices; a rule drawn from one case has not been tested against a second. Mike: 'takes an absolutist position on something for which we have only one, or just a few use-cases to decide the pattern for.' When there is one case, record what was done and why in the TASK, and let a decision wait until a pattern actually exists.
+
+2. PRESCRIBED A MECHANISM HE NEVER APPROVED. The decision said the reaper runs on a schedule. He had approved taking it OFF the hook path; that is not the same as approving where it goes instead. He wants it on 'endless worktree land' so the reclamation is VISIBLE to the person whose land made those worktrees reclaimable. Removing something from one place is not a mandate to choose its new home.
+
+3. THE MECHANISM ALREADY EXISTED AND I DID NOT LOOK. worktree_cmd.land_worktree already calls _reap_stale_worktrees(main_root) as a post-land best-effort sweep, shelling to 'endless-go event reap-worktrees' with stderr forwarded so reaped dirs reach the user. I designed a new reapjob package and a new cadence for behaviour that shipped. Before designing a trigger, grep for the trigger.
+
+Also: an architecture decision constrains future choices across cases. 'Where does this one sweep run' is an implementation choice belonging in the task's plan. If a proposed decision reads as a summary of one task, it is not a decision.
+- **Project**: endless
