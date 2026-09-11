@@ -5710,3 +5710,9 @@ What made it look credible was that I ran the SAME wrong command against two dif
 
 The rule: before reporting anything as a product defect from inside a worktree, prove which database the observation came from. Name a row you expect to see and check it is there. A count that disagrees with expectation by an order of magnitude is first evidence about the OBSERVER, not the system. And when an independent-looking comparison agrees, ask what the two runs SHARE before treating the agreement as confirmation.
 - **Project**: endless
+
+### [2026-09-11] A git grep guard written beside new files passes by examining nothing
+I added a verify check that greps this task's two new files for a hardcoded base-branch name. It passed, and it was vacuous: `git grep` searches TRACKED files only, and both files were still untracked when I wrote the check. It went green without reading a byte. The real hit surfaced at land time, after the commit, and failed the land.
+
+Two rules. Any guard whose subject is a FILE LIST must assert that list is present and readable before it searches — a check that cannot distinguish 'found nothing' from 'looked at nothing' is not a check. And `git grep` specifically is the wrong tool while the files are new; plain `grep` over an explicit path list, or `git grep --untracked`, actually looks.
+- **Project**: endless
