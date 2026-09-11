@@ -5772,3 +5772,42 @@ behaviour, the observation wins immediately and without relitigating. Record the
 reversal where the work lives - here as trigger 5 on E-2028 - so the next
 session inherits the correction rather than the original argument.
 - **Project**: endless
+
+### [2026-09-11] Check whether the data is already in a command the failing path runs before proposing a mechanism to deliver it
+Mike reported that handoffs kept telling him to spawn tasks he had already
+spawned. I diagnosed it as a missing notification and folded it into E-2028
+("Inject who-to-message context...") as a fifth trigger. He then asked whether
+E-2028 was needed for anything beyond what its title says, and the answer
+exposed the error.
+
+WHAT WAS WRONG. E-2028 is inter-session coordination and depends on E-1936
+choosing a messaging transport, which is a `later` brainstorm. By folding his
+need into it I coupled a fix he wanted now to a dependency he wanted deferred,
+and I left a note in E-2028's analysis implying the task was urgent for a reason
+that was not true.
+
+THE ACTUAL DEFECT was not missing data. "endless task show <id> --llm" already
+prints "touched_by=claimed ES-NNNN (E-NNNN) [working]", and that is the exact
+command the whats-left handoff rules tell the agent to run. The rules simply
+never said that a task already claimed by a live session is not something to put
+on the user's list. A rules gap in a prompt file, not a feature gap in the
+product.
+
+THE RULE. Before proposing a mechanism, check whether the information the
+mechanism would deliver is ALREADY in the output of a command the failing path
+already runs. If it is, the defect is in how that output is used, and the fix is
+in the rules that use it. Cost of getting this backwards: a schema change, a SQL
+trigger and a notice kind proposed to fix a missing sentence.
+
+SECOND RULE, on folding. Two needs sharing a MECHANISM do not share a TASK. The
+spawn notice and the who-to-message affordance both ride session_notices, which
+is what made folding look right. They have different purposes, different
+urgency, and different dependencies; the one with no dependencies should never
+be parked behind the one waiting on a brainstorm. Test before folding: would
+this need still ship if the host task were deferred a quarter? If yes, it does
+not belong inside it.
+
+THIRD. When an argument for a task's priority turns out to be false, go back and
+remove it from the task. A stale justification in an analysis is read by the
+next session as current reasoning.
+- **Project**: endless
