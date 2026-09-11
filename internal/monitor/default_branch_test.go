@@ -1,6 +1,7 @@
 package monitor
 
 import (
+	"context"
 	"errors"
 	"os"
 	"os/exec"
@@ -98,7 +99,7 @@ func TestDefaultBranchFallsBackToMaster(t *testing.T) {
 	resetDefaultBranchCache()
 	t.Cleanup(resetDefaultBranchCache)
 
-	got, err := DefaultBranch(fixtureRepo(t, "master"))
+	got, err := DefaultBranch(context.Background(), fixtureRepo(t, "master"))
 	if err != nil {
 		t.Fatalf("DefaultBranch: %v", err)
 	}
@@ -119,7 +120,7 @@ func TestDefaultBranchIgnoresInitDefaultBranchThatDoesNotExist(t *testing.T) {
 	dir := fixtureRepo(t, "master")
 	gitConfigSet(t, dir, "init.defaultBranch", "main")
 
-	got, err := DefaultBranch(dir)
+	got, err := DefaultBranch(context.Background(), dir)
 	if err != nil {
 		t.Fatalf("DefaultBranch: %v", err)
 	}
@@ -137,7 +138,7 @@ func TestDefaultBranchUsesInitDefaultBranchWhenItExists(t *testing.T) {
 	dir := fixtureRepo(t, "trunk")
 	gitConfigSet(t, dir, "init.defaultBranch", "trunk")
 
-	got, err := DefaultBranch(dir)
+	got, err := DefaultBranch(context.Background(), dir)
 	if err != nil {
 		t.Fatalf("DefaultBranch: %v", err)
 	}
@@ -156,7 +157,7 @@ func TestDefaultBranchConfigWins(t *testing.T) {
 	gitConfigSet(t, dir, "init.defaultBranch", "release")
 	writeProjectConfig(t, dir, "release")
 
-	got, err := DefaultBranch(dir)
+	got, err := DefaultBranch(context.Background(), dir)
 	if err != nil {
 		t.Fatalf("DefaultBranch: %v", err)
 	}
@@ -175,7 +176,7 @@ func TestDefaultBranchConfigTypoDoesNotFallThrough(t *testing.T) {
 	dir := fixtureRepo(t, "main")
 	writeProjectConfig(t, dir, "mian")
 
-	got, err := DefaultBranch(dir)
+	got, err := DefaultBranch(context.Background(), dir)
 	if !errors.Is(err, ErrDefaultBranchUnresolved) {
 		t.Fatalf("DefaultBranch = (%q, %v), want ErrDefaultBranchUnresolved", got, err)
 	}
@@ -192,7 +193,7 @@ func TestDefaultBranchErrorsRatherThanGuessingMain(t *testing.T) {
 	resetDefaultBranchCache()
 	t.Cleanup(resetDefaultBranchCache)
 
-	got, err := DefaultBranch(fixtureRepo(t, "develop"))
+	got, err := DefaultBranch(context.Background(), fixtureRepo(t, "develop"))
 	if !errors.Is(err, ErrDefaultBranchUnresolved) {
 		t.Fatalf("DefaultBranch = (%q, %v), want ErrDefaultBranchUnresolved", got, err)
 	}
@@ -204,24 +205,28 @@ func TestDefaultBranchErrorsRatherThanGuessingMain(t *testing.T) {
 // TestDefaultBranchMemoizes guards the hot path: `session monitor` re-probes
 // every row every two seconds, and an unmemoized resolver would add up to four
 // git invocations per row per tick to re-derive a constant.
+//
+// Zero calls on the second resolution covers the git-common-dir lookup the key
+// is derived from as well (E-2128) — that lookup is memoized per directory, so a
+// repeat resolution of the same directory must not re-run it either.
 func TestDefaultBranchMemoizes(t *testing.T) {
 	resetDefaultBranchCache()
 	t.Cleanup(resetDefaultBranchCache)
 
 	dir := fixtureRepo(t, "master")
-	if _, err := DefaultBranch(dir); err != nil {
+	if _, err := DefaultBranch(context.Background(), dir); err != nil {
 		t.Fatalf("DefaultBranch: %v", err)
 	}
 
 	var calls int
 	prev := runGit
 	t.Cleanup(func() { runGit = prev })
-	runGit = func(d string, args ...string) (string, error) {
+	runGit = func(ctx context.Context, d string, args ...string) (string, error) {
 		calls++
-		return prev(d, args...)
+		return prev(ctx, d, args...)
 	}
 
-	if _, err := DefaultBranch(dir); err != nil {
+	if _, err := DefaultBranch(context.Background(), dir); err != nil {
 		t.Fatalf("DefaultBranch (cached): %v", err)
 	}
 	if calls != 0 {

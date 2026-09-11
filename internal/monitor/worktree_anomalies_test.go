@@ -1,6 +1,7 @@
 package monitor
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -35,7 +36,7 @@ func (s gitStub) install(t *testing.T) {
 	t.Helper()
 	prev := runGit
 	t.Cleanup(func() { runGit = prev })
-	runGit = func(dir string, args ...string) (string, error) {
+	runGit = func(_ context.Context, dir string, args ...string) (string, error) {
 		switch args[0] {
 		case "status":
 			return s.status, s.statusErr
@@ -140,7 +141,7 @@ func TestWorktreeAnomaliesAt(t *testing.T) {
 			writeCompanion(t, wt, branch)
 			tc.stub(wt).install(t)
 
-			got := kinds(worktreeAnomaliesAt(root, wt))
+			got := kinds(worktreeAnomaliesAt(context.Background(), root, wt))
 			if len(got) != len(tc.want) {
 				t.Fatalf("kinds = %v, want %v", got, tc.want)
 			}

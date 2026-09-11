@@ -1,8 +1,10 @@
 package monitor
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -43,6 +45,27 @@ type unsettledStub struct {
 	// rangeDiffArgs records the arguments of the content comparison, so a test
 	// can assert which ranges were compared.
 	rangeDiffArgs *[]string
+	// cacheRoot is where the stub tells git its common dir is, so the unlanded
+	// cache (E-2128) lands in a throwaway directory the test owns. install fills
+	// it; a test reads it to prime or inspect the cache.
+	cacheRoot string
+}
+
+// cacheDir is the unlanded cache directory the stub's fake common dir implies.
+func (s *unsettledStub) cacheDir() string {
+	return filepath.Join(s.cacheRoot, filepath.FromSlash(unlandedCacheRel))
+}
+
+// primeWatermark writes the repo-level watermark the cache-only read addresses
+// the cache through. Without one every lookup is a miss, which is correct — it is
+// the state of a fresh clone — but it means a test that wants to exercise a HIT
+// has to stand in for the job that normally writes it.
+func (s *unsettledStub) primeWatermark(t *testing.T, base, tip string) {
+	t.Helper()
+	c := unlandedCache{dir: s.cacheDir()}
+	if err := c.writeWatermark(base, tip); err != nil {
+		t.Fatalf("prime watermark: %v", err)
+	}
 }
 
 // stubRangeDiff renders n left-only rows in `git range-diff --no-patch`'s
@@ -57,13 +80,19 @@ func stubRangeDiff(n int) string {
 	return b.String()
 }
 
-func (s unsettledStub) install(t *testing.T) {
+func (s *unsettledStub) install(t *testing.T) {
 	t.Helper()
 	prev := runGit
 	t.Cleanup(func() { runGit = prev })
+	// resetDefaultBranchCache also drops the memoized git common dir, which these
+	// tests all probe under the same "/wt" path — without it, the second test in a
+	// run would read the first one's cache directory.
 	t.Cleanup(resetDefaultBranchCache)
 	resetDefaultBranchCache()
-	runGit = func(dir string, args ...string) (string, error) {
+	if s.cacheRoot == "" {
+		s.cacheRoot = t.TempDir()
+	}
+	runGit = func(_ context.Context, dir string, args ...string) (string, error) {
 		switch args[0] {
 		case "status":
 			return s.status, s.statusErr
@@ -93,6 +122,12 @@ func (s unsettledStub) install(t *testing.T) {
 		case "config":
 			return "", errors.New("unset")
 		case "rev-parse":
+			// The cache (E-2128) asks where this repo's common dir is; answer with a
+			// directory the test owns, so entries are written and read somewhere
+			// throwaway rather than under the package's working tree.
+			if len(args) > 1 && strings.HasSuffix(args[len(args)-1], "--git-common-dir") {
+				return s.cacheRoot + "\n", nil
+			}
 			if s.baseUnresolvable {
 				return "", errors.New("unknown revision")
 			}
@@ -102,20 +137,26 @@ func (s unsettledStub) install(t *testing.T) {
 	}
 }
 
+// unsettledStubDir is the worktree path every stubbed test probes. A constant
+// because the git common dir is memoized per directory, so two tests using
+// different literals would silently not share the reset this file relies on.
+const unsettledStubDir = "/wt"
+
 // legacyUnsettled is a verbatim copy of the pre-E-1865 taskWorktreeUnsettled git
 // logic (minus the DB resolution): fail-open, hardcoded `main`, no credit for a
 // recorded landing. Kept as an independent oracle so the tests below can state
 // where today's verdict deliberately differs from it, rather than asserting the
 // new code against itself.
 func legacyUnsettled(wt string) bool {
-	out, gerr := runGit(wt, "status", "--porcelain")
+	ctx := context.Background()
+	out, gerr := runGit(ctx, wt, "status", "--porcelain")
 	if gerr != nil {
 		return false
 	}
 	if strings.TrimSpace(out) != "" {
 		return true
 	}
-	out, gerr = runGit(wt, "rev-list", "main..HEAD", "--count")
+	out, gerr = runGit(ctx, wt, "rev-list", "main..HEAD", "--count")
 	if gerr != nil {
 		return false
 	}
@@ -162,14 +203,14 @@ func TestUnsettledDivergesFromLegacyOnlyWhereIntended(t *testing.T) {
 				// is what this test is looking for. The case where they
 				// legitimately disagree is TestRebasedCommitsAreNotUnlanded.
 				n, _ := strconv.Atoi(strings.TrimSpace(rl.out))
-				unsettledStub{
+				(&unsettledStub{
 					status: st.out, statusErr: st.err,
 					revList: rl.out, revListErr: rl.err,
 					unlanded: n,
-				}.install(t)
+				}).install(t)
 
-				legacy := legacyUnsettled("/wt")
-				d := WorktreeUnsettledAt("/wt")
+				legacy := legacyUnsettled(unsettledStubDir)
+				d := WorktreeUnsettledDetailAt(context.Background(), unsettledStubDir)
 
 				// A probe that could not run is the ONLY licensed divergence
 				// here.
@@ -202,8 +243,8 @@ func TestUnsettledDivergesFromLegacyOnlyWhereIntended(t *testing.T) {
 // draw. Both make the row ◆, and collapsing them is what made "I could not
 // tell" indistinguishable from "you have work to land".
 func TestUndeterminedIsNotUnlanded(t *testing.T) {
-	unsettledStub{revListErr: errors.New("boom")}.install(t)
-	d := WorktreeUnsettledAt("/wt")
+	(&unsettledStub{revListErr: errors.New("boom")}).install(t)
+	d := WorktreeUnsettledDetailAt(context.Background(), unsettledStubDir)
 
 	if !d.Unsettled() || !d.IsUndetermined() {
 		t.Fatalf("failed probe must be unsettled AND undetermined: %+v", d)
@@ -224,8 +265,8 @@ func TestUndeterminedIsNotUnlanded(t *testing.T) {
 // nor `main`, the hardcoded probe exited 128 on every tick and the fail-open
 // verdict rendered a clean row forever.
 func TestUnresolvedDefaultBranchIsUndetermined(t *testing.T) {
-	unsettledStub{baseUnresolvable: true, revList: "0\n"}.install(t)
-	d := WorktreeUnsettledAt("/wt")
+	(&unsettledStub{baseUnresolvable: true, revList: "0\n"}).install(t)
+	d := WorktreeUnsettledDetailAt(context.Background(), unsettledStubDir)
 
 	if !d.Unsettled() || !d.IsUndetermined() || d.BaseErr == "" {
 		t.Fatalf("unresolvable default branch must read as undetermined: %+v", d)
@@ -243,9 +284,9 @@ func TestUnresolvedDefaultBranchIsUndetermined(t *testing.T) {
 // every one of them to a commit already on the base. The old probe reported
 // three, advised `worktree land`, and would have replayed work that was in.
 func TestRebasedCommitsAreNotUnlanded(t *testing.T) {
-	unsettledStub{revList: "3\n", unlanded: 0}.install(t)
+	(&unsettledStub{revList: "3\n", unlanded: 0}).install(t)
 
-	d := WorktreeUnsettledAt("/wt")
+	d := WorktreeUnsettledDetailAt(context.Background(), unsettledStubDir)
 
 	if d.IsUndetermined() {
 		t.Fatalf("probe could not run: %s", d.UndeterminedReason())
@@ -253,7 +294,7 @@ func TestRebasedCommitsAreNotUnlanded(t *testing.T) {
 	if d.Unsettled() || d.IsUnlanded() {
 		t.Errorf("commits already on the base still read as unlanded: %s", d.Reason())
 	}
-	if legacyUnsettled("/wt") != true {
+	if legacyUnsettled(unsettledStubDir) != true {
 		t.Fatal("fixture does not reproduce the bug: the legacy probe agreed")
 	}
 }
@@ -264,9 +305,9 @@ func TestRebasedCommitsAreNotUnlanded(t *testing.T) {
 // question with a different answer.
 func TestUnlandedComparesTheForkPointRanges(t *testing.T) {
 	var got []string
-	unsettledStub{revList: "2\n", unlanded: 2, rangeDiffArgs: &got}.install(t)
+	(&unsettledStub{revList: "2\n", unlanded: 2, rangeDiffArgs: &got}).install(t)
 
-	worktreeUnsettledAt("/wt", false)
+	worktreeUnsettledAt(context.Background(), unsettledStubDir, unlandedComputeOnMiss, false)
 
 	want := []string{"range-diff", "--no-color", "--no-patch",
 		"b45e0000..HEAD", "b45e0000..main"}
@@ -287,21 +328,21 @@ func TestUnlandedComparesTheForkPointRanges(t *testing.T) {
 // log is the answer, and range-diff must not be called at all.
 func TestBaseUnmovedSkipsTheComparison(t *testing.T) {
 	var called [][]string
-	unsettledStub{
+	(&unsettledStub{
 		revList: "0\n",
 		log:     "abc1234 first\n",
-	}.install(t)
+	}).install(t)
 	inner := runGit
-	runGit = func(dir string, args ...string) (string, error) {
+	runGit = func(ctx context.Context, dir string, args ...string) (string, error) {
 		called = append(called, args)
 		// The branch is 2 ahead; the base gained nothing.
 		if args[0] == "rev-list" && strings.HasSuffix(args[len(args)-1], "..HEAD") {
 			return "2\n", nil
 		}
-		return inner(dir, args...)
+		return inner(ctx, dir, args...)
 	}
 
-	d := WorktreeUnsettledAt("/wt")
+	d := WorktreeUnsettledDetailAt(context.Background(), unsettledStubDir)
 
 	if d.IsUndetermined() {
 		t.Fatalf("an unmoved base made the verdict undetermined: %s", d.UndeterminedReason())
@@ -319,12 +360,12 @@ func TestBaseUnmovedSkipsTheComparison(t *testing.T) {
 // TestUnlandedProbeFailureIsUndetermined proves the comparison fails CLOSED. A
 // range-diff that cannot run must mark the row, never clear it.
 func TestUnlandedProbeFailureIsUndetermined(t *testing.T) {
-	unsettledStub{
+	(&unsettledStub{
 		revList:      "2\n",
 		rangeDiffErr: errors.New("fatal: need two commit ranges"),
-	}.install(t)
+	}).install(t)
 
-	d := WorktreeUnsettledAt("/wt")
+	d := WorktreeUnsettledDetailAt(context.Background(), unsettledStubDir)
 
 	if !d.Unsettled() || !d.IsUndetermined() {
 		t.Fatalf("a failed comparison must not read as the all-clear: %+v", d)
@@ -342,16 +383,16 @@ func TestUnlandedProbeFailureIsUndetermined(t *testing.T) {
 // the base has not moved the branch's own log IS the answer, so a failure there
 // is a failure of the probe — not a lost detail.
 func TestUnmovedBaseLogFailureIsUndetermined(t *testing.T) {
-	unsettledStub{revList: "0\n", logErr: errors.New("git exploded")}.install(t)
+	(&unsettledStub{revList: "0\n", logErr: errors.New("git exploded")}).install(t)
 	inner := runGit
-	runGit = func(dir string, args ...string) (string, error) {
+	runGit = func(ctx context.Context, dir string, args ...string) (string, error) {
 		if args[0] == "rev-list" && strings.HasSuffix(args[len(args)-1], "..HEAD") {
 			return "2\n", nil
 		}
-		return inner(dir, args...)
+		return inner(ctx, dir, args...)
 	}
 
-	d := WorktreeUnsettledAt("/wt")
+	d := WorktreeUnsettledDetailAt(context.Background(), unsettledStubDir)
 
 	if !d.Unsettled() || !d.IsUndetermined() {
 		t.Fatalf("a failed log on the verdict path must not read as clean: %+v", d)
@@ -361,62 +402,77 @@ func TestUnmovedBaseLogFailureIsUndetermined(t *testing.T) {
 	}
 }
 
-// TestVerdictPathSkipsEnrichment guards the hot path.
-// AnnotateSessionStatusUnsettled runs the verdict probe once per row on EVERY
-// flat `session status` render, so the marker must never pay for the branch
-// name that only `task unsettled <id>` displays.
+// TestVerdictPathReadsTheCacheAndNeverComputes is the property E-2128 exists
+// for, and it should fail loudly if a future edit puts a computation back on the
+// display path.
 //
-// E-2087 moved the commit subjects OFF that list. The content comparison has to
-// identify the unlanded commits individually to count them, so naming them
-// costs nothing extra and both entry points carry them; what used to be a
-// second `git log` per row is now no git call at all.
-func TestVerdictPathSkipsEnrichment(t *testing.T) {
+// AnnotateSessionStatusUnsettled runs the verdict probe once per row on EVERY
+// flat `session status` render, and `session monitor` re-renders every two
+// seconds. So the verdict path must run NEITHER the display-only branch name
+// that only `task unsettled <id>` shows, NOR any part of the content comparison
+// — `git range-diff` above all, measured at 584ms for one row.
+//
+// It also pins what the path does instead: with nothing in the cache the verdict
+// is not established, which is a third answer beside settled and unsettled.
+func TestVerdictPathReadsTheCacheAndNeverComputes(t *testing.T) {
 	var called [][]string
-	unsettledStub{
+	stub := (&unsettledStub{
 		status:   "",
 		revList:  "3\n",
 		unlanded: 3,
 		branch:   "task/x\n",
-	}.install(t)
+	})
+	stub.install(t)
 	inner := runGit
-	runGit = func(dir string, args ...string) (string, error) {
+	runGit = func(ctx context.Context, dir string, args ...string) (string, error) {
 		called = append(called, args)
-		return inner(dir, args...)
+		return inner(ctx, dir, args...)
 	}
 
-	// Verdict-only: the predicate's probes, and nothing display-only.
-	d := WorktreeUnsettledAt("/wt")
-	if !d.Unsettled() {
-		t.Fatal("expected unsettled")
+	// Cold cache: the row has no verdict, and says so.
+	d := WorktreeUnsettledAt(context.Background(), unsettledStubDir)
+	if d.UnlandedKnown {
+		t.Error("an empty cache must not yield an established verdict")
 	}
-	if len(d.UnlandedLog) != 3 {
-		t.Errorf("UnlandedLog = %v, want the commits the comparison already named", d.UnlandedLog)
+	if d.UnsettledKnown() {
+		t.Error("a clean worktree with no cached verdict must read as not yet determined")
+	}
+	if d.Unsettled() {
+		t.Errorf("an uncomputed verdict must not read as unsettled: %s", d.Reason())
+	}
+	if d.IsUndetermined() {
+		t.Errorf("no probe failed, so this is not the undetermined state: %s", d.UndeterminedReason())
 	}
 	for _, c := range called {
-		if c[0] == "log" || (c[0] == "symbolic-ref" && c[len(c)-1] == "HEAD") {
-			t.Errorf("verdict path ran display-only git %v (calls: %v)", c, called)
+		switch {
+		case c[0] == "range-diff", c[0] == "merge-base", c[0] == "log",
+			c[0] == "symbolic-ref" && c[len(c)-1] == "HEAD":
+			t.Errorf("the cache-only verdict path ran %v (calls: %v)", c, called)
 		}
 	}
 
-	// The resolver's own calls must be paid ONCE per repo, not once per row:
-	// `session monitor` re-renders every two seconds.
-	before := len(called)
-	if second := WorktreeUnsettledAt("/wt"); second.UnlandedCount != d.UnlandedCount {
-		t.Fatalf("second probe disagreed: %+v vs %+v", second, d)
-	}
-	for _, c := range called[before:] {
-		if c[0] == "rev-parse" || c[0] == "config" {
-			t.Errorf("second probe re-resolved the default branch (%v)", c)
-		}
-	}
-
-	// Detail path: same verdict, plus the enrichment.
-	full := WorktreeUnsettledDetailAt("/wt")
-	if full.Unsettled() != d.Unsettled() || full.UnlandedCount != d.UnlandedCount {
-		t.Errorf("enrichment changed the verdict: %+v vs %+v", full, d)
+	// Warm the cache through the path that is allowed to compute, then read again.
+	full := WorktreeUnsettledDetailAt(context.Background(), unsettledStubDir)
+	if !full.UnlandedKnown || full.UnlandedCount != 3 {
+		t.Fatalf("the computing path did not establish the verdict: %+v", full)
 	}
 	if full.Branch == "" {
 		t.Errorf("detail path did not enrich: %+v", full)
+	}
+	stub.primeWatermark(t, "main", "deadbeef")
+
+	called = nil
+	warm := WorktreeUnsettledAt(context.Background(), unsettledStubDir)
+	if !warm.UnlandedKnown || warm.UnlandedCount != full.UnlandedCount {
+		t.Fatalf("cache-only read disagreed with the computed verdict: %+v vs %+v", warm, full)
+	}
+	if !warm.Unsettled() || !warm.UnsettledKnown() {
+		t.Errorf("a cached non-zero verdict must mark the row: %s", warm.Reason())
+	}
+	for _, c := range called {
+		if c[0] == "range-diff" || c[0] == "merge-base" {
+			t.Errorf("a cache HIT still ran the comparison: %v", called)
+		}
 	}
 }
 
@@ -426,9 +482,9 @@ func TestVerdictPathSkipsEnrichment(t *testing.T) {
 // report every branch with more than unlandedLogLimit commits outstanding.
 func TestUnlandedLogIsCappedButTheCountIsNot(t *testing.T) {
 	const n = unlandedLogLimit + 7
-	unsettledStub{revList: "99\n", unlanded: n}.install(t)
+	(&unsettledStub{revList: "99\n", unlanded: n}).install(t)
 
-	d := WorktreeUnsettledDetailAt("/wt")
+	d := WorktreeUnsettledDetailAt(context.Background(), unsettledStubDir)
 
 	if d.UnlandedCount != n {
 		t.Errorf("UnlandedCount = %d, want the exact %d", d.UnlandedCount, n)
@@ -443,12 +499,12 @@ func TestUnlandedLogIsCappedButTheCountIsNot(t *testing.T) {
 // it, so an explanation that filtered it would explain a marker the user is not
 // seeing.
 func TestUnsettledPartitionsModified(t *testing.T) {
-	unsettledStub{
+	(&unsettledStub{
 		status:  " M src/endless/cli.py\n?? notes.txt\n M .endless/verbs.jsonl\n",
 		revList: "0\n",
-	}.install(t)
+	}).install(t)
 
-	d := WorktreeUnsettledAt("/wt")
+	d := WorktreeUnsettledDetailAt(context.Background(), unsettledStubDir)
 	if !d.Unsettled() {
 		t.Fatal("worktree with modifications must be unsettled")
 	}
@@ -467,9 +523,9 @@ func TestUnsettledPartitionsModified(t *testing.T) {
 // "which is it?" question in its most confusing form: a ◆ caused purely by
 // endless's own ledger churn, where the user sees no work of their own.
 func TestUnsettledAutoManagedOnlyReason(t *testing.T) {
-	unsettledStub{status: " M .endless/verbs.jsonl\n", revList: "0\n"}.install(t)
+	(&unsettledStub{status: " M .endless/verbs.jsonl\n", revList: "0\n"}).install(t)
 
-	d := WorktreeUnsettledAt("/wt")
+	d := WorktreeUnsettledDetailAt(context.Background(), unsettledStubDir)
 	if !d.Unsettled() {
 		t.Fatal("auto-managed churn alone must still be unsettled (matches the ◆)")
 	}
@@ -481,15 +537,15 @@ func TestUnsettledAutoManagedOnlyReason(t *testing.T) {
 // TestUnsettledUnlandedOnly covers the clean-but-unlanded steady state: the
 // normal pre-land condition, where the fix is `worktree land`, not a commit.
 func TestUnsettledUnlandedOnly(t *testing.T) {
-	unsettledStub{
+	(&unsettledStub{
 		status:   "",
 		revList:  "2\n",
 		unlanded: 2,
 		branch:   "task/1865-x\n",
-	}.install(t)
+	}).install(t)
 
 	// Detail variant: this test asserts the display enrichment.
-	d := WorktreeUnsettledDetailAt("/wt")
+	d := WorktreeUnsettledDetailAt(context.Background(), unsettledStubDir)
 	if !d.Unsettled() || d.IsModified() || !d.IsUnlanded() {
 		t.Fatalf("want unlanded-only; got unsettled=%v modified=%v unlanded=%v",
 			d.Unsettled(), d.IsModified(), d.IsUnlanded())
@@ -508,13 +564,13 @@ func TestUnsettledUnlandedOnly(t *testing.T) {
 // TestUnsettledBothSubStates proves the reason names BOTH fixes when both apply
 // — the case where telling the user only one of them would leave them stuck.
 func TestUnsettledBothSubStates(t *testing.T) {
-	unsettledStub{
+	(&unsettledStub{
 		status:   " M src/endless/cli.py\n",
 		revList:  "1\n",
 		unlanded: 1,
-	}.install(t)
+	}).install(t)
 
-	d := WorktreeUnsettledAt("/wt")
+	d := WorktreeUnsettledDetailAt(context.Background(), unsettledStubDir)
 	if !d.IsModified() || !d.IsUnlanded() {
 		t.Fatal("want both sub-states true")
 	}
@@ -527,8 +583,8 @@ func TestUnsettledBothSubStates(t *testing.T) {
 // which the list view must render distinctly: a worktree that is genuinely
 // settled, and a task that never had one.
 func TestUnsettledSettledAndNoWorktree(t *testing.T) {
-	unsettledStub{status: "", revList: "0\n"}.install(t)
-	d := WorktreeUnsettledAt("/wt")
+	(&unsettledStub{status: "", revList: "0\n"}).install(t)
+	d := WorktreeUnsettledDetailAt(context.Background(), unsettledStubDir)
 	if d.Unsettled() {
 		t.Error("clean + fully landed must be settled")
 	}
@@ -536,7 +592,7 @@ func TestUnsettledSettledAndNoWorktree(t *testing.T) {
 		t.Errorf("Reason() = %q, want settled", got)
 	}
 
-	none := WorktreeUnsettledAt("")
+	none := WorktreeUnsettledAt(context.Background(), "")
 	if none.HasWorktree || none.Unsettled() {
 		t.Error("empty path must yield no worktree and settled")
 	}
@@ -550,13 +606,13 @@ func TestUnsettledSettledAndNoWorktree(t *testing.T) {
 // suppress) the verdict.
 func TestUnsettledDisplayFailuresDoNotChangeVerdict(t *testing.T) {
 	boom := errors.New("git exploded")
-	unsettledStub{
+	(&unsettledStub{
 		status: "", revList: "4\n", unlanded: 4,
 		branchErr: boom,
-	}.install(t)
+	}).install(t)
 
 	// Detail variant: only it attempts the enrichment that fails here.
-	d := WorktreeUnsettledDetailAt("/wt")
+	d := WorktreeUnsettledDetailAt(context.Background(), unsettledStubDir)
 	if !d.Unsettled() || d.UnlandedCount != 4 {
 		t.Fatalf("verdict changed by display-only failures: %+v", d)
 	}

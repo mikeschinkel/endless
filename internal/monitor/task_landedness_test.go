@@ -1,6 +1,7 @@
 package monitor
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -76,7 +77,7 @@ func (f *landednessFixture) land(t *testing.T) {
 
 func (f *landednessFixture) probe(t *testing.T) Landedness {
 	t.Helper()
-	got := TaskLandedness(f.root, []string{f.branch})
+	got := TaskLandedness(context.Background(), f.root, []string{f.branch})
 	if len(got) != 1 {
 		t.Fatalf("TaskLandedness returned %d rows, want 1", len(got))
 	}
@@ -172,7 +173,7 @@ func TestLandednessCountsAMixedCommitAsSource(t *testing.T) {
 func TestLandednessMissingBranchIsNotLanded(t *testing.T) {
 	f := newLandednessFixture(t)
 
-	got := TaskLandedness(f.root, []string{"task/999"})
+	got := TaskLandedness(context.Background(), f.root, []string{"task/999"})
 	if len(got) != 1 {
 		t.Fatalf("TaskLandedness returned %d rows, want 1", len(got))
 	}
@@ -191,7 +192,7 @@ func TestLandednessPreservesRequestOrder(t *testing.T) {
 	f.commit(t, "E-42: the fix", "fix.go")
 
 	want := []string{"task/999", f.branch, "task/998"}
-	got := TaskLandedness(f.root, want)
+	got := TaskLandedness(context.Background(), f.root, want)
 	if len(got) != len(want) {
 		t.Fatalf("TaskLandedness returned %d rows, want %d", len(got), len(want))
 	}
@@ -210,7 +211,7 @@ func TestLandednessUnresolvedBaseIsUndetermined(t *testing.T) {
 	t.Cleanup(resetDefaultBranchCache)
 
 	root := t.TempDir()
-	got := TaskLandedness(root, []string{"task/42"})
+	got := TaskLandedness(context.Background(), root, []string{"task/42"})
 	if len(got) != 1 {
 		t.Fatalf("TaskLandedness returned %d rows, want 1", len(got))
 	}
@@ -231,15 +232,15 @@ func TestLandednessCarriesTheInterruptClassification(t *testing.T) {
 	f.commit(t, "E-42: the fix", "fix.go")
 
 	restore := runGit
-	runGit = func(dir string, args ...string) (string, error) {
+	runGit = func(ctx context.Context, dir string, args ...string) (string, error) {
 		if len(args) > 0 && args[0] == "for-each-ref" {
 			return "", fmt.Errorf("%w: signal: interrupt", ErrGitInterrupted)
 		}
-		return restore(dir, args...)
+		return restore(ctx, dir, args...)
 	}
 	t.Cleanup(func() { runGit = restore })
 
-	got := TaskLandedness(f.root, []string{f.branch})[0]
+	got := TaskLandedness(context.Background(), f.root, []string{f.branch})[0]
 	if !got.Undetermined() {
 		t.Fatal("Undetermined = false, want true — the probe established nothing")
 	}

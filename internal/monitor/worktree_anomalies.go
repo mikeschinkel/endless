@@ -1,6 +1,7 @@
 package monitor
 
 import (
+	"context"
 	"fmt"
 	"path"
 	"strings"
@@ -95,15 +96,15 @@ func (a WorktreeAnomaly) Line() string {
 // that lookup routed to the per-worktree sandbox (which lacks the task row) and
 // errored; path-based resolution behaves identically in self-dev and consumer
 // projects. An empty projectRoot disables only the repo-level prunable probe.
-func WorktreeAnomaliesAt(projectRoot, worktreePath string) []WorktreeAnomaly {
-	return worktreeAnomaliesAt(projectRoot, worktreePath)
+func WorktreeAnomaliesAt(ctx context.Context, projectRoot, worktreePath string) []WorktreeAnomaly {
+	return worktreeAnomaliesAt(ctx, projectRoot, worktreePath)
 }
 
 // WorktreeAnomalies returns the genuine handoff anomalies for the task's
 // worktree, or an empty slice when clean (or when there is no worktree). It is
 // best-effort: any git error on a given probe skips that probe rather than
 // failing — the surfaces must never lie or block because a git call hiccuped.
-func WorktreeAnomalies(projectID, taskID int64) []WorktreeAnomaly {
+func WorktreeAnomalies(ctx context.Context, projectID, taskID int64) []WorktreeAnomaly {
 	wt, err := WorktreePathForTask(projectID, taskID)
 	if err != nil || wt == "" {
 		return nil
@@ -114,7 +115,7 @@ func WorktreeAnomalies(projectID, taskID int64) []WorktreeAnomaly {
 		// still report the per-worktree anomalies we can compute from wt alone.
 		root = ""
 	}
-	return worktreeAnomaliesAt(root, wt)
+	return worktreeAnomaliesAt(ctx, root, wt)
 }
 
 // worktreeAnomaliesAt is the path-based inspection core shared by all callers:
@@ -122,11 +123,11 @@ func WorktreeAnomalies(projectID, taskID int64) []WorktreeAnomaly {
 // anomaly list. Kept free of DB/path-resolution so it is unit-testable with a
 // stubbed runGit. An empty projectRoot disables only the repo-level prunable
 // probe. Best-effort throughout: a failing probe is skipped, never fatal.
-func worktreeAnomaliesAt(projectRoot, wt string) []WorktreeAnomaly {
+func worktreeAnomaliesAt(ctx context.Context, projectRoot, wt string) []WorktreeAnomaly {
 	var anomalies []WorktreeAnomaly
 
 	// 1. Uncommitted/untracked USER files — auto-managed churn partitioned out.
-	if out, gerr := runGit(wt, "status", "--porcelain"); gerr == nil {
+	if out, gerr := runGit(ctx, wt, "status", "--porcelain"); gerr == nil {
 		if user := userStatusPaths(out); len(user) > 0 {
 			anomalies = append(anomalies, WorktreeAnomaly{
 				Kind:   AnomalyUncommitted,
@@ -137,7 +138,7 @@ func worktreeAnomaliesAt(projectRoot, wt string) []WorktreeAnomaly {
 
 	// 2. Detached HEAD, or HEAD on a branch other than the companion's.
 	// `symbolic-ref --short --quiet HEAD` exits non-zero on a detached HEAD.
-	branch, berr := runGit(wt, "symbolic-ref", "--short", "--quiet", "HEAD")
+	branch, berr := runGit(ctx, wt, "symbolic-ref", "--short", "--quiet", "HEAD")
 	branch = strings.TrimSpace(branch)
 	switch {
 	case berr != nil || branch == "":
@@ -158,7 +159,7 @@ func worktreeAnomaliesAt(projectRoot, wt string) []WorktreeAnomaly {
 	// 3. The worktree is prunable or locked per git's own bookkeeping (a leaked
 	// or stale-locked checkout). Read from the repo-level worktree list.
 	if projectRoot != "" {
-		if detail := worktreePrunableDetail(projectRoot, wt); detail != "" {
+		if detail := worktreePrunableDetail(ctx, projectRoot, wt); detail != "" {
 			anomalies = append(anomalies, WorktreeAnomaly{
 				Kind:   AnomalyPrunable,
 				Detail: detail,
@@ -224,8 +225,8 @@ func uncommittedDetail(paths []string) string {
 // worktreePrunableDetail inspects `git worktree list --porcelain` and returns a
 // non-empty detail string when the block for wt is marked prunable or locked.
 // Best-effort: any git error yields "" (no anomaly claimed).
-func worktreePrunableDetail(projectRoot, wt string) string {
-	out, err := runGit(projectRoot, "worktree", "list", "--porcelain")
+func worktreePrunableDetail(ctx context.Context, projectRoot, wt string) string {
+	out, err := runGit(ctx, projectRoot, "worktree", "list", "--porcelain")
 	if err != nil {
 		return ""
 	}

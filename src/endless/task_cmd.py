@@ -2419,6 +2419,12 @@ def unsettled_item(item_id: int, llm: bool = False, as_json: bool = False):
         "modified_files": [], "auto_managed_files": [],
         "unlanded_count": 0, "unlanded_log": [],
         "undetermined": False, "undetermined_reason": "",
+        # Vacuously known (E-2128): there is no worktree, so there is nothing to
+        # land and no probe to have skipped. Matching the Go literal for the same
+        # case matters — this is the one probe dict Python builds itself, and a
+        # missing key here would render "not yet computed" on a task that has
+        # nothing to compute.
+        "unlanded_known": True,
         "base": "",
     }
 
@@ -2461,6 +2467,15 @@ def unsettled_item(item_id: int, llm: bool = False, as_json: bool = False):
         if not probe["has_worktree"]:
             click.echo(click.style("•", fg="cyan") +
                        " No worktree for this task — nothing to land.")
+        elif not probe.get("unlanded_known", True):
+            # E-2128: the working tree is clean and nothing has computed whether
+            # this branch's commits reached the base. Saying "settled" here would
+            # be the false all-clear ED-1589 was written about. This command
+            # computes on a miss, so reaching it means the computation itself could
+            # not be stored OR this output came from a cache-only caller.
+            click.echo(click.style("•", fg="yellow") +
+                       " Working tree is clean; whether its commits reached the "
+                       "base branch is not yet computed.")
         else:
             base = probe.get("base") or "the base branch"
             click.echo(click.style("•", fg="green") +

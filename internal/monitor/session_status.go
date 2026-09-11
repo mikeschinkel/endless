@@ -50,6 +50,19 @@ type SessionStatusRow struct {
 	// tree moved since); it is filled in by AnnotateSessionStatusUnsettled, which
 	// shells out to git, and only on the flat render path. --tree leaves it false.
 	Unsettled bool
+	// UnsettledKnown says whether Unsettled above is an ANSWER or a placeholder
+	// (E-2128). The unlanded half of the verdict is now read from a cache one
+	// background job writes rather than computed per row per tick (ED-1589), and a
+	// cache miss has no verdict to report — so the renderer draws `~` (not yet
+	// determined) instead of choosing between ◆ and a blank on no evidence.
+	//
+	// Like Unsettled it is an annotation, filled only on the flat path; --tree
+	// leaves it false, which is harmless there because --tree draws no marker.
+	//
+	// It is true in more cases than "the cache had an entry": a task with no
+	// worktree has nothing to land, and a DIRTY worktree is known to be unsettled
+	// from `git status` alone, which stays live. See UnsettledDetail.UnsettledKnown.
+	UnsettledKnown bool
 	// Hidden / HiddenAt are the VIEWING session's per-session suppression of this
 	// task (E-1914): a session_hidden_tasks row for (viewer, task). Like Unsettled
 	// they are NOT part of the row query — the row set is viewer-agnostic, and

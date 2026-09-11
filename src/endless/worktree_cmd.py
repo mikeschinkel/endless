@@ -1401,6 +1401,35 @@ def _reap_stale_worktrees(project_root: Path) -> None:
     )
 
 
+def _warm_unlanded_cache(worktree_path: Path) -> None:
+    """Record the just-landed worktree's settled verdict (E-2128). Best-effort.
+
+    A land rebases the branch onto the base and fast-forwards the base to it, so
+    afterwards the branch tip IS the base tip and the answer to "does this branch
+    hold work the base lacks?" is known to be no — without comparing anything.
+    Asking the Go probe now costs three cheap git calls (the comparison short-
+    circuits on a branch contained in its base) and leaves the marker on disk, so
+    the next `session status` tick reads a verdict instead of rendering `~` for
+    the one worktree whose state definitely just changed.
+
+    It goes through `session-query worktree-unsettled` rather than writing the
+    marker here on purpose: the cache layout is Go's, and a second writer in a
+    second language is how two halves of one format drift apart.
+
+    Never fatal — the land has already happened, and a cache is an optimization.
+    """
+    from endless import config
+
+    binary = shutil.which("endless-go")
+    if not binary:
+        return
+    subprocess.run(
+        [binary, *config.go_db_context_args(),
+         "session-query", "worktree-unsettled", str(worktree_path)],
+        capture_output=True, check=False,
+    )
+
+
 def _normalize_task_id(task_id: str) -> str:
     m = re.fullmatch(r"(?:[Ee]-)?(\d+)", task_id.strip())
     if m is None:
@@ -3235,6 +3264,17 @@ def land_worktree(
         # credited) and before the best-effort reap. Non-fatal to the merge
         # (already advanced) but raises to exit non-zero if residue remains.
         _check_post_land_residue(main_root, canonical, ignored_before)
+
+        # E-2128: the branch tip now equals the base, so this worktree's unlanded
+        # verdict is known without computing it. Warm the cache before the reap
+        # sweep below, whose condition 4 reads the same cache.
+        try:
+            _warm_unlanded_cache(worktree_path)
+        except Exception:
+            # Deliberately silent, unlike the sweep below. A cold cache entry costs
+            # one monitor tick showing `~`; saying so would be noise on a land that
+            # succeeded.
+            pass
 
         # Best-effort sweep: clean up older landed worktrees that have
         # passed their TTL. Failure here doesn't unwind the land.

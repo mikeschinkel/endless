@@ -4,6 +4,7 @@
 package eventcmd
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -716,7 +717,10 @@ func runReapWorktrees(args []string) {
 		}
 	}
 
-	if err := monitor.ReapStaleWorktrees(*projectRoot, ttl); err != nil {
+	// context.Background(): `endless-go event reap-worktrees` is a one-shot CLI
+	// invocation with no ambient context to inherit, and the reaper's git probes
+	// now take one (E-2128). This is where the chain terminates.
+	if err := monitor.ReapStaleWorktrees(context.Background(), *projectRoot, ttl); err != nil {
 		fmt.Fprintf(os.Stderr, "endless-go event: reap-worktrees: %v\n", err)
 		os.Exit(1)
 	}

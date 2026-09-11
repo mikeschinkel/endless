@@ -2,6 +2,7 @@ package monitor
 
 import (
 	"bytes"
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -90,7 +91,15 @@ var ReapSandbox func(worktreeName string) error
 // projectRoot is the main checkout path; `git worktree remove` runs
 // there. The function is idempotent and best-effort: per-directory
 // failures are logged and do not abort the sweep.
-func ReapStaleWorktrees(projectRoot string, ttl time.Duration) error {
+//
+// Its trigger is unchanged by E-2128 and remains the post-land sweep
+// `worktree land` runs: a land is what makes other worktrees reclaimable, and
+// the person who caused the reclamation is the one who should see what was
+// reclaimed. The five copies that used to run on Claude's hook branches —
+// SessionStart, PreToolUse, PostToolUse, Stop, SessionEnd — were deleted there
+// rather than moved, because they were duplicating this sweep before and after
+// every tool call.
+func ReapStaleWorktrees(ctx context.Context, projectRoot string, ttl time.Duration) error {
 	worktreeRoot := filepath.Join(projectRoot, ".endless", "worktrees")
 	entries, err := os.ReadDir(worktreeRoot)
 	if err != nil {
@@ -119,7 +128,7 @@ func ReapStaleWorktrees(projectRoot string, ttl time.Duration) error {
 			continue
 		}
 		dir := filepath.Join(worktreeRoot, e.Name())
-		reaped, err := maybeReapWorktree(db, projectRoot, dir, taskID, cutoff)
+		reaped, err := maybeReapWorktree(ctx, db, projectRoot, dir, taskID, cutoff)
 		if err != nil {
 			log.Printf("reap worktrees: %s: %v", displayPath(dir), err)
 			continue
@@ -162,30 +171,37 @@ func reapBoundSandbox(worktreeName string) {
 //     (see internal/events/session_tasks.go).
 //  3. No active (sessionstate.Live) session has task_id pointing at
 //     the task.
-//  4. The worktree's working tree is clean, and every commit on its branch is
-//     reachable from the project's default branch by SHA — crediting each
-//     recorded landing, since a rebasing land rewrites those SHAs (E-1940).
-//  5. No live process holds cwd inside the dir.
+//  4. No commit on the worktree's branch holds content the project's default
+//     branch lacks — the EXACT content verdict, read from the shared cache and
+//     computed on a miss (E-2128).
+//  5. The worktree's working tree is clean.
+//  6. No live process holds cwd inside the dir.
 //
-// Condition 4 is deliberately NOT the probe `session status` reads for its ◆
-// and `task unsettled` explains. That probe answers by CONTENT and is exact;
-// this one answers by SHA reachability and is merely sufficient — it can report
-// work outstanding on a branch that holds none, never the reverse. The reasons
-// are in reapNothingToLand, and both are load-bearing: this function's mistakes
-// are asymmetric, and it runs on every tool call. Do not "unify" the two
-// without reading that comment first — E-2087 did, and cost ~90s per sweep on
-// PreToolUse and PostToolUse before it was reverted here.
+// Condition 4 is the same question `session status`'s ◆ and `task unsettled`
+// answer, and since E-2128 it is the same ANSWER, read from the same
+// content-addressed cache. That agreement is the point: between E-2087 and here
+// the reaper deliberately used a cheaper SHA-containment test, which could only
+// err in the safe direction but never reclaimed a branch whose work landed under
+// rewritten SHAs with no task_landings row. The cost that forced the cheap test
+// is gone — the reaper no longer runs on PreToolUse/PostToolUse, and a cached
+// verdict is a path lookup — so the exact answer is affordable here again.
+//
+// It reads in COMPUTE-ON-MISS mode, never cache-only: this condition ends in a
+// removed directory, and a delete must not act on "not computed yet".
+// Conditions 5 and 6 likewise stay live and uncached — a destructive decision
+// re-verifies the filesystem itself, and `git status` has no honest cache key
+// anyway.
 //
 // Every failure still means skip, never reap: a git error, an unparsable count,
 // or a default branch that will not resolve all leave the directory alone. The
 // reaper would rather keep a candidate it cannot reason about than destroy
 // in-flight work.
 //
-// Conditions 3 and 5 are not evaluated here: they are WorktreeInUse, the one
+// Conditions 3 and 6 are not evaluated here: they are WorktreeInUse, the one
 // implementation `endless worktree drop` also consults (E-1947), and it is
 // called after the cheap git conditions since its lsof probe is the expensive
 // one. They are still listed above in significance order.
-func maybeReapWorktree(db *sql.DB, projectRoot, dir string, taskID int64, cutoff time.Time) (bool, error) {
+func maybeReapWorktree(ctx context.Context, db *sql.DB, projectRoot, dir string, taskID int64, cutoff time.Time) (bool, error) {
 	// The most recent landing, if there is one. Its absence no longer
 	// disqualifies the directory (E-2087) — it only supplies one of the two
 	// timestamps the TTL is measured from. The branch name is not read here and
@@ -238,25 +254,21 @@ func maybeReapWorktree(db *sql.DB, projectRoot, dir string, taskID int64, cutoff
 		return false, nil
 	}
 
-	base, berr := DefaultBranch(dir)
+	base, berr := DefaultBranch(ctx, dir)
 	if berr != nil {
 		recordReapDefaultBranchFault(dir, taskID, berr)
 		return false, nil
 	}
 
-	// Condition 4, answered cheaply — see reapNothingToLand for why this is
-	// deliberately NOT the probe behind ◆.
-	landedRefs, lerr := landedSHAs(db, taskID)
-	if lerr != nil {
-		return false, fmt.Errorf("query landing shas: %w", lerr)
-	}
-	nothing, gerr := reapNothingToLand(dir, base, landedRefs)
-	if gerr != nil || !nothing {
+	// Condition 4 — the exact content verdict, computed here when the cache has
+	// not got one. A miss must never read as "nothing to land".
+	unlanded, uerr := computeUnlandedAndCache(ctx, dir, base)
+	if uerr != nil || len(unlanded) > 0 {
 		return false, nil
 	}
 
 	// Condition 5 — a modified working tree.
-	out, gerr := runGit(dir, "status", "--porcelain")
+	out, gerr := runGit(ctx, dir, "status", "--porcelain")
 	if gerr != nil {
 		return false, nil
 	}
@@ -293,11 +305,11 @@ func maybeReapWorktree(db *sql.DB, projectRoot, dir string, taskID int64, cutoff
 	// paid only by a directory actually being removed, and before the removal
 	// below, which takes the answer with it.
 	var branchName string
-	if out, gerr := runGit(dir, "symbolic-ref", "--short", "--quiet", "HEAD"); gerr == nil {
+	if out, gerr := runGit(ctx, dir, "symbolic-ref", "--short", "--quiet", "HEAD"); gerr == nil {
 		branchName = strings.TrimSpace(out)
 	}
 
-	if out, err := runGit(projectRoot, "worktree", "remove", "--force", dir); err != nil {
+	if out, err := runGit(ctx, projectRoot, "worktree", "remove", "--force", dir); err != nil {
 		// A stranded leftover: git's worktree admin no longer knows the
 		// path (e.g. a prior reap removed the record but didn't rmdir),
 		// so `git worktree remove` aborts with "is not a working tree".
@@ -317,94 +329,13 @@ func maybeReapWorktree(db *sql.DB, projectRoot, dir string, taskID int64, cutoff
 	// A detached HEAD has no branch to read, so there may be nothing to delete —
 	// the dir removal above is the whole reap in that case.
 	if branchName != "" {
-		if out, err := runGit(projectRoot, "branch", "-D", branchName); err != nil {
+		if out, err := runGit(ctx, projectRoot, "branch", "-D", branchName); err != nil {
 			// Branch deletion failure shouldn't unwind the dir removal —
 			// log it but treat the reap as successful.
 			log.Printf("reap worktrees: %s: git branch -D %s: %v: %s", displayPath(dir), branchName, err, out)
 		}
 	}
 	return true, nil
-}
-
-// reapNothingToLand answers the reaper's condition 4 with a SUFFICIENT
-// condition rather than an exact one: every commit on this branch is reachable
-// from base by SHA, so there is provably nothing here to land.
-//
-// It is deliberately NOT the probe behind ◆ and `task unsettled`, and the
-// asymmetry is the point. Those two surfaces answer a question a person is
-// reading — "what is outstanding?" — where a wrong answer misleads, so they pay
-// `git range-diff` to recognise a commit a rebasing land re-hashed (E-2087).
-// This function answers a question that ends in `rm -rf`, where the two
-// mistakes are not comparable: refusing to reap a reapable directory costs disk
-// space, and reaping one that still holds work destroys it. A cheap containment
-// test is wrong only in the safe direction — it never reports "nothing to land"
-// about a branch that holds something.
-//
-// It is also on a hot path that has no business being slow. ReapWorktreesForProject
-// is called from five hook branches in internal/hookcmd/claude.go, including
-// PreToolUse and PostToolUse, so this runs before and after EVERY tool call in
-// every session. E-2087 briefly routed it through the range-diff probe and made
-// each sweep cost ~90 seconds, which did not degrade the product so much as stop
-// it. Anything added here is paid per tool call; treat that as the constraint it
-// is.
-//
-// The cost of being conservative: a branch whose work landed under rewritten
-// SHAs reads as holding something, so its directory is never reclaimed and
-// landed worktrees accumulate — the leak E-1940 and E-2087 each tried to close.
-// That is a known, accepted debt, tracked for a proper fix (caching the exact
-// verdict rather than recomputing it per tool call). A slow leak is survivable;
-// a 90-second tool call is not.
-//
-// The recorded landings are still credited (E-1940): excluding each one from
-// the range is one more `^sha` on the same single git call, and dropping it
-// would cost the reaper a second fix it already had — a rebasing land rewrites
-// every SHA, so without the credit a worktree that landed through `worktree
-// land` could never be reclaimed at all. `--ignore-missing` covers a recorded
-// SHA this clone no longer has; without it one absent object makes git exit 128
-// and the candidate is skipped forever.
-//
-// A git error answers false: the reaper skips what it cannot inspect.
-func reapNothingToLand(dir, base string, landed []string) (bool, error) {
-	args := []string{"rev-list", "--count", "--ignore-missing", "HEAD", "^" + base}
-	for _, sha := range landed {
-		args = append(args, "^"+sha)
-	}
-	out, err := runGit(dir, args...)
-	if err != nil {
-		return false, err
-	}
-	n, perr := strconv.Atoi(strings.TrimSpace(out))
-	if perr != nil {
-		return false, fmt.Errorf("unparsable rev-list count %q", strings.TrimSpace(out))
-	}
-	return n == 0, nil
-}
-
-// landedSHAs returns the merge_commit_sha of every recorded landing for a task,
-// newest first. Reaper-only: the display probe answers by content and needs no
-// such credit (E-2087).
-func landedSHAs(db *sql.DB, taskID int64) ([]string, error) {
-	rows, err := db.Query(
-		`SELECT merge_commit_sha
-		   FROM task_landings
-		  WHERE task_id = ? AND merge_commit_sha != ''
-		  ORDER BY landed_at DESC`,
-		taskID,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = rows.Close() }()
-
-	var shas []string
-	for rows.Next() {
-		var sha string
-		if err := rows.Scan(&sha); err != nil {
-			return nil, err
-		}
-		shas = append(shas, sha)
-	}
-	return shas, rows.Err()
 }
 
 // removeStrandedWorktreeDir deletes a stranded orphan worktree directory
@@ -485,36 +416,26 @@ func realHasLiveProcessInDir(dir string) (bool, error) {
 	return strings.TrimSpace(stdout.String()) != "", nil
 }
 
-// AnnotateSessionStatusUnsettled fills each row's Unsettled flag from the git
-// state of its worktree, in place. Called only on the FLAT render path (E-1701)
-// — the IDs-only --tree view does not surface the marker, so it skips the git
-// cost. Best-effort: a row whose worktree is absent or whose git inspection
-// errors is left Unsettled=false rather than failing the whole view.
-func AnnotateSessionStatusUnsettled(rows []SessionStatusRow) {
+// AnnotateSessionStatusUnsettled fills each row's Unsettled and UnsettledKnown
+// flags from the git state of its worktree, in place. Called only on the FLAT
+// render path (E-1701) — the IDs-only --tree view does not surface the marker,
+// so it skips the git cost. Best-effort: a row whose worktree is absent or whose
+// git inspection errors is left Unsettled=false rather than failing the whole
+// view.
+//
+// This is the surface ED-1589 is about, and the reason it now has TWO flags. The
+// exact unlanded verdict is never computed here: it is read from the
+// content-addressed cache one background job writes, and a miss sets
+// UnsettledKnown=false so the row can say "not yet determined" rather than
+// report a state derived from something else. `session monitor` re-renders every
+// two seconds and this ran `git range-diff` once per row per tick — measured at
+// 584ms for a single row — which is load this function must never carry again.
+func AnnotateSessionStatusUnsettled(ctx context.Context, rows []SessionStatusRow) {
 	for i := range rows {
-		rows[i].Unsettled = taskWorktreeUnsettled(rows[i].ProjectID, rows[i].ID)
+		d := TaskWorktreeUnsettledDetail(ctx, rows[i].ProjectID, rows[i].ID)
+		rows[i].Unsettled = d.Unsettled()
+		rows[i].UnsettledKnown = d.UnsettledKnown()
 	}
-}
-
-// taskWorktreeUnsettled reports the landed-vs-worktree delta for one task: true
-// when its worktree exists AND diverges from main — either modified (an unclean
-// working tree, i.e. uncommitted changes) or unlanded (commits on the branch not
-// yet on main, or changes made since a land). This collapses "unlanded" and
-// "modified since land" into the single ◆ the flat view renders (Mike,
-// 2026-07-01): a clean worktree whose commits are all on main — the fully-landed
-// steady state — is settled, and a task with no worktree has nothing to land.
-//
-// It reuses the exact git signals the reaper inverts to decide a worktree is
-// safe to remove (reap_worktrees.go conditions 4 & 5), so the two surfaces agree
-// on what "done and landed" means. Any git error is treated as settled: the
-// view must never block or lie because a git call hiccuped.
-//
-// E-1865 collapsed this into a wrapper over TaskWorktreeUnsettledDetail so the
-// ◆ marker and `task unsettled`'s explanation of it read the SAME probes; the
-// git logic now lives in worktree_unsettled.go, and UnsettledDetail.Unsettled
-// preserves this function's original short-circuit order exactly.
-func taskWorktreeUnsettled(projectID, taskID int64) bool {
-	return TaskWorktreeUnsettledDetail(projectID, taskID).Unsettled()
 }
 
 // recordReapDefaultBranchFault reports the resolver failure that makes a
@@ -551,18 +472,36 @@ func recordReapDefaultBranchFault(dir string, taskID int64, err error) {
 // (`worktree remove`, `branch -D`) and the worktree dir itself for
 // per-worktree inspection (`rev-list`, `status`).
 //
-// Held as a var rather than a plain func so reaper tests can substitute
-// a fixture-driven implementation without building real git fixtures.
-// Restore the original via the returned func from SetRunGitForTest.
-var runGit = func(dir string, args ...string) (string, error) {
+// ctx is the FIRST parameter of every git invocation in this package, and there
+// is deliberately no context-free door beside it (E-2128). The unlanded verdict
+// is now computed by a background job whose lease carries a deadline, and a
+// probe that cannot be cancelled is the defect: leaving a wrapper without a
+// context would preserve the uncancellable path as the path of least resistance
+// for the next caller. CLI entry points with no ambient context pass
+// context.Background() at the boundary, which is where that decision belongs.
+//
+// Held as a var rather than a plain func so reaper tests can substitute a
+// fixture-driven implementation without building real git fixtures; they assign
+// it directly and restore it from t.Cleanup.
+var runGit = func(ctx context.Context, dir string, args ...string) (string, error) {
 	full := append([]string{"-C", dir}, args...)
-	cmd := exec.Command("git", full...)
+	cmd := exec.CommandContext(ctx, "git", full...)
 	out, err := cmd.CombinedOutput()
-	if killedBySIGINT(err) {
+	switch {
+	case killedBySIGINT(err):
 		// Classified here because this is the single point at which every probe's
 		// git child is created: no caller can forget to ask, and the meaning
 		// travels to any depth through errors.Is rather than having to be
 		// re-derived by each fault recorder (E-2113).
+		err = fmt.Errorf("%w: %v", ErrGitInterrupted, err)
+	case err != nil && ctx.Err() != nil:
+		// A cancelled context. exec.CommandContext kills with SIGKILL, which
+		// killedBySIGINT deliberately does NOT absorb — a SIGKILL is usually the
+		// OOM killer and a probe large enough to be OOM-killed is a real
+		// operational fact worth an incident. Cancelling a job's lease would
+		// otherwise record one fault per in-flight worktree, so the case is
+		// recognised HERE, by the context rather than by the signal, and joins
+		// SIGINT as the second benign death (E-2128).
 		err = fmt.Errorf("%w: %v", ErrGitInterrupted, err)
 	}
 	return string(out), err
@@ -648,10 +587,16 @@ func ReadWorktreeTTLConfig(projectRoot string) string {
 }
 
 // ReapWorktreesForProject resolves the project's filesystem path and
-// configured TTL, then runs ReapStaleWorktrees. Used by callers (e.g.
-// the endless-hook event handlers) that have a projectID but not the
-// path. Returns silently when projectID has no row or no path.
-func ReapWorktreesForProject(projectID int64) error {
+// configured TTL, then runs ReapStaleWorktrees. Used by callers that have a
+// projectID but not the path. Returns silently when projectID has no row or no
+// path.
+//
+// It keeps its signature through E-2128 even though every caller it was built
+// for is gone: the five Claude hook branches that called it were deleted, and
+// `endless-go event reap-worktrees` — the entry point the post-land sweep shells
+// to — calls ReapStaleWorktrees directly with a path it already has. This stays
+// as the id-shaped front door for a caller that has only a project id.
+func ReapWorktreesForProject(ctx context.Context, projectID int64) error {
 	db, err := DB()
 	if err != nil {
 		return fmt.Errorf("reap worktrees for project %d: db: %w", projectID, err)
@@ -681,5 +626,5 @@ func ReapWorktreesForProject(projectID int64) error {
 				projectID, s, perr, DefaultWorktreeTTL)
 		}
 	}
-	return ReapStaleWorktrees(path, ttl)
+	return ReapStaleWorktrees(ctx, path, ttl)
 }

@@ -1,6 +1,7 @@
 package monitor
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -71,7 +72,7 @@ func (f *unlandedFixture) unlandedOnBranch(t *testing.T) []string {
 	t.Helper()
 	mustGit(t, f.root, "checkout", f.branch)
 	defer mustGit(t, f.root, "checkout", "main")
-	got, err := unlandedCommits(f.root, "main")
+	got, err := unlandedCommits(context.Background(), f.root, "main")
 	if err != nil {
 		t.Fatalf("unlandedCommits: %v", err)
 	}
@@ -98,7 +99,7 @@ func TestRebasedLandingReadsAsLanded(t *testing.T) {
 		t.Fatalf("fixture did not reproduce the bug: `main..HEAD` = %s, want 2", n)
 	}
 
-	got, err := unlandedCommits(f.root, "main")
+	got, err := unlandedCommits(context.Background(), f.root, "main")
 	if err != nil {
 		t.Fatalf("unlandedCommits: %v", err)
 	}
@@ -128,7 +129,7 @@ func TestConflictResolvedLandingReadsAsLanded(t *testing.T) {
 		t.Fatalf("fixture does not reproduce the patch-id miss: git cherry = %q", cherry)
 	}
 
-	got, err := unlandedCommits(f.root, "main")
+	got, err := unlandedCommits(context.Background(), f.root, "main")
 	if err != nil {
 		t.Fatalf("unlandedCommits: %v", err)
 	}
@@ -187,13 +188,13 @@ func TestBaseUnmovedSinceForkReportsEveryCommit(t *testing.T) {
 	mustGit(t, f.root, "checkout", f.branch)
 	defer mustGit(t, f.root, "checkout", "main")
 
-	if _, err := runGit(f.root, "range-diff", "--no-patch",
+	if _, err := runGit(context.Background(), f.root, "range-diff", "--no-patch",
 		mustGit(t, f.root, "merge-base", "main", "HEAD")+"..HEAD",
 		mustGit(t, f.root, "merge-base", "main", "HEAD")+"..main"); err == nil {
 		t.Fatal("fixture is not the empty-range shape: range-diff accepted it")
 	}
 
-	got, err := unlandedCommits(f.root, "main")
+	got, err := unlandedCommits(context.Background(), f.root, "main")
 	if err != nil {
 		t.Fatalf("unlandedCommits: %v", err)
 	}
@@ -225,7 +226,7 @@ func TestUnresolvableBaseIsAnError(t *testing.T) {
 	f := newUnlandedFixture(t)
 	f.commitOn(t, f.branch, "feature.txt", "work\n", "E-42: the work")
 
-	got, err := unlandedCommits(f.root, "no-such-branch")
+	got, err := unlandedCommits(context.Background(), f.root, "no-such-branch")
 	if err == nil {
 		t.Fatalf("a base that does not exist returned %v and no error", got)
 	}
@@ -245,7 +246,7 @@ func TestWorktreeUnsettledAtSeesARebasedLanding(t *testing.T) {
 	mustGit(t, f.root, "checkout", f.branch)
 	defer mustGit(t, f.root, "checkout", "main")
 
-	d := WorktreeUnsettledDetailAt(f.root)
+	d := WorktreeUnsettledDetailAt(context.Background(), f.root)
 	if d.IsUndetermined() {
 		t.Fatalf("probe could not run: %s", d.UndeterminedReason())
 	}

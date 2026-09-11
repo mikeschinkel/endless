@@ -315,12 +315,17 @@ func runClaude(args []string) (err error) {
 		// is now answered at read time by JOINing a per-invocation observation
 		// against the pane's durable identity. No sweep, so no chance for a
 		// sweep to be wrong.
-		// Opportunistic stale-worktree reaper (E-1337). Removes worktree
-		// dirs whose owning task has a landing record past worktree_ttl
-		// and no live process holding cwd. Cheap when nothing to reap.
-		if err := monitor.ReapWorktreesForProject(projectID); err != nil {
-			log.Printf("reaping stale worktrees: %v", err)
-		}
+		// The opportunistic stale-worktree reaper (E-1337) that used to run here —
+		// and on PreToolUse, PostToolUse, Stop and SessionEnd — was removed by
+		// E-2128, and nothing replaces it.
+		//
+		// Reaping was already happening where it belongs: `worktree land` sweeps
+		// after a successful land, because a land is what makes OTHER worktrees
+		// reclaimable and the person who caused the reclamation is the one who
+		// should see what was reclaimed. These five copies were running that same
+		// sweep before and after every tool call in every session, which is what
+		// made the exact content comparison unaffordable and forced the reaper onto
+		// a deliberately inexact condition 4 between E-2087 and E-2128.
 		// Opportunistic notice reaper (E-1917 fix). Drops undelivered notices
 		// for sessions that have ended: they never take another turn, so those
 		// rows are undeliverable by construction. SessionStart only — the write
@@ -376,18 +381,12 @@ func runClaude(args []string) (err error) {
 		return handleUserPromptSubmit(projectID, payload, applySigils(payload))
 
 	case "PreToolUse":
-		if err := monitor.ReapWorktreesForProject(projectID); err != nil {
-			log.Printf("reaping stale worktrees: %v", err)
-		}
 		return handlePreToolUse(projectID, isRegistered, payload)
 
 	case "PostToolUse":
 		// The tool the prompt was about completed, so the user approved it
 		// (E-2091). Non-fatal for clearPromptState's reason — see it.
 		clearPromptState(payload)
-		if err := monitor.ReapWorktreesForProject(projectID); err != nil {
-			log.Printf("reaping stale worktrees: %v", err)
-		}
 		return handlePostToolUse(projectID, isRegistered, payload)
 
 	case "Notification":
@@ -412,9 +411,6 @@ func runClaude(args []string) (err error) {
 		if err := monitor.IdleSession(payload.SessionID); err != nil {
 			return fmt.Errorf("idling session: %w", err)
 		}
-		if err := monitor.ReapWorktreesForProject(projectID); err != nil {
-			log.Printf("reaping stale worktrees: %v", err)
-		}
 	case "PreCompact":
 		// Capture everything before compaction
 		monitor.ParseTranscript(payload.SessionID, payload.TranscriptPath)
@@ -436,9 +432,6 @@ func runClaude(args []string) (err error) {
 		}
 		if err := monitor.EndSession(payload.SessionID); err != nil {
 			return fmt.Errorf("ending session: %w", err)
-		}
-		if err := monitor.ReapWorktreesForProject(projectID); err != nil {
-			log.Printf("reaping stale worktrees: %v", err)
 		}
 	}
 

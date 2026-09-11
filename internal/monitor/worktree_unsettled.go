@@ -1,6 +1,7 @@
 package monitor
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"path/filepath"
@@ -44,6 +45,22 @@ import (
 // comparison (worktree_unlanded.go) that sees a rebased — and even a
 // conflict-resolved — copy for what it is, so the database credit it used as a
 // stand-in is gone and this probe is pure git again.
+//
+// E-2128 split the probe in two along the cost line, which is what ED-1589
+// requires of any display that repaints on a timer:
+//
+//   - The ◆ path (WorktreeUnsettledAt) READS the exact content verdict from the
+//     cache one background job writes (unlanded_cache.go) and computes nothing.
+//     A miss is its own answer — UnlandedKnown is false and the row renders `~`
+//     (not yet determined) — never a verdict derived from something else. That
+//     removes a measured 584ms per row per two-second tick.
+//   - The on-demand path (WorktreeUnsettledDetailAt) computes on a miss and
+//     stores what it found, because a direct question deserves a real answer.
+//
+// `git status --porcelain` stays LIVE on both paths and is never cached:
+// filesystem state changes without any ref moving, so it has no honest cache
+// key. It is 15-27ms, three orders of magnitude below the comparison it now sits
+// beside.
 
 // UnsettledDetail is the breakdown behind one worktree's unsettled state: which
 // files are modified (split into user work vs endless's own auto-managed files)
@@ -77,6 +94,17 @@ type UnsettledDetail struct {
 	// content comparison identifies them individually, so it costs nothing to
 	// name the right ones.
 	UnlandedLog []string
+
+	// UnlandedKnown reports that the unlanded verdict above was ESTABLISHED —
+	// read from the cache, computed here, or vacuous because there is no worktree
+	// (E-2128). False means nothing has computed it yet, which is distinct from
+	// both "zero unlanded" and UnlandedErr's "the probe failed": no probe ran, so
+	// there is nothing to report and nobody to blame.
+	//
+	// It exists because the ◆ path is now cache-only. Collapsing an uncomputed
+	// verdict into either ◆ or a blank is the lie ED-1589 was written about — a
+	// missing answer used to render byte-identically to a verified-clean worktree.
+	UnlandedKnown bool
 
 	// Branch is the worktree's current branch ("" when detached).
 	Branch string
@@ -112,6 +140,36 @@ const unlandedLogLimit = 20
 // view collapses the two, the detail view explains them.
 func (d UnsettledDetail) IsUndetermined() bool {
 	return d.LookupErr != "" || d.BaseErr != "" || d.StatusErr != "" || d.UnlandedErr != ""
+}
+
+// UnsettledKnown reports whether Unsettled() is an ANSWER rather than a
+// placeholder. The row-level question, as distinct from UnlandedKnown's
+// field-level one — and deliberately wider than it, because two cases have a
+// known verdict without any cached commit answer:
+//
+//   - A task with no worktree. There is nothing to land and no git ran, so the
+//     row resolves to ⊙ or blank exactly as it always did.
+//   - A DIRTY worktree. `git status --porcelain` stays live, so modifications are
+//     visible on every tick without the cache; a modified working tree is known
+//     to be unsettled whatever the commits have done.
+//
+// A failed probe also counts as known: it is the undetermined state E-1940
+// introduced, which marks the row ◆ and records a fault. "The probe failed" and
+// "no probe ran" are different facts with different remedies, and `~` belongs to
+// the second alone.
+//
+// So `~` means specifically: this worktree is CLEAN, and whether its commits
+// reached the base has not been computed yet.
+func (d UnsettledDetail) UnsettledKnown() bool {
+	switch {
+	case !d.HasWorktree:
+		return true
+	case d.IsUndetermined():
+		return true
+	case d.IsModified():
+		return true
+	}
+	return d.UnlandedKnown
 }
 
 // Unsettled reports whether this worktree needs the user's attention: it has
@@ -201,47 +259,82 @@ func (d UnsettledDetail) Reason() string {
 	if d.IsUndetermined() {
 		parts = append(parts, "undetermined ("+d.UndeterminedReason()+")")
 	}
+	// Said plainly rather than folded into "settled". This can only be reached
+	// from the cache-only path, which no surface renders Reason() from today — but
+	// a type that would answer "settled" to a question nobody has computed is one
+	// wrong call site away from being the E-1940 bug again.
+	if !d.UnlandedKnown && !d.IsUndetermined() && d.HasWorktree {
+		parts = append(parts, "unlanded state not yet computed")
+	}
 	if len(parts) == 0 {
 		return "settled"
 	}
 	return strings.Join(parts, " + ")
 }
 
+// unlandedMode selects how worktreeUnsettledAt obtains the unlanded verdict.
+// It is the ED-1589 boundary expressed in the type system: which mode a caller
+// picks is the whole of its licence to be slow.
+type unlandedMode int
+
+const (
+	// unlandedCacheOnly reads the cache and NEVER computes, so a miss answers
+	// "not yet determined". Every repainting display is on this mode.
+	unlandedCacheOnly unlandedMode = iota
+	// unlandedComputeOnMiss computes the exact comparison when the cache has no
+	// answer, and stores what it computed so the next reader gets it free.
+	unlandedComputeOnMiss
+)
+
 // WorktreeUnsettledAt returns the verdict for a worktree using ONLY the probes
-// the ◆ predicate runs. This is the hot path: AnnotateSessionStatusUnsettled
-// calls it once per row on every flat `session status` render, so it must not pay
-// for detail nobody is going to read.
+// the ◆ predicate runs, and CACHE-ONLY for the expensive half. This is the hot
+// path: AnnotateSessionStatusUnsettled calls it once per row on every flat
+// `session status` render, and `session monitor` re-renders every two seconds, so
+// it must neither pay for detail nobody is going to read nor compute an answer a
+// background job owns (ED-1589).
+//
+// A worktree whose unlanded verdict is not in the cache comes back with
+// UnlandedKnown false and no error: "nothing has computed this" is a third
+// answer beside settled and unsettled, and it is the `~` the column renders.
+// Nothing here resolves the default branch either — the base NAME comes from the
+// cache's own watermark — so the resolver is off the display path entirely.
 //
 // It reads no database (E-1766, restored by E-2087): everything the verdict
 // needs is in the repository, so the probe answers the same way inside a
 // self-dev worktree whose sandbox has no task row as it does anywhere else.
-func WorktreeUnsettledAt(worktreePath string) UnsettledDetail {
-	return worktreeUnsettledAt(worktreePath, false)
+func WorktreeUnsettledAt(ctx context.Context, worktreePath string) UnsettledDetail {
+	return worktreeUnsettledAt(ctx, worktreePath, unlandedCacheOnly, false)
 }
 
 // WorktreeUnsettledDetailAt returns the verdict PLUS the display enrichment
-// (the worktree's current branch) that `task unsettled <id>` renders. One extra
-// git call per worktree, so it is reserved for the surfaces that show the
-// breakdown — never the per-row marker.
-func WorktreeUnsettledDetailAt(worktreePath string) UnsettledDetail {
-	return worktreeUnsettledAt(worktreePath, true)
+// (the worktree's current branch) that `task unsettled <id>` renders, and
+// COMPUTES the unlanded comparison when the cache has no answer. One extra git
+// call per worktree for the enrichment and up to a full content comparison for
+// the verdict, so it is reserved for the surfaces a person asked — never the
+// per-row marker.
+func WorktreeUnsettledDetailAt(ctx context.Context, worktreePath string) UnsettledDetail {
+	return worktreeUnsettledAt(ctx, worktreePath, unlandedComputeOnMiss, true)
 }
 
 // worktreeUnsettledAt is the shared core. It runs exactly the probes the ◆
-// predicate runs, in the same order; the enrich flag adds display-only calls
-// that never affect the verdict.
-func worktreeUnsettledAt(worktreePath string, enrich bool) UnsettledDetail {
+// predicate runs, in the same order; mode decides whether the unlanded verdict
+// may be computed, and the enrich flag adds display-only calls that never affect
+// the verdict.
+func worktreeUnsettledAt(ctx context.Context, worktreePath string, mode unlandedMode, enrich bool) UnsettledDetail {
 	d := UnsettledDetail{
 		HasWorktree:  worktreePath != "",
 		WorktreePath: worktreePath,
 	}
 	if !d.HasWorktree {
+		// Vacuously known: nothing to land, and no git ran to be uncertain about.
+		d.UnlandedKnown = true
 		return d
 	}
 
-	// Probe 1 — uncommitted changes. Partitioned for display only: BOTH halves
-	// count toward unsettled, matching the predicate's unfiltered `status` test.
-	out, gerr := runGit(worktreePath, "status", "--porcelain")
+	// Probe 1 — uncommitted changes, LIVE on every path. Partitioned for display
+	// only: BOTH halves count toward unsettled, matching the predicate's
+	// unfiltered `status` test.
+	out, gerr := runGit(ctx, worktreePath, "status", "--porcelain")
 	if gerr != nil {
 		d.StatusErr = firstLine(out, gerr)
 		d.Interrupted = errors.Is(gerr, ErrGitInterrupted)
@@ -259,43 +352,69 @@ func worktreeUnsettledAt(worktreePath string, enrich bool) UnsettledDetail {
 	// Probe 2 — commits whose content has not reached the base branch. Two
 	// corrections over the original `main..HEAD`: the base is resolved rather
 	// than hardcoded (E-1940), and the comparison is by content rather than by
-	// SHA, so a commit a rebasing land re-hashed is seen to be in (E-2087).
-	base, berr := DefaultBranch(worktreePath)
-	if berr != nil {
-		d.BaseErr = berr.Error()
-		d.Interrupted = errors.Is(berr, ErrGitInterrupted)
-		recordDefaultBranchFault(d, berr)
-		return d
+	// SHA, so a commit a rebasing land re-hashed is seen to be in (E-2087). Since
+	// E-2128 it is answered from the cache, and only computed when the caller's
+	// mode licenses it.
+	lookup := cachedUnlanded(ctx, worktreePath)
+	d.Base = lookup.Base
+	if lookup.Known {
+		d.applyUnlanded(lookup.Commits)
+		goto enrichment
 	}
-	d.Base = base
+	if mode == unlandedCacheOnly {
+		// Not an error, and deliberately not a fault: no probe ran, so there is
+		// nothing to report. The row says so with `~` and the job fills it in.
+		goto enrichment
+	}
+	{
+		base, berr := DefaultBranch(ctx, worktreePath)
+		if berr != nil {
+			d.BaseErr = berr.Error()
+			d.Interrupted = errors.Is(berr, ErrGitInterrupted)
+			recordDefaultBranchFault(d, berr)
+			return d
+		}
+		d.Base = base
 
-	commits, uerr := unlandedCommits(worktreePath, base)
-	if uerr != nil {
-		d.UnlandedErr = uerr.Error()
-		d.Interrupted = errors.Is(uerr, ErrGitInterrupted)
-		recordProbeFault(d, probeCommand(uerr), d.UnlandedErr, uerr)
-		return d
+		commits, uerr := computeUnlandedAndCache(ctx, worktreePath, base)
+		if uerr != nil {
+			d.UnlandedErr = uerr.Error()
+			d.Interrupted = errors.Is(uerr, ErrGitInterrupted)
+			recordProbeFault(d, probeCommand(uerr), d.UnlandedErr, uerr)
+			return d
+		}
+		d.applyUnlanded(commits)
 	}
-	d.UnlandedCount = len(commits)
-	// The comparison names the unlanded commits as a side effect of finding
-	// them, so the log costs no extra git call and both entry points carry it.
-	// Only the sample is bounded; the count above is exact.
-	if len(commits) > unlandedLogLimit {
-		commits = commits[:unlandedLogLimit]
-	}
-	d.UnlandedLog = commits
 
+enrichment:
 	if !enrich {
 		return d
 	}
 
 	// Display-only enrichment. A failure here is silent: it must never change
 	// the verdict, only the detail rendered under it.
-	if br, berr := runGit(worktreePath, "symbolic-ref", "--short", "--quiet", "HEAD"); berr == nil {
+	if br, berr := runGit(ctx, worktreePath, "symbolic-ref", "--short", "--quiet", "HEAD"); berr == nil {
 		d.Branch = strings.TrimSpace(br)
 	}
 
 	return d
+}
+
+// applyUnlanded records an established unlanded verdict: the exact count, and a
+// bounded sample of the commits behind it.
+//
+// The cap applies HERE and nowhere else, which is what lets the cache store the
+// full list (see unlandedCache.writeEntry): the count has to stay exact — the
+// detail view says how many more there are than it printed — and a cache that
+// stored only the sample would silently cap the count for exactly the worktrees
+// that have drifted furthest.
+func (d *UnsettledDetail) applyUnlanded(commits []string) {
+	d.UnlandedKnown = true
+	d.UnlandedCount = len(commits)
+	if len(commits) > unlandedLogLimit {
+		commits = commits[:unlandedLogLimit]
+	}
+	d.UnlandedLog = commits
 }
 
 // recordProbeFault reports a git probe that could not run. Deduped on (worktree,
@@ -375,8 +494,11 @@ func worktreeTaskLabel(worktreePath string) string {
 // A lookup that ERRORS is a different answer from one that finds nothing: it
 // means the project path could not be resolved, so whether there is unlanded
 // work is unknown. That records as LookupErr and reads as undetermined —
-// before E-1940 it was indistinguishable from "no worktree, all clear".
-func TaskWorktreeUnsettledDetail(projectID, taskID int64) UnsettledDetail {
+// before E-1940 it was indistinguishable from "no worktree, all clear". It is
+// undetermined, NOT "not yet computed": the ◆ still marks the row and the fault
+// is still recorded, because a lookup that failed is a failure and `~` is
+// reserved for a question nothing has asked yet (E-2128).
+func TaskWorktreeUnsettledDetail(ctx context.Context, projectID, taskID int64) UnsettledDetail {
 	wt, err := WorktreePathForTask(projectID, taskID)
 	if err != nil {
 		d := UnsettledDetail{LookupErr: err.Error()}
@@ -403,9 +525,9 @@ func TaskWorktreeUnsettledDetail(projectID, taskID int64) UnsettledDetail {
 		return d
 	}
 	if wt == "" {
-		return UnsettledDetail{}
+		return UnsettledDetail{UnlandedKnown: true}
 	}
-	return worktreeUnsettledAt(wt, false)
+	return worktreeUnsettledAt(ctx, wt, unlandedCacheOnly, false)
 }
 
 // statusPaths parses `git status --porcelain` output into repo-relative paths.

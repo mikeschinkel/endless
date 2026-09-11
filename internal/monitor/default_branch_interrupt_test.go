@@ -1,6 +1,7 @@
 package monitor
 
 import (
+	"context"
 	"errors"
 	"os"
 	"testing"
@@ -51,7 +52,7 @@ func TestDefaultBranchPropagatesInterrupt(t *testing.T) {
 	t.Cleanup(resetDefaultBranchCache)
 	gitShimInterrupting(t, "")
 
-	branch, err := DefaultBranch(t.TempDir())
+	branch, err := DefaultBranch(context.Background(), t.TempDir())
 	if !errors.Is(err, ErrGitInterrupted) {
 		t.Fatalf("DefaultBranch err = %v, want it to satisfy errors.Is(err, ErrGitInterrupted)", err)
 	}
@@ -64,9 +65,11 @@ func TestDefaultBranchPropagatesInterrupt(t *testing.T) {
 }
 
 // TestInterruptedResolveIsNotMemoized is the half that outlives the signal. The
-// reaper runs on PreToolUse/PostToolUse in a process that keeps going, so a
+// background jobs run inside `session monitor`, a process that keeps going, so a
 // cached interrupt is not one lost tick — it is every later probe of that
-// directory answering from a verdict no probe ever reached.
+// directory answering from a verdict no probe ever reached. (It was the
+// PreToolUse/PostToolUse reaper that made the point until E-2128 took the reaper
+// off the hook path; the hazard is the same, in a longer-lived process.)
 func TestInterruptedResolveIsNotMemoized(t *testing.T) {
 	resetDefaultBranchCache()
 	t.Cleanup(resetDefaultBranchCache)
@@ -74,12 +77,12 @@ func TestInterruptedResolveIsNotMemoized(t *testing.T) {
 	dir := fixtureRepo(t, "master") // built with the real git, and always fine
 
 	realPath := gitShimInterrupting(t, "")
-	if _, err := DefaultBranch(dir); !errors.Is(err, ErrGitInterrupted) {
+	if _, err := DefaultBranch(context.Background(), dir); !errors.Is(err, ErrGitInterrupted) {
 		t.Fatalf("setup: DefaultBranch err = %v, want an interrupt", err)
 	}
 
 	t.Setenv("PATH", realPath) // the signal is over; the real git is back
-	got, err := DefaultBranch(dir)
+	got, err := DefaultBranch(context.Background(), dir)
 	if err != nil {
 		t.Fatalf("DefaultBranch after the interrupt: %v", err)
 	}
@@ -100,7 +103,7 @@ func TestInterruptedConfiguredBranchIsNotCalledATypo(t *testing.T) {
 	writeProjectConfig(t, dir, "release")
 	gitShimInterrupting(t, "")
 
-	_, err := DefaultBranch(dir)
+	_, err := DefaultBranch(context.Background(), dir)
 	if !errors.Is(err, ErrGitInterrupted) {
 		t.Fatalf("DefaultBranch err = %v, want an interrupt", err)
 	}
@@ -112,6 +115,10 @@ func TestInterruptedConfiguredBranchIsNotCalledATypo(t *testing.T) {
 // TestInterruptedDefaultBranchRecordsNoFault is the incident that reached the
 // fault list: ERR-0011 "the repository's default branch could not be resolved",
 // naming a worktree whose only problem was that someone quit `session monitor`.
+//
+// Driven through WorktreeUnsettledDetailAt since E-2128: the display path no
+// longer resolves the default branch — it reads the base NAME from the cache's
+// watermark — so the resolver is now reached from the paths that compute.
 func TestInterruptedDefaultBranchRecordsNoFault(t *testing.T) {
 	bindFaultsForTest(t)
 	resetDefaultBranchCache()
@@ -120,7 +127,7 @@ func TestInterruptedDefaultBranchRecordsNoFault(t *testing.T) {
 	// interleaving a Ctrl-C mid-tick produces.
 	gitShimInterrupting(t, "status")
 
-	d := WorktreeUnsettledAt(t.TempDir())
+	d := WorktreeUnsettledDetailAt(context.Background(), t.TempDir())
 
 	// The verdict is deliberately unchanged: E-1940's invariant is that a
 	// worktree nobody could inspect never renders as verified clean.
@@ -154,7 +161,7 @@ func TestInterruptedReapDefaultBranchRecordsNoFault(t *testing.T) {
 	f.revParseErr = interrupted
 	cutoff := time.Now().UTC().Add(-14 * 24 * time.Hour)
 
-	reaped, err := maybeReapWorktree(f.db, f.projRoot, f.dir, 42, cutoff)
+	reaped, err := maybeReapWorktree(context.Background(), f.db, f.projRoot, f.dir, 42, cutoff)
 	if err != nil {
 		t.Fatalf("maybeReapWorktree: %v", err)
 	}
@@ -172,9 +179,9 @@ func TestOrdinaryUnresolvableStillRecords(t *testing.T) {
 	bindFaultsForTest(t)
 	resetDefaultBranchCache()
 	t.Cleanup(resetDefaultBranchCache)
-	unsettledStub{baseUnresolvable: true}.install(t)
+	(&unsettledStub{baseUnresolvable: true}).install(t)
 
-	WorktreeUnsettledAt("/wt/e-2130")
+	WorktreeUnsettledDetailAt(context.Background(), unsettledStubDir)
 
 	incidents, err := faults.List(faults.AllProjects, false, 0)
 	if err != nil {
@@ -202,7 +209,7 @@ func TestOrdinaryFailureStillFallsThrough(t *testing.T) {
 	dir := fixtureRepo(t, "master")
 	gitConfigSet(t, dir, "init.defaultBranch", "main")
 
-	got, err := DefaultBranch(dir)
+	got, err := DefaultBranch(context.Background(), dir)
 	if err != nil {
 		t.Fatalf("DefaultBranch: %v", err)
 	}

@@ -6,6 +6,7 @@
 package sessionquerycmd
 
 import (
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -596,7 +597,7 @@ func runWorktreeAnomalies(args []string) int {
 		fmt.Fprintln(os.Stderr, "--worktree-path is required")
 		return 2
 	}
-	anomalies := monitor.WorktreeAnomaliesAt(*projectRoot, *worktreePath)
+	anomalies := monitor.WorktreeAnomaliesAt(context.Background(), *projectRoot, *worktreePath)
 	for _, a := range anomalies {
 		fmt.Println(a.Line())
 	}
@@ -630,9 +631,13 @@ func runWorktreeUnsettled(args []string) error {
 	if len(paths) == 0 {
 		return fmt.Errorf("at least one worktree path argument is required")
 	}
+	// context.Background(): a one-shot CLI invocation has no ambient context to
+	// inherit, and every git probe beneath this now takes one (E-2128). This is
+	// where the chain terminates.
+	ctx := context.Background()
 	out := make([]worktreeUnsettledJSON, 0, len(paths))
 	for _, p := range paths {
-		out = append(out, newWorktreeUnsettledJSON(monitor.WorktreeUnsettledDetailAt(p)))
+		out = append(out, newWorktreeUnsettledJSON(monitor.WorktreeUnsettledDetailAt(ctx, p)))
 	}
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "  ")
@@ -669,7 +674,7 @@ func runTaskLandedness(args []string) error {
 	if len(branches) == 0 {
 		return fmt.Errorf("at least one branch argument is required")
 	}
-	rows := monitor.TaskLandedness(*root, branches)
+	rows := monitor.TaskLandedness(context.Background(), *root, branches)
 	out := make([]taskLandednessJSON, 0, len(rows))
 	for _, l := range rows {
 		// Nil slices marshal as null; the Python side wants a list it can
@@ -737,6 +742,15 @@ type worktreeUnsettledJSON struct {
 	// and Unsettled is true alongside it so the row still gets marked.
 	Undetermined       bool   `json:"undetermined"`
 	UndeterminedReason string `json:"undetermined_reason"`
+	// UnlandedKnown is E-2128's: FALSE means nothing has computed whether this
+	// branch's commits reached the base, which is a third state beside settled and
+	// unsettled and a different fact from Undetermined's "the probe failed".
+	//
+	// It is effectively always true through THIS command, which computes on a miss
+	// — a direct question deserves a real answer. It is carried anyway so the
+	// Python renderer reads one contract whatever fills it, rather than inferring
+	// the state from the absence of a key.
+	UnlandedKnown bool `json:"unlanded_known"`
 	// Base is the resolved default branch the count was measured against, so
 	// the renderer can name it instead of saying "main" on a repo where that is
 	// not true.
@@ -774,6 +788,7 @@ func newWorktreeUnsettledJSON(d monitor.UnsettledDetail) worktreeUnsettledJSON {
 		UnlandedLog:        log,
 		Undetermined:       d.IsUndetermined(),
 		UndeterminedReason: d.UndeterminedReason(),
+		UnlandedKnown:      d.UnlandedKnown,
 		Base:               d.Base,
 		StatusErr:          d.StatusErr,
 		UnlandedErr:        d.UnlandedErr,

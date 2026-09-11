@@ -15,6 +15,7 @@ package sessionstatuscmd
 // terminal-status rows are in the set at all), not the drawing.
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"strconv"
@@ -44,8 +45,13 @@ type jsonRow struct {
 	InFlight  bool   `json:"in_flight"`
 	Landed    bool   `json:"landed"`
 	Unsettled bool   `json:"unsettled"`
-	Hidden    bool   `json:"hidden"`
-	HiddenAt  string `json:"hidden_at,omitempty"`
+	// UnsettledKnown is E-2128's. `unsettled` stays a plain bool — false when the
+	// verdict has not been computed — so no existing consumer breaks; this says
+	// whether that false is an answer or a placeholder, and is the machine-readable
+	// form of the `~` the table draws.
+	UnsettledKnown bool   `json:"unsettled_known"`
+	Hidden         bool   `json:"hidden"`
+	HiddenAt       string `json:"hidden_at,omitempty"`
 	// Relation is how this task entered the VIEWING session's scope (E-1696) —
 	// the machine slug ("claimed", "queued", "surfaced", "revisited",
 	// "referenced"). Omitted when the viewer has no session_tasks row for the
@@ -83,7 +89,7 @@ func renderJSON(w io.Writer, a anchor, all bool) error {
 	if err != nil {
 		return err
 	}
-	monitor.AnnotateSessionStatusUnsettled(rows)
+	monitor.AnnotateSessionStatusUnsettled(context.Background(), rows)
 	if err := annotateHidden(rows, a.emittingSession); err != nil {
 		return err
 	}
@@ -113,27 +119,28 @@ func renderJSON(w io.Writer, a anchor, all bool) error {
 			duplicates = append(duplicates, "E-"+strconv.FormatInt(id, 10))
 		}
 		out.Rows = append(out.Rows, jsonRow{
-			ID:         r.ID,
-			ProjectID:  r.ProjectID,
-			Title:      collapse(r.Title),
-			Status:     r.Status,
-			Phase:      r.Phase,
-			Type:       r.TypeSlug,
-			Action:     classify(r).label(),
-			HasText:    r.HasText,
-			IsFocal:    r.IsFocal,
-			IsParent:   r.IsParent,
-			IsFrom:     r.IsFrom,
-			InFlight:   r.InFlight,
-			Landed:     r.Landed,
-			Unsettled:  r.Unsettled,
-			Hidden:     r.Hidden,
-			HiddenAt:   r.HiddenAt,
-			Relation:   relationSlug(r),
-			BlockedByN: r.BlockedByN,
-			BlocksN:    r.BlocksN,
-			ReplacedBy: replaced,
-			Duplicates: duplicates,
+			ID:             r.ID,
+			ProjectID:      r.ProjectID,
+			Title:          collapse(r.Title),
+			Status:         r.Status,
+			Phase:          r.Phase,
+			Type:           r.TypeSlug,
+			Action:         classify(r).label(),
+			HasText:        r.HasText,
+			IsFocal:        r.IsFocal,
+			IsParent:       r.IsParent,
+			IsFrom:         r.IsFrom,
+			InFlight:       r.InFlight,
+			Landed:         r.Landed,
+			Unsettled:      r.Unsettled,
+			UnsettledKnown: r.UnsettledKnown,
+			Hidden:         r.Hidden,
+			HiddenAt:       r.HiddenAt,
+			Relation:       relationSlug(r),
+			BlockedByN:     r.BlockedByN,
+			BlocksN:        r.BlocksN,
+			ReplacedBy:     replaced,
+			Duplicates:     duplicates,
 		})
 	}
 

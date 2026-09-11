@@ -1,6 +1,7 @@
 package monitor
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"regexp"
@@ -132,8 +133,14 @@ func renderCommits(commits []unlandedCommit) []string {
 // checked out. E-2095's landedness probe asks the same question of a NAMED
 // branch in a repository that may have no worktree for it at all, which is why
 // the body below takes a rev rather than assuming one.
-func unlandedCommits(worktreePath, base string) ([]string, error) {
-	commits, err := unlandedRevs(worktreePath, base, "HEAD")
+//
+// Since E-2128 this is reached ONLY from the computing paths — the background
+// job, `session-query worktree-unsettled`, and the reaper's condition 4. The ◆
+// column reads the cache those write and never arrives here, which is the entire
+// point of that task. ctx is threaded all the way down so a cancelled job lease
+// stops the git children rather than racing them.
+func unlandedCommits(ctx context.Context, worktreePath, base string) ([]string, error) {
+	commits, err := unlandedRevs(ctx, worktreePath, base, "HEAD")
 	if err != nil {
 		return nil, err
 	}
@@ -141,8 +148,8 @@ func unlandedCommits(worktreePath, base string) ([]string, error) {
 }
 
 // mergeBaseOf resolves the fork point of two revs, or reports why it could not.
-func mergeBaseOf(dir, base, rev string) (string, error) {
-	out, err := runGit(dir, "merge-base", base, rev)
+func mergeBaseOf(ctx context.Context, dir, base, rev string) (string, error) {
+	out, err := runGit(ctx, dir, "merge-base", base, rev)
 	if err != nil {
 		return "", gitProbeError{Command: "git merge-base", Detail: firstLine(out, err), Err: err}
 	}
@@ -158,22 +165,22 @@ func mergeBaseOf(dir, base, rev string) (string, error) {
 
 // unlandedRevs is unlandedCommits' body, generalized over the rev being asked
 // about and returning the commits themselves.
-func unlandedRevs(dir, base, rev string) ([]unlandedCommit, error) {
-	mergeBase, err := mergeBaseOf(dir, base, rev)
+func unlandedRevs(ctx context.Context, dir, base, rev string) ([]unlandedCommit, error) {
+	mergeBase, err := mergeBaseOf(ctx, dir, base, rev)
 	if err != nil {
 		return nil, err
 	}
-	return unlandedRevsFrom(dir, mergeBase, base, rev)
+	return unlandedRevsFrom(ctx, dir, mergeBase, base, rev)
 }
 
 // unlandedRevsFrom is the comparison itself, taking the fork point a caller has
 // already resolved. Splitting it out is what lets E-2095's probe run its own
 // cheap pre-filter against the same merge base instead of computing a second one.
-func unlandedRevsFrom(dir, mergeBase, base, rev string) ([]unlandedCommit, error) {
+func unlandedRevsFrom(ctx context.Context, dir, mergeBase, base, rev string) ([]unlandedCommit, error) {
 	branchRange := mergeBase + ".." + rev
 	baseRange := mergeBase + ".." + base
 
-	ahead, err := countRevs(dir, branchRange)
+	ahead, err := countRevs(ctx, dir, branchRange)
 	if err != nil {
 		return nil, err
 	}
@@ -182,7 +189,7 @@ func unlandedRevsFrom(dir, mergeBase, base, rev string) ([]unlandedCommit, error
 		return nil, nil
 	}
 
-	gained, err := countRevs(dir, baseRange)
+	gained, err := countRevs(ctx, dir, baseRange)
 	if err != nil {
 		return nil, err
 	}
@@ -192,10 +199,10 @@ func unlandedRevsFrom(dir, mergeBase, base, rev string) ([]unlandedCommit, error
 		// Handled here rather than left to range-diff, which refuses an empty
 		// range outright ("fatal: need two commit ranges") instead of reading
 		// it as zero counterparts.
-		return commitLines(dir, branchRange)
+		return commitLines(ctx, dir, branchRange)
 	}
 
-	out, err := runGit(dir, "range-diff", "--no-color", "--no-patch",
+	out, err := runGit(ctx, dir, "range-diff", "--no-color", "--no-patch",
 		branchRange, baseRange)
 	if err != nil {
 		return nil, gitProbeError{Command: "git range-diff", Detail: firstLine(out, err), Err: err}
@@ -224,9 +231,9 @@ func parseUnlandedRows(out string) []unlandedCommit {
 // countRevs counts the commits in a revision range. Trailing `extra` arguments
 // are passed to `rev-list` unchanged, which is how E-2095 narrows the same count
 // to the commits that touch project source.
-func countRevs(dir, revRange string, extra ...string) (int, error) {
+func countRevs(ctx context.Context, dir, revRange string, extra ...string) (int, error) {
 	args := append([]string{"rev-list", "--count", revRange}, extra...)
-	out, err := runGit(dir, args...)
+	out, err := runGit(ctx, dir, args...)
 	if err != nil {
 		return 0, gitProbeError{Command: "git rev-list", Detail: firstLine(out, err), Err: err}
 	}
@@ -243,8 +250,8 @@ func countRevs(dir, revRange string, extra ...string) (int, error) {
 // commitLines reads a revision range as commits, newest first — the same shape
 // parseUnlandedRows produces, so the two paths into unlandedRevs are
 // indistinguishable downstream.
-func commitLines(dir, revRange string) ([]unlandedCommit, error) {
-	out, err := runGit(dir, "log", "--format=%h %s", revRange)
+func commitLines(ctx context.Context, dir, revRange string) ([]unlandedCommit, error) {
+	out, err := runGit(ctx, dir, "log", "--format=%h %s", revRange)
 	if err != nil {
 		return nil, gitProbeError{Command: "git log", Detail: firstLine(out, err), Err: err}
 	}

@@ -12,6 +12,7 @@
 package sessionstatuscmd
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"io"
@@ -490,7 +491,7 @@ func renderSnapshot(w io.Writer, a anchor, all bool, cols int, color bool, hm hi
 	// Flat view only: fill each row's Unsettled flag from its worktree's git state
 	// so the renderer can mark the landed-vs-worktree delta with ◆ (E-1701). --tree
 	// takes a separate path and skips this git cost.
-	monitor.AnnotateSessionStatusUnsettled(rows)
+	monitor.AnnotateSessionStatusUnsettled(context.Background(), rows)
 	// Layer the VIEWING session's hides on top (E-1914). Annotating rather than
 	// filtering in the query keeps the row set viewer-agnostic and leaves the
 	// omit/show/only decision entirely to the renderer — which is also what lets
@@ -593,6 +594,9 @@ func eraseEachLineToEOL(frame string) string { return liveview.EraseEachLineToEO
 // tests can drive the focal expansion with a stubbed anomaly set (a genuinely
 // divergent worktree can't be seeded hermetically). Production points at the
 // real DB/git-backed monitor.WorktreeAnomalies.
+// Its TYPE changed with monitor.WorktreeAnomalies's signature (E-2128): the
+// anomaly probes now take a context, so the stub a test substitutes takes one
+// too.
 var worktreeAnomalies = monitor.WorktreeAnomalies
 
 func renderTo(w io.Writer, rows []monitor.SessionStatusRow, focal int64, noTaskHint string, cols int, color bool, hm hiddenMode) {
@@ -709,7 +713,7 @@ func renderTo(w io.Writer, rows []monitor.SessionStatusRow, focal int64, noTaskH
 		// (it correctly means unsettled — modified-or-unlanded, E-1701); only this
 		// detail line goes.
 		if r.IsFocal {
-			for _, a := range worktreeAnomalies(r.ProjectID, r.ID) {
+			for _, a := range worktreeAnomalies(context.Background(), r.ProjectID, r.ID) {
 				if a.Kind == monitor.AnomalyUncommitted {
 					continue
 				}
@@ -829,7 +833,7 @@ func hiddenField(r monitor.SessionStatusRow, hw int) string {
 // truncation, which would hide a real glyph).
 func buildLegend(rows []monitor.SessionStatusRow) string {
 	var present [len(actionMeta)]bool
-	var done, blocked, blocks, unsettled, notStarted, hidden, queued, referenced bool
+	var done, blocked, blocks, unsettled, notStarted, undetermined, hidden, queued, referenced bool
 	for _, r := range rows {
 		present[classify(r)] = true
 		if isTerminal(r.Status) {
@@ -855,6 +859,8 @@ func buildLegend(rows []monitor.SessionStatusRow) string {
 			unsettled = true
 		case notStartedGlyph:
 			notStarted = true
+		case undeterminedGlyph:
+			undetermined = true
 		}
 	}
 	var parts []string
@@ -864,8 +870,8 @@ func buildLegend(rows []monitor.SessionStatusRow) string {
 		}
 	}
 	// Decorations after the actions, each shown only when a row bears it. ✓ is the
-	// phase-column done marker (phaseChar); ⊗/⏸ match blockField; ◆ and ⊙ match
-	// unsettledMark (E-1701, E-2107) — derived by CALLING it rather than
+	// phase-column done marker (phaseChar); ⊗/⏸ match blockField; ◆, ⊙ and ~ match
+	// unsettledMark (E-1701, E-2107, E-2128) — derived by CALLING it rather than
 	// re-deriving the rule, so the legend cannot disagree with the column it
 	// documents. ✓ leads the decorations as it marks the task's own state
 	// (a focal/parent/from row can be terminal) before the relational/worktree
@@ -887,6 +893,11 @@ func buildLegend(rows []monitor.SessionStatusRow) string {
 	// some, ⊙ has none yet, a space has none left (E-2107).
 	if notStarted {
 		parts = append(parts, notStartedGlyph+" not started")
+	}
+	// ~ closes the same column's run, after the three states that are answers,
+	// because it is the absence of one (E-2128).
+	if undetermined {
+		parts = append(parts, undeterminedGlyph+" not yet determined")
 	}
 	// ⊘ comes last: it is the only decoration that describes THIS SESSION's view
 	// of the row rather than a property of the task or its worktree, and it can
@@ -1018,31 +1029,69 @@ func phaseRank(phase string) int {
 	}
 }
 
-// unsettledGlyph and notStartedGlyph are the two marked states of the
-// unsettledMark column; the third is a plain space. ◆ (U+25C6 BLACK DIAMOND)
-// is E-1701's original. ⊙ (U+2299 CIRCLED DOT OPERATOR) is E-2107's addition,
-// chosen for its silhouette: it shares this column with only ◆ and a space, so
-// the sole within-column distinction is circle vs diamond — which ◇ (U+25C7)
-// would not have given. The other circled operators — ⊗ blocked, ⏸ blocks,
-// ⊘ hidden, ⊕ queued — all render AFTER the id, so position disambiguates them.
-// Both measure one column (asserted in TestUnsettledMark), like the space they
-// replace.
+// unsettledGlyph, notStartedGlyph and undeterminedGlyph are the three marked
+// states of the unsettledMark column; the fourth is a plain space. ◆ (U+25C6
+// BLACK DIAMOND) is E-1701's original. ⊙ (U+2299 CIRCLED DOT OPERATOR) is
+// E-2107's addition, chosen for its silhouette: within this column the only
+// distinction is circle vs diamond — which ◇ (U+25C7) would not have given. The
+// other circled operators — ⊗ blocked, ⏸ blocks, ⊘ hidden, ⊕ queued — all render
+// AFTER the id, so position disambiguates them. All measure one column (asserted
+// in TestUnsettledMark), like the space they replace.
+//
+// ~ (U+007E TILDE) is E-2128's, meaning "not yet determined". Three things
+// recommend it over every circle-and-diamond variant:
+//
+//   - `·` was the obvious pick and is WRONG. This package already defines it as
+//     referencedGlyph (relation_tier.go) and buildLegend prints it as
+//     `· referenced`. In a ROW position disambiguates the two — unsettledMark
+//     precedes the id, relationField follows it — but the legend has no position,
+//     and a frame holding both states would print `~ not yet determined
+//     · referenced` on one line under one glyph. `◌` being taken by the triage
+//     action is what rules out the remaining dotted circles.
+//   - Being ASCII it is display width 1 BY DEFINITION, which sidesteps the East
+//     Asian Ambiguous trap that forced ⊙ to be asserted rather than assumed
+//     (E-1765, E-2107). The width test below is still written; it simply cannot
+//     fail.
+//   - Its silhouette is a horizontal wave, colliding with nothing in a vocabulary
+//     of circles, diamonds, arrows and boxes — actions ● ↑ ↩ ⟳ ▶ ⚑ ✎ ☑ ◷ ⏚ ⁇ ⇥ ◌,
+//     unsettled ◆ ⊙, phase ✓ ! 1 2 3 ?, hidden ⊘, relation ⊕ ·, block ⊗ ⏸ — and
+//     "approximate, unresolved" is the right reading of it.
 const (
-	unsettledGlyph  = "◆"
-	notStartedGlyph = "⊙"
+	unsettledGlyph    = "◆"
+	notStartedGlyph   = "⊙"
+	undeterminedGlyph = "~"
 )
 
 // unsettledMark is the single-column separator between the task-type letter and
-// the id. Three states (E-2107), together answering "is there work product here,
-// and where is it?":
+// the id. Four states (E-2107, E-2128), together answering "is there work product
+// here, and where is it?":
 //
+//	~   not yet determined — the worktree is clean and nothing has computed
+//	    whether its commits reached the base branch (E-2128).
 //	◆   work product, still outstanding — the worktree diverges from main:
 //	    unlanded commits, or changes made since a land (E-1701).
 //	⊙   no work product yet — never spawned, or claimed and still empty.
 //	    (space) work product, and all of it landed.
 //
-// All three are width 1, so the fixed 13-col prefix and its alignment hold in
-// every state. ◆ wins whenever the worktree is unsettled, unchanged.
+// All four are width 1, so the fixed 13-col prefix and its alignment hold in
+// every state.
+//
+// `~` is tested FIRST, ahead of ◆. If the expensive answer has not been computed,
+// the row says so rather than reporting a state derived from something else —
+// which is ED-1589's rule, and the reason the glyph exists at all: before it, an
+// unavailable answer rendered as a blank, byte-identical to a verified-clean
+// worktree.
+//
+// Two refinements keep `~` from swallowing rows whose answer IS known, and both
+// fall out of what each probe costs rather than from policy. A task with no
+// worktree is KNOWN — there is nothing to land and no git ran. And a DIRTY
+// worktree is known to be unsettled, because `git status --porcelain` stays live
+// and is visible every tick without the cache. Both are decided in
+// monitor.UnsettledDetail.UnsettledKnown, so this column cannot disagree with the
+// probe about which rows are eligible. `~` therefore appears on clean worktrees
+// during the first job pass after a cold start, and on a machine where nothing
+// fires the job — and since the monitor tick is what fires it, that window is
+// normally one interval.
 //
 // The two cases sharing ⊙ — a task nobody picked up, and a task a session is
 // sitting on that has produced nothing — are the same fact about the work, and
@@ -1073,6 +1122,8 @@ const (
 // --tree's leading focal marker — different view, different glyph, no clash.
 func unsettledMark(r monitor.SessionStatusRow) string {
 	switch {
+	case !r.UnsettledKnown:
+		return undeterminedGlyph
 	case r.Unsettled:
 		return unsettledGlyph
 	case !taskstatus.Has(taskstatus.Shipped, r.Status):
@@ -1221,6 +1272,11 @@ const (
 // `referenced` joins the existing dim set rather than getting its own arm, so
 // E-1707's unsettled veto covers it on the same terms as every other dim case:
 // a diverged worktree always reads at full intensity, whatever put the row here.
+//
+// The veto keys on r.Unsettled, so `~` does not trigger it and does not need to
+// be excluded by name (E-2128): a row whose verdict has not been computed is not
+// a row with outstanding work, and a never-started `later` task should still read
+// dim while the job catches up. ⊙ is out of the veto for the same reason.
 func colorize(line string, r monitor.SessionStatusRow, enabled bool) string {
 	if !enabled {
 		return line

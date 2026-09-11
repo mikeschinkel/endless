@@ -1,10 +1,12 @@
 package sessionstatuscmd
 
 import (
+	"context"
 	"strings"
 	"testing"
 
 	"github.com/mikeschinkel/endless/internal/monitor"
+	"github.com/mikeschinkel/endless/internal/sessiontaskrelation"
 )
 
 func TestClassify(t *testing.T) {
@@ -222,44 +224,60 @@ func TestBlockField(t *testing.T) {
 	}
 }
 
-// TestUnsettledMark pins all three states of the column and the rule that picks
-// between them (E-1701 for ◆, E-2107 for the ⊙/space split). The load-bearing
-// case is the last pair: `underway` settled and `unverified` settled differ ONLY
-// in status, and before E-2107 both rendered blank — the collapse the task
-// exists to undo.
+// TestUnsettledMark pins all four states of the column and the rule that picks
+// between them (E-1701 for ◆, E-2107 for the ⊙/space split, E-2128 for ~). Two
+// cases are load-bearing. `underway` settled and `unverified` settled differ ONLY
+// in status, and before E-2107 both rendered blank — the collapse that task
+// exists to undo. And every row here carries UnsettledKnown, because a row
+// WITHOUT it renders ~ whatever else is true of it: that is the precedence rule,
+// and the pair at the end of the table is what states it.
 func TestUnsettledMark(t *testing.T) {
+	known := func(r monitor.SessionStatusRow) monitor.SessionStatusRow {
+		r.UnsettledKnown = true
+		return r
+	}
 	cases := []struct {
 		name   string
 		row    monitor.SessionStatusRow
 		want   string
 		reason string
 	}{
-		{"unsettled beats everything", monitor.SessionStatusRow{Status: "underway", Unsettled: true}, "◆",
+		{"unsettled beats everything", known(monitor.SessionStatusRow{Status: "underway", Unsettled: true}), "◆",
 			"a diverged worktree has outstanding work product whatever the status says"},
-		{"unsettled outranks a shipped status", monitor.SessionStatusRow{Status: "confirmed", Unsettled: true}, "◆",
+		{"unsettled outranks a shipped status", known(monitor.SessionStatusRow{Status: "confirmed", Unsettled: true}), "◆",
 			"◆ takes precedence over the ⊙/space split, unchanged from E-1701"},
-		{"never spawned", monitor.SessionStatusRow{Status: "ready"}, "⊙",
+		{"never spawned", known(monitor.SessionStatusRow{Status: "ready"}), "⊙",
 			"nobody has picked this up, so there is no work product"},
-		{"untriaged", monitor.SessionStatusRow{Status: "untriaged"}, "⊙", "same, earlier still"},
-		{"claimed but empty", monitor.SessionStatusRow{Status: "underway"}, "⊙",
+		{"untriaged", known(monitor.SessionStatusRow{Status: "untriaged"}), "⊙", "same, earlier still"},
+		{"claimed but empty", known(monitor.SessionStatusRow{Status: "underway"}), "⊙",
 			"a session is sitting on it and has produced nothing — the same fact about the work"},
-		{"revisit", monitor.SessionStatusRow{Status: "revisit"}, "⊙",
+		{"revisit", known(monitor.SessionStatusRow{Status: "revisit"}), "⊙",
 			"reopened work has not been restarted"},
-		{"declined", monitor.SessionStatusRow{Status: "declined"}, "⊙",
+		{"declined", known(monitor.SessionStatusRow{Status: "declined"}), "⊙",
 			"abandoned without shipping — terminal, but never any work product"},
-		{"obsolete", monitor.SessionStatusRow{Status: "obsolete"}, "⊙", "same"},
-		{"unverified and settled", monitor.SessionStatusRow{Status: "unverified"}, " ",
+		{"obsolete", known(monitor.SessionStatusRow{Status: "obsolete"}), "⊙", "same"},
+		{"unverified and settled", known(monitor.SessionStatusRow{Status: "unverified"}), " ",
 			"reached the gate with a clean worktree: produced work, all of it landed"},
-		{"unreviewed and settled", monitor.SessionStatusRow{Status: "unreviewed"}, " ", "the findings-lane gate"},
-		{"confirmed and settled", monitor.SessionStatusRow{Status: "confirmed"}, " ", "past the gate"},
-		{"assumed and settled", monitor.SessionStatusRow{Status: "assumed"}, " ", "past the gate"},
-		{"completed and settled", monitor.SessionStatusRow{Status: "completed"}, " ", "past the gate"},
+		{"unreviewed and settled", known(monitor.SessionStatusRow{Status: "unreviewed"}), " ", "the findings-lane gate"},
+		{"confirmed and settled", known(monitor.SessionStatusRow{Status: "confirmed"}), " ", "past the gate"},
+		{"assumed and settled", known(monitor.SessionStatusRow{Status: "assumed"}), " ", "past the gate"},
+		{"completed and settled", known(monitor.SessionStatusRow{Status: "completed"}), " ", "past the gate"},
+
+		// E-2128. `~` is tested FIRST, so an unknown verdict outranks every state
+		// below it — including ◆, whose flag is meaningless until something has
+		// computed it.
+		{"not yet computed", monitor.SessionStatusRow{Status: "underway"}, "~",
+			"nothing has computed whether this clean worktree's commits reached the base"},
+		{"not yet computed outranks a shipped status", monitor.SessionStatusRow{Status: "confirmed"}, "~",
+			"the ⊙/space split is an answer, and there is no answer yet"},
+		{"not yet computed outranks the unsettled flag", monitor.SessionStatusRow{Status: "underway", Unsettled: true}, "~",
+			"an Unsettled flag on a row whose verdict is unknown was never filled in; reporting ◆ would be inventing it"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			if got := unsettledMark(c.row); got != c.want {
-				t.Errorf("unsettledMark(status=%q, unsettled=%v) = %q, want %q — %s",
-					c.row.Status, c.row.Unsettled, got, c.want, c.reason)
+				t.Errorf("unsettledMark(status=%q, unsettled=%v, known=%v) = %q, want %q — %s",
+					c.row.Status, c.row.Unsettled, c.row.UnsettledKnown, got, c.want, c.reason)
 			}
 		})
 	}
@@ -275,8 +293,12 @@ func TestUnsettledMark(t *testing.T) {
 // asserted rather than assumed (E-2107).
 func TestUnsettledMarkGlyphWidths(t *testing.T) {
 	for name, g := range map[string]string{
-		"unsettledGlyph":         unsettledGlyph,
-		"notStartedGlyph":        notStartedGlyph,
+		"unsettledGlyph":  unsettledGlyph,
+		"notStartedGlyph": notStartedGlyph,
+		// ASCII, so this one cannot fail — which is half of why it was chosen over
+		// every dotted-circle candidate (E-2128). Asserted anyway: the guarantee
+		// belongs to the glyph, not to whoever remembers it is ASCII.
+		"undeterminedGlyph":      undeterminedGlyph,
 		"the space they replace": " ",
 	} {
 		if w := displayWidth(g); w != 1 {
@@ -292,9 +314,9 @@ func TestUnsettledMarkGlyphWidths(t *testing.T) {
 // un-dim most of the table at once, since ⊙ is the common state.
 func TestNotStartedDoesNotVetoDim(t *testing.T) {
 	for _, r := range []monitor.SessionStatusRow{
-		{Status: "ready", Phase: "later"},
-		{Status: "ready", Phase: "maybe"},
-		{Status: "declined", Phase: "now"},
+		{Status: "ready", Phase: "later", UnsettledKnown: true},
+		{Status: "ready", Phase: "maybe", UnsettledKnown: true},
+		{Status: "declined", Phase: "now", UnsettledKnown: true},
 	} {
 		if got := unsettledMark(r); got != "⊙" {
 			t.Fatalf("fixture no longer bears ⊙ (got %q) — the test proves nothing", got)
@@ -303,8 +325,22 @@ func TestNotStartedDoesNotVetoDim(t *testing.T) {
 			t.Errorf("status=%q phase=%q: ⊙ row = %q, want dim", r.Status, r.Phase, got)
 		}
 	}
+	// ~ is on ⊙'s side of the same asymmetry (E-2128): a row whose verdict has not
+	// been computed is not a row with outstanding work, so a `later` task must not
+	// jump to full intensity just because the job has not caught up with it.
+	for _, r := range []monitor.SessionStatusRow{
+		{Status: "ready", Phase: "later"},
+		{Status: "confirmed", Phase: "now"},
+	} {
+		if got := unsettledMark(r); got != "~" {
+			t.Fatalf("fixture no longer bears ~ (got %q) — the test proves nothing", got)
+		}
+		if got := colorize("row", r, true); !strings.HasPrefix(got, ansiDim) {
+			t.Errorf("status=%q phase=%q: ~ row = %q, want dim", r.Status, r.Phase, got)
+		}
+	}
 	// The contrast case: same row, unsettled, stays at full intensity.
-	unsettled := monitor.SessionStatusRow{Status: "ready", Phase: "later", Unsettled: true}
+	unsettled := monitor.SessionStatusRow{Status: "ready", Phase: "later", Unsettled: true, UnsettledKnown: true}
 	if got := colorize("row", unsettled, true); got != "row" {
 		t.Errorf("◆ row = %q, want undimmed", got)
 	}
@@ -316,8 +352,8 @@ func TestNotStartedDoesNotVetoDim(t *testing.T) {
 // E-1701.
 func TestRenderUnsettledIndicator(t *testing.T) {
 	rows := []monitor.SessionStatusRow{
-		{ID: 1701, Title: "unsettled one", Status: "underway", Phase: "now", TypeSlug: "todo", IsFocal: true, Unsettled: true},
-		{ID: 1702, Title: "settled one", Status: "ready", Phase: "now", TypeSlug: "todo", Unsettled: false},
+		{ID: 1701, Title: "unsettled one", Status: "underway", Phase: "now", TypeSlug: "todo", IsFocal: true, Unsettled: true, UnsettledKnown: true},
+		{ID: 1702, Title: "settled one", Status: "ready", Phase: "now", TypeSlug: "todo", Unsettled: false, UnsettledKnown: true},
 	}
 	var b strings.Builder
 	renderTo(&b, rows, 1701, hintClaimBind, 90, false, hiddenOmit)
@@ -341,38 +377,43 @@ func TestRenderUnsettledIndicator(t *testing.T) {
 	}
 }
 
-// TestRenderThreeStateColumn is E-2107's whole-render proof: one frame holding
-// all three states of the column at once, showing that they are DISTINGUISHABLE
-// and that swapping between them never shifts the id column.
+// TestRenderFourStateColumn is E-2107's whole-render proof, extended by E-2128:
+// one frame holding all four states of the column at once, showing that they are
+// DISTINGUISHABLE and that swapping between them never shifts the id column.
 //
 // The alignment half matters more than it looks. The column sits inside the
 // fixed 13-col prefix, so the E-1765 guarantee — every row's id, phase and title
 // start at the same display offset — holds only if all three states measure the
-// same. Byte offsets differ (◆ and ⊙ are 3 bytes, a space is 1), which is
+// same. Byte offsets differ (◆ and ⊙ are 3 bytes, a space and ~ are 1), which is
 // exactly why the assertion measures display width instead.
-func TestRenderThreeStateColumn(t *testing.T) {
+func TestRenderFourStateColumn(t *testing.T) {
 	rows := []monitor.SessionStatusRow{
 		// ◆ — a session's worktree still diverges from main.
-		{ID: 2101, Title: "outstanding", Status: "underway", Phase: "now", TypeSlug: "todo", IsFocal: true, Unsettled: true},
+		{ID: 2101, Title: "outstanding", Status: "underway", Phase: "now", TypeSlug: "todo", IsFocal: true, Unsettled: true, UnsettledKnown: true},
 		// ⊙ — claimed, settled worktree: nothing produced yet.
-		{ID: 2102, Title: "claimed and empty", Status: "underway", Phase: "now", TypeSlug: "todo", InFlight: true},
+		{ID: 2102, Title: "claimed and empty", Status: "underway", Phase: "now", TypeSlug: "todo", InFlight: true, UnsettledKnown: true},
 		// ⊙ — never spawned at all. Same column state as E-2102 on purpose: this
 		// column does not distinguish them, the action icon does.
-		{ID: 2103, Title: "never spawned", Status: "ready", Phase: "now", TypeSlug: "todo"},
+		{ID: 2103, Title: "never spawned", Status: "ready", Phase: "now", TypeSlug: "todo", UnsettledKnown: true},
 		// (blank) — shipped and settled: produced work, all of it landed.
-		{ID: 2104, Title: "landed and done", Status: "unverified", Phase: "now", TypeSlug: "todo"},
+		{ID: 2104, Title: "landed and done", Status: "unverified", Phase: "now", TypeSlug: "todo", UnsettledKnown: true},
+		// ~ — a clean worktree whose unlanded verdict nothing has computed yet
+		// (E-2128). The state the other four are answers to.
+		{ID: 2105, Title: "not yet determined", Status: "underway", Phase: "now", TypeSlug: "todo"},
 	}
 	var b strings.Builder
 	renderTo(&b, rows, 2101, hintClaimBind, 90, false, hiddenOmit)
 	lines := strings.Split(strings.TrimRight(b.String(), "\n"), "\n")
-	if len(lines) != 5 {
-		t.Fatalf("want 5 lines (legend + 4 rows), got %d:\n%s", len(lines), b.String())
+	if len(lines) != 6 {
+		t.Fatalf("want 6 lines (legend + 5 rows), got %d:\n%s", len(lines), b.String())
 	}
-	if !strings.Contains(lines[0], "◆ unsettled") || !strings.Contains(lines[0], "⊙ not started") {
-		t.Errorf("legend must document both marked states, got %q", lines[0])
+	for _, entry := range []string{"◆ unsettled", "⊙ not started", "~ not yet determined"} {
+		if !strings.Contains(lines[0], entry) {
+			t.Errorf("legend must document %q, got %q", entry, lines[0])
+		}
 	}
 
-	want := map[string]string{"E-2101": "◆", "E-2102": "⊙", "E-2103": "⊙", "E-2104": " "}
+	want := map[string]string{"E-2101": "◆", "E-2102": "⊙", "E-2103": "⊙", "E-2104": " ", "E-2105": "~"}
 	offsets := map[string]int{}
 	for _, ln := range lines[1:] {
 		for id, glyph := range want {
@@ -468,8 +509,8 @@ func TestBuildLegend(t *testing.T) {
 		{
 			name: "do and plan only",
 			rows: []monitor.SessionStatusRow{
-				{Status: "ready"},     // do
-				{Status: "unplanned"}, // plan
+				{Status: "ready", UnsettledKnown: true},     // do
+				{Status: "unplanned", UnsettledKnown: true}, // plan
 			},
 			want:        "▶ do  ✎ plan  ⊙ not started",
 			mustNotHave: []string{"orphan", "verify", "landed", "unknown", "closed", "done", "blocked", "blocks", "unsettled", "|"},
@@ -481,7 +522,7 @@ func TestBuildLegend(t *testing.T) {
 		// is ●/↑/⏚.
 		{
 			name: "undecorated unlanded terminal row surfaces ⇥ closed and ✓ done, never ⁇",
-			rows: []monitor.SessionStatusRow{{Status: "confirmed"}},
+			rows: []monitor.SessionStatusRow{{Status: "confirmed", UnsettledKnown: true}},
 			want: "⇥ closed  ✓ done",
 			// No ⊙: `confirmed` is Shipped, so the row's column is a blank —
 			// "produced work, all of it landed". Contrast the declined/obsolete
@@ -490,7 +531,7 @@ func TestBuildLegend(t *testing.T) {
 		},
 		{
 			name: "declined and obsolete — which never land — also read ⇥ closed",
-			rows: []monitor.SessionStatusRow{{Status: "declined"}, {Status: "obsolete"}},
+			rows: []monitor.SessionStatusRow{{Status: "declined", UnsettledKnown: true}, {Status: "obsolete", UnsettledKnown: true}},
 			// ⊙ too: abandoned work is terminal but never shipped, so the column
 			// correctly reports no work product (E-2107).
 			want:        "⇥ closed  ✓ done  ⊙ not started",
@@ -500,7 +541,7 @@ func TestBuildLegend(t *testing.T) {
 		// glyph for closed work that never merged — the informative case.
 		{
 			name:        "landed terminal row surfaces ⏚ landed and ✓ done, not ⇥ closed",
-			rows:        []monitor.SessionStatusRow{{Status: "confirmed", Landed: true}},
+			rows:        []monitor.SessionStatusRow{{Status: "confirmed", Landed: true, UnsettledKnown: true}},
 			want:        "⏚ landed  ✓ done",
 			mustNotHave: []string{"⇥ closed", "⁇ unknown"},
 		},
@@ -522,8 +563,8 @@ func TestBuildLegend(t *testing.T) {
 		{
 			name: "do and review render in enum order",
 			rows: []monitor.SessionStatusRow{
-				{Status: "submitted"}, // review (later in enum)
-				{Status: "ready"},     // do (earlier in enum)
+				{Status: "submitted", UnsettledKnown: true}, // review (later in enum)
+				{Status: "ready", UnsettledKnown: true},     // do (earlier in enum)
 			},
 			want: "▶ do  ⚑ review  ⊙ not started",
 		},
@@ -540,31 +581,31 @@ func TestBuildLegend(t *testing.T) {
 		{
 			name: "⇥ closed follows ⁇ unknown in legend order",
 			rows: []monitor.SessionStatusRow{
-				{Status: "confirmed"}, // closed (last in enum)
-				{Status: "blocked"},   // unknown
-				{Status: "ready"},     // do
+				{Status: "confirmed", UnsettledKnown: true}, // closed (last in enum)
+				{Status: "blocked", UnsettledKnown: true},   // unknown
+				{Status: "ready", UnsettledKnown: true},     // do
 			},
 			want: "▶ do  ⁇ unknown  ⇥ closed  ✓ done  ⊙ not started",
 		},
 		{
 			name:     "blocked decoration",
-			rows:     []monitor.SessionStatusRow{{Status: "ready", BlockedByN: 1}},
+			rows:     []monitor.SessionStatusRow{{Status: "ready", BlockedByN: 1, UnsettledKnown: true}},
 			mustHave: []string{"⊗ blocked"},
 		},
 		{
 			name:     "blocks decoration",
-			rows:     []monitor.SessionStatusRow{{Status: "ready", BlocksN: 1}},
+			rows:     []monitor.SessionStatusRow{{Status: "ready", BlocksN: 1, UnsettledKnown: true}},
 			mustHave: []string{"⏸ blocks"},
 		},
 		{
 			name:        "unsettled decoration",
-			rows:        []monitor.SessionStatusRow{{Status: "ready", Unsettled: true}},
+			rows:        []monitor.SessionStatusRow{{Status: "ready", Unsettled: true, UnsettledKnown: true}},
 			mustHave:    []string{"◆ unsettled"},
 			mustNotHave: []string{"not started"},
 		},
 		{
 			name:        "not-started decoration",
-			rows:        []monitor.SessionStatusRow{{Status: "underway"}},
+			rows:        []monitor.SessionStatusRow{{Status: "underway", UnsettledKnown: true}},
 			mustHave:    []string{"⊙ not started"},
 			mustNotHave: []string{"unsettled"},
 		},
@@ -573,16 +614,16 @@ func TestBuildLegend(t *testing.T) {
 			// every row has shipped and settled bears no ⊙, so the legend must not
 			// advertise one (E-2107).
 			name:        "no ⊙ when every row has shipped and settled",
-			rows:        []monitor.SessionStatusRow{{Status: "unverified"}, {Status: "confirmed"}},
+			rows:        []monitor.SessionStatusRow{{Status: "unverified", UnsettledKnown: true}, {Status: "confirmed", UnsettledKnown: true}},
 			mustNotHave: []string{"not started"},
 		},
 		{
 			name: "actions in enum order then decorations",
 			rows: []monitor.SessionStatusRow{
-				{Status: "unplanned"},                 // plan (later in enum)
-				{IsFocal: true, Status: "ready"},      // this (first in enum)
-				{Status: "ready", BlockedByN: 1},      // do + ⊗
-				{Status: "underway", Unsettled: true}, // orphan + ◆
+				{Status: "unplanned", UnsettledKnown: true},                 // plan (later in enum)
+				{IsFocal: true, Status: "ready", UnsettledKnown: true},      // this (first in enum)
+				{Status: "ready", BlockedByN: 1, UnsettledKnown: true},      // do + ⊗
+				{Status: "underway", Unsettled: true, UnsettledKnown: true}, // orphan + ◆
 			},
 			want: "● this  ▶ do  ✎ plan  ◷ orphan  ⊗ blocked  ◆ unsettled  ⊙ not started",
 		},
@@ -619,9 +660,9 @@ func TestBuildLegend(t *testing.T) {
 
 func TestRenderColumnsAndTruncation(t *testing.T) {
 	rows := []monitor.SessionStatusRow{
-		{ID: 1465, Title: "Implement endless session next briefing read command", Status: "underway", Phase: "now", TypeSlug: "todo", IsFocal: true},
-		{ID: 1461, Title: "Add endless session next prospective remaining-work briefing", Status: "ready", Phase: "now", TypeSlug: "epic", IsParent: true},
-		{ID: 1684, Title: "Add session next --tree showing task IDs in implementation order", Status: "confirmed", Phase: "now", TypeSlug: "todo", IsFrom: true},
+		{ID: 1465, Title: "Implement endless session next briefing read command", Status: "underway", Phase: "now", TypeSlug: "todo", IsFocal: true, UnsettledKnown: true},
+		{ID: 1461, Title: "Add endless session next prospective remaining-work briefing", Status: "ready", Phase: "now", TypeSlug: "epic", IsParent: true, UnsettledKnown: true},
+		{ID: 1684, Title: "Add session next --tree showing task IDs in implementation order", Status: "confirmed", Phase: "now", TypeSlug: "todo", IsFrom: true, UnsettledKnown: true},
 	}
 	var b strings.Builder
 	renderTo(&b, rows, 1465, hintClaimBind, 40, false, hiddenOmit)
@@ -751,6 +792,10 @@ func TestColorize(t *testing.T) {
 				Phase:     c.phase,
 				Status:    status,
 				Unsettled: c.unsettled,
+				// colorize reads Unsettled, never UnsettledKnown — but a row built
+				// without it is a row whose Unsettled flag was never filled in, and
+				// this table is about what the flag DOES, so say so (E-2128).
+				UnsettledKnown: true,
 			}
 			got := colorize(line, row, enabled)
 			if got != c.want {
@@ -770,7 +815,7 @@ func TestRenderUnsettledRowNotDimmed(t *testing.T) {
 	render := func(unsettled bool) string {
 		rows := []monitor.SessionStatusRow{
 			{ID: 1687, Title: "completed but unlanded", Status: "completed", Phase: "now",
-				TypeSlug: "todo", IsFrom: true, Unsettled: unsettled},
+				TypeSlug: "todo", IsFrom: true, Unsettled: unsettled, UnsettledKnown: true},
 		}
 		var b strings.Builder
 		renderTo(&b, rows, 1687, hintClaimBind, 90, true, hiddenOmit)
@@ -830,7 +875,7 @@ func TestTypeLetter(t *testing.T) {
 func TestFocalExpansionSuppressesUncommitted(t *testing.T) {
 	prev := worktreeAnomalies
 	t.Cleanup(func() { worktreeAnomalies = prev })
-	worktreeAnomalies = func(projectID, taskID int64) []monitor.WorktreeAnomaly {
+	worktreeAnomalies = func(_ context.Context, projectID, taskID int64) []monitor.WorktreeAnomaly {
 		return []monitor.WorktreeAnomaly{
 			{Kind: monitor.AnomalyUncommitted, Detail: "3 uncommitted/untracked user files"},
 			{Kind: monitor.AnomalyDetachedHead, Detail: "HEAD is detached"},
@@ -869,7 +914,7 @@ func TestFocalExpansionSuppressesUncommitted(t *testing.T) {
 func TestFocalExpansionUncommittedOnlyIsSilent(t *testing.T) {
 	prev := worktreeAnomalies
 	t.Cleanup(func() { worktreeAnomalies = prev })
-	worktreeAnomalies = func(projectID, taskID int64) []monitor.WorktreeAnomaly {
+	worktreeAnomalies = func(_ context.Context, projectID, taskID int64) []monitor.WorktreeAnomaly {
 		return []monitor.WorktreeAnomaly{
 			{Kind: monitor.AnomalyUncommitted, Detail: "3 uncommitted/untracked user files"},
 		}
@@ -882,5 +927,76 @@ func TestFocalExpansionUncommittedOnlyIsSilent(t *testing.T) {
 	renderTo(&b, rows, 1768, hintClaimBind, 90, false, hiddenOmit)
 	if n := strings.Count(b.String(), "      ◆ "); n != 0 {
 		t.Errorf("uncommitted-only focal worktree must add no detail lines, got %d:\n%s", n, b.String())
+	}
+}
+
+// TestLegendGlyphsAreUnique is the check that would have caught E-2128's first
+// candidate glyph before it shipped.
+//
+// `·` was the obvious pick for "not yet determined" and is already
+// referencedGlyph. In a ROW the two are distinguishable by position —
+// unsettledMark precedes the id, relationField follows it — so a row-level test
+// would have passed. The LEGEND has no position: a frame holding both states
+// would have printed `· not yet determined  · referenced` on one line, two
+// meanings under one glyph, and nothing in the suite would have said so.
+//
+// So the assertion is over the whole legend vocabulary at once, not over one
+// column: every glyph buildLegend can emit must mean exactly one thing.
+func TestLegendGlyphsAreUnique(t *testing.T) {
+	owner := map[string]string{}
+	claim := func(glyph, label string) {
+		t.Helper()
+		if glyph == " " {
+			return // the unmarked state is never a legend entry
+		}
+		if prev, taken := owner[glyph]; taken {
+			t.Errorf("glyph %q means both %q and %q — the legend has no position to tell them apart",
+				glyph, prev, label)
+			return
+		}
+		owner[glyph] = label
+	}
+
+	for a := action(0); int(a) < len(actionMeta); a++ {
+		claim(a.icon(), a.label())
+	}
+	for _, d := range []struct{ glyph, label string }{
+		{"✓", "done"},
+		{"⊗", "blocked"},
+		{"⏸", "blocks"},
+		{unsettledGlyph, "unsettled"},
+		{notStartedGlyph, "not started"},
+		{undeterminedGlyph, "not yet determined"},
+		{hiddenGlyph, "hidden"},
+		{queuedGlyph, "queued"},
+		{referencedGlyph, "referenced"},
+	} {
+		claim(d.glyph, d.label)
+	}
+
+	// And every decoration this test names must actually be one buildLegend emits,
+	// or the uniqueness it proves is about a vocabulary the renderer does not use.
+	rows := []monitor.SessionStatusRow{
+		{Status: "ready", Unsettled: true, UnsettledKnown: true},
+		{Status: "underway", UnsettledKnown: true},
+		{Status: "underway"},
+		{Status: "confirmed", UnsettledKnown: true, BlockedByN: 1, BlocksN: 1},
+		{Status: "ready", UnsettledKnown: true, Hidden: true},
+		{Status: "ready", UnsettledKnown: true, Relation: sessiontaskrelation.RelationQueued},
+		{Status: "ready", UnsettledKnown: true, Relation: sessiontaskrelation.RelationReferenced},
+	}
+	legend := buildLegend(rows)
+	for _, want := range []string{
+		"✓ done", "⊗ blocked", "⏸ blocks",
+		unsettledGlyph + " unsettled",
+		notStartedGlyph + " not started",
+		undeterminedGlyph + " not yet determined",
+		hiddenGlyph + " hidden",
+		queuedGlyph + " queued",
+		referencedGlyph + " referenced",
+	} {
+		if !strings.Contains(legend, want) {
+			t.Errorf("buildLegend = %q, must contain %q", legend, want)
+		}
 	}
 }

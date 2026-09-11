@@ -1,6 +1,7 @@
 package monitor
 
 import (
+	"context"
 	"errors"
 	"os"
 	"os/exec"
@@ -79,7 +80,7 @@ func TestKilledBySIGINT(t *testing.T) {
 func TestRunGitClassifiesAtTheSource(t *testing.T) {
 	writeGitShim(t, "kill -INT $$; sleep 5")
 
-	_, err := runGit(t.TempDir(), "status", "--porcelain")
+	_, err := runGit(context.Background(), t.TempDir(), "status", "--porcelain")
 	if !errors.Is(err, ErrGitInterrupted) {
 		t.Fatalf("runGit err = %v, want it to satisfy errors.Is(err, ErrGitInterrupted)", err)
 	}
@@ -90,7 +91,7 @@ func TestRunGitClassifiesAtTheSource(t *testing.T) {
 func TestRunGitLeavesOrdinaryFailuresAlone(t *testing.T) {
 	writeGitShim(t, "echo 'fatal: not a git repository' >&2; exit 128")
 
-	_, err := runGit(t.TempDir(), "status", "--porcelain")
+	_, err := runGit(context.Background(), t.TempDir(), "status", "--porcelain")
 	if err == nil {
 		t.Fatal("a failing git must still return an error")
 	}
@@ -143,7 +144,7 @@ func TestInterruptClassificationSurvivesGitProbeError(t *testing.T) {
 func runGitInterrupted(t *testing.T) error {
 	t.Helper()
 	writeGitShim(t, "kill -INT $$; sleep 5")
-	_, err := runGit(t.TempDir(), "status", "--porcelain")
+	_, err := runGit(context.Background(), t.TempDir(), "status", "--porcelain")
 	if !errors.Is(err, ErrGitInterrupted) {
 		t.Fatalf("shim did not produce an interrupted error: %v", err)
 	}
@@ -155,9 +156,9 @@ func runGitInterrupted(t *testing.T) error {
 func TestInterruptedProbeRecordsNoFault(t *testing.T) {
 	bindFaultsForTest(t)
 	interrupted := runGitInterrupted(t)
-	unsettledStub{statusErr: interrupted}.install(t)
+	(&unsettledStub{statusErr: interrupted}).install(t)
 
-	d := WorktreeUnsettledAt("/wt/e-1972")
+	d := WorktreeUnsettledAt(context.Background(), "/wt/e-1972")
 
 	// The verdict is deliberately unchanged. E-1940's invariant — a worktree
 	// nobody could inspect must never render as verified clean — is intact.
@@ -178,9 +179,9 @@ func TestInterruptedProbeRecordsNoFault(t *testing.T) {
 func TestInterruptedUnlandedProbeRecordsNoFault(t *testing.T) {
 	bindFaultsForTest(t)
 	interrupted := runGitInterrupted(t)
-	unsettledStub{revList: "3\n", rangeDiffErr: interrupted}.install(t)
+	(&unsettledStub{revList: "3\n", rangeDiffErr: interrupted}).install(t)
 
-	d := WorktreeUnsettledAt("/wt/e-1972")
+	d := WorktreeUnsettledDetailAt(context.Background(), unsettledStubDir)
 
 	if !d.Unsettled() || !d.Interrupted {
 		t.Errorf("unsettled=%v interrupted=%v, want both true", d.Unsettled(), d.Interrupted)
@@ -193,9 +194,9 @@ func TestInterruptedUnlandedProbeRecordsNoFault(t *testing.T) {
 // an incident.
 func TestOrdinaryProbeFailureStillRecords(t *testing.T) {
 	bindFaultsForTest(t)
-	unsettledStub{statusErr: errors.New("fatal: not a git repository")}.install(t)
+	(&unsettledStub{statusErr: errors.New("fatal: not a git repository")}).install(t)
 
-	WorktreeUnsettledAt("/wt/e-1972")
+	WorktreeUnsettledAt(context.Background(), "/wt/e-1972")
 
 	incidents, err := faults.List(faults.AllProjects, false, 0)
 	if err != nil {

@@ -204,6 +204,26 @@ var (
 		Severity: SeverityError,
 		Title:    "The repository's default branch could not be resolved",
 	}
+
+	// ErrCodeUnlandedCacheUnwritable covers the derived-state cache under the
+	// git common dir being unusable — it cannot be created, or an entry cannot
+	// be written (E-2128).
+	//
+	// Warning rather than error, and that is the whole distinction from
+	// ERR-0010: every probe still RUNS and every on-demand answer is still
+	// exact. What is lost is the ability to remember an answer, so the ◆ column
+	// shows `~` (not yet determined) indefinitely and `task unsettled`
+	// recomputes from scratch each time. Correct, just not fast.
+	//
+	// Fingerprinted on the cache DIRECTORY, not on a worktree: one unwritable
+	// directory is one condition with one remedy, and a per-worktree
+	// fingerprint would raise N incidents about it on every pass.
+	ErrCodeUnlandedCacheUnwritable = Code{
+		ID:       "ERR-0012",
+		Slug:     "unlanded-cache-unwritable",
+		Severity: SeverityWarning,
+		Title:    "The unlanded-verdict cache cannot be written",
+	}
 )
 
 // catalog indexes every registered Code by ID. Built once at init from the
@@ -220,6 +240,7 @@ var catalog = buildCatalog(
 	ErrCodeTriageFailed,
 	ErrCodeWorktreeProbeFailed,
 	ErrCodeDefaultBranchUnresolved,
+	ErrCodeUnlandedCacheUnwritable,
 )
 
 // buildCatalog indexes codes by ID. It panics on a duplicate ID: a collision is

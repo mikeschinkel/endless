@@ -1,6 +1,7 @@
 package monitor
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"strings"
@@ -43,15 +44,21 @@ func bindFaultsForTest(t *testing.T) *sql.DB {
 }
 
 // TestProbeFailureRecordsOneIncidentPerProbe is the dedup requirement stated as
-// a test: fifty ticks over one broken worktree must leave ONE open incident
-// with fifty occurrences, not fifty incidents.
+// a test: fifty probes of one broken worktree must leave ONE open incident with
+// fifty occurrences, not fifty incidents.
+//
+// The fifty used to be `session monitor` ticks. Since E-2128 the display path
+// does not run this probe at all — it reads a cache — so the repetition now comes
+// from the computing callers: the background job's passes, and `task unsettled
+// --all` over a repo with many worktrees. The requirement is unchanged and the
+// fingerprint is the same.
 func TestProbeFailureRecordsOneIncidentPerProbe(t *testing.T) {
 	bindFaultsForTest(t)
-	unsettledStub{revListErr: errors.New("fatal: bad revision")}.install(t)
+	(&unsettledStub{revListErr: errors.New("fatal: bad revision")}).install(t)
 
 	const ticks = 50
 	for i := 0; i < ticks; i++ {
-		if !WorktreeUnsettledAt("/wt/e-1940").Unsettled() {
+		if !WorktreeUnsettledDetailAt(context.Background(), unsettledStubDir).Unsettled() {
 			t.Fatal("a failed probe must not read as the all-clear")
 		}
 	}
@@ -71,9 +78,11 @@ func TestProbeFailureRecordsOneIncidentPerProbe(t *testing.T) {
 		t.Errorf("occurrences = %d, want %d", got.Occurrences, ticks)
 	}
 	// The list is read to find out WHICH task is unverifiable; a bare path
-	// buries that.
-	if !strings.Contains(got.Summary, "E-1940") {
-		t.Errorf("summary %q does not name the task", got.Summary)
+	// buries that. The stub's worktree is not an e-NNNN directory, so the label
+	// falls back to its basename — which is the same contract, stated on the one
+	// path a stub can exercise.
+	if !strings.Contains(got.Summary, "wt") {
+		t.Errorf("summary %q does not name the worktree", got.Summary)
 	}
 }
 
@@ -83,9 +92,9 @@ func TestProbeFailureRecordsOneIncidentPerProbe(t *testing.T) {
 func TestDistinctProbesRaiseDistinctIncidents(t *testing.T) {
 	bindFaultsForTest(t)
 
-	unsettledStub{statusErr: errors.New("fatal: not a git repository")}.install(t)
-	WorktreeUnsettledAt("/wt/e-1000")
-	WorktreeUnsettledAt("/wt/e-2000")
+	(&unsettledStub{statusErr: errors.New("fatal: not a git repository")}).install(t)
+	WorktreeUnsettledAt(context.Background(), "/wt/e-1000")
+	WorktreeUnsettledAt(context.Background(), "/wt/e-2000")
 
 	incidents, err := faults.List(faults.AllProjects, false, 0)
 	if err != nil {
@@ -102,9 +111,9 @@ func TestDistinctProbesRaiseDistinctIncidents(t *testing.T) {
 // worktree whose git call failed.
 func TestUnresolvedDefaultBranchRecordsItsOwnCode(t *testing.T) {
 	bindFaultsForTest(t)
-	unsettledStub{baseUnresolvable: true}.install(t)
+	(&unsettledStub{baseUnresolvable: true}).install(t)
 
-	WorktreeUnsettledAt("/wt/e-1940")
+	WorktreeUnsettledDetailAt(context.Background(), unsettledStubDir)
 
 	incidents, err := faults.List(faults.AllProjects, false, 0)
 	if err != nil {
@@ -124,9 +133,9 @@ func TestUnresolvedDefaultBranchRecordsItsOwnCode(t *testing.T) {
 // real failures land.
 func TestSettledWorktreeRecordsNothing(t *testing.T) {
 	bindFaultsForTest(t)
-	unsettledStub{status: "", revList: "0\n"}.install(t)
+	(&unsettledStub{status: "", revList: "0\n"}).install(t)
 
-	if WorktreeUnsettledAt("/wt/e-1940").Unsettled() {
+	if WorktreeUnsettledDetailAt(context.Background(), unsettledStubDir).Unsettled() {
 		t.Fatal("clean and fully landed must be settled")
 	}
 

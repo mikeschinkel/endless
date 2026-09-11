@@ -1,6 +1,7 @@
 package monitor
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"os"
@@ -162,7 +163,7 @@ func TestMaybeReapWorktree_NoLandingRow(t *testing.T) {
 	db := newReaperTestDB(t)
 	// No task_landings and no session_tasks rows for task 42.
 	cutoff := time.Now().UTC().Add(-time.Hour)
-	reaped, err := maybeReapWorktree(db, t.TempDir(), "/tmp/fake-worktree-dir", 42, cutoff)
+	reaped, err := maybeReapWorktree(context.Background(), db, t.TempDir(), "/tmp/fake-worktree-dir", 42, cutoff)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -186,7 +187,7 @@ func TestMaybeReapWorktree_LandingTooRecent(t *testing.T) {
 	}
 	// Cutoff is 14 days ago — anything newer than this is "too recent".
 	cutoff := time.Now().UTC().Add(-14 * 24 * time.Hour)
-	reaped, err := maybeReapWorktree(db, t.TempDir(), "/tmp/fake-worktree-dir", 42, cutoff)
+	reaped, err := maybeReapWorktree(context.Background(), db, t.TempDir(), "/tmp/fake-worktree-dir", 42, cutoff)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -232,6 +233,10 @@ type reaperFixture struct {
 	// revParseErr makes every branch candidate fail to resolve, which is how
 	// DefaultBranch reports "I cannot name this repo's default branch" (E-1940).
 	revParseErr error
+
+	// cacheRoot stands in for the repo's git common dir, so the unlanded cache
+	// condition 4 now reads and writes (E-2128) lands somewhere the test owns.
+	cacheRoot string
 }
 
 func newReaperFixture(t *testing.T, landedAt time.Time) *reaperFixture {
@@ -249,6 +254,7 @@ func newReaperFixture(t *testing.T, landedAt time.Time) *reaperFixture {
 		db:         newReaperTestDB(t),
 		dir:        dir,
 		projRoot:   projRoot,
+		cacheRoot:  t.TempDir(),
 		revListOut: "0",
 		statusOut:  "",
 		branchOut:  "task/42",
@@ -265,7 +271,7 @@ func newReaperFixture(t *testing.T, landedAt time.Time) *reaperFixture {
 
 	prevRunGit := runGit
 	prevLive := hasLiveProcessInDir
-	runGit = func(dir string, args ...string) (string, error) {
+	runGit = func(_ context.Context, dir string, args ...string) (string, error) {
 		key := args[0]
 		f.calls = append(f.calls, key)
 		switch key {
@@ -280,6 +286,12 @@ func newReaperFixture(t *testing.T, landedAt time.Time) *reaperFixture {
 			}
 			return stubRangeDiff(f.unlanded), nil
 		case "rev-parse":
+			// The unlanded cache (E-2128) asks where this repo's common dir is.
+			// Answering with the fixture's own temp root keeps condition 4's cache
+			// writes inside the directory the test already owns.
+			if len(args) > 1 && strings.HasSuffix(args[len(args)-1], "--git-common-dir") {
+				return f.cacheRoot + "\n", nil
+			}
 			if f.revParseErr != nil {
 				return "", f.revParseErr
 			}
@@ -305,9 +317,10 @@ func newReaperFixture(t *testing.T, landedAt time.Time) *reaperFixture {
 		return "", nil
 	}
 	hasLiveProcessInDir = func(string) (bool, error) { return f.live, nil }
-	// The reaper resolves the default branch per directory and memoizes it; a
-	// fixture that rewrites what git answers must not read the previous test's
-	// verdict.
+	// The reaper resolves the default branch per directory and memoizes it, and
+	// the cache memoizes the git common dir the same way; a fixture that rewrites
+	// what git answers must not read the previous test's verdict, nor the previous
+	// test's cache directory. resetDefaultBranchCache drops both.
 	resetDefaultBranchCache()
 	t.Cleanup(func() {
 		runGit = prevRunGit
@@ -323,7 +336,7 @@ func newReaperFixture(t *testing.T, landedAt time.Time) *reaperFixture {
 func TestMaybeReapWorktree_ReapsCleanAbandoned(t *testing.T) {
 	f := newReaperFixture(t, time.Now().Add(-30*24*time.Hour))
 	cutoff := time.Now().UTC().Add(-14 * 24 * time.Hour)
-	reaped, err := maybeReapWorktree(f.db, f.projRoot, f.dir, 42, cutoff)
+	reaped, err := maybeReapWorktree(context.Background(), f.db, f.projRoot, f.dir, 42, cutoff)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -355,7 +368,7 @@ func TestMaybeReapWorktree_DetachedHeadSkipsBranchDelete(t *testing.T) {
 	f := newReaperFixture(t, time.Now().Add(-30*24*time.Hour))
 	f.branchOut = "" // makes `symbolic-ref --quiet HEAD` fail, as it does when detached
 	cutoff := time.Now().UTC().Add(-14 * 24 * time.Hour)
-	reaped, err := maybeReapWorktree(f.db, f.projRoot, f.dir, 42, cutoff)
+	reaped, err := maybeReapWorktree(context.Background(), f.db, f.projRoot, f.dir, 42, cutoff)
 	if err != nil {
 		t.Fatalf("unexpected error reaping a detached worktree: %v", err)
 	}
@@ -390,7 +403,7 @@ func TestMaybeReapWorktree_SessionTaskActivityProtects(t *testing.T) {
 		t.Fatalf("seed session_tasks: %v", err)
 	}
 	cutoff := time.Now().UTC().Add(-14 * 24 * time.Hour)
-	reaped, err := maybeReapWorktree(f.db, f.projRoot, f.dir, 42, cutoff)
+	reaped, err := maybeReapWorktree(context.Background(), f.db, f.projRoot, f.dir, 42, cutoff)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -419,7 +432,7 @@ func TestMaybeReapWorktree_OldSessionTaskActivityReaps(t *testing.T) {
 		t.Fatalf("seed session_tasks: %v", err)
 	}
 	cutoff := time.Now().UTC().Add(-14 * 24 * time.Hour)
-	reaped, err := maybeReapWorktree(f.db, f.projRoot, f.dir, 42, cutoff)
+	reaped, err := maybeReapWorktree(context.Background(), f.db, f.projRoot, f.dir, 42, cutoff)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -435,7 +448,7 @@ func TestMaybeReapWorktree_UnmergedCommitsProtect(t *testing.T) {
 	f.revListOut = "3"
 	f.unlanded = 3
 	cutoff := time.Now().UTC().Add(-14 * 24 * time.Hour)
-	reaped, err := maybeReapWorktree(f.db, f.projRoot, f.dir, 42, cutoff)
+	reaped, err := maybeReapWorktree(context.Background(), f.db, f.projRoot, f.dir, 42, cutoff)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -455,7 +468,7 @@ func TestMaybeReapWorktree_ActiveSessionProtects(t *testing.T) {
 		t.Fatalf("seed active session: %v", err)
 	}
 	cutoff := time.Now().UTC().Add(-14 * 24 * time.Hour)
-	reaped, err := maybeReapWorktree(f.db, f.projRoot, f.dir, 42, cutoff)
+	reaped, err := maybeReapWorktree(context.Background(), f.db, f.projRoot, f.dir, 42, cutoff)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -476,7 +489,7 @@ func TestMaybeReapWorktree_EndedSessionDoesNotProtect(t *testing.T) {
 		t.Fatalf("seed ended session: %v", err)
 	}
 	cutoff := time.Now().UTC().Add(-14 * 24 * time.Hour)
-	reaped, err := maybeReapWorktree(f.db, f.projRoot, f.dir, 42, cutoff)
+	reaped, err := maybeReapWorktree(context.Background(), f.db, f.projRoot, f.dir, 42, cutoff)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -491,7 +504,7 @@ func TestMaybeReapWorktree_ModifiedTreeProtects(t *testing.T) {
 	f := newReaperFixture(t, time.Now().Add(-30*24*time.Hour))
 	f.statusOut = " M internal/monitor/reap_worktrees.go\n"
 	cutoff := time.Now().UTC().Add(-14 * 24 * time.Hour)
-	reaped, err := maybeReapWorktree(f.db, f.projRoot, f.dir, 42, cutoff)
+	reaped, err := maybeReapWorktree(context.Background(), f.db, f.projRoot, f.dir, 42, cutoff)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -507,7 +520,7 @@ func TestMaybeReapWorktree_GitStatusErrorProtects(t *testing.T) {
 	f := newReaperFixture(t, time.Now().Add(-30*24*time.Hour))
 	f.statusErr = fmt.Errorf("fatal: not a git repository")
 	cutoff := time.Now().UTC().Add(-14 * 24 * time.Hour)
-	reaped, err := maybeReapWorktree(f.db, f.projRoot, f.dir, 42, cutoff)
+	reaped, err := maybeReapWorktree(context.Background(), f.db, f.projRoot, f.dir, 42, cutoff)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -522,7 +535,7 @@ func TestMaybeReapWorktree_GitRevListErrorProtects(t *testing.T) {
 	f := newReaperFixture(t, time.Now().Add(-30*24*time.Hour))
 	f.revListErr = fmt.Errorf("fatal: ambiguous argument 'main'")
 	cutoff := time.Now().UTC().Add(-14 * 24 * time.Hour)
-	reaped, err := maybeReapWorktree(f.db, f.projRoot, f.dir, 42, cutoff)
+	reaped, err := maybeReapWorktree(context.Background(), f.db, f.projRoot, f.dir, 42, cutoff)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -541,7 +554,7 @@ func TestMaybeReapWorktree_StrandedLeftover_Reaped(t *testing.T) {
 	f.worktreeRmErr = fmt.Errorf("exit status 128")
 	f.worktreeRmOut = "fatal: '" + f.dir + "' is not a working tree\n"
 	cutoff := time.Now().UTC().Add(-14 * 24 * time.Hour)
-	reaped, err := maybeReapWorktree(f.db, f.projRoot, f.dir, 42, cutoff)
+	reaped, err := maybeReapWorktree(context.Background(), f.db, f.projRoot, f.dir, 42, cutoff)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -573,7 +586,7 @@ func TestMaybeReapWorktree_StrandedLeftover_NonEmptyDirReaped(t *testing.T) {
 		t.Fatalf("plant file: %v", err)
 	}
 	cutoff := time.Now().UTC().Add(-14 * 24 * time.Hour)
-	reaped, err := maybeReapWorktree(f.db, f.projRoot, f.dir, 42, cutoff)
+	reaped, err := maybeReapWorktree(context.Background(), f.db, f.projRoot, f.dir, 42, cutoff)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -657,7 +670,7 @@ func TestMaybeReapWorktree_GitWorktreeRemoveOtherErrorSurfaces(t *testing.T) {
 	f.worktreeRmErr = fmt.Errorf("exit status 128")
 	f.worktreeRmOut = "fatal: working tree contains modified or untracked files\n"
 	cutoff := time.Now().UTC().Add(-14 * 24 * time.Hour)
-	reaped, err := maybeReapWorktree(f.db, f.projRoot, f.dir, 42, cutoff)
+	reaped, err := maybeReapWorktree(context.Background(), f.db, f.projRoot, f.dir, 42, cutoff)
 	if err == nil {
 		t.Errorf("expected error to surface for non-stranded git failure")
 	}
@@ -671,7 +684,7 @@ func TestMaybeReapWorktree_GitWorktreeRemoveOtherErrorSurfaces(t *testing.T) {
 // worktrees ever created).
 func TestReapStaleWorktrees_NoWorktreesDir(t *testing.T) {
 	proj := t.TempDir() // empty: no .endless/worktrees subtree
-	if err := ReapStaleWorktrees(proj, 14*24*time.Hour); err != nil {
+	if err := ReapStaleWorktrees(context.Background(), proj, 14*24*time.Hour); err != nil {
 		t.Errorf("expected nil error for missing worktrees dir, got %v", err)
 	}
 }
@@ -695,7 +708,7 @@ func TestReapStaleWorktrees_SkipsNonMatchingDirNames(t *testing.T) {
 			t.Fatalf("mkdir %s: %v", name, err)
 		}
 	}
-	if err := ReapStaleWorktrees(proj, 14*24*time.Hour); err != nil {
+	if err := ReapStaleWorktrees(context.Background(), proj, 14*24*time.Hour); err != nil {
 		t.Errorf("expected nil error, got %v", err)
 	}
 	// All four dirs should still exist (none matched and none were reaped).
@@ -716,7 +729,7 @@ func TestMaybeReapWorktree_SkipsWhenDefaultBranchUnresolved(t *testing.T) {
 	f.revParseErr = fmt.Errorf("fatal: unknown revision")
 	cutoff := time.Now().UTC().Add(-14 * 24 * time.Hour)
 
-	reaped, err := maybeReapWorktree(f.db, f.projRoot, f.dir, 42, cutoff)
+	reaped, err := maybeReapWorktree(context.Background(), f.db, f.projRoot, f.dir, 42, cutoff)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -730,22 +743,24 @@ func TestMaybeReapWorktree_SkipsWhenDefaultBranchUnresolved(t *testing.T) {
 	}
 }
 
-// TestMaybeReapWorktree_UnrecordedRebaseLandingIsNotReaped pins a debt, not a
-// feature. E-2087 briefly gave the reaper the exact content comparison, which
-// recognised a rebase-landed branch with no task_landings row and reclaimed it.
-// That probe costs ~1-2s per worktree and the reaper runs on PreToolUse and
-// PostToolUse, so the sweep cost ~90s before and after every tool call in every
-// session. It was reverted to the cheap containment test.
+// TestMaybeReapWorktree_UnrecordedRebaseLandingIsReaped is the assertion E-2128
+// exists to reverse, and the leak it closes.
 //
-// The consequence, asserted here so it is visible rather than merely absent: a
-// branch whose work reached the base under rewritten SHAs, with nothing
-// recorded, is never reclaimed. Reversing this assertion is the point of
-// E-2111 — do it there, with something that makes the exact answer affordable,
-// not by loosening the test.
-func TestMaybeReapWorktree_UnrecordedRebaseLandingIsNotReaped(t *testing.T) {
+// E-2087 briefly gave the reaper the exact content comparison, which recognised a
+// rebase-landed branch with no task_landings row and reclaimed it. The probe cost
+// ~584ms per worktree and the reaper ran on PreToolUse and PostToolUse, so the
+// sweep cost ~90s before and after every tool call in every session; it was
+// reverted to a cheap SHA-containment test, and the consequence — a branch whose
+// work reached the base under rewritten SHAs, with nothing recorded, is never
+// reclaimed — was asserted here as a known debt.
+//
+// Both halves of what made that debt necessary are gone. The reaper is off the
+// hook path entirely, and condition 4 reads a cache one background job writes. So
+// the exact answer is affordable again, and the directory is reclaimable.
+func TestMaybeReapWorktree_UnrecordedRebaseLandingIsReaped(t *testing.T) {
 	f := newReaperFixture(t, time.Time{}) // no landing row to credit
 	// Three commits ahead by SHA; every one of them is on the base under a
-	// different hash, which only a content comparison could see.
+	// different hash, which only a content comparison can see.
 	f.revListOut = "3"
 	f.unlanded = 0
 	if _, err := f.db.Exec(
@@ -758,49 +773,53 @@ func TestMaybeReapWorktree_UnrecordedRebaseLandingIsNotReaped(t *testing.T) {
 	}
 	cutoff := time.Now().UTC().Add(-14 * 24 * time.Hour)
 
-	reaped, err := maybeReapWorktree(f.db, f.projRoot, f.dir, 42, cutoff)
+	reaped, err := maybeReapWorktree(context.Background(), f.db, f.projRoot, f.dir, 42, cutoff)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !reaped {
+		t.Fatalf("a rebase-landed worktree with no landing row was not reclaimed (calls=%v)", f.calls)
+	}
+	// And it got there by asking the exact question, not by guessing.
+	var sawComparison bool
+	for _, c := range f.calls {
+		if c == "range-diff" {
+			sawComparison = true
+		}
+	}
+	if !sawComparison {
+		t.Errorf("condition 4 did not run the content comparison (calls=%v)", f.calls)
+	}
+}
+
+// TestMaybeReapWorktree_ComputesConditionFourOnACacheMiss is the rule that keeps
+// the reaper honest about a cold cache: a delete must never act on "not yet
+// determined".
+//
+// The display path reads the same cache and renders `~` on a miss, which is right
+// for a display. Here a miss means compute, because the alternative is reclaiming
+// a directory on the strength of an answer nobody has worked out.
+func TestMaybeReapWorktree_ComputesConditionFourOnACacheMiss(t *testing.T) {
+	f := newReaperFixture(t, time.Now().Add(-30*24*time.Hour))
+	f.revListOut = "2"
+	f.unlanded = 2
+	cutoff := time.Now().UTC().Add(-14 * 24 * time.Hour)
+
+	reaped, err := maybeReapWorktree(context.Background(), f.db, f.projRoot, f.dir, 42, cutoff)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if reaped {
-		t.Fatal("the reaper reached for the exact comparison again — see E-2111")
+		t.Fatal("a worktree holding unlanded work was reaped off a cache miss")
 	}
+	var sawComparison bool
 	for _, c := range f.calls {
 		if c == "range-diff" {
-			t.Errorf("the reaper ran range-diff; it is on the PreToolUse/PostToolUse path (calls=%v)", f.calls)
+			sawComparison = true
 		}
 	}
-}
-
-// TestMaybeReapWorktree_CreditsRecordedLandings is E-1940's regression, kept
-// after E-2087's revert: a rebasing land rewrites every SHA, so without
-// crediting the recorded landing the cheap containment test can never clear a
-// worktree that landed through `worktree land`, and landed worktrees accumulate
-// without bound.
-func TestMaybeReapWorktree_CreditsRecordedLandings(t *testing.T) {
-	f := newReaperFixture(t, time.Now().Add(-30*24*time.Hour))
-	if _, err := f.db.Exec(
-		`INSERT INTO task_landings (task_id, merge_commit_sha, landed_at)
-		 VALUES (42, 'cafebabe', '2026-01-01T00:00:00')`,
-	); err != nil {
-		t.Fatalf("seed second landing: %v", err)
-	}
-	cutoff := time.Now().UTC().Add(-14 * 24 * time.Hour)
-
-	if _, err := maybeReapWorktree(f.db, f.projRoot, f.dir, 42, cutoff); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	excluded := map[string]bool{}
-	for _, a := range f.revListArgs {
-		if strings.HasPrefix(a, "^") {
-			excluded[a] = true
-		}
-	}
-	for _, want := range []string{"^main", "^deadbeef", "^cafebabe"} {
-		if !excluded[want] {
-			t.Errorf("condition 4 did not exclude %s (args=%v)", want, f.revListArgs)
-		}
+	if !sawComparison {
+		t.Errorf("the reaper treated a cache miss as an answer (calls=%v)", f.calls)
 	}
 }
 
@@ -822,7 +841,7 @@ func TestMaybeReapWorktree_SettledWithNoLandingIsReapable(t *testing.T) {
 	}
 	cutoff := time.Now().UTC().Add(-14 * 24 * time.Hour)
 
-	reaped, err := maybeReapWorktree(f.db, f.projRoot, f.dir, 42, cutoff)
+	reaped, err := maybeReapWorktree(context.Background(), f.db, f.projRoot, f.dir, 42, cutoff)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -860,7 +879,7 @@ func TestMaybeReapWorktree_NoLandingStillProtectsUnlandedWork(t *testing.T) {
 	}
 	cutoff := time.Now().UTC().Add(-14 * 24 * time.Hour)
 
-	reaped, err := maybeReapWorktree(f.db, f.projRoot, f.dir, 42, cutoff)
+	reaped, err := maybeReapWorktree(context.Background(), f.db, f.projRoot, f.dir, 42, cutoff)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -877,7 +896,7 @@ func TestMaybeReapWorktree_NoRecordedActivityIsSkipped(t *testing.T) {
 	f := newReaperFixture(t, time.Time{})
 	cutoff := time.Now().UTC().Add(-14 * 24 * time.Hour)
 
-	reaped, err := maybeReapWorktree(f.db, f.projRoot, f.dir, 42, cutoff)
+	reaped, err := maybeReapWorktree(context.Background(), f.db, f.projRoot, f.dir, 42, cutoff)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

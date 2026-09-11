@@ -325,3 +325,34 @@ to the project's `.endless/config.json`, which beats every detection step. Or
 give git the answer it is missing: `git remote set-head origin --auto` populates
 `origin/HEAD` for a clone that never had it. Dismiss with
 `endless errors clear <id>`.
+
+## ERR-0012 — unlanded-cache-unwritable
+
+**Severity:** warning · **Raised by:** the unlanded-verdict cache under the git
+common directory (E-2128)
+
+Endless keeps the answer to "does this branch hold work the base branch lacks?"
+in a small derived-state cache at `<git-common-dir>/info/endless/unlanded/`, so
+that one background job computes it and every display merely reads it. This
+incident says that directory cannot be created, or an entry in it cannot be
+written.
+
+Warning rather than error, and that is the whole difference from ERR-0010: every
+probe still runs, and every answer Endless gives is still exact. What is lost is
+the ability to *remember* one. So the ◆ column in `session status` and
+`session monitor` shows `~` — not yet determined — for every clean worktree
+indefinitely, because a read-only cache is a permanent miss, and
+`endless task unsettled <id>` pays the full `git range-diff` comparison on every
+invocation instead of once per branch tip. Correct, just not fast.
+
+Fingerprinted on the cache directory rather than on a worktree: one unwritable
+directory is one condition with one remedy, so this raises a single incident
+however many worktrees the pass covered.
+
+**What to do.** Read the detail (`endless errors show --id <n> --detail`); it
+names the directory and the filesystem error. The usual causes are a checkout on
+read-only media, a `.git` directory owned by another user, and a full disk.
+`git rev-parse --path-format=absolute --git-common-dir` from inside the
+repository prints the parent the cache wants to live under. Nothing needs
+repairing afterwards — the cache is rebuildable derived state, and the next job
+pass refills it. Dismiss with `endless errors clear <id>`.

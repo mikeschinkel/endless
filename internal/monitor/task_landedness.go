@@ -1,6 +1,7 @@
 package monitor
 
 import (
+	"context"
 	"errors"
 	"strings"
 )
@@ -93,7 +94,7 @@ func (l Landedness) Undetermined() bool {
 // surveys every finished task in a project, and resolving the default branch
 // and enumerating local branches once for the whole batch is the difference
 // between two git calls and two per task.
-func TaskLandedness(repoRoot string, branches []string) []Landedness {
+func TaskLandedness(ctx context.Context, repoRoot string, branches []string) []Landedness {
 	out := make([]Landedness, len(branches))
 	for i, b := range branches {
 		out[i].Branch = b
@@ -106,7 +107,7 @@ func TaskLandedness(repoRoot string, branches []string) []Landedness {
 	// DefaultBranch exists to remove, and it fails a repository that named its
 	// default branch anything else in the one direction that matters — a false
 	// all-clear (E-1940).
-	base, berr := DefaultBranch(repoRoot)
+	base, berr := DefaultBranch(ctx, repoRoot)
 	if berr != nil {
 		for i := range out {
 			out[i].BaseErr = berr.Error()
@@ -115,7 +116,7 @@ func TaskLandedness(repoRoot string, branches []string) []Landedness {
 		return out
 	}
 
-	existing, eerr := localBranches(repoRoot)
+	existing, eerr := localBranches(ctx, repoRoot)
 	if eerr != nil {
 		for i := range out {
 			out[i].Base = base
@@ -131,7 +132,7 @@ func TaskLandedness(repoRoot string, branches []string) []Landedness {
 			continue
 		}
 		out[i].BranchExists = true
-		commits, err := sourceUnlandedRevs(repoRoot, base, out[i].Branch)
+		commits, err := sourceUnlandedRevs(ctx, repoRoot, base, out[i].Branch)
 		if err != nil {
 			out[i].ProbeErr = err.Error()
 			out[i].Interrupted = errors.Is(err, ErrGitInterrupted)
@@ -149,8 +150,8 @@ func TaskLandedness(repoRoot string, branches []string) []Landedness {
 // localBranches is the set of branch names present in the repository. One call
 // for the whole batch: asking `rev-parse --verify` per branch would be one
 // process per task, and the survey runs over every finished task in a project.
-func localBranches(repoRoot string) (map[string]bool, error) {
-	out, err := runGit(repoRoot, "for-each-ref", "--format=%(refname:short)", "refs/heads/")
+func localBranches(ctx context.Context, repoRoot string) (map[string]bool, error) {
+	out, err := runGit(ctx, repoRoot, "for-each-ref", "--format=%(refname:short)", "refs/heads/")
 	if err != nil {
 		return nil, gitProbeError{
 			Command: "git for-each-ref", Detail: firstLine(out, err), Err: err,
@@ -182,13 +183,13 @@ func localBranches(repoRoot string) (map[string]bool, error) {
 // The post-filter is still required. A branch can hold both kinds — its source
 // commit landed and its plan mirror did not — and only the second filter can
 // tell which of the commits that came back is which.
-func sourceUnlandedRevs(dir, base, rev string) ([]unlandedCommit, error) {
-	mergeBase, err := mergeBaseOf(dir, base, rev)
+func sourceUnlandedRevs(ctx context.Context, dir, base, rev string) ([]unlandedCommit, error) {
+	mergeBase, err := mergeBaseOf(ctx, dir, base, rev)
 	if err != nil {
 		return nil, err
 	}
 
-	ahead, err := countSourceRevs(dir, mergeBase+".."+rev)
+	ahead, err := countSourceRevs(ctx, dir, mergeBase+".."+rev)
 	if err != nil {
 		return nil, err
 	}
@@ -196,11 +197,11 @@ func sourceUnlandedRevs(dir, base, rev string) ([]unlandedCommit, error) {
 		return nil, nil
 	}
 
-	commits, err := unlandedRevsFrom(dir, mergeBase, base, rev)
+	commits, err := unlandedRevsFrom(ctx, dir, mergeBase, base, rev)
 	if err != nil {
 		return nil, err
 	}
-	return dropBookkeepingCommits(dir, commits)
+	return dropBookkeepingCommits(ctx, dir, commits)
 }
 
 // countSourceRevs counts the commits in a range that change at least one path
@@ -209,8 +210,8 @@ func sourceUnlandedRevs(dir, base, rev string) ([]unlandedCommit, error) {
 // --full-history because the default pathspec simplification is allowed to omit
 // commits it considers uninteresting for a path, and this count is load-bearing
 // in the direction where an omission would HIDE work.
-func countSourceRevs(dir, revRange string) (int, error) {
-	return countRevs(dir, revRange, "--full-history", "--", ":(exclude)"+bookkeepingDir)
+func countSourceRevs(ctx context.Context, dir, revRange string) (int, error) {
+	return countRevs(ctx, dir, revRange, "--full-history", "--", ":(exclude)"+bookkeepingDir)
 }
 
 // dropBookkeepingCommits removes the commits that changed nothing outside
@@ -223,7 +224,7 @@ func countSourceRevs(dir, revRange string) (int, error) {
 // A commit whose file list comes back EMPTY is kept. That is what a merge commit
 // looks like to `--name-only` without `-m`, and keeping it errs toward reporting
 // work that might be real rather than silently dropping it.
-func dropBookkeepingCommits(dir string, commits []unlandedCommit) ([]unlandedCommit, error) {
+func dropBookkeepingCommits(ctx context.Context, dir string, commits []unlandedCommit) ([]unlandedCommit, error) {
 	if len(commits) == 0 {
 		return nil, nil
 	}
@@ -231,7 +232,7 @@ func dropBookkeepingCommits(dir string, commits []unlandedCommit) ([]unlandedCom
 	for _, c := range commits {
 		args = append(args, c.SHA)
 	}
-	out, err := runGit(dir, args...)
+	out, err := runGit(ctx, dir, args...)
 	if err != nil {
 		return nil, gitProbeError{Command: "git show", Detail: firstLine(out, err), Err: err}
 	}

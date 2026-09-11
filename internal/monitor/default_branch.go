@@ -1,6 +1,7 @@
 package monitor
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -25,8 +26,11 @@ import (
 //
 // One behaviour is deliberately NOT mirrored: the interrupt short-circuit below
 // (E-2130). It exists because this resolver runs inside long-lived processes —
-// `session monitor`'s 2s render loop and the PreToolUse/PostToolUse reaper —
-// that outlive the signal and would otherwise file an incident about it. The
+// `session monitor`'s 2s render loop, and the background jobs the monitor's
+// refresh fires — that outlive the signal and would otherwise file an incident
+// about it. (It named the PreToolUse/PostToolUse reaper until E-2128 took the
+// reaper off the hook path entirely; the argument is unchanged, only its
+// example.) The
 // Python resolver runs inside `worktree land`, a foreground command a Ctrl-C
 // kills outright, so there is no surviving process to mislead. The parity cases
 // are all about which branch a repository resolves to, and none of them signal
@@ -38,10 +42,21 @@ import (
 // "I don't know" and no caller may silently guess.
 var ErrDefaultBranchUnresolved = errors.New("cannot resolve the repository's default branch")
 
-// defaultBranchCache memoizes resolution per repo directory. `session monitor`
-// re-probes every row every 2s; without this each row would pay two to four git
-// invocations per tick just to re-derive a constant.
-var defaultBranchCache sync.Map // repoDir -> defaultBranchResult
+// defaultBranchCache memoizes resolution per REPOSITORY, keyed on the git
+// common dir. `session monitor` re-probes every row every 2s; without this each
+// row would pay two to four git invocations per tick just to re-derive a
+// constant.
+//
+// The key was the worktree directory until E-2128. A repository with 135
+// worktrees therefore held 135 identical entries and paid the resolution 135
+// times per process, even though the answer is a property of the repository and
+// every one of those directories shares its refs. Keying on the common dir — the
+// same identity the unlanded cache is addressed by — collapses them to one.
+//
+// The CONTEXT is deliberately not part of the key, and must never become part of
+// it: two callers holding different contexts would miss each other's entries
+// forever, which is a memo that grows without ever being read.
+var defaultBranchCache sync.Map // gitCommonDir (or repoDir) -> defaultBranchResult
 
 type defaultBranchResult struct {
 	branch string
@@ -71,12 +86,13 @@ type defaultBranchResult struct {
 //
 // repoDir may be a worktree; `.endless/config.json` is tracked, so it is
 // present there too, and git resolves refs through the shared object store.
-func DefaultBranch(repoDir string) (string, error) {
-	if cached, ok := defaultBranchCache.Load(repoDir); ok {
+func DefaultBranch(ctx context.Context, repoDir string) (string, error) {
+	key := defaultBranchCacheKey(ctx, repoDir)
+	if cached, ok := defaultBranchCache.Load(key); ok {
 		res := cached.(defaultBranchResult)
 		return res.branch, res.err
 	}
-	branch, err := resolveDefaultBranch(repoDir)
+	branch, err := resolveDefaultBranch(ctx, repoDir)
 	if errors.Is(err, ErrGitInterrupted) {
 		// Not memoized, and deliberately so (E-2130). Every other outcome here is
 		// a fact about the repository and stays true until its refs change; an
@@ -87,8 +103,23 @@ func DefaultBranch(repoDir string) (string, error) {
 		// one lost tick but a permanently poisoned cache.
 		return "", err
 	}
-	defaultBranchCache.Store(repoDir, defaultBranchResult{branch: branch, err: err})
+	defaultBranchCache.Store(key, defaultBranchResult{branch: branch, err: err})
 	return branch, err
+}
+
+// defaultBranchCacheKey identifies the REPOSITORY repoDir belongs to, so every
+// worktree of one repo shares a single memo entry.
+//
+// It falls back to repoDir itself when the common dir cannot be resolved. That
+// keeps keying a pure optimization: a directory git will not answer about still
+// gets a correct (if unshared) memo, rather than every such directory colliding
+// on one empty key and answering for each other.
+func defaultBranchCacheKey(ctx context.Context, repoDir string) string {
+	common, err := gitCommonDir(ctx, repoDir)
+	if err != nil || common == "" {
+		return repoDir
+	}
+	return common
 }
 
 // resetDefaultBranchCache drops every memoized answer. Tests only: the cache is
@@ -99,6 +130,10 @@ func resetDefaultBranchCache() {
 		defaultBranchCache.Delete(k)
 		return true
 	})
+	// The key is now derived from the git common dir, so a stale common-dir memo
+	// would hand the next resolution the previous fixture's key. Dropping both
+	// together is what makes "reset the cache" mean what its name says.
+	resetGitCommonDirCache()
 }
 
 // resolveDefaultBranch is DefaultBranch without the memoization.
@@ -113,9 +148,9 @@ func resetDefaultBranchCache() {
 // ran, which is what put ERR-0011 incidents on innocent worktrees.
 //
 // Each helper therefore returns an error for that case ALONE; see branchIfExists.
-func resolveDefaultBranch(repoDir string) (string, error) {
+func resolveDefaultBranch(ctx context.Context, repoDir string) (string, error) {
 	if name := ReadDefaultBranchConfig(repoDir); name != "" {
-		b, err := branchIfExists(repoDir, name)
+		b, err := branchIfExists(ctx, repoDir, name)
 		if err != nil {
 			return "", err
 		}
@@ -127,27 +162,27 @@ func resolveDefaultBranch(repoDir string) (string, error) {
 		return b, nil
 	}
 
-	origin, err := originHeadBranch(repoDir)
+	origin, err := originHeadBranch(ctx, repoDir)
 	if err != nil {
 		return "", err
 	}
-	if b, err := branchIfExists(repoDir, origin); err != nil || b != "" {
+	if b, err := branchIfExists(ctx, repoDir, origin); err != nil || b != "" {
 		return b, err
 	}
 
 	// Derived only now, not alongside origin/HEAD above: the steps stay lazy, so
 	// a repo that resolves at step 2 still costs exactly the two git calls it
 	// cost before, and the invocation order the Python mirror follows is intact.
-	configured, err := gitConfigValue(repoDir, "init.defaultBranch")
+	configured, err := gitConfigValue(ctx, repoDir, "init.defaultBranch")
 	if err != nil {
 		return "", err
 	}
-	if b, err := branchIfExists(repoDir, configured); err != nil || b != "" {
+	if b, err := branchIfExists(ctx, repoDir, configured); err != nil || b != "" {
 		return b, err
 	}
 
 	for _, candidate := range []string{"main", "master"} {
-		if b, err := branchIfExists(repoDir, candidate); err != nil || b != "" {
+		if b, err := branchIfExists(ctx, repoDir, candidate); err != nil || b != "" {
 			return b, err
 		}
 	}
@@ -177,8 +212,8 @@ func ReadDefaultBranchConfig(repoDir string) string {
 // `origin/` prefix, or "" when the symbolic ref is unset. It is unset on a
 // fresh clone until `git remote set-head` runs — E-1166's original finding, and
 // the whole reason the steps after it exist.
-func originHeadBranch(repoDir string) (string, error) {
-	out, err := runGit(repoDir, "symbolic-ref", "--short", "--quiet", "refs/remotes/origin/HEAD")
+func originHeadBranch(ctx context.Context, repoDir string) (string, error) {
+	out, err := runGit(ctx, repoDir, "symbolic-ref", "--short", "--quiet", "refs/remotes/origin/HEAD")
 	if err != nil {
 		return "", interruptOnly(err)
 	}
@@ -186,8 +221,8 @@ func originHeadBranch(repoDir string) (string, error) {
 }
 
 // gitConfigValue returns a git config value, or "" when unset.
-func gitConfigValue(repoDir, key string) (string, error) {
-	out, err := runGit(repoDir, "config", "--get", key)
+func gitConfigValue(ctx context.Context, repoDir, key string) (string, error) {
+	out, err := runGit(ctx, repoDir, "config", "--get", key)
 	if err != nil {
 		return "", interruptOnly(err)
 	}
@@ -205,11 +240,11 @@ func gitConfigValue(repoDir, key string) (string, error) {
 // step fell through, and a non-nil error always means interrupted. Callers can
 // therefore bail on any error without re-testing what kind it is, and a
 // non-nil error always comes back paired with an empty name.
-func branchIfExists(repoDir, name string) (string, error) {
+func branchIfExists(ctx context.Context, repoDir, name string) (string, error) {
 	if name == "" {
 		return "", nil
 	}
-	if _, err := runGit(repoDir, "rev-parse", "--verify", "--quiet", name+"^{commit}"); err != nil {
+	if _, err := runGit(ctx, repoDir, "rev-parse", "--verify", "--quiet", name+"^{commit}"); err != nil {
 		return "", interruptOnly(err)
 	}
 	return name, nil
