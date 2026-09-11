@@ -5716,3 +5716,9 @@ I added a verify check that greps this task's two new files for a hardcoded base
 
 Two rules. Any guard whose subject is a FILE LIST must assert that list is present and readable before it searches — a check that cannot distinguish 'found nothing' from 'looked at nothing' is not a check. And `git grep` specifically is the wrong tool while the files are new; plain `grep` over an explicit path list, or `git grep --untracked`, actually looks.
 - **Project**: endless
+
+### [2026-09-11] Check main before asking about a blocker the plan names
+E-2095's plan said it was blocked by E-2108 and argued the block at length. I took that as current and spent a blocking question on it. Mike's answer: 'E-2108 was in process of landed when you started.' One `git log --oneline main` would have shown its commit and saved the round trip.
+
+A plan is written at one moment and read at another. Anything it asserts about the WORLD — a blocker's status, a column that still exists, a branch naming convention, a measured count — is a claim as of its writing, not a fact as of my reading. Re-verify it against main and the live DB before building on it, and especially before stopping to ask about it. The plan's REASONING still stands; only its premises go stale.
+- **Project**: endless
