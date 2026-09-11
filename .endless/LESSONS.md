@@ -5886,3 +5886,43 @@ Related error in the same reply: I offered 'stop auto-registering projects' as a
 ### [2026-09-11] Weigh a caveat against the system's own invariants before reporting it as a risk
 Twice in one handoff I reported a staleness window as something Mike should watch for, without first asking how often the system's established invariants would let it happen. The unlanded cache can serve a stale 'unsettled' verdict only when the base branch gains content-equivalent copies of a branch's own commits while that branch's tip does not move. Under Endless's invariants — a session works only in its own worktree, and never moves another session's commits to main — that is essentially unreachable; another session landing THEIR task moves main but adds no counterpart for MY commits, so my verdict does not change at all. Mike had to reason that out for me. A caveat that is real in the mechanism but unreachable in the system is not an action item, and presenting it as one spends the reader's attention on a case that will not occur while burying the behaviour they WILL see. Derive the frequency from the invariants before deciding whether something belongs in a handoff, and if it survives, say plainly how rare it is.
 - **Project**: endless
+
+### [2026-09-11] A session reports only what IT owns; another session's task is never on this session's list, whatever its status
+A /whats-left report listed two items, both wrong, when the correct answer was
+"Nothing left - safe to archive." Mike, in caps: "E-2128 IS ANOTHER SESSION'S
+TASK! IT IS NOT THIS SESSION'S TASK TO RESOLVE!"
+
+THE RULE. /whats-left reports only what THIS session owns. A task claimed by
+another non-ended session is THAT session's to report, at every status,
+including unverified and including actions only Mike can take. Its own session
+raises it when ready. Mentioning it here does not help him; it reports the same
+item twice and spends the resource the report exists to protect - his attention.
+"Only Mike can do it" is not a reason to list something. "This session owns it"
+is the only reason.
+
+HOW I GOT THERE. I had written a correct rule - a live claim disqualifies the
+task - then "fixed" it after one run by carving out an exception: unverified
+awaits Mike by definition, so list it regardless of claim. The exception was
+built from a single observation and never tested against the question it should
+have asked: whose list is this? Do not amend a rule you just wrote because its
+first application feels wrong; work out WHY it feels wrong first. In this case
+the rule was right and my instinct was the defect.
+
+SECOND ERROR, same report. I listed E-1881 as needing a spawn after Mike had
+already told me another session owned it and that he had HIDDEN it for this
+session. Hidden state is per-viewer, lives in session_hidden_tasks, and is NOT
+in "endless task show --llm" output - so nothing I was reading would have shown
+it. "endless session status" excludes hidden rows by default.
+
+THE DEEPER MISTAKE. I built the candidate list from memory of what this
+conversation touched, then verified each candidate's status. That ordering is
+backwards: it can only ever confirm or drop what I already thought of, and it
+cannot see that a task left this session's board. Build the list from THIS
+SESSION'S BOARD - which already reflects ownership and hidden state - and use
+the conversation only to catch things the board does not know about.
+
+GENERAL FORM. Before reporting an item to a user who runs many parallel
+sessions, ask "will something else already tell him this?" A duplicate
+notification is not a harmless redundancy; it is a tax on the scarcest thing he
+has.
+- **Project**: endless
