@@ -5862,3 +5862,13 @@ The remedy is cheap and I should reach for it unprompted: fold the second into t
 
 Next time: before a second 'endless task add' in one session, write the one-sentence cause. If both candidates fit under it, there is one task. Sub-parts go in that task's analysis under headings, where they cost a scroll instead of a triage pass, an approval, a claim, a worktree and a land.
 - **Project**: endless
+
+### [2026-09-11] Do not answer an architectural argument with evidence the symptom is not happening now
+Mike argued that Endless's hooks should not be invoked AT ALL for a project that has nothing to do with Endless — on three grounds: performance, complexity, and that a bug in the bypass logic then cannot matter because there is no bypass to get wrong.
+
+I answered by showing that the runtime gate (agentenv.Supported / hookcmd.supportedAgent, E-1962) already returns nil early for Claude Code Desktop, and asked what he was observing. That is a diagnosis, not an answer to the argument.
+
+'Already handled at runtime' does not address 'should not be reachable'. An early return still spawns a process on every event of every project on the machine, still has to stay correct, and still can regress. Defense-in-depth is an argument FOR removing the reachability, not against it.
+
+When the claim is that code should not run, do not rebut with evidence that the code currently does nothing.
+- **Project**: endless
