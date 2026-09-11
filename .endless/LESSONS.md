@@ -5722,3 +5722,15 @@ E-2095's plan said it was blocked by E-2108 and argued the block at length. I to
 
 A plan is written at one moment and read at another. Anything it asserts about the WORLD — a blocker's status, a column that still exists, a branch naming convention, a measured count — is a claim as of its writing, not a fact as of my reading. Re-verify it against main and the live DB before building on it, and especially before stopping to ask about it. The plan's REASONING still stands; only its premises go stale.
 - **Project**: endless
+
+### [2026-09-11] Do not argue a signal is sufficient because it is inferable; check whether the inference is actually drawn
+An earlier session argued Mike did not need an explicit spawn notification, because the existing signals already implied it, and he accepted that argument. The observed result: asked 'what is left', this agent repeatedly told him to spawn tasks he had ALREADY spawned.
+
+The argument was sound and the conclusion was wrong.  does imply a claim.  does print . Every fact needed was available. The inference from those facts to 'already spawned, do not ask for it again' simply was not made at the moment it mattered — when writing a handoff.
+
+THE RULE. 'The information is available' and 'the information reaches the decision' are different claims, and only the second one matters. When arguing against adding a signal, the test is not whether a sufficiently careful reader COULD derive it; it is whether it IS derived, reliably, at the moment of use. Availability arguments are cheap to make and cost the user real work when wrong — here, being told to redo finished work.
+
+Corollary: redundancy that closes a loop is not waste. Mike: 'It is a bit redundant, but I want to close the loop so you can stop reminding me to do things I have already done.' A signal that removes a recurring user cost earns its redundancy; do not argue it away on elegance grounds.
+
+Corollary 2: when a prior recommendation of mine is contradicted by observed behaviour, the observation wins immediately and without relitigating. Record the reversal where the work lives — here as trigger 5 on E-2028 — so the next session inherits the correction rather than the original argument.
+- **Project**: endless
