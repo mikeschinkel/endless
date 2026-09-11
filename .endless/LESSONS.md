@@ -5811,3 +5811,40 @@ THIRD. When an argument for a task's priority turns out to be false, go back and
 remove it from the task. A stale justification in an analysis is read by the
 next session as current reasoning.
 - **Project**: endless
+
+### [2026-09-11] A handoff lists what only I can hand over — not every task id I have touched
+Asked for the action items from this session, I gave Mike three. Two were not
+mine to give:
+
+- "Verify and land E-2105" — claimed by ES-1173. That session owns driving it to
+  verification and handing it back. My telling Mike to do it duplicates a handoff
+  he was already going to get, from the session that actually knows the state.
+- "Approve E-2091" — he had already spawned it.
+
+Both were stale as well: E-2105 had landed hours earlier and E-2091 was underway.
+But staleness is the smaller fault and fixing it (re-read before reporting) would
+not have fixed the real one.
+
+The real one: I built the list by SCANNING THE TASK TREE for anything unfinished
+that I had touched, then presenting each as something Mike must do. Filing a task
+does not make me its project manager. Once filed, a task goes through the normal
+pipeline — triage, approval, claim, spawn, the claiming session's own handoff —
+and every one of those has an owner who is not me. Reporting their states back as
+a to-do list inserts me into loops I am not in, and it does it in the register of
+helpfulness, which is what makes it hard to refuse.
+
+A handoff answers: what did I do, and what does the person in front of me have to
+decide or act on THAT NOBODY ELSE WILL TELL THEM. It is not a status report on
+every id I have touched. Of the three items I gave, exactly one qualified — an
+unfiled finding I was holding, which nobody else could surface because it existed
+only in this conversation.
+
+Test before any item goes in a handoff: does this reach him some other way? If a
+claiming session will hand it over, a triage pass will surface it, or a status
+already shows it, then reporting it is duplication, and duplication at the size
+of a backlog is how a to-do list becomes unreadable.
+
+Corollary for /tl-dr specifically: the request is "what do I NEED to know". Need
+means it dies here if I do not say it. Items that are merely TRUE about the
+project do not qualify, however recently I touched them.
+- **Project**: endless
