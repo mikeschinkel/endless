@@ -5848,3 +5848,17 @@ Corollary for /tl-dr specifically: the request is "what do I NEED to know". Need
 means it dies here if I do not say it. Items that are merely TRUE about the
 project do not qualify, however recently I touched them.
 - **Project**: endless
+
+### [2026-09-11] One cause is one task; 'they land independently' is not a reason to split
+I found one omission — a command's DB context is inferred from ambient state and never declared — and filed it as TWO tasks: a refusal (stop guessing) and an output contract (state the answer). I had already written the shared root cause down in the second task's own analysis, and split anyway on the reasoning that they were 'a refusal and an output contract', 'land independently in either order', and had slightly different audiences.
+
+Mike: 'EACH task requires a minimum amount of time for my scarcest resource, my attention. When you file two tasks *for purity* when you could have filed one you DOUBLE the amount of attention I have to SPEND.' ED-1550 rule 3 says it outright: several symptoms of one cause are one task; file the cause. Endless's own task-add output even prompted me — 'Does the one you just filed share a root cause with any of them?' — and I answered the prompt in prose and filed anyway.
+
+The tell is unmistakable in hindsight: if I can state the shared cause in one sentence, it is one task. Every argument I reached for was about the SHAPE OF THE WORK — two different code layers, two different landing orders, two different blast radii. None of those is the unit being economised. The unit is one decision by one person. A task is a claim on attention, not a container for a coherent change, and 'independently landable' describes commits, which are free, not tasks, which are not.
+
+Note also that filing was invited — Mike said 'file it'. ED-1550 rule 5: a request to file is not unlimited. A request to file ONE thing is not a licence to file two.
+
+The remedy is cheap and I should reach for it unprompted: fold the second into the first and close it with 'endless task replace <extra> --by <keeper>', which records replaced_by rather than pretending it never needed doing.
+
+Next time: before a second 'endless task add' in one session, write the one-sentence cause. If both candidates fit under it, there is one task. Sub-parts go in that task's analysis under headings, where they cost a scroll instead of a triage pass, an approval, a claim, a worktree and a land.
+- **Project**: endless
