@@ -5676,3 +5676,17 @@ The handoff instructions say hand exactly ONE verify command and do not enumerat
 
 Shape: the ask(s), then the one command, then at most a short line pointing at where the detail lives. If a departure from the plan genuinely needs Mike's eyes before he lands, that IS an ask — state it as one, in one sentence, at the top, not as narrative.
 - **Project**: endless
+
+### [2026-09-11] Never open a task or plan with 'Implements ED-NNNN' — cite the decision where it constrains a choice, with 'Per ED-NNNN'
+Mike called the question on the 'Implements ED-NNNN' / 'Commits ED-NNNN' opening line and was right to. Banned. Two reasons, and one thing that is NOT a reason.
+
+WHY IT IS WRONG. An architectural decision is a standing constraint, not a specification that some task realises and retires. ED-1589 ('a display never computes an expensive answer to paint a row') binds every display surface built from now on. Writing 'E-2128 implements ED-1589' says the decision is discharged when that task lands — and if that were true the next display surface could compute freely. Mike's analogy: a homeowner deciding on midcentury modern does not then write house plans titled 'Implement my midcentury modern home'. The plans cite the program on the sheet where the roof pitch is chosen.
+
+'Implements' is defensible only for a ONE-TIME commitment — 'migrate to Postgres' — where the decision really is carried out once and then in force. Most decisions worth recording are rules, not migrations.
+
+WHAT TO DO INSTEAD. Cite the decision inline, at the point in the prose where it actually constrains the choice being described: 'The display path never computes (ED-1589).' That earns its words, because it says WHICH decision drove WHICH choice. The corpus already prefers this — counting the ledger, 'Per ED-NNNN' outnumbers 'Implements ED-NNNN' roughly six to four per decision.
+
+NOT A REASON: redundancy with the link. I assumed the prose duplicated the implemented_by relation and was therefore stale-prone. It does not: 'endless task show' renders task-to-task relations only and shows no decision links at all, so a reader of the task cannot see the decision. That gap is filed separately. Until it closes, a decision that binds a task still has to reach the reader somehow — inline citation, not a banner.
+
+Note for later: the relation type is itself named implemented_by, which carries the same flaw one layer down. Not changing it here; flagged if the vocabulary is ever revisited.
+- **Project**: endless
