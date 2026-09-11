@@ -5668,3 +5668,11 @@ Mike rejected ED-1590 ('A destructive sweep runs on a schedule, never from a hoo
 
 Also: an architecture decision constrains future choices across cases. 'Where does this one sweep run' is an implementation choice belonging in the task's plan. If a proposed decision reads as a summary of one task, it is not a decision.
 - **Project**: endless
+
+### [2026-09-10] A handoff reply leads with what Mike must DO; everything else goes below it or into the task
+E-2113's handoff opened with the reproduction, then the plan deviations, then the regression line, then the one verify command, then an ask. Mike's response was /tl-dr — 'what from that wall of text is an action item that I NEED to know?' Two things needed him: run the verify command, and answer a file-or-drop question. Both were buried.
+
+The handoff instructions say hand exactly ONE verify command and do not enumerate a checklist. Obeying that is not sufficient. Ordering is the other half: the actions Mike must take go FIRST and are the only things that get prominence. Supporting material — reproduction evidence, deviations from the plan, what was deliberately not done — is already recorded in the commit message and the task's plan, which is where a reviewer reads it. Repeating it in the reply does not make it more available; it makes the two actual asks less available.
+
+Shape: the ask(s), then the one command, then at most a short line pointing at where the detail lives. If a departure from the plan genuinely needs Mike's eyes before he lands, that IS an ask — state it as one, in one sentence, at the top, not as narrative.
+- **Project**: endless
