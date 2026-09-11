@@ -32,7 +32,9 @@
 #      worktree.
 #   D. There is no file format: the only file with contents holds the lines a
 #      consumer needs, and "fully landed" is an EMPTY file whose presence is the
-#      verdict.
+#      verdict — which is also what lets a land show settled immediately, since a
+#      settled marker is keyed on the branch tip alone and never goes through the
+#      watermark's base tip.
 #   E. The invariant the whole design rests on: a settled verdict survives the
 #      base branch advancing, and a non-zero one does not.
 #   F. A branch amend self-invalidates, by path, with no logic and no stored
@@ -141,6 +143,8 @@ mon TestMaybeReapWorktree_ComputesConditionFourOnACacheMiss \
     "and computes on a miss — a delete never acts on 'not yet determined'"
 mon TestMasterProjectMarksUnlandedWorkAndClearsAfterLanding \
     "job-writes-then-display-reads, end to end on a master-branch repo"
+mon TestPostLandWarmIsVisibleWithoutWaitingForTheJob \
+    "landing your own task shows settled at once, with no job pass in between"
 
 go_claim ./internal/sessionstatuscmd/ TestUnsettledMark \
     "all four column states, with ~ outranking ◆ on an uncomputed row"

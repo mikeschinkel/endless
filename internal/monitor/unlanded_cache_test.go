@@ -604,3 +604,62 @@ func listIncidents(t *testing.T) []faults.Incident {
 	}
 	return incidents
 }
+
+// TestPostLandWarmIsVisibleWithoutWaitingForTheJob is the moment a person
+// actually watches: you land your own task, and the pane either updates or it
+// does not.
+//
+// It works because settled/ is keyed on the branch tip ALONE and is read before
+// anything else. A land moves the base past the tip the watermark records, so
+// every unsettled/ entry in the repo goes unreachable at that instant — but a
+// settled marker does not go through the watermark's tip at all, which is
+// exactly why the settled half is not nested under it. `worktree land` writes
+// that marker through the same entry point it shells to, and the next render
+// reads it.
+//
+// Asserted with NO job pass in between, because that is the claim: the display
+// must not wait an interval for the one worktree whose state definitely just
+// changed.
+func TestPostLandWarmIsVisibleWithoutWaitingForTheJob(t *testing.T) {
+	ctx := context.Background()
+	f := newCacheFixture(t, 1)
+	f.appendToBase(t, "base.txt")
+	f.refresh(t) // the job has run once, so the repo has a watermark
+
+	if got := f.read(t, 0); !got.Known || len(got.Commits) != 1 {
+		t.Fatalf("setup: the worktree should read as unlanded: %+v", got)
+	}
+	watermarkTip := mustGit(t, f.root, "rev-parse", "main")
+
+	f.landFromWorktree(t, 0)
+
+	// The land moved BOTH tips, so before the warm there is nothing to read —
+	// which is what the row would show as `~`.
+	if got := f.read(t, 0); got.Known {
+		t.Fatalf("a land moves the branch tip; the old entry must not still answer: %+v", got)
+	}
+	if now := mustGit(t, f.root, "rev-parse", "main"); now == watermarkTip {
+		t.Fatal("the fixture did not actually move the base past the watermark")
+	}
+
+	// What `worktree land` does next: ask the on-demand entry point, which
+	// computes and stores. Cheap here by construction — the branch is contained
+	// in its base, so the comparison short-circuits before range-diff.
+	if d := WorktreeUnsettledDetailAt(ctx, f.worktrees[0]); d.Unsettled() {
+		t.Fatalf("a just-landed worktree is not settled: %s", d.Reason())
+	}
+
+	// No refresh. Read exactly as the ◆ column does.
+	got := f.read(t, 0)
+	if !got.Known {
+		t.Fatal("the post-land warm was not visible to the display — the row would read `~`")
+	}
+	if len(got.Commits) != 0 {
+		t.Errorf("post-land verdict = %v, want settled", got.Commits)
+	}
+	// And the reader got there without the watermark having moved, which is the
+	// property that makes the warm worth writing at all.
+	if wm, err := f.cache(t).readWatermark(); err != nil || wm.tip != watermarkTip {
+		t.Errorf("the watermark moved (%+v, err %v); only the job advances it", wm, err)
+	}
+}
