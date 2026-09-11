@@ -5690,3 +5690,13 @@ NOT A REASON: redundancy with the link. I assumed the prose duplicated the imple
 
 Note for later: the relation type is itself named implemented_by, which carries the same flaw one layer down. Not changing it here; flagged if the vocabulary is ever revisited.
 - **Project**: endless
+
+### [2026-09-11] Correction: it is the VERB 'implements' that is banned, not naming the decision a task is bound by
+Supersedes the earlier lesson 'Never open a task or plan with Implements ED-NNNN — cite the decision where it constrains a choice, with Per ED-NNNN'. That lesson overreached on two counts and both matter.
+
+1. I BANNED THE WRONG THING. Mike objected to the word 'implements', not to naming the decision up front. His words: 'it was implements ED-1589 I was objecting to', and 'you could say something like This task <verb> decision ED-1589'. An opening line that names the binding decision is GOOD — it is the only way a reader of the task learns the decision exists, because task show renders task-to-task relations only. Ban the verb, keep the reference. Asked whether to ban a convention, separate the part that is wrong from the part that carries information, and do not throw out both because one is defective.
+
+2. I FILED A TASK THAT WOULD BE THROWN AWAY. I filed E-2131 to render decision relations in task show, without checking whether the schema it targets has a future. E-1868 moves decisions back onto tasks and deletes that split, so the work would have been discarded — Mike had the epic open and unstarted behind higher-priority work. Before filing against a structure, check whether a task already plans to replace that structure. ED-1550 §4 says search the area for an owning task; searching for the SYMPTOM ('render decision links') found nothing, while searching for the STRUCTURE ('decisions table') found E-1868 immediately. Search for the thing being changed, not for the change.
+
+The verb itself is not mine to settle. It is a modelling question now recorded on E-1861, the brainstorm determining how decisions are carried on tasks and how they relate, with Mike's candidates: complies with, conforms to, respects, follows, obeys, defers to, honors, adheres to, aligns with, per. Interim prose uses 'This task conforms to decision ED-NNNN' until that lands.
+- **Project**: endless
