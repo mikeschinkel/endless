@@ -5700,3 +5700,13 @@ Supersedes the earlier lesson 'Never open a task or plan with Implements ED-NNNN
 
 The verb itself is not mine to settle. It is a modelling question now recorded on E-1861, the brainstorm determining how decisions are carried on tasks and how they relate, with Mike's candidates: complies with, conforms to, respects, follows, obeys, defers to, honors, adheres to, aligns with, per. Interim prose uses 'This task conforms to decision ED-NNNN' until that lands.
 - **Project**: endless
+
+### [2026-09-11] Measure against the right database before calling it a defect
+While diagnosing a land failure I ran `endless-go session-query list-live --project-root <main checkout>` from inside my worktree, got 2 rows where main has 59, and reported it to Mike as a probable defect: 'list-live reports only two unbound sentinel sessions even though six live pane-bound sessions exist.' I even unset XDG_CONFIG_HOME to be careful.
+
+It was not a defect. A worktree routes DB access to its per-worktree sandbox, and the Go binary self-detects that from CWD — not only from XDG_CONFIG_HOME. So unsetting the env var proved nothing; the binary still read the sandbox, whose seeded contents ARE two unbound sessions. Run from main's cwd the same command returns 59 rows with panes correctly marked live. The project's own CLAUDE.md says this in one line: 'endless commands in your worktree read and write a per-worktree sandbox database, not the main database.'
+
+What made it look credible was that I ran the SAME wrong command against two different binaries, got identical output, and treated the agreement as corroboration. Two readings of the same wrong database agree perfectly. That comparison was the right control for the question I was actually answering — 'did my change alter this?' — and no control at all for the one I then went on to assert.
+
+The rule: before reporting anything as a product defect from inside a worktree, prove which database the observation came from. Name a row you expect to see and check it is there. A count that disagrees with expectation by an order of magnitude is first evidence about the OBSERVER, not the system. And when an independent-looking comparison agrees, ask what the two runs SHARE before treating the agreement as confirmation.
+- **Project**: endless
