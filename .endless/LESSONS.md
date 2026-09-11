@@ -5872,3 +5872,13 @@ I answered by showing that the runtime gate (agentenv.Supported / hookcmd.suppor
 
 When the claim is that code should not run, do not rebut with evidence that the code currently does nothing.
 - **Project**: endless
+
+### [2026-09-11] Self-dev tooling is never a constraint on product design
+Arguing against project-scoped Claude Code hooks, I offered as a complication that 'just claude-settings-init already writes .claude/settings.local.json per worktree, so two mechanisms would have to compose.'
+
+The justfile is Endless's OWN development tooling. No user of Endless runs it. Citing it as a constraint on how a user's project gets its hooks is exactly the PRODUCT failure CLAUDE.md names: reasoning from this machine and this project.
+
+Before offering a constraint against a design, check that it exists for someone else, on a different machine, on a project that is not Endless. If it only exists in the self-dev loop, it is not a constraint — it is at most a migration chore for one repo.
+
+Related error in the same reply: I offered 'stop auto-registering projects' as a cheaper alternative to scoping the hooks. It is not an alternative. Auto-registration is downstream of the hook firing — suppressing it leaves the hook running on every event in every project, which was the entire point. A cheaper fix that does not address the stated concern is not cheaper.
+- **Project**: endless
