@@ -22,6 +22,15 @@ import (
 // The order is mirrored by endless.worktree_cmd._default_base_branch on the
 // Python side, and tests/test_default_branch_parity.py asserts the two agree
 // case for case rather than trusting this comment.
+//
+// One behaviour is deliberately NOT mirrored: the interrupt short-circuit below
+// (E-2130). It exists because this resolver runs inside long-lived processes —
+// `session monitor`'s 2s render loop and the PreToolUse/PostToolUse reaper —
+// that outlive the signal and would otherwise file an incident about it. The
+// Python resolver runs inside `worktree land`, a foreground command a Ctrl-C
+// kills outright, so there is no surviving process to mislead. The parity cases
+// are all about which branch a repository resolves to, and none of them signal
+// anything, so this adds no case for the Python side to match.
 
 // ErrDefaultBranchUnresolved is returned when every resolution step fell
 // through. It is a real error on purpose: substituting `main` here is exactly
@@ -68,6 +77,16 @@ func DefaultBranch(repoDir string) (string, error) {
 		return res.branch, res.err
 	}
 	branch, err := resolveDefaultBranch(repoDir)
+	if errors.Is(err, ErrGitInterrupted) {
+		// Not memoized, and deliberately so (E-2130). Every other outcome here is
+		// a fact about the repository and stays true until its refs change; an
+		// interrupt is a fact about the process that asked, and it stops being
+		// true the moment the signal has been handled. Caching it would let one
+		// Ctrl-C answer for every later probe of this directory — the reaper runs
+		// on PreToolUse/PostToolUse in a process that keeps going, so that is not
+		// one lost tick but a permanently poisoned cache.
+		return "", err
+	}
 	defaultBranchCache.Store(repoDir, defaultBranchResult{branch: branch, err: err})
 	return branch, err
 }
@@ -83,24 +102,53 @@ func resetDefaultBranchCache() {
 }
 
 // resolveDefaultBranch is DefaultBranch without the memoization.
+//
+// Every step below may fall through, and that is the whole design — a step that
+// cannot name the branch hands the question to the next one. An INTERRUPTED step
+// is the one thing that must not fall through (E-2130): it was killed before it
+// could answer, so it has established nothing about this repository, and asking
+// the next step is asking a question whose answer was already lost. Worse, the
+// fall-through would end at ErrDefaultBranchUnresolved — a claim that the repo
+// has no discoverable default branch, made on the strength of probes that never
+// ran, which is what put ERR-0011 incidents on innocent worktrees.
+//
+// Each helper therefore returns an error for that case ALONE; see branchIfExists.
 func resolveDefaultBranch(repoDir string) (string, error) {
-	if b := ReadDefaultBranchConfig(repoDir); b != "" {
-		if branchIfExists(repoDir, b) == "" {
+	if name := ReadDefaultBranchConfig(repoDir); name != "" {
+		b, err := branchIfExists(repoDir, name)
+		if err != nil {
+			return "", err
+		}
+		if b == "" {
 			return "", fmt.Errorf(
 				"%w: .endless/config.json sets default_branch %q, which does not exist here",
-				ErrDefaultBranchUnresolved, b)
+				ErrDefaultBranchUnresolved, name)
 		}
 		return b, nil
 	}
-	if b := branchIfExists(repoDir, originHeadBranch(repoDir)); b != "" {
-		return b, nil
+
+	origin, err := originHeadBranch(repoDir)
+	if err != nil {
+		return "", err
 	}
-	if b := branchIfExists(repoDir, gitConfigValue(repoDir, "init.defaultBranch")); b != "" {
-		return b, nil
+	if b, err := branchIfExists(repoDir, origin); err != nil || b != "" {
+		return b, err
 	}
+
+	// Derived only now, not alongside origin/HEAD above: the steps stay lazy, so
+	// a repo that resolves at step 2 still costs exactly the two git calls it
+	// cost before, and the invocation order the Python mirror follows is intact.
+	configured, err := gitConfigValue(repoDir, "init.defaultBranch")
+	if err != nil {
+		return "", err
+	}
+	if b, err := branchIfExists(repoDir, configured); err != nil || b != "" {
+		return b, err
+	}
+
 	for _, candidate := range []string{"main", "master"} {
-		if b := branchIfExists(repoDir, candidate); b != "" {
-			return b, nil
+		if b, err := branchIfExists(repoDir, candidate); err != nil || b != "" {
+			return b, err
 		}
 	}
 	return "", ErrDefaultBranchUnresolved
@@ -129,32 +177,51 @@ func ReadDefaultBranchConfig(repoDir string) string {
 // `origin/` prefix, or "" when the symbolic ref is unset. It is unset on a
 // fresh clone until `git remote set-head` runs — E-1166's original finding, and
 // the whole reason the steps after it exist.
-func originHeadBranch(repoDir string) string {
+func originHeadBranch(repoDir string) (string, error) {
 	out, err := runGit(repoDir, "symbolic-ref", "--short", "--quiet", "refs/remotes/origin/HEAD")
 	if err != nil {
-		return ""
+		return "", interruptOnly(err)
 	}
-	return strings.TrimPrefix(strings.TrimSpace(out), "origin/")
+	return strings.TrimPrefix(strings.TrimSpace(out), "origin/"), nil
 }
 
 // gitConfigValue returns a git config value, or "" when unset.
-func gitConfigValue(repoDir, key string) string {
+func gitConfigValue(repoDir, key string) (string, error) {
 	out, err := runGit(repoDir, "config", "--get", key)
 	if err != nil {
-		return ""
+		return "", interruptOnly(err)
 	}
-	return strings.TrimSpace(out)
+	return strings.TrimSpace(out), nil
 }
 
 // branchIfExists returns name when it resolves to a commit in repoDir, else "".
 // Empty input is "" straight back, so callers can chain candidate sources
 // without checking each one first.
-func branchIfExists(repoDir, name string) string {
+//
+// The error return carries exactly one thing: a git child killed by a signal
+// (E-2130). Every ORDINARY failure is still absorbed — `rev-parse --verify` exits
+// non-zero for a name that is not a branch, and that is this resolver's normal
+// answer of "not this candidate", not a fault to report. So ("", nil) means the
+// step fell through, and a non-nil error always means interrupted. Callers can
+// therefore bail on any error without re-testing what kind it is, and a
+// non-nil error always comes back paired with an empty name.
+func branchIfExists(repoDir, name string) (string, error) {
 	if name == "" {
-		return ""
+		return "", nil
 	}
 	if _, err := runGit(repoDir, "rev-parse", "--verify", "--quiet", name+"^{commit}"); err != nil {
-		return ""
+		return "", interruptOnly(err)
 	}
-	return name
+	return name, nil
+}
+
+// interruptOnly reduces a git failure to the single class the fall-through above
+// must not absorb, returning err when a signal killed the child and nil for
+// every ordinary failure. It is the one place the distinction is made, so the
+// helpers state their contract by calling it rather than each re-deriving it.
+func interruptOnly(err error) error {
+	if errors.Is(err, ErrGitInterrupted) {
+		return err
+	}
+	return nil
 }
