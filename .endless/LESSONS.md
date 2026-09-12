@@ -5926,3 +5926,13 @@ sessions, ask "will something else already tell him this?" A duplicate
 notification is not a harmless redundancy; it is a tax on the scarcest thing he
 has.
 - **Project**: endless
+
+### [2026-09-12] Never report a status transition that is working as intended
+Mike, in caps: 'YOU DO NOT NEED TO REPORT It reset from submitted to unplanned. That is WORKS AS INTENDED.'
+
+I had flagged that editing a task description reset it from submitted to unplanned, presenting it as something he needed to know. It is designed behaviour: a material re-spec invalidates prior approval, which the status lifecycle documents explicitly. Reporting it framed a correctly functioning mechanism as an incident.
+
+THE RULE. Report a state change only when it is unexpected, wrong, or requires an action he would not otherwise take. A documented, intended consequence of the edit he just asked for is none of those. If the lifecycle diagram or the guide describes it, he already knows it; saying it again spends attention and implies something went wrong.
+
+This is the same failure as reporting another session's task: both put something on his screen that costs attention and buys nothing. The test before writing any line to him is not 'is this true' but 'does he need to act on it, or is it something he does not already expect'.
+- **Project**: endless
