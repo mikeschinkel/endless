@@ -1402,21 +1402,30 @@ def _reap_stale_worktrees(project_root: Path) -> None:
 
 
 def _warm_unlanded_cache(worktree_path: Path) -> None:
-    """Record the just-landed worktree's settled verdict (E-2128). Best-effort.
+    """Record one worktree's unlanded verdict now (E-2128). Best-effort.
 
-    A land rebases the branch onto the base and fast-forwards the base to it, so
-    afterwards the branch tip IS the base tip and the answer to "does this branch
-    hold work the base lacks?" is known to be no — without comparing anything.
-    Asking the Go probe now costs three cheap git calls (the comparison short-
-    circuits on a branch contained in its base) and leaves the marker on disk, so
-    the next `session status` tick reads a verdict instead of rendering `~` for
-    the one worktree whose state definitely just changed.
+    Called at the two moments a worktree's branch tip moves under Endless's own
+    hand, which are also the two moments somebody is about to look at the row:
+
+    * **Creation.** `git worktree add -b <branch> <dir> <base>` puts the new
+      branch AT the base, so it holds nothing the base lacks.
+    * **Land.** The rebase-and-fast-forward leaves the branch tip equal to the
+      base tip again, so the same thing is true.
+
+    In both cases the answer is known without comparing anything, and the probe
+    costs two or three cheap git calls — the comparison short-circuits on a branch
+    contained in its base, never reaching `git range-diff`. Without this the row
+    reads `~` (not yet determined) until the background job's next pass, for the
+    one worktree whose state definitely just changed. `session resume --reopen`
+    reusing an existing branch is the exception: its tip is wherever that branch
+    was, so the full comparison runs once, which is the same cost
+    `task unsettled <id>` pays and still better than showing `~`.
 
     It goes through `session-query worktree-unsettled` rather than writing the
     marker here on purpose: the cache layout is Go's, and a second writer in a
     second language is how two halves of one format drift apart.
 
-    Never fatal — the land has already happened, and a cache is an optimization.
+    Never fatal — the worktree exists either way, and a cache is an optimization.
     """
     from endless import config
 
@@ -1913,6 +1922,16 @@ def _bootstrap_task_worktree(
     )
     _materialize_task_docs(task_id, wt_dir)
     _maybe_auto_sandbox_bind(project_root, wt_dir, task_id)
+    # E-2128: the branch was just cut at the base, so its unlanded verdict is
+    # known without comparing anything. Recording it here means the row this
+    # session is about to look at reads a verdict rather than `~`. Before the
+    # post-create hook, which on some projects takes seconds.
+    try:
+        _warm_unlanded_cache(wt_dir)
+    except Exception:
+        # Deliberately silent: a cold cache entry costs one monitor tick showing
+        # `~`, and saying so would be noise on a worktree that was created fine.
+        pass
     _run_post_worktree_create_hook(project_root, wt_dir)
 
 

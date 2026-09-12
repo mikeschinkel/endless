@@ -663,3 +663,90 @@ func TestPostLandWarmIsVisibleWithoutWaitingForTheJob(t *testing.T) {
 		t.Errorf("the watermark moved (%+v, err %v); only the job advances it", wm, err)
 	}
 }
+
+// TestFreshWorktreeIsSettledWithoutAComparison is the other moment worth warming
+// (E-2128): `task claim` cuts a branch AT the base, so the new worktree holds
+// nothing the base lacks and the verdict needs no comparison at all.
+//
+// Both halves matter. That the answer is free is what makes warming it at creation
+// free — if this reached `git range-diff` it would put half a second on every
+// claim. And that the display then reads it is the point: without it the row for
+// the task you just claimed, and are about to look at, shows `~` until the job's
+// next pass.
+//
+// The base is moved AFTER the job pass on purpose, because that is the only shape
+// in which the warm is load-bearing. A worktree cut at a tip the job has already
+// seen inherits that tip's settled marker for free — the main checkout normally
+// sits there, and markers are keyed on the OID alone precisely so two worktrees at
+// one tip share one answer. What leaves a gap is the base moving between passes,
+// which on a project whose own tooling auto-commits ledger entries and lessons to
+// the base branch is most of the time.
+func TestFreshWorktreeIsSettledWithoutAComparison(t *testing.T) {
+	ctx := context.Background()
+	f := newCacheFixture(t, 1)
+	f.appendToBase(t, "base.txt")
+	f.refresh(t) // a watermark exists, as it does wherever a live view runs
+	f.appendToBase(t, "ledger.txt")
+
+	// A worktree exactly as `git worktree add -b <branch> <dir> <base>` leaves it.
+	fresh := filepath.Join(f.root, ".endless", "worktrees", "e-9001")
+	mustGit(t, f.root, "worktree", "add", "-b", "task/9001", fresh, "main")
+
+	if got := cachedUnlanded(ctx, fresh); got.Known {
+		t.Fatalf("setup: a tip the job has not seen cannot have a cached verdict: %+v", got)
+	}
+
+	g := countGit(t)
+	d := WorktreeUnsettledDetailAt(ctx, fresh)
+	if d.Unsettled() {
+		t.Errorf("a branch cut at the base is not settled: %s", d.Reason())
+	}
+	if !d.UnlandedKnown {
+		t.Error("the verdict was not established")
+	}
+	if g.ran("range-diff") {
+		t.Errorf("the free answer cost a content comparison: %v", g.calls)
+	}
+
+	// And the display reads it, with no job pass in between.
+	got := cachedUnlanded(ctx, fresh)
+	if !got.Known || len(got.Commits) != 0 {
+		t.Errorf("the creation warm was not visible to the display: %+v", got)
+	}
+}
+
+// TestWorktreesAtOneTipShareOneAnswer pins the property that made the test above
+// need a moved base: a settled marker is keyed on the branch-tip OID and NOTHING
+// else, so every worktree standing at that OID reads the same entry.
+//
+// It is why `settled/` is not nested under the base tip the way `unsettled/` is,
+// and it is load-bearing rather than incidental — the main checkout normally sits
+// at the base tip, so on a repo the job has swept, a branch cut there is already
+// answered before anything warms it.
+func TestWorktreesAtOneTipShareOneAnswer(t *testing.T) {
+	ctx := context.Background()
+	f := newCacheFixture(t, 1)
+	f.refresh(t)
+
+	baseTip := mustGit(t, f.root, "rev-parse", "main")
+	if got := cachedUnlanded(ctx, f.root); !got.Known || len(got.Commits) != 0 {
+		t.Fatalf("the main checkout at the base tip must read settled: %+v", got)
+	}
+
+	twin := filepath.Join(f.root, ".endless", "worktrees", "e-9002")
+	mustGit(t, f.root, "worktree", "add", "-b", "task/9002", twin, "main")
+	if head := mustGit(t, twin, "rev-parse", "HEAD"); head != baseTip {
+		t.Fatalf("fixture: the new worktree is at %s, want the base tip %s", head, baseTip)
+	}
+
+	g := countGit(t)
+	got := cachedUnlanded(ctx, twin)
+	if !got.Known || len(got.Commits) != 0 {
+		t.Errorf("a second worktree at the same tip did not share the answer: %+v", got)
+	}
+	for _, forbidden := range []string{"range-diff", "merge-base"} {
+		if g.ran(forbidden) {
+			t.Errorf("sharing the answer still cost `git %s`: %v", forbidden, g.calls)
+		}
+	}
+}

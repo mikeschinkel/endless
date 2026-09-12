@@ -145,6 +145,10 @@ mon TestMasterProjectMarksUnlandedWorkAndClearsAfterLanding \
     "job-writes-then-display-reads, end to end on a master-branch repo"
 mon TestPostLandWarmIsVisibleWithoutWaitingForTheJob \
     "landing your own task shows settled at once, with no job pass in between"
+mon TestFreshWorktreeIsSettledWithoutAComparison \
+    "and so does claiming one — a branch cut at the base needs no comparison"
+mon TestWorktreesAtOneTipShareOneAnswer \
+    "two worktrees at one branch tip share one answer, paying no git at all"
 
 go_claim ./internal/sessionstatuscmd/ TestUnsettledMark \
     "all four column states, with ~ outranking ◆ on an uncomputed row"
