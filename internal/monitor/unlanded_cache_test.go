@@ -708,10 +708,18 @@ func TestFreshWorktreeIsSettledWithoutAComparison(t *testing.T) {
 		t.Errorf("the free answer cost a content comparison: %v", g.calls)
 	}
 
-	// And the display reads it, with no job pass in between.
-	got := cachedUnlanded(ctx, fresh)
-	if !got.Known || len(got.Commits) != 0 {
-		t.Errorf("the creation warm was not visible to the display: %+v", got)
+	// And the display reads it, with no job pass in between — through the exact
+	// entry point the ◆ column calls, so this is the delay a person would see
+	// rather than a property of an inner helper.
+	row := WorktreeUnsettledAt(ctx, fresh)
+	if !row.UnsettledKnown() {
+		t.Error("the row would render `~` after a claim — the creation warm was not visible")
+	}
+	if row.Unsettled() {
+		t.Errorf("a freshly claimed worktree reads as unsettled: %s", row.Reason())
+	}
+	if !row.UnlandedKnown || row.UnlandedCount != 0 {
+		t.Errorf("verdict = %+v, want an established zero", row)
 	}
 }
 
