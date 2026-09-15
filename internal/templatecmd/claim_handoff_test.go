@@ -53,7 +53,7 @@ func TestRender_Claim_ArrivalMechanicsClose(t *testing.T) {
 				"/cd /tmp/wt/e-9999",
 				"cwd gate",
 				// Arrival: carry forward the planning already in this chat.
-				"endless task update E-9999 --text <path> --db main",
+				"endless task update E-9999 --plan-file <path> --db main",
 				// Mechanics partial.
 				"Your worktree is: /tmp/wt/e-9999 (branch task/9999-test)",
 				"--db main",
@@ -319,7 +319,7 @@ func TestRender_Handoff_DiscoveryBranchesSurviveCompression(t *testing.T) {
 		// Bullet 1's third obligation. The commit message and the reply are
 		// transient; the task row is what anyone reads later.
 		"record the grown scope on the task",
-		"`endless task update E-9999 --text-file <path> --keep-status --db main`",
+		"`endless task update E-9999 --plan-file <path> --keep-status --db main`",
 		// The branch that routes the residue to the user instead of into
 		// `task add`, with the shape that makes the question answerable.
 		"ASK me before filing — that call is mine, not yours",

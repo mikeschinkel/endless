@@ -1,6 +1,6 @@
 // White-box test for the plan-attach promotion's source predicate (E-1845).
 // The predicate is small but load-bearing on both executor paths: at creation
-// (`task add --text`) and on update (`task update --text`). Getting its set
+// (`task add --plan`) and on update (`task update --plan`). Getting its set
 // wrong either strands planned tasks in a pre-judgment status or silently
 // overrides a deliberate one.
 package events
@@ -11,7 +11,7 @@ func TestIsPreJudgmentStatus(t *testing.T) {
 	cases := map[string]bool{
 		// Attaching a plan is what answers the open question, so it promotes.
 		// `untriaged` is the status `task add` defaults to (E-1845); without it
-		// `task add --text plan.md` would file a fully planned task as untriaged.
+		// `task add --plan-file plan.md` would file a fully planned task as untriaged.
 		"untriaged": true,
 		"unplanned": true,
 

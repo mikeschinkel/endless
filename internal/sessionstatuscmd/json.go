@@ -38,7 +38,7 @@ type jsonRow struct {
 	Phase     string `json:"phase"`
 	Type      string `json:"type"`
 	Action    string `json:"action"`
-	HasText   bool   `json:"has_text"`
+	HasPlan   bool   `json:"has_plan"`
 	IsFocal   bool   `json:"is_focal"`
 	IsParent  bool   `json:"is_parent"`
 	IsFrom    bool   `json:"is_from"`
@@ -126,7 +126,7 @@ func renderJSON(w io.Writer, a anchor, all bool) error {
 			Phase:          r.Phase,
 			Type:           r.TypeSlug,
 			Action:         classify(r).label(),
-			HasText:        r.HasText,
+			HasPlan:        r.HasPlan,
 			IsFocal:        r.IsFocal,
 			IsParent:       r.IsParent,
 			IsFrom:         r.IsFrom,

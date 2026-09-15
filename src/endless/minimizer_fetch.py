@@ -60,7 +60,7 @@ def _fetch_task_plan(task_id: int | None, session_id: int | None, spec: dict) ->
     if not task_id:
         return ""
     rows = db.query(
-        "SELECT id, title, status, phase, description, text, analysis "
+        "SELECT id, title, status, phase, description, plan, analysis "
         "FROM live_tasks WHERE id = ?",
         (task_id,),
     )
@@ -68,7 +68,7 @@ def _fetch_task_plan(task_id: int | None, session_id: int | None, spec: dict) ->
         return ""
     t = rows[0]
     parts = [f"E-{t['id']} [{t['status']}/{t['phase']}] {t['title']}"]
-    for label, key in (("Description", "description"), ("Plan", "text"),
+    for label, key in (("Description", "description"), ("Plan", "plan"),
                        ("Analysis", "analysis")):
         value = (t[key] or "").strip()
         if value:

@@ -78,11 +78,11 @@ def _worktree_dir(p) -> Path:
 
 # --- safe paths: recreate fresh --------------------------------------------
 
-def test_plan_only_orphan_text_matches_recreates_fresh(project_with_task, monkeypatch):
+def test_plan_only_orphan_plan_matches_recreates_fresh(project_with_task, monkeypatch):
     p = project_with_task
     plan_rel = f".endless/plans/E-{p['tid']}.md"
     _make_orphan_branch(p["root"], p["branch"], {plan_rel: VIABLE}, "plan")
-    monkeypatch.setattr(worktree_cmd, "_read_task_text", lambda *a, **k: VIABLE)
+    monkeypatch.setattr(worktree_cmd, "_read_task_plan", lambda *a, **k: VIABLE)
 
     wt_path, created = create_task_worktree(p["tid"], p["root"])
 
@@ -95,7 +95,7 @@ def test_empty_delta_orphan_recreates_fresh(project_with_task, monkeypatch):
     """Branch is an ancestor of main (no unique commits) -> trivially safe."""
     p = project_with_task
     _make_orphan_branch(p["root"], p["branch"], None, "")
-    monkeypatch.setattr(worktree_cmd, "_read_task_text", lambda *a, **k: VIABLE)
+    monkeypatch.setattr(worktree_cmd, "_read_task_plan", lambda *a, **k: VIABLE)
 
     wt_path, created = create_task_worktree(p["tid"], p["root"])
 
@@ -104,19 +104,19 @@ def test_empty_delta_orphan_recreates_fresh(project_with_task, monkeypatch):
 
 
 def test_plan_only_orphan_db_empty_adopts_file(project_with_task, monkeypatch):
-    """tasks.text empty + viable committed plan -> recover the file into the DB."""
+    """tasks.plan empty + viable committed plan -> recover the file into the DB."""
     p = project_with_task
     plan_rel = f".endless/plans/E-{p['tid']}.md"
     file_text = "# Recovered plan\n\n" + "z" * 200
     _make_orphan_branch(p["root"], p["branch"], {plan_rel: file_text}, "plan")
-    monkeypatch.setattr(worktree_cmd, "_read_task_text", lambda *a, **k: "")
+    monkeypatch.setattr(worktree_cmd, "_read_task_plan", lambda *a, **k: "")
 
     wt_path, created = create_task_worktree(p["tid"], p["root"])
 
     assert created is True
     assert wt_path.exists()
-    row = db.query("SELECT text FROM tasks WHERE id = ?", (p["tid"],))[0]
-    assert row["text"].strip() == file_text.strip()
+    row = db.query("SELECT plan FROM tasks WHERE id = ?", (p["tid"],))[0]
+    assert row["plan"].strip() == file_text.strip()
 
 
 # --- refusal paths: actionable errors, branch preserved ---------------------
@@ -125,7 +125,7 @@ def test_plan_only_orphan_mismatch_raises(project_with_task, monkeypatch):
     p = project_with_task
     plan_rel = f".endless/plans/E-{p['tid']}.md"
     _make_orphan_branch(p["root"], p["branch"], {plan_rel: "FILE " + "a" * 200}, "plan")
-    monkeypatch.setattr(worktree_cmd, "_read_task_text", lambda *a, **k: "DB " + "b" * 200)
+    monkeypatch.setattr(worktree_cmd, "_read_task_plan", lambda *a, **k: "DB " + "b" * 200)
 
     with pytest.raises(click.ClickException) as exc:
         create_task_worktree(p["tid"], p["root"])
@@ -133,26 +133,26 @@ def test_plan_only_orphan_mismatch_raises(project_with_task, monkeypatch):
     msg = str(exc.value)
     assert "differs" in msg
     assert "chars)" in msg  # char counts shown, not full dump
-    assert f"endless task show E-{p['tid']} --text" in msg
+    assert f"endless task show E-{p['tid']} --plan" in msg
     assert f"branch -D {p['branch']}" in msg
-    assert f"endless task update E-{p['tid']} --text" in msg
+    assert f"endless task update E-{p['tid']} --plan" in msg
     # branch preserved (error before any delete); no worktree created
     assert p["branch"] in _branches(p["root"])
     assert not _worktree_dir(p).exists()
 
 
-def test_plan_only_orphan_db_text_not_viable_raises(project_with_task, monkeypatch):
+def test_plan_only_orphan_db_plan_not_viable_raises(project_with_task, monkeypatch):
     p = project_with_task
     plan_rel = f".endless/plans/E-{p['tid']}.md"
     _make_orphan_branch(p["root"], p["branch"], {plan_rel: VIABLE}, "plan")
-    monkeypatch.setattr(worktree_cmd, "_read_task_text", lambda *a, **k: "one short line")
+    monkeypatch.setattr(worktree_cmd, "_read_task_plan", lambda *a, **k: "one short line")
 
     with pytest.raises(click.ClickException) as exc:
         create_task_worktree(p["tid"], p["root"])
 
     msg = str(exc.value)
     assert "too short to be a viable plan" in msg
-    assert f"endless task update E-{p['tid']} --text" in msg
+    assert f"endless task update E-{p['tid']} --plan" in msg
     assert p["branch"] in _branches(p["root"])
 
 
@@ -160,7 +160,7 @@ def test_plan_only_orphan_db_empty_file_not_viable_raises(project_with_task, mon
     p = project_with_task
     plan_rel = f".endless/plans/E-{p['tid']}.md"
     _make_orphan_branch(p["root"], p["branch"], {plan_rel: "too short"}, "plan")
-    monkeypatch.setattr(worktree_cmd, "_read_task_text", lambda *a, **k: "")
+    monkeypatch.setattr(worktree_cmd, "_read_task_plan", lambda *a, **k: "")
 
     with pytest.raises(click.ClickException) as exc:
         create_task_worktree(p["tid"], p["root"])
@@ -172,7 +172,7 @@ def test_plan_only_orphan_db_empty_file_not_viable_raises(project_with_task, mon
 def test_real_work_orphan_raises(project_with_task, monkeypatch):
     p = project_with_task
     _make_orphan_branch(p["root"], p["branch"], {"src/foo.py": "print('x')\n"}, "code")
-    monkeypatch.setattr(worktree_cmd, "_read_task_text", lambda *a, **k: VIABLE)
+    monkeypatch.setattr(worktree_cmd, "_read_task_plan", lambda *a, **k: VIABLE)
 
     with pytest.raises(click.ClickException) as exc:
         create_task_worktree(p["tid"], p["root"])
@@ -192,7 +192,7 @@ def test_status_untouched_when_orphan_refuses(project_with_task, monkeypatch):
 
     p = project_with_task
     _make_orphan_branch(p["root"], p["branch"], {"src/foo.py": "print('x')\n"}, "code")
-    monkeypatch.setattr(worktree_cmd, "_read_task_text", lambda *a, **k: VIABLE)
+    monkeypatch.setattr(worktree_cmd, "_read_task_plan", lambda *a, **k: VIABLE)
 
     with pytest.raises(click.ClickException):
         claim_item(p["tid"], force=True)
@@ -213,7 +213,7 @@ def test_legacy_slug_orphan_with_real_work_still_refuses(project_with_task,
     p = project_with_task
     legacy = f"task/{p['tid']}-some-old-title-slug"
     _make_orphan_branch(p["root"], legacy, {"src/foo.py": "print('x')\n"}, "code")
-    monkeypatch.setattr(worktree_cmd, "_read_task_text", lambda *a, **k: VIABLE)
+    monkeypatch.setattr(worktree_cmd, "_read_task_plan", lambda *a, **k: VIABLE)
 
     with pytest.raises(click.ClickException) as exc:
         create_task_worktree(p["tid"], p["root"])
@@ -231,7 +231,7 @@ def test_legacy_slug_orphan_with_nothing_is_reclaimed(project_with_task,
     p = project_with_task
     legacy = f"task/{p['tid']}-some-old-title-slug"
     _make_orphan_branch(p["root"], legacy, None, "")
-    monkeypatch.setattr(worktree_cmd, "_read_task_text", lambda *a, **k: VIABLE)
+    monkeypatch.setattr(worktree_cmd, "_read_task_plan", lambda *a, **k: VIABLE)
 
     wt_path, created = create_task_worktree(p["tid"], p["root"])
 
@@ -247,7 +247,7 @@ def test_unrelated_task_branch_is_not_swept(project_with_task, monkeypatch):
     p = project_with_task
     neighbour = f"task/{p['tid']}0-different-task"
     _make_orphan_branch(p["root"], neighbour, {"src/foo.py": "print('x')\n"}, "code")
-    monkeypatch.setattr(worktree_cmd, "_read_task_text", lambda *a, **k: VIABLE)
+    monkeypatch.setattr(worktree_cmd, "_read_task_plan", lambda *a, **k: VIABLE)
 
     wt_path, created = create_task_worktree(p["tid"], p["root"])
 

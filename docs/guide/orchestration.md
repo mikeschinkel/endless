@@ -61,7 +61,7 @@ A fresh worktree often needs project-specific setup endless can't bake in — Go
 - **Failure is non-fatal and loud.** If the hook exits non-zero, endless keeps the worktree and prints a warning naming the script, exit code, worktree path, and the command to re-run it.
 - **The hook must be idempotent / re-runnable.** Because there's no teardown, completing a failed bootstrap is just re-running the hook. Write it so a second run on an already-bootstrapped worktree is a safe no-op (or a clean regenerate).
 
-Plan files for a task live in the task's worktree at `<worktree>/.endless/plans/E-NNNN.md`, not in main, and ride into main when the task lands. The DB's `tasks.text` column is the source of truth; the on-disk file is a mirror that lives with the branch. `endless task update <id> --text-file <path>` writes `tasks.text`; it does **not** create a worktree. The plan file is materialized from `tasks.text` when the worktree is born (at `task claim`/`task spawn`); if a worktree already exists, `--text`/`--text-file` also mirrors into it. So setting plan text on an unclaimed task touches only the DB — no stray worktrees for tasks you aren't working on yet.
+Plan files for a task live in the task's worktree at `<worktree>/.endless/plans/E-NNNN.md`, not in main, and ride into main when the task lands. The DB's `tasks.plan` column is the source of truth; the on-disk file is a mirror that lives with the branch. `endless task update <id> --plan-file <path>` writes `tasks.plan`; it does **not** create a worktree. The plan file is materialized from `tasks.plan` when the worktree is born (at `task claim`/`task spawn`); if a worktree already exists, `--plan`/`--plan-file` also mirrors into it. So setting a plan on an unclaimed task touches only the DB — no stray worktrees for tasks you aren't working on yet.
 
 ### Getting into the worktree
 
@@ -345,7 +345,7 @@ Both leave the directory — and whoever is working in it — intact. "The branc
 | What                                    | Where it commits          | How                                                                 |
 |-----------------------------------------|---------------------------|---------------------------------------------------------------------|
 | Task work (code, docs, tests)           | Worktree branch → main    | `worktree land` only                                                |
-| Plan files (`.endless/plans/E-NNNN.md`) | Worktree branch → main    | Written to the worktree by `task update --text`; rides in via `worktree land` |
+| Plan files (`.endless/plans/E-NNNN.md`) | Worktree branch → main    | Written to the worktree by `task update --plan`; rides in via `worktree land` |
 | DB ledger (`.endless/db-ledger/`)       | Main directly             | Auto by endless-event hook                                          |
 | Verbs (`verbs.jsonl`)                   | Main directly             | Auto on `worktree land`                                             |
 | Project config (`.endless/config.json`) | Worktree branch → main    | Follows task work; not auto                                         |
@@ -428,7 +428,7 @@ Any other or unset type falls back to the `todo` variant.
 
 ### The handoff is generated, not authored
 
-There is nothing to write. The handoff is rendered from the per-type template (`handoff/<type>.md.tmpl`) merged with the task's id and title plus runtime context (its worktree and branch). The substantive design lives in the task's `--text` plan, which the handoff tells the spawned session to read — so a prompt can no longer drift from the plan.
+There is nothing to write. The handoff is rendered from the per-type template (`handoff/<type>.md.tmpl`) merged with the task's id and title plus runtime context (its worktree and branch). The substantive design lives in the task's `--plan`, which the handoff tells the spawned session to read — so a prompt can no longer drift from the plan.
 
 Inspect the exact text spawn will paste:
 
@@ -444,7 +444,7 @@ To change what every spawned session is told, edit the template — see [Customi
 
 Spawn is not the only way a session picks up a task. When you run `endless task claim <id>` from inside a session that has been going for a while — a retrofit rather than a fresh dispatch — you get the same type handoff, delivered as context folded against that command's own output. You don't ask for it and there is nothing to render by hand.
 
-It differs from the spawn text only in its arrival framing, because that is the only thing that actually differs: a spawned session is born inside the task's worktree, whereas a claimed-in one is still wherever it was and has to `/cd` there (the cwd gate refuses write tools until it does), and it arrives carrying planning that belongs in the task's `--text`, not in the transcript. Everything else — which worktree, the `--db main` routing that implies, one-session-one-task, and the per-type deliverable and terminal-status rules — is rendered from the shared `handoff/_mechanics.tmpl` partials that the per-type spawn templates also pull from, so the two renderings cannot drift.
+It differs from the spawn text only in its arrival framing, because that is the only thing that actually differs: a spawned session is born inside the task's worktree, whereas a claimed-in one is still wherever it was and has to `/cd` there (the cwd gate refuses write tools until it does), and it arrives carrying planning that belongs in the task's `--plan`, not in the transcript. Everything else — which worktree, the `--db main` routing that implies, one-session-one-task, and the per-type deliverable and terminal-status rules — is rendered from the shared `handoff/_mechanics.tmpl` partials that the per-type spawn templates also pull from, so the two renderings cannot drift.
 
 Inspect it the same way as any other template:
 

@@ -817,8 +817,8 @@ func handlePostToolUse(projectID int64, isRegistered bool, payload claudePayload
 		return nil
 	}
 
-	// NOTE: Auto-import disabled. Sessions should use `endless task update <id> --text <file>`
-	// to save task text, and `endless task add` to create child items explicitly.
+	// NOTE: Auto-import disabled. Sessions should use `endless task update <id> --plan-file <file>`
+	// to save a task's plan, and `endless task add` to create child items explicitly.
 	// Auto-import created duplicate items at the wrong granularity (every bullet became a task item).
 
 	items, err := monitor.GetActiveTasks(projectID)
@@ -916,7 +916,7 @@ func handlePreToolUse(projectID int64, isRegistered bool, payload claudePayload)
 	// E-1202: refuse a direct Write/Edit of a task plan-file mirror
 	// (.endless/plans/E-NNN.md) in main OR a worktree. Placed before the
 	// worktree gate so a plan-file write in main gets the plan-specific
-	// redirect to `endless task update --text` rather than the generic
+	// redirect to `endless task update --plan` rather than the generic
 	// "edits in main" refusal. Independent of tracking_mode.
 	blockPlanFileWriteIfApplicable(payload)
 
@@ -1276,7 +1276,7 @@ func handleExitPlanMode(projectID int64, payload claudePayload) error {
 	}
 
 	// NOTE: Auto-import disabled. Sessions save plan text explicitly with
-	// `endless task update <id> --text <plan-file>`.
+	// `endless task update <id> --plan-file <plan-file>`.
 	// See PostToolUse/Write handler for rationale.
 
 	items, err := monitor.GetActiveTasks(projectID)
@@ -1299,7 +1299,7 @@ var gitCommitRe = regexp.MustCompile(`^\s*git\s+commit($|\s)`)
 // absolute or repo-relative. Anchored $ plus the E-<digits>.md immediately after
 // plans/ excludes any subdir (e.g. a future plans/snapshots/…) and any non-plan
 // file in the dir. Plan files are the DB-owned mirror endless writes and commits
-// on land; hand-editing them via Write/Edit desyncs tasks.text (the source of
+// on land; hand-editing them via Write/Edit desyncs tasks.plan (the source of
 // truth). See blockPlanFileWriteIfApplicable.
 var planFileRe = regexp.MustCompile(`(^|/)\.endless/plans/E-\d+\.md$`)
 
@@ -1480,11 +1480,11 @@ Bypass (NOT recommended):
 
 // blockPlanFileWriteIfApplicable refuses any Write/Edit/NotebookEdit whose
 // target is a task plan-file mirror .endless/plans/E-NNN.md — in main's working
-// tree OR a worktree's materialized mirror. Plan content lives in tasks.text (the
+// tree OR a worktree's materialized mirror. Plan content lives in tasks.plan (the
 // source of truth); the .md file is a mirror endless writes and commits during
 // worktree-land so humans can read plans on GitHub. A direct tool-write desyncs
 // the DB, and if the worktree is later dropped the edit is silently lost. The CLI
-// materializer (`endless task update --text`) is a subprocess the hook never sees,
+// materializer (`endless task update --plan`) is a subprocess the hook never sees,
 // so the land-produces-plan-markdown flow is unaffected. Independent of
 // tracking_mode, like the worktree and commit-on-main gates.
 func blockPlanFileWriteIfApplicable(payload claudePayload) {
@@ -1494,16 +1494,16 @@ func blockPlanFileWriteIfApplicable(payload claudePayload) {
 	}
 	blockToolUse(
 		"BLOCKED: refusing a direct Write/Edit of a task plan file " +
-			"(.endless/plans/E-NNN.md). Plan content lives in tasks.text (the source " +
+			"(.endless/plans/E-NNN.md). Plan content lives in tasks.plan (the source " +
 			"of truth); the file is a mirror endless writes and commits for you so " +
 			"humans can see plans when reviewing the repo on GitHub or other Git " +
 			"hosts. Editing it directly leaves the DB stale, and if the worktree is " +
 			"later dropped the edit is silently lost.\n\n" +
 			"Author the plan under .endless/tmp/ (the project-local scratch " +
 			"dir), then run:\n" +
-			"  endless task update <id> --text-file .endless/tmp/<file>.md\n\n" +
-			"(--text-file loads the file's content; --text would store the path " +
-			"string itself. Use --text only for inline content.)\n\n" +
+			"  endless task update <id> --plan-file .endless/tmp/<file>.md\n\n" +
+			"(--plan-file loads the file's content; --plan would store the path " +
+			"string itself. Use --plan only for inline content.)\n\n" +
 			"Never hand-edit or git-commit the plan file yourself.")
 }
 

@@ -118,7 +118,7 @@ def test_the_verdict_carries_what_would_have_stopped_the_failure(project_row, as
     # The command that produced it, so the line survives out of context.
     assert "task add" in verdict
     # Where the overflow goes, not merely "shorten".
-    assert "--analysis" in verdict and "--text" in verdict
+    assert "--analysis" in verdict and "--plan" in verdict
     # Whether anything changed.
     assert task_cmd.NOTHING_CREATED in verdict
 

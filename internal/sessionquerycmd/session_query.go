@@ -34,8 +34,8 @@ func Run(args []string) {
 	// spawn/claim guard could WRITE a ghost owner to 'ended' before reading
 	// ownership. `list-live` now excludes observably-dead sessions at read
 	// time, so the ghost is absent without anything having been written.
-	case "task-text":
-		if err := runTaskText(args[1:]); err != nil {
+	case "task-plan":
+		if err := runTaskPlan(args[1:]); err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
@@ -130,8 +130,8 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "subcommands:")
 	fmt.Fprintln(os.Stderr, "  list-live --project-root <path>   JSON array of live sessions for the project")
 	fmt.Fprintln(os.Stderr, "                                    end non-ended sessions whose tmux pane is gone (silent; DB error → exit 1)")
-	fmt.Fprintln(os.Stderr, "  task-text --id <task-id>          raw tasks.text for the task (empty if none)")
-	fmt.Fprintln(os.Stderr, "  task-field --id <task-id> --name <text|outcome|analysis>")
+	fmt.Fprintln(os.Stderr, "  task-plan --id <task-id>          raw tasks.plan for the task (empty if none)")
+	fmt.Fprintln(os.Stderr, "  task-field --id <task-id> --name <plan|outcome|analysis>")
 	fmt.Fprintln(os.Stderr, "                                    raw value of one multiline doc column (empty if none)")
 	fmt.Fprintln(os.Stderr, "  ensure-claude-id --session-id <uuid> --project-root <path> [--process <pane>]")
 	fmt.Fprintln(os.Stderr, "                                    look up (or lazy-create) sessions.id; prints integer id")
@@ -153,7 +153,7 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "  task-report --id <task-id>        JSON {task_id, status, type, landed, successors[]} of a task's computed report facts (E-1771)")
 	fmt.Fprintln(os.Stderr, "  untriaged-tasks [--project <name>] [--limit N]")
 	fmt.Fprintln(os.Stderr, "                                    JSON array [{id, project, title}] of the triage queue, oldest first (E-1859)")
-	fmt.Fprintln(os.Stderr, "  triage-context --id <task-id>     JSON {task_id, project, title, description, type, phase, status, has_text,")
+	fmt.Fprintln(os.Stderr, "  triage-context --id <task-id>     JSON {task_id, project, title, description, type, phase, status, has_plan,")
 	fmt.Fprintln(os.Stderr, "                                    parent, siblings[], decisions[]} — the persisted artifacts triage may judge (E-1859)")
 	fmt.Fprintln(os.Stderr, "  triage-claim --id <task-id> --ttl-seconds N [--owner <id>]")
 	fmt.Fprintln(os.Stderr, "                                    take the per-task triage claim; prints 1 if won, 0 if another holds it (E-1859)")
@@ -528,12 +528,12 @@ func runGateClear(args []string) error {
 	}
 }
 
-// runTaskText prints the raw tasks.text for a task id to stdout, so the Python
+// runTaskPlan prints the raw tasks.plan for a task id to stdout, so the Python
 // side can materialize a plan file at claim time without a Python DB read
-// (E-894 / E-1445). Output is the raw text (not JSON) — it is written verbatim
+// (E-894 / E-1445). Output is the raw plan (not JSON) — it is written verbatim
 // to <worktree>/.endless/plans/E-NNN.md. Empty output means "no plan".
-func runTaskText(args []string) error {
-	fs := flag.NewFlagSet("task-text", flag.ContinueOnError)
+func runTaskPlan(args []string) error {
+	fs := flag.NewFlagSet("task-plan", flag.ContinueOnError)
 	id := fs.Int64("id", 0, "task id")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -541,22 +541,22 @@ func runTaskText(args []string) error {
 	if *id == 0 {
 		return fmt.Errorf("--id is required")
 	}
-	text, err := monitor.TaskText(*id)
+	plan, err := monitor.TaskPlan(*id)
 	if err != nil {
-		return fmt.Errorf("read task text for E-%d: %w", *id, err)
+		return fmt.Errorf("read task plan for E-%d: %w", *id, err)
 	}
-	_, err = os.Stdout.WriteString(text)
+	_, err = os.Stdout.WriteString(plan)
 	return err
 }
 
 // runTaskField prints the raw value of one whitelisted multiline document
-// column (text/outcome/analysis) for a task. Backs E-1747's birth-time mirror
+// column (plan/outcome/analysis) for a task. Backs E-1747's birth-time mirror
 // seeding: the Python worktree-create path reads each field this way instead
 // of doing a forbidden Python DB read (E-894/E-1486).
 func runTaskField(args []string) error {
 	fs := flag.NewFlagSet("task-field", flag.ContinueOnError)
 	id := fs.Int64("id", 0, "task id")
-	name := fs.String("name", "", "column name: text|outcome|analysis")
+	name := fs.String("name", "", "column name: plan|outcome|analysis")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}

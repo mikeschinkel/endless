@@ -31,7 +31,7 @@ type SessionStatusRow struct {
 	Status    string
 	Phase     string
 	TypeSlug  string
-	HasText   bool
+	HasPlan   bool
 	IsFocal   bool
 	IsParent  bool
 	IsFrom    bool
@@ -274,19 +274,19 @@ sfoc(stid) AS (SELECT task_id FROM sessions WHERE id = ?),
 -- rpar.rpid = the focal's real task-tree parent (tasks.parent_id → ↑ parent).
 rpar(rpid) AS (SELECT parent_id FROM live_tasks WHERE id = (SELECT tid FROM ftask)),
 base AS (
-  SELECT t.id, t.project_id, t.title, t.status, t.phase, t.text, t.type_id
+  SELECT t.id, t.project_id, t.title, t.status, t.phase, t.plan, t.type_id
     FROM session_tasks st JOIN live_tasks t ON t.id = st.task_id
    WHERE st.session_id IN (
      SELECT id FROM sessions WHERE task_id = (SELECT tid FROM ftask)
    )
   UNION
-  SELECT t.id, t.project_id, t.title, t.status, t.phase, t.text, t.type_id
+  SELECT t.id, t.project_id, t.title, t.status, t.phase, t.plan, t.type_id
     FROM live_tasks t WHERE t.id = (SELECT tid FROM ftask)
   UNION
-  SELECT t.id, t.project_id, t.title, t.status, t.phase, t.text, t.type_id
+  SELECT t.id, t.project_id, t.title, t.status, t.phase, t.plan, t.type_id
     FROM live_tasks t, rpar WHERE t.id = rpar.rpid
   UNION
-  SELECT t.id, t.project_id, t.title, t.status, t.phase, t.text, t.type_id
+  SELECT t.id, t.project_id, t.title, t.status, t.phase, t.plan, t.type_id
     FROM live_tasks t, sfoc WHERE t.id = sfoc.stid
   UNION
   -- E-1685: the focal task's direct dependents (tasks it blocks), read-time
@@ -294,7 +294,7 @@ base AS (
   -- projection-of-the-event-ledger invariant holds. The terminal-status filter
   -- in the final SELECT drops done dependents unless --all; the BlockedByN
   -- column drives their ⊗ while the focal stays open.
-  SELECT t.id, t.project_id, t.title, t.status, t.phase, t.text, t.type_id
+  SELECT t.id, t.project_id, t.title, t.status, t.phase, t.plan, t.type_id
     FROM live_tasks t
    WHERE EXISTS (
      SELECT 1 FROM task_deps d
@@ -311,7 +311,7 @@ base AS (
   -- in that child's own session, keeping each view one level deep rather than
   -- exploding the whole subtree. The terminal-status filter in the final SELECT
   -- drops done children unless --all, matching the dependent behavior.
-  SELECT t.id, t.project_id, t.title, t.status, t.phase, t.text, t.type_id
+  SELECT t.id, t.project_id, t.title, t.status, t.phase, t.plan, t.type_id
     FROM live_tasks t WHERE t.parent_id = (SELECT tid FROM ftask)
 ),
 -- E-1795: the UPSTREAM blocker chain of every task already in base, walked
@@ -339,15 +339,15 @@ upchain(id) AS (
 -- seed rows are already in base, so the join below only adds the newly-reached
 -- prerequisites; UNION dedupes the overlap.
 allbase AS (
-  SELECT id, project_id, title, status, phase, text, type_id FROM base
+  SELECT id, project_id, title, status, phase, plan, type_id FROM base
   UNION
-  SELECT t.id, t.project_id, t.title, t.status, t.phase, t.text, t.type_id
+  SELECT t.id, t.project_id, t.title, t.status, t.phase, t.plan, t.type_id
     FROM live_tasks t JOIN upchain u ON u.id = t.id
 ),
 enr AS (
   SELECT b.id, b.project_id, b.title, b.status, b.phase,
     COALESCE((SELECT slug FROM task_types WHERE id = b.type_id), '') AS type_slug,
-    (b.text IS NOT NULL AND b.text <> '') AS has_text,
+    (b.plan IS NOT NULL AND b.plan <> '') AS has_plan,
     (b.id = (SELECT tid FROM ftask)) AS is_focal,
     -- rpar.rpid is NULL when the focal has no parent; COALESCE keeps is_parent a
     -- real boolean rather than NULL. The focal-self guard avoids self-marking.
@@ -373,7 +373,7 @@ enr AS (
          AND d.dep_type = 'blocks') AS blocks_n,` + replacedByExpr + `,` + duplicatesExpr + `
   FROM allbase b
 )
-SELECT id, project_id, title, status, phase, type_slug, has_text,
+SELECT id, project_id, title, status, phase, type_slug, has_plan,
        is_focal, is_parent, is_from, in_flight, landed, blocked_by_n, blocks_n,
        replaced_by, duplicates
   FROM enr
@@ -400,7 +400,7 @@ func scanSessionStatusRows(rows *sql.Rows) ([]SessionStatusRow, error) {
 		var r SessionStatusRow
 		var replaced, duplicates sql.NullString
 		if err := rows.Scan(
-			&r.ID, &r.ProjectID, &r.Title, &r.Status, &r.Phase, &r.TypeSlug, &r.HasText,
+			&r.ID, &r.ProjectID, &r.Title, &r.Status, &r.Phase, &r.TypeSlug, &r.HasPlan,
 			&r.IsFocal, &r.IsParent, &r.IsFrom, &r.InFlight, &r.Landed, &r.BlockedByN, &r.BlocksN,
 			&replaced, &duplicates,
 		); err != nil {
@@ -458,7 +458,7 @@ func SessionStatusRowsForSession(sessionID int64, includeAll bool) ([]SessionSta
 	// it here (E-1696).
 	q := `
 WITH base AS (
-  SELECT t.id, t.project_id, t.title, t.status, t.phase, t.text, t.type_id
+  SELECT t.id, t.project_id, t.title, t.status, t.phase, t.plan, t.type_id
     FROM session_tasks st JOIN live_tasks t ON t.id = st.task_id
    WHERE st.session_id = ?
      AND st.relation_id IN (` + nonClaimedRelationIDs + `)
@@ -466,7 +466,7 @@ WITH base AS (
 enr AS (
   SELECT b.id, b.project_id, b.title, b.status, b.phase,
     COALESCE((SELECT slug FROM task_types WHERE id = b.type_id), '') AS type_slug,
-    (b.text IS NOT NULL AND b.text <> '') AS has_text,
+    (b.plan IS NOT NULL AND b.plan <> '') AS has_plan,
     0 AS is_focal,
     0 AS is_parent,
     0 AS is_from,
@@ -484,7 +484,7 @@ enr AS (
          AND d.dep_type = 'blocks') AS blocks_n,` + replacedByExpr + `,` + duplicatesExpr + `
   FROM base b
 )
-SELECT id, project_id, title, status, phase, type_slug, has_text,
+SELECT id, project_id, title, status, phase, type_slug, has_plan,
        is_focal, is_parent, is_from, in_flight, landed, blocked_by_n, blocks_n,
        replaced_by, duplicates
   FROM enr

@@ -174,7 +174,7 @@ _FIELD_LABELS = {
     "phase":       "Phase",
     "title":       "Title",
     "description": "Description",
-    "text":        "Text",
+    "plan":        "Plan",
     "parent_id":   "Parent",
     "tier":        "Tier",
     "outcome":     "Outcome",
@@ -203,7 +203,7 @@ def _format_field_value(name: str, value) -> str:
             return task_id_display(int(value))
         except (TypeError, ValueError):
             return str(value)
-    if name == "text":
+    if name == "plan":
         return "<set>" if value else "<cleared>"
     if name in ("title", "description", "outcome"):
         s = str(value)
@@ -326,7 +326,7 @@ NOTHING_WRITTEN = "Nothing was written."
 # (long-form content in a short field) with the same fix, so they collapse to
 # a single clause however many of them fired.
 _LONG_FORM_REMEDY = (
-    "Long-form goes in --analysis (rationale) or --text (plan); "
+    "Long-form goes in --analysis (rationale) or --plan (the plan); "
     "the title names WHAT and the description is a 2-3 sentence blurb."
 )
 
@@ -377,7 +377,7 @@ def _title_problems(title: str, force: bool) -> list[_Refusal]:
                 f"\n"
                 f"If it does not fit in {TITLE_MAX_LENGTH} chars, the title is usually naming HOW instead\n"
                 f"of WHAT. Long-form belongs elsewhere: analysis in --analysis, design/plan in\n"
-                f"--text, a brief blurb in --description — not the title.\n"
+                f"--plan, a brief blurb in --description — not the title.\n"
                 f"\n"
                 f"Consider using this template:\n"
                 f"\n"
@@ -465,7 +465,7 @@ def _description_problems(description: str | None) -> list[_Refusal]:
             guidance=(
                 f"Description is {len(description)} characters; max is {DESCRIPTION_MAX_LENGTH}.\n"
                 f"  Description is a 2-3 sentence blurb, not a dissertation. Long-form context\n"
-                f"  belongs in a dedicated field: analysis in --analysis, plans/verification in --text."
+                f"  belongs in a dedicated field: analysis in --analysis, plans/verification in --plan."
             ),
         ))
     if "\n" in description or "\r" in description:
@@ -475,7 +475,7 @@ def _description_problems(description: str | None) -> list[_Refusal]:
             guidance=(
                 "Description must be a single line; embedded newlines are not allowed.\n"
                 "  Description is a brief blurb. Long-form context belongs in a dedicated field:\n"
-                "  analysis in --analysis, plans/verification in --text."
+                "  analysis in --analysis, plans/verification in --plan."
             ),
         ))
     return problems
@@ -672,7 +672,7 @@ def _mirror_doc_to_worktree(
 
 
 def _mirror_plan_to_worktree(task_id: int, content: str) -> Path | None:
-    """Back-compat alias: mirror the plan (text) field. Prefer
+    """Back-compat alias: mirror the `plan` field. Prefer
     `_mirror_doc_to_worktree` for arbitrary doc fields (E-1747)."""
     return _mirror_doc_to_worktree(task_id, "plans", "plan", content)
 
@@ -2610,7 +2610,7 @@ def _compose_justification_notes(
 def add_item(
     title: str,
     description: str | None = None,
-    text: str | None = None,
+    plan: str | None = None,
     analysis: str | None = None,
     phase: str = "now",
     project_name: str | None = None,
@@ -2651,7 +2651,7 @@ def add_item(
         _research_gate_check(parent_id, justification)
     notes_value = _compose_justification_notes(None, justification)
 
-    text_content: str | None = text
+    plan_content: str | None = plan
 
     payload = {
         "title": title,
@@ -2660,8 +2660,8 @@ def add_item(
         "status": status,
         "type": task_type,
     }
-    if text_content is not None:
-        payload["text"] = text_content
+    if plan_content is not None:
+        payload["plan"] = plan_content
     if analysis is not None:
         payload["analysis"] = analysis
     if notes_value is not None:
@@ -2685,8 +2685,8 @@ def add_item(
         click.style("•", fg="cyan")
         + f" Added {task_id_display(item_id)}: {title}"
     )
-    if text_content is not None:
-        _mirror_plan_to_worktree(item_id, text_content)
+    if plan_content is not None:
+        _mirror_plan_to_worktree(item_id, plan_content)
     if analysis is not None and analysis.strip():
         _mirror_doc_to_worktree(item_id, "analyses", "analysis", analysis)
 
@@ -3785,9 +3785,9 @@ def submit_item(item_id: int):
     """Mark a task as `submitted` — spec-complete, awaiting human approval.
 
     Agent-set. Reachable two ways, both landing here: the agent attached a
-    plan (`tasks.text` populated — the plan-attach auto-move handles that in
+    plan (`tasks.plan` populated — the plan-attach auto-move handles that in
     the executor) OR the agent judges the description a sufficient spec (no
-    plan text, this verb). Plan-vs-no-plan is carried by `tasks.text`, not by
+    plan, this verb). Plan-vs-no-plan is carried by `tasks.plan`, not by
     status. A human then runs `endless task approve` to reach `ready`.
     """
     from endless.event_bridge import emit_event
@@ -5185,12 +5185,12 @@ def _reopen_task_core(item_id: int) -> tuple[str, str, bool]:
     after which both resume paths reported the session had never claimed a task
     (`task_id` alone cannot tell *released* from *never claimed*).
 
-    Returns (prev_status, new_status, text_present).
+    Returns (prev_status, new_status, plan_present).
     """
     from endless.event_bridge import emit_event
 
     row = db.query(
-        "SELECT id, COALESCE(title, description) as title, status, text "
+        "SELECT id, COALESCE(title, description) as title, status, plan "
         "FROM live_tasks WHERE id = ?",
         (item_id,),
     )
@@ -5219,14 +5219,14 @@ def _reopen_task_core(item_id: int) -> tuple[str, str, bool]:
     # A reopened task is by definition work whose prior judgment no longer
     # holds — either the plan was wrong or what shipped under it was — and
     # `revisit` is the status that means exactly that. Routing to `ready` on
-    # text-present would have re-asserted a human approval nobody re-granted;
-    # routing to `unplanned` on text-absent would have claimed the task was
+    # plan-present would have re-asserted a human approval nobody re-granted;
+    # routing to `unplanned` on plan-absent would have claimed the task was
     # never planned. The other two reopen paths (`session resume --reopen`,
     # E-1801) already landed `revisit`; this closes the divergence.
     #
-    # `text_present` is still returned: callers render it as the message
+    # `plan_present` is still returned: callers render it as the message
     # suffix, which is the one place plan-vs-no-plan is still worth saying.
-    text_present = bool((row[0]["text"] or "").strip())
+    plan_present = bool((row[0]["plan"] or "").strip())
     new_status = "revisit"
 
     _, proj_name = _resolve_project(None)
@@ -5247,10 +5247,10 @@ def _reopen_task_core(item_id: int) -> tuple[str, str, bool]:
         item_id,
         row[0]["title"],
         [("status", current_status, new_status)],
-        suffix=f"(text: {'present' if text_present else 'absent'})",
+        suffix=f"(plan: {'present' if plan_present else 'absent'})",
     )
 
-    return current_status, new_status, text_present
+    return current_status, new_status, plan_present
 
 
 def reopen_item(item_id: int) -> None:
@@ -5269,7 +5269,7 @@ def update_plan(
     status: str | None = None,
     title: str | None = None,
     description: str | None = None,
-    text: str | None = None,
+    plan: str | None = None,
     parent_id: int | None = None,
     phase: str | None = None,
     tier: int | None = None,
@@ -5287,7 +5287,7 @@ def update_plan(
     _require_outcome_for_declined(status, outcome)
 
     row = db.query(
-        "SELECT id, title, description, text, notes, status, "
+        "SELECT id, title, description, plan, notes, status, "
         "       COALESCE((SELECT slug FROM task_types WHERE id = live_tasks.type_id), '') AS type, "
         "       phase, tier, parent_id, outcome, analysis "
         "FROM live_tasks WHERE id = ?",
@@ -5412,12 +5412,12 @@ def update_plan(
     # explicitly, and the reset does set it. Note the reset still costs a `ready`
     # task its approval — correct, since approval was granted against the OLD
     # description; it lands `submitted`, awaiting re-approval.
-    plan_attached = text is not None and text.strip() != ""
+    plan_attached = plan is not None and plan.strip() != ""
     untriage_target = "submitted" if plan_attached else "untriaged"
 
     # E-1913: `--keep-status` holds the status across EVERY auto-transition, not
     # only the one guarded above. The plan-attach promotion (a pre-judgment task
-    # + non-empty --text → `submitted`) is the one that used to leak through: it
+    # + non-empty --plan → `submitted`) is the one that used to leak through: it
     # lives in the Go executor, and the flag has no field in the event payload
     # to travel in. So cross the boundary in the vocabulary the executor already
     # speaks — send the current status, and its "caller wins" branch (the same
@@ -5464,9 +5464,9 @@ def update_plan(
     if description is not None:
         _add("description", description)
 
-    if text is not None:
-        _add("text", text)
-        _mirror_plan_to_worktree(item_id, text)
+    if plan is not None:
+        _add("plan", plan)
+        _mirror_plan_to_worktree(item_id, plan)
 
     if parent_id is not None:
         _add("parent_id", parent_id if parent_id > 0 else None)
@@ -5611,12 +5611,12 @@ def update_plan(
         )
 
 
-def recover_task_text(item_id: int, text: str) -> None:
-    """Set tasks.text for item_id, emitting task.fields_updated.
+def recover_task_plan(item_id: int, plan: str) -> None:
+    """Set tasks.plan for item_id, emitting task.fields_updated.
 
     Used by create_task_worktree (E-1500) to recover a plan from an orphan
     branch's committed plan file back into the DB — the source of truth —
-    when tasks.text was empty. Kept separate from update_item so worktree_cmd
+    when tasks.plan was empty. Kept separate from update_item so worktree_cmd
     can call it without dragging in the full update flow (and to avoid the
     worktree-mirroring step: the worktree is recreated fresh right after).
     """
@@ -5628,7 +5628,7 @@ def recover_task_text(item_id: int, text: str) -> None:
         project=proj_name,
         entity_type="task",
         entity_id=str(item_id),
-        payload={"fields": {"text": text}},
+        payload={"fields": {"plan": plan}},
     )
 
 
@@ -6020,7 +6020,7 @@ def detail_item(
     item_id: int,
     show_description: bool = True,
     show_analysis: bool = False,
-    show_text: bool = False,
+    show_plan: bool = False,
     show_children: bool = False,
     show_outcome: bool = False,
     llm: bool = False,
@@ -6051,7 +6051,7 @@ def detail_item(
     # — who filed it, what it said, that it was removed — instead of erroring as
     # if the id had never existed. Every OTHER read here goes through live_tasks.
     row = db.query(
-        "SELECT t.id, t.title, t.description, t.analysis, t.text, t.phase, t.status, "
+        "SELECT t.id, t.title, t.description, t.analysis, t.plan, t.phase, t.status, "
         "COALESCE(tt.slug, '') AS type, "
         "t.parent_id, t.source_file, t.created_at, t.updated_at, "
         "t.completed_at, t.sort_order, t.tier, t.outcome, t.removed, "
@@ -6159,7 +6159,7 @@ def detail_item(
             "outcome": brief_text(item["outcome"] or None, brief),
             "description": brief_text(item["description"] or None, brief),
             "analysis": brief_text(item["analysis"] or None, brief),
-            "text": brief_text(item["text"] or None, brief),
+            "plan": brief_text(item["plan"] or None, brief),
             # `<field>_chars` is the TRUE character count of the stored value —
             # never the truncated preview's — present for all four body fields,
             # always an integer, and 0 when the field is empty (E-2126). Never
@@ -6170,7 +6170,7 @@ def detail_item(
             # if `<field>` is null.
             "description_chars": len(item["description"] or ""),
             "analysis_chars": len(item["analysis"] or ""),
-            "text_chars": len(item["text"] or ""),
+            "plan_chars": len(item["plan"] or ""),
             "outcome_chars": len(item["outcome"] or ""),
             # Children are always advertised as a count; the full list stays
             # gated behind --children (E-2126). Always present, so 0 / {} says
@@ -6251,12 +6251,12 @@ def detail_item(
                 click.echo(f"unlanded {c}")
         # Large fields collapse to a char marker unless their flag is set, so
         # `task show --llm` stays token-cheap on tasks whose outcome is a large
-        # deliverable; pass --outcome/--text/--analysis to pull the body (E-1601).
+        # deliverable; pass --outcome/--plan/--analysis to pull the body (E-1601).
         # `--brief` upgrades the bare count to a readable preview (E-2126): the
         # field counts as shown, so the marker gives way to a truncated section.
         for name, content, shown in (
             ("analysis", item["analysis"], show_analysis or brief is not None),
-            ("text", item["text"], show_text or brief is not None),
+            ("plan", item["plan"], show_plan or brief is not None),
             ("outcome", item["outcome"], show_outcome or brief is not None),
         ):
             if content and not shown:
@@ -6272,8 +6272,8 @@ def detail_item(
             click.echo(f"\n## Description\n{brief_text(item['description'], brief)}")
         if (show_analysis or brief is not None) and item["analysis"]:
             click.echo(f"\n## Analysis\n{brief_text(item['analysis'], brief)}")
-        if (show_text or brief is not None) and item["text"]:
-            click.echo(f"\n## Text\n{brief_text(item['text'], brief)}")
+        if (show_plan or brief is not None) and item["plan"]:
+            click.echo(f"\n## Plan\n{brief_text(item['plan'], brief)}")
         if (show_outcome or brief is not None) and item["outcome"]:
             click.echo(f"\n## Outcome\n{brief_text(item['outcome'], brief)}")
         if show_children:
@@ -6323,7 +6323,7 @@ def detail_item(
                 caveat_line=caveat_line,
                 show_description=show_description,
                 show_analysis=show_analysis,
-                show_text=show_text,
+                show_plan=show_plan,
                 show_children=show_children,
                 show_outcome=show_outcome,
                 color=color,
@@ -6347,7 +6347,7 @@ def _render_detail_human(
     caveat_line: str | None,
     show_description: bool,
     show_analysis: bool,
-    show_text: bool,
+    show_plan: bool,
     show_children: bool,
     show_outcome: bool,
     color: bool,
@@ -6358,7 +6358,7 @@ def _render_detail_human(
 ):
     """Emit the human-readable `task show` detail to the current stdout. Split
     from detail_item so the whole render can run under a color/pager proxy
-    (E-1746). Multiline markdown fields (description/analysis/text/outcome) are
+    (E-1746). Multiline markdown fields (description/analysis/plan/outcome) are
     colorized when `color`. `touches`/`creator` are the session provenance
     detail_item already resolved for every output mode (E-1866). `brief` is the
     `--brief[=N]` preview length: it wins over every display flag, rendering all
@@ -6370,7 +6370,7 @@ def _render_detail_human(
     # --brief means previews, not bodies — one meaning in every format, so it
     # reveals a gated field rather than merely shortening a revealed one.
     if brief is not None:
-        show_description = show_analysis = show_text = show_outcome = True
+        show_description = show_analysis = show_plan = show_outcome = True
     col_w = 11  # width of label column (longest: "Confirmed:" = 10 + 1 space)
     label = lambda s: click.style(f"{s:<{col_w}}", fg="cyan")
     val = lambda s: click.style(str(s), fg="white", bold=True)
@@ -6441,9 +6441,9 @@ def _render_detail_human(
     # A hidden large field collapses to a single-line `Name: N chars` placeholder
     # grouped here with the other Label: value fields; its full body (when the
     # matching flag is set) renders as a multi-line section after Description
-    # (E-1601). Analysis precedes Text: pre-plan design content (E-999).
+    # (E-1601). Analysis precedes Plan: pre-plan design content (E-999).
     _echo_field_placeholder(label, val, "Analysis:", item["analysis"], show_analysis, "--analysis")
-    _echo_field_placeholder(label, val, "Text:", item["text"], show_text, "--text")
+    _echo_field_placeholder(label, val, "Plan:", item["plan"], show_plan, "--plan")
     _echo_field_placeholder(label, val, "Outcome:", item["outcome"], show_outcome, "--outcome")
     # Children are structure, so they are advertised as a count here whether or
     # not --children was passed to list them below — the same shape as a large
@@ -6483,7 +6483,7 @@ def _render_detail_human(
             click.echo("(none)")
 
     _echo_large_section("Analysis", brief_text(item["analysis"], brief), show_analysis, color)
-    _echo_large_section("Text", brief_text(item["text"], brief), show_text, color)
+    _echo_large_section("Plan", brief_text(item["plan"], brief), show_plan, color)
     _echo_large_section("Outcome", brief_text(item["outcome"], brief), show_outcome, color)
 
     click.echo()
@@ -6944,7 +6944,7 @@ def search_tasks(
     status_filter: list[str] | None = None,
     phase_filter: str | None = None,
     parent_id: int | None = None,
-    search_text: bool = False,
+    search_plan: bool = False,
     limit: int | None = None,
     no_limit: bool = False,
     llm: bool = False,
@@ -6998,8 +6998,8 @@ def search_tasks(
     except ValueError:
         pass
 
-    if search_text:
-        search_clauses.append("COALESCE(t.text, '') LIKE ? COLLATE NOCASE")
+    if search_plan:
+        search_clauses.append("COALESCE(t.plan, '') LIKE ? COLLATE NOCASE")
         search_params.append(like_pattern)
 
     where += " AND (" + " OR ".join(search_clauses) + ")"

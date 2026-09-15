@@ -172,8 +172,8 @@ func TestTriageContext_RootTaskHasNoParentOrSiblings(t *testing.T) {
 	if ctx.Status != "untriaged" {
 		t.Errorf("status: got %q want untriaged", ctx.Status)
 	}
-	if ctx.HasText {
-		t.Error("has_text true for a task with no plan")
+	if ctx.HasPlan {
+		t.Error("has_plan true for a task with no plan")
 	}
 }
 
@@ -295,17 +295,17 @@ func TestTriageContext_MissingTaskIsAnError(t *testing.T) {
 	}
 }
 
-func TestTriageContext_HasTextReportsAnAttachedPlan(t *testing.T) {
+func TestTriageContext_HasPlanReportsAnAttachedPlan(t *testing.T) {
 	db := triageTestDB(t)
 	seedTriageTask(t, db, 80, 1, "planned already", "untriaged", "2026-08-01T00:00:00", nil)
-	if _, err := db.Exec("UPDATE tasks SET text = ? WHERE id = 80", "# Plan\n"); err != nil {
+	if _, err := db.Exec("UPDATE tasks SET plan = ? WHERE id = 80", "# Plan\n"); err != nil {
 		t.Fatalf("attach plan: %v", err)
 	}
 	ctx, err := triageContext(db, 80)
 	if err != nil {
 		t.Fatalf("triageContext: %v", err)
 	}
-	if !ctx.HasText {
-		t.Error("has_text false for a task with an attached plan")
+	if !ctx.HasPlan {
+		t.Error("has_plan false for a task with an attached plan")
 	}
 }

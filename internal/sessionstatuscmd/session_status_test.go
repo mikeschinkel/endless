@@ -20,14 +20,14 @@ func TestClassify(t *testing.T) {
 		{"parent wins over from", monitor.SessionStatusRow{IsParent: true, IsFrom: true, Status: "underway"}, actParent},
 		{"from wins over in_flight", monitor.SessionStatusRow{IsFrom: true, InFlight: true, Status: "underway"}, actFrom},
 		{"in_flight wins over status", monitor.SessionStatusRow{InFlight: true, Status: "ready"}, actDoing},
-		{"ready with no plan still do", monitor.SessionStatusRow{Status: "ready", HasText: false}, actDo},
+		{"ready with no plan still do", monitor.SessionStatusRow{Status: "ready", HasPlan: false}, actDo},
 		{"unplanned is plan", monitor.SessionStatusRow{Status: "unplanned"}, actPlan},
 		// E-1845: `untriaged` is its own action. NOT actPlan (it carries no
 		// plan judgment yet) and — load-bearing — NOT actUnknown, which is the
 		// should-never-happen glyph and would otherwise land on the most common
 		// row in the database, since every new task starts untriaged.
 		{"untriaged is triage not plan", monitor.SessionStatusRow{Status: "untriaged"}, actTriage},
-		{"untriaged with plan text is still triage", monitor.SessionStatusRow{Status: "untriaged", HasText: true}, actTriage},
+		{"untriaged with plan text is still triage", monitor.SessionStatusRow{Status: "untriaged", HasPlan: true}, actTriage},
 		{"landed untriaged is landed", monitor.SessionStatusRow{Status: "untriaged", Landed: true}, actLanded},
 		{"focal untriaged is this", monitor.SessionStatusRow{Status: "untriaged", IsFocal: true}, actThis},
 		{"in-flight untriaged is doing", monitor.SessionStatusRow{Status: "untriaged", InFlight: true}, actDoing},

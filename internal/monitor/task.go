@@ -133,13 +133,13 @@ func MarkContextInjected(projectID int64, sessionID, workingDir string) {
 	})
 }
 
-// TaskText returns the tasks.text content for a task id (E-1445). Returns an
-// empty string (no error) when the row or the text is absent — the caller
-// treats "no text" as "no plan file to materialize". This is the Go-side read
+// TaskPlan returns the tasks.plan content for a task id (E-1445). Returns an
+// empty string (no error) when the row or the plan is absent — the caller
+// treats "no plan" as "no plan file to materialize". This is the Go-side read
 // that lets create_task_worktree materialize a plan file without a Python DB
 // read (E-894).
-func TaskText(taskID int64) (string, error) {
-	return TaskField(taskID, "text")
+func TaskPlan(taskID int64) (string, error) {
+	return TaskField(taskID, "plan")
 }
 
 // taskDocColumns whitelists the multiline document columns TaskField may
@@ -147,7 +147,7 @@ func TaskText(taskID int64) (string, error) {
 // substituted into SQL — the whitelist is the injection guard. These are the
 // fields E-1747 mirrors to committed `.endless/<subdir>/E-NNN.md` files.
 var taskDocColumns = map[string]bool{
-	"text":     true,
+	"plan":     true,
 	"outcome":  true,
 	"analysis": true,
 }

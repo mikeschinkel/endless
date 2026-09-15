@@ -75,10 +75,10 @@ type TriageContext struct {
 	Type        string `json:"type"`
 	Phase       string `json:"phase"`
 	Status      string `json:"status"`
-	// HasText reports whether a plan is already attached. It is a boolean, not
-	// the text: a task with a plan is not a triage candidate at all, so the
+	// HasPlan reports whether a plan is already attached. It is a boolean, not
+	// the plan: a task with a plan is not a triage candidate at all, so the
 	// prompt needs to know only that one exists.
-	HasText bool `json:"has_text"`
+	HasPlan bool `json:"has_plan"`
 
 	// Parent is nil for a root task.
 	Parent *TriageParent `json:"parent"`
@@ -173,18 +173,18 @@ func triageContext(db *sql.DB, taskID int64) (TriageContext, error) {
 
 	// A missing task is a caller error, not an empty context — triage would
 	// otherwise happily prompt about nothing and route a row that isn't there.
-	// type_id is nullable, so LEFT JOIN + COALESCE; description/text are too.
+	// type_id is nullable, so LEFT JOIN + COALESCE; description/plan are too.
 	var parentID sql.NullInt64
 	err := db.QueryRow(
 		`SELECT p.name, p.path, t.title, COALESCE(t.description, ''),
 		        COALESCE(tt.slug, ''), t.phase, t.status,
-		        COALESCE(t.text, '') != '', t.parent_id
+		        COALESCE(t.plan, '') != '', t.parent_id
 		   FROM live_tasks t
 		   JOIN projects p ON p.id = t.project_id
 		   LEFT JOIN task_types tt ON tt.id = t.type_id
 		  WHERE t.id = ?`, taskID,
 	).Scan(&ctx.Project, &ctx.ProjectRoot, &ctx.Title, &ctx.Description,
-		&ctx.Type, &ctx.Phase, &ctx.Status, &ctx.HasText, &parentID)
+		&ctx.Type, &ctx.Phase, &ctx.Status, &ctx.HasPlan, &parentID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ctx, fmt.Errorf("no such task E-%d", taskID)
 	}

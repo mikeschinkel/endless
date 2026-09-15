@@ -46,20 +46,20 @@ def test_default_show_omits_analysis(seeded_project_at_cwd):
     assert "hidden analysis content" not in result.output
 
 
-def test_analysis_section_precedes_text(seeded_project_at_cwd):
+def test_analysis_section_precedes_plan(seeded_project_at_cwd):
     """Analysis is pre-plan design content, so it renders before Text."""
     tid = _add_task("Audit the X system")
-    _set_fields(tid, analysis="analysis content", text="plan content")
+    _set_fields(tid, analysis="analysis content", plan="plan content")
     runner = CliRunner()
     result = runner.invoke(
-        main, ["task", "show", f"E-{tid}", "--analysis", "--text"]
+        main, ["task", "show", f"E-{tid}", "--analysis", "--plan"]
     )
     assert result.exit_code == 0, result.output
     analysis_idx = result.output.find("— Analysis —")
-    text_idx = result.output.find("— Text —")
+    plan_idx = result.output.find("— Plan —")
     assert analysis_idx != -1
-    assert text_idx != -1
-    assert analysis_idx < text_idx, "analysis section must precede text section"
+    assert plan_idx != -1
+    assert analysis_idx < plan_idx, "analysis section must precede plan section"
 
 
 def test_all_fields_emits_every_content_section(seeded_project_at_cwd):
@@ -68,7 +68,7 @@ def test_all_fields_emits_every_content_section(seeded_project_at_cwd):
         tid,
         description="description blurb",
         analysis="analysis content",
-        text="plan content",
+        plan="plan content",
         outcome="outcome content",
     )
     child = _add_task("Implement the fix")
@@ -78,7 +78,7 @@ def test_all_fields_emits_every_content_section(seeded_project_at_cwd):
     assert result.exit_code == 0, result.output
     assert "— Description —" in result.output
     assert "— Analysis —" in result.output
-    assert "— Text —" in result.output
+    assert "— Plan —" in result.output
     assert "— Outcome —" in result.output
     assert "— Children —" in result.output
     assert f"E-{child}" in result.output

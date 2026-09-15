@@ -32,7 +32,7 @@ from click.testing import CliRunner
 from endless import db
 from endless.cli import BRIEF_CHARS, main
 
-BODY_FIELDS = ("description", "analysis", "text", "outcome")
+BODY_FIELDS = ("description", "analysis", "plan", "outcome")
 
 # Every way a caller can ask for more or less of the human render. The payload
 # assertions run across all of them because the claim being made is that NONE of
@@ -42,7 +42,7 @@ FLAG_COMBOS = [
     ("--all-fields",),
     ("--no-description",),
     ("--analysis",),
-    ("--text",),
+    ("--plan",),
     ("--outcome",),
     ("--children",),
     ("--brief",),
@@ -135,7 +135,7 @@ def test_chars_zero_iff_body_null(seeded_project_at_cwd, combo):
         "Sample",
         description="a description body",
         analysis="an analysis body",
-        text="",          # empty string in the column, not NULL
+        plan="",          # empty string in the column, not NULL
         outcome=None,     # NULL in the column
     )
     payload = _json(f"E-{tid}", *combo)
@@ -146,7 +146,7 @@ def test_chars_zero_iff_body_null(seeded_project_at_cwd, combo):
             f"{field}_chars == 0 must hold if and only if {field} is null "
             f"(got {count!r} / {payload[field]!r} under {combo or '(no flags)'})"
         )
-    assert payload["text"] is None, "an empty string must spell absent as null"
+    assert payload["plan"] is None, "an empty string must spell absent as null"
     assert payload["outcome"] is None
 
 
@@ -180,11 +180,11 @@ def test_brief_n_honours_n(seeded_project_at_cwd):
 def test_brief_leaves_a_short_field_whole(seeded_project_at_cwd):
     """No ellipsis on a field at or under the limit, so the absence of `…`
     reliably means 'not truncated'."""
-    tid = _add_task("Sample", analysis="z" * 40, text="z" * 41)
+    tid = _add_task("Sample", analysis="z" * 40, plan="z" * 41)
     payload = _json(f"E-{tid}", "--brief=40")
     assert payload["analysis"] == "z" * 40
     assert not payload["analysis"].endswith("…")
-    assert payload["text"] == "z" * 40 + "…"
+    assert payload["plan"] == "z" * 40 + "…"
 
 
 def test_brief_never_yields_null_for_a_populated_field(seeded_project_at_cwd):
@@ -198,7 +198,7 @@ def test_brief_never_yields_null_for_a_populated_field(seeded_project_at_cwd):
 def test_brief_wins_over_the_display_flags_in_the_human_render(seeded_project_at_cwd):
     """One flag, one meaning — previews, not bodies — so `--all-fields --brief`
     yields previews rather than the full bodies --all-fields would have."""
-    tid = _add_task("Sample", analysis="a" * 400, text="t" * 400)
+    tid = _add_task("Sample", analysis="a" * 400, plan="t" * 400)
     out = _run(f"E-{tid}", "--all-fields", "--brief=30")
     assert "a" * 30 + "…" in out
     assert "a" * 400 not in out
@@ -250,7 +250,7 @@ def test_llm_default_output_is_unchanged_but_for_the_children_lines(
     task emits no children lines at all, so this is E-1601's `--llm` output
     verbatim."""
     tid = _add_task("Sample", description="Sample", analysis="a" * 12,
-                    text="t" * 34, outcome="o" * 56)
+                    plan="t" * 34, outcome="o" * 56)
     assert _run(f"E-{tid}", "--llm").splitlines() == [
         f"# E-{tid} Sample",
         "project=test",
@@ -258,7 +258,7 @@ def test_llm_default_output_is_unchanged_but_for_the_children_lines(
         "created=2026-01-01T00:00:00",
         "updated=2026-01-01T00:00:00",
         "analysis_chars=12",
-        "text_chars=34",
+        "plan_chars=34",
         "outcome_chars=56",
     ]
 
@@ -366,11 +366,11 @@ def test_untyped_children_are_labelled_rather_than_blank(seeded_project_at_cwd):
 
 def test_children_section_renders_in_slot_2(seeded_project_at_cwd):
     parent = _add_task("Parent", type_id=4, description="a description body",
-                       analysis="an analysis body", text="a text body",
+                       analysis="an analysis body", plan="a plan body",
                        outcome="an outcome body")
     _add_task("child", parent=parent)
     assert _sections(_run(f"E-{parent}", "--all-fields")) == [
-        "Description", "Children", "Analysis", "Text", "Outcome",
+        "Description", "Children", "Analysis", "Plan", "Outcome",
     ]
 
 
@@ -391,8 +391,8 @@ def test_children_section_renders_in_slot_2(seeded_project_at_cwd):
     # Children is the ONLY section that renders.
     (dict(description="Parent"), ("--children",), ["Children"]),
     # Trailing sections present, everything ahead of Children absent.
-    (dict(description="Parent", text="t", outcome="o"),
-     ("--text", "--outcome", "--children"), ["Children", "Text", "Outcome"]),
+    (dict(description="Parent", plan="t", outcome="o"),
+     ("--plan", "--outcome", "--children"), ["Children", "Plan", "Outcome"]),
 ])
 def test_children_hold_slot_2_across_the_presence_matrix(
         seeded_project_at_cwd, fields, args, expected):

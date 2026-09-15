@@ -3,7 +3,7 @@
 Exercises reopen semantics from the E-1555 plan, as amended by E-1889 and
 E-1968:
   - Reopen flips assumed/confirmed/completed → revisit, whatever the plan
-    text says. Text presence survives only as the message suffix.
+    says. Plan presence survives only as the message suffix.
   - Reopen refuses on declined/obsolete (steers to `task update --status`).
   - Reopen refuses on non-terminal statuses.
   - Reopen LEAVES an existing session→task binding alone (E-1968). It used to
@@ -40,12 +40,12 @@ def _insert_session(
 
 def _insert_task(
     *, pk: int, project_id: int, status: str = "assumed",
-    text: str | None = None,
+    plan: str | None = None,
 ):
     db.execute(
-        "INSERT INTO tasks (id, project_id, title, status, text) "
+        "INSERT INTO tasks (id, project_id, title, status, plan) "
         "VALUES (?, ?, 'test task', ?, ?)",
-        (pk, project_id, status, text),
+        (pk, project_id, status, plan),
     )
 
 
@@ -72,7 +72,7 @@ def test_reopen_lands_revisit_from_every_reopenable_status(
 
     _insert_task(
         pk=1000, project_id=project_at_cwd["project_id"],
-        status=status, text="# plan body\n",
+        status=status, plan="# plan body\n",
     )
 
     reopen_item(1000)
@@ -85,14 +85,14 @@ def test_reopen_lands_revisit_from_every_reopenable_status(
     assert f"{status} -> revisit" in captured.out
 
 
-def test_reopen_without_text_still_lands_revisit(project_at_cwd, capsys):
+def test_reopen_without_plan_still_lands_revisit(project_at_cwd, capsys):
     """Text presence no longer branches the target status (E-1889) — it only
     survives as the message suffix, which still reports it honestly."""
     from endless.task_cmd import reopen_item
 
     _insert_task(
         pk=1001, project_id=project_at_cwd["project_id"],
-        status="confirmed", text=None,
+        status="confirmed", plan=None,
     )
 
     reopen_item(1001)
@@ -102,21 +102,21 @@ def test_reopen_without_text_still_lands_revisit(project_at_cwd, capsys):
 
     captured = capsys.readouterr()
     assert "confirmed -> revisit" in captured.out
-    assert "text: absent" in captured.out
+    assert "plan: absent" in captured.out
 
 
-def test_reopen_with_text_reports_the_plan_in_the_suffix(project_at_cwd, capsys):
+def test_reopen_with_plan_reports_the_plan_in_the_suffix(project_at_cwd, capsys):
     from endless.task_cmd import reopen_item
 
     _insert_task(
         pk=1004, project_id=project_at_cwd["project_id"],
-        status="assumed", text="# plan body\n",
+        status="assumed", plan="# plan body\n",
     )
 
     reopen_item(1004)
 
     captured = capsys.readouterr()
-    assert "text: present" in captured.out
+    assert "plan: present" in captured.out
 
 
 def test_reopen_completed_epic_does_not_cascade(project_at_cwd, capsys):
@@ -124,7 +124,7 @@ def test_reopen_completed_epic_does_not_cascade(project_at_cwd, capsys):
 
     _insert_task(
         pk=1002, project_id=project_at_cwd["project_id"],
-        status="completed", text="plan",
+        status="completed", plan="plan",
     )
     # Insert a child to confirm cascade=False — child is unaffected.
     db.execute(
@@ -148,7 +148,7 @@ def test_reopen_refuses_non_terminal_status(project_at_cwd, status):
 
     _insert_task(
         pk=1100, project_id=project_at_cwd["project_id"],
-        status=status, text="plan",
+        status=status, plan="plan",
     )
 
     with pytest.raises(click.ClickException) as exc:
@@ -167,7 +167,7 @@ def test_reopen_refuses_declined_obsolete_with_pointer(project_at_cwd, status):
 
     _insert_task(
         pk=1110, project_id=project_at_cwd["project_id"],
-        status=status, text="plan",
+        status=status, plan="plan",
     )
 
     with pytest.raises(click.ClickException) as exc:
@@ -202,7 +202,7 @@ def test_reopen_keeps_the_session_binding(project_at_cwd):
 
     _insert_task(
         pk=1200, project_id=project_at_cwd["project_id"],
-        status="assumed", text="plan",
+        status="assumed", plan="plan",
     )
     _insert_session(
         pk=400, session_id="s-400",
@@ -227,7 +227,7 @@ def test_reopen_does_not_create_worktree(project_at_cwd):
 
     _insert_task(
         pk=1300, project_id=project_at_cwd["project_id"],
-        status="assumed", text="plan",
+        status="assumed", plan="plan",
     )
 
     with patch("endless.worktree_cmd.create_task_worktree") as wt_mock:
@@ -282,7 +282,7 @@ def test_spawn_no_flag_terminal_target_routes_to_the_session(project_at_cwd, mon
 
     _insert_task(
         pk=1600, project_id=project_at_cwd["project_id"],
-        status="assumed", text="plan",
+        status="assumed", plan="plan",
     )
 
     with pytest.raises(click.ClickException) as exc:
@@ -312,7 +312,7 @@ def test_any_session_can_claim_a_reopened_task(project_at_cwd):
 
     _insert_task(
         pk=1710, project_id=project_at_cwd["project_id"],
-        status="assumed", text="plan",
+        status="assumed", plan="plan",
     )
     reopen_item(1710)
     assert db.query(
@@ -349,7 +349,7 @@ def test_spawn_no_flag_unverified_names_the_reopen_route(project_at_cwd, monkeyp
 
     _insert_task(
         pk=1610, project_id=project_at_cwd["project_id"],
-        status="unverified", text="plan",
+        status="unverified", plan="plan",
     )
 
     with pytest.raises(click.ClickException) as exc:
@@ -375,7 +375,7 @@ def test_spawn_force_still_demotes_but_warns(project_at_cwd, monkeypatch, capsys
 
     _insert_task(
         pk=1611, project_id=project_at_cwd["project_id"],
-        status="unverified", text="plan",
+        status="unverified", plan="plan",
     )
 
     # The launcher cannot open a window against a fake $TMUX, so the spawn

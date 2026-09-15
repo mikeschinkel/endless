@@ -284,7 +284,7 @@ CREATE TABLE IF NOT EXISTS tasks (
     parent_id INTEGER,
     title TEXT NOT NULL,
     description TEXT,
-    text TEXT,
+    plan TEXT,
     phase TEXT NOT NULL DEFAULT 'now',
     status TEXT NOT NULL DEFAULT 'unplanned',
     source_file TEXT,
@@ -410,7 +410,7 @@ CREATE INDEX IF NOT EXISTS idx_session_notices_undelivered
 -- rather than a 2-element array so json_extract(changes,'$.status.after') reads as
 -- what it is, and so a third key can be added later without a breaking change.
 --
--- Freeform fields (description/text/analysis/notes) carry the single character
+-- Freeform fields (description/plan/analysis/notes) carry the single character
 -- '…' (U+2026) in place of content — the notice says a field CHANGED without
 -- reproducing it, while still distinguishing added / cleared / emptied / edited.
 --
@@ -443,7 +443,7 @@ WHEN OLD.status      IS NOT NEW.status
   OR OLD.phase       IS NOT NEW.phase
   OR OLD.tier        IS NOT NEW.tier
   OR OLD.description IS NOT NEW.description
-  OR OLD.text        IS NOT NEW.text
+  OR OLD.plan        IS NOT NEW.plan
   OR OLD.analysis    IS NOT NEW.analysis
   OR OLD.notes       IS NOT NEW.notes
 BEGIN
@@ -474,15 +474,15 @@ BEGIN
                                           ELSE '…' END)
                  WHERE OLD.description IS NOT NEW.description
                 UNION ALL
-                SELECT 'text',
+                SELECT 'plan',
                        json_object(
-                           'before', CASE WHEN OLD.text IS NULL THEN NULL
-                                          WHEN OLD.text = ''   THEN ''
+                           'before', CASE WHEN OLD.plan IS NULL THEN NULL
+                                          WHEN OLD.plan = ''   THEN ''
                                           ELSE '…' END,
-                           'after',  CASE WHEN NEW.text IS NULL THEN NULL
-                                          WHEN NEW.text = ''   THEN ''
+                           'after',  CASE WHEN NEW.plan IS NULL THEN NULL
+                                          WHEN NEW.plan = ''   THEN ''
                                           ELSE '…' END)
-                 WHERE OLD.text IS NOT NEW.text
+                 WHERE OLD.plan IS NOT NEW.plan
                 UNION ALL
                 SELECT 'analysis',
                        json_object(

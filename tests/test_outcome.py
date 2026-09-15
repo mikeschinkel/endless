@@ -213,21 +213,21 @@ def test_task_show_completed_hides_outcome_by_default(seeded_project_at_cwd):
     assert "a long research deliverable body" not in result.output
 
 
-def test_task_show_text_and_analysis_placeholders(seeded_project_at_cwd):
-    """E-1601: text and analysis also collapse to flag-named placeholders."""
+def test_task_show_plan_and_analysis_placeholders(seeded_project_at_cwd):
+    """E-1601: plan and analysis also collapse to flag-named placeholders."""
     tid = _add_task("Sample")
     db.execute(
-        "UPDATE tasks SET text = ?, analysis = ? WHERE id = ?",
-        ("body text content", "analysis design content", tid),
+        "UPDATE tasks SET plan = ?, analysis = ? WHERE id = ?",
+        ("body plan content", "analysis design content", tid),
     )
     runner = CliRunner()
     result = runner.invoke(main, ["task", "show", f"E-{tid}"])
     assert result.exit_code == 0
-    assert "Text:" in result.output
-    assert "(--text to display)" in result.output
+    assert "Plan:" in result.output
+    assert "(--plan to display)" in result.output
     assert "Analysis:" in result.output
     assert "(--analysis to display)" in result.output
-    assert "body text content" not in result.output
+    assert "body plan content" not in result.output
     assert "analysis design content" not in result.output
 
 
@@ -274,33 +274,33 @@ def test_task_show_all_fields_reveals_everything(seeded_project_at_cwd):
     """E-1601: --all-fields shows every section with no placeholders left."""
     tid = _add_task("Sample")
     db.execute(
-        "UPDATE tasks SET text = ?, analysis = ?, outcome = ? WHERE id = ?",
-        ("body text content", "analysis design content", "outcome deliverable", tid),
+        "UPDATE tasks SET plan = ?, analysis = ?, outcome = ? WHERE id = ?",
+        ("body plan content", "analysis design content", "outcome deliverable", tid),
     )
     runner = CliRunner()
     result = runner.invoke(main, ["task", "show", f"E-{tid}", "--all-fields"])
     assert result.exit_code == 0
     assert "— Analysis —" in result.output
-    assert "— Text —" in result.output
+    assert "— Plan —" in result.output
     assert "— Outcome —" in result.output
     assert "to display)" not in result.output
 
 
-def test_task_show_outcome_section_renders_after_text(seeded_project_at_cwd):
-    """E-1577: the outcome section appears AFTER the text section."""
+def test_task_show_outcome_section_renders_after_plan(seeded_project_at_cwd):
+    """E-1577: the outcome section appears AFTER the plan section."""
     tid = _add_task("Sample")
     db.execute(
-        "UPDATE tasks SET text = ?, outcome = ? WHERE id = ?",
-        ("body text content", "outcome content", tid),
+        "UPDATE tasks SET plan = ?, outcome = ? WHERE id = ?",
+        ("body plan content", "outcome content", tid),
     )
     runner = CliRunner()
-    result = runner.invoke(main, ["task", "show", f"E-{tid}", "--text", "--outcome"])
+    result = runner.invoke(main, ["task", "show", f"E-{tid}", "--plan", "--outcome"])
     assert result.exit_code == 0
-    text_idx = result.output.find("— Text —")
+    plan_idx = result.output.find("— Plan —")
     outcome_idx = result.output.find("— Outcome —")
-    assert text_idx != -1
+    assert plan_idx != -1
     assert outcome_idx != -1
-    assert outcome_idx > text_idx, "outcome section must follow text section"
+    assert outcome_idx > plan_idx, "outcome section must follow plan section"
 
 
 def test_task_show_llm_outcome_gated(seeded_project_at_cwd):

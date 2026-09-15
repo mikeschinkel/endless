@@ -2,7 +2,7 @@
 
 `task update` infers a status change from what you edited, in three places:
 
-  1. non-empty `--text` on a pre-judgment task      -> `submitted`  (E-1266/E-1648)
+  1. non-empty `--plan` on a pre-judgment task      -> `submitted`  (E-1266/E-1648)
   2. a material `--description` edit on pre-work    -> `untriaged`  (E-1845)
   3. `--tier 1` on a pre-judgment task              -> `ready`
 
@@ -12,7 +12,7 @@ so appending a line to an `unplanned` task's plan silently promoted it, which is
 how E-1671 lost a deliberately-unapproved status. Leg 3 was never guarded
 either.
 
-There was a fourth: a real `--text` edit on a done task inferred `revisit`
+There was a fourth: a real `--plan` edit on a done task inferred `revisit`
 (E-1762). E-2120 removed the inference rather than the guard, so that edit is
 now inert with the flag or without it; the last section here holds what remains
 true about it.
@@ -20,7 +20,7 @@ true about it.
 The flag now means exactly what its name says: the status you see is the status
 you keep. Its siblings — the no-op-on-identical-rewrite guard and the
 "explicit --status wins" rule — are covered in test_untriaged_status.py and
-test_text_auto_promote.py; what is asserted here is the flag itself.
+test_plan_auto_promote.py; what is asserted here is the flag itself.
 """
 
 import click
@@ -50,7 +50,7 @@ def _finish(item_id: int, status: str, **kwargs) -> None:
 
 def _row(item_id: int) -> dict:
     rows = db.query(
-        "SELECT status, text, tier, completed_at FROM tasks WHERE id = ?",
+        "SELECT status, plan, tier, completed_at FROM tasks WHERE id = ?",
         (item_id,),
     )
     assert rows, f"task E-{item_id} not found"
@@ -68,11 +68,11 @@ def test_keep_status_suppresses_the_plan_attach_promotion(
     )
     assert _status_of(item_id) == start
 
-    task_cmd.update_plan(item_id=item_id, text="# plan\nbody\n", keep_status=True)
+    task_cmd.update_plan(item_id=item_id, plan="# plan\nbody\n", keep_status=True)
 
     row = _row(item_id)
     assert row["status"] == start, "the promotion must not fire"
-    assert row["text"] == "# plan\nbody\n", "the text must still be written"
+    assert row["plan"] == "# plan\nbody\n", "the plan must still be written"
 
 
 @pytest.mark.parametrize("start", ["untriaged", "unplanned"])
@@ -82,7 +82,7 @@ def test_without_the_flag_the_promotion_still_fires(start, seeded_project_at_cwd
         title="Add a thing", description="short", status=start
     )
 
-    task_cmd.update_plan(item_id=item_id, text="# plan\nbody\n")
+    task_cmd.update_plan(item_id=item_id, plan="# plan\nbody\n")
 
     assert _status_of(item_id) == "submitted"
 
@@ -92,15 +92,15 @@ def test_keep_status_holds_an_append_to_an_existing_plan(seeded_project_at_cwd):
     item_id = task_cmd.add_item(
         title="Add a thing", description="short", status="unplanned"
     )
-    task_cmd.update_plan(item_id=item_id, text="# plan\n", keep_status=True)
+    task_cmd.update_plan(item_id=item_id, plan="# plan\n", keep_status=True)
 
     task_cmd.update_plan(
-        item_id=item_id, text="# plan\n\n## Finding\nnew\n", keep_status=True
+        item_id=item_id, plan="# plan\n\n## Finding\nnew\n", keep_status=True
     )
 
     row = _row(item_id)
     assert row["status"] == "unplanned"
-    assert "## Finding" in row["text"]
+    assert "## Finding" in row["plan"]
 
 
 # --- leg 2: the description-edit reset (E-1845, already guarded) -------------
@@ -119,7 +119,7 @@ def test_keep_status_suppresses_the_description_reset(seeded_project_at_cwd):
 def test_a_plan_edit_on_a_done_task_infers_nothing(seeded_project_at_cwd):
     """The inference is gone, so the flag is not what holds the status here.
 
-    E-1762 read a real `--text` change on a finished task as unshipped scope and
+    E-1762 read a real `--plan` change on a finished task as unshipped scope and
     flipped it to `revisit`. Recording what shipped is now an obligation on any
     session that folds discovered work into the task it is on, so that edit is
     routine — and `revisit` has no edge back to `assumed`, so the flip destroyed
@@ -127,14 +127,14 @@ def test_a_plan_edit_on_a_done_task_infers_nothing(seeded_project_at_cwd):
     to make.
     """
     item_id = task_cmd.add_item(title="Add a thing", description="short")
-    task_cmd.update_plan(item_id=item_id, text="# plan\n")
+    task_cmd.update_plan(item_id=item_id, plan="# plan\n")
     _finish(item_id, "assumed")
 
-    task_cmd.update_plan(item_id=item_id, text="# plan\n\n## Also shipped\nx\n")
+    task_cmd.update_plan(item_id=item_id, plan="# plan\n\n## Also shipped\nx\n")
 
     row = _row(item_id)
     assert row["status"] == "assumed", "no status is inferred from the edit"
-    assert "## Also shipped" in row["text"], "the plan edit still lands"
+    assert "## Also shipped" in row["plan"], "the plan edit still lands"
 
 
 def test_a_plan_edit_on_a_done_task_reports_no_status_change(
@@ -142,11 +142,11 @@ def test_a_plan_edit_on_a_done_task_reports_no_status_change(
 ):
     """Nothing moved, so nothing about status is printed — to either audience."""
     item_id = task_cmd.add_item(title="Add a thing", description="short")
-    task_cmd.update_plan(item_id=item_id, text="# plan\n")
+    task_cmd.update_plan(item_id=item_id, plan="# plan\n")
     _finish(item_id, "assumed")
     capsys.readouterr()
 
-    task_cmd.update_plan(item_id=item_id, text="# plan\n\n## Also shipped\nx\n")
+    task_cmd.update_plan(item_id=item_id, plan="# plan\n\n## Also shipped\nx\n")
 
     out = capsys.readouterr().out
     assert "Status:" not in out, out
@@ -158,10 +158,10 @@ def test_keep_status_on_a_done_task_still_holds(seeded_project_at_cwd):
     rules tell a session to pass, and it must stay a no-op rather than an
     error or a surprise."""
     item_id = task_cmd.add_item(title="Add a thing", description="short")
-    task_cmd.update_plan(item_id=item_id, text="# plan\n")
+    task_cmd.update_plan(item_id=item_id, plan="# plan\n")
     _finish(item_id, "assumed")
 
-    task_cmd.update_plan(item_id=item_id, text="# plan (typo fixed)\n", keep_status=True)
+    task_cmd.update_plan(item_id=item_id, plan="# plan (typo fixed)\n", keep_status=True)
 
     assert _status_of(item_id) == "assumed"
 
@@ -175,16 +175,16 @@ def test_keep_status_on_a_done_task_does_not_restamp_completed_at(
     "caller wins" branch honors. But a status field is not inert there: whenever
     one is present the executor also rewrites `completed_at` and clears the tier
     of a terminal-status task. Pinning unconditionally would therefore restamp
-    the completion time of a `confirmed` task whose plan text was merely
+    the completion time of a `confirmed` task whose plan was merely
     typo-fixed — so the pin fires only where the promotion would have.
     """
     item_id = task_cmd.add_item(title="Add a thing", description="short")
-    task_cmd.update_plan(item_id=item_id, text="# plan\n")
+    task_cmd.update_plan(item_id=item_id, plan="# plan\n")
     _finish(item_id, "confirmed", outcome="shipped")
     before = _row(item_id)["completed_at"]
     assert before, "fixture: a confirmed task carries a completion timestamp"
 
-    task_cmd.update_plan(item_id=item_id, text="# plan (typo fixed)\n", keep_status=True)
+    task_cmd.update_plan(item_id=item_id, plan="# plan (typo fixed)\n", keep_status=True)
 
     after = _row(item_id)
     assert after["status"] == "confirmed"
@@ -244,18 +244,18 @@ def test_keep_status_still_writes_every_other_field(seeded_project_at_cwd):
         item_id=item_id,
         title="Add a renamed thing",
         description="a materially different spec",
-        text="# plan\n",
+        plan="# plan\n",
         phase="later",
         keep_status=True,
     )
 
     rows = db.query(
-        "SELECT title, description, text, phase, status FROM tasks WHERE id = ?",
+        "SELECT title, description, plan, phase, status FROM tasks WHERE id = ?",
         (item_id,),
     )
     assert rows[0]["title"] == "Add a renamed thing"
     assert rows[0]["description"] == "a materially different spec"
-    assert rows[0]["text"] == "# plan\n"
+    assert rows[0]["plan"] == "# plan\n"
     assert rows[0]["phase"] == "later"
     assert rows[0]["status"] == "untriaged"
 
@@ -266,7 +266,7 @@ def test_keep_status_does_not_report_a_status_change(capsys, seeded_project_at_c
         title="Add a thing", description="short", status="unplanned"
     )
 
-    task_cmd.update_plan(item_id=item_id, text="# plan\n", keep_status=True)
+    task_cmd.update_plan(item_id=item_id, plan="# plan\n", keep_status=True)
 
     out = capsys.readouterr().out
     assert "Status:" not in out, out

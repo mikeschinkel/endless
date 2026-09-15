@@ -41,7 +41,7 @@ from pathlib import Path
 import click
 
 from endless import land_conflict, rowcap
-from endless.task_cmd import _display_path, _resolve_project, recover_task_text
+from endless.task_cmd import _display_path, _resolve_project, recover_task_plan
 from endless.project_path import resolved
 
 
@@ -87,7 +87,7 @@ AMENDABLE_COMMIT_SUBJECTS = (
 # Land's retry cap for the race-with-concurrent-writers loop (E-987).
 LAND_MAX_RETRIES = 8
 
-# E-1500: minimum stripped length for tasks.text (or a committed plan file)
+# E-1500: minimum stripped length for tasks.plan (or a committed plan file)
 # to count as a viable plan. Empirically derived from the existing tasks: every
 # junk/placeholder plan is <=34 chars and every genuine plan is >=351 chars,
 # so 128 rejects all observed junk while accepting all observed real plans.
@@ -1622,8 +1622,8 @@ def _read_branch_file(branch: str, rel_path: str, project_root: Path) -> str | N
     return res.stdout if res.returncode == 0 else None
 
 
-def _read_task_text(task_id: int, project_root: Path) -> str:
-    """Current tasks.text via the `endless-go session-query` Go helper.
+def _read_task_plan(task_id: int, project_root: Path) -> str:
+    """Current tasks.plan via the `endless-go session-query` Go helper.
 
     Returns '' when empty/absent or the helper is unavailable. Python SQLite
     reads are forbidden (E-894), so there is no DB fallback.
@@ -1635,7 +1635,7 @@ def _read_task_text(task_id: int, project_root: Path) -> str:
         return ""
     try:
         result = subprocess.run(
-            [binary, *config.go_db_context_args(), "session-query", "task-text", "--id", str(task_id)],
+            [binary, *config.go_db_context_args(), "session-query", "task-plan", "--id", str(task_id)],
             capture_output=True, text=True,
         )
     except OSError:
@@ -1697,28 +1697,28 @@ def _orphan_real_work_msg(
 
 
 def _orphan_plan_mismatch_msg(
-    task_id: int, branch: str, db_text: str, file_text: str, project_root: Path,
+    task_id: int, branch: str, db_plan: str, file_text: str, project_root: Path,
 ) -> str:
     root = _tilde(project_root)
     plan_rel = f".endless/plans/E-{task_id}.md"
     return (
-        f"E-{task_id}: the plan in tasks.text differs from the plan committed "
+        f"E-{task_id}: the plan in tasks.plan differs from the plan committed "
         f"on branch {branch}.\n\n"
-        f"  tasks.text  ({len(db_text.strip())} chars): \"{_plan_preview(db_text)}\"\n"
+        f"  tasks.plan  ({len(db_plan.strip())} chars): \"{_plan_preview(db_plan)}\"\n"
         f"  branch file ({len(file_text.strip())} chars): \"{_plan_preview(file_text)}\"\n\n"
         f"View full:\n"
-        f"  endless task show E-{task_id} --text\n"
+        f"  endless task show E-{task_id} --plan\n"
         f"  git -C {root} show {branch}:{plan_rel}\n"
         f"Keep the DB version, discard the branch:\n"
         f"  git -C {root} branch -D {branch}          # then retry\n"
         f"Adopt the branch's version into the DB:\n"
         f"  git -C {root} show {branch}:{plan_rel} > .endless/tmp/E-{task_id}.md\n"
-        f"  endless task update E-{task_id} --text-file .endless/tmp/E-{task_id}.md   # then retry"
+        f"  endless task update E-{task_id} --plan-file .endless/tmp/E-{task_id}.md   # then retry"
     )
 
 
-def _orphan_text_not_viable_msg(
-    task_id: int, branch: str, db_text: str, file_text: str, project_root: Path,
+def _orphan_plan_not_viable_msg(
+    task_id: int, branch: str, db_plan: str, file_text: str, project_root: Path,
 ) -> str:
     root = _tilde(project_root)
     plan_rel = f".endless/plans/E-{task_id}.md"
@@ -1729,57 +1729,57 @@ def _orphan_text_not_viable_msg(
             f"be the one you want:\n  git -C {root} show {branch}:{plan_rel}"
         )
     return (
-        f"E-{task_id}: tasks.text is too short to be a viable plan "
-        f"({len(db_text.strip())} chars):\n  \"{_plan_preview(db_text)}\"\n\n"
+        f"E-{task_id}: tasks.plan is too short to be a viable plan "
+        f"({len(db_plan.strip())} chars):\n  \"{_plan_preview(db_plan)}\"\n\n"
         f"Write a real plan, then retry:\n"
-        f"  endless task update E-{task_id} --text-file <path>{extra}"
+        f"  endless task update E-{task_id} --plan-file <path>{extra}"
     )
 
 
 def _orphan_no_viable_plan_msg(task_id: int, branch: str) -> str:
     return (
-        f"E-{task_id}: no viable plan in tasks.text or on branch {branch}.\n\n"
+        f"E-{task_id}: no viable plan in tasks.plan or on branch {branch}.\n\n"
         f"Add one, then retry:\n"
-        f"  endless task update E-{task_id} --text-file <path>"
+        f"  endless task update E-{task_id} --plan-file <path>"
     )
 
 
 def _reconcile_orphan_plan(
     task_id: int, branch: str, plan_rel: str, project_root: Path,
 ) -> None:
-    """Plan-only orphan branch. tasks.text (the DB) is the source of truth; the
+    """Plan-only orphan branch. tasks.plan (the DB) is the source of truth; the
     committed plan file is a derived mirror. Decide adopt / proceed / refuse.
 
     Returns normally when it's safe to delete the branch and recreate fresh
-    (the plan re-materializes from tasks.text). Raises ClickException, with an
+    (the plan re-materializes from tasks.plan). Raises ClickException, with an
     actionable message, when the DB and file disagree or no viable plan exists.
     """
     file_text = _read_branch_file(branch, plan_rel, project_root) or ""
-    db_text = _read_task_text(task_id, project_root)
-    db_s, file_s = db_text.strip(), file_text.strip()
+    db_plan = _read_task_plan(task_id, project_root)
+    db_s, file_s = db_plan.strip(), file_text.strip()
 
     if not db_s:
         # The DB has no plan; the committed file is all we have.
         if _plan_viable(file_s):
-            recover_task_text(task_id, file_text)
+            recover_task_plan(task_id, file_text)
             click.echo(
                 click.style("•", fg="cyan")
                 + f" Recovered plan for E-{task_id} from branch {branch} "
-                f"into tasks.text"
+                f"into tasks.plan"
             )
             return
         raise click.ClickException(_orphan_no_viable_plan_msg(task_id, branch))
 
     if not _plan_viable(db_s):
         raise click.ClickException(
-            _orphan_text_not_viable_msg(task_id, branch, db_text, file_text, project_root)
+            _orphan_plan_not_viable_msg(task_id, branch, db_plan, file_text, project_root)
         )
 
     if not file_s or file_s == db_s:
-        return  # DB and file agree (or no file) -> recreate fresh from tasks.text
+        return  # DB and file agree (or no file) -> recreate fresh from tasks.plan
 
     raise click.ClickException(
-        _orphan_plan_mismatch_msg(task_id, branch, db_text, file_text, project_root)
+        _orphan_plan_mismatch_msg(task_id, branch, db_plan, file_text, project_root)
     )
 
 
@@ -2254,11 +2254,11 @@ def _check_post_land_residue(
 
 # E-1747: the multiline document fields that mirror to committed
 # .endless/<subdir>/E-NNN.md files. Each tuple is (tasks column, subdir,
-# human label used in the commit subject and progress line). `text` is the
+# human label used in the commit subject and progress line). `plan` is the
 # original plan mirror (E-1445); `outcome`/`analysis` are added here. Short
 # metadata (description, title) is deliberately excluded — not documents.
 _TASK_DOC_FIELDS: tuple[tuple[str, str, str], ...] = (
-    ("text", "plans", "plan"),
+    ("plan", "plans", "plan"),
     ("outcome", "outcomes", "outcome"),
     ("analysis", "analyses", "analysis"),
 )
@@ -2346,7 +2346,7 @@ def _materialize_plan_file(task_id: int, worktree_path: Path) -> None:
     Prefer `_materialize_task_docs`, which seeds every mirrored field (E-1747).
     Retained because existing callers/tests reference this name.
     """
-    _materialize_task_doc(task_id, worktree_path, "text", "plans", "plan")
+    _materialize_task_doc(task_id, worktree_path, "plan", "plans", "plan")
 
 
 def _commit_doc_in_worktree(

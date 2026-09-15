@@ -106,27 +106,27 @@ def test_update_analysis_at_path_refused_by_gate(seeded_project_at_cwd, tmp_path
     assert a is None
 
 
-def test_update_text_inline_and_file_forms(seeded_project_at_cwd, tmp_path):
-    """E-1001: --text stores inline content; --text-file loads from a path;
+def test_update_plan_inline_and_file_forms(seeded_project_at_cwd, tmp_path):
+    """E-1001: --plan stores inline content; --plan-file loads from a path;
     passing both is an error."""
     from click.testing import CliRunner
     from endless.cli import main
 
-    def _text_of(task_id: int) -> str | None:
-        return db.query("SELECT text FROM tasks WHERE id = ?", (task_id,))[0]["text"]
+    def _plan_of(task_id: int) -> str | None:
+        return db.query("SELECT plan FROM tasks WHERE id = ?", (task_id,))[0]["plan"]
 
     runner = CliRunner()
 
     tid = _add_task("Audit the X system")
-    assert runner.invoke(main, ["task", "update", f"E-{tid}", "--text", "inline body"]).exit_code == 0
-    assert _text_of(tid) == "inline body"
+    assert runner.invoke(main, ["task", "update", f"E-{tid}", "--plan", "inline body"]).exit_code == 0
+    assert _plan_of(tid) == "inline body"
 
     p = tmp_path / "plan.md"
     p.write_text("file body\nmore")
-    assert runner.invoke(main, ["task", "update", f"E-{tid}", "--text-file", str(p)]).exit_code == 0
-    assert _text_of(tid) == "file body\nmore"
+    assert runner.invoke(main, ["task", "update", f"E-{tid}", "--plan-file", str(p)]).exit_code == 0
+    assert _plan_of(tid) == "file body\nmore"
 
-    both = runner.invoke(main, ["task", "update", f"E-{tid}", "--text", "x", "--text-file", str(p)])
+    both = runner.invoke(main, ["task", "update", f"E-{tid}", "--plan", "x", "--plan-file", str(p)])
     assert both.exit_code != 0
     assert "not both" in both.output
 

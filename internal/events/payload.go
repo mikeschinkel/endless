@@ -1,20 +1,50 @@
 package events
 
+// legacyPlanKey is the pre-E-1000 spelling of the plan field in event payloads.
+// It survives only as a READ path: 1,257 db-ledger events carry it, the ledger
+// is immutable, and a projector that ignored the key would rebuild those tasks
+// with empty plans. Nothing emits it. Named here rather than repeated as a bare
+// "text" so a future reader of either field map can find every site at once.
+const legacyPlanKey = "text"
+
 // Task payloads
 
 type TaskCreatedPayload struct {
 	Title       string `json:"title"`
 	Description string `json:"description,omitempty"`
-	Text        string `json:"text,omitempty"`
-	Analysis    string `json:"analysis,omitempty"`
-	Notes       string `json:"notes,omitempty"`
-	Phase       string `json:"phase"`
-	Status      string `json:"status"`
-	Type        string `json:"type"`
-	Tier        *int   `json:"tier,omitempty"`
-	ParentID    *int64 `json:"parent_id,omitempty"`
-	SortOrder   int    `json:"sort_order"`
-	AfterID     *int64 `json:"after_id,omitempty"` // Go resolves to sort_order
+	Plan        string `json:"plan,omitempty"`
+
+	// LegacyText carries the pre-E-1000 spelling of Plan. 129 task.created
+	// events in the db-ledger were emitted with a `text` key, and the ledger is
+	// immutable by design — decoding them into Plan directly is impossible
+	// (encoding/json takes one tag per field), and decoding them into nothing
+	// would rebuild those tasks with empty plans, silently, because an absent
+	// field is indistinguishable from an empty one.
+	//
+	// READ IT THROUGH PlanText(), never directly. Nothing emits this key any
+	// more; `omitempty` keeps it out of every payload this struct marshals.
+	LegacyText string `json:"text,omitempty"`
+
+	Analysis  string `json:"analysis,omitempty"`
+	Notes     string `json:"notes,omitempty"`
+	Phase     string `json:"phase"`
+	Status    string `json:"status"`
+	Type      string `json:"type"`
+	Tier      *int   `json:"tier,omitempty"`
+	ParentID  *int64 `json:"parent_id,omitempty"`
+	SortOrder int    `json:"sort_order"`
+	AfterID   *int64 `json:"after_id,omitempty"` // Go resolves to sort_order
+}
+
+// PlanText is the plan this event carries, whichever key spelled it. Post-E-1000
+// events use `plan`; the historical ones use `text`. Plan wins when a payload
+// somehow carries both, so a forward-spelled key is never overridden by a
+// legacy one.
+func (p TaskCreatedPayload) PlanText() string {
+	if p.Plan != "" {
+		return p.Plan
+	}
+	return p.LegacyText
 }
 
 type TaskImportedPayload struct {

@@ -51,14 +51,20 @@ const noticeLandedKey = "landed"
 // in a different order on every run — noise in a log meant for eyeballing, and
 // churn in golden test output.
 var noticeFieldOrder = []string{
-	"status", "phase", "tier", "description", "text", "analysis", "notes",
+	"status", "phase", "tier", "description", "plan", "analysis", "notes",
 }
+
+// noticeLegacyPlanKey is the pre-E-1000 key the trigger wrote for the plan
+// field. Undelivered notices written before the rename still carry it, so
+// RenderNotice folds it onto "plan" rather than dropping the field — a notice
+// that rendered nothing would be held back forever as unrenderable.
+const noticeLegacyPlanKey = "text"
 
 // noticeFreeform is the set of fields whose content the trigger elides. They
 // render as a verb ("description edited") rather than a before → after pair,
 // because their values are sentinels, not content.
 var noticeFreeform = map[string]bool{
-	"description": true, "text": true, "analysis": true, "notes": true,
+	"description": true, "plan": true, "analysis": true, "notes": true,
 }
 
 // PendingNotices returns this session's undelivered notices, oldest first.
@@ -142,6 +148,15 @@ func RenderNotice(n Notice) (string, bool) {
 	// answered before the field loop rather than merged into it.
 	if landed, ok := changes[noticeLandedKey]; ok {
 		return fmt.Sprintf("FYI — E-%d %s", n.TaskID, landedPhrase(landed.After)), true
+	}
+	// Fold a pre-rename notice's key onto the current one before the ordered
+	// walk, so one loop renders both vintages and nothing downstream has to
+	// know there were ever two names. Only when the row does not already carry
+	// the forward key.
+	if legacy, ok := changes[noticeLegacyPlanKey]; ok {
+		if _, forward := changes["plan"]; !forward {
+			changes["plan"] = legacy
+		}
 	}
 	var parts []string
 	for _, field := range noticeFieldOrder {

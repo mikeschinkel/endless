@@ -188,9 +188,9 @@ func replayTaskCreated(db *sql.DB, evt *Event, result *ProjectResult) error {
 	typeID := projectorTypeID(p.Type)
 
 	_, err = db.Exec(
-		`INSERT INTO tasks (id, project_id, phase, title, description, text, analysis, status, type_id, sort_order, parent_id, tier, created_at, updated_at)
+		`INSERT INTO tasks (id, project_id, phase, title, description, plan, analysis, status, type_id, sort_order, parent_id, tier, created_at, updated_at)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		taskID, projectID, p.Phase, p.Title, p.Description, p.Text, p.Analysis, p.Status, typeID,
+		taskID, projectID, p.Phase, p.Title, p.Description, p.PlanText(), p.Analysis, p.Status, typeID,
 		sortOrder, p.ParentID, p.Tier, ts, ts,
 	)
 	if err != nil {
@@ -349,15 +349,32 @@ func replayTaskFieldsUpdated(db *sql.DB, evt *Event, result *ProjectResult) erro
 		// historical task.fields_updated events still carry it, and the
 		// unknown-field branch below skips them rather than writing to the
 		// dropped column on rebuild.
-		"title": "title", "description": "description", "text": "text",
+		//
+		// "text" and "plan" BOTH project into the renamed `plan` column
+		// (E-1000). 1,128 historical task.fields_updated events carry the `text`
+		// key and the ledger is immutable by design; dropping them would rebuild
+		// those tasks with empty plans, silently, because an absent field is
+		// indistinguishable from an empty one. Everything emitted from E-1000 on
+		// uses `plan`. See legacyPlanKey below for the both-present case.
+		"title": "title", "description": "description",
+		"plan": "plan", legacyPlanKey: "plan",
 		"phase": "phase", "tier": "tier",
 		"type": "type_id", "status": "status", "parent_id": "parent_id",
 		"outcome": "outcome", "analysis": "analysis",
 	}
 
+	// A payload carrying both spellings would otherwise emit `plan = ?` twice,
+	// resolved by map iteration order — i.e. non-deterministically. No emitter
+	// has ever produced both, but the forward key wins by construction rather
+	// than by luck. Mirrored in the executor.
+	_, hasPlanKey := p.Fields["plan"]
+
 	for field, value := range p.Fields {
 		col, ok := allowedFields[field]
 		if !ok {
+			continue
+		}
+		if field == legacyPlanKey && hasPlanKey {
 			continue
 		}
 		if field == "phase" {

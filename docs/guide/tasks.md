@@ -12,7 +12,7 @@ Every task has multiple body fields. Knowing which to use prevents long descript
 |---------------|----------------|--------------------------------------------------------------------------------------------------|----------------------------------------------------|
 | `title`       | One line       | The task name. Verb-first (see Verbs below).                                                     | Positional arg on `task add`; `--title` on update. |
 | `description` | < 200 words    | Brief pitch — *what* and *why* in a paragraph or two. Shown by default in `task list` / `task show`. | `--description` (inline) / `--description-file <path>` on `task add` / `task update`. |
-| `text`        | Long-form      | Full implementation plan: approach, the files and functions it touches, verification steps. Name files and functions, never line numbers — see **No time-frozen specifics** below. Shown with `task show --text`. **On a research task, `text` instead holds the research *request* — see the Research-task field model below.** | `--text` (inline) / `--text-file <path>` on `task add` / `task update`. |
+| `plan`        | Long-form      | Full implementation plan: approach, the files and functions it touches, verification steps. Name files and functions, never line numbers — see **No time-frozen specifics** below. Shown with `task show --plan`. **On a research task, `plan` instead holds the research *request* — see the Research-task field model below.** | `--plan` (inline) / `--plan-file <path>` on `task add` / `task update`. |
 | `analysis`    | Long-form      | Supporting research / exploration content that is *not* a proper plan — comparisons, findings, evidence gathered before the plan is written. Shown with `task show --analysis`. | `--analysis` (inline) / `--analysis-file <path>` on `task update`. |
 | `notes`       | Freeform       | Catch-all for content that doesn't fit elsewhere. Use sparingly.                                 | DB column; CLI flag may not yet be wired.          |
 | `outcome`     | Short to long  | Result / reason at terminal status. **Required** when completing a `research`/`brainstorm` task (the outcome IS the deliverable) and as the reason on `decline`. Optional on `confirm`/`assume`. | `--outcome` (inline) / `--outcome-file <path>` on `task confirm` / `task assume` / `task update`; `--reason` on `task decline` (stored as outcome). |
@@ -20,10 +20,10 @@ Every task has multiple body fields. Knowing which to use prevents long descript
 ### Distinctions in practice
 
 - **Loading a field from a file.** Every long-form field has a `--<field>-file <path>` twin. It refuses an empty or whitespace-only file rather than blanking what's there — see [An empty `--<field>-file` is refused](#an-empty---field-file-is-refused) below.
-- **Description vs text.** Description is a pitch — max 1024 character — readable in 30 seconds, fits in a list view. Text is the plan you'd hand to an engineer. If you're writing four paragraphs into `--description`, stop — put it in a plan file and load with `--text-file` (`--text` stores its argument verbatim as inline content; pass a path to `--text-file` to load a file).
-- **Text vs handoff.** Text is the plan — for humans and for the spawned session, which `endless task spawn` directs it to read. The session's *opening input* (the handoff) is generated from a template at spawn time, not stored on the task; see `endless guide orchestration`.
-- **Analysis vs text.** Analysis is supporting evidence gathered *before a plan is written on a do-task* — comparisons, findings, raw material. Text is the actionable plan. A deliverable-shaped task (an audit, or a `research`-type task) puts its *result* in `outcome`, not `text` or `analysis`; for research tasks specifically, see the Research-task field model below.
-- **No time-frozen specifics.** No durable field — description, analysis, text/plan, outcome, or a decision body — may carry a byte count, a file size, a line number, a `file.ext:NNN` citation, a match count, or a sha of something that still moves. They have near-zero historical value and go stale the moment anything else lands, which leaves a later session unable to tell whether to trust them. Cite a durable identifier instead — a function, handler, command or symbol name — or better, state the SEARCH that finds the sites rather than the sites themselves. This is enforced on write, on both the inline flag and its `--<field>-file` twin, and there is no escape flag.
+- **Description vs plan.** Description is a pitch — max 1024 character — readable in 30 seconds, fits in a list view. The plan is what you'd hand to an engineer. If you're writing four paragraphs into `--description`, stop — put it in a plan file and load with `--plan-file` (`--plan` stores its argument verbatim as inline content; pass a path to `--plan-file` to load a file).
+- **Plan vs handoff.** The plan is for humans and for the spawned session, which `endless task spawn` directs it to read. The session's *opening input* (the handoff) is generated from a template at spawn time, not stored on the task; see `endless guide orchestration`.
+- **Analysis vs plan.** Analysis is supporting evidence gathered *before a plan is written on a do-task* — comparisons, findings, raw material. The plan is the actionable part. A deliverable-shaped task (an audit, or a `research`-type task) puts its *result* in `outcome`, not `plan` or `analysis`; for research tasks specifically, see the Research-task field model below.
+- **No time-frozen specifics.** No durable field — description, analysis, plan, outcome, or a decision body — may carry a byte count, a file size, a line number, a `file.ext:NNN` citation, a match count, or a sha of something that still moves. They have near-zero historical value and go stale the moment anything else lands, which leaves a later session unable to tell whether to trust them. Cite a durable identifier instead — a function, handler, command or symbol name — or better, state the SEARCH that finds the sites rather than the sites themselves. This is enforced on write, on both the inline flag and its `--<field>-file` twin, and there is no escape flag.
 - **Outcome.** Single field for "how this task ended." Required where the *why* must be captured at the moment of the decision: completing a `research`/`brainstorm` task (the outcome IS the deliverable) and declining (the reason). Optional on `confirm`/`assume`, where "we tested it and it worked" rarely needs prose. `task decline` uses `--reason` as the CLI flag (stored as outcome internally).
 
 ---
@@ -47,7 +47,7 @@ endless task list --json
 # Detail for one task
 endless task show <id>
 endless task show <id> --all-fields
-endless task show <id> --text
+endless task show <id> --plan
 endless task show <id> --analysis
 endless task show <id> --children
 endless task show <id> --outcome
@@ -75,14 +75,14 @@ endless task id                                      # the task THIS session is 
 endless task recent                                  # recently updated
 endless task active                                  # underway + unverified + unreviewed
 endless task search "query"                          # ID, title, description
-endless task search "query" --text                   # also search text field
+endless task search "query" --plan                   # also search the plan field
 endless task handoff <id>                            # render the spawn handoff
 ```
 
 Reach for `--llm` whenever you're parsing output yourself — it's token-efficient.
 
 `--json` carries every field's body with no flag passed. The display flags
-(`--all-fields`, `--analysis`, `--text`, `--outcome`, `--no-description`) shape
+(`--all-fields`, `--analysis`, `--plan`, `--outcome`, `--no-description`) shape
 the terminal render only; they do not change the JSON. In it, `null` means one
 thing — the field is empty — and `<field>_chars` is always an integer, `0` when
 it is, so `<field>_chars == 0` and `<field> is null` are the same question.
@@ -204,7 +204,7 @@ Sessions render as **`ES-NNNN`** and tasks as `E-NNNN` — separate id spaces th
 endless task add "Title here"
 endless task add "Title here" --parent <parent_id>
 endless task add "Title here" --description "Brief pitch" --phase now
-endless task add "Title here" --text-file /path/to/plan.md --status ready
+endless task add "Title here" --plan-file /path/to/plan.md --status ready
 endless task add "Title here" --type bugfix          # todo|bugfix|research|epic|brainstorm
 endless task add "Title here" --tier 1               # 1-4 or auto|quick|deep|discuss
 endless task add "Title here" --blocked-by E-100     # also: --blocks, --relates-to,
@@ -238,11 +238,11 @@ Use the task ID printed by `task add` **literally**. IDs advance globally across
 
 ```bash
 # The task row is what posterity reads; the commit and the reply are transient.
-endless task update <id> --text-file <path> --keep-status
+endless task update <id> --plan-file <path> --keep-status
 # Discoveries go in your reply draft; the minimizer decides what survives.
 endless task report <id> --draft-file <path>
 ```
-{{else}}**1. Could it reasonably be done now?** Then do it, and do all three parts: note it in the commit message, record the grown scope on the task itself (`endless task update <id> --text-file <path> --keep-status`), and say so in your reply so your user learns the scope grew without having to read the diff.
+{{else}}**1. Could it reasonably be done now?** Then do it, and do all three parts: note it in the commit message, record the grown scope on the task itself (`endless task update <id> --plan-file <path> --keep-status`), and say so in your reply so your user learns the scope grew without having to read the diff.
 {{end}}
 **The test is cost and reviewer confusion, not kinship.** How big is the fix, and would carrying it in this diff mislead whoever reviews it? "Not a pure example of this task" is not a reason to file — a one-line fix in a file you already have open is cheaper to make than the task row describing it. Do not let purity get in the way of proficiency.
 
@@ -307,12 +307,12 @@ A research task's deliverable is *information*, not code — so its body fields 
 
 | Field     | On a research task holds…                                                                                      |
 |-----------|--------------------------------------------------------------------------------------------------------------|
-| `text`    | The research **request** — scope, the open questions to answer, the inputs to draw on, and the deliverable spec. This is the brief, written up front (where a do-task would hold its implementation plan). |
+| `plan`    | The research **request** — scope, the open questions to answer, the inputs to draw on, and the deliverable spec. This is the brief, written up front (where a do-task would hold its implementation plan). |
 | `outcome` | The **deliverable** — the findings and decisions, plus pointers to the implementation work the research spawns (typically follow-up tasks). Set this at completion; research's only terminal status is `completed`. |
 
 Keep large standalone deliverables — a full research report or decision document — as a file alongside the task (today, `docs/research-<date>-<slug>.md` or `docs/decision-<date>-<slug>.md`) and reference it from `outcome` rather than pasting the whole thing inline. The `outcome` then captures the conclusions and links to the report for the detail.
 
-> This file-alongside convention is interim and expected to evolve toward per-task directories and typed content storage; the field roles above (`text` = request, `outcome` = deliverable) are the stable part.
+> This file-alongside convention is interim and expected to evolve toward per-task directories and typed content storage; the field roles above (`plan` = request, `outcome` = deliverable) are the stable part.
 
 ### Brainstorm tasks (`--type brainstorm`)
 
@@ -329,7 +329,7 @@ Field model (mirrors the research model):
 
 | Field     | On a brainstorm task holds…                                                                                   |
 |-----------|--------------------------------------------------------------------------------------------------------------|
-| `text`    | The **seed / framing** — the spark, written up front: "I want to explore X; here's what's nagging me." A starting point, not a script. |
+| `plan`    | The **seed / framing** — the spark, written up front: "I want to explore X; here's what's nagging me." A starting point, not a script. |
 | `outcome` | The **synthesis** of what was landed on, plus `cleans_up` / `implements` links to the decision / research / do-tasks it spawned. Set at completion; a brainstorm's only terminal status is `completed` (with `--outcome`). |
 
 **Ungated.** Unlike `research`, `brainstorm` requires no `--justification` — frictionless ideation is the point. A brainstorm is typically a *precursor* that resolves into an `endless decision add` and/or new tasks linked from its outcome. Because the type itself signals an information deliverable, `completed` does not require an investigation-category title verb (the same exemption epics get).
@@ -341,7 +341,7 @@ Field model (mirrors the research model):
 ```bash
 endless task update <id> --title "New title"
 endless task update <id> --description "..."
-endless task update <id> --text-file /path/to/plan.md
+endless task update <id> --plan-file /path/to/plan.md
 endless task update <id> --status ready
 endless task update <id> --phase later
 endless task update <id> --tier 2
@@ -349,11 +349,11 @@ endless task update <id> --parent 444                # move under different pare
 endless task update <id> --parent 0                  # make it a root
 endless task update <id> --outcome "What was done"
 endless task update <id> <id2> ... --status ready    # bulk update
-endless task update <id> --text-file <path> --keep-status   # edit, infer nothing
+endless task update <id> --plan-file <path> --keep-status   # edit, infer nothing
 endless task update <id> --clear analysis            # empty a field, on purpose
 ```
 
-Attaching a non-empty plan (`--text`) to a `unplanned` task moves it to `submitted` (spec-complete, awaiting approval — **not** `ready`, which now means human-approved). Applies on both `task add` and `task update`. An explicit `--status` in the same call always wins. When the description alone is a sufficient spec (no plan text), run `task submit <id>` to reach `submitted` directly. A human then runs `task approve <id>` to promote `submitted → ready`.
+Attaching a non-empty plan (`--plan`) to a `unplanned` task moves it to `submitted` (spec-complete, awaiting approval — **not** `ready`, which now means human-approved). Applies on both `task add` and `task update`. An explicit `--status` in the same call always wins. When the description alone is a sufficient spec (no plan), run `task submit <id>` to reach `submitted` directly. A human then runs `task approve <id>` to promote `submitted → ready`.
 
 ### `--keep-status`: edit the content, infer nothing
 
@@ -361,7 +361,7 @@ Attaching a non-empty plan (`--text`) to a `unplanned` task moves it to `submitt
 
 | The edit | Infers |
 |---|---|
-| non-empty `--text` on an `untriaged`/`unplanned` task | → `submitted` (plan attached = spec-complete) |
+| non-empty `--plan` on an `untriaged`/`unplanned` task | → `submitted` (plan attached = spec-complete) |
 | a material `--description` change on a pre-work task | → `untriaged` (the spec every later judgment was made against changed) |
 | `--tier 1` on an `untriaged`/`unplanned` task | → `ready` (tier 1 is exempt from planning and triage) |
 
@@ -369,11 +369,11 @@ Attaching a non-empty plan (`--text`) to a `unplanned` task moves it to `submitt
 
 `--keep-status` cannot be combined with `--status`; the call is refused rather than silently resolved. Naming a status is already the explicit way to say what the status should be, and it wins over all three inferences on its own.
 
-**Editing a done task's plan changes nothing but the plan.** There was a fourth inference: a real `--text` change on a `confirmed`/`assumed`/`completed` task flipped it to `revisit`, reading the edit as unshipped scope. Recording what shipped is now an obligation (test 1 above), so that edit is routine and benign — and the flip cost a verification `revisit` cannot walk back. Reopening is still spelled `--status revisit`, and it is your user's call, not an inference.
+**Editing a done task's plan changes nothing but the plan.** There was a fourth inference: a real `--plan` change on a `confirmed`/`assumed`/`completed` task flipped it to `revisit`, reading the edit as unshipped scope. Recording what shipped is now an obligation (test 1 above), so that edit is routine and benign — and the flip cost a verification `revisit` cannot walk back. Reopening is still spelled `--status revisit`, and it is your user's call, not an inference.
 
 ### An empty `--<field>-file` is refused
 
-`--description-file`, `--text-file`, `--analysis-file` and `--outcome-file` write whatever the file holds. When the file comes back empty — a failed extraction, a `sed` that matched nothing — that used to replace the existing content with nothing and print a normal success line. It happened to a 3.5KB analysis, and the content survived only because the session still had it in context.
+`--description-file`, `--plan-file`, `--analysis-file` and `--outcome-file` write whatever the file holds. When the file comes back empty — a failed extraction, a `sed` that matched nothing — that used to replace the existing content with nothing and print a normal success line. It happened to a 3.5KB analysis, and the content survived only because the session still had it in context.
 
 **Zero bytes is never a legitimate value for these fields**, so an empty *or whitespace-only* file is refused. The error names the path, so you can find the step that produced it:
 
@@ -391,7 +391,7 @@ Emptying a field is a separate, explicit act:
 
 ```bash
 endless task update <id> --clear analysis                  # repeatable
-endless task update <id> --clear description --clear text
+endless task update <id> --clear description --clear plan
 ```
 
 `--clear` names the field it erases, so it cannot be produced by a pipeline that went wrong, and it is refused alongside that same field's `--<field>` / `--<field>-file` — two flags writing one column is the ambiguity the guard exists to remove. It is available on `task update`, `epic update` and `decision update`; not on `task add` or the status-transition verbs, where there is nothing yet to clear. The inline `--<field> ''` form still clears too, for the same reason `--clear` is safe: it names the field.

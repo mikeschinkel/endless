@@ -39,7 +39,7 @@ func applySchema(t *testing.T, db *sql.DB) {
 // withTestDB rebinds monitor.DB()'s singleton to a fresh schema-applied DB for
 // the lifetime of t. Restores the previous state on cleanup so tests run
 // sequentially without dbOnce leaking. Use this for any test that exercises a
-// public monitor.* wrapper that calls DB() internally — TouchSession, TaskText,
+// public monitor.* wrapper that calls DB() internally — TouchSession, TaskPlan,
 // BindSessionToTask, etc. Tests must NOT t.Parallel() while the seam is held.
 //
 // The seam also satisfies guardWorktreeDBContext (E-1429) by setting

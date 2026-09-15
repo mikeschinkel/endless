@@ -5,18 +5,18 @@ import (
 	"testing"
 )
 
-// snTask inserts a task with explicit phase/status/text/type so the
-// session-status query's canonicalization and has_text columns can be exercised.
-func snTask(t *testing.T, db *sql.DB, id, projectID int64, status, phase, text string) {
+// snTask inserts a task with explicit phase/status/plan/type so the
+// session-status query's canonicalization and has_plan columns can be exercised.
+func snTask(t *testing.T, db *sql.DB, id, projectID int64, status, phase, plan string) {
 	t.Helper()
-	var textVal any
-	if text != "" {
-		textVal = text
+	var planVal any
+	if plan != "" {
+		planVal = plan
 	}
 	if _, err := db.Exec(
-		`INSERT INTO tasks (id, project_id, title, status, phase, text)
+		`INSERT INTO tasks (id, project_id, title, status, phase, plan)
 		 VALUES (?, ?, ?, ?, ?, ?)`,
-		id, projectID, "task-"+status, status, phase, textVal,
+		id, projectID, "task-"+status, status, phase, planVal,
 	); err != nil {
 		t.Fatalf("snTask id=%d: %v", id, err)
 	}
@@ -175,8 +175,8 @@ func TestSessionStatusRows_RowSetAndDecorations(t *testing.T) {
 	if !s.InFlight {
 		t.Errorf("sibling should be in_flight (live session on it): %+v", s)
 	}
-	if !s.HasText {
-		t.Errorf("sibling has plan text, HasText should be true: %+v", s)
+	if !s.HasPlan {
+		t.Errorf("sibling has a plan, HasPlan should be true: %+v", s)
 	}
 }
 

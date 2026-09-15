@@ -123,6 +123,52 @@ class BriefLenType(click.ParamType):
 BRIEF_LEN = BriefLenType()
 
 
+def retired_option(old, new, is_flag=False):
+    """Keep a renamed option RECOGNISED, and refuse it by name (E-1000).
+
+    The middle road between the two obvious ways to rename a flag, both of which
+    were rejected:
+
+    - A working alias lets the obsolete name survive for years. Two spellings of
+      one field is the problem the rename exists to end, so re-introducing it at
+      the CLI would leave the rename half done forever.
+    - A bare removal gets Click's "No such option: --text", which tells a session
+      nothing about where the field went — and agent muscle memory will keep
+      reaching for the old name long after the rename.
+
+    So the option is still declared (hidden from --help, since nothing should
+    learn it) and fails loudly with the new spelling in the message. `is_flag`
+    must match the retired option's original arity, or the parser will mis-read
+    the value that followed it.
+    """
+    def _callback(ctx, param, value):
+        if value is None or value is False:
+            return None
+        raise click.UsageError(
+            f"{old} was renamed to {new}.\n"
+            f"  The old name is still recognised, so this is a pointer rather "
+            f"than \"no such option\" — but it no longer works. Re-run with {new}."
+        )
+
+    return click.option(
+        old, f"_retired{old.replace('-', '_')}",
+        is_flag=is_flag, default=False if is_flag else None,
+        expose_value=False, hidden=True, callback=_callback,
+        help=f"Retired: use {new}.",
+    )
+
+
+def retired_content_options(old, new):
+    """The `--<old>` / `--<old>-file` pair of a renamed content field, retired
+    together. Both arities are declared so `--text-file plan.md` is refused by
+    name rather than parsed as `--text` with a stray argument."""
+    def _decorate(fn):
+        return retired_option(f"--{old}-file", f"--{new}-file")(
+            retired_option(f"--{old}", f"--{new}")(fn)
+        )
+    return _decorate
+
+
 class DecisionIDType(click.ParamType):
     """Click parameter type that accepts decision IDs with optional ED- prefix.
 
@@ -1921,15 +1967,16 @@ def task_list(project, show_all, status, phase, tier, parent_id, related_to_id, 
               help="Hide description")
 @click.option("--analysis", "show_analysis", is_flag=True,
               help="Show analysis field")
-@click.option("--text", "show_text", is_flag=True,
-              help="Show text field")
+@retired_option("--text", "--plan", is_flag=True)
+@click.option("--plan", "show_plan_field", is_flag=True,
+              help="Show plan field")
 @click.option("--children", "show_children", is_flag=True,
               help="Show direct children")
 @click.option("--outcome", "show_outcome", is_flag=True,
               help="Show the full outcome field (hidden by default; a "
                    "char-count placeholder shows otherwise)")
 @click.option("--all-fields", "all_fields", is_flag=True,
-              help="Show every content section (description, analysis, text, "
+              help="Show every content section (description, analysis, plan, "
                    "outcome, children)")
 @click.option("--brief", "brief", is_flag=False, flag_value=str(BRIEF_CHARS),
               default=None, type=BRIEF_LEN, metavar="[N]",
@@ -1946,16 +1993,16 @@ def task_list(project, show_all, status, phase, tier, parent_id, related_to_id, 
               help="Page colorized output through less (wheel-scrollable)")
 @click.option("--no-color", is_flag=True,
               help="Disable ANSI color even on a TTY")
-def task_show(item_ids, no_description, show_analysis, show_text,
+def task_show(item_ids, no_description, show_analysis, show_plan_field,
               show_children, show_outcome, all_fields, brief, llm, as_json,
               paged, no_color):
     """Show detail for one or more tasks."""
     from endless.task_cmd import detail_item
     if all_fields:
-        show_analysis = show_text = show_children = show_outcome = True
+        show_analysis = show_plan_field = show_children = show_outcome = True
     for item_id in item_ids:
         detail_item(item_id, show_description=not no_description,
-                    show_analysis=show_analysis, show_text=show_text,
+                    show_analysis=show_analysis, show_plan=show_plan_field,
                     show_children=show_children, show_outcome=show_outcome,
                     llm=llm, as_json=as_json, paged=paged, no_color=no_color,
                     brief=brief)
@@ -2214,15 +2261,16 @@ def task_unsettled(item_id, project, show_all, include_settled, limit, llm, as_j
               help="Filter by phase")
 @click.option("--parent", "parent_id", default=None,
               help="Filter to children of this task (e.g. E-101), or 'none' for root tasks")
-@click.option("--text", "search_text", is_flag=True,
-              help="Also search in text field")
+@retired_option("--text", "--plan", is_flag=True)
+@click.option("--plan", "search_plan", is_flag=True,
+              help="Also search in plan field")
 @click.option("--llm", is_flag=True,
               help="Token-efficient output for LLMs")
 @click.option("--json", "as_json", is_flag=True,
               help="JSON output")
 @rowcap.limit_options
 def task_search(query, project, show_all, status, phase, parent_id,
-                search_text, limit, llm, as_json, no_limit):
+                search_plan, limit, llm, as_json, no_limit):
     """Search tasks by query string.
 
     The count under the table is the number of MATCHES, not the number of rows
@@ -2233,12 +2281,12 @@ def task_search(query, project, show_all, status, phase, parent_id,
     search_tasks(query, project_name=project, show_all=show_all,
                  status_filter=status, phase_filter=phase,
                  parent_id=parent_val,
-                 search_text=search_text,
+                 search_plan=search_plan,
                  limit=limit, no_limit=no_limit, llm=llm, as_json=as_json)
 
 
 # ─── inline-content path gate (E-1744) ───────────────────────────────────────
-# Inline flags (--text, --outcome, --description, --analysis) store their argument
+# Inline flags (--plan, --outcome, --description, --analysis) store their argument
 # verbatim. Passing a file *path* silently stores the path and discards the intended
 # content — the corruption that lost E-1626/E-1564. Every inline/file flag pair
 # funnels through _resolve_content_flag, so the gate lives here and covers all
@@ -2517,7 +2565,7 @@ def _guard_content_rules(content, name, allow_paths, whole_value_checked=False):
 # ─── empty-file gate (E-2008) ────────────────────────────────────────────────
 # `--<name>-file` writes whatever the file holds, so a path that is empty — or
 # produced by an extraction that silently yielded nothing — replaced existing
-# description/text/analysis/outcome content with nothing and reported success.
+# description/plan/analysis/outcome content with nothing and reported success.
 # Observed on E-1817: a sed round-trip produced a zero-byte file and
 # `task update --analysis-file` wrote it over 3.5KB, recoverable only because
 # the session still had the content in context.
@@ -2529,7 +2577,7 @@ def _guard_content_rules(content, name, allow_paths, whole_value_checked=False):
 # trail claiming it was intended. Clearing is instead an explicit, field-named
 # act (`--clear <field>`, below) that a failed pipeline cannot reach by accident.
 
-CLEARABLE_CONTENT_FIELDS = ("description", "text", "analysis", "outcome")
+CLEARABLE_CONTENT_FIELDS = ("description", "plan", "analysis", "outcome")
 
 
 def _describe_empty_file(content):
@@ -2624,10 +2672,11 @@ def _apply_clear_flags(clear_fields, resolved):
               help="Longer description of the task (inline)")
 @click.option("--description-file", default=None,
               help="Load the task description from a file")
-@click.option("--text", default=None,
-              help="Full task text / plan content (inline)")
-@click.option("--text-file", default=None,
-              help="Load the full task text / plan from a file")
+@retired_content_options("text", "plan")
+@click.option("--plan", "plan_text", default=None,
+              help="Full implementation plan (inline)")
+@click.option("--plan-file", default=None,
+              help="Load the full implementation plan from a file")
 @click.option("--analysis", "analysis_text", default=None,
               help="Analysis content (inline)")
 @click.option("--analysis-file", default=None,
@@ -2676,7 +2725,7 @@ def _apply_clear_flags(clear_fields, resolved):
 @click.option("--allow-path", "allow_paths", multiple=True,
               help="Regex matching an absolute path to permit in inline content "
                    "(repeatable; escape hatch for the path gate).")
-def task_add(title, description, description_file, text, text_file, analysis_text, analysis_file, phase, project, parent, after, task_type, status, tier, force,
+def task_add(title, description, description_file, plan_text, plan_file, analysis_text, analysis_file, phase, project, parent, after, task_type, status, tier, force,
              justification,
              blocks_ids, blocked_by_ids, relates_to_ids, implements_ids,
              cleans_up_ids, cleaned_up_by_ids, duplicates_ids, replaces_ids,
@@ -2684,10 +2733,10 @@ def task_add(title, description, description_file, text, text_file, analysis_tex
     """Add a task."""
     from endless.task_cmd import add_item, parse_tier, link_tasks, print_add_hints
     description = _resolve_content_flag(description, description_file, "description", allow_paths)
-    text = _resolve_content_flag(text, text_file, "text", allow_paths)
+    plan_text = _resolve_content_flag(plan_text, plan_file, "plan", allow_paths)
     analysis_text = _resolve_content_flag(analysis_text, analysis_file, "analysis", allow_paths)
     tier_val = parse_tier(tier) if tier else None
-    new_id = add_item(title, description=description, text=text, analysis=analysis_text,
+    new_id = add_item(title, description=description, plan=plan_text, analysis=analysis_text,
                       phase=phase, project_name=project, after=after, parent_id=parent,
                       task_type=task_type, status=status, tier=tier_val, force=force,
                       justification=justification)
@@ -2723,10 +2772,11 @@ def task_add(title, description, description_file, text, text_file, analysis_tex
               help="New description (inline)")
 @click.option("--description-file", default=None,
               help="Load the new description from a file")
-@click.option("--text", default=None,
-              help="Full task text / plan content (inline)")
-@click.option("--text-file", default=None,
-              help="Load the full task text / plan from a file")
+@retired_content_options("text", "plan")
+@click.option("--plan", "plan_text", default=None,
+              help="Full implementation plan (inline)")
+@click.option("--plan-file", default=None,
+              help="Load the full implementation plan from a file")
 @click.option("--parent", type=TASK_ID, default=None,
               help="Set parent task ID (0 to make root)")
 @click.option("--phase", default=None,
@@ -2762,7 +2812,7 @@ def task_add(title, description, description_file, text, text_file, analysis_tex
               type=click.Choice(CLEARABLE_CONTENT_FIELDS),
               help="Erase a content field, naming it (repeatable). --<field>-file "
                    "refuses an empty file, so this is the deliberate way to empty "
-                   "description/text/analysis/outcome. Conflicts with the same "
+                   "description/plan/analysis/outcome. Conflicts with the same "
                    "field's --<field>/--<field>-file.")
 @click.option("--duplicates", "duplicates_ids", type=TASK_ID, multiple=True,
               help="Task ID(s) each named task duplicates — same concern, filed "
@@ -2771,19 +2821,19 @@ def task_add(title, description, description_file, text, text_file, analysis_tex
               help="Task ID(s) each named task supersedes (repeatable). Records "
                    "the relation only; use `task replace <old> --by <new>` to also "
                    "close the replaced task.")
-def task_update(item_ids, status, title, description, description_file, text, text_file, parent, phase, tier,
+def task_update(item_ids, status, title, description, description_file, plan_text, plan_file, parent, phase, tier,
                 task_type, analysis_text, analysis_file, force, outcome, outcome_file, justification, allow_paths,
                 keep_status, clear_fields, duplicates_ids, replaces_ids):
     """Update fields on one or more tasks."""
     from endless.task_cmd import update_plan, parse_tier, link_tasks
     resolved = _apply_clear_flags(clear_fields, {
         "description": _resolve_content_flag(description, description_file, "description", allow_paths, clearable=True),
-        "text": _resolve_content_flag(text, text_file, "text", allow_paths, clearable=True),
+        "plan": _resolve_content_flag(plan_text, plan_file, "plan", allow_paths, clearable=True),
         "analysis": _resolve_content_flag(analysis_text, analysis_file, "analysis", allow_paths, clearable=True),
         "outcome": _resolve_content_flag(outcome, outcome_file, "outcome", allow_paths, clearable=True),
     })
     description = resolved["description"]
-    text = resolved["text"]
+    plan_text = resolved["plan"]
     analysis_text = resolved["analysis"]
     outcome = resolved["outcome"]
     tier_val = parse_tier(tier) if tier else None
@@ -2792,14 +2842,14 @@ def task_update(item_ids, status, title, description, description_file, text, te
     # nothing at all was passed — so it is skipped, not weakened, when the only
     # flags given are relations.
     edits_a_field = any(v is not None for v in (
-        status, title, description, text, parent, phase, tier, task_type,
+        status, title, description, plan_text, parent, phase, tier, task_type,
         analysis_text, outcome, justification,
     ))
     relations_only = not edits_a_field and (duplicates_ids or replaces_ids)
     for item_id in item_ids:
         if not relations_only:
             update_plan(item_id, status=status, title=title,
-                        description=description, text=text,
+                        description=description, plan=plan_text,
                         parent_id=parent,
                         phase=phase, tier=tier_val, task_type=task_type,
                         analysis=analysis_text,
@@ -3601,10 +3651,11 @@ def epic_cmd():
               help="Longer description of the epic (inline)")
 @click.option("--description-file", default=None,
               help="Load the epic description from a file")
-@click.option("--text", default=None,
-              help="Full epic text / plan content (inline)")
-@click.option("--text-file", default=None,
-              help="Load the full epic text / plan from a file")
+@retired_content_options("text", "plan")
+@click.option("--plan", "plan_text", default=None,
+              help="Full implementation plan (inline)")
+@click.option("--plan-file", default=None,
+              help="Load the full implementation plan from a file")
 @click.option("--phase", default="now",
               type=click.Choice(["urgent", "now", "next", "later", "maybe"]),
               help="Phase: urgent, now, next, later, maybe (default: now)")
@@ -3643,7 +3694,7 @@ def epic_cmd():
 @click.option("--allow-path", "allow_paths", multiple=True,
               help="Regex matching an absolute path to permit in inline content "
                    "(repeatable; escape hatch for the path gate).")
-def epic_add(title, description, description_file, text, text_file, phase, project,
+def epic_add(title, description, description_file, plan_text, plan_file, phase, project,
              parent, after, status, tier, force,
              blocks_ids, blocked_by_ids, relates_to_ids, implements_ids,
              cleans_up_ids, cleaned_up_by_ids, duplicates_ids, replaces_ids,
@@ -3652,9 +3703,9 @@ def epic_add(title, description, description_file, text, text_file, phase, proje
     from endless.epic_cmd import add_epic
     from endless.task_cmd import parse_tier, link_tasks
     description = _resolve_content_flag(description, description_file, "description", allow_paths)
-    text = _resolve_content_flag(text, text_file, "text", allow_paths)
+    plan_text = _resolve_content_flag(plan_text, plan_file, "plan", allow_paths)
     tier_val = parse_tier(tier) if tier else None
-    new_id = add_epic(title, description=description, text=text,
+    new_id = add_epic(title, description=description, plan=plan_text,
                       phase=phase, project_name=project, after=after,
                       parent_id=parent, status=status, tier=tier_val, force=force)
     if new_id is None:
@@ -3720,30 +3771,31 @@ def epic_list(project, show_all, status, phase, tier, parent_id, sort,
               help="Hide description")
 @click.option("--analysis", "show_analysis", is_flag=True,
               help="Show analysis field")
-@click.option("--text", "show_text", is_flag=True,
-              help="Show text field")
+@retired_option("--text", "--plan", is_flag=True)
+@click.option("--plan", "show_plan_field", is_flag=True,
+              help="Show plan field")
 @click.option("--no-children", is_flag=True,
               help="Hide child tasks (shown by default)")
 @click.option("--outcome", "show_outcome", is_flag=True,
               help="Show the full outcome field (hidden by default; a "
                    "char-count placeholder shows otherwise)")
 @click.option("--all-fields", "all_fields", is_flag=True,
-              help="Show every content section (description, analysis, text, "
+              help="Show every content section (description, analysis, plan, "
                    "outcome, children)")
 @click.option("--llm", is_flag=True,
               help="Token-efficient output for LLMs")
 @click.option("--json", "as_json", is_flag=True,
               help="JSON output")
-def epic_show(item_ids, no_description, show_analysis, show_text,
+def epic_show(item_ids, no_description, show_analysis, show_plan_field,
               no_children, show_outcome, all_fields, llm, as_json):
     """Show detail for one or more epics (children shown by default)."""
     from endless.epic_cmd import show_epic
     show_children = not no_children
     if all_fields:
-        show_analysis = show_text = show_children = show_outcome = True
+        show_analysis = show_plan_field = show_children = show_outcome = True
     for item_id in item_ids:
         show_epic(item_id, show_description=not no_description,
-                  show_analysis=show_analysis, show_text=show_text,
+                  show_analysis=show_analysis, show_plan=show_plan_field,
                   show_children=show_children, show_outcome=show_outcome,
                   llm=llm, as_json=as_json)
 
@@ -3757,10 +3809,11 @@ def epic_show(item_ids, no_description, show_analysis, show_text,
               help="New description (inline)")
 @click.option("--description-file", default=None,
               help="Load the new description from a file")
-@click.option("--text", default=None,
-              help="Full epic text / plan content (inline)")
-@click.option("--text-file", default=None,
-              help="Load the full epic text / plan from a file")
+@retired_content_options("text", "plan")
+@click.option("--plan", "plan_text", default=None,
+              help="Full implementation plan (inline)")
+@click.option("--plan-file", default=None,
+              help="Load the full implementation plan from a file")
 @click.option("--parent", type=TASK_ID, default=None,
               help="Set parent task ID (0 to make root)")
 @click.option("--phase", default=None,
@@ -3785,10 +3838,10 @@ def epic_show(item_ids, no_description, show_analysis, show_text,
               type=click.Choice(CLEARABLE_CONTENT_FIELDS),
               help="Erase a content field, naming it (repeatable). --<field>-file "
                    "refuses an empty file, so this is the deliberate way to empty "
-                   "description/text/analysis/outcome. Conflicts with the same "
+                   "description/plan/analysis/outcome. Conflicts with the same "
                    "field's --<field>/--<field>-file.")
-def epic_update(item_ids, status, title, description, description_file, text,
-                text_file, parent, phase, tier, analysis_text, analysis_file,
+def epic_update(item_ids, status, title, description, description_file, plan_text,
+                plan_file, parent, phase, tier, analysis_text, analysis_file,
                 force, outcome, outcome_file, allow_paths, clear_fields):
     """Update one or more epics (promotes type to epic).
 
@@ -3799,18 +3852,18 @@ def epic_update(item_ids, status, title, description, description_file, text,
     from endless.task_cmd import parse_tier
     resolved = _apply_clear_flags(clear_fields, {
         "description": _resolve_content_flag(description, description_file, "description", allow_paths, clearable=True),
-        "text": _resolve_content_flag(text, text_file, "text", allow_paths, clearable=True),
+        "plan": _resolve_content_flag(plan_text, plan_file, "plan", allow_paths, clearable=True),
         "analysis": _resolve_content_flag(analysis_text, analysis_file, "analysis", allow_paths, clearable=True),
         "outcome": _resolve_content_flag(outcome, outcome_file, "outcome", allow_paths, clearable=True),
     })
     description = resolved["description"]
-    text = resolved["text"]
+    plan_text = resolved["plan"]
     analysis_text = resolved["analysis"]
     outcome = resolved["outcome"]
     tier_val = parse_tier(tier) if tier else None
     for item_id in item_ids:
         update_epic(item_id, status=status, title=title,
-                    description=description, text=text, parent_id=parent,
+                    description=description, plan=plan_text, parent_id=parent,
                     phase=phase, tier=tier_val, analysis=analysis_text,
                     outcome=outcome, force=force)
 

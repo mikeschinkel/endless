@@ -1,12 +1,12 @@
-"""Tests for E-1445: `task update --text` never creates a worktree.
+"""Tests for E-1445: `task update --plan` never creates a worktree.
 
 Rescinds the E-1216 auto-create default. The contract now:
-  - `task update --text` / `task add --text` write `tasks.text` (DB) and, IF a
+  - `task update --plan` / `task add --plan` write `tasks.plan` (DB) and, IF a
     worktree already exists, mirror the content into
     `<worktree>/.endless/plans/E-NNN.md`. They NEVER create a worktree.
   - The plan file otherwise materializes when the worktree is born at
     claim/spawn (`worktree_cmd.create_task_worktree` -> `_materialize_plan_file`,
-    which reads `tasks.text` via the endless-session-query Go helper).
+    which reads `tasks.plan` via the endless-session-query Go helper).
   - `--no-create-worktree` is removed (the command never creates one).
   - Plan files NEVER land in main's working tree.
 """
@@ -44,15 +44,15 @@ def test_main_root_for_task_resolves_registered_path(seeded_project_at_cwd):
     assert root == seeded_project_at_cwd
 
 
-# ─── update/add --text no longer create a worktree (the fix) ───────────────────
+# ─── update/add --plan no longer create a worktree (the fix) ───────────────────
 
 
-def test_update_text_does_not_create_worktree(tmp_path, seeded_project_at_cwd):
+def test_update_plan_does_not_create_worktree(tmp_path, seeded_project_at_cwd):
     tid = _add_minimal_task()
     plan_src = tmp_path / "plan.md"
     plan_src.write_text("# plan\nbody\n")
 
-    task_cmd.update_plan(tid, text=plan_src.read_text())
+    task_cmd.update_plan(tid, plan=plan_src.read_text())
 
     # No worktree, no sandbox-triggering side effects, nothing on disk.
     assert task_cmd._worktree_for_task(tid) is None
@@ -62,23 +62,23 @@ def test_update_text_does_not_create_worktree(tmp_path, seeded_project_at_cwd):
     assert not (
         seeded_project_at_cwd / ".endless" / "plans" / f"E-{tid}.md"
     ).exists()
-    # The DB IS updated — tasks.text is the source of truth.
-    row = db.query("SELECT text FROM tasks WHERE id = ?", (tid,))
-    assert row[0]["text"] == "# plan\nbody\n"
+    # The DB IS updated — tasks.plan is the source of truth.
+    row = db.query("SELECT plan FROM tasks WHERE id = ?", (tid,))
+    assert row[0]["plan"] == "# plan\nbody\n"
 
 
-def test_add_text_does_not_create_worktree(tmp_path, seeded_project_at_cwd):
+def test_add_plan_does_not_create_worktree(tmp_path, seeded_project_at_cwd):
     plan_src = tmp_path / "plan.md"
     plan_src.write_text("# from add\nbody\n")
 
-    item_id = task_cmd.add_item(title="Refactor the buffer", text=plan_src.read_text())
+    item_id = task_cmd.add_item(title="Refactor the buffer", plan=plan_src.read_text())
 
     assert task_cmd._worktree_for_task(item_id) is None
     assert not (
         seeded_project_at_cwd / ".endless" / "worktrees" / f"e-{item_id}"
     ).exists()
-    row = db.query("SELECT text FROM tasks WHERE id = ?", (item_id,))
-    assert row[0]["text"] == "# from add\nbody\n"
+    row = db.query("SELECT plan FROM tasks WHERE id = ?", (item_id,))
+    assert row[0]["plan"] == "# from add\nbody\n"
 
 
 # ─── mirror into an existing worktree ─────────────────────────────────────────
@@ -100,7 +100,7 @@ def _git_init_wt(wt) -> None:
     )
 
 
-def test_update_text_mirrors_into_existing_worktree(
+def test_update_plan_mirrors_into_existing_worktree(
     tmp_path, seeded_project_at_cwd, monkeypatch,
 ):
     tid = _add_minimal_task()
@@ -111,7 +111,7 @@ def test_update_text_mirrors_into_existing_worktree(
 
     plan_src = tmp_path / "plan.md"
     plan_src.write_text("# v2\n")
-    task_cmd.update_plan(tid, text=plan_src.read_text())
+    task_cmd.update_plan(tid, plan=plan_src.read_text())
 
     mirrored = fake_wt / ".endless" / "plans" / f"E-{tid}.md"
     assert mirrored.read_text() == "# v2\n"
@@ -122,7 +122,7 @@ def test_update_text_mirrors_into_existing_worktree(
     ).stdout.strip()
     assert log == f"Endless: update plan for E-{tid}"
     # And re-running with the same content is a no-op (no second commit).
-    task_cmd.update_plan(tid, text=plan_src.read_text())
+    task_cmd.update_plan(tid, plan=plan_src.read_text())
     count = subprocess.run(
         ["git", "-C", str(fake_wt), "rev-list", "--count", "HEAD"],
         capture_output=True, text=True, check=True,
@@ -201,13 +201,13 @@ def test_confirm_outcome_mirrors_into_worktree(
 def _fake_run_factory(stdout: str, returncode: int = 0):
     # Capture the real subprocess.run before any test-time monkeypatch so the
     # E-1525 commit step (git status/add/commit) can pass through to a real
-    # git repo while the endless-go task-text spawn stays mocked.
+    # git repo while the endless-go task-plan spawn stays mocked.
     real_run = subprocess.run
 
     def _run(argv, **kwargs):
         if argv and argv[0] == "git":
             return real_run(argv, **kwargs)
-        # "task-field" is the subcommand (E-1747 generalized task-text); it
+        # "task-field" is the subcommand (E-1747 generalized task-plan); it
         # may be preceded by the E-1429 --config-dir context pair, so assert
         # membership, not position.
         assert "task-field" in argv
@@ -217,7 +217,7 @@ def _fake_run_factory(stdout: str, returncode: int = 0):
     return _run
 
 
-def test_materialize_plan_file_writes_from_db_text(tmp_path, monkeypatch):
+def test_materialize_plan_file_writes_from_db_plan(tmp_path, monkeypatch):
     wt = tmp_path / "wt"
     wt.mkdir()
     _git_init_wt(wt)
@@ -238,7 +238,7 @@ def test_materialize_plan_file_writes_from_db_text(tmp_path, monkeypatch):
     assert log == "Endless: add plan for E-777"
 
 
-def test_materialize_plan_file_skips_when_db_text_empty(tmp_path, monkeypatch):
+def test_materialize_plan_file_skips_when_db_plan_empty(tmp_path, monkeypatch):
     wt = tmp_path / "wt"
     wt.mkdir()
     monkeypatch.setattr(worktree_cmd.shutil, "which", lambda _b: "/fake/esq")
@@ -291,7 +291,7 @@ def test_materialize_task_docs_seeds_all_fields(tmp_path, monkeypatch):
     monkeypatch.setattr(
         worktree_cmd.subprocess, "run",
         _fake_field_run_factory({
-            "text": "# plan\n",
+            "plan": "# plan\n",
             "outcome": "done\n",
             # analysis intentionally absent → no file
         }),
@@ -321,7 +321,7 @@ def test_cli_update_no_create_worktree_flag_removed(
     plan_src.write_text("# plan\n")
     result = CliRunner().invoke(main, [
         "task", "update", f"E-{tid}",
-        "--text-file", str(plan_src),
+        "--plan-file", str(plan_src),
         "--no-create-worktree",
     ])
     assert result.exit_code != 0
@@ -333,19 +333,19 @@ def test_cli_add_no_create_worktree_flag_removed(tmp_path, seeded_project_at_cwd
     plan_src.write_text("# plan\n")
     result = CliRunner().invoke(main, [
         "task", "add", "Refactor something new",
-        "--text-file", str(plan_src),
+        "--plan-file", str(plan_src),
         "--no-create-worktree",
     ])
     assert result.exit_code != 0
     assert "no such option" in result.output.lower()
 
 
-def test_cli_update_text_succeeds_without_worktree(tmp_path, seeded_project_at_cwd):
+def test_cli_update_plan_succeeds_without_worktree(tmp_path, seeded_project_at_cwd):
     tid = _add_minimal_task()
     plan_src = tmp_path / "plan.md"
     plan_src.write_text("# plan\n")
     result = CliRunner().invoke(main, [
-        "task", "update", f"E-{tid}", "--text-file", str(plan_src),
+        "task", "update", f"E-{tid}", "--plan-file", str(plan_src),
     ])
     assert result.exit_code == 0, result.output
     assert "Worktree created" not in result.output

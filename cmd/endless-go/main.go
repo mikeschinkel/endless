@@ -9,7 +9,7 @@
 //	endless-go hook          prompt|claude|codex
 //	endless-go sandbox       run|enter|init|bind|list|prune|destroy
 //	endless-go tmux          apply|status-line|active-id|show-menu
-//	endless-go session-query list-live|task-text|resume-target
+//	endless-go session-query list-live|task-plan|resume-target
 //	endless-go worktree      in-use|ledger-orphans  (the shared "is this worktree
 //	                         still in use" guard; and which of a branch's ledger
 //	                         commits the base branch provably already holds)
@@ -325,7 +325,7 @@ func usage(w *os.File) {
 	fmt.Fprintln(w, "  hook           prompt|claude|codex")
 	fmt.Fprintln(w, "  sandbox        run|enter|init|bind|list|prune|destroy")
 	fmt.Fprintln(w, "  tmux           apply|status-line|active-id|show-menu")
-	fmt.Fprintln(w, "  session-query  list-live|task-text|resume-target")
+	fmt.Fprintln(w, "  session-query  list-live|task-plan|resume-target")
 	fmt.Fprintln(w, "  worktree       in-use  (is this worktree still in use?)")
 	fmt.Fprintln(w, "  session-status render the per-session status view (--monitor loops it)")
 	fmt.Fprintln(w, "  project-status render the project attention board (--monitor loops it)")

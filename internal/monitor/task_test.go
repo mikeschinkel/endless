@@ -5,64 +5,64 @@ import (
 	"testing"
 )
 
-// TestTaskText_ReturnsText pins the happy path: a tasks row whose text
+// TestTaskPlan_ReturnsPlan pins the happy path: a tasks row whose text
 // column holds non-empty content is returned verbatim. This is the
-// content endless-go session-query task-text writes to stdout for the
+// content endless-go session-query task-plan writes to stdout for the
 // Python claim flow (E-894, E-1445).
-func TestTaskText_ReturnsText(t *testing.T) {
+func TestTaskPlan_ReturnsPlan(t *testing.T) {
 	db := withTestDB(t)
 	seedProject(t, db, 1, "proj-test-1", "/tmp/proj-test-1")
 	want := "# Plan\n\nDo the thing.\n"
 	if _, err := db.Exec(
-		"INSERT INTO tasks (id, project_id, title, status, text) VALUES (?, ?, ?, ?, ?)",
+		"INSERT INTO tasks (id, project_id, title, status, plan) VALUES (?, ?, ?, ?, ?)",
 		42, 1, "test task", "ready", want,
 	); err != nil {
 		t.Fatalf("seed task: %v", err)
 	}
 
-	got, err := TaskText(42)
+	got, err := TaskPlan(42)
 	if err != nil {
-		t.Fatalf("TaskText: %v", err)
+		t.Fatalf("TaskPlan: %v", err)
 	}
 	if got != want {
-		t.Errorf("TaskText = %q, want %q", got, want)
+		t.Errorf("TaskPlan = %q, want %q", got, want)
 	}
 }
 
-// TestTaskText_EmptyTextReturnsEmpty pins the COALESCE branch: when text
+// TestTaskPlan_EmptyPlanReturnsEmpty pins the COALESCE branch: when text
 // is NULL (no plan attached), the documented contract is to return ""
 // with no error so the caller (create_task_worktree) treats it as
 // "no plan file to materialize".
-func TestTaskText_EmptyTextReturnsEmpty(t *testing.T) {
+func TestTaskPlan_EmptyPlanReturnsEmpty(t *testing.T) {
 	db := withTestDB(t)
 	seedProject(t, db, 1, "proj-test-1", "/tmp/proj-test-1")
 	if _, err := db.Exec(
-		"INSERT INTO tasks (id, project_id, title, status, text) VALUES (?, ?, ?, ?, NULL)",
+		"INSERT INTO tasks (id, project_id, title, status, plan) VALUES (?, ?, ?, ?, NULL)",
 		43, 1, "test task no text", "ready",
 	); err != nil {
 		t.Fatalf("seed task: %v", err)
 	}
 
-	got, err := TaskText(43)
+	got, err := TaskPlan(43)
 	if err != nil {
-		t.Fatalf("TaskText: %v", err)
+		t.Fatalf("TaskPlan: %v", err)
 	}
 	if got != "" {
-		t.Errorf("TaskText = %q, want \"\"", got)
+		t.Errorf("TaskPlan = %q, want \"\"", got)
 	}
 }
 
-// TestTaskText_MissingRowReturnsEmpty pins the sql.ErrNoRows branch: an
+// TestTaskPlan_MissingRowReturnsEmpty pins the sql.ErrNoRows branch: an
 // unknown task id returns "", nil so the Python caller can run the
 // materialize step uniformly for present and absent rows.
-func TestTaskText_MissingRowReturnsEmpty(t *testing.T) {
+func TestTaskPlan_MissingRowReturnsEmpty(t *testing.T) {
 	withTestDB(t)
-	got, err := TaskText(999999)
+	got, err := TaskPlan(999999)
 	if err != nil {
-		t.Fatalf("TaskText: %v", err)
+		t.Fatalf("TaskPlan: %v", err)
 	}
 	if got != "" {
-		t.Errorf("TaskText on missing row = %q, want \"\"", got)
+		t.Errorf("TaskPlan on missing row = %q, want \"\"", got)
 	}
 }
 

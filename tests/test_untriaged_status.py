@@ -9,9 +9,9 @@ Covered here:
     still win.
   - No deadlock: a freshly filed task can leave `untriaged` with no triager
     present (the `submit` route lives in test_submit_approve.py; the
-    plan-attach route in test_text_auto_promote.py).
+    plan-attach route in test_plan_auto_promote.py).
   - A material description edit resets a pre-work task to `untriaged`, with
-    its three guards (no-op on identical text, `--keep-status`, and the
+    its three guards (no-op on identical description, `--keep-status`, and the
     excluded statuses).
   - `untriaged` is not offered by `task next`, but still blocks dependents.
 """
@@ -174,7 +174,7 @@ def test_description_edit_with_plan_text_lands_submitted(seeded_project_at_cwd):
     assert _status_of(item_id) == "untriaged"
 
     task_cmd.update_plan(
-        item_id=item_id, description="materially different", text="# plan\nbody\n"
+        item_id=item_id, description="materially different", plan="# plan\nbody\n"
     )
     assert _status_of(item_id) == "submitted"
 
@@ -189,7 +189,7 @@ def test_description_edit_with_plan_text_still_costs_ready_its_approval(
     _set_status(item_id, "ready")
 
     task_cmd.update_plan(
-        item_id=item_id, description="materially different", text="# plan\nbody\n"
+        item_id=item_id, description="materially different", plan="# plan\nbody\n"
     )
     assert _status_of(item_id) == "submitted"
 

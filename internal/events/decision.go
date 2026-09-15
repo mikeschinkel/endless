@@ -689,7 +689,7 @@ func replayLegacyDecisionCreated(db *sql.DB, evt *Event, p *TaskCreatedPayload) 
 		`INSERT INTO decisions
 		   (id, project_id, title, description, text, status, created_at, updated_at)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-		decisionID, projectID, p.Title, p.Description, p.Text, status, ts, ts,
+		decisionID, projectID, p.Title, p.Description, p.PlanText(), status, ts, ts,
 	)
 	if err != nil {
 		return fmt.Errorf("insert legacy decision %d: %w", decisionID, err)

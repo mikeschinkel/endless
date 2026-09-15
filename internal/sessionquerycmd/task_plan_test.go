@@ -53,10 +53,10 @@ func endlessGoBin(t *testing.T) string {
 }
 
 // seedTaskDB writes an endless.db at $cfgDir/endless.db with the schema
-// applied and one tasks row whose text is `text`. Returns the seeded task
+// applied and one tasks row whose plan is `plan`. Returns the seeded task
 // id. Use with --config-dir so the gate is satisfied and the binary opens
 // THIS db.
-func seedTaskDB(t *testing.T, cfgDir string, id int64, text string) {
+func seedTaskDB(t *testing.T, cfgDir string, id int64, plan string) {
 	t.Helper()
 	dbPath := filepath.Join(cfgDir, "endless.db")
 	db, err := sql.Open("sqlite", dbPath)
@@ -73,26 +73,26 @@ func seedTaskDB(t *testing.T, cfgDir string, id int64, text string) {
 		t.Fatalf("seed project: %v", err)
 	}
 	if _, err := db.Exec(
-		"INSERT INTO tasks (id, project_id, title, status, text) VALUES (?, 1, ?, 'ready', ?)",
-		id, "seed task", text,
+		"INSERT INTO tasks (id, project_id, title, status, plan) VALUES (?, 1, ?, 'ready', ?)",
+		id, "seed task", plan,
 	); err != nil {
 		t.Fatalf("seed task: %v", err)
 	}
 }
 
-// TestTaskText_BinaryReadsSeededRow pins the happy path of the
-// endless-go session-query task-text verb: given a task row with
-// non-empty text, the binary prints exactly that text to stdout and
+// TestTaskPlan_BinaryReadsSeededRow pins the happy path of the
+// endless-go session-query task-plan verb: given a task row with
+// a non-empty plan, the binary prints exactly that plan to stdout and
 // exits 0. This is the contract create_task_worktree relies on to
 // materialize plan files at claim time (E-894, E-1445).
-func TestTaskText_BinaryReadsSeededRow(t *testing.T) {
+func TestTaskPlan_BinaryReadsSeededRow(t *testing.T) {
 	cfgDir := t.TempDir()
 	want := "# Plan\n\nDo the thing.\n"
 	seedTaskDB(t, cfgDir, 42, want)
 
 	bin := endlessGoBin(t)
 	cmd := exec.Command(bin, "--config-dir", cfgDir,
-		"session-query", "task-text", "--id", "42")
+		"session-query", "task-plan", "--id", "42")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("binary exec failed: %v\nout: %s", err, out)
@@ -102,17 +102,17 @@ func TestTaskText_BinaryReadsSeededRow(t *testing.T) {
 	}
 }
 
-// TestTaskText_BinaryMissingRowExitsZeroEmpty pins the documented "no
+// TestTaskPlan_BinaryMissingRowExitsZeroEmpty pins the documented "no
 // plan to materialize" contract: an unknown task id returns "" with
 // exit 0 so the Python caller can run materialize uniformly for
 // present-and-absent rows.
-func TestTaskText_BinaryMissingRowExitsZeroEmpty(t *testing.T) {
+func TestTaskPlan_BinaryMissingRowExitsZeroEmpty(t *testing.T) {
 	cfgDir := t.TempDir()
 	seedTaskDB(t, cfgDir, 42, "present-row")
 
 	bin := endlessGoBin(t)
 	cmd := exec.Command(bin, "--config-dir", cfgDir,
-		"session-query", "task-text", "--id", "9999999")
+		"session-query", "task-plan", "--id", "9999999")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("expected exit 0 on missing row, got %v\nout: %s", err, out)
@@ -122,16 +122,16 @@ func TestTaskText_BinaryMissingRowExitsZeroEmpty(t *testing.T) {
 	}
 }
 
-// TestTaskText_BinaryMissingIdFlagExitsNonZero pins the input-validation
+// TestTaskPlan_BinaryMissingIdFlagExitsNonZero pins the input-validation
 // contract: omitting --id is a usage error, exits non-zero, and prints a
 // message naming the missing flag.
-func TestTaskText_BinaryMissingIdFlagExitsNonZero(t *testing.T) {
+func TestTaskPlan_BinaryMissingIdFlagExitsNonZero(t *testing.T) {
 	cfgDir := t.TempDir()
 	seedTaskDB(t, cfgDir, 42, "present-row")
 
 	bin := endlessGoBin(t)
 	cmd := exec.Command(bin, "--config-dir", cfgDir,
-		"session-query", "task-text")
+		"session-query", "task-plan")
 	out, err := cmd.CombinedOutput()
 	if err == nil {
 		t.Fatalf("expected non-zero exit when --id is omitted, got success\nout: %s", out)

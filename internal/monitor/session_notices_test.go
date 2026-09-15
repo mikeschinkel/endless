@@ -161,7 +161,7 @@ func TestNoticeTrigger_FreeformNeverLeaksContent(t *testing.T) {
 
 	const secret = "the-actual-description-body"
 	if _, err := db.Exec(
-		"UPDATE tasks SET description=?, text=?, analysis=?, notes=? WHERE id=500",
+		"UPDATE tasks SET description=?, plan=?, analysis=?, notes=? WHERE id=500",
 		secret, secret, secret, secret,
 	); err != nil {
 		t.Fatalf("update: %v", err)
@@ -283,6 +283,22 @@ func TestRenderNotice(t *testing.T) {
 				`"tier":{"before":null,"after":3},` +
 				`"status":{"before":"ready","after":"underway"}}`,
 			want: "FYI — E-500 status: ready → underway; tier: — → 3; description added",
+		},
+		{
+			// E-1000 renamed the trigger's key from `text` to `plan`. A notice
+			// already sitting undelivered when the rename landed still carries
+			// the old key, and delivery is one-shot: a row that rendered
+			// nothing would be held back as unrenderable forever rather than
+			// merely losing a field.
+			name:    "a pre-rename notice's `text` key renders as the plan",
+			changes: `{"text":{"before":null,"after":"…"}}`,
+			want:    "FYI — E-500 plan added",
+		},
+		{
+			name: "a pre-rename key alongside its successor does not double up",
+			changes: `{"plan":{"before":"…","after":"…"},` +
+				`"text":{"before":null,"after":"…"}}`,
+			want: "FYI — E-500 plan edited",
 		},
 	}
 	for _, tc := range tests {

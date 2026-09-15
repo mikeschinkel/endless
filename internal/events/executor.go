@@ -432,14 +432,15 @@ func execTaskCreated(db dbQuerier, evt *Event, emit DerivedEmitter) (*ExecuteRes
 
 	// Attaching a non-empty plan at creation moves the task to `submitted`
 	// (spec-complete, awaiting human approval — NOT `ready`, which now means
-	// human-approved). Mirrors task.fields_updated when --text is supplied.
+	// human-approved). Mirrors task.fields_updated when --plan is supplied.
 	// Only fires from a pre-judgment status — an explicit override (e.g. a
 	// tier-1 task created at `ready`, or any other non-default status) is
 	// preserved. E-1845 added `untriaged`, which is now the default `task add`
-	// lands on; without it, `task add --text plan.md` would file a fully planned
-	// task as untriaged and strand it there.
+	// lands on; without it, `task add --plan-file plan.md` would file a fully
+	// planned task as untriaged and strand it there.
+	plan := p.PlanText()
 	status := p.Status
-	if isPreJudgmentStatus(status) && strings.TrimSpace(p.Text) != "" {
+	if isPreJudgmentStatus(status) && strings.TrimSpace(plan) != "" {
 		status = "submitted"
 	}
 
@@ -448,9 +449,9 @@ func execTaskCreated(db dbQuerier, evt *Event, emit DerivedEmitter) (*ExecuteRes
 		notes = p.Notes
 	}
 	_, err = db.Exec(
-		`INSERT INTO tasks (id, project_id, phase, title, description, text, analysis, notes, status, type_id, sort_order, parent_id, tier, created_at, updated_at)
+		`INSERT INTO tasks (id, project_id, phase, title, description, plan, analysis, notes, status, type_id, sort_order, parent_id, tier, created_at, updated_at)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		taskID, projectID, p.Phase, p.Title, p.Description, p.Text, p.Analysis, notes, status, int(typeID),
+		taskID, projectID, p.Phase, p.Title, p.Description, plan, p.Analysis, notes, status, int(typeID),
 		sortOrder, p.ParentID, p.Tier, ts, ts,
 	)
 	if err != nil {
@@ -622,18 +623,39 @@ func execTaskFieldsUpdated(db dbQuerier, evt *Event, emit DerivedEmitter) (*Exec
 	var setClauses []string
 	var args []any
 
+	// "text" and "plan" BOTH write the renamed `plan` column (E-1000). The
+	// executor runs live emissions, which all spell it `plan` now — but it also
+	// runs when an old event is re-applied, and an unknown field here is a hard
+	// error rather than a skip, so dropping the legacy key would turn a
+	// historical payload into a failed apply instead of a correct one.
 	allowedFields := map[string]string{
-		"title": "title", "description": "description", "text": "text",
+		"title": "title", "description": "description",
+		"plan": "plan", legacyPlanKey: "plan",
 		"notes": "notes",
 		"phase": "phase", "tier": "tier",
 		"type": "type_id", "status": "status", "parent_id": "parent_id",
 		"outcome": "outcome", "analysis": "analysis",
 	}
 
+	// planValue is the plan this update writes, under whichever key it arrived,
+	// and hasPlan whether it carries one at all. Both are read again by the
+	// plan-attach promotion below, so resolving the spelling once here is what
+	// keeps the promotion from having to know there are two. The forward key
+	// wins when a payload somehow carries both — otherwise the loop below would
+	// emit `plan = ?` twice in map-iteration order. Mirrored in the projector.
+	planValue, hasForwardPlan := p.Fields["plan"]
+	hasPlan := hasForwardPlan
+	if !hasPlan {
+		planValue, hasPlan = p.Fields[legacyPlanKey]
+	}
+
 	for field, value := range p.Fields {
 		col, ok := allowedFields[field]
 		if !ok {
 			return nil, fmt.Errorf("events: unknown field %q in task.fields_updated", field)
+		}
+		if field == legacyPlanKey && hasForwardPlan {
+			continue
 		}
 		if field == "phase" {
 			phaseStr, ok := value.(string)
@@ -712,14 +734,14 @@ func execTaskFieldsUpdated(db dbQuerier, evt *Event, emit DerivedEmitter) (*Exec
 		hasNewStatus = true
 	}
 
-	// Attaching a non-empty plan (--text) to a pre-judgment task moves it to
+	// Attaching a non-empty plan (--plan) to a pre-judgment task moves it to
 	// `submitted` (spec-complete, awaiting human approval — NOT `ready`,
 	// which now means human-approved). Only fires when the same update does
 	// not already set status explicitly (caller wins).
-	if textVal, hasText := p.Fields["text"]; hasText {
+	if hasPlan {
 		if !hasNewStatus {
-			textStr, _ := textVal.(string)
-			if strings.TrimSpace(textStr) != "" {
+			planStr, _ := planValue.(string)
+			if strings.TrimSpace(planStr) != "" {
 				var currentStatus string
 				if err := db.QueryRow("SELECT status FROM tasks WHERE id = ?",
 					taskID).Scan(&currentStatus); err == nil {
