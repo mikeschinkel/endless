@@ -82,7 +82,7 @@ type Transition struct {
 // being waited on; both now write `idle`. Nothing writes `needs_input`, so the
 // state means exactly what the declaration gate says it means and nothing else,
 // and the rows still carrying it are sessions that registered and never had a
-// turn. Those are surfaced on the attention board to be resolved deliberately,
+// turn. Those are surfaced in `project status` to be resolved deliberately,
 // not migrated away in the dark. TestEveryStateIsWritten names it as the one
 // permitted exception.
 var transitions = []Transition{

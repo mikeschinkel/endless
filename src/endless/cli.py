@@ -542,11 +542,12 @@ def list_cmd(status, group, limit, no_limit):
                   limit=limit, no_limit=no_limit)
 
 
-# E-1976 renamed this command. `project status` now names the attention board
-# below — the project-scoped counterpart to `session status` — and this, the
+# E-1976 renamed this command. `project status` now names the project-scoped
+# counterpart to `session status` — defined further down — and this, the
 # project's metadata card, became `project info`. The pairing that results
-# matches the session verbs exactly: `session show` is the card, `session status`
-# is the board, and now so is the project trio.
+# matches the session verbs exactly: `session show` is the card and
+# `session status` ranks what needs attention; `project info` and
+# `project status` are now those same two.
 @project_cmd.command("info")
 @click.argument("name", default=None, required=False)
 def info(name):

@@ -8,7 +8,7 @@ import (
 	"github.com/mikeschinkel/endless/internal/sessionstate"
 )
 
-// E-2091. The producer for the attention board's first rank.
+// E-2091. The producer for `project status`'s first rank.
 //
 // These drive the handler with SYNTHETIC payloads rather than a live harness,
 // which is the only honest way to test it: the fact under test is what Endless

@@ -19,10 +19,9 @@ endless project monitor --tmux                 # the board in its own two-pane t
 ```
 
 `project info` is the registration card — metadata, notes, dependencies.
-`project status` is the attention board: every claim on your attention across
-every session in the project, loudest first. `project monitor` is the live
-version of the same board, the project-scoped counterpart to
-`endless session monitor`.
+`project status` ranks every claim on your attention across every session in
+the project, loudest first. `project monitor` is the live version of the same
+view, the project-scoped counterpart to `endless session monitor`.
 
 ### Registering a project
 

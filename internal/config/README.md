@@ -82,7 +82,7 @@ Multiplexer preferences.
 
 | Field          | Type     | Meaning |
 | -------------- | -------- | ------- |
-| `session_name` | `string` | Go `text/template` naming the tmux session a project's attention board runs in (`endless project monitor --tmux`). Default `e-{{project}}-monitor`. |
+| `session_name` | `string` | Go `text/template` naming the tmux session `endless project monitor --tmux` opens for a project. Default `e-{{project}}-monitor`. |
 
 `{{project}}` is available as a function, so the setting reads the way you would
 write it; `{{.Project}}` resolves to the same string. The rendered result is

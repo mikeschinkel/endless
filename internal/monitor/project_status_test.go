@@ -9,7 +9,8 @@ import (
 	"github.com/mikeschinkel/endless/internal/sessionstate"
 )
 
-// The project attention board's reads (E-1976).
+// The reads behind `endless project status` / `endless project monitor`
+// (E-1976).
 
 func TestSanitizeTmuxName(t *testing.T) {
 	tests := []struct{ project, want string }{

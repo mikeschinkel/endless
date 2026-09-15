@@ -69,9 +69,10 @@ type EndlessConfig struct {
 // Tmux is the "tmux" object: how Endless names and shapes what it creates in
 // the multiplexer.
 type Tmux struct {
-	// SessionName is the Go text/template rendering the tmux session name for a
-	// project's attention board (E-1976). Empty inherits, and a fully-empty
-	// result falls back to projectstatuscmd's built-in default.
+	// SessionName is the Go text/template rendering the tmux session name that
+	// `endless project monitor --tmux` opens for a project (E-1976). Empty
+	// inherits, and a fully-empty result falls back to projectstatuscmd's
+	// built-in default.
 	//
 	// `{{project}}` is available as a function, so the value reads the way a user
 	// would write it; `{{.Project}}` resolves to the same string for anyone who

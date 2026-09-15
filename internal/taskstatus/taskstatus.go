@@ -93,7 +93,7 @@ const (
 	Active
 
 	// AwaitsUser is work that has stopped and is waiting on a PERSON, in the
-	// order the project attention board ranks them (E-1976): a finished
+	// order `endless project status` ranks them (E-1976): a finished
 	// implementation awaiting verification, a delivered outcome awaiting a read,
 	// a plan awaiting approval.
 	//
@@ -101,8 +101,8 @@ const (
 	// NotActionable answers "may `task next` offer this?", which is also true of
 	// `underway` (someone else has it) and `untriaged` (nobody has looked). This
 	// group answers a narrower question — "is the ball in the user's court?" —
-	// and that is the whole basis on which the board decides a row is worth a
-	// line.
+	// and that is the whole basis on which `project status` decides a row is
+	// worth a line.
 	AwaitsUser
 
 	// ClaimPromotes are the statuses `task claim` promotes to `underway` in

@@ -18,9 +18,10 @@ import (
 	"github.com/mikeschinkel/endless/internal/taskstatus"
 )
 
-// The project attention board's ranking and rendering (E-1976).
+// The ranking and rendering behind `endless project status` and
+// `endless project monitor` (E-1976).
 //
-// The board answers one question: what in this project is claiming a PERSON's
+// Both answer one question: what in this project is claiming a PERSON's
 // attention, loudest first. That is a different question from `session status`'s
 // — "what is next for the task I am on" — which is why this is a second view
 // rather than a flag on that one, and why its rows can be sessions.

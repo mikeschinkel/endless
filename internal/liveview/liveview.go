@@ -3,7 +3,7 @@
 // self-fit, and the width/color detection both share.
 //
 // Extracted from internal/sessionstatuscmd by E-1976, which added a second
-// dashboard — the project-scoped attention board — that needs every part of it.
+// dashboard — `endless project monitor` — that needs every part of it.
 // The extraction is verbatim: sessionstatuscmd keeps one-line wrappers over
 // these functions, so its own tests still exercise the same code under the same
 // names.

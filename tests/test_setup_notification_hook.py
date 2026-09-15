@@ -3,7 +3,7 @@
 Endless hooked six Claude Code events and none of them reported that the harness
 was asking the USER something, so a session sitting on a permission prompt read
 `working` — indistinguishable from one doing work. `Notification` is the event
-that reports it, and installing it is the producer half of the attention board's
+that reports it, and installing it is the producer half of `project status`'s
 first rank.
 
 Two properties, and the second matters as much as the first. It must be in

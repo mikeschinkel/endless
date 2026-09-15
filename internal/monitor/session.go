@@ -581,7 +581,7 @@ func IdleSession(sessionID string) error {
 // Claude Code's `Notification` hook with notification_type=permission_prompt is
 // the event that reports the user is actually being asked. Until it was wired,
 // a session sitting on a prompt read `working` — indistinguishable from one
-// doing work — which is the fact the attention board's first rank was built for
+// doing work — which is the fact `project status`'s first rank was built for
 // and had no producer of.
 //
 // Unconditional, like IdleSession and EndSession beside it: the notification is

@@ -2,17 +2,17 @@
 // annotation both live status views append below their rows.
 //
 // Extracted from internal/sessionstatuscmd by E-1976, which added a second
-// caller: the project-scoped attention board. Neither view owns the badge, so it
-// lives here; what it COUNTS is each view's own decision, passed in as a
-// faults.ProjectScope (E-1960).
+// caller: `endless project status` and its live twin `project monitor`. Neither
+// view owns the badge, so it lives here; what it COUNTS is each view's own
+// decision, passed in as a faults.ProjectScope (E-1960).
 //
 // The two callers answer that differently, and both are right. `session status`
 // passes faults.AllProjects: it is a machine-wide view of every session on the
 // box, so a fault in a project other than the one you are standing in is still
-// news. The project board passes its own project, because the whole board is
-// already scoped to that project and a badge counting other projects' incidents
-// would be the one line on it that isn't. Unattributed faults ride along with
-// both — see faults.ProjectScope for why they must.
+// news. `project status` passes its own project, because that view is already
+// scoped to one project and a badge counting other projects' incidents would be
+// the one line on it that isn't. Unattributed faults ride along with both —
+// see faults.ProjectScope for why they must.
 package faultbadge
 
 import (

@@ -1,4 +1,4 @@
-"""Tests for E-1976: the project attention board.
+"""Tests for E-1976: `project status` and `project monitor`.
 
 `endless project status` / `endless project monitor` are the project-scoped
 counterpart to the `session status` / `session monitor` pair. What Python owns is

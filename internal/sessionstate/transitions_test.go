@@ -43,8 +43,8 @@ func TestEveryEndpointIsAStateOrSentinel(t *testing.T) {
 // initial value and the revive-an-ended-row CASE — both meant "this row exists
 // and has done nothing", not "a person is being waited on", and both now write
 // `idle`. So the state has no producer on purpose: it means exactly what the
-// declaration gate says it means, and the rows still carrying it are surfaced on
-// the attention board to be resolved rather than migrated away in the dark.
+// declaration gate says it means, and the rows still carrying it are surfaced in
+// `project status` to be resolved rather than migrated away in the dark.
 //
 // The exception is a NAMED list, not a skip, so every other state still fails
 // here the moment its last writer goes.

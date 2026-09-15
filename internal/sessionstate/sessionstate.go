@@ -113,10 +113,10 @@ const (
 	// prompt-blocked session is mid-turn by exactly the reasoning that admits
 	// `idle` — the tool it is waiting on is its own. The asymmetry of failure
 	// modes decided it. If the clearing transition is ever missed under this
-	// reading, a stale glyph sits on the board until the next Stop: cosmetic and
-	// self-correcting. Under the other reading a missed clear refuses the
-	// session's next write and tells it there is no command to run — which is
-	// the failure E-2093 spent a task cleaning up after.
+	// reading, a stale glyph sits in `project status` until the next Stop:
+	// cosmetic and self-correcting. Under the other reading a missed clear
+	// refuses the session's next write and tells it there is no command to
+	// run — which is the failure E-2093 spent a task cleaning up after.
 	MayWrite
 
 	// AwaitsHuman is the states in which a session is waiting on a PERSON,
@@ -191,8 +191,8 @@ var labels = map[State]string{
 // is the reason they exist at all — `needs_input` is eleven characters against
 // `idle`'s four, and printing the raw word made every following column ragged.
 //
-// ⚠ for `prompted` is borrowed the same way (E-2091): it is already the attention
-// board's glyph for its waiting rank, so the two surfaces teach one symbol
+// ⚠ for `prompted` is borrowed the same way (E-2091): it is already the glyph
+// `project status` gives its waiting rank, so the two surfaces teach one symbol
 // rather than two. TestGlyphsAreSingleWidth holds the column rule for every
 // member, which is what a borrowed glyph most needs checking against.
 var glyphs = map[State]string{
@@ -257,7 +257,7 @@ func SQLList(g Group) string {
 
 // Rank returns the index of s within an ordered group, or NoRank when s is not
 // a member. Used where the ordering itself is the rule — `session list`'s sort
-// CASE, the board's attention ranking.
+// CASE, `project status`'s attention ranking.
 func Rank(g Group, s State) int {
 	for i, member := range groups[g] {
 		if member == s {

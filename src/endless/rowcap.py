@@ -53,12 +53,11 @@ def resolve_cap(
     to uncapped; an explicit `--limit` still applies.
 
     `default` is the cap applied when neither flag was passed (E-1976). It exists
-    for the one surface whose cap is not measured in rows-per-render: the project
-    attention board caps PER GROUP, so a board-sized default is a different
-    number from a listing-sized one. The VALIDATION — the mutual exclusion and
-    the `--limit 0` refusal — is the part that must not fork, which is why the
-    number is a parameter here rather than a second copy of this function
-    somewhere else.
+    for the one surface whose cap is not measured in rows-per-render:
+    `project status` caps PER GROUP, so its default is a different number from a
+    listing-sized one. The VALIDATION — the mutual exclusion and the `--limit 0`
+    refusal — is the part that must not fork, which is why the number is a
+    parameter here rather than a second copy of this function somewhere else.
     """
     if no_limit:
         if limit is not None:
@@ -149,10 +148,10 @@ def limit_options_for(default: int = DEFAULT_ROW_CAP, unit: str = "rows to rende
     """Build the `--limit` / `--no-limit` decorator for a listing command.
 
     One factory so the two flags cannot appear on one command and not another,
-    and so their help text is written once. `default` and `unit` exist for the
-    project attention board (E-1976), whose cap is per GROUP rather than per
-    render — a surface that spelled its own flags would be a surface that could
-    drift from these.
+    and so their help text is written once. `default` and `unit` exist for
+    `project status` (E-1976), whose cap is per GROUP rather than per render —
+    a surface that spelled its own flags would be a surface that could drift
+    from these.
     """
 
     def decorate(f):

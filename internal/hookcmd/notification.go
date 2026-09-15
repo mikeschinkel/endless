@@ -75,8 +75,8 @@ func handleNotification(payload claudePayload) error {
 // about completed, so they approved) and UserPromptSubmit (they typed instead).
 //
 // Non-fatal, and that is a decision rather than laziness. `prompted` is in
-// sessionstate.MayWrite, so a clear that fails costs a stale glyph on the
-// attention board until the next Stop writes `idle` — cosmetic and
+// sessionstate.MayWrite, so a clear that fails costs a stale glyph in
+// `project status` until the next Stop writes `idle` — cosmetic and
 // self-correcting. Failing the hook over it would take the session down to fix
 // a display.
 func clearPromptState(payload claudePayload) {

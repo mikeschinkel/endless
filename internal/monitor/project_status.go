@@ -13,7 +13,7 @@ import (
 )
 
 // The reads behind `endless project status` / `endless project monitor`
-// (E-1976): the project-scoped attention board.
+// (E-1976).
 //
 // This file answers ONE question — "what in this project is claiming a person's
 // attention right now?" — and it answers it in two halves that the caller merges
@@ -35,8 +35,9 @@ import (
 // and it is deliberately not a superset: `ready` arrives only under all=true,
 // because spawnable work claims capacity, not attention.
 
-// ProjectStatusRow is one row of the project attention board. Every row carries
-// a task, a session, or both — never neither.
+// ProjectStatusRow is one row of what `endless project status` prints and
+// `endless project monitor` repaints. Every row carries a task, a session, or
+// both — never neither.
 //
 // The zero value of each half is its "absent" marker (TaskID == 0, SessionID ==
 // 0), which is why neither is a pointer: a board row is read a dozen times per

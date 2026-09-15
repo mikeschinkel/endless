@@ -108,9 +108,10 @@ def test_register_and_list(isolated_env):
     assert "cli-test" in result.output
 
 
-# E-1976 renamed this command: `project status` is now the attention board, and
-# the project's registration card — what these three tests read — is `project
-# info`. They still assert the CARD's content, so they follow the card.
+# E-1976 renamed this command: `project status` now ranks what needs attention
+# across the project, and the project's registration card — what these three
+# tests read — is `project info`. They still assert the CARD's content, so they
+# follow the card.
 def test_info_by_name(isolated_env):
     project_dir = isolated_env["projects_root"] / "status-test"
     project_dir.mkdir()

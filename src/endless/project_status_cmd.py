@@ -1,10 +1,10 @@
 """CLI implementation for `endless project status` / `project monitor` (E-1976).
 
-The project-scoped counterpart to `session status` / `session monitor`: an
-attention board across every concurrent session in one project. `project status`
-prints one frame, `project monitor` loops the same frame until interrupted, and
-`project monitor --tmux` opens the dedicated two-pane tmux session the live board
-is meant to live in.
+The project-scoped counterpart to `session status` / `session monitor`: what is
+claiming your attention across every concurrent session in one project.
+`project status` prints one frame, `project monitor` loops the same frame until
+interrupted, and `project monitor --tmux` opens the dedicated two-pane tmux
+session that loop is meant to run in.
 
 This module performs no DB access. Everything — the query, the ranking, the
 render, the redraw loop and the tmux layout — lives in Go
@@ -70,7 +70,7 @@ def project_status_resolve(
     no_limit: bool = False,
     as_json: bool = False,
 ) -> None:
-    """Render the project attention board — one frame, or the live loop.
+    """Render `project status` — one frame, or `project monitor`'s live loop.
 
     The cap is resolved HERE rather than in Go so `--limit` and `--no-limit`
     behave identically to every other Endless listing, errors included. What
