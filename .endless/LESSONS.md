@@ -6225,3 +6225,7 @@ the sweep and keeps teaching the reader the word. And when a sweep keeps
 forcing the same repair, that is the scope announcing itself; widen it rather
 than logging the repairs.
 - **Project**: endless
+
+### [2026-09-15] Don't cite my own prior output as established vocabulary
+Mike asked what 'badge' referred to. I answered that it was 'the product's own name for it, not one I coined,' and quoted docs/guide/reference.md — text a previous session of mine had written. That is appealing to the authority of my own work. A term that appears only in code and docs Claude produced is not established product vocabulary; it is a name Claude chose that nobody has ratified. When Mike does not recognize a word I am using, the correct response is to explain the thing plainly and treat his non-recognition as evidence the name is bad, not to produce a citation proving I have used it before. Mike's read: 'badge' is unintuitive for a one-line notification appended under a status view; 'notification row' says what it is.
+- **Project**: endless
