@@ -6105,3 +6105,37 @@ use the globally installed CLI (the one `which endless` finds outside the
 worktree), which is still main's build, with ENDLESS_SESSION_ID unset so it
 does not route back through the worktree's source.
 - **Project**: endless
+
+### [2026-09-15] Use the product's names, not ones I coin — 'attention board' is not a thing Endless has
+I coined "attention board" for the thing Endless calls `project monitor` (live)
+and `project status` (snapshot), and then used the coinage as if it were the
+product's name — in E-2149's title, in three task records, in conversation, and
+in roughly twenty code comments and docs across three landed tasks. Mike: "use
+the terms I know, don't coin novel new terms."
+
+What made it feel right, which is the part worth catching: it reads better. "The
+project attention board" says what the thing is FOR, where `project monitor` only
+says what it is called. Writing the purpose into the name felt like clarity.
+
+It is the opposite. A reader who knows this product now meets a phrase that is
+not a command, not a file, not a package, and not in any help text, and has to
+work out whether it is a third surface or a synonym. The one person who cannot
+answer that from the name is the person who did not invent it. And a coined
+synonym does not stay in one place — it propagates into comments, which land, and
+then it is in the tree looking authoritative.
+
+There is a real cost beyond style. `project status` and `project monitor` are two
+things — a snapshot and a loop. "Attention board" collapses them into one, so
+every sentence using it is ambiguous about which surface it means, and I wrote
+comments where that ambiguity actually matters.
+
+Rule: durable content uses the names the product uses — the command, the flag,
+the package, the file. When a descriptive phrase genuinely helps, it goes
+alongside the real name and subordinate to it, not in place of it: "`project
+monitor`, the live view" and never "the attention board". If something has no
+name and needs one, that is a naming decision, which is Mike's, and it gets asked
+before it goes into an artifact.
+
+Cheap check before writing any noun phrase for a feature: can I point at the
+command, symbol or file that carries this name? If not, I invented it.
+- **Project**: endless
