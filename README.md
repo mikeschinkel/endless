@@ -220,12 +220,12 @@ stateDiagram-v2
     completed --> declined: user declines — the shipped work is not being kept
 
     %% Obsoleting — made irrelevant before the work ever shipped
-    untriaged --> obsolete: user retires — it never needed doing
-    unplanned --> obsolete: user retires — it never needed doing
-    submitted --> obsolete: user retires — it never needed doing
-    ready --> obsolete: user retires — it never needed doing
-    underway --> obsolete: user retires — it never needed doing
-    revisit --> obsolete: user retires — it never needed doing
+    untriaged --> obsolete: user retires — it no longer needs doing
+    unplanned --> obsolete: user retires — it no longer needs doing
+    submitted --> obsolete: user retires — it no longer needs doing
+    ready --> obsolete: user retires — it no longer needs doing
+    underway --> obsolete: user retires — it no longer needs doing
+    revisit --> obsolete: user retires — it no longer needs doing
 
     %% Reversal — reconsidering an abandonment decision
     declined --> untriaged: user reconsiders

@@ -140,7 +140,7 @@ func TestSettledIsTerminalPlusTheGates(t *testing.T) {
 
 // TestShippedIsSettledMinusTheAbandonments pins the other side of the same
 // coin. `unreviewed` is Shipped — the work HAPPENED, which is what makes
-// `obsolete` ("it never needed doing") a lie about it, exactly as E-1956
+// `obsolete` ("it no longer needs doing") a lie about it, exactly as E-1956
 // reasoned for `unverified`.
 func TestShippedIsSettledMinusTheAbandonments(t *testing.T) {
 	abandoned := map[string]bool{taskstatus.Declined: true, taskstatus.Obsolete: true}

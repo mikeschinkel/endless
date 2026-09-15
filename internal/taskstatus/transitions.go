@@ -295,18 +295,26 @@ var transitionGroups = []transitionGroup{
 		},
 	},
 	{
+		// `obsolete` is the ordinary English word: no longer needed, out of
+		// date, superseded by something newer. So the commonest case it
+		// covers is work that WAS worth doing when it was filed and has
+		// since been overtaken — not only work that was never worth doing.
+		// A label saying "it never needed doing" excluded that case and sent
+		// it toward `declined`, which is a different fact: an active decision
+		// not to do work that would still be worth doing (E-2144).
+		//
 		// No inbound edge from a Shipped status, and that is the rule E-1956
 		// landed: `obsolete` reads as "never happened", which is simply false
 		// of work that ran. The fact to record there is a `replaced_by`
 		// relation — `task replace <old> --by <new>`.
 		Name: "Obsoleting — made irrelevant before the work ever shipped",
 		Transitions: []Transition{
-			{From: Untriaged, To: Obsolete, Actor: ActorUser, Label: "retires — it never needed doing"},
-			{From: Unplanned, To: Obsolete, Actor: ActorUser, Label: "retires — it never needed doing"},
-			{From: Submitted, To: Obsolete, Actor: ActorUser, Label: "retires — it never needed doing"},
-			{From: Ready, To: Obsolete, Actor: ActorUser, Label: "retires — it never needed doing"},
-			{From: Underway, To: Obsolete, Actor: ActorUser, Label: "retires — it never needed doing"},
-			{From: Revisit, To: Obsolete, Actor: ActorUser, Label: "retires — it never needed doing"},
+			{From: Untriaged, To: Obsolete, Actor: ActorUser, Label: "retires — it no longer needs doing"},
+			{From: Unplanned, To: Obsolete, Actor: ActorUser, Label: "retires — it no longer needs doing"},
+			{From: Submitted, To: Obsolete, Actor: ActorUser, Label: "retires — it no longer needs doing"},
+			{From: Ready, To: Obsolete, Actor: ActorUser, Label: "retires — it no longer needs doing"},
+			{From: Underway, To: Obsolete, Actor: ActorUser, Label: "retires — it no longer needs doing"},
+			{From: Revisit, To: Obsolete, Actor: ActorUser, Label: "retires — it no longer needs doing"},
 		},
 	},
 	{

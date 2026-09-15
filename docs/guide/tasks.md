@@ -837,8 +837,8 @@ Once the redundant task **is** closed, the relation rides along with its status
 — `obsolete (duplicates E-102)` in `task show` and `session status`, and as a
 `duplicates` key in their `--llm` and `--json` modes. This is the same rule
 `replaces` follows, applied for the same reason: a terminal status reads as the
-end of the story, and `obsolete` alone says "never needed doing" rather than "already
-being done over there". It follows that rule's exception too: the human tables
+end of the story, and `obsolete` alone says "no longer needs doing" rather than
+"already being done over there". It follows that rule's exception too: the human tables
 render the bare status, for the column-width reason given above.
 
 The note appears **only** beside a terminal status, and only on the redundant

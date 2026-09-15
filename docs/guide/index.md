@@ -136,12 +136,12 @@ stateDiagram-v2
     completed --> declined: user declines — the shipped work is not being kept
 
     %% Obsoleting — made irrelevant before the work ever shipped
-    untriaged --> obsolete: user retires — it never needed doing
-    unplanned --> obsolete: user retires — it never needed doing
-    submitted --> obsolete: user retires — it never needed doing
-    ready --> obsolete: user retires — it never needed doing
-    underway --> obsolete: user retires — it never needed doing
-    revisit --> obsolete: user retires — it never needed doing
+    untriaged --> obsolete: user retires — it no longer needs doing
+    unplanned --> obsolete: user retires — it no longer needs doing
+    submitted --> obsolete: user retires — it no longer needs doing
+    ready --> obsolete: user retires — it no longer needs doing
+    underway --> obsolete: user retires — it no longer needs doing
+    revisit --> obsolete: user retires — it no longer needs doing
 
     %% Reversal — reconsidering an abandonment decision
     declined --> untriaged: user reconsiders
@@ -171,7 +171,7 @@ stateDiagram-v2
 | `completed`   | Findings work is done and accepted — the terminal of the review lane, as `confirmed`/`assumed` are of the verification lane. **Unblocks dependents.** Research and brainstorm reach it only through `unreviewed`, and only with an outcome. Epics reach it directly, self-completing from their children. `todo`/`bugfix` never reach it at all: completed-eligibility is a rule about task TYPE, not about the title's verb, and implementation work terminates via `confirmed`/`assumed`. |
 | `revisit`     | Needs re-evaluation before it can proceed — either a partial plan that no longer holds, or work that shipped and turned out wrong. Reopening your own landed work lands here. |
 | `declined`    | Active decision not to do this. Requires `--reason`.                                                           |
-| `obsolete`    | Made irrelevant by other changes — it never needed doing. **Refused on work that already shipped** (`unverified`/`unreviewed`/`confirmed`/`assumed`/`completed`): that work happened, and if something superseded it the fact to record is a `replaced_by` relation. Use `task replace <old> --by <new>`. |
+| `obsolete`    | No longer needs doing — out of date, or superseded by something newer. It covers work that was worth doing when it was filed and has since been overtaken, not only work that was never worth doing; the active decision *not* to do work that would still be worth doing is `declined`, a different fact. **Refused on work that already shipped** (`unverified`/`unreviewed`/`confirmed`/`assumed`/`completed`): that work happened, and if something superseded it the fact to record is a `replaced_by` relation. Use `task replace <old> --by <new>`. |
 
 The agent sets `submitted` (via `task submit`, or by attaching a plan); a human sets `ready` (via `task approve`) — the two-step gate that makes `ready` mean "approved," not merely "planned."
 
