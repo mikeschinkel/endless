@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/mikeschinkel/endless/internal/dbprovenance"
+	"github.com/mikeschinkel/endless/internal/docmirror"
 	"github.com/mikeschinkel/endless/internal/gatekind"
 	"github.com/mikeschinkel/endless/internal/monitor"
 	_ "modernc.org/sqlite"
@@ -42,6 +43,11 @@ func Run(args []string) {
 		}
 	case "task-field":
 		if err := runTaskField(args[1:]); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+	case "doc-content":
+		if err := runDocContent(args[1:]); err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
@@ -134,6 +140,10 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "  task-plan --id <task-id>          raw tasks.plan for the task (empty if none)")
 	fmt.Fprintln(os.Stderr, "  task-field --id <task-id> --name <plan|outcome|analysis>")
 	fmt.Fprintln(os.Stderr, "                                    raw value of one multiline doc column (empty if none)")
+	fmt.Fprintln(os.Stderr, "  doc-content --path <rel-path>     authoritative content behind a document mirror path")
+	fmt.Fprintln(os.Stderr, "                                    (.endless/tasks/e-N/{plan,outcome,analysis}.md, a legacy")
+	fmt.Fprintln(os.Stderr, "                                    .endless/{plans,outcomes,analyses}/E-N.md, or")
+	fmt.Fprintln(os.Stderr, "                                    .endless/decisions/ED-N.md); unrecognized path → exit 1")
 	fmt.Fprintln(os.Stderr, "  ensure-claude-id --session-id <uuid> --project-root <path> [--process <pane>]")
 	fmt.Fprintln(os.Stderr, "                                    look up (or lazy-create) sessions.id; prints integer id")
 	fmt.Fprintln(os.Stderr, "  gate-clear --session-id <id> --kind <slug> --cleared-by <reason>")
@@ -529,10 +539,14 @@ func runGateClear(args []string) error {
 	}
 }
 
-// runTaskPlan prints the raw tasks.plan for a task id to stdout, so the Python
-// side can materialize a plan file at claim time without a Python DB read
-// (E-894 / E-1445). Output is the raw plan (not JSON) — it is written verbatim
-// to <worktree>/.endless/plans/E-NNN.md. Empty output means "no plan".
+// runTaskPlan prints the raw tasks.plan for a task id to stdout — a Python-side
+// read of a document column without a Python DB read (E-894 / E-1445). Output is
+// the raw plan, not JSON; empty output means "no plan".
+//
+// It backed birth-time plan materialization until E-2137 retired that, and no
+// caller in this repository uses it now. Kept because it is the narrow read verb
+// for one column and costs nothing; `doc-content` below is the one callers
+// reach for, because it takes the FILE and works out the column itself.
 func runTaskPlan(args []string) error {
 	fs := flag.NewFlagSet("task-plan", flag.ContinueOnError)
 	id := fs.Int64("id", 0, "task id")
@@ -551,9 +565,9 @@ func runTaskPlan(args []string) error {
 }
 
 // runTaskField prints the raw value of one whitelisted multiline document
-// column (plan/outcome/analysis) for a task. Backs E-1747's birth-time mirror
-// seeding: the Python worktree-create path reads each field this way instead
-// of doing a forbidden Python DB read (E-894/E-1486).
+// column (plan/outcome/analysis) for a task, without a forbidden Python DB read
+// (E-894/E-1486). It backed E-1747's birth-time mirror seeding until E-2137
+// retired that; see runTaskPlan for why the verb stays.
 func runTaskField(args []string) error {
 	fs := flag.NewFlagSet("task-field", flag.ContinueOnError)
 	id := fs.Int64("id", 0, "task id")
@@ -862,4 +876,48 @@ func runEnsureClaudeID(args []string) error {
 	}
 	fmt.Println(id)
 	return nil
+}
+
+// runDocContent prints the AUTHORITATIVE content behind a document mirror
+// path — the database column the file is a projection of — so the Python side
+// can compare a file against its source without a Python DB read (E-894).
+//
+// It takes the PATH rather than an id and a column because that is the question
+// every caller actually has: git hands them a changed file and they need to
+// know what it should have said. Resolving the path in one place (docmirror)
+// keeps "which column owns this file" from being decided separately by the
+// sweep, the orphan-branch check, and the branch-history cleanup.
+//
+// Exit 0 with empty output means "the row exists and the column is empty", which
+// is a legitimate answer. An UNRECOGNIZED path is an error, not empty output:
+// silently reporting "" for a typo'd path would read as "the database has
+// nothing", and a caller comparing against it would conclude the file is
+// unauthorized content and act on that.
+func runDocContent(args []string) error {
+	fs := flag.NewFlagSet("doc-content", flag.ContinueOnError)
+	path := fs.String("path", "", "repo-relative path of a document mirror")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *path == "" {
+		return fmt.Errorf("--path is required")
+	}
+	src, ok := docmirror.Resolve(*path)
+	if !ok {
+		return fmt.Errorf("not a document mirror path: %s", *path)
+	}
+
+	var content string
+	var err error
+	switch {
+	case src.DecisionID != 0:
+		content, err = monitor.DecisionBody(src.DecisionID)
+	default:
+		content, err = monitor.TaskField(src.TaskID, src.Column)
+	}
+	if err != nil {
+		return fmt.Errorf("read content for %s: %w", *path, err)
+	}
+	_, err = os.Stdout.WriteString(content)
+	return err
 }

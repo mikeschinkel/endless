@@ -768,6 +768,27 @@ def require_db_context():
     raise click.ClickException(WORKTREE_DB_REFUSAL)
 
 
+def db_context_is_sandbox() -> bool:
+    """True when the resolved DB context is a per-worktree sandbox.
+
+    The question a write with a side effect OUTSIDE the database has to ask.
+    A sandbox exists so that exercising endless from a dev worktree cannot touch
+    the real state; a command that consulted only the database would honour that
+    for its rows and violate it for its files.
+
+    False when no --db choice was resolved: an unrouted command in a gated
+    worktree is refused at require_db_context() before it gets this far, and
+    outside one there is no sandbox to be in.
+    """
+    if RESOLVED_CONFIG_DIR is None:
+        return False
+    try:
+        RESOLVED_CONFIG_DIR.relative_to(_cache_root() / "endless" / "sandboxes")
+    except ValueError:
+        return False
+    return True
+
+
 def go_db_context_args() -> list[str]:
     """The flag pair that threads the resolved DB context to a CLI-path Go
     subprocess, or [] when no explicit context is active.

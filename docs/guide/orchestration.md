@@ -61,7 +61,11 @@ A fresh worktree often needs project-specific setup endless can't bake in — Go
 - **Failure is non-fatal and loud.** If the hook exits non-zero, endless keeps the worktree and prints a warning naming the script, exit code, worktree path, and the command to re-run it.
 - **The hook must be idempotent / re-runnable.** Because there's no teardown, completing a failed bootstrap is just re-running the hook. Write it so a second run on an already-bootstrapped worktree is a safe no-op (or a clean regenerate).
 
-Plan files for a task live in the task's worktree at `<worktree>/.endless/plans/E-NNNN.md`, not in main, and ride into main when the task lands. The DB's `tasks.plan` column is the source of truth; the on-disk file is a mirror that lives with the branch. `endless task update <id> --plan-file <path>` writes `tasks.plan`; it does **not** create a worktree. The plan file is materialized from `tasks.plan` when the worktree is born (at `task claim`/`task spawn`); if a worktree already exists, `--plan`/`--plan-file` also mirrors into it. So setting a plan on an unclaimed task touches only the DB — no stray worktrees for tasks you aren't working on yet.
+A task's plan, outcome and analysis each have a **document mirror** on the main checkout: `.endless/tasks/e-NNNN/plan.md`, `outcome.md` and `analysis.md`, in the same directory as that task's `verify.sh`. The DB column is the source of truth; the file is a projection of it, written so a human can read it on GitHub without a database.
+
+`endless task update <id> --plan-file <path>` writes the column and the mirror, and commits the mirror on main straight away. It does **not** create a worktree, and it never writes into one. So setting a plan on an unclaimed task touches only the DB and main — no stray worktrees for tasks you aren't working on yet, and nothing waiting on a land.
+
+A worktree cut from main carries whatever mirrors main had at the fork point, as ordinary tracked files. Leave them alone: a hand-edit desyncs the database and is overwritten by the next sweep, and the Claude hook refuses one. Your task's own `verify.sh` in that same directory IS yours to write.
 
 ### The worktree's sandbox
 
@@ -311,10 +315,13 @@ Endless auto-commits a fixed, narrow set of its own files — and none of them i
 | `.endless/verbs.jsonl`                               | endless, on `worktree land`                        |
 | `.endless/db-ledger/*.jsonl`                         | endless, on the main checkout, via the event hook  |
 | `.endless/LESSONS.md`                                | endless, on the main checkout, at write time       |
-| `.endless/plans/E-<id>.md`                           | endless, when it writes the plan into the worktree |
+| `.endless/tasks/e-<id>/*.md`                         | endless, on the main checkout, at write time       |
+| `.endless/decisions/ED-<id>.md`                      | endless, on the main checkout, at write time       |
 | **everything else — source, docs, tests, config**    | **you, with `git commit`**                          |
 
-Two of those never wait for `land`: a ledger entry is committed by the event hook as it is written, and a lesson is committed by `endless lesson write` as it is written. Both land on the main checkout, in a single-file commit, from wherever you ran the command — which is why recording a correction does not oblige you to re-land a task that was already finished.
+All but the first never wait for `land`: a ledger entry is committed by the event hook as it is written, a lesson by `endless lesson write`, and a document mirror by `task update` / `decision add`. Each lands on the main checkout, in a single-file commit, from wherever you ran the command — which is why recording a correction, or attaching a plan, does not oblige you to re-land a task that was already finished.
+
+None of them ever reaches a task branch. Mirrors used to, and the cost was measurable: of 139 genuinely-unlanded commits across 133 worktrees, 123 were mirrors, and 44 of 56 worktrees read as unlanded for no other reason. `endless worktree strip-docs` takes the remaining ones off branches that still carry them.
 
 The two exclusions in the `git add` above are not cosmetic. Ledger entries are recorded **on the main checkout only**; a ledger commit that rides a task branch into `main` would rebase a branch-authored segment into shared database history, so `land` refuses outright (`the branch has N commits modifying the database ledger`). A blanket `git add -A` in a worktree the event hook has written to is the usual way that happens. Leave both paths alone and let endless commit them.
 
@@ -445,7 +452,7 @@ Both leave the directory — and whoever is working in it — intact. "The branc
 | What                                    | Where it commits          | How                                                                 |
 |-----------------------------------------|---------------------------|---------------------------------------------------------------------|
 | Task work (code, docs, tests)           | Worktree branch → main    | `worktree land` only                                                |
-| Plan files (`.endless/plans/E-NNNN.md`) | Worktree branch → main    | Written to the worktree by `task update --plan`; rides in via `worktree land` |
+| Document mirrors (`.endless/tasks/e-NNNN/*.md`, `.endless/decisions/ED-NNNN.md`) | Main directly | Auto by `task update` / `decision add`, at write time; repaired by the `doc-mirrors` job |
 | DB ledger (`.endless/db-ledger/`)       | Main directly             | Auto by endless-event hook                                          |
 | Verbs (`verbs.jsonl`)                   | Main directly             | Auto on `worktree land`                                             |
 | Project config (`.endless/config.json`) | Worktree branch → main    | Follows task work; not auto                                         |

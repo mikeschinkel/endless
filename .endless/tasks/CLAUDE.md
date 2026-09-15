@@ -1,9 +1,41 @@
-# Verification suites live here
+# A task's own directory lives here
 
-One directory per task: `.endless/tasks/e-<id>/`, holding a `verify.toml`
-manifest, a `verify.sh` script, or both. `_harness.sh` is the shared shell
-harness a script suite sources, and `_guard.sh` is the guard the harness
+One directory per task: `.endless/tasks/e-<id>/`. `_harness.sh` is the shared
+shell harness a script suite sources, and `_guard.sh` is the guard the harness
 sources; both belong to no task.
+
+## Two kinds of file, and only one of them is yours
+
+| In `e-<id>/`                           | Whose          | Written by                     |
+|----------------------------------------|----------------|--------------------------------|
+| `verify.toml`, `verify.sh`             | the task's     | you, on the task branch        |
+| `plan.md`, `outcome.md`, `analysis.md` | the database's | `endless task update`, on main |
+
+The three `.md` files are **document mirrors**: projections of `tasks.plan`,
+`tasks.outcome` and `tasks.analysis`. The column is the source of truth; the
+file exists so a human can read it on a Git host without a database.
+
+**Never hand-edit one, and never `git add` one.** A direct edit leaves the
+database stale and is overwritten without warning by the `doc-mirrors` sweep,
+which rewrites any mirror whose bytes differ from its column. Write the content
+under `.endless/tmp/` and load it:
+
+    endless task update E-<id> --plan-file .endless/tmp/<file>.md
+    endless task update E-<id> --analysis-file .endless/tmp/<file>.md
+    endless task update E-<id> --outcome-file .endless/tmp/<file>.md
+
+A Claude hook refuses a Write/Edit of those three names, so you meet this rule
+before you break it rather than after.
+
+Your worktree may already contain them, and that is not a second home for the
+content: they are on main, your branch was cut from main, so git checked them
+out like any other tracked file. They go stale as main moves on, exactly as
+`.endless/db-ledger/` already does. Nothing reads them, and nothing writes them
+here.
+
+Decisions (`.endless/decisions/ED-<id>.md`) are mirrors under the same rules,
+and they do not live under `.endless/tasks/` because a decision has no owning
+task.
 
 ## Run one with the runner, never by hand
 

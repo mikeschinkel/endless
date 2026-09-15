@@ -40,8 +40,8 @@ from pathlib import Path
 
 import click
 
-from endless import land_conflict, provenance, rowcap
-from endless.task_cmd import _display_path, _resolve_project, recover_task_plan
+from endless import doc_mirror, land_conflict, provenance, rowcap
+from endless.task_cmd import _display_path, _resolve_project
 from endless.project_path import resolved
 
 
@@ -87,11 +87,12 @@ AMENDABLE_COMMIT_SUBJECTS = (
 # Land's retry cap for the race-with-concurrent-writers loop (E-987).
 LAND_MAX_RETRIES = 8
 
-# E-1500: minimum stripped length for tasks.plan (or a committed plan file)
-# to count as a viable plan. Empirically derived from the existing tasks: every
-# junk/placeholder plan is <=34 chars and every genuine plan is >=351 chars,
-# so 128 rejects all observed junk while accepting all observed real plans.
-PLAN_VIABILITY_MIN_CHARS = 128
+# E-1500's plan-viability threshold lived here and was retired by E-2137. It
+# existed to judge whether a plan recovered from an orphan BRANCH was worth
+# adopting back into the database. Mirrors are no longer written to branches, so
+# there is nothing to recover and nothing to judge: a branch whose mirrors match
+# their columns is discarded, and one whose mirrors DIFFER is reported to a
+# person rather than measured against a character count.
 
 
 def _is_retryable_ff_merge_error(err_text: str) -> bool:
@@ -1551,32 +1552,43 @@ def _default_base_branch(project_root: Path) -> str:
 
 
 def _check_plan_file_committed(task_id: int, project_root: Path) -> str | None:
-    """If .endless/plans/E-<id>.md exists but is modified/untracked in main,
+    """If the task's plan mirror exists but is modified/untracked in main,
     return an error message with recommended commands. Otherwise None.
 
-    The plan file lives in main's working tree but won't propagate to a
-    new worktree (git worktree add starts from a commit, not the index).
-    Per E-1169, refuse with recommendations rather than auto-commit.
+    Per ED-1169, refuse with recommendations rather than auto-commit: an
+    uncommitted mirror in main's working tree is a HUMAN's edit, and
+    auto-committing it would hide their intent.
+
+    Since E-2137 the mirror is written and committed on main at write time, so
+    reaching this means something bypassed that — a hand-edit, or a commit that
+    failed and warned. Both are worth stopping for, and both are exactly what
+    the recommendation resolves. Checks the legacy path too, since a tree the
+    `doc-mirrors` sweep has not reached yet still has its mirrors there.
     """
-    plan_rel = f".endless/plans/E-{task_id}.md"
-    plan_abs = project_root / plan_rel
-    if not plan_abs.exists():
-        return None
-    res = _git_run(
-        ["status", "--porcelain", "--", plan_rel],
-        cwd=project_root, check=False,
-    )
-    if res.returncode != 0 or not res.stdout.strip():
-        return None
-    root_display = _tilde(project_root)
-    return (
-        f"Plan file {plan_rel} is uncommitted in main; it will not "
-        f"appear in the new worktree.\n\n"
-        f"Capture it before starting the task. Recommended:\n"
-        f"  git -C {root_display} add {plan_rel}\n"
-        f"  git -C {root_display} commit -m 'Add plan for E-{task_id}'\n"
-        f"\nThen retry: endless task claim E-{task_id}"
-    )
+    kind = doc_mirror.KIND_BY_COLUMN["plan"]
+    candidates = [
+        doc_mirror.task_doc_path(task_id, kind.stem),
+        doc_mirror.legacy_task_doc_path(kind, task_id),
+    ]
+    for plan_rel in candidates:
+        if not (project_root / plan_rel).exists():
+            continue
+        res = _git_run(
+            ["status", "--porcelain", "--", plan_rel],
+            cwd=project_root, check=False,
+        )
+        if res.returncode != 0 or not res.stdout.strip():
+            continue
+        root_display = _tilde(project_root)
+        return (
+            f"Plan mirror {plan_rel} is uncommitted in main; it will not "
+            f"appear in the new worktree.\n\n"
+            f"Capture it before starting the task. Recommended:\n"
+            f"  git -C {root_display} add {plan_rel}\n"
+            f"  git -C {root_display} commit -m 'Add plan for E-{task_id}'\n"
+            f"\nThen retry: endless task claim E-{task_id}"
+        )
+    return None
 
 
 # --- E-1500: orphan-branch recovery ----------------------------------------
@@ -1621,35 +1633,33 @@ def _read_branch_file(branch: str, rel_path: str, project_root: Path) -> str | N
     return res.stdout if res.returncode == 0 else None
 
 
-def _read_task_plan(task_id: int, project_root: Path) -> str:
-    """Current tasks.plan via the `endless-go session-query` Go helper.
+def doc_mirror_content(rel_path: str) -> str | None:
+    """The authoritative content behind a document mirror path, from the DB.
 
-    Returns '' when empty/absent or the helper is unavailable. Python SQLite
-    reads are forbidden (E-894), so there is no DB fallback.
+    Delegates to the `endless-go session-query doc-content` Go helper, which
+    resolves the path to the row and column that own it. Python SQLite reads are
+    forbidden (E-894), so there is no DB fallback.
+
+    Returns None — distinct from "" — when the answer is UNKNOWN: the helper is
+    missing, the path is not a mirror, or the read failed. A caller deciding
+    whether a branch's copy may be discarded must be able to tell "the database
+    says this file should be empty" from "I could not ask", because only the
+    first is a reason to discard anything.
     """
     from endless import config
 
     binary = shutil.which("endless-go")
     if not binary:
-        return ""
+        return None
     try:
         result = subprocess.run(
-            [binary, *config.go_db_context_args(), "session-query", "task-plan", "--id", str(task_id)],
+            [binary, *config.go_db_context_args(),
+             "session-query", "doc-content", "--path", rel_path],
             capture_output=True, text=True,
         )
     except OSError:
-        return ""
-    return result.stdout if result.returncode == 0 else ""
-
-
-def _plan_viable(text: str) -> bool:
-    return len(text.strip()) >= PLAN_VIABILITY_MIN_CHARS
-
-
-def _plan_preview(text: str, n: int = 80) -> str:
-    """One-line, length-capped preview for error messages (never a full dump)."""
-    one_line = " ".join(text.strip().split())
-    return one_line[:n] + ("…" if len(one_line) > n else "")
+        return None
+    return result.stdout if result.returncode == 0 else None
 
 
 def _delete_orphan_branch(branch: str, project_root: Path) -> None:
@@ -1679,14 +1689,14 @@ def _delete_orphan_branch(branch: str, project_root: Path) -> None:
 
 
 def _orphan_real_work_msg(
-    task_id: int, branch: str, base: str, non_plan: list[str], project_root: Path,
+    task_id: int, branch: str, base: str, real_work: list[str], project_root: Path,
 ) -> str:
     root = _tilde(project_root)
-    shown = "\n  ".join(non_plan[:20])
-    more = "" if len(non_plan) <= 20 else f"\n  ... and {len(non_plan) - 20} more"
+    shown = "\n  ".join(real_work[:20])
+    more = "" if len(real_work) <= 20 else f"\n  ... and {len(real_work) - 20} more"
     return (
         f"E-{task_id}: branch {branch} has commits beyond {base} touching "
-        f"non-plan files:\n  {shown}{more}\n\n"
+        f"files no document mirror accounts for:\n  {shown}{more}\n\n"
         f"Inspect:\n"
         f"  git -C {root} log {base}..{branch}\n"
         f"  git -C {root} diff {base}...{branch}\n"
@@ -1695,91 +1705,90 @@ def _orphan_real_work_msg(
     )
 
 
-def _orphan_plan_mismatch_msg(
-    task_id: int, branch: str, db_plan: str, file_text: str, project_root: Path,
+def _orphan_mirror_mismatch_msg(
+    task_id: int, branch: str, mismatched: list[str], project_root: Path,
 ) -> str:
     root = _tilde(project_root)
-    plan_rel = f".endless/plans/E-{task_id}.md"
+    rel = mismatched[0]
+    more = (
+        "" if len(mismatched) == 1
+        else "\n  " + "\n  ".join(mismatched[1:])
+    )
     return (
-        f"E-{task_id}: the plan in tasks.plan differs from the plan committed "
-        f"on branch {branch}.\n\n"
-        f"  tasks.plan  ({len(db_plan.strip())} chars): \"{_plan_preview(db_plan)}\"\n"
-        f"  branch file ({len(file_text.strip())} chars): \"{_plan_preview(file_text)}\"\n\n"
-        f"View full:\n"
-        f"  endless task show E-{task_id} --plan\n"
-        f"  git -C {root} show {branch}:{plan_rel}\n"
-        f"Keep the DB version, discard the branch:\n"
-        f"  git -C {root} branch -D {branch}          # then retry\n"
-        f"Adopt the branch's version into the DB:\n"
-        f"  git -C {root} show {branch}:{plan_rel} > .endless/tmp/E-{task_id}.md\n"
-        f"  endless task update E-{task_id} --plan-file .endless/tmp/E-{task_id}.md   # then retry"
+        f"E-{task_id}: branch {branch} holds document mirrors whose content the "
+        f"database does not have:\n  {rel}{more}\n\n"
+        f"A mirror is a projection of a task's row, so ordinarily discarding the "
+        f"branch loses nothing. These differ, which means the branch is the only "
+        f"place that text exists — and which side is right is not this command's "
+        f"to guess.\n\n"
+        f"Read the branch's copy:\n"
+        f"  git -C {root} show {branch}:{rel}\n"
+        f"Adopt it into the database, then retry:\n"
+        f"  git -C {root} show {branch}:{rel} > .endless/tmp/E-{task_id}.md\n"
+        f"  endless task update E-{task_id} --plan-file .endless/tmp/E-{task_id}.md\n"
+        f"    (--analysis-file / --outcome-file for those kinds)\n"
+        f"Or keep the database's version and discard the branch:\n"
+        f"  git -C {root} branch -D {branch}"
     )
 
 
-def _orphan_plan_not_viable_msg(
-    task_id: int, branch: str, db_plan: str, file_text: str, project_root: Path,
+def _orphan_unreadable_mirror_msg(
+    task_id: int, branch: str, unreadable: list[str], project_root: Path,
 ) -> str:
     root = _tilde(project_root)
-    plan_rel = f".endless/plans/E-{task_id}.md"
-    extra = ""
-    if _plan_viable(file_text):
-        extra = (
-            f"\nThe branch's committed plan ({len(file_text.strip())} chars) may "
-            f"be the one you want:\n  git -C {root} show {branch}:{plan_rel}"
-        )
+    shown = "\n  ".join(unreadable[:10])
     return (
-        f"E-{task_id}: tasks.plan is too short to be a viable plan "
-        f"({len(db_plan.strip())} chars):\n  \"{_plan_preview(db_plan)}\"\n\n"
-        f"Write a real plan, then retry:\n"
-        f"  endless task update E-{task_id} --plan-file <path>{extra}"
+        f"E-{task_id}: branch {branch} holds document mirrors, and the database "
+        f"could not be asked what they should contain:\n  {shown}\n\n"
+        f"Deleting the branch would be safe only if the database already has "
+        f"this content, which is exactly what could not be checked. Refusing "
+        f"rather than guessing.\n\n"
+        f"Inspect, then retry:\n"
+        f"  git -C {root} show {branch}:{unreadable[0]}"
     )
 
 
-def _orphan_no_viable_plan_msg(task_id: int, branch: str) -> str:
-    return (
-        f"E-{task_id}: no viable plan in tasks.plan or on branch {branch}.\n\n"
-        f"Add one, then retry:\n"
-        f"  endless task update E-{task_id} --plan-file <path>"
-    )
-
-
-def _reconcile_orphan_plan(
-    task_id: int, branch: str, plan_rel: str, project_root: Path,
+def _check_orphan_mirrors(
+    task_id: int, branch: str, mirrors: list[str], project_root: Path,
 ) -> None:
-    """Plan-only orphan branch. tasks.plan (the DB) is the source of truth; the
-    committed plan file is a derived mirror. Decide adopt / proceed / refuse.
+    """A mirror-only orphan branch. Decide whether it may be discarded.
 
-    Returns normally when it's safe to delete the branch and recreate fresh
-    (the plan re-materializes from tasks.plan). Raises ClickException, with an
-    actionable message, when the DB and file disagree or no viable plan exists.
+    The database is the source of truth and a mirror is derived from it, so a
+    branch whose only unique content is mirrors matching their columns carries
+    nothing: return, and the caller deletes it.
+
+    Raises when a mirror's committed content DIFFERS from its column, or when
+    the column could not be read at all. E-1500's guarantee is that a claim can
+    never silently strand a branch holding something the database lacks, and
+    that guarantee does not weaken just because the thing is a file Endless
+    wrote.
+
+    This replaces `_reconcile_orphan_plan` (E-2137). That version knew only
+    about plans, carried a character-count heuristic for deciding whether a plan
+    was "viable", and would silently ADOPT a branch's plan when the column was
+    empty. All three were shaped by mirrors living on branches; once they do
+    not, a mismatch is rare enough that reporting it and letting a person choose
+    beats any rule this code could apply.
     """
-    file_text = _read_branch_file(branch, plan_rel, project_root) or ""
-    db_plan = _read_task_plan(task_id, project_root)
-    db_s, file_s = db_plan.strip(), file_text.strip()
+    mismatched: list[str] = []
+    unreadable: list[str] = []
+    for rel in mirrors:
+        db_text = doc_mirror_content(rel)
+        if db_text is None:
+            unreadable.append(rel)
+            continue
+        branch_text = _read_branch_file(branch, rel, project_root) or ""
+        if branch_text.strip() != db_text.strip():
+            mismatched.append(rel)
 
-    if not db_s:
-        # The DB has no plan; the committed file is all we have.
-        if _plan_viable(file_s):
-            recover_task_plan(task_id, file_text)
-            click.echo(
-                click.style("•", fg="cyan")
-                + f" Recovered plan for E-{task_id} from branch {branch} "
-                f"into tasks.plan"
-            )
-            return
-        raise click.ClickException(_orphan_no_viable_plan_msg(task_id, branch))
-
-    if not _plan_viable(db_s):
+    if mismatched:
         raise click.ClickException(
-            _orphan_plan_not_viable_msg(task_id, branch, db_plan, file_text, project_root)
+            _orphan_mirror_mismatch_msg(task_id, branch, mismatched, project_root)
         )
-
-    if not file_s or file_s == db_s:
-        return  # DB and file agree (or no file) -> recreate fresh from tasks.plan
-
-    raise click.ClickException(
-        _orphan_plan_mismatch_msg(task_id, branch, db_plan, file_text, project_root)
-    )
+    if unreadable:
+        raise click.ClickException(
+            _orphan_unreadable_mirror_msg(task_id, branch, unreadable, project_root)
+        )
 
 
 def _orphan_task_branches(task_id: int, project_root: Path) -> list[str]:
@@ -1816,17 +1825,24 @@ def _handle_orphan_branch(
 ) -> None:
     """The branch exists but its worktree dir is gone. Either delete the branch
     (caller recreates fresh) or raise with actionable guidance.
+
+    "Real work" is everything that is not a document mirror. The exclusion
+    covers every mirror kind and both layouts (E-2137) rather than the single
+    legacy plan path it started as: a branch cut before mirrors
+    became main-bound may hold a plan, an analysis, an outcome and a decision
+    body, at either the consolidated or the legacy path, and none of them is
+    work a person did here.
     """
-    plan_rel = f".endless/plans/E-{task_id}.md"
     unique = _branch_unique_files(base, branch, project_root)
-    non_plan = [f for f in unique if f != plan_rel]
-    if non_plan:
+    mirrors = [f for f in unique if doc_mirror.is_mirror_path(f)]
+    real_work = [f for f in unique if not doc_mirror.is_mirror_path(f)]
+    if real_work:
         raise click.ClickException(
-            _orphan_real_work_msg(task_id, branch, base, non_plan, project_root)
+            _orphan_real_work_msg(task_id, branch, base, real_work, project_root)
         )
-    if plan_rel in unique:
-        _reconcile_orphan_plan(task_id, branch, plan_rel, project_root)
-    # Empty delta, or a plan-only delta that reconciled cleanly -> safe.
+    if mirrors:
+        _check_orphan_mirrors(task_id, branch, mirrors, project_root)
+    # Empty delta, or a mirror-only delta that checked out clean -> safe.
     _delete_orphan_branch(branch, project_root)
 
 
@@ -1892,9 +1908,13 @@ def _bootstrap_task_worktree(
     """Post-`git worktree add` bootstrap shared by claim and session recovery.
 
     Writes the companion marker (`.endless/worktree.json` + scratch dir),
-    materializes the task's doc mirrors, creates the worktree's sandbox, then runs
-    the project's post-worktree-create hook (go-work-init, bin copy,
-    claude-settings-init, ...). It performs NO status transition: `task claim`
+    creates the worktree's sandbox, then runs the project's post-worktree-create
+    hook (go-work-init, bin copy, claude-settings-init, ...).
+
+    It materializes NO document mirrors (E-2137). Those live on main, where
+    `task update` writes them; a worktree copy would be a second home for
+    content the database owns, and the agent working here would be the one most
+    likely to edit it. It performs NO status transition: `task claim`
     flips the task to `underway`, while `session resume --review`/`--reopen`
     (E-1801) each own their own status side effect (none / per-status), so the
     physical worktree setup had to be decoupled from the status change.
@@ -1919,7 +1939,6 @@ def _bootstrap_task_worktree(
     (companion_dir / "worktree.json").write_text(
         json.dumps(companion, indent=2) + "\n"
     )
-    _materialize_task_docs(task_id, wt_dir)
     provision_worktree_sandbox(wt_dir)
     # E-2128: the branch was just cut at the base, so its unlanded verdict is
     # known without comparing anything. Recording it here means the row this
@@ -2256,140 +2275,28 @@ def _check_post_land_residue(
 # human label used in the commit subject and progress line). `plan` is the
 # original plan mirror (E-1445); `outcome`/`analysis` are added here. Short
 # metadata (description, title) is deliberately excluded — not documents.
-_TASK_DOC_FIELDS: tuple[tuple[str, str, str], ...] = (
-    ("plan", "plans", "plan"),
-    ("outcome", "outcomes", "outcome"),
-    ("analysis", "analyses", "analysis"),
-)
-
-
-def _materialize_task_docs(task_id: int, worktree_path: Path) -> None:
-    """Seed every version-controlled task-doc mirror at worktree birth (E-1747).
-
-    Extends the original plan-only materialization (E-1445) to the full set of
-    multiline document fields (`_TASK_DOC_FIELDS`), so a freshly born worktree
-    carries git-backed copies of the task's plan, outcome, and analysis — not
-    just the plan. Each field is independent: a missing one warns and skips
-    without aborting worktree creation.
-    """
-    for field, subdir, label in _TASK_DOC_FIELDS:
-        _materialize_task_doc(task_id, worktree_path, field, subdir, label)
-
-
-def _materialize_task_doc(
-    task_id: int, worktree_path: Path, field: str, subdir: str, label: str,
-) -> None:
-    """Write <worktree>/.endless/<subdir>/E-NNN.md from tasks.<field> and commit.
-
-    The single point where a task-doc mirror is created on disk at worktree
-    birth. `task update` no longer provisions a worktree; the mirror
-    materializes here when the worktree is born (at claim/spawn).
-
-    Reads the field via the `endless-go session-query task-field` Go helper —
-    Python DB reads are forbidden (E-894). Empty/absent content writes
-    nothing. Failures warn and skip rather than abort worktree creation; a
-    missing mirror is recoverable by re-running the write once the worktree
-    exists (which mirrors into it).
-    """
-    from endless import config
-
-    binary = shutil.which("endless-go")
-    if not binary:
-        click.echo(
-            f"  warning: endless-go not found on PATH; {label} file "
-            "not materialized.",
-            err=True,
-        )
-        return
-    try:
-        # E-1429: thread the resolved --db context (no-op outside a gated
-        # worktree) so this DB read isn't refused when claim runs from a
-        # worktree cwd.
-        result = subprocess.run(
-            [binary, *config.go_db_context_args(), "session-query",
-             "task-field", "--id", str(task_id), "--name", field],
-            capture_output=True, text=True,
-        )
-    except OSError as e:
-        click.echo(
-            f"  warning: endless-go session-query task-field {field}: {e}",
-            err=True,
-        )
-        return
-    if result.returncode != 0:
-        click.echo(
-            f"  warning: could not read {label} for E-{task_id}: "
-            f"{(result.stderr or '').strip()}",
-            err=True,
-        )
-        return
-    if not result.stdout.strip():
-        return
-    docs_dir = worktree_path / ".endless" / subdir
-    docs_dir.mkdir(parents=True, exist_ok=True)
-    target = docs_dir / f"E-{task_id}.md"
-    target.write_text(result.stdout)
-    click.echo(
-        click.style("✓", fg="green")
-        + f" Materialized {label} to {_tilde(target)}"
-    )
-    _commit_doc_in_worktree(
-        worktree_path, f".endless/{subdir}/E-{task_id}.md",
-        f"Endless: add {label} for E-{task_id}",
-    )
-
-
-def _materialize_plan_file(task_id: int, worktree_path: Path) -> None:
-    """Back-compat alias: materialize just the plan (text) mirror.
-
-    Prefer `_materialize_task_docs`, which seeds every mirrored field (E-1747).
-    Retained because existing callers/tests reference this name.
-    """
-    _materialize_task_doc(task_id, worktree_path, "plan", "plans", "plan")
-
-
-def _commit_doc_in_worktree(
-    worktree_path: Path, rel_path: str, subject: str,
-) -> None:
-    """Stage and commit one .endless/<subdir>/E-NNN.md mirror on the worktree branch (E-1525/E-1747).
-
-    Called at both mirror write sites — claim/spawn materialization and the
-    `task update` write-time mirror — so the file rides to main on `worktree
-    land` instead of sitting untracked and getting rejected by the modified-
-    worktree guard.
-
-    `commit -o <rel_path>` scopes the commit to just this file even if the
-    worktree has unrelated modifications (user mid-edit, other auto-managed
-    files).
-    Returns silently when the file already matches HEAD — re-running a write
-    with identical content is a no-op.
-    """
-    status = _git_run(
-        ["status", "--porcelain", "--", rel_path],
-        cwd=worktree_path,
-    ).stdout
-    if not status.strip():
-        return
-    try:
-        _git_run(["add", "--", rel_path], cwd=worktree_path)
-        _git_run(
-            ["commit", "-o", rel_path, "-m", subject], cwd=worktree_path,
-        )
-    except subprocess.CalledProcessError as e:
-        detail = (e.stderr or e.stdout or str(e)).strip()
-        raise click.ClickException(
-            f"Failed to commit {rel_path} in worktree: {detail}"
-        )
-
-
-def _commit_plan_file_in_worktree(
-    worktree_path: Path, task_id: int, subject: str,
-) -> None:
-    """Back-compat alias for committing the plan mirror. Prefer
-    `_commit_doc_in_worktree` for arbitrary doc mirrors (E-1747)."""
-    _commit_doc_in_worktree(
-        worktree_path, f".endless/plans/E-{task_id}.md", subject,
-    )
+# E-2137 retired five functions that lived here: `_TASK_DOC_FIELDS`,
+# `_materialize_task_docs`, `_materialize_task_doc`, `_materialize_plan_file`,
+# `_commit_doc_in_worktree` and `_commit_plan_file_in_worktree`.
+#
+# Together they seeded a newborn worktree with committed copies of the task's
+# plan, outcome and analysis, and re-committed each one on the branch every time
+# `task update` rewrote it. Those commits were the single largest reason the
+# fleet read as holding unlanded work: 123 of 139 genuinely-unlanded commits
+# across 133 worktrees, and 44 of 56 worktrees unlanded ONLY because of them.
+#
+# Nothing in Endless read the worktree copy. `task update` wrote it and
+# `task show` renders from the database, so it existed for browsing — which
+# main satisfies, now that every mirror is written there at write time.
+#
+# The worktree copy did do one thing reliably: invite an agent to hand-edit
+# content the database owns, the same failure `.endless/LESSONS.md` needed a
+# CLAUDE.md rule to prevent. A file that is not there cannot be hand-edited.
+#
+# The tempting middle option — write the worktree copy but leave it
+# uncommitted — is exactly what E-1525 removed. It makes every worktree
+# permanently dirty, which trips land's modified-worktree guard and pushes
+# another hundred worktrees into reading as modified.
 
 
 # Content endless writes at the root of every sandbox it creates. Mirrors

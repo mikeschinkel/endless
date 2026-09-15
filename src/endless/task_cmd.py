@@ -17,6 +17,7 @@ from tabulate import tabulate
 
 from endless import agent_help, authority
 from endless import db, config
+from endless import doc_mirror
 from endless import provenance
 from endless import rowcap
 from endless import session_states
@@ -632,50 +633,45 @@ def _display_path(p: Path) -> str:
     return s.replace(home, "~", 1) if s.startswith(home) else s
 
 
-def _mirror_doc_to_worktree(
-    task_id: int, subdir: str, label: str, content: str,
-) -> Path | None:
-    """Mirror one multiline document field into the task's worktree IF one exists.
+def _mirror_task_doc(task_id: int, column: str, content: str) -> Path | None:
+    """Mirror one multiline document field onto the project's MAIN checkout.
 
-    Generalizes the E-1445 plan mirror to every version-controlled doc field
-    (E-1747): plan/outcome/analysis each land in their own
-    `<worktree>/.endless/<subdir>/E-NNN.md`. The DB column is the source of
-    truth and is written separately via the task event payload; this mirrors
-    that content to a committed file as the durability belt.
+    plan / outcome / analysis each land at `.endless/tasks/e-NNNN/<kind>.md`
+    there, beside that task's own `verify.sh`. The DB column is the source of
+    truth and is written separately via the task event payload; this writes the
+    human-readable projection of it and commits that file on main.
 
-    It NEVER creates a worktree (rescinds the E-1216 auto-create default,
-    which surprised callers by provisioning worktrees + sandboxes for tasks
-    they had no intention of working on yet). When no worktree exists, the DB
-    is updated and nothing is written to disk; the mirror materializes later
-    when the worktree is born at claim/spawn
-    (`worktree_cmd.create_task_worktree` → `_materialize_task_docs`).
+    E-2137 moved this off the task branch. It used to write
+    `<worktree>/.endless/<subdir>/E-NNN.md` and commit it on the branch whenever
+    a worktree existed, where it waited for a land — 123 of 139 genuinely
+    unlanded commits across the fleet were exactly that. The authoritative half
+    of the same write, the ledger entry, has always been enforced onto main; the
+    mirror follows it there, at the same time and by the same route.
 
-    Returns the written path, or None when no worktree exists.
+    It follows the ledger in the other direction too: under a per-worktree
+    sandbox DB, nothing is written at all. A sandbox exists so that exercising
+    endless from a dev worktree cannot touch real state, and a file committed on
+    the main checkout is real state — the same reason a sandbox emit skips the
+    ledger auto-commit (E-1729).
+
+    Returns the written path, or None when nothing was written.
     """
-    wt_path = _worktree_for_task(task_id)
-    if wt_path is None:
+    if config.db_context_is_sandbox():
+        return None
+    kind = doc_mirror.KIND_BY_COLUMN.get(column)
+    if kind is None:
+        raise ValueError(f"no document mirror for column {column!r}")
+    main_root = _main_root_for_task(task_id)
+    if main_root is None:
         return None
 
-    docs_dir = wt_path / ".endless" / subdir
-    docs_dir.mkdir(parents=True, exist_ok=True)
-    target = docs_dir / f"E-{task_id}.md"
-    target.write_text(content)
-    click.echo(
-        click.style("✓", fg="green")
-        + f" Wrote {label} to {_display_path(target)}"
+    rel_path = doc_mirror.task_doc_path(task_id, kind.stem)
+    action = "update" if (main_root / rel_path).exists() else "add"
+    return doc_mirror.write_to_main(
+        main_root, rel_path, content,
+        doc_mirror.task_doc_subject(action, kind.label, task_id),
+        kind.label,
     )
-    from endless.worktree_cmd import _commit_doc_in_worktree
-    _commit_doc_in_worktree(
-        wt_path, f".endless/{subdir}/E-{task_id}.md",
-        f"Endless: update {label} for E-{task_id}",
-    )
-    return target
-
-
-def _mirror_plan_to_worktree(task_id: int, content: str) -> Path | None:
-    """Back-compat alias: mirror the `plan` field. Prefer
-    `_mirror_doc_to_worktree` for arbitrary doc fields (E-1747)."""
-    return _mirror_doc_to_worktree(task_id, "plans", "plan", content)
 
 
 def _resolve_project(name: str | None) -> tuple[int, str]:
@@ -2800,9 +2796,9 @@ def add_item(
         + f" Added {task_id_display(item_id)}: {title}"
     )
     if plan_content is not None:
-        _mirror_plan_to_worktree(item_id, plan_content)
+        _mirror_task_doc(item_id, "plan", plan_content)
     if analysis is not None and analysis.strip():
-        _mirror_doc_to_worktree(item_id, "analyses", "analysis", analysis)
+        _mirror_task_doc(item_id, "analysis", analysis)
 
     # E-1859: triage at file time, detached. A synchronous model call here
     # would add seconds to EVERY filing, interactive ones included, so this is
@@ -3695,7 +3691,7 @@ def complete_item(item_id: int, cascade: bool = False, outcome: str | None = Non
     )
 
     if outcome and outcome.strip():
-        _mirror_doc_to_worktree(item_id, "outcomes", "outcome", outcome)
+        _mirror_task_doc(item_id, "outcome", outcome)
 
     changes = [("status", row[0]["status"], "confirmed")]
     if outcome:
@@ -3764,7 +3760,7 @@ def assume_item(item_id: int, cascade: bool = False, outcome: str | None = None)
     )
 
     if outcome and outcome.strip():
-        _mirror_doc_to_worktree(item_id, "outcomes", "outcome", outcome)
+        _mirror_task_doc(item_id, "outcome", outcome)
 
     changes = [("status", row[0]["status"], "assumed")]
     if outcome:
@@ -3841,7 +3837,7 @@ def mark_completed_item(item_id: int, outcome: str):
     )
 
     if outcome and outcome.strip():
-        _mirror_doc_to_worktree(item_id, "outcomes", "outcome", outcome)
+        _mirror_task_doc(item_id, "outcome", outcome)
 
     changes = [
         ("status", row[0]["status"], "completed"),
@@ -3891,7 +3887,7 @@ def decline_item(item_id: int, reason: str):
     )
 
     if reason and reason.strip():
-        _mirror_doc_to_worktree(item_id, "outcomes", "outcome", reason)
+        _mirror_task_doc(item_id, "outcome", reason)
 
     changes = [
         ("status", row[0]["status"], "declined"),
@@ -5595,7 +5591,7 @@ def update_plan(
 
     if plan is not None:
         _add("plan", plan)
-        _mirror_plan_to_worktree(item_id, plan)
+        _mirror_task_doc(item_id, "plan", plan)
 
     if parent_id is not None:
         _add("parent_id", parent_id if parent_id > 0 else None)
@@ -5621,7 +5617,7 @@ def update_plan(
     if outcome is not None:
         _add("outcome", outcome)
         if outcome.strip():
-            _mirror_doc_to_worktree(item_id, "outcomes", "outcome", outcome)
+            _mirror_task_doc(item_id, "outcome", outcome)
 
     if task_type is not None:
         valid_types = ("todo", "bugfix", "research", "epic", "brainstorm")
@@ -5656,7 +5652,7 @@ def update_plan(
     if analysis is not None:
         _add("analysis", analysis)
         if analysis.strip():
-            _mirror_doc_to_worktree(item_id, "analyses", "analysis", analysis)
+            _mirror_task_doc(item_id, "analysis", analysis)
 
     if not fields:
         raise click.ClickException(
@@ -5738,27 +5734,6 @@ def update_plan(
         _maybe_emit_report_reminder(
             item_id, row[0]["status"], status, bool(effective_outcome and effective_outcome.strip())
         )
-
-
-def recover_task_plan(item_id: int, plan: str) -> None:
-    """Set tasks.plan for item_id, emitting task.fields_updated.
-
-    Used by create_task_worktree (E-1500) to recover a plan from an orphan
-    branch's committed plan file back into the DB — the source of truth —
-    when tasks.plan was empty. Kept separate from update_item so worktree_cmd
-    can call it without dragging in the full update flow (and to avoid the
-    worktree-mirroring step: the worktree is recreated fresh right after).
-    """
-    from endless.event_bridge import emit_event
-
-    _, proj_name = _resolve_project(None)
-    emit_event(
-        kind="task.fields_updated",
-        project=proj_name,
-        entity_type="task",
-        entity_id=str(item_id),
-        payload={"fields": {"plan": plan}},
-    )
 
 
 def _format_timestamp(ts: str) -> str:
@@ -7618,7 +7593,7 @@ def replace_task(
         )
 
     if outcome and outcome.strip():
-        _mirror_doc_to_worktree(old_id, "outcomes", "outcome", outcome)
+        _mirror_task_doc(old_id, "outcome", outcome)
 
     if outcome:
         changes.append(("outcome", None, outcome))

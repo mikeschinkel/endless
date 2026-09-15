@@ -21,6 +21,7 @@ import (
 	"os/exec"
 	"path"
 	"strings"
+	"time"
 )
 
 // LedgerCommitSubject is the exact `git log --format=%s` value for ledger
@@ -54,17 +55,43 @@ func CommitLedgerSegment(projectRoot, segmentRelPath string) error {
 }
 
 // CommitDoc commits a single version-controlled document mirror file
-// (E-1747: `.endless/<kind>/<ID>.md`) directly on the project's main checkout.
-// Used for content that has no worktree of its own — a decision body authored
-// from outside any task worktree. Thin wrapper around commitPaths; inherits
-// its main-checkout enforcement (ensureMainCheckout) and GIT_DIR-family env
-// stripping, so callers don't re-implement that safety. The amend-scope glob
-// is the doc file's own directory, so a re-commit of the same subject folds in
-// rather than piling up (canAmend also requires the subject to match, and each
-// doc's subject is ID-specific, so distinct docs never amend over each other).
+// (`.endless/tasks/e-NNNN/<kind>.md`, or `.endless/decisions/ED-NNNN.md`)
+// directly on the project's main checkout. Thin wrapper around commitPaths;
+// inherits its main-checkout enforcement (ensureMainCheckout), its index.lock
+// retry, and its GIT_DIR-family env stripping, so callers don't re-implement
+// that safety. The amend-scope glob is the doc file's own directory, so a
+// re-commit of the same subject folds in rather than piling up (canAmend also
+// requires the subject to match, and each doc's subject is ID-specific, so
+// distinct docs never amend over each other).
+//
+// E-2137 made this the ONLY route a mirror takes. It was previously reached
+// only when a task had no worktree; a task that had one got its mirror
+// committed on the task BRANCH instead, where it waited for a land. Measured
+// over 133 worktrees: 123 of the 139 genuinely-unlanded commits were those
+// mirrors, and 44 of 56 unlanded worktrees were unlanded only because of them.
+// The mirror is a projection of a database column, and the column's own commit
+// has always been enforced onto main; the mirror now follows it there.
 func CommitDoc(projectRoot, relPath, subject string) error {
 	excludeGlob := path.Dir(relPath) + "/*.md"
 	return commitPaths(projectRoot, []string{relPath}, subject, excludeGlob)
+}
+
+// CommitDocPaths commits several document mirror files as ONE commit, under a
+// subject of the caller's choosing. The sweep that relocates mirrors into the
+// consolidated layout (E-2137) uses it: relocating four hundred files as four
+// hundred commits would bury every other commit on main, and the relocation is
+// one act.
+//
+// The amend-scope glob is `.endless/**` — the whole of Endless's own tree —
+// because these paths span many directories and there is no single one to name.
+// That is the correct scope for this caller and the wrong one for a single-doc
+// write, which is why the two are separate entry points rather than one with a
+// flag.
+func CommitDocPaths(projectRoot string, relPaths []string, subject string) error {
+	if len(relPaths) == 0 {
+		return nil
+	}
+	return commitPaths(projectRoot, relPaths, subject, ".endless/**")
 }
 
 // commitPaths makes one commit containing exactly the named paths.
@@ -102,6 +129,66 @@ func commitPaths(projectRoot string, paths []string, subject, excludeGlob string
 		return err
 	}
 
+	var err error
+	for attempt := 0; attempt <= commitMaxRetries; attempt++ {
+		err = commitPathsOnce(projectRoot, paths, subject, excludeGlob)
+		if err == nil || !isIndexLocked(err) {
+			break
+		}
+		sleepFn(commitRetryDelay(attempt))
+	}
+	return err
+}
+
+// commitMaxRetries bounds the index.lock retry loop. Eight, the same cap
+// `worktree land` carries for the same reason (LAND_MAX_RETRIES): it is enough
+// that a contended write waits out another process's commit, and small enough
+// that a STUCK lock — one left behind by a killed git — surfaces as an error in
+// about two seconds rather than hanging a CLI command.
+const commitMaxRetries = 8
+
+// commitRetryBase is the first backoff step; each attempt doubles it, so eight
+// attempts span roughly 10ms + 20 + 40 + ... ≈ 2.5s in total.
+const commitRetryBase = 10 * time.Millisecond
+
+// sleepFn is time.Sleep, indirected so a test can exercise the retry loop
+// without spending the backoff. Tests restore it; nothing else assigns it.
+var sleepFn = time.Sleep
+
+// commitRetryDelay returns the backoff before the attempt after this one.
+func commitRetryDelay(attempt int) time.Duration {
+	return commitRetryBase * time.Duration(1<<uint(attempt))
+}
+
+// isIndexLocked reports whether a git failure is `.git/index.lock` contention —
+// another process holding the index while we tried to stage or commit.
+//
+// This path had NO retry before E-2137, and got away with it because the only
+// writer was the ledger auto-commit. That task added every document mirror to
+// it: a `task update` now stages a file on main while some other session's
+// `task add` is staging its ledger segment there, and two writers on one index
+// is the textbook case. `land` has carried LAND_MAX_RETRIES for precisely this
+// since E-987, so the discipline already existed in the codebase — it simply
+// was not on this path.
+//
+// Matched on git's message rather than an exit code because git returns 128 for
+// this and for a dozen unrelated fatals; the text is what distinguishes them.
+// Both spellings are matched: the lock file's own name (every git version) and
+// the advisory sentence git adds when it recognizes a concurrent process.
+func isIndexLocked(err error) bool {
+	if err == nil {
+		return false
+	}
+	text := err.Error()
+	return strings.Contains(text, "index.lock") ||
+		strings.Contains(text, "Another git process seems to be running")
+}
+
+// commitPathsOnce is one attempt at the add+commit above. Separated from
+// commitPaths so the retry wraps the whole decision — canAmend runs
+// `diff-index --cached`, which refreshes the index and can itself lose the
+// race, so retrying only the commit would leave that failure unprotected.
+func commitPathsOnce(projectRoot string, paths []string, subject, excludeGlob string) error {
 	canAmend, err := canAmend(projectRoot, subject, excludeGlob)
 	if err != nil {
 		return err

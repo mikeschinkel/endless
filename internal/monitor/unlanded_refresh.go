@@ -202,34 +202,15 @@ func recordRefreshDefaultBranchFault(repoDir string, err error) {
 // by id only makes the pass deterministic; nothing depends on which project is
 // visited first.
 func ProjectRoots() ([]string, error) {
-	db, err := DB()
+	projects, err := ActiveProjects()
 	if err != nil {
 		return nil, err
 	}
-	rows, err := db.Query("SELECT path FROM projects WHERE status = 'active' ORDER BY id")
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = rows.Close() }()
-
 	var roots []string
-	for rows.Next() {
-		var stored string
-		if err = rows.Scan(&stored); err != nil {
-			return nil, err
-		}
-		// The column is STORED form (normally `~/...`); everything below this point
-		// hands the path to git and the filesystem (E-2011).
-		resolved, rerr := ResolvedProjectPath(stored)
-		if rerr != nil || resolved == "" {
-			continue
-		}
-		if fi, serr := os.Stat(resolved); serr != nil || !fi.IsDir() {
-			continue
-		}
-		roots = append(roots, resolved)
+	for _, p := range projects {
+		roots = append(roots, p.Root)
 	}
-	return roots, rows.Err()
+	return roots, nil
 }
 
 // hasTaskWorktrees reports whether repoDir has at least one task worktree, by

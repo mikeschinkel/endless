@@ -4,10 +4,15 @@ run from inside a worktree.
 
 Two sites were missed in the original E-1429 wiring:
   - _reap_stale_worktrees  -> `endless-go event reap-worktrees` (land's reap sweep)
-  - _materialize_plan_file -> `endless-go session-query task-field` (claim)
+  - doc_mirror_content     -> `endless-go session-query doc-content`
 
 Both open the DB and neither self-pins to main, so each needs the context
 threaded when a --db context is resolved, and nothing when it isn't.
+
+(The second was `_materialize_plan_file -> session-query task-field` until
+E-2137 retired birth-time materialization. The read it left behind is the one
+that asks what a mirror on a branch SHOULD contain — same binary, same gate,
+same requirement.)
 
 E-1668 changed the SPELLING, not the requirement: the child is told `--db main`
 / `--db sandbox` when the resolved dir is one of the two named databases, and
@@ -75,21 +80,17 @@ def test_reap_omits_flag_when_unresolved(capture_spawn, monkeypatch):
     assert "--db-dir" not in cmd
 
 
-def test_materialize_threads_db_main_when_resolved(
-    capture_spawn, monkeypatch, tmp_path
-):
+def test_doc_content_threads_db_main_when_resolved(capture_spawn, monkeypatch):
     monkeypatch.setattr(config, "RESOLVED_CONFIG_DIR", config.main_config_dir())
-    worktree_cmd._materialize_plan_file(1429, tmp_path)
+    worktree_cmd.doc_mirror_content(".endless/tasks/e-1429/plan.md")
     cmd = capture_spawn["cmd"]
     assert cmd[cmd.index("--db") + 1] == "main"
-    assert cmd.index("--db") < cmd.index("task-field")
+    assert cmd.index("--db") < cmd.index("doc-content")
 
 
-def test_materialize_omits_flag_when_unresolved(
-    capture_spawn, monkeypatch, tmp_path
-):
+def test_doc_content_omits_flag_when_unresolved(capture_spawn, monkeypatch):
     monkeypatch.setattr(config, "RESOLVED_CONFIG_DIR", None)
-    worktree_cmd._materialize_plan_file(1429, tmp_path)
+    worktree_cmd.doc_mirror_content(".endless/tasks/e-1429/plan.md")
     assert "--db" not in capture_spawn["cmd"]
     assert "--db-dir" not in capture_spawn["cmd"]
 

@@ -134,10 +134,8 @@ func MarkContextInjected(projectID int64, sessionID, workingDir string) {
 }
 
 // TaskPlan returns the tasks.plan content for a task id (E-1445). Returns an
-// empty string (no error) when the row or the plan is absent — the caller
-// treats "no plan" as "no plan file to materialize". This is the Go-side read
-// that lets create_task_worktree materialize a plan file without a Python DB
-// read (E-894).
+// empty string (no error) when the row or the plan is absent. A thin alias for
+// TaskField, kept for the `session-query task-plan` verb.
 func TaskPlan(taskID int64) (string, error) {
 	return TaskField(taskID, "plan")
 }
@@ -145,7 +143,8 @@ func TaskPlan(taskID int64) (string, error) {
 // taskDocColumns whitelists the multiline document columns TaskField may
 // read. Keyed here (not interpolated freely) because the column name is
 // substituted into SQL — the whitelist is the injection guard. These are the
-// fields E-1747 mirrors to committed `.endless/<subdir>/E-NNN.md` files.
+// columns mirrored to `.endless/tasks/e-NNNN/<kind>.md`; the authoritative list
+// of kinds is internal/docmirror.TaskKinds, and this set must match it.
 var taskDocColumns = map[string]bool{
 	"plan":     true,
 	"outcome":  true,

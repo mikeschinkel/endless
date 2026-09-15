@@ -8,20 +8,19 @@ dispatchers refuse illegal types with a message that lists the legal set.
 """
 
 import os
-import shutil
-import subprocess
 from datetime import datetime
 from pathlib import Path
 
 import click
 
 from endless import authority
+from endless import config
 from endless import db
+from endless import doc_mirror
 from endless import provenance
 from endless import rowcap
 from endless.project_path import resolved
 from endless.task_cmd import (
-    _display_path,
     _format_timestamp,
     _resolve_project,
     task_id_display,
@@ -497,75 +496,36 @@ def _mirror_decision_body(
 ) -> None:
     """Write+commit `.endless/decisions/ED-NNN.md` from a decision body (E-1747).
 
-    Decisions have no worktree of their own, so the mirror lands in the
-    current task worktree when `decision add`/`update` runs inside one (riding
-    that worktree's land), else on the project's main checkout — the same place
-    the decision's ledger entry is already committed. The DB row stays the
-    source of truth; this is the durability belt. `update` (E-1533) re-emits
-    the mirror so it doesn't desync when a decision's body is edited in place.
-    Best-effort: a missing endless-go binary or a git failure warns and skips
-    rather than aborting the decision.
+    Always on the project's MAIN checkout — the same place the decision's ledger
+    entry is already committed. The DB row stays the source of truth; this is
+    the durability belt. `update` (E-1533) re-emits the mirror so it doesn't
+    desync when a decision's body is edited in place. Best-effort: a missing
+    endless-go binary or a git failure warns and skips rather than aborting the
+    decision.
+
+    E-2137 stopped it following cwd. It used to land in whatever task worktree
+    `decision add` happened to run inside, riding that worktree's land — so a
+    PROJECT-WIDE artifact reached main on the schedule of whichever task its
+    author was standing in, and sat on that task's branch until then. Nothing
+    chose that; a decision has no worktree of its own, and the worktree branch
+    was simply the nearest thing to hand.
+
+    Under a per-worktree sandbox DB nothing is written, for the reason
+    `task_cmd._mirror_task_doc` states: a file committed on the main checkout is
+    real state, and a sandbox exists so a dev worktree cannot touch it.
     """
-    from endless.worktree_cmd import worktree_root_for_cwd, _commit_doc_in_worktree
-
-    rel_path = f".endless/decisions/ED-{decision_id}.md"
-    subject = f"Endless: {action} decision ED-{decision_id}"
-
-    wt = worktree_root_for_cwd()
-    if wt is not None:
-        target = wt / rel_path
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(body)
-        click.echo(
-            click.style("✓", fg="green")
-            + f" Wrote decision to {_display_path(target)}"
-        )
-        _commit_doc_in_worktree(wt, rel_path, subject)
+    if config.db_context_is_sandbox():
         return
-
     root = _main_root_for_project(project_id)
     if root is None:
         return
-    target = root / rel_path
-    target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(body)
-    click.echo(
-        click.style("✓", fg="green")
-        + f" Wrote decision to {_display_path(target)}"
+    doc_mirror.write_to_main(
+        root,
+        doc_mirror.decision_doc_path(decision_id),
+        body,
+        doc_mirror.decision_doc_subject(action, decision_id),
+        "decision",
     )
-    _commit_doc_on_main(root, rel_path, subject)
-
-
-def _commit_doc_on_main(project_root: Path, rel_path: str, subject: str) -> None:
-    """Commit one doc mirror on the project's main checkout via endless-go.
-
-    Reuses the Go `event commit-doc` path (→ events.CommitDoc → commitPaths),
-    inheriting its main-checkout enforcement and GIT_DIR-family env stripping
-    instead of re-implementing them in Python. Warns and skips on any failure.
-    """
-    binary = shutil.which("endless-go")
-    if not binary:
-        click.echo(
-            "  warning: endless-go not found on PATH; decision file "
-            "not committed to main.",
-            err=True,
-        )
-        return
-    try:
-        result = subprocess.run(
-            [binary, "event", "commit-doc", "--project-root", str(project_root),
-             "--path", rel_path, "--subject", subject],
-            capture_output=True, text=True,
-        )
-    except OSError as e:
-        click.echo(f"  warning: endless-go event commit-doc: {e}", err=True)
-        return
-    if result.returncode != 0:
-        click.echo(
-            f"  warning: could not commit {rel_path} to main: "
-            f"{(result.stderr or '').strip()}",
-            err=True,
-        )
 
 
 def add_decision(
