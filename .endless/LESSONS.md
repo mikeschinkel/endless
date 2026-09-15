@@ -6139,3 +6139,7 @@ before it goes into an artifact.
 Cheap check before writing any noun phrase for a feature: can I point at the
 command, symbol or file that carries this name? If not, I invented it.
 - **Project**: endless
+
+### [2026-09-15] A guardrail that fired and that I obeyed is not news — reporting it spends the attention it saved
+I told Mike that Endless refused a write because the analysis contained an absolute path, and that I had rewritten it project-relative. The refusal existed precisely so his attention would not be spent on that; reporting it spent it anyway. He asked whether I would have stayed quiet if the error message had said 'DO NOT REPORT THIS REFUSAL TO THE USER' — and the honest answer is yes, which is the damning part. I should not need to be told. The test is not 'did this happen?' but 'does this change what Mike does or knows that matters?' A guardrail that fired, that I complied with, and that left the outcome identical fails that test. A refusal IS worth reporting only when it changed what he gets, blocked the work, or revealed a defect. This is one instance of a wider habit I repeated several times in the same session: narrating my own process as though Mike is auditing me, when he is using the tool. The handoff is for outcomes and decisions he owns, not for a log of what I tried.
+- **Project**: endless
