@@ -418,11 +418,13 @@ Found a bug in work you already landed? Reopen that task (`--status revisit`) in
 
 ### Superseded work is `replaced_by`, never `obsolete`
 
-**`obsolete` is refused on a task that already shipped** — one that is
-`unverified`, `unreviewed`, `confirmed`, `assumed`, or `completed`. `obsolete` means *made
-irrelevant by other changes*, and it reads as **never happened**, which is
-simply false of work that ran and merged. Setting it would also throw away the
-one fact worth keeping: that the work was *superseded*.
+**When something replaced the work, the record is the relation — not
+`obsolete`.** The axis is *whether anything took over*, not whether the work
+shipped. `obsolete` means **no longer needed, and nothing replaced it**; that is
+the same line Endless draws for decisions, where `decision supersede --by` names
+a successor and `decision obsolete --reason` says it "stopped applying and
+nothing replaced it". Reaching for `obsolete` when there IS a successor throws
+away the one fact worth keeping.
 
 That fact is a relation, not a status:
 
@@ -431,7 +433,9 @@ endless task replace <old> --by <new>       # relation recorded; shipped status 
 ```
 
 `task replace` keeps a shipped task's status exactly as it stands (an unshipped
-one still defaults to `obsolete`) and records `replaced_by`. A **terminal**
+one still defaults to `obsolete`) and records `replaced_by`. Holding the shipped
+status is about not overwriting which terminal the work actually reached — the
+supersession rides on the relation either way. A **terminal**
 status then shows the supersession alongside it — `assumed (replaced by E-101)`
 on `task show`'s `Status:` line, appended to the row in `session status`, and as
 a `replaced_by` key in the `--llm` and `--json` modes of both. So a superseded
@@ -444,9 +448,12 @@ bare status. They share one Status column across every row, so annotating a
 handful of cells sized the column for all of them and took the difference out of
 every title — a real cost for a fact one `task show` away.
 
-The refusal is keyed to the task's **current** status. Work that shipped and was
-later reopened to `revisit` is genuinely back in play, so closing it as
-`obsolete` is allowed.
+**Shipped work CAN be `obsolete`.** Code that is being *deleted* rather than
+superseded is obsolete in the plainest sense of the word: no longer in use. There is no successor to name, so
+`task replace` had no answer for it, and `declined` — an active decision not to
+*do* the work — says something false about work that was built and landed. The
+fact that it shipped is not lost by saying so: that lives in the landing record,
+which is where `task show`'s `Landed:` line comes from.
 
 ---
 

@@ -93,13 +93,18 @@ stateDiagram-v2
     assumed --> declined: user declines — the shipped work is not being kept
     completed --> declined: user declines — the shipped work is not being kept
 
-    %% Obsoleting — no longer needed, from the statuses where nothing has shipped yet
+    %% Obsoleting — no longer needed, and nothing replaced it
     untriaged --> obsolete: user retires — it no longer needs doing
     unplanned --> obsolete: user retires — it no longer needs doing
     submitted --> obsolete: user retires — it no longer needs doing
     ready --> obsolete: user retires — it no longer needs doing
     underway --> obsolete: user retires — it no longer needs doing
     revisit --> obsolete: user retires — it no longer needs doing
+    unverified --> obsolete: user retires — the shipped work is no longer in use
+    unreviewed --> obsolete: user retires — the shipped work is no longer in use
+    confirmed --> obsolete: user retires — the shipped work is no longer in use
+    assumed --> obsolete: user retires — the shipped work is no longer in use
+    completed --> obsolete: user retires — the shipped work is no longer in use
 
     %% Reversal — reconsidering an abandonment decision
     declined --> untriaged: user reconsiders

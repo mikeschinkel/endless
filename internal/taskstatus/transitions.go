@@ -296,22 +296,32 @@ var transitionGroups = []transitionGroup{
 	},
 	{
 		// `obsolete` is the ordinary English word: no longer needed, out of
-		// date, superseded by something newer. So the commonest case it
-		// covers is work that WAS worth doing when it was filed and has
-		// since been overtaken — not only work that was never worth doing.
-		// A label saying "it never needed doing" excluded that case and sent
-		// it toward `declined`, which is a different fact: an active decision
-		// not to do work that would still be worth doing (E-2144).
+		// date, overtaken. So the commonest case it covers is work that WAS
+		// worth doing when it was filed and has since been overtaken — not
+		// only work that was never worth doing. The old label said
+		// "it never needed doing", which excluded that case and sent it
+		// toward `declined` — a different fact: an active decision not to do
+		// work that would still be worth doing (E-2144).
 		//
-		// No inbound edge from a Shipped status, and that is the rule E-1956
-		// landed. Note what that rule is and is not: it is a fact about which
-		// EDGES exist, not a definition of the word. Read as a definition it
-		// says "obsolete means it never shipped", which is the old gloss in
-		// different words — and it is false of any epic, whose status is
-		// derived in Go and never passes through the Python gate. E-1421
-		// landed twice and is obsolete. So the group's name describes the
-		// edges; what `obsolete` MEANS is above, and holds either way.
-		Name: "Obsoleting — no longer needed, from the statuses where nothing has shipped yet",
+		// The axis is WHETHER ANYTHING REPLACED IT, never whether it shipped.
+		// Endless already draws exactly that line for decisions, and the two
+		// record kinds now agree: `decision supersede --by` when there IS a
+		// successor, `decision obsolete --reason` when "it stopped applying
+		// and nothing replaced it". For tasks the successor is the
+		// `replaced_by` relation (`task replace <old> --by <new>`), and
+		// `obsolete` is the no-replacement terminal.
+		//
+		// E-1956 keyed this on the wrong column: it refused `obsolete` from
+		// every Shipped status, reasoning that the word "reads as never
+		// happened". That reading was an artifact of the gloss above, and it
+		// is gone with it. Shipped work that is being REMOVED — not replaced
+		// — is obsolete in the plainest sense of the word: no longer in use.
+		// The rule also never held. Epic status is derived in Go and never
+		// passed the Python gate, so E-1421 has been a shipped-and-obsolete
+		// epic (landed twice, 18fe0f0) the whole time. And the fact that the
+		// work shipped is not lost by saying so: it lives in task_landings,
+		// which is where `task show` reads the `Landed:` line from.
+		Name: "Obsoleting — no longer needed, and nothing replaced it",
 		Transitions: []Transition{
 			{From: Untriaged, To: Obsolete, Actor: ActorUser, Label: "retires — it no longer needs doing"},
 			{From: Unplanned, To: Obsolete, Actor: ActorUser, Label: "retires — it no longer needs doing"},
@@ -319,6 +329,11 @@ var transitionGroups = []transitionGroup{
 			{From: Ready, To: Obsolete, Actor: ActorUser, Label: "retires — it no longer needs doing"},
 			{From: Underway, To: Obsolete, Actor: ActorUser, Label: "retires — it no longer needs doing"},
 			{From: Revisit, To: Obsolete, Actor: ActorUser, Label: "retires — it no longer needs doing"},
+			{From: Unverified, To: Obsolete, Actor: ActorUser, Label: "retires — the shipped work is no longer in use"},
+			{From: Unreviewed, To: Obsolete, Actor: ActorUser, Label: "retires — the shipped work is no longer in use"},
+			{From: Confirmed, To: Obsolete, Actor: ActorUser, Label: "retires — the shipped work is no longer in use"},
+			{From: Assumed, To: Obsolete, Actor: ActorUser, Label: "retires — the shipped work is no longer in use"},
+			{From: Completed, To: Obsolete, Actor: ActorUser, Label: "retires — the shipped work is no longer in use"},
 		},
 	},
 	{

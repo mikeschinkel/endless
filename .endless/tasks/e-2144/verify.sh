@@ -42,6 +42,11 @@
 #      from. Both asserted "the work never shipped", which is not a fact the
 #      status carries: E-1421 is an epic that landed twice and is obsolete, so
 #      the banner called its own Landed: line imaginary.
+#   H. The axis is the RIGHT one. A definition nothing enforces is a comment,
+#      so the last pass makes the lifecycle agree with the word: `obsolete`
+#      turns on whether anything REPLACED the work, never on whether it
+#      shipped. That is the line Endless already draws for decisions, and the
+#      two record kinds now match.
 source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
@@ -121,31 +126,31 @@ EDGES="$("${BIN}" task-status transitions)" \
 
 inbound() { printf '%s\n' "${EDGES}" | awk -F'\t' '$2=="obsolete"'; }
 
-assert_eq "six inbound edges into obsolete, as before" \
-    "6" "$(inbound | grep -c .)"
-
-assert_eq "every one of them carries the corrected label" \
+assert_eq "the six pre-ship edges carry the corrected label" \
     "6" "$(inbound | awk -F'\t' -v l="${LABEL}" '$5==l' | grep -c .)"
 
 assert_not_contains "no edge in the whole table still says \"${OLD}\"" \
     "${OLD}" "${EDGES}"
 
 # ---------------------------------------------------------------------------
-section "C. The lifecycle itself did not move"
+section "C. What the rewording did NOT move"
 # ---------------------------------------------------------------------------
-# A wording fix that quietly loosened the rule would be a different change. The
-# inbound set is still exactly the six pre-ship statuses, which is the same
-# statement as E-1956's: shipped work is not obsoletable, because the fact to
-# record there is a `replaced_by` relation.
+# Sections A-G are a wording change and must not have altered behaviour; H is
+# the one deliberate behaviour change and is asserted there. What belongs here
+# is the invariant that survived both: which statuses reach `obsolete` at all,
+# and that the decision stays reversible.
+#
+# Every status except the two abandonments themselves reaches it. That is the
+# shape of the corrected axis — a task is obsoletable whenever nothing replaced
+# it, at any point in its life — and it is a stronger claim than listing eleven
+# froms, because it says WHY there are eleven.
 
-assert_eq "inbound obsolete edges come from the six pre-ship statuses" \
-    "ready revisit submitted underway unplanned untriaged" \
+OBSOLETABLE="$("${BIN}" task-status get all \
+               | grep -v -e '^declined$' -e '^obsolete$' | sort | tr '\n' ' ' | sed 's/ $//')"
+
+assert_eq "every status but the two abandonments can reach obsolete" \
+    "${OBSOLETABLE}" \
     "$(inbound | awk -F'\t' '{print $1}' | sort | tr '\n' ' ' | sed 's/ $//')"
-
-for s in $("${BIN}" task-status get shipped); do
-    assert_eq "no inbound obsolete edge from shipped status '${s}' (E-1956)" \
-        "0" "$(inbound | awk -F'\t' -v s="${s}" '$1==s' | grep -c .)"
-done
 
 assert_eq "the reversal edge obsolete → untriaged still stands" \
     "1" "$(printf '%s\n' "${EDGES}" | awk -F'\t' '$1=="obsolete" && $2=="untriaged" && $5=="reconsiders"' | grep -c .)"
@@ -193,8 +198,7 @@ assert_contains "the row names \`declined\` as the different fact" \
     "is \`declined\`, a different fact" "${ROW}"
 assert_not_contains "the row no longer says \"${OLD}\"" "${OLD}" "${ROW}"
 
-# E-1956's refusal is a separate rule and survives this edit intact.
-assert_contains "the row keeps the shipped-work refusal" \
+assert_not_contains "the row no longer teaches the removed refusal" \
     "Refused on work that already shipped" "${ROW}"
 assert_contains "the row keeps the replaced_by remedy" \
     'task replace <old> --by <new>' "${ROW}"
@@ -231,7 +235,7 @@ assert_eq "nothing in the product tree still says \"${OLD}\"" \
 assert_eq "transitions.go quotes it exactly once, in the comment that retires it" \
     "1" "$(grep -c -- "${OLD}" internal/taskstatus/transitions.go)"
 assert_contains "and that one mention is a comment, not a label" \
-    "// A label saying \"it ${OLD}\" excluded that case" \
+    "// \"it ${OLD}\", which excluded that case" \
     "$(cat internal/taskstatus/transitions.go)"
 
 # ---------------------------------------------------------------------------
@@ -280,5 +284,55 @@ assert_eq "nothing in the product tree still says \"${OLD_PARA}\"" \
     "" "$(sweep "${OLD_PARA}" \
           | grep -v -e '^src/endless/authority\.py$' \
                     -e '^internal/taskstatus/transitions\.go$')"
+
+# ---------------------------------------------------------------------------
+section "H. The axis is whether anything replaced it, not whether it shipped"
+# ---------------------------------------------------------------------------
+# E-1956 refused `obsolete` from every shipped status, reasoning that the word
+# "reads as never happened". That reading was an artifact of the gloss sections
+# A-G removed, so the gate went with it. Three things had to become true
+# together, or the definition would just be a comment nothing enforces: the Go
+# table has to ALLOW the edges, the Python path must not refuse them, and the
+# guide has to teach the axis.
+
+for s_ in $("${BIN}" task-status get shipped); do
+    assert_eq "the table allows ${s_} → obsolete" \
+        "1" "$(inbound | awk -F'\t' -v s="${s_}" '$1==s' | grep -c .)"
+done
+
+assert_eq "shipped edges say what is true of shipped work" \
+    "5" "$(inbound | awk -F'\t' '$5=="retires — the shipped work is no longer in use"' | grep -c .)"
+
+assert_eq "eleven inbound edges now: six pre-ship, five shipped" \
+    "11" "$(inbound | grep -c .)"
+
+# The Go legality check is what refused this at the event seam, so it is asked
+# directly rather than inferred from the table it reads.
+assert_contains "obsolete is reachable from a shipped status" \
+    "obsolete" "$("${BIN}" task-status transitions | awk -F'\t' '$1=="assumed"{print $2}')"
+
+# The Python gate is gone, not merely unreferenced.
+assert_eq "_refuse_obsolete_on_shipped_work no longer exists" \
+    "" "$(sweep '_refuse_obsolete_on_shipped_work')"
+
+# `declined` is untouched: it still means an active decision not to DO the work,
+# and it still reaches back from every shipped status. This change moved one
+# status, not both.
+assert_eq "declined still has its five shipped edges" \
+    "5" "$(printf '%s\n' "${EDGES}" | awk -F'\t' '$2=="declined" && $5=="declines — the shipped work is not being kept"' | grep -c .)"
+
+# The guide teaches the axis, and no longer teaches the refusal.
+TASKS_MD="$(cat docs/guide/tasks.md)"
+assert_contains "the guide says shipped work can be obsolete" \
+    "Shipped work CAN be \`obsolete\`" "${TASKS_MD}"
+assert_contains "the guide names the replacement axis" \
+    "no longer needed, and nothing replaced it" "$(cat docs/guide/index.md)"
+assert_not_contains "the guide no longer teaches the removed refusal" \
+    "obsolete\` is refused on a task that already shipped" "${TASKS_MD}"
+
+# Endless drew this line for decisions first; the two record kinds must agree,
+# because an agent that learns the rule from one applies it to the other.
+assert_contains "decisions still draw the same line" \
+    "it stopped applying and nothing replaced it" "$(cat docs/guide/decisions.md)"
 
 summary

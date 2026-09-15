@@ -193,23 +193,25 @@ def test_task_list_json_emits_the_relation_ungated(seeded_project_at_cwd, capsys
     assert rows[f"E-{new}"]["replaced_by"] == []
 
 
-# ─── the obsolete guard ──────────────────────────────────────────────────────
+# ─── obsolete and the replacement axis ───────────────────────────────────────
+#
+# `obsolete` means "no longer needed, and nothing replaced it" — the same line
+# Endless already draws for decisions. It is keyed on whether anything took the
+# work over, NEVER on whether the work shipped. The gate that refused it on
+# shipped work is gone: code being DELETED rather than superseded has no
+# successor for `task replace` to name, and `declined` (an active decision not
+# to DO the work) is false of work that was built and landed.
 
 
 @pytest.mark.parametrize(
     "shipped", ["unverified", "confirmed", "assumed", "completed"]
 )
-def test_update_to_obsolete_is_refused_on_shipped_work(
+def test_update_to_obsolete_is_allowed_on_shipped_work(
     seeded_project_at_cwd, shipped
 ):
     tid = _add_task("Add a shipped thing", status=shipped)
-    with pytest.raises(click.ClickException) as exc:
-        task_cmd.update_plan(tid, status="obsolete")
-    msg = str(exc.value.message)
-    assert shipped in msg
-    assert "task replace" in msg          # names the sanctioned path
-    assert "replaced_by" in msg           # names the fact to record
-    assert _status(tid) == shipped        # and nothing was written
+    task_cmd.update_plan(tid, status="obsolete")  # must not raise
+    assert _status(tid) == "obsolete"
 
 
 @pytest.mark.parametrize(
@@ -231,18 +233,17 @@ def test_other_transitions_on_shipped_work_are_untouched(seeded_project_at_cwd):
     assert _status(tid) == "declined"
 
 
-def test_replace_refuses_an_explicit_obsolete_on_shipped_work(
+def test_replace_allows_an_explicit_obsolete_on_shipped_work(
     seeded_project_at_cwd
 ):
+    # The DEFAULT still holds a shipped status (next test) — that is about not
+    # overwriting which terminal the work reached. An explicit --status is the
+    # caller overriding that, and it is no longer refused.
     old = _add_task("Add a shipped thing", status="assumed")
     new = _add_task("Add the replacement", status="underway")
-    with pytest.raises(click.ClickException) as exc:
-        task_cmd.replace_task(old, new, status="obsolete")
-    msg = str(exc.value.message)
-    assert "Omit --status" in msg
-    # Refused BEFORE the link is written — a rejected call leaves no residue.
-    assert task_cmd.replaced_by_map([old]) == {}
-    assert _status(old) == "assumed"
+    task_cmd.replace_task(old, new, status="obsolete")
+    assert _status(old) == "obsolete"
+    assert task_cmd.replaced_by_map([old]) == {old: [new]}
 
 
 def test_replace_holds_a_shipped_status_by_default(seeded_project_at_cwd):

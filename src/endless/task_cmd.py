@@ -3380,56 +3380,23 @@ def _require_status_allowed_for_type(status: str | None, task_type: str | None):
     )
 
 
-# E-1956: the statuses that mean the task's work SHIPPED — it reached the
-# verification gate or passed it. `obsolete` is refused on these.
+# The statuses that mean the task's work SHIPPED — it reached the verification
+# gate or passed it.
 #
 # Deliberately NOT the terminal set (_TERMINAL_STATUSES): `declined`
 # and `obsolete` are terminal but never shipped, and 'unverified' ships without
-# being terminal. And deliberately CURRENT status only, not "ever reached" — a
-# task that shipped and was later reopened to `revisit` is genuinely back in
-# play, and re-closing it as obsolete is a legitimate call.
+# being terminal.
+#
+# E-1956 used this to REFUSE `obsolete` on shipped work. E-2144 removed that
+# gate: the axis for `obsolete` is whether anything REPLACED the work, not
+# whether it shipped — the same line Endless already drew for decisions, where
+# `obsolete` means "it stopped applying and nothing replaced it". Shipped code
+# that is being deleted rather than superseded is obsolete in the plainest
+# sense, and `task replace` had no id to name for it. What survives here is the
+# one use that was always about shipped-ness: `_apply_replacement` holds a
+# replaced task at the status it EARNED instead of overwriting it.
 _SHIPPED_STATUSES = statuses.get("shipped")
 
-
-def _refuse_obsolete_on_shipped_work(
-    item_id: int,
-    status: str | None,
-    current_status: str,
-    via_replace: bool = False,
-):
-    """E-1956: refuse `obsolete` on a task whose work already shipped.
-
-    `obsolete` means "made irrelevant by other changes" — it reads as *never
-    happened*, which is simply false of work that ran, merged, and is being
-    superseded. The fact worth keeping is the supersession, and that is a
-    `replaced_by` relation, not a status. So the tempting-but-lossy move is
-    closed off and the caller is pointed at `task replace`, which records the
-    relation and leaves the shipped status standing.
-
-    A hard gate with no --force, matching `_require_status_allowed_for_type`
-    (E-1577): the fix is to record the right fact, not to override the check.
-    `via_replace` only swaps the remedy sentence — `task replace` is already
-    the command in hand there, so telling the caller to run it would be noise.
-    """
-    if status != "obsolete" or current_status not in _SHIPPED_STATUSES:
-        return
-    if via_replace:
-        remedy = (
-            f"Omit --status to keep {current_status!r} (the replaced_by "
-            f"relation is recorded either way), or name a terminal that is "
-            f"true of it."
-        )
-    else:
-        remedy = (
-            "If it was superseded, record that instead:\n"
-            f"    endless task replace {task_id_display(item_id)} --by <new-id>\n"
-            f"(keeps {current_status!r}, adds a replaced_by relation)"
-        )
-    raise click.ClickException(
-        f"{task_id_display(item_id)} is {current_status!r} — shipped work "
-        f"cannot be marked obsolete; that reads as \"never happened\" and "
-        f"loses the fact that it shipped.\n\n{remedy}"
-    )
 
 
 def _refuse_cascade_across_typed_descendants(item_id: int, status: str):
@@ -5341,10 +5308,6 @@ def update_plan(
         # The Go transition table refuses todo/bugfix → completed (E-1658); a
         # `completed` flip on an implementation type is caught there.
         _require_status_allowed_for_type(status, effective_type)
-        # E-1956: `obsolete` is refused on work that already shipped — the fact
-        # to record there is a replaced_by relation, not a status that reads as
-        # "never happened".
-        _refuse_obsolete_on_shipped_work(item_id, status, row[0]["status"])
 
     # Reject a maybe-phase task gaining (or keeping) a parent. Only evaluate
     # when this update touches phase or parent_id — an unrelated edit must not
@@ -7385,11 +7348,17 @@ def replace_task(
     """Mark old_id as replaced by new_id: record the relation, set the status.
 
     `status` is what the REPLACED task becomes. None means "derive it from what
-    the task is now" (E-1956): work that already SHIPPED keeps the status it
-    earned — the supersession is carried by the `replaced_by` relation, and
-    overwriting a true terminal with `obsolete` would assert the work never
-    happened — while everything else takes the historical 'obsolete' default.
-    An explicit status still wins, subject to the same shipped-work guard.
+    the task is now": work that already SHIPPED keeps the status it earned — the
+    supersession is carried by the `replaced_by` relation, and overwriting a
+    true terminal would throw away which terminal it reached — while everything
+    else takes the 'obsolete' default. An explicit status still wins.
+
+    Note the tension E-2144 left standing rather than resolving: `obsolete` now
+    means "no longer needed, and nothing replaced it", yet it is still the
+    default terminal for an unshipped task that IS being replaced. Decisions
+    have a dedicated `superseded` status for that case and tasks do not, so the
+    `replaced_by` relation carries the whole fact here. Adding a task-side
+    `superseded` is a separate question.
     """
     from endless.event_bridge import emit_event
 
@@ -7411,7 +7380,6 @@ def replace_task(
     if status is None:
         status = old_status if old_status in _SHIPPED_STATUSES else "obsolete"
     _require_outcome_for_declined(status, outcome)
-    _refuse_obsolete_on_shipped_work(old_id, status, old_status, via_replace=True)
 
     # "old replaced_by new" → display='replaced_by' resolves to stored='replaces' with
     # swap=True → row stored as source=new, target=old, dep_type='replaces' (active voice).

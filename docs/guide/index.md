@@ -135,13 +135,18 @@ stateDiagram-v2
     assumed --> declined: user declines — the shipped work is not being kept
     completed --> declined: user declines — the shipped work is not being kept
 
-    %% Obsoleting — no longer needed, from the statuses where nothing has shipped yet
+    %% Obsoleting — no longer needed, and nothing replaced it
     untriaged --> obsolete: user retires — it no longer needs doing
     unplanned --> obsolete: user retires — it no longer needs doing
     submitted --> obsolete: user retires — it no longer needs doing
     ready --> obsolete: user retires — it no longer needs doing
     underway --> obsolete: user retires — it no longer needs doing
     revisit --> obsolete: user retires — it no longer needs doing
+    unverified --> obsolete: user retires — the shipped work is no longer in use
+    unreviewed --> obsolete: user retires — the shipped work is no longer in use
+    confirmed --> obsolete: user retires — the shipped work is no longer in use
+    assumed --> obsolete: user retires — the shipped work is no longer in use
+    completed --> obsolete: user retires — the shipped work is no longer in use
 
     %% Reversal — reconsidering an abandonment decision
     declined --> untriaged: user reconsiders
@@ -171,7 +176,7 @@ stateDiagram-v2
 | `completed`   | Findings work is done and accepted — the terminal of the review lane, as `confirmed`/`assumed` are of the verification lane. **Unblocks dependents.** Research and brainstorm reach it only through `unreviewed`, and only with an outcome. Epics reach it directly, self-completing from their children. `todo`/`bugfix` never reach it at all: completed-eligibility is a rule about task TYPE, not about the title's verb, and implementation work terminates via `confirmed`/`assumed`. |
 | `revisit`     | Needs re-evaluation before it can proceed — either a partial plan that no longer holds, or work that shipped and turned out wrong. Reopening your own landed work lands here. |
 | `declined`    | Active decision not to do this. Requires `--reason`.                                                           |
-| `obsolete`    | No longer needs doing — out of date, or superseded by something newer. It covers work that was worth doing when it was filed and has since been overtaken, not only work that was never worth doing; the active decision *not* to do work that would still be worth doing is `declined`, a different fact. **Refused on work that already shipped** (`unverified`/`unreviewed`/`confirmed`/`assumed`/`completed`): that work happened, and if something superseded it the fact to record is a `replaced_by` relation. Use `task replace <old> --by <new>`. |
+| `obsolete`    | No longer needs doing — out of date, or superseded by something newer. It covers work that was worth doing when it was filed and has since been overtaken, not only work that was never worth doing; the active decision *not* to do work that would still be worth doing is `declined`, a different fact. The axis is **whether anything replaced it**, not whether it shipped — shipped code being *deleted* is obsolete in the plainest sense, and the landing record keeps the fact that it shipped. When something DID take over, record that instead: `task replace <old> --by <new>`, which holds the status and adds a `replaced_by` relation. |
 
 The agent sets `submitted` (via `task submit`, or by attaching a plan); a human sets `ready` (via `task approve`) — the two-step gate that makes `ready` mean "approved," not merely "planned."
 
