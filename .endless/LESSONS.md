@@ -6073,3 +6073,35 @@ decline it with a reason naming the over-filing. Do not let `task replace` pick
 the status, because its default answers a different question than the one the
 closure is answering.
 - **Project**: endless
+
+### [2026-09-15] On a schema-change task, rebuild bin/endless-go and apply the change to the sandbox before running the suite
+A schema-change task lands its migration on main at `worktree land` time, so
+while the task is in flight the worktree's own two databases are BOTH still
+pre-change — and two things break in ways that do not name the real cause.
+
+1. The Python suite shells out to `<worktree>/bin/endless-go`, which is
+   whatever was built when the worktree was born. After the first Go edit that
+   renames a column, ~100 tests fail with `table tasks has no column named
+   <old>` — an error about the OLD name, emitted by a STALE binary, while the
+   tree in front of you says the new one. Nothing in the failure points at the
+   binary.
+
+2. This session's Claude hooks run that same binary (`.claude/settings.local.json`
+   pins them to `<worktree>/bin/endless-go`) against the worktree's sandbox DB.
+   Once the binary expects the new column and the sandbox still has the old one,
+   session tracking for the session doing the work silently stops.
+
+So immediately after writing the change file under `internal/schema/changes/`,
+do both, before running anything:
+
+    go build -o bin/endless-go ./cmd/endless-go
+    endless db apply-change internal/schema/changes/<file> --db sandbox
+
+Also expect `endless <anything> --db main` from the worktree to refuse for the
+rest of the task — the worktree's source names the new column and main's DB
+still has the old one. That refusal is correct and by design (E-1941 applies
+changes AFTER the ff-merge). To set the task's status on main before landing,
+use the globally installed CLI (the one `which endless` finds outside the
+worktree), which is still main's build, with ENDLESS_SESSION_ID unset so it
+does not route back through the worktree's source.
+- **Project**: endless
