@@ -355,3 +355,66 @@ read-only media, a `.git` directory owned by another user, and a full disk.
 repository prints the parent the cache wants to live under. Nothing needs
 repairing afterwards — the cache is rebuildable derived state, and the next job
 pass refills it. Dismiss with `endless errors clear <id>`.
+
+## ERR-0013 — turn-failed-transient
+
+**Severity:** warning · **Raised by:** the Claude Code `StopFailure` hook
+(E-2145)
+
+A Claude Code turn ended on an API error that should pass on its own —
+`rate_limit`, `overloaded`, `server_error`, `max_output_tokens`, or any error
+type Endless does not recognise. Claude Code fires `StopFailure` *instead of*
+`Stop` when a turn dies this way, so without a hook on it the turn would end
+with no record anywhere and the session would keep reading `working` forever.
+
+The incident is what makes the failure visible; the session itself is already
+handled. Endless parses the transcript the dead turn produced and moves the
+session to `idle`, which is what it is: paused, waiting on a person. There is no
+separate session state for a crashed turn — the fault is where the *reason*
+lives.
+
+Fingerprinted on the error type, so a session that hits the same rate limit
+twenty times raises one incident with an occurrence count of twenty, while a
+different failure opens its own. The summary names the type, so the badge says
+which one it was.
+
+Warning rather than error because these clear themselves: waiting out a rate
+limit, retrying an overload, or shortening a reply that hit
+`max_output_tokens` is all that any of them need. An unrecognised error type
+also lands here — an unknown failure is more likely transient than fatal, and
+grading it red would let it outrank a real error for the single line the badge
+renders.
+
+**What to do.** Usually nothing but take the turn again. Read the detail
+(`endless errors show --id <n> --detail`) for the session, the task and the
+error type of every occurrence. A high occurrence count on `max_output_tokens`
+is worth acting on — it means turns are routinely being cut off mid-reply.
+Dismiss with `endless errors clear <id>`.
+
+## ERR-0014 — turn-failed-fatal
+
+**Severity:** error · **Raised by:** the Claude Code `StopFailure` hook
+(E-2145)
+
+A Claude Code turn ended on an API error that will not clear itself —
+`authentication_failed`, `billing_error`, `oauth_org_not_allowed`, or
+`account_on_hold`. Every one of these is a fact about the account rather than a
+passing condition, so retrying cannot change the answer; the same turn will die
+the same way until a person fixes something outside Endless.
+
+Identical to ERR-0013 in everything but severity and remedy: the same hook, the
+same transcript parse, the same move to `idle`, the same fingerprint-per-error-
+type grouping. Two codes rather than one whose colour depends on the payload,
+because severity here is a property of the code — one code that sometimes meant
+yellow and sometimes red would be invisible in the catalog and in
+`endless errors codes`.
+
+Error rather than warning so it wins the badge's single row against a
+transient failure that happens to be open at the same time. That is what
+severity buys here: prominence, not longevity.
+
+**What to do.** Fix the account condition the error type names — re-authenticate
+(`claude` will prompt), settle billing, or ask whoever administers the
+organisation about an org policy or a hold. `endless errors show --id <n>
+--detail` names the error type, the session and the task for every occurrence.
+Dismiss with `endless errors clear <id>` once it is sorted.

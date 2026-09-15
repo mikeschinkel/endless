@@ -322,12 +322,22 @@ CLAUDE_SETTINGS_PATH = Path.home() / ".claude" / "settings.json"
 # indistinguishable from one doing work. An install that predates it needs no
 # extra step: `_repair_missing_hook_events` adds an endless-go entry for any
 # hooked event that has none, which is exactly the case it exists for.
+#
+# StopFailure joined in E-2145, and it is `Stop`'s ALTERNATIVE rather than a
+# second thing that happens after it: Claude Code fires one or the other, this
+# one when the turn dies on an API error. Endless hung all of its end-of-turn
+# handling on `Stop`, so a failed turn took none of it — the transcript went
+# unparsed and the session sat at `working` on a dead turn. Installed here and
+# handled in internal/hookcmd/stopfailure.go; installing it without that handler
+# would leave the session `working` with a freshly refreshed last_activity,
+# which is worse than not hooking it at all.
 CLAUDE_HOOK_EVENTS = [
     "PreToolUse",
     "SessionStart",
     "UserPromptSubmit",
     "PostToolUse",
     "Stop",
+    "StopFailure",
     "SessionEnd",
     "Notification",
 ]
@@ -376,6 +386,11 @@ def _make_hook_entry(hook_bin: str, is_async: bool = True) -> dict:
 # member because something downstream reads what it wrote within the same turn;
 # the Notification handler records a session state and gates nothing, so
 # blocking the harness on it would buy nothing.
+#
+# StopFailure is NOT here either (E-2145), and could not usefully be. The hooks
+# reference is explicit that Claude Code does not read this hook's output on any
+# exit code — no JSON, no decision, exit 2 ignored — so a synchronous entry would
+# buy nothing at all and would delay the end of an already-failed turn to do it.
 SYNC_EVENTS = {"PreToolUse", "SessionStart", "UserPromptSubmit", "PostToolUse", "Stop"}
 
 

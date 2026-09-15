@@ -224,6 +224,40 @@ var (
 		Severity: SeverityWarning,
 		Title:    "The unlanded-verdict cache cannot be written",
 	}
+
+	// ErrCodeTurnFailedTransient and ErrCodeTurnFailedFatal both cover a Claude
+	// Code turn that ended on an API error — the `StopFailure` event (E-2145),
+	// which the harness fires INSTEAD OF `Stop` when a turn dies.
+	//
+	// TWO codes rather than one code whose severity depends on the payload,
+	// because severity is a property of the CODE here (see the Code doc above)
+	// and a per-occurrence severity would be the first exception to that. The
+	// split is by whether the failure can resolve itself, which is also what
+	// decides which one deserves the single line the badge renders.
+	//
+	// Transient: `rate_limit`, `overloaded`, `server_error`, `max_output_tokens`,
+	// and every error type not named in the fatal set — including ones a future
+	// Claude Code adds. Warning is the forgiving direction for an unrecognised
+	// value: an unknown failure is more likely to be a passing one than a fatal
+	// one, and over-reporting it as red would outrank real errors for the badge's
+	// one row.
+	ErrCodeTurnFailedTransient = Code{
+		ID:       "ERR-0013",
+		Slug:     "turn-failed-transient",
+		Severity: SeverityWarning,
+		Title:    "A turn ended on an API error that should pass on its own",
+	}
+
+	// ErrCodeTurnFailedFatal is the needs-a-person half: `authentication_failed`,
+	// `billing_error`, `oauth_org_not_allowed` and `account_on_hold`. Nothing
+	// self-heals — every one of them is a fact about the account that retrying
+	// cannot change — so they outrank a transient failure for the badge's row.
+	ErrCodeTurnFailedFatal = Code{
+		ID:       "ERR-0014",
+		Slug:     "turn-failed-fatal",
+		Severity: SeverityError,
+		Title:    "A turn ended on an API error that will not clear itself",
+	}
 )
 
 // catalog indexes every registered Code by ID. Built once at init from the
@@ -241,6 +275,8 @@ var catalog = buildCatalog(
 	ErrCodeWorktreeProbeFailed,
 	ErrCodeDefaultBranchUnresolved,
 	ErrCodeUnlandedCacheUnwritable,
+	ErrCodeTurnFailedTransient,
+	ErrCodeTurnFailedFatal,
 )
 
 // buildCatalog indexes codes by ID. It panics on a duplicate ID: a collision is

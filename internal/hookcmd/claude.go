@@ -62,6 +62,19 @@ type claudePayload struct {
 	// and ignores the rest; see it for why that is the rule and not a TODO.
 	NotificationType string `json:"notification_type,omitempty"`
 
+	// StopFailure only. Which API error ended the turn, and the field the
+	// event's own matcher filters on — `rate_limit`, `overloaded`,
+	// `max_output_tokens`, `server_error`, `authentication_failed`,
+	// `billing_error`, `oauth_org_not_allowed`, `account_on_hold`,
+	// `invalid_request`, `model_not_found`, `cloud_credential_error` and
+	// `unknown` are the documented vocabulary.
+	//
+	// handleStopFailure classifies it rather than enumerating it: exactly four
+	// values are treated as needing a person and every other value — including
+	// one a future Claude Code adds, and an absent field — is transient. See
+	// fatalTurnErrorTypes.
+	ErrorType string `json:"error_type,omitempty"`
+
 	// Stop only, and UNDOCUMENTED: set when this Stop follows a hook-induced
 	// continuation. Used only as a corroborating signal — the relay gate's loop
 	// guard is its own bounce counter, because staking a livelock on an
@@ -411,6 +424,16 @@ func runClaude(args []string) (err error) {
 		if err := monitor.IdleSession(payload.SessionID); err != nil {
 			return fmt.Errorf("idling session: %w", err)
 		}
+
+	case "StopFailure":
+		// The OTHER way a turn ends (E-2145). Claude Code fires this INSTEAD OF
+		// `Stop` when the turn dies on an API error, so it is the `Stop` case's
+		// alternative and not its sequel — everything above would otherwise never
+		// run for a failed turn, leaving the session reading `working` on a dead
+		// one. Beside `Stop` on purpose: the two end-of-turn events belong where
+		// a reader can see they are a pair.
+		return handleStopFailure(projectID, payload)
+
 	case "PreCompact":
 		// Capture everything before compaction
 		monitor.ParseTranscript(payload.SessionID, payload.TranscriptPath)
