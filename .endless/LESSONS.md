@@ -6143,3 +6143,48 @@ command, symbol or file that carries this name? If not, I invented it.
 ### [2026-09-15] A guardrail that fired and that I obeyed is not news — reporting it spends the attention it saved
 I told Mike that Endless refused a write because the analysis contained an absolute path, and that I had rewritten it project-relative. The refusal existed precisely so his attention would not be spent on that; reporting it spent it anyway. He asked whether I would have stayed quiet if the error message had said 'DO NOT REPORT THIS REFUSAL TO THE USER' — and the honest answer is yes, which is the damning part. I should not need to be told. The test is not 'did this happen?' but 'does this change what Mike does or knows that matters?' A guardrail that fired, that I complied with, and that left the outcome identical fails that test. A refusal IS worth reporting only when it changed what he gets, blocked the work, or revealed a defect. This is one instance of a wider habit I repeated several times in the same session: narrating my own process as though Mike is auditing me, when he is using the tool. The handoff is for outcomes and decisions he owns, not for a log of what I tried.
 - **Project**: endless
+
+### [2026-09-15] An ambiguous brief resolved silently is an assumption the user can only review as working software
+I built `project monitor` as a view whose rows are SESSIONS, with tasks attached
+to them. Mike, seeing it in use: "I don't care about sessions, I only care about
+tasks. A session is plumbing to allow me to make a task happen."
+
+When I called that a contradiction of the original premise, he corrected the
+correction: "I never WAS a session monitor, it was always a *project* monitor,
+and a project has tasks... Not the original premise, the premise you assumed to
+be the case but that where I could not realize what you assumed until after I saw
+what you built."
+
+He is right, and the mechanism is worth naming precisely because I had evidence
+pointing both ways and picked without noticing I was picking.
+
+E-1976's description says the job is "attention triage across many concurrent
+sessions". I read "across many sessions" as naming the DISPLAY UNIT — list the
+sessions. It names the SCOPE: aggregate work that is spread across many sessions,
+rather than the one session you are sitting in. The task's own title said
+`project status` and `project monitor`, and a project's unit is tasks, not
+sessions. Both facts were in front of me; I took the one that matched the
+implementation I could already picture, and never registered that the other
+existed.
+
+That is the shape of the error: an ambiguous phrase resolved silently, in the
+direction of the thing I already knew how to build. Not a wrong reading — an
+unnoticed reading. I never wrote down "I am taking sessions as the unit", so it
+was never available to be challenged, which is exactly his point about not being
+able to see the assumption until the thing was built.
+
+The general cost: a design assumption the user cannot see is one they can only
+review as working software. That makes the cheapest possible correction — a
+sentence — into the most expensive one, a rebuild.
+
+Rule: when a brief admits more than one reading of WHAT IS BEING LISTED, COUNTED,
+OR ACTED ON, that is not a detail to settle in code. Name the readings, say which
+one I am taking and why, and put it where the user will see it before the work
+starts — the plan's first paragraph, or a question. The test is not "is my
+reading defensible" but "would the user be able to tell from what I wrote which
+reading I took".
+
+Corollary about names: the artifact was called `project monitor` throughout. When
+the name of a thing and my mental model of it disagree, the name is evidence and
+I should treat the disagreement as a question, not as the name being loose.
+- **Project**: endless
