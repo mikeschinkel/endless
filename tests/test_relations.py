@@ -334,9 +334,9 @@ def test_replace_task_active_voice(isolated_env, monkeypatch):
     assert rows[0]["target_id"] == old
     assert rows[0]["dep_type"] == "replaces"
 
-    # Old should be obsolete
+    # Old should be superseded
     status = db.scalar("SELECT status FROM tasks WHERE id = ?", (old,))
-    assert status == "obsolete"
+    assert status == "superseded"
 
 
 def test_related_task_ids_helper(isolated_env):

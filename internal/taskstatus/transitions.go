@@ -337,15 +337,48 @@ var transitionGroups = []transitionGroup{
 		},
 	},
 	{
-		// The two abandonment states carry an explicit decision, so reversing
+		// The other half of the axis. `obsolete` is "nothing replaced it";
+		// this is "something did", and the successor is named by the
+		// `replaced_by` relation that `task replace <old> --by <new>` writes.
+		// Decisions have had exactly this pair since E-1920 — `decision
+		// supersede --by` against `decision obsolete --reason` — and tasks
+		// had only the second, which is why `task replace` used to close an
+		// unshipped task as `obsolete` while recording a replacement: a row
+		// asserting in one column that nothing replaced it and in another
+		// that something did.
+		//
+		// Pre-ship statuses only, and that is not an oversight. A task that
+		// SHIPPED earned a terminal — `confirmed`, `assumed`, `completed` —
+		// and that terminal is still true after something supersedes it, so
+		// `task replace` holds it and the relation rides alongside
+		// ("assumed (replaced by E-101)"). There is no earned terminal to
+		// protect before the work ships, which is where this one goes.
+		//
+		// Note for the decisions/tasks merge: the STATUS here is `superseded`
+		// while the RELATION is `replaced_by`, because renaming a stored
+		// dep_type is a data change this task is not. The two vocabularies
+		// converging is the merge's business.
+		Name: "Superseding — something else took the work over",
+		Transitions: []Transition{
+			{From: Untriaged, To: Superseded, Actor: ActorUser, Label: "supersedes — another task took it over"},
+			{From: Unplanned, To: Superseded, Actor: ActorUser, Label: "supersedes — another task took it over"},
+			{From: Submitted, To: Superseded, Actor: ActorUser, Label: "supersedes — another task took it over"},
+			{From: Ready, To: Superseded, Actor: ActorUser, Label: "supersedes — another task took it over"},
+			{From: Underway, To: Superseded, Actor: ActorUser, Label: "supersedes — another task took it over"},
+			{From: Revisit, To: Superseded, Actor: ActorUser, Label: "supersedes — another task took it over"},
+		},
+	},
+	{
+		// The three abandonment states carry an explicit decision, so reversing
 		// one has to be an explicit act — never a side effect of a reopen or a
-		// resume, which is what taskstatus.ReopenRefused exists to say. Both
+		// resume, which is what taskstatus.ReopenRefused exists to say. All
 		// land back at the entry status rather than teleporting to `ready`: a
 		// reconsidered task gets re-triaged like any other.
 		Name: "Reversal — reconsidering an abandonment decision",
 		Transitions: []Transition{
 			{From: Declined, To: Untriaged, Actor: ActorUser, Label: "reconsiders"},
 			{From: Obsolete, To: Untriaged, Actor: ActorUser, Label: "reconsiders"},
+			{From: Superseded, To: Untriaged, Actor: ActorUser, Label: "reconsiders"},
 		},
 	},
 }

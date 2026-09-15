@@ -148,9 +148,18 @@ stateDiagram-v2
     assumed --> obsolete: user retires — the shipped work is no longer in use
     completed --> obsolete: user retires — the shipped work is no longer in use
 
+    %% Superseding — something else took the work over
+    untriaged --> superseded: user supersedes — another task took it over
+    unplanned --> superseded: user supersedes — another task took it over
+    submitted --> superseded: user supersedes — another task took it over
+    ready --> superseded: user supersedes — another task took it over
+    underway --> superseded: user supersedes — another task took it over
+    revisit --> superseded: user supersedes — another task took it over
+
     %% Reversal — reconsidering an abandonment decision
     declined --> untriaged: user reconsiders
     obsolete --> untriaged: user reconsiders
+    superseded --> untriaged: user reconsiders
 
     %% Terminal — the work is over, one way or another
     confirmed --> [*]
@@ -158,6 +167,7 @@ stateDiagram-v2
     completed --> [*]
     declined --> [*]
     obsolete --> [*]
+    superseded --> [*]
 %% END generated
 ```
 <!-- END canonical:docs/status-lifecycle.mmd -->
@@ -176,6 +186,7 @@ stateDiagram-v2
 | `completed`   | Findings work is done and accepted — the terminal of the review lane, as `confirmed`/`assumed` are of the verification lane. **Unblocks dependents.** Research and brainstorm reach it only through `unreviewed`, and only with an outcome. Epics reach it directly, self-completing from their children. `todo`/`bugfix` never reach it at all: completed-eligibility is a rule about task TYPE, not about the title's verb, and implementation work terminates via `confirmed`/`assumed`. |
 | `revisit`     | Needs re-evaluation before it can proceed — either a partial plan that no longer holds, or work that shipped and turned out wrong. Reopening your own landed work lands here. |
 | `declined`    | Active decision not to do this. Requires `--reason`.                                                           |
+| `superseded`  | Another task took the work over. Set by `task replace <old> --by <new>`, which records the `replaced_by` relation and this status in one step — and refused without that relation, because `superseded` names a successor and needs one to name. An unshipped task only: work that already shipped keeps the terminal it earned, and the relation rides alongside it (`assumed (replaced by E-101)`). |
 | `obsolete`    | No longer needs doing — out of date, or superseded by something newer. It covers work that was worth doing when it was filed and has since been overtaken, not only work that was never worth doing; the active decision *not* to do work that would still be worth doing is `declined`, a different fact. The axis is **whether anything replaced it**, not whether it shipped — shipped code being *deleted* is obsolete in the plainest sense, and the landing record keeps the fact that it shipped. When something DID take over, record that instead: `task replace <old> --by <new>`, which holds the status and adds a `replaced_by` relation. |
 
 The agent sets `submitted` (via `task submit`, or by attaching a plan); a human sets `ready` (via `task approve`) — the two-step gate that makes `ready` mean "approved," not merely "planned."

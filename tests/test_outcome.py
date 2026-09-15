@@ -83,12 +83,15 @@ def test_task_assume_with_outcome(seeded_project_at_cwd):
 # ─── replace ──────────────────────────────────────────────────────────────────
 
 
-def test_task_replace_default_obsolete(seeded_project_at_cwd):
+def test_task_replace_default_superseded(seeded_project_at_cwd):
+    # E-2144: the unshipped default is `superseded`, not `obsolete` — the whole
+    # point of this call is recording that something replaced it, and
+    # `obsolete` means nothing did.
     old = _add_task("Old")
     new = _add_task("New")
     task_cmd.replace_task(old, new)
     status, outcome = _status_outcome(old)
-    assert status == "obsolete"
+    assert status == "superseded"
     assert outcome is None
 
 

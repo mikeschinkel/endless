@@ -232,9 +232,18 @@ stateDiagram-v2
     assumed --> obsolete: user retires — the shipped work is no longer in use
     completed --> obsolete: user retires — the shipped work is no longer in use
 
+    %% Superseding — something else took the work over
+    untriaged --> superseded: user supersedes — another task took it over
+    unplanned --> superseded: user supersedes — another task took it over
+    submitted --> superseded: user supersedes — another task took it over
+    ready --> superseded: user supersedes — another task took it over
+    underway --> superseded: user supersedes — another task took it over
+    revisit --> superseded: user supersedes — another task took it over
+
     %% Reversal — reconsidering an abandonment decision
     declined --> untriaged: user reconsiders
     obsolete --> untriaged: user reconsiders
+    superseded --> untriaged: user reconsiders
 
     %% Terminal — the work is over, one way or another
     confirmed --> [*]
@@ -242,6 +251,7 @@ stateDiagram-v2
     completed --> [*]
     declined --> [*]
     obsolete --> [*]
+    superseded --> [*]
 %% END generated
 ```
 <!-- END canonical:docs/status-lifecycle.mmd -->

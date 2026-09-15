@@ -47,6 +47,10 @@
 #      turns on whether anything REPLACED the work, never on whether it
 #      shipped. That is the line Endless already draws for decisions, and the
 #      two record kinds now match.
+#   I. The other half of the axis exists. "Obsolete means nothing replaced it"
+#      is only half a rule until there is a status for when something DID —
+#      otherwise `task replace` has to close its own subject as `obsolete`,
+#      which is what it did, writing a row that claimed both at once.
 source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
@@ -140,15 +144,21 @@ section "C. What the rewording did NOT move"
 # is the invariant that survived both: which statuses reach `obsolete` at all,
 # and that the decision stays reversible.
 #
-# Every status except the two abandonments themselves reaches it. That is the
-# shape of the corrected axis — a task is obsoletable whenever nothing replaced
-# it, at any point in its life — and it is a stronger claim than listing eleven
-# froms, because it says WHY there are eleven.
-
+# Every status except the abandonments themselves reaches it. That is the shape
+# of the corrected axis — a task is obsoletable whenever nothing replaced it, at
+# any point in its life — and it is a stronger claim than listing the froms,
+# because it says WHY there are that many.
+#
+# The exclusion set is DERIVED, not typed out: `reopen-refused` is exactly the
+# set of statuses carrying an explicit abandonment decision, so section I adding
+# `superseded` to it updates this assertion instead of breaking it. A hand-typed
+# list would have had to be remembered, and this suite has already been bitten
+# once by a filter that silently stopped matching.
+ABANDONED="$("${BIN}" task-status get reopen-refused | sed 's/^/-e ^/;s/$/$/' | tr '\n' ' ')"
 OBSOLETABLE="$("${BIN}" task-status get all \
-               | grep -v -e '^declined$' -e '^obsolete$' | sort | tr '\n' ' ' | sed 's/ $//')"
+               | grep -v ${ABANDONED} | sort | tr '\n' ' ' | sed 's/ $//')"
 
-assert_eq "every status but the two abandonments can reach obsolete" \
+assert_eq "every status but the abandonments can reach obsolete" \
     "${OBSOLETABLE}" \
     "$(inbound | awk -F'\t' '{print $1}' | sort | tr '\n' ' ' | sed 's/ $//')"
 
@@ -334,5 +344,59 @@ assert_not_contains "the guide no longer teaches the removed refusal" \
 # because an agent that learns the rule from one applies it to the other.
 assert_contains "decisions still draw the same line" \
     "it stopped applying and nothing replaced it" "$(cat docs/guide/decisions.md)"
+
+# ---------------------------------------------------------------------------
+section "I. superseded — the other half of the axis"
+# ---------------------------------------------------------------------------
+# `obsolete` = nothing replaced it. `superseded` = something did, and the
+# `replaced_by` relation names what. Before this, tasks had only the first, so
+# `task replace` closed an unshipped task as `obsolete` while recording a
+# replacement — a row asserting in one column that nothing replaced it and in
+# another that something did. E-2146 was closed that way during this task and
+# is the specimen.
+#
+# Decisions have had the pair since E-1920, which is why this is convergence
+# rather than invention: `decision supersede --by` against `decision obsolete
+# --reason`.
+
+assert_contains "superseded is in the vocabulary" \
+    "superseded" "$("${BIN}" task-status get all)"
+
+# It is a structural TWIN of obsolete — same groups, different meaning. Asserted
+# as set equality so a future group added to one and not the other fails here.
+obsolete_groups() {
+    for g in $("${BIN}" task-status groups); do
+        "${BIN}" task-status has "$g" "$1" && printf '%s\n' "$g"
+    done | sort
+}
+assert_eq "superseded sits in exactly the groups obsolete sits in" \
+    "$(obsolete_groups obsolete | tr '\n' ' ')" \
+    "$(obsolete_groups superseded | tr '\n' ' ')"
+
+assert_eq "it is reachable from the six pre-ship statuses and no others" \
+    "ready revisit submitted underway unplanned untriaged" \
+    "$(printf '%s\n' "${EDGES}" | awk -F'\t' '$2=="superseded"{print $1}' | sort | tr '\n' ' ' | sed 's/ $//')"
+
+assert_eq "reversing it is explicit, like the other abandonments" \
+    "1" "$(printf '%s\n' "${EDGES}" | awk -F'\t' '$1=="superseded" && $2=="untriaged"' | grep -c .)"
+
+# The behaviour, through the real Python, not the table.
+PY_OUT="$(uv run python -c '
+import endless.taskstatus_groups as g
+' 2>/dev/null; uv run pytest \
+    tests/test_replaced_by_inline.py \
+    -q -k "superseded or replacement" 2>&1 | tail -3)"
+assert_contains "task replace defaults to superseded, and the guard holds" \
+    "passed" "${PY_OUT}"
+
+# The guard is the mirror of the gate section H removed: keyed on what actually
+# licenses the status, not on whether the work shipped.
+assert_eq "superseded cannot be set without a replacement" \
+    "1" "$(sweep '_require_a_replacement_for_superseded' | grep -c '^src/endless/task_cmd\.py$')"
+
+assert_contains "the guide documents the new terminal" \
+    "status → superseded" "$(cat docs/guide/tasks.md)"
+assert_contains "the status table carries a superseded row" \
+    "| \`superseded\`" "$(cat docs/guide/index.md)"
 
 summary

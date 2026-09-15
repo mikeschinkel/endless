@@ -416,7 +416,7 @@ endless task replace <id> --by <new_id>              # supersede with another ta
 
 Found a bug in work you already landed? Reopen that task (`--status revisit`) instead of filing a new one — see [Fix a bug in your own landed work](orchestration.md#fix-a-bug-in-your-own-landed-work).
 
-### Superseded work is `replaced_by`, never `obsolete`
+### Superseded work is `superseded`, never `obsolete`
 
 **When something replaced the work, the record is the relation — not
 `obsolete`.** The axis is *whether anything took over*, not whether the work
@@ -426,14 +426,20 @@ a successor and `decision obsolete --reason` says it "stopped applying and
 nothing replaced it". Reaching for `obsolete` when there IS a successor throws
 away the one fact worth keeping.
 
-That fact is a relation, not a status:
+That fact is a relation **and** its own terminal — one command writes both:
 
 ```bash
-endless task replace <old> --by <new>       # relation recorded; shipped status held
+endless task replace <old> --by <new>       # replaced_by recorded; status → superseded
 ```
 
+`superseded` is refused unless the relation is actually there, which is the
+mirror of the rule above: the status names a successor, so it needs one to name.
+Set by hand on a task nothing replaced, it would send every reader looking for a
+task that does not exist. Decisions have enforced the same shape for as long as
+they have had the status — `decision supersede` requires `--by`.
+
 `task replace` keeps a shipped task's status exactly as it stands (an unshipped
-one still defaults to `obsolete`) and records `replaced_by`. Holding the shipped
+one becomes `superseded`) and records `replaced_by`. Holding the shipped
 status is about not overwriting which terminal the work actually reached — the
 supersession rides on the relation either way. A **terminal**
 status then shows the supersession alongside it — `assumed (replaced by E-101)`
@@ -449,7 +455,8 @@ handful of cells sized the column for all of them and took the difference out of
 every title — a real cost for a fact one `task show` away.
 
 **Shipped work CAN be `obsolete`.** Code that is being *deleted* rather than
-superseded is obsolete in the plainest sense of the word: no longer in use. There is no successor to name, so
+superseded is obsolete in the plainest sense of the word: no longer in use.
+There is no successor to name, so
 `task replace` had no answer for it, and `declined` — an active decision not to
 *do* the work — says something false about work that was built and landed. The
 fact that it shipped is not lost by saying so: that lives in the landing record,
@@ -802,7 +809,7 @@ endless task unlink <a> --to <b> --type implements
 | `implements`    | A is the implementation of a plan, idea, or decision recorded in B. Common pattern: B is type=`plan` or type=`decision`, A is the work. |
 | `cleans_up` / `cleaned_up_by` | A handles a loose end discovered while working on B. **This is the canonical "follow-up" link** — use it for follow-up tasks filed mid-stream. (We considered `follows_up` and rejected it in favor of `cleans_up` to keep the vocabulary tight.) |
 | `documents`    | A is a decision that explains B. Auto-created when you pass `--about <task>` to `endless decision add`.              |
-| `replaces`     | A supersedes B. Record it with `task replace B --by A`, which holds B's status if B's work already shipped — `obsolete` is refused there, because superseded is not the same as never happened. |
+| `replaces`     | A supersedes B. Record it with `task replace B --by A`, which sets B to `superseded` — or holds B's status if B's work already shipped, since the terminal it earned is still true. |
 | `duplicates` / `duplicated_by` | A and B were filed for the **same concern** — two descriptions of one piece of work, not two pieces. A is the redundant filing; B is the one kept. |
 
 **Quick decision tree:**
@@ -830,7 +837,7 @@ trying to record:
   nothing.
 
 Recorded, not enforced: linking `duplicates` changes no status. Close the
-redundant task separately — `obsolete` when it never shipped, and for work that
+redundant task separately — `obsolete` when nothing replaced it, and for work that
 already shipped the relation *is* the record, exactly as with `replaces` (see
 the `obsolete` row in [Task statuses](index.md#task-statuses)).
 

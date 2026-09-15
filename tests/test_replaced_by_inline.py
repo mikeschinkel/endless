@@ -254,13 +254,38 @@ def test_replace_holds_a_shipped_status_by_default(seeded_project_at_cwd):
     assert task_cmd.replaced_by_map([old]) == {old: [new]}
 
 
-def test_replace_still_defaults_to_obsolete_on_unshipped_work(
+def test_replace_defaults_to_superseded_on_unshipped_work(
     seeded_project_at_cwd
 ):
     old = _add_task("Add a stale idea", status="unplanned")
     new = _add_task("Add the replacement", status="underway")
     task_cmd.replace_task(old, new)
-    assert _status(old) == "obsolete"
+    assert _status(old) == "superseded"
+
+
+def test_superseded_is_refused_without_an_actual_replacement(
+    seeded_project_at_cwd
+):
+    """`superseded` asserts a fact about ANOTHER row. Set by hand with no
+    relation it names a successor that does not exist."""
+    tid = _add_task("Add a thing nothing replaced", status="ready")
+    with pytest.raises(click.ClickException) as exc:
+        task_cmd.update_plan(tid, status="superseded")
+    msg = str(exc.value.message)
+    assert "nothing replaced it" in msg
+    assert "task replace" in msg       # names the command that records both
+    assert "obsolete" in msg           # names the status that IS true of it
+    assert _status(tid) == "ready"     # and nothing was written
+
+
+def test_superseded_is_allowed_once_the_relation_exists(
+    seeded_project_at_cwd
+):
+    old = _add_task("Add a stale idea", status="ready")
+    new = _add_task("Add the replacement", status="underway")
+    task_cmd.replace_task(old, new, status="ready")   # relation only
+    task_cmd.update_plan(old, status="superseded")    # must not raise
+    assert _status(old) == "superseded"
 
 
 def test_replace_persists_an_outcome_when_the_status_is_held(

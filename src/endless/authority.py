@@ -98,6 +98,13 @@ def for_task(status: str | None, replaced_by: list[str] | None,
         # or not any of it shipped.
         return Caveat("not-ever",
                       "it is obsolete: retired as no longer needed")
+    if status == "superseded":
+        # Reached only when the relation is missing: `replaced_by` is checked
+        # first above and names the successor, which is the useful answer. The
+        # status alone can only say THAT something took over, so it says that
+        # and no more rather than inventing a successor it cannot see.
+        return Caveat("not-ever",
+                      "it is superseded: another task took the work over")
     if status == "declined":
         return Caveat("not-ever",
                       "it is declined: an active decision not to do the work")

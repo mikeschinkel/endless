@@ -143,7 +143,11 @@ func TestSettledIsTerminalPlusTheGates(t *testing.T) {
 // `obsolete` ("it no longer needs doing") a lie about it, exactly as E-1956
 // reasoned for `unverified`.
 func TestShippedIsSettledMinusTheAbandonments(t *testing.T) {
-	abandoned := map[string]bool{taskstatus.Declined: true, taskstatus.Obsolete: true}
+	abandoned := map[string]bool{
+		taskstatus.Declined:   true,
+		taskstatus.Obsolete:   true,
+		taskstatus.Superseded: true,
+	}
 	var want []string
 	for _, s := range taskstatus.Get(taskstatus.Settled) {
 		if !abandoned[s] {
@@ -359,11 +363,16 @@ func TestParseGroupRejectsUnknown(t *testing.T) {
 // relocated these sets; it did not change them, and this is what proves it. A
 // deliberate policy change edits this table AND says so; an accidental one
 // fails here.
+//
+// Said, per that rule: E-2144 added `superseded` — the "something replaced it"
+// terminal, against `obsolete` for "nothing did". It joins exactly the six
+// groups `obsolete` is in and no others, because the two are structural twins
+// and differ only in what they MEAN.
 func TestGroupMembershipIsPinned(t *testing.T) {
 	want := map[string][]string{
-		"all":                    {"untriaged", "unplanned", "submitted", "ready", "underway", "unverified", "unreviewed", "confirmed", "assumed", "completed", "revisit", "declined", "obsolete"},
+		"all":                    {"untriaged", "unplanned", "submitted", "ready", "underway", "unverified", "unreviewed", "confirmed", "assumed", "completed", "revisit", "declined", "obsolete", "superseded"},
 		"actionable":             {"unplanned", "ready", "revisit"},
-		"not-actionable":         {"untriaged", "submitted", "underway", "unverified", "unreviewed", "confirmed", "assumed", "completed", "declined", "obsolete"},
+		"not-actionable":         {"untriaged", "submitted", "underway", "unverified", "unreviewed", "confirmed", "assumed", "completed", "declined", "obsolete", "superseded"},
 		"active":                 {"underway", "unverified", "unreviewed"},
 		"awaits-user":            {"unverified", "unreviewed", "submitted"},
 		"claim-promotes":         {"untriaged", "unplanned", "ready", "revisit"},
@@ -372,17 +381,17 @@ func TestGroupMembershipIsPinned(t *testing.T) {
 		"derivation-precedence":  {"underway", "ready", "submitted", "unplanned", "untriaged"},
 		"description-reset-from": {"untriaged", "unplanned", "submitted", "ready", "revisit"},
 		"pre-judgment":           {"untriaged", "unplanned"},
-		"reopen-refused":         {"declined", "obsolete"},
+		"reopen-refused":         {"declined", "obsolete", "superseded"},
 		"reopenable":             {"confirmed", "assumed", "completed"},
 		"review-track":           {"unreviewed"},
 		"session-pending":        {"untriaged", "unplanned", "submitted", "ready", "underway", "revisit"},
 		"sets-completed-at":      {"confirmed", "completed"},
-		"settled":                {"unverified", "unreviewed", "confirmed", "assumed", "completed", "declined", "obsolete"},
+		"settled":                {"unverified", "unreviewed", "confirmed", "assumed", "completed", "declined", "obsolete", "superseded"},
 		"shipped":                {"unverified", "unreviewed", "confirmed", "assumed", "completed"},
 		"shipped-terminal":       {"confirmed", "assumed", "completed"},
-		"sticky-override":        {"revisit", "declined", "obsolete"},
+		"sticky-override":        {"revisit", "declined", "obsolete", "superseded"},
 		"submittable-from":       {"untriaged", "unplanned", "revisit"},
-		"terminal":               {"confirmed", "assumed", "completed", "declined", "obsolete"},
+		"terminal":               {"confirmed", "assumed", "completed", "declined", "obsolete", "superseded"},
 		"verification-terminal":  {"confirmed", "assumed"},
 		"verification-track":     {"unverified", "confirmed", "assumed"},
 	}

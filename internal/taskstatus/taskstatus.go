@@ -72,6 +72,7 @@ const (
 	Revisit    Status = "revisit"
 	Declined   Status = "declined"
 	Obsolete   Status = "obsolete"
+	Superseded Status = "superseded"
 )
 
 // Group names one curated set of statuses. Adding a Group means adding exactly
@@ -235,10 +236,10 @@ var groups = map[Group][]Status{
 	All: {
 		Untriaged, Unplanned, Submitted, Ready, Underway,
 		Unverified, Unreviewed, Confirmed, Assumed, Completed,
-		Revisit, Declined, Obsolete,
+		Revisit, Declined, Obsolete, Superseded,
 	},
 	Actionable:    {Unplanned, Ready, Revisit},
-	NotActionable: {Untriaged, Submitted, Underway, Unverified, Unreviewed, Confirmed, Assumed, Completed, Declined, Obsolete},
+	NotActionable: {Untriaged, Submitted, Underway, Unverified, Unreviewed, Confirmed, Assumed, Completed, Declined, Obsolete, Superseded},
 	Active:        {Underway, Unverified, Unreviewed},
 	AwaitsUser:    {Unverified, Unreviewed, Submitted},
 	ClaimPromotes: {Untriaged, Unplanned, Ready, Revisit},
@@ -249,17 +250,17 @@ var groups = map[Group][]Status{
 	DerivationPrecedence: {Underway, Ready, Submitted, Unplanned, Untriaged},
 	DescriptionResetFrom: {Untriaged, Unplanned, Submitted, Ready, Revisit},
 	PreJudgment:          {Untriaged, Unplanned},
-	ReopenRefused:        {Declined, Obsolete},
+	ReopenRefused:        {Declined, Obsolete, Superseded},
 	Reopenable:           {Confirmed, Assumed, Completed},
 	ReviewTrack:          {Unreviewed},
 	SessionPending:       {Untriaged, Unplanned, Submitted, Ready, Underway, Revisit},
 	SetsCompletedAt:      {Confirmed, Completed},
-	Settled:              {Unverified, Unreviewed, Confirmed, Assumed, Completed, Declined, Obsolete},
+	Settled:              {Unverified, Unreviewed, Confirmed, Assumed, Completed, Declined, Obsolete, Superseded},
 	Shipped:              {Unverified, Unreviewed, Confirmed, Assumed, Completed},
 	ShippedTerminal:      {Confirmed, Assumed, Completed},
-	StickyOverride:       {Revisit, Declined, Obsolete},
+	StickyOverride:       {Revisit, Declined, Obsolete, Superseded},
 	SubmittableFrom:      {Untriaged, Unplanned, Revisit},
-	Terminal:             {Confirmed, Assumed, Completed, Declined, Obsolete},
+	Terminal:             {Confirmed, Assumed, Completed, Declined, Obsolete, Superseded},
 	VerificationTerminal: {Confirmed, Assumed},
 	VerificationTrack:    {Unverified, Confirmed, Assumed},
 }
@@ -309,6 +310,7 @@ var labels = map[Status]string{
 	Revisit:    "Revisit",
 	Declined:   "Declined",
 	Obsolete:   "Obsolete",
+	Superseded: "Superseded",
 }
 
 // glyphs is the SEMANTIC glyph per status — no color, no medium-specific
@@ -320,7 +322,9 @@ var labels = map[Status]string{
 // ☑ (unverified) from the session-status action legend, where they already
 // mean review-this and verify-this. The remaining three follow the same logic:
 // ✔ is the heavier check for verified-done against ✓ for believed-done, and
-// ⊘/⊗ read as "chose not to" / "made irrelevant".
+// ⊘/⊗ read as "chose not to" / "made irrelevant", and ⊜ (superseded) is the
+// third in that family: the same ringed mark, but an equals sign — something
+// else now stands in its place.
 //
 // ☐ (unreviewed) is the deliberate pair to ☑ (unverified): the same box, not
 // yet ticked. The two gates are siblings — one asks "does it work", the other
@@ -339,6 +343,7 @@ var glyphs = map[Status]string{
 	Revisit:    "?",
 	Declined:   "⊘",
 	Obsolete:   "⊗",
+	Superseded: "⊜",
 }
 
 // NoRank is what Rank returns for a status outside the group.

@@ -3399,6 +3399,38 @@ _SHIPPED_STATUSES = statuses.get("shipped")
 
 
 
+def _require_a_replacement_for_superseded(item_id: int, status: str | None):
+    """Refuse `superseded` on a task that nothing actually replaced.
+
+    `superseded` is the one status that asserts a FACT ABOUT ANOTHER ROW — that
+    some other task took this work over. Set by hand with no `replaced_by`
+    relation, it names no successor, so every reader is told to go look for one
+    that does not exist. `obsolete` is the status for "no longer needed and
+    nothing replaced it", and it is one word away.
+
+    This is the mirror of the gate E-2144 removed, keyed on the thing that
+    actually licenses the status instead of on whether the work shipped.
+    Decisions have enforced the same shape since E-1920: `decision supersede`
+    REQUIRES `--by`, because a supersession without a successor is not one.
+
+    A hard gate with no --force, matching `_require_status_allowed_for_type`:
+    the fix is to record the right fact, not to override the check.
+    """
+    if status != "superseded":
+        return
+    if replaced_by_map([item_id]).get(item_id):
+        return
+    raise click.ClickException(
+        f"{task_id_display(item_id)} cannot be 'superseded': nothing "
+        f"replaced it.\n\n"
+        f"'superseded' names a successor, so it needs one on the row:\n"
+        f"    endless task replace {task_id_display(item_id)} --by <new-id>\n"
+        f"(records the relation AND sets the status in one step)\n\n"
+        f"If nothing replaced it and it simply no longer needs doing, that is "
+        f"'obsolete'."
+    )
+
+
 def _refuse_cascade_across_typed_descendants(item_id: int, status: str):
     """E-1577: when --cascade would set 'assumed'/'confirmed' on a subtree,
     refuse loudly if any descendant is research/epic. Naming offenders
@@ -5308,6 +5340,7 @@ def update_plan(
         # The Go transition table refuses todo/bugfix → completed (E-1658); a
         # `completed` flip on an implementation type is caught there.
         _require_status_allowed_for_type(status, effective_type)
+        _require_a_replacement_for_superseded(item_id, status)
 
     # Reject a maybe-phase task gaining (or keeping) a parent. Only evaluate
     # when this update touches phase or parent_id — an unrelated edit must not
@@ -7353,12 +7386,10 @@ def replace_task(
     true terminal would throw away which terminal it reached — while everything
     else takes the 'obsolete' default. An explicit status still wins.
 
-    Note the tension E-2144 left standing rather than resolving: `obsolete` now
-    means "no longer needed, and nothing replaced it", yet it is still the
-    default terminal for an unshipped task that IS being replaced. Decisions
-    have a dedicated `superseded` status for that case and tasks do not, so the
-    `replaced_by` relation carries the whole fact here. Adding a task-side
-    `superseded` is a separate question.
+    The unshipped default is `superseded`, not `obsolete`: `obsolete` means "no
+    longer needed, and nothing replaced it", and this function's whole job is
+    recording that something did. Closing it as `obsolete` made the row assert
+    both at once.
     """
     from endless.event_bridge import emit_event
 
@@ -7378,7 +7409,7 @@ def replace_task(
     old_status = old_row["status"]
 
     if status is None:
-        status = old_status if old_status in _SHIPPED_STATUSES else "obsolete"
+        status = old_status if old_status in _SHIPPED_STATUSES else "superseded"
     _require_outcome_for_declined(status, outcome)
 
     # "old replaced_by new" → display='replaced_by' resolves to stored='replaces' with
