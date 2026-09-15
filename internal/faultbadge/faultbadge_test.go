@@ -2,10 +2,8 @@ package faultbadge
 
 import (
 	"database/sql"
-	"errors"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/mattn/go-runewidth"
 	_ "modernc.org/sqlite"
@@ -16,7 +14,7 @@ import (
 
 // bindFaultStore points the faults package at a throwaway in-memory DB for one
 // test, and unbinds afterwards so tests that expect NO badge still see none.
-func bindFaultStore(t *testing.T) {
+func bindFaultStore(t *testing.T) *sql.DB {
 	t.Helper()
 
 	db, err := sql.Open("sqlite", ":memory:")
@@ -40,22 +38,111 @@ func bindFaultStore(t *testing.T) {
 		nil,
 	)
 	t.Cleanup(func() { faults.Bind(nil, nil, nil) })
+
+	return db
 }
 
-// --- E-1950: one-line badge, stale-warning age-off, non-redundant counts ---
+// ancient is a last-occurrence far enough back that any age-off, keyed to any
+// clock, would have fired long ago.
+const ancient = "2020-01-01T00:00:00"
 
-// activeClock returns an activeSince function that reports a fixed amount of
-// active time regardless of the timestamp asked about.
-func activeClock(d time.Duration) func(time.Time) (time.Duration, error) {
-	return func(time.Time) (time.Duration, error) { return d, nil }
-}
+// age backdates every open incident's last occurrence, so a test can ask what
+// the badge does with a fault nobody has seen fire in years.
+func age(t *testing.T, db *sql.DB, lastSeen string) {
+	t.Helper()
 
-// brokenClock stands in for an unreadable activity table.
-func brokenClock() func(time.Time) (time.Duration, error) {
-	return func(time.Time) (time.Duration, error) {
-		return 0, errors.New("activity table unreadable")
+	if _, err := db.Exec(`UPDATE errors SET last_seen_at = ?`, lastSeen); err != nil {
+		t.Fatalf("backdate incidents: %v", err)
 	}
 }
+
+// rendered is the badge Render writes for the bound store, at a width wide
+// enough that nothing is truncated away.
+func rendered(t *testing.T) string {
+	t.Helper()
+
+	var out strings.Builder
+	Render(&out, 120, false, faults.AllProjects)
+	return out.String()
+}
+
+// --- E-2151: nothing ages off the badge; clearing is the only way out ---
+//
+// A warning used to leave the badge an hour of active time after it last fired,
+// which made a fault that happened once and self-healed discoverable only by
+// someone who already suspected it existed. The badged set is now exactly the
+// uncleared set, at both severities, whatever their age.
+
+// recordWarning opens a warning-severity incident in the bound store.
+func recordWarning() {
+	faults.Record(faults.Fault{
+		Code:    faults.ErrCodeJobScheduling,
+		Source:  "job:triage",
+		Summary: "job scheduling row could not be created",
+	})
+}
+
+// recordError opens an error-severity incident in the bound store.
+func recordError() {
+	faults.Record(faults.Fault{
+		Code:    faults.ErrCodeJobPanicked,
+		Source:  "job:exploding",
+		Summary: `job "exploding" panicked`,
+	})
+}
+
+func TestRender_BadgesAWarningHoweverLongAgoItFired(t *testing.T) {
+	db := bindFaultStore(t)
+
+	recordWarning()
+	age(t, db, ancient)
+
+	line := rendered(t)
+	if !strings.Contains(line, "WARNING") {
+		t.Errorf("an old warning aged off the badge:\n%q", line)
+	}
+	if !strings.Contains(line, "ERR-0004") {
+		t.Errorf("badge lost the incident code:\n%q", line)
+	}
+}
+
+func TestRender_CountsEveryUnclearedIncidentHoweverOld(t *testing.T) {
+	db := bindFaultStore(t)
+
+	recordWarning()
+	recordError()
+	age(t, db, ancient)
+
+	// The tally is what the single chip cannot convey, so it is where a badge
+	// counting a filtered set rather than the open one shows up: an aged-off
+	// warning would leave the ERROR chip standing over no tally at all.
+	line := rendered(t)
+	if !strings.Contains(line, "ERROR") {
+		t.Errorf("an old error aged off the badge:\n%q", line)
+	}
+	if !strings.Contains(line, "1 error") || !strings.Contains(line, "1 warning") {
+		t.Errorf("badge counts fewer incidents than the store holds open:\n%q", line)
+	}
+}
+
+func TestRender_StopsBadgingOnlyWhatSomebodyCleared(t *testing.T) {
+	db := bindFaultStore(t)
+
+	recordWarning()
+	age(t, db, ancient)
+
+	// Clearing is the one thing that takes an incident off the badge — which is
+	// what makes badge noise the user's to manage rather than a timer's.
+	if _, err := faults.Clear(faults.AllProjects, nil, "test"); err != nil {
+		t.Fatalf("clear: %v", err)
+	}
+
+	if line := rendered(t); line != "" {
+		t.Errorf("badge survived the clear:\n%q", line)
+	}
+}
+
+// --- E-1950: one-line badge, non-redundant counts ---
 
 func warned(lastSeen string) faults.Incident {
 	return faults.Incident{
@@ -70,43 +157,6 @@ func errored(lastSeen string) faults.Incident {
 		ID: 2, Code: "ERR-0002", Severity: faults.SeverityError,
 		Source: "job:exploding", Summary: `job "exploding" panicked`,
 		Occurrences: 1, LastSeenAt: lastSeen,
-	}
-}
-
-func TestBadgeworthy_DropsAWarningOnlyAfterAnActiveHour(t *testing.T) {
-	stale := warned("2026-08-10T09:49:09")
-
-	kept := badgeworthy([]faults.Incident{stale}, activeClock(59*time.Minute))
-	if len(kept) != 1 {
-		t.Errorf("warning dropped before an active hour elapsed: kept=%d, want 1", len(kept))
-	}
-
-	kept = badgeworthy([]faults.Incident{stale}, activeClock(time.Hour))
-	if len(kept) != 0 {
-		t.Errorf("warning survived a full active hour: kept=%d, want 0", len(kept))
-	}
-}
-
-func TestBadgeworthy_NeverAgesOutAnError(t *testing.T) {
-	// An error is the case the manual-clear rule was written for: it stays until
-	// someone acknowledges it, however long ago it last fired.
-	kept := badgeworthy([]faults.Incident{errored("2020-01-01T00:00:00")}, activeClock(1000*time.Hour))
-	if len(kept) != 1 {
-		t.Errorf("error aged off the badge: kept=%d, want 1", len(kept))
-	}
-}
-
-func TestBadgeworthy_KeepsWhatItCannotMeasure(t *testing.T) {
-	// Unreadable activity table and unparseable timestamp both mean "cannot
-	// justify hiding this", which must never resolve to hiding it.
-	kept := badgeworthy([]faults.Incident{warned("2026-08-10T09:49:09")}, brokenClock())
-	if len(kept) != 1 {
-		t.Errorf("warning hidden despite an unreadable clock: kept=%d, want 1", len(kept))
-	}
-
-	kept = badgeworthy([]faults.Incident{warned("not-a-timestamp")}, activeClock(1000*time.Hour))
-	if len(kept) != 1 {
-		t.Errorf("warning hidden on an unparseable timestamp: kept=%d, want 1", len(kept))
 	}
 }
 

@@ -97,9 +97,10 @@ type Overview struct {
 // as a failure: a missing table (a binary pinned schema-passive onto a DB it
 // does not own) or a locked DB must never take down the view.
 //
-// A caller that applies its own display policy — the session-status badge
-// suppresses stale warnings (E-1950) — should call List and Summarize instead,
-// so the aggregate is computed over the incidents it actually intends to show.
+// A caller that applies its own display policy should call List and Summarize
+// instead, so the aggregate is computed over the incidents it actually intends
+// to show. The session-status badge once did, to suppress stale warnings; it no
+// longer has a policy to apply, because nothing ages off it (E-2151).
 func Open(scope ProjectScope) (overview Overview, err error) {
 	var incidents []Incident
 
@@ -116,8 +117,8 @@ end:
 
 // Summarize aggregates a set of incidents into the shape the badge renders.
 //
-// Split out from Open so a caller that filters the set first — by staleness, by
-// severity — gets counts consistent with what it displays rather than with what
+// Split out from Open so a caller that filters the set first — by severity, by
+// source — gets counts consistent with what it displays rather than with what
 // the table holds. Latest is the most recently seen of the incidents PASSED IN,
 // which requires them to be ordered last_seen_at DESC; both List and Open
 // produce that order.

@@ -20,13 +20,11 @@ import (
 	"io"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/mattn/go-runewidth"
 
 	"github.com/mikeschinkel/endless/internal/faults"
 	"github.com/mikeschinkel/endless/internal/liveview"
-	"github.com/mikeschinkel/endless/internal/monitor"
 )
 
 // The uncleared-fault badge (E-698).
@@ -72,23 +70,26 @@ const (
 // inside a frame it did not render itself.
 const Hint = "Run eeh"
 
-// staleWarningAfter is how much ACTIVE time (see monitor.ActiveSecondsSince) may
-// pass after a warning's last occurrence before it stops being badged.
+// Nothing ages off the badge. Neither severity expires, and every uncleared
+// incident stays badged until someone clears it (E-698's original rule:
+// clearing is manual, so an intermittent fault cannot heal itself out of view).
 //
-// Warnings only. An error never ages off — it stays until someone clears it.
+// A warning used to stop being badged an hour of active time after its last
+// occurrence (E-1950), on the reasoning that a fault which happened once and
+// self-healed had nothing left to say. It has one thing left to say: that it
+// happened. Whether that matters is the user's call, and making it is one
+// command — `eeh`, then `endless errors clear`.
 //
-// This is the deliberate reversal of E-698's original "clearing is manual, so an
-// intermittent fault cannot heal itself out of view" rule. That rule was written
-// against a fault that is still happening; applied to one that happened once and
-// self-healed, it pins a permanently unactionable warning to the pane. The
-// incident is not deleted or cleared — `endless errors show` still lists it —
-// it just stops occupying a row that has nothing left to say. Keying the hour to
-// active rather than wall-clock time means the hour is one the user was actually
-// present for.
-const staleWarningAfter = time.Hour
+// The age-off never deleted the incident — `endless errors show` still listed
+// it — but the badge is what makes a person think to run that command, so a
+// warning that left the badge had in practice left. That trades a row on a pane
+// against a failure nobody ever learns about, and those costs are not
+// comparable. Badge noise is the user's to manage; the answer to too much of it
+// is a better clearing affordance, not a timer deciding on their behalf which
+// failures were unimportant.
 
-// Render writes the badge line when incidents worth badging exist within scope,
-// and writes nothing at all otherwise.
+// Render writes the badge line when uncleared incidents exist within scope, and
+// writes nothing at all otherwise.
 //
 // scope is the caller's answer to "whose faults is this view responsible for":
 // faults.AllProjects for a machine-wide view, a project's id for a view already
@@ -100,18 +101,14 @@ const staleWarningAfter = time.Hour
 // simply omitted. A diagnostics surface must not be able to take down the view
 // it is annotating.
 func Render(w io.Writer, cols int, color bool, scope faults.ProjectScope) {
-	var incidents []faults.Incident
 	var overview faults.Overview
 	var line string
 	var err error
 
-	incidents, err = faults.List(scope, false, 0)
+	overview, err = faults.Open(scope)
 	if err != nil {
 		goto end
 	}
-
-	incidents = badgeworthy(incidents, monitor.ActiveSecondsSince)
-	overview = faults.Summarize(incidents)
 	if overview.Total == 0 {
 		goto end
 	}
@@ -127,46 +124,6 @@ func Render(w io.Writer, cols int, color bool, scope faults.ProjectScope) {
 
 end:
 	return
-}
-
-// badgeworthy drops the incidents that no longer earn a row: warnings whose last
-// occurrence is more than staleWarningAfter of active time old.
-//
-// activeSince is taken as a parameter rather than called directly so the policy
-// can be tested against a known clock. The production caller passes
-// monitor.ActiveSecondsSince.
-//
-// On any failure to measure active time the incident is kept. The conservative
-// direction is to keep showing a warning we cannot age out, never to hide one we
-// cannot justify hiding.
-func badgeworthy(
-	incidents []faults.Incident,
-	activeSince func(time.Time) (time.Duration, error),
-) (kept []faults.Incident) {
-	var active time.Duration
-	var lastSeen time.Time
-	var incident faults.Incident
-	var err error
-
-	kept = make([]faults.Incident, 0, len(incidents))
-	for _, incident = range incidents {
-		if incident.Severity != faults.SeverityWarning {
-			kept = append(kept, incident)
-			continue
-		}
-		lastSeen, err = time.Parse("2006-01-02T15:04:05", incident.LastSeenAt)
-		if err != nil {
-			// Unparseable timestamp: cannot age it out, so keep it.
-			kept = append(kept, incident)
-			continue
-		}
-		active, err = activeSince(lastSeen)
-		if err != nil || active < staleWarningAfter {
-			kept = append(kept, incident)
-		}
-	}
-
-	return kept
 }
 
 // badgeLine assembles the single badge row: chip, text, right-aligned hint, all

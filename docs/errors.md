@@ -201,9 +201,8 @@ yourself, someone was testing; it is not a fault report.
 **Severity:** error · **Raised by:** `endless errors raise --severity error`
 
 The error-severity counterpart to ERR-0006, for exercising the surfaces that
-treat `error` differently from `warning` — the red badge styling, the max-severity
-precedence, and the rule that an error never ages off the badge while a stale
-warning does.
+treat `error` differently from `warning` — the red badge styling and the
+max-severity precedence.
 
 **What to do.** Dismiss it: `endless errors clear <id>`.
 ## ERR-0008 — status-line-unavailable

@@ -298,9 +298,10 @@ func projectText(incident faults.Incident) (text string) {
 //
 // The badge and this listing were the only surfaces a user ever saw, and neither
 // mentioned `clear` — so the one action available on a fault that had already
-// self-healed was undiscoverable, and a stale warning read as permanent (E-1950).
-// Suppressed when nothing here is still open, since clearing a cleared incident
-// does nothing.
+// self-healed was undiscoverable (E-1950). Nothing ages off the badge (E-2151),
+// which makes this hint the whole exit: an incident stays badged until someone
+// runs the command named here. Suppressed when nothing here is still open, since
+// clearing a cleared incident does nothing.
 func printClearHint(incidents []faults.Incident) {
 	open := 0
 	for _, incident := range incidents {

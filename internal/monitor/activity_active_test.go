@@ -6,10 +6,9 @@ import (
 	"time"
 )
 
-// E-1950: ActiveSecondsSince is the clock the session-status badge ages stale
-// warnings against. It has to measure time the USER was present for — an hour
-// that passes overnight has shown them nothing, so an age-off keyed to
-// wall-clock would fire without ever having been seen.
+// ActiveSecondsSince measures time the USER was present for, not time that
+// passed. An hour that goes by overnight has shown them nothing, so an elapsed
+// time counted on the wall clock names a stretch they were never there for.
 
 // seedActivity writes activity rows at the given offsets from base.
 func seedActivity(t *testing.T, db *sql.DB, projectID int64, base time.Time, offsets ...time.Duration) {

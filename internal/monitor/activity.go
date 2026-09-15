@@ -42,11 +42,11 @@ const IdleGap = 5 * time.Minute
 // ActiveSecondsSince returns how much ACTIVE time has accumulated since `since`
 // — wall-clock with the idle stretches removed.
 //
-// Wall-clock is the wrong ruler for anything that ages out of a user's view:
-// an hour that passes overnight has shown the user nothing, so an age-off keyed
-// to it fires without the notice it exists to give. This sums only the gaps
-// between consecutive activity rows that are shorter than IdleGap, which pauses
-// the clock whenever the machine is unattended (E-1950).
+// Wall-clock is the wrong ruler for any elapsed time reported to a user: an hour
+// that passes overnight has shown them nothing, so "an hour ago" names a stretch
+// they were never present for. This sums only the gaps between consecutive
+// activity rows that are shorter than IdleGap, which pauses the clock whenever
+// the machine is unattended.
 //
 // Deliberately NOT scoped to a project: the question is whether the user was at
 // the computer, not which repo they were in.
