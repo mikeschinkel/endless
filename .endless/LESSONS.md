@@ -5971,3 +5971,35 @@ fixing it. List real costs when they are real. Do not pad the against-column
 with the age of the decision, the number of files touched, or the existence of a
 workaround — and never let those three turn a clear finding into a hedge.
 - **Project**: endless
+
+### [2026-09-14] A suite is only green if nothing wrote to the tree after it ran; and an assertion that passes on an empty result needs a guard proving it can still find anything.
+Mike, 2026-09-15, on E-2144. I reported a suite green; he ran it and it failed.
+
+Two independent causes, both mine.
+
+1. I mutated the tree AFTER running the suite. I ran `endless task verify`
+   (39/39), and only then wrote the task's plan mirror with `task update
+   --text-file`, which writes `.endless/plans/E-<id>.md` into the worktree. That
+   plan quoted the very phrase a sweep asserted was gone, so the suite I had
+   just reported green was already red. RULE: the verify run must be the LAST
+   thing before handing off. Anything that writes into the worktree — a plan
+   mirror, a regenerate, a commit hook — invalidates the result, so re-run after
+   it. "I ran it earlier" is not "it passes."
+
+2. The sweep's exclusions silently excluded nothing. I wrote path filters
+   anchored on `^\./` because `grep -r .` prefixes matches that way. Mike's
+   shell has `grep` as a function wrapping ugrep, which does NOT emit the
+   prefix, so every exclusion became a no-op for him while working for me under
+   the runner's plain grep. The assertion still LOOKED like it was filtering.
+   RULE: never depend on whether a tool prefixes "./". Inside a repo use `git
+   grep -lIF -e <phrase> -- ':!<path>'` — tracked files only, repo-relative
+   paths, exclusions in the pathspec, one implementation everywhere.
+
+The deeper rule tying them together: an assertion whose PASS condition is an
+empty result can pass by doing nothing at all. A broken filter, a failed command
+swallowed by `2>/dev/null`, a pathspec that matched no files — all report
+success. Such an assertion must be paired with a non-vacuity guard that proves
+the mechanism can still find something it is supposed to find. I have now added
+one; it should have been there the first time, because "expected: empty" is
+exactly the shape that hides its own failure.
+- **Project**: endless
