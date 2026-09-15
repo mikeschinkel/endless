@@ -826,8 +826,13 @@ func TestRefreshRecordsAnUnresolvableBaseWithoutFailingTheSweep(t *testing.T) {
 	resetDefaultBranchCache()
 	t.Cleanup(resetDefaultBranchCache)
 
-	// A real repository on a branch none of the four resolution steps can name.
+	// A real repository on a branch none of the four resolution steps can name —
+	// AND holding a task worktree, without which the pass now skips it before any
+	// git call and there is no resolution to fail (see
+	// TestRefreshSkipsAProjectWithNoTaskWorktrees).
 	repo := fixtureRepo(t, "develop")
+	mustGit(t, repo, "worktree", "add", "-b", "task/1",
+		filepath.Join(repo, ".endless", "worktrees", "e-1"), "develop")
 
 	if err := RefreshUnlandedCache(context.Background(), repo); err != nil {
 		t.Errorf("one project's unresolvable base must not fail the sweep: %v", err)
@@ -840,4 +845,67 @@ func TestRefreshRecordsAnUnresolvableBaseWithoutFailingTheSweep(t *testing.T) {
 	if incidents[0].Code != "ERR-0011" {
 		t.Errorf("code = %s, want ERR-0011 — the condition, not a job failure", incidents[0].Code)
 	}
+}
+
+// TestRefreshSkipsAProjectWithNoTaskWorktrees is the third defect E-2128 shipped,
+// found on use after it was marked assumed.
+//
+// `ProjectRoots` returns every registered project, and the pass swept all of
+// them. A project with no task worktrees has nothing to cache — the cache answers
+// a strictly per-worktree question — so the work was pure cost. The visible half
+// was noise: a registered project that was an EMPTY repository (no commits, so
+// `main` is an unborn HEAD resolving to no commit) failed default-branch
+// resolution and recorded ERR-0011 every interval, advising the operator to set
+// `default_branch` or run `git remote set-head` about a repository whose only
+// problem was that nobody had committed to it yet.
+//
+// The check must come before any git call, which is why the fixtures below assert
+// silence rather than a particular error.
+func TestRefreshSkipsAProjectWithNoTaskWorktrees(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("empty repository with no commits", func(t *testing.T) {
+		bindFaultsForTest(t)
+		resetDefaultBranchCache()
+		t.Cleanup(resetDefaultBranchCache)
+
+		// Exactly go-diffutils' shape: `git init` and nothing else.
+		dir := t.TempDir()
+		mustGit(t, dir, "init", "-q", "--initial-branch=main", ".")
+
+		if err := RefreshUnlandedCache(ctx, dir); err != nil {
+			t.Errorf("an empty repository must be skipped silently: %v", err)
+		}
+		assertNoIncidents(t)
+	})
+
+	t.Run("healthy repository that simply has no task worktrees", func(t *testing.T) {
+		bindFaultsForTest(t)
+		resetDefaultBranchCache()
+		t.Cleanup(resetDefaultBranchCache)
+
+		repo := fixtureRepo(t, "main")
+		if err := RefreshUnlandedCache(ctx, repo); err != nil {
+			t.Errorf("a project with no task worktrees must be skipped: %v", err)
+		}
+		assertNoIncidents(t)
+		// And it wrote nothing — no cache directory for a repo with no readers.
+		c, err := unlandedCacheFor(ctx, repo)
+		if err != nil {
+			t.Fatalf("unlandedCacheFor: %v", err)
+		}
+		if _, serr := os.Stat(c.dir); !os.IsNotExist(serr) {
+			t.Errorf("a skipped project got a cache directory: %v", serr)
+		}
+	})
+
+	t.Run("a project WITH task worktrees is still swept", func(t *testing.T) {
+		f := newCacheFixture(t, 1)
+		if err := RefreshUnlandedCache(ctx, f.root); err != nil {
+			t.Fatalf("RefreshUnlandedCache: %v", err)
+		}
+		if got := f.read(t, 0); !got.Known {
+			t.Errorf("the skip swallowed a project that does have worktrees: %+v", got)
+		}
+	})
 }

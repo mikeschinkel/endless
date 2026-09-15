@@ -155,6 +155,8 @@ mon TestRefreshSkipsADirectoryThatIsNotARepository \
     "a registered project that is not a git repo is skipped, not a job failure"
 mon TestRefreshRecordsAnUnresolvableBaseWithoutFailingTheSweep \
     "one project's unresolvable base records ERR-0011 and does not fail the sweep"
+mon TestRefreshSkipsAProjectWithNoTaskWorktrees \
+    "a project with no task worktrees is skipped before any git call runs"
 
 go_claim ./internal/sessionstatuscmd/ TestUnsettledMark \
     "all four column states, with ~ outranking ◆ on an uncomputed row"

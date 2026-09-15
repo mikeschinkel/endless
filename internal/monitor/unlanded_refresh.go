@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/mikeschinkel/endless/internal/faults"
 )
@@ -44,6 +45,19 @@ const (
 // branch, git will not list worktrees). Per-worktree failures are not errors:
 // they write nothing, which is already the correct representation of "unknown".
 func RefreshUnlandedCache(ctx context.Context, repoDir string) error {
+	if !hasTaskWorktrees(repoDir) {
+		// Nothing to cache. This cache answers one question — does THIS WORKTREE
+		// hold commits the base branch lacks — so a project with no task worktrees
+		// has no question, and every pass over it is cost and noise with no reader.
+		//
+		// Checked FIRST, before any git call, because the noise was the visible
+		// half: a registered project that is an empty repository (no commits, so
+		// `main` is an unborn HEAD that resolves to nothing) failed default-branch
+		// resolution and recorded ERR-0011 every interval — telling the operator to
+		// set `default_branch` or run `git remote set-head` about a repository whose
+		// only problem was that nobody had committed to it yet.
+		return nil
+	}
 	cache, err := unlandedCacheFor(ctx, repoDir)
 	if err != nil {
 		// Not a git repository, or one git will not answer about. A registered
@@ -216,4 +230,24 @@ func ProjectRoots() ([]string, error) {
 		roots = append(roots, resolved)
 	}
 	return roots, rows.Err()
+}
+
+// hasTaskWorktrees reports whether repoDir has at least one task worktree, by
+// the same `e-<digits>` directory convention the reaper enumerates.
+//
+// A pure filesystem check on purpose: it gates every git call in the pass, so it
+// must not itself be one. An unreadable or absent worktrees directory answers
+// false, which is the same answer as an empty one and needs no separate case —
+// neither has anything to cache.
+func hasTaskWorktrees(repoDir string) bool {
+	entries, err := os.ReadDir(filepath.Join(repoDir, ".endless", "worktrees"))
+	if err != nil {
+		return false
+	}
+	for _, e := range entries {
+		if e.IsDir() && worktreeDirRe.MatchString(e.Name()) {
+			return true
+		}
+	}
+	return false
 }
