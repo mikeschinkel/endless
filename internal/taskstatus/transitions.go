@@ -304,10 +304,14 @@ var transitionGroups = []transitionGroup{
 		// not to do work that would still be worth doing (E-2144).
 		//
 		// No inbound edge from a Shipped status, and that is the rule E-1956
-		// landed: `obsolete` reads as "never happened", which is simply false
-		// of work that ran. The fact to record there is a `replaced_by`
-		// relation — `task replace <old> --by <new>`.
-		Name: "Obsoleting — made irrelevant before the work ever shipped",
+		// landed. Note what that rule is and is not: it is a fact about which
+		// EDGES exist, not a definition of the word. Read as a definition it
+		// says "obsolete means it never shipped", which is the old gloss in
+		// different words — and it is false of any epic, whose status is
+		// derived in Go and never passes through the Python gate. E-1421
+		// landed twice and is obsolete. So the group's name describes the
+		// edges; what `obsolete` MEANS is above, and holds either way.
+		Name: "Obsoleting — no longer needed, from the statuses where nothing has shipped yet",
 		Transitions: []Transition{
 			{From: Untriaged, To: Obsolete, Actor: ActorUser, Label: "retires — it no longer needs doing"},
 			{From: Unplanned, To: Obsolete, Actor: ActorUser, Label: "retires — it no longer needs doing"},

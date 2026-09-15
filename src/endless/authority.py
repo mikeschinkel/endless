@@ -90,8 +90,14 @@ def for_task(status: str | None, replaced_by: list[str] | None,
                       + ", ".join(duplicates) + ", which is the record kept",
                       list(duplicates))
     if status == "obsolete":
+        # NOT "retired before the work ever shipped" (E-2144). That asserted a
+        # fact this function cannot see and is sometimes flatly wrong: E-1421 is
+        # an epic that landed twice and is obsolete, so the banner called its two
+        # landings imaginary. What `obsolete` licenses saying is what the word
+        # means — this is not the thing to do any more — and that holds whether
+        # or not any of it shipped.
         return Caveat("not-ever",
-                      "it is obsolete: retired before the work ever shipped")
+                      "it is obsolete: retired as no longer needed")
     if status == "declined":
         return Caveat("not-ever",
                       "it is declined: an active decision not to do the work")

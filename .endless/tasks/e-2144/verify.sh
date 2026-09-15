@@ -35,6 +35,13 @@
 #      superseded-but-was-worth-doing case, names `declined` as the different
 #      fact, and keeps E-1956's refusal clause.
 #   F. The old phrase is gone from everywhere the tool speaks it.
+#   G. The paraphrases are gone too. The first pass fixed the labels and the
+#      guide and MISSED two places that said the same wrong thing in different
+#      words — the authority banner an agent gets injected on every `task show`
+#      of an obsolete task, and the transition group name it took its framing
+#      from. Both asserted "the work never shipped", which is not a fact the
+#      status carries: E-1421 is an epic that landed twice and is obsolete, so
+#      the banner called its own Landed: line imaginary.
 source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
@@ -206,5 +213,59 @@ assert_eq "transitions.go quotes it exactly once, in the comment that retires it
 assert_contains "and that one mention is a comment, not a label" \
     "// A label saying \"it ${OLD}\" excluded that case" \
     "$(cat internal/taskstatus/transitions.go)"
+
+# ---------------------------------------------------------------------------
+section "G. The paraphrases are gone too"
+# ---------------------------------------------------------------------------
+# "Retired before the work ever shipped" is the same claim as "it never needed
+# doing" — it just does not reuse the words, which is exactly why the first pass
+# grepped past it. It is also the WORST copy, because it is not documentation:
+# it is injected into an agent's context as an authority banner every time an
+# obsolete task is shown.
+#
+# And it is not merely a stale gloss, it is false. `for_task` sees a status and
+# two relations. It cannot see landings. E-1421 is an epic that landed twice
+# (18fe0f0), reached obsolete without passing the Python gate because epic status
+# is derived in Go, and carried a banner telling every agent its work never
+# shipped — directly above its own `Landed:` line.
+
+OLD_PARA='before the work ever shipped'
+
+BANNER="$(uv run python -c '
+import endless.authority as a
+print(a.for_task("obsolete", None, None).summary("E-1"))
+print(a.for_task("declined", None, None).summary("E-1"))
+' 2>&1)" || setup_error "cannot evaluate endless.authority.for_task"
+
+assert_not_contains "the obsolete banner no longer claims the work never shipped" \
+    "${OLD_PARA}" "${BANNER}"
+assert_contains "the obsolete banner states what the status actually licenses" \
+    "it is obsolete: retired as no longer needed" "${BANNER}"
+assert_contains "the declined banner is untouched" \
+    "it is declined: an active decision not to do the work" "${BANNER}"
+
+# The group name is where the banner took its framing from, so it stops being
+# readable as a definition of the word.
+assert_not_contains "the transition group name is no longer a definition" \
+    "${OLD_PARA}" "$("${BIN}" task-status transitions; "${BIN}" task-status lifecycle)"
+
+for f in docs/status-lifecycle.mmd README.md docs/guide/index.md; do
+    assert_not_contains "${f} carries the regenerated group name" \
+        "${OLD_PARA}" "$(cat "${f}")"
+done
+
+# Same sweep as F, for the paraphrase. Only the two comments that explain the
+# removal may still say it.
+STRAY_PARA="$(grep -rIl --exclude-dir=.git --exclude-dir=.venv --exclude-dir=node_modules \
+            -- "${OLD_PARA}" . 2>/dev/null \
+         | grep -v '^\./\.endless/db-ledger/' \
+         | grep -v '^\./\.endless/LESSONS\.md$' \
+         | grep -v '^\./\.endless/tasks/' \
+         | grep -v '^\./src/endless/authority\.py$' \
+         | grep -v '^\./internal/taskstatus/transitions\.go$' \
+         | sort)"
+
+assert_eq "nothing outside history and the two explanatory comments says it" \
+    "" "${STRAY_PARA}"
 
 summary

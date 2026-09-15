@@ -219,7 +219,7 @@ stateDiagram-v2
     assumed --> declined: user declines — the shipped work is not being kept
     completed --> declined: user declines — the shipped work is not being kept
 
-    %% Obsoleting — made irrelevant before the work ever shipped
+    %% Obsoleting — no longer needed, from the statuses where nothing has shipped yet
     untriaged --> obsolete: user retires — it no longer needs doing
     unplanned --> obsolete: user retires — it no longer needs doing
     submitted --> obsolete: user retires — it no longer needs doing
