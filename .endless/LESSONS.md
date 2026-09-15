@@ -5936,3 +5936,38 @@ THE RULE. Report a state change only when it is unexpected, wrong, or requires a
 
 This is the same failure as reporting another session's task: both put something on his screen that costs attention and buys nothing. The test before writing any line to him is not 'is this true' but 'does he need to act on it, or is it something he does not already expect'.
 - **Project**: endless
+
+### [2026-09-14] A landed decision is not settled law, and 'it touches call sites' is not a cost — neither is a reason to leave something wrong in place.
+Mike, 2026-09-15, on E-2144.
+
+I found that E-1956's gate (refusing `obsolete` on shipped work) rested on a
+premise E-2144 had just deleted, and that its remedy (`task replace <old> --by
+<new>`) has no answer for work that is DELETED rather than superseded. I laid
+out the case, then argued AGAINST fixing it with two non-reasons:
+
+  1. "it's a behavior change to a landed decision"
+  2. "it touches two call sites plus the Go-side asymmetry"
+
+Mike: "Landed decisions are not sacrosanct, even though you tend to treat as
+such. (Almost?) any previous decision can be reconsidered." And: "Touching call
+sites is not a reason not to fix something that is wrong."
+
+Both halves were me inventing weight for the do-nothing side of a decision the
+facts had already made. A prior decision is evidence about what someone believed
+THEN, given what they knew then. When the thing it rested on has changed, that
+decision is exactly the thing to reopen — that is what reopening is for.
+Mechanical breadth (N call sites, two languages) describes the work; it is not
+an argument about whether the work is right. Cost becomes an argument only when
+it is genuinely large AND the payoff genuinely small. Quoting it against a
+known-wrong behavior is deferring to inertia and calling it judgment.
+
+The third non-reason I used in the same breath: "the workaround is survivable
+today." Mike: "declined as a workaround is actively causing the reason to be
+misconstrued." A workaround that makes the record say something false is not a
+mitigation — it is the bug continuing under another name.
+
+The rule: once I have established that something is WRONG, say so and recommend
+fixing it. List real costs when they are real. Do not pad the against-column
+with the age of the decision, the number of files touched, or the existence of a
+workaround — and never let those three turn a clear finding into a hedge.
+- **Project**: endless
