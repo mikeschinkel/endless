@@ -758,3 +758,86 @@ func TestWorktreesAtOneTipShareOneAnswer(t *testing.T) {
 		}
 	}
 }
+
+// TestComputeOnMissReadsTheCacheFirst is the regression E-2128 shipped and had
+// to reopen for.
+//
+// `computeUnlandedAndCache` originally computed unconditionally. That was
+// invisible on the two paths that consult the cache themselves before calling it
+// — the display probe and the background job — but the REAPER calls it directly
+// for condition 4. So every sweep paid the full ~584ms comparison per eligible
+// worktree with a warm cache sitting beside it, and because `task spawn` runs the
+// reaper, a spawn took about a minute. That is E-2087's regression verbatim: the
+// exact cost this whole task exists to remove.
+//
+// A function named compute-on-MISS must miss before it computes.
+func TestComputeOnMissReadsTheCacheFirst(t *testing.T) {
+	ctx := context.Background()
+	f := newCacheFixture(t, 1)
+	f.appendToBase(t, "base.txt")
+	f.refresh(t)
+
+	if got := f.read(t, 0); !got.Known {
+		t.Fatalf("setup: the job did not establish a verdict: %+v", got)
+	}
+
+	g := countGit(t)
+	commits, err := computeUnlandedAndCache(ctx, f.worktrees[0], "main")
+	if err != nil {
+		t.Fatalf("computeUnlandedAndCache: %v", err)
+	}
+	if len(commits) != 1 {
+		t.Errorf("verdict = %v, want the one unlanded commit", commits)
+	}
+	for _, forbidden := range []string{"range-diff", "merge-base", "rev-list", "log"} {
+		if g.ran(forbidden) {
+			t.Errorf("a warm cache still cost `git %s` (calls: %v)", forbidden, g.calls)
+		}
+	}
+}
+
+// TestRefreshSkipsADirectoryThatIsNotARepository is the second half of the same
+// reopening. `monitor.ProjectRoots` returns every registered project, and not all
+// of them are git repositories — one registered project was a plain directory.
+// Failing the pass over it raised ERR-0001 "the job failed" once a minute,
+// forever, about every OTHER project's sweep as well.
+//
+// A registered directory that is not a repository has no worktrees and nothing to
+// cache, so there is nothing to report.
+func TestRefreshSkipsADirectoryThatIsNotARepository(t *testing.T) {
+	bindFaultsForTest(t)
+	resetDefaultBranchCache()
+	t.Cleanup(resetDefaultBranchCache)
+
+	if err := RefreshUnlandedCache(context.Background(), t.TempDir()); err != nil {
+		t.Errorf("a non-repository must be skipped, not fail the sweep: %v", err)
+	}
+	assertNoIncidents(t)
+}
+
+// TestRefreshRecordsAnUnresolvableBaseWithoutFailingTheSweep is the third.
+// A repository whose default branch cannot be resolved is a durable property of
+// THAT repository, and the fault is fingerprinted on it, so it raises one
+// incident with a rising occurrence count. Returning an error as well raised a
+// SECOND incident every interval — ERR-0001 on top of ERR-0011 — saying the job
+// was broken when one project was.
+func TestRefreshRecordsAnUnresolvableBaseWithoutFailingTheSweep(t *testing.T) {
+	bindFaultsForTest(t)
+	resetDefaultBranchCache()
+	t.Cleanup(resetDefaultBranchCache)
+
+	// A real repository on a branch none of the four resolution steps can name.
+	repo := fixtureRepo(t, "develop")
+
+	if err := RefreshUnlandedCache(context.Background(), repo); err != nil {
+		t.Errorf("one project's unresolvable base must not fail the sweep: %v", err)
+	}
+
+	incidents := listIncidents(t)
+	if len(incidents) != 1 {
+		t.Fatalf("got %d incidents, want exactly 1: %+v", len(incidents), incidents)
+	}
+	if incidents[0].Code != "ERR-0011" {
+		t.Errorf("code = %s, want ERR-0011 — the condition, not a job failure", incidents[0].Code)
+	}
+}

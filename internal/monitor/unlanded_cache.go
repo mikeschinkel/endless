@@ -463,18 +463,37 @@ func cachedUnlanded(ctx context.Context, worktreeDir string) unlandedLookup {
 	return res
 }
 
-// computeUnlandedAndCache is the COMPUTE-ON-MISS mode: it runs the exact
-// comparison and stores what it found, so the next reader gets it for free.
+// computeUnlandedAndCache is the COMPUTE-ON-MISS mode: it answers from the
+// cache when the cache has an answer, and otherwise runs the exact comparison
+// and stores what it found so the next reader gets it free.
 //
 // Three callers, each for its own reason: `session-query worktree-unsettled`
 // (the Go entry point behind `task unsettled`), because a direct question
 // deserves a real answer; the reaper's condition 4, because a guess is not
 // acceptable before a delete; and the background job, because it is the writer.
 //
+// READING FIRST IS NOT AN OPTIMIZATION HERE, IT IS THE CONTRACT. E-2128 shipped
+// this function computing unconditionally, which was invisible on the two paths
+// that consult the cache themselves before calling — but the reaper calls it
+// directly, so every sweep paid the full ~584ms comparison per eligible worktree
+// with a fully warm cache sitting beside it. `task spawn` runs the reaper, and a
+// spawn took about a minute. That is E-2087's regression verbatim, which is the
+// one this whole task exists to make affordable; a function named
+// compute-on-MISS must therefore miss before it computes.
+//
+// The cache read keys on the watermark's base tip rather than on the caller's
+// freshly resolved base, and that is safe in both directions: a `settled` hit is
+// permanent while the branch tip has not moved, and a stale `unsettled` hit can
+// only over-report, which makes the reaper skip — the safe direction for a
+// decision that ends in a removed directory.
+//
 // The caller supplies base — every one of them has already resolved it, and
 // taking it as a parameter keeps this function from quietly becoming a second
 // resolver with its own failure mode.
 func computeUnlandedAndCache(ctx context.Context, worktreeDir, base string) ([]string, error) {
+	if hit := cachedUnlanded(ctx, worktreeDir); hit.Known {
+		return hit.Commits, nil
+	}
 	commits, err := unlandedCommits(ctx, worktreeDir, base)
 	if err != nil {
 		// A failed compute writes NOTHING. Absence already means unknown, and

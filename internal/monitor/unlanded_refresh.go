@@ -46,7 +46,12 @@ const (
 func RefreshUnlandedCache(ctx context.Context, repoDir string) error {
 	cache, err := unlandedCacheFor(ctx, repoDir)
 	if err != nil {
-		return fmt.Errorf("unlanded cache for %s: %w", repoDir, err)
+		// Not a git repository, or one git will not answer about. A registered
+		// project that is not a repo has no worktrees and nothing to cache, so
+		// there is nothing here to report — and reporting it would fail the sweep
+		// for every OTHER project once a minute, forever, which is what E-2128
+		// shipped and what ERR-0001 was counting.
+		return nil
 	}
 	if err = os.MkdirAll(cache.dir, 0o755); err != nil {
 		// A read-only checkout or a permissions problem. Every lookup in this repo
@@ -60,11 +65,14 @@ func RefreshUnlandedCache(ctx context.Context, repoDir string) error {
 
 	base, err := DefaultBranch(ctx, repoDir)
 	if err != nil {
+		// Recorded, not returned. This is a durable property of ONE repository —
+		// it has no discoverable default branch — and the fault is fingerprinted
+		// on the repo so it raises a single incident with a rising count. Failing
+		// the sweep over it would raise a SECOND incident (ERR-0001, "the job
+		// failed") every interval about a condition the first one already names,
+		// and would say the job is broken when one project is.
 		recordRefreshDefaultBranchFault(repoDir, err)
-		if errors.Is(err, ErrGitInterrupted) {
-			return nil
-		}
-		return fmt.Errorf("resolve default branch for %s: %w", repoDir, err)
+		return nil
 	}
 	baseTip, err := revOID(ctx, repoDir, base)
 	if err != nil {

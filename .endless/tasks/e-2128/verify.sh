@@ -149,6 +149,12 @@ mon TestFreshWorktreeIsSettledWithoutAComparison \
     "and so does claiming one — a branch cut at the base needs no comparison"
 mon TestWorktreesAtOneTipShareOneAnswer \
     "two worktrees at one branch tip share one answer, paying no git at all"
+mon TestComputeOnMissReadsTheCacheFirst \
+    "compute-on-miss MISSES first: a warm cache costs the reaper no git at all"
+mon TestRefreshSkipsADirectoryThatIsNotARepository \
+    "a registered project that is not a git repo is skipped, not a job failure"
+mon TestRefreshRecordsAnUnresolvableBaseWithoutFailingTheSweep \
+    "one project's unresolvable base records ERR-0011 and does not fail the sweep"
 
 go_claim ./internal/sessionstatuscmd/ TestUnsettledMark \
     "all four column states, with ~ outranking ◆ on an uncomputed row"
