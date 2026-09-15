@@ -23,12 +23,12 @@ var demoLayout = windowLayout{
 // TestNewSessionArgsIsADetachedShell pins two things at once, and the second is
 // the one that bites.
 //
-// Detached (-d): creating the board must never yank the user out of what they
+// Detached (-d): creating the monitor must never yank the user out of what they
 // are doing.
 //
 // And NO COMMAND: the session's first pane is the user's shell, because the
-// SHELL is created first and the board inserted above it. Creating the board
-// first and splitting a shell off it races the board's own self-resize — E-1851
+// SHELL is created first and the monitor inserted above it. Creating the monitor
+// first and splitting a shell off it races the monitor's own self-resize — E-1851
 // learned that in the spawn layout, and this launcher shipped with it backwards
 // (E-1976). The symptom is a window with no second pane at all.
 func TestNewSessionArgsIsADetachedShell(t *testing.T) {
@@ -54,29 +54,29 @@ func TestNewSessionArgsOmitsAnEmptyDir(t *testing.T) {
 	}
 }
 
-// TestSplitBoardArgsInsertsAboveTheShell is the ordering rule, stated as an
+// TestSplitMonitorArgsInsertsAboveTheShell is the ordering rule, stated as an
 // assertion so it cannot quietly revert: -b puts the new pane ABOVE its target,
 // and the target is the shell's PANE ID rather than the session (which would
 // resolve to whatever pane happened to be active).
-func TestSplitBoardArgsInsertsAboveTheShell(t *testing.T) {
-	got := splitBoardArgs(demoLayout, "%42")
+func TestSplitMonitorArgsInsertsAboveTheShell(t *testing.T) {
+	got := splitMonitorArgs(demoLayout, "%42")
 	if !strings.Contains(joined(got), "split-window -v -b -t %42") {
-		t.Errorf("the board is not inserted above the shell pane: %v", got)
+		t.Errorf("the monitor is not inserted above the shell pane: %v", got)
 	}
-	// `--` terminates tmux flag parsing so the board command reaches execvp
+	// `--` terminates tmux flag parsing so the monitor command reaches execvp
 	// literally, with no shell re-quoting of its arguments.
 	if i := indexOf(got, "--"); i < 0 || joined(got[i+1:]) != "endless project monitor demo" {
-		t.Errorf("the board command is not passed literally after --: %v", got)
+		t.Errorf("the monitor command is not passed literally after --: %v", got)
 	}
-	// No -l: the board sizes its own pane from a window-derived budget on first
+	// No -l: the monitor sizes its own pane from a window-derived budget on first
 	// paint, so a height guessed here is overwritten a moment later.
 	if indexOf(got, "-l") >= 0 {
-		t.Errorf("the split guesses a height the board immediately overrides: %v", got)
+		t.Errorf("the split guesses a height the monitor immediately overrides: %v", got)
 	}
 }
 
 // TestFocusReturnsToTheShell: tmux makes a new split active, so without this the
-// board — which is read, never typed in — would hold the cursor.
+// monitor — which is read, never typed in — would hold the cursor.
 func TestFocusReturnsToTheShell(t *testing.T) {
 	if joined(selectPaneArgs("%42")) != "select-pane -t %42" {
 		t.Errorf("focus is not handed back to a named pane: %v", selectPaneArgs("%42"))
@@ -105,7 +105,7 @@ func TestOwnershipMarkTargetsCarryNoEqualsPrefix(t *testing.T) {
 }
 
 // TestOwnershipMarkCarriesBothFacts: one option, two jobs. Its PRESENCE proves
-// Endless built the session; its VALUE says which project's board it holds. A
+// Endless built the session; its VALUE says which project's monitor it holds. A
 // session without it was made by someone else, whatever it is called — which is
 // the only question that matters once the name is user-configurable.
 func TestOwnershipMarkCarriesBothFacts(t *testing.T) {
@@ -121,7 +121,7 @@ func TestOwnershipMarkCarriesBothFacts(t *testing.T) {
 
 // TestSessionTargetsAreExact pins the `=` prefix. Without it tmux matches a
 // session name as a PREFIX, so a project whose name is a prefix of another's
-// (`h2pp` inside `h2pp-legacy`) resolves to the wrong board, and the launcher
+// (`h2pp` inside `h2pp-legacy`) resolves to the wrong monitor, and the launcher
 // attaches to — or declares already existing — a session that is not its own.
 func TestSessionTargetsAreExact(t *testing.T) {
 	for name, args := range map[string][]string{
@@ -137,7 +137,7 @@ func TestSessionTargetsAreExact(t *testing.T) {
 
 // TestMonitorCommandNamesTheProject: the pane must not rely on cwd resolution.
 // Its directory is the main checkout today, but a launcher that depends on that
-// coincidence breaks the moment the layout's home moves — and a board showing
+// coincidence breaks the moment the layout's home moves — and a monitor showing
 // the wrong project is worse than one that fails to open.
 func TestMonitorCommandNamesTheProject(t *testing.T) {
 	got := monitorCommand("gomion")

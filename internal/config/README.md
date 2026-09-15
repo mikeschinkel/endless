@@ -90,18 +90,18 @@ folded to a legal tmux session name, so a template may hold spaces, dots or
 slashes without you having to know tmux's rules.
 
 ```json
-{ "tmux": { "session_name": "{{project}}-board" } }
+{ "tmux": { "session_name": "{{project}}-watch" } }
 ```
 
 A template that fails to parse or renders to nothing falls back to the default
 and warns on stderr: this is a preference, and a typo in one must not stop the
-board from opening.
+monitor from opening.
 
 **Naming is a preference; ownership is a fact.** Because you can choose a name
 that collides with a session you already keep open, the launcher marks every
 session it creates (`@endless_monitor`, holding the project) and refuses to take
-over one it did not create, rather than switching you into a window with no board
-in it. That is why this setting costs an ownership check — see
+over one it did not create, rather than switching you into a window with no
+monitor in it. That is why this setting costs an ownership check — see
 `internal/projectstatuscmd/window.go`.
 
 Merged per field rather than wholesale, so a project that sets one tmux

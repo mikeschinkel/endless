@@ -176,7 +176,7 @@ func ProcessIDsForPanes(panes []string) ([]int64, error) {
 // address), and a NULL-server row matches no server at all. The first cut of
 // this migration shipped without adoption on the theory that each session would
 // re-bind on its next hook. Only sessions that FIRE hooks do — an idle window
-// fires none, so in practice the whole board went unresolvable and stayed that
+// fires none, so in practice `project status` went unresolvable and stayed that
 // way. Measured on the main database: 63 of 64 bound sessions were sitting on
 // panes that were live on the running server at migration time.
 //

@@ -48,7 +48,7 @@ func TestSortRows_ReferencedSinksBelowEverything(t *testing.T) {
 }
 
 // TestSortRows_ProminenceIsOnlyATiebreak is the other half, and the one that
-// keeps `session task add` from deranging the board: decided work wins ONLY
+// keeps `session task add` from deranging the view: decided work wins ONLY
 // against equally actionable rows. A `queued` task parked in `later` must stay
 // below the row actually being worked.
 func TestSortRows_ProminenceIsOnlyATiebreak(t *testing.T) {
@@ -83,7 +83,7 @@ func TestSortRows_ProminenceIsOnlyATiebreak(t *testing.T) {
 // the focal task's children, dependents and upstream blockers, which carry NO
 // session_tasks row and so no relation — are NOT demoted below surfaced or
 // revisited work. They are real work on the focal task; only their bookkeeping
-// differs, and sinking them would reorder the board for no reason a viewer could
+// differs, and sinking them would reorder the view for no reason a viewer could
 // see. Equal prominence means the pre-E-1696 phase→id ordering still decides.
 func TestSortRows_UnclassifiedRowsRankWithIncidental(t *testing.T) {
 	rows := []monitor.SessionStatusRow{

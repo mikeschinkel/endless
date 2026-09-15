@@ -581,7 +581,7 @@ def project_status(name, show_all, as_json, limit, no_limit):
     it from anywhere. For a live, self-updating view, use `endless project
     monitor`.
 
-    The cap is PER GROUP, not per board: a single cap would spend every row on
+    The cap is PER GROUP, not per frame: a single cap would spend every row on
     the unverified backlog and push the sessions off the bottom. Each truncated
     group says how many it left out.
     """
@@ -596,22 +596,23 @@ def project_status(name, show_all, as_json, limit, no_limit):
               help="Include `ready` tasks — spawnable work, a claim on capacity "
                    "rather than attention")
 @click.option("--tmux", "use_tmux", is_flag=True,
-              help="Open the board in its own two-pane tmux session (monitor "
-                   "above, a bare shell below) and switch to it. Idempotent.")
+              help="Open the monitor in its own two-pane tmux session (the "
+                   "monitor above, a bare shell below) and switch to it. "
+                   "Idempotent.")
 @click.option("--no-switch", is_flag=True,
               help="With --tmux: create the session but stay where you are.")
 @project_status_cmd.group_limit_options
 def project_monitor(name, show_all, use_tmux, no_switch, limit, no_limit):
-    """Live board: repeatedly render `project status` until interrupted.
+    """Live monitor: repeatedly render `project status` until interrupted.
 
     The pane you keep open all day when several sessions are running. Loops the
     same view `project status` prints once, redrawing every 2 seconds and
     repainting only when the frame changes (no flicker). Ctrl-C exits.
 
-    --tmux gives it the home it is designed for: its own tmux session, the board
-    on top and a bare shell beneath it for running `endless` commands against
-    what the board shows. Focus lands on the shell. Running it again switches to
-    the session that already exists rather than making a second one.
+    --tmux gives it the home it is designed for: its own tmux session, the
+    monitor on top and a bare shell beneath it for running `endless` commands
+    against what it shows. Focus lands on the shell. Running it again switches
+    to the session that already exists rather than making a second one.
     """
     if use_tmux:
         project_status_cmd.project_window_resolve(name, no_switch=no_switch)

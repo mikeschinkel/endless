@@ -29,7 +29,7 @@ import (
 // The merge belongs in Go rather than in a UNION because the two halves overlap
 // on exactly one key (a session's claimed task) and the overlap is a JOIN of
 // facts, not a concatenation of rows: a session working E-1976 and the task
-// E-1976 are ONE thing on the board, not two lines saying the same thing twice.
+// E-1976 are ONE row, not two lines saying the same thing twice.
 //
 // Unlike SessionStatusRows this set is PROJECT-scoped, not focal-task-scoped,
 // and it is deliberately not a superset: `ready` arrives only under all=true,
@@ -40,7 +40,7 @@ import (
 // both — never neither.
 //
 // The zero value of each half is its "absent" marker (TaskID == 0, SessionID ==
-// 0), which is why neither is a pointer: a board row is read a dozen times per
+// 0), which is why neither is a pointer: a row is read a dozen times per
 // repaint by width, sort and legend code, and a nil check at each of those is a
 // nil panic waiting for the one row shaped differently than the author pictured.
 type ProjectStatusRow struct {
@@ -53,7 +53,7 @@ type ProjectStatusRow struct {
 	Phase    string
 	TypeSlug string
 	// TaskUpdated is tasks.updated_at: when the task last changed, which for a
-	// row on this board is when it entered the status that put it here. It is
+	// row here is when it entered the status that put it here. It is
 	// the staleness clock — an `unverified` row updated 80 days ago is sediment,
 	// not a queue entry.
 	TaskUpdated string
@@ -106,8 +106,8 @@ func ProjectByName(name string) (id int64, resolved string, err error) {
 
 // ProjectForCwd resolves the project enclosing the working directory.
 //
-// It WALKS UP, which is the whole point: the board is most often run from a
-// per-task worktree (.endless/worktrees/e-NNN) or from some subdirectory of a
+// It WALKS UP, which is the whole point: `project status` is most often run from
+// a per-task worktree (.endless/worktrees/e-NNN) or from some subdirectory of a
 // checkout, and only the checkout root carries a projects row. Matching the
 // literal cwd alone — which is all MatchProjectPath does — reports "not inside a
 // registered project" from inside the project.
@@ -176,7 +176,7 @@ func ProjectForCwd() (id int64, name string, err error) {
 	return 0, "", fmt.Errorf("%w: no registered project encloses %s", ErrNoProject, cwd)
 }
 
-// boardTaskStatuses is the status set a task must be in to earn a board row
+// projectStatusTaskStatuses is the status set a task must be in to earn a row
 // without a session behind it.
 //
 // AwaitsUser is the ball-is-in-your-court set; `underway` joins it here and
@@ -184,11 +184,11 @@ func ProjectForCwd() (id int64, name string, err error) {
 // somebody started and walked away from — which is a genuine attention claim
 // that no status of its own describes. An underway task WITH a live session is
 // merged onto that session's row instead and never renders as an orphan.
-func boardTaskStatuses(all bool) string {
+func projectStatusTaskStatuses(all bool) string {
 	list := taskstatus.SQLList(taskstatus.AwaitsUser) + ",'" + string(taskstatus.Underway) + "'"
 	if all {
 		// `ready` is spawnable work: a claim on CAPACITY, not on attention. It
-		// is off the default board for the same reason `session status` keeps
+		// is off the default view for the same reason `session status` keeps
 		// terminal rows behind --all — including it by default would bury the
 		// rows that actually need a person under the ones that need a session.
 		list += ",'" + string(taskstatus.Ready) + "'"
@@ -200,7 +200,7 @@ func boardTaskStatuses(all bool) string {
 //
 // Sessions are read first so a task claimed by a live session is folded into
 // that session's row rather than emitted twice. Ordering is NOT applied here:
-// the board ranks and sorts per group, which is a rendering decision and lives
+// projectstatuscmd ranks and sorts per group, which is a rendering decision and lives
 // with the renderer.
 func ProjectStatusRows(projectID int64, all bool) ([]ProjectStatusRow, error) {
 	db, err := DB()
@@ -208,15 +208,15 @@ func ProjectStatusRows(projectID int64, all bool) ([]ProjectStatusRow, error) {
 		return nil, err
 	}
 
-	// RefreshLiveness, not livenessReady: the board is a repeating view whose
+	// RefreshLiveness, not livenessReady: `project monitor` is a repeating view whose
 	// whole premise is which sessions are alive RIGHT NOW, and livenessReady's
 	// sync.Once would freeze that observation at the first frame — so a session
-	// that ended while the board was open would never leave it, and one that
+	// that ended while the monitor was open would never leave it, and one that
 	// started would never appear. A one-shot render pays the same single
 	// observation either way, so there is no flag and no second entry point.
 	//
 	// A failed observation is not fatal. RefreshLiveness's own contract is that
-	// reaching nothing means `unknown`, not `dead`, so a board rendered against a
+	// reaching nothing means `unknown`, not `dead`, so a frame rendered against a
 	// stale snapshot over-includes rather than hiding live work.
 	if err = RefreshLiveness(); err != nil {
 		return nil, err
@@ -258,23 +258,23 @@ func ProjectStatusRows(projectID int64, all bool) ([]ProjectStatusRow, error) {
 //     session that registered and never had a turn — 34 of them in one project,
 //     each last active 25 to 71 days earlier. Hiding them is how they rotted
 //     unseen. E-2091 reveals them instead and fixes the writers that made them:
-//     the board already caps each rank at ten rows with a footer naming the
-//     remainder, which is machinery built for exactly this, and a row on the
-//     board is what provides the mechanism to resolve it. The existing rows are
+//     `project status` already caps each rank at ten rows with a footer naming
+//     the remainder, which is machinery built for exactly this, and a row in it
+//     is what provides the mechanism to resolve it. The existing rows are
 //     surfaced, not migrated — retiring them in the dark is the opposite of what
 //     revealing them is for.
 //   - liveness != 'dead' — a fresh OBSERVATION, joined the same way
 //     ListLiveSessions does it: we reached the session's tmux server and its
 //     pane was not there. `unknown` (server unreachable) deliberately stays,
 //     because "could not disprove" is not "gone" — the rule E-1898 established
-//     and this board has no reason to reinterpret.
+//     and `project status` has no reason to reinterpret.
 //   - hidden — `endless session hide` is how a user says "stop showing me this
-//     one", and a board whose whole job is attention triage is the last surface
+//     one", and a view whose whole job is attention triage is the last surface
 //     that should ignore it.
 //
 // The task join is LEFT: a session that has claimed nothing still gets a row,
 // because an agent running with no task is exactly the kind of thing a person
-// wants to see on a board.
+// wants to see.
 func projectSessionRows(db *sql.DB, projectID int64) ([]ProjectStatusRow, error) {
 	rows, err := db.Query(`
 		SELECT s.id,
@@ -324,7 +324,7 @@ func projectTaskRows(db *sql.DB, projectID int64, all bool) ([]ProjectStatusRow,
 		  FROM live_tasks t
 		  LEFT JOIN task_types ty ON ty.id = t.type_id
 		 WHERE t.project_id = ?
-		   AND t.status IN (` + boardTaskStatuses(all) + `)`
+		   AND t.status IN (` + projectStatusTaskStatuses(all) + `)`
 	rows, err := db.Query(query, projectID)
 	if err != nil {
 		return nil, fmt.Errorf("project status tasks: %w", err)
@@ -352,7 +352,7 @@ func projectTaskRows(db *sql.DB, projectID int64, all bool) ([]ProjectStatusRow,
 // folded to '-'. PRODUCT: project names are user-chosen and arrive with spaces,
 // dots and slashes in them; this must not be a rule the user has to know.
 //
-// A name that folds away to nothing yields "project", so a board stays
+// A name that folds away to nothing yields "project", so the monitor stays
 // reachable rather than the launcher refusing over a naming detail.
 func SanitizeTmuxName(project string) string {
 	var b strings.Builder
@@ -372,7 +372,7 @@ func SanitizeTmuxName(project string) string {
 }
 
 // ProjectNameByID resolves a project's name from its id. Used by the headless
-// --project-id path, which names the board's project without going through the
+// --project-id path, which names the project explicitly without going through the
 // name or cwd resolvers.
 func ProjectNameByID(id int64) (int64, string, error) {
 	db, err := DB()

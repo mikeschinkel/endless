@@ -103,8 +103,8 @@ func TestMayWriteIsASubsetOfLive(t *testing.T) {
 // A session is admitted to write when it is mid-turn; it awaits a human when it
 // has paused for input. `idle` and `prompted` are both at once. `idle` because a
 // write from an idle session is mid-turn by construction — writes only happen
-// inside turns, so the state is stale, not the agent (E-2093) — while the board
-// still ranks it as a claim on attention (E-1976). `prompted` because the
+// inside turns, so the state is stale, not the agent (E-2093) — while
+// `project status` still ranks it as a claim on attention (E-1976). `prompted` because the
 // session is blocked on a permission answer for a tool call it has already
 // decided to make (E-2091).
 //

@@ -9,13 +9,13 @@ import (
 	"github.com/mikeschinkel/endless/internal/monitor"
 )
 
-func decodeBoard(t *testing.T, rows []monitor.ProjectStatusRow) jsonBoard {
+func decodeDoc(t *testing.T, rows []monitor.ProjectStatusRow) jsonDoc {
 	t.Helper()
 	var b strings.Builder
 	if err := renderJSON(&b, "demo", rows, now); err != nil {
 		t.Fatalf("renderJSON: %v", err)
 	}
-	var out jsonBoard
+	var out jsonDoc
 	if err := json.Unmarshal([]byte(b.String()), &out); err != nil {
 		t.Fatalf("payload does not parse: %v\n%s", err, b.String())
 	}
@@ -30,7 +30,7 @@ func TestJSONIsUncapped(t *testing.T) {
 	for i := int64(1); i <= 40; i++ {
 		rows = append(rows, taskRow(i, "unverified", time.Duration(i)*time.Hour))
 	}
-	if got := decodeBoard(t, rows); len(got.Rows) != 40 {
+	if got := decodeDoc(t, rows); len(got.Rows) != 40 {
 		t.Fatalf("--json emitted %d of 40 rows", len(got.Rows))
 	}
 }
@@ -38,7 +38,7 @@ func TestJSONIsUncapped(t *testing.T) {
 // TestJSONKeepsRankOrder: the order is information the view computed, and
 // dropping it would make the payload strictly less useful than the render.
 func TestJSONKeepsRankOrder(t *testing.T) {
-	got := decodeBoard(t, []monitor.ProjectStatusRow{
+	got := decodeDoc(t, []monitor.ProjectStatusRow{
 		sessionRow(10, "working", time.Minute, 0),
 		taskRow(1, "unverified", time.Hour),
 		sessionRow(11, "idle", time.Minute, 0),
@@ -56,7 +56,7 @@ func TestJSONKeepsRankOrder(t *testing.T) {
 // consumer to learn the icon vocabulary) and not the enum (whose numeric value
 // reorders the moment a rank is inserted).
 func TestJSONCarriesTheActionAsALabel(t *testing.T) {
-	got := decodeBoard(t, []monitor.ProjectStatusRow{taskRow(1, "unverified", time.Hour)})
+	got := decodeDoc(t, []monitor.ProjectStatusRow{taskRow(1, "unverified", time.Hour)})
 	if got.Rows[0].Action != "verify" {
 		t.Errorf("action = %q, want the label 'verify'", got.Rows[0].Action)
 	}
@@ -65,12 +65,12 @@ func TestJSONCarriesTheActionAsALabel(t *testing.T) {
 	}
 }
 
-// TestJSONAgeIsComputedForTheConsumer: WHICH timestamp a row ages by is a board
+// TestJSONAgeIsComputedForTheConsumer: WHICH timestamp a row ages by is a render
 // rule — session activity for a session row, task update for a task row — and a
 // consumer re-deriving it would have to reimplement that rule to agree with the
 // view.
 func TestJSONAgeIsComputedForTheConsumer(t *testing.T) {
-	got := decodeBoard(t, []monitor.ProjectStatusRow{
+	got := decodeDoc(t, []monitor.ProjectStatusRow{
 		taskRow(1, "unverified", 2*time.Hour),
 		{SessionID: 9, SessionState: "idle", SessionActivity: "unparseable"},
 	})
@@ -84,14 +84,14 @@ func TestJSONAgeIsComputedForTheConsumer(t *testing.T) {
 	}
 }
 
-// TestJSONEmptyBoardStillParses: an empty result must be `[]`, never `null` — a
+// TestJSONEmptyDocStillParses: an empty result must be `[]`, never `null` — a
 // consumer looping over the payload should not have to special-case nothing.
-func TestJSONEmptyBoardStillParses(t *testing.T) {
+func TestJSONEmptyDocStillParses(t *testing.T) {
 	var b strings.Builder
 	if err := renderJSON(&b, "demo", nil, now); err != nil {
 		t.Fatalf("renderJSON: %v", err)
 	}
 	if !strings.Contains(b.String(), `"rows": []`) {
-		t.Fatalf("empty board did not emit an empty array:\n%s", b.String())
+		t.Fatalf("empty doc did not emit an empty array:\n%s", b.String())
 	}
 }

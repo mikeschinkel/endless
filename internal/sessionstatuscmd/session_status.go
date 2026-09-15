@@ -99,7 +99,7 @@ const (
 	// APPENDED, not inserted, per the rule actUnknown and actDone followed: enum
 	// order is both legend order and sortRows' rank, so appending leaves every
 	// existing rank untouched. Sorting last is right on its merits too — an
-	// untriaged task is the least actionable row on the board, and `untriaged` is
+	// untriaged task is the least actionable row in the view, and `untriaged` is
 	// now the DEFAULT status, so these rows would otherwise crowd real work off
 	// the top of every listing.
 	actTriage
@@ -159,7 +159,7 @@ func hiddenFooter(n int) string {
 }
 
 // The redraw cadence and the pane self-sizing rule moved to internal/liveview
-// in E-1976, when the project-scoped board became a second view needing both.
+// in E-1976, when `project status` became a second view needing both.
 // These aliases keep the names this package's tests were written against, and
 // keep the two dashboards provably sharing one set of numbers.
 const (
@@ -571,7 +571,7 @@ func monitorLoop(tracker *anchorTracker, all bool, colsOverride int, color bool,
 }
 
 // frameLines, paneHeightForFrame, fitPaneToFrame and eraseEachLineToEOL moved
-// to internal/liveview in E-1976 (the project board fits its pane by the same
+// to internal/liveview in E-1976 (`project monitor` fits its pane by the same
 // rule). They stay reachable under their original names so this package's tests
 // — which are where the rule is pinned — keep exercising the shared code.
 func frameLines(frame string) int { return liveview.FrameLines(frame) }
@@ -737,7 +737,7 @@ func renderTo(w io.Writer, rows []monitor.SessionStatusRow, focal int64, noTaskH
 	// AllProjects, not this session's project (E-1960): `session status` is a
 	// machine-wide view — it renders every live session on the box, whatever
 	// project each is in — so a fault narrowed to one of them would be the only
-	// narrowed thing on the frame. The project board is where the scoped badge
+	// narrowed thing on the frame. `project status` is where the scoped badge
 	// belongs, and that is what it passes.
 	faultbadge.Render(w, cols, color, faults.AllProjects)
 }
@@ -1230,7 +1230,7 @@ func colorEnabled() bool { return liveview.ColorEnabled() }
 
 // collapse squeezes internal whitespace runs to single spaces so multi-line or
 // padded titles render on one line (matches `endless session list`). Shared with
-// the project board via internal/liveview since E-1976.
+// `project monitor` via internal/liveview since E-1976.
 func collapse(s string) string { return liveview.Collapse(s) }
 
 // ANSI helpers. Phase-by-intensity: urgent bold, later/maybe dim, terminal rows

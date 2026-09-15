@@ -341,7 +341,7 @@ func IsTerminal(f *os.File) bool {
 // the fit is already capped at, so it is the honest budget.
 //
 // A view that overruns this budget does not wrap — it SCROLLS, and a scrolled
-// frame loses its TOP, which on a ranked board is the loudest rows. Any view
+// frame loses its TOP, which in a ranked frame is the loudest rows. Any view
 // whose row set can outgrow a pane has to spend this budget deliberately rather
 // than discover it.
 // `pct` is the share of the tmux WINDOW this view may claim WHEN IT IS SHARING
@@ -355,7 +355,7 @@ func IsTerminal(f *os.File) bool {
 // exists to feed a companion pane, and reserving a third of the window for a
 // pane that does not exist just draws a short frame above a block of dead space.
 // That is what `endless project monitor` did when run in a plain terminal or a
-// single-pane window — 27 lines of board in a 44-row pane (E-1976).
+// single-pane window — 27 lines of monitor in a 44-row pane (E-1976).
 func DetectRows(pane string, pct, fallback int) int {
 	if pct <= 0 {
 		pct = PanePctOfWindow

@@ -171,7 +171,7 @@ Because the feature is explicitly **research preview**, Anthropic warns the inte
 
 **Stage 1 — Minimal viable integration (depend only on documented, stable surfaces).**
 1. **Dispatch** child tasks with `claude --bg --name "<endless-task-id>" "<prompt>"` (optionally `--agent`), and **capture the short ID from stdout** at launch (parse the `backgrounded · <id> · <name>` line). Setting `--name` to your own task ID makes the row identifiable in `--json` output.
-2. **Discover/poll** with `claude agents --json --all` (filter by `--cwd` when you want one project). Map its `state`/`status`/`waitingFor` fields to your task board. Poll on an interval (e.g., 5–15s) rather than tailing files; remember row summaries lag up to ~15s, so key your logic on structured state, not summary text.
+2. **Discover/poll** with `claude agents --json --all` (filter by `--cwd` when you want one project). Map its `state`/`status`/`waitingFor` fields to your task tree. Poll on an interval (e.g., 5–15s) rather than tailing files; remember row summaries lag up to ~15s, so key your logic on structured state, not summary text.
 3. **Promote to a dedicated tmux window** by opening a new window/pane running `claude attach <id>`. Don't expect this to change the agent's lifecycle — the supervisor keeps hosting it, and detaching leaves it running.
 4. **Stop/clean up** with `claude stop <id>` and `claude rm <id>` (remember `claude rm` keeps worktrees with uncommitted changes and prints their path; deleting in the TUI via `Ctrl+X Ctrl+X` discards the worktree).
 

@@ -25,11 +25,12 @@ import click
 from endless import rowcap
 
 
-# The board caps PER GROUP rather than per render (see internal/projectstatuscmd
-# defaultGroupCap): a single board-wide cap with `unverified` ranked near the top
-# would spend every row on the backlog and push the sessions the board exists to
-# triage off the bottom. Ten rather than rowcap's twenty because the board lives
-# in a tmux pane sized to its own frame.
+# `project status` caps PER GROUP rather than per render (see
+# internal/projectstatuscmd defaultGroupCap): a single frame-wide cap with
+# `unverified` ranked near the top would spend every row on the backlog and push
+# the sessions the view exists to triage off the bottom. Ten rather than
+# rowcap's twenty because the monitor lives in a tmux pane sized to its own
+# frame.
 DEFAULT_GROUP_CAP = 10
 
 # The Click decorator for the two flags. Built from rowcap's factory so the
@@ -99,7 +100,7 @@ def project_status_resolve(
 
 
 def project_window_resolve(project: str | None, no_switch: bool = False) -> None:
-    """Open (or switch to) the dedicated two-pane tmux session for the board."""
+    """Open (or switch to) the dedicated two-pane tmux session for the monitor."""
     args = [_go_binary(), "project-window"]
     if project:
         args += ["--project", project]

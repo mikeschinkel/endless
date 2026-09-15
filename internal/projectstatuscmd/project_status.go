@@ -31,21 +31,22 @@ import (
 // --cols, no $COLUMNS). Matches sessionstatuscmd's.
 const fallbackCols = 90
 
-// boardPctOfWindow is the share of the tmux window the board claims, and it is
+// monitorPctOfWindow is the share of the tmux window the monitor claims, and it
+// is
 // deliberately smaller than liveview.PanePctOfWindow's 80.
 //
 // For `session monitor` that 80% is a safety net: its frame is a handful of rows
-// and the cap almost never binds. This board is the opposite — fair-share
+// and the cap almost never binds. The monitor is the opposite — fair-share
 // allocation grows the frame to fill whatever budget it is given, so the cap
 // binds on EVERY frame and whatever it leaves is exactly what the shell pane
-// below gets, forever. Two thirds keeps the board comfortably legible (five
+// below gets, forever. Two thirds keeps the monitor comfortably legible (five
 // groups still render several rows each on any normal terminal) while leaving a
 // third for the pane the user actually types in — which is the pane the whole
 // two-pane layout exists to provide.
-const boardPctOfWindow = 65
+const monitorPctOfWindow = 65
 
 // Run dispatches both subcommands this package owns. One package, because the
-// window IS the board's home — the layout exists to hold the monitor, and
+// window IS the monitor's home — the layout exists to hold it, and
 // splitting them would put the two halves of one feature in two places.
 func Run(sub string, args []string) {
 	switch sub {
@@ -84,8 +85,8 @@ func runStatus(args []string) {
 	fs.IntVar(&o.limit, "limit", defaultGroupCap, "max rows PER GROUP")
 	fs.BoolVar(&o.noLimit, "no-limit", false, "render every row in every group")
 	fs.IntVar(&o.cols, "cols", 0, "terminal width override (0 = auto-detect)")
-	fs.IntVar(&o.rows, "rows", 0, "terminal height override (0 = auto-detect; the budget the board fits its frame into)")
-	fs.BoolVar(&o.asJSON, "json", false, "emit the row set as JSON instead of the board")
+	fs.IntVar(&o.rows, "rows", 0, "terminal height override (0 = auto-detect; the budget the monitor fits its frame into)")
+	fs.BoolVar(&o.asJSON, "json", false, "emit the row set as JSON instead of the rendered frame")
 	if err := fs.Parse(args); err != nil {
 		os.Exit(2)
 	}
@@ -160,7 +161,7 @@ func runStatus(args []string) {
 	}
 }
 
-// frameFunc binds one board render into the liveview.Frame shape. The snapshot
+// frameFunc binds one render into the liveview.Frame shape. The snapshot
 // and the monitor call the SAME closure, which is what makes `project status`
 // provably one frame of `project monitor` rather than a lookalike.
 func frameFunc(projectID int64, name string, all bool, groupCap, rowBudget int) liveview.Frame {
@@ -176,14 +177,15 @@ func frameFunc(projectID int64, name string, all bool, groupCap, rowBudget int) 
 		// argument liveview.Loop already makes for re-detecting the width.
 		budget := rowBudget
 		if budget == 0 {
-			budget = liveview.DetectRows(os.Getenv("TMUX_PANE"), boardPctOfWindow, 0)
+			budget = liveview.DetectRows(os.Getenv("TMUX_PANE"), monitorPctOfWindow, 0)
 		}
 		return render(w, name, rows, groupCap, budget, cols, color, time.Now().UTC(),
 			faults.ProjectScope(projectID)), nil
 	}
 }
 
-// resolveProject settles which project the board is about, and the DB it reads.
+// resolveProject settles which project `project status` is about, and the DB it
+// reads.
 //
 // Three ways in, in precedence order:
 //
@@ -195,10 +197,10 @@ func frameFunc(projectID int64, name string, all bool, groupCap, rowBudget int) 
 //  3. the project enclosing the working directory, against the main DB.
 //
 // Cases 2 and 3 pin the main database unless an explicit --config-dir was given,
-// for the same reason `session-status` does: this board reads sessions and tasks
+// for the same reason `session-status` does: this view reads sessions and tasks
 // through a single-database join, sessions live in main regardless of cwd, and a
 // worktree sandbox holds one project row and no tasks — so a sandbox read would
-// render an empty board from inside every worktree.
+// render an empty frame from inside every worktree.
 func resolveProject(o options) (int64, string) {
 	if o.projectID > 0 {
 		name := o.project

@@ -26,7 +26,7 @@ func TestSanitizeTmuxName(t *testing.T) {
 		{"a/b/c", "a-b-c"},
 		// A leading '-' would be read as a flag by tmux, so the fold is trimmed.
 		{"-weird-", "weird"},
-		// Every character folded away. A board still has to be reachable.
+		// Every character folded away. The monitor still has to be reachable.
 		{"...", "project"},
 		{"", "project"},
 	}
@@ -37,28 +37,28 @@ func TestSanitizeTmuxName(t *testing.T) {
 	}
 }
 
-// TestBoardTaskStatusesComesFromTheVocabulary pins that the board's status set
+// TestProjectStatusTaskStatusesComesFromTheVocabulary pins that the status set
 // is DERIVED from taskstatus.AwaitsUser rather than spelled out. A status list
 // inside a SQL string is invisible to every tool, which is exactly why it rots.
-func TestBoardTaskStatusesComesFromTheVocabulary(t *testing.T) {
-	base := boardTaskStatuses(false)
+func TestProjectStatusTaskStatusesComesFromTheVocabulary(t *testing.T) {
+	base := projectStatusTaskStatuses(false)
 	for _, want := range []string{"'unverified'", "'unreviewed'", "'submitted'", "'underway'"} {
 		if !strings.Contains(base, want) {
-			t.Errorf("boardTaskStatuses(false) omits %s: %s", want, base)
+			t.Errorf("projectStatusTaskStatuses(false) omits %s: %s", want, base)
 		}
 	}
 	// `ready` is spawnable work — a claim on capacity, not on attention — so it
-	// is off the default board and reachable only through --all.
+	// is off the default view and reachable only through --all.
 	if strings.Contains(base, "'ready'") {
-		t.Errorf("boardTaskStatuses(false) includes 'ready': %s", base)
+		t.Errorf("projectStatusTaskStatuses(false) includes 'ready': %s", base)
 	}
-	if !strings.Contains(boardTaskStatuses(true), "'ready'") {
-		t.Errorf("boardTaskStatuses(true) omits 'ready': %s", boardTaskStatuses(true))
+	if !strings.Contains(projectStatusTaskStatuses(true), "'ready'") {
+		t.Errorf("projectStatusTaskStatuses(true) omits 'ready': %s", projectStatusTaskStatuses(true))
 	}
 }
 
-// seedBoardTask inserts one task for the board queries to find.
-func seedBoardTask(t *testing.T, db *sql.DB, id, projectID int64, status string) {
+// seedProjectStatusTask inserts one task for these queries to find.
+func seedProjectStatusTask(t *testing.T, db *sql.DB, id, projectID int64, status string) {
 	t.Helper()
 	if _, err := db.Exec(
 		`INSERT INTO tasks (id, project_id, title, status, phase, type_id, updated_at)
@@ -69,8 +69,8 @@ func seedBoardTask(t *testing.T, db *sql.DB, id, projectID int64, status string)
 	}
 }
 
-// seedBoardSession inserts one session, optionally bound to a task.
-func seedBoardSession(t *testing.T, db *sql.DB, id, projectID int64, state string, taskID *int64) {
+// seedProjectStatusSession inserts one session, optionally bound to a task.
+func seedProjectStatusSession(t *testing.T, db *sql.DB, id, projectID int64, state string, taskID *int64) {
 	t.Helper()
 	if _, err := db.Exec(
 		`INSERT INTO sessions (id, session_id, project_id, state, task_id, started_at, last_activity)
@@ -81,15 +81,15 @@ func seedBoardSession(t *testing.T, db *sql.DB, id, projectID int64, state strin
 	}
 }
 
-// TestProjectStatusRowsMergesASessionWithItsTask is the board's defining join: a
+// TestProjectStatusRowsMergesASessionWithItsTask is the defining join: a
 // session working E-1 and the task E-1 are ONE row, not two lines saying the
 // same thing twice.
 func TestProjectStatusRowsMergesASessionWithItsTask(t *testing.T) {
 	db := withTestDB(t)
 	seedProject(t, db, 1, "p", "/tmp/p")
-	seedBoardTask(t, db, 1, 1, "underway")
+	seedProjectStatusTask(t, db, 1, 1, "underway")
 	taskID := int64(1)
-	seedBoardSession(t, db, 10, 1, "working", &taskID)
+	seedProjectStatusSession(t, db, 10, 1, "working", &taskID)
 
 	rows, err := ProjectStatusRows(1, false)
 	if err != nil {
@@ -116,31 +116,31 @@ func TestProjectStatusRowsSelectsAttentionStatuses(t *testing.T) {
 	db := withTestDB(t)
 	seedProject(t, db, 1, "p", "/tmp/p")
 	for i, status := range []string{
-		"unverified", "unreviewed", "submitted", "underway", // on the board
+		"unverified", "unreviewed", "submitted", "underway", // included
 		"ready",                             // --all only
 		"confirmed", "untriaged", "revisit", // never
 	} {
-		seedBoardTask(t, db, int64(i+1), 1, status)
+		seedProjectStatusTask(t, db, int64(i+1), 1, status)
 	}
 
 	got := statusSet(t, 1, false)
 	for _, want := range []string{"unverified", "unreviewed", "submitted", "underway"} {
 		if !got[want] {
-			t.Errorf("default board omits %q", want)
+			t.Errorf("the default set omits %q", want)
 		}
 	}
 	for _, unwanted := range []string{"ready", "confirmed", "untriaged", "revisit"} {
 		if got[unwanted] {
-			t.Errorf("default board includes %q", unwanted)
+			t.Errorf("the default set includes %q", unwanted)
 		}
 	}
 
 	all := statusSet(t, 1, true)
 	if !all["ready"] {
-		t.Errorf("--all board omits 'ready'")
+		t.Errorf("--all omits 'ready'")
 	}
 	if all["confirmed"] || all["untriaged"] || all["revisit"] {
-		t.Errorf("--all board leaked a status that claims nothing: %v", all)
+		t.Errorf("--all leaked a status that claims nothing: %v", all)
 	}
 }
 
@@ -163,18 +163,18 @@ func statusSet(t *testing.T, projectID int64, all bool) map[string]bool {
 // That omission excluded 'needs_input' because nothing transitioned a session
 // INTO it, so every row carrying it was a session that registered and never had
 // a turn — 34 in one project, none on a pane that still existed. Hiding them is
-// how they rotted unseen. The board caps each rank at ten rows and names the
+// how they rotted unseen. `project status` caps each rank at ten rows and names the
 // remainder in a footer, which is machinery built for exactly this, and a row on
-// the board is what provides the mechanism to resolve it. So the filter is
+// the row is what provides the mechanism to resolve it. So the filter is
 // sessionstate.Live and nothing narrower: every live state earns a row, 'ended'
 // alone does not.
 func TestProjectStatusRowsIsEveryLiveSession(t *testing.T) {
 	db := withTestDB(t)
 	seedProject(t, db, 1, "p", "/tmp/p")
-	seedBoardSession(t, db, 12, 1, "ended", nil)
+	seedProjectStatusSession(t, db, 12, 1, "ended", nil)
 
 	for i, state := range sessionstate.Get(sessionstate.Live) {
-		seedBoardSession(t, db, int64(20+i), 1, state, nil)
+		seedProjectStatusSession(t, db, int64(20+i), 1, state, nil)
 	}
 
 	rows, err := ProjectStatusRows(1, false)
@@ -187,25 +187,25 @@ func TestProjectStatusRowsIsEveryLiveSession(t *testing.T) {
 	}
 	for _, state := range sessionstate.Get(sessionstate.Live) {
 		if !got[state] {
-			t.Errorf("a %q session is missing from the board", state)
+			t.Errorf("a %q session is missing from the row set", state)
 		}
 	}
 	if got[sessionstate.Ended] {
-		t.Errorf("an ended session rendered on the board")
+		t.Errorf("an ended session rendered in the row set")
 	}
 	if len(rows) != len(sessionstate.Get(sessionstate.Live)) {
-		t.Errorf("board returned %d rows, want one per live state (%d): %+v",
+		t.Errorf("the query returned %d rows, want one per live state (%d): %+v",
 			len(rows), len(sessionstate.Get(sessionstate.Live)), rows)
 	}
 }
 
 // TestProjectStatusRowsExcludesHiddenSessions: `endless session hide` is how a
-// user says "stop showing me this one", and a board whose whole job is attention
+// user says "stop showing me this one", and a view whose whole job is attention
 // triage is the last surface that should ignore it.
 func TestProjectStatusRowsExcludesHiddenSessions(t *testing.T) {
 	db := withTestDB(t)
 	seedProject(t, db, 1, "p", "/tmp/p")
-	seedBoardSession(t, db, 10, 1, "idle", nil)
+	seedProjectStatusSession(t, db, 10, 1, "idle", nil)
 	if _, err := db.Exec("UPDATE sessions SET hidden = 1 WHERE id = 10"); err != nil {
 		t.Fatalf("hide session: %v", err)
 	}
@@ -214,7 +214,7 @@ func TestProjectStatusRowsExcludesHiddenSessions(t *testing.T) {
 		t.Fatalf("ProjectStatusRows: %v", err)
 	}
 	if len(rows) != 0 {
-		t.Fatalf("a hidden session rendered on the board: %+v", rows)
+		t.Fatalf("a hidden session rendered in the row set: %+v", rows)
 	}
 }
 
@@ -225,10 +225,10 @@ func TestProjectStatusRowsExcludesHiddenSessions(t *testing.T) {
 func TestProjectStatusRowsExcludesDeadSessions(t *testing.T) {
 	db := withTestDB(t)
 	seedProject(t, db, 1, "p", "/tmp/p")
-	seedBoardSession(t, db, 10, 1, "idle", nil)
-	seedBoardSession(t, db, 11, 1, "idle", nil)
-	bindBoardPane(t, db, 10, "%1")
-	bindBoardPane(t, db, 11, "%2")
+	seedProjectStatusSession(t, db, 10, 1, "idle", nil)
+	seedProjectStatusSession(t, db, 11, 1, "idle", nil)
+	bindSessionPane(t, db, 10, "%1")
+	bindSessionPane(t, db, 11, "%2")
 
 	// A reachable server carrying only %1: session 10 is live, 11 is dead.
 	restore := SetTestTmuxObservation(TestServerUUID, map[string]string{"%1": "claude"})
@@ -239,13 +239,13 @@ func TestProjectStatusRowsExcludesDeadSessions(t *testing.T) {
 		t.Fatalf("ProjectStatusRows: %v", err)
 	}
 	if len(rows) != 1 || rows[0].SessionID != 10 {
-		t.Fatalf("board sessions = %+v, want only the live session (10)", rows)
+		t.Fatalf("sessions = %+v, want only the live session (10)", rows)
 	}
 }
 
-// bindBoardPane gives a seeded session a pane binding on the test server, so the
+// bindSessionPane gives a seeded session a pane binding on the test server, so the
 // liveness view has something to judge.
-func bindBoardPane(t *testing.T, db *sql.DB, sessionID int64, address string) {
+func bindSessionPane(t *testing.T, db *sql.DB, sessionID int64, address string) {
 	t.Helper()
 	res, err := db.Exec(
 		`INSERT INTO processes (kind_id, server_uuid, address) VALUES (1, ?, ?)`,
@@ -265,33 +265,33 @@ func bindBoardPane(t *testing.T, db *sql.DB, sessionID int64, address string) {
 	}
 }
 
-// TestProjectStatusRowsScopesToOneProject: the board is project-scoped, and a
+// TestProjectStatusRowsScopesToOneProject: the query is project-scoped, and a
 // row leaking in from another project would be a claim on attention the user
 // cannot act on from here.
 func TestProjectStatusRowsScopesToOneProject(t *testing.T) {
 	db := withTestDB(t)
 	seedProject(t, db, 1, "p", "/tmp/p")
 	seedProject(t, db, 2, "q", "/tmp/q")
-	seedBoardTask(t, db, 1, 1, "unverified")
-	seedBoardTask(t, db, 2, 2, "unverified")
-	seedBoardSession(t, db, 10, 2, "idle", nil)
+	seedProjectStatusTask(t, db, 1, 1, "unverified")
+	seedProjectStatusTask(t, db, 2, 2, "unverified")
+	seedProjectStatusSession(t, db, 10, 2, "idle", nil)
 
 	rows, err := ProjectStatusRows(1, false)
 	if err != nil {
 		t.Fatalf("ProjectStatusRows: %v", err)
 	}
 	if len(rows) != 1 || rows[0].TaskID != 1 {
-		t.Fatalf("board = %+v, want only project 1's task", rows)
+		t.Fatalf("rows = %+v, want only project 1's task", rows)
 	}
 }
 
 // TestProjectStatusRowsOmitsRemovedTasks: reads go through live_tasks, so a
-// removed task cannot leak back onto a board (E-1929).
+// removed task cannot leak back into the row set (E-1929).
 func TestProjectStatusRowsOmitsRemovedTasks(t *testing.T) {
 	db := withTestDB(t)
 	seedProject(t, db, 1, "p", "/tmp/p")
-	seedBoardTask(t, db, 1, 1, "unverified")
-	seedBoardTask(t, db, 2, 1, "unverified")
+	seedProjectStatusTask(t, db, 1, 1, "unverified")
+	seedProjectStatusTask(t, db, 2, 1, "unverified")
 	if _, err := db.Exec("UPDATE tasks SET removed = 1 WHERE id = 2"); err != nil {
 		t.Fatalf("remove task: %v", err)
 	}
@@ -300,7 +300,7 @@ func TestProjectStatusRowsOmitsRemovedTasks(t *testing.T) {
 		t.Fatalf("ProjectStatusRows: %v", err)
 	}
 	if len(rows) != 1 || rows[0].TaskID != 1 {
-		t.Fatalf("board = %+v, want only the live task", rows)
+		t.Fatalf("rows = %+v, want only the live task", rows)
 	}
 }
 

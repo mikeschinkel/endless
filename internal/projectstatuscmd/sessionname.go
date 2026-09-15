@@ -11,7 +11,7 @@ import (
 	"github.com/mikeschinkel/endless/internal/monitor"
 )
 
-// Naming the board's tmux session (E-1976).
+// Naming the monitor's tmux session (E-1976).
 //
 // Two things are settled here, and they pull against each other:
 //
@@ -31,7 +31,7 @@ import (
 //
 // Every part of the shape answers the same constraint: a tmux status line
 // truncates a session name to the width it has — nine characters on the machine
-// this was reported from — so whatever distinguishes one board from another has
+// this was reported from — so whatever distinguishes one monitor from another has
 // to be at the FRONT.
 //
 //   - The PROJECT leads, because that is what differs. `{{project}}-monitor`
@@ -39,7 +39,7 @@ import (
 //     an `endless` session sitting beside it in the list.
 //   - `e-` leads the project: two characters that say "Endless made this", using
 //     the prefix Endless already wears on its ids (E-NNNN, ES-NNNN, ED-NNNN),
-//     and enough to keep the board out of the namespace a user picks by hand.
+//     and enough to keep the monitor out of the namespace a user picks by hand.
 //   - `-monitor` trails, where truncation usually eats it. That is fine — it is
 //     there for the full name, which is what `tmux ls` and `tmux attach -t`
 //     show, and it survives into the tab for short project names (`e-h2pp-mo`).
@@ -48,8 +48,9 @@ const DefaultSessionNameTemplate = "e-{{project}}-monitor"
 // sessionNameFor renders the configured template for one project.
 //
 // Errors are NOT fatal. A malformed template is a typo in a preference, and a
-// preference must not be able to stop the board from opening: the built-in
-// default is used and the reason is returned for the caller to print. The board
+// preference must not be able to stop the monitor from opening: the built-in
+// default is used and the reason is returned for the caller to print. The
+// monitor
 // still comes up, under a name the user can predict from the docs.
 func sessionNameFor(project, tmpl string) (name string, warn error) {
 	if strings.TrimSpace(tmpl) == "" {
@@ -105,7 +106,7 @@ func renderSessionName(project, tmpl string) (string, error) {
 // (<project>/.endless/config.json), project winning.
 //
 // Returns "" for every failure, which sessionNameFor reads as "use the default".
-// A configuration that cannot be loaded must not stop the board from opening:
+// A configuration that cannot be loaded must not stop the monitor from opening:
 // the setting is a preference, and the built-in name is a working answer. The
 // alternative — refusing to open a window because a config file has a syntax
 // error — trades a cosmetic preference for the feature itself.

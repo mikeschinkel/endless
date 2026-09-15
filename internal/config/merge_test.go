@@ -143,10 +143,10 @@ func TestTmuxSessionNameMerge(t *testing.T) {
 		project, global string
 		want            string
 	}{
-		{"project wins", "{{project}}-board", "e-{{project}}-monitor", "{{project}}-board"},
+		{"project wins", "{{project}}-watch", "e-{{project}}-monitor", "{{project}}-watch"},
 		{"project inherits when unset", "", "e-{{project}}-monitor", "e-{{project}}-monitor"},
 		{"neither set stays empty (caller applies the default)", "", "", ""},
-		{"project-only", "board", "", "board"},
+		{"project-only", "watch", "", "watch"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

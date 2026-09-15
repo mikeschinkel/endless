@@ -103,13 +103,13 @@ func TestRenderFaultBadge_AppearsWhenIncidentsAreOpen(t *testing.T) {
 }
 
 // TestRenderFaultBadge_StaysMachineWide is the session-status half of E-1960's
-// scoping contract, and the deliberate asymmetry with the project board.
+// scoping contract, and the deliberate asymmetry with `project status`.
 //
 // `session status` renders every live session on the box, whatever project each
 // is in, so its badge counts every project's open incidents. Narrowing it to the
 // project the pane happens to sit in would hide a fault in a project this very
-// frame is showing a session for. The board makes the opposite call — see
-// internal/projectstatuscmd/badge_scope_test.go — because the board is scoped to
+// frame is showing a session for. `project status` makes the opposite call — see
+// internal/projectstatuscmd/badge_scope_test.go — because that view is scoped to
 // one project in every other respect.
 func TestRenderFaultBadge_StaysMachineWide(t *testing.T) {
 	bindFaultStore(t)

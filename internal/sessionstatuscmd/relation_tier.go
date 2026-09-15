@@ -21,7 +21,7 @@ package sessionstatuscmd
 //     ties between EQUALLY actionable rows. Relation deliberately does not
 //     outrank the action classification: a `queued` task parked in `later` must
 //     not jump above the ⟳ row you are actually working, and promoting it would
-//     make `session task add` a way to derange the board rather than to fill it.
+//     make `session task add` a way to derange the view rather than to fill it.
 //
 // The read gate that produces `referenced` at volume ships separately (it needs
 // the gitignored machine-user ledger E-1673 routes to), so today the tier holds
@@ -63,7 +63,7 @@ func isReferenced(r monitor.SessionStatusRow) bool {
 // read-time children, dependents and upstream blockers, which have no
 // session_tasks row by design. They rank alongside surfaced/revisited rather
 // than below them, because they are real work on the focal task and only their
-// bookkeeping differs. Ranking them last would reorder the board for a reason
+// bookkeeping differs. Ranking them last would reorder the view for a reason
 // that has nothing to do with what a viewer should look at next.
 //
 // referenced never reaches this function: it is sunk by the primary sort key.

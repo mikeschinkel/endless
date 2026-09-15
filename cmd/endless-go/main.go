@@ -91,7 +91,7 @@ func main() {
 	//
 	// This is not new surface for E-1976, it is a latent gap that task made
 	// reachable. Nothing set the logger, and the three config.Load call sites
-	// (monitor.GetTrackingMode, monitor.IsCheckEnabled, and now the board's
+	// (monitor.GetTrackingMode, monitor.IsCheckEnabled, and now `project status`'s
 	// tmux.session_name lookup) survived only because ~/.config/endless/config.json
 	// happens to exist on a developed machine: cfgstore reaches the logger on the
 	// path where it CREATES a missing config, so a fresh install — or any run

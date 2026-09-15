@@ -28,7 +28,7 @@ import (
 
 // action is a row's primary classification, in rank order. Both the glyph and
 // the sort position derive from it, so the enum's declaration order IS the
-// board's priority order — there is no second list to keep in step.
+// rendered rank order — there is no second list to keep in step.
 type action int
 
 const (
@@ -39,13 +39,14 @@ const (
 	// the user can clear, and there are at most a handful of them, while
 	// unverified runs to dozens.
 	//
-	// E-2091 gave the rank its producer. Both states land here and the board
-	// needs no third rank to tell them apart: the age column already
+	// E-2091 gave the rank its producer. Both states land here and `project
+	// status` needs no third rank to tell them apart: the age column already
 	// distinguishes a live prompt from a two-month-old row on sight, which is
 	// what that column is for.
 	actWaiting action = iota
-	// actVerify: an `unverified` task. The reason the board exists: 57 of these
-	// accumulated in `endless` alone precisely because nothing kept them in view.
+	// actVerify: an `unverified` task. The reason `project status` exists: 57 of
+	// these accumulated in `endless` alone precisely because nothing kept them in
+	// view.
 	actVerify
 	// actRead: an `unreviewed` task — a research or brainstorm outcome delivered
 	// and waiting to be read. Distinct from actVerify because the act is
@@ -58,15 +59,15 @@ const (
 	actReview
 	// actOrphan: an `underway` task with no live session on it. Work somebody
 	// claimed and walked away from. No status describes this — it is the ABSENCE
-	// of a session that makes it interesting — which is why the board computes it
-	// rather than querying for it.
+	// of a session that makes it interesting — which is why `project status`
+	// computes it rather than querying for it.
 	actOrphan
 	// actIdle: a live session whose turn has ended. It is waiting for the user's
 	// next prompt, so it is a genuine claim on attention, just a quieter one than
 	// a session blocked mid-turn.
 	actIdle
-	// actDoing: a live session working. Nothing is needed from the user; it is on
-	// the board so the board is a complete picture of the project rather than a
+	// actDoing: a live session working. Nothing is needed from the user; it is
+	// listed so the frame is a complete picture of the project rather than a
 	// worry list with no context.
 	actDoing
 	// actReady: a `ready` task — spawnable. --all only: this is a claim on
@@ -74,8 +75,8 @@ const (
 	// above.
 	actReady
 	// actUnknown: a row no rule above matched — a should-never-happen net, kept
-	// for the same reason sessionstatuscmd keeps one. Its ⁇ appearing on the
-	// board means a status or session state slipped past classify().
+	// for the same reason sessionstatuscmd keeps one. Its ⁇ appearing in a
+	// frame means a status or session state slipped past classify().
 	actUnknown
 )
 
@@ -85,9 +86,9 @@ const (
 //
 // Glyphs are borrowed from the views the user already reads — ☑ ⚑ ◷ ▶ ⟳ from
 // `session status`, ‖ from `session list` — wherever the meaning is the same, so
-// the board teaches no new vocabulary for concepts that already have one. Only
-// the two genuinely new ideas get new glyphs: ⚠ for a blocked session and ☰ for
-// an outcome to read. Every glyph measures one column (asserted in
+// `project status` teaches no new vocabulary for concepts that already have one.
+// Only the two genuinely new ideas get new glyphs: ⚠ for a blocked session and ☰
+// for an outcome to read. Every glyph measures one column (asserted in
 // TestActionGlyphsAreSingleWidth), which is what keeps the fixed prefix aligned.
 //
 // oldestFirst is per-action, and almost every action says no.
@@ -101,7 +102,7 @@ const (
 // what you were waiting for, while a 15-day-old pane is abandoned. Measured
 // against the real database, oldest-first pinned both groups' visible ten to
 // their oldest rows and pushed everything from the last hour under the cap —
-// the exact disappearance this board exists to prevent.
+// the exact disappearance `project status` exists to prevent.
 //
 // actWaiting is the single exception, and it is not an inconsistency: a session
 // blocked mid-turn is a QUEUE, not a feed. Longest-blocked-first is the fair
@@ -129,7 +130,7 @@ func (a action) noun() string      { return actionMeta[a].noun }
 func (a action) oldestFirst() bool { return actionMeta[a].oldestFirst }
 
 // actions is every action in rank order, for callers that need to iterate the
-// board's groups (the renderer, the cap, the legend).
+// frame's groups (the renderer, the cap, the legend).
 func actions() []action {
 	out := make([]action, 0, len(actionMeta))
 	for i := range actionMeta {
@@ -140,20 +141,21 @@ func actions() []action {
 
 // defaultGroupCap is the per-group row limit.
 //
-// PER GROUP, not per board, and that is the whole point. A single board-wide cap
+// PER GROUP, not per frame, and that is the whole point. A single frame-wide cap
 // with `verify` ranked near the top would spend every row on unverified tasks
-// and push the sessions — the "many concurrent sessions" the board was built to
-// triage — off the bottom. Capping each group means every kind of claim keeps a
-// place on the board however lopsided the backlog is, and the footer says how
-// much of each was left out.
+// and push the sessions — the "many concurrent sessions" `project status` was
+// built to triage — off the bottom. Capping each group means every kind of claim
+// keeps a place in the frame however lopsided the backlog is, and the footer
+// says how much of each was left out.
 //
 // Ten rather than rowcap.py's twenty for the same reason: this view lives in a
-// tmux pane sized to its own frame, and eight groups × twenty is not a board.
+// tmux pane sized to its own frame, and eight groups × twenty is not a frame
+// anyone can read.
 const defaultGroupCap = 10
 
 // classify maps a row to its action. The SESSION half wins wherever a row has
 // both, because a live session is a fact about right now while a task status is
-// a fact about the work — and the board ranks by what is happening.
+// a fact about the work — and `project status` ranks by what is happening.
 func classify(r monitor.ProjectStatusRow) action {
 	if r.HasSession() {
 		switch r.SessionState {
@@ -263,7 +265,7 @@ type group struct {
 // matter most" rather than "whichever N the database returned".
 //
 //   - groupCap is the caller's --limit: a ceiling on any single group, so one
-//     lopsided rank cannot spend the whole board. <= 0 means uncapped.
+//     lopsided rank cannot spend the whole frame. <= 0 means uncapped.
 //   - budget is how many rows the destination can actually SHOW (see
 //     liveview.DetectRows). budget <= 0 means unbounded — a piped snapshot, or
 //     a terminal whose size cannot be read.
@@ -319,9 +321,9 @@ func nonRowLines(legendText string, cols int) int {
 // allot decides how many rows each group renders, in place.
 //
 // The per-group cap alone is easy. The BUDGET is the interesting half, and it is shared:
-// every present group has a claim on the visible rows, because a board that
-// spends its whole height on unverified tasks has stopped being a board of
-// sessions — which is what it was built to be.
+// every present group has a claim on the visible rows, because a frame that
+// spends its whole height on unverified tasks has stopped showing the sessions
+// — which is what it was built to show.
 //
 // The allocation is classic fair-share with carry: walk the groups from the one
 // wanting fewest rows to the one wanting most, give each an equal share of what
@@ -374,7 +376,7 @@ func allot(groups []group, groupCap, budget, overhead int) {
 // overruns its pane by exactly the number of capped groups.
 //
 // Ordering note: the shares are computed over claimants sorted by size, but the
-// RESULT is returned in input order, so the board's rank order is untouched. The
+// RESULT is returned in input order, so the frame's rank order is untouched. The
 // sort decides who releases surplus to whom; it never decides who renders first.
 func fairShare(want, have []int, budget int) []int {
 	give := make([]int, len(want))
@@ -449,7 +451,7 @@ func sortGroup(a action, rows []monitor.ProjectStatusRow, now time.Time) {
 
 // footerFor is the omission trace for one capped group, in the idiom
 // src/endless/rowcap.py established: the count and the flag that shows them.
-// The noun is the GROUP's, not "rows", because on this board what was dropped
+// The noun is the GROUP's, not "rows", because in this frame what was dropped
 // matters as much as how many — "47 more unverified" is a different sentence
 // from "47 more rows".
 func footerFor(g group) string {
@@ -465,13 +467,13 @@ func emptyHint(project string) string {
 	return "  nothing needs attention in " + project
 }
 
-// render writes one complete board frame and returns the number of TASK/SESSION
+// render writes one complete frame and returns the number of TASK/SESSION
 // rows drawn. A return of 0 means the frame is the empty hint, which the pane fit
 // treats differently from a short real frame.
-// scope is the board's project as the fault store understands it (E-1960): the
+// scope is the frame's project as the fault store understands it (E-1960): the
 // badge below counts THIS project's open incidents plus the machine-level ones
-// no project could be attributed to, never another project's. The board is
-// scoped to one project in every other respect, and a badge that ignored that
+// no project could be attributed to, never another project's. `project status`
+// is scoped to one project in every other respect, and a badge that ignored that
 // would be reporting on work the frame above it does not show.
 func render(
 	w io.Writer,
@@ -500,7 +502,7 @@ func render(
 
 	// Width-on-demand columns, the idiom `session status` uses for its block and
 	// hidden columns: a column exists only when a RENDERED row has something to
-	// put in it, so a board of pure task rows is not padded with an empty session
+	// put in it, so a frame of pure task rows is not padded with an empty session
 	// gutter.
 	sw := sessionColWidth(groups)
 
@@ -514,7 +516,7 @@ func render(
 	for _, g := range groups {
 		if len(g.rows) == 0 {
 			// Squeezed to nothing by the budget. The footer is the group's whole
-			// presence on the board, and it still says the true thing: this rank
+			// presence in the frame, and it still says the true thing: this rank
 			// exists and holds N rows you are not seeing.
 			if g.omitted > 0 {
 				fmt.Fprintln(w, liveview.Dim("      "+footerFor(g), color))
@@ -529,7 +531,7 @@ func render(
 			// terminal too narrow for the fixed prefix plus that floor the line
 			// would otherwise exceed `cols` and WRAP — and one wrapped row
 			// misaligns the whole table, not just itself. Truncating the assembled
-			// line degrades such a terminal to a clipped board, which is legible;
+			// line degrades such a terminal to a clipped frame, which is legible;
 			// wrapping degrades it to noise. At any sane width this never fires.
 			fmt.Fprintln(w, colorize(runewidth.Truncate(line, cols, ""), g.act, color))
 			drawn++
@@ -549,13 +551,13 @@ func render(
 // One column wider than `session status`'s otherwise-identical prefix, and the
 // column buys a SPACE between the type letter and the id. That view spends the
 // same column on its ◆ unsettled marker, so "T" and "E-1976" abut and every row
-// opens with a token like `TE-1976` that reads as one word. This board has no
-// unsettled marker — landed-vs-worktree state is a task-tree question, not an
-// attention one — so the column is free, and a board built for scanning under
+// opens with a token like `TE-1976` that reads as one word. `project status` has
+// no unsettled marker — landed-vs-worktree state is a task-tree question, not an
+// attention one — so the column is free, and a view built for scanning under
 // load should not make the eye parse its first token.
 const prefixWidth = 13
 
-// SPECIFIED, NOT BUILT (E-2095): one unlanded claim belongs on this board.
+// SPECIFIED, NOT BUILT (E-2095): one unlanded claim belongs in this frame.
 //
 // Read the paragraph above carefully before dismissing this as a contradiction.
 // It rules out a per-row ◆ — "does this worktree still hold something" is a
@@ -565,7 +567,8 @@ const prefixWidth = 13
 // fix on an unlanded branch and the same bug was fixed again fourteen days
 // later.
 //
-// The claim, in full, so the session that revises this board does not have to
+// The claim, in full, so the session that revises `project status` does not have
+// to
 // re-derive it:
 //
 //	 ⊘ 3 unlanded (Run: task unlanded)
@@ -578,7 +581,7 @@ const prefixWidth = 13
 //   - DRILL-DOWN: `endless task unlanded`.
 //   - Suppressed entirely at zero.
 //
-// It is specified here rather than built because this board is heading for
+// It is specified here rather than built because `project status` is heading for
 // major revisions and a row designed now is a row designed to be replaced. The
 // producer already exists and needs no new query: monitor.TaskLandedness over
 // the project's finished tasks, keyed on `task/<id>`. Budget for it —
@@ -647,7 +650,7 @@ func sessionField(r monitor.ProjectStatusRow, sw int) string {
 }
 
 // typeLetter mirrors sessionstatuscmd's: the same letters for the same types, so
-// a row means the same thing on both boards.
+// a row means the same thing in `session status` and `project status`.
 func typeLetter(slug string) string {
 	switch slug {
 	case "epic":
@@ -664,7 +667,7 @@ func typeLetter(slug string) string {
 }
 
 // phaseChar mirrors sessionstatuscmd's phase column. No ✓ case: nothing terminal
-// reaches this board, so the only values are the five phases.
+// reaches `project status`, so the only values are the five phases.
 func phaseChar(phase string) string {
 	switch phase {
 	case "urgent":
@@ -687,7 +690,7 @@ func phaseChar(phase string) string {
 // snapshot and the monitor stay byte-identical by construction.
 //
 // The project name shares the legend's line rather than taking one of its own.
-// In a pane sized to its frame every row is scarce, and an unlabelled board is
+// In a pane sized to its frame every row is scarce, and an unlabelled frame is
 // ambiguous the moment a second one is open.
 func legend(project string, groups []group) string {
 	parts := make([]string, 0, len(groups))
@@ -705,7 +708,7 @@ func legend(project string, groups []group) string {
 // spawnable.
 //
 // Intensity only, never color: the 30-47 ANSI range is remapped by the user's
-// theme, and a board that renders as an unreadable block on someone else's
+// theme, and a frame that renders as an unreadable block on someone else's
 // terminal is worse than one that renders plainly on every terminal.
 func colorize(line string, a action, enabled bool) string {
 	switch a {

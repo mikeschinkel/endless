@@ -12,10 +12,11 @@ import (
 
 // The dedicated monitor session (E-1976, per E-1815's topology).
 //
-// The board gets its OWN tmux session with two panes: the monitor on top, and a
-// bare interactive shell beneath it for running `endless` commands against what
-// the monitor shows. Its own session rather than a window in the user's, because
-// it is a standing surface rather than a piece of work — and because the user's
+// `project monitor --tmux` gets its OWN tmux session with two panes: the monitor
+// on top, and a bare interactive shell beneath it for running `endless` commands
+// against what the monitor shows. Its own session rather than a window in the
+// user's, because it is a standing surface rather than a piece of work — and
+// because the user's
 // windows are where auto-spawned sessions land (E-1814), which a review-batch
 // session would take out of sight.
 //
@@ -35,9 +36,9 @@ type windowLayout struct {
 	// checkout, because both are observation surfaces onto the main database and
 	// the Python CLI routes its DB from cwd.
 	Dir string
-	// MonitorCmd is the argv of the board's pane.
+	// MonitorCmd is the argv of the monitor's pane.
 	MonitorCmd []string
-	// Project is the project the board is for. It is already baked into Session
+	// Project is the project the monitor is for. It is already baked into Session
 	// (monitor.MonitorSessionName), and kept here because the layout is the one
 	// place that knows both, which is what a future multiplexer driver will need.
 	Project string
@@ -46,11 +47,11 @@ type windowLayout struct {
 // newSessionArgs builds `tmux new-session -d -s <name> -c <dir>` — with NO
 // command, so the session's first pane is the user's own shell.
 //
-// The SHELL is created first and the board inserted ABOVE it, not the other way
-// round. This is E-1851's rule, learned in spawnlaunchcmd.buildLayoutAround and
-// restated here because getting it backwards is invisible until it bites: the
-// board shrinks its own pane to its frame on first paint
-// (liveview.FitPaneToFrame), so creating the board first and then splitting a
+// The SHELL is created first and the monitor inserted ABOVE it, not the other
+// way round. This is E-1851's rule, learned in spawnlaunchcmd.buildLayoutAround
+// and restated here because getting it backwards is invisible until it bites:
+// the monitor shrinks its own pane to its frame on first paint
+// (liveview.FitPaneToFrame), so creating the monitor first and then splitting a
 // shell off it races that shrink. The shell then gets whatever few rows survived
 // — or, in a short window, the split fails outright and there is no second pane
 // at all. Splitting off a shell cannot race anything, because a shell does not
@@ -60,7 +61,7 @@ type windowLayout struct {
 // are doing. Attaching or switching is a separate, explicit step.
 //
 // `-P -F #{pane_id}` reports the shell's pane id, which is what focus is handed
-// back to once the board is in place.
+// back to once the monitor is in place.
 func newSessionArgs(l windowLayout) []string {
 	args := []string{"new-session", "-d", "-s", l.Session}
 	if l.Dir != "" {
@@ -69,19 +70,19 @@ func newSessionArgs(l windowLayout) []string {
 	return append(args, "-P", "-F", "#{pane_id}")
 }
 
-// splitBoardArgs inserts the board ABOVE the shell pane (-b), running the
+// splitMonitorArgs inserts the monitor ABOVE the shell pane (-b), running the
 // monitor command.
 //
-// No `-l` height: the board sizes its own pane on first paint, from a budget it
-// computes against the window (liveview.DetectRows), so a height guessed here
+// No `-l` height: the monitor sizes its own pane on first paint, from a budget
+// it computes against the window (liveview.DetectRows), so a height guessed here
 // would be overwritten a moment later — and guessing one is what E-1851 removed
 // from the spawn layout for the same reason. tmux's even split is the starting
-// point and the board settles from there.
+// point and the monitor settles from there.
 //
 // Targets the shell by PANE ID rather than by index: pane indexes depend on the
 // user's pane-base-index and shift as panes are added, so index targeting
 // silently addresses the wrong pane on a 1-based configuration.
-func splitBoardArgs(l windowLayout, shellPane string) []string {
+func splitMonitorArgs(l windowLayout, shellPane string) []string {
 	args := []string{"split-window", "-v", "-b", "-t", shellPane}
 	if l.Dir != "" {
 		args = append(args, "-c", l.Dir)
@@ -90,8 +91,9 @@ func splitBoardArgs(l windowLayout, shellPane string) []string {
 	return append(args, l.MonitorCmd...)
 }
 
-// selectPaneArgs hands focus to a pane. After the board is inserted it is the
-// active pane (tmux selects a new split), and the board is read, not typed in —
+// selectPaneArgs hands focus to a pane. After the monitor is inserted it is the
+// active pane (tmux selects a new split), and the monitor is read, not typed
+// in —
 // so focus goes back to the shell explicitly rather than by luck.
 func selectPaneArgs(pane string) []string {
 	return []string{"select-pane", "-t", pane}
@@ -115,7 +117,7 @@ func attachArgs(session string) []string {
 }
 
 // monitorOptionKey is the tmux session option that marks a session as one
-// Endless built, and records which project's board it holds.
+// Endless built, and records which project's monitor it holds.
 //
 // One option carrying both facts: its PRESENCE is the ownership proof, its VALUE
 // is the project. A session without it was made by someone else, whatever it is
@@ -125,7 +127,7 @@ func attachArgs(session string) []string {
 // built-in `e-<project>-monitor` a collision was implausible; the moment a user
 // can set `tmux.session_name` to `{{project}}` — which is the natural thing to
 // want — the launcher can find a session with the right name that is the user's
-// own shell. Adopting it would switch them into a window with no board and
+// own shell. Adopting it would switch them into a window with no monitor and
 // report "reusing", which is a lie told confidently.
 const monitorOptionKey = "@endless_monitor"
 
@@ -158,7 +160,7 @@ const (
 	// ownMine: Endless built it, for THIS project. Reuse it.
 	ownMine
 	// ownOtherProject: Endless built it, for a different project. Only reachable
-	// when the configured template does not vary by project — `board`, say. Not
+	// when the configured template does not vary by project — `monitor`, say. Not
 	// an error in the session; an error in the name.
 	ownOtherProject
 	// ownForeign: a session by that name exists and Endless did not make it.
@@ -174,7 +176,7 @@ const (
 // thing operationally: nothing here proves Endless built it. Guessing generously
 // would put us straight back to adopting a stranger's session.
 //
-// The one cost is a board created before this stamp existed: it reads foreign
+// The one cost is a monitor created before this stamp existed: it reads foreign
 // and the user is told to close it. That is a one-time message, not a silent
 // wrong window.
 func checkOwnership(session, project string) ownership {
@@ -227,7 +229,7 @@ func runWindow(args []string) {
 	projectID, name := resolveProject(options{project: *project})
 	dir, err := monitor.ProjectPath(projectID)
 	if err != nil {
-		// A missing or unreadable path must not stop the board from opening: the
+		// A missing or unreadable path must not stop the monitor from opening: the
 		// monitor names its project explicitly and does not depend on cwd. The
 		// panes just start wherever the launcher was run.
 		dir = ""
@@ -235,7 +237,7 @@ func runWindow(args []string) {
 
 	// The name is a PREFERENCE, read from layered config; a bad template warns
 	// and falls back rather than refusing, because a typo in a preference must
-	// not be able to stop the board from opening.
+	// not be able to stop the monitor from opening.
 	sessionName, warn := sessionNameFor(name, sessionNameTemplate(dir))
 	if warn != nil {
 		fmt.Fprintf(os.Stderr, "project-window: %v\n", warn)
@@ -254,7 +256,7 @@ func runWindow(args []string) {
 		// Ours, for this project. Fall through to the switch/attach below.
 	case ownOtherProject:
 		fmt.Fprintf(os.Stderr,
-			"project-window: the session %q already holds another project's board.\n"+
+			"project-window: the session %q already holds another project's monitor.\n"+
 				"Your `tmux.session_name` renders the same name for every project. "+
 				"Include the project in it — the default is %q.\n",
 			layout.Session, DefaultSessionNameTemplate)
@@ -272,18 +274,18 @@ func runWindow(args []string) {
 			fmt.Fprintf(os.Stderr, "project-window: creating the monitor session: %v\n", serr)
 			os.Exit(1)
 		}
-		// The board pane is best-effort: a shell with no board beside it is a
+		// The monitor pane is best-effort: a shell with no monitor beside it is a
 		// degraded but working window, and refusing to open one over a failed
 		// split would trade the whole feature for half of it.
-		if err = tmuxRun(splitBoardArgs(layout, shellPane)); err != nil {
-			fmt.Fprintf(os.Stderr, "project-window: board pane: %v\n", err)
+		if err = tmuxRun(splitMonitorArgs(layout, shellPane)); err != nil {
+			fmt.Fprintf(os.Stderr, "project-window: monitor pane: %v\n", err)
 		} else if err = tmuxRun(selectPaneArgs(shellPane)); err != nil {
-			// Focus belongs on the shell: the board is read, the shell is typed
+			// Focus belongs on the shell: the monitor is read, the shell is typed
 			// in. Cosmetic if it fails — the user presses a pane key.
 			fmt.Fprintf(os.Stderr, "project-window: focus shell: %v\n", err)
 		}
 		// Stamp ownership LAST, so a session that failed to build is not claimed
-		// by a project whose board never started. A stamp that fails is fatal,
+		// by a project whose monitor never started. A stamp that fails is fatal,
 		// not best-effort: an unstamped session reads as foreign on the next
 		// launch, so leaving one behind would strand the user under a name they
 		// are then told they cannot have.

@@ -348,7 +348,7 @@ func TestLiveness_NoTmuxBinaryIsUnknownNotDead(t *testing.T) {
 
 // ── migration adoption (E-1898) ─────────────────────────────────────────────
 //
-// AdoptPaneBindings is the fix for the defect that took the board down on
+// AdoptPaneBindings is the fix for the defect that took `project status` down on
 // 2026-08-10: the migration backfilled every binding with server_uuid NULL, and
 // a NULL-server binding matches no server, so all 64 pre-existing sessions went
 // unresolvable at once. The original reasoning — "each re-binds on its next

@@ -25,9 +25,9 @@ def runner():
 
 # --- the rename ------------------------------------------------------------
 #
-# E-1976 took the name `project status` for the board and moved the project's
-# registration card to `project info`. Both halves of that have to be true: the
-# card must still be reachable, and the name must now mean the board.
+# E-1976 took the name `project status` for the attention view and moved the
+# project's registration card to `project info`. Both halves of that have to be
+# true: the card must still be reachable, and the name must now mean the view.
 
 def test_project_info_exists(runner):
     result = runner.invoke(main, ["project", "info", "--help"])
@@ -35,7 +35,7 @@ def test_project_info_exists(runner):
     assert "registration card" in result.output
 
 
-def test_project_status_is_the_board_not_the_card(runner):
+def test_project_status_is_the_attention_view_not_the_card(runner):
     result = runner.invoke(main, ["project", "status", "--help"])
     assert result.exit_code == 0
     assert "needs attention" in result.output
@@ -47,11 +47,11 @@ def test_project_status_is_the_board_not_the_card(runner):
 def test_project_monitor_exists(runner):
     result = runner.invoke(main, ["project", "monitor", "--help"])
     assert result.exit_code == 0
-    assert "Live board" in result.output
+    assert "Live monitor" in result.output
 
 
 def test_both_verbs_take_an_optional_project_name(runner):
-    # Naming the project is what makes the board usable from anywhere —
+    # Naming the project is what makes these usable from anywhere —
     # including from inside a worktree of a different project.
     for verb in ("status", "monitor"):
         result = runner.invoke(main, ["project", verb, "--help"])
@@ -60,11 +60,11 @@ def test_both_verbs_take_an_optional_project_name(runner):
 
 # --- the cap ---------------------------------------------------------------
 #
-# The board caps PER GROUP, which is a different unit from every other listing.
+# `project status` caps PER GROUP, which is a different unit from every other listing.
 # What must NOT differ is the validation: same flag names, same refusals.
 
 def test_group_cap_default_differs_from_the_row_cap():
-    # Not equal, and that is deliberate — the board's frame holds several groups
+    # Not equal, and that is deliberate — its frame holds several groups
     # where a listing holds one table. If they ever coincide it should be
     # because someone chose that, not because the parameter stopped being passed.
     assert project_status_cmd.DEFAULT_GROUP_CAP != rowcap.DEFAULT_ROW_CAP
@@ -178,12 +178,12 @@ def test_monitor_tmux_routes_to_the_window_verb(runner, monkeypatch):
     monkeypatch.setattr(project_status_cmd, "project_window_resolve",
                         lambda *a, **k: called.update(window=(a, k)))
     monkeypatch.setattr(project_status_cmd, "project_status_resolve",
-                        lambda *a, **k: called.update(board=(a, k)))
+                        lambda *a, **k: called.update(inline=(a, k)))
 
     result = runner.invoke(main, ["project", "monitor", "demo", "--tmux"])
     assert result.exit_code == 0, result.output
-    assert "window" in called and "board" not in called, \
-        "--tmux must open the layout, not run a board in the current pane"
+    assert "window" in called and "inline" not in called, \
+        "--tmux must open the layout, not run the monitor in the current pane"
 
 
 def test_no_switch_without_tmux_is_refused(runner):

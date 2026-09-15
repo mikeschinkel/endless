@@ -31,8 +31,9 @@
 // (current server uuid, address), so a NULL-server binding matches no server,
 // and every pre-existing session became unresolvable the moment this ran. The
 // original reasoning was that each session would re-bind on its next hook —
-// true only for sessions that FIRE hooks. An idle window fires none, so the
-// board went blank and stayed blank. Measured on the main database when this bit:
+// true only for sessions that FIRE hooks. An idle window fires none, so
+// `project status` went blank and stayed blank. Measured on the main database
+// when this bit:
 // 63 of 64 bound sessions were sitting on panes live on the running server, and
 // exactly one was a genuine leftover from a dead server.
 //

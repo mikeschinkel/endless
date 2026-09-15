@@ -8,7 +8,7 @@ import (
 	"github.com/mikeschinkel/endless/internal/monitor"
 )
 
-// --json emits the board as DATA: every row the query returned, in rank order,
+// --json emits the frame as DATA: every row the query returned, in rank order,
 // each carrying its own action so a consumer can reproduce the grouping without
 // re-deriving it. Uncapped, per rowcap.py's rule for machine formats — a
 // consumer parsing a silently truncated payload has no footer to read and no way
@@ -34,14 +34,14 @@ type jsonRow struct {
 
 	// AgeSeconds is the row's own clock (see clock()) measured against now, or
 	// null when the timestamp could not be read. Included rather than left to the
-	// consumer because WHICH timestamp a row ages by is a board rule — session
+	// consumer because WHICH timestamp a row ages by is a render rule — session
 	// activity for a session row, task update for a task row — and a consumer
 	// re-deriving it would have to reimplement that rule to agree with the view.
 	AgeSeconds *int64 `json:"age_seconds"`
 }
 
-// jsonBoard is the document: the project it describes, then its rows.
-type jsonBoard struct {
+// jsonDoc is the document: the project it describes, then its rows.
+type jsonDoc struct {
 	Project string    `json:"project"`
 	Rows    []jsonRow `json:"rows"`
 }
@@ -52,7 +52,7 @@ func renderJSON(w io.Writer, project string, rows []monitor.ProjectStatusRow, no
 	// the render for no benefit.
 	groups := buildGroups(rows, 0, 0, 0, now)
 
-	out := jsonBoard{Project: project, Rows: []jsonRow{}}
+	out := jsonDoc{Project: project, Rows: []jsonRow{}}
 	for _, g := range groups {
 		for _, r := range g.rows {
 			row := jsonRow{

@@ -118,7 +118,7 @@ func TestLandednessSeesRebasedLandingAsLanded(t *testing.T) {
 }
 
 // A branch holding nothing but Endless's own plan and analysis mirrors has no
-// CODE outstanding. Reporting it would put one row on the board per task branch
+// CODE outstanding. Reporting it would put one row in `project status` per task branch
 // in the project and bury the handful that matter.
 func TestLandednessIgnoresBookkeepingOnlyBranch(t *testing.T) {
 	f := newLandednessFixture(t)

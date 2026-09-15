@@ -83,7 +83,7 @@ func TestClassify(t *testing.T) {
 		// Both paused-on-a-person states are the waiting rank, and they share it
 		// deliberately (E-2091). `prompted` is the producer the rank was built
 		// for — a session blocked on a permission prompt — while `needs_input`
-		// is the older one. The board needs no third rank to tell them apart:
+		// is the older one. `project status` needs no third rank to tell them apart:
 		// the age column distinguishes a live prompt from a two-month-old row on
 		// sight, which is what that column is for.
 		{"prompted session is the waiting rank", sessionRow(11, "prompted", time.Minute, 0), actWaiting},
@@ -107,7 +107,7 @@ func TestClassify(t *testing.T) {
 	}
 }
 
-// TestRankOrderIsDeclarationOrder pins that the enum order IS the board order,
+// TestRankOrderIsDeclarationOrder pins that the enum order IS the rank order,
 // which is the property that lets a new rank be added by declaring it in the
 // right place and nothing else.
 func TestRankOrderIsDeclarationOrder(t *testing.T) {
@@ -234,8 +234,8 @@ func TestParseTSAcceptsBothStoredSpellings(t *testing.T) {
 }
 
 // TestCapIsPerGroup is the defect the per-group cap exists to prevent: a
-// board-wide cap with 40 unverified tasks ranked near the top spends every row
-// on them and the sessions — what the board was built to triage — never render.
+// frame-wide cap with 40 unverified tasks ranked near the top spends every row
+// on them and the sessions — what the view was built to triage — never render.
 func TestCapIsPerGroup(t *testing.T) {
 	var rows []monitor.ProjectStatusRow
 	for i := int64(1); i <= 40; i++ {
@@ -251,16 +251,16 @@ func TestCapIsPerGroup(t *testing.T) {
 		t.Errorf("verify rendered %d lines under --limit 3, want 3 rows + 1 legend entry", n)
 	}
 	if !strings.Contains(out, "⟳ T E-") && !strings.Contains(out, "⟳  ") {
-		t.Errorf("the working session was crowded off the board by the unverified backlog:\n%s", out)
+		t.Errorf("the working session was crowded out of the frame by the unverified backlog:\n%s", out)
 	}
 	if !strings.Contains(out, "… 37 more unverified (--no-limit)") {
 		t.Errorf("the truncated group did not name what it dropped:\n%s", out)
 	}
 }
 
-// TestBudgetKeepsTheFrameInsideThePane is the property a ranked board cannot do
+// TestBudgetKeepsTheFrameInsideThePane is the property a ranked view cannot do
 // without. An overrun frame does not wrap, it SCROLLS, and a scrolled frame
-// loses its top — which on this board is the loudest rows. Sweeping the budget
+// loses its top — which in this frame is the loudest rows. Sweeping the budget
 // rather than testing one value: the failure is a boundary, and boundaries are
 // where an off-by-one lives.
 func TestBudgetKeepsTheFrameInsideThePane(t *testing.T) {
@@ -281,7 +281,7 @@ func TestBudgetKeepsTheFrameInsideThePane(t *testing.T) {
 }
 
 // TestBudgetKeepsEveryGroupPresent is the other half: the frame must fit, but it
-// must not fit by dropping whole ranks. A board that shows only unverified rows
+// must not fit by dropping whole ranks. A frame that shows only unverified rows
 // has stopped answering the question it was built for.
 func TestBudgetKeepsEveryGroupPresent(t *testing.T) {
 	var rows []monitor.ProjectStatusRow
@@ -297,7 +297,7 @@ func TestBudgetKeepsEveryGroupPresent(t *testing.T) {
 	out := b.String()
 	for _, glyph := range []string{"☑", "⚑", "‖", "⟳"} {
 		if !strings.Contains(out, glyph) {
-			t.Errorf("group %q vanished from a 20-row board:\n%s", glyph, out)
+			t.Errorf("group %q vanished from a 20-row frame:\n%s", glyph, out)
 		}
 	}
 }
@@ -372,18 +372,18 @@ func TestLegendCarriesOnlyPresentGlyphs(t *testing.T) {
 	}
 }
 
-func TestEmptyBoard(t *testing.T) {
+func TestEmptyFrame(t *testing.T) {
 	var b strings.Builder
 	n := render(&b, "demo", nil, 10, 0, 120, false, now, faults.AllProjects)
 	if n != 0 {
-		t.Errorf("empty board reported %d rows, want 0 (the pane fit treats 0 specially)", n)
+		t.Errorf("empty frame reported %d rows, want 0 (the pane fit treats 0 specially)", n)
 	}
 	if !strings.Contains(b.String(), "nothing needs attention in demo") {
-		t.Errorf("empty board did not name the project it found nothing in:\n%s", b.String())
+		t.Errorf("empty frame did not name the project it found nothing in:\n%s", b.String())
 	}
 }
 
-// TestSessionColumnIsWidthOnDemand: a board of pure task rows must not be padded
+// TestSessionColumnIsWidthOnDemand: a frame of pure task rows must not be padded
 // with an empty session gutter, and one with sessions must align every row to
 // the same column.
 func TestSessionColumnIsWidthOnDemand(t *testing.T) {
@@ -393,7 +393,7 @@ func TestSessionColumnIsWidthOnDemand(t *testing.T) {
 	}, 10, 0, 120, false, now, faults.AllProjects)
 	row := strings.Split(tasksOnly.String(), "\n")[1]
 	if strings.Contains(row, "  3d") && strings.Contains(row, "     3d") {
-		t.Errorf("task-only board padded a session column: %q", row)
+		t.Errorf("task-only frame padded a session column: %q", row)
 	}
 
 	var mixed strings.Builder
@@ -435,7 +435,7 @@ func TestRowsNeverExceedTheWidth(t *testing.T) {
 	}
 }
 
-// TestColorizeIsIntensityOnly pins the theme-independence rule: the board emits
+// TestColorizeIsIntensityOnly pins the theme-independence rule: the renderer emits
 // bold and dim, never a color from the 30-47 range a terminal theme remaps.
 func TestColorizeIsIntensityOnly(t *testing.T) {
 	for _, a := range actions() {

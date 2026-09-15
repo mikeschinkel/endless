@@ -13,10 +13,11 @@ import (
 	"github.com/mikeschinkel/endless/internal/schema"
 )
 
-// The board's badge counts THIS project's open incidents plus the machine-level
+// The frame's badge counts THIS project's open incidents plus the machine-level
 // ones no project could be attributed to (E-1960) — never another project's.
 //
-// The board is scoped to one project in every other respect, so a badge counting
+// `project status` is scoped to one project in every other respect, so a badge
+// counting
 // the whole machine would be the one line on the frame reporting on work the
 // rows above it do not show. `session status` makes the opposite call, and its
 // own suite pins that; the two together are the whole scoping contract.
@@ -25,7 +26,7 @@ import (
 // two registered projects, and returns their ids.
 //
 // A near-copy of sessionstatuscmd's helper, deliberately: these tests assert the
-// scope reaches the BOARD FRAME, which is a property of render. Sharing a helper
+// scope reaches the RENDERED FRAME, which is a property of render. Sharing a helper
 // across the package boundary would couple two suites that have to be able to
 // fail independently.
 func bindFaultStoreWithProjects(t *testing.T) (alpha, beta int64) {
@@ -83,38 +84,38 @@ func bindFaultStoreWithProjects(t *testing.T) (alpha, beta int64) {
 	return 1, 2
 }
 
-// boardRows is the minimal row set that exercises the normal (non-empty) render
-// path, so the badge is asserted where it will actually be seen.
-func boardRows() []monitor.ProjectStatusRow {
+// nonEmptyRows is the minimal row set that exercises the normal (non-empty)
+// render path, so the badge is asserted where it will actually be seen.
+func nonEmptyRows() []monitor.ProjectStatusRow {
 	return []monitor.ProjectStatusRow{taskRow(1, "unverified", 0)}
 }
 
-func TestBoardBadge_CountsOnlyThisProjectAndTheUnattributed(t *testing.T) {
+func TestFrameBadge_CountsOnlyThisProjectAndTheUnattributed(t *testing.T) {
 	alpha, _ := bindFaultStoreWithProjects(t)
 
 	var b strings.Builder
-	render(&b, "alpha", boardRows(), 10, 0, 120, false, now, faults.ProjectScope(alpha))
+	render(&b, "alpha", nonEmptyRows(), 10, 0, 120, false, now, faults.ProjectScope(alpha))
 	out := b.String()
 
 	if !strings.Contains(out, faultbadge.Hint) {
-		t.Fatalf("no badge on a board with open incidents:\n%s", out)
+		t.Fatalf("no badge on a frame with open incidents:\n%s", out)
 	}
 	// alpha's own fault is a warning; the unattributed one is a warning too. Beta's
 	// is the only ERROR, so the severity chip is the tell: an ERROR chip here means
-	// the board counted a project it has no business counting.
+	// the frame counted a project it has no business counting.
 	if strings.Contains(out, "ERROR") {
-		t.Errorf("alpha's board badged beta's error:\n%s", out)
+		t.Errorf("alpha's frame badged beta's error:\n%s", out)
 	}
 	if !strings.Contains(out, "2 warnings") {
-		t.Errorf("alpha's board did not count its own fault plus the unattributed one:\n%s", out)
+		t.Errorf("alpha's frame did not count its own fault plus the unattributed one:\n%s", out)
 	}
 }
 
-func TestBoardBadge_MachineWideScopeSeesEverything(t *testing.T) {
+func TestFrameBadge_MachineWideScopeSeesEverything(t *testing.T) {
 	bindFaultStoreWithProjects(t)
 
 	var b strings.Builder
-	render(&b, "alpha", boardRows(), 10, 0, 120, false, now, faults.AllProjects)
+	render(&b, "alpha", nonEmptyRows(), 10, 0, 120, false, now, faults.AllProjects)
 	out := b.String()
 
 	if !strings.Contains(out, "ERROR") {

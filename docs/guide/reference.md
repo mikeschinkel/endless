@@ -14,14 +14,14 @@ endless project info                           # registration card for the curre
 endless project info <name>                    # for a named project
 endless project status                         # what in this project needs attention
 endless project status <name>                  # for a named project
-endless project monitor                        # the same board, live, until Ctrl-C
-endless project monitor --tmux                 # the board in its own two-pane tmux session
+endless project monitor                        # the same rows, live, until Ctrl-C
+endless project monitor --tmux                 # the monitor in its own two-pane tmux session
 ```
 
 `project info` is the registration card — metadata, notes, dependencies.
 `project status` ranks every claim on your attention across every session in
 the project, loudest first. `project monitor` is the live version of the same
-view, the project-scoped counterpart to `endless session monitor`.
+rows, the project-scoped counterpart to `endless session monitor`.
 
 ### Registering a project
 

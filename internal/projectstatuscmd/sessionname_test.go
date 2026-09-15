@@ -27,7 +27,7 @@ func init() {
 // `{{project}}-monitor` showed `endless-m`, a mangled twin of the user's own
 // `endless` session sitting beside it in the list; and a fixed `e-monitor` with
 // a `-{{project}}` suffix for the second project showed `e-monitor` for both,
-// which is the wrong-board problem the suffix existed to prevent, moved one
+// which is the wrong-monitor problem the suffix existed to prevent, moved one
 // level down.
 func TestDefaultNameLeadsWithTheProject(t *testing.T) {
 	const tabWidth = 9
@@ -64,7 +64,7 @@ func TestDefaultNameLeadsWithTheProject(t *testing.T) {
 		t.Errorf("two projects share the visible %d columns: both read %q", tabWidth, a[:tabWidth])
 	}
 
-	// ...and the board must not read as the project's OWN session, which is the
+	// ...and the monitor must not read as the project's OWN session, which is the
 	// collision `endless-m` created.
 	if strings.HasPrefix(a, "endless") {
 		t.Errorf("the monitor session reads as the project's own session: %q", a)
@@ -75,12 +75,12 @@ func TestDefaultNameLeadsWithTheProject(t *testing.T) {
 // in, and `{{.Project}}` resolves to the same string for anyone who prefers Go's
 // data syntax. A user should not have to know which one this happens to support.
 func TestSessionNameTemplateForms(t *testing.T) {
-	fn, warnA := sessionNameFor("endless", "{{project}}-board")
-	dot, warnB := sessionNameFor("endless", "{{.Project}}-board")
+	fn, warnA := sessionNameFor("endless", "{{project}}-watch")
+	dot, warnB := sessionNameFor("endless", "{{.Project}}-watch")
 	if warnA != nil || warnB != nil {
 		t.Fatalf("a legal template warned: %v / %v", warnA, warnB)
 	}
-	if fn != "endless-board" || dot != "endless-board" {
+	if fn != "endless-watch" || dot != "endless-watch" {
 		t.Fatalf("the two forms disagree: {{project}} = %q, {{.Project}} = %q", fn, dot)
 	}
 }
@@ -90,11 +90,11 @@ func TestSessionNameTemplateForms(t *testing.T) {
 // spaces and punctuation, and folding only the substitution would leave those
 // for tmux to reject later, far from the setting that caused it.
 func TestSessionNameIsFoldedAfterRendering(t *testing.T) {
-	got, warn := sessionNameFor("endless", "my board.{{project}}:live")
+	got, warn := sessionNameFor("endless", "my view.{{project}}:live")
 	if warn != nil {
 		t.Fatalf("a legal template warned: %v", warn)
 	}
-	if got != "my-board-endless-live" {
+	if got != "my-view-endless-live" {
 		t.Errorf("rendered name was not folded to a legal tmux name: %q", got)
 	}
 	if strings.ContainsAny(got, " .:/") {
@@ -103,7 +103,7 @@ func TestSessionNameIsFoldedAfterRendering(t *testing.T) {
 }
 
 // TestBadTemplateFallsBackAndSaysSo: a typo in a preference must not be able to
-// stop the board from opening. It falls back to the built-in name and returns
+// stop the monitor from opening. It falls back to the built-in name and returns
 // the reason, which the launcher prints.
 func TestBadTemplateFallsBackAndSaysSo(t *testing.T) {
 	for _, tmpl := range []string{
@@ -141,25 +141,25 @@ func TestSessionNameTemplateReadsProjectConfig(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(dir, ".endless"), 0o755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
-	cfg := `{"tmux": {"session_name": "{{project}}-board"}}`
+	cfg := `{"tmux": {"session_name": "{{project}}-watch"}}`
 	if err := os.WriteFile(filepath.Join(dir, ".endless", "config.json"), []byte(cfg), 0o644); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
 
-	if got := sessionNameTemplate(dir); got != "{{project}}-board" {
+	if got := sessionNameTemplate(dir); got != "{{project}}-watch" {
 		t.Fatalf("sessionNameTemplate = %q, want the project layer's value", got)
 	}
 	name, warn := sessionNameFor("endless", sessionNameTemplate(dir))
 	if warn != nil {
 		t.Fatalf("configured template warned: %v", warn)
 	}
-	if name != "endless-board" {
-		t.Errorf("configured template produced %q, want %q", name, "endless-board")
+	if name != "endless-watch" {
+		t.Errorf("configured template produced %q, want %q", name, "endless-watch")
 	}
 }
 
 // TestSessionNameTemplateSurvivesABrokenConfig: a config file that cannot be
-// parsed must not stop the board from opening. The setting is a preference and
+// parsed must not stop the monitor from opening. The setting is a preference and
 // the built-in name is a working answer; refusing to open a window over a stray
 // comma would trade the feature for the preference.
 func TestSessionNameTemplateSurvivesABrokenConfig(t *testing.T) {
