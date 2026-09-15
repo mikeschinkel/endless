@@ -53,6 +53,26 @@ OLD='never needed doing'
 NEW='no longer needs doing'
 LABEL="retires — it ${NEW}"
 
+# sweep <phrase> — tracked files in the PRODUCT tree that still contain it.
+#
+# `git grep` rather than `grep -r` for two reasons, both learned the hard way.
+# It searches tracked files only, so a scratch file cannot fail the suite; and
+# it prints repo-relative paths with no leading "./", which `grep -r` prefixes
+# or not depending on which grep is installed. The first version of this sweep
+# anchored its exclusions on "^\./" and so excluded NOTHING under a grep that
+# omits the prefix (ugrep, for one) — a filter that silently stops filtering is
+# worse than no filter, because the assertion still looks like it is checking.
+#
+# Everything under .endless/ is excluded because all of it is Endless's own
+# RECORDS: the append-only db-ledger, LESSONS.md, the per-task plan mirrors, and
+# landed verify suites — including this one, which necessarily quotes both
+# phrases to assert they are gone. A record of what was said then is not the
+# tool saying it now, and .endless/tasks/CLAUDE.md forbids retrofitting landed
+# suites in any case.
+sweep() {
+    git grep -lIF -e "$1" -- ':!.endless/' 2>/dev/null | sort
+}
+
 # ---------------------------------------------------------------------------
 section "A. This task's own tests (fail-fast)"
 # ---------------------------------------------------------------------------
@@ -197,16 +217,16 @@ section "F. The old phrase is gone from everything the tool speaks"
 #     comment that explains why it went. A change is allowed to name the thing
 #     it removed.
 
-STRAY="$(grep -rIl --exclude-dir=.git --exclude-dir=.venv --exclude-dir=node_modules \
-            -- "${OLD}" . 2>/dev/null \
-         | grep -v '^\./\.endless/db-ledger/' \
-         | grep -v '^\./\.endless/LESSONS\.md$' \
-         | grep -v '^\./\.endless/tasks/' \
-         | grep -v '^\./internal/taskstatus/transitions\.go$' \
-         | sort)"
+# Guard against a vacuous pass FIRST. Every sweep assertion below is satisfied
+# by an empty result, so a sweep that silently found nothing — a broken pathspec,
+# a git grep that errored into 2>/dev/null — would report success while checking
+# nothing. This is the same failure the "^\./" anchor caused, so it is asserted
+# rather than trusted: the sweep must be able to find the phrase that IS there.
+assert_contains "the sweep is not vacuous — it finds what it should find" \
+    "internal/taskstatus/transitions.go" "$(sweep "${NEW}")"
 
-assert_eq "nothing outside history and the explanatory comment says \"${OLD}\"" \
-    "" "${STRAY}"
+assert_eq "nothing in the product tree still says \"${OLD}\"" \
+    "" "$(sweep "${OLD}" | grep -v '^internal/taskstatus/transitions\.go$')"
 
 assert_eq "transitions.go quotes it exactly once, in the comment that retires it" \
     "1" "$(grep -c -- "${OLD}" internal/taskstatus/transitions.go)"
@@ -256,16 +276,9 @@ done
 
 # Same sweep as F, for the paraphrase. Only the two comments that explain the
 # removal may still say it.
-STRAY_PARA="$(grep -rIl --exclude-dir=.git --exclude-dir=.venv --exclude-dir=node_modules \
-            -- "${OLD_PARA}" . 2>/dev/null \
-         | grep -v '^\./\.endless/db-ledger/' \
-         | grep -v '^\./\.endless/LESSONS\.md$' \
-         | grep -v '^\./\.endless/tasks/' \
-         | grep -v '^\./src/endless/authority\.py$' \
-         | grep -v '^\./internal/taskstatus/transitions\.go$' \
-         | sort)"
-
-assert_eq "nothing outside history and the two explanatory comments says it" \
-    "" "${STRAY_PARA}"
+assert_eq "nothing in the product tree still says \"${OLD_PARA}\"" \
+    "" "$(sweep "${OLD_PARA}" \
+          | grep -v -e '^src/endless/authority\.py$' \
+                    -e '^internal/taskstatus/transitions\.go$')"
 
 summary
