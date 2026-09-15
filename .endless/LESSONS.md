@@ -6188,3 +6188,40 @@ Corollary about names: the artifact was called `project monitor` throughout. Whe
 the name of a thing and my mental model of it disagree, the name is evidence and
 I should treat the disagreement as a question, not as the name being loose.
 - **Project**: endless
+
+### [2026-09-15] The short form of a coined term is still the coined term — remove 'board' too, not just 'attention board'
+E-2153 told me to remove the coinage "attention board". I removed exactly that
+two-word phrase, and then wrote in my own handoff that bare "board" everywhere
+else was "not the coined term, and a rename of it is a different change" — the
+filename, the guide's --limit paragraph, the Click help for
+`project monitor --tmux`. Mike: "'board' is no better than 'attention board'.
+'monitor' and 'project monitor' are the proper terms."
+
+He is right, and my reasoning was backwards in two ways.
+
+1. I treated "board" as an ORDINARY NOUN that happened to sit next to a
+   coinage. It is not. It is the coinage minus its adjective, and every cost
+   the task listed applies to it unchanged: it names nothing a reader can point
+   at, it collapses `project status` and `project monitor` into one word, and
+   it is in output. Dropping an adjective does not turn a coined term into
+   English.
+
+2. I used the literal phrase as the scope boundary because the phrase was what
+   the task row spelled out. A terminology task is about the TERM, not about
+   the string the filer happened to type. The task's own rule — "replace each
+   use with whichever command the sentence means" — was already general, and I
+   narrowed it to a grep pattern.
+
+The tell I had and ignored: site after site, deleting "attention board" left
+"the board" pointing at nothing, and I repaired six of those dangling referents
+one at a time. Six repairs of the same shape is not six edge cases. It is the
+sweep telling me its own scope, and I filed it as a footnote instead of acting
+on it.
+
+The rule: when removing a coined term, enumerate its short forms, plurals,
+possessives and compounds FIRST and sweep for all of them. A shortened form
+that reads fine as English is the dangerous one, not the safe one — it survives
+the sweep and keeps teaching the reader the word. And when a sweep keeps
+forcing the same repair, that is the scope announcing itself; widen it rather
+than logging the repairs.
+- **Project**: endless
