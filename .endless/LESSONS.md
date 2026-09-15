@@ -6038,3 +6038,38 @@ gets FIXED in that task. Filing is for work that is genuinely separate and
 genuinely later. Before I offer to file anything, I check whether the current
 task can simply absorb it — and if it can, I say that instead of asking.
 - **Project**: endless
+
+### [2026-09-15] Closing an over-filed task is 'declined' — it was an active decision not to file it. 'superseded' asserts the task was a legitimate plan another took over.
+Mike, 2026-09-15, on E-2144. I closed E-2146 — a task I should never have filed
+— with `task replace E-2146 --by E-2144`, which set it `superseded`. Mike:
+"E-2146 should be declined, not superseded. I did that."
+
+I reached for supersession because the WORK moved: E-2146's scope got done inside
+E-2144, so it felt like a handoff. That is the wrong reading. `superseded` says
+this task was a legitimate plan that another task took over — it asserts the
+task had standing. E-2146 never had standing. It was scope that belonged to
+E-2144 the whole time, and the decision Mike made was "this should not exist as
+a separate task." A decision not to pursue a filing is an ACTIVE DECISION, which
+is exactly what `declined` means.
+
+The axis is about the DECISION, not about where the work ended up:
+
+  - `superseded` — it was a valid plan; another task took it over.
+  - `obsolete`   — nothing replaced it; it simply no longer needs doing.
+  - `declined`   — someone actively decided not to pursue it. Includes "this
+                   should never have been filed separately."
+
+This refines the remedy sentence in my 2026-09-11 lesson ("fold the second into
+the first and close it with `task replace <extra> --by <keeper>`"). That was
+written when `task replace` closed the extra as `obsolete`, and its point was
+"do not pretend it never needed doing." E-2144 changed that default to
+`superseded`, so following it mechanically now asserts the over-filed task was a
+legitimate plan. Keep the `replaced_by` relation — it points a reader at where
+the thinking went — but the STATUS must say what the owner decided, and for an
+over-filing that is `declined --reason`.
+
+Next time I fold a wrongly-filed task into its keeper: record the relation, then
+decline it with a reason naming the over-filing. Do not let `task replace` pick
+the status, because its default answers a different question than the one the
+closure is answering.
+- **Project**: endless
