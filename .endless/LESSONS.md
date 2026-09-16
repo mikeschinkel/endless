@@ -6271,3 +6271,13 @@ What I actually meant was ordinary: 'routed through a single shared function.' T
 
 The rule: in a reply, prefer the plain phrase over the term of art. If a term genuinely earns its place, define it the first time in the same sentence. Never let the reader do the decoding.
 - **Project**: endless
+
+### [2026-09-16] Don't claim something 'breaks every consumer' without counting the consumers
+I declined to fix a real gap — an empty --json array carries no provenance, which is the exact shape the founding incident took — and justified it with 'the alternative is an envelope, which breaks every consumer.' Mike asked which consumers. I had not looked.
+
+When I did look, the answer was: four Python call sites that parse a Go array, seven assertions across five test files, and one landed verify suite that does not actually parse array shape. All of them in this repo. Nothing external. Mike's own read — 'they are part of Endless so can be updated in parallel' — was right, and my objection was scenery.
+
+The failure is specific: I used the SIZE of an imagined blast radius as a reason not to do something, without measuring it. A blocker I have not counted is not a blocker, it is a guess dressed as one — and it is worse than saying nothing, because it sounds like analysis and ends the conversation.
+
+The rule: before naming a cost as the reason to skip work, count it.  the consumers, list them, and put the number in the reply. If the number turns out small, do the work.
+- **Project**: endless
