@@ -6257,3 +6257,7 @@ The rule: answer the question asked, at the length the question implies. A yes/n
 
 This compounds with the report-density contract already in the guide (run the regression yourself and state the outcome in prose; hand over one command; never enumerate a checklist). Same principle, applied to ordinary conversational turns and not just handoffs.
 - **Project**: endless
+
+### [2026-09-15] A verify.sh grep for absent code matches the comment explaining the absence
+This codebase comments deliberate absences at length, directly above the code that does not do the thing. So a source-level verify.sh assertion of the form `grep -q 'enforceReportGate' file || pass` reports the OPPOSITE of the truth: the handler's doc comment says 'NOT carried over from Stop: the report gate (enforceReportGate)...', and the grep matches that sentence. Same for 'failed bool' in a comment reading 'a helper taking a `failed bool` would...'. Strip comments first — `code_only() { sed -e 's://.*::' "$@"; }` — and grep that. Applies to every absence-assertion in a verify suite, and only bites on absences: presence-assertions get the right answer for the wrong reason.
+- **Project**: endless
