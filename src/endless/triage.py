@@ -78,7 +78,7 @@ class TriageError(Exception):
 def _endless_go(args: list[str], stdin: str | None = None) -> str:
     """Run `endless-go <args>` with the resolved DB context and return stdout.
 
-    Binary and `--config-dir` resolution are both borrowed from event_bridge
+    Binary and DB-context resolution are both borrowed from event_bridge
     rather than re-derived, so triage reads open exactly the database triage
     writes to (E-1429/E-1510).
     """

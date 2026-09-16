@@ -33,12 +33,13 @@
 //   - tmux → PinMainDB (E-1429).
 //   - session-status → PinMainDB on its normal path (it reads the live sessions
 //     table, which hook writes pin to main regardless of cwd), but with --task
-//     (headless/tests) it skips the pin and reads the resolved sandbox/
-//     --config-dir context; the decision lives in sessionstatuscmd.Run (E-1685).
+//     (headless/tests) it skips the pin and reads whatever --db/--db-dir
+//     resolved; the decision lives in sessionstatuscmd.Run (E-1685).
 //   - project-status, project-window → the same rule and the same reason, for
 //     the same single-database join; the headless escape is --project-id and the
 //     decision lives in projectstatuscmd.resolveProject (E-1976).
-//   - event, session-query, worktree → ConsumeDBContextFlag (E-1429).
+//   - event, session-query, worktree → ConsumeDBFlags (E-1429/E-1668), and
+//     nothing else: inside a self-dev worktree they are REFUSED without a flag.
 //   - sandbox → no DB-context init.
 //
 // The ENDLESS_NO_HOOKS gate is scoped to the `hook` subcommand only —
@@ -104,24 +105,24 @@ func main() {
 		Level: slog.LevelWarn,
 	})))
 
-	// E-1429: the Python CLI threads --db main|sandbox through as
-	// --config-dir <dir>. Consume scans os.Args, strips the flag, and
-	// applies the config dir. Must run BEFORE reading os.Args[1] so
-	// the subcommand is identified after the flag has been removed —
-	// otherwise `endless-go --config-dir /path event emit ...` would
-	// mistake "--config-dir" for the subcommand. Safe to always call:
-	// when the flag is absent it is a no-op, and for hook/tmux
-	// the PinMainDB override below still wins via dbPathOverride.
-	monitor.ConsumeDBContextFlag()
-
-	// E-1368: when no explicit --config-dir was given, self-detect the
-	// per-worktree sandbox from cwd and route to it. Replaces the bin-sandbox/
-	// wrapper scripts (which set XDG_CONFIG_HOME and exec'd the worktree
-	// binary). No-op outside a self-dev worktree or when its sandbox doesn't
-	// exist; explicit --config-dir already won above and is left untouched.
-	// Runs before the PinMainDB switch so hook/tmux still move the DB
-	// to main while their config.json/logs follow the self-detected sandbox.
-	monitor.SelfDetectWorktreeSandbox()
+	// E-1429/E-1668: consume this binary's DB-context flags — --db main|sandbox,
+	// or the --db-dir escape — scanning os.Args wherever they appear, stripping
+	// them, and resolving the config dir. Must run BEFORE reading os.Args[1] so
+	// the subcommand is identified after the flags have been removed — otherwise
+	// `endless-go --db main event emit ...` would mistake "--db" for the
+	// subcommand. Safe to always call: absent flags are a no-op, and for
+	// hook/tmux the PinMainDB override below still wins via dbPathOverride.
+	//
+	// E-1368's cwd self-detect used to follow this line and is deliberately
+	// gone (E-1668). It satisfied the E-1429 gate without anyone having chosen,
+	// which is how `endless-go session-query list-live --project-root <main>`,
+	// run from a worktree with main's binary, answered from the worktree's
+	// sandbox and said nothing. Detection may decide where to LOOK; only a flag
+	// decides that you may OPEN it.
+	if err := monitor.ConsumeDBFlags(); err != nil {
+		fmt.Fprintf(os.Stderr, "endless-go: %v\n", err)
+		os.Exit(2)
+	}
 
 	if len(os.Args) < 2 {
 		usage(os.Stderr)
@@ -160,15 +161,15 @@ func main() {
 	// activity in the main database regardless of cwd or XDG_CONFIG_HOME
 	// (hook-fired writes, tmux pane/task status). Pin pins the DB to main
 	// unconditionally and satisfies the worktree gate via dbPathOverride.
-	// Other subcommands stay on whatever --config-dir (or absence of one)
-	// ConsumeDBContextFlag already established above.
+	// Other subcommands stay on whatever --db/--db-dir (or absence of one)
+	// ConsumeDBFlags already established above.
 	switch sub {
 	case "hook", "tmux":
-		// An explicit --config-dir wins over the main pin (E-1429: a
+		// An explicit --db/--db-dir wins over the main pin (E-1429: a
 		// per-invocation flag is trustworthy; the env-driven pin is the
-		// fallback). Production invokers of these binaries never pass
-		// --config-dir, so the pin still applies for real hook/tmux
-		// traffic; only tests and sandbox tooling flip this.
+		// fallback). Production invokers of these binaries never pass one,
+		// so the pin still applies for real hook/tmux traffic; only tests
+		// and sandbox tooling flip this.
 		//
 		// `errors` MUST NOT be added here (tried and reverted under E-1950).
 		// These two are machine-invoked: a hook fires, tmux redraws. Nobody

@@ -25,7 +25,7 @@ func openDBAtPath(t *testing.T, path string, pinned bool) (*sql.DB, error) {
 	t.Helper()
 
 	prevOnce, prevConn, prevErr := dbOnce, dbConn, dbErr
-	prevCtxDir, prevPathOverride, prevFromFlag := dbContextDir, dbPathOverride, dbContextFromFlag
+	prevCtxDir, prevPathOverride := dbContextDir, dbPathOverride
 	t.Cleanup(func() {
 		if dbConn != nil {
 			dbConn.Close()
@@ -35,7 +35,6 @@ func openDBAtPath(t *testing.T, path string, pinned bool) (*sql.DB, error) {
 		dbErr = prevErr
 		dbContextDir = prevCtxDir
 		dbPathOverride = prevPathOverride
-		dbContextFromFlag = prevFromFlag
 	})
 
 	dbOnce = &sync.Once{}
@@ -43,7 +42,6 @@ func openDBAtPath(t *testing.T, path string, pinned bool) (*sql.DB, error) {
 	dbErr = nil
 	dbContextDir = ""
 	dbPathOverride = ""
-	dbContextFromFlag = false
 	if pinned {
 		dbPathOverride = path
 	} else {
@@ -230,7 +228,7 @@ func TestDBSchemaPassiveViaPinMainDB(t *testing.T) {
 	// Save/restore globals and reset the singleton, then take the pin via the
 	// real entry point rather than setting dbPathOverride by hand.
 	prevOnce, prevConn, prevErr := dbOnce, dbConn, dbErr
-	prevCtxDir, prevPathOverride, prevFromFlag := dbContextDir, dbPathOverride, dbContextFromFlag
+	prevCtxDir, prevPathOverride := dbContextDir, dbPathOverride
 	t.Cleanup(func() {
 		if dbConn != nil {
 			dbConn.Close()
@@ -240,14 +238,12 @@ func TestDBSchemaPassiveViaPinMainDB(t *testing.T) {
 		dbErr = prevErr
 		dbContextDir = prevCtxDir
 		dbPathOverride = prevPathOverride
-		dbContextFromFlag = prevFromFlag
 	})
 	dbOnce = &sync.Once{}
 	dbConn = nil
 	dbErr = nil
 	dbContextDir = ""
 	dbPathOverride = ""
-	dbContextFromFlag = false
 
 	PinMainDB() // dbPathOverride = $HOME/.config/endless/endless.db
 	if got := DBPath(); got != path {

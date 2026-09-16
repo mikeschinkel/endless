@@ -2,7 +2,7 @@
 //
 // These tests build cmd/endless-go once via TestMain, then exercise each
 // `endless-go event <subcommand>` from outside-in: argv parsing, the
-// dispatcher's gate (E-1429 worktree DB context via --config-dir), and
+// dispatcher's gate (E-1429 worktree DB context via --db/--db-dir), and
 // the subcommand's documented contract (exit code, stdout shape, side
 // effects). Per-test t.TempDir() is the config dir so each test starts
 // from a fresh DB.
@@ -185,7 +185,7 @@ func TestEventEmit_MissingKindExitsNonZero(t *testing.T) {
 	initSchemaDB(t, cfgDir)
 
 	bin := endlessGoBin(t)
-	cmd := exec.Command(bin, "--config-dir", cfgDir,
+	cmd := exec.Command(bin, "--db-dir", cfgDir,
 		"event", "emit",
 		"--project", "proj",
 		"--entity-type", "task",
@@ -213,7 +213,7 @@ func TestEventEmit_UnknownKindExitsNonZero(t *testing.T) {
 	initSchemaDB(t, cfgDir)
 
 	bin := endlessGoBin(t)
-	cmd := exec.Command(bin, "--config-dir", cfgDir,
+	cmd := exec.Command(bin, "--db-dir", cfgDir,
 		"event", "emit",
 		"--kind", "definitely.not.a.kind",
 		"--project", "proj",
@@ -252,7 +252,7 @@ func TestEventValidateDB_HappyPathReportsMatch(t *testing.T) {
 	seedTaskRow(t, dbPath, projectName, taskID, title)
 
 	bin := endlessGoBin(t)
-	cmd := exec.Command(bin, "--config-dir", cfgDir,
+	cmd := exec.Command(bin, "--db-dir", cfgDir,
 		"event", "validate-db",
 		"--project-root", projectRoot,
 	)
@@ -276,7 +276,7 @@ func TestEventValidateDB_MissingProjectRootExitsNonZero(t *testing.T) {
 	initSchemaDB(t, cfgDir)
 
 	bin := endlessGoBin(t)
-	cmd := exec.Command(bin, "--config-dir", cfgDir,
+	cmd := exec.Command(bin, "--db-dir", cfgDir,
 		"event", "validate-db",
 	)
 	out, err := cmd.CombinedOutput()
@@ -304,7 +304,7 @@ func TestEventRebuildDB_DryRunReportsProjectedCounts(t *testing.T) {
 	writeLedgerEvent(t, projectRoot, evt)
 
 	bin := endlessGoBin(t)
-	cmd := exec.Command(bin, "--config-dir", cfgDir,
+	cmd := exec.Command(bin, "--db-dir", cfgDir,
 		"event", "rebuild-db",
 		"--project-root", projectRoot,
 	)
@@ -433,7 +433,7 @@ func TestEventRebuildDB_ConfirmRefusesAndDestroysNothing(t *testing.T) {
 	before := rebuildLossCounts(t, dbPath)
 
 	bin := endlessGoBin(t)
-	cmd := exec.Command(bin, "--config-dir", cfgDir,
+	cmd := exec.Command(bin, "--db-dir", cfgDir,
 		"event", "rebuild-db",
 		"--project-root", projectRoot,
 		"--confirm",
@@ -525,7 +525,7 @@ func TestEventRebuildDB_ConfirmRefusesWithNoBoundSession(t *testing.T) {
 		makeTaskCreatedEvent(t, projectName, taskID, "unbound task"))
 
 	bin := endlessGoBin(t)
-	cmd := exec.Command(bin, "--config-dir", cfgDir,
+	cmd := exec.Command(bin, "--db-dir", cfgDir,
 		"event", "rebuild-db",
 		"--project-root", projectRoot,
 		"--confirm",
@@ -560,7 +560,7 @@ func TestEventRebuildDB_ConfirmRefusesBeforeReadingTheLedger(t *testing.T) {
 	initSchemaDB(t, cfgDir)
 
 	bin := endlessGoBin(t)
-	cmd := exec.Command(bin, "--config-dir", cfgDir,
+	cmd := exec.Command(bin, "--db-dir", cfgDir,
 		"event", "rebuild-db",
 		"--project-root", projectRoot,
 		"--confirm",
@@ -594,7 +594,7 @@ func TestEventApplyChange_NoopSQLRecordsMarker(t *testing.T) {
 	}
 
 	bin := endlessGoBin(t)
-	cmd := exec.Command(bin, "--config-dir", cfgDir,
+	cmd := exec.Command(bin, "--db-dir", cfgDir,
 		"event", "apply-change", changePath,
 	)
 	// Use Output so log lines on stderr don't pollute the JSON parse.
@@ -645,14 +645,14 @@ func TestEventApplyChange_AlreadyAppliedIsSkipped(t *testing.T) {
 
 	bin := endlessGoBin(t)
 	// First run: applied.
-	first := exec.Command(bin, "--config-dir", cfgDir,
+	first := exec.Command(bin, "--db-dir", cfgDir,
 		"event", "apply-change", changePath,
 	)
 	if out, err := first.Output(); err != nil {
 		t.Fatalf("first apply-change failed: %v\nstdout: %s", err, out)
 	}
 	// Second run: should report skipped.
-	second := exec.Command(bin, "--config-dir", cfgDir,
+	second := exec.Command(bin, "--db-dir", cfgDir,
 		"event", "apply-change", changePath,
 	)
 	out, err := second.Output()
@@ -678,7 +678,7 @@ func TestEventBackup_WritesBackupFileUnderConfigDir(t *testing.T) {
 	initSchemaDB(t, cfgDir)
 
 	bin := endlessGoBin(t)
-	cmd := exec.Command(bin, "--config-dir", cfgDir, "event", "backup")
+	cmd := exec.Command(bin, "--db-dir", cfgDir, "event", "backup")
 	out, err := cmd.Output()
 	if err != nil {
 		t.Fatalf("backup failed: %v\nstdout: %s", err, out)
@@ -713,7 +713,7 @@ func TestEventBackup_ReportsTheDestinationPath(t *testing.T) {
 	initSchemaDB(t, cfgDir)
 
 	bin := endlessGoBin(t)
-	out, err := exec.Command(bin, "--config-dir", cfgDir, "event", "backup").Output()
+	out, err := exec.Command(bin, "--db-dir", cfgDir, "event", "backup").Output()
 	if err != nil {
 		t.Fatalf("backup failed: %v\nstdout: %s", err, out)
 	}
@@ -745,11 +745,11 @@ func TestEventBackup_SkippedReportsTheExistingBackup(t *testing.T) {
 	initSchemaDB(t, cfgDir)
 
 	bin := endlessGoBin(t)
-	first, err := exec.Command(bin, "--config-dir", cfgDir, "event", "backup").Output()
+	first, err := exec.Command(bin, "--db-dir", cfgDir, "event", "backup").Output()
 	if err != nil {
 		t.Fatalf("first backup failed: %v\nstdout: %s", err, first)
 	}
-	second, err := exec.Command(bin, "--config-dir", cfgDir, "event", "backup").Output()
+	second, err := exec.Command(bin, "--db-dir", cfgDir, "event", "backup").Output()
 	if err != nil {
 		t.Fatalf("second backup failed: %v\nstdout: %s", err, second)
 	}
@@ -778,7 +778,7 @@ func TestEventBackup_NoDatabaseFailsLoudly(t *testing.T) {
 	cfgDir := t.TempDir()
 
 	bin := endlessGoBin(t)
-	cmd := exec.Command(bin, "--config-dir", cfgDir, "event", "backup")
+	cmd := exec.Command(bin, "--db-dir", cfgDir, "event", "backup")
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	out, err := cmd.Output()
@@ -841,7 +841,7 @@ func TestEventBackup_EnforcesTieredRetention(t *testing.T) {
 	foreign := seed("operators-copy.sqlite")
 
 	bin := endlessGoBin(t)
-	out, err := exec.Command(bin, "--config-dir", cfgDir, "event", "backup").Output()
+	out, err := exec.Command(bin, "--db-dir", cfgDir, "event", "backup").Output()
 	if err != nil {
 		t.Fatalf("backup failed: %v\nstdout: %s", err, out)
 	}
@@ -881,7 +881,7 @@ func TestEvent_UnknownSubcommandExitsNonZero(t *testing.T) {
 	initSchemaDB(t, cfgDir)
 
 	bin := endlessGoBin(t)
-	cmd := exec.Command(bin, "--config-dir", cfgDir,
+	cmd := exec.Command(bin, "--db-dir", cfgDir,
 		"event", "not-a-real-subcommand",
 	)
 	out, err := cmd.CombinedOutput()

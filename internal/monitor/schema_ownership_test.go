@@ -10,7 +10,7 @@ import "testing"
 // migrate, reseed or fail-close it.
 //
 // E-1818 enforced that only for the FORCE-PIN path (ForceRealDB / PinMainDB).
-// An explicit --config-dir left the override empty and sailed straight past it —
+// An explicit DB flag left the override empty and sailed straight past it —
 // and `endless --db main <anything>` threads exactly that flag to every
 // endless-go shellout, so the hole was on the documented daily path rather than
 // in some corner. A branch that added a table to schema.sql created it in the
@@ -35,7 +35,7 @@ func TestForeignRealDB(t *testing.T) {
 			override: real, exe: deployed, dbPath: real, realPath: real, want: true,
 		},
 		{
-			// The case E-1975 found. Explicit --config-dir, candidate binary,
+			// The case E-1975 found. Explicit DB flag, candidate binary,
 			// main database.
 			name: "candidate build pointed at the main database by an explicit flag",
 			exe:  candidate, dbPath: real, realPath: real, want: true,

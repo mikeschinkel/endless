@@ -190,13 +190,13 @@ func frameFunc(projectID int64, name string, all bool, groupCap, rowBudget int) 
 // Three ways in, in precedence order:
 //
 //  1. --project-id (headless). Skips the main-DB pin so the caller's resolved
-//     context — a self-detected worktree sandbox, or an explicit --config-dir —
+//     context — whatever --db/--db-dir resolved —
 //     is what gets read. This is the seam the verify harness drives, mirroring
 //     sessionstatuscmd's --task.
 //  2. --project NAME, against the main DB.
 //  3. the project enclosing the working directory, against the main DB.
 //
-// Cases 2 and 3 pin the main database unless an explicit --config-dir was given,
+// Cases 2 and 3 pin the main database unless an explicit --db/--db-dir was given,
 // for the same reason `session-status` does: this view reads sessions and tasks
 // through a single-database join, sessions live in main regardless of cwd, and a
 // worktree sandbox holds one project row and no tasks — so a sandbox read would

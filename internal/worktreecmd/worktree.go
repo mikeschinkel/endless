@@ -10,7 +10,7 @@
 //
 // DB context: `in-use` READS the sessions table, so it must see the database
 // the caller resolved. It is deliberately NOT in cmd/endless-go's PinMainDB
-// group — it takes the `--config-dir` that ConsumeDBContextFlag strips, exactly
+// group — it takes the `--db`/`--db-dir` that ConsumeDBFlags strips, exactly
 // as `event` and `session-query` do, and the Python caller threads
 // `config.go_db_context_args()`. Pinning main instead would answer a self-dev
 // worktree's question from the real ledger and report no live session.

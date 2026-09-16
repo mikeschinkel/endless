@@ -199,7 +199,7 @@ func Run(args []string) {
 	monitorMode := fs.Bool("monitor", false, "live dashboard: redraw every 2s until interrupted (Ctrl-C)")
 	tree := fs.Bool("tree", false, "render do/plan tasks as an IDs-only implementation-order tree")
 	cols := fs.Int("cols", 0, "terminal width override (0 = auto-detect)")
-	taskFlag := fs.Int64("task", 0, "explicit task id (headless: bypasses tmux/session resolution and reads the resolved DB context — the self-detected sandbox or --config-dir — instead of pinning the main DB; intended for tests)")
+	taskFlag := fs.Int64("task", 0, "explicit task id (headless: bypasses tmux/session resolution and reads the DB context --db/--db-dir resolved instead of pinning the main DB; intended for tests)")
 	fromSession := fs.Int64("from-session", 0, "explicit spawning session id paired with --task (headless: drives the ↩ from row + --tree spawner annotation without tmux resolution; intended for tests)")
 	sessionFlag := fs.Int64("session", 0, "explicit viewing session id (headless: bypasses tmux resolution; alone it lists that session's surfaced/revisited rows — the no-goal view — and alongside --task it names the session whose hides apply; intended for tests)")
 	showHidden := fs.Bool("show-hidden", false, "render this session's hidden task rows too, marked "+hiddenGlyph)
@@ -235,7 +235,7 @@ func Run(args []string) {
 		// directly, so there is no live tmux pane / session to resolve — and no
 		// reason to force the main DB. Skip PinMainDB so DB() honors whatever
 		// context was already resolved in main.go (the self-detected per-worktree
-		// sandbox, or an explicit --config-dir), which is what lets the verify
+		// whatever --db/--db-dir resolved), which is what lets the verify
 		// script exercise the dependents row-set against a seeded sandbox DB.
 		// --from-session supplies the spawning session id the live path would read
 		// from @endless_spawned_by, so the ↩ from row stays testable headless.
@@ -280,7 +280,7 @@ func Run(args []string) {
 		// suppresses itself when it detects a self_dev worktree pinned to a real DB.
 		// That keeps the protection without costing a working dashboard.
 		//
-		// An explicit --config-dir still wins, matching main.go's hook/tmux
+		// An explicit --db/--db-dir still wins, matching main.go's hook/tmux
 		// pattern (E-1429: a per-invocation flag is trustworthy; the env-driven pin
 		// is the fallback). That preserves the seam the verify harnesses drive.
 		if !monitor.HasExplicitDBContext() {

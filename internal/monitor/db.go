@@ -34,32 +34,27 @@ var (
 
 	// dbContextDir, when set, pins ConfigDir() (and therefore DBPath()) to an
 	// explicit directory for the lifetime of this process. It is the E-1429
-	// "explicit DB context": the Python CLI resolves the user's --db
-	// main|worktree choice to a directory and threads it to every Go
-	// subprocess via the --config-dir flag (ConsumeDBContextFlag). Inside a
-	// self-dev worktree, guardWorktreeDBContext() refuses to open the DB
-	// unless an explicit context exists (this var or dbPathOverride).
+	// "explicit DB context", and since E-1668 a FLAG is the only thing that
+	// sets it: --db main|sandbox, or the --db-dir escape (ConsumeDBFlags).
+	// Inside a self-dev worktree, guardWorktreeDBContext() refuses to open the
+	// DB unless an explicit context exists (this var or dbPathOverride).
 	//
 	// Deliberately NOT satisfied by XDG_CONFIG_HOME: an env var can be
 	// exported once and silently route every later command to the wrong DB --
-	// the exact failure mode the gate exists to kill. Only a per-invocation
-	// flag (or the hook's ForceRealDB) counts as explicit.
+	// the exact failure mode the gate exists to kill. Nor by cwd, which E-1368
+	// briefly allowed and E-1668 removed: cwd is stickier than an env var,
+	// since it needs no export at all. Only a per-invocation flag (or the
+	// hook/tmux PinMainDB) counts as explicit.
+	//
+	// The principle, stated once so it is not re-derived: DETECTION DECIDES
+	// WHERE TO LOOK; ONLY A FLAG DECIDES THAT YOU MAY OPEN IT. `--db sandbox`
+	// still reads cwd, because cwd is what says WHICH worktree's sandbox --
+	// the flag grants the permission, cwd supplies the address.
 	dbContextDir string
-
-	// dbContextFromFlag distinguishes an EXPLICIT --config-dir (the trustworthy
-	// per-invocation flag, or a test deliberately targeting a DB) from a
-	// cwd-self-detected sandbox (SelfDetectWorktreeSandbox). Both set
-	// dbContextDir so ConfigDir()/the E-1429 gate follow the same target, but
-	// only the explicit flag should suppress the hook/tmux PinMainDB
-	// override. Without this split a self-dev worktree's own dev session would
-	// have its session/pane-state writes routed to the sandbox (where the
-	// spawned task does not exist -> task_id FK-fails -> NULL -> status
-	// line shows "claim a task"), instead of the main database per E-1450 (E-1700).
-	dbContextFromFlag bool
 )
 
 // ConfigDir returns the Endless configuration directory. When an explicit DB
-// context was provided (--config-dir, via ConsumeDBContextFlag), it wins over
+// context was provided (--db/--db-dir, via ConsumeDBFlags), it wins over
 // XDG_CONFIG_HOME so config.json and logs follow the same target as the DB.
 //
 // The resolution itself lives in internal/dbcontext, because ED-1571's
@@ -127,38 +122,74 @@ func ForceRealDB() {
 	dbPathOverride = filepath.Join(home, ".config", "endless", "endless.db")
 }
 
-// HasExplicitDBContext reports whether an EXPLICIT --config-dir was consumed for
-// this process (as opposed to a cwd-self-detected sandbox). Callers that would
-// otherwise PinMainDB use this to let an explicit per-invocation DB target win —
-// the E-1429 contract is that an explicit flag is trustworthy and beats the
-// env-driven main pin. Production invokers of the pinned binaries (tmux, the
-// Claude hook, tmux) never pass --config-dir, so this stays false
-// there and the main pin still applies — including for a self-dev worktree's own
-// dev session, whose sandbox is discovered from cwd (SelfDetectWorktreeSandbox),
-// not from a flag, so it must NOT suppress the pin (E-1700). Only tests / sandbox
-// tooling that pass --config-dir flip it true.
+// HasExplicitDBContext reports whether a per-invocation DB flag was consumed for
+// this process. Callers that would otherwise PinMainDB use this to let an
+// explicit target win — the E-1429 contract is that a flag is trustworthy and
+// beats the env-driven main pin. Production invokers of the pinned surfaces (the
+// Claude hook, tmux) never pass one, so this stays false there and the main pin
+// still applies.
+//
+// Since E-1668 it is simply "is there a context at all": a flag is the only
+// thing that can set dbContextDir, so there is no longer a guessed context to
+// tell an explicit one apart from. The E-1700 routing this once protected —
+// a self-dev worktree's own dev session writing session/pane state to MAIN
+// rather than to its sandbox — is preserved by that same fact: such a session
+// passes no flag, so the pin still runs.
 func HasExplicitDBContext() bool {
-	return dbContextFromFlag
+	return dbContextDir != ""
 }
 
 // SetDBContextDir records an EXPLICIT DB/config directory for this process,
-// satisfying the E-1429 self-dev-worktree gate and marking the context as
-// flag-provided so it beats the hook/tmux main pin. Called by
-// ConsumeDBContextFlag when the Python CLI threads --config-dir to a Go
-// subprocess (and by tests that deliberately target a DB). Self-detection from
-// cwd uses setDetectedContextDir instead, which does NOT set the flag.
+// satisfying the E-1429 self-dev-worktree gate and beating the hook/tmux main
+// pin. Called by ConsumeDBFlags once it has resolved --db / --db-dir, and by
+// tests that deliberately target a database.
 func SetDBContextDir(dir string) {
 	dbContextDir = dir
-	dbContextFromFlag = true
 }
 
-// setDetectedContextDir records a cwd-self-detected sandbox as the config/DB
-// context WITHOUT marking it flag-explicit. It satisfies ConfigDir() and the
-// E-1429 gate the same way SetDBContextDir does, but leaves HasExplicitDBContext
-// false so the hook/tmux PinMainDB override still moves the DB to main
-// (E-1450/E-1700). Only SelfDetectWorktreeSandbox calls this.
-func setDetectedContextDir(dir string) {
-	dbContextDir = dir
+// mainConfigDir is the deployed installation's config directory — what `--db
+// main` resolves to. It FOLLOWS $HOME (via os.UserHomeDir) while deliberately
+// ignoring $XDG_CONFIG_HOME, which is the whole point of asking for main: to
+// escape a sandbox the environment routed us into. Following $HOME is what lets
+// a verify suite, which runs under a temp HOME, say `--db main` and mean its own
+// isolated main rather than the developer's real one.
+//
+// Mirrors Python's config.main_config_dir, so "the main database" means one
+// thing across both layers.
+func mainConfigDir() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("resolving home directory for --db main: %w", err)
+	}
+	return filepath.Join(home, ".config", "endless"), nil
+}
+
+// sandboxConfigDirForCwd resolves `--db sandbox` to THIS worktree's sandbox
+// config dir, or reports why it cannot.
+//
+// cwd is read here and that is not the E-1368 guess returning: the flag is what
+// grants permission to open a database, and cwd only supplies the address of
+// the one permitted. Refused outside a self-dev worktree for the same reason
+// Python's config.apply_db_choice refuses it — there is no sandbox to name, and
+// inventing one would mkdir a stray database in the cache.
+func sandboxConfigDirForCwd() (string, error) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return "", fmt.Errorf("resolving working directory for --db sandbox: %w", err)
+	}
+	root := selfDevProjectRoot(cwd)
+	if root == "" || !projectIsSelfDev(root) {
+		return "", errors.New(
+			"--db sandbox only applies inside a self-dev worktree " +
+				"(.endless/worktrees/e-NNN); cwd is not in one")
+	}
+	name := worktreeDirName(cwd)
+	if name == "" {
+		return "", errors.New(
+			"--db sandbox only applies inside a self-dev worktree " +
+				"(.endless/worktrees/e-NNN); cwd is not in one")
+	}
+	return filepath.Join(CacheDir(), "sandboxes", name, "endless"), nil
 }
 
 // PinMainDB unconditionally routes the DB (DBPath() and DB()) to the real
@@ -187,25 +218,96 @@ func PinMainDB() {
 	dbPathOverride = filepath.Join(home, ".config", "endless", "endless.db")
 }
 
-// ConsumeDBContextFlag strips a "--config-dir <dir>" / "--config-dir=<dir>"
-// pair out of os.Args (wherever it appears) and records it as the explicit DB
-// context. Binaries call this once at the top of main() so their existing
-// positional argument parsing (os.Args[1] = subcommand) is unaffected.
+// ErrDBFlagConflict is returned when one invocation spells its DB choice twice.
+var ErrDBFlagConflict = errors.New(
+	"--db and --db-dir are two spellings of one choice; pass only one")
+
+// ConsumeDBFlags strips this binary's DB-context flags out of os.Args (wherever
+// they appear) and resolves them to a config directory. Called once at the top
+// of main(), BEFORE os.Args[1] is read as the subcommand, so existing positional
+// parsing is unaffected and `endless-go --db main event emit ...` works.
 //
-// The DB target is carried as a per-invocation flag, never an env var: an
-// exported env var could silently satisfy the gate for every later command,
-// which is exactly the silent-wrong-DB failure mode E-1429 exists to prevent.
-func ConsumeDBContextFlag() {
-	cleaned, dir, found := dbcontext.ConsumeConfigDirFlag(os.Args)
-	if found {
-		SetDBContextDir(string(dir))
+// The vocabulary is the Python CLI's, deliberately (E-1668): one --db
+// main|sandbox spelling serves both layers as the port moves to Go, instead of
+// the user saying --db and the Go binary hearing --config-dir.
+//
+//	--db main        the project's main database (~/.config/endless, $HOME-following)
+//	--db sandbox     this worktree's sandbox database, addressed from cwd
+//	--db-dir <path>  name a directory outright
+//
+// --db-dir is the escape for a caller that must name a directory WITHOUT owning
+// the process environment — chiefly Go tests on t.TempDir(). A caller that
+// already runs under a temp HOME (the verify runner does) wants plain --db
+// main, since mainConfigDir follows $HOME.
+//
+// The target is carried as a per-invocation flag, never an env var: an exported
+// env var could silently satisfy the gate for every later command, which is
+// exactly the silent-wrong-DB failure mode E-1429 exists to prevent — and since
+// E-1668, never from cwd either.
+//
+// Both flags accept the `--flag value` and `--flag=value` forms. A missing value
+// is an error rather than a silent skip: `--db` with nothing after it is a
+// caller that meant to choose and did not, and the old flag's silent tolerance
+// of that is how a choice goes missing.
+func ConsumeDBFlags() error {
+	args := os.Args
+	cleaned := make([]string, 0, len(args))
+	if len(args) > 0 {
+		cleaned = append(cleaned, args[0])
+	}
+	var choice, dir string
+	for i := 1; i < len(args); i++ {
+		a := args[i]
+		switch {
+		case a == "--db":
+			if i+1 >= len(args) {
+				return errors.New("--db requires a value: main or sandbox")
+			}
+			choice = args[i+1]
+			i++
+		case strings.HasPrefix(a, "--db="):
+			choice = strings.TrimPrefix(a, "--db=")
+		case a == "--db-dir":
+			if i+1 >= len(args) {
+				return errors.New("--db-dir requires a directory")
+			}
+			dir = args[i+1]
+			i++
+		case strings.HasPrefix(a, "--db-dir="):
+			dir = strings.TrimPrefix(a, "--db-dir=")
+		default:
+			cleaned = append(cleaned, a)
+		}
 	}
 	os.Args = cleaned
+
+	if choice != "" && dir != "" {
+		return ErrDBFlagConflict
+	}
+	switch {
+	case dir != "":
+		SetDBContextDir(dir)
+	case choice == "main":
+		resolved, err := mainConfigDir()
+		if err != nil {
+			return err
+		}
+		SetDBContextDir(resolved)
+	case choice == "sandbox":
+		resolved, err := sandboxConfigDirForCwd()
+		if err != nil {
+			return err
+		}
+		SetDBContextDir(resolved)
+	case choice != "":
+		return fmt.Errorf("unknown --db value %q: expected 'main' or 'sandbox'", choice)
+	}
+	return nil
 }
 
 // dbContextExplicit reports whether this process was handed an explicit DB
-// target: the --config-dir flag (dbContextDir) or the hook's ForceRealDB
-// override (dbPathOverride). Either satisfies the self-dev-worktree gate.
+// target: a --db/--db-dir flag (dbContextDir) or the hook/tmux pin
+// (dbPathOverride). Either satisfies the self-dev-worktree gate.
 func dbContextExplicit() bool {
 	return dbContextDir != "" || dbPathOverride != ""
 }
@@ -227,7 +329,7 @@ func dbContextExplicit() bool {
 //
 // The gate is DB-path only: it does not fire for the deployed global binary or
 // a self-detected sandbox open of a DB the binary owns (dbPathOverride == ""),
-// nor for an explicit --config-dir open (which sets dbContextDir, not
+// nor for an explicit --db/--db-dir open (which sets dbContextDir, not
 // dbPathOverride) — so land-time `endless db apply-change` still migrates.
 func pinnedToForeignRealDB() bool {
 	exe, err := os.Executable()
@@ -243,11 +345,11 @@ func pinnedToForeignRealDB() bool {
 // override != "" is E-1818's original case: ForceRealDB / PinMainDB moved this
 // process onto the main database, so it does not own the schema.
 //
-// The second clause is E-1975's. An explicit --config-dir is trusted to ROUTE
+// The second clause is E-1975's. An explicit DB flag is trusted to ROUTE
 // this process (E-1429: a per-invocation flag beats the env), but routing and
 // OWNERSHIP are different questions, and conflating them punched a hole through
 // E-1818's invariant. `endless --db main <anything>` threads
-// --config-dir <main database> to every endless-go shellout; run from a worktree
+// --db main to every endless-go shellout; run from a worktree
 // that is the WORKTREE's binary — unlanded code — and because the explicit flag
 // left override empty this returned false, so monitor.DB() applied the branch's
 // schema.SQL to the user's real database. A branch that adds a table created it
@@ -351,53 +453,6 @@ func worktreeDirName(dir string) string {
 		name = name[:j]
 	}
 	return name
-}
-
-// SelfDetectWorktreeSandbox routes this process to the per-worktree sandbox
-// (E-1281) when it runs inside a self-dev worktree that has a sandbox, unless
-// an explicit DB context was already set. It is the E-1368 reversal of
-// IsSandboxActive: instead of detecting that a wrapper routed us into a
-// sandbox via XDG_CONFIG_HOME, the binary routes itself from cwd — replacing
-// the bin-sandbox/ wrapper scripts entirely.
-//
-// The routing is cwd-derived and recomputed every invocation (never an
-// inherited env var), so it satisfies the E-1429 gate the same way the
-// --config-dir flag does: per-invocation and tied to physical location, not a
-// sticky export that silently misroutes later commands. Explicit --config-dir
-// (ConsumeDBContextFlag) is consumed first and wins via the dbContextDir guard
-// below; the hook/tmux PinMainDB override still moves the DB to main
-// afterward, with ConfigDir() (config.json, logs) following the self-detected
-// sandbox per the E-1450 split.
-//
-// No-op unless ALL hold: cwd is inside <root>/.endless/worktrees/e-NNN,
-// <root> is a self_dev project, and the sandbox config dir already exists on
-// disk. The existence check is essential — routing to a missing sandbox would
-// open a fresh empty DB at a half-built path. Must run before the first
-// DB()/DBPath()/ConfigDir() use.
-func SelfDetectWorktreeSandbox() {
-	if dbContextDir != "" {
-		return
-	}
-	cwd, err := os.Getwd()
-	if err != nil {
-		return
-	}
-	root := selfDevProjectRoot(cwd)
-	if root == "" || !projectIsSelfDev(root) {
-		return
-	}
-	name := worktreeDirName(cwd)
-	if name == "" {
-		return
-	}
-	sandboxDir := filepath.Join(CacheDir(), "sandboxes", name, "endless")
-	if info, err := os.Stat(sandboxDir); err != nil || !info.IsDir() {
-		return
-	}
-	// setDetectedContextDir (not SetDBContextDir): a cwd-detected sandbox routes
-	// config/logs to the sandbox but must NOT suppress the hook/tmux main
-	// pin — session/pane state belongs in the main database (E-1450/E-1700).
-	setDetectedContextDir(sandboxDir)
 }
 
 // projectIsSelfDev reports whether <root>/.endless/config.json has
@@ -645,17 +700,29 @@ func resolvedPath(p string) string {
 // worktreeDBContextRefusal is the error returned by the gate. It is the
 // backstop wording for direct Go-binary invocations; the Python CLI emits its
 // own user-facing --db message (the locked text) before ever reaching here.
+//
+// It names the flags THIS binary takes. It used to say the endless CLI "threads
+// --config-dir to this binary", which stopped being true in E-1668 when
+// endless-go took --db itself — and a refusal that names a remedy the reader
+// cannot type is worse than terse.
 var worktreeDBContextRefusal = errors.New(
 	"refusing to open the database: this process runs inside a self-dev " +
-		"worktree but was given no explicit DB context. Invoke through the " +
-		"endless CLI with --db main|sandbox, which threads --config-dir to " +
-		"this binary.")
+		"worktree, where the project's main database and this worktree's " +
+		"sandbox are both reachable, and nothing said which one to use. " +
+		"Pass --db main or --db sandbox (or --db-dir <dir> to name one " +
+		"outright).")
 
 // guardWorktreeDBContext implements the E-1429 gate. When this process runs
 // inside a self-dev worktree of a self_dev project and no explicit DB
-// context was provided (flag or ForceRealDB), it refuses to open the DB.
-// Bypass-proof: it sits at the single DB() entry point, so any binary that
-// opens the DB is covered, including future ones, without an allowlist.
+// context was provided (a --db/--db-dir flag, or the hook/tmux pin), it refuses
+// to open the DB. Bypass-proof: it sits at the single DB() entry point, so any
+// binary that opens the DB is covered, including future ones, without an
+// allowlist.
+//
+// E-1668 restored its bite. E-1368's cwd self-detect set dbContextDir, which
+// satisfied dbContextExplicit() — so the gate went on passing while nothing had
+// actually been said, and a foreign build run inside a worktree answered from
+// that worktree's sandbox in silence. Detection is gone; the gate is unchanged.
 func guardWorktreeDBContext() error {
 	if dbContextExplicit() {
 		return nil

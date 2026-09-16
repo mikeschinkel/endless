@@ -1,6 +1,7 @@
 package monitor
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -14,11 +15,9 @@ func resetDBContext(t *testing.T) {
 	t.Helper()
 	dbContextDir = ""
 	dbPathOverride = ""
-	dbContextFromFlag = false
 	t.Cleanup(func() {
 		dbContextDir = ""
 		dbPathOverride = ""
-		dbContextFromFlag = false
 	})
 }
 
@@ -109,7 +108,10 @@ func TestProjectIsSelfDev(t *testing.T) {
 	})
 }
 
-func TestConsumeDBContextFlag(t *testing.T) {
+// TestConsumeDBFlags covers the --db-dir escape and the argv surgery every
+// spelling shares. `--db main` and `--db sandbox` resolve against the
+// environment and cwd, so they get their own test below.
+func TestConsumeDBFlags(t *testing.T) {
 	cases := []struct {
 		name     string
 		args     []string
@@ -118,27 +120,27 @@ func TestConsumeDBContextFlag(t *testing.T) {
 	}{
 		{
 			name:     "space form before subcommand",
-			args:     []string{"endless-event", "--config-dir", "/c/endless", "emit", "--kind", "x"},
+			args:     []string{"endless-go", "--db-dir", "/c/endless", "event", "emit", "--kind", "x"},
 			wantDir:  "/c/endless",
-			wantArgs: []string{"endless-event", "emit", "--kind", "x"},
+			wantArgs: []string{"endless-go", "event", "emit", "--kind", "x"},
 		},
 		{
 			name:     "equals form",
-			args:     []string{"endless-event", "--config-dir=/c/endless", "emit"},
+			args:     []string{"endless-go", "--db-dir=/c/endless", "event", "emit"},
 			wantDir:  "/c/endless",
-			wantArgs: []string{"endless-event", "emit"},
+			wantArgs: []string{"endless-go", "event", "emit"},
 		},
 		{
 			name:     "flag after subcommand still stripped",
-			args:     []string{"endless-event", "emit", "--config-dir", "/c/endless", "--kind", "x"},
+			args:     []string{"endless-go", "event", "emit", "--db-dir", "/c/endless", "--kind", "x"},
 			wantDir:  "/c/endless",
-			wantArgs: []string{"endless-event", "emit", "--kind", "x"},
+			wantArgs: []string{"endless-go", "event", "emit", "--kind", "x"},
 		},
 		{
 			name:     "absent leaves args and dir untouched",
-			args:     []string{"endless-event", "emit", "--kind", "x"},
+			args:     []string{"endless-go", "event", "emit", "--kind", "x"},
 			wantDir:  "",
-			wantArgs: []string{"endless-event", "emit", "--kind", "x"},
+			wantArgs: []string{"endless-go", "event", "emit", "--kind", "x"},
 		},
 	}
 	for _, tc := range cases {
@@ -148,7 +150,9 @@ func TestConsumeDBContextFlag(t *testing.T) {
 			t.Cleanup(func() { os.Args = orig })
 			os.Args = append([]string(nil), tc.args...)
 
-			ConsumeDBContextFlag()
+			if err := ConsumeDBFlags(); err != nil {
+				t.Fatalf("ConsumeDBFlags() = %v, want nil", err)
+			}
 
 			if dbContextDir != tc.wantDir {
 				t.Errorf("dbContextDir = %q, want %q", dbContextDir, tc.wantDir)
@@ -219,12 +223,12 @@ func TestGuardWorktreeDBContext(t *testing.T) {
 		}
 	})
 
-	t.Run("gated worktree, --config-dir context -> allow", func(t *testing.T) {
+	t.Run("gated worktree, --db-dir context -> allow", func(t *testing.T) {
 		resetDBContext(t)
 		t.Chdir(newProject(t, true))
 		SetDBContextDir(t.TempDir())
 		if err := guardWorktreeDBContext(); err != nil {
-			t.Fatalf("explicit --config-dir context should satisfy the gate: %v", err)
+			t.Fatalf("an explicit DB context should satisfy the gate: %v", err)
 		}
 	})
 
@@ -294,137 +298,213 @@ func TestWorktreeDirName(t *testing.T) {
 		})
 	}
 }
-
-func TestSelfDetectWorktreeSandbox(t *testing.T) {
-	// Build <root>/.endless/{config.json, worktrees/<name>} and, when
-	// makeSandbox, the sandbox config dir under XDG_CACHE_HOME/endless/
-	// sandboxes/<name>/endless. Returns the worktree dir to chdir into and the
-	// sandbox dir self-detect should resolve to. CacheDir() reads the same
-	// XDG_CACHE_HOME string, so the expected and computed paths match exactly
-	// (no symlink-resolution mismatch).
-	setup := func(t *testing.T, name string, selfDev, makeSandbox bool) (string, string) {
-		root := t.TempDir()
-		endless := filepath.Join(root, ".endless")
-		wt := filepath.Join(endless, "worktrees", name)
-		if err := os.MkdirAll(wt, 0755); err != nil {
-			t.Fatal(err)
-		}
-		body := `{"self_dev": false}`
-		if selfDev {
-			body = `{"self_dev": true}`
-		}
-		if err := os.WriteFile(filepath.Join(endless, "config.json"), []byte(body), 0644); err != nil {
-			t.Fatal(err)
-		}
-		cache := t.TempDir()
-		t.Setenv("XDG_CACHE_HOME", cache)
-		sandboxDir := filepath.Join(cache, "endless", "sandboxes", name, "endless")
-		if makeSandbox {
-			if err := os.MkdirAll(sandboxDir, 0755); err != nil {
-				t.Fatal(err)
-			}
-		}
-		return wt, sandboxDir
+// newGatedWorktree builds <root>/.endless/{config.json, worktrees/<name>} and
+// the matching sandbox config dir under XDG_CACHE_HOME, returning the worktree
+// dir to chdir into and the sandbox dir `--db sandbox` must resolve to.
+// CacheDir() reads the same XDG_CACHE_HOME string, so expected and computed
+// paths match exactly (no symlink-resolution mismatch).
+func newGatedWorktree(t *testing.T, name string, selfDev bool) (wt, sandboxDir string) {
+	t.Helper()
+	root := t.TempDir()
+	endless := filepath.Join(root, ".endless")
+	wt = filepath.Join(endless, "worktrees", name)
+	if err := os.MkdirAll(wt, 0755); err != nil {
+		t.Fatal(err)
 	}
+	body := `{"self_dev": false}`
+	if selfDev {
+		body = `{"self_dev": true}`
+	}
+	if err := os.WriteFile(filepath.Join(endless, "config.json"), []byte(body), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cache := t.TempDir()
+	t.Setenv("XDG_CACHE_HOME", cache)
+	sandboxDir = filepath.Join(cache, "endless", "sandboxes", name, "endless")
+	if err := os.MkdirAll(sandboxDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	return wt, sandboxDir
+}
 
-	t.Run("self-dev worktree + sandbox exists -> routes", func(t *testing.T) {
+// consume runs ConsumeDBFlags over a synthetic argv, restoring os.Args after.
+func consume(t *testing.T, args ...string) error {
+	t.Helper()
+	orig := os.Args
+	t.Cleanup(func() { os.Args = orig })
+	os.Args = append([]string{"endless-go"}, args...)
+	return ConsumeDBFlags()
+}
+
+// TestConsumeDBFlags_Choices covers the two named databases. `--db main` must
+// follow $HOME (so a verify suite under a temp HOME means its own main, not the
+// developer's), and `--db sandbox` must read cwd for the ADDRESS while still
+// requiring the flag for the PERMISSION.
+func TestConsumeDBFlags_Choices(t *testing.T) {
+	t.Run("--db main follows $HOME and ignores XDG_CONFIG_HOME", func(t *testing.T) {
 		resetDBContext(t)
-		wt, sandboxDir := setup(t, "e-1368", true, true)
+		home := t.TempDir()
+		t.Setenv("HOME", home)
+		t.Setenv("XDG_CONFIG_HOME", t.TempDir()) // must lose
+		if err := consume(t, "--db", "main", "event", "emit"); err != nil {
+			t.Fatalf("ConsumeDBFlags() = %v, want nil", err)
+		}
+		want := filepath.Join(home, ".config", "endless")
+		if dbContextDir != want {
+			t.Errorf("dbContextDir = %q, want %q", dbContextDir, want)
+		}
+	})
+
+	t.Run("--db sandbox resolves this worktree's sandbox from cwd", func(t *testing.T) {
+		resetDBContext(t)
+		wt, sandboxDir := newGatedWorktree(t, "e-1668", true)
 		t.Chdir(wt)
-		SelfDetectWorktreeSandbox()
+		if err := consume(t, "--db", "sandbox", "session-query", "list-live"); err != nil {
+			t.Fatalf("ConsumeDBFlags() = %v, want nil", err)
+		}
 		if dbContextDir != sandboxDir {
 			t.Errorf("dbContextDir = %q, want %q", dbContextDir, sandboxDir)
 		}
-		// A cwd-detected sandbox must NOT count as an explicit flag context, so
-		// the hook/tmux main pin still applies (E-1700). Otherwise a
-		// self-dev dev session's session/pane-state writes land in the sandbox,
-		// where the spawned task doesn't exist (FK-fails) instead of main.
-		if HasExplicitDBContext() {
-			t.Error("HasExplicitDBContext() = true after cwd self-detect; want false so PinMainDB still runs")
-		}
 	})
 
-	t.Run("named-alternate dir not recognized -> no-op (ED-1515)", func(t *testing.T) {
-		resetDBContext(t)
-		wt, _ := setup(t, "e-1368-my-slug", true, true)
-		t.Chdir(wt)
-		SelfDetectWorktreeSandbox()
-		if dbContextDir != "" {
-			t.Errorf("dbContextDir = %q, want empty (named alternate is not a task worktree)", dbContextDir)
-		}
-	})
-
-	t.Run("sandbox absent -> no-op (gate still refuses)", func(t *testing.T) {
-		resetDBContext(t)
-		wt, _ := setup(t, "e-1368", true, false)
-		t.Chdir(wt)
-		SelfDetectWorktreeSandbox()
-		if dbContextDir != "" {
-			t.Errorf("dbContextDir = %q, want empty (no sandbox on disk)", dbContextDir)
-		}
-	})
-
-	t.Run("not a self-dev project -> no-op", func(t *testing.T) {
-		resetDBContext(t)
-		wt, _ := setup(t, "e-1368", false, true)
-		t.Chdir(wt)
-		SelfDetectWorktreeSandbox()
-		if dbContextDir != "" {
-			t.Errorf("dbContextDir = %q, want empty (not self_dev)", dbContextDir)
-		}
-	})
-
-	t.Run("explicit context already set -> no-op", func(t *testing.T) {
-		resetDBContext(t)
-		wt, _ := setup(t, "e-1368", true, true)
-		t.Chdir(wt)
-		SetDBContextDir("/explicit/dir")
-		SelfDetectWorktreeSandbox()
-		if dbContextDir != "/explicit/dir" {
-			t.Errorf("dbContextDir = %q, want /explicit/dir (self-detect must not override explicit)", dbContextDir)
-		}
-	})
-
-	t.Run("cwd outside any worktree -> no-op", func(t *testing.T) {
+	t.Run("--db sandbox outside a self-dev worktree is refused", func(t *testing.T) {
 		resetDBContext(t)
 		t.Setenv("XDG_CACHE_HOME", t.TempDir())
 		t.Chdir(t.TempDir())
-		SelfDetectWorktreeSandbox()
+		err := consume(t, "--db", "sandbox")
+		if err == nil {
+			t.Fatal("want a refusal: there is no sandbox to name")
+		}
+		if !strings.Contains(err.Error(), "self-dev worktree") {
+			t.Errorf("refusal = %q, want it to say why", err)
+		}
 		if dbContextDir != "" {
-			t.Errorf("dbContextDir = %q, want empty (cwd not in a worktree)", dbContextDir)
+			t.Errorf("dbContextDir = %q, want empty on a refused choice", dbContextDir)
+		}
+	})
+
+	t.Run("--db sandbox in a NON-self-dev worktree is refused", func(t *testing.T) {
+		resetDBContext(t)
+		wt, _ := newGatedWorktree(t, "e-1668", false)
+		t.Chdir(wt)
+		if err := consume(t, "--db", "sandbox"); err == nil {
+			t.Fatal("want a refusal: the project is not self-dev")
+		}
+	})
+
+	t.Run("unknown --db value is refused, naming the two", func(t *testing.T) {
+		resetDBContext(t)
+		err := consume(t, "--db", "worktree")
+		if err == nil {
+			t.Fatal("want a refusal for an unknown --db value")
+		}
+		if !strings.Contains(err.Error(), "main") || !strings.Contains(err.Error(), "sandbox") {
+			t.Errorf("refusal = %q, want it to name both accepted values", err)
+		}
+	})
+
+	t.Run("--db with no value is refused, not silently skipped", func(t *testing.T) {
+		resetDBContext(t)
+		if err := consume(t, "--db"); err == nil {
+			t.Fatal("want a refusal: a caller that meant to choose and did not")
+		}
+	})
+
+	t.Run("--db-dir with no value is refused", func(t *testing.T) {
+		resetDBContext(t)
+		if err := consume(t, "--db-dir"); err == nil {
+			t.Fatal("want a refusal for --db-dir with nothing after it")
+		}
+	})
+
+	t.Run("--db and --db-dir together are refused", func(t *testing.T) {
+		resetDBContext(t)
+		t.Setenv("HOME", t.TempDir())
+		err := consume(t, "--db", "main", "--db-dir", "/tmp/x")
+		if !errors.Is(err, ErrDBFlagConflict) {
+			t.Fatalf("err = %v, want ErrDBFlagConflict", err)
 		}
 	})
 }
 
-// TestSelfDetectVsExplicit_MainPinRouting is the E-1700 routing regression. It
-// exercises both self-dev use cases through the exact main.go guard
+// TestGateRefusesWithoutAFlag is E-1668's regression, at the unit level: the
+// E-1429 gate must refuse inside a self-dev worktree when nothing was said,
+// EVEN THOUGH the sandbox exists on disk and cwd names it unambiguously.
+//
+// That "even though" is the whole bug. E-1368 read those same facts and routed
+// to the sandbox, which set dbContextDir, which satisfied dbContextExplicit() —
+// so the gate passed while nobody had chosen. Detection decides where to look;
+// only a flag decides that you may open it.
+func TestGateRefusesWithoutAFlag(t *testing.T) {
+	t.Run("sandbox on disk, cwd inside it, no flag -> still refuse", func(t *testing.T) {
+		resetDBContext(t)
+		wt, _ := newGatedWorktree(t, "e-1668", true)
+		t.Chdir(wt)
+
+		if dbContextDir != "" {
+			t.Fatalf("dbContextDir = %q before any flag; nothing may set it but a flag", dbContextDir)
+		}
+		err := guardWorktreeDBContext()
+		if err == nil {
+			t.Fatal("gate allowed an unchosen database — this is the E-1368 regression")
+		}
+		// The refusal has to name the remedy this binary actually takes.
+		for _, want := range []string{"--db main", "--db sandbox"} {
+			if !strings.Contains(err.Error(), want) {
+				t.Errorf("refusal %q does not name %q", err, want)
+			}
+		}
+	})
+
+	t.Run("the same cwd WITH --db sandbox -> allowed", func(t *testing.T) {
+		resetDBContext(t)
+		wt, sandboxDir := newGatedWorktree(t, "e-1668", true)
+		t.Chdir(wt)
+		if err := consume(t, "--db", "sandbox"); err != nil {
+			t.Fatalf("ConsumeDBFlags() = %v, want nil", err)
+		}
+		if err := guardWorktreeDBContext(); err != nil {
+			t.Fatalf("an explicit --db sandbox must satisfy the gate: %v", err)
+		}
+		if got := ConfigDir(); got != sandboxDir {
+			t.Errorf("ConfigDir() = %q, want %q", got, sandboxDir)
+		}
+	})
+
+	t.Run("the same cwd WITH --db main -> allowed, and points at main", func(t *testing.T) {
+		resetDBContext(t)
+		home := t.TempDir()
+		t.Setenv("HOME", home)
+		wt, sandboxDir := newGatedWorktree(t, "e-1668", true)
+		t.Chdir(wt)
+		if err := consume(t, "--db", "main"); err != nil {
+			t.Fatalf("ConsumeDBFlags() = %v, want nil", err)
+		}
+		if err := guardWorktreeDBContext(); err != nil {
+			t.Fatalf("an explicit --db main must satisfy the gate: %v", err)
+		}
+		if got := DBPath(); got != filepath.Join(home, ".config", "endless", "endless.db") {
+			t.Errorf("DBPath() = %q, want main under the test HOME", got)
+		}
+		if strings.HasPrefix(DBPath(), sandboxDir) {
+			t.Errorf("DBPath() = %q, must not be the sandbox", DBPath())
+		}
+	})
+}
+
+// TestMainPinRoutingSurvivesTheDeletion is the E-1700 routing regression,
+// re-stated for the world without cwd self-detection. It exercises both
+// self-dev use cases through the exact main.go guard
 // (`if !HasExplicitDBContext() { PinMainDB() }`):
 //
-//  1. Developing endless (a real dev session): the sandbox is discovered from
-//     cwd, so session/pane-state writes must go to MAIN (where the spawned task
-//     exists) while config/logs follow the sandbox.
-//  2. Testing endless (an explicit --config-dir): the pin is suppressed so
-//     writes go to the chosen sandbox/temp DB.
-func TestSelfDetectVsExplicit_MainPinRouting(t *testing.T) {
-	newSelfDevWorktree := func(t *testing.T) (wt, sandboxDir string) {
-		root := t.TempDir()
-		endless := filepath.Join(root, ".endless")
-		wt = filepath.Join(endless, "worktrees", "e-1700")
-		if err := os.MkdirAll(wt, 0755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(filepath.Join(endless, "config.json"), []byte(`{"self_dev": true}`), 0644); err != nil {
-			t.Fatal(err)
-		}
-		cache := t.TempDir()
-		t.Setenv("XDG_CACHE_HOME", cache)
-		sandboxDir = filepath.Join(cache, "endless", "sandboxes", "e-1700", "endless")
-		if err := os.MkdirAll(sandboxDir, 0755); err != nil {
-			t.Fatal(err)
-		}
-		return wt, sandboxDir
-	}
-
+//  1. Developing endless (a real dev session): no flag is passed, so
+//     HasExplicitDBContext() is false and session/pane-state writes are pinned
+//     to MAIN — where the spawned task exists. This used to depend on
+//     setDetectedContextDir deliberately NOT marking its guess explicit; with
+//     the guess gone it falls out of "no flag, no context".
+//  2. Testing endless (an explicit --db-dir): the pin is suppressed so writes
+//     go to the chosen temp DB.
+func TestMainPinRoutingSurvivesTheDeletion(t *testing.T) {
 	// applyGuard mirrors cmd/endless-go/main.go's hook/tmux pin.
 	applyGuard := func() {
 		if !HasExplicitDBContext() {
@@ -432,31 +512,35 @@ func TestSelfDetectVsExplicit_MainPinRouting(t *testing.T) {
 		}
 	}
 
-	t.Run("dev session (cwd self-detect): DB->main, config->sandbox", func(t *testing.T) {
+	t.Run("dev session (no flag): DB->main, config->XDG", func(t *testing.T) {
 		resetDBContext(t)
-		wt, sandboxDir := newSelfDevWorktree(t)
+		wt, sandboxDir := newGatedWorktree(t, "e-1700", true)
 		t.Chdir(wt)
+		// The worktree's .claude/settings.local.json exports this for a Claude
+		// session's hook processes, which is what keeps config.json and logs on
+		// the sandbox now that nothing self-detects it.
+		t.Setenv("XDG_CONFIG_HOME", filepath.Dir(sandboxDir))
 
-		SelfDetectWorktreeSandbox() // as main.go runs it, before the pin
 		applyGuard()
 
 		if got := DBPath(); !strings.HasSuffix(got, filepath.Join(".config", "endless", "endless.db")) || strings.HasPrefix(got, sandboxDir) {
 			t.Errorf("DBPath() = %q, want the real main DB (not under sandbox %q)", got, sandboxDir)
 		}
 		if got := ConfigDir(); got != sandboxDir {
-			t.Errorf("ConfigDir() = %q, want sandbox %q (config/logs follow the sandbox)", got, sandboxDir)
+			t.Errorf("ConfigDir() = %q, want sandbox %q (config/logs follow XDG)", got, sandboxDir)
 		}
 	})
 
-	t.Run("test harness (explicit --config-dir): DB->that dir", func(t *testing.T) {
+	t.Run("test harness (explicit --db-dir): DB->that dir", func(t *testing.T) {
 		resetDBContext(t)
-		wt, _ := newSelfDevWorktree(t)
+		wt, _ := newGatedWorktree(t, "e-1700", true)
 		t.Chdir(wt)
 		explicit := t.TempDir()
 
-		SetDBContextDir(explicit) // stands in for ConsumeDBContextFlag(--config-dir)
-		SelfDetectWorktreeSandbox() // no-ops: explicit already set
-		applyGuard()                // no-ops: HasExplicitDBContext() is true
+		if err := consume(t, "--db-dir", explicit); err != nil {
+			t.Fatalf("ConsumeDBFlags() = %v, want nil", err)
+		}
+		applyGuard() // no-ops: HasExplicitDBContext() is true
 
 		if got := DBPath(); got != filepath.Join(explicit, "endless.db") {
 			t.Errorf("DBPath() = %q, want explicit %q (flag beats the main pin)", got, filepath.Join(explicit, "endless.db"))

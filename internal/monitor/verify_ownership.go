@@ -81,7 +81,7 @@ func SuiteOwnershipFor(taskID int64, root string) (o SuiteOwnership, err error) 
 //
 // It does NOT go through DB(). DB() applies schema and runs the enum integrity
 // gates, which a candidate build must never do to a database it does not own
-// (E-1818), and it follows --config-dir / the self-detected sandbox, which is
+// (E-1818), and it follows whatever --db/--db-dir resolved, which is
 // the routing this lookup has to ignore. A plain open of realDBPath() reads the
 // one database where landings and sessions actually live, whichever database
 // the rest of the command is talking to.

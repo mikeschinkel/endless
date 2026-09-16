@@ -21,7 +21,7 @@ DB_PATH = CONFIG_DIR / "endless.db"
 # RESOLVED_CONFIG_DIR records an explicit DB/config directory chosen for this
 # invocation via the global `--db main|sandbox` flag (E-1429/E-1476). None means
 # no explicit choice was made. When set, it both (a) satisfies the self-dev
-# worktree gate and (b) is threaded to Go subprocesses via --config-dir.
+# worktree gate and (b) is threaded to Go subprocesses as --db main|sandbox.
 RESOLVED_CONFIG_DIR: Path | None = None
 
 # NO_SESSION records the global `--no-session` flag (E-1444). When True,
@@ -460,7 +460,7 @@ def mark_as_group(dir_path: Path):
 # routing is replaced by a mandatory, per-invocation --db main|sandbox flag.
 # The choice is never an env var: an exported var could silently route every
 # later command to the wrong DB. The flag resolves to a config directory, which
-# pins this process's reads and is threaded to Go subprocesses via --config-dir.
+# pins this process's reads and is threaded to Go subprocesses as --db main|sandbox.
 
 # Matches the canonical task-worktree path segment. Group 1 captures the
 # worktree dir basename (e-NNN) — the source of the per-worktree sandbox dir
@@ -634,7 +634,7 @@ def default_db_to_main():
     landing (the landed task lives only in the real DB; the task_landings FK
     fails). Calling this at such a command's entry pins main_config_dir() so
     Python reads use the real DB and go_db_context_args() threads
-    --config-dir <real> to every downstream endless-go shellout.
+    --db main to every downstream endless-go shellout.
 
     An explicit --db main|sandbox is honored: it sets RESOLVED_CONFIG_DIR via
     DBAwareGroup before the command body runs, so this is a no-op then.
@@ -665,8 +665,36 @@ def require_db_context():
 
 
 def go_db_context_args() -> list[str]:
-    """The --config-dir argument pair to thread the resolved DB context to a
-    CLI-path Go subprocess, or [] when no explicit context is active.
+    """The flag pair that threads the resolved DB context to a CLI-path Go
+    subprocess, or [] when no explicit context is active.
+
+    Since E-1668 this speaks the SAME vocabulary the user typed: `endless --db
+    main` threads `--db main`, not a directory under a flag name (`--config-dir`)
+    that no user has ever heard of. One word means one thing across both layers,
+    which is what lets the Go binary's own refusal name a remedy a reader can
+    type.
+
+    The spelling is derived from what was RESOLVED, not from what was typed, so
+    every route into a pinned context — `--db`, `default_db_to_main`, a test
+    monkeypatching RESOLVED_CONFIG_DIR — threads something the child can act on:
+
+      - the main config dir          -> `--db main`
+      - this worktree's sandbox dir  -> `--db sandbox`
+      - anything else                -> `--db-dir <path>`
+
+    `--db main` rather than `--db-dir <main>` on purpose: main_config_dir()
+    follows $HOME, so a caller already running under a temp HOME (the verify
+    runner does) gets its own isolated main in the child exactly as it did in
+    the parent. Threading the absolute path would instead hand the child a
+    directory resolved against whichever HOME the parent happened to have.
+
+    `--db sandbox` is likewise safe to thread rather than spell out: the Go side
+    resolves it from cwd, and every endless-go spawn inherits this process's cwd
+    (none of them pass cwd=). We re-derive the sandbox dir here from the live cwd
+    so the two agree by construction rather than by assumption.
+
+    `--db-dir` is the escape, and it stays an escape: it is reached only when the
+    resolved dir is neither named database.
 
     Call require_db_context() first at any site that spawns a DB-opening Go
     binary, so a missing --db refuses with the friendly message before the Go
@@ -674,7 +702,12 @@ def go_db_context_args() -> list[str]:
     """
     if RESOLVED_CONFIG_DIR is None:
         return []
-    return ["--config-dir", str(RESOLVED_CONFIG_DIR)]
+    if RESOLVED_CONFIG_DIR == main_config_dir():
+        return ["--db", "main"]
+    dir_name = worktree_dir_name()
+    if dir_name and RESOLVED_CONFIG_DIR == sandbox_config_dir(dir_name):
+        return ["--db", "sandbox"]
+    return ["--db-dir", str(RESOLVED_CONFIG_DIR)]
 
 
 def resolution_cwd() -> Path:

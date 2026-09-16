@@ -54,7 +54,7 @@ func endlessGoBin(t *testing.T) string {
 
 // seedTaskDB writes an endless.db at $cfgDir/endless.db with the schema
 // applied and one tasks row whose plan is `plan`. Returns the seeded task
-// id. Use with --config-dir so the gate is satisfied and the binary opens
+// id. Use with --db-dir so the gate is satisfied and the binary opens
 // THIS db.
 func seedTaskDB(t *testing.T, cfgDir string, id int64, plan string) {
 	t.Helper()
@@ -91,7 +91,7 @@ func TestTaskPlan_BinaryReadsSeededRow(t *testing.T) {
 	seedTaskDB(t, cfgDir, 42, want)
 
 	bin := endlessGoBin(t)
-	cmd := exec.Command(bin, "--config-dir", cfgDir,
+	cmd := exec.Command(bin, "--db-dir", cfgDir,
 		"session-query", "task-plan", "--id", "42")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -111,7 +111,7 @@ func TestTaskPlan_BinaryMissingRowExitsZeroEmpty(t *testing.T) {
 	seedTaskDB(t, cfgDir, 42, "present-row")
 
 	bin := endlessGoBin(t)
-	cmd := exec.Command(bin, "--config-dir", cfgDir,
+	cmd := exec.Command(bin, "--db-dir", cfgDir,
 		"session-query", "task-plan", "--id", "9999999")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -130,7 +130,7 @@ func TestTaskPlan_BinaryMissingIdFlagExitsNonZero(t *testing.T) {
 	seedTaskDB(t, cfgDir, 42, "present-row")
 
 	bin := endlessGoBin(t)
-	cmd := exec.Command(bin, "--config-dir", cfgDir,
+	cmd := exec.Command(bin, "--db-dir", cfgDir,
 		"session-query", "task-plan")
 	out, err := cmd.CombinedOutput()
 	if err == nil {

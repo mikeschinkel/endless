@@ -27,7 +27,8 @@ def _run_go(subcommand: str, args: list[str]) -> None:
       candidate build, so the PATH-resolved global would refuse with "unknown
       subcommand" until this branch lands.
 
-    - WHICH DATABASE: --config-dir threads the resolved DB context (E-1429), so
+    - WHICH DATABASE: go_db_context_args threads the resolved DB context
+      (E-1429) as --db main|sandbox, so
       the subprocess opens the same database this CLI resolved instead of being
       refused by the Go-side self-dev worktree gate.
 
@@ -36,7 +37,7 @@ def _run_go(subcommand: str, args: list[str]) -> None:
     E-1429 gate for every verb routed through this helper (E-1950).
 
     Without it, `endless errors clear` or `jobs retry` inside a self-dev worktree
-    with no --db threaded no --config-dir at all, and the Go binary fell through
+    with no --db threaded no context at all, and the Go binary fell through
     to E-1368 cwd self-detection: the command ran, reported success, and
     mutated whichever database that guessed. The gate exists precisely so a
     human or an agent cannot hit the wrong DB by omission — a silent guess is

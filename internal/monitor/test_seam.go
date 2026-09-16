@@ -44,7 +44,7 @@ func SeedPaneProcess(db *sql.DB, serverUUID, pane string) (int64, error) {
 // E-1506.
 func SetTestDB(db *sql.DB) (restore func()) {
 	prevOnce, prevConn, prevErr := dbOnce, dbConn, dbErr
-	prevCtxDir, prevPathOverride, prevFromFlag := dbContextDir, dbPathOverride, dbContextFromFlag
+	prevCtxDir, prevPathOverride := dbContextDir, dbPathOverride
 
 	dbOnce = &sync.Once{}
 	dbOnce.Do(func() {}) // mark consumed so DB() returns dbConn directly
@@ -78,7 +78,6 @@ func SetTestDB(db *sql.DB) (restore func()) {
 		dbErr = prevErr
 		dbContextDir = prevCtxDir
 		dbPathOverride = prevPathOverride
-		dbContextFromFlag = prevFromFlag
 		if tmpCfg != "test-injected" {
 			os.RemoveAll(tmpCfg)
 		}

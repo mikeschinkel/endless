@@ -1061,7 +1061,7 @@ def session_status_resolve(
     dumps the row set as data instead of drawing it.
 
     The Go subcommand pins the main DB (sessions live there regardless of cwd),
-    so no --config-dir is threaded.
+    so no --db is threaded.
     """
     import shutil
     import subprocess

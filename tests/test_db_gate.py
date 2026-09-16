@@ -146,10 +146,7 @@ def test_default_db_to_main_pins_main_when_unset(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "RESOLVED_CONFIG_DIR", None)
     config.default_db_to_main()
     assert config.RESOLVED_CONFIG_DIR == config.main_config_dir()
-    assert config.go_db_context_args() == [
-        "--config-dir",
-        str(config.main_config_dir()),
-    ]
+    assert config.go_db_context_args() == ["--db", "main"]
 
 
 def test_default_db_to_main_honors_explicit_sandbox(tmp_path, monkeypatch):
@@ -293,13 +290,27 @@ def test_require_db_context_ok_in_non_sandbox_worktree(tmp_path, monkeypatch):
     config.require_db_context()  # downstream project -> no gate
 
 
-def test_go_db_context_args(monkeypatch):
+def test_go_db_context_args(monkeypatch, tmp_path):
+    """E-1668: the child is told the same WORD the user typed, derived from what
+    was resolved — so `--db-dir` stays an escape rather than the normal case."""
     monkeypatch.setattr(config, "RESOLVED_CONFIG_DIR", None)
     assert config.go_db_context_args() == []
+
     monkeypatch.setattr(config, "RESOLVED_CONFIG_DIR", config.main_config_dir())
+    assert config.go_db_context_args() == ["--db", "main"]
+
+    wt = _make_worktree(tmp_path, sandbox=True, task_id="1668")
+    monkeypatch.chdir(wt)
+    monkeypatch.setattr(
+        config, "RESOLVED_CONFIG_DIR", config.sandbox_config_dir("e-1668")
+    )
+    assert config.go_db_context_args() == ["--db", "sandbox"]
+
+    # Neither named database: the escape carries the path itself.
+    monkeypatch.setattr(config, "RESOLVED_CONFIG_DIR", tmp_path / "elsewhere")
     assert config.go_db_context_args() == [
-        "--config-dir",
-        str(config.main_config_dir()),
+        "--db-dir",
+        str(tmp_path / "elsewhere"),
     ]
 
 
@@ -370,7 +381,7 @@ def test_db_path_requires_db_flag(monkeypatch):
 #
 # `_run_go` in jobs_cmd threads go_db_context_args() but omitted the
 # require_db_context() call that function's docstring requires. With no --db in
-# a gated worktree it therefore threaded NO --config-dir, and the Go binary fell
+# a gated worktree it therefore threaded NO context, and the Go binary fell
 # through to cwd self-detection: `endless errors clear` and `jobs retry` ran,
 # reported success, and mutated whichever database that resolved to — observed
 # clearing incidents in the REAL record from inside a worktree.
@@ -447,4 +458,4 @@ def test_go_shellout_verbs_proceed_once_db_is_resolved(tmp_path, monkeypatch):
     jobs_cmd.errors_clear(())
     assert len(spawned) == 1
     # And the resolved context must actually be threaded through.
-    assert "--config-dir" in spawned[0]
+    assert "--db" in spawned[0] or "--db-dir" in spawned[0]

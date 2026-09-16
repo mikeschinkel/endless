@@ -72,7 +72,7 @@ func projectFixture(t *testing.T) string {
 
 // runRenderInProject invokes `endless-go template render <name>` with cwd
 // set to projectRoot. Returns stdout, stderr, exit error. The binary's
-// --config-dir gate is irrelevant here because the project is not self-dev.
+// --db-dir gate is irrelevant here because the project is not self-dev.
 func runRenderInProject(t *testing.T, projectRoot, name, stdin string, extraArgs ...string) (string, string, error) {
 	t.Helper()
 	bin := endlessGoBin(t)
@@ -403,7 +403,7 @@ func TestRender_NoProjectContext_ExitsNonZero(t *testing.T) {
 }
 
 // TestRender_ProjectFlagResolvesViaDB seeds a projects row, invokes with
-// --project <name> --config-dir <db>, and verifies the named project's
+// --project <name> --db-dir <db>, and verifies the named project's
 // path is used as the project root (the materialized file lands there).
 func TestRender_ProjectFlagResolvesViaDB(t *testing.T) {
 	cfgDir := t.TempDir()
@@ -416,7 +416,7 @@ func TestRender_ProjectFlagResolvesViaDB(t *testing.T) {
 	// only way to resolve. We deliberately use a different tempdir for cwd.
 	cwdDir := t.TempDir()
 	cmd := exec.Command(bin,
-		"--config-dir", cfgDir,
+		"--db-dir", cfgDir,
 		"template", "render",
 		"--project", "test-proj",
 		"handoff/todo",
@@ -448,7 +448,7 @@ func TestRender_UnknownProjectFlag_ExitsNonZero(t *testing.T) {
 	bin := endlessGoBin(t)
 	cwdDir := t.TempDir()
 	cmd := exec.Command(bin,
-		"--config-dir", cfgDir,
+		"--db-dir", cfgDir,
 		"template", "render",
 		"--project", "no-such-project",
 		"handoff/todo",

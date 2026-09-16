@@ -151,7 +151,8 @@ end:
 // runner's RESOLVED config directory, so the subprocess opens the database this
 // process is using rather than whatever the ambient environment names.
 //
-// The Python CLI has no --config-dir — that flag is Go-side only — so the
+// The Python CLI takes --db main|sandbox, not a directory — there is no way
+// to hand it one — so the
 // environment is the whole mechanism. Endless's config dir is always
 // <XDG_CONFIG_HOME>/endless, so handing the child the PARENT of ConfigDir()
 // reproduces the resolution exactly, sandbox included. Without this, a self-dev

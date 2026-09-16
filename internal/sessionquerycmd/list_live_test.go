@@ -63,7 +63,7 @@ func TestListLive_BinaryReturnsLiveSessionsForProject(t *testing.T) {
 	})
 
 	bin := endlessGoBin(t)
-	cmd := exec.Command(bin, "--config-dir", cfgDir,
+	cmd := exec.Command(bin, "--db-dir", cfgDir,
 		"session-query", "list-live", "--project-root", projectPath)
 	// Use Output (stdout only); ProjectIDForPath's auto-register path
 	// emits an info log to stderr that would otherwise corrupt the JSON
@@ -95,7 +95,7 @@ func TestListLive_BinaryUnregisteredRootReturnsEmptyArray(t *testing.T) {
 	})
 
 	bin := endlessGoBin(t)
-	cmd := exec.Command(bin, "--config-dir", cfgDir,
+	cmd := exec.Command(bin, "--db-dir", cfgDir,
 		"session-query", "list-live", "--project-root", unregistered)
 	out, err := cmd.Output()
 	if err != nil {
@@ -120,7 +120,7 @@ func TestListLive_BinaryMissingFlagExitsNonZero(t *testing.T) {
 	seedLiveSessionsDB(t, cfgDir, t.TempDir(), nil)
 
 	bin := endlessGoBin(t)
-	cmd := exec.Command(bin, "--config-dir", cfgDir,
+	cmd := exec.Command(bin, "--db-dir", cfgDir,
 		"session-query", "list-live")
 	out, err := cmd.CombinedOutput()
 	if err == nil {

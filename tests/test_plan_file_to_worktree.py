@@ -208,7 +208,7 @@ def _fake_run_factory(stdout: str, returncode: int = 0):
         if argv and argv[0] == "git":
             return real_run(argv, **kwargs)
         # "task-field" is the subcommand (E-1747 generalized task-plan); it
-        # may be preceded by the E-1429 --config-dir context pair, so assert
+        # may be preceded by the E-1429 --db context pair, so assert
         # membership, not position.
         assert "task-field" in argv
         return types.SimpleNamespace(

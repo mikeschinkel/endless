@@ -103,7 +103,7 @@ func usage(w *os.File) {
 //
 // Which database it writes to is the CALLER's decision, never this command's.
 // Inside a self-dev worktree the Python CLI requires an explicit --db and
-// refuses without one (E-1429/E-1950); `endless-go` takes --config-dir. Pinning
+// refuses without one (E-1429/E-1950); `endless-go` takes --db. Pinning
 // a database here on the user's behalf was tried and reverted: it let
 // `errors clear` dismiss incidents in the real record from a worktree with no
 // flag, which is the failure the gate exists to prevent.

@@ -95,7 +95,7 @@ func TestEpicDerivation_EmitWritesLedgerAndUpdatesEpic(t *testing.T) {
 	}
 
 	bin := endlessGoBin(t)
-	cmd := exec.Command(bin, "--config-dir", cfgDir,
+	cmd := exec.Command(bin, "--db-dir", cfgDir,
 		"event", "emit",
 		"--kind", string(events.KindTaskStatusChanged),
 		"--project", projectName,

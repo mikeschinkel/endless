@@ -59,7 +59,7 @@ func TestTaskReport_BinaryEmitsFacts(t *testing.T) {
 	seedReportDB(t, cfgDir)
 
 	bin := endlessGoBin(t)
-	cmd := exec.Command(bin, "--config-dir", cfgDir,
+	cmd := exec.Command(bin, "--db-dir", cfgDir,
 		"session-query", "task-report", "--id", "10")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -106,7 +106,7 @@ func TestTaskReport_BinaryMissingIdExitsNonZero(t *testing.T) {
 	cfgDir := t.TempDir()
 	seedReportDB(t, cfgDir)
 	bin := endlessGoBin(t)
-	cmd := exec.Command(bin, "--config-dir", cfgDir, "session-query", "task-report")
+	cmd := exec.Command(bin, "--db-dir", cfgDir, "session-query", "task-report")
 	if out, err := cmd.CombinedOutput(); err == nil {
 		t.Fatalf("expected non-zero exit when --id omitted\nout: %s", out)
 	}

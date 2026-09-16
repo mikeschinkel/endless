@@ -77,7 +77,7 @@ func TestEnsureClaudeID_ReturnsExistingRow(t *testing.T) {
 	wantID, _, _, _ := readSessionsRow(t, cfgDir, "existing-uuid")
 
 	bin := endlessGoBin(t)
-	cmd := exec.Command(bin, "--config-dir", cfgDir,
+	cmd := exec.Command(bin, "--db-dir", cfgDir,
 		"session-query", "ensure-claude-id",
 		"--session-id", "existing-uuid",
 		"--project-root", projectPath,
@@ -105,7 +105,7 @@ func TestEnsureClaudeID_LazyCreatesMissingRow(t *testing.T) {
 	seedEnsureClaudeIDDB(t, cfgDir, projectPath, nil)
 
 	bin := endlessGoBin(t)
-	cmd := exec.Command(bin, "--config-dir", cfgDir,
+	cmd := exec.Command(bin, "--db-dir", cfgDir,
 		"session-query", "ensure-claude-id",
 		"--session-id", "fresh-uuid",
 		"--project-root", projectPath,
@@ -145,7 +145,7 @@ func TestEnsureClaudeID_IdempotentSecondCall(t *testing.T) {
 	bin := endlessGoBin(t)
 	run := func() int64 {
 		t.Helper()
-		cmd := exec.Command(bin, "--config-dir", cfgDir,
+		cmd := exec.Command(bin, "--db-dir", cfgDir,
 			"session-query", "ensure-claude-id",
 			"--session-id", "idempotent-uuid",
 			"--project-root", projectPath)
@@ -175,7 +175,7 @@ func TestEnsureClaudeID_MissingSessionIDFlag(t *testing.T) {
 	seedEnsureClaudeIDDB(t, cfgDir, projectPath, nil)
 
 	bin := endlessGoBin(t)
-	cmd := exec.Command(bin, "--config-dir", cfgDir,
+	cmd := exec.Command(bin, "--db-dir", cfgDir,
 		"session-query", "ensure-claude-id",
 		"--project-root", projectPath)
 	out, err := cmd.CombinedOutput()
@@ -197,7 +197,7 @@ func TestEnsureClaudeID_MissingProjectRootFlag(t *testing.T) {
 	seedEnsureClaudeIDDB(t, cfgDir, projectPath, nil)
 
 	bin := endlessGoBin(t)
-	cmd := exec.Command(bin, "--config-dir", cfgDir,
+	cmd := exec.Command(bin, "--db-dir", cfgDir,
 		"session-query", "ensure-claude-id",
 		"--session-id", "fresh-uuid")
 	out, err := cmd.CombinedOutput()
